@@ -14,6 +14,7 @@ test("Run on a drifted check previews the site_repair call, performs it, and the
 
   await drifted.getByRole("button", { name: "Run" }).click();
   const dialog = page.locator("dialog.confirm");
+  await dialog.getByText("Details", { exact: true }).click();
   await expect(dialog.getByText("What changes")).toBeVisible();
   await expect(dialog).toContainText("POST https://sample-b.example.com/api/operator with tool sync_pages");
   await expect(dialog).toContainText("the token is never shown or recorded");

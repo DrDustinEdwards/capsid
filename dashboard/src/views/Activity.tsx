@@ -3,6 +3,7 @@ import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "wouter";
 import { useApp } from "../app/ctx";
 import { fetchActivity } from "../lib/api";
+import { actionWords } from "../lib/audit-words";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalActivity } from "../types";
 import { Panel } from "capsomer/react/panel";
@@ -69,6 +70,7 @@ export function Activity() {
   const now = data ? Math.max(appNow, ms(data.generated)) : appNow;
   const names = feed.live.namespaces.map((n) => n.name);
   if (namespace && !names.includes(namespace)) names.push(namespace);
+  const actors = [...new Set([...feed.live.agents.map((a) => `agent:${a.name}`), ...(data?.rows ?? []).map((r) => r.actor).filter((a): a is string => !!a), ...(actor ? [actor] : [])])].sort();
 
   return (
     <div className="page">
@@ -83,10 +85,10 @@ export function Activity() {
         }}
       >
         <label className="sr-only" htmlFor="actNs">
-          Namespace
+          Project
         </label>
         <select id="actNs" className="search" value={nsInput} onChange={(e) => setNsInput(e.target.value)}>
-          <option value="">All namespaces</option>
+          <option value="">All projects</option>
           {names.map((n) => (
             <option key={n} value={n}>
               {n}
@@ -94,9 +96,18 @@ export function Activity() {
           ))}
         </select>
         <label className="sr-only" htmlFor="actActor">
-          Actor
+          Who
         </label>
-        <input id="actActor" className="search" type="search" placeholder="Actor, e.g. agent:watcher" value={actorInput} onChange={(e) => setActorInput(e.target.value)} />
+        {/* A picker, not a box to type an id into from memory (the UX audit's m7): every
+            agent on the roster, and every actor in the rows read. */}
+        <select id="actActor" className="search" value={actorInput} onChange={(e) => setActorInput(e.target.value)}>
+          <option value="">Anyone</option>
+          {actors.map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
         <button type="submit" className="btn">
           Apply
         </button>
@@ -135,9 +146,9 @@ export function Activity() {
               <thead>
                 <tr>
                   <th>When</th>
-                  <th>Actor</th>
-                  <th>Action</th>
-                  <th>Namespace</th>
+                  <th>Who</th>
+                  <th>What</th>
+                  <th>Project</th>
                   <th>Path</th>
                 </tr>
               </thead>
@@ -148,9 +159,10 @@ export function Activity() {
                       {ago(ms(r.at), now)}
                     </td>
                     <td className="mono">{r.actor ?? <None />}</td>
-                    <td className="mono">
-                      {r.action ?? <None />}
+                    <td>
+                      {actionWords(r.action) ?? <span className="mono">{r.action ?? <None />}</span>}
                       {r.target && <span className="faint"> {TARGET_LABEL[r.target]}</span>}
+                      {actionWords(r.action) && <div className="src mono">{r.action}</div>}
                     </td>
                     <td className="mono">{r.namespace ?? <None />}</td>
                     <td className="mono wrap">{r.path ?? <None />}</td>

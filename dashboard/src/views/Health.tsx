@@ -1,9 +1,9 @@
 import { Suspense, lazy, useSyncExternalStore, type ReactNode } from "react";
-import { TabLink, TabsNav, type RenderTabLink } from "capsomer/react/tabs";
-import { Link, useSearch } from "wouter";
+import { Link } from "wouter";
 import { HEALTH_TABS, healthTab, placePath, useApp, type HealthTab } from "../app/ctx";
 import { WAITING_KINDS, attentionGroups, hasSites, type AttentionRow } from "../lib/derive";
 import { St } from "../ui/icons";
+import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Backups } from "./Backups";
 import { DefaultBranches } from "./Ci";
 import { Deploys } from "./Deploys";
@@ -28,41 +28,25 @@ const NAMED = 3;
 const onHash = (cb: () => void) => (window.addEventListener("hashchange", cb), () => window.removeEventListener("hashchange", cb));
 const useHash = () => useSyncExternalStore(onHash, () => window.location.hash.slice(1));
 
-const tabLink: RenderTabLink = ({ href, ...props }) => <Link href={href} {...props} />;
-
 export function Health() {
   const { feed } = useApp();
-  const search = useSearch();
+  const param = useTabParam();
   const hash = useHash();
   const sitesOn = hasSites(feed);
   const tabs = HEALTH_TABS.filter((t) => t.id !== "sites" || sitesOn);
   const first = tabs[0]!.id;
   // An old section anchor (a bookmark to /health#deploys) names its tab too.
-  const asked = healthTab(new URLSearchParams(search).get("tab")) ?? healthTab(hash);
+  const asked = healthTab(param) ?? healthTab(hash);
   const tab: HealthTab = asked && tabs.some((t) => t.id === asked) ? asked : first;
-  const label = tabs.find((t) => t.id === tab)!.label;
-  const hrefFor = (id: HealthTab) => {
-    const qs = new URLSearchParams(search);
-    if (id === first) qs.delete("tab");
-    else qs.set("tab", id);
-    const q = qs.toString();
-    return `/health${q ? `?${q}` : ""}`;
-  };
   return (
     <div className="page">
       <PageHead title="Health" />
       <Verdict />
       <Overview />
-      <TabsNav aria-label="Health" variant="line" renderLink={tabLink}>
-        {tabs.map((t) => (
-          <TabLink key={t.id} href={hrefFor(t.id)} current={t.id === tab} data-tab={t.id}>
-            {t.label}
-          </TabLink>
-        ))}
-      </TabsNav>
-      <section className="embedded" id={tab} aria-label={label} data-tab-panel={tab}>
+      <PageTabs label="Health" path="/health" tabs={tabs} current={tab} />
+      <div className="embedded" id={tab} data-tab-panel={tab}>
         {panel(tab)}
-      </section>
+      </div>
     </div>
   );
 }

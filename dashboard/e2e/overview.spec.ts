@@ -267,7 +267,7 @@ test("an old view's address is replaced by the page, tab or section that holds i
   await page.goto("./claims?namespace=sample-b");
   await expect(page.getByRole("heading", { level: 1, name: "Agents" })).toBeVisible();
   await expect(page).toHaveURL(/\/agents\?tab=claims&namespace=sample-b$/);
-  await expect(page.getByRole("button", { name: "Claims", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("navigation", { name: "Agents", exact: true }).getByRole("link", { name: "Checks" })).toHaveAttribute("aria-current", "page");
   await page.goto("./namespaces");
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await expect(page).toHaveURL(/\/settings#automation$/);

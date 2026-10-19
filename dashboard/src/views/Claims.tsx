@@ -354,10 +354,10 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
         }}
       >
         <label className="sr-only" htmlFor="clNs">
-          Namespace
+          Project
         </label>
         <select id="clNs" className="search" value={input.namespace} onChange={(e) => setInput({ ...input, namespace: e.target.value })}>
-          <option value="">All namespaces</option>
+          <option value="">All projects</option>
           {names.map((n) => (
             <option key={n} value={n}>
               {n}
@@ -420,7 +420,7 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
               <thead>
                 <tr>
                   <th>Agent</th>
-                  <th>Namespace</th>
+                  <th>Project</th>
                   <th>Jobs</th>
                   <th>Claims</th>
                   <th>Checks</th>
@@ -434,7 +434,7 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
                     <td className="mono wrap" data-label="Agent">
                       {g.agent ?? <None what="no claim yet" />}
                     </td>
-                    <td className="mono" data-label="Namespace">
+                    <td className="mono" data-label="Project">
                       {g.namespace}
                     </td>
                     <td className="num" data-label="Jobs">

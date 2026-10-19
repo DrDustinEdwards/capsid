@@ -141,8 +141,14 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
             On. It goes to {digest.to}.
           </div>
         ) : (
+          // Plain words first (the UX audit's m11); what the setup still needs, in the
+          // Worker's own words, is one click away.
           <div className="callout warn" role="status">
-            Off, and nothing is sent: {digest.problem}
+            <b>Not set up yet.</b> Nothing is sent until it is.
+            <details className="mt4">
+              <summary>What it needs</summary>
+              <p className="small">{digest.problem}</p>
+            </details>
           </div>
         )}
         {digest.last && (

@@ -26,9 +26,9 @@ export function Sites({ embedded = false }: { embedded?: boolean } = {}) {
       {head}
       <NsChips list={snap.sites.map((s) => s.namespace)} />
       <Panel flush title="Fleet" src={`watcher pass ${ago(ms(snap.pass_at), now)}`}>
-        {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No site in the namespace {ns}.</FilterEmpty> : <FleetTable sites={list} />}
+        {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No site in the project {ns}.</FilterEmpty> : <FleetTable sites={list} />}
       </Panel>
-      <Panel flush title="Health contract coverage" src="GET /health returning {status, sha}">
+      <Panel flush title="Which sites report their health" src="GET /health returning {status, sha}">
         <div className="scroll-x">
           <table className="list">
             <thead>

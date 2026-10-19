@@ -1,42 +1,36 @@
 import { ChartSlot } from "../ui/Enar";
 import { Suspense, lazy } from "react";
-import { useLocation, useSearch } from "wouter";
 import { useApp } from "../app/ctx";
 import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/derive";
 import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
+import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
 
-// Claims is a tab of Agents (design-portal-evaluation.md section 2: both answer "how is this
-// agent doing"), loaded when the tab opens. The tab is in the address (?tab=claims), so it can
-// be reloaded or shared.
+// Checks (the claims ledger; "Claims" until the UX audit's M5) is a tab of Agents
+// (design-portal-evaluation.md section 2: both answer "how is this agent doing"), loaded when
+// the tab opens. The tab is in the address (?tab=claims, its id unchanged), so it can be
+// reloaded or shared.
 const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
 // Chart 6, weekly model spend, sits under the roster.
 const CostChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.CostChart })));
 
 type Tab = "roster" | "archive" | "claims";
 
+const TABS = [
+  { id: "roster", label: "Agents" },
+  { id: "archive", label: "Archive" },
+  { id: "claims", label: "Checks" },
+] as const;
+
 export function Agents() {
-  const search = useSearch();
-  const [location, navigate] = useLocation();
-  const asked = new URLSearchParams(search).get("tab");
+  const asked = useTabParam();
   const tab: Tab = asked === "claims" || asked === "archive" ? asked : "roster";
-  const pick = (to: Tab) => navigate(to === "roster" ? location : `${location}?tab=${to}`);
   return (
     <div className="page">
       <PageHead title="Agents" />
-      <div className="toolbar" role="group" aria-label="Roster, archive or claims">
-        <button type="button" className="chip" aria-pressed={tab === "roster"} onClick={() => pick("roster")}>
-          Roster
-        </button>
-        <button type="button" className="chip" aria-pressed={tab === "archive"} onClick={() => pick("archive")}>
-          Archive
-        </button>
-        <button type="button" className="chip" aria-pressed={tab === "claims"} onClick={() => pick("claims")}>
-          Claims
-        </button>
-      </div>
+      <PageTabs label="Agents" path="/agents" tabs={TABS} current={tab} />
       {tab === "claims" ? (
         <Suspense fallback={null}>
           <Claims embedded />

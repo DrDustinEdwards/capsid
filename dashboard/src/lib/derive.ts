@@ -264,7 +264,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       sev: "warn",
       kind: agent ? "Agent" : "Breaker",
       title: f.headline,
-      sub: agent ? "Out of its usual pattern · a finding only, nothing suspended" : (f.evidence[0] ?? "A queue breaker is open"),
+      sub: agent ? "Out of its usual pattern · a finding only, nothing suspended" : (f.evidence[0] ?? "Paused after repeated failures"),
       at: ms(f.last_seen),
       open: agent ? "view:incidents" : "view:needs#waiting",
     });

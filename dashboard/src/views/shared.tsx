@@ -10,6 +10,21 @@ import { Icon, NoData, Pill, St } from "../ui/icons";
 import { Spark, Timeline, TimelineLegend, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 import { useWidth } from "../ui/useWidth";
 
+// The risky controls, set apart from the safe ones (the UX audit's M9): a red-edged area
+// under its own "Danger" label, after everything else, so a Remove or a Mark failed is never
+// the button beside Edit or Resume. Each control in it still previews and confirms.
+export function Danger({ note, children }: { note?: string; children: ReactNode }) {
+  return (
+    <div className="callout crit full" role="group" aria-label="Danger" data-danger="">
+      <p className="section-title">Danger</p>
+      <div className="toolbar">
+        {children}
+        {note && <span className="note">{note}</span>}
+      </div>
+    </div>
+  );
+}
+
 // The heading only: what a view is for is one line in the shortcut sheet (design D13).
 export function PageHead({ title }: { title: string }) {
   return (

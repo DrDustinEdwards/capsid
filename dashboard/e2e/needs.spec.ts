@@ -203,7 +203,7 @@ test("PLANT: a stopped queue is here with Reset, which previews reset_breaker fo
   const row = group(page, "w-stops").locator('[data-stop="sample-b"]');
   await expect(row).toContainText("No job here starts until you reset it.");
   await row.getByRole("button", { name: "Reset sample-b" }).click();
-  await expect(dialog(page).getByRole("button", { name: "Reset breaker" })).toBeVisible();
+  await expect(dialog(page).getByRole("button", { name: "Reset and resume" })).toBeVisible();
   expect(sent).toEqual([{ action: "reset_breaker", params: { namespace: "sample-b" } }]);
   await expect(dialog(page).getByRole("button", { name: "Cancel" })).toBeFocused();
   await dialog(page).getByRole("button", { name: "Cancel" }).click();

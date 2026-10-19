@@ -314,7 +314,7 @@ export function statusFindings(status: StatusReport): Finding[] {
       out.push(
         finding(ns.namespace, `breaker-open-${ns.namespace}`, `the queue's circuit breaker for ${ns.namespace} is open`, [
           `holder fails since ${ns.breaker.since} UTC: ${ns.breaker.failed}, threshold ${ns.breaker.threshold}`,
-          "No job in this namespace is handed out until the seat or Dustin resets it: capsid_admin_control_improve action breaker_reset, or Reset breaker in the Portal.",
+          "No job in this namespace is handed out until the seat or Dustin resets it: capsid_admin_control_improve action breaker_reset, or Reset under Paused after repeated failures on the Portal's Needs you.",
         ])
       );
     }

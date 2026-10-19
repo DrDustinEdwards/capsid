@@ -4,6 +4,10 @@ import { ago, ms, utc } from "../lib/format";
 import type { PortalPerformed, PortalPreview } from "../types";
 import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, performLabel, type BatchItem, type ConfirmRequest } from "./ctx";
 
+// The actions whose Details start open: a rule change's added and removed lines are what
+// the person is deciding.
+const OPEN_DETAILS: ReadonlySet<string> = new Set(["canon_approve", "canon_approve_all", "canon_reject"]);
+
 // The one confirm dialog every control opens. It collects a reason where the action
 // needs one, previews (which writes nothing), shows what will change and the audit
 // rows, and performs only on the button named for the action (performLabel). Cancel and
@@ -179,7 +183,11 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
         {/* The heading stays in plain words (req.title); the server's summary, which can
             name a job by its id, sits under it once the preview answers. */}
         <h2 id="confirmTitle">{req.title}</h2>
-        {preview && <p className="muted note" data-summary="">{preview.summary}</p>}
+        {preview && (
+          <p className="confirm-say" data-summary="">
+            {preview.summary}
+          </p>
+        )}
         {given && (
           <div>
             <p className="section-title">Your reply</p>
@@ -246,36 +254,45 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
             Checking what this will change...
           </div>
         )}
+        {/* The sentence above is the answer; the rows it changes and the audit rows it
+            writes are the server's own text, behind Details (the UX audit's M5). A rule
+            change's lines are what is being decided, so they start open. */}
         {preview && (
-          <>
-            <div>
-              <p className="section-title">What changes</p>
-              {preview.changes.length ? (
-                <ul className="plain">
-                  {preview.changes.map((c, i) => (
-                    <li key={i}>{c}</li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="faint">The server lists no change.</div>
-              )}
+          <details className="confirm-details" open={OPEN_DETAILS.has(req.action)}>
+            <summary>
+              <span className="chev" aria-hidden="true" />
+              Details
+            </summary>
+            <div className="stack-gap mt8">
+              <div>
+                <p className="section-title">What changes</p>
+                {preview.changes.length ? (
+                  <ul className="plain">
+                    {preview.changes.map((c, i) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="faint">The server lists no change.</div>
+                )}
+              </div>
+              <div>
+                <p className="section-title">Audit rows it writes</p>
+                {preview.audit.length ? (
+                  <ul className="plain mono">
+                    {preview.audit.map((a, i) => (
+                      <li key={i}>{a}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="faint">The server lists no audit row.</div>
+                )}
+              </div>
+              <p className="faint note">
+                This confirmation is good until {utc(ms(preview.expires_at))} ({ago(ms(preview.expires_at))}).
+              </p>
             </div>
-            <div>
-              <p className="section-title">Audit rows it writes</p>
-              {preview.audit.length ? (
-                <ul className="plain mono">
-                  {preview.audit.map((a, i) => (
-                    <li key={i}>{a}</li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="faint">The server lists no audit row.</div>
-              )}
-            </div>
-            <p className="faint note">
-              This confirmation is good until {utc(ms(preview.expires_at))} ({ago(ms(preview.expires_at))}).
-            </p>
-          </>
+          </details>
         )}
         {error && (
           <div className="callout crit" role="alert" id="confirmError">

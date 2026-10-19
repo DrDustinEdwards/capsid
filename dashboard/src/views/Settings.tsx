@@ -7,11 +7,13 @@ import { Switch } from "../ui/Switch";
 import { setSingleKeys, setThemeChoice, useSingleKeys, useThemeChoice, type ThemeChoice } from "../lib/prefs";
 import type { OpsSiteConfig } from "../types";
 import { Panel } from "capsomer/react/panel";
-import { PageHead } from "./shared";
+import { Danger, PageHead } from "./shared";
 import { PackageSettings } from "./SettingsPackages";
 
-// The Namespaces panel loads on its own, after Settings' first paint (it reads its own route).
-const Namespaces = lazy(() => import("./Namespaces").then((m) => ({ default: m.Namespaces })));
+// The Automation panel and the Projects roster load on their own, after Settings' first
+// paint (the roster reads its own route).
+const Automation = lazy(() => import("./Namespaces").then((m) => ({ default: m.Automation })));
+const Projects = lazy(() => import("./Namespaces").then((m) => ({ default: m.Projects })));
 // Phone alerts load on their own too: the panel is used once per device.
 const PhoneAlerts = lazy(() => import("./PhoneAlerts").then((m) => ({ default: m.PhoneAlerts })));
 
@@ -129,7 +131,7 @@ function SiteForm({ editing, onClose }: { editing: Editing; onClose: () => void 
           submit();
         }}
       >
-        <Field id={f("ns")} label="Namespace" note="A registered namespace. One row each.">
+        <Field id={f("ns")} label="Project" note="A registered project (its namespace). One row each.">
           {adding ? (
             <>
               <input ref={first} id={f("ns")} aria-describedby={`${f("ns")}-note`} className="field mono" list={f("nslist")} value={d.namespace} autoComplete="off" spellCheck={false} onChange={(e) => set({ namespace: e.target.value })} />
@@ -177,13 +179,25 @@ function SiteForm({ editing, onClose }: { editing: Editing; onClose: () => void 
             Cancel
           </button>
         </div>
+        {!adding && (
+          <Danger note="The watcher stops probing it. Its history stays.">
+            <button
+              type="button"
+              className="btn danger"
+              aria-label={`Remove ${editing.row.namespace}`}
+              onClick={() => confirm({ action: "site_remove", params: { namespace: editing.row.namespace, revision: String(editing.row.revision) }, title: `Remove ${editing.row.namespace}`, onDone: onClose })}
+            >
+              Remove
+            </button>
+          </Danger>
+        )}
       </form>
     </section>
   );
 }
 
 function Row({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
-  const { now, confirm } = useApp();
+  const { now } = useApp();
   const at = msSql(s.updated_at);
   const none = <span className="faint">none</span>;
   return (
@@ -216,19 +230,10 @@ function Row({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void }) {
         </div>
       </td>
       <td className="ctl">
-        <div className="toolbar nowrap">
-          <button type="button" className="btn" aria-label={`Edit ${s.namespace}`} onClick={onEdit}>
-            Edit
-          </button>
-          <button
-            type="button"
-            className="btn"
-            aria-label={`Remove ${s.namespace}`}
-            onClick={() => confirm({ action: "site_remove", params: { namespace: s.namespace, revision: String(s.revision) }, title: `Remove ${s.namespace}` })}
-          >
-            Remove
-          </button>
-        </div>
+        {/* Edit only: Remove is in the form's Danger area (UX audit M9). */}
+        <button type="button" className="btn" aria-label={`Edit ${s.namespace}`} onClick={onEdit}>
+          Edit
+        </button>
       </td>
     </tr>
   );
@@ -240,12 +245,20 @@ export function Settings() {
   const rows = feed.live.sites;
   // The form is keyed on what it edits, so switching rows starts a fresh draft.
   const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.row.namespace}`) : "";
+  // The order is the UX audit's (M3): the switches that matter at 2 a.m. first, then phone
+  // alerts and email, the sites, the packages, the projects, and this browser's display.
   return (
     <div className="page">
       <PageHead title="Settings" />
+      <Suspense fallback={null}>
+        <Automation />
+      </Suspense>
+      <Suspense fallback={null}>
+        <PhoneAlerts />
+      </Suspense>
       {!hasSites(feed) && (
         <div className="callout" role="status">
-          No site is configured, so the watcher probes nothing and Health shows no Sites section. Add a site to start.
+          No site is configured, so the watcher probes nothing and Health shows no Sites tab. Add a site to start.
         </div>
       )}
       <div className="toolbar">
@@ -257,10 +270,10 @@ export function Settings() {
       <Panel flush title="Sites" count={rows.length} src="D1 ops_sites">
         {rows.length ? (
           <div className="scroll-x reflow">
-            <table className="list cards-below-1320">
+            <table className="list cards-below-1100">
               <thead>
                 <tr>
-                  <th>Namespace</th>
+                  <th>Project</th>
                   <th>Name</th>
                   <th>Origin</th>
                   <th>Health path</th>
@@ -285,19 +298,9 @@ export function Settings() {
       </Panel>
       <PackageSettings />
       <Suspense fallback={null}>
-        <PhoneAlerts />
+        <Projects />
       </Suspense>
       <Display />
-      {/* The automation switches and the roster, which were the Namespaces view
-          (design-portal-evaluation.md section 2: "Namespaces: it is settings"). */}
-      <section className="health-section" id="automation" data-section="Automation" aria-labelledby="automation-h">
-        <h2 className="health-title" id="automation-h">
-          Automation and namespaces
-        </h2>
-        <Suspense fallback={null}>
-          <Namespaces embedded />
-        </Suspense>
-      </section>
     </div>
   );
 }

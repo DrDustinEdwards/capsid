@@ -6,7 +6,6 @@ import { fetchSharedCode } from "../lib/api";
 import { ago, ms } from "../lib/format";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "../types";
 import { St } from "../ui/icons";
-import { PageHead } from "./shared";
 
 // SHARED CODE (job_584b4e7f2824): how far the centralization has got. One panel per shared
 // package from configuration (shared_packages), each app that uses it with the tag it
@@ -34,8 +33,7 @@ export function SharedCode() {
   }, [signOut]);
   const data = load.data;
   return (
-    <div className="page">
-      <PageHead title="Shared code" />
+    <div className="embedded">
       {load.loading ? (
         <div className="loading">
           <Spinner label="Reading the shared packages" />

@@ -3,7 +3,7 @@ import { useApp } from "../app/ctx";
 import { ago, msSql, utc } from "../lib/format";
 import type { OpsPackageConfig } from "../types";
 import { Panel } from "capsomer/react/panel";
-import {  } from "./shared";
+import { Danger } from "./shared";
 
 // The package configuration (live.packages, the ops_packages table): one row per npm
 // package the Packages view shows. Every change goes through the confirm dialog, which
@@ -96,13 +96,25 @@ function PackageForm({ editing, onClose }: { editing: Editing; onClose: () => vo
             </span>
           )}
         </div>
+        {!adding && (
+          <Danger note="The Packages page stops showing it.">
+            <button
+              type="button"
+              className="btn danger"
+              aria-label={`Remove ${editing.row.name}`}
+              onClick={() => confirm({ action: "package_remove", params: { name: editing.row.name, revision: String(editing.row.revision) }, title: `Remove ${editing.row.name}`, onDone: onClose })}
+            >
+              Remove
+            </button>
+          </Danger>
+        )}
       </form>
     </section>
   );
 }
 
 export function PackageSettings() {
-  const { feed, now, confirm } = useApp();
+  const { feed, now } = useApp();
   const [editing, setEditing] = useState<Editing | null>(null);
   const rows = feed.live.packages;
   const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.row.name}`) : "";
@@ -144,19 +156,10 @@ export function PackageSettings() {
                         </div>
                       </td>
                       <td className="ctl">
-                        <div className="toolbar nowrap">
-                          <button type="button" className="btn" aria-label={`Edit ${p.name}`} onClick={() => setEditing({ kind: "edit", row: p })}>
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="btn"
-                            aria-label={`Remove ${p.name}`}
-                            onClick={() => confirm({ action: "package_remove", params: { name: p.name, revision: String(p.revision) }, title: `Remove ${p.name}` })}
-                          >
-                            Remove
-                          </button>
-                        </div>
+                        {/* Edit only: Remove is in the form's Danger area (UX audit M9). */}
+                        <button type="button" className="btn" aria-label={`Edit ${p.name}`} onClick={() => setEditing({ kind: "edit", row: p })}>
+                          Edit
+                        </button>
                       </td>
                     </tr>
                   );

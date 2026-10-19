@@ -44,8 +44,10 @@ test("a job transition's two rows say which is the job's and which its mirror do
   await page.goto("activity");
   const posted = page.locator("tbody tr[data-row]").filter({ hasText: "jobs/job_9ab0bcf483ae.md" });
   await expect(posted).toHaveCount(2);
-  await expect(posted.nth(0)).toContainText("job-posted (job)");
-  await expect(posted.nth(1)).toContainText("job-posted (mirror document)");
+  // The action in words, its code under it (UX audit M5).
+  await expect(posted.nth(0)).toContainText("Posted a job (job)");
+  await expect(posted.nth(1)).toContainText("Posted a job (mirror document)");
+  await expect(posted.nth(0).locator(".src.mono")).toHaveText("job-posted");
 });
 
 // The Activity drawer (job_fe0da37c07e0 PR 2): a row opens the audit row it is, with
@@ -54,7 +56,8 @@ test("an Activity row opens its audit row: the reason, the before and after, and
   await page.goto("activity");
   await page.locator("tbody tr[data-row]").filter({ hasText: "ops-site-edited" }).click();
   const drawer = page.locator("dialog.drawer");
-  await expect(drawer.getByRole("heading", { name: "ops-site-edited" })).toBeVisible();
+  await expect(drawer.getByRole("heading", { name: "Changed a site" })).toBeVisible();
+  await expect(drawer).toContainText("ops-site-edited");
   await expect(page).toHaveURL(/\/activity\/audit\/\d+$/);
   const origin = drawer.locator(".kv.diff dd").first();
   await expect(origin.locator("del")).toHaveText("https://sample-b.example.com");
@@ -71,8 +74,20 @@ test("an Activity row opens its audit row: the reason, the before and after, and
 test("an audit row opened by its address reads that row; a write's hash is counted, not shown", async ({ page }) => {
   await page.goto("activity/audit/1000");
   const drawer = page.locator("dialog.drawer");
-  await expect(drawer.getByRole("heading", { name: "write" })).toBeVisible();
+  await expect(drawer.getByRole("heading", { name: "Wrote a document" })).toBeVisible();
   await expect(drawer).toContainText("1 recorded field is not shown");
+});
+
+// UX audit m7: who did it is picked from a list, not typed from memory.
+test("the Who filter is a picker of the agents and actors seen", async ({ page }) => {
+  await page.goto("activity");
+  const who = page.getByLabel("Who", { exact: true });
+  await expect(who.locator("option").first()).toHaveText("Anyone");
+  await expect(who.locator("option", { hasText: "agent:watcher" })).toHaveCount(1);
+  await who.selectOption("agent:watcher");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(page).toHaveURL(/\/activity\?actor=agent%3Awatcher$/);
+  await expect(page.locator("tbody tr[data-row]").first()).toContainText("agent:watcher");
 });
 
 test("an address naming no audit row says so", async ({ page }) => {

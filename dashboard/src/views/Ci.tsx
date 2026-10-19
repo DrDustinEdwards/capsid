@@ -34,7 +34,7 @@ export function DefaultBranches() {
             <table className="list">
               <thead>
                 <tr>
-                  <th>Namespace</th>
+                  <th>Project</th>
                   <th>Latest run</th>
                   <th>Sha</th>
                   <th>When</th>
@@ -45,7 +45,8 @@ export function DefaultBranches() {
                 {snap.ci.map((c) => {
                   const st = ciState(c);
                   return (
-                    <tr key={c.namespace}>
+                    // The whole row opens the run (the UX audit's m5: "run" was a 20 by 16 px target).
+                    <tr key={c.namespace} className={c.latest?.url ? "click" : undefined}>
                       <td>
                         <b>{c.namespace}</b>
                       </td>
@@ -58,8 +59,8 @@ export function DefaultBranches() {
                       </td>
                       <td>
                         {c.latest?.url && (
-                          <a href={c.latest.url} target="_blank" rel="noopener noreferrer">
-                            run
+                          <a className="stretch" href={c.latest.url} target="_blank" rel="noopener noreferrer" aria-label={`Open the latest ${c.namespace} run on GitHub`}>
+                            Open run
                           </a>
                         )}
                       </td>

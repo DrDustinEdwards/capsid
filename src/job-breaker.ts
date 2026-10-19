@@ -91,7 +91,7 @@ export function breakerRefusal(state: BreakerState): string {
   return (
     `the circuit breaker for ${state.namespace} is open: ${state.failed} jobs failed by their holders since ${state.since} UTC, ` +
     `at or over the threshold of ${state.threshold}. Nothing in ${state.namespace} is handed out until the seat or Dustin resets it ` +
-    `(capsid_admin_control_improve action breaker_reset, or Reset breaker in the Portal).`
+    `(capsid_admin_control_improve action breaker_reset, or Reset in the Portal, under Paused after repeated failures on Needs you).`
   );
 }
 

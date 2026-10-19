@@ -105,7 +105,7 @@ test("PLANT: chart 3, the queue, says whether it grew or drained over the 14 day
 
 test("PLANT: chart 5, claim against verified, has the four agreements for each agent that was checked", async ({ page }) => {
   await visit(page, "agents");
-  await page.getByRole("button", { name: "Claims" }).click();
+  await page.getByRole("navigation", { name: "Agents", exact: true }).getByRole("link", { name: "Checks" }).click();
   const chart = page.locator('[data-chart="agreement"]');
   // sample-f has no check, so three agents.
   await expect(chart.getByRole("img", { name: /for 3 agents: 20 agree, 4 disagree, 9 unclaimed, 2 unchecked/ })).toBeVisible();

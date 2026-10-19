@@ -5,6 +5,9 @@ import { ago, fmtN, ms } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
 import { Panel } from "capsomer/react/panel";
+import { PageTabs, useTabParam } from "../ui/pagetabs";
+import { hasPackages } from "../lib/derive";
+import { SharedCode } from "./SharedCode";
 import { NoSnapshot, PageHead } from "./shared";
 
 // The optional Packages panel (capsid/decisions.md, 2026-09-29): one panel per package
@@ -225,16 +228,34 @@ function PackagePanel({ cfg, snap }: { cfg: OpsPackageConfig; snap: PackageSnaps
   );
 }
 
+// One page for one kind of thing (the UX audit's m1): Published, the npm packages configured
+// in Settings (only while one is), and Shared, the git-pinned packages the apps share (what
+// was the Shared code page). The tab is in the address (?tab=shared); /shared lands there.
 export function Packages() {
   const { feed } = useApp();
-  const byName = new Map((feed.snapshot?.packages ?? []).map((p) => [p.name, p]));
+  const tabs = [...(hasPackages(feed) ? [{ id: "published", label: "Published" }] : []), { id: "shared", label: "Shared" }];
+  const asked = useTabParam();
+  const tab = tabs.some((t) => t.id === asked) ? asked! : tabs[0]!.id;
   return (
     <div className="page">
       <PageHead title="Packages" />
+      <PageTabs label="Packages" path="/packages" tabs={tabs} current={tab} />
+      <div className="embedded" id={tab}>
+        {tab === "shared" ? <SharedCode /> : <Published />}
+      </div>
+    </div>
+  );
+}
+
+function Published() {
+  const { feed } = useApp();
+  const byName = new Map((feed.snapshot?.packages ?? []).map((p) => [p.name, p]));
+  return (
+    <>
       {!feed.snapshot && <NoSnapshot />}
       {feed.live.packages.map((cfg) => (
         <PackagePanel key={cfg.name} cfg={cfg} snap={byName.get(cfg.name) ?? null} />
       ))}
-    </div>
+    </>
   );
 }

@@ -103,9 +103,9 @@ export function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => voi
   return (
     <Panel
       flush
-      title="Stale jobs"
+      title="Stuck jobs"
       id="stale-jobs"
-      section="Stale jobs"
+      section="Stuck jobs"
       count={data ? rows.length : undefined}
       src={
         <>
@@ -169,27 +169,24 @@ export function Queue() {
   return (
     <div className="page">
       <Anchors />
-      <PageHead title="Queue" />
-      <ChartSlot>
-        <QueueChart />
-      </ChartSlot>
+      <PageHead title="Jobs" />
       <div className="toolbar">
         <NsChips list={nss} />
         <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />
       </div>
       <StaleJobs load={stale.load} reread={stale.reread} />
       <div className="grid2">
-        <Panel flush title="Jobs" id="jobs" section="Jobs" src="live · D1 jobs, read on each refresh">
+        <Panel flush title="All jobs" id="jobs" section="All jobs" src="live · D1 jobs, read on each refresh">
           {!jobs.length && all.length ? (
             <FilterEmpty onShowAll={() => (setFilters({ q: "" }), setNs("all"))}>
               No job {q ? `matches the text "${filters.q.trim()}"` : "is listed"}
-              {ns !== "all" ? ` in the namespace ${ns}` : ""}.
+              {ns !== "all" ? ` in the project ${ns}` : ""}.
             </FilterEmpty>
           ) : (
             <QueueRows jobs={jobs.filter((j) => !inPanel.has(j.id))} />
           )}
         </Panel>
-        <Panel flush title="By namespace" id="by-namespace" section="By namespace">
+        <Panel flush title="By project" id="by-namespace" section="By project">
           <div className="scroll-x">
             <table className="list">
               <tbody>
@@ -224,6 +221,10 @@ export function Queue() {
           <LiveSessions />
         </Panel>
       </div>
+      {/* The chart goes last: the lists are what a person comes for (the UX audit's m6). */}
+      <ChartSlot>
+        <QueueChart />
+      </ChartSlot>
     </div>
   );
 }

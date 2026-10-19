@@ -57,17 +57,17 @@ test("a filter picked on Health narrows each of its tabs, lives in the address, 
   await page.getByRole("navigation", { name: "Health", exact: true }).getByRole("link", { name: "Sites" }).click();
   await expect(page).toHaveURL(/\/health\?ns=watcher$/);
   await expect(page.locator("#sites [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#sites [data-filter-empty]")).toContainText("No site in the namespace watcher.");
+  await expect(page.locator("#sites [data-filter-empty]")).toContainText("No site in the project watcher.");
   // g then q: the keyboard way to another page, which keeps its own filter.
   await page.keyboard.press("g");
   await page.keyboard.press("q");
-  await expect(page.getByRole("heading", { level: 1, name: "Queue" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
   await expect(page).toHaveURL(/\/queue$/);
   await expect(page.locator("main [role=group]").getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
   // Reloading a filtered address keeps the filter; Show all clears it.
   await page.goto("./health?ns=watcher");
   const empty = page.locator("#sites [data-filter-empty]");
-  await expect(empty).toContainText("No site in the namespace watcher.");
+  await expect(empty).toContainText("No site in the project watcher.");
   await empty.getByRole("button", { name: "Show all" }).click();
   await expect(page).toHaveURL(/\/health$/);
   await expect(page.locator("#sites table.fleet tbody tr[data-row]")).toHaveCount(8);
@@ -145,5 +145,5 @@ test("document.title differs per view", async ({ page }) => {
   const title = (await row.locator("b").first().textContent()) ?? "";
   await row.click();
   await expect(drawer(page)).toBeVisible();
-  await expect(page).toHaveTitle(`${title} · Queue · Capsid Portal`);
+  await expect(page).toHaveTitle(`${title} · Jobs · Capsid Portal`);
 });

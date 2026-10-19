@@ -1,28 +1,29 @@
 import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 
-// Eight pages, regrouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE
-// 2 and 8, ruled 2026-10-09; job_d62abdbfc270 PR 2 and PR 7). Health holds what Overview,
-// Sites, Incidents, Deploys, Backups and CI's default-branch table held; Pull requests
-// holds CI's PR half; Agents holds Claims as a tab; Settings holds the Namespaces panel.
-// Shared code sits in Records beside Packages. The letters follow the pages, with no
+// Nine pages, regrouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE
+// 2 and 8, ruled 2026-10-09; job_d62abdbfc270 PR 2 and PR 7; the Portal UX audit's sitemap,
+// 2026-10). Health holds what Overview, Sites, Incidents, Deploys, Backups and CI's
+// default-branch table held; Pull requests holds CI's PR half; Agents holds Claims as its
+// Checks tab; Packages holds Shared code as its Shared tab; Settings holds the Namespaces
+// panel. The ids are internal and stay; only the labels are the audit's words (the Queue is
+// "Jobs"). The order is the menu's, Settings last. The letters follow the pages, with no
 // redirect period for the old ones (Dustin, 2026-10-09).
 export const VIEWS = [
   { id: "needs", label: "Needs you", key: "y" },
-  { id: "queue", label: "Queue", key: "q" },
-  { id: "prs", label: "Pull requests", key: "p" },
   { id: "health", label: "Health", key: "h" },
+  { id: "prs", label: "Pull requests", key: "p" },
+  { id: "queue", label: "Jobs", key: "q" },
   { id: "activity", label: "Activity", key: "l" },
   { id: "agents", label: "Agents", key: "a" },
   { id: "packages", label: "Packages", key: "k" },
-  { id: "shared", label: "Shared code", key: "x" },
   { id: "library", label: "Library", key: "b" },
   { id: "settings", label: "Settings", key: "e" },
 ] as const;
 
 // Where each retired view's content lives now, so an old address, an old "view:" reference
 // and a bookmark land on the page and section that hold it.
-export type MovedId = "overview" | "sites" | "incidents" | "deploys" | "backups" | "ci" | "namespaces" | "claims";
+export type MovedId = "overview" | "sites" | "incidents" | "deploys" | "backups" | "ci" | "namespaces" | "claims" | "shared";
 export const MOVED: Record<MovedId, { view: (typeof VIEWS)[number]["id"]; anchor?: string; tab?: string }> = {
   overview: { view: "health" },
   sites: { view: "health", tab: "sites" },
@@ -32,6 +33,7 @@ export const MOVED: Record<MovedId, { view: (typeof VIEWS)[number]["id"]; anchor
   ci: { view: "prs" },
   namespaces: { view: "settings", anchor: "automation" },
   claims: { view: "agents", tab: "claims" },
+  shared: { view: "packages", tab: "shared" },
 };
 
 // Health's tabs (the UX audit's M1): the verdict and the tiles, then one of these at a
@@ -54,13 +56,11 @@ export function healthTab(name: string | null | undefined): HealthTab | null {
 
 export type ViewId = (typeof VIEWS)[number]["id"];
 
-// The views on offer: Packages only while a package is configured (hasPackages in
-// lib/derive.ts). Sites are a section of Health, shown only while one is configured.
-// Every other view is always there, Settings included, since that is where the first of
-// each is added.
+// The views on offer: every one. Packages stays with no npm package configured, since its
+// Shared tab is always there; Settings is where the first site and package are added.
 export type ViewDef = (typeof VIEWS)[number];
-export function viewsFor(_sites: boolean, packages = true): ReadonlyArray<ViewDef> {
-  return VIEWS.filter((v) => v.id !== "packages" || packages);
+export function viewsFor(): ReadonlyArray<ViewDef> {
+  return VIEWS;
 }
 export type DrawerType = "site" | "job" | "agent" | "audit";
 
@@ -155,7 +155,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   site_add: "Add site",
   site_edit: "Save changes",
   site_remove: "Remove site",
-  reset_breaker: "Reset breaker",
+  reset_breaker: "Reset and resume",
   package_add: "Add package",
   package_edit: "Save changes",
   package_remove: "Remove package",
