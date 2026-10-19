@@ -78,6 +78,12 @@
   //   wrangler secret put CF_ACCESS_SYNC_TOKEN         (POST /ops/access-sync only:
   //                                                     Access: Groups Write, Access: Users
   //                                                     Read, Zero Trust: Seats Write)
+  //   wrangler secret put GSC_SERVICE_ACCOUNT_KEY      (capsid_inspect_repo action search:
+  //                                                     a Google service account's JSON key,
+  //                                                     docs/search-console.md)
+  //   wrangler secret put BING_WEBMASTER_API_KEY       (capsid_inspect_repo action bing:
+  //                                                     Bing Webmaster Tools' API key,
+  //                                                     docs/bing-webmaster.md)
   "vars": {
     "GITHUB_APP_CLIENT_ID": "YOUR_GITHUB_APP_CLIENT_ID"
   },

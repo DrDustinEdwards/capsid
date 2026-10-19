@@ -4,7 +4,7 @@ Capsid reaches mapped repositories through a dedicated GitHub App. The Worker mi
 
 A namespace can map to several repos, each with a label (for example `primary` and `legacy`). Every repo tool takes an optional `repo` parameter, a label or a mapped `owner/name`, defaulting to `primary`. An unmapped repo is rejected, so the namespace mapping is the authorization boundary.
 
-- **Read**: `capsid_read_repo` (actions `tree`, `files` and `search`) and `capsid_inspect_repo` (actions `refs`, `history`, `ci` and `site`, the last a live check of the namespace's site, docs/portal.md)
+- **Read**: `capsid_read_repo` (actions `tree`, `files` and `search`) and `capsid_inspect_repo` (actions `refs`, `history`, `ci`, `site`, `search` and `bing`: `site` is a live check of the namespace's site, docs/portal.md, `search` its Google Search Console data, docs/search-console.md, and `bing` its Bing Webmaster Tools data, docs/bing-webmaster.md)
 - **Write**: `capsid_change_repo` (actions `write_file`, `delete_file` and `create_branch`), `capsid_open_pr` (actions `open` and `comment`), `capsid_close_pr` (actions `merge`, `close`, `delete_branch`, `tag` and `release`) and `capsid_run_ci`
 
 `capsid_change_repo` action `write_file` defaults to `mode: "pr"` (commit to a new branch, open a pull request). `mode: "direct"` commits to the default branch and needs `can_direct_write`. `capsid_change_repo` action `delete_file` takes the same modes.

@@ -96,6 +96,8 @@ You need a Cloudflare account and a GitHub App. [docs/bootstrap.md](docs/bootstr
 - [docs/portal.md](docs/portal.md) the owner's admin app
 - [docs/health-format.md](docs/health-format.md) the health answer every site gives
 - [docs/live-checks.md](docs/live-checks.md) the checks run against each live site
+- [docs/search-console.md](docs/search-console.md) reading each site's Google Search Console data, and the one-time setup
+- [docs/bing-webmaster.md](docs/bing-webmaster.md) reading each site's Bing Webmaster Tools data, and the one-time setup
 - [docs/public-data.md](docs/public-data.md) the public model and numbers
 - [explorer/README.md](explorer/README.md) the system explorer at capsid.dustinedwards.info
 

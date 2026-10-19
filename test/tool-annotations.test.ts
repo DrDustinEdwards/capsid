@@ -265,6 +265,16 @@ const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence
     via: /\bsiteCheck\(/,
     evidence: [{ file: "site-check.ts", pattern: /\bfetchImpl\(/ }],
   },
+  search_console: {
+    reason: "reads the site's Search Console data from Google's API",
+    via: /\bsearchConsole\(/,
+    evidence: [{ file: "search-console.ts", pattern: /\bfetchImpl\(/ }],
+  },
+  bing_webmaster: {
+    reason: "reads the site's Bing Webmaster Tools data from Bing's API",
+    via: /\bbingWebmaster\(/,
+    evidence: [{ file: "bing-webmaster.ts", pattern: /\bfetchImpl\(/ }],
+  },
 };
 
 // The names a file imports, as values, from src/github* or src/ops-cloudflare*.ts.
