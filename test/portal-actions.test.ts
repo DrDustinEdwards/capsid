@@ -43,6 +43,11 @@ const passThrough = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input instanceof Request ? input.url : input);
   if (url === "https://api.github.com/repos/owner/repo/pulls/41") return Response.json({ head: { sha: APPROVED_HEAD }, state: "open", merged: false });
+  // sign_policy_from_repo reads docs/policy/auto-merge.md: the shipped policy, a version on.
+  if (url === "https://api.github.com/repos/owner/repo/contents/docs/policy/auto-merge.md") {
+    const text = readFileSync(join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"), "utf8").replace(/^- version: (\d+)$/m, (_, v: string) => `- version: ${Number(v) + 1}`);
+    return Response.json({ type: "file", encoding: "base64", content: Buffer.from(text, "utf8").toString("base64"), size: text.length, sha: "f".repeat(40) });
+  }
   return passThrough(input, init);
 }) as typeof fetch;
 
@@ -292,6 +297,7 @@ const FEED: OpsFeedData = {
     prs: [],
     awaiting_seat: [],
     merge_safety: null,
+    merge_policy: { loads: false, reason: "sample" },
     overnight: { mode: "off", decision: null },
     sessions: [],
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },
@@ -382,6 +388,7 @@ const EVERY_ACTION = [
   ["canon_approve_all", {}],
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
   ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "8" }],
+  ["sign_policy_from_repo", { confirm: "8" }],
   ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
   ["automerge_resume", { namespace: "capsid", reason: "both rollbacks are answered" }],
 ] as const;
@@ -410,6 +417,7 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "resume_job",
     "revoke_agent",
     "sign_policy_change",
+    "sign_policy_from_repo",
     "site_add",
     "site_edit",
     "site_remove",
@@ -420,7 +428,7 @@ test("the Portal's actions are the eight the old /console page had, the overnigh
     "unpause",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 28);
+  assert.equal(PORTAL_ACTIONS.length, 29);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing

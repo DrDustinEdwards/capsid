@@ -861,6 +861,23 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
     // when nothing is promoted or suspended.
     case "sign_policy_change":
       throw new Refusal(400, "The mock holds no signed auto-merge policy, so no version is changed.");
+    // The mock's repo says version 8 against the stored 7, so the typed version is checked
+    // as the Worker checks it and a perform writes nothing.
+    case "sign_policy_from_repo": {
+      const typed = need(params, "confirm", "The version to sign");
+      if (typed !== "8") throw new Refusal(400, `${typed} is not the version in docs/policy/auto-merge.md, which says 8. Type 8 to sign it. Nothing was signed.`);
+      return {
+        summary: "Write the auto-merge policy from docs/policy/auto-merge.md on the default branch and sign it.",
+        done: "Signed auto-merge policy version 8 from docs/policy/auto-merge.md (1 lines removed, 1 added).",
+        changes: [
+          "capsid/policy/auto-merge.md: version 7 -> 8, written exactly as docs/policy/auto-merge.md reads on the default branch now, and signed.",
+          "Lines changed: 1 removed, 1 added.",
+          "- - version: 7",
+          "+ - version: 8",
+        ],
+        apply: () => {},
+      };
+    }
     case "unit_resume":
       throw new Refusal(400, `${params.unit ?? "That unit"} is not suspended, so there is nothing to lift.`);
     case "automerge_resume":

@@ -439,6 +439,8 @@ export interface OpsMergeSafety {
   namespaces: OpsMergeSafetyRow[];
 }
 
+export type OpsMergePolicy = { loads: true; version: string; enabled: boolean } | { loads: false; reason: string };
+
 export interface OpsLive {
   generated: string;
   // Every open job, and every job that ended in the last 24 hours.
@@ -450,6 +452,9 @@ export interface OpsLive {
   // The auto-merge safety meter the tick's merge-safety step kept, or null before its
   // first pass. One KV get, no D1 or GitHub read.
   merge_safety: OpsMergeSafety | null;
+  // Whether the signed auto-merge policy loads as the tick loads it (loadMergePolicy), and
+  // if not why, so the Portal's policy panel can say so beside its sign-from-repo button.
+  merge_policy: OpsMergePolicy;
   overnight: OpsOvernight;
   // Sessions with no SessionEnd whose last event was in the last 24 hours, newest
   // first, at most 50.
@@ -603,6 +608,9 @@ export type PortalAction =
   // The merge units (docs/design/design-merge-pipeline.md section 7): a signed policy
   // change that promotes or removes a unit, and the Undo of a unit's suspension.
   | "sign_policy_change"
+  // Write the auto-merge policy from docs/policy/auto-merge.md on the default branch and
+  // sign it (src/policy-sign.ts, planPolicyFromRepo).
+  | "sign_policy_from_repo"
   | "unit_resume"
   // Lift a namespace's auto-merge pause (src/merge-safety.ts), the shutoff after bad
   // unattended merges.

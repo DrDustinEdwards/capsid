@@ -210,6 +210,7 @@ const FEED: OpsFeedData = {
     prs: [],
     awaiting_seat: [],
     merge_safety: null,
+    merge_policy: { loads: false, reason: "sample" },
     overnight: { mode: "off", decision: null },
     sessions: [],
     loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },

@@ -129,6 +129,34 @@ export function PullRequests() {
           </table>
         </div>
       </Panel>
+      {/* The signed auto-merge policy (src/auto-merge-policy.ts): whether the Worker loads it,
+          and the control that writes it from docs/policy/auto-merge.md and signs it
+          (sign_policy_from_repo). The version is typed in the dialog. */}
+      <Panel title="Auto-merge policy" src="signed policy · loadMergePolicy">
+        <div className="stack-gap">
+          {live.merge_policy.loads ? (
+            <p>
+              <St kind="ok">Loads</St> version {live.merge_policy.version}, {live.merge_policy.enabled ? "enabled" : "disabled"}.
+            </p>
+          ) : (
+            <>
+              <p>
+                <St kind="crit">Does not load</St> Nothing is auto-merged until it does.
+              </p>
+              <p className="muted prewrap">{live.merge_policy.reason}</p>
+            </>
+          )}
+          <div className="toolbar">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => confirm({ action: "sign_policy_from_repo", params: {}, title: "Load the auto-merge policy from the repo and sign it" })}
+            >
+              Load from repo and sign
+            </button>
+          </div>
+        </div>
+      </Panel>
       {/* The auto-merge safety meter (src/merge-safety.ts): the last seven days per
           namespace, and the shutoff. Resuming is the automerge_resume control. */}
       {live.merge_safety && (

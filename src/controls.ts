@@ -19,7 +19,7 @@ import { openTitleHolder } from "./jobs-edit";
 import { resolveRepo } from "./github/client";
 import { managePr } from "./github/refs";
 import { performApproval, planApproval } from "./pr-approvals";
-import { performPolicyChange, planPolicyChange } from "./policy-sign";
+import { performPolicyChange, performPolicyFromRepo, planPolicyChange, planPolicyFromRepo } from "./policy-sign";
 import { liftSuspension, planLift } from "./merge-units";
 import { planResume, resumeNamespace } from "./merge-safety";
 import type { JobRow } from "./jobs-schema";
@@ -72,6 +72,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "canon_approve_all",
   "site_repair",
   "sign_policy_change",
+  "sign_policy_from_repo",
   "unit_resume",
   "automerge_resume",
 ];
@@ -191,6 +192,8 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return params.change === "demote"
         ? `Write and sign the next version of the auto-merge policy without the merge unit ${params.unit ?? ""}: its pull requests wait for an approval again.`
         : `Write and sign the next version of the auto-merge policy with the merge unit ${params.unit ?? ""} promoted to auto: its pull requests may merge with no human when every other check passes. This widens autonomy, so the new version number is typed as confirm.`;
+    case "sign_policy_from_repo":
+      return "Write the auto-merge policy from docs/policy/auto-merge.md on the default branch, exactly as it reads there, and sign it. The version in the file is typed as confirm, because the policy decides what merges with no human.";
     case "unit_resume":
       return `Lift the suspension of the merge unit ${params.unit ?? ""}. The tick may merge its pull requests unattended again, and the rollbacks before now suspend it no more.`;
     case "automerge_resume":
@@ -406,6 +409,16 @@ async function performAction(
         summary = done.summary;
         committed = true;
         await auditClick(env, actor, source, surface, action, "capsid", { change: params.change, unit: params.unit, confirm: params.confirm, reason: required(params, "reason") }, click);
+        break;
+      }
+      case "sign_policy_from_repo": {
+        // The file is read again and must read as the preview's did (the hash the token
+        // binds), and the typed version must be the file's.
+        const done = await performPolicyFromRepo(env, actor, required(params, "confirm") ?? undefined, required(params, "source_sha") ?? undefined);
+        if (!done.ok) return { ok: false, refusal: done.error };
+        summary = done.summary;
+        committed = true;
+        await auditClick(env, actor, source, surface, action, "capsid", { confirm: params.confirm, source_sha: params.source_sha, reason: required(params, "reason") }, click);
         break;
       }
       case "unit_resume": {
@@ -655,6 +668,8 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   canon_approve_all: ["reason"],
   site_repair: ["namespace", "tool"],
   sign_policy_change: ["change", "unit", "confirm", "reason"],
+  // The hash its preview read is bound into the token (Plan.bind), so a caller cannot send one.
+  sign_policy_from_repo: ["confirm", "reason"],
   unit_resume: ["unit", "reason"],
   automerge_resume: ["namespace", "reason"],
 };
@@ -981,6 +996,12 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
     case "sign_policy_change": {
       const plan = await planPolicyChange(env, p.change, p.unit);
       return plan.ok ? { ok: true, changes: plan.changes, audit: [`policy-changed by ${actor}`, click] } : refused(plan.error);
+    }
+    case "sign_policy_from_repo": {
+      const plan = await planPolicyFromRepo(env);
+      // A typed version, when one comes with the preview, is checked now and bound into the token.
+      if (plan.ok && p.confirm && p.confirm !== plan.to) return refused(`${p.confirm} is not the version in docs/policy/auto-merge.md, which says ${plan.to}. Type ${plan.to} to sign it. Nothing was signed.`);
+      return plan.ok ? { ok: true, changes: plan.changes, audit: [`policy-loaded-from-repo by ${actor}`, click], bind: { source_sha: plan.newSha } } : refused(plan.error);
     }
     case "unit_resume": {
       if (!p.reason) return refused(UNIT_RESUME_REASON);

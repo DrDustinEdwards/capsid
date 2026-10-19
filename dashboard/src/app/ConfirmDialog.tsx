@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { performAction, previewAction, type Answer } from "../lib/api";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalPerformed, PortalPreview } from "../types";
-import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, performLabel, type ConfirmRequest } from "./ctx";
+import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, TYPED_CONFIRM, performLabel, type ConfirmRequest } from "./ctx";
 
 // The one confirm dialog every control opens. It collects a reason where the action
 // needs one, previews (which writes nothing), shows what will change and the audit
@@ -26,6 +26,7 @@ export function ConfirmDialog({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
   const opener = useRef<Element | null>(null);
   const started = useRef(false);
   const finished = useRef(false);
@@ -34,6 +35,10 @@ export function ConfirmDialog({
   const [reason, setReason] = useState("");
   const takesNote = TAKES_NOTE.has(req.action);
   const [note, setNote] = useState("");
+  // The actions that widen autonomy ask for the version number typed before the preview, so
+  // the token carries it; a wrong number is refused with the right one.
+  const typesConfirm = TYPED_CONFIRM.has(req.action);
+  const [typedVersion, setTypedVersion] = useState("");
   const [preview, setPreview] = useState<PortalPreview | null>(null);
   const [pending, setPending] = useState<null | "preview" | "perform">(null);
   // field: the error is about the reason field itself, so the field is marked invalid.
@@ -79,7 +84,13 @@ export function ConfirmDialog({
       return;
     }
     const typedNote = takesNote ? (noteRef.current?.value ?? note).trim() : "";
-    const params = { ...req.params, ...(needsReason ? { reason: typed } : {}), ...(typedNote ? { note: typedNote } : {}) };
+    const version = typesConfirm ? (confirmRef.current?.value ?? typedVersion).trim() : "";
+    if (typesConfirm && !version) {
+      setError({ text: "Type the version number of the policy to be signed, then preview. The preview names it if you do not know it.", expired: false, field: true });
+      confirmRef.current?.focus();
+      return;
+    }
+    const params = { ...req.params, ...(needsReason ? { reason: typed } : {}), ...(typedNote ? { note: typedNote } : {}), ...(typesConfirm ? { confirm: version } : {}) };
     setPending("preview");
     setError(null);
     setPreview(null);
@@ -127,7 +138,7 @@ export function ConfirmDialog({
     // previews as soon as the dialog opens.
     if (!started.current) {
       started.current = true;
-      if (!needsReason) void runPreview("");
+      if (!needsReason && !typesConfirm) void runPreview("");
     }
     return () => {
       alive.current = false;
@@ -147,7 +158,7 @@ export function ConfirmDialog({
         {pending === "perform" ? "Working..." : label}
       </button>
     );
-  } else if (needsReason || error) {
+  } else if (needsReason || typesConfirm || error) {
     primary = (
       // A plain button with its own handler: Preview never depends on the form's submit
       // event, and it is disabled only while a request is in flight, never silently
@@ -175,6 +186,34 @@ export function ConfirmDialog({
             name a job by its id, sits under it once the preview answers. */}
         <h2 id="confirmTitle">{req.title}</h2>
         {preview && <p className="muted note" data-summary="">{preview.summary}</p>}
+        {typesConfirm && !needsReason && !preview && (
+          <form
+            id="confirmForm"
+            className="stack-gap"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!busy) void runPreview("");
+            }}
+          >
+            <label htmlFor="confirmVersion" className="section-title">
+              Version to sign (required)
+            </label>
+            <input
+              ref={confirmRef}
+              id="confirmVersion"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              autoFocus
+              value={typedVersion}
+              disabled={busy}
+              aria-invalid={error?.field ? true : undefined}
+              aria-describedby={error?.field ? "confirmError" : undefined}
+              onChange={(e) => setTypedVersion(e.target.value)}
+            />
+            <p className="faint note">The version number in the policy file. It decides what merges with no human, so it is typed, not clicked.</p>
+          </form>
+        )}
         {needsReason && !preview && (
           <form
             id="confirmForm"

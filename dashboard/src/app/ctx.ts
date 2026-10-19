@@ -109,6 +109,9 @@ export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["p
 // is the full approval, which the driver reads as resume_note.note.
 export const TAKES_NOTE: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job"]);
 
+// The actions whose dialog asks for the version number typed before the preview (confirm).
+export const TYPED_CONFIRM: ReadonlySet<PortalAction> = new Set<PortalAction>(["sign_policy_from_repo"]);
+
 // The confirm dialog's perform button, named for what it does (audit DECIDE 11).
 const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) => string)> = {
   pause: "Pause",
@@ -137,6 +140,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   canon_approve_all: "Approve all",
   site_repair: (p) => `Run ${p.tool ?? "repair"}`,
   sign_policy_change: (p) => (p.change === "demote" ? "Sign without the unit" : "Sign and promote"),
+  sign_policy_from_repo: "Load from repo and sign",
   unit_resume: "Lift suspension",
   automerge_resume: "Resume auto-merge",
 };
