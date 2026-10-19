@@ -7,6 +7,8 @@ import { visit } from "./views.ts";
 
 test("PLANT: chart 1, your time per week, says this week's figure and the change with its unit and direction", async ({ page }) => {
   await visit(page, "needs");
+  // Folded in Trends at the foot of Needs you (UX audit B3).
+  await page.locator("#trends > summary").click();
   const tile = page.locator('[data-chart="minutes"]');
   await expect(tile).toContainText("34 min this week");
   await expect(tile.locator(".minutes-change.up")).toHaveText(/4 min more than last week/);
@@ -77,6 +79,7 @@ test("PLANT: chart 11 says how long a branch has been red, a branch never run, a
 
 test("PLANT: chart 2, where waiting goes, sums the waits across namespaces and puts the longest gate first", async ({ page }) => {
   await visit(page, "needs");
+  await page.locator("#trends > summary").click();
   const tile = page.locator('[data-chart="waiting"]');
   await expect(tile.getByRole("img", { name: /39\.4 h in all, 30\.6 h of it at a step only a person takes/ })).toBeVisible();
   // needs_human is 24.4 h in sample and 6.2 h in sample-b, both ended by a human; every

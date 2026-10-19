@@ -86,40 +86,26 @@ test("Health has its five sections, no Queue panel and no attention list", async
 
 // ---- ruling 3: grouping and notices -------------------------------------------------------
 
-test("four pull requests of one repo are one row that opens in place to four", async ({ page }) => {
-  await reshape(page, fourPrs);
+test("four pull requests waiting are four rows in Waiting for you, each with its own Approve and Close, and none in Problems", async ({ page }) => {
+  await reshape(page, (f) => {
+    fourPrs(f);
+    const app = f.live.inbox.apps.find((a) => a.namespace === "sample-c")!;
+    app.items = [29, 30, 31, 32].map((n) => ({ title: `PR #${n} waits for you`, kind: "pr" as const, link: `https://github.com/example-org/sample-info/pull/${n}`, since: f.live.generated }));
+  });
   await visit(page, "needs");
-  const rows = attention(page).locator(".att-row").filter({ hasText: /awaits? the seat/ });
-  await expect(rows).toHaveCount(1);
-  const toggle = rows.getByRole("button", { name: "4 pull requests await the seat" });
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  const kids = page.locator(`#${await toggle.getAttribute("aria-controls")}`);
-  await expect(kids).toBeHidden();
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(kids.locator(".att-child")).toHaveCount(4);
-  for (const n of [29, 30, 31, 32]) await expect(kids.getByText(`example-org/sample-info #${n} awaits the seat`)).toBeVisible();
-  await expect(kids.getByRole("link", { name: "Open Pull requests" })).toHaveAttribute("href", "/portal/prs");
-  // Enter on the focused button closes it again.
-  await toggle.focus();
-  await page.keyboard.press("Enter");
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(kids).toBeHidden();
-  // A child opens what it names.
-  await toggle.click();
-  await kids.locator(".att-child").first().click();
-  await expect(page.getByRole("heading", { level: 1, name: "Pull requests" })).toBeVisible();
+  const prs = page.locator('[data-group="w-prs"]');
+  await expect(prs.locator(".wrow")).toHaveCount(4);
+  for (const n of [29, 30, 31, 32]) {
+    await expect(prs.getByRole("button", { name: `Approve example-org/sample-info #${n}`, exact: true })).toBeVisible();
+    await expect(prs.getByRole("button", { name: `Close example-org/sample-info #${n}`, exact: true })).toBeVisible();
+  }
+  await expect(attention(page).getByText(/await the seat/)).toHaveCount(0);
 });
 
-test("the blocked jobs are one row whose children are the jobs, then a link to the Queue", async ({ page }) => {
+test("the blocked jobs are rows in Waiting for you, and none of them is repeated in Problems", async ({ page }) => {
   await visit(page, "needs");
-  const toggle = attention(page).getByRole("button", { name: "3 jobs are waiting on you" });
-  await toggle.click();
-  const kids = page.locator(`#${await toggle.getAttribute("aria-controls")}`);
-  await expect(kids.locator(".att-child")).toHaveCount(3);
-  await expect(kids.getByRole("link", { name: "Open Queue" })).toHaveAttribute("href", "/portal/queue");
-  await kids.locator(".att-child").first().click();
-  await expect(page.locator("dialog.drawer[open]")).toBeVisible();
+  await expect(page.locator('[data-group="w-jobs"] .wrow')).toHaveCount(3);
+  await expect(attention(page).getByText(/jobs? (is|are) waiting on you/)).toHaveCount(0);
 });
 
 const NOTICE_TITLES = [/no Cloudflare data/, /could not run/, /could not be read/, /Site map drift/, /silent/];
@@ -151,13 +137,13 @@ test("with no problems it says all clear, and the notices row stays under it", a
     f.live.jobs = f.live.jobs.filter((j) => j.status !== "blocked" && j.status !== "claimed");
     f.live.awaiting_seat = [];
     f.live.canon_proposals = [];
-    // Session incidents are problems too (Needs attention lists them).
+    // Session incidents are problems too (Problems lists them).
     f.live.sessions = f.live.sessions.map((s) => ({ ...s, incident: null }));
     // A failing or quiet scheduled task is a problem too (src/task-runs.ts).
     for (const t of f.scheduled.tasks ?? []) if (t.flag !== "never") t.flag = null;
   });
   await visit(page, "needs");
-  await expect(attention(page).getByText("All clear. Nothing needs you.")).toBeVisible();
+  await expect(attention(page).getByText("No problems.")).toBeVisible();
   await expect(attention(page).locator(".att-list")).toHaveCount(0);
   await expect(attention(page).locator(".notices").getByRole("button", { name: /^\d+ notices?$/ })).toHaveAttribute("aria-expanded", "false");
 });

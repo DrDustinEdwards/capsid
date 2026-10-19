@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { OpsFeed } from "../src/types.ts";
 
 // An agent acting out of its usual pattern (src/anomaly.ts, OWASP item 6) is a warning row
-// in Needs attention, with no job behind it, that says nothing was suspended (Dustin,
+// in Problems, with no job behind it, that says nothing was suspended (Dustin,
 // D4 of 2026-10-03). The home page holds the list, whichever page the home is.
 
 test("PLANT: an open anomaly finding is an attention row, with no job behind it", async ({ page }) => {

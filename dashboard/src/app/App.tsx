@@ -9,13 +9,15 @@ import { RAIL_PREF, THEME_PREF, readPref, setSingleKeys, toggleTheme, useSingleK
 import { NavIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
 import { AppCtx, MOVED, VIEWS, parseRoute, placePath, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
-import { NeedsYou } from "../views/NeedsYou";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
 
-// Needs you, the home, ships in the initial chunk; every other view loads on first visit.
+// Every view loads on first visit. Needs you, the home, is asked for as this module loads,
+// so its chunk arrives beside the first feed read rather than after it (the feed is what
+// the page waits for), and the entry stays inside its size budget.
+const needsChunk = import("../views/NeedsYou");
 const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
-  needs: NeedsYou,
+  needs: lazy(() => needsChunk.then((m) => ({ default: m.NeedsYou }))),
   queue: lazy(() => import("../views/Queue").then((m) => ({ default: m.Queue }))),
   prs: lazy(() => import("../views/Ci").then((m) => ({ default: m.PullRequests }))),
   health: lazy(() => import("../views/Health").then((m) => ({ default: m.Health }))),

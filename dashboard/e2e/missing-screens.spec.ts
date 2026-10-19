@@ -141,7 +141,7 @@ test("Needs you shows what happened since this browser last looked, and the next
   await visit(page, "needs");
   const strip = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Since you last looked" }) });
   await expect(strip.locator("[data-digest]")).toContainText("finished");
-  await expect(strip.locator("[data-digest]")).toContainText("ready for the seat");
+  await expect(strip.locator("[data-digest]")).toContainText("ready for you");
   await page.reload();
   await expect(strip.locator("[data-digest]")).toBeVisible();
   expect(asked.length).toBeGreaterThanOrEqual(2);

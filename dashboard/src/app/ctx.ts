@@ -92,6 +92,18 @@ export interface ConfirmRequest {
   // The reverse action the result message offers as Undo, for a reversible control
   // (park and unpark).
   undo?: UndoRequest;
+  // Several rows of one kind decided together (Needs you's batch approve): each item is
+  // the same single control with its own params, previewed on its own and listed in this
+  // one dialog, then performed one after another. action and params above are the first
+  // item's. No item takes a reason.
+  batch?: ReadonlyArray<BatchItem>;
+}
+
+export interface BatchItem {
+  action: PortalAction;
+  params: Record<string, string>;
+  // The row in plain words, e.g. "sample-org/sample-a #12".
+  label: string;
 }
 
 // The reverse of a switch change, sent by the message's Undo as its own action, with

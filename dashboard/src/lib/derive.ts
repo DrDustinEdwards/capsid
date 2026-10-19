@@ -266,7 +266,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       title: f.headline,
       sub: agent ? "Out of its usual pattern · a finding only, nothing suspended" : (f.evidence[0] ?? "A queue breaker is open"),
       at: ms(f.last_seen),
-      open: agent ? "view:incidents" : "view:namespaces",
+      open: agent ? "view:incidents" : "view:needs#waiting",
     });
   }
   // Drivers' canon writes waiting for approval (src/canon.ts). A proposal whose added
@@ -281,7 +281,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       title: `${n} canon ${n === 1 ? "proposal awaits" : "proposals await"} your approval`,
       sub: `${[...new Set(live.canon_proposals.map((c) => `${c.namespace}/${c.path}`))].join(", ")}${flagged ? ` · ${flagged} with lines that read as instructions to agents` : ""}`,
       at: Math.max(...live.canon_proposals.map((c) => ms(c.created_at))),
-      open: "view:queue",
+      open: "view:needs#waiting",
     });
   }
   for (const a of live.awaiting_seat) {
@@ -413,8 +413,14 @@ function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
   return out.sort(worstFirst);
 }
 
-export function attentionGroups(feed: OpsFeed, now: number): AttentionGroups {
-  const items = attentionItems(feed, now);
+// What waits on a person's decision: blocked jobs, rule changes (canon proposals), pull
+// requests waiting for you and stopped queues. Needs you lists each of these with its
+// buttons, so its Problems list, and Health's, leave them out (UX audit m2: one count, in
+// one place).
+export const WAITING_KINDS: ReadonlySet<string> = new Set(["Queue", "Canon", "PR", "Breaker"]);
+
+export function attentionGroups(feed: OpsFeed, now: number, skip?: ReadonlySet<string>): AttentionGroups {
+  const items = attentionItems(feed, now).filter((a) => !skip?.has(a.kind));
   const notices = items.filter((a) => tierOf(a) === "notice");
   return {
     problems: fold(items.filter((a) => tierOf(a) === "problem"), feed, now),

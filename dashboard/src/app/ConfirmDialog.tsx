@@ -2,25 +2,26 @@ import { useEffect, useRef, useState } from "react";
 import { performAction, previewAction, type Answer } from "../lib/api";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalPerformed, PortalPreview } from "../types";
-import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, performLabel, type ConfirmRequest } from "./ctx";
+import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, performLabel, type BatchItem, type ConfirmRequest } from "./ctx";
 
 // The one confirm dialog every control opens. It collects a reason where the action
 // needs one, previews (which writes nothing), shows what will change and the audit
 // rows, and performs only on the button named for the action (performLabel). Cancel and
 // Esc close it; a click outside does not, so a typed reason is never lost that way. For
 // a one-way action the preview puts focus on Cancel, not on perform (audit DECIDE 11).
-export function ConfirmDialog({
-  req,
-  csrf,
-  onClose,
-  onSignedOut,
-}: {
+interface DialogProps {
   req: ConfirmRequest;
   csrf: string;
   // Called once, with the result when the action was performed.
   onClose: (performed: PortalPerformed | null) => void;
   onSignedOut: () => void;
-}) {
+}
+
+export function ConfirmDialog(props: DialogProps) {
+  return props.req.batch ? <BatchDialog {...props} items={props.req.batch} /> : <SingleDialog {...props} />;
+}
+
+function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const dlg = useRef<HTMLDialogElement>(null);
   const doIt = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -31,6 +32,10 @@ export function ConfirmDialog({
   const finished = useRef(false);
   const alive = useRef(true);
   const needsReason = NEEDS_REASON.has(req.action);
+  // A reason typed before the dialog opened (the reply box on a Needs you row) is the
+  // reason: the dialog previews with it at once and shows it, rather than asking again.
+  const given = needsReason ? (req.params.reason ?? "").trim() : "";
+  const askReason = needsReason && !given;
   const [reason, setReason] = useState("");
   const takesNote = TAKES_NOTE.has(req.action);
   const [note, setNote] = useState("");
@@ -72,13 +77,13 @@ export function ConfirmDialog({
   // refusal, a timeout, or the reason it could not be sent. A click that does nothing
   // is the defect this dialog was sent back for.
   const runPreview = async (why: string) => {
-    const typed = needsReason ? why.trim() : "";
+    const typed = needsReason ? given || why.trim() : "";
     if (needsReason && !typed) {
       setError({ text: "A reason is required. Type what you are doing and why, then preview.", expired: false, field: true });
       reasonRef.current?.focus();
       return;
     }
-    const typedNote = takesNote ? (noteRef.current?.value ?? note).trim() : "";
+    const typedNote = takesNote ? (noteRef.current?.value ?? (note || req.params.note || "")).trim() : "";
     const params = { ...req.params, ...(needsReason ? { reason: typed } : {}), ...(typedNote ? { note: typedNote } : {}) };
     setPending("preview");
     setError(null);
@@ -127,7 +132,7 @@ export function ConfirmDialog({
     // previews as soon as the dialog opens.
     if (!started.current) {
       started.current = true;
-      if (!needsReason) void runPreview("");
+      if (!askReason) void runPreview("");
     }
     return () => {
       alive.current = false;
@@ -147,7 +152,7 @@ export function ConfirmDialog({
         {pending === "perform" ? "Working..." : label}
       </button>
     );
-  } else if (needsReason || error) {
+  } else if (askReason || error) {
     primary = (
       // A plain button with its own handler: Preview never depends on the form's submit
       // event, and it is disabled only while a request is in flight, never silently
@@ -175,7 +180,15 @@ export function ConfirmDialog({
             name a job by its id, sits under it once the preview answers. */}
         <h2 id="confirmTitle">{req.title}</h2>
         {preview && <p className="muted note" data-summary="">{preview.summary}</p>}
-        {needsReason && !preview && (
+        {given && (
+          <div>
+            <p className="section-title">Your reply</p>
+            <p className="note prewrap" data-given-reason="">
+              {given}
+            </p>
+          </div>
+        )}
+        {askReason && !preview && (
           <form
             id="confirmForm"
             className="stack-gap"
@@ -277,6 +290,157 @@ export function ConfirmDialog({
             Cancel
           </button>
           {preview && destructive && primary}
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+// Several rows decided in one dialog (Needs you's batch approve). Each item is previewed on
+// its own, as its single control would be, and the previews are listed together; perform
+// sends each item's own token, one after another, and a refusal of one does not stop the
+// rest. The result names what was done and, lasting, what was not.
+function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & { items: ReadonlyArray<BatchItem> }) {
+  const dlg = useRef<HTMLDialogElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const opener = useRef<Element | null>(null);
+  const started = useRef(false);
+  const finished = useRef(false);
+  const alive = useRef(true);
+  type Row = { item: BatchItem; preview: PortalPreview | null; error: string | null };
+  const [rows, setRows] = useState<Row[]>(() => items.map((item) => ({ item, preview: null, error: null })));
+  const [pending, setPending] = useState<null | "preview" | "perform">("preview");
+  const [error, setError] = useState<string | null>(null);
+  const ready = rows.filter((r) => r.preview);
+  const first = items[0];
+  const label = first ? performLabel(first.action, first.params) : "Go";
+
+  const finish = (performed: PortalPerformed | null) => {
+    if (finished.current) return;
+    finished.current = true;
+    if (dlg.current?.open) dlg.current.close();
+    const from = opener.current;
+    onClose(performed);
+    requestAnimationFrame(() => {
+      const back = from instanceof HTMLElement && from.isConnected ? from : document.querySelector<HTMLElement>("main");
+      back?.focus();
+    });
+  };
+  const words = (r: Exclude<Answer<unknown>, { kind: "ok" }>): string | null => {
+    if (r.kind === "signed-out") {
+      finished.current = true;
+      if (dlg.current?.open) dlg.current.close();
+      onSignedOut();
+      return null;
+    }
+    return r.kind === "error" ? `Could not reach the server: ${r.message}` : r.message;
+  };
+
+  const previewAll = async () => {
+    setPending("preview");
+    setError(null);
+    const next: Row[] = [];
+    for (const item of items) {
+      const r = await previewAction(csrf, { action: item.action, params: item.params });
+      if (!alive.current || finished.current) return;
+      if (r.kind === "ok") next.push({ item, preview: r.value, error: null });
+      else {
+        const w = words(r);
+        if (w === null) return;
+        next.push({ item, preview: null, error: w });
+      }
+      setRows([...next, ...items.slice(next.length).map((i) => ({ item: i, preview: null, error: null }))]);
+    }
+    setPending(null);
+  };
+
+  const performAll = async () => {
+    setPending("perform");
+    setError(null);
+    const done: PortalPerformed[] = [];
+    const failed: string[] = [];
+    for (const r of rows) {
+      if (!r.preview) {
+        if (r.error) failed.push(`${r.item.label}: ${r.error}`);
+        continue;
+      }
+      const a = await performAction(csrf, r.preview.token);
+      if (!alive.current) return;
+      if (a.kind === "ok") done.push(a.value);
+      else {
+        const w = words(a);
+        if (w === null) return;
+        failed.push(`${r.item.label}: ${w}`);
+      }
+    }
+    setPending(null);
+    const last = done[done.length - 1];
+    if (!last) return setError(`Nothing was done. ${failed.join(" ")}`);
+    const warnings = [...done.map((d) => d.warning).filter((w): w is string => w !== null), ...(failed.length ? [`${failed.length} not done: ${failed.join(" ")}`] : [])];
+    finish({ ...last, summary: done.map((d) => d.summary).join(" "), warning: warnings.length ? warnings.join(" ") : null });
+  };
+
+  useEffect(() => {
+    alive.current = true;
+    const d = dlg.current;
+    if (d && !d.open) {
+      opener.current = document.activeElement;
+      d.showModal();
+    }
+    if (!started.current) {
+      started.current = true;
+      void previewAll();
+    }
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  // Every item here is one-way once performed together, so the preview leaves focus on Cancel.
+  useEffect(() => {
+    if (pending === null) cancelRef.current?.focus();
+  }, [pending]);
+
+  const busy = pending !== null;
+  return (
+    <dialog ref={dlg} className="help confirm" aria-labelledby="confirmTitle" aria-busy={busy} onCancel={(e) => busy && e.preventDefault()} onClose={() => finish(null)}>
+      <div className="card">
+        <h2 id="confirmTitle">{req.title}</h2>
+        <ol className="plain batch-list">
+          {rows.map((r) => (
+            <li key={r.item.label} data-batch-item={r.item.label}>
+              <b>{r.item.label}</b>
+              {r.preview ? (
+                <span className="muted note"> {r.preview.summary}</span>
+              ) : r.error ? (
+                <span className="callout crit prewrap" role="alert">
+                  {r.error}
+                </span>
+              ) : (
+                <span className="faint"> Checking...</span>
+              )}
+            </li>
+          ))}
+        </ol>
+        {pending === "preview" && (
+          <div className="faint" role="status">
+            Checking what each one will change...
+          </div>
+        )}
+        {error && (
+          <div className="callout crit prewrap" role="alert">
+            {error}
+          </div>
+        )}
+        <div className="toolbar">
+          {pending !== "preview" && ready.length > 0 && (
+            <button type="button" className="btn primary" disabled={busy} onClick={() => void performAll()}>
+              {pending === "perform" ? "Working..." : `${label} ${ready.length}`}
+            </button>
+          )}
+          <button ref={cancelRef} type="button" className="btn" disabled={busy} onClick={() => finish(null)}>
+            Cancel
+          </button>
         </div>
       </div>
     </dialog>

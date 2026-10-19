@@ -71,11 +71,11 @@ test("a filter picked on Health narrows each of its sections, lives in the addre
   await expect(page.locator("#sites table.fleet tbody tr[data-row]")).toHaveCount(8);
 });
 
-// Defect 4: a live session stopped on a failure is critical under Needs attention (on
+// Defect 4: a live session stopped on a failure is critical under Problems (on
 // Needs you), and the rail's Health count includes it.
-test("a critical session incident appears in Needs attention", async ({ page }) => {
+test("a critical session incident appears in Problems", async ({ page }) => {
   await visit(page, "needs");
-  const attention = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Needs attention" }) });
+  const attention = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Problems" }) });
   const row = attention.locator("[data-row]").filter({ hasText: "Session for agent:sample-b-driver stopped: rate_limit" });
   await expect(row).toHaveCount(1);
   await expect(row.locator(".st.crit")).toHaveCount(1);
