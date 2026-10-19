@@ -401,8 +401,17 @@ export function countedRuns<T extends PriorRun>(runs: readonly T[], outage: Read
   return runs.filter((r) => !(r.stopped_on_error && r.finished_at && outage.has(r.finished_at.slice(0, 13))));
 }
 
-const PRIOR_RUNS_SQL = `SELECT id, status, started_at, finished_at, json_extract(report, '$.stopped_on_error') AS stopped_on_error
-  FROM bench_runs WHERE task_id = ?1 AND arm = ?2 ORDER BY started_at, rowid`;
+// A task and arm's runs in start order, for both the start's slot and the score's attempt.
+async function priorRuns(db: D1Database, taskId: string, arm: string): Promise<(PriorRun & { id: string })[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, status, started_at, finished_at, json_extract(report, '$.stopped_on_error') AS stopped_on_error
+       FROM bench_runs WHERE task_id = ?1 AND arm = ?2 ORDER BY started_at, rowid`
+    )
+    .bind(taskId, arm)
+    .all<PriorRun & { id: string }>();
+  return results;
+}
 
 // Which slot and attempt the next start of a model arm on a task takes, from that task
 // and arm's earlier runs in start order, or null when every slot is used. Slots fill in
@@ -460,7 +469,7 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     if (outage.has(now.toISOString().slice(0, 13))) {
       return textResponse(`no model run starts in an outage hour: at least half of this hour's ended runs stopped with an error during execution; start again next hour`, 409);
     }
-    const { results } = await env.DB.prepare(PRIOR_RUNS_SQL).bind(task_id, arm).all<PriorRun & { id: string }>();
+    const results = await priorRuns(env.DB, task_id, arm);
     slot = nextSlot(countedRuns(results, outage), stale);
     if (!slot) {
       return textResponse(
@@ -513,7 +522,7 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
   // The attempt this run took, from the runs started before it, as /bench/start chose it.
   let attempt: 1 | 2 | undefined;
   if (MODEL_ARMS.includes(run.arm)) {
-    const { results } = await env.DB.prepare(PRIOR_RUNS_SQL).bind(run.task_id, run.arm).all<PriorRun & { id: string }>();
+    const results = await priorRuns(env.DB, run.task_id, run.arm);
     const before = results.slice(0, Math.max(0, results.findIndex((r) => r.id === run.id)));
     attempt = nextSlot(countedRuns(before, await outageHours(env.DB)), "")?.attempt;
   }
