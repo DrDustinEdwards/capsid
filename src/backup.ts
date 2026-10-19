@@ -133,6 +133,10 @@ export const TABLES = [
   // Insert-only and close-once by trigger; nothing prunes them.
   "bench_tasks",
   "bench_runs",
+  // The registration and the drawn task order (migrations/0049_bench_draw.sql),
+  // insert-only by trigger; nothing prunes them.
+  "bench_registration",
+  "bench_draw",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
 ] as const;

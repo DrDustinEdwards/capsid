@@ -159,8 +159,9 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "Capsid Admin for a key: resolveAgent on the bearer (401 without one), then the admin identity only (403 for any other key), and every tool call it serves then passes checkScope in the registrar, where each tool is admin only",
   "/backup/credential": "signed with the backup-specific HMAC key, derived from the Worker's root secret under its own context, and replay-protected",
   "/bench/tasks": "signed with the capsid-bench HMAC key (src/bench.ts), which no backup key can produce, and replay-protected; registers a task once and never changes one",
+  "/bench/draw": "signed with the capsid-bench HMAC key and replay-protected; records the registration once and appends the drawn task order, which never changes",
   "/bench/start": "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap",
-  "/bench/score": "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, and reads the treatment's claim from its own job row rather than the report",
+  "/bench/score": "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, takes every arm's claim from the report, and checks the treatment's job is its own",
   "/ops/inbox":
     "what needs Dustin, per app (src/inbox.ts): resolveAgent on the bearer (401 without one), then each app is kept only if checkScope admits the caller's read grant on that app's namespace, so a key scoped to one namespace sees that app alone and the admin or an all-namespace read key sees every app. GET only, no CORS headers (an app's server calls it, never a browser), nothing written",
   "/ops/inbox/report":

@@ -33,6 +33,7 @@ const MCP_HOST_PATHS = new Set([
   "/csp-report",
   "/backup/credential",
   "/bench/tasks",
+  "/bench/draw",
   "/bench/start",
   "/bench/score",
   "/public/model/v1.json",

@@ -30,7 +30,7 @@ import { REPORT_PATH } from "../src/headers.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
 import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
-import { BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH } from "../src/bench.ts";
+import { BENCH_DRAW_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH } from "../src/bench.ts";
 import { PUBLIC_CODE_PATH, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH } from "../src/public-data.ts";
 import {
   ROUTE_GRANTS,
@@ -119,6 +119,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   VERIFY_LIVE_CLIENT_PATH,
   BACKUP_CREDENTIAL_PATH,
   BENCH_TASKS_PATH,
+  BENCH_DRAW_PATH,
   BENCH_START_PATH,
   BENCH_SCORE_PATH,
   PORTAL_CALLBACK_PATH,

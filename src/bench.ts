@@ -8,11 +8,12 @@ import { logEvent } from "./log";
 // capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
 //
 // The capsid-bench repo runs one task per GitHub Actions job per arm and talks to Capsid
-// through three endpoints, signed like the improve scorer's (its own key, the Worker
+// through four endpoints, signed like the improve scorer's (its own key, the Worker
 // secret BENCH_SECRET, the same timestamp window, the same replay cache under its own
 // scope) and not under /ops/ for the scorer's reason:
 //
 //   /bench/tasks  register a task and its hidden test counts, once
+//   /bench/draw   record the registration and append the drawn task order
 //   /bench/start  open a run, behind the off switch and the concurrency cap
 //   /bench/score  close it: the Worker computes resolved and the false success claim
 //
@@ -22,6 +23,7 @@ import { logEvent } from "./log";
 // to be this run's, but its status is not the claim.
 
 export const BENCH_TASKS_PATH = "/bench/tasks";
+export const BENCH_DRAW_PATH = "/bench/draw";
 export const BENCH_START_PATH = "/bench/start";
 export const BENCH_SCORE_PATH = "/bench/score";
 
@@ -133,6 +135,52 @@ function parseTaskRequest(body: string): { ok: true; jti: string; task: BenchTas
       fail_to_pass_count: t.fail_to_pass_count,
       pass_to_pass_count: t.pass_to_pass_count,
     },
+  };
+}
+
+export interface BenchRegistration {
+  registration_sha256: string;
+  frame_sha256: string;
+  seed: string;
+}
+
+export interface DrawRequest {
+  jti: string;
+  registration: BenchRegistration;
+  // The 1-based draw position of tasks[0].
+  from: number;
+  tasks: string[];
+}
+
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+export function parseDrawRequest(body: string): ({ ok: true } & DrawRequest) | Refusal {
+  const r = parseJson(body);
+  if (refused(r)) return r;
+  const jti = jtiOf(r);
+  if (refused(jti)) return jti;
+  if (!isRecord(r.registration)) return { ok: false, refusal: "registration must be an object" };
+  const reg = r.registration;
+  for (const field of ["registration_sha256", "frame_sha256"]) {
+    if (typeof reg[field] !== "string" || !SHA256_HEX.test(reg[field])) return { ok: false, refusal: `registration.${field} must be a lowercase hex sha256` };
+  }
+  const seed = text(reg, "seed", 128);
+  if (refused(seed)) return { ok: false, refusal: `registration.${seed.refusal}` };
+  if (!isCount(r.from) || r.from === 0) return { ok: false, refusal: "from must be a draw position of 1 or more" };
+  // D1 binds at most 100 parameters to a statement, and the registered-task read binds one per task.
+  if (!Array.isArray(r.tasks) || r.tasks.length === 0 || r.tasks.length > 100) return { ok: false, refusal: "tasks must be an array of 1 to 100 task ids; send a longer draw in batches" };
+  const tasks: string[] = [];
+  for (const t of r.tasks) {
+    if (typeof t !== "string" || t.length === 0 || t.length > 256) return { ok: false, refusal: "each task must be a non-empty string of at most 256 characters" };
+    tasks.push(t);
+  }
+  if (new Set(tasks).size !== tasks.length) return { ok: false, refusal: "a task appears twice in tasks" };
+  return {
+    ok: true,
+    jti,
+    registration: { registration_sha256: reg.registration_sha256 as string, frame_sha256: reg.frame_sha256 as string, seed },
+    from: r.from,
+    tasks,
   };
 }
 
@@ -372,6 +420,68 @@ export async function handleBenchTasks(request: Request, env: Env): Promise<Resp
   return textResponse(`task ${t.task_id} is already registered with a different ${differs.join(", ")}; a registered task never changes`, 409);
 }
 
+// THE DRAW (the methods paper's protocol, section 4). The first call records the
+// registration; every call must carry that same registration. tasks are the draw from
+// position `from` on: positions already recorded must hold the same tasks, and the rest
+// are appended in order, so a batch can be sent again and the draw only grows. A drawn
+// task must be registered in the full split. One batch, so a refused task appends none.
+export async function handleBenchDraw(request: Request, env: Env): Promise<Response> {
+  const front = await signedBody(request, env, "BENCH_DRAW_REJECTED", parseDrawRequest);
+  if (!front.ok) return front.response;
+  const { registration, from, tasks } = front.value;
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO bench_registration (id, registration_sha256, frame_sha256, seed, recorded_at) VALUES (1, ?1, ?2, ?3, ?4)
+     ON CONFLICT(id) DO NOTHING`
+  )
+    .bind(registration.registration_sha256, registration.frame_sha256, registration.seed, now)
+    .run();
+  const recorded = await env.DB.prepare("SELECT registration_sha256, frame_sha256, seed FROM bench_registration WHERE id = 1").first<BenchRegistration>();
+  const differs = recorded ? (["registration_sha256", "frame_sha256", "seed"] as const).filter((f) => recorded[f] !== registration[f]) : [];
+  if (!recorded || differs.length > 0) {
+    return textResponse(`a different registration is recorded (${differs.join(", ")}); a re-plan is a new registration, recorded by the seat before any confirmatory run`, 409);
+  }
+  const { results: drawn } = await env.DB.prepare("SELECT position, task_id FROM bench_draw WHERE position >= ?1 ORDER BY position")
+    .bind(from)
+    .all<{ position: number; task_id: string }>();
+  const size = await env.DB.prepare("SELECT COUNT(*) AS n FROM bench_draw").first<{ n: number }>();
+  const count = size?.n ?? 0;
+  if (from > count + 1) return textResponse(`the draw holds ${count} tasks, so a batch starts at position ${count + 1} at the latest, not ${from}`, 409);
+  for (const row of drawn) {
+    const sent = tasks[row.position - from];
+    if (sent !== undefined && sent !== row.task_id) return textResponse(`draw position ${row.position} holds ${row.task_id}, not ${sent}; the draw never changes`, 409);
+  }
+  const fresh = tasks.slice(count + 1 - from);
+  if (fresh.length > 0) {
+    const placeholders = fresh.map((_, i) => `?${i + 1}`).join(", ");
+    const { results: full } = await env.DB.prepare(`SELECT task_id FROM bench_tasks WHERE split = 'full' AND task_id IN (${placeholders})`)
+      .bind(...fresh)
+      .all<{ task_id: string }>();
+    const known = new Set(full.map((t) => t.task_id));
+    const missing = fresh.filter((t) => !known.has(t));
+    if (missing.length > 0) return textResponse(`not registered in the full split, so not drawn: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? ", ..." : ""}`, 409);
+    try {
+      await env.DB.batch(fresh.map((task_id, i) => env.DB.prepare("INSERT INTO bench_draw (position, task_id, recorded_at) VALUES (?1, ?2, ?3)").bind(count + 1 + i, task_id, now)));
+    } catch (err) {
+      return textResponse(`the draw was not extended (${err instanceof Error ? err.message : String(err)}); a task already drawn, or another batch landed at the same time`, 409);
+    }
+  }
+  logEvent("log", "BENCH_DRAW_RECORDED", { message: `BENCH_DRAW_RECORDED added=${fresh.length} size=${count + fresh.length}` });
+  return Response.json({ ok: true, added: fresh.length, size: count + fresh.length });
+}
+
+// THE REGISTRATION LOCK, for a model arm. A full-split task starts only once the
+// registration is recorded and the task is on the draw. A pilot task starts only before
+// it: the pilot checks feasibility and may change the budgets, so it precedes the hash.
+// The planted arms call no model and are not locked.
+async function drawRefusal(db: D1Database, taskId: string, split: string): Promise<string | null> {
+  const registered = await db.prepare("SELECT 1 AS one FROM bench_registration WHERE id = 1").first<{ one: number }>();
+  if (split === "pilot") return registered ? `task ${taskId} is a pilot task, and the pilot ends when the registration is recorded` : null;
+  if (!registered) return `no registration is recorded; record it and the draw with ${BENCH_DRAW_PATH} before a model run on a full-split task`;
+  const drawn = await db.prepare("SELECT 1 AS one FROM bench_draw WHERE task_id = ?1").bind(taskId).first<{ one: number }>();
+  return drawn ? null : `task ${taskId} is not on the draw`;
+}
+
 export interface PriorRun {
   status: string;
   started_at: string;
@@ -457,6 +567,8 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
   let slot: { slot: number; attempt: 1 | 2 } | null = null;
   let prior = -1;
   if (MODEL_ARMS.includes(arm)) {
+    const locked = await drawRefusal(env.DB, task_id, task.split);
+    if (locked) return textResponse(locked, 409);
     // A stale running row is closed as unjudged before its rerun can open, so its job can
     // no longer post a late score: /bench/score refuses a row that is not running.
     await env.DB.prepare(
