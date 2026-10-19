@@ -65,7 +65,7 @@ const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
 // What each rail count means, for its accessible name and its tooltip.
 const BADGE_NOTE: Partial<Record<ViewId, string>> = {
   health: "critical",
-  prs: "awaiting the seat",
+  prs: "waiting for you",
 };
 
 function useTick(ms: number): number {

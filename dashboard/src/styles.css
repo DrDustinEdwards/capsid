@@ -67,8 +67,8 @@ main { min-width: 0; position: relative; }
 .st.nodata { color: var(--nodata); } .st.run { color: var(--info); } .st.queued { color: var(--muted); }
 .st.blocked { color: var(--warn); }
 /* A hold reason is a phrase, so it wraps in its own column rather than squeezing the rest. */
-.awaiting td.num, .awaiting .row-gap { white-space: nowrap; flex-wrap: nowrap; }
-.held { min-width: 11em; max-width: 15em; } .held .st { white-space: normal; align-items: flex-start; } .held .st svg { margin-top: 2px; }
+.held .st { white-space: normal; align-items: flex-start; } .held .st svg { margin-top: 2px; }
+.prcards .wrow + .wrow { border-top: 1px solid var(--line); }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 6px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .pill.ok { background: var(--ok-soft); color: var(--ok); }
 .pill.warn { background: var(--warn-soft); color: var(--warn); }

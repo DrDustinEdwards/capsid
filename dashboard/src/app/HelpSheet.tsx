@@ -7,7 +7,7 @@ import type { ViewDef, ViewId } from "./ctx";
 const ABOUT: Partial<Record<ViewId, string>> = {
   needs: "The home: what waits on you, per app, then every problem worst first.",
   queue: "A blocked job shows what it waits on; open it for the command and the resume call.",
-  prs: "Pull requests recorded against jobs, and those auto-merge left for the seat.",
+  prs: "The pull requests waiting for you, with Approve and Close, then those recorded against jobs.",
   health: "The tiles, then sites, findings, deploys, backups and CI. Deploys are from Cloudflare's own record, so a hand-run wrangler deploy shows up too.",
   activity: "The audit log, newest first: who did what, where.",
   agents: "Every credential and when it was last seen; Claims sets what each agent said beside what the Worker verified.",

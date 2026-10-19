@@ -3,9 +3,11 @@ import { Suspense, lazy } from "react";
 import { useApp } from "../app/ctx";
 import { ciState } from "../lib/derive";
 import { checkWords } from "../../../src/check-words";
-import { ago, ms, utc } from "../lib/format";
+import { age, ago, ms, utc } from "../lib/format";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
+import { Empty } from "capsomer/react/empty";
+import { approveRequest, canApprove, closeRequest, prAnchor, prName, prUrl } from "../lib/pr-actions";
 import { NoSnapshot, PageHead } from "./shared";
 import type { OpsAwaitingSeat } from "../types";
 
@@ -78,20 +80,30 @@ export function DefaultBranches() {
   );
 }
 
-// Pull requests (design section 2): the PRs recorded against jobs and those awaiting the
-// seat, CI's PR half. The default-branch table moved to Health.
+// Pull requests (design section 2; the UX audit of 2026-10-19, B2 and m6): what waits for
+// you first, each pull request a row on a wide screen and a card with full-width Approve and
+// Close on a phone; then the pull requests recorded in the last 7 days, the auto-merge meter,
+// and the chart last. The default-branch table is on Health.
 export function PullRequests() {
-  const { feed, now, confirm } = useApp();
+  const { feed, now } = useApp();
   const live = feed.live;
   return (
     <div className="page">
       <PageHead title="Pull requests" />
-      <ChartSlot>
-        <MergesChart />
-      </ChartSlot>
+      <Panel flush title="Waiting for you" id="waiting-prs" count={live.awaiting_seat.length} src="auto-merge left these for a person">
+        {live.awaiting_seat.length ? (
+          <ul className="wlist prcards">
+            {live.awaiting_seat.map((a) => (
+              <WaitingPr key={`${a.repo}-${a.number}`} a={a} />
+            ))}
+          </ul>
+        ) : (
+          <Empty kind="all-clear" title="No pull request is waiting for you." />
+        )}
+      </Panel>
       <Panel flush title="Pull requests, last 7 days" src="recorded against jobs" count={live.prs.length}>
-        <div className="scroll-x">
-          <table className="list">
+        <div className="scroll-x reflow">
+          <table className="list cards-below-1100">
             <thead>
               <tr>
                 <th>PR</th>
@@ -111,10 +123,10 @@ export function PullRequests() {
                         {prLabel(p.pr_url)}
                       </a>
                     </td>
-                    <td>{job ? job.title : <span className="mono faint">{p.job_id}</span>}</td>
-                    <td>{p.merged === true ? <St kind="ok">Merged</St> : p.merged === false ? <St kind="crit">Not merged</St> : <St kind="run">Open</St>}</td>
-                    <td className="num">{p.merge_verified_at ? ago(ms(p.merge_verified_at), now) : <span className="faint">not yet</span>}</td>
-                    <td className="num">{ago(ms(p.recorded_at), now)}</td>
+                    <td data-label="Job">{job ? job.title : <span className="mono faint">{p.job_id}</span>}</td>
+                    <td data-label="State">{p.merged === true ? <St kind="ok">Merged</St> : p.merged === false ? <St kind="crit">Not merged</St> : <St kind="run">Open</St>}</td>
+                    <td className="num" data-label="Verified">{p.merge_verified_at ? ago(ms(p.merge_verified_at), now) : <span className="faint">not yet</span>}</td>
+                    <td className="num" data-label="Recorded">{ago(ms(p.recorded_at), now)}</td>
                   </tr>
                 );
               })}
@@ -130,14 +142,14 @@ export function PullRequests() {
         </div>
       </Panel>
       {/* The auto-merge safety meter (src/merge-safety.ts): the last seven days per
-          namespace, and the shutoff. Resuming is the automerge_resume control. */}
+          project, and the shutoff. Resuming is the automerge_resume control. */}
       {live.merge_safety && (
-        <Panel flush title="Auto-merge, last 7 days" count={live.merge_safety.namespaces.length} src="the tick's safety meter">
+        <Panel flush title="Auto-merge, last 7 days" id="auto-merge" count={live.merge_safety.namespaces.length} src="the tick's safety meter">
           <div className="scroll-x reflow">
             <table className="list cards-below-1100">
               <thead>
                 <tr>
-                  <th>Namespace</th>
+                  <th>Project</th>
                   <th>Auto</th>
                   <th>Approved</th>
                   <th>Verified</th>
@@ -151,7 +163,7 @@ export function PullRequests() {
               <tbody>
                 {live.merge_safety.namespaces.map((n) => (
                   <tr key={n.namespace}>
-                    <td>
+                    <td className="nowrap">
                       <b>{n.namespace}</b>
                     </td>
                     <td className="num" data-label="Auto">{n.auto_merged}</td>
@@ -170,78 +182,43 @@ export function PullRequests() {
           </div>
         </Panel>
       )}
-      <Panel flush title="Awaiting the seat" count={live.awaiting_seat.length} src="PRs auto-merge declined">
-        <div className="scroll-x">
-          <table className="list awaiting">
-            <thead>
-              <tr>
-                <th>PR</th>
-                <th>Held because</th>
-                <th>Why</th>
-                <th>When</th>
-                <th>
-                  <span className="sr-only">Approve or close</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {live.awaiting_seat.map((a) => (
-                <tr key={`${a.repo}-${a.number}`}>
-                  <td className="mono">
-                    <a href={`https://github.com/${a.repo}/pull/${a.number}`} target="_blank" rel="noopener noreferrer">
-                      {a.repo} #{a.number}
-                    </a>
-                  </td>
-                  <td className="held">
-                    <St kind="warn">{checkWords(a.failed)}</St>
-                  </td>
-                  <td className="muted">
-                    {a.why}
-                    {a.visual && <VisualLook visual={a.visual} />}
-                  </td>
-                  <td className="num">{ago(ms(a.at), now)}</td>
-                  <td>
-                    <span className="row-gap">
-                      {/* Approving (src/pr-approvals.ts) records the head the tick judged, and
-                          the next tick merges it once CI is green on that sha. A money PR (class
-                          typed) is approved by typing its number in chat, never here; seat and
-                          wait cannot be approved. */}
-                      {(a.class === "approve" || a.class === "auto") && a.head_sha && (
-                        <button
-                          type="button"
-                          className="btn"
-                          aria-label={`Approve ${a.repo} #${a.number}`}
-                          onClick={() => confirm({ action: "approve_pr", params: { namespace: a.namespace, repo: a.repo, prs: String(a.number), shas: a.head_sha! }, title: `Approve pull request ${a.repo} #${a.number}` })}
-                        >
-                          Approve
-                        </button>
-                      )}
-                      {/* Closing without a merge (design-portal-evaluation.md, the PR close row):
-                          a confirm with a reason; GitHub can reopen it, the Portal does not. */}
-                      <button
-                        type="button"
-                        className="btn"
-                        aria-label={`Close ${a.repo} #${a.number}`}
-                        onClick={() => confirm({ action: "pr_close", params: { namespace: a.namespace, repo: a.repo, number: String(a.number) }, title: `Close pull request ${a.repo} #${a.number}` })}
-                      >
-                        Close
-                      </button>
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {!live.awaiting_seat.length && (
-                <tr>
-                  <td colSpan={5} className="faint">
-                    Nothing is waiting on the seat.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+      <ChartSlot>
+        <MergesChart />
+      </ChartSlot>
     </div>
+  );
+}
+
+// One pull request waiting for you. Its buttons are the same controls Needs you uses
+// (lib/pr-actions.ts); on a phone they sit under it, full width (styles.css, .wact).
+function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
+  const { now, confirm } = useApp();
+  const name = prName(a);
+  return (
+    <li className="wrow prcard" data-row="" id={prAnchor(a)}>
+      <div className="wmain">
+        <a className="wtitle mono" href={prUrl(a)} target="_blank" rel="noopener noreferrer">
+          {name}
+        </a>
+        <span className="held">
+          <St kind="warn">{checkWords(a.failed)}</St>
+        </span>
+        <span className="muted">{a.why}</span>
+        {a.visual && <VisualLook visual={a.visual} />}
+        <span className="wmeta">{a.namespace} · waiting {age(ms(a.at), now)}</span>
+      </div>
+      <div className="wact">
+        {canApprove(a) && (
+          <button type="button" className="btn primary" aria-label={`Approve ${name}`} onClick={() => confirm(approveRequest(a))}>
+            Approve
+          </button>
+        )}
+        <button type="button" className="btn" aria-label={`Close ${name}`} onClick={() => confirm(closeRequest(a))}>
+          Close
+        </button>
+        {!canApprove(a) && <span className="faint wnote">{a.class === "typed" ? "Approve it by typing its number in chat." : "Not approvable here."}</span>}
+      </div>
+    </li>
   );
 }
 

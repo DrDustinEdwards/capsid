@@ -98,7 +98,7 @@ test("Supersede is offered on a queued job, not on a blocked one, and previews b
 
 test("a pull request awaiting the seat has Close, which asks a reason and previews the close", async ({ page }) => {
   await visit(page, "prs");
-  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Awaiting the seat" }) });
+  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Waiting for you" }) });
   const close = awaiting.getByRole("button", { name: /^Close / }).first();
   const name = (await close.getAttribute("aria-label"))!.replace(/^Close /, "");
   await performLeavesFeed(page, "pr_close", `Closed ${name}.`);
@@ -111,7 +111,7 @@ test("a pull request awaiting the seat has Close, which asks a reason and previe
 
 test("a pull request classed approve has Approve, which previews the approval at the head the tick judged", async ({ page }) => {
   await visit(page, "prs");
-  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Awaiting the seat" }) });
+  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Waiting for you" }) });
   await performLeavesFeed(page, "approve_pr", "Approved example-org/sample-c#32. It merges once CI is green on 4f2c9a1.");
   await awaiting.getByRole("button", { name: "Approve example-org/sample-c #32", exact: true }).click();
   const d = await previewWith(page, null);

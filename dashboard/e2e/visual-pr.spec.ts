@@ -3,7 +3,7 @@ import type { OpsFeed } from "../src/types.ts";
 import { visit } from "./views.ts";
 
 // A pull request labelled visual waits for Dustin's look (src/visual-pr.ts,
-// job_0368576da167). Its row in Awaiting the seat links its preview and screenshots, and
+// job_0368576da167). Its row in Waiting for you links its preview and screenshots, and
 // Approve stays beside them. The feed is reshaped in the browser, so the mock is unchanged.
 
 test("a visual pull request shows its title, preview and screenshots beside Approve", async ({ page }) => {
@@ -19,7 +19,7 @@ test("a visual pull request shows its title, preview and screenshots beside Appr
     await route.fulfill({ response: res, json: feed });
   });
   await visit(page, "prs");
-  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Awaiting the seat" }) });
+  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Waiting for you" }) });
   const look = awaiting.locator(".visual-look");
   await expect(look).toContainText("New header");
   await expect(look.getByRole("link", { name: "Open the preview" })).toHaveAttribute("href", "https://pr-32.sample.workers.dev/");
@@ -28,7 +28,7 @@ test("a visual pull request shows its title, preview and screenshots beside Appr
   await expect(awaiting.getByRole("button", { name: "Approve example-org/sample-c #32", exact: true })).toBeVisible();
 });
 
-test("Awaiting the seat says why a pull request was held in words, not a check name", async ({ page }) => {
+test("Waiting for you says why a pull request was held in words, not a check name", async ({ page }) => {
   await page.route("**/portal/api/ops", async (route) => {
     const res = await route.fetch();
     const feed = (await res.json()) as OpsFeed;
@@ -36,8 +36,7 @@ test("Awaiting the seat says why a pull request was held in words, not a check n
     await route.fulfill({ response: res, json: feed });
   });
   await visit(page, "prs");
-  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Awaiting the seat" }) });
-  await expect(awaiting.getByRole("columnheader", { name: "Held because" })).toBeVisible();
-  await expect(awaiting).toContainText("it touches payment code");
+  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Waiting for you" }) });
+  await expect(awaiting.locator(".held").first()).toContainText("it touches payment code");
   await expect(awaiting).not.toContainText("paths_not_money");
 });
