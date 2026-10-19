@@ -396,7 +396,15 @@ function listDisagreement(what: string, documented: string[], enforced: string[]
 export async function loadMergePolicy(env: Env): Promise<{ policy: MergePolicy } | { error: string }> {
   const read = await readSignedPolicy(env, AUTO_MERGE_POLICY_PATH, "merge policy", "nothing is auto-merged");
   if ("error" in read) return read;
-  const parsed = parseMergePolicy(read.body);
+  return checkMergePolicyBody(read.body);
+}
+
+/** Every check loadMergePolicy makes of a body once its signature is verified: it parses,
+ *  and it says no less, and nothing different, than the code enforces. The one place a body
+ *  is judged loadable, so a body signed from the repo (sign_policy_from_repo) is held to
+ *  what the loader will hold it to. */
+export function checkMergePolicyBody(body: string): { policy: MergePolicy } | { error: string } {
+  const parsed = parseMergePolicy(body);
   if ("error" in parsed) return parsed;
   const missing = POLICY_CHECKS.filter((c) => !parsed.policy.checks.includes(c));
   if (missing.length > 0) {

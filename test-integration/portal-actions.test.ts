@@ -50,6 +50,8 @@ function workerEnv(): Env {
 const operatorCalls: Array<{ url: string; auth: string | null; body: string }> = [];
 const githubCalls: string[] = [];
 const GITHUB_PR = "https://api.github.com/repos/example/capsid/pulls/41";
+// docs/policy/auto-merge.md on the default branch, for sign_policy_from_repo.
+let repoPolicy = "";
 const passThrough = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input instanceof Request ? input.url : input);
@@ -59,6 +61,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (url === GITHUB_PR && method === "PATCH") return Response.json({ number: 41, state: "closed", html_url: "https://github.com/example/capsid/pull/41" });
     if (url === GITHUB_PR) return Response.json({ head: { ref: "feat/sample", sha: "c".repeat(40), repo: { full_name: "example/capsid" } }, base: { ref: "main" }, state: "open", merged: false });
     if (url === "https://api.github.com/repos/example/capsid") return Response.json({ default_branch: "main" });
+    if (url === "https://api.github.com/repos/example/capsid/contents/docs/policy/auto-merge.md") {
+      return Response.json({ type: "file", encoding: "base64", content: btoa(repoPolicy), size: repoPolicy.length, sha: "f".repeat(40) });
+    }
     if (url.endsWith("/git/refs/heads/feat/sample") && method === "DELETE") return new Response(null, { status: 204 });
     return new Response("not stubbed", { status: 404 });
   }
@@ -187,11 +192,11 @@ async function proposalRow(id: string) {
 
 // A signed auto-merge policy that agrees with the code, at version 7 (as shipped since #367), and its pin, as a
 // Worker that has loaded it before holds them: for sign_policy_change.
-async function signedPolicy(): Promise<void> {
-  const body = [
+const policyText = (version: string): string =>
+  [
     "# Auto-merge policy",
     "",
-    "- version: 7",
+    `- version: ${version}`,
     "- enabled: true",
     "- namespaces: capsid",
     "",
@@ -210,6 +215,9 @@ async function signedPolicy(): Promise<void> {
     ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [`## Allowed paths, ${ns}`, "", ...rows.map((r) => `- allow \`${r.pattern.source}\` ${r.why}`), ""]),
     ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [`## Required CI, ${ns}`, "", ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``), ""]),
   ].join("\n");
+
+async function signedPolicy(): Promise<void> {
+  const body = policyText("7");
   const secret = (env as unknown as { IMPROVE_SCORE_SECRET: string }).IMPROVE_SCORE_SECRET;
   await env.DB.prepare("DELETE FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(AUTO_MERGE_POLICY_PATH).run();
   await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES ('capsid', ?1, 'Auto-merge policy', ?2)").bind(AUTO_MERGE_POLICY_PATH, await signTaskBody(secret, body)).run();
@@ -426,6 +434,27 @@ const CASES: Record<string, Case> = {
       expect("policy" in loaded && loaded.policy.units).toEqual(["capsid / tests"]);
       const version = await env.DB.prepare("SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
       expect(version?.body, "version 7 was not snapshotted").toMatch(/- version: 7/);
+    },
+  },
+  sign_policy_from_repo: {
+    // The repo's file, version 8, written over version 7 and signed, snapshotting version 7,
+    // and loading as the Worker's copy. The preview binds the file's hash.
+    params: async () => {
+      await signedPolicy();
+      repoPolicy = policyText("8");
+      return { confirm: "8" };
+    },
+    after: async () => {
+      const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
+      const { signature, body } = splitSignedTask(row!.body);
+      expect(signature).toBeTruthy();
+      expect(body).toBe(policyText("8"));
+      const loaded = await loadMergePolicy(env as unknown as Env);
+      expect("policy" in loaded && loaded.policy.version).toBe("8");
+      const version = await env.DB.prepare("SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
+      expect(version?.body, "version 7 was not snapshotted").toMatch(/- version: 7/);
+      const audit = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'policy-loaded-from-repo' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
+      expect(JSON.parse(audit?.params ?? "{}")).toMatchObject({ from: "7", to: "8", source: "docs/policy/auto-merge.md" });
     },
   },
   unit_resume: {

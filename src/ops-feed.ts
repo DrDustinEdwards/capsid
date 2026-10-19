@@ -2,6 +2,7 @@ import { gatherInbox } from "./inbox";
 import { adminAgentForEmail } from "./agents";
 import { getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
+import { loadMergePolicy } from "./auto-merge-policy";
 import { readSafetyReport } from "./merge-safety";
 import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, type PortalUser, portalDisplay, portalGate, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
@@ -343,8 +344,19 @@ async function liveSessions(db: D1Database, now: Date): Promise<OpsSession[]> {
   return (results ?? []).map((row) => opsSessionFrom(row, now));
 }
 
+// The policy as the tick loads it. A throw is reported as not loading, not raised: one
+// unreadable policy must not take the whole live feed down.
+async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
+  try {
+    const loaded = await loadMergePolicy(env);
+    return "error" in loaded ? { loads: false, reason: loaded.error } : { loads: true, version: loaded.policy.version, enabled: loaded.policy.enabled };
+  } catch (err) {
+    return { loads: false, reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
 async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, canonProposals, inbox, findings] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, canonProposals, inbox, findings, mergePolicy] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -357,6 +369,7 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     pendingProposals(env.DB),
     gatherInbox(env, now, null),
     openQuietFindings(env.DB),
+    liveMergePolicy(env),
   ]);
   return {
     generated: now.toISOString(),
@@ -365,6 +378,7 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     prs,
     awaiting_seat: awaitingFrom(awaitingRaw),
     merge_safety: mergeSafety,
+    merge_policy: mergePolicy,
     overnight,
     sessions,
     namespaces: APP_ROSTER.map((name) => ({ name })),
