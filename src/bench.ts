@@ -47,7 +47,7 @@ export const BENCH_REPEATS = 3;
 // which at least BENCH_OUTAGE_MIN_ENDED model runs ended and at least half of them
 // stopped this way. Such a stop counts as no attempt at all, so its slot is started once
 // more, and no model run starts while the current hour already meets the rule.
-export const BENCH_OUTAGE_MIN_ENDED = 4;
+const BENCH_OUTAGE_MIN_ENDED = 4;
 const MODEL_ARMS: readonly Arm[] = ["baseline", "treatment"];
 // The namespace the treatment's jobs live in, whose breaker gates a treatment start.
 const BENCH_NAMESPACE = "bench";
