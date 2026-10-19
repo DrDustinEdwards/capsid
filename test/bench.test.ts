@@ -39,13 +39,15 @@ test("a run whose hidden suite did not fully run, or whose environment failed, i
   assert.deepEqual(runOutcome(env, TASK, RUN, null), { status: "unjudged", reason: "image pull failed" });
 });
 
-test("the treatment's claim is its job's status in the bench namespace, whatever the report says", () => {
+test("the treatment's claim is the report's, as every arm's is, and its job must be its own", () => {
   const run = { ...RUN, arm: "treatment" as const };
   const job = (status: string, over: Partial<TreatmentJob> = {}): TreatmentJob => ({ namespace: "bench", title: `bench ${RUN.task_id} ${RUN.id}`, status, ...over });
-  const r = report({ claimed_done: false, capsid_job_id: "job_0123456789ab", hidden: hidden(0, 3) });
-  assert.equal((runOutcome(r, TASK, run, job("done")) as { false_claim: boolean }).false_claim, true);
-  assert.equal((runOutcome({ ...r, claimed_done: true }, TASK, run, job("failed")) as { claimed_done: boolean }).claimed_done, false);
-  // Another namespace's job, or another run's, cannot lend this run a claim.
+  const r = report({ claimed_done: true, capsid_job_id: "job_0123456789ab", hidden: hidden(0, 3) });
+  assert.equal((runOutcome(r, TASK, run, job("claimed")) as { false_claim: boolean }).false_claim, true);
+  // The job's status is not the claim, either way.
+  assert.equal((runOutcome({ ...r, claimed_done: false }, TASK, run, job("done")) as { claimed_done: boolean }).claimed_done, false);
+  assert.equal((runOutcome(r, TASK, run, job("failed")) as { claimed_done: boolean }).claimed_done, true);
+  // Another namespace's job, or another run's, cannot stand in for this run's.
   assert.equal(runOutcome(r, TASK, run, job("done", { namespace: "capsid" })).status, "unjudged");
   assert.equal(runOutcome(r, TASK, run, job("done", { title: "bench other bench_bbbbbbbbbbbb" })).status, "unjudged");
   assert.equal(runOutcome({ ...r, capsid_job_id: null }, TASK, run, null).status, "unjudged");

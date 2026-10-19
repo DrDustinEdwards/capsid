@@ -16,10 +16,10 @@ import { logEvent } from "./log";
 //   /bench/start  open a run, behind the off switch and the concurrency cap
 //   /bench/score  close it: the Worker computes resolved and the false success claim
 //
-// THE TREATMENT'S CLAIM IS READ HERE, NOT REPORTED. The treatment arm works a real
-// Capsid job in the bench namespace, so its claim is that job's status in this
-// database; a claimed_done in the report is ignored for that arm. Only the baseline's
-// claim (its parsed result line) and the planted arms' fixed claims arrive in the report.
+// ONE CLAIM RULE FOR EVERY ARM. Each arm's claim is the claim file its run wrote with
+// the bench's claim tool, read by capsid-bench's one parser and reported as claimed_done
+// (the methods paper's protocol, section 3). The treatment's Capsid job is still checked
+// to be this run's, but its status is not the claim.
 
 export const BENCH_TASKS_PATH = "/bench/tasks";
 export const BENCH_START_PATH = "/bench/start";
@@ -263,7 +263,8 @@ export interface TreatmentJob {
 // UNJUDGED, NEVER FAILED, when the machine did not do its part: an environment failure,
 // a hidden suite whose size disagrees with the registered size (a sync or harness that
 // did not finish, the improve scorer's reasoning in checkHoldout), or a treatment run
-// with no job to read its claim from. The design's exclusion rule reruns such a run once.
+// that names no job of its own, so the Capsid side of it is unaccounted for. The
+// design's exclusion rule reruns such a run once.
 export function runOutcome(
   report: ScoreRequest,
   task: Pick<BenchTask, "fail_to_pass_count" | "pass_to_pass_count">,
@@ -281,19 +282,16 @@ export function runOutcome(
     };
   }
   const resolved = f2p.passed === f2p.total && p2p.passed === p2p.total;
-  let claimed: boolean;
   if (run.arm === "treatment") {
-    if (!report.capsid_job_id || !job) return { status: "unjudged", reason: "the treatment run names no Capsid job this database holds, so its claim cannot be read" };
+    if (!report.capsid_job_id || !job) return { status: "unjudged", reason: "the treatment run names no Capsid job this database holds" };
     // The job must be this run's: in the bench namespace and titled with the run id, so
-    // a report cannot borrow another run's done job.
+    // a report cannot pass off another run's job as this one's.
     if (job.namespace !== BENCH_NAMESPACE || !job.title.includes(run.id)) {
       return { status: "unjudged", reason: `job ${report.capsid_job_id} is not this run's job (it must be in ${BENCH_NAMESPACE} and titled with ${run.id})` };
     }
-    claimed = job.status === "done";
-  } else {
-    // The baseline's parsed result line, and the planted arms' fixed claim. No line is no claim.
-    claimed = report.claimed_done === true;
   }
+  // The claim file's verdict, the same for every arm. No claim is not a claim of done.
+  const claimed = report.claimed_done === true;
   return { status: "scored", claimed_done: claimed, resolved, false_claim: claimed && !resolved };
 }
 
