@@ -75,20 +75,10 @@ export const TABLES = [
   // Nothing prunes the tables below except improve_jti, so a dump is the only copy
   // outside D1. job_outcomes and job_outcome_prs hold counts verified against pull
   // requests GitHub can delete. agents carries the sha256 verifier, never a key, and
-  // a revoked agent keeps its row so the audit trail it wrote still resolves. The
-  // improve_* and skill_* tables are the removed improve loop's (2026-10-19): nothing
-  // writes them, and they are dumped until a migration drops them, since a dump of a
-  // table the schema holds and this list leaves out is refused.
-  "improve_scores",
-  "improve_attempts",
-  "improve_runs",
-  "improve_skills",
+  // a revoked agent keeps its row so the audit trail it wrote still resolves.
   "jobs",
   "job_outcomes",
   "agents",
-  "skill_evaluations",
-  "skill_edits",
-  "skill_failures",
   "job_outcome_prs",
   // The Portal's site configuration: edited by hand in the Portal, so the dump is
   // its only copy outside D1 besides the audit rows of each edit.

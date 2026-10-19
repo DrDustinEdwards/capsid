@@ -471,9 +471,9 @@ The stored-skill lifecycle (candidate, live and retired skills, their evaluation
 bounded edits and attribution) was removed with the improve loop on 2026-10-19. Its
 tables, `improve_skills`, `skill_evaluations`, `skill_edits` and `skill_failures`
 (migrations 0003, 0012 and 0013), and the loop's own `improve_runs`, `improve_attempts`
-and `improve_scores`, are still in D1. Nothing writes them, and only the nightly backup reads them: it
-still dumps them (`TABLES` in `src/backup.ts`). A migration that drops them waits on
-Dustin. `improve_jti` is not one of them: it is the replay table for the bench and the
+and `improve_scores`, were dropped by `migrations/0048_drop_improve_loop.sql` (Dustin,
+2026-10-19); their two remaining rows were exported first, and earlier nightly dumps
+still hold them. `improve_jti` was kept: it is the replay table for the bench and the
 backup credential. The `skill_ids_offered` and `skill_ids_used` columns on
 `job_outcomes` (migration 0013) stay too, unused, with their old values. Skills as
 `SKILL.md` guidance in each repo are separate and stay: the weekly skills refresh
