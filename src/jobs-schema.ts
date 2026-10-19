@@ -36,7 +36,9 @@ export const JOBS_ROWS_MAX = 100;
 
 // Every job is also a document, so brief and search see the queue. The table is the
 // source of truth for status.
-export const jobDocPath = (id: string) => `jobs/${id}.md`;
+// Nothing else writes under it: the docs write tools refuse it (src/tools/docs-write.ts).
+export const JOB_DOC_PREFIX = "jobs/";
+export const jobDocPath = (id: string) => `${JOB_DOC_PREFIX}${id}.md`;
 
 export interface JobRow {
   id: string;

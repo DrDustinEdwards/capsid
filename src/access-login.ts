@@ -1,14 +1,14 @@
 import { verifyIdToken, type KeysFetcher } from "./access-jwt";
 import { getCookie, isAdminEmail, sha256Hex, timingSafeEqual } from "./auth";
-import { b64urlFromBytes } from "./encoding";
+import { b64urlFromBytes, bytesToHex } from "./encoding";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
 // identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27), shared
 // by the MCP authorization flow (src/routes.ts) and Capsid Portal's login
 // (src/portal-auth.ts). What differs between them is passed in as a LoginFlow; what
 // each stores and does with the admitted email stays in the caller. A state token is
-// stored in OAUTH_KV for ten minutes, bound to the browser by a cookie holding its
-// digest, and used once. PKCE and an OIDC nonce are kept in the stored state, and the
+// stored in OAUTH_KV for ten minutes, bound to the browser by a cookie holding a random
+// value of its own whose digest the stored state keeps, and used once. PKCE and an OIDC nonce are kept in the stored state, and the
 // ID token is verified in src/access-jwt.ts. The person is the email in the token,
 // admitted only when it equals ADMIN_EMAIL or a CO_OWNER_EMAILS entry exactly.
 //
@@ -58,12 +58,14 @@ async function s256(verifier: string): Promise<string> {
   return b64urlFromBytes(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
 }
 
-// What the KV state holds: the caller's own value, and this sign-in's PKCE verifier and
-// nonce, which never leave the server.
+// What the KV state holds: the caller's own value, this sign-in's PKCE verifier and
+// nonce, which never leave the server, and the digest of the browser binding the state
+// cookie carries.
 interface StoredSignIn {
   stored: string;
   verifier: string;
   nonce: string;
+  binding: string;
 }
 
 // Stores `stored` against a fresh state token and redirects to Access.
@@ -77,7 +79,16 @@ export async function startAccessLogin(
   const saas = accessSaas(env);
   if (!saas) return refusal(UNCONFIGURED, 503);
   const stateToken = crypto.randomUUID();
-  const signIn: StoredSignIn = { stored, verifier: b64urlFromBytes(crypto.getRandomValues(new Uint8Array(32))), nonce: crypto.randomUUID() };
+  // The browser binding is random and unrelated to the state token. A cookie derived
+  // from the token could be computed by anyone holding the callback URL, which carries
+  // the token, and would bind nothing (Grok audit 2026-10, S6).
+  const binding = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
+  const signIn: StoredSignIn = {
+    stored,
+    verifier: b64urlFromBytes(crypto.getRandomValues(new Uint8Array(32))),
+    nonce: crypto.randomUUID(),
+    binding: await sha256Hex(binding),
+  };
   await env.OAUTH_KV.put(`${flow.kvPrefix}${stateToken}`, JSON.stringify(signIn), { expirationTtl: STATE_TTL_SECONDS });
   const target = new URL(`${saas.issuer}/authorization`);
   target.searchParams.set("client_id", saas.clientId);
@@ -89,11 +100,8 @@ export async function startAccessLogin(
   target.searchParams.set("code_challenge", await s256(signIn.verifier));
   target.searchParams.set("code_challenge_method", "S256");
   const headers = new Headers({ Location: target.href });
-  // The state cookie carries a DIGEST of the token, so the cookie alone is not the token.
-  headers.append(
-    "Set-Cookie",
-    `${flow.stateCookie}=${await sha256Hex(stateToken)}; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=${STATE_TTL_SECONDS}`
-  );
+  // The state cookie carries the binding, which neither the URL nor the stored state holds.
+  headers.append("Set-Cookie", `${flow.stateCookie}=${binding}; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=${STATE_TTL_SECONDS}`);
   for (const cookie of extraCookies) headers.append("Set-Cookie", cookie);
   return new Response(null, { status: 302, headers });
 }
@@ -123,18 +131,27 @@ export async function completeAccessLogin<T>(
   const stateToken = url.searchParams.get("state");
   if (!code || !stateToken) return fail("missing code or state", 400);
 
+  const notThisBrowser = `state validation failed: this browser did not start the flow. ${flow.restartHint}`;
   const stateCookie = getCookie(request, flow.stateCookie);
-  if (!stateCookie || !timingSafeEqual(stateCookie, await sha256Hex(stateToken))) {
-    return fail(`state validation failed: this browser did not start the flow. ${flow.restartHint}`, 403);
-  }
+  if (!stateCookie) return fail(notThisBrowser, 403);
   const stateKey = `${flow.kvPrefix}${stateToken}`;
   const raw = await env.OAUTH_KV.get(stateKey);
   if (!raw) return fail(`state expired or already used. ${flow.restartHint}`, 403);
   let signIn: StoredSignIn;
-  let state: T;
   try {
     signIn = JSON.parse(raw) as StoredSignIn;
-    if (typeof signIn.verifier !== "string" || typeof signIn.nonce !== "string" || typeof signIn.stored !== "string") throw new Error("shape");
+    if (typeof signIn.verifier !== "string" || typeof signIn.nonce !== "string" || typeof signIn.stored !== "string" || typeof signIn.binding !== "string") {
+      throw new Error("shape");
+    }
+  } catch {
+    await env.OAUTH_KV.delete(stateKey);
+    return fail(`stored authorization state is unreadable. ${flow.restartHint}`, 403);
+  }
+  // A cookie that does not match leaves the state in place, so a stranger holding the
+  // callback URL cannot spend the browser's sign-in.
+  if (!timingSafeEqual(await sha256Hex(stateCookie), signIn.binding)) return fail(notThisBrowser, 403);
+  let state: T;
+  try {
     state = parse(signIn.stored);
   } catch {
     await env.OAUTH_KV.delete(stateKey);

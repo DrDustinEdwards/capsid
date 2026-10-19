@@ -60,7 +60,7 @@ block: needs reason and the command the human must run, or question: true with t
 Complete and block that name a pull request also report open pull requests sharing a file (overlaps); a failed read says not checked and never blocks.
 fail: needs reason. The seat may fail a job somebody else holds.
 complete, fail and block take an optional claim (what the agent says it did), recorded before anything is verified.
-resume: returns a blocked job to claimed for its blocker, or to the caller with take; a job blocked by a shared identity (access:, github:, opkey:) goes back to queued. Needs reason and re-verifies the signature. A plain resume by the claimant needs the seat, unless approved_by_policy covers a branch push or a pull request. correction spends one correction; corrections are capped at ${CORRECTION_CAP} per piece of work, past which only the admin may resume.
+resume: returns a blocked job to claimed for its blocker, or to the caller with take; a job blocked by a shared identity (access:, github:, opkey:) goes back to queued. Needs reason and re-verifies the signature. A plain resume needs the seat; the claimant may resume on approved_by_policy for a branch push or a pull request. correction spends one correction; corrections are capped at ${CORRECTION_CAP} per piece of work, past which only the admin may resume.
 supersede: end a job replaced before work began; needs reason. Any writer on a queued job; the holder or the seat on a claimed job with no work recorded.
 release: the seat returns a job another credential holds to the queue; needs reason.
 edit: the seat changes title, body, priority or gate_required of a queued or blocked job; the old version is kept.

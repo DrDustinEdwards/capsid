@@ -110,3 +110,19 @@ test("one pass changes at most a bounded number and says there are more", async 
   assert.equal(second.marked.length, 1);
   assert.equal(second.more, false);
 });
+
+test("PLANT: an edge to a canon document never marks it superseded", async () => {
+  // A driver may write edges in its own namespace but may not change its core.md or
+  // decisions.md, so the pass must not change them for it (Grok audit 2026-10, M4).
+  const { raw, env } = fresh();
+  for (const p of ["new.md", "core.md", "decisions.md", "old.md"]) put(raw, p);
+  link(raw, "new.md", "supersedes", "core.md");
+  link(raw, "new.md", "replaces", "decisions.md");
+  link(raw, "new.md", "supersedes", "old.md");
+  const report = await supersedePass(env);
+  assert.deepEqual(report.marked.map((m) => m.document), ["sample/old.md"]);
+  assert.deepEqual(report.skipped_canon.sort(), ["sample/core.md", "sample/decisions.md"]);
+  assert.equal(status(raw, "core.md"), "published");
+  assert.equal(status(raw, "decisions.md"), "published");
+  assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE path IN ('core.md', 'decisions.md')").get()?.n, 0);
+});

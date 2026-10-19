@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { bounded, BRIEF_BUDGET, HISTORY_ROWS, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_GLOB, MAX_QUERY, MAX_ROWS, nsName, SEARCH_ROWS, docPath } from "../limits";
 import { ok, fail, type ToolCtx } from "./docs";
+import { surfaceOf } from "./surface";
 import { isConventionsDoc, recordConventionsRead } from "../conventions-read";
 import { describePortfolioDocs, isPortfolioPath, PORTFOLIO_DOCS, portfolioDocuments } from "../portfolio-docs";
 import { portfolioOnly } from "../scope";
@@ -315,7 +316,11 @@ export function defineBacklinksOperation(server: McpServer, ctx: ToolCtx): void 
       inputSchema: { namespace: nsName, path: docPath },
     },
     async ({ namespace, path }) => {
-      return ok({ namespace, path, ...(await documentEdges(db, namespace, path)) });
+      const { outgoing, incoming } = await documentEdges(db, namespace, path);
+      // An incoming edge names a document in another namespace, so it is kept only when
+      // the caller may read that document, asked through checkScope (Grok audit 2026-10, A2).
+      const readable = incoming.filter((e) => ctx.scope({ ...surfaceOf("backlinks"), grant: "read", namespace: e.from_ns, path: e.from_path }) === null);
+      return ok({ namespace, path, outgoing, incoming: readable });
     }
   );
 }

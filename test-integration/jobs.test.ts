@@ -988,14 +988,17 @@ describe("the retry cap, where resume reads it", () => {
   // shares (namespace, title).
   //
   // Named agents rather than the legacy key: a legacy write key resolves to the admin,
-  // and the admin is the one caller the cap lets through.
-  function agentNamed(name: string, admin = false): Agent {
+  // and the admin is the one caller the cap lets through. The resumer is a can_merge
+  // seat, because a plain resume is the seat's act and a driver's is refused before the
+  // cap is read.
+  function agentNamed(name: string, admin = false, canMerge = false): Agent {
     const scopes = defaultScopes(["capsid"]);
     scopes.grants = ["read", "write"];
-    return { id: "agent_aaaabbbbcccc", name, kind: admin ? "seat" : "driver", actor: `agent:${name}`, scopes, admin, row: null };
+    scopes.flags.can_merge = canMerge;
+    return { id: "agent_aaaabbbbcccc", name, kind: admin || canMerge ? "seat" : "driver", actor: `agent:${name}`, scopes, admin, row: null };
   }
   const CLAIMANT = agentNamed("capsid-driver");
-  const OTHER_DRIVER = agentNamed("other-driver");
+  const OTHER_SEAT = agentNamed("other-seat", false, true);
 
   async function blockedAt(corrections: number, title: string): Promise<string> {
     const posted = await post({ title, gate_required: true });
@@ -1012,7 +1015,7 @@ describe("the retry cap, where resume reads it", () => {
   it("the first two corrections are allowed, and each one spends the budget", async () => {
     for (const corrections of [0, 1]) {
       const id = await blockedAt(corrections, `correction ${corrections + 1}`);
-      const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, "fix the review findings", { correction: true });
+      const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, "fix the review findings", { correction: true });
       expect(result.ok, `correction ${corrections + 1} refused: ${JSON.stringify(result)}`).toBe(true);
       expect((await row(id))?.corrections_count, "a correction that does not spend the budget can never reach the cap").toBe(corrections + 1);
       await env.DB.prepare("DELETE FROM jobs").run();
@@ -1022,7 +1025,7 @@ describe("the retry cap, where resume reads it", () => {
   it("PLANT: a PLAIN resume spends nothing, so ordinary pushes never reach the cap", async () => {
     const id = await blockedAt(0, "three ordinary pushes");
     for (let i = 1; i <= 3; i++) {
-      const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, `push ${i} ran`);
+      const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, `push ${i} ran`);
       expect(result.ok, `plain resume ${i} refused: ${JSON.stringify(result)}`).toBe(true);
       expect((await row(id))?.corrections_count, `plain resume ${i} spent a correction`).toBe(0);
       const blocked = await blockJob(jobsEnv(), CLAIMANT, NOW, id, { reason: `push ${i + 1}`, command: "git push -u origin feat/x" });
@@ -1033,7 +1036,7 @@ describe("the retry cap, where resume reads it", () => {
   it("THE THIRD RESUME IS REFUSED, and the refusal names the cap", async () => {
     const id = await blockedAt(CORRECTION_CAP, "at the cap already");
     const before = await row(id);
-    const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, "one more go");
+    const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, "one more go");
     expect(result.ok).toBe(false);
     expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
     expect(result.refusal, "a refusal that does not say who CAN act leaves the job stuck").toMatch(/admin caller may resume it/);
@@ -1049,7 +1052,7 @@ describe("the retry cap, where resume reads it", () => {
     const id = await blockedAt(0, "the same work");
     expect(id).not.toBe(first);
     const before = await row(id);
-    const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, "posting it again");
+    const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, "posting it again");
     expect(result.ok, "a fresh row for the same work reset the cap").toBe(false);
     expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
     expect(result.refusal, "the refusal must say why re-posting did not help").toMatch(/per \(namespace, title\) rather than per row/);
@@ -1060,14 +1063,14 @@ describe("the retry cap, where resume reads it", () => {
     const first = await blockedAt(0, "unspent work");
     await env.DB.prepare("UPDATE jobs SET status = 'failed' WHERE id = ?1").bind(first).run();
     const id = await blockedAt(0, "unspent work");
-    const result = await resumeJob(jobsEnv(), OTHER_DRIVER, NOW, id, "first go");
+    const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, "first go");
     expect(result.ok, `an unspent budget was refused: ${JSON.stringify(result)}`).toBe(true);
     expect((await row(id))?.status).toBe("claimed");
   });
 
   it("THE SEAT IS ALSO REFUSED at the cap, because the seat is not the human", async () => {
     const id = await blockedAt(CORRECTION_CAP, "the seat at the cap");
-    const result = await resumeJob(jobsEnv(), agentNamed("seat"), NOW, id, "the seat says go");
+    const result = await resumeJob(jobsEnv(), agentNamed("seat", false, true), NOW, id, "the seat says go");
     expect(result.ok).toBe(false);
     expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
     expect((await row(id))?.status).toBe("blocked");

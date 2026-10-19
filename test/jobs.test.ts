@@ -8,7 +8,8 @@ import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { sourceFile } from "./source-files.ts";
 import { claimJob, completeJob, failJob, postJob, resumeJob, supersedeJob } from "../src/jobs.ts";
-import { legacyAgent } from "../src/agents.ts";
+import { legacyAgent, type Agent } from "../src/agents.ts";
+import { defaultScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
 
@@ -357,6 +358,20 @@ test("PLANT: a resume whose bad-signature job moved first writes no mirror and n
   assert.equal(out.ok, false);
   assert.deepEqual(committed, [], "a job that moved was still mirrored and audited as failed");
   assert.match(out.refusal ?? "", /now failed/);
+});
+
+test("PLANT: a driver may not plain-resume a sibling driver's blocked job; that approval is the seat's", async () => {
+  const blocked = { ...MOVED_JOB, status: "blocked", claimed_by: "agent:capsid-driver", blocked_count: 1 };
+  const { db, attempted } = movedJobDb(blocked, blocked);
+  const scopes = defaultScopes(["capsid"]);
+  scopes.grants = ["read", "write"];
+  const sibling: Agent = { id: "agent_ddddeeeeffff", name: "other-driver", kind: "driver", actor: "agent:other-driver", scopes, admin: false, row: null };
+  for (const take of [false, true]) {
+    const out = await resumeJob(fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }), sibling, new Date("2026-09-25T09:00:00Z"), "job_abc123abc123", "ran it", { take });
+    assert.equal(out.ok, false, `a sibling driver resumed another driver's gate (take: ${take})`);
+    assert.match(out.refusal ?? "", /the seat's act/);
+  }
+  assert.deepEqual(attempted, [], "a refused resume sent a batch");
 });
 
 test("PLANT: post into a namespace that is not registered is refused and writes nothing", async () => {

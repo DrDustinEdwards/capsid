@@ -221,9 +221,9 @@ describe("a driver's policy resume", () => {
   });
 });
 
-// The claimant's own plain resume. A plain resume records "approved: <reason>" in the
-// audit row, which reads as a human approval, so the claimant may not write it for
-// itself unless it is the admin or holds can_merge. Other write-grant callers still can.
+// A plain resume. It records "approved: <reason>" in the audit row, which reads as a
+// human approval, so only the admin or a can_merge caller may write it: not the
+// claimant, and not another driver in the namespace.
 
 async function plainResume(agent: Agent, command: string, opts: { take?: boolean } = {}) {
   const id = await blockedJob(command);
@@ -263,10 +263,17 @@ describe("a plain resume", () => {
     expect(result.ok, `a can_merge claimant was refused: ${JSON.stringify(result)}`).toBe(true);
   });
 
-  it("a DIFFERENT write-grant caller may still resume, and the job goes back to its claimant", async () => {
-    const { id, result } = await plainResume(driverAgent("agent:other-driver"), "npm run deploy");
-    expect(result.ok, `another write-grant caller was refused: ${JSON.stringify(result)}`).toBe(true);
-    expect((await jobRow(id))?.claimed_by).toBe("agent:capsid-driver");
+  it("PLANT: a DIFFERENT driver may not plain-resume another driver's gate, with or without take", async () => {
+    // A sibling driver holds the namespace's write grant, and clearing a deploy, a secret
+    // or a force push is still the seat's approval (Grok audit 2026-10, S1).
+    for (const command of ["npm run deploy", "git push --force origin feat/x"]) {
+      for (const take of [false, true]) {
+        const { id, before, result } = await plainResume(driverAgent("agent:other-driver"), command, { take });
+        expect(result.ok, `a sibling driver resumed '${command}' (take: ${take})`).toBe(false);
+        expect(String(result.refusal)).toMatch(/the seat's act/);
+        await expectUntouched(id, before);
+      }
+    }
   });
 });
 
