@@ -160,8 +160,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/backup/credential": "signed with the backup-specific HMAC key, derived from the Worker's root secret under its own context, and replay-protected",
   "/bench/tasks": "signed with the capsid-bench HMAC key (src/bench.ts), which no backup key can produce, and replay-protected; registers a task once and never changes one",
   "/bench/draw": "signed with the capsid-bench HMAC key and replay-protected; records the registration once and appends the drawn task order, which never changes",
-  "/bench/start": "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap",
-  "/bench/score": "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, takes every arm's claim from the report, and checks the treatment's job is its own",
+  "/bench/start": "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap, and returns a treatment run's own run key once",
+  "/bench/score": "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, takes every arm's claim from the report, and checks the treatment's job is its own, and closes that job in the same step",
   "/ops/inbox":
     "what needs Dustin, per app (src/inbox.ts): resolveAgent on the bearer (401 without one), then each app is kept only if checkScope admits the caller's read grant on that app's namespace, so a key scoped to one namespace sees that app alone and the admin or an all-namespace read key sees every app. GET only, no CORS headers (an app's server calls it, never a browser), nothing written",
   "/ops/inbox/report":
@@ -214,6 +214,11 @@ export function routeRefusal(path: string, agent: Agent): string | null {
 
 export interface ScopeNeed {
   tool: string;
+  // A capsid_work_jobs call as the registrar saw it: the job id it names, and whether it
+  // asks for more than one job's row (a view, the stale view or a status filter). Only
+  // the registrar sets it, before every handler; a bench run key is bound by it
+  // (benchRunRefusal).
+  call?: { jobId?: string; filtered: boolean };
   // The action, for a tool whose action decides what it does. Present means the tools
   // axis may narrow this call to the actions it names (allowsToolAction).
   action?: string;
@@ -262,6 +267,10 @@ const FLAG_REASON: Record<ScopeFlag, string> = {
 // cannot use the tool is told that, not that its namespace is out of scope, which
 // would leak which namespaces exist.
 export function checkScope(agent: Agent, need: ScopeNeed): string | null {
+  if (agent.benchRun) {
+    const bound = benchRunRefusal(agent.benchRun, agent.actor, need);
+    if (bound) return bound;
+  }
   const scopes = agent.scopes;
   if (!allowsToolAction(scopes.tools, need.tool, need.action)) {
     // Name the qualified tool.action that failed. A caller told it is not scoped to
@@ -301,6 +310,25 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
       return `unauthorized: '${need.tool}' needs the ${flag} flag and ${agent.actor} does not hold it, because ${FLAG_REASON[flag]}.`;
     }
   }
+  return null;
+}
+
+// What a bench run key may do (the methods paper's protocol, "The run key";
+// src/bench-run-key.ts): claim its one job, and list that job by id. Every other tool,
+// every other action, another job, no job, and a list that asks for more than the one
+// row are refused, so an action added later is closed to it until listed here. A
+// re-check inside the jobs handler carries no call and is not bound here: the
+// registrar's check, which binds every call, has already run.
+const BENCH_RUN_ACTIONS: readonly string[] = ["claim", "list"];
+
+function benchRunRefusal(run: { run: string; job: string | null }, actor: string, need: ScopeNeed): string | null {
+  const refusal = `unauthorized: ${actor} is the run key of bench run ${run.run} and may only claim and read its own job`;
+  if (need.tool !== JOBS_TOOL) return `${refusal}; it cannot use ${need.tool}.`;
+  if (!need.call) return null;
+  if (!need.action || !BENCH_RUN_ACTIONS.includes(need.action)) return `${refusal}; it cannot ${need.action ?? "call the tool with no action"}.`;
+  if (run.job === null) return `${refusal}, and no single job carries this run's title yet.`;
+  if (need.call.jobId !== run.job) return `${refusal} (${run.job}); this call names ${need.call.jobId ?? "no job"}.`;
+  if (need.call.filtered) return `${refusal}; a list may not take a view, the stale view or a status filter.`;
   return null;
 }
 
@@ -591,12 +619,22 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
         path: typeof args.path === "string" ? args.path : undefined,
         action,
         stepUp: needsStepUp(name, action),
+        ...(name === JOBS_TOOL
+          ? {
+              call: {
+                jobId: typeof args.id === "string" ? args.id : undefined,
+                filtered: args.view !== undefined || args.stale !== undefined || args.status !== undefined,
+              },
+            }
+          : {}),
         // An "action" tool outside TOOL_ACTION_GRANTS (jobs, lint) is checked by its
         // handler, where the namespace is known, so the registrar names no grant.
         ...needFor(requiredForAction(name, action)),
       });
       if (refusal) return deny(refusal);
-      if (takesNamespace(action) && namespace === undefined) {
+      // A run key's call has already passed benchRunRefusal, which binds it to its one
+      // job in bench, so an omitted namespace asks for nothing wider.
+      if (takesNamespace(action) && namespace === undefined && !agent.benchRun) {
         const missing = namespaceRefusal(agent, name);
         if (missing) return deny(missing);
       }

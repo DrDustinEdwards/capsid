@@ -35,6 +35,18 @@ export function requireJobUnchanged(
     .bind(id, status, claimedBy, updatedAt);
 }
 
+// The same abort for a bench run (src/bench.ts finishRun): fires unless the run is still
+// running, so a run's close and its job's close commit together or not at all.
+export function requireBenchRunRunning(db: D1Database, runId: string): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO document_versions (document_id, namespace, path)
+       SELECT NULL, 'bench', ?1
+       WHERE NOT EXISTS (SELECT 1 FROM bench_runs WHERE id = ?1 AND status = 'running')`
+    )
+    .bind(runId);
+}
+
 export function isMissingRowAbort(err: unknown): boolean {
   return (err instanceof Error ? err.message : String(err)).includes(GUARD_VIOLATION);
 }

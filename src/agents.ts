@@ -10,6 +10,7 @@ import {
   type AgentScopes,
   type ScopeFlag,
 } from "./agents-schema";
+import { runKeyAgent } from "./bench-run-key";
 import { logEvent } from "./log";
 
 // A bearer resolves to a caller, not to a tier. A bare "read" or "write" plus a key
@@ -17,7 +18,7 @@ import { logEvent } from "./log";
 // driver a credential that works a job without also being able to merge a pull
 // request into a repo that deploys on push.
 //
-// Three kinds of caller resolve here, and the order matters:
+// Four kinds of caller resolve here, and the order matters:
 //
 //   1. A minted agent (a row in `agents`), with exactly its row's scopes. Checked
 //      first, so a key that is also an OPERATOR_KEY_HASH entry gets the narrower
@@ -25,7 +26,9 @@ import { logEvent } from "./log";
 //   2. A legacy operator key: a plain entry is write with every flag, an `ro:` entry
 //      is read with none. This lets the table exist without breaking the credential
 //      used to mint the first agent. It stops working when its hash is removed.
-//   3. The OAuth admin session, resolved in src/index.ts: the synthetic agent
+//   3. A bench run key (src/bench-run-key.ts): one treatment run of the paired
+//      comparison, bound to its one job while the run is open.
+//   4. The OAuth admin session, resolved in src/index.ts: the synthetic agent
 //      "admin", holding every scope.
 
 export interface Agent {
@@ -58,6 +61,9 @@ export interface Agent {
   // session's agent is built and updated by the registrar (src/scope.ts STEP_UP). Absent
   // when there is none, or when KV could not say.
   lastStepUpAt?: number;
+  // A bench run key's run and the one job it may work (null while no single job carries
+  // the run's title). checkScope refuses it everything else (src/scope.ts).
+  benchRun?: { run: string; job: string | null };
 }
 
 function flagsAll(value: boolean): Record<ScopeFlag, boolean> {
@@ -162,6 +168,8 @@ export async function resolveAgent(
     const agent = agentFromRow(row);
     return { agent, touch: () => touchLastSeen(env.DB, agent) };
   }
+  const run = await runKeyAgent(env.DB, hash, now);
+  if (run) return { agent: run, touch: async () => {} };
   // A revoked key is refused whether its row is still in agents or has moved to the
   // archive (src/agents-archive.ts): an archived key is a revoked key.
   const revoked = await env.DB.prepare(

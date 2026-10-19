@@ -3,6 +3,13 @@ import type { Env } from "./env";
 import { claimJti, MAX_REPORT_BYTES, readBoundedText, verifyBenchRequest } from "./signed-requests";
 import { breakerRefusal, breakerState } from "./job-breaker";
 import { logEvent } from "./log";
+import { BENCH_NAMESPACE, BENCH_STALE_MS, newRunKey, runJobTitle } from "./bench-run-key";
+import { sha256Hex } from "./auth";
+import type { Agent } from "./agents";
+import { noFlags } from "./agents-schema";
+import { adminFailJob, supersedeJob, workRecorded } from "./jobs-seat";
+import { readJob } from "./jobs-transition";
+import { isMissingRowAbort, requireBenchRunRunning } from "./store-guards";
 
 // THE METHODS PAPER'S PAIRED COMPARISON, the Worker's half (job_ecb1b5f80c2d;
 // capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
@@ -32,9 +39,9 @@ export const BENCH_SCORE_PATH = "/bench/score";
 export const BENCH_ENABLED_KEY = "bench:enabled";
 // At most this many runs at once, so a pilot never starves Dustin's own subscription use.
 export const BENCH_MAX_RUNNING = 4;
-// A running row older than this no longer holds a slot: its job hit GitHub's own
-// timeout without reporting. The row stays 'running' as the record of that.
-const BENCH_STALE_MS = 3 * 60 * 60 * 1000;
+// A running row older than BENCH_STALE_MS (src/bench-run-key.ts) no longer holds a
+// slot: its job hit GitHub's own timeout without reporting. The row stays 'running' as
+// the record of that.
 // The design's k=3 repeats (D17): each model arm gets this many slots per task. A slot
 // may be started twice, and the second start only when the first came back unjudged (a
 // machine failure); a scored or running attempt holds its slot. Enforced here, not in the
@@ -52,7 +59,6 @@ export const BENCH_REPEATS = 3;
 const BENCH_OUTAGE_MIN_ENDED = 4;
 const MODEL_ARMS: readonly Arm[] = ["baseline", "treatment"];
 // The namespace the treatment's jobs live in, whose breaker gates a treatment start.
-const BENCH_NAMESPACE = "bench";
 // The replay scope in improve_jti. A colon, which no namespace name may hold, so it
 // can never collide with a roster namespace's scope.
 const JTI_SCOPE = "bench:";
@@ -571,12 +577,21 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     if (locked) return textResponse(locked, 409);
     // A stale running row is closed as unjudged before its rerun can open, so its job can
     // no longer post a late score: /bench/score refuses a row that is not running.
-    await env.DB.prepare(
-      `UPDATE bench_runs SET status = 'unjudged', finished_at = ?4, unjudged_reason = 'no report within the stale window; closed when the next start was asked for'
-       WHERE task_id = ?1 AND arm = ?2 AND status = 'running' AND started_at <= ?3`
+    // A treatment row's job is closed with it (finishRun); one that moved in between is
+    // left running, and the slot refusal below says so.
+    const { results: staleRuns } = await env.DB.prepare(
+      "SELECT id FROM bench_runs WHERE task_id = ?1 AND arm = ?2 AND status = 'running' AND started_at <= ?3"
     )
-      .bind(task_id, arm, stale, now.toISOString())
-      .run();
+      .bind(task_id, arm, stale)
+      .all<{ id: string }>();
+    for (const { id: staleId } of staleRuns ?? []) {
+      await finishRun(env, { id: staleId, task_id, arm }, now, [
+        env.DB.prepare(
+          `UPDATE bench_runs SET status = 'unjudged', finished_at = ?2, unjudged_reason = 'no report within the stale window; closed when the next start was asked for'
+           WHERE id = ?1 AND status = 'running'`
+        ).bind(staleId, now.toISOString()),
+      ]);
+    }
     const outage = await outageHours(env.DB);
     if (outage.has(now.toISOString().slice(0, 13))) {
       return textResponse(`no model run starts in an outage hour: at least half of this hour's ended runs stopped with an error during execution; start again next hour`, 409);
@@ -591,17 +606,21 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     }
     prior = results.length;
   }
+  // A treatment run's own key (src/bench-run-key.ts), returned once and stored only as
+  // its hash on the row it opens.
+  const runKey = arm === "treatment" ? newRunKey() : null;
+  const runKeyHash = runKey ? await sha256Hex(runKey) : null;
   // One statement, so two starts racing for the last running slot cannot both take it,
   // and a model start counted against the rows read above fails if another start landed
   // since. The planted arms call no model and have no per-task slots.
   const opened = await env.DB.prepare(
-    `INSERT INTO bench_runs (id, task_id, arm, gh_run, status, started_at)
-     SELECT ?1, ?2, ?3, ?4, 'running', ?5
+    `INSERT INTO bench_runs (id, task_id, arm, gh_run, status, started_at, run_key_hash)
+     SELECT ?1, ?2, ?3, ?4, 'running', ?5, ?9
      WHERE (SELECT COUNT(*) FROM bench_runs WHERE status = 'running' AND started_at > ?6) < ?7
        AND (?8 < 0 OR (SELECT COUNT(*) FROM bench_runs WHERE task_id = ?2 AND arm = ?3) = ?8)
      RETURNING id`
   )
-    .bind(id, task_id, arm, gh_run, now.toISOString(), stale, BENCH_MAX_RUNNING, prior)
+    .bind(id, task_id, arm, gh_run, now.toISOString(), stale, BENCH_MAX_RUNNING, prior, runKeyHash)
     .all<{ id: string }>();
   if (opened.results.length !== 1) {
     if (prior >= 0) {
@@ -612,7 +631,52 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
   }
   const at = slot ? ` slot=${slot.slot} attempt=${slot.attempt}` : "";
   logEvent("log", "BENCH_RUN_STARTED", { message: `BENCH_RUN_STARTED ${id} task=${task_id} arm=${arm} gh_run=${gh_run}${at}` });
-  return Response.json({ ok: true, run_id: id, ...(slot ? { slot: slot.slot, attempt: slot.attempt } : {}) });
+  return Response.json({ ok: true, run_id: id, ...(slot ? { slot: slot.slot, attempt: slot.attempt } : {}), ...(runKey ? { run_key: runKey } : {}) });
+}
+
+// THE JOB CLOSE (the methods paper's protocol, section 4, "The job"; decided 2026-10-19).
+// The score step finishes the run and closes that run's job in one batch, so the run is
+// not finished unless the close commits with it, and the run key stops resolving in the
+// same step (src/bench-run-key.ts reads a running row only). The close is a supersede by
+// the harness with the same reason on every treatment run; a job with work recorded on
+// it, which supersede refuses, is failed by the seat path with that reason, no claim and
+// no outcome row, since it is not the holder's fail. Neither the run key nor the driver
+// key that posted the job can supersede it. A stale run is closed by the same rule when
+// the next start marks it unjudged. The analysis reads the claim file, never job status.
+export const BENCH_CLOSE_REASON = "closed by the harness; the claim is the claim file";
+const BENCH_HARNESS: Agent = {
+  id: "bench-harness",
+  name: "bench-harness",
+  kind: "seat",
+  actor: "bench-harness",
+  scopes: { namespaces: [BENCH_NAMESPACE], repos: [], tools: ["capsid_work_jobs"], grants: ["read", "write"], flags: { ...noFlags(), can_merge: true } },
+  admin: false,
+  row: null,
+};
+
+/** Commits `rowClose` only while the run is running, with its job's close for a treatment run. False when nothing was written. */
+async function finishRun(env: Env, run: { id: string; task_id: string; arm: Arm }, now: Date, rowClose: D1PreparedStatement[]): Promise<boolean> {
+  const statements = [requireBenchRunRunning(env.DB, run.id), ...rowClose];
+  if (run.arm === "treatment") {
+    const open = await env.DB.prepare("SELECT id FROM jobs WHERE namespace = ?1 AND title = ?2 AND status IN ('queued', 'claimed', 'blocked')")
+      .bind(BENCH_NAMESPACE, runJobTitle(run.task_id, run.id))
+      .first<{ id: string }>();
+    const job = open ? await readJob(env.DB, open.id) : null;
+    if (job) {
+      const failed = job.status === "blocked" || (job.status === "claimed" && workRecorded(job) !== null);
+      const result = failed
+        ? await adminFailJob(env, BENCH_HARNESS, now, job.id, BENCH_CLOSE_REASON, { extra: statements, outcome: false })
+        : await supersedeJob(env, BENCH_HARNESS, now, job.id, { reason: BENCH_CLOSE_REASON }, statements);
+      return result.ok;
+    }
+  }
+  try {
+    await env.DB.batch(statements);
+    return true;
+  } catch (err) {
+    if (!isMissingRowAbort(err)) throw err;
+    return false;
+  }
 }
 
 export async function handleBenchScore(request: Request, env: Env): Promise<Response> {
@@ -642,18 +706,17 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
   const scored = outcome.status === "scored";
   const flag = (v: boolean | undefined) => (v === undefined ? null : v ? 1 : 0);
   const u = report.usage;
-  const closed = await env.DB.prepare(
+  const finishedAt = new Date();
+  const closeRow = env.DB.prepare(
     `UPDATE bench_runs SET status = ?2, finished_at = ?3, capsid_job_id = ?4, claimed_done = ?5, resolved = ?6, false_claim = ?7,
        fail_to_pass_passed = ?8, pass_to_pass_passed = ?9, unjudged_reason = ?10, model = ?11, claude_code_version = ?12,
        cost_usd = ?13, turns = ?14, duration_ms = ?15, input_tokens = ?16, output_tokens = ?17, cache_read_tokens = ?18,
        cache_creation_tokens = ?19, image_bytes = ?20, report = ?21
-     WHERE id = ?1 AND status = 'running'
-     RETURNING id`
-  )
-    .bind(
+     WHERE id = ?1 AND status = 'running'`
+  ).bind(
       run.id,
       outcome.status,
-      new Date().toISOString(),
+      finishedAt.toISOString(),
       report.capsid_job_id,
       flag(scored ? outcome.claimed_done : undefined),
       flag(scored ? outcome.resolved : undefined),
@@ -672,10 +735,13 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
       u.cache_creation_tokens,
       report.image_bytes,
       JSON.stringify(report)
-    )
-    .all<{ id: string }>();
-  // Two reports for one run racing: the first closed it, the second matched nothing.
-  if (closed.results.length !== 1) return textResponse(`bench run ${run.id} was closed by another report`, 409);
+    );
+  if (!(await finishRun(env, run, finishedAt, [closeRow]))) {
+    // Two reports for one run racing: the first closed it, the second matched nothing.
+    const after = await env.DB.prepare("SELECT status FROM bench_runs WHERE id = ?1").bind(run.id).first<{ status: string }>();
+    if (after?.status !== "running") return textResponse(`bench run ${run.id} was closed by another report`, 409);
+    return textResponse(`bench run ${run.id}'s job changed while it was being closed, so nothing was scored; send the report again`, 409);
+  }
   logEvent("log", "BENCH_RUN_SCORED", { message: `BENCH_RUN_SCORED ${run.id} ${outcome.status}` });
   return Response.json({ ok: true, run_id: run.id, ...outcome });
 }

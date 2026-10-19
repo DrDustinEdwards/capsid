@@ -1,6 +1,6 @@
 # The paired comparison (capsid-bench)
 
-The methods paper compares Claude Code used well with the same model working through Capsid's method, scored on hidden tests. The study design is `capsid/research/design-paired-comparison.md` in Capsid. The runs happen in the public repo [capsid-bench](https://github.com/DrDustinEdwards/capsid-bench), one task per GitHub Actions job per arm; this Worker keeps the task list and every run's outcome (`src/bench.ts`, `migrations/0047_bench.sql`, `migrations/0049_bench_draw.sql`).
+The methods paper compares Claude Code used well with the same model working through Capsid's method, scored on hidden tests. The study design is `capsid/research/design-paired-comparison.md` in Capsid. The runs happen in the public repo [capsid-bench](https://github.com/DrDustinEdwards/capsid-bench), one task per GitHub Actions job per arm; this Worker keeps the task list and every run's outcome (`src/bench.ts`, `migrations/0047_bench.sql`, `migrations/0049_bench_draw.sql`, `migrations/0050_bench_run_keys.sql`).
 
 ## The four endpoints
 
@@ -17,8 +17,14 @@ Remove-Variable k
 
 - `POST /bench/tasks` registers a task with its source, split (`pilot`, `full` or `excluded`), repo, issue date and the counts of its `FAIL_TO_PASS` and `PASS_TO_PASS` tests. The same registration again is a no-op; a different one is refused. A task is never updated, and a task with a run cannot be deleted (triggers in the migration).
 - `POST /bench/draw` records the registration (the registration's sha256, the frame file's sha256 and the sampling seed) and appends the drawn task order: a batch is the draw from position `from` on. The first call records the registration and every later call must carry the same one. Positions already recorded must hold the same tasks and the rest are appended, so a batch can be sent again and the draw only grows. A drawn task must be registered in the `full` split. Both tables are insert-only, and neither can be deleted once a drawn task has a model run (triggers in the migration).
-- `POST /bench/start` opens a run for a task and an arm: `baseline`, `treatment`, or one of the two planted arms that call no model, `check-gold` (the upstream fix; must score resolved) and `check-false-claim` (an empty diff that claims done; must score a false claim). It returns the run id.
-- `POST /bench/score` closes the run with the hidden test counts, the baseline's parsed claim, the treatment's Capsid job id, and Claude Code's usage figures.
+- `POST /bench/start` opens a run for a task and an arm: `baseline`, `treatment`, or one of the two planted arms that call no model, `check-gold` (the upstream fix; must score resolved) and `check-false-claim` (an empty diff that claims done; must score a false claim). It returns the run id, and for a treatment run its run key (below).
+- `POST /bench/score` closes the run with the hidden test counts, the baseline's parsed claim, the treatment's Capsid job id, and Claude Code's usage figures, and closes a treatment run's job in the same step (below).
+
+## The run key and the job close
+
+Each treatment run gets its own Capsid key, `capsid_run_` and 64 hex characters, returned once by `/bench/start` and stored only as its sha256 on the run's row (`src/bench-run-key.ts`). It is the agent's only Capsid credential. The harness posts the run's one job, titled `bench <task_id> <run_id>` in `bench`, with the bench driver key, which the agent never holds. The run key's only successful calls are `claim` of that job and `list` of it by id; any other tool, action, job, filtered list or namespace is refused (`benchRunRefusal` in `src/scope.ts`). It resolves only while the run is `running` and inside the 3-hour stale window, so it stops working when the run is scored. The baseline has no Capsid key.
+
+`/bench/score` finishes the run and closes its job in one batch, so neither commits without the other. The close is a supersede by the harness with the reason `closed by the harness; the claim is the claim file`, the same on every run; a job with work recorded on it, which supersede refuses, is failed by the seat path with that reason, no claim and no outcome row, since it is not the holder's fail. A stale run is closed by the same rule when the next start marks it unjudged. The analysis reads the claim file only, never job status. Narrow the bench driver to posting (`capsid_work_jobs` and `capsid_work_jobs.post`), so the credential that posts a job cannot supersede it.
 
 ## What can stop a run
 
