@@ -404,6 +404,14 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
   let slot: { slot: number; attempt: 1 | 2 } | null = null;
   let prior = -1;
   if (MODEL_ARMS.includes(arm)) {
+    // A stale running row is closed as unjudged before its rerun can open, so its job can
+    // no longer post a late score: /bench/score refuses a row that is not running.
+    await env.DB.prepare(
+      `UPDATE bench_runs SET status = 'unjudged', finished_at = ?4, unjudged_reason = 'no report within the stale window; closed when the next start was asked for'
+       WHERE task_id = ?1 AND arm = ?2 AND status = 'running' AND started_at <= ?3`
+    )
+      .bind(task_id, arm, stale, now.toISOString())
+      .run();
     const { results } = await env.DB.prepare("SELECT status, started_at FROM bench_runs WHERE task_id = ?1 AND arm = ?2 ORDER BY started_at, rowid")
       .bind(task_id, arm)
       .all<PriorRun>();

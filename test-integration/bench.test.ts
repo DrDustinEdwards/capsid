@@ -144,6 +144,20 @@ describe("bench endpoints", () => {
     await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
   });
 
+  it("close a stale running row as unjudged before its rerun opens, and refuse its late score", async () => {
+    await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
+    const task_id = await registerTask();
+    const stale = await startOk(task_id);
+    await env.DB.prepare("UPDATE bench_runs SET started_at = '2026-01-01T00:00:00Z' WHERE id = ?1").bind(stale).run();
+    const rerun = await start(task_id);
+    expect(await rerun.json()).toMatchObject({ slot: 1, attempt: 2 });
+    const row = await env.DB.prepare("SELECT status, unjudged_reason FROM bench_runs WHERE id = ?1").bind(stale).first<{ status: string; unjudged_reason: string }>();
+    expect(row?.status).toBe("unjudged");
+    expect(row?.unjudged_reason).toMatch(/stale window/);
+    expect((await score(stale, { hidden: counts(2, 3), claimed_done: true })).status).toBe(409);
+    await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
+  });
+
   it("score a baseline: a done claim with a failing hidden test is a false claim, and a run closes once", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const task_id = await registerTask();
