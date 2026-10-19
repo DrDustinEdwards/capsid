@@ -39,6 +39,15 @@ const BENCH_STALE_MS = 3 * 60 * 60 * 1000;
 // hand-dispatched workflow, so a run whose outcome was seen cannot be replaced by another
 // start. A running row past BENCH_STALE_MS counts as unjudged.
 export const BENCH_REPEATS = 3;
+// THE SECOND STOP AND THE OUTAGE HOUR (the methods paper's protocol, section 3). A model
+// run that ends with Claude Code's "error during execution" (a usage limit and a
+// transport error look the same, and neither is classified) is unjudged the first time
+// and its slot is started once more; if the rerun stops the same way, it is scored from
+// its diff and claim file, as a clock kill is. Except in an outage hour: a UTC hour in
+// which at least BENCH_OUTAGE_MIN_ENDED model runs ended and at least half of them
+// stopped this way. Such a stop counts as no attempt at all, so its slot is started once
+// more, and no model run starts while the current hour already meets the rule.
+const BENCH_OUTAGE_MIN_ENDED = 4;
 const MODEL_ARMS: readonly Arm[] = ["baseline", "treatment"];
 // The namespace the treatment's jobs live in, whose breaker gates a treatment start.
 const BENCH_NAMESPACE = "bench";
@@ -159,6 +168,9 @@ export interface ScoreRequest {
   // Null when the scorer never got as far as counting (an environment failure).
   hidden: { fail_to_pass: { total: number; passed: number }; pass_to_pass: { total: number; passed: number } } | null;
   claimed_done: boolean | null;
+  // Claude Code ended a phase with "error during execution". The diff is still scored;
+  // runOutcome decides from the attempt whether the run counts.
+  stopped_on_error: boolean;
   capsid_job_id: string | null;
   usage: BenchUsage;
   image_bytes: number | null;
@@ -221,6 +233,7 @@ export function parseScoreRequest(body: string): { ok: true; jti: string; report
     hidden = { fail_to_pass: f2p, pass_to_pass: p2p };
   }
   if (r.claimed_done !== undefined && r.claimed_done !== null && typeof r.claimed_done !== "boolean") return { ok: false, refusal: "claimed_done must be true, false or null" };
+  if (r.stopped_on_error !== undefined && typeof r.stopped_on_error !== "boolean") return { ok: false, refusal: "stopped_on_error must be true or false" };
   let jobId: string | null = null;
   if (r.capsid_job_id !== undefined && r.capsid_job_id !== null) {
     if (typeof r.capsid_job_id !== "string" || !/^job_[0-9a-f]{12}$/.test(r.capsid_job_id)) return { ok: false, refusal: "capsid_job_id must be a job id (job_ and 12 hex)" };
@@ -239,6 +252,7 @@ export function parseScoreRequest(body: string): { ok: true; jti: string; report
       environment,
       hidden,
       claimed_done: typeof r.claimed_done === "boolean" ? r.claimed_done : null,
+      stopped_on_error: r.stopped_on_error === true,
       capsid_job_id: jobId,
       usage,
       image_bytes: isCount(image) ? image : null,
@@ -268,10 +282,15 @@ export interface TreatmentJob {
 export function runOutcome(
   report: ScoreRequest,
   task: Pick<BenchTask, "fail_to_pass_count" | "pass_to_pass_count">,
-  run: { id: string; task_id: string; arm: Arm },
+  run: { id: string; task_id: string; arm: Arm; attempt?: 1 | 2 },
   job: TreatmentJob | null
 ): RunOutcome {
   if (!report.environment.ok || !report.hidden) return { status: "unjudged", reason: report.environment.reason ?? "no hidden test counts" };
+  // A first stop on an error is not scored, and its slot is started once more; the
+  // rerun's second stop is.
+  if (report.stopped_on_error && run.attempt !== 2) {
+    return { status: "unjudged", reason: "Claude Code stopped with an error during execution; the slot is started once more, and a second such stop is scored" };
+  }
   const { fail_to_pass: f2p, pass_to_pass: p2p } = report.hidden;
   if (f2p.total !== task.fail_to_pass_count || p2p.total !== task.pass_to_pass_count) {
     return {
@@ -356,6 +375,42 @@ export async function handleBenchTasks(request: Request, env: Env): Promise<Resp
 export interface PriorRun {
   status: string;
   started_at: string;
+  finished_at?: string | null;
+  stopped_on_error?: number | boolean | null;
+}
+
+/** Whether a UTC hour with this many ended model runs, this many of them stopped on an error, is an outage hour. */
+export function isOutageHour(ended: number, errors: number): boolean {
+  return ended >= BENCH_OUTAGE_MIN_ENDED && errors * 2 >= ended;
+}
+
+// The outage hours so far, as the first 13 characters of an ISO time ("2026-10-19T02").
+async function outageHours(db: D1Database): Promise<Set<string>> {
+  const { results } = await db
+    .prepare(
+      `SELECT substr(finished_at, 1, 13) AS hour, COUNT(*) AS ended,
+         SUM(CASE WHEN json_extract(report, '$.stopped_on_error') = 1 THEN 1 ELSE 0 END) AS errors
+       FROM bench_runs WHERE arm IN ('baseline', 'treatment') AND finished_at IS NOT NULL GROUP BY hour`
+    )
+    .all<{ hour: string; ended: number; errors: number }>();
+  return new Set(results.filter((h) => isOutageHour(h.ended, h.errors)).map((h) => h.hour));
+}
+
+/** The runs that count toward slots: an error stop in an outage hour is no attempt at all. */
+export function countedRuns<T extends PriorRun>(runs: readonly T[], outage: ReadonlySet<string>): T[] {
+  return runs.filter((r) => !(r.stopped_on_error && r.finished_at && outage.has(r.finished_at.slice(0, 13))));
+}
+
+// A task and arm's runs in start order, for both the start's slot and the score's attempt.
+async function priorRuns(db: D1Database, taskId: string, arm: string): Promise<(PriorRun & { id: string })[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, status, started_at, finished_at, json_extract(report, '$.stopped_on_error') AS stopped_on_error
+       FROM bench_runs WHERE task_id = ?1 AND arm = ?2 ORDER BY started_at, rowid`
+    )
+    .bind(taskId, arm)
+    .all<PriorRun & { id: string }>();
+  return results;
 }
 
 // Which slot and attempt the next start of a model arm on a task takes, from that task
@@ -410,10 +465,12 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     )
       .bind(task_id, arm, stale, now.toISOString())
       .run();
-    const { results } = await env.DB.prepare("SELECT status, started_at FROM bench_runs WHERE task_id = ?1 AND arm = ?2 ORDER BY started_at, rowid")
-      .bind(task_id, arm)
-      .all<PriorRun>();
-    slot = nextSlot(results, stale);
+    const outage = await outageHours(env.DB);
+    if (outage.has(now.toISOString().slice(0, 13))) {
+      return textResponse(`no model run starts in an outage hour: at least half of this hour's ended runs stopped with an error during execution; start again next hour`, 409);
+    }
+    const results = await priorRuns(env.DB, task_id, arm);
+    slot = nextSlot(countedRuns(results, outage), stale);
     if (!slot) {
       return textResponse(
         `task ${task_id} has used its ${arm} runs: ${BENCH_REPEATS} slots, each started at most twice and the second time only after an unjudged first attempt`,
@@ -462,7 +519,14 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
     run.arm === "treatment" && report.capsid_job_id
       ? await env.DB.prepare("SELECT namespace, title, status FROM jobs WHERE id = ?1").bind(report.capsid_job_id).first<TreatmentJob>()
       : null;
-  const outcome = runOutcome(report, run, run, job);
+  // The attempt this run took, from the runs started before it, as /bench/start chose it.
+  let attempt: 1 | 2 | undefined;
+  if (MODEL_ARMS.includes(run.arm)) {
+    const results = await priorRuns(env.DB, run.task_id, run.arm);
+    const before = results.slice(0, Math.max(0, results.findIndex((r) => r.id === run.id)));
+    attempt = nextSlot(countedRuns(before, await outageHours(env.DB)), "")?.attempt;
+  }
+  const outcome = runOutcome(report, run, { ...run, attempt }, job);
   const scored = outcome.status === "scored";
   const flag = (v: boolean | undefined) => (v === undefined ? null : v ? 1 : 0);
   const u = report.usage;

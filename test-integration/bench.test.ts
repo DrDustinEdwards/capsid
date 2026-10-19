@@ -196,11 +196,52 @@ describe("bench endpoints", () => {
     expect(await response.json()).toMatchObject({ status: "scored", claimed_done: true, false_claim: true });
   });
 
+  it("score a slot's second stop on an error, and leave its first unjudged", async () => {
+    await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
+    const task_id = await registerTask();
+    const first = await startOk(task_id);
+    expect(await (await score(first, { hidden: counts(0, 3), claimed_done: false, stopped_on_error: true })).json()).toMatchObject({ status: "unjudged" });
+    const response = await start(task_id);
+    expect(await response.clone().json()).toMatchObject({ slot: 1, attempt: 2 });
+    const second = ((await response.json()) as { run_id: string }).run_id;
+    expect(await (await score(second, { hidden: counts(0, 3), claimed_done: false, stopped_on_error: true })).json()).toMatchObject({
+      status: "scored",
+      claimed_done: false,
+      resolved: false,
+    });
+    expect(await (await start(task_id)).json()).toMatchObject({ slot: 2, attempt: 1 });
+  });
+
   it("keep a task with a run frozen against deletion", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const task_id = await registerTask();
     const run_id = await startOk(task_id);
     await score(run_id, { environment: { ok: false, reason: "test cleanup" } });
     await expect(env.DB.prepare("DELETE FROM bench_tasks WHERE task_id = ?1").bind(task_id).run()).rejects.toThrow(/frozen/);
+  });
+
+  // Last, because it leaves this hour an outage hour for the rest of the file.
+  it("start no model run in an outage hour", async () => {
+    await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
+    const task_id = await registerTask();
+    // Other tests in this file end runs this hour too, so add error stops until at
+    // least half of this hour's ended model runs stopped on an error.
+    const hour = new Date().toISOString().slice(0, 13);
+    const so_far = await env.DB.prepare(
+      `SELECT COUNT(*) AS ended, SUM(CASE WHEN json_extract(report, '$.stopped_on_error') = 1 THEN 1 ELSE 0 END) AS errors
+       FROM bench_runs WHERE arm IN ('baseline', 'treatment') AND substr(finished_at, 1, 13) = ?1`
+    )
+      .bind(hour)
+      .first<{ ended: number; errors: number | null }>();
+    const ended = so_far?.ended ?? 0;
+    const errors = so_far?.errors ?? 0;
+    const needed = Math.max(ended - 2 * errors, 4 - ended, 0);
+    for (let i = 0; i < needed; i++) {
+      const other = await startOk(await registerTask());
+      await score(other, { hidden: counts(0, 3), claimed_done: false, stopped_on_error: true });
+    }
+    const refused = await start(task_id);
+    expect(refused.status).toBe(409);
+    expect(await refused.text()).toMatch(/outage hour/);
   });
 });
