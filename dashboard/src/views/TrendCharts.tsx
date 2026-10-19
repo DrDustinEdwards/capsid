@@ -333,7 +333,7 @@ export function CostChart() {
 // ---- 7. How much merges with no human? -------------------------------------------------------
 
 const MERGE_KINDS = ["auto", "approved", "seat", "closed"] as const;
-const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = { auto: "Merged by policy", approved: "Merged on approval", seat: "Merged by the seat", closed: "Closed unmerged" };
+const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = { auto: "Merged by policy", approved: "Merged on approval", seat: "Merged by you", closed: "Closed unmerged" };
 
 /** Pull requests' chart: each week's merges and closes by who acted, stacked. Enarratio's bar
  *  chart has no event marker, so each rollback is listed under it. */
@@ -357,7 +357,7 @@ export function MergesChart() {
     xLabel: `ISO week, ${weeks[0]!.week.slice(0, 4)} on`,
     yLabel: "Pull requests",
     height: 240,
-    alt: `Pull requests merged or closed per week for ${weeks.length} weeks: ${total("auto")} merged by policy with no human, ${total("approved")} on an approval, ${total("seat")} by the seat, ${total("closed")} closed unmerged. ${rollbacks.length} ${rollbacks.length === 1 ? "rollback" : "rollbacks"}.`,
+    alt: `Pull requests merged or closed per week for ${weeks.length} weeks: ${total("auto")} merged by policy with no human, ${total("approved")} on an approval, ${total("seat")} by you, ${total("closed")} closed unmerged. ${rollbacks.length} ${rollbacks.length === 1 ? "rollback" : "rollbacks"}.`,
     dataTable: "details",
   } as const;
   return (

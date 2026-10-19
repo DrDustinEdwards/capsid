@@ -8,12 +8,13 @@ import { St } from "../ui/icons";
 import { AutomationSwitch, ReasonForm, useApplySwitch } from "../ui/Switch";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
-import { PageHead } from "./shared";
 
-// The Automation panel and the roster (ruled 2026-09-30, DECIDE 5, 6 and 7). Every
-// automation change is a switch that asks for a reason beside it, moves only when the
-// change has applied, and offers Undo in the app's message. The breaker reset is one-way,
-// so it keeps its preview and confirm.
+// The Automation panel and the Projects roster, both on Settings (ruled 2026-09-30, DECIDE
+// 5, 6 and 7; the UX audit's M3 put Automation first). Every automation change is a switch
+// that asks for a reason beside it, moves only when the change has applied, and offers
+// Undo in the app's message. A project paused after repeated failures (the queue's circuit
+// breaker, src/job-breaker.ts) is reset one way, so the reset keeps its preview and
+// confirm; Needs you offers the same Reset.
 
 // The last good read stays on screen while a new one runs or after one fails.
 interface Load {
@@ -30,7 +31,7 @@ const RUNS_ON: ReadonlyArray<{ value: RunsOn; label: string }> = [
 const runsOnLabel = (v: RunsOn) => RUNS_ON.find((r) => r.value === v)?.label ?? v;
 const isRunsOn = (m: string): m is RunsOn => m === "subscription" || m === "api";
 
-function Automation() {
+export function Automation() {
   const { feed } = useApp();
   const apply = useApplySwitch();
   // The overnight run: a switch and a "Runs on" radio group.
@@ -49,7 +50,7 @@ function Automation() {
   const shownNight = pendingNight ?? (nightOn ? (night.mode as RunsOn) : nightChosen);
 
   return (
-    <Panel flush title="Automation" src="each change is recorded in Activity with its reason">
+    <Panel flush title="Automation" id="automation" src="each change is recorded in Activity with its reason">
       <div className="auto">
         <div className="auto-row">
           <div className="what">
@@ -158,10 +159,10 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
         {n.breaker.open && (
           <>
             <div className="mt4">
-              <St kind="crit">Queue stopped</St>
+              <St kind="crit">Paused after repeated failures</St>
             </div>
             <div className="src wrap">
-              circuit breaker: {n.breaker.failed} jobs failed by their holders since {n.breaker.since} UTC (threshold {n.breaker.threshold})
+              {n.breaker.failed} jobs failed since {n.breaker.since} UTC; it pauses at {n.breaker.threshold}. No job is handed out until it is reset.
             </div>
           </>
         )}
@@ -180,8 +181,8 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
       </td>
       <td className="ctl">
         {n.breaker.open && (
-          <button type="button" className="btn" onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Reset the circuit breaker for ${n.namespace}`, onDone: onChanged })}>
-            Reset breaker
+          <button type="button" className="btn" aria-label={`Reset ${n.namespace}`} onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Reset ${n.namespace} and hand out its jobs again`, onDone: onChanged })}>
+            Reset
           </button>
         )}
       </td>
@@ -189,7 +190,7 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
   );
 }
 
-export function Namespaces({ embedded = false }: { embedded?: boolean } = {}) {
+export function Projects() {
   const { now, signOut } = useApp();
   const [load, setLoad] = useState<Load>({ data: null, loading: true, error: null });
   const alive = useRef(true);
@@ -211,18 +212,17 @@ export function Namespaces({ embedded = false }: { embedded?: boolean } = {}) {
   }, [read]);
   const data = load.data;
   return (
-    <div className={embedded ? "embedded" : "page"}>
-      {!embedded && <PageHead title="Namespaces" />}
-      <Automation />
+    <>
       {load.error && (
         <div className="callout crit" role="alert">
-          Could not read the namespaces: {load.error}
+          Could not read the projects: {load.error}
           {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
         </div>
       )}
       <Panel
         flush
-        title="Roster"
+        title="Projects"
+        id="projects"
         count={data?.namespaces.length}
         src={
           <>
@@ -235,14 +235,14 @@ export function Namespaces({ embedded = false }: { embedded?: boolean } = {}) {
       >
         {!data && load.loading ? (
           <div className="loading" role="status">
-            <Spinner label="Reading the namespaces..." />
+            <Spinner label="Reading the projects..." />
           </div>
         ) : data && data.namespaces.length ? (
           <div className="scroll-x reflow">
             <table className="list cards-below-1100 roster">
               <thead>
                 <tr>
-                  <th>Namespace</th>
+                  <th>Project</th>
                   <th>Driver</th>
                   <th>Jobs</th>
                   <th>Integrity</th>
@@ -259,11 +259,11 @@ export function Namespaces({ embedded = false }: { embedded?: boolean } = {}) {
             </table>
           </div>
         ) : data ? (
-          <div className="body faint">The roster has no namespaces.</div>
+          <div className="body faint">The roster has no projects.</div>
         ) : (
           <div className="body faint">No read yet.</div>
         )}
       </Panel>
-    </div>
+    </>
   );
 }

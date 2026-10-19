@@ -1,14 +1,15 @@
-import { Suspense, lazy, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { placePath, useApp } from "../app/ctx";
-import { counts, hasSites, isOpen } from "../lib/derive";
-import { DAY, age, ago, ms } from "../lib/format";
+import { counts, hasSites } from "../lib/derive";
+import { DAY, ago, ms } from "../lib/format";
 
-// The top of Health (docs/design/design-portal-evaluation.md section 2: "Overview: its tiles
-// move to the top of Health"): six summary tiles and the daily maintenance pass's list
-// (job_549550d73d4e). The Overview's brief site table and week of deploys are not repeated:
-// Health's Sites and Deploys sections are the whole of both. With no site configured there
-// is no site tile.
+// The tiles at the top of Health (docs/design/design-portal-evaluation.md section 2; the UX
+// audit's m2 and m3, 2026-10): sites up, open findings, the primary backup and the
+// off-account mirror, each a link to the tab that holds it. Backup and Mirror are two
+// tiles, so a stale mirror never turns a good primary backup red. What waits on you is
+// counted on Needs you only, so there is no "Blocked on you" tile. With no site configured
+// there is no site tile.
 
 interface Tile {
   label: string;
@@ -19,17 +20,14 @@ interface Tile {
   go: string;
 }
 
-// The Maintenance list loads on its own, after the Overview's first paint.
-const Maintenance = lazy(() => import("./Maintenance").then((m) => ({ default: m.Maintenance })));
-
 export function Overview() {
   const { feed, now } = useApp();
   const c = counts(feed);
   const snap = feed.snapshot;
-  const live = feed.live;
-  const blocked = live.jobs.filter((j) => j.status === "blocked");
   const backup = snap?.health?.backup ?? null;
-  const mirrorAge = snap?.mirror?.newest_dump ? now - ms(snap.mirror.newest_dump) : null;
+  const mirror = snap?.mirror ?? null;
+  const mirrorAge = mirror?.newest_dump ? now - ms(mirror.newest_dump) : null;
+  const mirrorFailed = mirror?.last_run?.conclusion != null && mirror.last_run.conclusion !== "success";
   const findingsOpen = c.findings;
   const sitesOn = hasSites(feed);
   const siteTile: Tile | null = !sitesOn
@@ -39,15 +37,22 @@ export function Overview() {
       : { label: "Sites up", v: <small>No data</small>, d: "no watcher pass yet", cls: "", go: "sites" };
   const tiles: Tile[] = [
     ...(siteTile ? [siteTile] : []),
-    { label: "Blocked on you", v: String(c.blocked), d: blocked.length ? `oldest ${age(Math.min(...blocked.map((j) => ms(j.updated_at))), now)}` : "nothing waiting", cls: c.blocked ? "warn" : "ok", go: "queue" },
-    { label: "Running", v: String(c.running), d: `${c.queued} queued · across ${new Set(live.jobs.filter(isOpen).map((j) => j.namespace)).size} namespaces`, cls: "", go: "queue" },
-    backup && backup.age_hours != null
-      ? { label: "Primary backup", v: <>{backup.age_hours.toFixed(1)}<small>h</small></>, d: mirrorAge == null ? "mirror: no data" : `mirror ${Math.floor(mirrorAge / DAY)}d old`, cls: backup.warning || (mirrorAge != null && mirrorAge > 2 * DAY) ? "crit" : "ok", go: "backups" }
-      : { label: "Primary backup", v: <small>No data</small>, d: snap?.health ? "no good dump recorded" : "health not read", cls: snap?.health ? "crit" : "", go: "backups" },
     { label: "Open findings", v: String(findingsOpen), d: snap ? `watcher pass ${ago(ms(snap.pass_at), now)}` : "no watcher pass yet", cls: findingsOpen ? "warn" : "ok", go: "incidents" },
+    backup && backup.age_hours != null
+      ? { label: "Backup", v: <>{backup.age_hours.toFixed(1)}<small>h</small></>, d: backup.warning ?? (backup.last_ok ? `last good dump ${ago(ms(backup.last_ok), now)}` : "no good dump recorded"), cls: backup.warning ? "crit" : "ok", go: "backups" }
+      : { label: "Backup", v: <small>No data</small>, d: snap?.health ? "no good dump recorded" : "health not read", cls: snap?.health ? "crit" : "", go: "backups" },
+    mirror
+      ? {
+          label: "Mirror",
+          v: mirrorAge == null ? <small>No dump</small> : <>{Math.floor(mirrorAge / DAY)}<small>d</small></>,
+          d: mirror.last_run ? `last run ${mirror.last_run.conclusion ?? "still running"}${mirror.last_run.at ? ` ${ago(ms(mirror.last_run.at), now)}` : ""}` : "no run recorded",
+          cls: mirrorAge == null || mirrorAge > 2 * DAY || mirrorFailed ? "crit" : "ok",
+          go: "backups",
+        }
+      : { label: "Mirror", v: <small>No data</small>, d: snap ? "not read on the last pass" : "no watcher pass yet", cls: snap ? "warn" : "", go: "backups" },
   ];
   return (
-    <div className="embedded" id="summary" data-section="Summary">
+    <div className="embedded" id="summary">
       {/* Figure and label on one line, the detail under them; a tile is never narrower
           than its text, so the row wraps instead of cutting a word (design D3). */}
       <div className="tiles">
@@ -61,22 +66,13 @@ export function Overview() {
               <span className="d">{t.d}</span>
             </>
           );
-          // A section of Health, this page, is a plain in-page link, so the browser jumps.
-          const to = placePath(t.go);
-          return to.startsWith("/health#") ? (
-            <a key={t.label} href={to.slice("/health".length)} className={`tile ${t.cls}`}>
-              {body}
-            </a>
-          ) : (
-            <Link key={t.label} href={to} className={`tile ${t.cls}`}>
+          return (
+            <Link key={t.label} href={placePath(t.go)} className={`tile ${t.cls}`}>
               {body}
             </Link>
           );
         })}
       </div>
-      <Suspense fallback={null}>
-        <Maintenance />
-      </Suspense>
     </div>
   );
 }

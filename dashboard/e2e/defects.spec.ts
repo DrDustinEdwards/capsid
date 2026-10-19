@@ -47,35 +47,37 @@ test("Enter on a Holding now row opens the job", async ({ page }) => {
 });
 
 // Defect 3: a namespace filter belongs to one page and lives in its address, and a list
-// the filter empties says so and offers a way back. Health's sections are one page, so
-// one filter narrows them all.
-test("a filter picked on Health narrows each of its sections, lives in the address, stays off Queue, and an emptied list says so", async ({ page }) => {
-  await visit(page, "health");
-  await page.locator("#incidents [role=group]").getByRole("button", { name: "watcher", exact: true }).click();
+// the filter empties says so and offers a way back. Health is one page, so one filter
+// narrows every tab, and it is kept when the tab changes.
+test("a filter picked on Health narrows each of its tabs, lives in the address, stays off Queue, and an emptied list says so", async ({ page }) => {
+  await page.goto("./health?tab=problems");
+  await page.locator("#problems [role=group]").getByRole("button", { name: "watcher", exact: true }).click();
+  await expect(page).toHaveURL(/\/health\?tab=problems&ns=watcher$/);
+  await expect(page.locator("#problems [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("navigation", { name: "Health", exact: true }).getByRole("link", { name: "Sites" }).click();
   await expect(page).toHaveURL(/\/health\?ns=watcher$/);
-  await expect(page.locator("#incidents [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#sites [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#sites [data-filter-empty]")).toContainText("No site in the namespace watcher.");
+  await expect(page.locator("#sites [data-filter-empty]")).toContainText("No site in the project watcher.");
   // g then q: the keyboard way to another page, which keeps its own filter.
   await page.keyboard.press("g");
   await page.keyboard.press("q");
-  await expect(page.getByRole("heading", { level: 1, name: "Queue" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
   await expect(page).toHaveURL(/\/queue$/);
   await expect(page.locator("main [role=group]").getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
   // Reloading a filtered address keeps the filter; Show all clears it.
   await page.goto("./health?ns=watcher");
   const empty = page.locator("#sites [data-filter-empty]");
-  await expect(empty).toContainText("No site in the namespace watcher.");
+  await expect(empty).toContainText("No site in the project watcher.");
   await empty.getByRole("button", { name: "Show all" }).click();
   await expect(page).toHaveURL(/\/health$/);
   await expect(page.locator("#sites table.fleet tbody tr[data-row]")).toHaveCount(8);
 });
 
-// Defect 4: a live session stopped on a failure is critical under Needs attention (on
+// Defect 4: a live session stopped on a failure is critical under Problems (on
 // Needs you), and the rail's Health count includes it.
-test("a critical session incident appears in Needs attention", async ({ page }) => {
+test("a critical session incident appears in Problems", async ({ page }) => {
   await visit(page, "needs");
-  const attention = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Needs attention" }) });
+  const attention = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Problems" }) });
   const row = attention.locator("[data-row]").filter({ hasText: "Session for agent:sample-b-driver stopped: rate_limit" });
   await expect(row).toHaveCount(1);
   await expect(row.locator(".st.crit")).toHaveCount(1);
@@ -143,5 +145,5 @@ test("document.title differs per view", async ({ page }) => {
   const title = (await row.locator("b").first().textContent()) ?? "";
   await row.click();
   await expect(drawer(page)).toBeVisible();
-  await expect(page).toHaveTitle(`${title} · Queue · Capsid Portal`);
+  await expect(page).toHaveTitle(`${title} · Jobs · Capsid Portal`);
 });

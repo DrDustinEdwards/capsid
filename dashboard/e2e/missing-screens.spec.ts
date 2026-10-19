@@ -18,7 +18,7 @@ const drawer = (page: Page) => page.locator("dialog.drawer[open]");
 const dialog = (page: Page) => page.locator("dialog.confirm");
 
 // Types a reason, previews, and returns the dialog with its preview up.
-async function previewWith(page: Page, reason: string | null) {
+async function previewWith(page: Page, reason: string | null, details = true) {
   const d = dialog(page);
   await expect(d).toBeVisible();
   // An action that takes no reason previews as the dialog opens.
@@ -26,7 +26,12 @@ async function previewWith(page: Page, reason: string | null) {
     await d.getByLabel("Reason (required)").pressSequentially(reason);
     await d.getByRole("button", { name: "Preview" }).click();
   }
-  await expect(d.getByText("What changes")).toBeVisible();
+  // The plain sentence is up; what changes is behind Details (UX audit M5), opened here.
+  await expect(d.locator("[data-summary]")).toBeVisible();
+  if (details) {
+    await d.getByText("Details", { exact: true }).click();
+    await expect(d.getByText("What changes")).toBeVisible();
+  }
   return d;
 }
 
@@ -87,8 +92,11 @@ test("Supersede is offered on a queued job, not on a blocked one, and previews b
   await expect(drawer(page).getByRole("button", { name: "Supersede", exact: true })).toHaveCount(0);
   await performLeavesFeed(page, "supersede_job", `Superseded ${QUEUED}.`);
   await page.goto(`queue/job/${QUEUED}`);
+  // Supersede is one of the job's More actions (UX audit M9).
+  await drawer(page).getByText("More actions").click();
   await drawer(page).getByRole("button", { name: "Supersede", exact: true }).click();
-  const d = await previewWith(page, "a duplicate of the health job");
+  // Details stays closed, so focus is where the dialog put it.
+  const d = await previewWith(page, "a duplicate of the health job", false);
   await expect(d).toContainText("superseded");
   // One-way: focus goes to Cancel once the preview is up.
   await expect(d.getByRole("button", { name: "Cancel" })).toBeFocused();
@@ -98,7 +106,7 @@ test("Supersede is offered on a queued job, not on a blocked one, and previews b
 
 test("a pull request awaiting the seat has Close, which asks a reason and previews the close", async ({ page }) => {
   await visit(page, "prs");
-  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Awaiting the seat" }) });
+  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Waiting for you" }) });
   const close = awaiting.getByRole("button", { name: /^Close / }).first();
   const name = (await close.getAttribute("aria-label"))!.replace(/^Close /, "");
   await performLeavesFeed(page, "pr_close", `Closed ${name}.`);
@@ -111,7 +119,7 @@ test("a pull request awaiting the seat has Close, which asks a reason and previe
 
 test("a pull request classed approve has Approve, which previews the approval at the head the tick judged", async ({ page }) => {
   await visit(page, "prs");
-  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Awaiting the seat" }) });
+  const awaiting = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Waiting for you" }) });
   await performLeavesFeed(page, "approve_pr", "Approved example-org/sample-c#32. It merges once CI is green on 4f2c9a1.");
   await awaiting.getByRole("button", { name: "Approve example-org/sample-c #32", exact: true }).click();
   const d = await previewWith(page, null);
@@ -141,7 +149,7 @@ test("Needs you shows what happened since this browser last looked, and the next
   await visit(page, "needs");
   const strip = page.locator("main section").filter({ has: page.getByRole("heading", { level: 2, name: "Since you last looked" }) });
   await expect(strip.locator("[data-digest]")).toContainText("finished");
-  await expect(strip.locator("[data-digest]")).toContainText("ready for the seat");
+  await expect(strip.locator("[data-digest]")).toContainText("ready for you");
   await page.reload();
   await expect(strip.locator("[data-digest]")).toBeVisible();
   expect(asked.length).toBeGreaterThanOrEqual(2);

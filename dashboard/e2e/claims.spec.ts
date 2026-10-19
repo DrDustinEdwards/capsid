@@ -31,7 +31,7 @@ test("the aggregate lists each agent and namespace with its checks, touches and 
 
 test("the namespace filter narrows the rows and lives in the address", async ({ page }) => {
   await visit(page, "claims");
-  await page.getByLabel("Namespace", { exact: true }).selectOption("sample-b");
+  await page.getByLabel("Project", { exact: true }).selectOption("sample-b");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page).toHaveURL(/\/agents\?tab=claims&namespace=sample-b$/);
   await expect(groupRows(page)).toHaveCount(1);

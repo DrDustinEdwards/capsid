@@ -44,10 +44,10 @@ export function Convergence({ ns }: { ns: string }) {
   if (data && data.sites.length === 0) return null;
   if (!data) {
     return (
-      <Panel flush title="Convergence" id="convergence" section="Convergence">
+      <Panel flush title="Site sync" id="convergence" section="Site sync">
         {load.error ? (
           <div className="callout crit" role="alert">
-            Could not read the convergence view: {load.error}
+            Could not read site sync: {load.error}
           </div>
         ) : (
           <div className="loading" role="status">
@@ -61,7 +61,7 @@ export function Convergence({ ns }: { ns: string }) {
     <>
       {load.error && (
         <div className="callout crit" role="alert">
-          Could not read the convergence view again: {load.error}. Showing the read from {data.generated.slice(11, 16)} UTC.
+          Could not read site sync again: {load.error}. Showing the read from {data.generated.slice(11, 16)} UTC.
         </div>
       )}
       {sites.map((s) => (
@@ -79,9 +79,9 @@ function SitePanel({ site, loading, reread }: { site: ConvergenceSite; loading: 
   return (
     <Panel
       flush
-      title={`Convergence: ${site.name}`}
+      title={`Site sync: ${site.name}`}
       id={`convergence-${site.namespace}`}
-      section={`Convergence ${site.name}`}
+      section={`Site sync ${site.name}`}
       src={
         <>
           {`read ${ago(ms(site.read_at), now)} · `}

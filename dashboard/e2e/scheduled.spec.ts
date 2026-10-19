@@ -40,7 +40,7 @@ test("Incidents lists every scheduled task with its state, its last run and what
   await expect(tick.locator("details li")).toHaveCount(2);
 });
 
-test("a failing scheduled task is in Needs attention", async ({ page }) => {
+test("a failing scheduled task is in Problems", async ({ page }) => {
   await refusedMerge(page);
   await visit(page, "needs");
   await expect(page.locator("main section.attention").getByText("Auto-merge step: its last run refused")).toBeVisible();

@@ -42,7 +42,10 @@ test("a package is added from Settings through the confirm dialog, and removed a
   await expect(page.getByRole("dialog")).toBeHidden();
   const row = page.locator('main tr[data-package="sample-extra"]');
   await expect(row).toHaveCount(1);
-  await row.getByRole("button", { name: "Remove sample-extra" }).click();
+  // Remove is not beside Edit: it is in the edit form's Danger area (UX audit M9).
+  await expect(row.getByRole("button", { name: "Remove sample-extra" })).toHaveCount(0);
+  await row.getByRole("button", { name: "Edit sample-extra" }).click();
+  await page.getByRole("group", { name: "Danger" }).getByRole("button", { name: "Remove sample-extra" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Remove package", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(row).toHaveCount(0);
@@ -57,12 +60,26 @@ async function withoutPackages(page: Page) {
   });
 }
 
-test("with no package configured there is no Packages view, and /packages shows the home", async ({ page }) => {
+test("with no package configured, Packages has only its Shared tab", async ({ page }) => {
   await withoutPackages(page);
   await visit(page, "health");
-  await expect(page.locator("nav.cap-admin-menu a")).toHaveCount(RAIL_COUNT - 1);
-  await expect(page.locator("nav.cap-admin-menu a").filter({ hasText: /^Packages/ })).toHaveCount(0);
+  await expect(page.locator("nav.cap-admin-menu a")).toHaveCount(RAIL_COUNT);
   await page.goto("./packages");
-  await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
-  await expect(page).toHaveURL(/\/portal\/$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Packages" })).toBeVisible();
+  const tabs = page.getByRole("navigation", { name: "Packages", exact: true }).getByRole("link");
+  await expect(tabs).toHaveText(["Shared"]);
+  await expect(tabs.first()).toHaveAttribute("aria-current", "page");
+});
+
+// UX audit m1: one page for one kind of thing. Published and Shared are tabs of Packages,
+// and the old Shared code address lands on its tab.
+test("Packages has Published and Shared tabs, and /shared opens the Shared tab", async ({ page }) => {
+  await visit(page, "packages");
+  const tabs = page.getByRole("navigation", { name: "Packages", exact: true });
+  await expect(tabs.getByRole("link")).toHaveText(["Published", "Shared"]);
+  await expect(tabs.getByRole("link", { name: "Published" })).toHaveAttribute("aria-current", "page");
+  await page.goto("./shared");
+  await expect(page).toHaveURL(/\/packages\?tab=shared$/);
+  await expect(tabs.getByRole("link", { name: "Shared" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { level: 1, name: "Packages" })).toBeVisible();
 });

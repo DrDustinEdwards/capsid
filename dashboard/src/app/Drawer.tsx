@@ -1,15 +1,16 @@
 import { ChartSlot } from "../ui/Enar";
 import { Fragment, lazy, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
-import { useApp, type DrawerType } from "./ctx";
+import { useApp, type ConfirmRequest, type DrawerType } from "./ctx";
 import type { OpsAgent, OpsJob, PortalActivityRow, SiteSnapshot } from "../types";
 import { fetchActivity } from "../lib/api";
+import { actionWords } from "../lib/audit-words";
 import { JOB, PROBE, cfNoData, cfOk, resumeCall, siteKey } from "../lib/derive";
 import { ago, hostOf, ms, shortId, utc } from "../lib/format";
 import { NoData, Pill, St } from "../ui/icons";
 import { When } from "../ui/When";
 import { UptimeFoot, UptimeTicks } from "../ui/charts";
-import { jobMeta } from "../views/shared";
+import { Danger, jobMeta } from "../views/shared";
 import { agentState, nsList } from "../lib/derive";
 
 // Chart 9 (error rate with deploy markers) is an Enarratio line chart, loaded when a site's
@@ -192,47 +193,61 @@ function JobControls({ j }: { j: OpsJob }) {
   }
   const failable = blocked || claimed || queued;
   if (!failable) return null;
+  // One primary action for the state the job is in, the other safe ones under More
+  // actions, and Mark failed alone in the Danger area (the UX audit's M9: it sat beside
+  // Close as shipped and Resume in a row of up to six).
+  const resume = { action: "resume_job" as const, params, title: `${j.question ? "Answer" : "Resume job"}: ${j.title}` };
+  const release = { action: "release_job" as const, params, title: `Release job: ${j.title}` };
+  const park = { action: "park_job" as const, params, title: `Park job: ${j.title}`, undo: { action: "unpark_job" as const, params: { id: j.id, undo: "true" } } };
+  const primary = blocked ? { req: resume, label: j.question ? "Answer" : "Resume" } : claimed ? { req: release, label: "Release" } : { req: park, label: "Park" };
+  const more: Array<{ label: string; req: ConfirmRequest }> = [
+    ...(blocked ? [{ label: "Close as shipped", req: { action: "close_shipped" as const, params, title: `Close as shipped: ${j.title}` } }] : []),
+    ...(supersedable(j) ? [{ label: "Supersede", req: { action: "supersede_job" as const, params, title: `Supersede job: ${j.title}` } }] : []),
+  ];
   return (
-    <div>
-      <p className="section-title">Change it</p>
-      <div className="toolbar">
-        {blocked && (
-          <button type="button" className="btn primary" onClick={() => confirm({ action: "resume_job", params, title: `${j.question ? "Answer" : "Resume job"}: ${j.title}` })}>
-            {j.question ? "Answer" : "Resume"}
+    <div className="stack-gap" data-job-controls="">
+      <div>
+        <p className="section-title">Change it</p>
+        <div className="toolbar">
+          <button type="button" className="btn primary" onClick={() => confirm(primary.req)}>
+            {primary.label}
           </button>
-        )}
-        {blocked && (
-          <button type="button" className="btn" onClick={() => confirm({ action: "close_shipped", params, title: `Close as shipped: ${j.title}` })}>
-            Close as shipped
-          </button>
-        )}
-        {claimed && (
-          <button type="button" className="btn" onClick={() => confirm({ action: "release_job", params, title: `Release job: ${j.title}` })}>
-            Release
-          </button>
-        )}
-        {queued && (
-          <button type="button" className="btn" onClick={() => confirm({ action: "park_job", params, title: `Park job: ${j.title}`, undo: { action: "unpark_job", params: { id: j.id, undo: "true" } } })}>
-            Park
-          </button>
-        )}
-        {supersedable(j) && (
-          <button type="button" className="btn" onClick={() => confirm({ action: "supersede_job", params, title: `Supersede job: ${j.title}` })}>
-            Supersede
-          </button>
-        )}
+        </div>
+        <p className="faint small">
+          {blocked
+            ? j.question
+              ? "Answer sends your reply to its driver as the resume note."
+              : "Resume sends it back to its driver."
+            : claimed
+              ? "Release takes it from its holder and puts it back in the queue."
+              : "Park keeps it out of the queue until you unpark it; its reason says when it comes back."}{" "}
+          Each asks for a reason and shows what changes first.
+        </p>
+      </div>
+      {more.length > 0 && (
+        <details className="more-actions">
+          <summary className="btn">
+            <span className="chev" aria-hidden="true" />
+            More actions
+          </summary>
+          <div className="toolbar mt8">
+            {more.map((m) => (
+              <button key={m.label} type="button" className="btn" onClick={() => confirm(m.req)}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <p className="faint small">
+            {blocked ? "Close as shipped ends it as done when its work already landed, credited to the driver. " : ""}
+            {supersedable(j) ? "Supersede ends a job replaced before any work was done, with no outcome against anybody." : ""}
+          </p>
+        </details>
+      )}
+      <Danger note="Ends it as failed, against its holder.">
         <button type="button" className="btn danger" onClick={() => confirm({ action: "fail_job", params, title: `Mark job failed: ${j.title}` })}>
           Mark failed
         </button>
-      </div>
-      <p className="faint small">
-        {blocked
-          ? `${j.question ? "Answer sends your reply to its driver as the resume note." : "Resume sends it back to its driver."} Close as shipped ends it as done when its work already landed, credited to the driver. `
-          : claimed
-            ? "Release takes it from its holder and puts it back in the queue. "
-            : "Park keeps it out of the queue until you unpark it; its reason says when it comes back. "}
-        {supersedable(j) ? "Supersede ends a job replaced before any work was done, with no outcome against anybody. " : ""}Mark failed ends it. Each asks for a reason and shows what changes first.
-      </p>
+      </Danger>
     </div>
   );
 }
@@ -241,15 +256,11 @@ function AgentControls({ a }: { a: OpsAgent }) {
   const { confirm } = useApp();
   if (a.revoked_at) return null;
   return (
-    <div>
-      <p className="section-title">Change it</p>
-      <div className="toolbar">
-        <button type="button" className="btn danger" onClick={() => confirm({ action: "revoke_agent", params: { name: a.name }, title: `Revoke agent ${a.name}` })}>
-          Revoke
-        </button>
-      </div>
-      <p className="faint small">Revoke ends this credential. The preview lists what else it changes.</p>
-    </div>
+    <Danger note="Ends this credential. The preview lists what else it changes.">
+      <button type="button" className="btn danger" onClick={() => confirm({ action: "revoke_agent", params: { name: a.name }, title: `Revoke agent ${a.name}` })}>
+        Revoke
+      </button>
+    </Danger>
   );
 }
 
@@ -304,9 +315,9 @@ function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
               )}
             </div>
             <div>
-              <p className="section-title">Then resume it</p>
-              <CopyBlock id="resumeText" text={resumeCall(j)} label="Copy resume call" />
-              <p className="faint small">Resume it with the button below, or copy the call and make it from a session.</p>
+              <p className="section-title">Or resume it from chat</p>
+              <CopyBlock id="resumeText" text={resumeCall(j)} label="Copy for a chat session" />
+              <p className="faint small">Resume it with the button below, or paste this into a chat session.</p>
             </div>
           </>
         )}
@@ -455,7 +466,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
   const d = r.detail;
   return (
     <>
-      <Head label={`Audit row · ${r.namespace ?? "no namespace"}`} title={r.action ?? "no action"} sub={`#${r.id} · ${r.actor ?? "no actor"}`} onClose={onClose} />
+      <Head label={`Audit row · ${r.namespace ?? "no namespace"}`} title={actionWords(r.action) ?? r.action ?? "no action"} sub={`#${r.id} · ${r.action ?? "no action"} · ${r.actor ?? "no actor"}`} onClose={onClose} />
       <div className="dbody">
         {d.reason !== null && (
           <div>

@@ -162,14 +162,16 @@ const NAV_ICONS: Record<string, ReactNode> = {
       <path d="M2.5 14c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </>
   ),
+  // A gear: Settings is the menu's last entry (UX audit M4).
   settings: (
     <>
-      <path d="M2 4h1.4M6.6 4H14M2 8h7.4M12.6 8H14M2 12h3.4M8.6 12H14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      <circle cx="5" cy="4" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="11" cy="8" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="7" cy="12" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M14.1 6.7L14.1 9.3L12.3 9.6L12.2 10L13.2 11.3L11.3 13.2L10 12.2L9.6 12.3L9.3 14.1L6.7 14.1L6.4 12.3L6 12.2L4.7 13.2L2.8 11.3L3.8 10L3.7 9.6L1.9 9.3L1.9 6.7L3.7 6.4L3.8 6L2.8 4.7L4.7 2.8L6 3.8L6.4 3.7L6.7 1.9L9.3 1.9L9.6 3.7L10 3.8L11.3 2.8L13.2 4.7L12.2 6L12.3 6.4z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </>
   ),
+  // A parcel: published and shared packages (UX audit M6; the collapsed menu showed a
+  // blank button without it).
+  packages: <path d="M8 1.8l5.6 3v6.4L8 14.2l-5.6-3V4.8zM2.4 4.8L8 7.8l5.6-3M8 7.8v6.4M5.2 3.3l5.6 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
   library: <path d="M2.5 2.5h3v11h-3zM6.5 2.5h3v11h-3zM10.5 3.2l2.6-.7 2.4 10.6-2.6.7z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
   activity: (
     <>

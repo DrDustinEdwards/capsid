@@ -29,7 +29,13 @@ test("Mark failed with a typed reason, then Preview, shows the preview and perfo
   const dialog = await openReasonDialog(page);
   await dialog.getByLabel("Reason (required)").pressSequentially("testing");
   await dialog.getByRole("button", { name: "Preview" }).click();
+  // A plain sentence first; the rows it changes and the audit rows are behind Details
+  // (UX audit M5).
+  await expect(dialog.locator("[data-summary]")).toBeVisible();
+  await expect(dialog.getByText("What changes")).toBeHidden();
+  await dialog.getByText("Details", { exact: true }).click();
   await expect(dialog.getByText("What changes")).toBeVisible();
+  await expect(dialog.getByText("Audit rows it writes")).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Mark failed", exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "Mark failed", exact: true }).click();
   await expect(page.locator("dialog.confirm")).toBeHidden();
@@ -53,7 +59,8 @@ test("a reason the browser filled in without an input event still previews", asy
     el.value = "filled by the browser";
   });
   await dialog.getByRole("button", { name: "Preview" }).click();
-  await expect(dialog.getByText("What changes")).toBeVisible();
+  await expect(dialog.locator("[data-summary]")).toBeVisible();
+  await expect(dialog.locator("details.confirm-details")).toHaveCount(1);
 });
 
 test("a refusal from the Worker is shown in the dialog, verbatim", async ({ page }) => {
@@ -101,6 +108,8 @@ test.describe("on a phone", () => {
     }
     await dialog.getByLabel("Reason (required)").pressSequentially("testing");
     await dialog.getByRole("button", { name: "Preview" }).tap();
+    await expect(dialog.locator("[data-summary]")).toBeVisible();
+    await dialog.getByText("Details", { exact: true }).tap();
     await expect(dialog.getByText("What changes")).toBeVisible();
     // The dialog is Mark failed, so its perform button is named for that (ruling 11).
     for (const name of ["Mark failed", "Cancel"]) {

@@ -7,7 +7,7 @@ import type { OpsFeed } from "../src/ops-types.ts";
 // The Overview's Needs attention list, grouped and tiered (dashboard/src/lib/derive.ts,
 // attentionGroups and blockedOrder; capsid/research/audit-ui-patterns.md, rulings 3 and
 // 10). Built on the dashboard's own sample feed (fake data), reshaped per test.
-const { attentionGroups, blockedOrder, GROUP_CHILDREN, STALE_BLOCKED_MS } = await import("../dashboard/src/lib/derive.ts");
+const { attentionGroups, blockedOrder, GROUP_CHILDREN, STALE_BLOCKED_MS, WAITING_KINDS } = await import("../dashboard/src/lib/derive.ts");
 
 const SAMPLE = readFileSync(join(import.meta.dirname, "..", "dashboard", "dev", "sample-feed.json"), "utf8");
 const DAY = 86_400_000;
@@ -51,10 +51,20 @@ test("a group shows at most five children and counts the rest", () => {
 
 test("one pull request stays a row of its own", () => {
   const { f, now } = feed();
+  f.live.awaiting_seat = f.live.awaiting_seat.slice(0, 1);
   const rows = attentionGroups(f, now).problems.filter((r) => r.kind === "PR");
   assert.equal(rows.length, 1);
   assert.equal(rows[0]?.children, undefined);
   assert.equal(rows[0]?.title, "example-org/sample-c #32 awaits the seat");
+});
+
+test("PLANT: with WAITING_KINDS skipped, Problems hold nothing Needs you lists with its buttons", () => {
+  const { f, now } = feed();
+  const all = attentionGroups(f, now).problems.map((r) => r.kind);
+  for (const k of ["Queue", "Canon", "PR"]) assert.ok(all.includes(k), `the sample has a ${k} row to skip`);
+  const left = attentionGroups(f, now, WAITING_KINDS).problems.map((r) => r.kind);
+  assert.deepEqual(left.filter((k) => WAITING_KINDS.has(k)), []);
+  assert.ok(left.length > 0, "the other problems stay");
 });
 
 test("PLANT: problems hold no notice; missing data, a check that could not run, unread CI, drift and silent drivers are notices", () => {

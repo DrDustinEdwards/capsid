@@ -175,9 +175,13 @@ export function SinceLastLooked() {
       ) : d ? (
         <div className="digest">
           <p className="digest-line" data-digest="">
-            <b className="num">{d.finished.length}</b> finished · <b className="num">{merged}</b> merged · <b className="num">{d.pull_requests_ready.length}</b> ready for the seat ·{" "}
+            <b className="num">{d.finished.length}</b> finished · <b className="num">{merged}</b> merged · <b className="num">{d.pull_requests_ready.length}</b> ready for you ·{" "}
             <b className="num">{d.blocked.length}</b> blocked
           </p>
+          {(d.pull_requests_ready.length > 0 || d.blocked.length > 0) && (
+            // One line first (UX audit, the proposed Needs you); the lists behind it.
+            <details className="digest-more">
+              <summary>Show them</summary>
           {d.pull_requests_ready.length > 0 && (
             <ul className="digest-list">
               {d.pull_requests_ready.map((p) => (
@@ -198,6 +202,8 @@ export function SinceLastLooked() {
                 </li>
               ))}
             </ul>
+          )}
+            </details>
           )}
           {d.truncated.length > 0 && <p className="faint small">Cut short: {d.truncated.join("; ")}.</p>}
         </div>

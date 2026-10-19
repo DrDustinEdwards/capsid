@@ -1,48 +1,66 @@
 import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 
-// Eight pages, regrouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE
-// 2 and 8, ruled 2026-10-09; job_d62abdbfc270 PR 2 and PR 7). Health holds what Overview,
-// Sites, Incidents, Deploys, Backups and CI's default-branch table held; Pull requests
-// holds CI's PR half; Agents holds Claims as a tab; Settings holds the Namespaces panel.
-// Shared code sits in Records beside Packages. The letters follow the pages, with no
+// Nine pages, regrouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE
+// 2 and 8, ruled 2026-10-09; job_d62abdbfc270 PR 2 and PR 7; the Portal UX audit's sitemap,
+// 2026-10). Health holds what Overview, Sites, Incidents, Deploys, Backups and CI's
+// default-branch table held; Pull requests holds CI's PR half; Agents holds Claims as its
+// Checks tab; Packages holds Shared code as its Shared tab; Settings holds the Namespaces
+// panel. The ids are internal and stay; only the labels are the audit's words (the Queue is
+// "Jobs"). The order is the menu's, Settings last. The letters follow the pages, with no
 // redirect period for the old ones (Dustin, 2026-10-09).
 export const VIEWS = [
   { id: "needs", label: "Needs you", key: "y" },
-  { id: "queue", label: "Queue", key: "q" },
-  { id: "prs", label: "Pull requests", key: "p" },
   { id: "health", label: "Health", key: "h" },
+  { id: "prs", label: "Pull requests", key: "p" },
+  { id: "queue", label: "Jobs", key: "q" },
   { id: "activity", label: "Activity", key: "l" },
   { id: "agents", label: "Agents", key: "a" },
   { id: "packages", label: "Packages", key: "k" },
-  { id: "shared", label: "Shared code", key: "x" },
   { id: "library", label: "Library", key: "b" },
   { id: "settings", label: "Settings", key: "e" },
 ] as const;
 
 // Where each retired view's content lives now, so an old address, an old "view:" reference
 // and a bookmark land on the page and section that hold it.
-export type MovedId = "overview" | "sites" | "incidents" | "deploys" | "backups" | "ci" | "namespaces" | "claims";
+export type MovedId = "overview" | "sites" | "incidents" | "deploys" | "backups" | "ci" | "namespaces" | "claims" | "shared";
 export const MOVED: Record<MovedId, { view: (typeof VIEWS)[number]["id"]; anchor?: string; tab?: string }> = {
-  overview: { view: "health", anchor: "summary" },
-  sites: { view: "health", anchor: "sites" },
-  incidents: { view: "health", anchor: "incidents" },
-  deploys: { view: "health", anchor: "deploys" },
-  backups: { view: "health", anchor: "backups" },
+  overview: { view: "health" },
+  sites: { view: "health", tab: "sites" },
+  incidents: { view: "health", tab: "problems" },
+  deploys: { view: "health", tab: "deploys" },
+  backups: { view: "health", tab: "backups" },
   ci: { view: "prs" },
   namespaces: { view: "settings", anchor: "automation" },
   claims: { view: "agents", tab: "claims" },
+  shared: { view: "packages", tab: "shared" },
 };
+
+// Health's tabs (the UX audit's M1): the verdict and the tiles, then one of these at a
+// time, its choice in the address (?tab=). An old section anchor names the tab that holds
+// it now, so a bookmark to /health#deploys or a "view:health#ci" reference still lands.
+export const HEALTH_TABS = [
+  { id: "sites", label: "Sites" },
+  { id: "problems", label: "Problems" },
+  { id: "deploys", label: "Deploys" },
+  { id: "backups", label: "Backups" },
+  { id: "ci", label: "CI" },
+] as const;
+export type HealthTab = (typeof HEALTH_TABS)[number]["id"];
+const HEALTH_ALIAS: Record<string, HealthTab> = { incidents: "problems", maintenance: "problems" };
+export function healthTab(name: string | null | undefined): HealthTab | null {
+  if (!name) return null;
+  if (HEALTH_TABS.some((t) => t.id === name)) return name as HealthTab;
+  return Object.hasOwn(HEALTH_ALIAS, name) ? HEALTH_ALIAS[name]! : null;
+}
 
 export type ViewId = (typeof VIEWS)[number]["id"];
 
-// The views on offer: Packages only while a package is configured (hasPackages in
-// lib/derive.ts). Sites are a section of Health, shown only while one is configured.
-// Every other view is always there, Settings included, since that is where the first of
-// each is added.
+// The views on offer: every one. Packages stays with no npm package configured, since its
+// Shared tab is always there; Settings is where the first site and package are added.
 export type ViewDef = (typeof VIEWS)[number];
-export function viewsFor(_sites: boolean, packages = true): ReadonlyArray<ViewDef> {
-  return VIEWS.filter((v) => v.id !== "packages" || packages);
+export function viewsFor(): ReadonlyArray<ViewDef> {
+  return VIEWS;
 }
 export type DrawerType = "site" | "job" | "agent" | "audit";
 
@@ -92,6 +110,18 @@ export interface ConfirmRequest {
   // The reverse action the result message offers as Undo, for a reversible control
   // (park and unpark).
   undo?: UndoRequest;
+  // Several rows of one kind decided together (Needs you's batch approve): each item is
+  // the same single control with its own params, previewed on its own and listed in this
+  // one dialog, then performed one after another. action and params above are the first
+  // item's. No item takes a reason.
+  batch?: ReadonlyArray<BatchItem>;
+}
+
+export interface BatchItem {
+  action: PortalAction;
+  params: Record<string, string>;
+  // The row in plain words, e.g. "sample-org/sample-a #12".
+  label: string;
 }
 
 // The reverse of a switch change, sent by the message's Undo as its own action, with
@@ -128,7 +158,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   site_add: "Add site",
   site_edit: "Save changes",
   site_remove: "Remove site",
-  reset_breaker: "Reset breaker",
+  reset_breaker: "Reset and resume",
   package_add: "Add package",
   package_edit: "Save changes",
   package_remove: "Remove package",
@@ -192,10 +222,14 @@ export function parseRoute(path: string): Route {
 
 /** The address an old view id or a current one names: its page, with the section's anchor
  *  or the tab's query when it moved into one. A current id may name its section itself,
- *  as "health#ci". */
+ *  as "health#ci", which on Health is a tab. */
 export function placePath(id: string): string {
   const [page, anchor] = id.split("#");
-  if (isView(page)) return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
+  if (isView(page)) {
+    const tab = page === "health" ? healthTab(anchor) : null;
+    if (tab) return `${routePath(page)}?tab=${tab}`;
+    return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
+  }
   const moved = Object.hasOwn(MOVED, id) ? MOVED[id as MovedId] : null;
   if (!moved) return routePath("needs");
   return `${routePath(moved.view)}${moved.tab ? `?tab=${moved.tab}` : ""}${moved.anchor ? `#${moved.anchor}` : ""}`;

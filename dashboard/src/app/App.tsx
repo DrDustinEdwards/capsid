@@ -3,26 +3,27 @@ import { Spinner } from "capsomer/react/empty";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
 import { Link, useLocation, useSearch } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
-import { attentionItems, counts, hasPackages, hasSites, passStale } from "../lib/derive";
+import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
 import { RAIL_PREF, THEME_PREF, readPref, setSingleKeys, toggleTheme, useSingleKeys, writePref } from "../lib/prefs";
 import { NavIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
-import { AppCtx, MOVED, VIEWS, parseRoute, placePath, routePath, viewsFor, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
-import { NeedsYou } from "../views/NeedsYou";
+import { AppCtx, MOVED, VIEWS, parseRoute, placePath, routePath, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
 
-// Needs you, the home, ships in the initial chunk; every other view loads on first visit.
+// Every view loads on first visit. Needs you, the home, is asked for as this module loads,
+// so its chunk arrives beside the first feed read rather than after it (the feed is what
+// the page waits for), and the entry stays inside its size budget.
+const needsChunk = import("../views/NeedsYou");
 const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
-  needs: NeedsYou,
+  needs: lazy(() => needsChunk.then((m) => ({ default: m.NeedsYou }))),
   queue: lazy(() => import("../views/Queue").then((m) => ({ default: m.Queue }))),
   prs: lazy(() => import("../views/Ci").then((m) => ({ default: m.PullRequests }))),
   health: lazy(() => import("../views/Health").then((m) => ({ default: m.Health }))),
   activity: lazy(() => import("../views/Activity").then((m) => ({ default: m.Activity }))),
   agents: lazy(() => import("../views/Agents").then((m) => ({ default: m.Agents }))),
   packages: lazy(() => import("../views/Packages").then((m) => ({ default: m.Packages }))),
-  shared: lazy(() => import("../views/SharedCode").then((m) => ({ default: m.SharedCode }))),
   library: lazy(() => import("../views/Library").then((m) => ({ default: m.Library }))),
   settings: lazy(() => import("../views/Settings").then((m) => ({ default: m.Settings }))),
 };
@@ -36,19 +37,20 @@ const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ defaul
 // Loaded the first time it is opened, then kept: the initial bundle does not carry it.
 const HelpSheet = lazy(() => import("./HelpSheet").then((m) => ({ default: m.HelpSheet })));
 
-// The phone tab bar (design-portal-evaluation.md section 2): Needs you, Queue, Health. The
-// header's menu button opens every other page (Capsomer 0.9.0 has no More tab); Settings is
-// under the avatar's menu.
-const TABS: ViewId[] = ["needs", "queue", "health"];
+// The phone tab bar (the Portal UX audit's sitemap, 2026-10): Needs you, Health and Pull
+// requests, the three pages a person opens most. The header's menu button opens every page
+// (Capsomer has no Menu tab yet), Settings among them.
+const TABS: ViewId[] = ["needs", "health", "prs"];
 
-// The menu's groups (design section 2: Needs you, Work, Health, Records; Needs you and Health
-// share the first group, so no group label repeats a page's name). Settings is not a menu
-// entry: it is under the avatar's account panel, with its g then e shortcut and its
+// The menu's groups (design section 2 and the UX audit's sitemap): Now, Work, Records, then
+// Settings at the foot, with no heading of its own (the UX audit's M4: it was only under
+// the avatar). It is still in the avatar's menu, with its g then e shortcut and its
 // command-menu entry.
-const GROUPS: Array<{ label: string; views: ViewId[] }> = [
+const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
   { label: "Now", views: ["needs", "health"] },
-  { label: "Work", views: ["queue", "prs"] },
-  { label: "Records", views: ["activity", "agents", "packages", "shared", "library"] },
+  { label: "Work", views: ["prs", "queue"] },
+  { label: "Records", views: ["activity", "agents", "packages", "library"] },
+  { views: ["settings"] },
 ];
 
 // What a count means (rulings: a plain number counts, a violet pill needs you, red and amber are
@@ -56,14 +58,12 @@ const GROUPS: Array<{ label: string; views: ViewId[] }> = [
 // waits on the owner is violet.
 const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
   health: "crit",
-  prs: "need",
 };
 
 
 // What each rail count means, for its accessible name and its tooltip.
 const BADGE_NOTE: Partial<Record<ViewId, string>> = {
   health: "critical",
-  prs: "awaiting the seat",
 };
 
 function useTick(ms: number): number {
@@ -105,19 +105,9 @@ export function App() {
   // drawer over the view keeps them.
   const search = useSearch();
   const qs = search ? `?${search}` : "";
-  // Until the feed answers, Packages is assumed on offer, so a configured install does not
-  // see it flicker in.
-  const sitesOn = feed ? hasSites(feed) : true;
-  const packagesOn = feed ? hasPackages(feed) : true;
-  const views = viewsFor(sitesOn, packagesOn);
-  const parsed = parseRoute(location);
-  // With no package configured, /packages is not a page: it shows the home, and the
-  // address is replaced below.
-  const hidden = parsed.view === "packages" && !packagesOn;
-  const route = hidden ? { view: "needs" as const, drawer: null } : parsed;
-  useEffect(() => {
-    if (hidden) navigate(routePath("needs"), { replace: true });
-  }, [hidden, navigate]);
+  const views = VIEWS;
+  const route = parseRoute(location);
+  const parsed = route;
   // A retired view's address (a bookmark, say) is replaced by the page, tab and section
   // that hold its content now (MOVED in ctx.ts).
   const old = location.split("/").filter(Boolean)[0];
@@ -452,7 +442,7 @@ export function App() {
           el.focus();
           el.click();
         } else if (Date.now() < until) setTimeout(press, 50);
-        else say(`That switch is not on Namespaces right now (${id}). Flip it there.`);
+        else say("That switch did not load in Settings, under Automation. Try it there.");
       };
       setTimeout(press, 0);
     },
@@ -482,15 +472,15 @@ export function App() {
   };
 
   const c = feed ? counts(feed) : null;
-  // One number, one place (design-portal-evaluation.md section 2, "Badges"): what waits on you
-  // is the header inbox's number, so Needs you's menu entry carries none; Health counts
-  // the critical problems, session incidents included (derive.ts); Pull requests counts
-  // what waits on the seat. The Queue's blocked jobs are in Needs you's count already.
-  const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
+  // One number, one place (design-portal-evaluation.md section 2, "Badges"; the UX audit's
+  // m2): what waits on you is the header inbox's number and Needs you's list, and nowhere
+  // else, so no menu entry counts it (Pull requests' waiting pull requests among them).
+  // Health counts the critical problems, session incidents included (derive.ts), leaving
+  // out what waits on you.
+  const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit" && !WAITING_KINDS.has(x.kind)).length : 0;
   const badge: Partial<Record<ViewId, { n: number; cls: string }>> = c && feed
     ? {
         health: { n: critCount, cls: "hot" },
-        prs: { n: feed.live.awaiting_seat.length, cls: "warm" },
       }
     : {};
 
@@ -504,7 +494,7 @@ export function App() {
   }, [pageTitle, signedOut]);
 
   const tabs: ViewId[] = TABS;
-  // One menu entry per view on offer, grouped; Settings is under the avatar's account panel.
+  // One menu entry per view, grouped, Settings last.
   const entryFor = (id: ViewId, group?: string): AdminEntry => {
     const v = VIEWS.find((x) => x.id === id)!;
     const b = badge[id];
@@ -520,7 +510,7 @@ export function App() {
       group,
     };
   };
-  const menu: AdminEntry[] = GROUPS.flatMap((g) => g.views.filter((id) => views.some((v) => v.id === id)).map((id) => entryFor(id, g.label)));
+  const menu: AdminEntry[] = GROUPS.flatMap((g) => g.views.map((id) => entryFor(id, g.label)));
   const tabEntries = tabs.map((id) => ({ ...entryFor(id), icon: <NavIcon id={id} size={20} /> }));
 
   const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy, say, confirm, performed, signOut } : null;

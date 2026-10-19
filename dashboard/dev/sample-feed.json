@@ -1672,6 +1672,18 @@
         "path_class": "docs",
         "class_reasons": ["the namespace is not in the policy, so it needs your approval"],
         "head_sha": "4f2c9a1e8b7d6c5f4a3b2c1d0e9f8a7b6c5d4e3f"
+      },
+      {
+        "namespace": "sample-c",
+        "repo": "example-org/sample-c",
+        "number": 33,
+        "failed": "auto-merge",
+        "why": "the docs change waits for a person while the policy is new",
+        "at": "2026-09-24T06:00:00.000Z",
+        "class": "auto",
+        "path_class": "docs",
+        "class_reasons": ["a docs-only change in a namespace new to the policy"],
+        "head_sha": "9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c"
       }
     ],
     "overnight": {
@@ -1948,7 +1960,7 @@
     ],
     "inbox": {
       "generated": "2026-09-28T12:00:00.000Z",
-      "count": 6,
+      "count": 7,
       "severity": "needs-you",
       "apps": [
         {
@@ -1997,7 +2009,7 @@
         {
           "namespace": "sample-c",
           "name": "Sample C",
-          "count": 1,
+          "count": 2,
           "severity": "needs-you",
           "items": [
             {
@@ -2005,6 +2017,12 @@
               "kind": "pr",
               "link": "https://github.com/example-org/sample-c/pull/32",
               "since": "2026-09-23T00:00:00.000Z"
+            },
+            {
+              "title": "PR #33 waits for you: a docs change in a namespace new to the auto-merge policy",
+              "kind": "pr",
+              "link": "https://github.com/example-org/sample-c/pull/33",
+              "since": "2026-09-24T06:00:00.000Z"
             }
           ]
         },

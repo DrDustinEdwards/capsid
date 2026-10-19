@@ -35,7 +35,7 @@ test("a stale row opens its job, and Resume sends the typed note with the reason
   await dialog.getByLabel("Reason (required)").fill("the pull request merged");
   await dialog.getByLabel("Note for the driver (optional)").fill("Merged at abc1234.\nConfirm the deploy, then complete.");
   await dialog.getByRole("button", { name: "Preview" }).click();
-  await expect(dialog.getByText("What changes")).toBeVisible();
+  await expect(dialog.locator("[data-summary]")).toBeVisible();
   expect(sent.action).toBe("resume_job");
   expect(sent.params?.reason).toBe("the pull request merged");
   expect(sent.params?.note).toBe("Merged at abc1234.\nConfirm the deploy, then complete.");

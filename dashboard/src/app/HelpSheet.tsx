@@ -5,16 +5,15 @@ import type { ViewDef, ViewId } from "./ctx";
 // heading (design D13 moved them here). CI and merges has none: its intro only restated
 // its name.
 const ABOUT: Partial<Record<ViewId, string>> = {
-  needs: "The home: what waits on you, per app, then every problem worst first.",
-  queue: "A blocked job shows what it waits on; open it for the command and the resume call.",
-  prs: "Pull requests recorded against jobs, and those auto-merge left for the seat.",
-  health: "The tiles, then sites, findings, deploys, backups and CI. Deploys are from Cloudflare's own record, so a hand-run wrangler deploy shows up too.",
+  needs: "The home: every decision waiting for you, with its buttons, then every problem worst first.",
+  queue: "Every job by state. A blocked job shows what it waits on; open it to answer or resume it.",
+  prs: "The pull requests waiting for you, with Approve and Close, then those recorded against jobs.",
+  health: "One line on whether anything is broken, the tiles, then a tab each for sites, problems, deploys, backups and CI. Deploys are from Cloudflare's own record, so a hand-run wrangler deploy shows up too.",
   activity: "The audit log, newest first: who did what, where.",
-  agents: "Every credential and when it was last seen; Claims sets what each agent said beside what the Worker verified.",
-  packages: "Each package configured in Settings: its versions, downloads, dependents and repository.",
-  shared: "Each shared package, the tag each app pins, who is behind, and the local copies left.",
+  agents: "Every credential and when it was last seen; Checks sets what each agent said beside what the Worker verified.",
+  packages: "Published: each npm package configured in Settings. Shared: the tag each app pins, who is behind, and the local copies left.",
   library: "The knowledge store, read-only: decisions, rulings and research, a search, and each document with its links and jobs.",
-  settings: "The sites and packages, then the automation switches and each roster namespace. Every change is previewed first.",
+  settings: "The automation switches first, then phone alerts and email, sites, packages, projects and display. Every change is previewed first.",
 };
 import { Switch } from "../ui/Switch";
 

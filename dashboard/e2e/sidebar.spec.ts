@@ -55,12 +55,12 @@ test("collapsing shrinks the menu to icons: same order, same places, labels and 
 test("a collapsed icon shows its label on hover and on keyboard focus", async ({ page }) => {
   await visit(page, "health");
   await toggle(page).click();
-  const queue = menu(page).getByRole("link", { name: /^Queue/ });
+  const queue = menu(page).getByRole("link", { name: /^Jobs/ });
   const tip = queue.locator(".cap-admin-tip");
   await expect(tip).toBeHidden();
   await queue.hover();
   await expect(tip).toBeVisible();
-  await expect(tip).toHaveText("Queue");
+  await expect(tip).toHaveText("Jobs");
   await page.mouse.move(900, 500);
   await expect(tip).toBeHidden();
   // A key press first, so the focus that follows counts as keyboard focus (:focus-visible).
@@ -107,8 +107,10 @@ test("a count on a menu entry says what it counts in the entry's name", async ({
       expect(name).toContain(`, ${n} `);
     }
   }
-  // Health and Pull requests; what waits on you is the header inbox's number, not the menu's.
-  expect(counted).toBeGreaterThanOrEqual(2);
+  // Health's critical problems only: what waits on you is the header inbox's number and
+  // Needs you's list, so Pull requests carries no count of its own (UX audit m2).
+  expect(counted).toBe(1);
+  await expect(menuLinks(page).filter({ has: page.getByText("Pull requests", { exact: true }) }).locator(".cap-admin-count:not(:empty)")).toHaveCount(0);
 });
 
 test("the state survives a reload", async ({ page }) => {
@@ -117,7 +119,7 @@ test("the state survives a reload", async ({ page }) => {
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
   expect(await page.evaluate((k) => localStorage.getItem(k), RAIL_PREF)).toBe("collapsed");
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: "Queue" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
   await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
   const collapsed = (await menu(page).boundingBox())!.width;
   await toggle(page).click();

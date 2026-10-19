@@ -19,7 +19,7 @@ export function Incidents({ embedded = false }: { embedded?: boolean } = {}) {
       <NsChips list={all.map((x) => x.ns)} />
       <div className="grid2">
         <Panel flush title="Findings" src="jobs posted by agent:watcher">
-          {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No finding in the namespace {ns}.</FilterEmpty> : <IncidentFeed ns={ns} />}
+          {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No finding in the project {ns}.</FilterEmpty> : <IncidentFeed ns={ns} />}
         </Panel>
         <Panel flush title="Last watcher pass" src={snap ? <When t={ms(snap.pass_at)} /> : "none yet"}>
           {snap ? (

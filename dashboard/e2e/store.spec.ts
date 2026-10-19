@@ -10,7 +10,7 @@ test("Backups shows the store's size against the cap", async ({ page }) => {
   await expect(page.locator("[data-store-size]")).toHaveText("48.3 MB of 10 GB (0.47%)");
 });
 
-test("PLANT: from half the cap Backups flags it and Needs attention lists it", async ({ page }) => {
+test("PLANT: from half the cap Backups flags it and Problems lists it", async ({ page }) => {
   await page.route("**/portal/api/ops", async (route) => {
     const res = await route.fetch();
     const feed = (await res.json()) as OpsFeed;

@@ -178,6 +178,7 @@ test("PLANT: a namespace the safety shutoff paused alerts once, naming the names
   const report = await pushTick(w.env, NOW, s.fetcher);
   assert.deepEqual(report.sent, [`paused:capsid:${since}`]);
   assert.equal(s.got[0]!.title, "Auto-merge paused");
+  assert.equal(s.got[0]!.url, "https://portal.dustinedwards.info/prs#auto-merge");
   assert.match(s.got[0]!.body, /^capsid: 2 of the pull requests auto-merge merged were rolled back or reverted in 7 days\./);
   assert.equal((await pushTick(w.env, new Date(NOW.getTime() + 5 * 60_000), service().fetcher)).sent.length, 0, "the same pause alerted twice");
 });
@@ -211,7 +212,7 @@ test("an item is sent once, and the next tick sends nothing new", async () => {
   assert.ok(w.tables.audit_log!.rows.some((r) => r.action === "push-sent"), "no audit row for the alert");
 });
 
-test("no alert carries an action, and every alert opens the Portal", async () => {
+test("no alert carries an action, and every alert opens its own item on the Portal", async () => {
   const w = world({
     awaiting: [typed(7)],
     state: { typed_seen: { "owner/foxhound#7": iso(-3 * H) }, sent: {} },
@@ -222,8 +223,16 @@ test("no alert carries an action, and every alert opens the Portal", async () =>
   assert.equal(s.got.length, 2);
   for (const g of s.got) {
     assert.deepEqual(Object.keys(g).sort(), ["body", "tag", "title", "url"], "an alert carried more than title, body, url and tag");
-    assert.equal(g.url, "https://portal.dustinedwards.info/");
   }
+  assert.deepEqual(s.got.map((g) => g.url).sort(), ["https://portal.dustinedwards.info/health?tab=deploys", "https://portal.dustinedwards.info/prs#pr-owner-foxhound-7"]);
+});
+
+test("a job's alert opens its drawer on Jobs", async () => {
+  const jobs: Row[] = [{ id: "job_cap", namespace: "capsid", title: "t", priority: 10, status: "blocked", result_summary: `${RETRY_CAP_REASON}\n\nreview`, updated_at: iso(-H) }];
+  const w = world({ jobs });
+  const s = service();
+  await pushTick(w.env, NOW, s.fetcher);
+  assert.deepEqual(s.got.map((g) => g.url), ["https://portal.dustinedwards.info/queue/job/job_cap"]);
 });
 
 test("at most three items go out per tick; the rest follow on the next", async () => {

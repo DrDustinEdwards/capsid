@@ -21,12 +21,13 @@ test.describe.serial("the site configuration", () => {
   test("add a site through the form: preview, Add site, and the row appears", async ({ page }) => {
     await openAdd(page);
     await expect(row(page)).toHaveCount(0);
-    await page.getByLabel("Namespace", { exact: true }).fill(NS);
+    await page.getByLabel("Project", { exact: true }).fill(NS);
     await page.getByLabel("Name", { exact: true }).fill("Sample I");
     await page.getByLabel("Origin", { exact: true }).fill("https://sample-i.example.com");
     await page.getByLabel("Health path", { exact: true }).fill("/health");
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const dialog = page.getByRole("dialog");
+    await dialog.getByText("Details", { exact: true }).click();
     await expect(dialog.getByText("What changes")).toBeVisible();
     await expect(dialog).toContainText("ops_sites: add sample-i");
     await dialog.getByRole("button", { name: "Add site", exact: true }).click();
@@ -58,7 +59,7 @@ test.describe.serial("the site configuration", () => {
 
   test("a refusal from the server is shown in the dialog, verbatim", async ({ page }) => {
     await openAdd(page);
-    await page.getByLabel("Namespace", { exact: true }).fill("sample-j");
+    await page.getByLabel("Project", { exact: true }).fill("sample-j");
     await page.getByLabel("Origin", { exact: true }).fill("http://sample-j.example.com");
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const dialog = page.getByRole("dialog");
@@ -72,7 +73,10 @@ test.describe.serial("the site configuration", () => {
 
   test("remove a row", async ({ page }) => {
     await visit(page, "settings");
-    await row(page).getByRole("button", { name: `Remove ${NS}` }).click();
+    // Remove is in the edit form's Danger area, not beside Edit (UX audit M9).
+    await expect(row(page).getByRole("button", { name: `Remove ${NS}` })).toHaveCount(0);
+    await row(page).getByRole("button", { name: `Edit ${NS}` }).click();
+    await page.getByRole("group", { name: "Danger" }).getByRole("button", { name: `Remove ${NS}` }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText(`ops_sites: remove ${NS}`);
     await dialog.getByRole("button", { name: "Remove site", exact: true }).click();
@@ -87,7 +91,7 @@ test("a row that serves no site is listed as such, and a blank origin is caught 
   let sent = 0;
   await page.route("**/portal/api/actions/preview", (route) => (sent++, route.continue()));
   await page.getByRole("button", { name: "Add site", exact: true }).click();
-  await page.getByLabel("Namespace", { exact: true }).fill(NS);
+  await page.getByLabel("Project", { exact: true }).fill(NS);
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.locator("main").getByRole("alert")).toContainText("Give the site's origin");
   expect(sent).toBe(0);
@@ -112,8 +116,8 @@ async function withoutSites(page: Page) {
 async function siteItems(page: Page) {
   return {
     tile: await page.locator(".tiles .tile").filter({ hasText: "Sites up" }).count(),
-    // Health's Sites section, with its one row per site (audit ruling 1).
-    section: await page.getByRole("heading", { level: 2, name: "Sites", exact: true }).count(),
+    // Health's Sites tab, with its one row per site (audit ruling 1).
+    section: await page.getByRole("navigation", { name: "Health", exact: true }).getByRole("link", { name: "Sites", exact: true }).count(),
     fleet: await page.locator("main table.fleet").count(),
   };
 }
@@ -133,7 +137,7 @@ test("with sites configured, Health shows its site items", async ({ page }) => {
   expect(await siteProblems(page)).toBeGreaterThan(0);
 });
 
-test("with no site configured, Health has no Sites section and shows no site items", async ({ page }) => {
+test("with no site configured, Health has no Sites tab and shows no site items", async ({ page }) => {
   await withoutSites(page);
   await visit(page, "health");
   expect(await siteItems(page)).toEqual({ tile: 0, section: 0, fleet: 0 });
@@ -143,8 +147,10 @@ test("with no site configured, Health has no Sites section and shows no site ite
   await expect(page.locator(".cap-site-header-account").getByRole("link", { name: "Portal settings" })).toBeVisible();
   await page.keyboard.press("Escape");
   // Everything else is still there.
-  await expect(page.locator(".tiles .tile").filter({ hasText: "Blocked on you" })).toHaveCount(1);
-  await expect(page.getByRole("heading", { level: 2, name: "Incidents", exact: true })).toHaveCount(1);
+  await expect(page.locator(".tiles .tile").filter({ hasText: "Open findings" })).toHaveCount(1);
+  // Problems is the first tab now, and it is open.
+  await expect(page.getByRole("navigation", { name: "Health", exact: true }).getByRole("link").first()).toHaveText("Problems");
+  await expect(page.locator("#problems").getByRole("heading", { level: 2, name: "Findings" })).toBeVisible();
 
   // The command menu offers no site.
   await page.keyboard.press("Control+k");
@@ -174,9 +180,9 @@ test.describe("on a phone, with no site configured", () => {
     await withoutSites(page);
     await visit(page, "health");
     const tabs = page.locator("nav.cap-site-tabs a");
-    await expect(tabs).toHaveText([/^Needs you/, /^Queue/, /^Health/]);
+    await expect(tabs).toHaveText([/^Needs you/, /^Health/, /^Pull requests/]);
     await page.locator("header.cap-site-header").getByRole("button", { name: "Menu" }).tap();
-    await expect(page.getByRole("dialog").getByRole("link", { name: /^Portal settings/ })).toBeVisible();
+    await expect(page.getByRole("dialog").getByRole("link", { name: /^Settings/ }).first()).toBeVisible();
   });
 });
 
@@ -197,10 +203,14 @@ test.describe.serial("phone alerts", () => {
   });
 });
 
-// The daily digest (src/digest.ts): off until Email Routing is on, and Settings says why.
-test("the daily digest says it is off and why until Email Routing is on", async ({ page }) => {
+// The daily digest (src/digest.ts): off until Email Routing is on. Settings says so plainly
+// (UX audit m11), and what the setup needs is behind "What it needs".
+test("the daily digest says Not set up yet, and what it needs one click away", async ({ page }) => {
   await visit(page, "settings");
   const panel = page.locator("section.cap-panel", { has: page.getByRole("heading", { name: "Daily digest" }) });
-  await expect(panel.getByRole("status")).toContainText("Off, and nothing is sent: Email Routing is not on");
+  await expect(panel.getByRole("status")).toContainText("Not set up yet. Nothing is sent until it is.");
+  await expect(panel.getByText(/Email Routing is not on/)).toBeHidden();
+  await panel.getByText("What it needs").click();
+  await expect(panel.getByText(/Email Routing is not on/)).toBeVisible();
   await expect(panel).toContainText("after 12:00 UTC");
 });

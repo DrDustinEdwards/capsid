@@ -1,5 +1,5 @@
 // Capsid Portal's service worker: phone alerts only (src/push.ts). It shows each alert the
-// Worker sends and opens the Portal when one is tapped. It caches nothing and answers no
+// Worker sends and, when one is tapped, opens the item it names on the Portal. It caches nothing and answers no
 // fetch, so the Portal loads exactly as it does without it. An alert never carries an
 // action button: every answer is given in the Portal.
 
@@ -30,8 +30,12 @@ self.addEventListener("notificationclick", (event) => {
   }
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      // A Portal tab already open moves to the item, so the tap never lands on a page
+      // that says nothing about it. A tab that cannot be moved is only brought forward.
       for (const w of windows) {
-        if (w.url.startsWith(self.registration.scope) && "focus" in w) return w.focus();
+        if (!w.url.startsWith(scope) || !("focus" in w)) continue;
+        if (!("navigate" in w)) return w.focus();
+        return w.navigate(url).then((moved) => (moved || w).focus(), () => w.focus());
       }
       return self.clients.openWindow(url);
     })

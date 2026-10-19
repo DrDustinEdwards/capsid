@@ -77,8 +77,8 @@ export function PhoneAlerts() {
       <Panel flush title="Phone alerts" count={devices.length} src="Web Push">
         <div className="body stack-gap">
           <p className="faint">
-            Six things only: a money pull request waiting over 2 hours, a rollback, a job at the correction cap, a question over 4 hours old on a job with priority 70 or more, auto-merge paused by the safety shutoff, and a visual pull request waiting for your look. Everything else waits for the daily digest and Needs you. An alert names the repo and number, never a title, and opens
-            the Portal; it has no Approve button.
+            Six things only: a money pull request waiting over 2 hours, a rollback, a job at the correction cap, a question over 4 hours old on a job with priority 70 or more, auto-merge paused by the safety shutoff, and a visual pull request waiting for your look. Everything else waits for the daily digest and Needs you. An alert names the repo and number, never a title, and a tap
+            opens that item in the Portal; it has no Approve button.
           </p>
           {data?.problem && (
             <div className="callout warn" role="status">
@@ -141,8 +141,14 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
             On. It goes to {digest.to}.
           </div>
         ) : (
+          // Plain words first (the UX audit's m11); what the setup still needs, in the
+          // Worker's own words, is one click away.
           <div className="callout warn" role="status">
-            Off, and nothing is sent: {digest.problem}
+            <b>Not set up yet.</b> Nothing is sent until it is.
+            <details className="mt4">
+              <summary>What it needs</summary>
+              <p className="small">{digest.problem}</p>
+            </details>
           </div>
         )}
         {digest.last && (

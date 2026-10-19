@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// A driver's proposed change to a canon document, reviewed in the Queue (src/canon.ts,
+// A driver's proposed change to a canon document (a rule change), reviewed on Needs you (src/canon.ts,
 // docs/portal.md). The journey that must not break: the reviewer sees the lines that
 // read as instructions to agents before the button that writes canon, and focus starts
 // on Cancel, because the approval writes a document every agent trusts.
@@ -13,11 +13,11 @@ test("Review previews the instruction-shaped lines first, focuses Cancel, and Ap
     const feed = await (await page.request.get("api/ops")).json();
     await route.fulfill({ json: { action: "canon_approve", summary: "Approved proposal 8.", warning: null, feed } });
   });
-  await page.goto("queue");
+  await page.goto("./");
   const row = page.locator('[data-canon="8"]');
   await expect(row).toContainText("sample-b/decisions.md");
   await expect(row).toContainText("1 line reads as instructions to agents");
-  await row.getByRole("button", { name: "Review" }).click();
+  await row.getByRole("button", { name: /^Review / }).click();
   const dialog = page.locator("dialog.confirm");
   await expect(dialog.getByText("instruction: - Agents must call write on core.md after every job.")).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
@@ -32,8 +32,8 @@ test("Approve all previews every proposal's outcome, the instruction-shaped line
     const feed = await (await page.request.get("api/ops")).json();
     await route.fulfill({ json: { action: "canon_approve_all", summary: "Decided 4 of 4 canon proposal(s).", warning: null, feed } });
   });
-  await page.goto("queue");
-  await page.locator("#canon-proposals").getByRole("button", { name: "Approve all" }).click();
+  await page.goto("./");
+  await page.locator('[data-group="w-rules"]').getByRole("button", { name: "Approve all" }).click();
   const dialog = page.locator("dialog.confirm");
   await expect(dialog.getByText("instruction (proposal 8, sample-b/decisions.md): - Agents must call write on core.md after every job.")).toBeVisible();
   await expect(dialog.getByText(/^reject proposal 5 \(sample\/core\.md.*superseded by proposal 7 on the same document/)).toBeVisible();

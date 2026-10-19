@@ -7,6 +7,8 @@ import { visit } from "./views.ts";
 
 test("PLANT: chart 1, your time per week, says this week's figure and the change with its unit and direction", async ({ page }) => {
   await visit(page, "needs");
+  // Folded in Trends at the foot of Needs you (UX audit B3).
+  await page.locator("#trends > summary").click();
   const tile = page.locator('[data-chart="minutes"]');
   await expect(tile).toContainText("34 min this week");
   await expect(tile.locator(".minutes-change.up")).toHaveText(/4 min more than last week/);
@@ -33,7 +35,8 @@ test("chart 8, each site's uptime, is a strip of two-hour windows with a text eq
 });
 
 test("PLANT: chart 10, the backup slots, counts each period's kept runs", async ({ page }) => {
-  await visit(page, "health");
+  // Health's Backups tab (the old Backups view's address names it).
+  await visit(page, "backups");
   const slots = page.locator("#backup-slots");
   await expect(slots.locator('[data-slots="daily"]')).toContainText("13 of 14 kept");
   await expect(slots.locator('[data-slots="weekly"]')).toContainText("8 of 8 kept");
@@ -42,7 +45,7 @@ test("PLANT: chart 10, the backup slots, counts each period's kept runs", async 
 });
 
 test("a missing backup slot is a full-height mark, not an underline", async ({ page }) => {
-  await visit(page, "health");
+  await visit(page, "backups");
   const daily = page.locator('#backup-slots [data-slots="daily"]').getByRole("img", { name: /Daily backups/ });
   // evaluateAll does not wait, so wait for the 14 marks first: read at once, the chart
   // can still be unrendered and give none.
@@ -62,7 +65,8 @@ test("a chart is drawn at the width of its card, not a fixed 560px", async ({ pa
 });
 
 test("PLANT: chart 11 says how long a branch has been red, a branch never run, and a repo not read", async ({ page }) => {
-  await visit(page, "health");
+  // Health's CI tab.
+  await page.goto("./health?tab=ci");
   const ci = page.locator("#ci-history");
   await expect(ci.locator('[data-ci="sample-b"]')).toContainText("red for 2 days");
   await expect(ci.locator('[data-ci="sample"]')).toContainText("green");
@@ -77,6 +81,7 @@ test("PLANT: chart 11 says how long a branch has been red, a branch never run, a
 
 test("PLANT: chart 2, where waiting goes, sums the waits across namespaces and puts the longest gate first", async ({ page }) => {
   await visit(page, "needs");
+  await page.locator("#trends > summary").click();
   const tile = page.locator('[data-chart="waiting"]');
   await expect(tile.getByRole("img", { name: /39\.4 h in all, 30\.6 h of it at a step only a person takes/ })).toBeVisible();
   // needs_human is 24.4 h in sample and 6.2 h in sample-b, both ended by a human; every
@@ -100,7 +105,7 @@ test("PLANT: chart 3, the queue, says whether it grew or drained over the 14 day
 
 test("PLANT: chart 5, claim against verified, has the four agreements for each agent that was checked", async ({ page }) => {
   await visit(page, "agents");
-  await page.getByRole("button", { name: "Claims" }).click();
+  await page.getByRole("navigation", { name: "Agents", exact: true }).getByRole("link", { name: "Checks" }).click();
   const chart = page.locator('[data-chart="agreement"]');
   // sample-f has no check, so three agents.
   await expect(chart.getByRole("img", { name: /for 3 agents: 20 agree, 4 disagree, 9 unclaimed, 2 unchecked/ })).toBeVisible();
