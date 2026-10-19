@@ -47,7 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${BACKUP_CREDENTIAL_KEY}" ]; then
-            echo "BACKUP_CREDENTIAL_KEY is not set on this repo; derive it with scripts/improve-derive-key.mjs --backup-credential" >&2
+            echo "BACKUP_CREDENTIAL_KEY is not set on this repo; derive it with scripts/derive-backup-key.mjs" >&2
             exit 1
           fi
           TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)

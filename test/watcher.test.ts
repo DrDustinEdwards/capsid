@@ -5,13 +5,9 @@ import { test } from "node:test";
 import { ROLES } from "../scripts/mint-agents.mjs";
 import { allowsToolAction } from "../src/agents-schema.ts";
 import { checkScope } from "../src/scope.ts";
-import { anchorDriftVerdict, driftVerdict } from "../src/improve-gates.ts";
-import { loopPauseReason } from "../src/improve-schema.ts";
-import type { RunRow } from "../src/improve-state.ts";
 import { fakeFindingMemory } from "./fakes.ts";
 import { MAX_EVIDENCE, REOPEN_QUIET_MS, appendEvidence, onSighting, type EvidenceEntry, type FindingRow } from "../src/watcher-findings.ts";
 import {
-  BUDGET_WARN_FRACTION,
   CI_RED_HOURS,
   DEFAULT_CADENCE_MINUTES,
   DEPLOY_SETTLE_MINUTES,
@@ -28,7 +24,6 @@ import {
   passDue,
   runPass,
   statusFindings,
-  identityFindings,
   mirrorFindings,
   watcherAgent,
   type Finding,
@@ -168,7 +163,7 @@ test("master head's CI run failed, cancelled, never started, unreadable or long 
     [[ciRun("completed", "cancelled", 1)], /ended cancelled/],
     [[], /no CI run started/],
     // Another workflow's run on the same sha is not master's deploy.
-    [[ciRun("in_progress", null, 1, "improve-score")], /no CI run started/],
+    [[ciRun("in_progress", null, 1, "mirror")], /no CI run started/],
     [null, /could not be read/],
     [[ciRun("completed", "success", DEPLOY_SETTLE_MINUTES + 1)], /succeeded 16 minutes ago/],
   ];
@@ -203,87 +198,18 @@ test("a live schema ahead of master is its own finding, not a behind one", () =>
   assert.deepEqual(found.map((f) => f.fingerprint), ["schema-ahead-0018_applied_early.sql"]);
 });
 
-test("a PAUSE A HUMAN SET is not a finding, and one the loop set is", () => {
-  // A human pausing a namespace is the system working; reporting it would teach the
-  // reader to ignore the watcher.
-  const report = (paused: string | null) =>
-    statusFindings(
-      {
-        budget: { month: "2026-09", caps: { actions_minutes_month: 300, model_usd_month: 50 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false, reason: null },
-        namespaces: [{ namespace: "foxing", paused }],
-      } as never
-    );
-  assert.deepEqual(report("Dustin is rewriting the scorer"), []);
-  assert.deepEqual(report(null), []);
-  // A human reason that happens to mention budget or drift is still a human pause.
-  assert.deepEqual(report("waiting on the budget review"), []);
-  assert.deepEqual(report(loopPauseReason("budget")).map((f) => f.fingerprint), ["paused-foxing"]);
-  // The bare value written before the prefix existed, which may still be in KV.
-  assert.deepEqual(report("budget").map((f) => f.fingerprint), ["paused-foxing"]);
-});
-
-test("an OPEN queue breaker is a finding the improve_status check owns, and a closed one is not", () => {
+test("an OPEN queue breaker is a finding the status check owns, and a closed one is not", () => {
   const report = (open: boolean) =>
     statusFindings(
       {
-        budget: { month: "2026-09", caps: { actions_minutes_month: 300, model_usd_month: 50 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false, reason: null },
-        namespaces: [{ namespace: "foxing", paused: null, breaker: { namespace: "foxing", open, failed: open ? 3 : 2, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
+        namespaces: [{ namespace: "foxing", breaker: { namespace: "foxing", open, failed: open ? 3 : 2, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
       } as never
     );
   const found = report(true);
   assert.deepEqual(found.map((f) => f.fingerprint), ["breaker-open-foxing"]);
-  assert.equal(owningCheck("breaker-open-foxing"), "improve_status");
+  assert.equal(owningCheck("breaker-open-foxing"), "status");
   assert.match(found[0].body, /3, threshold 3/);
   assert.deepEqual(report(false), []);
-});
-
-// Derived from the gates' own reasons, not a hand-written one: neither gate's reason
-// contains the word "drift".
-test("a pause set by either drift gate is a finding", () => {
-  const run = (attempts: number, reverts: number) => ({ ...({} as RunRow), attempts, reverts });
-  const drift = driftVerdict([run(4, 4), run(4, 4), run(4, 4)]);
-  const anchor = anchorDriftVerdict([{ metric: "build_passes", direction: "higher", bound: 1 }] as never, { build_passes: 1 }, { build_passes: 0.5 });
-  assert.ok(drift.pause && drift.reason, "the revert-ratio gate did not pause, so this proves nothing");
-  assert.ok(anchor.pause && anchor.reason, "the anchor gate did not pause, so this proves nothing");
-  for (const reason of [drift.reason, anchor.reason]) {
-    const found = statusFindings(
-      {
-        budget: { month: "2026-09", caps: {}, spend: {}, exceeded: false, reason: null },
-        namespaces: [{ namespace: "foxing", paused: loopPauseReason(reason) }],
-      } as never
-    );
-    assert.deepEqual(found.map((f) => f.fingerprint), ["paused-foxing"], `not reported: ${reason}`);
-  }
-});
-
-test("a budget over the warning fraction is a finding, per cap", () => {
-  const found = statusFindings(
-    {
-      budget: {
-        month: "2026-09",
-        caps: { actions_minutes_month: 300, model_usd_month: 50 },
-        spend: { ci_minutes: 290, cost_usd: 45 },
-        exceeded: false,
-        reason: null,
-      },
-      namespaces: [],
-    } as never
-  );
-  assert.deepEqual(found.map((f) => f.fingerprint).sort(), ["budget-actions_minutes_month-2026-09", "budget-model_usd_month-2026-09"]);
-  // Just under the threshold is not a finding.
-  const under = statusFindings(
-    {
-      budget: {
-        month: "2026-09",
-        caps: { actions_minutes_month: 100, model_usd_month: 100 },
-        spend: { ci_minutes: BUDGET_WARN_FRACTION * 100 - 1, cost_usd: BUDGET_WARN_FRACTION * 100 - 1 },
-        exceeded: false,
-        reason: null,
-      },
-      namespaces: [],
-    } as never
-  );
-  assert.deepEqual(under, []);
 });
 
 test("CI red for longer than a flake is a finding, and a fresh red is not", () => {
@@ -347,13 +273,13 @@ test("A CLEARED FINDING CLOSES ITS JOB, and a finding still being found does not
 });
 
 test("A FAILED READ DOES NOT CLEAR THE JOBS ITS CHECK OWNS", async () => {
-  // improve_status and the roster CI reads failed this pass, so their findings are
+  // The status and roster CI reads failed this pass, so their findings are
   // absent. That says nothing about whether the problems went away.
-  const open = new Map([["ci-red-abc1234", "job_1"], ["paused-foxing", "job_2"], ["backup-stale", "job_3"]]);
+  const open = new Map([["ci-red-abc1234", "job_1"], ["breaker-open-foxing", "job_2"], ["backup-stale", "job_3"]]);
   const cleared: string[] = [];
   const result = await runPass(
     {
-      findings: async () => ({ findings: [], ran: new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "improve_status")) }),
+      findings: async () => ({ findings: [], ran: new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "status")) }),
       open: async () => open,
       clear: async (id) => {
         cleared.push(id);
@@ -375,18 +301,15 @@ test("every fingerprint the checks produce has an owning check", () => {
     ...ciFindings("germomics", [{ head_sha: "feedface99", status: "completed", conclusion: "failure", created_at: hoursAgo(9) }], NOW),
     ...statusFindings(
       {
-        budget: { month: "2026-09", caps: { actions_minutes_month: 10, model_usd_month: 10 }, spend: { ci_minutes: 10, cost_usd: 10 }, exceeded: true, reason: null },
-        namespaces: [{ namespace: "foxing", paused: loopPauseReason("budget") }],
+        namespaces: [{ namespace: "foxing", breaker: { namespace: "foxing", open: true, failed: 3, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
       } as never
     ),
     ...mirrorFindings("capsid", null, [], NOW),
     ...mirrorFindings("capsid", stale, [], NOW),
     ...mirrorFindings("capsid", stale, [{ name: "mirror", status: "completed", conclusion: "failure" }], NOW),
     ...mirrorFindings("capsid", stale, [{ name: "mirror", status: "completed", conclusion: "success" }], NOW),
-    ...identityFindings([{ namespace: "capsid", block: "a", report: "a" }], ["foxing"], []),
-    ...identityFindings([{ namespace: "capsid", block: "a", report: "a" }, { namespace: "foxing", block: "b", report: "a" }], [], []),
   ];
-  assert.equal(all.length, 16, `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`);
+  assert.equal(all.length, 11, `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`);
   for (const f of all) assert.ok(owningCheck(f.fingerprint), `${f.fingerprint} has no owning check, so a failed read would clear it`);
 });
 

@@ -21,7 +21,7 @@ import { auditStatement } from "./store-guards";
 // deleted too, in the same cap and with the same audit row (job_9dbaf2ecfd2c; Dustin,
 // 2026-10-14: every repo's branches down to the default and those with an open pull request
 // or active work). Only when every list was read in full, and never the default, a
-// protected, keep-listed or improve branch, or a screenshot branch an open pull request
+// protected or keep-listed branch, or a screenshot branch an open pull request
 // still shows (src/github/prune.ts, shotsInUse).
 
 /** The switch the seat sets to "on" to let the pass delete merged branches. Anything else,

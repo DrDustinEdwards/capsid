@@ -5,20 +5,53 @@
 // handler asking for the wrong row gets nothing back. A fake that cannot disagree
 // with the handler cannot test it.
 //
-// The improve tables live in their own dialect module (./improve-fakes.ts),
-// delegated to below; it is still one fakeD1.
+// The removed improve loop's tables are still in the schema until a migration drops
+// them: the backup dumps them, and improve_jti is the live replay cache (loopTableExec
+// below).
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
 import { TABLES as BACKUP_TABLES } from "../src/backup.ts";
 import { OPEN_JOB_STATUSES, type JobStatus } from "../src/jobs-schema.ts";
 import { REOPEN_QUIET_MS, appendEvidence, type FindingMemory, type FindingRow, type JobEnd } from "../src/watcher-findings.ts";
-import { applyWrite, selectRows, sqliteNow, type Row, type TableSpec, type WriteResult } from "./fake-sql.ts";
-import {
-  IMPROVE_ATTEMPT_DEFAULTS,
-  IMPROVE_RUN_DEFAULTS,
-  IMPROVE_SKILL_DEFAULTS,
-  improveExec,
-  isImproveStatement,
-} from "./improve-fakes.ts";
+import { applyWrite, evalCond, selectRows, sqliteNow, type Row, type TableSpec, type WriteResult } from "./fake-sql.ts";
+
+// The removed improve loop's tables. The backup dumps each with a bare
+// `SELECT * FROM <table>`, the name quoted as @dustinedwards/d1-dump writes it, and
+// improve_jti is the replay cache the signed endpoints claim nonces in.
+type LoopTableAnswer = { handled: false } | { handled: true; results: unknown[] };
+type LoopTable = "improve_runs" | "improve_attempts" | "improve_scores" | "improve_skills" | "improve_jti" | "skill_evaluations" | "skill_edits" | "skill_failures";
+
+function isLoopTableStatement(sql: string): boolean {
+  return /\b(improve_(runs|attempts|scores|skills|jti)|skill_evaluations|skill_edits|skill_failures)\b/i.test(sql);
+}
+
+function loopTableExec(sql: string, params: unknown[], rows: Record<LoopTable, Array<Record<string, unknown>>>): LoopTableAnswer {
+  const text = sql.replace(/\s+/g, " ").trim();
+  const dump = /^SELECT \* FROM "?((?:improve|skill)_\w+)"?$/i.exec(text);
+  if (dump) {
+    const table = dump[1] as LoopTable;
+    if (!(table in rows)) throw new Error(`fake: the dump named an unknown table '${table}'`);
+    return { handled: true, results: rows[table] };
+  }
+  // INSERT ... ON CONFLICT DO NOTHING RETURNING. The database decides who claimed the
+  // nonce, so the fake models the uniqueness: a row already present returns nothing.
+  if (/^INSERT INTO improve_jti/i.test(text)) {
+    const [scope, jti] = params;
+    if (rows.improve_jti.some((r) => r.scope === scope && r.jti === jti)) return { handled: true, results: [] };
+    rows.improve_jti.push({ scope, jti, seen_at: sqliteNow() });
+    return { handled: true, results: [{ jti }] };
+  }
+  // The nightly prune, which drops only nonces older than a day. The WHERE clause is
+  // evaluated, so a recent nonce stays and a replay of it is still refused.
+  if (/^DELETE FROM improve_jti/i.test(text)) {
+    const where = /^DELETE FROM improve_jti WHERE (.+)$/i.exec(text)?.[1];
+    if (!where) throw new Error(`fake: an unfiltered DELETE on improve_jti: ${text}`);
+    const keep = rows.improve_jti.filter((row) => !evalCond(where, { params, row }));
+    rows.improve_jti.length = 0;
+    rows.improve_jti.push(...keep);
+    return { handled: true, results: [] };
+  }
+  throw new Error(`fake: a statement on a removed improve loop table: ${text}`);
+}
 
 // KV
 
@@ -94,7 +127,6 @@ export function fakeR2(seed: Record<string, string> = {}): FakeR2 {
       objects.set(key, value);
       return {};
     },
-    // The scorer reads the holdout manifest (a count, never the tests).
     get: async (key: string) => {
       const value = objects.get(key);
       if (value === undefined) return null;
@@ -200,11 +232,6 @@ export interface FakeD1Options {
   // Throw from batch() for any statement matching this, to drive the "a batch
   // failure is a clean refusal" paths. The guards throw on their own.
   failBatchMatching?: RegExp;
-  // The improve loop's four tables. Absent by default.
-  improveRuns?: Array<Record<string, unknown>>;
-  improveAttempts?: Array<Record<string, unknown>>;
-  improveScores?: Array<Record<string, unknown>>;
-  improveSkills?: Array<Record<string, unknown>>;
   // Seed audit_log rows so the read/brief provenance lookup (last_actor) can be
   // driven. Later entries win, matching ORDER BY id DESC. An id is optional; the
   // backup's paged export reads it.
@@ -236,9 +263,10 @@ export interface FakeD1Rows {
   improve_attempts: Array<Record<string, unknown>>;
   improve_scores: Array<Record<string, unknown>>;
   improve_skills: Array<Record<string, unknown>>;
+  // The replay cache (migrations/0004). Row-backed so the PRIMARY KEY behaviour is
+  // modelled: a second claim of the same (scope, jti) returns no row.
   improve_jti: Array<Record<string, unknown>>;
-  // The skill lifecycle's evidence (migrations 0012 and 0013), delegated to the
-  // improve dialect like the rest of those tables.
+  // The removed skill lifecycle's evidence (migrations 0012 and 0013), dumped only.
   skill_evaluations: Array<Record<string, unknown>>;
   skill_edits: Array<Record<string, unknown>>;
   skill_failures: Array<Record<string, unknown>>;
@@ -431,10 +459,10 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     versions: (opts.versions ?? []).map((v) => ({ ...v })),
     namespaces: (opts.namespaces ?? [{ namespace: "capsid", repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) }]).map((n) => ({ ...n })),
     links: (opts.links ?? []).map((l) => ({ ...l })),
-    improve_runs: (opts.improveRuns ?? []).map((r) => ({ ...IMPROVE_RUN_DEFAULTS, ...r })),
-    improve_attempts: (opts.improveAttempts ?? []).map((a) => ({ ...IMPROVE_ATTEMPT_DEFAULTS, ...a })),
-    improve_scores: opts.improveScores ?? [],
-    improve_skills: (opts.improveSkills ?? []).map((k) => ({ ...IMPROVE_SKILL_DEFAULTS, ...k })),
+    improve_runs: [],
+    improve_attempts: [],
+    improve_scores: [],
+    improve_skills: [],
     improve_jti: [],
     skill_evaluations: [],
     skill_edits: [],
@@ -473,11 +501,10 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
   // than being recorded and ignored.
   const write = (sql: string, params: unknown[]): WriteResult => {
     const flat = sql.replace(/\s+/g, " ").trim();
-    if (isImproveStatement(flat)) {
-      const answered = improveExec(flat, params, rows);
+    if (isLoopTableStatement(flat)) {
+      const answered = loopTableExec(flat, params, rows);
       const results = (answered.handled ? answered.results : []) as Row[];
-      // The improve dialect answers a keyed UPDATE with the row it moved and a plain
-      // INSERT with nothing, so an INSERT that did not throw wrote one row.
+      // A plain INSERT that did not throw wrote one row.
       const changes = /^INSERT/i.test(flat) && !/\bRETURNING\b/i.test(flat) ? 1 : results.length;
       return { changes, returning: results };
     }
@@ -544,8 +571,8 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
   // the wrong path or version id gets nothing back, as the database would answer.
   const answerFirst = (sql: string, params: unknown[]): unknown => {
     const flat = sql.replace(/\s+/g, " ");
-    if (isImproveStatement(flat)) {
-      const answered = improveExec(flat, params, rows);
+    if (isLoopTableStatement(flat)) {
+      const answered = loopTableExec(flat, params, rows);
       return answered.handled ? (answered.results[0] ?? null) : null;
     }
     if (/FROM namespaces WHERE namespace/i.test(flat)) {
@@ -633,8 +660,8 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
 
   const answerAll = (sql: string, params: unknown[]): unknown[] => {
     const flat = sql.replace(/\s+/g, " ");
-    if (isImproveStatement(flat)) {
-      const answered = improveExec(flat, params, rows);
+    if (isLoopTableStatement(flat)) {
+      const answered = loopTableExec(flat, params, rows);
       return answered.handled ? answered.results : [];
     }
     // auto-merge's read of the PR URLs recorded against one job.
@@ -995,7 +1022,7 @@ export function fakeEnv(parts: Record<string, unknown>): never {
 // A fixture built by the real function from empty rows, so a field added to
 // AgentRecord cannot be silently missing from every AgentSummary fixture.
 export function agentRecord(overrides: Partial<AgentRecord> = {}): AgentRecord {
-  return { ...recordFor("agent:fixture", { outcomes: [], jobs: [], runs: [] }, null), ...overrides };
+  return { ...recordFor("agent:fixture", { outcomes: [], jobs: [] }), ...overrides };
 }
 
 // The watcher's finding memory

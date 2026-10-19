@@ -132,12 +132,14 @@ It refuses, whatever `cascade` says:
   `capsid_work_jobs` tool (`supersede` for a queued job, `fail` for a claimed or blocked one).
 - while any live agent names the namespace in its scopes. Use the `capsid_admin_manage_agents` tool
   (`revoke`, or `update_scopes` to drop the namespace).
-- while the namespace is on the improve roster, which is a list in code.
+- while the namespace is on the roster (`ROSTER` in `src/roster.ts`), which is a list in code.
 
 It also refuses while live documents exist and `cascade` is not true, and while the
-namespace holds improve loop control documents and `allow_improve_paths` is not
+namespace holds signed policy documents (under `policy/`, counted as
+`policy_documents` and listed as `policy_paths`) and `allow_improve_paths` is not
 true. `allow_improve_paths` needs the `can_touch_protected` flag, as it does on a
-document delete.
+document delete. The argument keeps the improve loop's name; since the loop was
+removed (2026-10-19) it covers only the signed policy documents.
 
 What the batch deletes: every live document (every path outside `archive/`), each
 snapshotted to `document_versions` first and then removed by the same path helper a
@@ -145,10 +147,7 @@ document delete uses, which takes every edge touching it too; the `ops_sites` ro
 the `namespaces` row. An edge that was already dangling (its end in the namespace
 names no document) touches nothing deleted and stays. One audit row, action
 `namespace-delete`, holds the counts, the deleted paths, the removed edges, and
-the `ops_sites` and `namespaces` rows whole. After the batch commits, the
-namespace's four improve KV keys (`improve:best:`, `improve:paused:`,
-`improve:anchor:`, `improve:driver:`) are deleted. A key that cannot be deleted is
-named in the response, not dropped.
+the `ops_sites` and `namespaces` rows whole.
 
 The whole delete is one D1 batch, and D1 caps a batch at 100 statements: five fixed
 ones plus two per document. So a namespace with more than 47 live documents is
@@ -157,8 +156,7 @@ with the `capsid_delete_doc` tool first, or ask the seat to rule a set-based hel
 
 What it keeps, because it is history: archived documents and the edges between
 them, `document_versions`, `audit_log`, finished jobs, `job_outcomes`,
-`job_claims`, `job_touches`, the skill records, every `improve_*` row, revoked
-agents, the nightly backups and the holdout bucket. The kept archived documents
+`job_claims`, `job_touches`, revoked agents and the nightly backups. The kept archived documents
 still carry the deleted name. `capsid_read_doc`, `capsid_find_docs` and
 `capsid_start_session` return them under it. `capsid_write_doc` and `capsid_delete_doc` refuse there until
 the name is registered again, and registering it again brings them back into
@@ -241,7 +239,7 @@ document is a series.
 ## Jobs as evidence
 
 A finished job writes one row to `job_outcomes` (`migrations/0011_job_outcomes.sql`),
-so the queue produces the same kind of evidence the improve loop does. Before it,
+so the queue produces verified evidence of how a job went. Before it,
 the only record of how a job went was `result_summary`: prose, written by the party
 being measured.
 
@@ -359,8 +357,7 @@ stored text of the first job it happened to.
 `src/agent-record.ts` aggregates those rows into one record per credential, served
 in `capsid_run_improve` action `status`'s `agents` and rendered in Capsid Portal: jobs done, failed and
 blocked, gates hit, resumes, pull requests opened and merged, a merge rate, a CI
-green rate with `ci_checked` as its stated denominator, a median duration, and for
-drivers the loop's kept and reverted counts.
+green rate with `ci_checked` as its stated denominator, and a median duration.
 
 Three rules. Counts and rates, never a composite score: a
 score needs a weighting, a weighting is an opinion, and the moment one number
@@ -470,63 +467,18 @@ than the head commit's committer date because whoever commits sets that date. A
 
 ## Skill records
 
-A skill is an idea abstracted from work that landed, written down so another project
-can act on it. `improve_skills` has held one row per skill since the first improve
-migration; migrations 0012 and 0013 gave those rows a lifecycle and the evidence to
-move through it.
-
-The rule: a skill's status changes on VERIFIED evidence, never on a driver's judgement
-of its own run. A driver reporting that a skill helped is the party being measured
-reporting the measurement. Verified means the Worker read the signal from GitHub
-itself: a pull request merged and CI green, as stored on `job_outcomes`, and a scored
-improve attempt when the loop runs.
-
-AMENDED 2026-09-16 (option C). The 2026-09-12 rule said evaluations were the only
-evidence. They were also the only evidence that never existed: the fortnightly probe
-that was meant to produce them dispatched a scorer workflow body GitHub refuses, so no
-`skill_evaluations` row was ever written and no status could ever move. Scheduled
-probing is dropped, and verified job outcomes take its place. Everything below about
-how evidence is counted is unchanged; what changed is where it comes from.
-
-Three states. Every skill starts `candidate`, including one abstracted from an
-attempt that was kept: being born of a success is not evidence that the written form
-of the idea helps anybody else, which is the only thing an evaluation measures. A
-candidate promotes to `live` on two positive evaluations. A live skill goes `retired`
-on two consecutive non-positive ones. Retired rows are kept with their whole record,
-both because a retirement is evidence about what does not work and because the
-creating path checks them, so the same idea is not abstracted again from the same
-source next month.
-
-Two evaluations minimum, in both directions. One result is a sample. A system that
-promoted on one would spend its life promoting and retiring the same skill on noise.
-Promotion and retirement have different shapes: promotion asks for a
-pattern of helping, retirement asks for a run of not helping, so a live skill that
-alternates positive and neutral is doing something and stays.
-
-Evidence is counted per version and per probe set. An evaluation of version 2 says
-nothing about version 3, and a delta measured against a different probe set is not
-comparable to one measured against this one. So an accepted edit costs a skill every
-evaluation it had accumulated, which is what makes the edit bound matter.
-
-Edits are bounded at 20 percent of the instruction lines, counted by distinct
-lines touched, and accepted only on strict improvement. A tie is a rejection: an edit
-that changes nothing measurable still resets the evidence. Rejected edits are stored
-in `skill_edits` and handed to the next optimizer run, so a proposal that was already
-refused is not proposed again.
-
-Attribution (improve attempts only now) separates three things a single counter conflated. A skill moves only
-when it was used and the verifier reported on the work itself. A skill that was
-offered and ignored while the run succeeded anyway counts as nothing, because the
-success is not its. A run that died on the environment counts as nothing either,
-because charging a loss for a failed checkout would retire skills for being present
-during an outage.
-
-Offered and used were once stored on `job_outcomes` (`skill_ids_offered`,
-`skill_ids_used`, migration 0013), from the claim-time offer and the driver's `skills`
-param. Both are removed from the claim, complete and fail path (docs/skills.md); the two
-columns stay, unused, with their old values. `skill_evaluations` and `skill_failures` stay
-as history with no writer, since the evaluation cycle and the failure notes read the same
-removed input.
+The stored-skill lifecycle (candidate, live and retired skills, their evaluations,
+bounded edits and attribution) was removed with the improve loop on 2026-10-19. Its
+tables, `improve_skills`, `skill_evaluations`, `skill_edits` and `skill_failures`
+(migrations 0003, 0012 and 0013), and the loop's own `improve_runs`, `improve_attempts`
+and `improve_scores`, are still in D1. Nothing writes them, and only the nightly backup reads them: it
+still dumps them (`TABLES` in `src/backup.ts`). A migration that drops them waits on
+Dustin. `improve_jti` is not one of them: it is the replay table for the bench and the
+backup credential. The `skill_ids_offered` and `skill_ids_used` columns on
+`job_outcomes` (migration 0013) stay too, unused, with their old values. Skills as
+`SKILL.md` guidance in each repo are separate and stay: the weekly skills refresh
+(`src/skills-refresh.ts`) posts a job in `claude-skills` when a model's prompting guide
+has moved.
 
 ## Why documents carry provenance
 
@@ -540,16 +492,16 @@ body is exactly what an attacker controls.
 Capsid Portal (`/portal/`, docs/portal.md) reads the store through the same
 functions the tools call, so the two cannot disagree. `GET /portal/api/ops` is the
 feed, `OpsFeed` in `src/ops-types.ts`. `GET /portal/api/namespaces` returns each
-roster namespace from `improveStatus()`, the function behind `capsid_run_improve` action `status`.
+roster namespace from `capsidStatus()` (`src/status.ts`), the function behind `capsid_run_improve` action `status`.
 `GET /portal/api/activity?namespace=&actor=` returns the last 50 `audit_log` rows,
 filtered, with ISO times. `GET /portal/api/stale` returns the stale jobs from
 `staleJobs()`, the function behind `capsid_work_jobs` action `list` with `stale: true`. All four are admin
 session only.
 
 **A click in the Portal writes two audit rows:** the shared mutator's own row (for
-example `improve-paused` by `improve-loop`, or `job-resumed`), then the click's row,
-`portal-<action>` under `access:<email>`. The four automation switches (`pause`,
-`unpause`, `mode`, `overnight`) record the reason in that row, and an Undo from the
+example `overnight-set` or `job-resumed`), then the click's row,
+`portal-<action>` under `access:<email>`. The automation switch (`overnight`) records
+the reason in that row, and an Undo from the
 Portal's result message writes `portal-undo-<action>` instead, with `"undo": true`
 in its params. The Portal's on-demand watcher pass is
 `portal-ops-refresh`. Rows written before the Portal moved from `/console` to
@@ -585,10 +537,6 @@ only in that audit row and the nightly dump. Its `operator` column (migrations/0
 a site's opt-in to Capsid calling its operator API (docs/portal.md, "Site repairs");
 each call is audited as `site-repair` under the caller (`agent:watcher` or
 `access:<email>`) with the tool and the site's verdict, never the token.
-
-`attempts_kept` and `attempts_reverted` on an agent are `null` for every kind
-except `driver`, because an attempt belongs to a namespace's runs and crediting a
-seat with them would attribute one credential's work to another.
 
 `record` is the agent record. It is a different measurement from the counts
 beside it. The flat `prs_opened` and `prs_merged` count what this credential did

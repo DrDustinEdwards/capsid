@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server";
 import { integrityOf } from "../src/truth-report";
-import { improveStatus } from "../src/improve-run";
+import { capsidStatus } from "../src/status";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 // test/truth-report.test.ts proves which statements the handler issues; this proves
@@ -93,7 +93,7 @@ describe("lint mode report", () => {
   });
 
   it("improve_status surfaces the latest integrity number for the namespace", async () => {
-    const status = await improveStatus(env as never, "capsid");
+    const status = await capsidStatus(env as never, "capsid");
     const capsid = status.namespaces.find((n) => n.namespace === "capsid");
     expect(capsid, "capsid is on the improve roster and must be in the status report").toBeTruthy();
     expect(capsid!.latest_report, "no report was surfaced, though one was just written").toBeTruthy();
@@ -102,7 +102,7 @@ describe("lint mode report", () => {
   });
 
   it("PLANT: a namespace with no report reports null, which is not an integrity of zero", async () => {
-    const status = await improveStatus(env as never, "germomics");
+    const status = await capsidStatus(env as never, "germomics");
     const germomics = status.namespaces.find((n) => n.namespace === "germomics");
     expect(germomics!.latest_report).toBeNull();
   });
@@ -115,7 +115,7 @@ describe("lint mode report", () => {
       `INSERT OR REPLACE INTO documents (namespace, path, title, body, type, status, updated_at)
        VALUES ('capsid', 'reports/lint-2020-01-01.md', 'Old', 'integrity: 1%', 'reference', 'published', datetime('now'))`
     ).run();
-    const status = await improveStatus(env as never, "capsid");
+    const status = await capsidStatus(env as never, "capsid");
     const capsid = status.namespaces.find((n) => n.namespace === "capsid")!;
     expect(capsid.latest_report!.path).not.toContain("2020-01-01");
     expect(capsid.latest_report!.integrity).not.toBe(1);

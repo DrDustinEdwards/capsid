@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
-import { LOOP_ROSTER } from "./improve-schema";
+import { APP_ROSTER } from "./roster";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher";
 
@@ -21,8 +21,8 @@ import type { Finding } from "./watcher";
 const LIVE_JOB = "live gate";
 const LIVE_JOB_SUFFIX = ` / ${LIVE_JOB}`;
 // The namespaces the deploy watcher reads. carrel's live gate runs in devkit's reusable
-// worker-deploy.yml; carrel is merge-only for the improve loop, so not on LOOP_ROSTER.
-export const DEPLOY_ROSTER = [...LOOP_ROSTER, "carrel"] as const;
+// worker-deploy.yml; carrel is not on APP_ROSTER (src/roster.ts).
+export const DEPLOY_ROSTER = [...APP_ROSTER, "carrel"] as const;
 
 /** A live gate job: "live gate", or a called workflow's "<caller job> / live gate". */
 export function isLiveGateJob(name: string): boolean {

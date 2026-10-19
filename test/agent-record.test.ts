@@ -30,12 +30,12 @@ function verified(overrides: Partial<RecordRows["outcomes"][number]> = {}) {
   });
 }
 
-const EMPTY: RecordRows = { outcomes: [], jobs: [], runs: [] };
+const EMPTY: RecordRows = { outcomes: [], jobs: [] };
 
 test("a credential that has done nothing reports zero counts and NULL rates", () => {
   // A count of zero is a fact: this agent finished no jobs. A rate of zero would claim
   // a bad record, and it has no record.
-  const record = recordFor(ACTOR, EMPTY, null);
+  const record = recordFor(ACTOR, EMPTY);
   assert.equal(record.jobs_done, 0);
   assert.equal(record.prs_opened, 0);
   assert.equal(record.pr_merge_rate, null);
@@ -56,7 +56,7 @@ test("job states come from the jobs table, because a blocked job has no outcome 
       // matching the name alone would credit somebody else's work.
       { actor: "capsid-driver", status: "done", n: 99 },
     ],
-  }, null);
+  });
   assert.equal(record.jobs_done, 5);
   assert.equal(record.jobs_failed, 2);
   assert.equal(record.jobs_blocked, 1);
@@ -74,7 +74,7 @@ test("ONLY A VERIFIED FIELD FEEDS A RATE", () => {
       // Verified and modest.
       verified({ prs_opened: 4, prs_merged: 1 }),
     ],
-  }, null);
+  });
   assert.equal(record.prs_opened, 4, "an unverified pull request count reached the record");
   assert.equal(record.prs_merged, 1);
   assert.equal(record.pr_merge_rate, 0.25);
@@ -95,7 +95,7 @@ test("the CI rate's denominator is what was checked, not what was done", () => {
       outcome({ ci_green: null }),
       verified({ ci_green: null }),
     ],
-  }, null);
+  });
   assert.equal(record.ci_checked, 3, "the denominator counted rows the Worker never checked");
   assert.equal(record.ci_green_rate, 0.667);
 });
@@ -109,14 +109,14 @@ test("the duration is a MEDIAN, so one job left open over a weekend does not mov
       outcome({ duration_minutes: 30 }),
       outcome({ duration_minutes: 4000 }),
     ],
-  }, null);
+  });
   // The mean here is over a thousand minutes. The median says what a job usually took.
   assert.equal(weekend.median_duration_minutes, 28);
   // An odd count takes the middle rather than averaging.
-  const odd = recordFor(ACTOR, { ...EMPTY, outcomes: [outcome({ duration_minutes: 1 }), outcome({ duration_minutes: 5 }), outcome({ duration_minutes: 90 })] }, null);
+  const odd = recordFor(ACTOR, { ...EMPTY, outcomes: [outcome({ duration_minutes: 1 }), outcome({ duration_minutes: 5 }), outcome({ duration_minutes: 90 })] });
   assert.equal(odd.median_duration_minutes, 5);
   // A job with no duration is not a job of length zero.
-  const mixed = recordFor(ACTOR, { ...EMPTY, outcomes: [outcome({ duration_minutes: null }), outcome({ duration_minutes: 10 })] }, null);
+  const mixed = recordFor(ACTOR, { ...EMPTY, outcomes: [outcome({ duration_minutes: null }), outcome({ duration_minutes: 10 })] });
   assert.equal(mixed.median_duration_minutes, 10);
 });
 
@@ -129,7 +129,7 @@ test("gates hit and resumes are totals over the agent's own rows", () => {
       // Another credential's job, which must not land on this record.
       outcome({ agent: "agent:foxing-driver", blocked_count: 9, resumed_count: 9 }),
     ],
-  }, null);
+  });
   assert.equal(record.gates_hit, 3);
   assert.equal(record.resumed, 3);
 });
@@ -138,33 +138,13 @@ test("a corrupt verified column withholds a rate rather than inventing one", () 
   // Fail closed, which for a rate means refusing to compute it. The alternative is a
   // percentage derived from a column nobody can read.
   for (const bad of ["{", "null", "[]", '"true"']) {
-    const record = recordFor(ACTOR, { ...EMPTY, outcomes: [outcome({ prs_opened: 9, prs_merged: 9, verified: bad })] }, null);
+    const record = recordFor(ACTOR, { ...EMPTY, outcomes: [outcome({ prs_opened: 9, prs_merged: 9, verified: bad })] });
     assert.equal(record.prs_opened, 0, `a row with a ${bad} verified column was counted`);
     assert.equal(record.pr_merge_rate, null);
   }
 });
 
-test("the improve loop's columns belong to drivers and are NULL for everybody else", () => {
-  const runs = [
-    { namespace: "capsid", kept: 6, reverts: 14 },
-    { namespace: "foxing", kept: 1, reverts: 3 },
-  ];
-  const driver = recordFor(ACTOR, { ...EMPTY, runs }, ["capsid"]);
-  assert.equal(driver.attempts_kept, 6);
-  assert.equal(driver.attempts_reverted, 14);
-
-  const wildcard = recordFor(ACTOR, { ...EMPTY, runs }, "*");
-  assert.equal(wildcard.attempts_kept, 7, "a wildcard driver sums every namespace");
-  assert.equal(wildcard.attempts_reverted, 17);
-
-  // A seat reads everywhere and runs nothing. Crediting it with a namespace's
-  // attempts would attribute one credential's work to another.
-  const seat = recordFor(ACTOR, { ...EMPTY, runs }, null);
-  assert.equal(seat.attempts_kept, null);
-  assert.equal(seat.attempts_reverted, null);
-});
-
-test("recordsFrom keys by agent name and fills the loop columns only for drivers", () => {
+test("recordsFrom keys by agent name", () => {
   const agents: RecordSubject[] = [
     { name: "capsid-driver", kind: "driver", namespaces: ["capsid"] },
     { name: "seat", kind: "seat", namespaces: "*" },
@@ -172,15 +152,12 @@ test("recordsFrom keys by agent name and fills the loop columns only for drivers
   const records = recordsFrom(agents, {
     outcomes: [verified({ prs_opened: 2, prs_merged: 2 })],
     jobs: [{ actor: ACTOR, status: "done", n: 3 }],
-    runs: [{ namespace: "capsid", kept: 4, reverts: 1 }],
   });
   assert.equal(records["capsid-driver"].jobs_done, 3);
   assert.equal(records["capsid-driver"].pr_merge_rate, 1);
-  assert.equal(records["capsid-driver"].attempts_kept, 4);
   // The seat gets a record too, and it is empty rather than absent: a credential
   // that has done nothing should read as nothing, not as missing.
   assert.equal(records["seat"].jobs_done, 0);
-  assert.equal(records["seat"].attempts_kept, null);
   // Object.create(null), so a credential named for a prototype member cannot collide
   // with one.
   assert.equal(Object.getPrototypeOf(records), null);
@@ -190,7 +167,7 @@ test("recordsFrom keys by agent name and fills the loop columns only for drivers
 test("NO COMPOSITE SCORE IS COMPUTED ANYWHERE IN THE RECORD", () => {
   // Every field is a count with a name on it or a rate with a stated denominator; a
   // single number standing for all of them would invite a gate nobody specified.
-  const record = recordFor(ACTOR, EMPTY, null);
+  const record = recordFor(ACTOR, EMPTY);
   const named = Object.keys(record);
   for (const forbidden of ["score", "rating", "trust", "grade", "rank"]) {
     assert.ok(
@@ -217,8 +194,8 @@ test("the inventory is read with grouped queries, not one set per credential", a
     assert.equal(Object.keys(records).length, howMany);
     return prepared;
   };
-  assert.equal(await countFor(1), 3, "the loader should issue three grouped reads");
-  assert.equal(await countFor(50), 3, "the query count grew with the number of credentials");
+  assert.equal(await countFor(1), 2, "the loader should issue two grouped reads");
+  assert.equal(await countFor(50), 2, "the query count grew with the number of credentials");
 });
 
 // Numerator and denominator must use the same rows: a row whose merge count is not
@@ -229,6 +206,6 @@ test("the merge rate counts only rows where both counts were verified", () => {
     prs_merged: 4,
     verified: JSON.stringify({ prs_opened: true, prs_merged: false, commits: true, files_changed: true, ci_green: true }),
   });
-  const record = recordFor(ACTOR, { ...EMPTY, outcomes: [verified({ prs_opened: 2, prs_merged: 2 }), openedOnly] }, null);
+  const record = recordFor(ACTOR, { ...EMPTY, outcomes: [verified({ prs_opened: 2, prs_merged: 2 }), openedOnly] });
   assert.equal(record.pr_merge_rate, 1, "a row with an unverified merge count lowered the rate");
 });

@@ -17,7 +17,7 @@ import {
   type MinRecord,
   type RequiredScopes,
 } from "./jobs-schema";
-import { signTaskBody, verifySignedBody } from "./improve-task";
+import { signTaskBody, verifySignedBody } from "./signed-docs";
 import { JOB_KINDS, isJobKind, routeJob, type Routing } from "./model-routing";
 import { pullRequestRisk } from "./model-routing-pr";
 import { jobAudit, mirrorStatements, resumeNotes } from "./jobs-mirror";
@@ -36,8 +36,8 @@ import {
 
 // Getting work into and out of the queue: post, list and claim.
 
-// The body is signed at post, with the same key and envelope as the improve loop's
-// task documents (src/improve-task.ts). The driver refuses a job whose body does not
+// The body is signed at post, with the same key and envelope as the signed policy
+// documents (src/signed-docs.ts). The driver refuses a job whose body does not
 // verify, so a row edited by a raw D1 splice, or a document mirrored back over by
 // hand, cannot steer a session that holds local shell and repo credentials.
 //

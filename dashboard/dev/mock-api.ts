@@ -61,10 +61,10 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["pause", "unpause", "mode", "overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "canon_approve_all", "site_repair"];
+const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "canon_approve_all", "site_repair"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
-const SWITCHES: PortalAction[] = ["pause", "unpause", "mode", "overnight"];
+const SWITCHES: PortalAction[] = ["overnight"];
 
 // The click row's action name, as the Worker names it, in the mock's "portal." form.
 function clickName(action: PortalAction, params: Record<string, string>): string {
@@ -109,10 +109,8 @@ function shift(value: unknown, delta: number): unknown {
 
 // What the controls changed since the dev server started.
 interface MockState {
-  paused: Map<string, string | null>;
   // Namespaces whose breaker was reset since the mock started.
   breakerReset: Set<string>;
-  mode: string | null;
   overnight: "off" | "api" | "subscription" | null;
   // The reason typed when the overnight switch was last set, recorded with the decision.
   overnightReason: string;
@@ -441,8 +439,6 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
       if (s.platform === "cloudflare") s.cloudflare = { state: "no-token", reason: "CF_OPS_TOKEN is not set" };
     }
   }
-  for (const n of out.live.namespaces) if (st.paused.has(n.name)) n.paused = st.paused.get(n.name) ?? null;
-  if (st.mode != null) out.live.loop.mode = st.mode;
   if (st.overnight != null) {
     out.live.overnight = {
       mode: st.overnight,
@@ -543,14 +539,6 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
     return j;
   };
   switch (action) {
-    case "pause": {
-      const ns = need(params, "namespace", "The namespace");
-      const reason = params.reason?.trim() ?? "";
-      const n = f.live.namespaces.find((x) => x.name === ns);
-      if (!n) throw new Refusal(400, `${ns} is not a roster namespace.`);
-      if (n.paused != null) throw new Refusal(400, `${ns} is already paused: ${n.paused}`);
-      return { summary: `Pause the improve loop for ${ns}.`, done: `Paused the improve loop for ${ns}.`, changes: [`improve:paused:${ns}: not set -> "${reason}"`, "The next scheduled run for this namespace is skipped."], apply: (st) => void st.paused.set(ns, reason) };
-    }
     case "reset_breaker": {
       const ns = need(params, "namespace", "The namespace");
       if (!f.live.namespaces.some((x) => x.name === ns)) throw new Refusal(400, `${ns} is not a roster namespace.`);
@@ -560,19 +548,6 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         changes: [`jobs:breaker:reset:${ns}: -> now. Holder fails before now stop counting.`],
         apply: (st) => void st.breakerReset.add(ns),
       };
-    }
-    case "unpause": {
-      const ns = need(params, "namespace", "The namespace");
-      const n = f.live.namespaces.find((x) => x.name === ns);
-      if (!n) throw new Refusal(400, `${ns} is not a roster namespace.`);
-      if (n.paused == null) throw new Refusal(400, `${ns} is not paused.`);
-      return { summary: `Unpause the improve loop for ${ns}.`, done: `Unpaused the improve loop for ${ns}.`, changes: [`improve:paused:${ns}: "${n.paused}" -> not set`], apply: (st) => void st.paused.set(ns, null) };
-    }
-    case "mode": {
-      const value = need(params, "value", "The mode");
-      if (!["api", "subscription", "off"].includes(value)) throw new Refusal(400, `Mode must be api, subscription or off, not ${value}.`);
-      if (value === f.live.loop.mode) throw new Refusal(400, `The improve loop is already ${value}.`);
-      return { summary: `Set the improve loop to ${value}.`, done: `The improve loop is now ${value}.`, changes: [`improve:mode: ${f.live.loop.mode} -> ${value}`], apply: (st) => void (st.mode = value) };
     }
     case "overnight": {
       const value = need(params, "value", "The value");
@@ -1041,38 +1016,16 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
   const H = 3_600_000;
   const detail: Record<string, Partial<PortalNamespace>> = {
     sample: {
-      anchor_pinned: true,
-      best: { sha: "a1b2c3d4e5f6a7b8c9d0", score: 0.912, recorded_at: iso(30 * H) },
-      last_run: { status: "done", started: iso(5 * H), attempts: 4, kept: 1, reverts: 3 },
-      totals: { runs: 38, attempts: 152, kept: 14, reverts: 9, cost_usd: 11.2, ci_minutes: 140 },
       latest_report: { integrity: 0.93, generated: iso(26 * H) },
-      skills: { candidate: 2, live: 5, retired: 1, last_evaluation: iso(50 * H) },
-    },
-    "sample-b": {
-      anchor_problem: "The anchor sha 9f8e7d6 is not on the default branch of example-org/sample-b.",
-      best: { sha: "0f1e2d3c4b5a69788796", score: 0.71, recorded_at: iso(90 * H) },
-      last_run: { status: "failed", started: iso(20 * H), attempts: 2, kept: 0, reverts: 2 },
-      totals: { runs: 12, attempts: 40, kept: 6, reverts: 11, cost_usd: 4.9, ci_minutes: 52 },
-      skills: { candidate: 1, live: 2, retired: 0, last_evaluation: null },
     },
     "sample-c": {
-      anchor_pinned: true,
-      last_run: { status: "done", started: iso(80 * H), attempts: 1, kept: 0, reverts: 1 },
-      totals: { runs: 3, attempts: 5, kept: 2, reverts: 3, cost_usd: 1.1, ci_minutes: 14 },
       latest_report: { integrity: null, generated: iso(70 * H) },
     },
   };
   const empty: PortalNamespace = {
     namespace: "",
-    paused: null,
-    anchor_pinned: false,
-    anchor_problem: null,
-    best: null,
-    last_run: null,
-    totals: { runs: 0, attempts: 0, kept: 0, reverts: 0, cost_usd: 0, ci_minutes: 0 },
     latest_report: null,
     jobs: { queued: 0, claimed: 0, blocked: 0, done_today: 0 },
-    skills: { candidate: 0, live: 0, retired: 0, last_evaluation: null },
     breaker: { open: false, failed: 0, threshold: 3, since: "", reset_at: null },
   };
   const since = new Date(now - 24 * H).toISOString().slice(0, 19).replace("T", " ");
@@ -1085,7 +1038,7 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
     namespaces: f.live.namespaces.map((n) => {
       const js = f.live.jobs.filter((j) => j.namespace === n.name);
       const count = (s: OpsJob["status"]) => js.filter((j) => j.status === s).length;
-      return { ...empty, ...detail[n.name], namespace: n.name, paused: n.paused, breaker: breaker(n.name), jobs: { queued: count("queued"), claimed: count("claimed"), blocked: count("blocked"), done_today: count("done") } };
+      return { ...empty, ...detail[n.name], namespace: n.name, breaker: breaker(n.name), jobs: { queued: count("queued"), claimed: count("claimed"), blocked: count("blocked"), done_today: count("done") } };
     }),
   };
 }
@@ -1106,10 +1059,10 @@ function seedActivity(): PortalActivityRow[] {
     [48, "seat", "jobs.resume", "sample", "sample/jobs/job_91b3c0de5a24.md", "job", d({ reason: "Merged #41 and confirmed the deploy.", fields: [{ name: "Job", value: "job_91b3c0de5a24" }] })],
     [70, ACTOR, "ops-site-edited", "sample-b", null, null, d({ changes: [{ field: "Origin", before: "https://sample-b.example.com", after: "https://www.sample-b.example.com" }, { field: "Health path", before: "none", after: "/health" }, { field: "Revision", before: "3", after: "4" }] })],
     [95, "agent:sample-b-driver", "write", "sample-b", "sample-b/core.md", "document", d({ fields: [{ name: "Mode", value: "overwrite" }], withheld: 1 })],
-    [180, ACTOR, "portal-mode", null, null, null, d({ reason: "Nightly runs are paused while the budget resets.", fields: [{ name: "Mode", value: "off" }] })],
+    [180, ACTOR, "portal-overnight", null, null, null, d({ reason: "Nightly runs are off while the fixture repo is rebuilt.", fields: [{ name: "Mode", value: "off" }] })],
     [240, "agent:reviewer", "read", "sample-c", "sample-c/decisions.md", null, d({})],
     [400, null, "lint.finalize", "sample", "sample/archive/old-note.md", null, d({ unreadable: true })],
-    [720, "agent:sample-c-driver", "improve.run", "sample-c", null, null, d({ fields: [{ name: "Ran", value: "yes" }, { name: "Note", value: "baseline scored" }] })],
+    [720, "agent:sample-c-driver", "write", "sample-c", "sample-c/notes/run-log.md", "document", d({ fields: [{ name: "Mode", value: "append" }] })],
   ];
   return rows.map(([m, actor, action, namespace, path, target, detail], i) => ({ id: 1000 - i, at: new Date(now - m * M).toISOString(), actor, action, namespace, path, target, detail }));
 }
@@ -1321,7 +1274,7 @@ function isoOrNull(value: string | null): string | null {
 
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
-  const st: MockState = { paused: new Map(), breakerReset: new Set(), mode: null, overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], closedPrs: new Set(), tokens: new Map() };
+  const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], closedPrs: new Set(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();

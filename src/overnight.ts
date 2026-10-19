@@ -1,14 +1,13 @@
 import type { Env } from "./env";
-import { IMPROVE_MODES } from "./improve-schema";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
 
 // THE OVERNIGHT RUN SWITCH (capsid/research/design-automation-for-speed.md, D2 and D3, ruled
 // by Dustin 2026-10-04). A scheduled run of the per-namespace drivers on Dustin's own
 // machine, off unless he turns it on, with a "Runs on"
-// choice of API key or subscription. It reuses the improve loop's three values
-// (IMPROVE_MODES: api, subscription, off) and its Portal pattern: a reason on every
-// change, an audit row, and the value read back.
+// choice of API key or subscription. Three values (OVERNIGHT_MODES: api,
+// subscription, off) and the Portal's switch pattern: a reason on every change, an
+// audit row, and the value read back.
 //
 // What the switch is NOT: the way work normally runs. Hand-started VS Code tabs that
 // chain jobs are ordinary use Dustin starts himself; they are the default and this
@@ -21,7 +20,8 @@ import { logEvent } from "./log";
 export const OVERNIGHT_MODE_KEY = "overnight:mode";
 export const OVERNIGHT_DECISION_KEY = "overnight:decision";
 
-export type OvernightMode = (typeof IMPROVE_MODES)[number];
+const OVERNIGHT_MODES = ["api", "subscription", "off"] as const;
+export type OvernightMode = (typeof OVERNIGHT_MODES)[number];
 
 // The ruling, in one place, so the record and the Portal's confirm text say the same
 // thing. The reasoning is Dustin's, from capsid/decisions.md "2026-10-04: overnight runs
@@ -52,7 +52,7 @@ export interface OvernightState {
   decision: OvernightDecision | null;
 }
 
-const isMode = (value: unknown): value is OvernightMode => typeof value === "string" && (IMPROVE_MODES as readonly string[]).includes(value);
+const isMode = (value: unknown): value is OvernightMode => typeof value === "string" && (OVERNIGHT_MODES as readonly string[]).includes(value);
 
 function parseDecision(raw: string | null): OvernightDecision | null {
   if (raw === null) return null;
@@ -100,7 +100,7 @@ export async function overnightState(env: Env): Promise<OvernightState> {
 }
 
 export function overnightValueRefusal(value: string | undefined): string | null {
-  return isMode(value) ? null : `overnight must be one of ${IMPROVE_MODES.join(", ")}; got '${value ?? ""}'.`;
+  return isMode(value) ? null : `overnight must be one of ${OVERNIGHT_MODES.join(", ")}; got '${value ?? ""}'.`;
 }
 
 /** What setting the switch will record, for the confirm step and the audit row. */

@@ -156,12 +156,9 @@ export function movedBeforeFailing(action: string, id: string, current: JobRow |
 //
 // It goes through recordFor, the same function capsid_run_improve action status and the Portal call,
 // so the bar a claim is measured against is the number a human can read on the page.
-// `null` for namespaces because the improve-loop columns play no part in this
-// comparison, and computing them here would attribute a namespace's attempts to
-// whichever credential happened to be asking.
 export async function recordShortfall(db: D1Database, actor: string, job: JobRow): Promise<string | null> {
   if (!job.min_record) return null;
-  return missingForRecord(recordFor(actor, await loadRecordRows(db), null), job.min_record);
+  return missingForRecord(recordFor(actor, await loadRecordRows(db)), job.min_record);
 }
 
 // The corrections budget is a property of the work, not of the row.

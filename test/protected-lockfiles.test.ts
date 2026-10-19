@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { protectedHits } from "../src/improve-schema.ts";
+import { protectedHits } from "../src/protected-paths.ts";
 
 // Lockfiles the scorer installs from. The scorer's install step is package-manager
 // agnostic and installs from whichever lockfile it finds, so a lockfile an attempt can

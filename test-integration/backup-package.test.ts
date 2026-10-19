@@ -28,7 +28,7 @@ describe("the nightly dump on a migrated D1", () => {
 
     const files = result.json_keys.map((k) => k.slice(result.json_prefix.length));
     expect(files.filter((f) => !f.startsWith("_")).sort()).toEqual(TABLES.map((t) => `${t}.json`).sort());
-    expect(files.filter((f) => f.startsWith("_")).sort()).toEqual(["_complete.json", "_holdout-manifests.json", "_kv.json", "_schema.json"]);
+    expect(files.filter((f) => f.startsWith("_")).sort()).toEqual(["_complete.json", "_kv.json", "_schema.json"]);
     expect(files.at(-1)).toBe("_complete.json");
 
     const schema = JSON.parse(await (await env.MEDIA.get(`${result.json_prefix}_schema.json`))!.text()) as {

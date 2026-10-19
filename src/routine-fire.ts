@@ -3,7 +3,7 @@ import type { Agent } from "./agents";
 import { jobDocPath, outsideJobNamespace, startedNotice, type JobRow } from "./jobs-schema";
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { callerIsSeat, guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
-import { verifySignedBody } from "./improve-task";
+import { verifySignedBody } from "./signed-docs";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
 import { redactText } from "./redact";

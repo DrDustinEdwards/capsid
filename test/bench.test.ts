@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { nextSlot, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
 import { createHmac } from "node:crypto";
-import { verifyBenchRequest } from "../src/improve-scorer.ts";
+import { verifyBenchRequest } from "../src/signed-requests.ts";
 
 // The paired comparison's outcome rules (src/bench.ts runOutcome). These decide the
 // paper's primary outcome, the false success claim, so each rule is pinned here; the

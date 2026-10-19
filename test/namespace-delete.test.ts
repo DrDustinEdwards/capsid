@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { anchorKey, bestKey, driverKey, pausedKey } from "../src/improve-schema.ts";
 import {
   deleteRefusals,
   fingerprintDifference,
-  improveKvKeys,
   NAMESPACE_DELETE_MAX_DOCUMENTS,
   planFingerprint,
   signDeleteToken,
@@ -36,16 +34,9 @@ function zeroCounts(): PlanCounts {
     job_outcomes: 0,
     job_claims: 0,
     job_touches: 0,
-    skill_evaluations: 0,
-    skill_failures: 0,
-    improve_runs: 0,
-    improve_attempts: 0,
-    improve_scores: 0,
-    improve_skills: 0,
-    improve_jti: 0,
     agents_live: 0,
     agents_revoked: 0,
-    improve_control_documents: 0,
+    policy_documents: 0,
   };
 }
 
@@ -60,8 +51,7 @@ function plan(over: Partial<DeletePlan> = {}, counts: Partial<PlanCounts> = {}):
     ops_site_revision: null,
     open_jobs: [],
     live_agents: [],
-    improve_control_paths: [],
-    kv_keys: [],
+    policy_paths: [],
     live_paths: [],
     live_paths_sha256: "0".repeat(64),
     ...over,
@@ -126,11 +116,11 @@ test("archived documents alone need no cascade", () => {
   assert.deepEqual(deleteRefusals(plan({}, { documents_archived: 9 }), NONE), []);
 });
 
-test("PLANT: an improve control document needs allow_improve_paths", () => {
-  const p = plan({ improve_control_paths: ["improve/prompts/run.md"] }, { documents_live: 1, improve_control_documents: 1 });
+test("PLANT: a signed policy document needs allow_improve_paths", () => {
+  const p = plan({ policy_paths: ["policy/auto-merge.md"] }, { documents_live: 1, policy_documents: 1 });
   const refusals = deleteRefusals(p, { cascade: true, allowImprovePaths: false });
   assert.equal(refusals.length, 1);
-  assert.match(refusals[0], /improve\/prompts\/run\.md/);
+  assert.match(refusals[0], /policy\/auto-merge\.md/);
   assert.deepEqual(deleteRefusals(p, ALL), []);
 });
 
@@ -146,16 +136,15 @@ test("a refusal names at most twenty and counts the rest", () => {
   assert.match(refusal, /and 5 more/);
 });
 
-test("the fingerprint ignores key order and KV key order, and moves with every count", () => {
-  const a = plan({ kv_keys: ["b", "a"], jobs_by_status: { done: 1, failed: 2 } });
-  const b = plan({ kv_keys: ["a", "b"], jobs_by_status: { failed: 2, done: 1 } });
+test("the fingerprint ignores key order and moves with every count", () => {
+  const a = plan({ jobs_by_status: { done: 1, failed: 2 } });
+  const b = plan({ jobs_by_status: { failed: 2, done: 1 } });
   assert.equal(planFingerprint(a), planFingerprint(b));
   for (const key of Object.keys(zeroCounts()) as Array<keyof PlanCounts>) {
     const moved = plan({}, { [key]: 1 });
     assert.notEqual(planFingerprint(moved), planFingerprint(plan()), `${key} does not move the fingerprint`);
   }
   assert.notEqual(planFingerprint(plan({ ops_site_revision: 2 })), planFingerprint(plan({ ops_site_revision: 3 })));
-  assert.notEqual(planFingerprint(plan({ kv_keys: ["a"] })), planFingerprint(plan()));
   assert.notEqual(planFingerprint(plan({ live_paths_sha256: "1".repeat(64) })), planFingerprint(plan()), "a swapped document would not move the fingerprint");
 });
 
@@ -181,10 +170,6 @@ test("PLANT: one document over the cap is refused whatever cascade says, with th
 test("the difference names what moved", () => {
   const diff = fingerprintDifference(planFingerprint(plan({}, { documents_live: 1 })), planFingerprint(plan({ ops_site_revision: 2 }, { documents_live: 2 })));
   assert.deepEqual(diff, ["counts.documents_live 1 -> 2", "ops_site_revision null -> 2"]);
-});
-
-test("the KV keys are the four per-namespace improve keys, spelled by improve-schema", () => {
-  assert.deepEqual(improveKvKeys("sample"), [bestKey("sample"), pausedKey("sample"), anchorKey("sample"), driverKey("sample")]);
 });
 
 // ---- the token -------------------------------------------------------------------

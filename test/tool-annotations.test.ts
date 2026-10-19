@@ -49,10 +49,10 @@ const DESTRUCTIVE = [
   /\bdeleteBranch\(/,
   /\bmanagePr\(/,
   /\bwriteRepoFile\(/,
-  // The improve loop's two mutating entry points (mode, pause and budget; advancing
-  // a run reverts attempts). Named because the writes happen in another module.
-  /\bimproveControl\(/,
-  /\bimproveRunManual\(/,
+  // The administrator's switches: sign_policy overwrites a policy document and
+  // breaker_reset a namespace's breaker. Named because the writes happen in another module.
+  /\bsignPolicyDocument\(/,
+  /\bresetBreaker\(/,
   // The work queue's mutating entry points; the writes happen in src/jobs.ts.
   /\bclaimJob\(/,
   /\bcompleteJob\(/,
@@ -121,7 +121,7 @@ test("PLANT: the served readOnlyHint is exactly the negation of the write gate",
 });
 
 // The destructive classification comes from the handler source, because the repo,
-// queue, improve and agent tools overwrite through modules this file cannot observe
+// queue, admin and agent tools overwrite through modules this file cannot observe
 // without their own fakes. The hints compared are the served ones. The five document
 // mutators test/write-invariants.test.ts drives are also checked by name below.
 test("PLANT: every mutating tool is served with destructiveHint true", async () => {
@@ -230,14 +230,6 @@ const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence
       { file: "jobs-holder.ts", pattern: /\bverifyEvidence\(/ },
       { file: "job-outcomes.ts", pattern: /\bghFetch\(/ },
       { file: "routine-fire.ts", pattern: /\bfetch\(url\b/ },
-    ],
-  },
-  improve_run: {
-    reason: "run advances open runs, which dispatches workflows and opens pull requests",
-    via: /\bimproveRunManual\(/,
-    evidence: [
-      { file: "improve-run.ts", pattern: /\btickRuns\(/ },
-      { file: "improve/tick.ts", pattern: /\bdispatchWorkflow\(/ },
     ],
   },
   whats_next: {
@@ -351,7 +343,6 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
   capsid_close_pr: { idempotent: false, reason: "a merge or close of a reopened pull request is not a no-op" },
   capsid_run_ci: { idempotent: false, reason: "every call starts a new workflow run" },
   capsid_work_jobs: { idempotent: false, reason: "post creates a job on every call" },
-  capsid_run_improve: { idempotent: false, reason: "run advances runs a step" },
   capsid_admin_manage_namespaces: { idempotent: false, reason: "register creates one on every call it is not refused" },
   capsid_admin_manage_agents: { idempotent: false, reason: "mint issues a new credential on every call" },
   capsid_admin_run_controls: { idempotent: false, reason: "a perform spends its single-use token, so a repeat of the same call is refused rather than repeated" },
@@ -369,7 +360,6 @@ const NEW_EACH_CALL = [
   /\bmanagePr\(/,
   /\bmintAgent\(/,
   /\bpostJob\(/,
-  /\bimproveRunManual\(/,
 ];
 
 // An INSERT into anything but audit_log with no ON CONFLICT, read up to the end of

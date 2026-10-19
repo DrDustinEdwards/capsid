@@ -18,17 +18,12 @@ export interface StopActions {
 }
 
 // Every way to stop something, in one place (capsid/decisions.md 2026-09-30, "admin
-// panels review adopted", item 4): type "stop" or "pause" to find them all. Each is
-// listed only while there is something to stop. There is no "pause all": the Worker
-// refuses it on purpose (src/portal-actions.ts).
+// panels review adopted", item 4): type "stop" to find them all. Each is
+// listed only while there is something to stop.
 export function stopCommands(feed: OpsFeed | null, a: StopActions): Command[] {
   if (!feed) return [];
   const out: Command[] = [];
   if (feed.live.overnight.mode !== "off") out.push({ group: "Stop", text: "Turn the overnight run off", hint: "asks a reason", run: () => a.flip("sw-overnight") });
-  if (feed.live.loop.mode !== "off") out.push({ group: "Stop", text: "Turn the improve loop off", hint: "asks a reason", run: () => a.flip("sw-loop") });
-  for (const n of feed.live.namespaces) {
-    if (n.paused === null) out.push({ group: "Stop", text: `Pause ${n.name}`, hint: "asks a reason", run: () => a.flip(`sw-ns-${n.name}`) });
-  }
   for (const g of feed.live.agents) {
     if (!g.revoked_at) out.push({ group: "Stop", text: `Revoke ${g.name}`, hint: "preview first", run: () => a.confirm({ action: "revoke_agent", params: { name: g.name }, title: `Revoke agent ${g.name}` }) });
   }

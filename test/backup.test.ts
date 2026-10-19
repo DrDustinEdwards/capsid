@@ -96,7 +96,6 @@ test("a healthy run dumps one object per table, keyed by TABLES", async () => {
   const expected = [
     ...TABLES.map((t) => `${result.json_prefix}${t}.json`),
     `${result.json_prefix}_kv.json`,
-    `${result.json_prefix}_holdout-manifests.json`,
     `${result.json_prefix}_schema.json`,
     `${result.json_prefix}_complete.json`,
   ].sort();
@@ -136,8 +135,8 @@ test("an empty documents read refuses the prune, loudly, and deletes nothing", a
   assert.ok(logged.some((line) => line.includes("BACKUP_PREFLIGHT_REFUSED")), logged.join("\n"));
   // The dumps are still written: an export deletes nothing, and an empty dump is
   // the evidence of the day the store looked empty.
-  // Every table, _schema.json and the two sidecars.
-  assert.equal(result.json_keys.length, TABLES.length + 3);
+  // Every table, _schema.json and the KV sidecar.
+  assert.equal(result.json_keys.length, TABLES.length + 2);
   for (const key of result.json_keys) assert.ok(r2.objects.has(key));
   // A refused run is not marked complete, so it takes no slot in the retention floor.
   assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a refused run was marked complete");
@@ -509,12 +508,9 @@ test("a failed part aborts the multipart upload and fails the run", async () => 
   assert.equal(kv.puts.some((p) => p.key === "backup:last-ok"), false, "a failed run stamped itself as fresh");
 });
 
-test("the dump carries the loop's KV pins, by allowlist and never by prefix sweep", async () => {
+test("the dump carries the KV pins, by allowlist and never by prefix sweep", async () => {
   const { env, r2 } = makeEnv({ documents: DOCS }, MIRROR, {
-    improve_mode: "subscription",
-    "improve:budget": '{"actions_minutes_month":300,"model_usd_month":50}',
-    "improve:anchor:capsid": "sha256-of-the-anchor-block",
-    "improve:paused:foxing": "paused by hand",
+    "backup:last-ok": "2026-10-18T02:00:00.000Z",
     // A cached GitHub token lives in the same namespace as the pins and must never
     // reach a dump, which leaves the account.
     "gh:token:DrDustinEdwards": "ghs-not-a-real-token",
@@ -524,33 +520,19 @@ test("the dump carries the loop's KV pins, by allowlist and never by prefix swee
   if (!result.ran) return;
 
   const raw = r2.objects.get(`${result.json_prefix}_kv.json`);
-  assert.ok(raw, "the dump carries no KV pins; the loop's memory is not in the backup");
+  assert.ok(raw, "the dump carries no KV pins");
   const dumped = JSON.parse(raw as string) as { keys: Record<string, string | null> };
-  assert.equal(dumped.keys.improve_mode, "subscription");
-  assert.equal(dumped.keys["improve:anchor:capsid"], "sha256-of-the-anchor-block");
-  assert.equal(dumped.keys["improve:paused:foxing"], "paused by hand");
+  assert.equal(dumped.keys["backup:last-ok"], "2026-10-18T02:00:00.000Z");
   const leaked = Object.keys(dumped.keys).filter((k) => k.startsWith("gh:"));
   assert.deepEqual(leaked, [], "the KV dump swept a prefix and carried a cached credential out of the account");
 });
 
-test("the dump carries the holdout manifests, which are counts and never tests", async () => {
-  const { env, r2 } = makeEnv({ documents: DOCS }, MIRROR);
-  const result = await runBackup(env);
-  assert.equal(result.ran, true);
-  if (!result.ran) return;
-
-  const raw = r2.objects.get(`${result.json_prefix}_holdout-manifests.json`);
-  assert.ok(raw, "the dump carries no holdout manifests; the hidden suites' sizes exist in one place only");
-  const dumped = JSON.parse(raw as string) as { manifests: Record<string, unknown> };
-  assert.equal(dumped.manifests.capsid !== undefined, true, "capsid's manifest is missing from the dump");
-});
-
 test("an unreadable KV pin is recorded as unreadable, not as an unset null", async () => {
-  // A restore that put back a null would clear a mode that existed.
-  const { env, r2, kv } = makeEnv({ documents: DOCS }, MIRROR, { improve_mode: "subscription" });
+  // A restore that put back a null would clear a value that existed.
+  const { env, r2, kv } = makeEnv({ documents: DOCS }, MIRROR, { "backup:last-ok": "2026-10-18T02:00:00.000Z" });
   const get = kv.kv.get.bind(kv.kv);
   (kv.kv as unknown as { get: unknown }).get = async (key: string, ...rest: unknown[]) => {
-    if (key === "improve_mode") throw new Error("KV get timed out");
+    if (key === "backup:last-ok") throw new Error("KV get timed out");
     return (get as (k: string, ...r: unknown[]) => Promise<unknown>)(key, ...rest);
   };
   const result = await runBackup(env);
@@ -558,9 +540,7 @@ test("an unreadable KV pin is recorded as unreadable, not as an unset null", asy
   if (!result.ran) return;
 
   const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}_kv.json`) as string) as { keys: Record<string, unknown> };
-  assert.deepEqual(dumped.keys.improve_mode, { unreadable: "KV get timed out" });
-  // An unset key is still a plain null, so the two cases stay distinguishable.
-  assert.equal(dumped.keys["improve:budget"], null);
+  assert.deepEqual(dumped.keys["backup:last-ok"], { unreadable: "KV get timed out" });
 });
 
 // Seeds one run: every table object, plus the completion marker when `marked`.

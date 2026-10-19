@@ -6,11 +6,9 @@ import { hmacHex, timingSafeEqual } from "./auth";
 import { sourceAddress } from "./portal-auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
-import { improveControl } from "./improve-run";
 import { breakerState, resetBreaker } from "./job-breaker";
 import { addPackage, describePackage, editPackage, readPackageRow, removePackage, validatePackage } from "./ops-packages";
-import { IMPROVE_MODES, onLoopRoster, pausedKey, LOOP_ROSTER } from "./improve-schema";
-import { pausedReason, readMode } from "./improve-state";
+import { APP_ROSTER } from "./roster";
 import { adminFailJob, completeAsCaller, releaseJob, resumeJob } from "./jobs";
 import { parkJob, unparkJob } from "./jobs-park";
 import { MAX_RESUME_NOTE } from "./limits";
@@ -46,9 +44,6 @@ export const TOKEN_TTL_SECONDS = 5 * 60;
 const TOKEN_CONTEXT = "capsid-portal-confirm:v2";
 
 export const PORTAL_ACTIONS: readonly PortalAction[] = [
-  "pause",
-  "unpause",
-  "mode",
   "overnight",
   "resume_job",
   "fail_job",
@@ -82,11 +77,10 @@ export type ActionParams = Record<string, string | undefined>;
 // /portal say console-<action>; a query across that date names both (docs/schema.md).
 const CLICK_AUDIT_PREFIX = "portal-";
 
-// The automation switches (pause, unpause, mode, overnight) take a reason in both
-// directions, and an Undo from the Portal's result message sends the reverse change with
-// undo: "true". Its click row is then `portal-undo-<action>`, so an undo reads as its
+// The automation switch (overnight) takes a reason in both directions, and an Undo
+// from the Portal's result message sends the reverse change with undo: "true". Its click row is then `portal-undo-<action>`, so an undo reads as its
 // own row, never as a fresh decision (ruled 2026-09-30, DECIDE 5).
-const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["pause", "unpause", "mode", "overnight"]);
+const SWITCHES: ReadonlySet<PortalAction> = new Set<PortalAction>(["overnight"]);
 const UNDO_INFIX = "undo-";
 
 // Which front door an action came in by. A click in the Portal and a call to the
@@ -106,12 +100,6 @@ function clickAuditAction(action: PortalAction, params: ActionParams, surface: S
 /** What a switch without a reason is told, at preview and again at perform. */
 function switchReasonRefusal(action: PortalAction): string {
   switch (action) {
-    case "pause":
-      return "pause needs a reason: what you are looking at. The pause has no expiry, and the reason is what whoever unpauses it reads.";
-    case "unpause":
-      return "unpause needs a reason: why the loop may run for this namespace again. It is recorded in the audit row with the change.";
-    case "mode":
-      return "mode needs a reason: why the improve loop changes how it runs. It is recorded in the audit row with the change.";
     case "overnight":
       return "overnight needs a reason: why the overnight run goes on, off, or changes what it runs on. It is recorded in the audit row with the change.";
     default:
@@ -129,12 +117,6 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
   const ns = params.namespace ?? "";
   const id = params.id ?? "";
   switch (action) {
-    case "pause":
-      return `Pause the improve loop for ${ns}. It stays paused until somebody unpauses it: the pause key has no expiry, deliberately.`;
-    case "unpause":
-      return `Unpause ${ns}. The loop will open a run for it on the next opener.`;
-    case "mode":
-      return `Set the improve mode to ${params.value ?? ""} for every namespace.`;
     case "overnight":
       return params.value === "off"
         ? "Turn the overnight run OFF. No scheduled run starts; one already running finishes."
@@ -215,8 +197,7 @@ function shippedEvidence(job: JobRow): { result_ref?: string; prs: string[]; mor
 }
 
 // The click's own audit row, naming the admin and the address the click came from
-// (sourceAddress). The shared mutators' rows do not say who asked (improveControl
-// records a pause as `improve-loop`).
+// (sourceAddress). The shared mutators' rows do not always say who asked.
 async function auditClick(
   env: Env,
   actor: string,
@@ -254,8 +235,7 @@ async function performAction(
   let summary = "";
   // The switches: a reason in both directions, checked again here because the token
   // binds the params and a token signed before this rule could lack one. The reason and
-  // whether this is an Undo go in the click row; the shared mutators for unpause and mode
-  // record no reason, and their contract is left as it is.
+  // whether this is an Undo go in the click row.
   const switchReason = SWITCHES.has(action) ? required(params, "reason") : null;
   if (SWITCHES.has(action) && !switchReason) return { ok: false, refusal: switchReasonRefusal(action) };
   const undo = params.undo === "true";
@@ -263,27 +243,6 @@ async function performAction(
   const switchDetail = (result: object) => ({ ...result, reason: switchReason, ...(undo ? { undo: true } : {}) });
   try {
     switch (action) {
-      case "pause":
-      case "unpause": {
-        const namespace = required(params, "namespace");
-        if (!namespace) return { ok: false, refusal: `${action} needs a namespace.` };
-        const reason = switchReason ?? undefined;
-        // improveControl records the reason in its improve-paused row; unpause takes none.
-        const result = await improveControl(env, action, action === "pause" ? { namespace, reason, actor } : { namespace, actor });
-        committed = true;
-        summary = action === "pause" ? `Paused the improve loop for ${namespace}.` : `Unpaused ${namespace}.`;
-        await auditClick(env, actor, source, surface, action, namespace, switchDetail(result), click);
-        break;
-      }
-      case "mode": {
-        const value = required(params, "value");
-        if (!value) return { ok: false, refusal: "mode needs a value." };
-        const result = await improveControl(env, "mode", { value, actor });
-        committed = true;
-        summary = `Set the improve mode to ${value}.`;
-        await auditClick(env, actor, source, surface, action, null, switchDetail(result), click);
-        break;
-      }
       case "reset_breaker": {
         const namespace = required(params, "namespace");
         if (!namespace) return { ok: false, refusal: "reset_breaker needs a namespace." };
@@ -610,7 +569,6 @@ async function performAction(
       logEvent("error", "PORTAL_ACTION_AUDIT_FAILED", { message: warning });
       return { ok: true, summary, warning };
     }
-    // improveControl throws on a bad value, with a message that says so.
     return { ok: false, refusal: message };
   }
   return { ok: true, summary, warning: null };
@@ -627,9 +585,6 @@ function isPortalAction(value: unknown): value is PortalAction {
 // The params each action takes. Anything else is refused rather than carried into a
 // token nobody reads.
 const FIELDS: Record<PortalAction, readonly string[]> = {
-  pause: ["namespace", "reason", "undo"],
-  unpause: ["namespace", "reason", "undo"],
-  mode: ["value", "reason", "undo"],
   overnight: ["value", "reason", "undo"],
   resume_job: ["id", "reason", "note"],
   release_job: ["id", "reason"],
@@ -732,12 +687,12 @@ function sweepChanges(items: readonly SweepItem[], reason: string | undefined, c
   ];
 }
 
-function rosterRefusal(action: "pause" | "unpause" | "reset_breaker", namespace: string | undefined): string | null {
+function rosterRefusal(action: "reset_breaker", namespace: string | undefined): string | null {
   if (!namespace) return `${action} needs a namespace.`;
   if (namespace === "all") {
-    return `the Portal acts on one namespace at a time, so "all" is refused here. Do each of ${LOOP_ROSTER.join(", ")} in turn.`;
+    return `the Portal acts on one namespace at a time, so "all" is refused here. Do each of ${APP_ROSTER.join(", ")} in turn.`;
   }
-  if (!onLoopRoster(namespace)) return `'${namespace}' is not on the improve roster (${LOOP_ROSTER.join(", ")}).`;
+  if (!(APP_ROSTER as readonly string[]).includes(namespace)) return `'${namespace}' is not on the roster (${APP_ROSTER.join(", ")}).`;
   return null;
 }
 
@@ -748,21 +703,6 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
   const click = `${clickAuditAction(action, p, surface)} by ${actor}`;
   if (p.undo !== undefined && p.undo !== "true") return refused(`${action}'s undo is "true" or absent; got '${p.undo}'.`);
   switch (action) {
-    case "pause": {
-      const bad = rosterRefusal(action, p.namespace);
-      if (bad) return refused(bad);
-      if (!p.reason) return refused(switchReasonRefusal(action));
-      const current = await pausedReason(env.APP_KV, p.namespace);
-      return {
-        ok: true,
-        changes: [
-          current === null
-            ? `${pausedKey(p.namespace)} is set to "${p.reason}", with no expiry. The loop opens no run for ${p.namespace} until it is unpaused.`
-            : `${pausedKey(p.namespace)} already holds "${current}"; it is replaced with "${p.reason}", with no expiry.`,
-        ],
-        audit: [`improve-paused by ${actor}`, click],
-      };
-    }
     case "reset_breaker": {
       const bad = rosterRefusal(action, p.namespace);
       if (bad) return refused(bad);
@@ -775,37 +715,6 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
             : `The breaker for ${p.namespace} is closed (${state.failed} of ${state.threshold} holder fails since ${state.since} UTC). The reset moves its window to now.`,
         ],
         audit: [`job-breaker-reset by ${actor}`, click],
-      };
-    }
-    case "unpause": {
-      const bad = rosterRefusal(action, p.namespace);
-      if (bad) return refused(bad);
-      if (!p.reason) return refused(switchReasonRefusal(action));
-      const current = await pausedReason(env.APP_KV, p.namespace);
-      return {
-        ok: true,
-        changes: [
-          current === null
-            ? `${p.namespace} is not paused: ${pausedKey(p.namespace)} is already absent, so the delete changes nothing.`
-            : `${pausedKey(p.namespace)} ("${current}") is deleted. The next opener may open a run for ${p.namespace}.`,
-        ],
-        audit: [`improve-unpaused by ${actor}`, click],
-      };
-    }
-    case "mode": {
-      if (!p.value || !(IMPROVE_MODES as readonly string[]).includes(p.value)) {
-        return refused(`mode must be one of ${IMPROVE_MODES.join(", ")}; got '${p.value ?? ""}'.`);
-      }
-      if (!p.reason) return refused(switchReasonRefusal(action));
-      const current = await readMode(env.APP_KV);
-      return {
-        ok: true,
-        changes: [
-          current.mode === p.value
-            ? `improve_mode is already ${p.value}; it is written again unchanged.`
-            : `improve_mode: ${current.mode} -> ${p.value}, for every namespace.${current.reason ? ` (It reads ${current.mode} now because ${current.reason}.)` : ""}`,
-        ],
-        audit: [`improve-mode-set by ${actor}`, click],
       };
     }
     case "overnight": {

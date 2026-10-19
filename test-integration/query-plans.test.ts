@@ -16,10 +16,6 @@ const HOT_TABLES = [
   "document_links",
   "document_versions",
   "audit_log",
-  "improve_runs",
-  "improve_attempts",
-  "improve_scores",
-  "improve_skills",
   "improve_jti",
 ];
 

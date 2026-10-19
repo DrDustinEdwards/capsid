@@ -10,7 +10,7 @@
 import { agentActor } from "./agents-schema";
 
 // What this module needs to know about a credential, and no more. Not
-// `AgentSummary` from improve-run.ts: that module builds the summaries and then asks
+// `AgentSummary` from status.ts: that module builds the summaries and then asks
 // for the records, so importing its type here would make the two import each other.
 export interface RecordSubject {
   name: string;
@@ -42,10 +42,6 @@ export interface AgentRecord {
   ci_green_rate: number | null;
   // Whole minutes, median (one job left open over a weekend skews a mean).
   median_duration_minutes: number | null;
-  // Improve-loop attempts, for drivers only; null for other kinds, which only read
-  // the namespace's runs.
-  attempts_kept: number | null;
-  attempts_reverted: number | null;
 }
 
 // The rows the record is computed from. Grouped reads, one per shape, so the query
@@ -64,8 +60,6 @@ export interface RecordRows {
   }>;
   // One row per (claimed_by, status) from jobs.
   jobs: Array<{ actor: string; status: string; n: number }>;
-  // One row per namespace from improve_runs.
-  runs: Array<{ namespace: string; kept: number; reverts: number }>;
 }
 
 function rate(numerator: number, denominator: number): number | null {
@@ -96,7 +90,7 @@ function verifiedFields(json: string): Record<string, boolean> {
   }
 }
 
-export function recordFor(actor: string, rows: RecordRows, namespaces: "*" | string[] | null): AgentRecord {
+export function recordFor(actor: string, rows: RecordRows): AgentRecord {
   const mine = rows.outcomes.filter((o) => o.agent === actor);
   const jobsByStatus = (status: string) =>
     rows.jobs.filter((r) => r.actor === actor && r.status === status).reduce((total, r) => total + r.n, 0);
@@ -113,8 +107,6 @@ export function recordFor(actor: string, rows: RecordRows, namespaces: "*" | str
   const ciChecked = mine.filter((o) => verifiedFields(o.verified).ci_green === true && o.ci_green !== null);
   const durations = mine.map((o) => o.duration_minutes).filter((d): d is number => typeof d === "number");
 
-  const runs = namespaces === null ? [] : rows.runs.filter((r) => namespaces === "*" || namespaces.includes(r.namespace));
-
   return {
     actor,
     // From job statuses, not outcome rows: both done and failed write an outcome.
@@ -129,17 +121,14 @@ export function recordFor(actor: string, rows: RecordRows, namespaces: "*" | str
     ci_checked: ciChecked.length,
     ci_green_rate: rate(ciChecked.filter((o) => o.ci_green === 1).length, ciChecked.length),
     median_duration_minutes: median(durations),
-    attempts_kept: namespaces === null ? null : runs.reduce((total, r) => total + r.kept, 0),
-    attempts_reverted: namespaces === null ? null : runs.reduce((total, r) => total + r.reverts, 0),
   };
 }
 
-// One record per credential. Passing null for namespaces leaves the improve-loop
-// columns null, for every kind but driver.
+// One record per credential.
 export function recordsFrom(agents: RecordSubject[], rows: RecordRows): Record<string, AgentRecord> {
   const out: Record<string, AgentRecord> = Object.create(null);
   for (const agent of agents) {
-    out[agent.name] = recordFor(agentActor(agent.name), rows, agent.kind === "driver" ? agent.namespaces : null);
+    out[agent.name] = recordFor(agentActor(agent.name), rows);
   }
   return out;
 }
@@ -163,13 +152,7 @@ export async function loadRecordRows(db: D1Database): Promise<RecordRows> {
        WHERE claimed_by IS NOT NULL GROUP BY claimed_by, status`
     )
     .all<{ actor: string; status: string; n: number }>();
-  const runs = await db
-    .prepare(
-      `SELECT namespace, COALESCE(SUM(kept),0) AS kept, COALESCE(SUM(reverts),0) AS reverts
-       FROM improve_runs GROUP BY namespace`
-    )
-    .all<{ namespace: string; kept: number; reverts: number }>();
-  return { outcomes: outcomes.results ?? [], jobs: jobs.results ?? [], runs: runs.results ?? [] };
+  return { outcomes: outcomes.results ?? [], jobs: jobs.results ?? [] };
 }
 
 export async function loadAgentRecords(db: D1Database, agents: RecordSubject[]): Promise<Record<string, AgentRecord>> {

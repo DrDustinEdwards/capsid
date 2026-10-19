@@ -44,7 +44,7 @@ Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is 
 
 ## The overnight switch
 
-APP_KV `overnight:mode`: `off` (default), `api` or `subscription`, the improve loop's three values. Set in the Portal's Settings, Automation and namespaces section, Automation panel, **Overnight run**, with its own "Runs on" choice of API or Subscription, or by an admin with `capsid_admin_control_improve` action `overnight`. A reason is required in both directions and recorded in the audit rows (`overnight-set`, `portal-overnight`); an Undo is its own row.
+APP_KV `overnight:mode`: `off` (default), `api` or `subscription`. Set in the Portal's Settings, Automation and namespaces section, Automation panel, **Overnight run**, with its own "Runs on" choice of API or Subscription, or by an admin with `capsid_admin_control_improve` action `overnight`. A reason is required in both directions and recorded in the audit rows (`overnight-set`, `portal-overnight`); an Undo is its own row.
 
 **Choosing the subscription records Dustin's decision.** The switch stores, beside the mode, who decided (Dustin Edwards), the date (2026-10-04), the ruling, the reasoning and who set the switch, when, and why (`overnight:decision`). The Portal's confirm step shows it and the panel shows it after. Leaving the subscription deletes the record, so a later choice records its own date and reason. A subscription mode with no readable record reads as `off`.
 

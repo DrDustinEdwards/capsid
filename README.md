@@ -49,7 +49,7 @@ Agents open pull requests and never merge them. The owner merges, or Capsid merg
 - **One key per agent.** Each agent has its own key and its own limits, and one function, `checkScope`, is the only place a permission is checked.
 - **Nothing is lost.** Every overwrite or delete of a document keeps the old version and writes a line to the audit log.
 - **Daily backups.** Every table is copied to R2 each morning and mirrored to a private repository, and a weekly run practises a restore ([docs/backups.md](docs/backups.md)).
-- **Off by default.** An optional loop that proposes improvements to the code, and automatic merging, each have to be turned on.
+- **Off by default.** Automatic merging and the overnight run each have to be turned on.
 
 The owner also has an admin app, the Capsid Portal, at portal.dustinedwards.info. It shows what needs the owner, the health of each site, the task list, open pull requests and the controls ([docs/portal.md](docs/portal.md)). The pictures below are drawn from sample data, not from the live site.
 
@@ -63,7 +63,7 @@ The owner also has an admin app, the Capsid Portal, at portal.dustinedwards.info
 
 - **Not for many users.** It admits its owner and any co-owners named in `CO_OWNER_EMAILS`. Agents are keys the owner makes, not other people.
 - **Not a hosted service.** Each install is its own Worker on its own Cloudflare account. The one this repository runs is Dustin's.
-- **Not a general agent framework.** It stores memory, issues keys, keeps the task list and passes GitHub requests through its GitHub App. It does not run AI models itself, except in the optional improvement loop.
+- **Not a general agent framework.** It stores memory, issues keys, keeps the task list and passes GitHub requests through its GitHub App. It does not run AI models itself.
 - **Not a replacement for code review.** Agents never merge. Some paths, such as database changes, workflows, lockfiles and login code, always wait for a person. A merge to `master` here is a production deploy.
 - **Not listed in any MCP directory.**
 
@@ -87,8 +87,6 @@ You need a Cloudflare account and a GitHub App. [docs/bootstrap.md](docs/bootstr
 - [docs/routines.md](docs/routines.md) how Capsid starts a cloud session for a task
 - [docs/autonomy.md](docs/autonomy.md) automatic merging and what always waits for a person
 - [docs/overnight.md](docs/overnight.md) the overnight run and the morning summary
-- [docs/improve.md](docs/improve.md) the optional improvement loop and what stops it grading itself
-- [docs/skills.md](docs/skills.md) sharing an idea that worked in one project with the others
 - [docs/bench.md](docs/bench.md) the methods paper's paired comparison and how its runs are scored
 
 ### Watching the sites

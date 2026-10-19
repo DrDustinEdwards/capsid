@@ -209,51 +209,30 @@ test("PLANT: a WRITE-ONLY agent is refused jobs list, which is the grant half", 
   assert.match(result.content[0].text, /requires the read grant/, result.content[0].text);
 });
 
-test("PLANT: a driver is REFUSED the loop's controls: pause is not served to it, and the admin tool is admin only", async () => {
-  // pause stops a namespace, mode switches the whole loop off. Neither is an action of
-  // the driver's capsid_run_improve; both are capsid_admin_control_improve, admin only.
+test("PLANT: a driver is REFUSED the administrator's switches: its status tool serves none, and the admin tool is admin only", async () => {
+  // breaker_reset reopens a namespace's queue and overnight starts unattended sessions.
+  // Neither is an action of the driver's capsid_run_improve; both are
+  // capsid_admin_control_improve, admin only.
   const driverSide = await connect(driver());
-  const asked = (await driverSide.client.callTool({ name: "capsid_run_improve", arguments: { action: "pause", namespace: "capsid" } })) as {
+  const asked = (await driverSide.client.callTool({ name: "capsid_run_improve", arguments: { action: "breaker_reset", namespace: "capsid" } })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
   await driverSide.close();
-  assert.equal(asked.isError, true, "capsid_run_improve served pause");
-  const admin = await connect(driver(), [], buildAdminServer);
-  const result = (await admin.client.callTool({ name: "capsid_admin_control_improve", arguments: { action: "pause", namespace: "capsid" } })) as {
-    content: Array<{ text: string }>;
-  };
-  await admin.close();
-  assert.match(result.content[0].text, /admin only/, result.content[0].text);
-});
-
-test("PLANT: a driver is REFUSED action mode, which switches the whole loop off", async () => {
-  // The namespace is passed because the tool declares one and namespaceRefusal fires
-  // first for a scoped caller that omits it; this plant is about the admin check.
-  const { client, close } = await connect(driver(), [], buildAdminServer);
-  const result = (await client.callTool({ name: "capsid_admin_control_improve", arguments: { action: "mode", value: "off", namespace: "capsid" } })) as {
-    content: Array<{ text: string }>;
-  };
-  await close();
-  assert.match(result.content[0].text, /admin only/, result.content[0].text);
-});
-
-test("THE INNOCENT DIRECTION: a driver may still CLAIM its own lease", async () => {
-  // The lease is the only thing stopping two drivers working one namespace in
-  // subscription mode, which creates no run row for the database index to catch.
-  const { client, close } = await connect(driver());
-  const result = (await client.callTool({ name: "capsid_run_improve", arguments: { action: "claim", namespace: "capsid" } })) as {
-    isError?: boolean;
-    content: Array<{ text: string }>;
-  };
-  await close();
-  assert.doesNotMatch(result.content[0].text, /admin only/, `a driver was refused its own lease: ${result.content[0].text}`);
-  assert.doesNotMatch(result.content[0].text, /unauthorized:/, result.content[0].text);
-  assert.notEqual(result.isError, true, result.content[0].text);
-  const claimed = JSON.parse(result.content[0].text) as { action: string; namespace: string; held: boolean };
-  assert.equal(claimed.action, "claim");
-  assert.equal(claimed.namespace, "capsid");
-  assert.equal(claimed.held, true, "the driver did not get the lease");
+  assert.equal(asked.isError, true, "capsid_run_improve served breaker_reset");
+  for (const args of [
+    { action: "breaker_reset", namespace: "capsid" },
+    { action: "overnight", value: "off", namespace: "capsid" },
+  ]) {
+    // The namespace is passed because the tool declares one and namespaceRefusal fires
+    // first for a scoped caller that omits it; this plant is about the admin check.
+    const admin = await connect(driver(), [], buildAdminServer);
+    const result = (await admin.client.callTool({ name: "capsid_admin_control_improve", arguments: args })) as {
+      content: Array<{ text: string }>;
+    };
+    await admin.close();
+    assert.match(result.content[0].text, /admin only/, `${args.action}: ${result.content[0].text}`);
+  }
 });
 
 // lint gather, the same shape as jobs.list

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { signPolicyDocument } from "../src/policy-sign.ts";
-import { signTaskBody, splitSignedTask, verifySignedBody } from "../src/improve-task.ts";
+import { signTaskBody, splitSignedTask, verifySignedBody } from "../src/signed-docs.ts";
 import {
   loadMergePolicy,
   AUTO_MERGE_POLICY_PATH,
@@ -13,6 +13,7 @@ import {
 } from "../src/auto-merge-policy.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
+import { COMPOSITES } from "../src/tools/surface.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // The one thing that mints policy authority: the counterpart to verifySignedBody. The
@@ -191,10 +192,12 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
 
 test("sign_policy is admin only in the scope table, and the refusal says why", () => {
   // Served as capsid_admin_control_improve action "sign_policy", an admin tool in
-  // TOOL_GRANTS, and enforced by the registrar. The driver's capsid_run_improve does
-  // not list it in TOOL_ACTION_GRANTS, so it takes that tool's admin default there too.
+  // TOOL_GRANTS, and enforced by the registrar. The driver's capsid_run_improve serves
+  // status only, so no driver tool can name sign_policy.
   assert.equal(requiredForAction("capsid_admin_control_improve", "sign_policy"), "admin", "signing a policy must be gated on admin, not on the write grant");
-  assert.equal(requiredForAction("capsid_run_improve", "sign_policy"), "admin", "the driver's improve tool would let a write-grant caller name sign_policy");
+  const runImprove = COMPOSITES.find((c) => c.name === "capsid_run_improve");
+  assert.ok(runImprove, "capsid_run_improve is not served");
+  assert.deepEqual(Object.keys(runImprove.actions), ["status"], "the driver's status tool serves an action beyond status");
   const driver = { ...adminAgentForEmail("admin@example.com"), actor: "agent:capsid-driver", admin: false };
   const refusal = checkScope(driver, {
     tool: "capsid_admin_control_improve",

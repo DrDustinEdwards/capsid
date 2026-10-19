@@ -11,25 +11,20 @@ import type { Env, Props } from "./env";
 import { buildAdminServer, buildServer } from "./server";
 import { ADMIN_MCP_ROUTE, serveMcp } from "./mcp-handler";
 import { gateRegistration, REGISTER_PATH } from "./dcr";
-import { chicagoHour } from "./improve-schema";
-import { openRuns, tickRuns } from "./improve-run";
+import { runTick } from "./tick";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
 import { portalHostRequest } from "./portal-host";
 import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
 import { logEvent } from "./log";
 
-// Spelled once. wrangler.jsonc declares them; test/improve-cron.test.ts derives
-// one list from the other and fails in both directions.
+// Spelled once. wrangler.jsonc declares them; test/crons.test.ts derives one list
+// from the other and fails in both directions.
 export const BACKUP_CRON = "0 9 * * *";
-export const IMPROVE_OPEN_CRON = "0 8,9 * * *";
-export const IMPROVE_TICK_CRON = "*/5 * * * *";
+export const TICK_CRON = "*/5 * * * *";
 // Fires daily; readSchedule decides from KV whether today is the configured day, so
 // the weekly schedule changes without a redeploy.
 export const SKILLS_REFRESH_CRON = "30 9 * * *";
-
-// 03:00 America/Chicago.
-const IMPROVE_OPEN_HOUR_CT = 3;
 
 const apiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -135,11 +130,9 @@ export default {
     const response = await (legacy ? legacyProvider : provider).fetch(forwarded, env, ctx);
     return withSecurityHeaders(withCacheDefault(response, pathname));
   },
-  // Dispatch on controller.cron, not the clock: 09:00 UTC matches three of the
-  // four expressions and Cloudflare delivers once per expression. Open cron is two
-  // UTC hours because 03:00 America/Chicago is 08:00 or 09:00 depending on DST;
-  // chicagoHour() picks the real 03:00. Each branch is its own task so a throwing
-  // tick cannot stop the backup. runTask (src/task-runs.ts) records every run in the
+  // Dispatch on controller.cron, not the clock: 09:00 UTC matches all three
+  // expressions and Cloudflare delivers once per expression. Each branch is its own
+  // task so a throwing tick cannot stop the backup. runTask (src/task-runs.ts) records every run in the
   // run ledger, logs a throw with the tag named here, and rethrows it so the
   // invocation shows as failed.
   scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
@@ -184,43 +177,14 @@ export default {
       );
     }
 
-    if (cron === IMPROVE_OPEN_CRON) {
-      const now = new Date();
-      const hour = chicagoHour(now);
-      if (hour !== IMPROVE_OPEN_HOUR_CT) {
-        // The other of the two UTC hours: not a run, so not recorded.
-        logEvent("log", "IMPROVE_OPEN_SKIPPED", { message: `IMPROVE_OPEN_SKIPPED local hour is ${hour}, not ${IMPROVE_OPEN_HOUR_CT}` });
-      } else {
-        ctx.waitUntil(
-          runTask(
-            env,
-            "improve-open",
-            () => openRuns(env, now),
-            (summary): TaskResult => {
-              const line = `mode=${summary.mode} ${summary.outcomes.map((o) => `${o.namespace}:${o.opened ? "opened" : "skipped"}`).join(" ")}`;
-              logEvent("log", "IMPROVE_OPENED", { message: `IMPROVE_OPENED ${line}` });
-              return { outcome: "ok", reason: line };
-            },
-            { tag: "IMPROVE_OPEN_THREW", rethrow: true }
-          )
-        );
-      }
-    }
-
-    if (cron === IMPROVE_TICK_CRON) {
+    if (cron === TICK_CRON) {
       ctx.waitUntil(
         runTask(
           env,
           "tick",
-          () => tickRuns(env, new Date()),
-          (outcomes): TaskResult => {
-            for (const o of outcomes) {
-              logEvent("log", "IMPROVE_TICK", { message: `IMPROVE_TICK ${o.runId} ${o.from} -> ${o.to}: ${o.note}` });
-            }
-            const moved = outcomes.filter((o) => o.from !== o.to).length;
-            return { outcome: "ok", reason: outcomes.length === 0 ? "no improve run to advance" : `${outcomes.length} improve run(s) looked at, ${moved} moved` };
-          },
-          { tag: "IMPROVE_TICK_THREW", rethrow: true }
+          () => runTick(env, new Date()),
+          (): TaskResult => ({ outcome: "ok", reason: "the tick's steps ran; each records its own run" }),
+          { tag: "TICK_THREW", rethrow: true }
         )
       );
     }

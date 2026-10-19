@@ -15,7 +15,7 @@ import {
   splitStatements,
 } from "../src/gate-policy.ts";
 import { commandFromSummary, RESUME_MARKER } from "../src/jobs.ts";
-import { signTaskBody } from "../src/improve-task.ts";
+import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // The seat may resume a blocked job on the signed gate policy instead of a human

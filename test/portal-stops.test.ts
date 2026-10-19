@@ -7,7 +7,7 @@ import type { OpsFeed } from "../src/ops-types.ts";
 // Every stop in the command menu (dashboard/src/lib/stops.ts; capsid/decisions.md
 // 2026-09-30, "admin panels review adopted", item 4), on the dashboard's sample feed.
 // Each is listed only while there is something to stop, and each runs the control it
-// stands for: a switch on Namespaces, or the confirm dialog.
+// stands for: a switch in Settings' Automation panel, or the confirm dialog.
 const { stopCommands } = await import("../dashboard/src/lib/stops.ts");
 
 const SAMPLE = readFileSync(join(import.meta.dirname, "..", "dashboard", "dev", "sample-feed.json"), "utf8");
@@ -22,32 +22,29 @@ function run(f: OpsFeed) {
   return { list, calls, texts: list.map((c) => c.text) };
 }
 
-test("PLANT: a paused namespace has no Pause, a revoked agent no Revoke, and an off switch no Turn off", () => {
+test("PLANT: a revoked agent has no Revoke, and an off switch no Turn off", () => {
   const f = feed();
-  f.live.loop.mode = "off";
+  f.live.overnight.mode = "off";
   const { texts } = run(f);
-  const paused = f.live.namespaces.filter((n) => n.paused !== null).map((n) => n.name);
   const revoked = f.live.agents.filter((a) => a.revoked_at).map((a) => a.name);
-  assert.ok(paused.length > 0 && revoked.length > 0, "the sample has a paused namespace and a revoked agent");
-  for (const ns of paused) assert.ok(!texts.includes(`Pause ${ns}`), ns);
+  assert.ok(revoked.length > 0, "the sample has a revoked agent");
   for (const name of revoked) assert.ok(!texts.includes(`Revoke ${name}`), name);
-  assert.ok(!texts.includes("Turn the improve loop off"));
+  assert.ok(!texts.includes("Turn the overnight run off"));
 });
 
 test("PLANT: each stop runs its own control: a switch is pressed, a revoke previews", () => {
   const f = feed();
-  f.live.loop.mode = "subscription";
+  f.live.overnight.mode = "subscription";
   const { list, calls } = run(f);
   for (const c of list) c.run();
-  const running = f.live.namespaces.filter((n) => n.paused === null).map((n) => `flip sw-ns-${n.name}`);
   const live = f.live.agents.filter((a) => !a.revoked_at).map((a) => `confirm revoke_agent ${JSON.stringify({ name: a.name })}`);
-  assert.deepEqual(calls, ["flip sw-loop", ...running, ...live]);
+  assert.deepEqual(calls, ["flip sw-overnight", ...live]);
   assert.ok(list.every((c) => c.group === "Stop"));
 });
 
-test("there is no pause-all, which the Worker refuses on purpose", () => {
+test("there is no stop-all", () => {
   const f = feed();
-  f.live.loop.mode = "api";
+  f.live.overnight.mode = "api";
   assert.ok(!run(f).texts.some((t) => /\ball\b/i.test(t)));
 });
 

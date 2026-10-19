@@ -2,8 +2,6 @@ import { COMPLETE_MARKER, dumpDatabase, pruneDumps, writeCompleteMarker, type Du
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./headers";
-import { anchorKey, bestKey, BUDGET_KEY, META_LAST_KEY, MODE_KEY, pausedKey, LOOP_ROSTER } from "./improve-schema";
-import { readHoldoutManifests } from "./improve-scorer";
 import { probeFts } from "./store-probe";
 import { logEvent } from "./log";
 
@@ -77,9 +75,10 @@ export const TABLES = [
   // Nothing prunes the tables below except improve_jti, so a dump is the only copy
   // outside D1. job_outcomes and job_outcome_prs hold counts verified against pull
   // requests GitHub can delete. agents carries the sha256 verifier, never a key, and
-  // a revoked agent keeps its row so the audit trail it wrote still resolves. A
-  // rejected skill_edits row is what stops the optimizer proposing the same edit
-  // again, and skill_failures is prose nothing else holds.
+  // a revoked agent keeps its row so the audit trail it wrote still resolves. The
+  // improve_* and skill_* tables are the removed improve loop's (2026-10-19): nothing
+  // writes them, and they are dumped until a migration drops them, since a dump of a
+  // table the schema holds and this list leaves out is refused.
   "improve_scores",
   "improve_attempts",
   "improve_runs",
@@ -225,16 +224,14 @@ export async function runBackup(env: Env): Promise<BackupResult> {
 // The KV pins, by allowlist and never by prefix sweep. APP_KV also holds the GitHub
 // installation-token cache, and a dump leaves the account, so a prefix sweep would
 // mirror a live credential the first time someone added a key under a prefix nobody
-// re-read. Every key below is a control value a human set, none a secret.
-// backup:lease is absent: it is this run's own bookkeeping.
+// re-read. Every key below is a control value, none a secret. backup:lease is absent:
+// it is this run's own bookkeeping.
 function kvPinKeys(): string[] {
-  const keys = [MODE_KEY, BUDGET_KEY, META_LAST_KEY, BACKUP_LAST_OK_KEY];
-  for (const namespace of LOOP_ROSTER) keys.push(bestKey(namespace), pausedKey(namespace), anchorKey(namespace));
-  return keys;
+  return [BACKUP_LAST_OK_KEY];
 }
 
 // null means the key was unset. An unreadable key is { unreadable: reason }, because
-// restoring a null for it would clear a mode or a pause that existed.
+// restoring a null for it would clear a value that existed.
 type KvPin = string | null | { unreadable: string };
 
 async function readKvPins(env: Env): Promise<Record<string, KvPin>> {
@@ -252,7 +249,7 @@ async function readKvPins(env: Env): Promise<Record<string, KvPin>> {
 
 type DocRow = { namespace: string; path: string; body: string | null };
 
-// Writes one JSON object per table, _schema.json and the two sidecars under one run
+// Writes one JSON object per table, _schema.json and the KV sidecar under one run
 // prefix, WITHOUT the completion marker, which exportAndPrune writes only once the
 // preflight passes. Returns the documents rows as dumped, which the preflight and the
 // markdown mirror both read, and any difference between the tables dumped and TABLES.
@@ -262,10 +259,8 @@ type DocRow = { namespace: string; path: string; body: string | null };
 // invariants script (scripts/dump-invariants.mjs) checks for the signature a torn read
 // leaves.
 //
-// The two sidecars, underscore-prefixed so they cannot collide with a table name, are
-// not in D1. Without them a restored improve loop has no mode, pins, pauses, best
-// commits or holdout manifests, so every namespace scores as "no manifest" and every
-// run refuses.
+// The sidecar, underscore-prefixed so it cannot collide with a table name, holds the
+// KV pins, which are not in D1.
 async function exportDump(env: Env, now: string): Promise<{ dump: DumpResult; docs: DocRow[]; tablesMismatch: string | null }> {
   const dump = await dumpDatabase(env.DB, env.MEDIA, {
     prefix: JSON_PREFIX,
@@ -274,7 +269,6 @@ async function exportDump(env: Env, now: string): Promise<{ dump: DumpResult; do
     exclude: EXCLUDED,
     sidecars: {
       kv: { keys: await readKvPins(env) },
-      "holdout-manifests": { manifests: await readHoldoutManifests(env) },
     },
     markComplete: false,
   });

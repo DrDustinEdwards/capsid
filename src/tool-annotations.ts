@@ -66,9 +66,8 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // complete, fail and block overwrite result_summary and move a job out of claimed;
   // post and record create a job each call; evidence is checked against GitHub.
   capsid_work_jobs: destructive({ idempotent: false, openWorld: true }),
-  // run advances every open run a step and can dispatch a workflow or open a pull
-  // request; claim takes or releases a lease.
-  capsid_run_improve: destructive({ idempotent: false, openWorld: true }),
+  // Status only: Capsid's state from this Worker's own stores.
+  capsid_run_improve: read({ idempotent: true, openWorld: false }),
 
   // ---- Capsid Admin (8)
   // Reads the queue, the Portal's stored state and GitHub's open pull requests.
@@ -86,9 +85,10 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // perform can revoke an agent, fail a job or remove a site, and a confirmed token is
   // spent, so a repeat is refused rather than repeated. Only this Worker's own stores.
   capsid_admin_run_controls: destructive({ idempotent: false, openWorld: false }),
-  // mode, pause and budget overwrite the loop's settings; mint_operator_key issues a
-  // key each call.
-  capsid_admin_control_improve: destructive({ idempotent: false, openWorld: true }),
+  // sign_policy overwrites a policy document (snapshotted), breaker_reset and overnight
+  // overwrite their switches, and mint_operator_key issues a key each call. Only this
+  // Worker's own stores.
+  capsid_admin_control_improve: destructive({ idempotent: false, openWorld: false }),
   // Replaces a site's key on the site Worker and on Carrel through the Cloudflare API.
   capsid_admin_set_site_key: destructive({ idempotent: false, openWorld: true }),
 };

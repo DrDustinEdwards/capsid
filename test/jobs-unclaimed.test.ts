@@ -4,7 +4,7 @@ import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { beginJob, completeAsCaller, listJobs } from "../src/jobs.ts";
 import { opsJobFrom, type JobFeedRow } from "../src/ops-feed.ts";
-import { signTaskBody } from "../src/improve-task.ts";
+import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The pull request is the claim (job_e68de044f8a4; Dustin, 2026-10-10, plan step 2).

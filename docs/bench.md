@@ -4,7 +4,7 @@ The methods paper compares Claude Code used well with the same model working thr
 
 ## The three endpoints
 
-All three are signed like the improve scorer's endpoints: `X-Bench-Timestamp` and `X-Bench-Signature`, an HMAC over `timestamp.body` with the bench key, a 30-minute window either side, and a `jti` in the body that is accepted once. The bench key is its own Worker secret, `BENCH_SECRET`, used as is and not derived from `IMPROVE_SCORE_SECRET`, so no improve or backup key opens these endpoints and rotating it touches nothing else. Unset, every bench request is refused with 503. Set the same fresh value on both sides at once, so it never sits in a file or a chat:
+All three are signed like the backup credential endpoint: `X-Bench-Timestamp` and `X-Bench-Signature`, an HMAC over `timestamp.body` with the bench key, a 30-minute window either side, and a `jti` in the body that is accepted once. The bench key is its own Worker secret, `BENCH_SECRET`, used as is and not derived from `IMPROVE_SCORE_SECRET`, so no backup or job-signing key opens these endpoints and rotating it touches nothing else. Unset, every bench request is refused with 503. Set the same fresh value on both sides at once, so it never sits in a file or a chat:
 
 ```
 $k = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"

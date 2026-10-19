@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail } from "../src/agents";
-import { improveStatus } from "../src/improve-run";
+import { capsidStatus } from "../src/status";
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY, setOvernight } from "../src/overnight";
 import { readOvernightDigest, readOvernightPlan } from "../src/overnight-plan";
 import { buildServer } from "../src/server";
@@ -159,15 +159,15 @@ describe("the overnight switch on a real KV", () => {
   it("setOvernight stores the mode and the decision, improve_status reports them, and leaving the subscription removes the record", async () => {
     await env.APP_KV.delete(OVERNIGHT_MODE_KEY);
     await env.APP_KV.delete(OVERNIGHT_DECISION_KEY);
-    expect((await improveStatus(env as never, "capsid")).overnight).toEqual({ mode: "off", decision: null });
+    expect((await capsidStatus(env as never, "capsid")).overnight).toEqual({ mode: "off", decision: null });
     const set = await setOvernight(env as never, "access:admin@example.com", NOW, { value: "subscription", reason: "first supervised night" });
     expect(set.mode).toBe("subscription");
-    const status = await improveStatus(env as never, "capsid");
+    const status = await capsidStatus(env as never, "capsid");
     expect(status.overnight.mode).toBe("subscription");
     expect(status.overnight.decision?.decided_on).toBe("2026-10-04");
     expect(status.overnight.decision?.reason).toBe("first supervised night");
     await setOvernight(env as never, "access:admin@example.com", NOW, { value: "off", reason: "done" });
     expect(await env.APP_KV.get(OVERNIGHT_DECISION_KEY)).toBeNull();
-    expect((await improveStatus(env as never, "capsid")).overnight).toEqual({ mode: "off", decision: null });
+    expect((await capsidStatus(env as never, "capsid")).overnight).toEqual({ mode: "off", decision: null });
   });
 });

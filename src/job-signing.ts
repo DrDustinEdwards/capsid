@@ -1,5 +1,5 @@
 import { hmacHex, timingSafeEqual } from "./auth";
-import { deriveTaskKey } from "./improve-task";
+import { deriveTaskKey } from "./signed-docs";
 
 // Signed resume notes and block commands (job_9e602b31888f item 4, OWASP ASI07).
 //

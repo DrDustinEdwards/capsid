@@ -42,29 +42,24 @@
   // exports the same number and test/cloudflare-platform.test.ts fails if they
   // drift; that test also asserts the floor, so shrinking this is a build failure.
   "limits": { "cpu_ms": 3500 },
-  // FOUR CRONS. src/index.ts dispatches on which one fired and exports the same
-  // four strings; test/improve-cron.test.ts derives one list from the other and
-  // fails in both directions, so this config and the handler cannot drift. That
-  // test also derives the two counts in this comment from the array below, because
-  // this said THREE for as long as the fourth cron has existed.
+  // THREE CRONS. src/index.ts dispatches on which one fired and exports the same
+  // three strings; test/crons.test.ts derives one list from the other and fails in
+  // both directions, so this config and the handler cannot drift.
   //   "0 9 * * *"    the daily backup.
-  //   "0 8,9 * * *"  the improve opener. Two UTC hours because cron expressions
-  //                  are UTC only and 03:00 America/Chicago is 08:00 UTC in CDT
-  //                  and 09:00 in CST. chicagoHour() picks the real one, so the
-  //                  run opens once a night year round.
-  //   "*/5 * * * *"  the improve tick, advancing any run that is not finished.
+  //   "*/5 * * * *"  the tick: auto-merge, the watcher, maintenance and the rest of
+  //                  src/tick.ts.
   //   "30 9 * * *"   the weekly skills refresh. Fires DAILY and readSchedule in
   //                  src/skills-refresh.ts decides whether today is the
   //                  configured day, so the day is a KV edit not a redeploy.
-  "triggers": { "crons": ["0 9 * * *", "0 8,9 * * *", "*/5 * * * *", "30 9 * * *"] },
+  "triggers": { "crons": ["0 9 * * *", "*/5 * * * *", "30 9 * * *"] },
   // CAPSID PORTAL (dashboard/, built to dashboard/dist by scripts/deploy.mjs).
   // run_worker_first is REQUIRED, not a preference: with it off, the platform's
   // navigation handling could answer a browser's /authorize or /portal/callback with
   // index.html and break both logins. Every request reaches the Worker, which serves an
   // asset only under /portal/ and only after the Portal gate. not_found_handling
   // is "none" because the Worker does the single-page fallback itself, after the gate.
-  // scripts/dry-run-config.mjs removes this block (between the two markers) for the
-  // scorer's bundle-size dry run, which builds no dashboard.
+  // scripts/dry-run-config.mjs removes this block (between the two markers) for
+  // `npm run types`, which builds no dashboard.
   // ASSETS-BEGIN
   "assets": { "directory": "./dashboard/dist", "binding": "ASSETS", "run_worker_first": true, "not_found_handling": "none" },
   // ASSETS-END
@@ -72,9 +67,8 @@
   // with `wrangler secret put` and never committed. The installation id is not
   // configured at all: it is resolved per owner and repo at run time.
   //   wrangler secret put GITHUB_APP_PRIVATE_KEY       (paste the .pem contents)
-  //   wrangler secret put ANTHROPIC_API_KEY            (improve_mode "api" only)
-  //   wrangler secret put IMPROVE_SCORE_SECRET         (root of the per-namespace
-  //                                                     score-report HMAC keys)
+  //   wrangler secret put IMPROVE_SCORE_SECRET         (root of the job, policy and
+  //                                                     backup credential HMAC keys)
   //   wrangler secret put CF_ACCESS_SYNC_TOKEN         (POST /ops/access-sync only:
   //                                                     Access: Groups Write, Access: Users
   //                                                     Read, Zero Trust: Seats Write)
@@ -110,19 +104,11 @@
       "id": "YOUR_OAUTH_KV_ID"
     }
   ],
-  // TWO BUCKETS. MEDIA holds backups, the markdown mirror and the CSP report
-  // sink. HOLDOUT holds the improve loop's hidden test suites and is bound
-  // separately so that attempt-generating code can be handed an environment that
-  // structurally lacks it (src/env.ts, AttemptEnv). Only src/improve-scorer.ts may
-  // name it; test/improve-holdout.test.ts enforces that.
+  // MEDIA holds backups, the markdown mirror and the CSP report sink.
   "r2_buckets": [
     {
       "binding": "MEDIA",
       "bucket_name": "YOUR_R2_BUCKET"
-    },
-    {
-      "binding": "HOLDOUT",
-      "bucket_name": "YOUR_HOLDOUT_R2_BUCKET"
     }
   ],
   // THE MEANING INDEX. Cloudflare AI Search, namespace-scoped, so the Worker creates

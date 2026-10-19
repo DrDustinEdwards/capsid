@@ -2,7 +2,7 @@ import { COMPLETE_MARKER, DEFAULT_RETENTION } from "@dustinedwards/d1-dump";
 import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
-import { LOOP_ROSTER } from "./improve-schema";
+import { APP_ROSTER } from "./roster";
 import { logEvent } from "./log";
 import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types";
 
@@ -313,10 +313,10 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
   }
   const repos: TrendCiRepo[] = [];
   const notRead: Array<{ namespace: string; error: string }> = [];
-  const settled = await Promise.allSettled(LOOP_ROSTER.map((namespace) => readCiRepo(env, namespace, days)));
+  const settled = await Promise.allSettled(APP_ROSTER.map((namespace) => readCiRepo(env, namespace, days)));
   settled.forEach((r, i) => {
     if (r.status === "fulfilled") repos.push(r.value);
-    else notRead.push({ namespace: LOOP_ROSTER[i]!, error: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+    else notRead.push({ namespace: APP_ROSTER[i]!, error: r.reason instanceof Error ? r.reason.message : String(r.reason) });
   });
   const out: PortalTrends["ci"] = { read_at: now.toISOString(), repos, not_read: notRead };
   // Only a full read is kept, so a GitHub outage is retried on the next look, not for an hour.

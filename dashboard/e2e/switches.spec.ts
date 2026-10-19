@@ -10,8 +10,6 @@ import { visit } from "./views.ts";
 const PREVIEW_URL = "**/portal/api/actions/preview";
 
 const seat = (page: Page) => page.getByRole("switch", { name: "Overnight run", exact: true });
-const loop = (page: Page) => page.getByRole("switch", { name: "Improve loop", exact: true });
-const nsSwitch = (page: Page, ns: string) => page.getByRole("switch", { name: `Improve loop for ${ns}`, exact: true });
 const message = (page: Page) => page.locator(".msg-region");
 
 async function newestActivity(page: Page): Promise<string> {
@@ -103,65 +101,15 @@ test("PLANT: a refusal from the Worker is shown beside the switch in plain words
   await expect(message(page)).toHaveText("");
 });
 
-test("a namespace's switch reads On while running and Off when paused, with the reason beside it; there is no Pause button", async ({ page }) => {
-  await visit(page, "namespaces");
-  const row = page.locator("tr[data-row]").filter({ has: nsSwitch(page, "sample-d") });
-  await expect(row.getByRole("button", { name: /^(Pause|Unpause)$/ })).toHaveCount(0);
-  await expect(nsSwitch(page, "sample-d")).toHaveAttribute("aria-checked", "true");
-  await nsSwitch(page, "sample-d").click();
-  await page.getByLabel("Pausing sample-d. Reason:").fill("looking at a regression");
-  await page.keyboard.press("Enter");
-  await expect(nsSwitch(page, "sample-d")).toHaveAttribute("aria-checked", "false");
-  await expect(row).toContainText("Paused: looking at a regression");
-  expect(await newestActivity(page)).toBe("portal.pause");
-  await message(page).getByRole("button", { name: "Undo" }).click();
-  await expect(nsSwitch(page, "sample-d")).toHaveAttribute("aria-checked", "true");
-  expect(await newestActivity(page)).toBe("portal.undo-unpause");
-});
-
-test("the improve loop turns on with the chosen Runs on, and Runs on while it is on asks a reason too", async ({ page }) => {
-  await visit(page, "namespaces");
-  await expect(loop(page)).toHaveAttribute("aria-checked", "false");
-  // While off, the choice is only held: nothing is sent.
-  // The radios are drawn as a segmented control; a click lands on the label.
-  await page.locator('label[for="runs-on-api"]').click();
-  // Scoped by id: the overnight run has its own Runs on group with the same two names.
-  await expect(page.locator("#runs-on-api")).toBeChecked();
-  await loop(page).click();
-  await page.getByLabel("Turning the improve loop on, on API. Reason:").fill("try the API run");
-  await page.keyboard.press("Enter");
-  await expect(loop(page)).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByText("Running on API.")).toBeVisible();
-
-  // A change of Runs on while the loop is on is a change of mode: a reason first.
-  await page.locator('label[for="runs-on-subscription"]').click();
-  const field = page.getByLabel("Changing the improve loop to run on Subscription. Reason:");
-  await expect(field).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(field).toHaveCount(0);
-  await expect(page.locator("#runs-on-api")).toBeChecked();
-
-  // Leave it as found: off.
-  await loop(page).click();
-  await page.getByLabel("Turning the improve loop off. Reason:").fill("leave the fixture as it was");
-  await page.keyboard.press("Enter");
-  await expect(loop(page)).toHaveAttribute("aria-checked", "false");
-});
-
-test("Queue and Agents have no automation control of their own, and Agents links to Settings' automation section", async ({ page }) => {
+test("Queue and Agents have no automation control of their own", async ({ page }) => {
   await visit(page, "queue");
   await expect(page.getByRole("button", { name: /^Turn (on|off)$/ })).toHaveCount(0);
   await visit(page, "agents");
   // The header's theme button is "Switch to dark theme"; only the page is checked.
   await expect(page.locator("main").getByRole("button", { name: /^(Switch to|Turn off)/ })).toHaveCount(0);
-  await page.getByRole("link", { name: "Change it in Settings" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
-  await expect(page).toHaveURL(/\/settings#automation$/);
-  await expect(page.getByRole("heading", { level: 2, name: "Automation and namespaces" })).toBeVisible();
 });
 
-// The overnight run's switch (docs/overnight.md): the same pattern with its own "Runs on"
-// choice. Choosing the subscription records Dustin's decision with the switch, and the
+// The overnight run's switch (docs/overnight.md), with its "Runs on" choice. Choosing the subscription records Dustin's decision with the switch, and the
 // panel shows it. Undone at the end, so later specs read the fixture as it was.
 
 const overnight = (page: Page) => page.getByRole("switch", { name: "Overnight run", exact: true });

@@ -1,7 +1,6 @@
 # Bootstrap
 
-What it takes to stand this up, and what to check before switching the nightly
-loop on. Written for a stranger with a Cloudflare account and a GitHub org.
+What it takes to stand this up, and what to check before a push. Written for a stranger with a Cloudflare account and a GitHub org.
 
 ## 1. Configuration
 
@@ -20,19 +19,17 @@ bindings. Only `wrangler dev` and `wrangler deploy` need the real file.
 
 | binding | kind | why it is separate |
 | --- | --- | --- |
-| `DB` | D1 | documents, versions, links, audit log, the loop's tables |
+| `DB` | D1 | documents, versions, links, audit log, jobs, agents |
 | `APP_KV` | KV | the Worker's own bookkeeping: caches, counters |
 | `OAUTH_KV` | KV | the OAuth provider's clients, grants and tokens |
 | `MEDIA` | R2 | backups, the markdown mirror, the report sink |
-| `HOLDOUT` | R2 | the loop's hidden test suites |
 
 The two KV namespaces are separate. They shared one for a while,
 which meant the Worker's caches lived in the same keyspace as the provider's
 tokens.
 
-The two buckets are separate too. The code that generates loop attempts is handed
-an environment type that structurally omits `HOLDOUT`, so it cannot read the hidden
-tests. Merging the buckets would delete that guarantee.
+The improve loop's `HOLDOUT` bucket went with the loop (removed 2026-10-19), so
+`MEDIA` is the one bucket.
 
 Resolve by name, verify by id. Assert the resolved id equals a pinned value
 rather than trusting the name. A name is not an identity. A Worker pointed at
@@ -49,8 +46,7 @@ npx wrangler secret put ADMIN_EMAIL              # the primary owner's email, ad
 npx wrangler secret put CO_OWNER_EMAILS          # optional: co-owners, comma separated, admitted like ADMIN_EMAIL (docs/auth.md, "Co-owner")
 npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; signs the login state and the Portal cookie and confirm tokens
 npx wrangler secret put OPERATOR_KEY_HASH        # see below
-npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the per-project HMAC keys
-npx wrangler secret put ANTHROPIC_API_KEY        # only for the fully automated mode
+npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the job, policy and backup credential HMAC keys
 ```
 
 Never commit one, and never read, display or log the contents of an env file.
@@ -90,7 +86,7 @@ nobody has checked.
 | Metadata | Read | resolving the default branch, every other call | implied by every working call |
 | Contents | Read and write | reading files and trees, committing, branches, deleting files | exercised continuously since 2026-07-06 |
 | Pull requests | Read and write | opening, merging and closing pull requests | exercised continuously |
-| Actions | Read and write | reading workflow runs and logs; dispatching a workflow and re-running failed jobs | read confirmed 2026-08-16; dispatch is what the loop uses to score |
+| Actions | Read and write | reading workflow runs and logs; dispatching a workflow and re-running failed jobs | read confirmed 2026-08-16; dispatch is what `capsid_run_ci` uses |
 | Workflows | Write | committing under `.github/workflows/` | confirmed by probe 2026-09-07: a pull request authoring a workflow file succeeded, and was closed immediately |
 
 The App can author workflows in
@@ -330,7 +326,7 @@ and needs replacing, and re-minting the set is not available then. An
 unknown namespace is refused and the refusal lists the known ones, because
 "minted 0 agents" and "minted the one you meant" are the same output to anybody
 not counting. `test/mint-agents.test.ts` derives the driver list from
-`src/improve-schema.ts`, so a sixth roster project fails the suite rather than
+`APP_ROSTER` in `src/roster.ts`, so a sixth roster project fails the suite rather than
 quietly having no driver agent and no key file.
 
 The six, as calls:
@@ -359,74 +355,14 @@ the work needs. The claim refuses a driver that does not hold those flags and
 leaves the job queued for one that does, so the mismatch surfaces at the claim
 rather than after a driver has already taken it.
 
-## 9. The loop on/off checklist
+## 9. The improve loop (removed)
 
-The nightly loop is off by default and stays off until every line here is true.
-Each item exists because of something that went wrong when it was not checked.
-
-### Before switching it on
-
-- [ ] **A scores document exists for every project on the roster**, with an
-      Anchors section and a Secondary section. A project without one is refused;
-      there is no opt-in by existing.
-- [ ] **Every anchor block is pinned.** `capsid_run_improve` action `status` reports `anchor_pinned`
-      per project. An unpinned project refuses every run.
-- [ ] **Every declared secondary metric is one something actually reports.** Two
-      were declared everywhere and emitted as null on every run for weeks.
-- [ ] **A hidden suite and its manifest are uploaded for every project**, and the
-      suite has been measured passing against the current default branch. A suite
-      that does not already pass reverts every attempt forever.
-- [ ] **The manifest total matches the real case count.** A report claiming fewer
-      tests than the manifest declares is refused, which is the defence against
-      shrinking the suite rather than passing it.
-- [ ] **The signing secret is set**, and each repository holds its own derived
-      per-project key as a repository secret. A key leaking from one repository
-      must not verify for another.
-- [ ] **The scoring workflow is byte-identical across every repository** except
-      the per-repository build job. Verify by hashing the shared section, not by
-      reading it.
-- [ ] **A shakedown dispatch has been run and answered.** Dispatch the scorer with
-      the literal run id `shakedown`: the expected terminal answer is a refusal of
-      the unknown run, which proves the signature verified end to end.
-- [ ] **The budget caps are set** for CI minutes and model spend, and
-      `capsid_run_improve` action `status` shows them.
-- [ ] **No project is paused for a reason nobody has read.** A pause key has no
-      expiry on purpose.
-
-### Switching it on
-
-```
-capsid_admin_control_improve(action: "mode", value: "subscription")   # a human session drives it
-capsid_admin_control_improve(action: "mode", value: "api")            # the Worker drives it
-```
-
-Start with the human-driven mode. It does everything except talk to a model: it
-reads the scores, verifies the pin, picks the base commit and writes a signed task
-document. Nothing is spent, and the signed task document is there to read.
-
-### Switching it off
-
-```
-capsid_admin_control_improve(action: "mode", value: "off")
-capsid_admin_control_improve(action: "pause", namespace: "all", reason: "why")
-```
-
-`off` is also what an unset key, an unrecognised value or an unreadable store
-mean. That default matters: without it, an unreadable configuration store
-starts writing to every repository on the roster.
-
-### After the first night
-
-- [ ] Read the run summary and every attempt archive. They are written before
-      the score arrives, so an attempt that was never scored still left a record.
-- [ ] Check the audit log for the loop's actor. One query answers what it did.
-- [ ] Look at the pull request. A loop attempt is never merged automatically:
-      the auto-merge policy merges only a pull request whose body names a job
-      that a driver agent claimed, and the loop's pull request names its run,
-      not a job, so `body_names_job` refuses it.
-      That is the human gate. What the Worker may merge alone is
-      `docs/policy/auto-merge.md`, and every merge it makes names the policy
-      version and every check that passed in the audit log.
+The nightly improve loop, its scorer, holdout suites and switches were removed on
+2026-10-19. Two tools keep the loop's names so agents' tool lists did not change:
+`capsid_run_improve` serves only action `status`, a read-grant read of Capsid's state,
+and `capsid_admin_control_improve` holds the admin's switches (`mint_operator_key`,
+`sign_policy`, `breaker_reset` and `overnight`). `IMPROVE_SCORE_SECRET` keeps its name
+too; it is the root the job, policy and backup credential keys are derived from.
 
 ## 10. A fresh install, step by step
 
@@ -440,7 +376,6 @@ The sections above explain each part. This is the order to do them in. The host 
    npx wrangler kv namespace create APP_KV
    npx wrangler kv namespace create OAUTH_KV
    npx wrangler r2 bucket create capsid-media
-   npx wrangler r2 bucket create capsid-improve-holdout   # only if you run the self-improvement loop
    ```
 
 3. Copy `wrangler.jsonc.example` to `wrangler.jsonc` and fill in the ids from step 2. **`APP_KV` and `OAUTH_KV` must be different namespace ids.** The real `wrangler.jsonc` is gitignored. Never commit it.
@@ -451,8 +386,8 @@ The sections above explain each part. This is the order to do them in. The host 
    - Scopes openid, email and profile, PKCE on, and a policy that allows your email only (and any co-owner's).
    - Then set the secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL` and `COOKIE_ENCRYPTION_KEY` (section 3).
 7. Create the GitHub App (section 4), install it on the repositories you want reachable, note its Client ID, generate a private key (`.pem`), put the Client ID in `wrangler.jsonc` vars as `GITHUB_APP_CLIENT_ID` and set `GITHUB_APP_PRIVATE_KEY`. Only the private key mints installation tokens; the App client secret is not needed. The installation id is not configured: it resolves from GitHub per owner and repo and is cached for a day, because one pinned id cannot be correct for two owners.
-8. Optional, for the self-improvement loop: `IMPROVE_SCORE_SECRET` (the root of the per-repo score-report keys) and, for `api` mode, `ANTHROPIC_API_KEY`. The loop stays off until `improve_mode` is set. `IMPROVE_SCORE_SECRET` also signs jobs: without it the work queue refuses to post one.
-9. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"); `CF_ACCESS_SYNC_TOKEN` (`POST /ops/access-sync`); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the holdout and the backup mirror.
+8. `IMPROVE_SCORE_SECRET`, the root the job-signing, policy-signing and backup credential keys are derived from. Without it the work queue refuses to post a job and no signed policy loads.
+9. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"); `CF_ACCESS_SYNC_TOKEN` (`POST /ops/access-sync`); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the backup mirror.
 10. Type check and deploy with `npm run check` and `npm run deploy`. Deploy builds the Portal first and stops if the build or its size budget fails.
 11. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://capsid.<your-subdomain>.workers.dev/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity and any `CO_OWNER_EMAILS` identity get in (docs/auth.md). To test the flow first, run `npx @modelcontextprotocol/inspector`, set the transport to Streamable HTTP, set the URL to the same address, open the Auth tab and run Quick OAuth Flow.
 
@@ -463,16 +398,15 @@ Optional parts stay hidden or inert until configured:
 - With no row in `ops_sites` that has an origin, nothing is probed and Health shows no Sites section.
 - Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured.
 - The telemetry receiver (`/ops/otlp/v1/*`, docs/telemetry.md) and the hook receiver (`/ops/hooks`, docs/hooks.md) are live but store nothing until a Claude Code session is configured to send to them with a key.
-- The improve loop and auto-merge are each off by default (section 11).
+- Auto-merge is off by default (section 11).
 
 ## 11. Switches
 
-Two switches, all off by default. Each is turned on separately.
+One switch, off by default.
 
-- **The improve loop** runs only when `improve_mode` in `APP_KV` is `subscription` or `api`, set by `capsid_admin_control_improve` action `mode`. Anything unreadable or unexpected falls back to `off`.
 - **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_control_improve` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
 
-Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16; the loop is still off.
+Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16.
 
 ## 12. Checks before a push
 

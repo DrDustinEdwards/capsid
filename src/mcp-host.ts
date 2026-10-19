@@ -3,8 +3,8 @@
 // https://mcp.dustinedwards.info, a Custom Domain on this Worker.
 //
 // That host serves the machine surface and nothing else: the MCP endpoints, the OAuth
-// flow that authorizes them, the /ops routes keys and runners call, the scorer's signed
-// endpoints, /health and the CSP report sink. Any other path there is the plain 404, so
+// flow that authorizes them, the /ops routes keys and runners call, the signed backup
+// and bench endpoints, /health and the CSP report sink. Any other path there is the plain 404, so
 // the host never answers with the Portal or a page; the Portal has its own host
 // (src/portal-host.ts). It runs first in the Worker's fetch, with the Portal's rewrite,
 // before the OAuth provider (the lesson of #226).
@@ -31,8 +31,6 @@ const MCP_HOST_PATHS = new Set([
   "/register",
   "/health",
   "/csp-report",
-  "/improve/score",
-  "/improve/holdout-credential",
   "/backup/credential",
   "/bench/tasks",
   "/bench/start",

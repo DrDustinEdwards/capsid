@@ -2,10 +2,9 @@ import type { Env } from "./env";
 import type { Agent } from "./agents";
 import { noFlags } from "./agents-schema";
 import { BACKUP_STALE_HOURS, healthReport, type HealthReport } from "./health";
-import { ciStatus, defaultBranchSha, listRepoTree, readRepoFile } from "./github";
-import { improveStatus, type StatusReport } from "./improve-run";
-import { LOOP_PAUSE_PREFIX, LOOP_ROSTER } from "./improve-schema";
-import { SCORER_MARKER, SCORER_REPORT, SCORER_WORKFLOW, digest, normalizePins, sharedBlock } from "./scorer-identity";
+import { ciStatus, defaultBranchSha, listRepoTree } from "./github";
+import { capsidStatus, type StatusReport } from "./status";
+import { APP_ROSTER } from "./roster";
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { markJobFailed, readJob } from "./jobs-transition";
@@ -89,9 +88,6 @@ export const MIRROR_STALE_HOURS = 36;
 const MIRROR_REPO_LABEL = "backups";
 export const MIRROR_DUMP_PREFIX = "backups/json";
 
-// Warn before the cap stops the loop, not after.
-export const BUDGET_WARN_FRACTION = 0.8;
-
 // How many findings one pass will post. If every check fires at once, the queue gets
 // ten jobs and the rest are found again next pass, which is better than a tick that
 // posts fifty and times out.
@@ -128,7 +124,7 @@ export async function cadenceMinutes(env: Env): Promise<number> {
     if (!Number.isFinite(parsed) || parsed < MIN_CADENCE_MINUTES) return DEFAULT_CADENCE_MINUTES;
     return Math.floor(parsed);
   } catch {
-    // An unreadable store means the default, as improve_mode does.
+    // An unreadable store means the default.
     return DEFAULT_CADENCE_MINUTES;
   }
 }
@@ -301,34 +297,7 @@ function migrationNumber(name: string): number {
  *  each finding becomes belongs to the namespace it is about. */
 export function statusFindings(status: StatusReport): Finding[] {
   const out: Finding[] = [];
-  const budget = status.budget;
-  for (const key of ["model_usd_month", "actions_minutes_month"] as const) {
-    const cap = budget.caps?.[key];
-    const spent = key === "model_usd_month" ? budget.spend?.cost_usd : budget.spend?.ci_minutes;
-    if (typeof cap !== "number" || cap <= 0 || typeof spent !== "number") continue;
-    const fraction = spent / cap;
-    if (fraction < BUDGET_WARN_FRACTION) continue;
-    out.push(
-      finding("capsid", `budget-${key}-${budget.month}`, `${key} is over ${Math.round(BUDGET_WARN_FRACTION * 100)} percent of its cap`, [
-        `spent: ${spent} of ${cap} (${Math.round(fraction * 100)} percent)`,
-        `month: ${budget.month}`,
-        "Said before the cap stops the loop rather than after.",
-      ])
-    );
-  }
-
   for (const ns of status.namespaces ?? []) {
-    // Only a pause the loop set on itself is reported (LOOP_PAUSE_PREFIX, or a bare
-    // "budget", the older spelling that may still be in KV). A human pause is not a
-    // problem.
-    if (ns.paused && (ns.paused.startsWith(LOOP_PAUSE_PREFIX) || ns.paused === "budget")) {
-      out.push(
-        finding(ns.namespace, `paused-${ns.namespace}`, `${ns.namespace} is paused by the loop itself`, [
-          `reason: ${ns.paused}`,
-          "A pause key has no TTL, so this stays until a human clears it.",
-        ])
-      );
-    }
     // An open breaker stops the namespace's queue until a person resets it, so it is
     // said; the watcher files it and nothing more (src/job-breaker.ts).
     if (ns.breaker?.open) {
@@ -539,11 +508,9 @@ export const WATCHER_CHECKS = [
   "health",
   "master head",
   "migrations",
-  "improve_status",
+  "status",
   "mirror dumps",
   "mirror runs",
-  "scorer identity",
-  "scorer surface",
   "ci",
   "site map",
   "repo map",
@@ -564,11 +531,9 @@ const OWNERS: ReadonlyArray<readonly [RegExp, WatcherCheck]> = [
   [/^deploy-drift-/, "master head"],
   [/^schema-behind-/, "migrations"],
   [/^schema-ahead-/, "migrations"],
-  [/^(budget-|paused-|breaker-open-)/, "improve_status"],
+  [/^breaker-open-/, "status"],
   [/^mirror-no-dump$/, "mirror dumps"],
   [/^(mirror-not-running$|mirror-run-failed-|mirror-green-no-dump$)/, "mirror runs"],
-  [/^scorer-unread-/, "scorer identity"],
-  [/^(scorer-diverged-|scorer-identity-unknown$)/, "scorer surface"],
   [/^ci-red-/, "ci"],
   [/^site-map-drift-/, "site map"],
   [/^unmapped-repo/, "repo map"],
@@ -604,11 +569,9 @@ const CLASSES: ReadonlyArray<readonly [RegExp, FindingClass]> = [
   [/^deploy-drift-/, "job"],
   [/^schema-behind-/, "job"],
   [/^schema-ahead-/, "digest"],
-  [/^(budget-|paused-|breaker-open-)/, "attention"],
+  [/^breaker-open-/, "attention"],
   [/^mirror-no-dump$/, "job"],
   [/^(mirror-not-running$|mirror-run-failed-|mirror-green-no-dump$)/, "job"],
-  [/^scorer-unread-/, "digest"],
-  [/^(scorer-diverged-|scorer-identity-unknown$)/, "digest"],
   [/^ci-red-/, "job"],
   [/^site-map-drift-/, "job"],
   [/^unmapped-repo/, "job"],
@@ -1008,112 +971,6 @@ export function newestMigration(names: string[]): string | null {
   return sql.length ? sql[sql.length - 1] : null;
 }
 
-/** The scorer surface is meant to be identical in all roster repos; this checks it
- *  from the only component that can read all of them. A repo that cannot be read is
- *  named in a finding rather than dropped, and the count read is stated, so "they all
- *  match" cannot come from fewer repos than it claims. It reports; a human runs the
- *  copier to fix it. */
-async function scorerIdentityFindings(env: Env): Promise<Finding[]> {
-  const read: Array<{ namespace: string; block: string; report: string }> = [];
-  const unreadable: string[] = [];
-  const malformed: string[] = [];
-
-  for (const namespace of LOOP_ROSTER) {
-    const files = await attempt(`scorer surface ${namespace}`, async () => {
-      const wf = await readRepoFile(env, namespace, SCORER_WORKFLOW);
-      const rp = await readRepoFile(env, namespace, SCORER_REPORT);
-      return { workflow: wf.content, report: rp.content };
-    });
-    if (!files || files.workflow.length === 0 || files.report.length === 0) {
-      unreadable.push(namespace);
-      continue;
-    }
-    const block = sharedBlock(files.workflow);
-    if (block === null) {
-      // The marker is missing or doubled, so there is no block to compare. Reported
-      // rather than skipped: a file that lost its marker is a shape the copier cannot
-      // maintain.
-      malformed.push(namespace);
-      continue;
-    }
-    read.push({
-      namespace,
-      block: (await digest(normalizePins(block))).slice(0, 16),
-      report: (await digest(files.report)).slice(0, 16),
-    });
-  }
-
-  return identityFindings(read, unreadable, malformed);
-}
-
-export interface ScorerSurface {
-  namespace: string;
-  block: string;
-  report: string;
-}
-
-/** The judgement, with no IO in it, so every branch is reachable from a test. */
-export function identityFindings(read: ScorerSurface[], unreadable: string[], malformed: string[]): Finding[] {
-  const out: Finding[] = [];
-  const seen = `${read.length} of ${LOOP_ROSTER.length} repos read`;
-
-  if (unreadable.length > 0 || malformed.length > 0) {
-    out.push(
-      finding("capsid", `scorer-unread-${unreadable.concat(malformed).sort().join("-")}`, "the scorer surface could not be read everywhere", [
-        ...unreadable.map((n) => `${n}: could not be read, so it is not in the comparison below`),
-        ...malformed.map((n) => `${n}: the ${SCORER_MARKER} marker is missing or doubled, so it has no shared block`),
-        seen,
-        "A repo that cannot be read is not a repo that agrees. Until this clears, any identity result below covers fewer than five.",
-      ])
-    );
-  }
-
-  // Fewer than two read is not agreement: one repo always matches itself and zero
-  // repos match too.
-  if (read.length < 2) {
-    if (read.length > 0) {
-      out.push(
-        finding("capsid", "scorer-identity-unknown", "the scorer surface cannot be compared", [
-          seen,
-          "At least two repos must be readable before identity means anything.",
-        ])
-      );
-    }
-    return out;
-  }
-
-  const blocks = new Map<string, string[]>();
-  const reports = new Map<string, string[]>();
-  for (const r of read) {
-    blocks.set(r.block, [...(blocks.get(r.block) ?? []), r.namespace]);
-    reports.set(r.report, [...(reports.get(r.report) ?? []), r.namespace]);
-  }
-
-  const describe = (groups: Map<string, string[]>) =>
-    [...groups.entries()].map(([hash, names]) => `${hash}: ${names.sort().join(", ")}`).sort();
-
-  if (blocks.size > 1 || reports.size > 1) {
-    out.push(
-      finding(
-        "capsid",
-        `scorer-diverged-${[...blocks.keys()].sort().join("-").slice(0, 24)}-${[...reports.keys()].sort().join("-").slice(0, 24)}`,
-        `the scorer surface differs across the roster (${blocks.size} score block(s), ${reports.size} report script(s))`,
-        [
-          seen,
-          `score block, ${blocks.size} distinct:`,
-          ...describe(blocks).map((line) => `  ${line}`),
-          `report script, ${reports.size} distinct:`,
-          ...describe(reports).map((line) => `  ${line}`),
-          "Pinned action SHAs are compared strictly; the trailing version comment is not, so this is not Renovate.",
-          "Fix by running scripts/sync-scorer.mjs from capsid and landing the result per repo.",
-        ]
-      )
-    );
-  }
-
-  return out;
-}
-
 export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetch = fetch): Promise<Gathered> {
   const out: Finding[] = [];
   const ran = new Set<WatcherCheck>();
@@ -1146,9 +1003,9 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     out.push(...healthFindings(health, head ?? null, migrations?.newest ?? null, "capsid", deploy));
   }
 
-  const status = await attempt("improve_status", () => improveStatus(env));
+  const status = await attempt("status", () => capsidStatus(env));
   if (status) {
-    ran.add("improve_status");
+    ran.add("status");
     out.push(...statusFindings(status));
   }
 
@@ -1173,20 +1030,11 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     };
   }
 
-  const scorer = await attempt("scorer identity", () => scorerIdentityFindings(env));
-  if (scorer) {
-    ran.add("scorer identity");
-    // A comparison over fewer than all the repos says nothing about the ones it could
-    // not read, so identity findings clear only on a full read.
-    if (!scorer.some((f) => owningCheck(f.fingerprint) === "scorer identity")) ran.add("scorer surface");
-    out.push(...scorer);
-  }
-
   // The ci check counts as run only when every roster repo was read. A ci-red
   // fingerprint names its namespace, but ownership is per check, not per repo, so a
   // repo that could not be read must not let the others' pass clear its incident.
   let ciRead = 0;
-  for (const namespace of LOOP_ROSTER) {
+  for (const namespace of APP_ROSTER) {
     const runs: CiRun[] | null = await attempt(`ci ${namespace}`, async () => (await ciStatus(env, namespace, undefined, { limit: 5 })).runs);
     if (runs) {
       ciRead++;
@@ -1200,7 +1048,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
         : null,
     });
   }
-  if (ciRead === LOOP_ROSTER.length) ran.add("ci");
+  if (ciRead === APP_ROSTER.length) ran.add("ci");
 
   // What became of each roster repo's newest deploys (src/deploy-outcomes.ts, the merge
   // pipeline's PR 6): recorded in deploy_outcomes, and a rollback is a finding. The check

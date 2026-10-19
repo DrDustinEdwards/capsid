@@ -19,9 +19,3 @@ export function normalizeDashes(text: string, mode: "prose" | "title" = "prose")
     .map((line) => applyDashes(line, HEADING.test(line) ? " - " : ", "))
     .join("\n");
 }
-
-// Not dead: the holdout suite imports this. "No caller in src/ or test/" is not
-// dead in this repo; confirm an export removal by scoring a branch, not grepping.
-export function hasWideDash(text: string): boolean {
-  return /[–—―]/.test(text ?? "");
-}

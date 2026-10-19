@@ -297,20 +297,15 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
   );
 }
 
-// ---- 6. What does the work cost, and is it on budget? ---------------------------------------
+// ---- 6. What does the work cost? ------------------------------------------------------------
 
-/** Agents' chart: model spend per week. The cap in the feed is monthly, so the reference line
- *  is its weekly share (12 months over 52 weeks), named so on the chart. */
+/** Agents' chart: model spend per week. */
 export function CostChart() {
-  const { feed } = useApp();
   const { data, error, loading } = useTrends();
-  const cap = feed.live.loop.budget.caps.model_usd_month;
-  const spent = feed.live.loop.budget.spend.cost_usd;
   if (loading && !data) return null;
   if (!data) return <p className="faint">Weekly cost could not be read: {error}</p>;
   const weeks = data.cost.weeks;
   if (!weeks.some((w) => w.usd !== null)) return <p className="faint">No model cost was recorded in these {weeks.length} weeks.</p>;
-  const share = cap ? Math.round(((cap * 12) / 52) * 100) / 100 : null;
   const now = weeks[weeks.length - 1]!;
   const opts = {
     data: weeks.map((w) => ({ week: w.start, usd: w.usd })),
@@ -319,19 +314,16 @@ export function CostChart() {
     xLabel: "Week starting",
     yLabel: "Model spend (USD)",
     formatValue: (v: number) => `$${v.toFixed(2)}`,
-    references: share ? [{ y: share, label: `Cap $${cap} a month, about $${share} a week` }] : [],
     height: 240,
-    alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, $${now.usd.toFixed(2)} this week`}${share ? `, against a weekly share of the $${cap} monthly cap ($${share})` : ""}. Weeks with no recorded cost are gaps.`,
+    alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, $${now.usd.toFixed(2)} this week`}. Weeks with no recorded cost are gaps.`,
     dataTable: "details",
   } as const;
   return (
-    <Panel flush title="What does the work cost, and is it on budget?" src="job outcomes, telemetry cost, an estimate" id="cost-trend">
+    <Panel flush title="What does the work cost?" src="job outcomes, telemetry cost, an estimate" id="cost-trend">
       <div className="body" data-chart="cost">
         <Stale error={error} />
         <EnarFigure draw={(width) => lineChart({ ...opts, width })}>
-          <p className="d">
-            {cap ? `$${spent.toFixed(2)} of $${cap} spent this month.` : `$${spent.toFixed(2)} spent this month; no monthly cap is set.`} A week with no job outcome carrying a cost is a gap, not a free week.
-          </p>
+          <p className="d">A week with no job outcome carrying a cost is a gap, not a free week.</p>
         </EnarFigure>
       </div>
     </Panel>

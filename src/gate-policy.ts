@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./improve-task";
+import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./signed-docs";
 
 // Pre-approved gates: which blocked commands the seat may approve without asking the
 // human. A driver that reaches a push, a migration or a pull request stops and blocks

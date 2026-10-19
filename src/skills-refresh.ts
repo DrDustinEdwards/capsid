@@ -3,9 +3,8 @@
 // DrDustinEdwards/claude-skills and opens a pull request. Nothing applies without
 // the merge. A cron, not a tool (CLAUDE.md, tool surface rule).
 //
-// It may propose edits to .claude/** where the improve loop may not, because the
-// loop scores its own attempts and this scores nothing: it proposes to a separate
-// repo as a gated job, and a human merges.
+// It may propose edits to .claude/** because it scores nothing: it proposes to a
+// separate repo as a gated job, and a human merges.
 
 import type { Env } from "./env";
 import type { Agent } from "./agents";

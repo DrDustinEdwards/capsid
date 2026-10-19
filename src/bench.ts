@@ -1,6 +1,6 @@
 import { bytesToHex } from "./encoding";
 import type { Env } from "./env";
-import { claimJti, MAX_REPORT_BYTES, readBoundedText, verifyBenchRequest } from "./improve-scorer";
+import { claimJti, MAX_REPORT_BYTES, readBoundedText, verifyBenchRequest } from "./signed-requests";
 import { breakerRefusal, breakerState } from "./job-breaker";
 import { logEvent } from "./log";
 

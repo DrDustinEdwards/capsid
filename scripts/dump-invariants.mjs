@@ -8,9 +8,10 @@
 // - Each table file's own "table" field matches its file name, so a copy shuffle cannot
 //   restore rows into the wrong table, and every row of a table carries the same
 //   columns, so a row that lost a nullable column is not restored as NULL.
-// - The two sidecars (_kv.json, _holdout-manifests.json) are present, hold a non-empty
-//   object of the right shape, and nothing else underscore-prefixed rides along that
-//   nothing verifies. _schema.json and the marker are the only other two allowed.
+// - The sidecar (_kv.json) is present, holds a non-empty object of the right shape, and
+//   nothing else underscore-prefixed rides along that nothing verifies. _schema.json and
+//   the marker are the only others allowed, and _holdout-manifests.json, which dumps
+//   written while the improve loop existed carry (it was removed 2026-10-19).
 // - documents is not empty: a gutted dump passes every count and proves nothing.
 // - The dump is not TORN. It is one D1 batch, so its tables describe one instant.
 //   Plain referential integrity is not checked: the live store holds orphaned version
@@ -24,8 +25,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 export const COMPLETE_MARKER = "_complete.json";
-export const SIDECARS = ["_holdout-manifests.json", "_kv.json"];
-export const OPTIONAL_SIDECARS = ["_schema.json"];
+export const SIDECARS = ["_kv.json"];
+export const OPTIONAL_SIDECARS = ["_schema.json", "_holdout-manifests.json"];
 
 function fail(reason) {
   const err = new Error(reason);
@@ -75,7 +76,6 @@ export function checkDump(dumpDir) {
   if (unknown.length > 0) fail(`the dump carries sidecars nothing verifies: ${unknown.join(", ")}`);
   // Present is not enough: `{}` exists too.
   checkSidecar(dumpDir, "_kv.json", "keys", (v) => v === null || typeof v === "string" || (typeof v === "object" && !Array.isArray(v) && typeof v.unreadable === "string"));
-  checkSidecar(dumpDir, "_holdout-manifests.json", "manifests", (v) => v === null || (typeof v === "object" && !Array.isArray(v)));
 
   const tables = {};
   let rows = 0;

@@ -3,19 +3,9 @@ node_modules/
 .env
 .wrangler/
 wrangler.jsonc
-# Written by scripts/dry-run-config.mjs for the scorer's bundle-size dry run.
+# Written by scripts/dry-run-config.mjs for `npm run types`.
 wrangler.dryrun.jsonc
 .tmp-*
-
-# The holdout suite is pulled into here by improve-score.yml and must NEVER be
-# committed: a hidden test set in the repo is a hidden test set the attempt path
-# can read, which defeats the entire measurement. Ignored so an accident is not
-# one `git add -A` away.
-.improve-holdout/
-
-# The improve loop's local build output: a bundled worker and its source map, about
-# 16MB of it, in the working tree of a public repo. Nothing reads it from here.
-.improve-build/
 
 # Per-user Claude Code settings (conventions 6.3): never committed.
 .claude/settings.local.json

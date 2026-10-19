@@ -1,5 +1,4 @@
-import { IMPROVE_BRANCH_PREFIX, isImproveBranch } from "../improve-schema";
-import type { AttemptEnv as Env } from "../env";
+import type { RepoEnv as Env } from "../env";
 import {
   assertRepoArg,
   cachedGet,
@@ -41,25 +40,6 @@ export async function createBranch(env: Env, namespace: string, branch: string, 
   return { repo: `${owner}/${repo}`, branch, from: base, sha };
 }
 
-// Branch from an exact commit, which createBranch cannot do: it resolves a branch
-// name to whatever that branch points at now. The improve loop branches from the
-// commit the lineage picked, which is frequently not the tip of anything.
-//
-// ensureBranch tolerates an existing branch of the same name. An attempt id is
-// unique, so a collision is a retry of the same attempt, and a retry should land on
-// the branch it made.
-export async function createBranchAt(
-  env: Env,
-  namespace: string,
-  branch: string,
-  sha: string,
-  repoSelector?: string
-): Promise<{ repo: string; branch: string; sha: string }> {
-  const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
-  await ensureBranch(env, owner, repo, branch, sha);
-  return { repo: full, branch, sha };
-}
-
 export async function openPr(
   env: Env,
   namespace: string,
@@ -85,14 +65,11 @@ export async function openPr(
 // deploy workflows, so callers gate by blast radius.
 //
 // The head branch is deleted when a PR closes or merges, because write_repo_file's
-// default PR mode creates a branch per write and nothing else cleans them up. Three
+// default PR mode creates a branch per write and nothing else cleans them up. Two
 // refusals:
 //   1. Never the default branch. A PR whose head is the default branch is a
 //      cross-fork PR or a misconfiguration.
-//   2. Never an improve-loop branch. The loop may still need the attempt and its own
-//      lifecycle owns those refs; capsid_close_pr action delete_branch refuses them
-//      without force too.
-//   3. Never fails the PR action. The merge or close already succeeded, and failing
+//   2. Never fails the PR action. The merge or close already succeeded, and failing
 //      the call because a branch delete failed would misreport it. Same rule as
 //      invalidateRepoReads. The outcome is reported in head_branch_deleted.
 async function deleteHeadBranchAfterPr(
@@ -124,13 +101,6 @@ async function deleteHeadBranchAfterPr(
     const defaultBranch = await getDefaultBranch(env, owner, repo);
     if (branch === defaultBranch) {
       return { head_branch: branch, head_branch_deleted: false, head_branch_note: "head is the default branch, which is never deleted" };
-    }
-    if (isImproveBranch(branch)) {
-      return {
-        head_branch: branch,
-        head_branch_deleted: false,
-        head_branch_note: `head is under the improve loop's prefix (${IMPROVE_BRANCH_PREFIX}), which owns its own refs, so it was left alone`,
-      };
     }
     const del = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/refs/heads/${encodePath(branch)}`, { method: "DELETE" });
     if (!del.ok) {
@@ -470,11 +440,6 @@ export async function deleteBranch(
   }
 
   if (!opts.force) {
-    if (isImproveBranch(branch)) {
-      throw new Error(
-        `delete_branch refuses: ${branch} is under the improve loop's branch prefix (${IMPROVE_BRANCH_PREFIX}), so it may be an attempt the loop still needs. Pass force: true to delete it anyway.`
-      );
-    }
     const prResp = await cachedGet(env, owner, repo, `${base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`);
     // Fail closed: a lookup that errors is not "no open PRs". Skipping the refusal on
     // a 5xx would delete the branches this check protects whenever GitHub is flaky.

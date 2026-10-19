@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { OpsFeed } from "../src/types.ts";
 import { visit } from "./views.ts";
 
 // Every stop in the command menu (capsid/decisions.md 2026-09-30, "admin panels review
@@ -14,25 +15,36 @@ async function menu(page: Page, query: string) {
   return dlg;
 }
 
+// Rewrites the feed on its way to the app, so a switch reads as on without the mock's
+// state changing.
+async function reshape(page: Page, fn: (f: OpsFeed) => void): Promise<void> {
+  await page.route("**/portal/api/ops", async (route) => {
+    const res = await route.fetch();
+    const feed = (await res.json()) as OpsFeed;
+    fn(feed);
+    await route.fulfill({ response: res, json: feed });
+  });
+}
+
 test("PLANT: typing stop lists the stops, and only for what is running", async ({ page }) => {
   await visit(page, "health");
   const dlg = await menu(page, "stop");
   const stops = dlg.getByRole("option").filter({ hasText: /^S\s*Stop/ });
-  await expect(stops.filter({ hasText: "Pause sample-b" })).toHaveCount(1);
-  // sample-c is paused in the sample feed, and the revoked agent is revoked.
-  await expect(stops.filter({ hasText: "Pause sample-c" })).toHaveCount(0);
+  // The overnight run is off in the sample feed, and the revoked agent is revoked.
+  await expect(stops.filter({ hasText: "Turn the overnight run off" })).toHaveCount(0);
   await expect(stops.filter({ hasText: /Revoke/ }).first()).toBeVisible();
   await expect(dlg.getByRole("option").filter({ hasText: /all/i }).filter({ hasText: /Stop/ })).toHaveCount(0);
 });
 
-test("PLANT: Pause from the menu opens that switch's reason in Settings, and moves nothing", async ({ page }) => {
+test("PLANT: Turn the overnight run off from the menu opens that switch's reason in Settings, and moves nothing", async ({ page }) => {
+  await reshape(page, (f) => void (f.live.overnight.mode = "api"));
   await visit(page, "health");
-  const dlg = await menu(page, "pause sample-b");
-  await dlg.getByRole("option").filter({ hasText: "Pause sample-b" }).first().click();
+  const dlg = await menu(page, "overnight run off");
+  await dlg.getByRole("option").filter({ hasText: "Turn the overnight run off" }).first().click();
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
-  const field = page.getByLabel("Pausing sample-b. Reason:");
+  const field = page.getByLabel("Turning the overnight run off. Reason:");
   await expect(field).toBeFocused();
-  const sw = page.getByRole("switch", { name: "Improve loop for sample-b", exact: true });
+  const sw = page.getByRole("switch", { name: "Overnight run", exact: true });
   await expect(sw).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("Escape");
   await expect(field).toHaveCount(0);

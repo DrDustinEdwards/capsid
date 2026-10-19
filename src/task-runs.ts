@@ -14,7 +14,6 @@ import { logEvent } from "./log";
 
 export type TaskId =
   | "backup"
-  | "improve-open"
   | "skills-refresh"
   | "tick"
   | "auto-merge"
@@ -38,7 +37,6 @@ export type TaskId =
 // means nothing: those are flagged only when they fail.
 //   tick           */5 * * * *, which carries the five steps below it
 //   backup         0 9 * * *
-//   improve-open   0 8,9 * * *, running at 03:00 America/Chicago only
 //   skills-refresh 30 9 * * *, doing its work on one UTC day a week
 //   watcher        on the tick, every cadence_min minutes (src/watcher.ts); its
 //                  period is read from the watcher's own snapshot
@@ -46,7 +44,6 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   { id: "tick", label: "Five-minute tick", period_ms: 5 * 60_000 },
   { id: "watcher", label: "Watcher pass", period_ms: null },
   { id: "backup", label: "Backup", period_ms: 24 * 3_600_000 },
-  { id: "improve-open", label: "Improve opener", period_ms: 24 * 3_600_000 },
   { id: "skills-refresh", label: "Skills refresh", period_ms: 7 * 24 * 3_600_000 },
   { id: "auto-merge", label: "Auto-merge step", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },

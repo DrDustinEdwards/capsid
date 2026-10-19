@@ -1,5 +1,4 @@
-import { isImproveBranch } from "../improve-schema";
-import type { AttemptEnv as Env } from "../env";
+import type { RepoEnv as Env } from "../env";
 import { encodePath, getDefaultBranch, ghFetch, invalidateRepoReads, resolveRepo } from "./client";
 
 // PRUNE MERGED BRANCHES (job_8779278b8e91, Dustin 2026-10-07). capsid_close_pr action delete_branch with merged:true
@@ -63,8 +62,7 @@ function shotsInUse(branch: { name: string; sha: string }, open: ReadonlyArray<{
 
 // orphan: kept only because the rule cannot prove its work landed (no pull request, one
 // closed without merging, or commits after the merge), so its age is what says whether it
-// is still wanted. A branch kept for what it is (default, protected, by name, the improve
-// loop's) or for an open pull request is not an orphan.
+// is still wanted. A branch kept for what it is (default, protected, by name) or for an open pull request is not an orphan.
 type PruneVerdict = { prune: true; pr: number } | { prune: false; reason: string; orphan: boolean };
 
 /** Whether a branch may be pruned, from the facts about it. Pure, so every rule is tested
@@ -80,7 +78,6 @@ export function pruneVerdict(
   if (NEVER_PRUNED.has(branch.name) || NEVER_PRUNED_PREFIXES.some((p) => branch.name.startsWith(p))) {
     return { prune: false, reason: "kept by name (release, screenshots, results, gh-pages)", orphan: false };
   }
-  if (isImproveBranch(branch.name)) return { prune: false, reason: "improve loop branch", orphan: false };
   if (!latest) {
     return { prune: false, reason: listsComplete ? "no pull request" : "no pull request found in the part of the list that was read", orphan: true };
   }

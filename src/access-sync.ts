@@ -1,7 +1,7 @@
 import type { Agent } from "./agents";
 import { resolveAgent } from "./agents";
 import type { Env } from "./env";
-import { readBoundedText } from "./improve-scorer";
+import { readBoundedText } from "./signed-requests";
 import { checkRate, type RateLimitPolicy } from "./rate-limit";
 import { checkScope } from "./scope";
 import { auditStatement } from "./store-guards";

@@ -440,9 +440,8 @@ export function App() {
   }, []);
 
   // A stop from the command menu presses its switch on Namespaces, so the switch's own
-  // reason field opens and the change goes the way a click would send it. The rows
-  // arrive with the namespaces read, so it waits for the switch, and says so if it never
-  // appears rather than doing nothing.
+  // reason field opens and the change goes the way a click would send it. It waits for
+  // the switch to render, and says so if it never appears rather than doing nothing.
   const flip = useCallback(
     (id: string) => {
       navigate(placePath("namespaces"));

@@ -1,8 +1,8 @@
 // A wrangler.jsonc good enough for `wrangler deploy --dry-run`, built OFFLINE.
 //
-// The scorer's build job measures bundle_size_bytes with `wrangler deploy --dry-run
-// --outdir`, but the real wrangler.jsonc is gitignored and the job holds no credential
-// to run scripts/ci-config.mjs.
+// `npm run types` generates worker-configuration.d.ts from it with `wrangler types`,
+// because the real wrangler.jsonc is gitignored and CI holds no credential to run
+// scripts/ci-config.mjs.
 //
 // THIS IS NOT ci-config.mjs. That script makes a DEPLOY safe: it resolves each binding
 // by name and refuses if the resolved id disagrees with the pinned one. This one is for
@@ -15,7 +15,7 @@
 // overwrite a developer's real gitignored config.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { APP_KV, D1, GITHUB_APP_CLIENT_ID, HOLDOUT_R2, OAUTH_KV, R2 } from "./bindings.mjs";
+import { APP_KV, D1, GITHUB_APP_CLIENT_ID, OAUTH_KV, R2 } from "./bindings.mjs";
 
 const OUT = "wrangler.dryrun.jsonc";
 
@@ -29,7 +29,6 @@ const SUBSTITUTIONS = [
   ["YOUR_APP_KV_ID", APP_KV.id],
   ["YOUR_OAUTH_KV_ID", OAUTH_KV.id],
   ["YOUR_R2_BUCKET", R2.name],
-  ["YOUR_HOLDOUT_R2_BUCKET", HOLDOUT_R2.name],
   ["YOUR_GITHUB_APP_CLIENT_ID", GITHUB_APP_CLIENT_ID],
 ];
 

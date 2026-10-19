@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
-import { pausedKey, LOOP_ROSTER } from "../src/improve-schema";
+import { APP_ROSTER } from "../src/roster";
 import { RESUME_MARKER } from "../src/jobs";
 import { OPS_FEED_PATH, OPS_FEED_READS, OPS_REFRESH_PATH, opsFeed } from "../src/ops-feed";
 import type { OpsFeed } from "../src/ops-types";
@@ -81,10 +81,8 @@ describe("the feed against real D1", () => {
     await opsFeed(e, NOW);
     expect(reads.d1.length, `D1 statements:\n${reads.d1.join("\n")}`).toBe(OPS_FEED_READS.d1);
     expect(reads.kv.length, `KV gets: ${reads.kv.join(", ")}`).toBe(OPS_FEED_READS.kv);
-    // One pause key per roster namespace, and those are the only per-namespace reads.
-    const pauseKeys = reads.kv.filter((key) => key.startsWith("improve:paused:"));
-    expect(pauseKeys.sort()).toEqual(LOOP_ROSTER.map(pausedKey).sort());
-    expect(OPS_FEED_READS.kv).toBe(12 + LOOP_ROSTER.length);
+    // No per-namespace KV read: the count does not grow with the roster.
+    expect(reads.kv.filter((key) => APP_ROSTER.some((ns) => key.endsWith(`:${ns}`)))).toEqual([]);
     // The count does not grow with the data: twice the jobs, the same reads.
     for (let i = 0; i < 6; i++) await seedJob(`job_1000000000${i}0`, { status: "queued" });
     const again = counted();
@@ -138,17 +136,9 @@ describe("the feed against real D1", () => {
     expect(feed.refresh_allowed_at).toBeNull();
   });
 
-  it("lists every roster namespace with its pause reason, null when not paused", async () => {
-    const [paused] = LOOP_ROSTER;
-    await env.APP_KV.put(pausedKey(paused), "looking at a regression");
-    try {
-      const feed = await opsFeed(env as unknown as Env, NOW);
-      expect(feed.live.namespaces.map((n) => n.name)).toEqual([...LOOP_ROSTER]);
-      expect(feed.live.namespaces.find((n) => n.name === paused)?.paused).toBe("looking at a regression");
-      expect(feed.live.namespaces.filter((n) => n.paused === null).length).toBe(LOOP_ROSTER.length - 1);
-    } finally {
-      await env.APP_KV.delete(pausedKey(paused));
-    }
+  it("lists every roster namespace", async () => {
+    const feed = await opsFeed(env as unknown as Env, NOW);
+    expect(feed.live.namespaces.map((n) => n.name)).toEqual([...APP_ROSTER]);
   });
 });
 

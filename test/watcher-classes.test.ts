@@ -68,15 +68,10 @@ const EXPECTED: Array<[string, FindingClass]> = [
   ["live-sha-unreported-sample", "digest"],
   ["live-sha-drift-sample-abc1234", "digest"],
   ["live-page-unread-sample-home", "digest"],
-  ["scorer-diverged-a-b", "digest"],
-  ["scorer-unread-x", "digest"],
-  ["scorer-identity-unknown", "digest"],
   ["site-weekly-sample-tool", "digest"],
   ["anomaly-first-use-x", "attention"],
   ["anomaly-new-action-x-y", "attention"],
   ["anomaly-rate-x", "attention"],
-  ["paused-sample", "attention"],
-  ["budget-model-2026-10", "attention"],
   ["breaker-open-sample", "attention"],
 ];
 
@@ -118,7 +113,7 @@ test("A DIGEST-CLASS FINDING POSTS NO JOB, and is remembered open with no job", 
 });
 
 test("AN ATTENTION-CLASS FINDING POSTS NO JOB", async () => {
-  const w = pass([fake("anomaly-rate-sample-driver", "capsid"), fake("paused-sample")], new Map());
+  const w = pass([fake("anomaly-rate-sample-driver", "capsid"), fake("breaker-open-sample")], new Map());
   await w.result;
   assert.deepEqual(w.posted, []);
   assert.equal(w.memory.rows.get("anomaly-rate-sample-driver")!.job_id, null);

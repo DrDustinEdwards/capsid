@@ -29,7 +29,7 @@ import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
 import { REPORT_PATH } from "../src/headers.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
-import { BACKUP_CREDENTIAL_PATH, CREDENTIAL_PATH, SCORE_PATH } from "../src/improve-scorer.ts";
+import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
 import { BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH } from "../src/bench.ts";
 import { PUBLIC_CODE_PATH, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH } from "../src/public-data.ts";
 import {
@@ -117,8 +117,6 @@ const PATH_CONSTANTS: Record<string, string> = {
   ACCESS_SYNC_PATH,
   REPORT_PATH,
   VERIFY_LIVE_CLIENT_PATH,
-  SCORE_PATH,
-  CREDENTIAL_PATH,
   BACKUP_CREDENTIAL_PATH,
   BENCH_TASKS_PATH,
   BENCH_START_PATH,
@@ -208,25 +206,19 @@ async function servedActions(build: typeof buildServer, name: string): Promise<s
   return served?.enum ?? [];
 }
 
-test("capsid_run_improve: status reads, run and claim are a driver's work, and the loop's controls are admin", async () => {
+test("capsid_run_improve serves status only, as a read, and the admin's switches are admin", async () => {
   // The actions come from the schemas the servers serve, so an action added to either
   // tool without a decision here fails.
   const driver = await servedActions(buildServer, "capsid_run_improve");
-  assert.equal(driver.length, 3, "capsid_run_improve's action list changed");
-  const expected: Record<string, string> = { status: "read", claim: "write", run: "write" };
-  for (const action of driver) {
-    assert.ok(Object.hasOwn(expected, action), `capsid_run_improve gained action '${action}'; decide its requirement here and in TOOL_ACTION_GRANTS`);
-    assert.equal(requiredForAction("capsid_run_improve", action), expected[action], `capsid_run_improve.${action}`);
-  }
-  // An unlisted action is admin, never a driver's.
-  assert.equal(requiredForAction("capsid_run_improve", "mode"), "admin");
+  assert.deepEqual(driver, ["status"], "capsid_run_improve's action list changed; decide its requirement here and in TOOL_ACTION_GRANTS");
+  assert.equal(requiredForAction("capsid_run_improve", "status"), "read");
 
   const admin = await servedActions(buildAdminServer, "capsid_admin_control_improve");
   // The overnight run's switch (src/overnight.ts) and the queue's circuit breaker
   // (src/job-breaker.ts) are among them.
   assert.deepEqual(
     [...admin].sort(),
-    ["breaker_reset", "budget", "mint_operator_key", "mode", "overnight", "pause", "register_skill", "sign_policy", "unpause"],
+    ["breaker_reset", "mint_operator_key", "overnight", "sign_policy"],
     "capsid_admin_control_improve's action list changed"
   );
   for (const action of admin) assert.equal(requiredForAction("capsid_admin_control_improve", action), "admin", `capsid_admin_control_improve.${action}`);

@@ -259,10 +259,6 @@ export interface OpsAgent {
   pr_merge_rate: number | null;
   ci_green_rate: number | null;
   median_duration_minutes: number | null;
-  // The improve loop's kept and reverted attempts in the agent's namespaces, from its
-  // record (src/agent-record.ts). Null for an agent that is not a namespace driver.
-  attempts_kept: number | null;
-  attempts_reverted: number | null;
 }
 
 export interface OpsPr {
@@ -335,16 +331,6 @@ export interface OpsSession {
   // billing_error, authentication_failed, account_on_hold, oauth_org_not_allowed),
   // "waiting" for needing input more than ten minutes. Null otherwise.
   incident: "failure" | "waiting" | null;
-}
-
-export interface OpsLoop {
-  mode: string;
-  budget: {
-    month: string;
-    caps: { actions_minutes_month: number; model_usd_month: number };
-    spend: { ci_minutes: number; cost_usd: number };
-    exceeded: boolean;
-  };
 }
 
 // Shared code (src/shared-code.ts): GET /portal/api/shared-code.
@@ -467,11 +453,10 @@ export interface OpsLive {
   // Sessions with no SessionEnd whose last event was in the last 24 hours, newest
   // first, at most 50.
   sessions: OpsSession[];
-  loop: OpsLoop;
-  // Every roster namespace with its improve-loop pause reason, null when not paused.
-  // One KV get per namespace; the heavy per-namespace detail is GET
-  // /portal/api/namespaces, read when the Namespaces view opens.
-  namespaces: Array<{ name: string; paused: string | null }>;
+  // Every app roster namespace (APP_ROSTER in src/roster.ts), read from code. The
+  // per-namespace detail is GET /portal/api/namespaces, read when the Namespaces view
+  // opens.
+  namespaces: Array<{ name: string }>;
   // The site configuration, every row. With no row that has an origin, the Portal
   // shows no Sites view and no site items on the Overview.
   sites: OpsSiteConfig[];
@@ -587,9 +572,6 @@ export interface OpsFeed {
 // token expired (preview again), 413 body too large. Signed out is the gate's 302.
 
 export type PortalAction =
-  | "pause"
-  | "unpause"
-  | "mode"
   | "overnight"
   | "resume_job"
   | "release_job"
@@ -699,19 +681,12 @@ export interface PortalPerformed {
 
 export interface PortalNamespace {
   namespace: string;
-  paused: string | null;
   // The queue's circuit breaker: open after the threshold of holder fails in 24 hours,
   // until reset. since is the window's start in audit_log's UTC format.
   breaker: { open: boolean; failed: number; threshold: number; since: string; reset_at: string | null };
-  anchor_pinned: boolean;
-  anchor_problem: string | null;
-  best: { sha: string; score: number; recorded_at: string } | null;
-  last_run: { status: string; started: string; attempts: number; kept: number; reverts: number } | null;
-  totals: { runs: number; attempts: number; kept: number; reverts: number; cost_usd: number; ci_minutes: number };
   // Null means no truth report was ever run, which is not an integrity of zero.
   latest_report: { integrity: number | null; generated: string } | null;
   jobs: { queued: number; claimed: number; blocked: number; done_today: number };
-  skills: { candidate: number; live: number; retired: number; last_evaluation: string | null };
 }
 
 export interface PortalNamespaces {

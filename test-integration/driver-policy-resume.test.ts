@@ -4,7 +4,7 @@ import { blockJob, claimJob, completeJob, postJob, resumeJob } from "../src/jobs
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
-import { signTaskBody } from "../src/improve-task";
+import { signTaskBody } from "../src/signed-docs";
 
 // The driver pushes its own branch and opens its own pull request.
 //

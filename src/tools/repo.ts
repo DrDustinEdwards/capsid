@@ -251,7 +251,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     "manage_pr",
     {
       description:
-        "Merge, close or comment on an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash') and needs the can_merge flag; with `sha`, it merges only if the head is still that commit and is otherwise refused with nothing merged. action 'close' closes it and needs the can_merge flag. action 'comment' posts `comment` and changes nothing else; it needs the can_comment_pr flag. Merge and close delete the head branch and return head_branch and head_branch_deleted, plus head_branch_note when the delete was declined: the default branch, a branch under the improve loop's prefix and a fork's branch are never deleted, and a failed delete does not fail the merge or close. A merge can trigger a deploy workflow. Needs the write grant.",
+        "Merge, close or comment on an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash') and needs the can_merge flag; with `sha`, it merges only if the head is still that commit and is otherwise refused with nothing merged. action 'close' closes it and needs the can_merge flag. action 'comment' posts `comment` and changes nothing else; it needs the can_comment_pr flag. Merge and close delete the head branch and return head_branch and head_branch_deleted, plus head_branch_note when the delete was declined: the default branch and a fork's branch are never deleted, and a failed delete does not fail the merge or close. A merge can trigger a deploy workflow. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         number: z.number().int().positive(),
@@ -384,14 +384,14 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     "delete_branch",
     {
       description:
-        "Delete a branch in a namespace's GitHub repo. REFUSES, naming the refusal: the default branch, always; a branch under the improve loop's prefix; a branch with an open pull request; and a branch that does not exist. force:true lifts the prefix and open-PR refusals and needs the can_merge flag. Pass merged:true instead of branch to prune every branch whose latest pull request merged and whose tip is the commit that pull request merged from (so work pushed after the merge is kept): it PREVIEWS by default, deleting nothing, and deletes only with confirm:true, at most 40 per call (it reports how many remain); keep:[names] leaves named branches alone. It keeps the default branch, protected branches, release/*, screenshots, results, gh-pages, improve-loop branches, branches with an open or unmerged pull request and branches with no pull request, and lists why. Give branch or merged, not both; merged does not take force. Needs the write grant; audit-logged with the list.",
+        "Delete a branch in a namespace's GitHub repo. REFUSES, naming the refusal: the default branch, always; a branch with an open pull request; and a branch that does not exist. force:true lifts the open-PR refusal and needs the can_merge flag. Pass merged:true instead of branch to prune every branch whose latest pull request merged and whose tip is the commit that pull request merged from (so work pushed after the merge is kept): it PREVIEWS by default, deleting nothing, and deletes only with confirm:true, at most 40 per call (it reports how many remain); keep:[names] leaves named branches alone. It keeps the default branch, protected branches, release/*, screenshots, results, gh-pages, branches with an open or unmerged pull request and branches with no pull request, and lists why. Give branch or merged, not both; merged does not take force. Needs the write grant; audit-logged with the list.",
       inputSchema: {
         namespace: nsName,
         branch: bounded(MAX_REF).optional().describe("The branch to delete. Omit when merged is true."),
         force: z
           .boolean()
           .optional()
-          .describe("Lift the improve-prefix and open-PR refusals. Requires the can_merge flag. Does NOT lift the default-branch refusal."),
+          .describe("Lift the open-PR refusal. Requires the can_merge flag. Does NOT lift the default-branch refusal."),
         merged: z.boolean().optional().describe("Prune the merged branches instead of deleting one: a preview unless confirm is true."),
         confirm: z.boolean().optional().describe("With merged: actually delete the branches the preview lists. Without it nothing is deleted."),
         keep: z.array(bounded(MAX_REF)).max(100).optional().describe("With merged: branch names to leave alone this call even if they would be pruned."),

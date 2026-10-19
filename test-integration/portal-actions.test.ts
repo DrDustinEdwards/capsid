@@ -4,8 +4,8 @@ import worker from "../src/index";
 import { legacyAgent } from "../src/agents";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
-import { improveStatus } from "../src/improve-run";
-import { MODE_KEY, pausedKey, LOOP_ROSTER } from "../src/improve-schema";
+import { capsidStatus } from "../src/status";
+import { APP_ROSTER } from "../src/roster";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import type { PortalActivity, PortalDigest, PortalNamespaces, PortalPerformed, PortalPlan, PortalPreview } from "../src/ops-types";
 import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight";
@@ -22,7 +22,7 @@ import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
 import { proposeCanon } from "../src/canon";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
 import { AUTO_MERGE_ALLOWED_PATHS, AUTO_MERGE_POLICY_PATH, AUTO_MERGE_REFUSED_PATHS, AUTO_MERGE_REQUIRED_CI, loadMergePolicy, POLICY_CHECKS, requiredCiLabel } from "../src/auto-merge-policy";
-import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/improve-task";
+import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs";
 import { LIFTED_KEY, SUSPENDED_KEY } from "../src/merge-units";
 import { LIFTED_KEY as SAFETY_LIFTED_KEY, PAUSED_KEY } from "../src/merge-safety";
 
@@ -125,7 +125,7 @@ async function auditRows(): Promise<Array<{ id: number; actor: string; action: s
   return results ?? [];
 }
 
-const KEYS = [MODE_KEY, OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...LOOP_ROSTER.map(pausedKey), ...LOOP_ROSTER.map(breakerResetKey)];
+const KEYS = [OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...APP_ROSTER.map(breakerResetKey)];
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
@@ -220,21 +220,6 @@ async function signedPolicy(): Promise<void> {
 type Case = { params: () => Promise<Record<string, string>>; after: (params: Record<string, string>) => Promise<void> };
 
 const CASES: Record<string, Case> = {
-  pause: {
-    params: async () => ({ namespace: "foxing", reason: "holdout rebuild" }),
-    after: async () => expect(await env.APP_KV.get(pausedKey("foxing"))).toBe("holdout rebuild"),
-  },
-  unpause: {
-    params: async () => {
-      await env.APP_KV.put(pausedKey("capsid"), "an old reason");
-      return { namespace: "capsid", reason: "the regression is fixed" };
-    },
-    after: async () => expect(await env.APP_KV.get(pausedKey("capsid"))).toBeNull(),
-  },
-  mode: {
-    params: async () => ({ value: "off", reason: "stop the loop" }),
-    after: async () => expect(await env.APP_KV.get(MODE_KEY)).toBe("off"),
-  },
   overnight: {
     // The subscription, so the real KV shows the decision record written with the mode.
     params: async () => ({ value: "subscription", reason: "first supervised night" }),
@@ -489,9 +474,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-eight actions", () => {
+  it("covers the allow-list, twenty-five actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(28);
+    expect(Object.keys(CASES).length).toBe(25);
   });
 
   for (const action of PORTAL_ACTIONS) {
@@ -514,7 +499,7 @@ describe("every action, previewed then performed through the Worker", () => {
       expect(body.action).toBe(action);
       expect(body.warning).toBeNull();
       expect(body.feed.csrf).toBe(CSRF);
-      expect(body.feed.live.namespaces.map((n) => n.name)).toEqual([...LOOP_ROSTER]);
+      expect(body.feed.live.namespaces.map((n) => n.name)).toEqual([...APP_ROSTER]);
       await CASES[action].after(params);
 
       // The rows written are the rows the preview said would be. A job transition
@@ -587,15 +572,12 @@ describe("the approval record against real D1", () => {
 });
 
 describe("the automation switches against real D1 and KV", () => {
-  it("unpause, mode and overnight refuse a missing reason at preview, as pause does, and write nothing", async () => {
-    await env.APP_KV.put(pausedKey("capsid"), "an old reason");
+  it("overnight refuses a missing reason at preview, and writes nothing", async () => {
     const auditBefore = await auditRows();
     const kvBefore = await Promise.all(KEYS.map((k) => env.APP_KV.get(k)));
     for (const [action, params] of [
-      ["pause", { namespace: "foxing" }],
-      ["unpause", { namespace: "capsid" }],
-      ["mode", { value: "off" }],
       ["overnight", { value: "api" }],
+      ["overnight", { value: "subscription" }],
     ] as const) {
       const res = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action, params } });
       expect(res.status, `${action} without a reason`).toBe(400);
@@ -731,19 +713,16 @@ describe("the site actions against real D1", () => {
 });
 
 describe("the Portal's reads", () => {
-  it("namespaces reports what improve_status reports, for every roster namespace", async () => {
-    await env.APP_KV.put(pausedKey("foxing"), "looking at a regression");
+  it("namespaces reports what the status reports, for every roster namespace", async () => {
     const response = await call(PORTAL_NAMESPACES_PATH);
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const body = (await response.json()) as PortalNamespaces;
-    expect(body.namespaces.map((n) => n.namespace)).toEqual([...LOOP_ROSTER]);
-    expect(body.namespaces.find((n) => n.namespace === "foxing")?.paused).toBe("looking at a regression");
-    const status = await improveStatus(workerEnv());
+    expect(body.namespaces.map((n) => n.namespace)).toEqual([...APP_ROSTER]);
+    const status = await capsidStatus(workerEnv());
     for (const ns of status.namespaces) {
       const served = body.namespaces.find((n) => n.namespace === ns.namespace)!;
-      expect(served.totals).toEqual(ns.totals);
-      expect(served.skills).toEqual(ns.skills);
+      expect(served.breaker.open).toBe(ns.breaker?.open ?? false);
       expect(served.jobs.queued).toBe(ns.jobs.queued);
     }
   });

@@ -14,7 +14,7 @@ import {
 import { approveByPolicy, classifyCommand, type GateClass } from "./gate-policy";
 import { readRepoFile } from "./github/contents";
 import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
-import { verifySignedBody } from "./improve-task";
+import { verifySignedBody } from "./signed-docs";
 import { outcomeFrom, outcomeStatement, readJobUsage, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
 import { signJobText } from "./job-signing";

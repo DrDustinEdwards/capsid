@@ -10,7 +10,7 @@ import { NoData, Pill, St } from "../ui/icons";
 import { When } from "../ui/When";
 import { UptimeFoot, UptimeTicks } from "../ui/charts";
 import { jobMeta } from "../views/shared";
-import { agentState, attemptsText, nsList } from "../lib/derive";
+import { agentState, nsList } from "../lib/derive";
 
 // Chart 9 (error rate with deploy markers) is an Enarratio line chart, loaded when a site's
 // drawer opens so it stays out of the initial bundle.
@@ -562,10 +562,6 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
           <dd className="num">{a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}</dd>
           <dt>Median job</dt>
           <dd className="num">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</dd>
-          <dt>Improve attempts</dt>
-          <dd className="num" title={a.attempts_kept == null ? "Not a namespace driver" : undefined}>
-            {attemptsText(a)}
-          </dd>
           <dt>Flags</dt>
           <dd>{a.flags.join(", ") || "none"}</dd>
         </dl>

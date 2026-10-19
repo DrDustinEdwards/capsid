@@ -13,6 +13,18 @@ const served = new Map<string, Set<string> | null>();
 for (const spec of COMPOSITES) served.set(spec.name, new Set(Object.keys(spec.actions)));
 for (const name of Object.keys(SINGLE_TOOLS)) served.set(name, null);
 
+// Targets whose actions went with the improve loop (removed 2026-10-19). The migration
+// ran before then; its map keeps them as the record of what it rewrote.
+const RETIRED = new Set([
+  "capsid_run_improve.run",
+  "capsid_run_improve.claim",
+  "capsid_admin_control_improve.mode",
+  "capsid_admin_control_improve.pause",
+  "capsid_admin_control_improve.unpause",
+  "capsid_admin_control_improve.budget",
+  "capsid_admin_control_improve.register_skill",
+]);
+
 test("every mapping target is a served tool and action, so no migrated entry names nothing", () => {
   const targets: Array<[string, string | null]> = [
     ...Object.values(SIMPLE),
@@ -22,7 +34,7 @@ test("every mapping target is a served tool and action, so no migrated entry nam
   assert.ok(targets.length >= 40, `only ${targets.length} targets`);
   for (const [tool, action] of targets) {
     assert.ok(served.has(tool), `${tool} is not served`);
-    if (action === null) continue;
+    if (action === null || RETIRED.has(`${tool}.${action}`)) continue;
     const actions = served.get(tool);
     assert.ok(actions, `${tool} takes no action, and the mapping names ${action}`);
     assert.ok(actions.has(action), `${tool} does not serve action ${action}`);
