@@ -1,6 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { BENCH_ENABLED_KEY, BENCH_MAX_RUNNING } from "../src/bench";
+import { BENCH_ENABLED_KEY, BENCH_MAX_RUNNING, BENCH_REPEATS } from "../src/bench";
 
 // The paired comparison's three signed endpoints (src/bench.ts) against a real D1 and
 // KV: the task freeze, the off switch, the running cap's single-statement INSERT, the
@@ -91,14 +91,15 @@ describe("bench endpoints", () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const task_id = await registerTask();
     const opened: string[] = [];
-    // Earlier tests may hold slots; fill whatever is left, then expect a refusal.
+    // Earlier tests may hold slots; fill whatever is left, then expect a refusal. A
+    // planted arm, so the per-task repeat cap does not refuse first.
     for (let i = 0; i <= BENCH_MAX_RUNNING; i++) {
-      const response = await start(task_id);
+      const response = await start(task_id, "check-gold");
       if (response.status === 429) break;
       expect(response.status).toBe(200);
       opened.push(((await response.json()) as { run_id: string }).run_id);
     }
-    expect((await start(task_id)).status).toBe(429);
+    expect((await start(task_id, "check-gold")).status).toBe(429);
     const running = await env.DB.prepare("SELECT COUNT(*) AS n FROM bench_runs WHERE status = 'running'").first<{ n: number }>();
     expect(running?.n).toBe(BENCH_MAX_RUNNING);
     // Close every running row, this test's and earlier ones', so later tests start clean.
@@ -106,6 +107,33 @@ describe("bench endpoints", () => {
     for (const row of results) expect((await score(row.id, { environment: { ok: false, reason: "test cleanup" } })).status).toBe(200);
     expect((await start(task_id)).status).toBe(200);
     await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
+  });
+
+  it("give each model arm its repeats per task and one rerun per repeat, and never cap the planted arms", async () => {
+    await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
+    const task_id = await registerTask();
+    // Repeats scored or still running fill the arm's scored slots.
+    for (let i = 0; i < BENCH_REPEATS; i++) {
+      const run_id = await startOk(task_id);
+      if (i < BENCH_REPEATS - 1) expect((await score(run_id, { hidden: counts(2, 3), claimed_done: true })).status).toBe(200);
+    }
+    const full = await start(task_id);
+    expect(full.status).toBe(409);
+    expect(await full.text()).toMatch(/has used its baseline runs/);
+    // The other arm on the same task has its own slots.
+    const treatment = await startOk(task_id, "treatment");
+    await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
+    // The last baseline repeat came back unjudged, so one rerun is allowed; reruns stop
+    // once the arm has as many unjudged runs as repeats.
+    const unjudgedTask = await registerTask();
+    for (let i = 0; i < BENCH_REPEATS; i++) {
+      const run_id = await startOk(unjudgedTask);
+      expect((await score(run_id, { environment: { ok: false, reason: "machine failure" } })).status).toBe(200);
+    }
+    expect((await start(unjudgedTask)).status).toBe(409);
+    for (let i = 0; i < BENCH_REPEATS + 1; i++) expect((await start(unjudgedTask, "check-gold")).status).toBe(200);
+    await env.DB.prepare("UPDATE bench_runs SET status = 'unjudged', unjudged_reason = 'test cleanup' WHERE status = 'running'").run();
+    expect(treatment).toMatch(/^bench_/);
   });
 
   it("score a baseline: a done claim with a failing hidden test is a false claim, and a run closes once", async () => {

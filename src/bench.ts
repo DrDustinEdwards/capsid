@@ -33,6 +33,12 @@ export const BENCH_MAX_RUNNING = 4;
 // A running row older than this no longer holds a slot: its job hit GitHub's own
 // timeout without reporting. The row stays 'running' as the record of that.
 const BENCH_STALE_MS = 3 * 60 * 60 * 1000;
+// How many scored runs each model arm gets per task (the design's D17), and so how many
+// unjudged ones it may have: each repeat is rerun at most once, and only after a machine
+// failure. Enforced here, not in the hand-dispatched workflow, so a run whose outcome
+// was seen cannot be replaced by another start. A stale running row counts as unjudged.
+export const BENCH_REPEATS = 3;
+const MODEL_ARMS: readonly Arm[] = ["baseline", "treatment"];
 // The namespace the treatment's jobs live in, whose breaker gates a treatment start.
 const BENCH_NAMESPACE = "bench";
 // The replay scope in improve_jti. A colon, which no namespace name may hold, so it
@@ -368,16 +374,31 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     if (breaker.open) return textResponse(`no treatment run starts while the bench job breaker is open: ${breakerRefusal(breaker)}`, 409);
   }
   const id = `bench_${bytesToHex(crypto.getRandomValues(new Uint8Array(6)))}`;
-  // One statement, so two starts racing for the last slot cannot both take it.
+  const stale = new Date(now.getTime() - BENCH_STALE_MS).toISOString();
+  const capped = MODEL_ARMS.includes(arm) ? 1 : 0;
+  // One statement, so two starts racing for the last slot, or for a task's last repeat,
+  // cannot both take it. The planted arms call no model and are not capped per task.
   const opened = await env.DB.prepare(
     `INSERT INTO bench_runs (id, task_id, arm, gh_run, status, started_at)
      SELECT ?1, ?2, ?3, ?4, 'running', ?5
      WHERE (SELECT COUNT(*) FROM bench_runs WHERE status = 'running' AND started_at > ?6) < ?7
+       AND (?8 = 0 OR (
+         (SELECT COUNT(*) FROM bench_runs WHERE task_id = ?2 AND arm = ?3
+            AND (status = 'scored' OR (status = 'running' AND started_at > ?6))) < ?9
+         AND (SELECT COUNT(*) FROM bench_runs WHERE task_id = ?2 AND arm = ?3
+            AND (status = 'unjudged' OR (status = 'running' AND started_at <= ?6))) < ?9))
      RETURNING id`
   )
-    .bind(id, task_id, arm, gh_run, now.toISOString(), new Date(now.getTime() - BENCH_STALE_MS).toISOString(), BENCH_MAX_RUNNING)
+    .bind(id, task_id, arm, gh_run, now.toISOString(), stale, BENCH_MAX_RUNNING, capped, BENCH_REPEATS)
     .all<{ id: string }>();
-  if (opened.results.length !== 1) return textResponse(`${BENCH_MAX_RUNNING} bench runs are already running; try again when one finishes`, 429);
+  if (opened.results.length !== 1) {
+    const live = await env.DB.prepare("SELECT COUNT(*) AS n FROM bench_runs WHERE status = 'running' AND started_at > ?1").bind(stale).first<{ n: number }>();
+    if ((live?.n ?? 0) >= BENCH_MAX_RUNNING) return textResponse(`${BENCH_MAX_RUNNING} bench runs are already running; try again when one finishes`, 429);
+    return textResponse(
+      `task ${task_id} has used its ${arm} runs: at most ${BENCH_REPEATS} scored or running, and at most ${BENCH_REPEATS} unjudged (one rerun per repeat)`,
+      409
+    );
+  }
   logEvent("log", "BENCH_RUN_STARTED", { message: `BENCH_RUN_STARTED ${id} task=${task_id} arm=${arm} gh_run=${gh_run}` });
   return Response.json({ ok: true, run_id: id });
 }

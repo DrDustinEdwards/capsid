@@ -23,13 +23,14 @@ Remove-Variable k
 
 - **The off switch.** `/bench/start` refuses unless KV `bench:enabled` reads exactly `on`. Absent, any other value, or a KV read that fails, is off. Turn it on with `npx wrangler kv key put bench:enabled on --binding APP_KV`, and off by deleting the key.
 - **The cap.** At most 4 runs are open at once. A run open for over 3 hours no longer holds a slot; its row stays `running` as the record that it never reported.
+- **Repeats and reruns.** Each model arm gets at most 3 scored or running runs per task (the design's k=3 repeats) and at most 3 unjudged ones, so each repeat is rerun at most once. A start past either limit is refused with 409, in the same statement as the cap, so a hand-dispatched run whose outcome was seen cannot be replaced. A stale running row counts as unjudged. The planted arms are not capped per task.
 - **The bench breaker.** A treatment run works a real job in the `bench` namespace, so it does not start while that namespace's job breaker is open (`src/job-breaker.ts`). Reset it as for any namespace.
 
 ## How a run is scored
 
 The Worker computes the outcome itself (`runOutcome`):
 
-- **Unjudged**, never failed, when the scorer reports an environment failure, when the hidden test counts differ from the registered counts (not every hidden test is known to have run), or when a treatment run names no job of its own. The design reruns such a run once and then drops the pair.
+- **Unjudged**, never failed, when the scorer reports an environment failure, when the hidden test counts differ from the registered counts (not every hidden test is known to have run), or when a treatment run names no job of its own. The design reruns such a run once (the start limit above enforces it) and then drops the pair.
 - **Resolved** when every `FAIL_TO_PASS` test passes and no `PASS_TO_PASS` test fails.
 - **Claimed done**: for the baseline, the parsed last line of its final message (`BENCH-RESULT: DONE`), as reported; for the treatment, its job's status in this database, `done` and nothing else. A treatment report's own `claimed_done` is ignored. The job must be in `bench` and titled with the run id.
 - **False claim**: claimed done and not resolved. This is the paper's primary outcome.
