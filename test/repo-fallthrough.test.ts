@@ -12,7 +12,6 @@ import {
   repoHistory,
   repoRefs,
 } from "../src/github.ts";
-import { IMPROVE_BRANCH_PREFIX, branchName, isImproveBranch } from "../src/improve-schema.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The repo fallthrough tools, which reach private repos through this Worker's App
@@ -36,18 +35,6 @@ function makeEnv(repos: unknown[] | null = ONE_REPO) {
 const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
 const fileBody = (content: string, sha = "s") => ({ type: "file", encoding: "base64", content: b64(content), size: content.length, sha });
 const REPO_META = { body: { default_branch: "main" } };
-
-// the shared branch prefix
-
-test("the improve branch prefix has ONE definition, and both readers agree", () => {
-  // A literal "improve/" in delete_branch's guard would silently stop matching if
-  // this prefix changed.
-  assert.equal(branchName("capsid-2026-09-06-a01").startsWith(IMPROVE_BRANCH_PREFIX), true);
-  assert.equal(isImproveBranch(branchName("x")), true);
-  assert.equal(isImproveBranch("improve/anything"), true);
-  assert.equal(isImproveBranch("feature/improve"), false, "the prefix matched mid-name");
-  assert.equal(isImproveBranch("improvements/x"), false, "the prefix matched a longer word");
-});
 
 // repo_refs
 
@@ -270,23 +257,6 @@ test("delete_branch REFUSES the default branch, and force does not lift it", asy
   });
 });
 
-test("delete_branch REFUSES an improve-loop branch unless forced, and names the prefix", async () => {
-  const branch = branchName("capsid-2026-09-06T00-00-00-a01");
-  await withFetch({ "GET /repos/o/r": REPO_META }, async () => {
-    await assert.rejects(() => deleteBranch(makeEnv(), "ns", branch), new RegExp(IMPROVE_BRANCH_PREFIX));
-    await assert.rejects(() => deleteBranch(makeEnv(), "ns", branch), /force: true/);
-  });
-  // Forced, it goes through: the refusal is a guard, not a prohibition.
-  await withFetch(
-    { "GET /repos/o/r": REPO_META, [`DELETE /repos/o/r/git/refs/heads/${branch}`]: { status: 204, text: "" } },
-    async () => {
-      const out = await deleteBranch(makeEnv(), "ns", branch, { force: true });
-      assert.equal(out.deleted, true);
-      assert.equal(out.forced, true);
-    }
-  );
-});
-
 test("delete_branch REFUSES a branch with an open PR unless forced, and names the PR", async () => {
   await withFetch(
     {
@@ -363,12 +333,9 @@ test("ci_dispatch requires both workflow and ref to start a run", async () => {
 });
 
 test("ci_dispatch reruns a run's failed jobs when given run_id alone", async () => {
-  // The run lookup is stubbed, so the scorer-identification check runs; an
-  // unreadable run is refused (see the next test).
   await withFetch(
     {
       "GET /repos/o/r": REPO_META,
-      "GET /repos/o/r/actions/runs/42": { body: { path: ".github/workflows/ci.yml", name: "CI" } },
       "POST /repos/o/r/actions/runs/42/rerun-failed-jobs": { status: 201, text: "" },
     },
     async () => {
@@ -376,27 +343,6 @@ test("ci_dispatch reruns a run's failed jobs when given run_id alone", async () 
       assert.equal(out.mode, "rerun");
       assert.equal(out.run_id, 42);
       assert.equal(out.rerun_requested, true);
-    }
-  );
-});
-
-test("PLANT: a rerun whose run cannot be IDENTIFIED is refused, not rerun anyway", async () => {
-  // A failed GET must not skip the lookup deciding whether this is the scorer. A
-  // rerun re-executes the signing step with the repo's secrets in scope, so an
-  // unidentified run waits.
-  await withFetch(
-    {
-      "GET /repos/o/r": REPO_META,
-      "GET /repos/o/r/actions/runs/42": { status: 500, text: "upstream is unwell" },
-      "POST /repos/o/r/actions/runs/42/rerun-failed-jobs": { status: 201, text: "" },
-    },
-    async (calls) => {
-      await assert.rejects(() => ciDispatch(makeEnv(), "ns", { run_id: 42 }), /could not be read/);
-      assert.equal(
-        calls.filter((c) => c.path.includes("rerun-failed-jobs")).length,
-        0,
-        "the rerun was POSTed despite the run being unidentifiable"
-      );
     }
   );
 });

@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { OpsMaintenanceItem } from "./ops-types";
-import { ROSTER } from "./improve-schema";
+import { ROSTER } from "./roster";
 import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./maintenance-branches";
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
 import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";

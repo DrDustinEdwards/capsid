@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { readBoundedText } from "./improve-scorer";
+import { readBoundedText } from "./signed-requests";
 import { resolveSessionCaller } from "./ops-session-auth";
 
 // The hook receiver: POST /ops/hooks. Claude Code's HTTP hooks post each event's input

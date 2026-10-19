@@ -18,7 +18,7 @@
 // revoked names included, because it is the audit identity. Replacing a key is:
 // revoke the old agent with the agents tool, then mint under a new name.
 //
-// --namespace takes any namespace registered in Capsid, not just one in the improve
+// --namespace takes any namespace registered in Capsid, not just one in the app
 // roster that AGENTS is built from. For an unlisted one the script asks the
 // `namespaces` tool whether it is registered and synthesizes a driver (driverFor).
 // Registration is the authority, so a typo still refuses.
@@ -140,7 +140,7 @@ export function driverFor(namespace) {
 // home directory. An unknown namespace is REFUSED rather than silently matching
 // nothing.
 //
-// The improve roster (AGENTS) is not the list of namespaces. A namespace not in
+// The app roster (AGENTS) is not the list of namespaces. A namespace not in
 // AGENTS is minted a driver on the strength of being REGISTERED; `registered` is
 // passed in rather than fetched so this stays pure. With no `registered`, only
 // AGENTS matches, so a failed lookup refuses instead of inventing a namespace.

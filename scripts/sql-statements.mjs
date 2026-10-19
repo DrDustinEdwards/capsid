@@ -113,6 +113,6 @@ export function readStatements(statements) {
 }
 
 // The tables whose plans matter, because each grows without bound: documents is the
-// corpus, document_versions is every snapshot, audit_log is every write, and the
-// improve_* tables are every attempt.
-export const HOT_TABLES = ["documents", "document_links", "document_versions", "audit_log", "improve_runs", "improve_attempts", "improve_scores", "improve_skills", "improve_jti", "jobs"];
+// corpus, document_versions is every snapshot, audit_log is every write, improve_jti
+// is every signed request's nonce, and jobs is the queue.
+export const HOT_TABLES = ["documents", "document_links", "document_versions", "audit_log", "improve_jti", "jobs"];

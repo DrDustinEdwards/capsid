@@ -1,23 +1,12 @@
 import { hmacHex, sha256Hex, timingSafeEqual } from "./auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
-import {
-  anchorKey,
-  bestKey,
-  driverKey,
-  onRoster,
-  pausedKey,
-  POLICY_PREFIX,
-  PROMPTS_PREFIX,
-  RUN_TASK_PREFIX,
-  SCORES_PATH,
-  SKILLS_PREFIX,
-} from "./improve-schema";
+import { onRoster } from "./roster";
+import { POLICY_PREFIX } from "./signed-docs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { D1_BATCH_STATEMENTS } from "./limits";
 import { isMissingRowAbort } from "./store-guards";
 import { pathMutation } from "./tools/docs";
-import { logEvent } from "./log";
 
 // Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and
 // delete_perform): the plan, the refusals, the signed confirmation and the one batch.
@@ -36,21 +25,19 @@ import { logEvent } from "./log";
 // pathMutation(db, ns, path, null), the one path mutation site (CLAUDE.md, path
 // mutation rule); every edge touching one of those documents, removed by the same
 // helper and recorded whole in the audit row; the ops_sites row,
-// recorded whole in the audit row; the namespaces row; and, after the batch commits,
-// the namespace's four improve KV keys.
+// recorded whole in the audit row; and the namespaces row.
 //
 // WHAT IS KEPT, because it is history: archived documents (archive/...), every
 // document_versions and audit_log row, finished jobs, job_outcomes, job_claims,
-// job_touches, skill_evaluations, skill_failures, every improve_* row, improve_jti,
-// revoked agents that name the namespace, the nightly backup objects, and the holdout
-// bucket (CLAUDE.md, improve loop rule: only src/improve-scorer.ts names it). The kept
+// job_touches, revoked agents that name the namespace, and the nightly backup
+// objects. The kept
 // archived documents still name a namespace that is no longer registered. The read
 // tools (capsid_read_doc, capsid_find_docs, capsid_start_session) still return them by
 // that name; capsid_write_doc and capsid_delete_doc refuse there until the namespace is registered again, and a
 // later capsid_admin_manage_namespaces action register of the same name brings them back into scope.
 //
 // WHAT ALWAYS REFUSES, whatever cascade says: an open job (queued, claimed, blocked),
-// a live agent whose scopes name the namespace, and a namespace on the improve roster.
+// a live agent whose scopes name the namespace, and a namespace on the roster.
 // cascade reaches documents only. A namespace with more live documents than one batch
 // can delete (NAMESPACE_DELETE_MAX_DOCUMENTS) is refused too, never half deleted.
 //
@@ -88,16 +75,9 @@ export interface PlanCounts {
   job_outcomes: number;
   job_claims: number;
   job_touches: number;
-  skill_evaluations: number;
-  skill_failures: number;
-  improve_runs: number;
-  improve_attempts: number;
-  improve_scores: number;
-  improve_skills: number;
-  improve_jti: number;
   agents_live: number;
   agents_revoked: number;
-  improve_control_documents: number;
+  policy_documents: number;
 }
 
 export interface DeletePlan {
@@ -111,9 +91,7 @@ export interface DeletePlan {
   ops_site_revision: number | null;
   open_jobs: Array<{ id: string; status: string; title: string }>;
   live_agents: string[];
-  improve_control_paths: string[];
-  // The improve KV keys that hold a value now.
-  kv_keys: string[];
+  policy_paths: string[];
   // Every live path in path order, at most NAMESPACE_DELETE_MAX_DOCUMENTS + 1 of them:
   // one more than fits says the namespace is over the cap. The perform deletes exactly
   // these, and the token binds them, so a document swapped for another refuses.
@@ -124,12 +102,9 @@ export interface DeletePlan {
 
 export interface DeleteOptions {
   cascade: boolean;
+  // allow_improve_paths keeps its name from the improve loop; it now covers only the
+  // signed policy documents (policyWriteRefusal in src/signed-docs.ts).
   allowImprovePaths: boolean;
-}
-
-/** Every improve KV key the Worker keeps per namespace (src/improve-schema.ts). */
-export function improveKvKeys(namespace: string): string[] {
-  return [bestKey(namespace), pausedKey(namespace), anchorKey(namespace), driverKey(namespace)];
 }
 
 function count(result: D1Result | undefined): number {
@@ -142,9 +117,8 @@ function rows<T>(result: D1Result | undefined): T[] {
 }
 
 /** Everything that names the namespace, read in one batch so the counts agree with
- *  each other. Writes nothing. A KV read that fails throws, and the caller fails
- *  closed with the reason (CLAUDE.md, no swallowed error rule). */
-export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace: string): Promise<DeletePlan> {
+ *  each other. Writes nothing. */
+export async function readDeletePlan(db: D1Database, namespace: string): Promise<DeletePlan> {
   const open = JSON.stringify(OPEN_JOB_STATUSES);
   const results = await db.batch([
     db.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(namespace),
@@ -171,13 +145,6 @@ export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace:
     db.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE namespace = ?1").bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM job_claims WHERE namespace = ?1").bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM job_touches WHERE namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM skill_evaluations WHERE namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM skill_failures WHERE namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM improve_runs WHERE namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM improve_attempts WHERE namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM improve_scores WHERE namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM improve_skills WHERE source_namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM improve_jti WHERE scope = ?1").bind(namespace),
     // The same reading of the scopes column as parseScopes (src/agents-schema.ts): a
     // row that is not a JSON object with a namespaces array names no namespace. The
     // nested CASE fixes the evaluation order, so json_type never sees malformed JSON.
@@ -191,24 +158,13 @@ export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace:
          ORDER BY name`
       )
       .bind(namespace),
-    // The improve loop's control surface (improveWriteRefusal in src/improve-scores.ts),
-    // matched case-exactly on the same prefixes. Deleting one of these is a steering
-    // change, so it needs allow_improve_paths as a document delete does.
+    // The signed policy documents (policyWriteRefusal in src/signed-docs.ts), matched
+    // case-exactly on the same prefix. Deleting one is a ruling, so it needs
+    // allow_improve_paths as a document delete does.
+    db.prepare("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND substr(path, 1, length(?2)) = ?2").bind(namespace, POLICY_PREFIX),
     db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND (
-           substr(path, 1, length(?2)) = ?2 OR substr(path, 1, length(?3)) = ?3 OR
-           substr(path, 1, length(?4)) = ?4 OR substr(path, 1, length(?5)) = ?5 OR path = ?6)`
-      )
-      .bind(namespace, RUN_TASK_PREFIX, PROMPTS_PREFIX, POLICY_PREFIX, SKILLS_PREFIX, SCORES_PATH),
-    db
-      .prepare(
-        `SELECT path FROM documents WHERE namespace = ?1 AND (
-           substr(path, 1, length(?2)) = ?2 OR substr(path, 1, length(?3)) = ?3 OR
-           substr(path, 1, length(?4)) = ?4 OR substr(path, 1, length(?5)) = ?5 OR path = ?6)
-         ORDER BY path LIMIT 20`
-      )
-      .bind(namespace, RUN_TASK_PREFIX, PROMPTS_PREFIX, POLICY_PREFIX, SKILLS_PREFIX, SCORES_PATH),
+      .prepare("SELECT path FROM documents WHERE namespace = ?1 AND substr(path, 1, length(?2)) = ?2 ORDER BY path LIMIT 20")
+      .bind(namespace, POLICY_PREFIX),
     db
       .prepare(
         `SELECT namespace, name, origin, health_path, platform, script, self_probe, revision, created_at, updated_at
@@ -228,22 +184,11 @@ export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace:
     if ((OPEN_JOB_STATUSES as readonly string[]).includes(status)) jobsOpen += n;
     else jobsFinished += n;
   }
-  const agents = rows<{ name: string; revoked_at: string | null }>(results[18]);
+  const agents = rows<{ name: string; revoked_at: string | null }>(results[11]);
   const live = agents.filter((a) => a.revoked_at === null).map((a) => a.name);
-  const site = rows<Record<string, unknown>>(results[21])[0] ?? null;
+  const site = rows<Record<string, unknown>>(results[14])[0] ?? null;
 
-  const kvKeys: string[] = [];
-  for (const key of improveKvKeys(namespace)) {
-    let value: string | null;
-    try {
-      value = await kv.get(key);
-    } catch (err) {
-      throw new Error(`reading KV ${key} failed (${err instanceof Error ? err.message : String(err)}), so the plan cannot say what the delete would leave behind`);
-    }
-    if (value !== null) kvKeys.push(key);
-  }
-
-  const livePaths = rows<{ path: string }>(results[22]).map((r) => r.path);
+  const livePaths = rows<{ path: string }>(results[15]).map((r) => r.path);
   return {
     namespace,
     registered: rows(results[0]).length > 0,
@@ -259,16 +204,9 @@ export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace:
       job_outcomes: count(results[8]),
       job_claims: count(results[9]),
       job_touches: count(results[10]),
-      skill_evaluations: count(results[11]),
-      skill_failures: count(results[12]),
-      improve_runs: count(results[13]),
-      improve_attempts: count(results[14]),
-      improve_scores: count(results[15]),
-      improve_skills: count(results[16]),
-      improve_jti: count(results[17]),
       agents_live: live.length,
       agents_revoked: agents.length - live.length,
-      improve_control_documents: count(results[19]),
+      policy_documents: count(results[12]),
     },
     jobs_by_status: jobsByStatus,
     ops_site: site,
@@ -277,8 +215,7 @@ export async function readDeletePlan(db: D1Database, kv: KVNamespace, namespace:
     live_agents: live,
     live_paths: livePaths,
     live_paths_sha256: await sha256Hex(JSON.stringify(livePaths)),
-    improve_control_paths: rows<{ path: string }>(results[20]).map((r) => r.path),
-    kv_keys: kvKeys,
+    policy_paths: rows<{ path: string }>(results[13]).map((r) => r.path),
   };
 }
 
@@ -297,7 +234,7 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
   const refusals: string[] = [];
   if (plan.on_roster) {
     refusals.push(
-      `${ns} is on the improve loop's roster (ROSTER in src/improve-schema.ts), which the loop, the backup and the scorer iterate by name. Remove it from the roster in code first; this tool will not.`
+      `${ns} is on the roster (ROSTER in src/roster.ts), which the watcher, auto-merge and maintenance iterate by name. Remove it from the roster in code first; this tool will not.`
     );
   }
   if (plan.counts.jobs_open > 0) {
@@ -325,17 +262,17 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
       `${ns} holds ${plan.counts.documents_live} live document${plan.counts.documents_live === 1 ? "" : "s"}. Pass cascade: true to delete them; each is snapshotted to document_versions first. Archived documents (archive/...) are kept either way.`
     );
   }
-  if (plan.counts.improve_control_documents > 0 && !opts.allowImprovePaths) {
+  if (plan.counts.policy_documents > 0 && !opts.allowImprovePaths) {
     refusals.push(
-      `${ns} holds ${plan.counts.improve_control_documents} improve loop control document${plan.counts.improve_control_documents === 1 ? "" : "s"} (${named(plan.improve_control_paths, plan.counts.improve_control_documents)}). ` +
-        `Deleting one is a steering change, so it needs allow_improve_paths: true, which needs the can_touch_protected flag and is audit-logged.`
+      `${ns} holds ${plan.counts.policy_documents} signed policy document${plan.counts.policy_documents === 1 ? "" : "s"} (${named(plan.policy_paths, plan.counts.policy_documents)}). ` +
+        `Deleting one is a ruling, so it needs allow_improve_paths: true, which needs the can_touch_protected flag and is audit-logged.`
     );
   }
   return refusals;
 }
 
 /** The part of the plan a token binds, in one canonical spelling: every count, the
- *  jobs by status, the ops_sites revision, the KV keys present and the sha256 of the
+ *  jobs by status, the ops_sites revision and the sha256 of the
  *  live path list (a digest, so fifty 512-character paths do not ride in the token).
  *  Any change between the preview and the perform changes this string. */
 export function planFingerprint(plan: DeletePlan): string {
@@ -347,7 +284,6 @@ export function planFingerprint(plan: DeletePlan): string {
     counts,
     jobs_by_status: jobs,
     ops_site_revision: plan.ops_site_revision,
-    kv_keys: [...plan.kv_keys].sort(),
     live_paths_sha256: plan.live_paths_sha256,
   });
 }
@@ -473,16 +409,13 @@ function summarize(plan: DeletePlan): { will_delete: string[]; will_keep: string
       `${c.document_links_removed} edge(s) touching those documents, recorded whole in the audit row (an already dangling edge touches none and stays)`,
       plan.ops_site ? `the ops_sites row (revision ${plan.ops_site_revision}), recorded whole in the audit row` : "no ops_sites row (there is none)",
       `the namespaces row and its repo mapping, recorded in the audit row`,
-      `the improve KV keys, after the batch commits (holding a value now: ${plan.kv_keys.length ? plan.kv_keys.join(", ") : "none"})`,
     ],
     will_keep: [
       `${c.documents_archived} archived document(s) under archive/, still readable by this namespace name; write, delete, move and restore refuse there until the namespace is registered again`,
       `${c.document_versions} document_versions row(s) and ${c.audit_log} audit_log row(s)`,
       `${c.jobs_finished} finished job(s), ${c.job_outcomes} job_outcomes, ${c.job_claims} job_claims, ${c.job_touches} job_touches row(s)`,
-      `${c.skill_evaluations} skill_evaluations, ${c.skill_failures} skill_failures row(s)`,
-      `${c.improve_runs} improve_runs, ${c.improve_attempts} improve_attempts, ${c.improve_scores} improve_scores, ${c.improve_skills} improve_skills, ${c.improve_jti} improve_jti row(s)`,
       `${c.agents_revoked} revoked agent(s) that name it`,
-      "the nightly backup objects and the holdout bucket",
+      "the nightly backup objects",
     ],
   };
 }
@@ -498,7 +431,7 @@ export async function previewNamespaceDelete(
 ): Promise<ToolAnswer> {
   let plan: DeletePlan;
   try {
-    plan = await readDeletePlan(env.DB, env.APP_KV, namespace);
+    plan = await readDeletePlan(env.DB, namespace);
   } catch (err) {
     return { ok: false, refusal: `delete_namespace preview failed, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -517,9 +450,8 @@ export async function previewNamespaceDelete(
     live_agents: plan.live_agents,
     live_paths: plan.live_paths,
     max_documents: NAMESPACE_DELETE_MAX_DOCUMENTS,
-    improve_control_paths: plan.improve_control_paths,
+    policy_paths: plan.policy_paths,
     ops_site: plan.ops_site,
-    kv_keys: plan.kv_keys,
     ...summarize(plan),
   };
   if (refusals.length) return { ok: true, data: base };
@@ -616,7 +548,7 @@ export async function performNamespaceDelete(
 
   let plan: DeletePlan;
   try {
-    plan = await readDeletePlan(db, env.APP_KV, namespace);
+    plan = await readDeletePlan(db, namespace);
   } catch (err) {
     return { ok: false, refusal: `delete_namespace failed, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -649,7 +581,6 @@ export async function performNamespaceDelete(
     allow_improve_paths: opts.allowImprovePaths,
     counts: plan.counts,
     jobs_by_status: plan.jobs_by_status,
-    kv_keys: plan.kv_keys,
     documents_deleted: paths,
   });
   let results: D1Result[];
@@ -710,20 +641,6 @@ export async function performNamespaceDelete(
   const siteRemoved = rows(results[3]).length > 0;
   const documentsDeleted = paths.length;
 
-  // KV after the commit: KV is not in the transaction. Every key is deleted, present
-  // or not, and a failure is reported with the key, never dropped.
-  const kvDeleted: string[] = [];
-  const kvFailed: Array<{ key: string; error: string }> = [];
-  for (const key of improveKvKeys(namespace)) {
-    try {
-      await env.APP_KV.delete(key);
-      kvDeleted.push(key);
-    } catch (err) {
-      kvFailed.push({ key, error: err instanceof Error ? err.message : String(err) });
-    }
-  }
-  if (kvFailed.length) logEvent("error", "DELETE_NAMESPACE_KV_FAILED", { message: `DELETE_NAMESPACE_KV_FAILED ${namespace}: ${kvFailed.map((f) => `${f.key}: ${f.error}`).join("; ")}` });
-
   return {
     ok: true,
     data: {
@@ -739,15 +656,6 @@ export async function performNamespaceDelete(
         jobs_finished: plan.counts.jobs_finished,
         agents_revoked: plan.counts.agents_revoked,
       },
-      kv_deleted: kvDeleted,
-      kv_failed: kvFailed,
-      ...(kvFailed.length
-        ? {
-            warning: `The namespace is deleted and its batch committed, but ${kvFailed.length} improve KV key(s) could not be deleted: ${kvFailed
-              .map((f) => f.key)
-              .join(", ")}. Delete them by hand; a stale improve:paused or improve:best key is read by the loop if the name is registered again.`,
-          }
-        : {}),
     },
   };
 }

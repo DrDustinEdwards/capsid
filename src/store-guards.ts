@@ -150,7 +150,7 @@ export function guardedCommit(opts: {
 
 // The document upsert, one spelling, shared by `capsid_write_doc` and `capsid_lint_namespace` mode `report`.
 // COALESCE on every optional column, so an omitted argument leaves the stored value
-// alone. The improve loop's writer sets every column and is not folded in.
+// alone. docStatements (src/doc-statements.ts) sets every column and is not folded in.
 //
 // test/mutation-guard-coverage.test.ts and test/tool-annotations.test.ts both match
 // this call as a mutation marker, the same way they match pathMutation().

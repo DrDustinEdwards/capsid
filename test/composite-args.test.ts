@@ -52,10 +52,10 @@ test("PLANT: a sha sent with a close is refused", async () => {
   assert.equal(r.fetches, 0);
 });
 
-test("PLANT: an unknown argument to a run_improve claim is refused", async () => {
-  const r = await call("capsid_run_improve", { action: "claim", namespace: "sample", mode: "off" });
+test("PLANT: an unknown argument to a run_improve status is refused", async () => {
+  const r = await call("capsid_run_improve", { action: "status", namespace: "sample", mode: "off" });
   assert.equal(r.isError, true);
-  assert.match(r.text, /capsid_run_improve action 'claim' does not take mode/);
+  assert.match(r.text, /capsid_run_improve action 'status' does not take mode/);
 });
 
 test("THE INNOCENT DIRECTION: the arguments an action takes go through to its operation", async () => {

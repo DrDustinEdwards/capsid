@@ -131,10 +131,10 @@ test("every queue transition is a keyed UPDATE with RETURNING, never meta.change
 
 // scanner-rule: CLAUDE.md, snapshot rule: every overwrite snapshots and audits. A second write path cannot be exercised before it exists
 test("the queue's writes go through the shared document statements, not a second write path", () => {
-  // The mirror uses improveDocStatements, which carries document_versions and
+  // The mirror uses docStatements, which carries document_versions and
   // audit_log in the same batch, rather than spelling its own upsert.
   const jobs = jobModulesSource();
-  assert.match(jobs, /improveDocStatements\(/, "the job mirror no longer uses the shared document statements");
+  assert.match(jobs, /\bdocStatements\(/, "the job mirror no longer uses the shared document statements");
   assert.doesNotMatch(jobs, /INSERT INTO documents/, "a job module spells its own document upsert");
   assert.doesNotMatch(jobs, /INSERT INTO document_versions/, "a job module spells its own snapshot");
 });

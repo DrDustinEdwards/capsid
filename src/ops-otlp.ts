@@ -1,4 +1,4 @@
-import { readBoundedText } from "./improve-scorer";
+import { readBoundedText } from "./signed-requests";
 import { resolveSessionCaller, type SessionCaller } from "./ops-session-auth";
 import { logEvent } from "./log";
 

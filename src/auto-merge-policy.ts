@@ -1,7 +1,7 @@
 import type { Env } from "./env";
-import { onRoster } from "./improve-schema";
+import { onRoster } from "./roster";
 import { isMoneyPath } from "./scope";
-import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./improve-task";
+import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./signed-docs";
 
 // What the Worker may merge without a human, and where that list lives. The document
 // is capsid/policy/auto-merge.md, signed with the same key and envelope as a task
@@ -75,30 +75,23 @@ export const overSizeCap = (facts: Pick<PrFacts, "changedLines">): boolean => fa
 export const sizeCapReason = (facts: Pick<PrFacts, "changedLines">): string =>
   `over the size cap: ${facts.changedLines} changed lines, more than ${AUTO_MERGE_SIZE_CAP}`;
 
-// The paths auto-merge refuses, separate from PROTECTED_PATH_PATTERNS (what the improve
-// loop may edit). Tests, src/, docs, CLAUDE.md and .claude/ merge on green; these do
+// The paths auto-merge refuses, separate from PROTECTED_PATH_PATTERNS (what needs the
+// can_touch_protected flag, src/protected-paths.ts). Tests, src/, docs, CLAUDE.md and .claude/ merge on green; these do
 // not, because each changes what judges a change or what ships beside it. Matched
 // case-insensitively against the repo-relative path; the document lists each source.
 export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> = [
-  { pattern: /^\.github\/workflows\/improve-score\.yml$/i, why: "the scorer workflow" },
-  { pattern: /^scripts\/improve-report\.mjs$/i, why: "the score report script" },
-  { pattern: /^scripts\/sync-scorer\.mjs$/i, why: "the script that copies the scorer to the roster" },
-  { pattern: /(^|\/)improve\/holdout\//i, why: "the holdout suite manifest" },
-  { pattern: /^src\/improve-scorer\.ts$/i, why: "the only source that reads the holdout suite" },
-  { pattern: /^test\/[^/]*holdout[^/]*$/i, why: "a test that keeps the holdout suite away from attempt code" },
   { pattern: /^src\/gate-policy\.ts$/i, why: "the gate policy source" },
   { pattern: /^src\/auto-merge(-(policy|tick))?\.ts$/i, why: "the auto-merge source, which holds this list" },
   { pattern: /^src\/policy-sign\.ts$/i, why: "the policy signer" },
-  { pattern: /^src\/improve-schema\.ts$/i, why: "the protected path list" },
+  { pattern: /^src\/protected-paths\.ts$/i, why: "the protected path list" },
   // The sources the checks read their answers from, not only the ones that run them.
   // Each is a two-step route otherwise: a green driver PR weakens the source and
   // merges on its own, and the next PR passes the check it weakened.
   { pattern: /^src\/scope\.ts$/i, why: "isMoneyPath, which is the whole of the paths_not_money check" },
-  { pattern: /^src\/improve-task\.ts$/i, why: "verifySignedBody, which is how loadMergePolicy decides the stored policy is signed" },
+  { pattern: /^src\/signed-docs\.ts$/i, why: "verifySignedBody, which is how loadMergePolicy decides the stored policy is signed" },
   { pattern: /^src\/auth\.ts$/i, why: "the HMAC and the constant-time comparison that verifier delegates to" },
   { pattern: /^src\/encoding\.ts$/i, why: "the hex encoding of the signature that verifier compares" },
   { pattern: /^src\/github\/client\.ts$/i, why: "the reader that supplies the changed paths and the CI facts every check judges" },
-  { pattern: /^scripts\/path-guard\.mjs$/i, why: "the driver's enforcement of the protected path list" },
   // dustinedwards-info's judge files. The list stays one list rather than one per
   // namespace: every pattern is a refusal, so a namespace inheriting another's pattern
   // can only refuse more, and a list split per namespace would be a second place to
@@ -308,7 +301,7 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
   const unknown = namespaces.filter((n) => !onRoster(n));
   if (unknown.length > 0) {
     return {
-      error: `the policy names ${unknown.join(", ")}, which is not on the improve roster. A policy cannot widen the set of repos this Worker reaches.`,
+      error: `the policy names ${unknown.join(", ")}, which is not on the roster. A policy cannot widen the set of repos this Worker reaches.`,
     };
   }
   const checks: string[] = [];

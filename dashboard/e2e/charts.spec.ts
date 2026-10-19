@@ -108,13 +108,10 @@ test("PLANT: chart 5, claim against verified, has the four agreements for each a
   await expect(chart.locator("li[data-enarratio-series]")).toHaveText(["agree", "disagree", "unclaimed", "unchecked"]);
 });
 
-test("PLANT: chart 6, weekly cost, is drawn against the cap's weekly share and leaves a week with no cost as a gap", async ({ page }) => {
+test("PLANT: chart 6, weekly cost, leaves a week with no cost as a gap", async ({ page }) => {
   await visit(page, "agents");
   const chart = page.locator('[data-chart="cost"]');
   await expect(chart.getByRole("img", { name: /Model spend per week for the last 8 weeks/ })).toBeVisible();
-  await expect(chart.getByRole("img", { name: /against a weekly share of the \$50 monthly cap \(\$11\.54\)/ })).toBeVisible();
-  await expect(chart).toContainText("Cap $50 a month, about $11.54 a week");
-  await expect(chart).toContainText("$18.40 of $50 spent this month");
   // Week 2 of the mock has no costed outcome: an empty cell, not $0.00.
   const rows = chart.locator("details.enarratio-data tbody tr");
   await expect(rows).toHaveCount(8);

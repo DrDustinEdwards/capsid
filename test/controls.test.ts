@@ -4,7 +4,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { CONTROLS, PORTAL_ACTIONS, performControl, previewControl } from "../src/controls.ts";
-import { MODE_KEY } from "../src/improve-schema.ts";
+import { OVERNIGHT_MODE_KEY } from "../src/overnight.ts";
 import { buildAdminServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -47,7 +47,7 @@ const admin = (email = EMAIL) => adminAgentForEmail(email);
 const auditRows = (d1: ReturnType<typeof fakeD1>) =>
   d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql)).map((r) => ({ actor: r.params[0] as string, action: r.params[1] as string, params: JSON.parse(String(r.params[4])) as Record<string, unknown> }));
 
-const MODE = { control: "mode", params: { value: "subscription", reason: "run it on the subscription tonight" } };
+const MODE = { control: "overnight", params: { value: "api", reason: "run it on the API key tonight" } };
 
 test("the registry, the Portal's action list and the tool's list name the same controls, in both directions", async () => {
   const { env } = world();
@@ -57,7 +57,7 @@ test("the registry, the Portal's action list and the tool's list name the same c
     assert.ok(listed.length >= 16, `the list held ${listed.length} controls, so this compared nothing`);
     assert.deepEqual(listed.map((c) => c.control).sort(), [...PORTAL_ACTIONS].sort());
     assert.deepEqual(CONTROLS.map((c) => c.name).sort(), [...PORTAL_ACTIONS].sort());
-    const mode = listed.find((c) => c.control === "mode");
+    const mode = listed.find((c) => c.control === "overnight");
     assert.deepEqual([mode?.params, mode?.reason_required], [["value", "reason", "undo"], true]);
     assert.equal(listed.find((c) => c.control === "revoke_agent")?.reason_required, false);
   } finally {
@@ -87,19 +87,19 @@ test("preview writes nothing and describes the change; perform runs exactly it, 
     assert.equal(previewed.isError, undefined, previewed.content[0].text);
     const plan = parse(previewed) as { token: string; changes: string[]; audit: string[]; expires_at: string };
     assert.ok(plan.token.length > 40 && plan.changes.length > 0);
-    assert.ok(plan.audit.some((line) => line.startsWith("control-mode by ")), `the plan names ${plan.audit.join(" | ")}, not the chat row`);
+    assert.ok(plan.audit.some((line) => line.startsWith("control-overnight by ")), `the plan names ${plan.audit.join(" | ")}, not the chat row`);
     assert.deepEqual(d1.recorded, [], "a preview wrote to D1");
     assert.deepEqual(kv.puts, [], "a preview wrote to KV");
 
     const done = await call({ action: "perform", token: plan.token });
     assert.equal(done.isError, undefined, done.content[0].text);
-    assert.equal(parse(done).action, "mode");
-    assert.equal(kv.store.get(MODE_KEY), "subscription");
+    assert.equal(parse(done).action, "overnight");
+    assert.equal(kv.store.get(OVERNIGHT_MODE_KEY), "api");
 
     const rows = auditRows(d1);
-    // The mutator's own row names the caller, not the loop, and the click row names the surface.
-    assert.ok(rows.some((r) => r.action === "improve-mode-set" && r.actor === ACTOR), JSON.stringify(rows.map((r) => [r.action, r.actor])));
-    const click = rows.find((r) => r.action === "control-mode");
+    // The mutator's own row names the caller, and the click row names the surface.
+    assert.ok(rows.some((r) => r.action === "overnight-set" && r.actor === ACTOR), JSON.stringify(rows.map((r) => [r.action, r.actor])));
+    const click = rows.find((r) => r.action === "control-overnight");
     assert.equal(click?.actor, ACTOR);
     assert.equal(click?.params.surface, "chat");
   } finally {
@@ -120,7 +120,7 @@ test("PLANT: a confirmation is spent by its first perform, whichever surface run
     assert.equal(d1.recorded.length, rowsAfterFirst, "a replayed confirmation wrote a row");
 
     // A token the Portal's door previewed is spent by chat's perform, and then by nobody.
-    const portal = await previewControl(env, EMAIL, "mode", MODE.params, new Date(), "portal");
+    const portal = await previewControl(env, EMAIL, "overnight", MODE.params, new Date(), "portal");
     assert.equal(portal.ok, true);
     if (!portal.ok) return;
     const viaChat = await call({ action: "perform", token: portal.preview.token });
@@ -155,11 +155,11 @@ test("a switch without a reason is refused at preview, with the reason it needs"
   const { env, d1, kv } = world();
   const { call, close } = await connect(env, admin());
   try {
-    const res = await call({ action: "preview", control: "mode", params: { value: "off" } });
+    const res = await call({ action: "preview", control: "overnight", params: { value: "off" } });
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /needs a reason/);
     assert.deepEqual([d1.recorded, kv.puts], [[], []]);
-    const stray = await call({ action: "preview", control: "mode", params: { value: "off", reason: "x", site: "y" } });
+    const stray = await call({ action: "preview", control: "overnight", params: { value: "off", reason: "x", site: "y" } });
     assert.equal(stray.isError, true, "a param the control does not take was carried");
   } finally {
     await close();

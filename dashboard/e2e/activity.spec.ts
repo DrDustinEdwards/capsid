@@ -63,8 +63,8 @@ test("an Activity row opens its audit row: the reason, the before and after, and
 
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/activity$/);
-  await page.locator("tbody tr[data-row]").filter({ hasText: "portal-mode" }).click();
-  await expect(drawer.locator(".callout.reason")).toHaveText("Nightly runs are paused while the budget resets.");
+  await page.locator("tbody tr[data-row]").filter({ hasText: "portal-overnight" }).click();
+  await expect(drawer.locator(".callout.reason")).toHaveText("Nightly runs are off while the fixture repo is rebuilt.");
   await expect(drawer.locator(".kv").last()).toContainText("Mode");
 });
 

@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { readBoundedText } from "./improve-scorer";
+import { readBoundedText } from "./signed-requests";
 import { callerIp, checkRate, type RateLimitPolicy } from "./rate-limit";
 import { logEvent } from "./log";
 

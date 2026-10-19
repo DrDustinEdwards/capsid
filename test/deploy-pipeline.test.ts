@@ -35,7 +35,7 @@ test("every cron branch rethrows after logging, so a failed invocation reports f
   const idx = read("src/index.ts");
   // Each branch runs through runTask (src/task-runs.ts), which logs the throw with
   // its tag and rethrows it only when told to; test/task-runs.test.ts runs both.
-  for (const marker of ["BACKUP_CRON_THREW", "IMPROVE_OPEN_THREW", "IMPROVE_TICK_THREW", "SKILLS_REFRESH_THREW"]) {
+  for (const marker of ["BACKUP_CRON_THREW", "TICK_THREW", "SKILLS_REFRESH_THREW"]) {
     assert.match(idx, new RegExp(`tag: "${marker}", rethrow: true`), `${marker} logs but does not rethrow, so a failed invocation reports clean`);
   }
 });

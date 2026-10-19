@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { policyField, readSignedPolicy, signTaskBody } from "../src/improve-task.ts";
+import { policyField, readSignedPolicy, signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 // One signed-policy reader, shared by the merge policy and the gate policy so a fix

@@ -9,7 +9,7 @@ import { CACHE_HINTS } from "./cache-hints";
 import { defineDocOperations, type ToolCtx, type ToolGrant } from "./tools/docs";
 import { defineLintOperations } from "./tools/lint";
 import { defineRepoOperations } from "./tools/repo";
-import { defineImproveOperations } from "./tools/improve";
+import { defineStatusOperations } from "./tools/status";
 import { defineJobOperations } from "./tools/jobs";
 import { defineAgentOperations } from "./tools/agents";
 import { defineClaimsOperations } from "./tools/claims";
@@ -94,7 +94,7 @@ function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminW
   defineDocOperations(server, ctx);
   defineLintOperations(server, ctx);
   defineRepoOperations(server, ctx);
-  defineImproveOperations(server, ctx);
+  defineStatusOperations(server, ctx);
   defineJobOperations(server, ctx);
   defineAgentOperations(server, ctx);
   defineClaimsOperations(server, ctx);

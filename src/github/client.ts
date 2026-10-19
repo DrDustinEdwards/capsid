@@ -7,8 +7,8 @@
 
 import { b64urlFromBytes, b64urlEncode } from "../encoding";
 import { repoPathProblem } from "../limits";
-// AttemptEnv, not Env: this module must not be able to name HOLDOUT.
-import type { AttemptEnv as Env } from "../env";
+// RepoEnv, not Env: this module must not be able to name the credentials it omits.
+import type { RepoEnv as Env } from "../env";
 import { logEvent } from "../log";
 
 const GH = "https://api.github.com";
@@ -430,10 +430,8 @@ export async function getFileSha(env: Env, owner: string, repo: string, path: st
   return data.sha;
 }
 
-// The default branch's head commit sha, for the improve loop. listRepoTree has no
-// top-level sha (its shas are per-entry blob shas), so reading one from it is always
-// undefined, and selectBase would then fall through to "no base could be resolved"
-// on a namespace's first run.
+// The default branch's head commit sha. listRepoTree has no top-level sha (its shas
+// are per-entry blob shas), so it cannot answer this.
 export async function defaultBranchSha(env: Env, namespace: string, repoSelector?: string): Promise<string> {
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
   const branch = await getDefaultBranch(env, owner, repo);

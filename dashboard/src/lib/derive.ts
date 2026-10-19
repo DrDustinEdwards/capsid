@@ -256,17 +256,17 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   // The watcher's attention-class findings (src/watcher.ts, findingClass), which post no
   // job: an agent acting out of its usual pattern (src/anomaly.ts, OWASP item 6; Dustin
   // ruled a hit is a finding plus an attention item and nothing more, D4, 2026-10-03), and
-  // the improve loop's pauses, budgets and open breakers. Warnings, never critical.
+  // open queue breakers. Warnings, never critical.
   for (const f of live.findings) {
     if (f.class !== "attention") continue;
     const agent = f.fingerprint.startsWith("anomaly-");
     out.push({
       sev: "warn",
-      kind: agent ? "Agent" : "Loop",
+      kind: agent ? "Agent" : "Breaker",
       title: f.headline,
-      sub: agent ? "Out of its usual pattern · a finding only, nothing suspended" : (f.evidence[0] ?? "The improve loop is held"),
+      sub: agent ? "Out of its usual pattern · a finding only, nothing suspended" : (f.evidence[0] ?? "A queue breaker is open"),
       at: ms(f.last_seen),
-      open: agent ? "view:incidents" : "view:agents",
+      open: agent ? "view:incidents" : "view:namespaces",
     });
   }
   // Drivers' canon writes waiting for approval (src/canon.ts). A proposal whose added
@@ -286,9 +286,6 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   }
   for (const a of live.awaiting_seat) {
     out.push({ sev: "warn", kind: "PR", title: `${a.repo} #${a.number} awaits the seat`, sub: `${a.failed}: ${a.why}`, at: ms(a.at), open: "view:prs", group: { key: "pr-seat", facet: a.repo } });
-  }
-  if (live.loop.budget.exceeded) {
-    out.push({ sev: "warn", kind: "Budget", title: `The ${live.loop.budget.month} budget is exceeded`, sub: `${live.loop.budget.spend.ci_minutes} of ${live.loop.budget.caps.actions_minutes_month} min · $${live.loop.budget.spend.cost_usd.toFixed(2)} of $${live.loop.budget.caps.model_usd_month}`, at: ms(live.generated), open: "view:agents" });
   }
   // Session incidents (the same ones Incidents lists): a live session stopped on a
   // failure is critical, one waiting on input over ten minutes a warning. Named by the
@@ -520,7 +517,6 @@ export function counts(feed: OpsFeed) {
     queued: jobs.filter((j) => j.status === "queued").length,
     findings: jobs.filter((j) => j.finding && isOpen(j)).length,
     ciRed: (feed.snapshot?.ci ?? []).filter((c) => ciState(c).red).length,
-    paused: feed.live.namespaces.filter((n) => n.paused != null).length,
   };
 }
 
@@ -557,21 +553,4 @@ export function nsList(a: OpsAgent): string {
 // A namespace's driver is the agent named <ns>-driver.
 export function driverOf(feed: OpsFeed, ns: string): OpsAgent | null {
   return feed.live.agents.find((a) => a.name === `${ns}-driver`) ?? null;
-}
-
-// The improve loop's attempts for a driver. Null is not a driver, shown as a dash, never zero.
-export function attemptsText(a: OpsAgent): string {
-  return a.attempts_kept == null || a.attempts_reverted == null ? "-" : `${a.attempts_kept} kept / ${a.attempts_reverted} reverted`;
-}
-
-// ---- improve loop mode -------------------------------------------------------------
-
-export const LOOP_MODES = ["api", "subscription", "off"] as const;
-export type LoopMode = (typeof LOOP_MODES)[number];
-
-export function loopMode(mode: string): { kind: Kind; label: string } {
-  if (mode === "api") return { kind: "ok", label: "API" };
-  if (mode === "subscription") return { kind: "ok", label: "Subscription" };
-  if (mode === "off") return { kind: "nodata", label: "Off" };
-  return { kind: "warn", label: `Unknown mode: ${mode}` };
 }

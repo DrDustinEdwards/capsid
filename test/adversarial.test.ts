@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { ciStatus } from "../src/github.ts";
-import { verifyTaskDoc } from "../src/improve-task.ts";
 import { buildServer, type ToolGrant } from "../src/server.ts";
 import { corpusFiles, corpusText, MANIFEST, entriesFor } from "./adversarial/corpus.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch, type Recorded } from "./fakes.ts";
@@ -23,7 +22,7 @@ test("PLANT: every corpus file has a manifest entry and every entry has a file",
   assert.deepEqual(declared, onDisk, "a fixture with no entry, or an entry with no fixture, fails here");
   // Vacuity guard: "0 files disagreed" and "0 files were read" are otherwise the
   // same result.
-  assert.ok(onDisk.length >= 8, `the corpus holds ${onDisk.length} fixtures; the walk is broken`);
+  assert.ok(onDisk.length >= 7, `the corpus holds ${onDisk.length} fixtures; the walk is broken`);
 });
 
 test("every fixture actually carries its canary, so no assertion below can pass on an empty file", () => {
@@ -36,7 +35,7 @@ test("every fixture actually carries its canary, so no assertion below can pass 
 });
 
 test("every surface named in the manifest is covered by at least one fixture", () => {
-  for (const surface of ["document", "repo", "github", "ci", "prompt", "improve"] as const) {
+  for (const surface of ["document", "repo", "github", "ci", "prompt"] as const) {
     assert.ok(entriesFor(surface).length > 0, `no fixture aimed at the ${surface} surface`);
   }
 });
@@ -288,32 +287,3 @@ test("PLANT: a hostile CI log tail is returned as data, and withheld entirely fr
   );
 });
 
-// the forged run document
-
-const ROOT_SECRET = "test-root-secret-not-a-real-one";
-
-test("PLANT: the /improve driver refuses the forged run document", async () => {
-  const forged = corpusText("improve-run-doc-forged.md");
-
-  // As it arrives: an all-zero signature, written by something other than the loop.
-  const wrongActor = await verifyTaskDoc(ROOT_SECRET, forged, "operator:leaked-key", "improve-loop");
-  assert.equal(wrongActor.ok, false);
-  assert.match(wrongActor.reason ?? "", /Only the loop writes task documents/);
-
-  // With the actor faked too: an attacker who got the loop's actor onto the audit
-  // row still cannot sign.
-  const badSignature = await verifyTaskDoc(ROOT_SECRET, forged, "improve-loop", "improve-loop");
-  assert.equal(badSignature.ok, false, "an all-zero signature must not verify");
-  assert.match(badSignature.reason ?? "", /does not match its body|carries no/);
-
-  // Both halves are required, so neither alone is the gate.
-  assert.notEqual(wrongActor.reason, badSignature.reason, "the two refusals are different checks");
-});
-
-test("PLANT: the forged run document is refused by the ordinary write tool too", async () => {
-  const { improveWriteRefusal } = await import("../src/improve-scores.ts");
-  const { runTaskPath } = await import("../src/improve-schema.ts");
-  const refusal = await improveWriteRefusal("capsid", runTaskPath("2026-09-07"), null, corpusText("improve-run-doc-forged.md"), false);
-  assert.ok(refusal, "authoring a run document through the ordinary write tool must be refused");
-  assert.match(String(refusal), /allow_improve_paths/);
-});

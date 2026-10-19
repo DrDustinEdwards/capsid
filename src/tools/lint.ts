@@ -5,7 +5,7 @@ import { auditStatement, documentUpsert, isMissingRowAbort, requireExists, snaps
 import { authoritativeFor, scanCountClaims } from "../counts";
 import { buildTruthReport, isUnscanned, renderTruthReport, reportPath, type ReportDoc, type ReportEdge } from "../truth-report";
 import { docPath, GATHER_BUDGET, LINT_CONSUMED_MAX, nsName } from "../limits";
-import { improveWriteRefusal } from "../improve-scores";
+import { policyWriteRefusal } from "../signed-docs";
 import { fail, ok, pathMutation, requireConfirmation, type ToolCtx } from "./docs";
 
 // The tool this operation is served as (src/tools/surface.ts), for its own scope checks.
@@ -299,17 +299,13 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         }
       }
       if (problems.length > 0) return fail(`finalize aborted, nothing archived:\n${problems.join("\n")}`);
-      // The improve control-surface guard. finalize is type-gated to episodic and
-      // source documents and improve documents are task, prompt and reference, so this
-      // looks unreachable. It is not: a document written to an improve path with the
-      // opt-in flag can carry type 'source', and finalize would then archive the run
-      // prompt out from under the loop. No opt-in here: archiving the loop's control
-      // surface is never right.
-      const consumedImproveRefusals = (
-        await Promise.all(paths.map((consumedPath) => improveWriteRefusal(namespace, consumedPath, null, "", false)))
-      ).filter((r): r is string => r !== null);
-      if (consumedImproveRefusals.length > 0) {
-        return fail(`finalize aborted, nothing archived:\n${consumedImproveRefusals.join("\n")}`);
+      // The policy-document guard. finalize is type-gated to episodic and source
+      // documents, but a document written under policy/ with the opt-in flag can carry
+      // type 'source', and finalize would then archive a signed policy. No opt-in here:
+      // archiving a policy is never right.
+      const consumedPolicyRefusals = paths.map((consumedPath) => policyWriteRefusal(namespace, consumedPath, false)).filter((r): r is string => r !== null);
+      if (consumedPolicyRefusals.length > 0) {
+        return fail(`finalize aborted, nothing archived:\n${consumedPolicyRefusals.join("\n")}`);
       }
       // finalize needs confirmation: one call renames every consumed document.
       const finalizeRefusal = await requireConfirmation(server, confirm, {

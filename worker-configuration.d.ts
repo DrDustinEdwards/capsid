@@ -4,7 +4,6 @@ interface __BaseEnv_Env {
 	APP_KV: KVNamespace;
 	OAUTH_KV: KVNamespace;
 	MEDIA: R2Bucket;
-	HOLDOUT: R2Bucket;
 	DB: D1Database;
 	AI_SEARCH: AiSearchNamespace;
 	GITHUB_APP_CLIENT_ID: "Iv23lik2O8SPPksxbc6O";

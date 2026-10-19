@@ -4,7 +4,7 @@ import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
-import { signTaskBody } from "../src/improve-task";
+import { signTaskBody } from "../src/signed-docs";
 
 // The gate policy's resume path, against a real D1. Every job is posted, claimed and
 // blocked through the real queue, the policy document is a real signed row, and every

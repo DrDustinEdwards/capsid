@@ -36,7 +36,6 @@ const BRANCHES = [
   { name: "release/1.0", commit: { sha: "x1" } },
   { name: "gh-pages", commit: { sha: "g1" } },
   { name: "stale/no-pr", commit: { sha: "n1" } },
-  { name: "improve/attempt-1", commit: { sha: "i1" } },
   { name: "stable", commit: { sha: "s1" }, protected: true },
 ];
 const OPEN = [pr(3, "feat/open", "o1", { state: "open" }), pr(6, "feat/reopened", "r2", { state: "open" })];
@@ -46,7 +45,6 @@ const CLOSED = [
   pr(4, "feat/closed-unmerged", "c1", { merged: false }),
   pr(5, "feat/reopened", "r1"),
   pr(7, "feat/forky", "f1", { repo: { full_name: "fork/r" } }),
-  pr(8, "improve/attempt-1", "i1"),
   pr(9, "stable", "s1"),
   pr(10, "release/1.0", "x1"),
 ];
@@ -79,7 +77,6 @@ test("the preview lists the one merged-clean branch, keeps every other with its 
     assert.match(reasons["release/1.0"], /kept by name/);
     assert.match(reasons["gh-pages"], /kept by name/);
     assert.match(reasons["stale/no-pr"], /no pull request/);
-    assert.match(reasons["improve/attempt-1"], /improve loop/);
     assert.match(reasons["stable"], /protected/);
     assert.match(reasons["main"], /default branch/);
     assert.equal(out.lists_complete, true);

@@ -28,8 +28,6 @@ export function Overview() {
   const snap = feed.snapshot;
   const live = feed.live;
   const blocked = live.jobs.filter((j) => j.status === "blocked");
-  const budget = live.loop.budget;
-  const minutesFrac = budget.caps.actions_minutes_month ? budget.spend.ci_minutes / budget.caps.actions_minutes_month : 0;
   const backup = snap?.health?.backup ?? null;
   const mirrorAge = snap?.mirror?.newest_dump ? now - ms(snap.mirror.newest_dump) : null;
   const findingsOpen = c.findings;
@@ -47,7 +45,6 @@ export function Overview() {
       ? { label: "Primary backup", v: <>{backup.age_hours.toFixed(1)}<small>h</small></>, d: mirrorAge == null ? "mirror: no data" : `mirror ${Math.floor(mirrorAge / DAY)}d old`, cls: backup.warning || (mirrorAge != null && mirrorAge > 2 * DAY) ? "crit" : "ok", go: "backups" }
       : { label: "Primary backup", v: <small>No data</small>, d: snap?.health ? "no good dump recorded" : "health not read", cls: snap?.health ? "crit" : "", go: "backups" },
     { label: "Open findings", v: String(findingsOpen), d: snap ? `watcher pass ${ago(ms(snap.pass_at), now)}` : "no watcher pass yet", cls: findingsOpen ? "warn" : "ok", go: "incidents" },
-    { label: "Actions budget", v: <>{budget.spend.ci_minutes}<small>/{budget.caps.actions_minutes_month} min</small></>, d: `$${budget.spend.cost_usd.toFixed(2)} of $${budget.caps.model_usd_month} · loop ${live.loop.mode}`, cls: budget.exceeded ? "crit" : minutesFrac > 0.8 ? "warn" : "", go: "agents" },
   ];
   return (
     <div className="embedded" id="summary" data-section="Summary">

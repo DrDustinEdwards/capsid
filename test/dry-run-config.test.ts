@@ -5,8 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-// scripts/dry-run-config.mjs builds a config for the scorer's `wrangler deploy
-// --dry-run`. It used to write wrangler.jsonc, the file a deploy reads, so running it
+// scripts/dry-run-config.mjs builds an offline config for `npm run types`. It used to write wrangler.jsonc, the file a deploy reads, so running it
 // on a machine with the real (gitignored) config replaced that config with the
 // example plus pins, with no backup. It now writes wrangler.dryrun.jsonc.
 
@@ -31,11 +30,6 @@ test("it writes wrangler.dryrun.jsonc and leaves an existing wrangler.jsonc alon
   }
 });
 
-test("the scorer's dry run names the file the script writes", () => {
-  const workflow = readFileSync(join(ROOT, ".github", "workflows", "improve-score.yml"), "utf8");
-  assert.match(workflow, /wrangler deploy --dry-run --config wrangler\.dryrun\.jsonc/, "the dry run would read wrangler.jsonc, which nothing writes on the runner");
-});
-
 // Capsid Portal's assets block (wrangler.jsonc.example). run_worker_first true is
 // what keeps a browser's /authorize and /portal/callback navigations reaching the
 // Worker; not_found_handling "none" leaves the single-page fallback to the Worker, after
@@ -51,7 +45,7 @@ test("the example serves the dashboard with every request reaching the Worker fi
   assert.equal(assets.directory, "./dashboard/dist");
 });
 
-test("the dry run drops the assets block, since the scorer builds no dashboard", () => {
+test("the dry run drops the assets block, since `npm run types` builds no dashboard", () => {
   const dir = mkdtempSync(join(tmpdir(), "dry-run-config-"));
   try {
     copyFileSync(join(ROOT, "wrangler.jsonc.example"), join(dir, "wrangler.jsonc.example"));

@@ -4,7 +4,7 @@
 // table and never from the request or from an editable row such as ops_sites.
 //
 // Each site dumps into its own bucket under d1-dump's prefix, BACKUP_DUMP_PREFIX in
-// src/improve-scorer.ts. txasm dumps into its books bucket rather than a backups one.
+// src/signed-requests.ts. txasm dumps into its books bucket rather than a backups one.
 // dustinedwards joined 2026-10-15, after its nightly dump (dustinedwards-info #439, on the
 // watchdog Worker) completed and passed its first drill (job_e40ec706c10a).
 export const OFFACCOUNT_SOURCES = {

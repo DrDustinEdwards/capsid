@@ -1,6 +1,6 @@
 import { base64Decode, base64Encode } from "../encoding";
 import { DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, MAX_SCAN_CAP, pathProblem } from "../limits";
-import type { AttemptEnv as Env } from "../env";
+import type { RepoEnv as Env } from "../env";
 import {
   assertRepoArg,
   cachedGet,
@@ -329,9 +329,6 @@ export const SELF_REPO = "DrDustinEdwards/capsid";
 // Checked in two places: commitOnBranch covers both verbs including the delete path
 // (which never reaches putFile), and putFile covers the write primitive, so a third
 // caller added later inherits the refusal.
-//
-// The improve loop never passes the flag: .github/ is a protected path, so an
-// attempt touching one is reverted before it is pushed.
 const WORKFLOW_DIR = ".github/workflows/";
 
 export function workflowWriteRefusal(path: string, allow: boolean | undefined): string | null {
@@ -401,10 +398,8 @@ async function commitOnBranch<R>(
   // every push to it, so a commit landing there is a production deploy behind a
   // write-grant key.
   //
-  // Only the default branch is refused. Refusing mode "direct" against this repo
-  // outright would be too wide: the improve loop pushes every attempt to a branch in
-  // direct mode, so every attempt on this repo would fail on its first file. Direct
-  // mode with no branch always means the default branch, so it is refused without a
+  // Only the default branch is refused: a direct commit to a work branch is ordinary.
+  // Direct mode with no branch always means the default branch, so it is refused without a
   // round trip.
   if (`${owner}/${repo}` === SELF_REPO && mode === "direct" && !branch) {
     throw new Error(

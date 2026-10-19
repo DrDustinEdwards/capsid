@@ -94,7 +94,7 @@ test("a watcher job's fingerprint is read exactly as openWatcherFingerprints rea
   assert.equal(opsJobFrom(job({ title: "mine [not-a-finding]" })).finding, null);
 });
 
-test("an agent is shown with the record improve_status computes for it, and without its grants", () => {
+test("an agent is shown with the record the status computes for it, and without its grants", () => {
   const record = agentRecord({
     jobs_done: 4,
     jobs_failed: 1,
@@ -104,8 +104,6 @@ test("an agent is shown with the record improve_status computes for it, and with
     pr_merge_rate: 0.667,
     ci_green_rate: null,
     median_duration_minutes: 12,
-    attempts_kept: 5,
-    attempts_reverted: 7,
   });
   const shaped = opsAgentFrom({
     name: "sample-driver",
@@ -134,8 +132,6 @@ test("an agent is shown with the record improve_status computes for it, and with
     pr_merge_rate: 0.667,
     ci_green_rate: null,
     median_duration_minutes: 12,
-    attempts_kept: 5,
-    attempts_reverted: 7,
   });
 });
 
@@ -212,10 +208,9 @@ const FEED: OpsFeedData = {
     merge_safety: null,
     overnight: { mode: "off", decision: null },
     sessions: [],
-    loop: { mode: "off", budget: { month: "2026-09", caps: { actions_minutes_month: 1, model_usd_month: 1 }, spend: { ci_minutes: 0, cost_usd: 0 }, exceeded: false } },
     sites: [],
     packages: [],
-    namespaces: [{ name: "sample", paused: null }],
+    namespaces: [{ name: "sample" }],
   },
   refresh_allowed_at: null,
   cloudflare_configured: false,

@@ -1,27 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { SELF_REPO, ciDispatch, deleteBranch, deleteRepoFile, writeRepoFile } from "../src/github.ts";
-import { checkHoldout, type ScoreReport } from "../src/improve-scorer.ts";
 import { mcpOriginProblem } from "../src/headers.ts";
-import { tickRuns } from "../src/improve-run.ts";
-import { anchorChecksum, parseScoresDoc, seedScoresDoc } from "../src/improve-scores.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
-import { sseChange } from "./improve-fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
 // Audit fixes, one block per finding. Harnesses are the shared ones: fakes.ts for
 // KV/D1/R2/fetch, source-files.ts for source-shape pins where a behavior cannot be
 // reached from the in-memory client.
 
-const workflowText = () =>
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ".github", "workflows", "improve-score.yml"), "utf8");
-
-// ci_dispatch refuses the scorer; repo writes refuse the self-repo
+// ci_dispatch takes a workflow file name; repo writes refuse the self-repo
 
 function repoEnv(repoFull: string) {
   const kv = fakeKv({ seedToken: true });
@@ -35,11 +25,11 @@ function repoEnv(repoFull: string) {
   });
 }
 
-test("ci_dispatch refuses improve-score.yml before any network call", async () => {
+test("ci_dispatch refuses a numeric workflow id before any network call", async () => {
   await withFetch({}, async (calls) => {
     await assert.rejects(
-      () => ciDispatch(repoEnv("owner/repo"), "ns", { workflow: "improve-score.yml", ref: "main" }),
-      /ci_dispatch refuses.*improve-score\.yml/s
+      () => ciDispatch(repoEnv("owner/repo"), "ns", { workflow: "12345", ref: "main" }),
+      /ci_dispatch refuses: '12345' is not a workflow file name/
     );
     assert.equal(calls.length, 0, "the refusal must not cost a GitHub round trip");
   });
@@ -79,102 +69,6 @@ test("write_repo_file pr mode with the default branch as the work branch is refu
       assert.equal(calls.filter((c) => c.method !== "GET").length, 0, "nothing may be written");
     }
   );
-});
-
-// the run machine claims before it calls out
-
-const SCORES = seedScoresDoc("capsid");
-// One minute after the improve fake's pinned datetime('now') ("2026-09-01
-// 08:05:00", improve-fakes.ts), so a row the claim CAS just stamped reads as
-// seconds old, the way it would in production, rather than as three days stale.
-const NOW = new Date("2026-09-01T08:06:00Z");
-
-async function runHarness(runs: Array<Record<string, unknown>>) {
-  const pin = await anchorChecksum(parseScoresDoc("capsid", SCORES));
-  const d1 = fakeD1({
-    documents: [{ namespace: "capsid", path: "improve/scores.md", title: "scores", body: SCORES, type: "reference" }],
-    namespaces: [{ namespace: "capsid", repos: JSON.stringify([{ repo: "owner/capsid-mcp", label: "primary" }]) }],
-    improveRuns: runs,
-  });
-  const kv = fakeKv({ seed: { "improve:anchor:capsid": pin }, seedToken: true });
-  const env = fakeEnv({
-    DB: d1.db,
-    APP_KV: kv.kv,
-    HOLDOUT: fakeR2({}).bucket,
-    MEDIA: fakeR2({}).bucket,
-    ANTHROPIC_API_KEY: "sk-test",
-    GITHUB_APP_CLIENT_ID: "x",
-    GITHUB_APP_PRIVATE_KEY: "x",
-  });
-  return { d1, env };
-}
-
-test("two concurrent ticks on an 'opening' run dispatch the baseline ONCE", async () => {
-  await withFetch(
-    {
-      "POST /repos/owner/capsid-mcp/git/refs": { status: 201, body: {} },
-      "GET /repos/owner/capsid-mcp": { body: { default_branch: "main" } },
-      "POST /repos/owner/capsid-mcp/actions/workflows/improve-score.yml/dispatches": { status: 204 },
-    },
-    async (calls) => {
-      const { d1, env } = await runHarness([
-        { id: "capsid-r9", namespace: "capsid", mode: "api", started: "2026-09-01 08:00:00", status: "opening", base_sha: "base000", advanced_at: "2026-09-01 08:04:00" },
-      ]);
-      await Promise.all([tickRuns(env, NOW), tickRuns(env, NOW)]);
-      const dispatches = calls.filter((c) => /\/dispatches$/.test(c.path));
-      assert.equal(dispatches.length, 1, "the loser tick dispatched the baseline a second time");
-      assert.equal(d1.rows.improve_runs[0].status, "awaiting-score");
-    }
-  );
-});
-
-test("two concurrent ticks on an 'attempting' run reach the model ONCE", async () => {
-  // No GitHub routes on purpose: the winner's push fails after the model call. Only
-  // one tick may spend the Anthropic call; the loser must stop at the claim.
-  await withFetch(
-    {
-      "POST /v1/messages": { contentType: "text/event-stream", text: sseChange([{ path: "src/x.ts", content: "y" }]) },
-    },
-    async (calls) => {
-      const { env } = await runHarness([
-        { id: "capsid-r9", namespace: "capsid", mode: "api", started: "2026-09-01 08:00:00", status: "attempting", attempts: 0, base_sha: "base000", advanced_at: "2026-09-01 08:04:00" },
-      ]);
-      await Promise.all([tickRuns(env, NOW), tickRuns(env, NOW)]);
-      const model = calls.filter((c) => c.path === "/v1/messages");
-      assert.equal(model.length, 1, "both ticks paid for an Anthropic call");
-    }
-  );
-});
-
-test("a tick leaves a FRESH 'judging' run alone; only a stale one is returned to awaiting-score", async () => {
-  await withFetch({}, async () => {
-    const base = { id: "capsid-r9", namespace: "capsid", mode: "api", started: "2026-09-01 08:00:00", current_attempt: "capsid-r9-a01", attempts: 1 };
-    const fresh = await runHarness([{ ...base, status: "judging", advanced_at: "2026-09-01 08:04:00" }]);
-    const freshOut = await tickRuns(fresh.env, NOW);
-    assert.equal(fresh.d1.rows.improve_runs[0].status, "judging", "a live ingest's run was yanked back mid-decision");
-    assert.equal(freshOut[0].to, "judging");
-
-    const stale = await runHarness([{ ...base, status: "judging", advanced_at: "2026-09-01 07:00:00" }]);
-    const staleOut = await tickRuns(stale.env, NOW);
-    assert.equal(stale.d1.rows.improve_runs[0].status, "awaiting-score", "a dead ingest's run stayed stranded in judging");
-    assert.equal(staleOut[0].to, "awaiting-score");
-  });
-});
-
-// scanner-rule: CLAUDE.md, path mutation rule: every run transition is a CAS whose result is read. It
-// covers every call site in ingestScore, including ones added later, which no single
-// lost-CAS test can.
-test("every advanceRun inside ingestScore checks its result", () => {
-  const owner = sourceFiles().find((f) => f.text.includes("export async function ingestScore"));
-  assert.ok(owner, "could not locate ingestScore under src/");
-  const start = owner.text.indexOf("export async function ingestScore");
-  const end = owner.text.indexOf("async function maybeAbstract");
-  assert.ok(start >= 0 && end > start, `could not bound ingestScore in src/${owner.name}`);
-  const body = owner.text.slice(start, end);
-  const all = body.match(/await advanceRun\(/g) ?? [];
-  const checked = body.match(/=\s*await advanceRun\(/g) ?? [];
-  assert.ok(all.length >= 3, `ingestScore has ${all.length} advanceRun calls; the transitions moved?`);
-  assert.equal(all.length, checked.length, "an advanceRun in ingestScore discards its result: a lost CAS would go unnoticed");
 });
 
 // delete_branch fails closed on the PR lookup
@@ -289,38 +183,3 @@ test("a cross-origin browser request to /mcp is refused; same-origin, claude.ai 
 
 // The wiring into the fetch handler is driven through the whole Worker in
 // test-integration/oauth.test.ts.
-
-// an empty holdout manifest is a refusal
-
-test("a manifest declaring zero holdout tests is refused, not scored as a pass", () => {
-  const report: ScoreReport = {
-    namespace: "capsid",
-    run_id: "r",
-    attempt_id: "a",
-    head_sha: "h",
-    jti: "j",
-    anchors: { build_passes: 1 },
-    secondary: { test_pass_rate: null, lint_count: null, error_count: null, p95_latency_ms: null, bundle_size_bytes: null },
-    holdout: { total: 0, passed: 0 },
-    ci_minutes: 0,
-  };
-  const verdict = checkHoldout({ namespace: "capsid", total: 0, updated_at: "2026-09-01T00:00:00Z" }, report);
-  assert.equal(verdict.ok, false, "an empty hidden suite scored exactly like a passing one");
-  assert.match(String(verdict.refusal), /zero|empty/i);
-  assert.equal(verdict.passRate, null);
-});
-
-// the scorer's ids come from the Post step's own env
-
-test("RUN_ID and ATTEMPT_ID are read only from the Post step's own env", () => {
-  const yml = workflowText();
-  const post = yml.slice(yml.indexOf("- name: Post the score report"));
-  assert.ok(post.length > 100, "could not locate the Post step");
-  const env = post.slice(post.indexOf("env:"), post.indexOf("run: |"));
-  assert.match(env, /RUN_ID: \$\{\{ inputs\.run_id \}\}/, "RUN_ID is not bound in the Post step's own env");
-  assert.match(env, /ATTEMPT_ID: \$\{\{ inputs\.attempt_id \}\}/, "ATTEMPT_ID is not bound in the Post step's own env");
-  // And nothing anywhere in the workflow writes either id into GITHUB_ENV, which
-  // is the cross-step injection the env placement exists to defeat.
-  assert.ok(!/RUN_ID[^\n]*GITHUB_ENV/.test(yml), "a step writes RUN_ID into GITHUB_ENV");
-  assert.ok(!/ATTEMPT_ID[^\n]*GITHUB_ENV/.test(yml), "a step writes ATTEMPT_ID into GITHUB_ENV");
-});

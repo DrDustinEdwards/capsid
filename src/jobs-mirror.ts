@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { improveDocStatements, priorDoc } from "./improve-state";
+import { docStatements, priorDoc } from "./doc-statements";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 import { jobDocPath, isTerminalJobStatus, type JobRow } from "./jobs-schema";
 import { auditStatement } from "./store-guards";
@@ -183,7 +183,7 @@ export async function mirrorStatements(env: NoteEnv, job: JobRow, action: string
   // log yet: it leads, and the notes read back are the earlier ones.
   const history = await resumeNotes(env, job);
   const notes = note ? [note, ...history.notes] : history.notes;
-  return improveDocStatements(env.DB, {
+  return docStatements(env.DB, {
     namespace: job.namespace,
     path,
     title: `Job: ${job.title}`,

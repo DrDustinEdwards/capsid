@@ -5,7 +5,7 @@ import { existingTestReason, mergeClass, pathClassOfAll, type Classification, ty
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { HeadMovedError, managePr } from "./github/refs";
 import { PER_PAGE, readAllPages, readPrFiles } from "./github/pr-files";
-import { improveAudit } from "./improve-state";
+import { systemAudit } from "./doc-statements";
 import {
   type PolicyCheck,
   requiredCiFor,
@@ -367,7 +367,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
             env,
             skippedFacts,
             skipped.failed,
-            improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, skippedFacts, skipped, now))
+            systemAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, skippedFacts, skipped, now))
           );
         } catch (err) {
           logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}` });
@@ -390,7 +390,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
           outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, failed: "error", why: `the tick could not judge or merge this PR: ${why}`, passed: [] });
           try {
             await env.DB.batch([
-              improveAudit(env.DB, "auto-merge-failed", namespace, {
+              systemAudit(env.DB, "auto-merge-failed", namespace, {
                 policy_version: policy.version,
                 repo: `${owner}/${repo}`,
                 pr: pr.number,
@@ -532,14 +532,14 @@ async function judgeOnePr(
       env,
       facts,
       verdict.failed,
-      improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, verdict, now))
+      systemAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, verdict, now))
     );
     return;
   }
   if (hold) {
     const held = { failed: hold.failed, why: hold.reason, passed: verdict.passed };
     outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...held, merge_class });
-    await auditDeclineOnChange(env, facts, held.failed, improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, held, now)));
+    await auditDeclineOnChange(env, facts, held.failed, systemAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, held, now)));
     return;
   }
   // merge_method "merge", because a squash would not keep the audited head sha. Pinned
@@ -560,7 +560,7 @@ async function judgeOnePr(
       env,
       facts,
       moved.failed,
-      improveAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, moved, now))
+      systemAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, moved, now))
     );
     return;
   }
@@ -568,7 +568,7 @@ async function judgeOnePr(
   // Merged by the policy on its own: an approval it held has nothing left to do.
   if (approval) await closeAsAutoMerged(env, namespace, facts, approval, (result as { sha?: string }).sha ?? null, now);
   await env.DB.batch([
-    improveAudit(
+    systemAudit(
       env.DB,
       "auto-merged",
       namespace,

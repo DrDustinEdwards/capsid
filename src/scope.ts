@@ -4,7 +4,7 @@ import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
 import { logEvent } from "./log";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
-import { protectedHits } from "./improve-schema";
+import { protectedHits } from "./protected-paths";
 import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
 
 // The one enforcement point. Every tool call, and every repo mutation inside one, is
@@ -12,7 +12,7 @@ import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS
 //
 // A per-tool gate in each handler has three failure modes: a new tool can simply
 // omit the line, and a scan for mutating SQL cannot see a tool whose writes happen a
-// module away (the queue, the improve loop, every repo write); a bare "may write"
+// module away (the queue, the auto-merge tick, every repo write); a bare "may write"
 // says nothing about which namespace, which repo, or whether the caller may merge
 // into a repo that deploys on push; and a check spelled N times has to be widened at
 // N sites, which is how a fix lands in all but one of them.
@@ -30,9 +30,9 @@ import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS
 // What each tool requires, stated once. The registrar enforces this table and
 // src/tool-annotations.ts derives readOnlyHint from it, so the two cannot disagree.
 //
-// "action" means the requirement depends on the action argument. `capsid_run_improve` states
-// its per-action requirements in TOOL_ACTION_GRANTS below, and the registrar reads
-// them, because the requirement depends on nothing but the action. `capsid_work_jobs` (action
+// "action" means the requirement depends on the action argument. A tool whose
+// requirement depends on nothing but the action states it per action in
+// TOOL_ACTION_GRANTS below, and the registrar reads it. `capsid_work_jobs` (action
 // list reads) and `capsid_lint_namespace` (mode gather reads) also depend on a namespace the handler resolves,
 // so their handlers call checkScope at the point where both are known.
 //
@@ -67,8 +67,9 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_run_ci: "write",
   // list reads; every other action changes the queue.
   capsid_work_jobs: "action",
-  // Per action, in TOOL_ACTION_GRANTS: status reads, run and claim are a driver's work.
-  capsid_run_improve: "action",
+  // Capsid's status (src/status.ts). The name is the improve loop's, kept when the loop
+  // was removed so no agent's tools list changes.
+  capsid_run_improve: "read",
 
   // What needs the seat, across every namespace and repo. It only reads.
   capsid_admin_whats_next: "admin_read",
@@ -87,12 +88,12 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // It only reads, and spans every namespace's sites, CI runs and Cloudflare state.
   capsid_admin_read_ops: "admin_read",
   // The administrator's controls (preview, then perform with a signed single-use
-  // token). A control pauses the loop, revokes an agent or edits a site, so a caller
+  // token). A control revokes an agent, resumes a job or edits a site, so a caller
   // that could use one could widen itself (capsid/decisions-vol-5.md, the controls ruling).
   capsid_admin_run_controls: "admin",
-  // mode switches the whole loop off, pause stops a namespace, budget moves the spend
-  // ceiling, mint_operator_key issues a credential, and sign_policy decides whether
-  // this Worker may merge without a human. None of those is a driver's work.
+  // mint_operator_key issues a credential, sign_policy decides whether this Worker may
+  // merge without a human, breaker_reset reopens a namespace's queue and overnight
+  // starts unattended sessions. None of those is a driver's work.
   capsid_admin_control_improve: "admin",
   // Mints a site key and sets it on the site Worker and on Carrel.
   capsid_admin_set_site_key: "admin",
@@ -107,21 +108,10 @@ export function requiredGrant(tool: string): ToolRequirement {
 }
 
 // What each action requires, for an "action" tool whose requirement depends on nothing
-// but the action. The registrar reads this table. An unlisted action takes `default`
-// (admin for capsid_run_improve), so a new action is refused to a driver until listed.
-export const TOOL_ACTION_GRANTS: Record<string, { default: ToolRequirement; actions: Record<string, ToolRequirement> }> = {
-  capsid_run_improve: {
-    // An unlisted action is refused to a driver until listed.
-    default: "admin",
-    actions: {
-      status: "read",
-      // Taking and releasing the driver lease is what a driver does every run, and it
-      // is what stops two drivers working one namespace.
-      claim: "write",
-      run: "write",
-    },
-  },
-};
+// but the action. The registrar reads this table. An unlisted action takes `default`,
+// so a new action is refused to a driver until listed. No served tool needs it today;
+// the improve loop's tool did, before the loop was removed.
+export const TOOL_ACTION_GRANTS: Record<string, { default: ToolRequirement; actions: Record<string, ToolRequirement> }> = {};
 
 export function requiredForAction(tool: string, action: string | undefined): ToolRequirement {
   const spec = Object.hasOwn(TOOL_ACTION_GRANTS, tool) ? TOOL_ACTION_GRANTS[tool] : null;
@@ -167,10 +157,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
   "/ops/mcp/admin":
     "Capsid Admin for a key: resolveAgent on the bearer (401 without one), then the admin identity only (403 for any other key), and every tool call it serves then passes checkScope in the registrar, where each tool is admin only",
-  "/improve/score": "signed with the per-namespace HMAC score key, which is the authorization, and replay-protected",
-  "/improve/holdout-credential": "signed with the per-namespace HMAC score key, and mints read access to that namespace's holdout only",
-  "/backup/credential": "signed with the backup-specific HMAC key, which no namespace score key can produce",
-  "/bench/tasks": "signed with the capsid-bench HMAC key (src/bench.ts), which no score or backup key can produce, and replay-protected; registers a task once and never changes one",
+  "/backup/credential": "signed with the backup-specific HMAC key, derived from the Worker's root secret under its own context, and replay-protected",
+  "/bench/tasks": "signed with the capsid-bench HMAC key (src/bench.ts), which no backup key can produce, and replay-protected; registers a task once and never changes one",
   "/bench/start": "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap",
   "/bench/score": "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, and reads the treatment's claim from its own job row rather than the report",
   "/ops/inbox":
@@ -435,12 +423,10 @@ const ADMIN_REASON: Record<string, string> = {
   capsid_admin_read_ops:
     "It reads the watcher's last pass, the Cloudflare account's Access and Email Routing configuration, and every Workers Build, across every namespace, which is wider than any one caller's scope.",
   capsid_admin_run_controls:
-    "It runs the administrator's controls (pause the loop, revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
+    "It runs the administrator's controls (revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
   capsid_admin_control_improve:
-    "It controls the loop rather than doing its work: mode switches it off, pause stops a namespace, budget moves the spend ceiling, mint_operator_key issues a credential, and sign_policy decides whether this Worker may merge without a human, so a caller that could sign one could widen itself. A driver uses capsid_run_improve.",
+    "It holds the administrator's switches: mint_operator_key issues a credential, sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_run_improve.",
   capsid_admin_set_site_key: "It mints a site's operator key and sets it as a secret on the site's Worker and on Carrel, so a caller that could use it could hand itself a site's key.",
-  capsid_run_improve:
-    "That action controls the loop rather than doing its work, which is capsid_admin_control_improve. A driver reads with action 'status', takes its lease with 'claim' and runs with 'run'.",
   "/ops/backup": "It backs up and prunes every namespace in the store, which is wider than any one namespace's scope.",
 };
 
@@ -448,9 +434,9 @@ function adminReason(tool: string): string {
   return Object.hasOwn(ADMIN_REASON, tool) ? ADMIN_REASON[tool] : "It acts on more than one namespace's scope.";
 }
 
-// The improve override is itself scoped: `allow_improve_paths`, which lets a document
-// write reach the improve loop's control surface (its runs, prompts, skills and
-// anchors), needs these flags. The document tools check this list; it is named here so
+// The policy override is itself scoped: `allow_improve_paths`, which lets a document
+// write reach an autonomy policy document (capsid/policy/), needs these flags. The
+// argument keeps the improve loop's name, from when it also opened the loop's documents. The document tools check this list; it is named here so
 // the flag vocabulary stays inside the enforcement point.
 export const IMPROVE_OVERRIDE_FLAGS = ["can_touch_protected"] as const;
 
@@ -539,6 +525,7 @@ const DEFAULT_ACTION: Record<string, string> = {
   capsid_read_doc: "read",
   capsid_write_doc: "write",
   capsid_lint_namespace: "gather",
+  capsid_run_improve: "status",
   capsid_admin_read_claims: "aggregate",
 };
 
@@ -674,10 +661,9 @@ export function repoWriteFlags(
   // Separate from can_merge so the reviewer role can comment without merging.
   if (tool === "capsid_open_pr" && action === "comment") flags.push("can_comment_pr");
   if (tool === "capsid_run_ci") flags.push("can_dispatch");
-  // The same protected list the improve loop enforces (src/improve-schema.ts), not a
-  // second copy. Those paths are what measure a repo: its tests, CI, lint and compiler
-  // config, lockfiles and manifests, agent steering layer and migrations. The loop may
-  // never touch them; a scoped caller may, holding this flag.
+  // The protected list (src/protected-paths.ts). Those paths are what measure a repo:
+  // its tests, CI, lint and compiler config, lockfiles and manifests, agent steering
+  // layer and migrations. A scoped caller may touch them holding this flag.
   if (args.path && protectedHits([args.path]).length > 0) flags.push("can_touch_protected");
   if (args.path && isMoneyPath(args.path)) flags.push("money_paths");
   return flags;

@@ -4,7 +4,7 @@ import { sha256Hex } from "../src/auth";
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import { legacyAgent } from "../src/agents";
 import { blockJob, claimJob, postJob } from "../src/jobs";
-import { improveStatus } from "../src/improve-run";
+import { capsidStatus } from "../src/status";
 import type { Inbox } from "../src/inbox";
 
 // "What needs Dustin, per app" (job_84e901d8eb71), driven through the whole Worker with the
@@ -139,7 +139,7 @@ describe("GET /ops/inbox", () => {
 describe("improve_status carries the same answer per namespace", () => {
   it("needs_dustin matches what the route serves for that namespace", async () => {
     await blocked("capsid", "Add the health route", `Merge ${PR}`);
-    const status = await improveStatus(jobsEnv(), "capsid");
+    const status = await capsidStatus(jobsEnv(), "capsid");
     const capsid = status.namespaces.find((n) => n.namespace === "capsid");
     expect(capsid?.needs_dustin.count).toBe(3);
     expect(capsid?.needs_dustin.severity).toBe("needs-you");
@@ -176,7 +176,7 @@ describe("POST /ops/inbox/report", () => {
     const item = body.apps[0].items.find((i) => i.kind === "report");
     expect(item).toMatchObject({ title: "Four AI drafts wait for review", link: `${CAPSID_ORIGIN}/drafts` });
     expect(body.apps[0].severity).toBe("needs-you");
-    const status = await improveStatus(jobsEnv(), "capsid");
+    const status = await capsidStatus(jobsEnv(), "capsid");
     const relayed = status.namespaces.find((n) => n.namespace === "capsid")?.needs_dustin.items.find((i) => i.kind === "report");
     expect(relayed?.title).toBe("~~~external source=inbox-report ref=capsid\nFour AI drafts wait for review\n~~~");
   });

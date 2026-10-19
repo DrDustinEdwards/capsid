@@ -10,7 +10,7 @@ import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 const at = (host: string, path: string) => hostRefusal(new Request(`https://${host}${path}`));
 
 test("PLANT: the MCP host serves every machine route and nothing else", () => {
-  for (const path of ["/mcp", "/mcp/sse", "/mcp/admin", "/ops/mcp/admin", "/authorize", "/token", "/callback", "/health", "/csp-report", "/ops/mcp", "/ops/hooks", "/ops/otlp/v1/metrics", "/ops/backup", "/improve/score", "/improve/holdout-credential", "/backup/credential", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp", "/oauth/clients/verify-live.json"]) {
+  for (const path of ["/mcp", "/mcp/sse", "/mcp/admin", "/ops/mcp/admin", "/authorize", "/token", "/callback", "/health", "/csp-report", "/ops/mcp", "/ops/hooks", "/ops/otlp/v1/metrics", "/ops/backup", "/backup/credential", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp", "/oauth/clients/verify-live.json"]) {
     assert.equal(servedOnMcpHost(path), true, path);
     assert.equal(at(MCP_HOST, path), null, path);
   }

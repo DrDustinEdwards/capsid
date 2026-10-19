@@ -1,12 +1,11 @@
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 
 // The bindings and vars wrangler.jsonc.example declares (DB, APP_KV, OAUTH_KV, MEDIA,
-// HOLDOUT, GITHUB_APP_CLIENT_ID) come from worker-configuration.d.ts, which
+// AI_SEARCH, GITHUB_APP_CLIENT_ID) come from worker-configuration.d.ts, which
 // `npm run types` generates with `wrangler types` and test/env-types.test.ts holds to
 // the example in both directions. What is written here is what the config cannot say:
 // secrets, the OAuth provider the library injects, the optional assets binding, and the
-// build stamps. HOLDOUT is generated, not declared here; AttemptEnv still omits it.
-// GITHUB_APP_CLIENT_ID is generated as the literal pinned id; it is widened to string
+// build stamps. GITHUB_APP_CLIENT_ID is generated as the literal pinned id; it is widened to string
 // here so tests and the deploy check can hold other values.
 export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   OAUTH_PROVIDER: OAuthHelpers;
@@ -55,20 +54,16 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   BUILD_SHA?: string;
   BUILD_DIRTY?: string;
   BUILT_AT?: string;
-  // HOLDOUT (the second R2 bucket) is withheld from AttemptEnv below. Only the
-  // generated declaration and src/improve-scorer.ts may name it;
-  // test/improve-holdout.test.ts refuses it in every other module.
-  // Used only in improve_mode "api".
-  ANTHROPIC_API_KEY?: string;
-  // Root secret the per-namespace score-report HMAC keys are derived from.
+  // Root secret the job and policy signing key (src/signed-docs.ts) and the backup
+  // credential key (src/signed-requests.ts) are derived from. Named for the improve
+  // loop that first used it; renaming a Worker secret is a step only the seat can take.
   IMPROVE_SCORE_SECRET?: string;
   // The capsid-bench repo's signing key (src/bench.ts), the same value as its BENCH_KEY secret.
   BENCH_SECRET?: string;
-  // Holdout mint only; omitted from AttemptEnv; only improve-scorer.ts may name the token.
+  // The backup credential mint (src/signed-requests.ts): the temp-access-credentials
+  // token and the parent it derives from. Omitted from RepoEnv.
   R2_TEMP_CRED_TOKEN?: string;
-  R2_TEMP_CRED_PARENT_ACCESS_KEY_ID?: string;
   R2_ACCOUNT_ID?: string;
-  // Backup mint parent, separate from the holdout parent. Omitted from AttemptEnv.
   R2_BACKUP_PARENT_ACCESS_KEY_ID?: string;
   // The watcher's red and green mail about a site's health (src/site-watch.ts): a
   // send_email binding, the address it sends to and the one it sends from, all optional and set by the seat
@@ -92,10 +87,10 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   ALERT_FROM?: string;
 }
 
-// Everything except the holdout bucket, the credentials that could mint read access to it,
-// the Cloudflare read token (it can read Worker code), the Access sync's write token and
-// the key that signs phone alerts.
-export type AttemptEnv = Omit<Env, "HOLDOUT" | "R2_TEMP_CRED_TOKEN" | "R2_TEMP_CRED_PARENT_ACCESS_KEY_ID" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "CF_ACCESS_SYNC_TOKEN" | "VAPID_PRIVATE_KEY">;
+// What the GitHub modules (src/github/) are handed: everything except the credentials
+// that mint backup read access, the Cloudflare read token (it can read Worker code), the
+// Access sync's write token and the key that signs phone alerts.
+export type RepoEnv = Omit<Env, "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "CF_ACCESS_SYNC_TOKEN" | "VAPID_PRIVATE_KEY">;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move
 // to Access carry { id, login, name } from GitHub instead, fail the per-request email

@@ -16,22 +16,15 @@ import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./ra
 import type { Env, Props } from "./env";
 import { buildAdminServer, buildServer } from "./server";
 import { ADMIN_OPS_MCP_ROUTE, serveMcp } from "./mcp-handler";
-import { ingestScore } from "./improve-run";
 import {
   BACKUP_CREDENTIAL_PATH,
   claimJti,
-  CREDENTIAL_PATH,
   MAX_REPORT_BYTES,
   mintBackupCredential,
-  mintHoldoutCredential,
   parseBackupCredentialRequest,
-  parseCredentialRequest,
-  parseScoreReport,
   readBoundedText,
-  SCORE_PATH,
   verifyBackupCredentialRequest,
-  verifySignedReport,
-} from "./improve-scorer";
+} from "./signed-requests";
 import { handleHealth } from "./health";
 import { escapeHtml } from "./html";
 import { handlePortalApp } from "./portal-app";
@@ -484,44 +477,19 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
 // /health lives in src/health.ts: routes.ts pulls cloudflare:workers via the Agents
 // SDK and cannot load under node --test.
 
-// The header names differ per endpoint; everything downstream of this is shared.
-function signedHeaders(request: Request, kind: "improve" | "backup"): { namespace: string; timestamp: string; signature: string } {
-  if (kind === "backup") {
-    return {
-      namespace: "",
-      timestamp: request.headers.get("X-Backup-Timestamp") ?? "",
-      signature: request.headers.get("X-Backup-Signature") ?? "",
-    };
-  }
-  return {
-    namespace: request.headers.get("X-Improve-Namespace") ?? "",
-    timestamp: request.headers.get("X-Improve-Timestamp") ?? "",
-    signature: request.headers.get("X-Improve-Signature") ?? "",
-  };
-}
-
-async function readSignedBody(
-  request: Request,
-  tooLarge: string,
-  declaredTooLarge?: (n: number) => string
-): Promise<{ ok: true; body: string } | { ok: false; response: Response }> {
-  if (declaredTooLarge) {
-    const declared = Number(request.headers.get("Content-Length") ?? "0");
-    if (Number.isFinite(declared) && declared > MAX_REPORT_BYTES) {
-      return { ok: false, response: textResponse(declaredTooLarge(declared), 413) };
-    }
-  }
+async function readSignedBody(request: Request, tooLarge: string): Promise<{ ok: true; body: string } | { ok: false; response: Response }> {
   const bounded = await readBoundedText(request, MAX_REPORT_BYTES);
   if (!bounded.ok) return { ok: false, response: textResponse(tooLarge, 413) };
   return { ok: true, body: bounded.text };
 }
 
-// The backup-credential mint. Same shape as the holdout mint below, with the
-// backup-specific derived key and no namespace: one hour of object-read-only on
-// backups/json/. The jti cache runs under the literal scope "backup", which is not
-// in ROSTER.
+// The backup-credential mint: an HMAC over timestamp.body with the backup-specific
+// derived key, a bounded body and the jti replay cache, then one hour of
+// object-read-only on backups/json/. The jti cache runs under the literal scope
+// "backup", which is not in ROSTER.
 async function handleBackupCredential(request: Request, env: Env): Promise<Response> {
-  const { timestamp, signature } = signedHeaders(request, "backup");
+  const timestamp = request.headers.get("X-Backup-Timestamp") ?? "";
+  const signature = request.headers.get("X-Backup-Signature") ?? "";
 
   const bounded = await readSignedBody(request, `request too large: exceeds ${MAX_REPORT_BYTES} bytes`);
   if (!bounded.ok) return bounded.response;
@@ -548,101 +516,6 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
-// The holdout-credential mint. Same envelope as the score report: per-namespace HMAC
-// over timestamp.body, bounded body, jti replay cache. The signed namespace is the
-// authority, so a repo can mint read access to its own holdout prefix only.
-async function handleHoldoutCredential(request: Request, env: Env): Promise<Response> {
-  const { namespace, timestamp, signature } = signedHeaders(request, "improve");
-
-  const bounded = await readSignedBody(request, `request too large: exceeds ${MAX_REPORT_BYTES} bytes`);
-  if (!bounded.ok) return bounded.response;
-  const body = bounded.body;
-
-  const verdict = await verifySignedReport(env, { namespace, timestamp, signature, body }, new Date());
-  if (!verdict.ok) {
-    logEvent("error", "IMPROVE_CREDENTIAL_REJECTED", { message: `IMPROVE_CREDENTIAL_REJECTED ${namespace || "(no namespace)"}: ${verdict.refusal}` });
-    return textResponse(verdict.refusal, verdict.status);
-  }
-
-  const parsed = parseCredentialRequest(body);
-  if (!parsed.ok) return textResponse(parsed.refusal, 400);
-  if (parsed.namespace !== verdict.namespace) {
-    return textResponse(
-      `the request body names namespace '${parsed.namespace}' but it was signed with the key for '${verdict.namespace}'`,
-      403
-    );
-  }
-
-  const claim = await claimJti(env.DB, verdict.namespace, parsed.jti);
-  if (!claim.ok) return textResponse(claim.refusal, claim.status);
-
-  const minted = await mintHoldoutCredential(env, verdict.namespace);
-  if (!minted.ok) {
-    logEvent("error", "IMPROVE_CREDENTIAL_FAILED", { message: `IMPROVE_CREDENTIAL_FAILED ${verdict.namespace}: ${minted.refusal}` });
-    return textResponse(minted.refusal, minted.status);
-  }
-  logEvent("log", "IMPROVE_CREDENTIAL_MINTED", { message: `IMPROVE_CREDENTIAL_MINTED ns=${verdict.namespace} ttl=${minted.credential.expires_in}s` });
-  return new Response(JSON.stringify(minted.credential), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-// The score report sink. CI posts here when it has finished scoring a branch.
-//
-// Not under /ops/. An /ops/ path is opened by an operator key, which can write every
-// document in the store. Several repos reach this endpoint, so it is opened by a
-// per-namespace HMAC derived from one Worker secret: a key leaking from one repo's
-// Actions log authorizes reports for that namespace only.
-//
-// No rate limiter, unlike /csp-report, which takes an unauthenticated write into R2.
-// This one writes nothing until a signature over the body verifies, so an unsigned
-// flood costs two HMAC computations per request and reaches no storage.
-async function handleImproveScore(request: Request, env: Env): Promise<Response> {
-  const { namespace, timestamp, signature } = signedHeaders(request, "improve");
-
-  // Bounded before any HMAC. The Content-Length check rejects a declared-large body
-  // cheaply but fires only when the header is present and honest; the bounded reader
-  // is the enforcement, and it stops pulling from the stream once MAX_REPORT_BYTES is
-  // exceeded, so neither memory nor crypto is spent.
-  const bounded = await readSignedBody(
-    request,
-    `report too large: exceeds ${MAX_REPORT_BYTES} bytes`,
-    (declared) => `report too large: ${declared} bytes exceeds ${MAX_REPORT_BYTES}`
-  );
-  if (!bounded.ok) return bounded.response;
-  const body = bounded.body;
-
-  const verdict = await verifySignedReport(env, { namespace, timestamp, signature, body }, new Date());
-  if (!verdict.ok) {
-    logEvent("error", "IMPROVE_SCORE_REJECTED", { message: `IMPROVE_SCORE_REJECTED ${namespace || "(no namespace)"}: ${verdict.refusal}` });
-    return textResponse(verdict.refusal, verdict.status);
-  }
-
-  const parsed = parseScoreReport(body);
-  if (!parsed.ok) return textResponse(parsed.refusal, 400);
-
-  // The signed namespace is the authority, not the one in the body. A body claiming a
-  // different namespace is a repo reporting for a project it holds no key to.
-  if (parsed.report.namespace !== verdict.namespace) {
-    return textResponse(
-      `the report body names namespace '${parsed.report.namespace}' but it was signed with the key for '${verdict.namespace}'`,
-      403
-    );
-  }
-
-  // Replay cache: the jti is inside the signed body, and a jti seen before for this
-  // namespace is refused. claimJti fails closed on a store error.
-  const claim = await claimJti(env.DB, verdict.namespace, parsed.report.jti);
-  if (!claim.ok) {
-    if (claim.status === 503) logEvent("error", "IMPROVE_SCORE_REPLAY_KV_ERROR", { message: `IMPROVE_SCORE_REPLAY_KV_ERROR ${verdict.namespace}: ${claim.refusal}` });
-    return textResponse(claim.refusal, claim.status);
-  }
-
-  const result = await ingestScore(env, parsed.report, new Date());
-  return Response.json(result, { status: result.ok ? 200 : 409 });
-}
-
 export const defaultHandler = {
   async fetch(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // The Portal host's rewrite has already run, in src/index.ts, before the OAuth
@@ -664,8 +537,6 @@ export const defaultHandler = {
     if (url.pathname === OPS_HOOKS_PATH && request.method === "POST") return handleOpsHooks(request, env, ctx);
     if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);
     if (url.pathname === OTLP_LOGS_PATH && request.method === "POST") return handleOtlpLogs(request, env);
-    if (url.pathname === SCORE_PATH && request.method === "POST") return handleImproveScore(request, env);
-    if (url.pathname === CREDENTIAL_PATH && request.method === "POST") return handleHoldoutCredential(request, env);
     if (url.pathname === BACKUP_CREDENTIAL_PATH && request.method === "POST") return handleBackupCredential(request, env);
     if (url.pathname === BENCH_TASKS_PATH && request.method === "POST") return handleBenchTasks(request, env);
     if (url.pathname === BENCH_START_PATH && request.method === "POST") return handleBenchStart(request, env);

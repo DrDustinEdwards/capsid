@@ -1,40 +1,29 @@
 {
   // scripts/, type-checked as JavaScript.
   //
-  // WHY IT IS ITS OWN CONFIG, and why it exists at all. scripts/improve-report.mjs
-  // is copied BYTE-IDENTICAL into all five roster repos, and those repos do not
-  // all gate it the same way. On 2026-09-07 dustinedwards-info's own gate rejected
-  // this repo's newly written code with ten type errors that nothing here could
-  // see: tsconfig.json includes only src, tsconfig.test.json only src and test,
-  // and neither checks a .mjs body. The file shipped to four repos before the
-  // strictest of them said no.
+  // WHY IT IS ITS OWN CONFIG: tsconfig.json includes only src, tsconfig.test.json
+  // only src and test, and neither checks a .mjs body. It began with the improve
+  // loop's score report script, which shipped to four repos with ten type errors on
+  // 2026-09-07; that script went with the loop on 2026-10-19.
   //
-  // A guard scoped to one repo is a guess about where the next bug will be
-  // written (capsid/conventions.md). This is that guard, in the repo the file is
-  // authored in, so the strictest consumer is no longer the first to find out.
-  //
-  // checkJs with strict, because that is what the strictest consumer applies. The
-  // .d.mts beside the .mjs types it for TypeScript importers; this checks the
-  // implementation the .d.mts describes.
+  // checkJs with strict. The .d.mts beside a .mjs types it for TypeScript importers;
+  // this checks the implementation the .d.mts describes.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
     "types": ["node"]
   },
-  // WIDENED ONE FILE AT A TIME. improve-report.mjs came first because it is the only
-  // file here that ships to four other repos, which makes a type error in it somebody
-  // else's build break. improve-derive-key.mjs was added on 2026-09-25
-  // (audit item E2-31) because its type errors included real bugs.
+  // WIDENED ONE FILE AT A TIME. derive-backup-key.mjs (then improve-derive-key.mjs)
+  // was added on 2026-09-25 (audit item E2-31) because its type errors included real
+  // bugs.
   // export-claims.mjs was written against this config from its first line. The
   // rest of scripts/ still carries implicit-any gaps; add a file here once it checks
   // clean.
   "include": [
-    "scripts/improve-report.mjs",
-    "scripts/improve-report.d.mts",
     "scripts/admin-exposure-check.mjs",
     "scripts/admin-exposure-check.d.mts",
-    "scripts/improve-derive-key.mjs",
+    "scripts/derive-backup-key.mjs",
     "scripts/export-claims.mjs",
     "scripts/export-claims.d.mts",
     "scripts/drill-all.mjs",

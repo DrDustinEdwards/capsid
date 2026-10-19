@@ -24,8 +24,8 @@ import { FILES_LIMIT } from "../src/github/pr-files.ts";
 import { AWAITING_SEAT_KEY, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
 import { SUSPENDED_KEY } from "../src/merge-units.ts";
 import { PAUSED_KEY } from "../src/merge-safety.ts";
-import { LOOP_ROSTER, ROSTER, onLoopRoster, onRoster, scheduledFor } from "../src/improve-schema.ts";
-import { signTaskBody } from "../src/improve-task.ts";
+import { APP_ROSTER, ROSTER, onRoster } from "../src/roster.ts";
+import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The Worker may merge a pull request with no human when every check in
@@ -263,7 +263,7 @@ test("paths_not_refused: tests, src/, docs, CLAUDE.md and .claude/ are not refus
   for (const changedPaths of [
     ["src/limits.ts", "test/jobs.test.ts"],
     ["CLAUDE.md"],
-    [".claude/commands/improve.md"],
+    [".claude/commands/drive.md"],
     ["test-integration/jobs.test.ts", "docs/autonomy.md"],
   ]) {
     assert.ok(passesRefusedPaths(changedPaths), `${changedPaths.join(", ")} was refused`);
@@ -272,14 +272,11 @@ test("paths_not_refused: tests, src/, docs, CLAUDE.md and .claude/ are not refus
 
 test("paths_not_refused: every path the ruling names refuses on its own", () => {
   const named = [
-    ".github/workflows/improve-score.yml",
-    "scripts/improve-report.mjs",
-    "scripts/sync-scorer.mjs",
-    "improve/holdout/capsid/imports.txt",
+    ".github/workflows/ci.yml",
     "src/gate-policy.ts",
     "src/auto-merge.ts",
     "src/policy-sign.ts",
-    "src/improve-schema.ts",
+    "src/protected-paths.ts",
     "migrations/0016_next.sql",
     "wrangler.jsonc",
     "wrangler.jsonc.example",
@@ -308,13 +305,11 @@ test("paths_not_refused: the two auto-merge modules refuse like the file they we
 
 test("paths_not_refused: every pattern in the list matches at least one path above or below", () => {
   // A pattern nothing matches is a refusal nobody has observed. Count stated: the
-  // list has 33 entries today, and each must be exercised.
+  // list has 27 entries today, and each must be exercised.
   const samples = [
-    ".github/workflows/improve-score.yml", "scripts/improve-report.mjs", "scripts/sync-scorer.mjs",
-    "improve/holdout/capsid/imports.txt", "src/improve-scorer.ts", "test/improve-holdout.test.ts",
-    "src/gate-policy.ts", "src/auto-merge.ts", "src/policy-sign.ts", "src/improve-schema.ts",
-    "src/scope.ts", "src/improve-task.ts", "src/auth.ts", "src/encoding.ts", "src/github/client.ts",
-    "scripts/path-guard.mjs", "migrations/0016_next.sql", "wrangler.jsonc", ".dev.vars", ".env",
+    "src/gate-policy.ts", "src/auto-merge.ts", "src/policy-sign.ts", "src/protected-paths.ts",
+    "src/scope.ts", "src/signed-docs.ts", "src/auth.ts", "src/encoding.ts", "src/github/client.ts",
+    "migrations/0016_next.sql", "wrangler.jsonc", ".dev.vars", ".env",
     "package.json", "tsconfig.test.json", "vitest.config.ts", "scripts/test-budget.mjs", "scripts/verify-live.mjs",
     // dustinedwards-info's judge files, on the same list.
     ".github/workflows/ci.yml", "scripts/check-all.mjs", "scripts/lib/slop.mjs", ".aislop/allow.txt",
@@ -336,7 +331,7 @@ test("paths_not_refused: every pattern in the list matches at least one path abo
 test("paths_not_refused: the sources the checks read their answers from refuse on their own", () => {
   const sources = [
     ["src/scope.ts", "isMoneyPath, the whole of paths_not_money"],
-    ["src/improve-task.ts", "verifySignedBody, how loadMergePolicy decides the policy is signed"],
+    ["src/signed-docs.ts", "verifySignedBody, how loadMergePolicy decides the policy is signed"],
     ["src/auth.ts", "the HMAC and the constant-time comparison the verifier delegates to"],
     ["src/encoding.ts", "the hex encoding of the signature the verifier compares"],
     ["src/github/client.ts", "the reader that supplies the changed paths and the CI facts"],
@@ -353,10 +348,10 @@ test("paths_not_refused: the sources the checks read their answers from refuse o
 
 test("paths_not_refused: similar-looking paths that are ordinary code are not refused", () => {
   for (const path of [
-    "src/improve/tick.ts", "docs/policy/auto-merge.md", "test/auto-merge.test.ts",
+    "src/tick.ts", "docs/policy/auto-merge.md", "test/auto-merge.test.ts",
     "scripts/mint-agents.mjs", "src/environment.ts",
     // Near-misses of the refused patterns, each a real file this repo carries.
-    "src/github/refs.ts", "src/improve-state.ts", "src/jobs-schema.ts", "src/agents-schema.ts", "src/limits.ts",
+    "src/github/refs.ts", "src/signed-requests.ts", "src/jobs-schema.ts", "src/agents-schema.ts", "src/limits.ts",
     "test/jobs.test.ts",
   ]) {
     assert.ok(passesRefusedPaths([path]), `${path} was refused`);
@@ -509,7 +504,7 @@ test("ci_green: a same-named step in another job or workflow does not count", ()
   );
   assert.equal(evaluate(greenPr({ ciSteps })).merge, false);
   const other = CAPSID_CI.map((r) =>
-    r.step === "Tests" ? { ...r, workflow: ".github/workflows/improve-score.yml", conclusion: "success" } : { ...r, conclusion: "success" }
+    r.step === "Tests" ? { ...r, workflow: ".github/workflows/other.yml", conclusion: "success" } : { ...r, conclusion: "success" }
   );
   assert.equal(evaluate(greenPr({ ciSteps: other })).merge, false);
 });
@@ -639,7 +634,7 @@ test("parseMergePolicy refuses a policy with no version, no switch or no namespa
   }
 });
 
-test("parseMergePolicy refuses a namespace that is not on the improve roster", () => {
+test("parseMergePolicy refuses a namespace that is not on the roster", () => {
   const parsed = parseMergePolicy(GOOD_POLICY.replace("- namespaces: capsid", "- namespaces: capsid, julieedwards"));
   assert.ok("error" in parsed);
   assert.match(parsed.error, /julieedwards/);
@@ -651,14 +646,12 @@ test("parseMergePolicy accepts carrel and capsomer, which are on the roster for 
   assert.deepEqual(parsed.policy.namespaces, ["capsid", "carrel", "capsomer"]);
 });
 
-test("carrel and capsomer are on the roster but not in the improve loop's", () => {
+test("carrel and capsomer are on the roster but not the app roster", () => {
   for (const ns of ["carrel", "capsomer"]) {
     assert.ok(onRoster(ns), `${ns} must be on the roster`);
-    assert.ok(!onLoopRoster(ns), `${ns} must not be on the loop roster`);
-    assert.ok(!(LOOP_ROSTER as readonly string[]).includes(ns), `${ns} must not be iterated by the loop`);
-    assert.ok(!scheduledFor(new Date()).includes(ns as never), `${ns} must never be scheduled to open a run`);
+    assert.ok(!(APP_ROSTER as readonly string[]).includes(ns), `${ns} must not be on the app roster`);
   }
-  assert.ok(ROSTER.length > LOOP_ROSTER.length, "the roster counts what it names");
+  assert.ok(ROSTER.length > APP_ROSTER.length, "the roster counts what it names");
 });
 
 async function envWithPolicy(body: string | null) {

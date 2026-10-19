@@ -6,9 +6,8 @@ import { readSafetyReport } from "./merge-safety";
 import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, type PortalUser, portalDisplay, portalGate, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
-import { agentSummaries, checkBudget, type AgentSummary } from "./improve-run";
-import { LOOP_ROSTER } from "./improve-schema";
-import { pausedReason, readMode } from "./improve-state";
+import { agentSummaries, type AgentSummary } from "./status";
+import { APP_ROSTER } from "./roster";
 import { commandFromSummary, isQuestionSummary, resumeMarkerIn } from "./jobs-holder";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
@@ -37,11 +36,10 @@ import { pendingProposals } from "./canon";
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 15 statements plus one per TASKS entry (9 today, so 24):
+//   D1, 13 statements plus one per TASKS entry (9 today, so 22):
 //     1  jobs: every open job and every job that ended in the last 24 hours
-//     4  agentSummaries: the inventory, then loadRecordRows' three grouped reads
+//     3  agentSummaries: the inventory, then loadRecordRows' two grouped reads
 //     1  job_outcome_prs in the last 7 days
-//     1  checkBudget's month spend
 //     1  ops_sites: the site configuration, every row
 //     1  ops_packages: the package configuration, every row
 //     1  agent_sessions: live sessions from the hook receiver, at most 50
@@ -52,13 +50,13 @@ import { pendingProposals } from "./canon";
 //     3  gatherInbox (src/inbox.ts): the blocked jobs, the applied migrations (a block
 //        on a migration already applied is settled) and the site configuration again,
 //        so Needs you counts exactly what GET /ops/inbox answers with
-//   KV, 12 gets plus one per LOOP_ROSTER namespace (5 today, so 17): gatherInbox's own
+//   KV, 10 gets: gatherInbox's own
 //     reads of the stale pull request cache (src/stale-jobs.ts), the manual steps cache
 //     (src/manual-steps.ts), ops:snapshot, the awaiting-seat set and the merge units' report
 //     (src/merge-units.ts), then ops:snapshot, the
-//     awaiting-seat set, the auto-merge safety report (src/merge-safety.ts), the refresh stamp, the improve mode, the budget caps,
-//     the overnight switch's mode (its decision record is
-//     read only while the mode is subscription), and each namespace's pause key.
+//     awaiting-seat set, the auto-merge safety report (src/merge-safety.ts), the refresh stamp,
+//     and the overnight switch's mode (its decision record is
+//     read only while the mode is subscription).
 // They run concurrently; the longest chain is agentSummaries' two steps.
 
 export const OPS_FEED_PATH = "/portal/api/ops";
@@ -66,7 +64,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 // Where a sign-in started from one of these routes lands afterwards: the app.
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
-export const OPS_FEED_READS = { d1: 15 + TASKS.length, kv: 12 + LOOP_ROSTER.length } as const;
+export const OPS_FEED_READS = { d1: 13 + TASKS.length, kv: 10 } as const;
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -194,8 +192,6 @@ export function opsAgentFrom(agent: AgentSummary): OpsAgent {
     pr_merge_rate: r.pr_merge_rate,
     ci_green_rate: r.ci_green_rate,
     median_duration_minutes: r.median_duration_minutes,
-    attempts_kept: r.attempts_kept,
-    attempts_reverted: r.attempts_reverted,
   };
 }
 
@@ -347,23 +343,13 @@ async function liveSessions(db: D1Database, now: Date): Promise<OpsSession[]> {
   return (results ?? []).map((row) => opsSessionFrom(row, now));
 }
 
-async function liveLoop(env: Env, now: Date): Promise<OpsLive["loop"]> {
-  const [{ mode }, budget] = await Promise.all([readMode(env.APP_KV), checkBudget(env, now)]);
-  // checkBudget's reason is prose for a refusal; the app states the numbers itself.
-  return { mode, budget: { month: budget.month, caps: budget.caps, spend: budget.spend, exceeded: budget.exceeded } };
-}
-
 async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, mergeSafety, loop, namespaces, sites, sessions, packages, overnight, canonProposals, inbox, findings] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, canonProposals, inbox, findings] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
     env.APP_KV.get(AWAITING_SEAT_KEY),
     readSafetyReport(env.APP_KV),
-    liveLoop(env, now),
-    // Read as the loop reads it (pausedReason), so an unreadable key shows as a pause
-    // with its reason, the way the loop treats it.
-    Promise.all(LOOP_ROSTER.map(async (name) => ({ name, paused: await pausedReason(env.APP_KV, name) }))),
     readSiteConfig(env.DB),
     liveSessions(env.DB, now),
     readPackageConfig(env.DB),
@@ -381,8 +367,7 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     merge_safety: mergeSafety,
     overnight,
     sessions,
-    loop,
-    namespaces,
+    namespaces: APP_ROSTER.map((name) => ({ name })),
     sites,
     packages,
     store: { size_bytes: jobRead.sizeBytes, cap_bytes: D1_CAP_BYTES },

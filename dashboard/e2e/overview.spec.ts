@@ -55,8 +55,8 @@ for (const width of [1440, 1100, 400]) {
       }
       return { tiles: tiles.length, checked, bad };
     });
-    expect(r.tiles).toBe(6);
-    expect(r.checked).toBeGreaterThan(6 * 4);
+    expect(r.tiles).toBe(5);
+    expect(r.checked).toBeGreaterThan(5 * 4);
     expect(r.bad).toEqual([]);
   });
 }
@@ -64,9 +64,9 @@ for (const width of [1440, 1100, 400]) {
 test("each tile is a link to its page or section", async ({ page }) => {
   await visit(page, "health");
   const tiles = page.locator("main .tiles a.tile");
-  await expect(tiles).toHaveCount(6);
+  await expect(tiles).toHaveCount(5);
   // A link to assistive technology too, not only in the markup.
-  await expect(page.locator("main .tiles").getByRole("link")).toHaveCount(6);
+  await expect(page.locator("main .tiles").getByRole("link")).toHaveCount(5);
   await expect(tiles.filter({ hasText: "Blocked on you" })).toHaveAttribute("href", "/portal/queue");
   await expect(tiles.filter({ hasText: "Open findings" })).toHaveAttribute("href", "#incidents");
   await tiles.filter({ hasText: "Blocked on you" }).click();
@@ -153,7 +153,6 @@ test("with no problems it says all clear, and the notices row stays under it", a
     f.live.canon_proposals = [];
     // Session incidents are problems too (Needs attention lists them).
     f.live.sessions = f.live.sessions.map((s) => ({ ...s, incident: null }));
-    f.live.loop.budget.exceeded = false;
     // A failing or quiet scheduled task is a problem too (src/task-runs.ts).
     for (const t of f.scheduled.tasks ?? []) if (t.flag !== "never") t.flag = null;
   });

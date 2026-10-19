@@ -4,8 +4,8 @@ import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activ
 import { type PortalUser, portalDisplay, portalGate, portalSignOutCookies, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
-import { improveStatus } from "./improve-run";
-import { readBoundedText } from "./improve-scorer";
+import { capsidStatus } from "./status";
+import { readBoundedText } from "./signed-requests";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import type { PortalActivity, PortalNamespaces, PortalPerformed } from "./ops-types";
 import { logEvent } from "./log";
@@ -151,23 +151,14 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
 export async function handlePortalNamespaces(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  const status = await improveStatus(env);
+  const status = await capsidStatus(env);
   const body: PortalNamespaces = {
     generated: now.toISOString(),
     namespaces: status.namespaces.map((ns) => ({
       namespace: ns.namespace,
-      paused: ns.paused,
       breaker: { open: ns.breaker.open, failed: ns.breaker.failed, threshold: ns.breaker.threshold, since: ns.breaker.since, reset_at: ns.breaker.reset_at },
-      anchor_pinned: ns.anchor_pinned,
-      anchor_problem: ns.anchor_problem,
-      best: ns.best,
-      last_run: ns.last_run
-        ? { status: ns.last_run.status, started: ns.last_run.started, attempts: ns.last_run.attempts, kept: ns.last_run.kept, reverts: ns.last_run.reverts }
-        : null,
-      totals: ns.totals,
       latest_report: ns.latest_report ? { integrity: ns.latest_report.integrity, generated: ns.latest_report.generated } : null,
       jobs: { queued: ns.jobs.queued, claimed: ns.jobs.claimed, blocked: ns.jobs.blocked, done_today: ns.jobs.done_today },
-      skills: ns.skills,
     })),
   };
   return jsonResponse(body);

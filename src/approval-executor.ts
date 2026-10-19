@@ -1,7 +1,7 @@
 import { ciGreenOn, type PrFacts } from "./auto-merge-policy";
 import type { Env } from "./env";
 import { HeadMovedError, managePr } from "./github/refs";
-import { improveAudit } from "./improve-state";
+import { systemAudit } from "./doc-statements";
 import type { Classification } from "./merge-class";
 
 // THE EXECUTOR (docs/design/design-merge-pipeline.md section 4, PR 4; Dustin's DECIDE of
@@ -18,7 +18,7 @@ import type { Classification } from "./merge-class";
 //      success moves the row to merged with the merge sha.
 // It is the only thing that merges an approved pull request. Every state move is
 // `UPDATE ... WHERE id = ? AND status = 'approved' RETURNING id` (CLAUDE.md, path mutation
-// rule), in one batch with its audit row, written as improve-loop like the tick's own rows.
+// rule), in one batch with its audit row, written as SYSTEM_ACTOR (src/doc-statements.ts) like the tick's own rows.
 
 const APPROVAL_DAYS = 7;
 const DAY_MS = 86_400_000;
@@ -78,7 +78,7 @@ async function close(
       reason,
       mergeSha
     ),
-    improveAudit(env.DB, AUDIT[status], namespace, {
+    systemAudit(env.DB, AUDIT[status], namespace, {
       repo: facts.repo,
       pr: facts.number,
       approved_sha: approval.head_sha,
@@ -165,7 +165,7 @@ export async function expireStaleApprovals(env: Env, now: Date): Promise<number>
     .all<{ id: number; repo: string; pr: number; head_sha: string }>();
   const rows = results ?? [];
   if (rows.length) {
-    await env.DB.batch(rows.map((r) => improveAudit(env.DB, "pr-approval-expired", null, { repo: r.repo, pr: r.pr, approved_sha: r.head_sha, reason: "7 days", at })));
+    await env.DB.batch(rows.map((r) => systemAudit(env.DB, "pr-approval-expired", null, { repo: r.repo, pr: r.pr, approved_sha: r.head_sha, reason: "7 days", at })));
   }
   return rows.length;
 }

@@ -1,7 +1,6 @@
 import type { Env } from "./env";
 import { sha256Hex } from "./auth";
-import { POLICY_PREFIX } from "./improve-schema";
-import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "./improve-task";
+import { POLICY_PREFIX, policyPin, policyPinKey, signTaskBody, splitSignedTask } from "./signed-docs";
 import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged, snapshotLive } from "./store-guards";
 import { AUTO_MERGE_POLICY_PATH, loadMergePolicy, parseMergePolicy } from "./auto-merge-policy";
 
@@ -109,7 +108,7 @@ async function commitSigned(
   const { signature } = splitSignedTask(signed);
   const sha256 = await sha256Hex(signed);
   // The anti-rollback record is written first: from here on the loaders accept this
-  // body and no other signed copy (policyPin in improve-task.ts). Written before the
+  // body and no other signed copy (policyPin in signed-docs.ts). Written before the
   // store so every failure refuses, including a store that aborts below.
   try {
     await env.APP_KV.put(policyPinKey(path), JSON.stringify(await policyPin(body)));

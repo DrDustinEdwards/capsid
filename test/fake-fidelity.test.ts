@@ -5,26 +5,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeD1 } from "./fakes.ts";
-import { loadRecordRows } from "../src/agent-record.ts";
-
-test("C1-19: an attempt inserted with datetime('now') stores a timestamp, not NaN", async () => {
-  const fake = fakeD1();
-  // The dispatch INSERT in src/improve/tick.ts.
-  await fake.db.batch([
-    fake.db
-      .prepare(
-        `INSERT INTO improve_attempts
-           (id, namespace, run_id, change_summary, diff_ref, lineage_parent, status, branch, head_sha, base_sha, skill_id, dispatched_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'awaiting-score', ?7, ?8, ?9, ?10, datetime('now'))`
-      )
-      .bind("a-1", "capsid", "run-1", "s", "ref", null, "improve/x", "head1", "base1", null),
-  ]);
-  const row = fake.rows.improve_attempts.find((a) => a.id === "a-1");
-  assert.ok(row);
-  assert.equal(typeof row.dispatched_at, "string");
-  assert.match(String(row.dispatched_at), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-  assert.equal(row.status, "awaiting-score");
-});
 
 test("C1-17: a document upsert lands in the rows", async () => {
   const fake = fakeD1({ documents: [{ namespace: "sample", path: "a.md", title: "old", body: "old body" }] });
@@ -109,58 +89,10 @@ test("C1-17: a COUNT over jobs counts, and a jobs read applies every filter", as
   assert.equal(held, null);
 });
 
-test("C1-18: the late-report CAS leaves an attempt whose status is not in its list", async () => {
-  const fake = fakeD1({ improveAttempts: [{ id: "a-1", status: "kept" }] });
-  const [result] = await fake.db.batch([
-    fake.db
-      .prepare(
-        `UPDATE improve_attempts SET status = ?2, kept = ?3
-         WHERE id = ?1 AND status IN ('unjudged', 'timed-out') RETURNING id`
-      )
-      .bind("a-1", "reverted", 0),
-  ]);
-  assert.deepEqual(result.results, []);
-  assert.equal(fake.rows.improve_attempts[0].status, "kept");
-});
-
-test("C1-18: the skill version CAS leaves a skill whose version moved", async () => {
-  const fake = fakeD1({ improveSkills: [{ id: "s-1", version: 3 }] });
-  // src/skills-evaluate.ts: move from version 2 to 4, but the skill is already at 3.
-  await fake.db.batch([fake.db.prepare("UPDATE improve_skills SET version = ?2 WHERE id = ?1 AND version = ?3").bind("s-1", 4, 2)]);
-  assert.equal(fake.rows.improve_skills[0].version, 3);
-});
-
-test("C1-18: a plain INSERT of a taken skill id aborts; the ON CONFLICT form updates", async () => {
-  const fake = fakeD1({ improveSkills: [{ id: "s-1", title: "old" }] });
-  await assert.rejects(
-    fake.db.batch([
-      fake.db
-        .prepare(
-          `INSERT INTO improve_skills (id, source_namespace, title, body_ref, source_job, status, version,
-             trigger_condition, namespaces, termination_test, composition_interface)
-           VALUES (?1, ?2, ?3, ?4, ?5, 'candidate', 1, ?6, ?7, ?8, ?9)`
-        )
-        .bind("s-1", "sample", "dup", "improve/skills/s-1.md", "j-1", null, null, null, null),
-    ]),
-    /UNIQUE constraint failed/
-  );
-  await fake.db.batch([
-    fake.db
-      .prepare(
-        `INSERT INTO improve_skills (id, source_namespace, title, body_ref, source_attempt)
-         VALUES (?1, ?2, ?3, ?4, ?5)
-         ON CONFLICT(id) DO UPDATE SET title = ?3, body_ref = ?4`
-      )
-      .bind("s-1", "sample", "new", "improve/skills/s-1.md", null),
-  ]);
-  assert.equal(fake.rows.improve_skills.length, 1);
-  assert.equal(fake.rows.improve_skills[0].title, "new");
-});
-
 test("C1-18: the nightly jti prune keeps a nonce seen within the day", async () => {
   const fake = fakeD1();
-  fake.rows.improve_jti.push({ scope: "score", jti: "old", seen_at: "2020-01-01 00:00:00" });
-  await fake.db.prepare("INSERT INTO improve_jti (scope, jti) VALUES (?1, ?2) ON CONFLICT(scope, jti) DO NOTHING RETURNING jti").bind("score", "fresh").first();
+  fake.rows.improve_jti.push({ scope: "backup", jti: "old", seen_at: "2020-01-01 00:00:00" });
+  await fake.db.prepare("INSERT INTO improve_jti (scope, jti) VALUES (?1, ?2) ON CONFLICT(scope, jti) DO NOTHING RETURNING jti").bind("backup", "fresh").first();
   await fake.db.batch([fake.db.prepare("DELETE FROM improve_jti WHERE seen_at < datetime('now', '-1 day')")]);
   assert.deepEqual(
     fake.rows.improve_jti.map((r) => r.jti),
@@ -168,20 +100,3 @@ test("C1-18: the nightly jti prune keeps a nonce seen within the day", async () 
   );
 });
 
-test("C1-18: the per-namespace run totals are summed, one row per namespace", async () => {
-  const fake = fakeD1({
-    improveRuns: [
-      { id: "r-1", namespace: "sample", kept: 2, reverts: 1, status: "done" },
-      { id: "r-2", namespace: "sample", kept: 3, reverts: 0, status: "done" },
-      { id: "r-3", namespace: "other", kept: 1, reverts: 4, status: "done" },
-    ],
-  });
-  const { runs } = await loadRecordRows(fake.db);
-  assert.deepEqual(
-    [...runs].sort((a, b) => a.namespace.localeCompare(b.namespace)),
-    [
-      { namespace: "other", kept: 1, reverts: 4 },
-      { namespace: "sample", kept: 5, reverts: 1 },
-    ]
-  );
-});

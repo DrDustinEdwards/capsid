@@ -4,7 +4,6 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import type { Env } from "../src/env";
-import { bestKey, pausedKey } from "../src/improve-schema";
 import { NAMESPACE_DELETE_MAX_DOCUMENTS, planFingerprint, readDeletePlan, signDeleteToken } from "../src/namespace-delete";
 import { buildAdminServer, buildServer } from "../src/server";
 
@@ -59,7 +58,7 @@ interface Preview {
   token?: string;
   open_jobs: Array<{ id: string }>;
   live_agents: string[];
-  kv_keys: string[];
+  policy_paths: string[];
 }
 
 async function preview(ns: string, extra: Record<string, unknown> = {}): Promise<Preview> {
@@ -184,18 +183,19 @@ describe("capsid_admin_manage_namespaces delete_preview refusals", () => {
     expect(p.counts.documents_live).toBe(0);
   });
 
-  it("PLANT: an improve control document refuses it without allow_improve_paths", async () => {
+  it("PLANT: a policy document refuses it without allow_improve_paths", async () => {
     const ns = fresh();
     await register(ns);
-    await doc(ns, "improve/prompts/run.md", "SYSTEM PROMPT");
+    await doc(ns, "policy/auto-merge.md", "lorem ipsum");
     const p = await preview(ns, { cascade: true });
     expect(p.verdict).toBe("refused");
     expect(p.refusals.join(" ")).toMatch(/allow_improve_paths/);
+    expect(p.policy_paths).toEqual(["policy/auto-merge.md"]);
     const allowed = await preview(ns, { cascade: true, allow_improve_paths: true });
     expect(allowed.verdict, allowed.refusals.join(" ")).toBe("allowed");
   });
 
-  it("PLANT: a namespace on the improve roster is refused", async () => {
+  it("PLANT: a namespace on the roster is refused", async () => {
     await register("germomics");
     const p = await preview("germomics", { cascade: true, allow_improve_paths: true });
     expect(p.verdict).toBe("refused");
@@ -286,7 +286,7 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
   it("PLANT: an expired token is refused", async () => {
     const ns = fresh();
     await register(ns);
-    const plan = await readDeletePlan(env.DB, env.APP_KV, ns);
+    const plan = await readDeletePlan(env.DB, ns);
     const token = await signDeleteToken(workerEnv(), {
       v: 1,
       namespace: ns,
@@ -305,7 +305,7 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
   it("PLANT: a token issued to another caller is refused", async () => {
     const ns = fresh();
     await register(ns);
-    const plan = await readDeletePlan(env.DB, env.APP_KV, ns);
+    const plan = await readDeletePlan(env.DB, ns);
     const token = await signDeleteToken(workerEnv(), {
       v: 1,
       namespace: ns,
@@ -323,7 +323,7 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
   it("PLANT: a token signed under another key does not verify", async () => {
     const ns = fresh();
     await register(ns);
-    const plan = await readDeletePlan(env.DB, env.APP_KV, ns);
+    const plan = await readDeletePlan(env.DB, ns);
     const token = await signDeleteToken(
       { COOKIE_ENCRYPTION_KEY: "not-the-worker-key" },
       { v: 1, namespace: ns, cascade: false, allow_improve_paths: false, actor: ACTOR, plan: planFingerprint(plan), exp: Math.floor(Date.now() / 1000) + 60 }
@@ -368,15 +368,12 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     await env.DB.prepare("INSERT INTO ops_sites (namespace, name, origin, platform) VALUES (?1, 'Sample', 'https://sample.example.com', 'cloudflare')")
       .bind(ns)
       .run();
-    await env.APP_KV.put(pausedKey(ns), "paused by hand");
-    await env.APP_KV.put(bestKey(ns), "{}");
 
     const p = await preview(ns, { cascade: true });
     expect(p.verdict, p.refusals.join(" ")).toBe("allowed");
     expect(p.counts.documents_live).toBe(3);
     expect(p.counts.documents_archived).toBe(2);
     expect(p.counts.document_links_removed).toBe(3);
-    expect(p.kv_keys.sort()).toEqual([bestKey(ns), pausedKey(ns)].sort());
 
     const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token });
     expect(result.isError, result.content[0].text).not.toBe(true);
@@ -385,20 +382,16 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
       snapshots: number;
       edges_removed: number;
       ops_site_removed: boolean;
-      kv_failed: unknown[];
     };
     expect(done.documents_deleted).toBe(3);
     expect(done.snapshots).toBe(3);
     expect(done.edges_removed).toBe(3);
     expect(done.ops_site_removed).toBe(true);
-    expect(done.kv_failed).toEqual([]);
 
-    // Deleted: the live documents, their edges, the site row, the mapping, the KV keys.
+    // Deleted: the live documents, their edges, the site row, the mapping.
     expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'", ns)).toBe(0);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(0);
     expect(await n("SELECT COUNT(*) AS n FROM ops_sites WHERE namespace = ?1", ns)).toBe(0);
-    expect(await env.APP_KV.get(pausedKey(ns))).toBeNull();
-    expect(await env.APP_KV.get(bestKey(ns))).toBeNull();
     expect(
       await n(
         "SELECT COUNT(*) AS n FROM document_links WHERE (from_ns = ?1 AND from_path IN ('core.md', 'notes/a.md')) OR (to_ns = ?1 AND to_path IN ('core.md', 'notes/a.md'))",
@@ -496,29 +489,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     expect(await n("SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1", ns)).toBe(0);
     expect(await n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'namespace-delete' AND namespace = ?1", ns)).toBe(0);
   });
-
-  it("PLANT: a KV delete that fails after the commit is reported, never dropped", async () => {
-    const ns = fresh();
-    await register(ns);
-    const p = await preview(ns);
-    const failingKv = {
-      get: (key: string) => env.APP_KV.get(key),
-      delete: async (key: string) => {
-        throw new Error(`kv refused ${key}`);
-      },
-    } as unknown as KVNamespace;
-    const server = buildAdminServer({ ...workerEnv(), APP_KV: failingKv } as never, ADMIN);
-    const client = new Client({ name: "delete-namespace-kv", version: "1.0.0" });
-    const [c, s] = InMemoryTransport.createLinkedPair();
-    await Promise.all([server.connect(s), client.connect(c)]);
-    const result = (await client.callTool({ name: "capsid_admin_manage_namespaces", arguments: { namespace: ns, action: "delete_perform", token: p.token } })) as Result;
-    await client.close();
-    expect(result.isError, result.content[0].text).not.toBe(true);
-    const done = JSON.parse(result.content[0].text) as { kv_failed: Array<{ key: string }>; warning?: string };
-    expect(done.kv_failed).toHaveLength(4);
-    expect(done.warning).toMatch(/could not be deleted/);
-    expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(0);
-  });
 });
 
 async function docs(ns: string, count: number): Promise<void> {
@@ -543,7 +513,7 @@ describe("capsid_admin_manage_namespaces delete batch cap", () => {
     expect(refusal).toMatch(/Delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper/);
 
     // A token signed over this very plan is refused at perform too, by the same rule.
-    const plan = await readDeletePlan(env.DB, env.APP_KV, ns);
+    const plan = await readDeletePlan(env.DB, ns);
     const token = await signDeleteToken(workerEnv(), {
       v: 1,
       namespace: ns,

@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { ROSTER } from "./improve-schema";
+import { ROSTER } from "./roster";
 import { readMaintenance } from "./maintenance";
 import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalMaintenance } from "./ops-types";

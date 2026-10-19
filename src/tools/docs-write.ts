@@ -9,7 +9,7 @@ import { parseLinks } from "../links";
 import { validateDocStatus, validateDocType } from "../doc-meta";
 import { bounded, MAX_BODY, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_LINKS_JSON, MAX_SHA, MAX_TAGS, MAX_TITLE, nsName, docPath } from "../limits";
 import { assembleBody } from "../write-modes";
-import { improveWriteRefusal } from "../improve-scores";
+import { policyWriteRefusal } from "../signed-docs";
 import { concurrentEditWarning } from "../server";
 import { canonGuarded, canonRefusal, proposeCanon } from "../canon";
 import { ruleDocCap, ruleDocWriteRefusal } from "../rule-docs";
@@ -28,26 +28,26 @@ async function requireRegisteredNamespace(db: D1Database, namespace: string): Pr
   );
 }
 
-// The improve control-surface check for write, restore, delete and move. First the
-// override is itself scoped: allow_improve_paths is how a caller writes the loop's
-// own control surface (its run documents, prompts, skills and anchors), and it is the
-// document-side twin of the repo-side protected-path flag, so it asks for the same
-// one (IMPROVE_OVERRIDE_FLAGS in src/scope.ts). Then improveWriteRefusal runs on every path the call changes, as what the path
-// holds now against what it would hold. Returns the first refusal, or null.
-async function improvePathsRefusal(
+// The policy-document check for write, restore, delete and move. First the override
+// is itself scoped: allow_improve_paths is how a caller writes a signed policy
+// document, and it is the document-side twin of the repo-side protected-path flag, so
+// it asks for the same one (IMPROVE_OVERRIDE_FLAGS in src/scope.ts). Then
+// policyWriteRefusal runs on every path the call changes. Returns the first refusal,
+// or null.
+function policyPathsRefusal(
   ctx: ToolCtx,
   tool: "write" | "restore" | "delete" | "move",
   namespace: string,
   allowImprovePaths: boolean | undefined,
-  changes: Array<{ path: string; before: string | null; after: string }>
-): Promise<string | null> {
+  paths: string[]
+): string | null {
   const allow = allowImprovePaths === true;
   if (allow) {
     const overrideRefusal = ctx.scope({ ...surfaceOf(tool), namespace, flags: IMPROVE_OVERRIDE_FLAGS });
     if (overrideRefusal) return overrideRefusal;
   }
-  for (const change of changes) {
-    const refusal = await improveWriteRefusal(namespace, change.path, change.before, change.after, allow);
+  for (const path of paths) {
+    const refusal = policyWriteRefusal(namespace, path, allow);
     if (refusal) return refusal;
   }
   return null;
@@ -79,9 +79,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         confirm: z.boolean().optional(),
         links: bounded(MAX_LINKS_JSON).optional(),
         if_match: bounded(MAX_SHA).optional(),
-        // Opt-in to writing the improve loop's control surface (improve/prompts/,
-        // improve/skills/, or the Anchors block of improve/scores.md). Refused
-        // without it; audit-logged with it. See improveWriteRefusal.
+        // Opt-in to writing a signed policy document (policy/). Refused without it;
+        // audit-logged with it. See policyWriteRefusal.
         allow_improve_paths: z.boolean().optional(),
       },
     },
@@ -163,14 +162,9 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         return fail(`mode 'meta' needs at least one of title, type, tags or status to change (${namespace}/${path}).`);
       }
 
-      // The improve control-surface guard, computed on the final assembled and
-      // normalized body so it sees exactly what would be stored: a patch or append that
-      // changes scores.md's anchor block is caught the same as a full replace. Refused
-      // unless allow_improve_paths was passed.
-      const improveRefusal = await improvePathsRefusal(ctx, "write", namespace, allow_improve_paths, [
-        { path, before: prior?.body ?? null, after: body as string },
-      ]);
-      if (improveRefusal) return fail(improveRefusal);
+      // The policy-document guard. Refused unless allow_improve_paths was passed.
+      const policyRefusal = policyPathsRefusal(ctx, "write", namespace, allow_improve_paths, [path]);
+      if (policyRefusal) return fail(policyRefusal);
 
       // A rule document (src/rule-docs.ts) may not be made worse: over its cap and
       // larger than before, or naming a tool the Worker does not serve. Checked before
@@ -380,14 +374,9 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
-      // The improve control-surface guard (see improvePathsRefusal): restoring an old
-      // improve/prompts/run.md installs an older system prompt for the attempt
-      // generator. Same call shape as write: what is stored now, against what would be
-      // stored.
-      const restoreImproveRefusal = await improvePathsRefusal(ctx, "restore", namespace, allow_improve_paths, [
-        { path, before: prior?.body ?? null, after: version.body ?? "" },
-      ]);
-      if (restoreImproveRefusal) return fail(restoreImproveRefusal);
+      // The policy-document guard (see policyPathsRefusal).
+      const restorePolicyRefusal = policyPathsRefusal(ctx, "restore", namespace, allow_improve_paths, [path]);
+      if (restorePolicyRefusal) return fail(restorePolicyRefusal);
       // A rule document is held to the same checks as a write (src/rule-docs.ts). A restore
       // that recreates a deleted document puts back what was there, so it is judged
       // against the version itself and passes.
@@ -491,15 +480,9 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
       if (!prior) return fail(`not found: ${namespace}/${path}`);
-      // The improve control-surface guard (see improvePathsRefusal). Removing
-      // improve/prompts/run.md drops the loop back to the hardcoded default prompt and
-      // removing a skill retires it, so a delete is a steering change even though it
-      // installs nothing. The "" is the resulting body: for the two prefixes that is a
-      // prefix match, and for scores.md an anchor block going from something to nothing.
-      const deleteImproveRefusal = await improvePathsRefusal(ctx, "delete", namespace, allow_improve_paths, [
-        { path, before: prior.body, after: "" },
-      ]);
-      if (deleteImproveRefusal) return fail(deleteImproveRefusal);
+      // The policy-document guard (see policyPathsRefusal).
+      const deletePolicyRefusal = policyPathsRefusal(ctx, "delete", namespace, allow_improve_paths, [path]);
+      if (deletePolicyRefusal) return fail(deletePolicyRefusal);
       const deleteRefusal = await requireConfirmation(server, confirm, {
         prompt: `Delete ${namespace}/${path}? It will be snapshotted to document_versions first, so it can be recovered.`,
         declined: `delete of ${namespace}/${path} declined`,
@@ -583,21 +566,14 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ ok: number }>();
       if (!exists) return fail(`not found: ${namespace}/${path}`);
-      // The improve control-surface guard on both ends (see improvePathsRefusal).
-      // Either path can steer the loop: moving a document into improve/skills/ installs
-      // a skill other namespaces' runs re-inject, and moving run.md out of
-      // improve/prompts/ drops the attempt generator to its hardcoded default. The
-      // source is emptied, the destination is filled with the moved body.
+      // The policy-document guard on both ends (see policyPathsRefusal).
+      const movePolicyRefusal = policyPathsRefusal(ctx, "move", namespace, allow_improve_paths, [path, new_path]);
+      if (movePolicyRefusal) return fail(movePolicyRefusal);
       const moved = await db
         .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
         .first<{ body: string | null }>();
       const movedBody = moved?.body ?? "";
-      const moveImproveRefusal = await improvePathsRefusal(ctx, "move", namespace, allow_improve_paths, [
-        { path, before: movedBody, after: "" },
-        { path: new_path, before: null, after: movedBody },
-      ]);
-      if (moveImproveRefusal) return fail(moveImproveRefusal);
       // Moving a document onto a rule path makes it a rule document, held to the same
       // checks as a write that creates one (src/rule-docs.ts). Moving one away is free, and
       // so is moving a rule document to another rule path (decisions.md to a volume): the

@@ -28,7 +28,7 @@ interface ActionSpec {
   // follows it.
   summary: string;
   // The operation arguments this action takes, where it takes fewer than the operation
-  // declares (claim and run take none of the loop's settings). The rest are neither
+  // declares (close_pr's merge takes none of manage_pr's comment). The rest are neither
   // exposed for this action nor accepted: one sent is refused.
   fields?: readonly string[];
 }
@@ -246,15 +246,16 @@ const CLOSE_PR: CompositeSpec = {
   },
 };
 
+// The name is the improve loop's, kept when the loop was removed (Dustin, 2026-10-19)
+// so no agent's tools list has to change; status was always a driver's general read.
 const RUN_IMPROVE: CompositeSpec = {
   name: "capsid_run_improve",
-  title: "Run the improve loop",
-  summary: "A driver's part of the improve loop: read its status, take or release the namespace lease, and run a step. Controlling the loop (mode, pause, budget, keys, policy, skills) is capsid_admin_control_improve. status needs the read grant; claim and run need the write grant.",
+  title: "Read Capsid's status",
+  summary: "Capsid's state as a driver reads it: per namespace the job queue, the breaker, the maintenance list and what needs Dustin, plus the signed policies and canon paths. Needs the read grant. (The improve loop this tool was named for has been removed.)",
   actions: {
-    status: { op: "improve_status", summary: "The loop's state." },
-    claim: { op: "improve_run", inject: { action: "claim" }, fields: ["namespace", "release"], summary: "Take or release the driver lease." },
-    run: { op: "improve_run", inject: { action: "run" }, fields: ["namespace", "dry_run", "condition"], summary: "Advance the namespace's runs a step." },
+    status: { op: "status", fields: ["namespace"], summary: "Capsid's status." },
   },
+  defaultAction: "status",
 };
 
 // ---- Capsid Admin (8) ---------------------------------------------------------------
@@ -287,23 +288,15 @@ const READ_OPS: CompositeSpec = {
   },
 };
 
-const IMPROVE_ADMIN_ACTIONS = [
-  "mode",
-  "pause",
-  "unpause",
-  "budget",
-  "mint_operator_key",
-  "sign_policy",
-  "register_skill",
-  "breaker_reset",
-  "overnight",
-] as const;
+const ADMIN_CONTROL_ACTIONS = ["mint_operator_key", "sign_policy", "breaker_reset", "overnight"] as const;
 
+// Named for the improve loop it once controlled; kept for the same reason as
+// capsid_run_improve.
 const CONTROL_IMPROVE: CompositeSpec = {
   name: "capsid_admin_control_improve",
-  title: "Control the improve loop",
-  summary: "Control the improve loop rather than run it: its mode, a namespace pause, the budget, operator keys, the signed policies, skills, the job breaker and the overnight run. Admin only, and every action needs a recent sign-in from a signed-in session.",
-  actions: Object.fromEntries(IMPROVE_ADMIN_ACTIONS.map((a) => [a, { op: "improve_run", inject: { action: a }, summary: "" }])),
+  title: "Administrator switches",
+  summary: "The administrator's switches: operator keys, the signed policies, the job breaker and the overnight run. Admin only, and every action needs a recent sign-in from a signed-in session.",
+  actions: Object.fromEntries(ADMIN_CONTROL_ACTIONS.map((a) => [a, { op: "admin_control", inject: { action: a }, summary: "" }])),
 };
 
 // The tools that are one operation each.

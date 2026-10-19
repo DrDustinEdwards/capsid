@@ -1,12 +1,12 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { adminFailJob, blockJob, claimJob, completeJob, editJob, failJob, jobsSummary, listJobs, parkJob, postJob, releaseJob, resumeJob, supersedeJob, unparkJob } from "../src/jobs";
-import { improveStatus } from "../src/improve-run";
+import { capsidStatus } from "../src/status";
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { loadRecordRows } from "../src/agent-record";
 import { CORRECTION_CAP, RETRY_CAP_REASON, jobDocPath } from "../src/jobs-schema";
-import { splitSignedTask, verifySignedBody, verifyTaskDoc } from "../src/improve-task";
+import { splitSignedTask, verifySignedBody } from "../src/signed-docs";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 import { MAX_TITLE } from "../src/limits";
@@ -773,7 +773,7 @@ describe("the mirrored document", () => {
     const prompt = atPost!.body.slice(atPost!.body.indexOf("## The prompt"));
     const signedPart = prompt.slice(prompt.indexOf("---\n"));
     expect(splitSignedTask(signedPart).body.trim()).toBe("the full prompt");
-    const verdict = await verifyTaskDoc(SECRET, signedPart, "improve-loop", "improve-loop");
+    const verdict = await verifySignedBody(SECRET, signedPart, "job document");
     expect(verdict.ok, "reason" in verdict ? verdict.reason : "").toBe(true);
 
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
@@ -917,11 +917,11 @@ describe("the improve_status jobs block", () => {
 
   it("improve_status carries the block for every namespace it reports", async () => {
     await post({ title: "visible in status" });
-    const status = await improveStatus(jobsEnv(), "capsid");
+    const status = await capsidStatus(jobsEnv(), "capsid");
     expect(status.namespaces).toHaveLength(1);
     expect(status.namespaces[0].jobs.queued).toBe(1);
     // Every namespace in the report has one, so a consumer never has to check.
-    const all = await improveStatus(jobsEnv());
+    const all = await capsidStatus(jobsEnv());
     for (const ns of all.namespaces) {
       expect(ns.jobs, `${ns.namespace} has no jobs block`).toBeTruthy();
     }

@@ -21,11 +21,6 @@
         "findings": []
       },
       {
-        "id": "budget",
-        "state": "clear",
-        "findings": []
-      },
-      {
         "id": "mirror",
         "state": "finding",
         "findings": [
@@ -1464,9 +1459,7 @@
         "prs_merged": 31,
         "pr_merge_rate": 0.86,
         "ci_green_rate": 0.94,
-        "median_duration_minutes": 212,
-        "attempts_kept": 14,
-        "attempts_reverted": 9
+        "median_duration_minutes": 212
       },
       {
         "name": "sample-b-driver",
@@ -1485,9 +1478,7 @@
         "prs_merged": 66,
         "pr_merge_rate": 0.93,
         "ci_green_rate": 0.9,
-        "median_duration_minutes": 96,
-        "attempts_kept": 6,
-        "attempts_reverted": 11
+        "median_duration_minutes": 96
       },
       {
         "name": "sample-c-driver",
@@ -1506,9 +1497,7 @@
         "prs_merged": 11,
         "pr_merge_rate": 0.85,
         "ci_green_rate": null,
-        "median_duration_minutes": 118,
-        "attempts_kept": 2,
-        "attempts_reverted": 3
+        "median_duration_minutes": 118
       },
       {
         "name": "sample-d-driver",
@@ -1527,9 +1516,7 @@
         "prs_merged": 5,
         "pr_merge_rate": 1,
         "ci_green_rate": null,
-        "median_duration_minutes": 77,
-        "attempts_kept": 0,
-        "attempts_reverted": 0
+        "median_duration_minutes": 77
       },
       {
         "name": "seat",
@@ -1548,9 +1535,7 @@
         "prs_merged": 58,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null,
-        "attempts_kept": null,
-        "attempts_reverted": null
+        "median_duration_minutes": null
       },
       {
         "name": "watcher",
@@ -1567,9 +1552,7 @@
         "prs_merged": 0,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null,
-        "attempts_kept": null,
-        "attempts_reverted": null
+        "median_duration_minutes": null
       },
       {
         "name": "reviewer",
@@ -1588,9 +1571,7 @@
         "prs_merged": 0,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null,
-        "attempts_kept": null,
-        "attempts_reverted": null
+        "median_duration_minutes": null
       },
       {
         "name": "old-auditor",
@@ -1607,9 +1588,7 @@
         "prs_merged": 0,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null,
-        "attempts_kept": null,
-        "attempts_reverted": null
+        "median_duration_minutes": null
       },
       {
         "name": "sample-old-key",
@@ -1628,9 +1607,7 @@
         "prs_merged": 0,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null,
-        "attempts_kept": null,
-        "attempts_reverted": null
+        "median_duration_minutes": null
       },
       {
         "name": "runner-job_6b5a4c3d2e1f-s4410",
@@ -1649,9 +1626,7 @@
         "prs_merged": 0,
         "pr_merge_rate": null,
         "ci_green_rate": null,
-        "median_duration_minutes": null,
-        "attempts_kept": null,
-        "attempts_reverted": null
+        "median_duration_minutes": null
       }
     ],
     "prs": [
@@ -1752,41 +1727,21 @@
         "incident": "failure"
       }
     ],
-    "loop": {
-      "mode": "off",
-      "budget": {
-        "month": "2026-09",
-        "caps": {
-          "actions_minutes_month": 300,
-          "model_usd_month": 50
-        },
-        "spend": {
-          "ci_minutes": 212,
-          "cost_usd": 18.4
-        },
-        "exceeded": false
-      }
-    },
     "namespaces": [
       {
-        "name": "sample",
-        "paused": null
+        "name": "sample"
       },
       {
-        "name": "sample-b",
-        "paused": null
+        "name": "sample-b"
       },
       {
-        "name": "sample-c",
-        "paused": "Paused while the fixture repo is rebuilt"
+        "name": "sample-c"
       },
       {
-        "name": "sample-d",
-        "paused": null
+        "name": "sample-d"
       },
       {
-        "name": "sample-f",
-        "paused": null
+        "name": "sample-f"
       }
     ],
     "sites": [
@@ -2119,19 +2074,19 @@
             "started_at": "2026-09-28T11:57:58.000Z",
             "finished_at": "2026-09-28T11:58:00.000Z",
             "outcome": "ok",
-            "reason": "no improve run to advance"
+            "reason": "the tick's steps ran; each records its own run"
           },
           {
             "started_at": "2026-09-28T11:52:58.000Z",
             "finished_at": "2026-09-28T11:53:00.000Z",
             "outcome": "ok",
-            "reason": "no improve run to advance"
+            "reason": "the tick's steps ran; each records its own run"
           },
           {
             "started_at": "2026-09-28T11:47:58.000Z",
             "finished_at": "2026-09-28T11:48:00.000Z",
             "outcome": "ok",
-            "reason": "1 improve run(s) looked at, 1 moved"
+            "reason": "the tick's steps ran; each records its own run"
           }
         ]
       },
@@ -2172,20 +2127,6 @@
             "finished_at": "2026-09-27T07:00:00.000Z",
             "outcome": "ok",
             "reason": "wrote 30 dump objects (409 documents); pruned 1 dumps, 0 versions, 0 audit rows"
-          }
-        ]
-      },
-      {
-        "id": "improve-open",
-        "label": "Improve opener",
-        "period_ms": 86400000,
-        "flag": null,
-        "recent": [
-          {
-            "started_at": "2026-09-28T05:59:58.000Z",
-            "finished_at": "2026-09-28T06:00:00.000Z",
-            "outcome": "ok",
-            "reason": "mode=off sample:skipped"
           }
         ]
       },

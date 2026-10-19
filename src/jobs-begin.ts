@@ -3,7 +3,7 @@ import type { Agent } from "./agents";
 import { outsideJobNamespace, startedNotice, type JobRow } from "./jobs-schema";
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
-import { verifySignedBody } from "./improve-task";
+import { verifySignedBody } from "./signed-docs";
 
 // Begin: the started label (job_e68de044f8a4; Dustin, 2026-10-10, plan step 2). A cloud
 // session works a job without claiming it and its pull request is the claim, as Copilot,

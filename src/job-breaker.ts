@@ -11,8 +11,7 @@ import { auditStatement } from "./store-guards";
 //
 // What counts is the holder's own `fail` (audit `job-fail`). A seat's admin fail is a
 // person cleaning up, and a claim that fails a tampered or corrupt body is the Worker
-// refusing, not a driver failing, so neither trips it. Reverted improve attempts do not
-// count either: a revert is the loop's normal answer to an experiment that did not help.
+// refusing, not a driver failing, so neither trips it.
 
 const BREAKER_THRESHOLD_DEFAULT = 3;
 const BREAKER_WINDOW_MS = 24 * 60 * 60 * 1000;

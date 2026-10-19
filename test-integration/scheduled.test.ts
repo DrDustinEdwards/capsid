@@ -1,16 +1,14 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import worker, { BACKUP_CRON, IMPROVE_OPEN_CRON, IMPROVE_TICK_CRON, SKILLS_REFRESH_CRON } from "../src/index";
-import { RUN_STATUSES, TERMINAL_RUN_STATUSES } from "../src/improve-schema";
-import { activeRun, advanceableRuns } from "../src/improve-state";
-import { claimJti } from "../src/improve-scorer";
+import worker, { BACKUP_CRON, SKILLS_REFRESH_CRON, TICK_CRON } from "../src/index";
+import { claimJti } from "../src/signed-requests";
 import { SCHEDULE_KEY, SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR, guideKey } from "../src/skills-refresh";
 
-// The scheduled handler, all four crons, against real bindings.
+// The scheduled handler, all three crons, against real bindings.
 //
 // Several expressions fire in the 09:00 UTC hour and Cloudflare delivers one
 // invocation per expression, so the handler dispatches on `controller.cron`.
-// test/improve-cron.test.ts derives the handler's list and the config's list from
+// test/crons.test.ts derives the handler's list and the config's list from
 // each other; this runs them, so a branch that throws on a real binding is visible.
 //
 // Each test asserts: the invocation completes, its work is observable in a real
@@ -31,7 +29,7 @@ async function fire(cron: string) {
   await waitOnExecutionContext(ctx);
 }
 
-describe("the four cron expressions", () => {
+describe("the three cron expressions", () => {
   // The ledger assertions below count rows, so each test starts from an empty ledger.
   beforeEach(async () => {
     await env.DB.prepare("DELETE FROM task_runs").run();
@@ -64,20 +62,9 @@ describe("the four cron expressions", () => {
     expect(["ok", "refused"]).toContain(run.outcome);
   });
 
-  it("the improve opener runs and writes nothing while the mode is off", async () => {
-    // improve_mode falls back to `off` on an unset key, the state of a fresh store.
-    // The opener must complete and open nothing.
-    await fire(IMPROVE_OPEN_CRON);
-    const runs = await env.DB.prepare("SELECT COUNT(*) AS n FROM improve_runs").first<{ n: number }>();
-    expect(runs?.n).toBe(0);
-  });
-
-  it("the improve tick runs against real improve tables and advances nothing when there is nothing to advance", async () => {
-    await fire(IMPROVE_TICK_CRON);
-    const runs = await env.DB.prepare("SELECT COUNT(*) AS n FROM improve_runs").first<{ n: number }>();
-    expect(runs?.n).toBe(0);
-    // The tick's own row, and none for a step with nothing to do.
-    expect(await ledger("tick")).toEqual([{ outcome: "ok", reason: "no improve run to advance" }]);
+  it("the tick runs against real bindings and records its run", async () => {
+    await fire(TICK_CRON);
+    expect(await ledger("tick")).toEqual([{ outcome: "ok", reason: "the tick's steps ran; each records its own run" }]);
   });
 
   // The skills refresh fires daily and gates on its weekday inside the handler, so
@@ -145,23 +132,23 @@ describe("the four cron expressions", () => {
       logged.mockRestore();
     }
 
-    await fire(IMPROVE_TICK_CRON);
-    const runs = await env.DB.prepare("SELECT COUNT(*) AS n FROM improve_runs").first<{ n: number }>();
-    expect(runs?.n).toBe(0);
+    await fire(TICK_CRON);
+    expect((await ledger("tick")).map((r) => r.outcome)).toEqual(["ok"]);
   });
 });
 
-describe("the improve schema is real", () => {
+describe("the replay table is real", () => {
   it("the jti replay cache really has a PRIMARY KEY, so a duplicate claim conflicts", async () => {
-    // migrations/0004_improve_jti.sql. Only a real database proves the conflict
-    // happens, and the replay defence rests on it.
+    // migrations/0004_improve_jti.sql, kept for the bench and the backup credential when
+    // the improve loop went. Only a real database proves the conflict happens, and the
+    // replay defence rests on it.
     const first = await env.DB.prepare(
-      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti"
+      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('bench:capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti"
     ).first<{ jti: string }>();
     expect(first?.jti).toBe("dup");
 
     const second = await env.DB.prepare(
-      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti"
+      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('bench:capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti"
     ).first<{ jti: string }>();
     expect(second, "the second claim must return nothing; if it returns a row the replay cache is decorative").toBeNull();
   });
@@ -170,47 +157,11 @@ describe("the improve schema is real", () => {
     // A PRIMARY KEY has no get-then-put window, and only real SQLite can show it; a
     // synchronous fake would agree with itself.
     const results = await Promise.all([
-      claimJti(env.DB, "capsid", "raced"),
-      claimJti(env.DB, "capsid", "raced"),
-      claimJti(env.DB, "capsid", "raced"),
+      claimJti(env.DB, "bench:capsid", "raced"),
+      claimJti(env.DB, "bench:capsid", "raced"),
+      claimJti(env.DB, "bench:capsid", "raced"),
     ]);
     expect(results.filter((r) => r.ok), "exactly one caller may claim a nonce").toHaveLength(1);
     expect(results.filter((r) => !r.ok).map((r) => (r.ok ? 0 : r.status))).toEqual([409, 409]);
-  });
-
-  it("the one-active-run partial unique index really refuses a second open run", async () => {
-    await env.DB.prepare(
-      `INSERT INTO improve_runs (id, namespace, mode, status, started, condition)
-       VALUES ('r-one', 'capsid', 'subscription', 'open', datetime('now'), 'full')`
-    ).run();
-    await expect(
-      env.DB.prepare(
-        `INSERT INTO improve_runs (id, namespace, mode, status, started, condition)
-         VALUES ('r-two', 'capsid', 'subscription', 'open', datetime('now'), 'full')`
-      ).run()
-    ).rejects.toThrow();
-    await env.DB.prepare("DELETE FROM improve_runs WHERE id = 'r-one'").run();
-  });
-});
-
-describe("the improve state machine's terminal set", () => {
-  // activeRun and advanceableRuns decide what the tick advances. Both must treat
-  // exactly TERMINAL_RUN_STATUSES as finished, or a finished run is advanced again or
-  // a live one is left behind.
-  it("a run in a terminal status is neither active nor advanceable, and every other status is both", async () => {
-    await env.DB.prepare("DELETE FROM improve_runs").run();
-    for (const status of RUN_STATUSES) {
-      await env.DB.prepare("INSERT INTO improve_runs (id, namespace, mode, status) VALUES (?1, ?2, 'api', ?3)")
-        .bind(`run-${status}`, `ns-${status}`, status)
-        .run();
-    }
-    const terminal = new Set<string>(TERMINAL_RUN_STATUSES);
-    const advanceable = (await advanceableRuns(env.DB as never, 100)).map((r) => r.status).sort();
-    expect(advanceable).toEqual(RUN_STATUSES.filter((s) => !terminal.has(s)).sort());
-    for (const status of RUN_STATUSES) {
-      const active = await activeRun(env.DB as never, `ns-${status}`);
-      expect(active === null, `activeRun for a ${status} run`).toBe(terminal.has(status));
-    }
-    await env.DB.prepare("DELETE FROM improve_runs").run();
   });
 });

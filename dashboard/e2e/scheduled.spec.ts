@@ -24,7 +24,7 @@ test("Incidents lists every scheduled task with its state, its last run and what
   await visit(page, "incidents");
   const panel = page.locator("#scheduled");
   await expect(panel.getByRole("heading", { name: "Scheduled tasks" })).toBeVisible();
-  await expect(panel.locator("tbody tr")).toHaveCount(8);
+  await expect(panel.locator("tbody tr")).toHaveCount(7);
 
   const merge = panel.locator('tr[data-task="auto-merge"]');
   await expect(merge.locator("td").nth(1)).toHaveText("Failing");

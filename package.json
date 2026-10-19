@@ -27,7 +27,6 @@
     "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src",
     "lint:dead-exports": "node --import ./test/resolve-ts.mjs --test test/lint/dead-exports.lint.ts",
     "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",
-    "sync:scorer": "node scripts/sync-scorer.mjs",
     "report:bloat": "devkit-no-bloat"
   },
   "devDependencies": {
@@ -45,7 +44,6 @@
     "wrangler": "4.149.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.124.0",
     "@cloudflare/workers-oauth-provider": "1.2.3",
     "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.4.2",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.3.0",

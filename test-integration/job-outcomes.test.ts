@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, failJob, postJob, resumeJob } from "../src/jobs";
-import { improveStatus } from "../src/improve-run";
+import { capsidStatus } from "../src/status";
 import { reverifyStatements } from "../src/outcome-prs";
 import { outcomeStatement } from "../src/job-outcomes";
 import { legacyAgent } from "../src/agents";
@@ -346,7 +346,7 @@ describe("job outcomes", () => {
     // is attached. The ?? [] satisfies the optional type (a scoped caller gets no
     // inventory); it is not a branch this test can take.
     await seedAgent("capsid-driver");
-    const status = await improveStatus(jobsEnv() as never, "capsid");
+    const status = await capsidStatus(jobsEnv() as never, "capsid");
     const agents = status.agents ?? [];
     // The count check, or the loop below passes by iterating an empty array.
     expect(agents.length).toBeGreaterThan(0);

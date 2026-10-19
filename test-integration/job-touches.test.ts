@@ -4,7 +4,7 @@ import { adminFailJob, blockJob, claimJob, postJob, releaseJob, resumeJob, super
 import { legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
-import { signTaskBody } from "../src/improve-task";
+import { signTaskBody } from "../src/signed-docs";
 
 // The human-touch log (migrations/0023, src/job-touches.ts) on a real D1: each
 // transition that a person or a policy makes writes its touch in the same guarded batch,

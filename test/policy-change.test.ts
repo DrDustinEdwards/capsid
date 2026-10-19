@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { AUTO_MERGE_POLICY_PATH, AUTO_MERGE_REQUIRED_CI, evaluatePolicy, loadMergePolicy, parseMergePolicy, PROMOTABLE_PATH_CLASSES, type PrFacts } from "../src/auto-merge-policy.ts";
-import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/improve-task.ts";
+import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs.ts";
 import { PATH_CLASSES } from "../src/merge-class.ts";
 import { judgeUnits, LIFTED_KEY, liftSuspension, SUSPENDED_KEY } from "../src/merge-units.ts";
 import { performPolicyChange, planPolicyChange } from "../src/policy-sign.ts";

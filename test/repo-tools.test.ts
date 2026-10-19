@@ -818,24 +818,6 @@ test("manage_pr NEVER deletes the default branch, whatever the PR says", async (
   );
 });
 
-test("manage_pr LEAVES an improve-loop branch alone, because the loop owns those refs", async () => {
-  await withFetch(
-    {
-      "PATCH /repos/o/r/pulls/5": { body: { number: 5, state: "closed", html_url: "https://pr" } },
-      ...PR_ROUTES("improve/capsid-2026-09-06-a01"),
-    },
-    async (calls) => {
-      const result = (await managePr(makeEnv([{ repo: "o/r", label: "primary" }]), "ns", 5, "close")) as {
-        head_branch_deleted: boolean;
-        head_branch_note?: string;
-      };
-      assert.equal(result.head_branch_deleted, false, "it deleted an attempt branch the loop may still need");
-      assert.match(result.head_branch_note ?? "", /improve/);
-      assert.equal(calls.some((c) => c.method === "DELETE"), false);
-    }
-  );
-});
-
 test("manage_pr leaves a FORK's head branch alone", async () => {
   await withFetch(
     {

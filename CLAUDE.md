@@ -17,7 +17,6 @@ Code comments cite these by name ("CLAUDE.md, snapshot rule").
 3. **Snapshot.** Every overwrite and delete snapshots to `document_versions` and writes `audit_log`.
 4. **One enforcement point.** `checkScope` is the only grant check; every repo mutation goes through `guardedWrite`.
 5. **Path mutation.** Paths change only through `pathMutation()`.
-6. **Improve loop.** Off unless Dustin turns it on; only `src/improve-scorer.ts` names `HOLDOUT`.
-7. **No AI trailer** on any commit or pull request.
-8. **Health probe.** `capsid/conventions.md` must keep the word "conventions".
-9. **Verify a deploy directly** on `/ops/mcp` with this project's driver key, never through a cached client; the steps are in `.claude/rules/deploy.md`. Never read `~/.claude/.credentials.json`.
+6. **No AI trailer** on any commit or pull request.
+7. **Health probe.** `capsid/conventions.md` must keep the word "conventions".
+8. **Verify a deploy directly** on `/ops/mcp` with this project's driver key, never through a cached client; the steps are in `.claude/rules/deploy.md`. Never read `~/.claude/.credentials.json`.

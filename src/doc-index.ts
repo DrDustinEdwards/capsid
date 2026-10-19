@@ -9,7 +9,7 @@ import type { SearchFilter, SearchRow } from "./doc-reads";
 // The index is derived from it and can be rebuilt from nothing.
 //
 // It is fed by the five-minute tick, not by the write paths: every writer of
-// `documents` (documentUpsert, pathMutation, restore, the improve loop's writer) sets
+// `documents` (documentUpsert, pathMutation, restore, docStatements) sets
 // updated_at, so one watermark over (updated_at, id) catches them all without a hook
 // in each. A move or delete leaves an index item behind; the daily reconcile removes
 // it, and search re-checks every hit against D1 in any case, so a stale item is never
