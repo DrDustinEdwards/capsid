@@ -1,4 +1,4 @@
-import { MIN_SAMPLE, RATE_FLOOR, RATE_GAIN, ROUTING_RULES, ROUTING_RULES_VERSION, TRIAL_ARMS, cellsOf, proposeRuleChanges, trialStatus, type Cell, type OutcomeFact, type Proposal, type TrialStatus } from "./model-routing";
+import { MIN_SAMPLE, RATE_FLOOR, RATE_GAIN, ROUTING_RULES, ROUTING_RULES_VERSION, TRIAL_ARMS, cellsOf, modelAlias, proposeRuleChanges, trialStatus, type Cell, type OutcomeFact, type Proposal, type TrialStatus } from "./model-routing";
 
 // WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model,
 // the share of jobs merged with green CI, the corrections spent, and the cost where
@@ -32,6 +32,7 @@ export interface ModelLearning {
 interface Row {
   kind: string | null;
   model: string | null;
+  model_actual: string | null;
   prs_merged: number | null;
   ci_green: number | null;
   corrections: number | null;
@@ -39,11 +40,21 @@ interface Row {
   tokens: number | null;
 }
 
+// An outcome is learned under the model Capsid chose, which the Worker recorded.
+// model_actual is the session's own report, so it never moves an outcome into another
+// model's cell; an outcome whose session reports a different model is left out, since
+// its work was not shown to be done on the chosen one. opusplan runs as Opus and Sonnet.
+function sameModel(r: Row): boolean {
+  const actual = modelAlias(r.model_actual);
+  if (actual === null || r.model === null) return true;
+  return r.model === "opusplan" ? actual === "opus" || actual === "sonnet" || actual === "opusplan" : actual === r.model;
+}
+
 export async function readModelLearning(db: D1Database, now: Date): Promise<ModelLearning> {
   const since = new Date(now.getTime() - LEARNING_WINDOW_DAYS * 86_400_000).toISOString();
   const { results } = await db
     .prepare(
-      `SELECT o.job_kind AS kind, COALESCE(o.model_actual, o.model_chosen) AS model, o.prs_merged AS prs_merged, o.ci_green AS ci_green,
+      `SELECT o.job_kind AS kind, o.model_chosen AS model, o.model_actual AS model_actual, o.prs_merged AS prs_merged, o.ci_green AS ci_green,
               j.corrections_count AS corrections, o.cost_usd AS cost_usd,
               CASE WHEN o.tokens_input IS NULL AND o.tokens_output IS NULL THEN NULL ELSE COALESCE(o.tokens_input, 0) + COALESCE(o.tokens_output, 0) END AS tokens
        FROM job_outcomes o LEFT JOIN jobs j ON j.id = o.job_id
@@ -54,14 +65,18 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
     .all<Row>();
   const rows = results ?? [];
   const truncated = rows.length > LEARNING_ROWS_MAX;
-  const facts: OutcomeFact[] = (truncated ? rows.slice(0, LEARNING_ROWS_MAX) : rows).map((r) => ({ ...r }));
+  const read = truncated ? rows.slice(0, LEARNING_ROWS_MAX) : rows;
+  const facts: OutcomeFact[] = read.filter(sameModel).map((r) => ({
+    kind: r.kind, model: r.model, prs_merged: r.prs_merged, ci_green: r.ci_green, corrections: r.corrections, cost_usd: r.cost_usd, tokens: r.tokens,
+  }));
+  const mismatched = read.length - facts.length;
   const cells = cellsOf(facts);
   const proposals = proposeRuleChanges(cells);
   const enough = cells.filter((c) => c.enough).length;
   return {
     generated: now.toISOString(),
     window_days: LEARNING_WINDOW_DAYS,
-    outcomes_read: facts.length,
+    outcomes_read: read.length,
     truncated,
     min_sample: MIN_SAMPLE,
     rate_floor: RATE_FLOOR,
@@ -73,8 +88,8 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
     proposals,
     trials: trialStatus(cells),
     note:
-      facts.length === 0
+      read.length === 0
         ? "No routed outcome in the window yet: outcomes written before migration 0032 carry no kind or model. Nothing is proposed from no evidence."
-        : `${cells.length} kind and model cells, ${enough} with at least ${MIN_SAMPLE} outcomes; only those are acted on. ${proposals.length} proposed change${proposals.length === 1 ? "" : "s"}, none applied: the seat approves each rule edit.${truncated ? ` The window holds more than ${LEARNING_ROWS_MAX} outcomes, so this is the newest ${LEARNING_ROWS_MAX}.` : ""}`,
+        : `${cells.length} kind and model cells, ${enough} with at least ${MIN_SAMPLE} outcomes; only those are acted on. ${proposals.length} proposed change${proposals.length === 1 ? "" : "s"}, none applied: the seat approves each rule edit.${mismatched ? ` ${mismatched} outcome${mismatched === 1 ? " was" : "s were"} left out because the session reported a model other than the one chosen.` : ""}${truncated ? ` The window holds more than ${LEARNING_ROWS_MAX} outcomes, so this is the newest ${LEARNING_ROWS_MAX}.` : ""}`,
   };
 }

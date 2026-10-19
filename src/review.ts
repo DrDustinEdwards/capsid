@@ -8,6 +8,7 @@
 
 import type { Env } from "./env";
 import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
+import { readAllPages } from "./github/pr-files";
 import { parseScopes } from "./agents-schema";
 
 const REVIEW_PREFIX = "REVIEW:";
@@ -105,16 +106,23 @@ export function outcomeOf(review: Review | null): ReviewOutcome {
   }
 }
 
+// The issue comments endpoint lists oldest first and has no direction parameter, so
+// the newest review is on the last page and every page is read.
+const COMMENT_MAX_PAGES = 30;
+
 /** Every comment on a pull request. Issue comments, not review comments, because
- *  capsid_open_pr action `comment` posts there. */
+ *  capsid_open_pr action `comment` posts there. Throws when the list cannot be read
+ *  whole, which the caller treats as an unread review rather than an approval. */
 export async function readReviewComments(
   env: Env,
   pr: PrUrl
 ): Promise<ReviewComment[]> {
-  const resp = await ghFetch(env, pr.owner, pr.repo, `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments?per_page=100`);
-  if (!resp.ok) throw new Error(`reading review comments failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
-  const rows = (await resp.json()) as Array<{ id?: number; user?: { login?: string }; body?: string; created_at?: string }>;
-  return rows.map((r) => ({
+  const read = await readAllPages(
+    env, pr.owner, pr.repo, `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments`,
+    (page) => page as Array<{ id?: number; user?: { login?: string }; body?: string; created_at?: string }>, COMMENT_MAX_PAGES
+  );
+  if (read.problem) throw new Error(`reading review comments failed: ${read.problem}`);
+  return read.items.map((r) => ({
     id: typeof r.id === "number" ? r.id : undefined,
     user: r.user?.login ?? "(unknown)",
     body: r.body ?? "",
