@@ -127,6 +127,24 @@ test("the admin completes the login: session cookie carries the email, state coo
   assert.equal(await (e as { OAUTH_KV: KVNamespace }).OAUTH_KV.get(`capsid:portal-state:${state}`), null);
 });
 
+test("PLANT: a stored return path that would leave the origin lands on the Portal's home instead", async () => {
+  // Grok audit 2026-10 C1: /portal//attacker.example passed the check, and on the Portal
+  // host the Location became the protocol-relative //attacker.example.
+  for (const origin of [ORIGIN, "https://portal.dustinedwards.info"]) {
+    const e = env();
+    const res0 = await startPortalLogin(new Request(`${origin}/portal/`), e, "/portal//attacker.example");
+    const location = String(res0.headers.get("Location"));
+    const state = String(new URL(location).searchParams.get("state"));
+    const cookie = (res0.headers.get("Set-Cookie") ?? "").split(";")[0];
+    stubAccess(location);
+    const res = await handlePortalCallback(new Request(`${origin}/portal/callback?code=c&state=${state}`, { headers: { Cookie: cookie } }), e, new Date());
+    assert.equal(res.status, 302);
+    const target = String(res.headers.get("Location"));
+    assert.ok(!target.startsWith("//"), target);
+    assert.equal(new URL(target, origin).origin, origin, target);
+  }
+});
+
 test("the name in the ID token rides the session cookie, and a token with no name leaves the session email-only", async () => {
   for (const [claims, expected] of [
     [{ name: "Dustin Edwards" }, { email: "admin@example.com", name: "Dustin Edwards" }],

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PORTAL_HOST, portalBase, portalCookiePath, portalHostRequest, publicPortalPath } from "../src/portal-host.ts";
+import { isSameOriginPath, PORTAL_HOST, portalBase, portalCookiePath, portalHostRequest, publicPortalPath } from "../src/portal-host.ts";
 
 // portal.dustinedwards.info serves the Portal and nothing else (src/portal-host.ts). The
 // Worker asks portalHostRequest first, in src/index.ts before the OAuth provider
@@ -39,6 +39,17 @@ test("PLANT: on the Portal host, an old /portal address redirects to the same pa
   assert.deepEqual(routed(`${PORTAL}/portal/api/ops/refresh`, { method: "POST" }), { redirect: `${PORTAL}/api/ops/refresh`, status: 308 });
   // /portalx is not under /portal: it is a root path like any other.
   assert.equal(routed(`${PORTAL}/portalx`), "/portal/portalx");
+});
+
+test("PLANT: on the Portal host, a /portal path that would leave the origin is refused, not redirected", () => {
+  // Grok audit 2026-10 C1: /portal//attacker.example was a 308 to https://attacker.example/.
+  for (const path of ["/portal//attacker.example", "/portal//attacker.example/x?code=c", "/portal///attacker.example"]) {
+    assert.deepEqual(routed(`${PORTAL}${path}`), { redirect: "null", status: 404 }, path);
+  }
+  assert.equal(isSameOriginPath("/queue"), true);
+  assert.equal(isSameOriginPath("//attacker.example"), false);
+  assert.equal(isSameOriginPath("/\\attacker.example"), false);
+  assert.equal(isSameOriginPath("queue"), false);
 });
 
 test("on the Portal host, the hashed files keep their /portal/assets/ path", () => {
