@@ -37,7 +37,7 @@ const RETAIN_MS = RETAIN_DAYS * 24 * 3_600_000;
 // Reads per pass: one pull request list per namespace (at most MAX_NAMESPACES), the
 // files of at most MAX_PR_READS_PER_PASS pull requests, and two D1 reads per namespace
 // with a remembered merge. A burst of merges is caught up over the next passes.
-const MAX_NAMESPACES = 20;
+export const MAX_NAMESPACES = 20;
 const MAX_PR_READS_PER_PASS = 5;
 const PULLS_LISTED = 20;
 // Paths kept per list per pull request. A larger change is kept cut, and says so.
@@ -289,6 +289,20 @@ export function newMerges(listed: readonly ListedPull[], known: ReadonlySet<numb
     .sort((a, b) => instant(a.merged_at!) - instant(b.merged_at!));
 }
 
+/** The namespaces this pass reads, from a list read with one row past the cap, and the
+ *  memory with every namespace no longer mapped forgotten. Past the cap the list is not
+ *  the whole mapping, so a namespace missing from it may still be mapped: nothing is
+ *  forgotten then, and the pass is not complete. Mutates `memory`. */
+export function namespacesThisPass(rows: readonly string[], memory: MergeMemory): { listed: string[]; capped: boolean } {
+  const capped = rows.length > MAX_NAMESPACES;
+  const listed = rows.slice(0, MAX_NAMESPACES);
+  if (!capped) {
+    const names = new Set(listed);
+    for (const ns of Object.keys(memory)) if (!names.has(ns)) delete memory[ns];
+  }
+  return { listed, capped };
+}
+
 // ---------------------------------------------------------------------------
 // The pass.
 
@@ -315,16 +329,16 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
   const { results: mapped } = await env.DB.prepare(
     "SELECT namespace FROM namespaces WHERE repos IS NOT NULL AND repos NOT IN ('', '[]') ORDER BY namespace LIMIT ?1"
   )
-    .bind(MAX_NAMESPACES)
+    .bind(MAX_NAMESPACES + 1)
     .all<{ namespace: string }>();
 
   // Every namespace's new merges, then the oldest MAX_PR_READS_PER_PASS of them read.
-  // A namespace no longer mapped (or past MAX_NAMESPACES) is forgotten.
-  const listedNames = new Set((mapped ?? []).map((m) => m.namespace));
-  for (const ns of Object.keys(memory)) if (!listedNames.has(ns)) delete memory[ns];
+  // A namespace no longer mapped is forgotten, unless the list hit MAX_NAMESPACES.
+  const { listed, capped } = namespacesThisPass((mapped ?? []).map((m) => m.namespace), memory);
+  if (capped) complete = false;
   const pending: Array<{ namespace: string; owner: string; repo: string; pull: ListedPull }> = [];
   const unread: string[] = [];
-  for (const { namespace } of mapped ?? []) {
+  for (const namespace of listed) {
     try {
       const { owner, repo, full } = await resolveRepo(env, namespace);
       // A namespace remapped to another repo starts again: its paths were another repo's.
@@ -377,7 +391,7 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
   const findings = staleCanonFindings(flags);
   const remembered = Object.values(kept).reduce((n, e) => n + e.prs.length, 0);
   const note =
-    `${(mapped ?? []).length} namespace(s) listed, ${read} of ${pending.length} new merge(s) read, ${remembered} remembered, ${flags.length} stale document flag(s)` +
+    `${listed.length} namespace(s) listed${capped ? ` (more than ${MAX_NAMESPACES} are mapped; the rest were not read)` : ""}, ${read} of ${pending.length} new merge(s) read, ${remembered} remembered, ${flags.length} stale document flag(s)` +
     (flags.length > MAX_FLAGS ? `, the first ${MAX_FLAGS} raised` : "") +
     (unread.length ? `; not read: ${unread.join(", ")}` : "");
   return { findings, complete, note };

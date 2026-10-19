@@ -68,7 +68,7 @@ test("replace still normalizes the whole body, because the caller supplied all o
   assert.equal(storedBody(fake.recorded), "x, y");
 });
 
-test("sign_policy refuses and writes nothing when the policy changes between its read and its batch", async () => {
+test("PLANT: sign_policy refuses and writes nothing when the policy changes between its read and its batch", async () => {
   const fake = fakeD1({
     documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: "# policy\n\n- version: 1\n" }],
     raceAfterPreRead: (rows, target) => {
@@ -81,6 +81,9 @@ test("sign_policy refuses and writes nothing when the policy changes between its
   const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
   assert.equal(result.ok, false, "the signer overwrote a policy edit with the signed older body");
   assert.match(result.ok ? "" : result.error, /changed or was removed after sign_policy read it/);
+  // The pin was written before the batch aborted, so the refusal must not say nothing was written.
+  assert.doesNotMatch(result.ok ? "" : result.error, /Nothing was signed or written/);
+  assert.match(result.ok ? "" : result.error, /anti-rollback record \(policy:signed:/);
   assert.deepEqual(fake.recorded, [], "a refused signing must commit nothing");
   assert.equal(
     fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)?.body,

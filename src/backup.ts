@@ -10,6 +10,8 @@ const MARKDOWN_PREFIX = "backups/markdown/";
 const PUT_CONCURRENCY = 20;
 
 // KV lease is best-effort (no CAS). Export before prune. Dump retention is d1-dump's graduated policy.
+// Two runs can both read the key empty and both take it, so the run re-reads the lease
+// after its export and refuses every destructive step unless the lease is still its own.
 //
 // The lease value carries a per-run token and a run releases only its own, so a run
 // that outlived its TTL cannot delete the lease of the run that started after it. The
@@ -170,6 +172,14 @@ export interface BackupSkipped {
 
 export type BackupResult = BackupSummary | BackupSkipped;
 
+// The HTTP status /ops/backup answers with, so "did nothing" is visible without the
+// body: 409 when another run holds the lease, 503 when the preflight refused the prune
+// (the dumps were written but nothing was marked, mirrored or pruned), 200 otherwise.
+export function backupHttpStatus(result: BackupResult): number {
+  if (!result.ran) return 409;
+  return result.prune_refused === null ? 200 : 503;
+}
+
 // R2's bulk delete takes at most 1000 keys per call and refuses the rest rather than
 // truncating, so an unbounded array throws after the dumps are written and before
 // backup:last-ok is stamped.
@@ -205,7 +215,7 @@ export async function runBackup(env: Env): Promise<BackupResult> {
   const lease = `${now} ${crypto.randomUUID()}`;
   await env.APP_KV.put(LEASE_KEY, lease, { expirationTtl: LEASE_TTL_SECONDS });
   try {
-    return await exportAndPrune(env, now);
+    return await exportAndPrune(env, now, lease);
   } finally {
     // Release on success or throw, and only this run's own lease: if the TTL lapsed
     // and another run took the key, deleting it would let a third run start.
@@ -358,7 +368,7 @@ async function pruneD1(env: Env): Promise<{ versions: number; audit: number }> {
   return { versions: pruned[0]?.results?.[0]?.n ?? 0, audit: pruned[2]?.results?.[0]?.n ?? 0 };
 }
 
-async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
+async function exportAndPrune(env: Env, now: string, lease: string): Promise<BackupSummary> {
   const { dump, docs, tablesMismatch } = await exportDump(env, now);
   const jsonPrefix = dump.prefix;
   const jsonKeys = dump.keys;
@@ -370,7 +380,13 @@ async function exportAndPrune(env: Env, now: string): Promise<BackupSummary> {
   // looked empty.
   const checked = await preflight(env, docs);
   const fts = checked.fts;
-  const pruneRefused = tablesMismatch ?? checked.pruneRefused;
+  let pruneRefused = tablesMismatch ?? checked.pruneRefused;
+  // The lease is get-then-put, so a run that started alongside this one may hold it
+  // now. Re-read before anything destructive: a run that lost it prunes nothing.
+  if (pruneRefused === null) {
+    const holder = await env.APP_KV.get(LEASE_KEY);
+    if (holder !== lease) pruneRefused = `lease-lost: ${LEASE_KEY} is now ${holder}`;
+  }
   if (pruneRefused !== null) {
     logEvent("error", "BACKUP_PREFLIGHT_REFUSED", {
       message:

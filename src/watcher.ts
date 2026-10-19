@@ -255,6 +255,16 @@ export function healthFindings(
       ])
     );
   }
+  // A stamp /health cannot parse has no age, so the window check above cannot fire and
+  // last_ok is not null. Its age is unknown, which is reported as stale.
+  if (health.backup.last_ok !== null && health.backup.age_hours === null) {
+    out.push(
+      finding(namespace, "backup-stale", "the last backup's time cannot be read", [
+        `last ok: ${health.backup.last_ok}`,
+        "/health reports age_hours as null, so the backup's age is unknown.",
+      ])
+    );
+  }
   if (health.backup.last_ok === null) {
     out.push(
       finding(namespace, "backup-never", "no backup has ever reported success", [

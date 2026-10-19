@@ -587,6 +587,27 @@ test("an installation token is minted for one repo and cached under owner/repo",
   );
 });
 
+test("PLANT: every GitHub call, the App token mint included, carries a timeout signal", async () => {
+  // With no signal a hung connection holds the request until the runtime kills it.
+  const env = makeEnv(ONE_REPO, fakeKv({ seedToken: false }), { GITHUB_APP_CLIENT_ID: "Iv1.test", GITHUB_APP_PRIVATE_KEY: await testPem() });
+  const original = globalThis.fetch;
+  const seen: Array<[string, unknown]> = [];
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    const path = new URL(url).pathname;
+    seen.push([path, init?.signal]);
+    if (path.endsWith("/installation")) return Response.json({ id: 111 });
+    if (path.endsWith("/access_tokens")) return Response.json({ token: "t" });
+    return Response.json(fileBody("a"));
+  }) as typeof fetch;
+  try {
+    await readRepoFile(env, "ns", "doc.md");
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.equal(seen.length, 3, JSON.stringify(seen.map(([p]) => p)));
+  for (const [path, signal] of seen) assert.ok(signal instanceof AbortSignal, `${path} was fetched with no signal`);
+});
+
 test("a 404 on installation resolution says the credentials are fine", async () => {
   const env = makeEnv(ONE_REPO, fakeKv({ seedToken: false }), {
     GITHUB_APP_CLIENT_ID: "Iv1.test",

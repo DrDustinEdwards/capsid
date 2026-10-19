@@ -334,7 +334,8 @@ export function analyticsFinding(site: Pick<OpsSite, "namespace" | "name" | "ori
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-async function readCapped(res: Response, max: number): Promise<{ text: string; truncated: boolean }> {
+/** The body as text, read no further than `max` bytes. */
+export async function readCapped(res: Response, max: number): Promise<{ text: string; truncated: boolean }> {
   if (!res.body) return { text: await res.text(), truncated: false };
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

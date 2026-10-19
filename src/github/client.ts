@@ -21,6 +21,10 @@ const GH_HEADERS: Record<string, string> = {
 const TOKEN_TTL_SECONDS = 3300; // installation tokens live 60 min; refresh a little early
 const INSTALL_TTL_SECONDS = 86400; // installation id is stable
 const READ_CACHE_TTL_SECONDS = 60; // brief cache for read tools
+// Every GitHub call is bounded, so a hung connection fails the call instead of holding
+// the request (or a cron pass) until the runtime kills it. Long enough for a large
+// contents PUT; a caller's own signal wins.
+const GH_TIMEOUT_MS = 30_000;
 
 const installKey = (owner: string) => `gh:install:v2:${owner}`;
 const tokenKey = (owner: string, repo: string) => `gh:token:v3:${owner}/${repo}`;
@@ -72,6 +76,7 @@ async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Res
   return fetch(`${GH}${path}`, {
     ...init,
     headers: { ...GH_HEADERS, ...(init?.headers as Record<string, string>), Authorization: `Bearer ${jwt}` },
+    signal: init?.signal ?? AbortSignal.timeout(GH_TIMEOUT_MS),
   });
 }
 
@@ -159,6 +164,7 @@ export async function listInstalledRepos(env: Env): Promise<{ repos: InstalledRe
       if (page > LIST_MAX_PAGES) throw new Error(`installation ${id} lists more than ${LIST_MAX_PAGES * LIST_PER_PAGE} repos`);
       const resp = await fetch(`${GH}/installation/repositories?per_page=${LIST_PER_PAGE}&page=${page}`, {
         headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(GH_TIMEOUT_MS),
       });
       if (!resp.ok) throw new Error(`could not list the repos of installation ${id} (${resp.status})`);
       const body = (await resp.json()) as {
@@ -206,6 +212,7 @@ export async function ghFetch(env: Env, owner: string, repo: string, path: strin
     fetch(url, {
       ...init,
       headers: { ...GH_HEADERS, ...(init?.headers as Record<string, string>), Authorization: `Bearer ${token}` },
+      signal: init?.signal ?? AbortSignal.timeout(GH_TIMEOUT_MS),
     });
   let resp = await call(await getInstallationToken(env, owner, repo));
   if (resp.status === 401) {

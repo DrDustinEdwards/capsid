@@ -150,12 +150,12 @@ test("the fingerprint ignores key order and moves with every count", () => {
 
 // the batch cap
 
-test("the cap is derived from D1's batch ceiling: five fixed statements plus two per document", () => {
+test("the cap is derived from D1's batch ceiling: six fixed statements plus two per document", () => {
   assert.equal(D1_BATCH_STATEMENTS, 100);
-  assert.equal(NAMESPACE_DELETE_MAX_DOCUMENTS, Math.floor((D1_BATCH_STATEMENTS - 5) / 2));
+  assert.equal(NAMESPACE_DELETE_MAX_DOCUMENTS, Math.floor((D1_BATCH_STATEMENTS - 6) / 2));
   assert.equal(NAMESPACE_DELETE_MAX_DOCUMENTS, 47);
-  assert.ok(5 + 2 * NAMESPACE_DELETE_MAX_DOCUMENTS <= D1_BATCH_STATEMENTS, "a batch at the cap does not fit");
-  assert.ok(5 + 2 * (NAMESPACE_DELETE_MAX_DOCUMENTS + 1) > D1_BATCH_STATEMENTS, "the cap is lower than it needs to be");
+  assert.ok(6 + 2 * NAMESPACE_DELETE_MAX_DOCUMENTS <= D1_BATCH_STATEMENTS, "a batch at the cap does not fit");
+  assert.ok(6 + 2 * (NAMESPACE_DELETE_MAX_DOCUMENTS + 1) > D1_BATCH_STATEMENTS, "the cap is lower than it needs to be");
 });
 
 test("PLANT: one document over the cap is refused whatever cascade says, with the count, the cap and the advice", () => {

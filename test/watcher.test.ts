@@ -188,6 +188,12 @@ test("a backup older than the window, and one that never ran, are different find
   assert.deepEqual(never.map((f) => f.fingerprint), ["backup-never"]);
 });
 
+test("PLANT: an unparseable backup stamp is a backup-stale finding", () => {
+  // /health keeps last_ok and sets age_hours null, so neither the window nor the never check fires.
+  const found = healthFindings({ ...HEALTHY, backup: { last_ok: "not-a-time", age_hours: null } }, HEALTHY.sha, HEALTHY.schema_version, "capsid");
+  assert.deepEqual(found.map((f) => f.fingerprint), ["backup-stale"]);
+});
+
 test("a live schema behind the newest migration is a finding", () => {
   const found = healthFindings(HEALTHY, HEALTHY.sha, "0017_something_new.sql", "capsid");
   assert.deepEqual(found.map((f) => f.fingerprint), ["schema-behind-0017_something_new.sql"]);

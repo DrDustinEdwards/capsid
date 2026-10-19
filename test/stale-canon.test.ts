@@ -5,6 +5,8 @@ import {
   citesPath,
   instant,
   MAX_FLAGS,
+  MAX_NAMESPACES,
+  namespacesThisPass,
   MAX_PATHS_PER_PR,
   newMerges,
   parseMemory,
@@ -237,4 +239,19 @@ test("memory: absent is empty, damage is reported, old merges are pruned", () =>
   );
   assert.deepEqual(Object.keys(kept), ["sample"]);
   assert.deepEqual(kept.sample!.prs.map((p) => p.number), [2]);
+});
+
+test("PLANT: a namespace list past the cap forgets nothing and is not complete", () => {
+  const rows = Array.from({ length: MAX_NAMESPACES + 1 }, (_, i) => `ns-${String(i).padStart(2, "0")}`);
+  const last = rows[MAX_NAMESPACES];
+  const memory = { [last]: { repo: "example/sample", prs: [] } };
+  const capped = namespacesThisPass(rows, memory);
+  assert.equal(capped.capped, true);
+  assert.equal(capped.listed.length, MAX_NAMESPACES);
+  assert.ok(memory[last], "a namespace past the cap, still mapped, was forgotten");
+
+  // Under the cap the list is whole, so an unmapped namespace is forgotten.
+  const gone = { gone: { repo: "example/gone", prs: [] } };
+  assert.equal(namespacesThisPass(["sample"], gone).capped, false);
+  assert.equal(gone.gone, undefined);
 });
