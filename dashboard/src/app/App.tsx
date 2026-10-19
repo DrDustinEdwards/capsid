@@ -3,7 +3,7 @@ import { Spinner } from "capsomer/react/empty";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
 import { Link, useLocation, useSearch } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
-import { attentionItems, counts, hasPackages, hasSites, passStale } from "../lib/derive";
+import { WAITING_KINDS, attentionItems, counts, hasPackages, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
 import { RAIL_PREF, THEME_PREF, readPref, setSingleKeys, toggleTheme, useSingleKeys, writePref } from "../lib/prefs";
 import { NavIcon } from "../ui/icons";
@@ -58,14 +58,12 @@ const GROUPS: Array<{ label: string; views: ViewId[] }> = [
 // waits on the owner is violet.
 const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
   health: "crit",
-  prs: "need",
 };
 
 
 // What each rail count means, for its accessible name and its tooltip.
 const BADGE_NOTE: Partial<Record<ViewId, string>> = {
   health: "critical",
-  prs: "waiting for you",
 };
 
 function useTick(ms: number): number {
@@ -484,15 +482,15 @@ export function App() {
   };
 
   const c = feed ? counts(feed) : null;
-  // One number, one place (design-portal-evaluation.md section 2, "Badges"): what waits on you
-  // is the header inbox's number, so Needs you's menu entry carries none; Health counts
-  // the critical problems, session incidents included (derive.ts); Pull requests counts
-  // what waits on the seat. The Queue's blocked jobs are in Needs you's count already.
-  const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit").length : 0;
+  // One number, one place (design-portal-evaluation.md section 2, "Badges"; the UX audit's
+  // m2): what waits on you is the header inbox's number and Needs you's list, and nowhere
+  // else, so no menu entry counts it (Pull requests' waiting pull requests among them).
+  // Health counts the critical problems, session incidents included (derive.ts), leaving
+  // out what waits on you.
+  const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit" && !WAITING_KINDS.has(x.kind)).length : 0;
   const badge: Partial<Record<ViewId, { n: number; cls: string }>> = c && feed
     ? {
         health: { n: critCount, cls: "hot" },
-        prs: { n: feed.live.awaiting_seat.length, cls: "warm" },
       }
     : {};
 

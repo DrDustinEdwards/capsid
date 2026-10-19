@@ -47,13 +47,15 @@ test("Enter on a Holding now row opens the job", async ({ page }) => {
 });
 
 // Defect 3: a namespace filter belongs to one page and lives in its address, and a list
-// the filter empties says so and offers a way back. Health's sections are one page, so
-// one filter narrows them all.
-test("a filter picked on Health narrows each of its sections, lives in the address, stays off Queue, and an emptied list says so", async ({ page }) => {
-  await visit(page, "health");
-  await page.locator("#incidents [role=group]").getByRole("button", { name: "watcher", exact: true }).click();
+// the filter empties says so and offers a way back. Health is one page, so one filter
+// narrows every tab, and it is kept when the tab changes.
+test("a filter picked on Health narrows each of its tabs, lives in the address, stays off Queue, and an emptied list says so", async ({ page }) => {
+  await page.goto("./health?tab=problems");
+  await page.locator("#problems [role=group]").getByRole("button", { name: "watcher", exact: true }).click();
+  await expect(page).toHaveURL(/\/health\?tab=problems&ns=watcher$/);
+  await expect(page.locator("#problems [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("navigation", { name: "Health", exact: true }).getByRole("link", { name: "Sites" }).click();
   await expect(page).toHaveURL(/\/health\?ns=watcher$/);
-  await expect(page.locator("#incidents [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#sites [role=group]").getByRole("button", { name: "watcher", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#sites [data-filter-empty]")).toContainText("No site in the namespace watcher.");
   // g then q: the keyboard way to another page, which keeps its own filter.

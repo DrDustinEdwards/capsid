@@ -107,8 +107,10 @@ test("a count on a menu entry says what it counts in the entry's name", async ({
       expect(name).toContain(`, ${n} `);
     }
   }
-  // Health and Pull requests; what waits on you is the header inbox's number, not the menu's.
-  expect(counted).toBeGreaterThanOrEqual(2);
+  // Health's critical problems only: what waits on you is the header inbox's number and
+  // Needs you's list, so Pull requests carries no count of its own (UX audit m2).
+  expect(counted).toBe(1);
+  await expect(menuLinks(page).filter({ has: page.getByText("Pull requests", { exact: true }) }).locator(".cap-admin-count:not(:empty)")).toHaveCount(0);
 });
 
 test("the state survives a reload", async ({ page }) => {

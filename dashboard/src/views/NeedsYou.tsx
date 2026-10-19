@@ -495,28 +495,28 @@ function WeeklyDigest() {
   const sites = [...new Set(open.map((f) => f.namespace))].sort();
   return (
     <Panel title="Weekly digest" id="weekly-digest" section="Weekly digest" count={open.length} src="watcher findings that post no job">
-      <div className="inbox-apps">
-        {sites.map((site) => (
-          <section className="inbox-app" key={site} aria-label={`Weekly digest, ${site}`} data-digest-site={site}>
+      {sites.map((site) => (
+        <section className="wgroup" key={site} aria-label={`Weekly digest, ${site}`} data-digest-site={site}>
+          <div className="wgroup-head">
             <h3>
               {site}
               <span className="num faint"> {open.filter((f) => f.namespace === site).length} open</span>
             </h3>
-            <ul className="inbox-items">
-              {open
-                .filter((f) => f.namespace === site)
-                .map((f) => (
-                  <li className="inbox-item" key={f.fingerprint} title={f.evidence.join("\n")}>
-                    <span className="what">
-                      <b>{f.headline}</b>
-                    </span>
-                    <span className="when">since {ago(ms(f.first_seen), now)}</span>
-                  </li>
-                ))}
-            </ul>
-          </section>
-        ))}
-      </div>
+          </div>
+          <ul className="wlist">
+            {open
+              .filter((f) => f.namespace === site)
+              .map((f) => (
+                <li className="wrow" key={f.fingerprint} title={f.evidence.join("\n")}>
+                  <span className="wmain">
+                    <b>{f.headline}</b>
+                    <span className="wmeta">since {ago(ms(f.first_seen), now)}</span>
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </section>
+      ))}
     </Panel>
   );
 }

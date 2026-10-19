@@ -35,7 +35,8 @@ test("chart 8, each site's uptime, is a strip of two-hour windows with a text eq
 });
 
 test("PLANT: chart 10, the backup slots, counts each period's kept runs", async ({ page }) => {
-  await visit(page, "health");
+  // Health's Backups tab (the old Backups view's address names it).
+  await visit(page, "backups");
   const slots = page.locator("#backup-slots");
   await expect(slots.locator('[data-slots="daily"]')).toContainText("13 of 14 kept");
   await expect(slots.locator('[data-slots="weekly"]')).toContainText("8 of 8 kept");
@@ -44,7 +45,7 @@ test("PLANT: chart 10, the backup slots, counts each period's kept runs", async 
 });
 
 test("a missing backup slot is a full-height mark, not an underline", async ({ page }) => {
-  await visit(page, "health");
+  await visit(page, "backups");
   const daily = page.locator('#backup-slots [data-slots="daily"]').getByRole("img", { name: /Daily backups/ });
   // evaluateAll does not wait, so wait for the 14 marks first: read at once, the chart
   // can still be unrendered and give none.
@@ -64,7 +65,8 @@ test("a chart is drawn at the width of its card, not a fixed 560px", async ({ pa
 });
 
 test("PLANT: chart 11 says how long a branch has been red, a branch never run, and a repo not read", async ({ page }) => {
-  await visit(page, "health");
+  // Health's CI tab.
+  await page.goto("./health?tab=ci");
   const ci = page.locator("#ci-history");
   await expect(ci.locator('[data-ci="sample-b"]')).toContainText("red for 2 days");
   await expect(ci.locator('[data-ci="sample"]')).toContainText("green");

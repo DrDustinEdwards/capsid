@@ -112,8 +112,8 @@ async function withoutSites(page: Page) {
 async function siteItems(page: Page) {
   return {
     tile: await page.locator(".tiles .tile").filter({ hasText: "Sites up" }).count(),
-    // Health's Sites section, with its one row per site (audit ruling 1).
-    section: await page.getByRole("heading", { level: 2, name: "Sites", exact: true }).count(),
+    // Health's Sites tab, with its one row per site (audit ruling 1).
+    section: await page.getByRole("navigation", { name: "Health", exact: true }).getByRole("link", { name: "Sites", exact: true }).count(),
     fleet: await page.locator("main table.fleet").count(),
   };
 }
@@ -133,7 +133,7 @@ test("with sites configured, Health shows its site items", async ({ page }) => {
   expect(await siteProblems(page)).toBeGreaterThan(0);
 });
 
-test("with no site configured, Health has no Sites section and shows no site items", async ({ page }) => {
+test("with no site configured, Health has no Sites tab and shows no site items", async ({ page }) => {
   await withoutSites(page);
   await visit(page, "health");
   expect(await siteItems(page)).toEqual({ tile: 0, section: 0, fleet: 0 });
@@ -143,8 +143,10 @@ test("with no site configured, Health has no Sites section and shows no site ite
   await expect(page.locator(".cap-site-header-account").getByRole("link", { name: "Portal settings" })).toBeVisible();
   await page.keyboard.press("Escape");
   // Everything else is still there.
-  await expect(page.locator(".tiles .tile").filter({ hasText: "Blocked on you" })).toHaveCount(1);
-  await expect(page.getByRole("heading", { level: 2, name: "Incidents", exact: true })).toHaveCount(1);
+  await expect(page.locator(".tiles .tile").filter({ hasText: "Open findings" })).toHaveCount(1);
+  // Problems is the first tab now, and it is open.
+  await expect(page.getByRole("navigation", { name: "Health", exact: true }).getByRole("link").first()).toHaveText("Problems");
+  await expect(page.locator("#problems").getByRole("heading", { level: 2, name: "Findings" })).toBeVisible();
 
   // The command menu offers no site.
   await page.keyboard.press("Control+k");

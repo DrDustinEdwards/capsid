@@ -24,15 +24,33 @@ export const VIEWS = [
 // and a bookmark land on the page and section that hold it.
 export type MovedId = "overview" | "sites" | "incidents" | "deploys" | "backups" | "ci" | "namespaces" | "claims";
 export const MOVED: Record<MovedId, { view: (typeof VIEWS)[number]["id"]; anchor?: string; tab?: string }> = {
-  overview: { view: "health", anchor: "summary" },
-  sites: { view: "health", anchor: "sites" },
-  incidents: { view: "health", anchor: "incidents" },
-  deploys: { view: "health", anchor: "deploys" },
-  backups: { view: "health", anchor: "backups" },
+  overview: { view: "health" },
+  sites: { view: "health", tab: "sites" },
+  incidents: { view: "health", tab: "problems" },
+  deploys: { view: "health", tab: "deploys" },
+  backups: { view: "health", tab: "backups" },
   ci: { view: "prs" },
   namespaces: { view: "settings", anchor: "automation" },
   claims: { view: "agents", tab: "claims" },
 };
+
+// Health's tabs (the UX audit's M1): the verdict and the tiles, then one of these at a
+// time, its choice in the address (?tab=). An old section anchor names the tab that holds
+// it now, so a bookmark to /health#deploys or a "view:health#ci" reference still lands.
+export const HEALTH_TABS = [
+  { id: "sites", label: "Sites" },
+  { id: "problems", label: "Problems" },
+  { id: "deploys", label: "Deploys" },
+  { id: "backups", label: "Backups" },
+  { id: "ci", label: "CI" },
+] as const;
+export type HealthTab = (typeof HEALTH_TABS)[number]["id"];
+const HEALTH_ALIAS: Record<string, HealthTab> = { incidents: "problems", maintenance: "problems" };
+export function healthTab(name: string | null | undefined): HealthTab | null {
+  if (!name) return null;
+  if (HEALTH_TABS.some((t) => t.id === name)) return name as HealthTab;
+  return Object.hasOwn(HEALTH_ALIAS, name) ? HEALTH_ALIAS[name]! : null;
+}
 
 export type ViewId = (typeof VIEWS)[number]["id"];
 
@@ -200,10 +218,14 @@ export function parseRoute(path: string): Route {
 
 /** The address an old view id or a current one names: its page, with the section's anchor
  *  or the tab's query when it moved into one. A current id may name its section itself,
- *  as "health#ci". */
+ *  as "health#ci", which on Health is a tab. */
 export function placePath(id: string): string {
   const [page, anchor] = id.split("#");
-  if (isView(page)) return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
+  if (isView(page)) {
+    const tab = page === "health" ? healthTab(anchor) : null;
+    if (tab) return `${routePath(page)}?tab=${tab}`;
+    return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
+  }
   const moved = Object.hasOwn(MOVED, id) ? MOVED[id as MovedId] : null;
   if (!moved) return routePath("needs");
   return `${routePath(moved.view)}${moved.tab ? `?tab=${moved.tab}` : ""}${moved.anchor ? `#${moved.anchor}` : ""}`;

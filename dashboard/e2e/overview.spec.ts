@@ -29,6 +29,23 @@ function fourPrs(f: OpsFeed): void {
 
 const attention = (page: Page) => page.locator("main section.attention");
 
+// Nothing wrong and nothing waiting: every site up, both backups fresh, CI green.
+function allClear(f: OpsFeed): void {
+  const snap = f.snapshot!;
+  for (const s of snap.sites) (s.state = "ok"), (s.ring = s.ring.replace(/0/g, "1"));
+  delete snap.health!.backup.warning;
+  snap.health!.status = "ok";
+  snap.mirror = { newest_dump: f.live.generated, last_run: { at: f.live.generated, conclusion: "success", url: null } };
+  snap.ci = snap.ci.map((c) => (c.latest ? { ...c, latest: { ...c.latest, conclusion: "success" } } : c));
+  f.live.jobs = f.live.jobs.filter((j) => j.status !== "blocked" && j.status !== "claimed");
+  f.live.awaiting_seat = [];
+  f.live.canon_proposals = [];
+  // Session incidents are problems too (Problems lists them).
+  f.live.sessions = f.live.sessions.map((s) => ({ ...s, incident: null }));
+  // A failing or quiet scheduled task is a problem too (src/task-runs.ts).
+  for (const t of f.scheduled.tasks ?? []) if (t.flag !== "never") t.flag = null;
+}
+
 // ---- D3: tiles never truncate ------------------------------------------------------------
 
 for (const width of [1440, 1100, 400]) {
@@ -55,33 +72,73 @@ for (const width of [1440, 1100, 400]) {
       }
       return { tiles: tiles.length, checked, bad };
     });
-    expect(r.tiles).toBe(5);
-    expect(r.checked).toBeGreaterThan(5 * 4);
+    expect(r.tiles).toBe(4);
+    expect(r.checked).toBeGreaterThan(4 * 4);
     expect(r.bad).toEqual([]);
   });
 }
 
-test("each tile is a link to its page or section", async ({ page }) => {
+test("each tile is a link to its tab", async ({ page }) => {
   await visit(page, "health");
   const tiles = page.locator("main .tiles a.tile");
-  await expect(tiles).toHaveCount(5);
+  await expect(tiles).toHaveCount(4);
   // A link to assistive technology too, not only in the markup.
-  await expect(page.locator("main .tiles").getByRole("link")).toHaveCount(5);
-  await expect(tiles.filter({ hasText: "Blocked on you" })).toHaveAttribute("href", "/portal/queue");
-  await expect(tiles.filter({ hasText: "Open findings" })).toHaveAttribute("href", "#incidents");
-  await tiles.filter({ hasText: "Blocked on you" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Queue" })).toBeVisible();
+  await expect(page.locator("main .tiles").getByRole("link")).toHaveCount(4);
+  await expect(tiles.filter({ hasText: "Sites up" })).toHaveAttribute("href", "/portal/health?tab=sites");
+  await expect(tiles.filter({ hasText: "Open findings" })).toHaveAttribute("href", "/portal/health?tab=problems");
+  await expect(tiles.filter({ hasText: "Mirror" })).toHaveAttribute("href", "/portal/health?tab=backups");
+  await tiles.filter({ hasText: "Open findings" }).click();
+  await expect(page).toHaveURL(/\/health\?tab=problems$/);
+  await expect(page.locator("#problems").getByRole("heading", { level: 2, name: "Findings" })).toBeVisible();
 });
 
-// ---- ruling 2: no Queue panel; the attention list is on Needs you -------------------------
-
-test("Health has its five sections, no Queue panel and no attention list", async ({ page }) => {
+// UX audit m3: the primary backup and the off-account mirror are two tiles, so a stale
+// mirror (10 days in the sample) does not turn a good backup red.
+test("Backup and Mirror are separate tiles, and only the stale mirror is critical", async ({ page }) => {
   await visit(page, "health");
-  // Its sections are there, so the absence below is not an empty page.
-  await expect(page.locator("main h2.health-title")).toHaveText(["Sites", "Incidents", "Deploys", "Backups", "CI, default branches"]);
-  // The Maintenance list's own rows (.mrow) are the daily pass's, not the Queue's.
+  const tile = (label: string) => page.locator("main .tiles a.tile").filter({ has: page.locator(".l", { hasText: new RegExp(`^${label}$`) }) });
+  await expect(tile("Backup")).toHaveClass(/\bok\b/);
+  await expect(tile("Backup")).toContainText("last good dump");
+  await expect(tile("Mirror")).toHaveClass(/\bcrit\b/);
+  await expect(tile("Mirror")).toContainText("10d");
+  // What waits on you is counted on Needs you only (m2).
+  await expect(page.locator("main .tiles").getByText("Blocked on you")).toHaveCount(0);
+});
+
+// ---- UX audit M1: one line first, then tabs ------------------------------------------------
+
+test("Health opens with a one-line verdict naming its problems as links, then the tiles and five tabs", async ({ page }) => {
+  await visit(page, "health");
+  const verdict = page.locator("main [data-verdict]");
+  await expect(verdict).toHaveAttribute("data-verdict", "problems");
+  await expect(verdict).toContainText(/^\d+ problems:/);
+  await expect(verdict.getByRole("link", { name: /Off-account mirror has not landed a dump/ })).toHaveAttribute("href", "/portal/health?tab=backups");
+  await expect(verdict.getByRole("button", { name: /^\d+ more$/ })).toBeVisible();
+  // Verdict, tiles, tabs, in that order.
+  const order = await page.evaluate(() => ["[data-verdict]", ".tiles", "nav[aria-label='Health']"].map((s) => Math.round(document.querySelector(`main ${s}`)!.getBoundingClientRect().top)));
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+  const tabs = page.getByRole("navigation", { name: "Health", exact: true }).getByRole("link");
+  await expect(tabs).toHaveText(["Sites", "Problems", "Deploys", "Backups", "CI"]);
+  await expect(tabs.first()).toHaveAttribute("aria-current", "page");
+  // One tab's content at a time: the fleet, and no deploy timeline.
+  await expect(page.locator("main table.fleet")).toHaveCount(1);
+  await expect(page.locator("main #deploys")).toHaveCount(0);
+  // No Queue panel and no attention list on Health.
   await expect(page.locator("main .qrow:not(.mrow)")).toHaveCount(0);
   await expect(page.locator("main section.attention")).toHaveCount(0);
+  // "N more" goes to the whole list on Needs you.
+  await verdict.getByRole("button", { name: /^\d+ more$/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
+  await expect(attention(page)).toBeVisible();
+});
+
+test("the verdict says All good when nothing is wrong", async ({ page }) => {
+  await reshape(page, allClear);
+  await visit(page, "health");
+  const verdict = page.locator("main [data-verdict]");
+  await expect(verdict).toHaveAttribute("data-verdict", "ok");
+  await expect(verdict).toContainText("All good");
+  await expect(verdict.getByRole("link")).toHaveCount(0);
 });
 
 // ---- ruling 3: grouping and notices -------------------------------------------------------
@@ -127,21 +184,7 @@ test("notices are one row, closed, at the foot; the problems hold none of them",
 });
 
 test("with no problems it says all clear, and the notices row stays under it", async ({ page }) => {
-  await reshape(page, (f) => {
-    const snap = f.snapshot!;
-    for (const s of snap.sites) (s.state = "ok"), (s.ring = s.ring.replace(/0/g, "1"));
-    delete snap.health!.backup.warning;
-    snap.health!.status = "ok";
-    snap.mirror = { newest_dump: f.live.generated, last_run: { at: f.live.generated, conclusion: "success", url: null } };
-    snap.ci = snap.ci.map((c) => (c.latest ? { ...c, latest: { ...c.latest, conclusion: "success" } } : c));
-    f.live.jobs = f.live.jobs.filter((j) => j.status !== "blocked" && j.status !== "claimed");
-    f.live.awaiting_seat = [];
-    f.live.canon_proposals = [];
-    // Session incidents are problems too (Problems lists them).
-    f.live.sessions = f.live.sessions.map((s) => ({ ...s, incident: null }));
-    // A failing or quiet scheduled task is a problem too (src/task-runs.ts).
-    for (const t of f.scheduled.tasks ?? []) if (t.flag !== "never") t.flag = null;
-  });
+  await reshape(page, allClear);
   await visit(page, "needs");
   await expect(attention(page).getByText("No problems.")).toBeVisible();
   await expect(attention(page).locator(".att-list")).toHaveCount(0);
@@ -181,39 +224,43 @@ test("the Queue orders blocked jobs by priority then newest, the ones blocked ov
   }
 });
 
-// ---- ruling 4: the anchor bar -------------------------------------------------------------
+// ---- the tabs: links in the address ---------------------------------------------------------
 
-test("Health gets the anchor bar, naming its sections and not their panels, with links that follow the scroll", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 420 });
+test("a Health tab is a link: it changes the address, shows its own content, and Back returns", async ({ page }) => {
   await visit(page, "health");
-  const bar = page.getByRole("navigation", { name: "On this page" });
-  await expect(bar).toBeVisible();
-  const links = bar.getByRole("link");
-  await expect(links).toHaveText(["Summary", "Sites", "Incidents", "Deploys", "Backups", "CI"]);
-  expect(await links.evaluateAll((as) => as.map((a) => a.getAttribute("href")))).toEqual(["#summary", "#sites", "#incidents", "#deploys", "#backups", "#ci"]);
-  await expect(links.nth(0)).toHaveAttribute("aria-current", "location");
-  // The scroller keeps a focused row clear of the bar.
-  const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop));
-  const barH = await bar.evaluate((b) => b.getBoundingClientRect().height);
-  expect(pad).toBeGreaterThanOrEqual(barH);
-  // Scrolled to the foot, the last section is current.
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await expect(links.nth(5)).toHaveAttribute("aria-current", "location");
-  await expect(links.nth(0)).not.toHaveAttribute("aria-current", /.+/);
-  // A click jumps there and marks it.
-  await links.nth(3).click();
-  await expect(links.nth(3)).toHaveAttribute("aria-current", "location");
-  await expect.poll(() => page.locator("#deploys").evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBeLessThanOrEqual(Math.ceil(pad) + 1);
-  expect(new URL(page.url()).hash).toBe("#deploys");
+  const tabs = page.getByRole("navigation", { name: "Health", exact: true });
+  await tabs.getByRole("link", { name: "Deploys" }).click();
+  await expect(page).toHaveURL(/\/health\?tab=deploys$/);
+  await expect(tabs.getByRole("link", { name: "Deploys" })).toHaveAttribute("aria-current", "page");
+  await expect(tabs.getByRole("link", { name: "Sites" })).not.toHaveAttribute("aria-current", /.+/);
+  await expect(page.locator("main #deploys")).toBeVisible();
+  await expect(page.locator("main table.fleet")).toHaveCount(0);
+  // Keyboard: each tab is a stop, and Enter follows it.
+  await tabs.getByRole("link", { name: "CI" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/health\?tab=ci$/);
+  await expect(page.locator("main #ci").getByRole("heading", { level: 2, name: "Default branches" })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/health\?tab=deploys$/);
+});
+
+test("an old section anchor opens its tab", async ({ page }) => {
+  const tabs = page.getByRole("navigation", { name: "Health", exact: true });
+  await page.goto("./health#backups");
+  await expect(tabs.getByRole("link", { name: "Backups" })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("#backup-slots")).toBeVisible();
+  await page.goto("./health#incidents");
+  await expect(tabs.getByRole("link", { name: "Problems" })).toHaveAttribute("aria-current", "page");
 });
 
 test("an old view's address is replaced by the page, tab or section that holds it", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 600 });
   await page.goto("./deploys");
   await expect(page.getByRole("heading", { level: 1, name: "Health" })).toBeVisible();
-  await expect(page).toHaveURL(/\/health#deploys$/);
-  // Scrolled to the section once it is drawn.
-  await expect.poll(() => page.locator("#deploys").evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBeLessThan(200);
+  await expect(page).toHaveURL(/\/health\?tab=deploys$/);
+  await expect(page.locator("main #deploys")).toBeVisible();
+  await page.goto("./incidents?ns=watcher");
+  await expect(page).toHaveURL(/\/health\?tab=problems&ns=watcher$/);
   await page.goto("./ci");
   await expect(page.getByRole("heading", { level: 1, name: "Pull requests" })).toBeVisible();
   await expect(page).toHaveURL(/\/prs$/);
