@@ -219,12 +219,9 @@ describe("job_claims: what the agent said", () => {
 });
 
 describe("skills do not ride on claim", () => {
-  it("PLANT: a matching live skill is neither offered at claim nor recorded on the outcome", async () => {
+  it("PLANT: a matching skill document is neither offered at claim nor recorded on the outcome", async () => {
     await env.DB.prepare(
       "INSERT INTO documents (namespace, path, title, body, type, status) VALUES ('capsid', 'improve/skills/sk-x.md', 'sk-x', 'check the slow query before the fix', 'reference', 'published')"
-    ).run();
-    await env.DB.prepare(
-      "INSERT INTO improve_skills (id, source_namespace, title, body_ref, status, trigger_condition) VALUES ('sk-x', 'sample', 'sk-x', 'improve/skills/sk-x.md', 'live', 'slow query')"
     ).run();
     const posted = await postJob(jobsEnv(), legacyAgent("write", SEAT), NOW, { namespace: NS, title: "Fix the slow query", body: "the slow query in the loader" });
     const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });

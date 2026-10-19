@@ -14,16 +14,21 @@ function tablesInMigrations(): string[] {
   const dir = join(import.meta.dirname, "..", "migrations");
   const names = new Set<string>();
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
-    const sql = readFileSync(join(dir, file), "utf8");
+    // Statements in file order, comment lines skipped so prose drops nothing. A table
+    // rebuild (0031) creates a scratch table, drops the original and renames the scratch
+    // over it; a dropped table (0048, the improve loop's) is gone.
+    const sql = readFileSync(join(dir, file), "utf8")
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("--"))
+      .join("\n");
     // CREATE VIRTUAL TABLE does not match, which keeps documents_fts out.
-    for (const m of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)/gi)) {
-      if (!DERIVED.test(m[1])) names.add(m[1]);
-    }
-    // A table rebuild (0031) creates a scratch table and renames it over the original, so
-    // the scratch name is not a table the schema ends up with.
-    for (const m of sql.matchAll(/ALTER TABLE\s+(\w+)\s+RENAME TO\s+(\w+)/gi)) {
-      names.delete(m[1]);
-      names.add(m[2]);
+    for (const m of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)|DROP TABLE(?: IF EXISTS)?\s+(\w+)|ALTER TABLE\s+(\w+)\s+RENAME TO\s+(\w+)/gi)) {
+      if (m[1] && !DERIVED.test(m[1])) names.add(m[1]);
+      if (m[2]) names.delete(m[2]);
+      if (m[3]) {
+        names.delete(m[3]);
+        names.add(m[4]);
+      }
     }
   }
   return [...names].sort();
