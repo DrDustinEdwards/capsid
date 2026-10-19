@@ -183,7 +183,7 @@ function withSites(db: D1Database, sites: OpsSiteConfig[]): D1Database {
   });
 }
 
-// The signed auto-merge policy, as shipped (docs/policy/auto-merge.md, version 7), for
+// The signed auto-merge policy, as shipped (docs/policy/auto-merge.md, version 8), for
 // sign_policy_change: signed with the world's key, so it loads as the Worker's copy does.
 const POLICY_BODY = readFileSync(join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"), "utf8");
 const SIGNED_POLICY = await signTaskBody("portal-test-signing-secret", POLICY_BODY);
@@ -382,8 +382,8 @@ const EVERY_ACTION = [
   ["canon_reject", { id: "7", reason: "the rule belongs in a typed doc" }],
   ["canon_approve_all", {}],
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
-  ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "8" }],
-  ["sign_policy_from_repo", { confirm: "8" }],
+  ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "9" }],
+  ["sign_policy_from_repo", { confirm: "9" }],
   ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
   ["automerge_resume", { namespace: "capsid", reason: "both rollbacks are answered" }],
 ] as const;
