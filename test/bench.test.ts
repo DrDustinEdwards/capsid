@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { countedRuns, isOutageHour, nextSlot, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
+import { countedRuns, isOutageHour, nextSlot, parseDrawRequest, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
 import { createHmac } from "node:crypto";
 import { verifyBenchRequest } from "../src/signed-requests.ts";
 
@@ -112,4 +112,18 @@ test("each slot is started at most twice, the second time only after an unjudged
   assert.equal(nextSlot([run("scored"), run("scored"), run("running")], STALE), null);
   assert.deepEqual(nextSlot([run("scored"), run("scored"), run("running", "2026-10-18T20:00:00Z")], STALE), { slot: 3, attempt: 2 });
   assert.equal(nextSlot([run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged")], STALE), null);
+});
+
+test("a draw request carries the registration's two sha256 hashes and seed, a start position and distinct task ids", () => {
+  const reg = { registration_sha256: "a".repeat(64), frame_sha256: "b".repeat(64), seed: "20261019" };
+  const body = (over: Record<string, unknown>) => JSON.stringify({ jti: "0123456789", registration: reg, from: 1, tasks: ["sample__repo-1", "sample__repo-2"], ...over });
+  const ok = parseDrawRequest(body({}));
+  assert.ok(ok.ok);
+  assert.deepEqual(ok.tasks, ["sample__repo-1", "sample__repo-2"]);
+  assert.equal(parseDrawRequest(body({ registration: { ...reg, frame_sha256: "B".repeat(64) } })).ok, false);
+  assert.equal(parseDrawRequest(body({ registration: { ...reg, seed: "" } })).ok, false);
+  assert.equal(parseDrawRequest(body({ from: 0 })).ok, false);
+  assert.equal(parseDrawRequest(body({ tasks: [] })).ok, false);
+  assert.equal(parseDrawRequest(body({ tasks: Array.from({ length: 101 }, (_, i) => `sample__repo-${i}`) })).ok, false);
+  assert.equal(parseDrawRequest(body({ tasks: ["sample__repo-1", "sample__repo-1"] })).ok, false);
 });
