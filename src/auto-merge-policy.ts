@@ -111,6 +111,18 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /(^|\/)vitest\.config\.[cm]?[jt]s$/i, why: "the integration suite's configuration" },
   { pattern: /^scripts\/test-budget\.mjs$/i, why: "the runner behind npm test" },
   { pattern: /^scripts\/verify-live\.mjs$/i, why: "the live gate, whose rollback is the backstop for an unattended merge" },
+  // Install, build and deploy glue. A namespace with no allowed-path limit merged these
+  // on green, though each runs in CI or ships (Grok audit 2026-10, U2). Lockfiles are
+  // no_migration_workflow_lockfile's, below.
+  { pattern: /(^|\/)scripts\//i, why: "a script CI, a build or a deploy runs" },
+  { pattern: /(^|\/)\.github\//i, why: "CI configuration beyond the workflows" },
+  { pattern: /(^|\/)package\.json$/i, why: "a nested package manifest, whose scripts and dependencies an install runs" },
+  { pattern: /(^|\/)(pnpm-workspace\.yaml|\.pnpmfile\.cjs|\.yarnrc[^/]*)$/i, why: "install configuration or a hook that runs during install" },
+  { pattern: /(^|\/)\.npmrc$/i, why: "npm registry and install-script policy" },
+  { pattern: /(^|\/)Dockerfile[^/]*$/i, why: "the image a build runs in" },
+  { pattern: /(^|\/)Makefile$/i, why: "build glue CI executes" },
+  { pattern: /(^|\/)\.husky\//i, why: "a git hook CI may run" },
+  { pattern: /(^|\/)\.gitmodules$/i, why: "submodules the checkout would fetch and run" },
   // pr_recorded_for_job trusts result_ref and job_outcome_prs because only the job's
   // holder writes them. These two sources are what writes them, so a green PR that
   // loosened either could record any PR against any job. The job transitions are
@@ -491,7 +503,7 @@ const MIGRATION_WORKFLOW_LOCKFILE: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /(^|\/)migrations\//i, why: "a migration, which runs against the live database" },
   { pattern: /(^|\/)\.github\/workflows\//i, why: "a workflow, which is what measures the code" },
   {
-    pattern: /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb|deno\.lock)$/i,
+    pattern: /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|deno\.lock)$/i,
     why: "a lockfile, which decides what gets installed and executed",
   },
 ];

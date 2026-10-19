@@ -251,7 +251,8 @@ jobs:
 
       # No npm ci on purpose: scripts/verify-live.mjs imports nothing outside the Node
       # standard library and runs on global fetch. Keeping it dependency-free is what
-      # lets the live gate run even if install is broken.
+      # lets the live gate run even if install is broken. The rollback step installs
+      # from the lockfile itself, only when it is about to roll back.
 
       # EXPECT_SHA is this run's commit when deploy succeeded, and master head on a
       # schedule run. Empty otherwise: the ternary below is the behaviour.
@@ -325,7 +326,11 @@ jobs:
             exit 0
           fi
           echo "::warning::the live gate failed against ${ROLLBACK_FROM}; rolling back to the previous version"
-          npx --yes wrangler@4.149.0 rollback --name capsid --message "live gate failed for ${GITHUB_SHA}" --yes
+          # The lockfile's wrangler, not npx: npx resolves wrangler's own dependency
+          # ranges at job time, next to the deploy token. No install scripts run, and the
+          # rollback is an API call that needs none (Grok audit 2026-10, U3).
+          npm ci --ignore-scripts --no-audit --no-fund
+          node_modules/.bin/wrangler rollback --name capsid --message "live gate failed for ${GITHUB_SHA}" --yes
           # The rollout is not instant, so read the sha back rather than assuming, and
           # say so when it never moved.
           ROLLBACK_TO=unreadable

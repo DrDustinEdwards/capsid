@@ -27,6 +27,10 @@ const EXECUTED_AT_INSTALL = [
   ".gitmodules",
 ];
 
+// Other toolchains' lockfiles, and the briefing other agents read beside CLAUDE.md
+// (Grok audit 2026-10, U5).
+const OTHER_TOOLCHAINS = ["bun.lock", "Cargo.lock", "go.sum", "poetry.lock", "uv.lock", "AGENTS.md"];
+
 const STEERS_THE_MEASURED_BUILD = [
   "wrangler.jsonc",
   "wrangler.json",
@@ -63,8 +67,14 @@ test("PLANT: config that steers the measured build is protected", () => {
   assert.deepEqual(unprotected, []);
 });
 
+test("PLANT: other toolchains' lockfiles and AGENTS.md are protected paths, nested too", () => {
+  const paths = [...OTHER_TOOLCHAINS, ...OTHER_TOOLCHAINS.map((p) => `packages/core/${p}`)];
+  const unprotected = paths.filter((p) => protectedHits([p]).length === 0);
+  assert.deepEqual(unprotected, []);
+});
+
 test("every protected hit names a reason a human can act on", () => {
-  for (const path of [...EXECUTED_AT_INSTALL, ...STEERS_THE_MEASURED_BUILD]) {
+  for (const path of [...EXECUTED_AT_INSTALL, ...STEERS_THE_MEASURED_BUILD, ...OTHER_TOOLCHAINS]) {
     const [hit] = protectedHits([path]);
     assert.ok(hit, `${path} must hit`);
     assert.ok(hit.why.length > 8, `${path} must explain WHY, got '${hit.why}'`);

@@ -20,6 +20,7 @@ const CHECK_WORDS: Record<string, string> = {
   visual_awaits_look: "it changes what people see, so it waits for your look",
   namespace_paused: "its app is paused",
   changes_existing_test: "it changes an existing test",
+  pr_is_draft: "it is still a draft",
 };
 
 export function checkWords(failed: string): string {

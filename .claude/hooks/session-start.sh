@@ -3,7 +3,7 @@
 # install dependencies, so `npm ci`, `npm run check` and `npm test` work first try.
 #
 # WHY. The cloud container ships Node 22 and npm 10 (/opt/node22). package.json engines
-# and .nvmrc need Node 24 and npm 11, and npm 10 reads this lockfile as out of sync, so
+# and .nvmrc need Node 26 and npm 11, and npm 10 reads this lockfile as out of sync, so
 # `npm ci` refuses and `npm test` fails with module-not-found. The container offers no
 # Node setting, so the repo installs the version in .nvmrc itself.
 #

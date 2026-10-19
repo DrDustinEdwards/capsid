@@ -60,8 +60,8 @@ test("the rollback step calls the guard BEFORE it calls wrangler rollback", () =
   assert.ok(step, "the rollback step was not found; this test is pinned to its name");
   const body = step[1];
   const guardAt = body.indexOf("scripts/rollback-guard.mjs");
-  // Any pinned version: test/deploy-pipeline.test.ts holds the pin equal to the deploy's.
-  const rollbackAt = body.search(/wrangler@[\d.]+ rollback/);
+  // The lockfile's wrangler: test/deploy-pipeline.test.ts holds it there.
+  const rollbackAt = body.search(/wrangler rollback/);
   assert.ok(guardAt > -1, "the rollback step does not call the guard at all");
   assert.ok(rollbackAt > -1, "the rollback step no longer calls wrangler rollback; this test is stale");
   assert.ok(guardAt < rollbackAt, "the guard runs AFTER the rollback, which decides nothing");

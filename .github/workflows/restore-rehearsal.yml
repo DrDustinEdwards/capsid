@@ -79,6 +79,11 @@ jobs:
           AWS_ACCESS_KEY_ID=$(cred access_key_id)
           AWS_SECRET_ACCESS_KEY=$(cred secret_access_key)
           AWS_SESSION_TOKEN=$(cred session_token)
+          # Masked before anything can print them: a later trace or an aws error would
+          # otherwise put the minted keys in the log (Grok audit 2026-10, P1).
+          echo "::add-mask::${AWS_ACCESS_KEY_ID}"
+          echo "::add-mask::${AWS_SECRET_ACCESS_KEY}"
+          echo "::add-mask::${AWS_SESSION_TOKEN}"
           DUMP_ENDPOINT=$(cred endpoint)
           DUMP_BUCKET=$(cred bucket)
           DUMP_PREFIX=$(cred prefix)
@@ -90,17 +95,27 @@ jobs:
             echo "no run prefixes under ${DUMP_PREFIX}; nothing to rehearse" >&2
             exit 1
           fi
+          # The prefix comes from the bucket listing and the credential, so it is checked
+          # before it names a directory or reaches a later step: path characters only,
+          # and no parent segment (Grok audit 2026-10, U4).
+          RUN_PREFIX="${DUMP_PREFIX}${NEWEST}"
+          if [[ ! "${RUN_PREFIX}" =~ ^[A-Za-z0-9_./-]+$ || "${RUN_PREFIX}" == *..* ]]; then
+            echo "the newest run prefix has characters outside [A-Za-z0-9_./-] or a '..'; refusing it" >&2
+            exit 1
+          fi
           echo "newest run: ${NEWEST}"
           # Laid out as the keys are (dump/backups/json/<run>/<table>.json), which is the
           # shape d1-dump's drill reads from a directory.
-          mkdir -p "dump/${DUMP_PREFIX}${NEWEST}"
-          aws s3 sync "s3://${DUMP_BUCKET}/${DUMP_PREFIX}${NEWEST}" "dump/${DUMP_PREFIX}${NEWEST}" --endpoint-url "${DUMP_ENDPOINT}"
-          echo "run_prefix=${DUMP_PREFIX}${NEWEST}" >> "${GITHUB_OUTPUT}"
+          mkdir -p "dump/${RUN_PREFIX}"
+          aws s3 sync "s3://${DUMP_BUCKET}/${RUN_PREFIX}" "dump/${RUN_PREFIX}" --endpoint-url "${DUMP_ENDPOINT}"
+          echo "run_prefix=${RUN_PREFIX}" >> "${GITHUB_OUTPUT}"
 
       # What only Capsid knows about its dump: the marker lists every file, both sidecars
       # are present, documents is not empty, and the tables describe one instant.
       - name: Check the dump's own invariants
-        run: node scripts/dump-invariants.mjs "dump/${{ steps.pull.outputs.run_prefix }}"
+        env:
+          RUN_PREFIX: ${{ steps.pull.outputs.run_prefix }}
+        run: node scripts/dump-invariants.mjs "dump/${RUN_PREFIX}"
 
       # Fails when the dump is older than 26 hours: the newest prefix is whatever the
       # last successful backup wrote, so without that check a stopped backup keeps this

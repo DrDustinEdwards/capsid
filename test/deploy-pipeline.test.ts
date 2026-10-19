@@ -44,7 +44,7 @@ test("every cron branch rethrows after logging, so a failed invocation reports f
 
 test("the live job rolls back when a gate fails on a run that deployed", () => {
   const ci = read(".github/workflows/ci.yml");
-  assert.match(ci, /wrangler@[\d.]+ rollback/, "the live job has no rollback step");
+  assert.match(ci, /node_modules\/\.bin\/wrangler rollback/, "the live job has no rollback step");
   // Guarded to this run's own deploy. On a scheduled run a red gate usually means the
   // live sha is behind master, and rolling back would move it further away.
   // The rollback is the job's last step since the probe-client reaper went with DCR.
@@ -64,14 +64,20 @@ test("the live gate's verify step carries the probe key, so gate 8 makes its MCP
   assert.match(verify, /CAPSID_LIVE_PROBE_KEY: \$\{\{ secrets\.CAPSID_LIVE_PROBE_KEY \}\}/);
 });
 
-test("the rollback pins the same wrangler version the deploy uses", () => {
+test("PLANT: the rollback runs the lockfile's wrangler, installed without scripts, never npx", () => {
+  // npx --yes wrangler@<pin> resolved wrangler's own dependency ranges at job time,
+  // beside the deploy token (Grok audit 2026-10, U3). npm ci installs the lockfile's
+  // tree, the same wrangler the deploy uses, and runs no install script.
   const ci = read(".github/workflows/ci.yml");
+  const step = ci.slice(ci.indexOf("- name: Roll back the deploy this run shipped"));
+  assert.doesNotMatch(step, /^\s+npx\s/m, "the rollback fetches wrangler through npx");
+  const install = step.search(/npm ci --ignore-scripts/);
+  const rollback = step.search(/node_modules\/\.bin\/wrangler rollback/);
+  assert.ok(install > -1, "the rollback step does not install from the lockfile with scripts off");
+  assert.ok(rollback > install, "the rollback does not run the wrangler that install put in node_modules");
+  const lock = JSON.parse(read("package-lock.json")) as { packages: Record<string, { version?: string }> };
   const pkg = JSON.parse(read("package.json")) as { devDependencies?: Record<string, string> };
-  const pinned = pkg.devDependencies?.wrangler;
-  assert.ok(pinned, "wrangler is no longer a pinned devDependency");
-  // The live job runs without npm ci, so an unpinned npx wrangler would float to
-  // latest.
-  assert.match(ci, new RegExp(`wrangler@${pinned.replace(/\./g, "\.")} rollback`), `the rollback does not pin wrangler ${pinned}`);
+  assert.equal(lock.packages["node_modules/wrangler"]?.version, pkg.devDependencies?.wrangler, "the lockfile's wrangler is not the pinned one");
 });
 
 // The Watch Floor app (dashboard/) is its own package, outside every root gate, so CI
