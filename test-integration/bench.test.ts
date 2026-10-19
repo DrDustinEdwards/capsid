@@ -180,7 +180,7 @@ describe("bench endpoints", () => {
     expect(row).toMatchObject({ false_claim: null, resolved: null });
   });
 
-  it("read the treatment's claim from its own job row, not from the report", async () => {
+  it("read the treatment's claim from the report, not from its job row", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const task_id = await registerTask();
     const run_id = await startOk(task_id, "treatment");
@@ -190,9 +190,10 @@ describe("bench endpoints", () => {
     )
       .bind(job, `bench ${task_id} ${run_id}`)
       .run();
-    // The report says done; the job says failed, so this is no claim and no false claim.
+    // The report's claim file says done and the job says failed: the claim is done, and
+    // with the hidden tests failing, a false claim.
     const response = await score(run_id, { hidden: counts(0, 3), claimed_done: true, capsid_job_id: job });
-    expect(await response.json()).toMatchObject({ status: "scored", claimed_done: false, false_claim: false });
+    expect(await response.json()).toMatchObject({ status: "scored", claimed_done: true, false_claim: true });
   });
 
   it("keep a task with a run frozen against deletion", async () => {
