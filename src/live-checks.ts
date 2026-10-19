@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import { ghFetch, getDefaultBranch, getRefSha, resolveRepo } from "./github/client";
 import type { OpsSite } from "./ops-sites";
 import type { SiteProbe, WebAnalyticsSite } from "./ops-types";
+import { readCapped } from "./read-capped";
 
 // THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5, ruled
 // by Dustin 2026-10-04). Four things Dustin checked by hand with PowerShell after a
@@ -333,25 +334,6 @@ export function analyticsFinding(site: Pick<OpsSite, "namespace" | "name" | "ori
 // READING.
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
-
-/** The body as text, read no further than `max` bytes. */
-export async function readCapped(res: Response, max: number): Promise<{ text: string; truncated: boolean }> {
-  if (!res.body) return { text: await res.text(), truncated: false };
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let text = "";
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return { text: text + decoder.decode(), truncated: false };
-    size += value.byteLength;
-    if (size > max) {
-      await reader.cancel();
-      return { text, truncated: true };
-    }
-    text += decoder.decode(value, { stream: true });
-  }
-}
 
 /** One GET of a site's page. A page that cannot be judged says why in `problem`: an
  *  error, a non-2xx answer, a redirect off the site (a login), a body that is not HTML,

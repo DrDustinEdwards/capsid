@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
 import { parseHealth } from "./health-format";
-import { readCapped } from "./live-checks";
+import { readCapped } from "./read-capped";
 import type { OpsSite } from "./ops-sites";
 import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
 import { logEvent } from "./log";
