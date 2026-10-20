@@ -24,14 +24,18 @@ export const HSTS = CAPSID_STANDARD_HEADERS["Strict-Transport-Security"];
 export const PERMISSIONS_POLICY = CAPSID_STANDARD_HEADERS["Permissions-Policy"];
 
 export const REPORT_PATH = "/csp-report";
-export const REPORTING_ENDPOINTS = `csp="${REPORT_PATH}"`;
+// The sink by its full address on the MCP host, which Access does not cover. The Portal's host
+// is behind Access, so a report sent to its own /csp-report met the sign-in redirect and was
+// lost; every host now reports to this one (routes.ts answers the Portal's preflight).
+export const REPORT_URL = "https://mcp.dustinedwards.info/csp-report";
+export const REPORTING_ENDPOINTS = `csp="${REPORT_URL}"`;
 // Where routes.ts stored reports until 2026-10-20. Nothing stores there now; the
 // backup prune (backup.ts) still reaps what is left, which is gone after its 30 days.
 export const REPORT_PREFIX = "reports/csp/";
 
 // Report-Only, never enforced. form-action is deliberately absent.
 export const CSP_REPORT_ONLY_NON_HTML =
-  `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; report-uri ${REPORT_PATH}; report-to csp`;
+  `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; report-uri ${REPORT_URL}; report-to csp`;
 
 export const COOP_REPORT_ONLY = "same-origin";
 

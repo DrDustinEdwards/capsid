@@ -10,9 +10,11 @@ import {
   HSTS,
   PERMISSIONS_POLICY,
   REPORT_PATH,
+  REPORT_URL,
   securityHeadersFor,
   withSecurityHeaders,
 } from "../src/security-headers.ts";
+import { MCP_HOST } from "../src/mcp-host.ts";
 
 // The offline half of the security header checks; the live half is in
 // scripts/verify-live.mjs. These assert the classes, not a list of paths, because a
@@ -100,11 +102,14 @@ test("NOTHING is enforced that is meant to be Report-Only", () => {
 });
 
 test("the report-only policies point at the report sink", () => {
-  assert.match(CSP_REPORT_ONLY_NON_HTML, new RegExp(`report-uri ${REPORT_PATH}`));
+  assert.ok(CSP_REPORT_ONLY_NON_HTML.includes(`report-uri ${REPORT_URL};`));
   assert.match(CSP_REPORT_ONLY_NON_HTML, /report-to csp/);
-  for (const cls of ["json", "other"] as const) {
-    assert.equal(securityHeadersFor(cls)["Reporting-Endpoints"], `csp="${REPORT_PATH}"`);
+  for (const cls of ["html", "json", "other"] as const) {
+    assert.equal(securityHeadersFor(cls)["Reporting-Endpoints"], `csp="${REPORT_URL}"`);
   }
+  // The full address of this Worker's own sink, on the host Access leaves open.
+  assert.equal(new URL(REPORT_URL).pathname, REPORT_PATH);
+  assert.equal(new URL(REPORT_URL).host, MCP_HOST);
 });
 
 test("form-action appears in no policy this layer emits", () => {

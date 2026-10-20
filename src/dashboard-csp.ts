@@ -5,5 +5,8 @@
 //
 // Scripts and styles from this origin and nothing inline, so an injected tag in
 // anything the feed carries cannot run. The consent dialog's CSP is separate.
+//
+// Violations go to the sink on the MCP host (REPORT_URL in src/security-headers.ts, written out
+// here because this module imports nothing; test/portal-app.test.ts checks the two agree).
 export const DASHBOARD_CSP =
-  "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+  "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; report-uri https://mcp.dustinedwards.info/csp-report; report-to csp";

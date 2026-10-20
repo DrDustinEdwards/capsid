@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { assetPath, DASHBOARD_CSP, handlePortalApp, HASHED_ASSET_CACHE, isNavigation } from "../src/portal-app.ts";
-import { CONSENT_DIALOG_HEADERS, withSecurityHeaders } from "../src/security-headers.ts";
+import { CONSENT_DIALOG_HEADERS, REPORT_URL, withSecurityHeaders } from "../src/security-headers.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // Capsid Portal's files behind the Portal gate (src/portal-app.ts), with a fake
@@ -124,4 +124,10 @@ test("the app's paths map onto the assets directory, and navigations are told fr
 test("the Portal's CSP did not loosen the consent dialog's, and allows nothing inline", () => {
   assert.doesNotMatch(CONSENT_DIALOG_HEADERS["Content-Security-Policy"], /script-src|connect-src/);
   assert.doesNotMatch(DASHBOARD_CSP, /unsafe-inline|unsafe-eval|\*/);
+});
+
+test("the Portal's page reports its violations to the sink on the MCP host, which Access leaves open", () => {
+  // dashboard-csp.ts imports nothing, so it writes the address out; this keeps the two equal.
+  assert.ok(DASHBOARD_CSP.includes(`report-uri ${REPORT_URL};`), DASHBOARD_CSP);
+  assert.match(DASHBOARD_CSP, /report-to csp$/);
 });
