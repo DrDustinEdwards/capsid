@@ -25,7 +25,8 @@ export const PERMISSIONS_POLICY = CAPSID_STANDARD_HEADERS["Permissions-Policy"];
 
 export const REPORT_PATH = "/csp-report";
 export const REPORTING_ENDPOINTS = `csp="${REPORT_PATH}"`;
-// Shared by intake (routes.ts) and prune (backup.ts), which must agree.
+// Where routes.ts stored reports until 2026-10-20. Nothing stores there now; the
+// backup prune (backup.ts) still reaps what is left, which is gone after its 30 days.
 export const REPORT_PREFIX = "reports/csp/";
 
 // Report-Only, never enforced. form-action is deliberately absent.

@@ -74,14 +74,14 @@ test("the daily limit fires even when the hour is quiet", async () => {
 });
 
 // What an unreadable counter means, per endpoint. /csp-report is unauthenticated and
-// every accepted report becomes an R2 object, so failing open during a KV outage would
-// hand an anonymous caller an unbounded write path to R2. A policy may fail open
+// every accepted report writes log lines, so failing open during a KV outage would
+// hand an anonymous caller an unbounded way to fill the logs. A policy may fail open
 // instead; the two directions are planted separately.
 
 test("PLANT: a KV read that throws REFUSES a csp report, and says it could not measure", async () => {
   const kv = fakeKv({ failGet: true });
   const verdict = await checkCspReportRate(kv.kv, IP, NOW);
-  assert.equal(verdict.allowed, false, "a KV read failure left the unauthenticated R2 write path unbounded");
+  assert.equal(verdict.allowed, false, "a KV read failure left the unauthenticated log path unbounded");
   assert.equal(verdict.window, "unavailable", "the refusal was reported as a spent budget rather than an unmeasured one");
 });
 
@@ -185,7 +185,7 @@ test("a rate-limited caller gets a 429 with a usable Retry-After, not a 204", as
   assert.equal(daily.headers.get("Retry-After"), "86400");
 });
 
-// That the handler checks the limit before it reads the body or writes to R2 is proven
+// That the handler checks the limit before it reads the body, and stores nothing, is proven
 // against the real Worker in test-integration/csp-report.test.ts.
 
 

@@ -10,8 +10,8 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 // behaviour of any one module: each guard asks whether a fact is still stated once,
 // and scans all of src/ rather than a list of files where a copy might appear.
 //
-// That the CSP report sink and the backup prune agree on the report prefix is driven
-// in test-integration/csp-report.test.ts: a stored report, aged, is reaped by the cron.
+// That the backup prune still reaps the report prefix the CSP sink stored under until
+// 2026-10-20 is driven in test-integration/csp-report.test.ts: an aged report is reaped.
 
 // scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("every secret compare goes through timingSafeEqual, in every file", () => {

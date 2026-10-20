@@ -20,9 +20,9 @@ export interface RateLimitPolicy {
 export const MAX_REPORTS_PER_HOUR = 300;
 export const MAX_REPORTS_PER_DAY = 1000;
 
-// Fail closed: /csp-report is unauthenticated and every accepted report is an R2
-// object, so failing open would give anyone an unbounded write path during an outage.
-// A dropped report costs one browser diagnostic.
+// Fail closed: /csp-report is unauthenticated and every accepted report writes log
+// lines, so failing open would let anyone fill the logs during an outage. A dropped
+// report costs one browser diagnostic, and the browser still gets its 204.
 export const CSP_REPORT_LIMIT: RateLimitPolicy = {
   prefix: "csp:rate:",
   perHour: MAX_REPORTS_PER_HOUR,

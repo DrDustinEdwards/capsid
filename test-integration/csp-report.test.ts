@@ -2,20 +2,21 @@ import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloud
 import worker, { BACKUP_CRON } from "../src/index";
 import { checkRate, CSP_REPORT_LIMIT } from "../src/rate-limit";
 import { REPORT_PREFIX } from "../src/security-headers";
-import { describe, expect, it } from "vitest";
+import { MAX_REPORT_BYTES } from "@dustinedwards/site-runtime/csp-report";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// /csp-report's body cap, measured against the real runtime. The cap must count
-// bytes, not UTF-16 code units, and must stop reading at the byte that crosses it
-// rather than buffering the whole body first. This suite posts real bodies to the
-// real handler in workerd.
+// /csp-report against the real runtime: site-runtime's shared receiver, behind
+// Capsid's limiter. Every POST is answered 204 (an error status makes browsers send
+// the report again), a body over the cap is never parsed, nothing is stored, and the
+// logged line carries no query string.
 
 const ORIGIN = "https://capsid.test";
-const CAP = 16_384;
+const CAP = MAX_REPORT_BYTES;
 
-function report(padding: string) {
+function report(padding: string, page = `${ORIGIN}/probe`) {
   return JSON.stringify({
     "csp-report": {
-      "document-uri": `${ORIGIN}/probe`,
+      "document-uri": page,
       "effective-directive": "integration-probe",
       "blocked-uri": "https://example.com/probe",
       note: padding,
@@ -23,101 +24,101 @@ function report(padding: string) {
   });
 }
 
-async function postReport(body: string) {
+async function postReport(body: string, ip = "203.0.113.10") {
   return SELF.fetch(`${ORIGIN}/csp-report`, {
     method: "POST",
-    headers: { "Content-Type": "application/csp-report" },
+    headers: { "Content-Type": "application/csp-report", "CF-Connecting-IP": ip },
     body,
   });
 }
 
-describe("/csp-report bounds the body in bytes, before buffering it", () => {
-  it("accepts an ordinary report", async () => {
-    const resp = await postReport(report("a real violation would say more than this"));
-    expect(resp.status).toBe(204);
-  });
+const stored = async () => (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.length;
 
-  it("refuses a body over the cap", async () => {
+// The receiver's lines, as console.log saw them.
+let logged: string[] = [];
+beforeEach(() => {
+  logged = [];
+  vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+    logged.push(args.map(String).join(" "));
+  });
+});
+afterEach(() => vi.restoreAllMocks());
+const violations = () => logged.filter((l) => l.includes('"event":"csp-violation"'));
+
+describe("/csp-report logs a violation and stores nothing", () => {
+  it("an ordinary report is 204, logged once with no query string, and nothing reaches R2", async () => {
+    const before = await stored();
+    const resp = await postReport(report("a real violation would say more than this", `${ORIGIN}/probe?token=sample-secret`));
+    expect(resp.status).toBe(204);
+    expect(await stored()).toBe(before);
+    const lines = violations();
+    expect(lines).toHaveLength(1);
+    const line = JSON.parse(lines[0]);
+    expect(line.page).toBe(`${ORIGIN}/probe`);
+    expect(line.blocked).toBe("https://example.com/probe");
+    expect(lines[0]).not.toContain("sample-secret");
+  });
+});
+
+describe("/csp-report bounds the body in bytes, before buffering it", () => {
+  it("a body over the cap is answered 204 and never parsed", async () => {
     const body = report("x".repeat(CAP));
     expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(CAP);
     const resp = await postReport(body);
-    expect(resp.status).toBe(413);
+    expect(resp.status).toBe(204);
+    expect(violations()).toHaveLength(0);
   });
 
-  it("counts BYTES, not UTF-16 code units: a multi-byte body over the cap is refused", async () => {
+  it("counts BYTES, not UTF-16 code units: a multi-byte body over the cap is not parsed", async () => {
     // Each of these is one code unit and three bytes: 24,000 bytes on the wire, over
     // the cap, while String#length reads 8,000.
-    const padding = "あ".repeat(8_000);
-    const body = report(padding);
-    const bytes = new TextEncoder().encode(body).byteLength;
+    const body = report("あ".repeat(8_000));
     expect(body.length).toBeLessThan(CAP);
-    expect(bytes).toBeGreaterThan(CAP);
+    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(CAP);
     const resp = await postReport(body);
-    expect(resp.status).toBe(413);
+    expect(resp.status).toBe(204);
+    expect(violations()).toHaveLength(0);
   });
 
-  it("still accepts a multi-byte body that is genuinely under the cap", async () => {
-    // A cap that rejected all multi-byte input would pass the test above for the
+  it("still logs a multi-byte body that is genuinely under the cap", async () => {
+    // A cap that dropped all multi-byte input would pass the test above for the
     // wrong reason.
     const body = report("あ".repeat(200));
     expect(new TextEncoder().encode(body).byteLength).toBeLessThan(CAP);
     const resp = await postReport(body);
     expect(resp.status).toBe(204);
+    expect(violations()).toHaveLength(1);
   });
 });
 
-describe("/csp-report is rate limited before it reads or stores anything", () => {
-  it("a limited caller gets 429 before the content type is checked, and nothing reaches R2", async () => {
+describe("/csp-report is rate limited before it reads anything", () => {
+  it("a limited caller gets 204, and its report is neither logged nor stored", async () => {
     const ip = "203.0.113.77";
     let verdict = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
     for (let i = 0; i < CSP_REPORT_LIMIT.perHour + 1 && verdict.allowed; i++) {
       verdict = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
     }
     expect(verdict.allowed, "the limiter never refused, so this test proves nothing").toBe(false);
-    const stored = async () => (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.length;
     const before = await stored();
 
-    // A wrong content type is a 415 for an unlimited caller. The limited caller is
-    // refused first.
-    const wrongType = await SELF.fetch(`${ORIGIN}/csp-report`, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain", "CF-Connecting-IP": ip },
-      body: "not a report",
-    });
-    expect(wrongType.status).toBe(429);
-
-    const valid = await SELF.fetch(`${ORIGIN}/csp-report`, {
-      method: "POST",
-      headers: { "Content-Type": "application/csp-report", "CF-Connecting-IP": ip },
-      body: report("a limited caller"),
-    });
-    expect(valid.status).toBe(429);
-    expect(await valid.text()).toMatch(/^too many reports:/);
+    const valid = await postReport(report("a limited caller"), ip);
+    expect(valid.status).toBe(204);
+    expect(violations()).toHaveLength(0);
     expect(await stored()).toBe(before);
   });
 });
 
-describe("a stored report is reaped by the backup cron once it ages past the window", () => {
-  // The sink and the prune must agree on where reports live, or reports accumulate
-  // under a prefix nothing reaps. The sink stores a real report, a copy is aged by
-  // rewriting only the date segment of its key, and the real backup cron runs.
+describe("a report the sink stored before 2026-10-20 is reaped by the backup cron", () => {
+  // The sink no longer stores, but the prune still reaps what it left under the
+  // prefix. A fresh and an aged report are seeded as the old sink keyed them.
   it("the aged copy is deleted and the fresh report is kept", async () => {
-    const posted = await SELF.fetch(`${ORIGIN}/csp-report`, {
-      method: "POST",
-      headers: { "Content-Type": "application/csp-report", "CF-Connecting-IP": "203.0.113.90" },
-      body: report("stored by the sink"),
-    });
-    expect(posted.status).toBeLessThan(300);
-
     const today = new Date().toISOString().slice(0, 10);
-    const stored = (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.map((o) => o.key).filter((k) => k.includes(today));
-    expect(stored.length, "the sink stored nothing under the report prefix, so this proves nothing").toBeGreaterThan(0);
-    const fresh = stored[0];
-
+    const fresh = `${REPORT_PREFIX}${today}/sample-ray.json`;
     // Same key, dated 40 days ago: past the 30-day retention the prune applies.
     const agedDay = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
     const aged = fresh.replace(today, agedDay);
     expect(aged).not.toBe(fresh);
+    await env.MEDIA.put(fresh, "{}");
     await env.MEDIA.put(aged, "{}");
 
     // The backup refuses every prune when the store looks empty or the pinned FTS probe
