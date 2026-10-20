@@ -17,7 +17,7 @@ import { readRepoFile } from "./github/contents";
 //   4. It re-signs rather than nesting: existing frontmatter is stripped first.
 //
 // The write snapshots the prior row and appends to audit_log in one batch
-// (CLAUDE.md, snapshot rule).
+// (test/write-invariants.test.ts).
 
 export interface PolicySignResult {
   ok: true;
@@ -95,7 +95,7 @@ export async function signPolicyDocument(
 /** Sign `body` and write it over the stored policy at `path`: the anti-rollback pin first,
  *  then one batch that refuses if the stored body changed since `prior` was read,
  *  snapshots the prior row, writes the signed body and the audit row
- *  (CLAUDE.md, snapshot rule). */
+ *  (test/write-invariants.test.ts). */
 async function commitSigned(
   env: Env,
   caller: string,
