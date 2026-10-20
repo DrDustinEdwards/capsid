@@ -151,6 +151,8 @@ test("script: the host, a wildcard, https:, * and an absent directive allow the 
     "script-src *",
     "default-src 'self' https://static.cloudflareinsights.com",
     "img-src 'self'",
+    "script-src https://static.cloudflareinsights.com/",
+    "script-src https://static.cloudflareinsights.com:443/beacon.min.js",
     "default-src 'self' https://static.cloudflareinsights.com; script-src 'self' https://static.cloudflareinsights.com/beacon.min.js",
   ]) {
     assert.deepEqual(cspAllowsBeaconScript(csp(header)), { ok: true, why: null }, header);
@@ -167,6 +169,10 @@ test("PLANT: a CSP that blocks the beacon script is reported, whichever way it b
     "script-src https://cloudflareinsights.com",
     "script-src https://evil-static.cloudflareinsights.com",
     "script-src 'self' https://static.cloudflareinsights.com, script-src 'self'",
+    "script-src https://static.cloudflareinsights.com/other.js",
+    "script-src https://static.cloudflareinsights.com/beacon/",
+    "script-src https://static.cloudflareinsights.com:8443",
+    "script-src wss://static.cloudflareinsights.com",
   ]) {
     const verdict = cspAllowsBeaconScript(csp(header));
     assert.equal(verdict.ok, false, `allowed: ${header}`);
@@ -182,6 +188,14 @@ test("report: 'self' is enough on Cloudflare, never on another host, and the ape
   assert.equal(cspAllowsBeaconReport(csp("default-src 'self'"), "cloudflare").ok, true, "default-src is the fallback");
   assert.equal(cspAllowsBeaconReport(csp("connect-src 'none'"), "cloudflare").ok, false);
   assert.equal(cspAllowsBeaconReport(csp("script-src 'self'"), "vercel").ok, true, "no connect-src and no default-src allows it");
+});
+
+test("PLANT: a source's path counts, so a host listed with another path does not let the beacon report", () => {
+  assert.equal(cspAllowsBeaconReport(csp("connect-src https://cloudflareinsights.com/cdn-cgi/"), "vercel").ok, true);
+  assert.equal(cspAllowsBeaconReport(csp("connect-src https://cloudflareinsights.com/cdn-cgi/rum"), "vercel").ok, true);
+  const blocked = cspAllowsBeaconReport(csp("connect-src https://cloudflareinsights.com/api"), "vercel");
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.why ?? "", /cdn-cgi\/rum/);
 });
 
 // findings from one page

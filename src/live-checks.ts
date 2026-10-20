@@ -25,6 +25,9 @@ const LIVE_CHECKS_PATH = "policy/live-checks.md";
 
 const BEACON_SCRIPT_HOST = "static.cloudflareinsights.com";
 const BEACON_REPORT_HOST = "cloudflareinsights.com";
+/** The two addresses a source must cover: the script itself and where it reports. */
+const BEACON_SCRIPT_URL = `https://${BEACON_SCRIPT_HOST}/beacon.min.js`;
+const BEACON_REPORT_URL = `https://${BEACON_REPORT_HOST}/cdn-cgi/rum`;
 
 // A push whose deploy has had this long and still has not reached the site is a finding.
 // Shorter and the watcher would file a job every time a pass landed inside a normal
@@ -128,15 +131,28 @@ export function parseCsp(header: string): Directives[] {
     .filter((d) => d.size > 0);
 }
 
-function hostMatches(source: string, host: string): boolean {
+/**
+ * Whether a CSP source expression covers `url` (CSP3, "Does url match expression"): its
+ * host, and its path when it has one. A path ending in "/" covers everything under it;
+ * any other path covers only itself, so https://cloudflareinsights.com/x does not let the
+ * beacon report. The beacon is always https, which an http: source upgrades to; a port
+ * other than 443 or * does not match it.
+ */
+function sourceMatches(source: string, url: string): boolean {
   const s = source.toLowerCase();
   if (s === "*" || s === "https:") return true;
-  // Scheme, path and port do not change which host a source names. The beacon is always
-  // https, which an http: source upgrades to.
-  const bare = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, "").replace(/[/?#].*$/, "").replace(/:(\d+|\*)$/, "");
-  if (bare === host) return true;
+  const target = new URL(url);
+  const m = /^(?:([a-z][a-z0-9+.-]*):\/\/)?([^/:?#]+)(?::(\d+|\*))?(\/[^?#]*)?/.exec(s);
+  if (!m) return false;
+  const [, scheme, host, port, path] = m;
+  if (scheme && scheme !== "https" && scheme !== "http") return false;
+  if (port && port !== "*" && port !== "443") return false;
   // A wildcard needs a subdomain, so *.cloudflareinsights.com does not name the apex.
-  return bare.startsWith("*.") && host.endsWith(bare.slice(1));
+  const hostOk = host === target.hostname || (host.startsWith("*.") && target.hostname.endsWith(host.slice(1)));
+  if (!hostOk) return false;
+  if (!path || path === "/") return true;
+  const decoded = decodeURIComponent(path);
+  return decoded.endsWith("/") ? target.pathname.startsWith(decoded) : target.pathname === decoded;
 }
 
 export interface CspVerdict {
@@ -160,8 +176,8 @@ export function cspAllowsBeaconScript(policies: Directives[]): CspVerdict {
     if (sources.length === 0 || sources.some((s) => s.toLowerCase() === "'none'")) {
       return { ok: false, why: `script-src allows no script (${sources.join(" ") || "empty"})` };
     }
-    if (!sources.some((s) => hostMatches(s, BEACON_SCRIPT_HOST))) {
-      return { ok: false, why: `script-src (${sources.join(" ")}) does not list ${BEACON_SCRIPT_HOST}` };
+    if (!sources.some((s) => sourceMatches(s, BEACON_SCRIPT_URL))) {
+      return { ok: false, why: `script-src (${sources.join(" ")}) does not cover ${BEACON_SCRIPT_URL}` };
     }
   }
   return { ok: true, why: null };
@@ -181,8 +197,8 @@ export function cspAllowsBeaconReport(policies: Directives[], platform: "cloudfl
       return { ok: false, why: `connect-src allows no connection (${sources.join(" ") || "empty"})` };
     }
     const self = platform === "cloudflare" && sources.some((s) => s.toLowerCase() === "'self'");
-    if (!self && !sources.some((s) => hostMatches(s, BEACON_REPORT_HOST))) {
-      return { ok: false, why: `connect-src (${sources.join(" ")}) does not list ${BEACON_REPORT_HOST}${platform === "cloudflare" ? " or 'self'" : ""}` };
+    if (!self && !sources.some((s) => sourceMatches(s, BEACON_REPORT_URL))) {
+      return { ok: false, why: `connect-src (${sources.join(" ")}) does not cover ${BEACON_REPORT_URL}${platform === "cloudflare" ? " or 'self'" : ""}` };
     }
   }
   return { ok: true, why: null };
