@@ -10,6 +10,7 @@ import { readPaused } from "./merge-safety";
 import { auditStatement } from "./store-guards";
 import { digestState } from "./digest";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
+import { jsonResponse as json, textResponse as text } from "./http";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
 // and 6 of 2026-10-09). Web Push to the devices the administrator turned on in the
@@ -245,14 +246,6 @@ export async function pushTick(env: Env, now: Date, fetcher: typeof fetch = fetc
 // The Portal's route: GET lists, POST turns a device on or off or sends a test.
 
 export const PORTAL_PUSH_PATH = "/portal/api/push";
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
-}
-
-function text(message: string, status: number): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
-}
 
 async function listDevices(env: Env, now: Date): Promise<PortalPush> {
   const vapid = readVapidKey(env.VAPID_PRIVATE_KEY);

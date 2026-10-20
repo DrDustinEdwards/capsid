@@ -60,6 +60,7 @@ import { handlePortalTrends, PORTAL_TRENDS_PATH } from "./portal-trends";
 import { handlePortalPackageHistory, handlePortalSharedCode, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
 import { logEvent } from "./log";
+import { textResponse } from "./http";
 
 const APPROVAL_COOKIE = "capsid_approved";
 const CSRF_COOKIE = "capsid_csrf";
@@ -73,10 +74,6 @@ const MCP_LOGIN: LoginFlow = {
   kvPrefix: "capsid:oauth-state:",
   restartHint: "Restart from your MCP client.",
 };
-
-function textResponse(message: string, status: number): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
-}
 
 // The approval cookie carries entries from src/approval.ts: a client id bound to a
 // digest of its redirect set, signed with COOKIE_ENCRYPTION_KEY, kept 30 days.
@@ -327,29 +324,27 @@ async function handleInbox(request: Request, env: Env): Promise<Response> {
 // expiry. The order is the gate's: who, then what, then the rate, then the write, so a
 // refused report spends nothing.
 async function handleInboxReport(request: Request, env: Env): Promise<Response> {
-  const plain = (message: string, status: number, extra: Record<string, string> = {}) =>
-    new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store", ...extra } });
   const caller = await resolveAgent(request, env);
-  if (!caller) return plain("unauthorized: the app's own agent key is required", 401, { "WWW-Authenticate": 'Bearer realm="capsid-operator"' });
+  if (!caller) return textResponse("unauthorized: the app's own agent key is required", 401, { "WWW-Authenticate": 'Bearer realm="capsid-operator"' });
   const bounded = await readBoundedText(request, MAX_INBOX_REPORT_BYTES);
-  if (!bounded.ok) return plain(`request too large: exceeds ${MAX_INBOX_REPORT_BYTES} bytes`, 413);
+  if (!bounded.ok) return textResponse(`request too large: exceeds ${MAX_INBOX_REPORT_BYTES} bytes`, 413);
   let body: unknown;
   try {
     body = JSON.parse(bounded.text);
   } catch {
-    return plain("the body must be JSON", 400);
+    return textResponse("the body must be JSON", 400);
   }
   const namespace = (body as { namespace?: unknown } | null)?.namespace;
-  if (typeof namespace !== "string" || namespace === "") return plain("namespace is required", 400);
+  if (typeof namespace !== "string" || namespace === "") return textResponse("namespace is required", 400);
   const refusal = reportCallerRefusal(caller.agent, namespace);
-  if (refusal) return plain(refusal, 403);
+  if (refusal) return textResponse(refusal, 403);
   const now = new Date();
   const config = await readSiteConfig(env.DB);
   const origin = config.find((c) => c.namespace === namespace)?.origin ?? null;
   const parsed = parseReport(body, origin, now);
-  if (!parsed.ok) return plain(parsed.refusal, 400);
+  if (!parsed.ok) return textResponse(parsed.refusal, 400);
   const rate = await spendReportRate(env.APP_KV, caller.agent.actor);
-  if (!rate.ok) return plain(rate.refusal, rate.status, { "Retry-After": "60" });
+  if (!rate.ok) return textResponse(rate.refusal, rate.status, { "Retry-After": "60" });
   await storeReport(env.APP_KV, { namespace, reported_at: now.toISOString(), reported_by: caller.agent.actor, items: parsed.value.items });
   return Response.json({ ok: true, namespace, items: parsed.value.items.length, expires_in_seconds: REPORT_TTL_SECONDS }, { headers: { "Cache-Control": "no-store" } });
 }
