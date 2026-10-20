@@ -7,6 +7,7 @@ import { STEP_UP } from "../src/scope.ts";
 import { buildAdminServer } from "../src/server.ts";
 import { CARREL_SCRIPT, SITE_SECRET, carrelSecretName, mintSiteKey, setSiteKey } from "../src/site-key.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
+import { sourceFiles } from "./source-files.ts";
 
 // Set a site key (src/site-key.ts), served as capsid_admin_set_site_key. A new key is
 // minted and set on the site's Worker, then on Carrel. Its value is never returned,
@@ -294,3 +295,25 @@ test("THE INNOCENT DIRECTION: an admin signed in within the window sets the key 
   });
 });
 
+
+// Who is the admin is deployment configuration: ADMIN_EMAIL (the primary owner) and
+// CO_OWNER_EMAILS, Worker secrets read by src/auth.ts isAdminEmail and set only in
+// Cloudflare. The one place Capsid writes a Worker secret is putSecret here, so no
+// route or tool can name the owner as long as that stays the only writer and the only
+// names it writes are the site key's.
+test("no Capsid code can set ADMIN_EMAIL or CO_OWNER_EMAILS: the only secret write is the site key's, under fixed names", () => {
+  const writers = sourceFiles()
+    .filter((f) => /secret_text/.test(f.text))
+    .map((f) => f.name);
+  assert.deepEqual(writers, ["site-key.ts"], "a second module writes a Worker secret");
+  const siteKey = sourceFiles().find((f) => f.name === "site-key.ts")!.text;
+  const names = [...siteKey.matchAll(/putSecret\(fetchImpl, token, account, \w+, (\w+), key\)/g)].map((m) => m[1]);
+  assert.deepEqual(names, ["SITE_SECRET", "carrelSecret"], "putSecret is called with a secret name other than the site key's");
+  assert.equal(SITE_SECRET, "CARREL_SITE_KEY");
+  for (const ns of ["sample", "admin-email", "co_owner_emails", "admin"]) {
+    const name = carrelSecretName(ns);
+    assert.match(name, /^SITE_[A-Z0-9_]+_KEY$/);
+    assert.notEqual(name, "ADMIN_EMAIL");
+    assert.notEqual(name, "CO_OWNER_EMAILS");
+  }
+});
