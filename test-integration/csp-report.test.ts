@@ -137,3 +137,25 @@ describe("a report the sink stored before 2026-10-20 is reaped by the backup cro
     expect(after, "the prune reaped a fresh report").toContain(fresh);
   });
 });
+
+describe("/csp-report answers every method the shared receiver's way", () => {
+  it("a GET is 405 naming POST and OPTIONS, as on the other sites", async () => {
+    const resp = await SELF.fetch(`${ORIGIN}/csp-report`);
+    expect(resp.status).toBe(405);
+    expect(resp.headers.get("Allow")).toBe("POST, OPTIONS");
+  });
+
+  it("the Portal's preflight is allowed, and no other origin's is", async () => {
+    const preflight = (origin: string) =>
+      SELF.fetch(`${ORIGIN}/csp-report`, {
+        method: "OPTIONS",
+        headers: { Origin: origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" },
+      });
+    const portal = await preflight("https://portal.dustinedwards.info");
+    expect(portal.status).toBe(204);
+    expect(portal.headers.get("Access-Control-Allow-Origin")).toBe("https://portal.dustinedwards.info");
+    const other = await preflight("https://example.com");
+    expect(other.status).toBe(204);
+    expect(other.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+});

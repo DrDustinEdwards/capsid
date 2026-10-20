@@ -29,6 +29,7 @@ import {
 import { handleHealth } from "./health";
 import { escapeHtml } from "./html";
 import { handlePortalApp } from "./portal-app";
+import { PORTAL_HOST } from "./portal-host";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH, handleOtlpLogs, handleOtlpMetrics } from "./ops-otlp";
 import { OPS_HOOKS_PATH, handleOpsHooks } from "./ops-hooks";
@@ -358,9 +359,12 @@ async function handleInboxReport(request: Request, env: Env): Promise<Response> 
 // logged one line each with every URL cut to origin and path, and nothing is stored.
 // Capsid stored every report in R2 until 2026-10-20; nothing read them (the backup
 // prune only deleted them), so the store went with its own parser. The limiter is
-// still asked first, and a refusal is a dropped report rather than a 429.
+// still asked first, and a refusal is a dropped report rather than a 429. Every method
+// comes here, so a GET is the receiver's 405 as on the other sites, and the Portal's
+// pages, which report here from their own host, get the preflight the Reporting API sends.
 async function handleCspReport(request: Request, env: Env): Promise<Response> {
   return receiveCspReport(request, {
+    allowOrigin: `https://${PORTAL_HOST}`,
     headers: securityHeadersFor("other"),
     allow: async (r) => {
       const ip = callerIp(r);
@@ -427,7 +431,7 @@ export const defaultHandler = {
     if (url.pathname === PUBLIC_STATS_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.stats);
     if (url.pathname === PUBLIC_CODE_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.code);
     if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET") return handleClientDocument(request);
-    if (url.pathname === REPORT_PATH && request.method === "POST") return handleCspReport(request, env);
+    if (url.pathname === REPORT_PATH) return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
     if (url.pathname === ADMIN_OPS_MCP_ROUTE) return handleOperatorAdminMcp(request, env, ctx);
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
