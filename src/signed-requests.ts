@@ -1,4 +1,5 @@
-import { hmacHex, timingSafeEqual } from "./auth";
+import { hmacHex } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
 import { isOffaccountSite, OFFACCOUNT_DEFAULT_SITE, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES, type OffaccountSite } from "./offaccount";
 import { readCapped } from "@dustinedwards/site-runtime/body";
@@ -107,7 +108,7 @@ async function verifyHmac(
   }
   const key = await opts.deriveKey(env.IMPROVE_SCORE_SECRET);
   const expected = await hmacHex(key, signaturePayload(signed.timestamp, signed.body));
-  if (!timingSafeEqual(signed.signature.trim().toLowerCase(), expected)) {
+  if (!await safeEqual(signed.signature.trim().toLowerCase(), expected)) {
     return { ok: false, status: 401, refusal: opts.badSig };
   }
   return { ok: true };

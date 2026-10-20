@@ -1,3 +1,4 @@
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { bytesToHex } from "./encoding";
 
 export async function sha256Hex(input: string): Promise<string> {
@@ -27,28 +28,6 @@ export function getCookie(request: Request, name: string): string | null {
     if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
   }
   return null;
-}
-
-// Constant-time compare of equal-length strings. The length check leaks length only.
-// Where the runtime has crypto.subtle.timingSafeEqual (workerd, which Cloudflare's
-// Workers best-practices guide names for secret compares) it does the comparison; the
-// xor loop below is the same compare for runtimes without it (the Node unit tests).
-// The callers compare hex digests and MACs of one fixed length, so the early return
-// reveals nothing the caller has not already published.
-export function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  const native = (crypto.subtle as { timingSafeEqual?: (x: BufferSource, y: BufferSource) => boolean }).timingSafeEqual;
-  if (typeof native === "function") {
-    const encoder = new TextEncoder();
-    const left = encoder.encode(a);
-    const right = encoder.encode(b);
-    // Equal-length strings can differ in UTF-8 length; the native call needs equal bytes.
-    if (left.byteLength !== right.byteLength) return false;
-    return native.call(crypto.subtle, left, right);
-  }
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
 }
 
 // OPERATOR_KEY_HASH: comma-separated sha256 hex. Plain = write, "ro:" = read.
@@ -82,7 +61,7 @@ export async function operatorIdentity(
     const entry = raw.trim().toLowerCase();
     if (!entry) continue;
     const readonly = entry.startsWith("ro:");
-    if (timingSafeEqual(readonly ? entry.slice(3) : entry, hash)) {
+    if (await safeEqual(readonly ? entry.slice(3) : entry, hash)) {
       return { grant: readonly ? "read" : "write", fingerprint: hash.slice(0, 12) };
     }
   }
@@ -96,14 +75,14 @@ type AdminEnv = { ADMIN_EMAIL?: string; CO_OWNER_EMAILS?: string };
 // no case folding; empty entries are skipped. An unset ADMIN_EMAIL admits nobody, a
 // co-owner included, so losing the primary owner's secret closes both logins. Both
 // secrets are set only in Cloudflare: nothing inside Capsid can change who is admin.
-export function isAdminEmail(env: AdminEnv, email: string): boolean {
+export async function isAdminEmail(env: AdminEnv, email: string): Promise<boolean> {
   const admin = (env.ADMIN_EMAIL ?? "").trim();
   if (!admin) return false;
   const candidate = email.trim();
   let admitted = false;
   for (const raw of [admin, ...(env.CO_OWNER_EMAILS ?? "").split(",")]) {
     const entry = raw.trim();
-    if (entry && timingSafeEqual(candidate, entry)) admitted = true;
+    if (entry && (await safeEqual(candidate, entry))) admitted = true;
   }
   return admitted;
 }
@@ -111,7 +90,7 @@ export function isAdminEmail(env: AdminEnv, email: string): boolean {
 // A grant's props on /mcp, checked on every request: only a grant whose email Access
 // verified as an admin (isAdminEmail) passes. A grant from before the move to Access
 // carries a GitHub login and no email, and fails here, so its client signs in again once.
-export function adminGrantEmail(env: AdminEnv, props: unknown): string | null {
+export async function adminGrantEmail(env: AdminEnv, props: unknown): Promise<string | null> {
   const email = props && typeof props === "object" ? (props as { email?: unknown }).email : undefined;
-  return typeof email === "string" && isAdminEmail(env, email) ? email : null;
+  return typeof email === "string" && (await isAdminEmail(env, email)) ? email : null;
 }

@@ -1,4 +1,5 @@
-import { hmacHex, sha256Hex, timingSafeEqual } from "./auth";
+import { hmacHex, sha256Hex } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { onRoster } from "./roster";
@@ -362,7 +363,7 @@ export async function verifyDeleteToken(
   if (!TOKEN_SHAPE.test(token)) return { ok: false, refusal: "the confirmation token is malformed: preview again." };
   const dot = token.indexOf(".");
   const payload = token.slice(0, dot);
-  if (!timingSafeEqual(token.slice(dot + 1), await hmacHex(await tokenKey(env), payload))) {
+  if (!await safeEqual(token.slice(dot + 1), await hmacHex(await tokenKey(env), payload))) {
     return { ok: false, refusal: "the confirmation token does not verify: preview again." };
   }
   let claims: DeleteClaims;

@@ -1,4 +1,5 @@
-import { hmacHex, timingSafeEqual } from "./auth";
+import { hmacHex } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { deriveTaskKey } from "./signed-docs";
 
 // Signed resume notes and block commands (job_9e602b31888f item 4, OWASP ASI07).
@@ -51,5 +52,5 @@ export async function checkJobText(
   if (!signature) return "legacy-unsigned";
   if (!rootSecret) return "unconfigured";
   const expected = await hmacHex(await deriveTaskKey(rootSecret), payload(kind, jobId, fields));
-  return timingSafeEqual(signature.toLowerCase(), expected) ? "verified" : "mismatch";
+  return await safeEqual(signature.toLowerCase(), expected) ? "verified" : "mismatch";
 }

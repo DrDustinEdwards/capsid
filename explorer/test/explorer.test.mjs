@@ -269,7 +269,7 @@ test("the workflow's pull request paths name every Capsid module the build loads
       visit(join("src", `${(spec ?? "").replace(/^\.\//, "").replace(/\.ts$/, "")}.ts`));
     }
   };
-  for (const rel of ["src/system-model.ts", "src/public-stats.ts", "src/html.ts"]) visit(rel);
+  for (const rel of ["src/system-model.ts", "src/public-stats.ts"]) visit(rel);
   assert.ok(seen.size >= 6, `the walk found only ${seen.size} modules`);
   const workflow = readFileSync(join(root, ".github/workflows/explorer.yml"), "utf8");
   const pr = workflow.slice(workflow.indexOf("pull_request:"), workflow.indexOf("push:"));

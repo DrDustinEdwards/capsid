@@ -2,7 +2,8 @@ import { archivedAgentByName } from "./agents-archive";
 import { adminAgentForEmail } from "./agents";
 import { revokeAgent } from "./agents-admin";
 import { agentActor } from "./agents-schema";
-import { hmacHex, timingSafeEqual } from "./auth";
+import { hmacHex } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { sourceAddress } from "./portal-auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
@@ -1191,7 +1192,7 @@ async function verifyConfirm(env: Env, token: string, email: string, now: Date):
   if (!TOKEN_SHAPE.test(token)) return { ok: false, status: 403, refusal: "the confirmation token is malformed: preview again." };
   const dot = token.indexOf(".");
   const payload = token.slice(0, dot);
-  if (!timingSafeEqual(token.slice(dot + 1), await hmacHex(await confirmKey(env), payload))) {
+  if (!await safeEqual(token.slice(dot + 1), await hmacHex(await confirmKey(env), payload))) {
     return { ok: false, status: 403, refusal: "the confirmation token does not verify: preview again." };
   }
   let claims: ConfirmClaims;

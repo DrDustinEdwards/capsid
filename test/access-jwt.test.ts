@@ -147,56 +147,56 @@ test("keys that cannot be read fail closed", async () => {
   assert.deepEqual(verdict, { ok: false, reason: "the Access keys could not be read: jwks endpoint down" });
 });
 
-test("a grant passes /mcp only when its props carry the admin's email, so a GitHub-era grant signs in again", () => {
+test("a grant passes /mcp only when its props carry the admin's email, so a GitHub-era grant signs in again", async () => {
   const env = { ADMIN_EMAIL: "admin@example.com" };
-  assert.equal(adminGrantEmail(env, { email: "admin@example.com" }), "admin@example.com");
+  assert.equal(await adminGrantEmail(env, { email: "admin@example.com" }), "admin@example.com");
   // The props every grant carried before the move to Access.
-  assert.equal(adminGrantEmail(env, { id: 7, login: "DrDustinEdwards", name: "Admin" }), null);
-  assert.equal(adminGrantEmail(env, { email: "someone@example.com" }), null);
-  assert.equal(adminGrantEmail(env, { email: 7 }), null);
-  assert.equal(adminGrantEmail(env, undefined), null);
-  assert.equal(adminGrantEmail({}, { email: "admin@example.com" }), null);
+  assert.equal(await adminGrantEmail(env, { id: 7, login: "DrDustinEdwards", name: "Admin" }), null);
+  assert.equal(await adminGrantEmail(env, { email: "someone@example.com" }), null);
+  assert.equal(await adminGrantEmail(env, { email: 7 }), null);
+  assert.equal(await adminGrantEmail(env, undefined), null);
+  assert.equal(await adminGrantEmail({}, { email: "admin@example.com" }), null);
 });
 
-test("the admin is ADMIN_EMAIL exactly: trimmed, never case-folded, and nobody when unset", () => {
+test("the admin is ADMIN_EMAIL exactly: trimmed, never case-folded, and nobody when unset", async () => {
   const env = { ADMIN_EMAIL: " admin@example.com " };
-  assert.equal(isAdminEmail(env, "admin@example.com"), true);
-  assert.equal(isAdminEmail(env, "Admin@example.com"), false);
-  assert.equal(isAdminEmail(env, "admin@example.com.evil"), false);
-  assert.equal(isAdminEmail({}, "admin@example.com"), false);
-  assert.equal(isAdminEmail({ ADMIN_EMAIL: "  " }, ""), false);
+  assert.equal(await isAdminEmail(env, "admin@example.com"), true);
+  assert.equal(await isAdminEmail(env, "Admin@example.com"), false);
+  assert.equal(await isAdminEmail(env, "admin@example.com.evil"), false);
+  assert.equal(await isAdminEmail({}, "admin@example.com"), false);
+  assert.equal(await isAdminEmail({ ADMIN_EMAIL: "  " }, ""), false);
 });
 
 // CO-OWNER: CO_OWNER_EMAILS admits further emails exactly as ADMIN_EMAIL does.
 const CO_ENV = { ADMIN_EMAIL: "admin@example.com", CO_OWNER_EMAILS: " other@example.com , co@example.com " };
 
-test("a co-owner is admitted from a list with spaces, and the primary owner still is", () => {
-  assert.equal(isAdminEmail(CO_ENV, "admin@example.com"), true);
-  assert.equal(isAdminEmail(CO_ENV, "co@example.com"), true);
-  assert.equal(isAdminEmail(CO_ENV, "other@example.com"), true);
+test("a co-owner is admitted from a list with spaces, and the primary owner still is", async () => {
+  assert.equal(await isAdminEmail(CO_ENV, "admin@example.com"), true);
+  assert.equal(await isAdminEmail(CO_ENV, "co@example.com"), true);
+  assert.equal(await isAdminEmail(CO_ENV, "other@example.com"), true);
 });
 
-test("PLANT: near misses of a co-owner entry are refused: case, extra character, shorter or other domain", () => {
+test("PLANT: near misses of a co-owner entry are refused: case, extra character, shorter or other domain", async () => {
   for (const near of ["Co@example.com", "co@Example.com", "co@example.com.", "co@example.co", "xco@example.com", "o@example.com", "co@example.com,other@example.com", ""]) {
-    assert.equal(isAdminEmail(CO_ENV, near), false, `'${near}' was admitted`);
+    assert.equal(await isAdminEmail(CO_ENV, near), false, `'${near}' was admitted`);
   }
 });
 
-test("an unset or empty CO_OWNER_EMAILS admits nobody extra, and empty entries never admit the empty email", () => {
-  assert.equal(isAdminEmail({ ADMIN_EMAIL: "admin@example.com" }, "co@example.com"), false);
-  assert.equal(isAdminEmail({ ADMIN_EMAIL: "admin@example.com", CO_OWNER_EMAILS: "" }, "co@example.com"), false);
-  assert.equal(isAdminEmail({ ADMIN_EMAIL: "admin@example.com", CO_OWNER_EMAILS: " , ,, " }, ""), false);
-  assert.equal(isAdminEmail({ ADMIN_EMAIL: "admin@example.com", CO_OWNER_EMAILS: " , ,, " }, "  "), false);
-  assert.equal(isAdminEmail({}, "co@example.com"), false);
+test("an unset or empty CO_OWNER_EMAILS admits nobody extra, and empty entries never admit the empty email", async () => {
+  assert.equal(await isAdminEmail({ ADMIN_EMAIL: "admin@example.com" }, "co@example.com"), false);
+  assert.equal(await isAdminEmail({ ADMIN_EMAIL: "admin@example.com", CO_OWNER_EMAILS: "" }, "co@example.com"), false);
+  assert.equal(await isAdminEmail({ ADMIN_EMAIL: "admin@example.com", CO_OWNER_EMAILS: " , ,, " }, ""), false);
+  assert.equal(await isAdminEmail({ ADMIN_EMAIL: "admin@example.com", CO_OWNER_EMAILS: " , ,, " }, "  "), false);
+  assert.equal(await isAdminEmail({}, "co@example.com"), false);
 });
 
-test("an unset ADMIN_EMAIL admits nobody, a co-owner included", () => {
-  assert.equal(isAdminEmail({ CO_OWNER_EMAILS: "co@example.com" }, "co@example.com"), false);
-  assert.equal(isAdminEmail({ ADMIN_EMAIL: " ", CO_OWNER_EMAILS: "co@example.com" }, "co@example.com"), false);
+test("an unset ADMIN_EMAIL admits nobody, a co-owner included", async () => {
+  assert.equal(await isAdminEmail({ CO_OWNER_EMAILS: "co@example.com" }, "co@example.com"), false);
+  assert.equal(await isAdminEmail({ ADMIN_EMAIL: " ", CO_OWNER_EMAILS: "co@example.com" }, "co@example.com"), false);
 });
 
-test("a /mcp grant whose props carry a co-owner's email passes, and returns that email", () => {
-  assert.equal(adminGrantEmail(CO_ENV, { email: "co@example.com" }), "co@example.com");
-  assert.equal(adminGrantEmail(CO_ENV, { email: "Co@example.com" }), null);
-  assert.equal(adminGrantEmail({ ADMIN_EMAIL: "admin@example.com" }, { email: "co@example.com" }), null);
+test("a /mcp grant whose props carry a co-owner's email passes, and returns that email", async () => {
+  assert.equal(await adminGrantEmail(CO_ENV, { email: "co@example.com" }), "co@example.com");
+  assert.equal(await adminGrantEmail(CO_ENV, { email: "Co@example.com" }), null);
+  assert.equal(await adminGrantEmail({ ADMIN_EMAIL: "admin@example.com" }, { email: "co@example.com" }), null);
 });

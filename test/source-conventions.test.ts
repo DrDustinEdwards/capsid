@@ -14,15 +14,15 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 // 2026-10-20 is driven in test-integration/csp-report.test.ts: an aged report is reaped.
 
 // scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
-test("every secret compare goes through timingSafeEqual, in every file", () => {
+test("every secret compare goes through safeEqual, in every file", () => {
   // The specific compares, still where they belong.
   const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
   const handler = sourceFiles().find((f) => f.name === "routes.ts")!.text;
-  assert.ok(auth.includes("timingSafeEqual(readonly ? entry.slice(3) : entry, hash)"));
-  assert.match(handler, /timingSafeEqual\(sig, await hmacHex/);
-  assert.match(handler, /timingSafeEqual\(csrfCookie, csrf\)/);
+  assert.ok(auth.includes("await safeEqual(readonly ? entry.slice(3) : entry, hash)"));
+  assert.match(handler, /await safeEqual\(sig, await hmacHex/);
+  assert.match(handler, /await safeEqual\(csrfCookie, csrf\)/);
   const accessLogin = sourceFiles().find((f) => f.name === "access-login.ts")!.text;
-  assert.match(accessLogin, /timingSafeEqual\(await sha256Hex\(stateCookie\), signIn\.binding\)/);
+  assert.match(accessLogin, /await safeEqual\(await sha256Hex\(stateCookie\), signIn\.binding\)/);
 
   // And no file anywhere has gone back to a short-circuiting compare of a secret.
   // Matched by shape rather than by the spellings that exist today, so a new secret
@@ -36,8 +36,22 @@ test("every secret compare goes through timingSafeEqual, in every file", () => {
   assert.deepEqual(
     offenders.map((o) => `src/${o.file}:${o.line} ${o.text}`),
     [],
-    "a secret is compared with === or !== instead of timingSafeEqual"
+    "a secret is compared with === or !== instead of safeEqual"
   );
+});
+
+// safeEqual and the admin check built on it return promises, and a promise is truthy: a
+// call that loses its await admits every caller, and neither tsc nor the tests see it.
+test("every safeEqual, isAdminEmail and adminGrantEmail call is awaited, in every file", () => {
+  const calls = sourceFiles().flatMap((f) =>
+    f.text
+      .split("\n")
+      .map((line, i) => ({ file: f.name, line: i + 1, text: line.trim() }))
+      .flatMap((l) => [...l.text.matchAll(/(\bawait\s+\(?)?\b(safeEqual|isAdminEmail|adminGrantEmail)\(/g)].map((m) => ({ ...l, awaited: Boolean(m[1]) })))
+      .filter((c) => !/^export async function /.test(c.text))
+  );
+  assert.ok(calls.length >= 17, `found only ${calls.length} calls`);
+  assert.deepEqual(calls.filter((c) => !c.awaited).map((c) => `src/${c.file}:${c.line} ${c.text}`), []);
 });
 
 test("move and lint finalize still accept an optional boolean confirm", async () => {

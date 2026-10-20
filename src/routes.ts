@@ -2,7 +2,8 @@ import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, ha
 import { BENCH_DRAW_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
-import { getCookie, hmacHex, timingSafeEqual } from "./auth";
+import { getCookie, hmacHex } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { resolveAgent } from "./agents";
 import { backupHttpStatus, runBackup } from "./backup";
 import { checkScope, routeRefusal } from "./scope";
@@ -27,7 +28,7 @@ import {
   verifyBackupCredentialRequest,
 } from "./signed-requests";
 import { handleHealth } from "./health";
-import { escapeHtml } from "./html";
+import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { handlePortalApp } from "./portal-app";
 import { PORTAL_HOST } from "./portal-host";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
@@ -86,7 +87,7 @@ async function approvedClients(request: Request, secret: string): Promise<string
   if (dot === -1) return [];
   const sig = raw.slice(0, dot);
   const payload = raw.slice(dot + 1);
-  if (!timingSafeEqual(sig, await hmacHex(secret, payload))) return [];
+  if (!await safeEqual(sig, await hmacHex(secret, payload))) return [];
   try {
     const parsed = JSON.parse(b64urlDecode(payload));
     return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : [];
@@ -202,7 +203,7 @@ async function handleAuthorizePost(request: Request, env: Env): Promise<Response
   const req = form.get("req");
   if (typeof csrf !== "string" || typeof req !== "string") return textResponse("bad request", 400);
   const csrfCookie = getCookie(request, CSRF_COOKIE);
-  if (!csrfCookie || !timingSafeEqual(csrfCookie, csrf)) return textResponse("csrf validation failed: restart the flow", 403);
+  if (!csrfCookie || !await safeEqual(csrfCookie, csrf)) return textResponse("csrf validation failed: restart the flow", 403);
   let oauthReq: AuthRequest;
   try {
     oauthReq = JSON.parse(b64urlDecode(req)) as AuthRequest;
