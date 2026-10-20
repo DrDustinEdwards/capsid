@@ -10,7 +10,7 @@ import { createLegacyEraHandler, isLegacyRequest } from "./legacy-era";
 // request.
 //
 // Origins: /mcp and /mcp/admin have their own Origin rule before the OAuth provider
-// (src/headers.ts mcpOriginProblem, which admits https://claude.ai), so the wrapper's
+// (src/security-headers.ts mcpOriginProblem, which admits https://claude.ai), so the wrapper's
 // default list, which would refuse claude.ai, is not applied there a second time.
 // /ops/mcp and /ops/mcp/admin are called with a bearer key and no browser, so they keep
 // the wrapper's default: a present Origin must be localhost-class or the workers.dev host.

@@ -62,14 +62,14 @@ test("a bare 2025-era initialize is answered with 2025-11-25, and the GET stream
   assert.equal(get.status, 405);
 });
 
-test("PLANT: /ops/mcp refuses a foreign browser Origin; /mcp leaves Origin to src/headers.ts, which admits claude.ai", async () => {
+test("PLANT: /ops/mcp refuses a foreign browser Origin; /mcp leaves Origin to src/security-headers.ts, which admits claude.ai", async () => {
   const e = env();
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "o", version: "1" } } });
   const headers = (origin: string) => ({ "Content-Type": "application/json", Accept: "application/json, text/event-stream", Origin: origin });
   const ops = await mcpFetch(e, () => buildServer(e, admin), "/ops/mcp")("https://mcp.example.com/ops/mcp", { method: "POST", headers: headers("https://evil.example"), body });
   assert.equal(ops.status, 403);
   const mcp = await mcpFetch(e, () => buildServer(e, admin), "/mcp")("https://mcp.example.com/mcp", { method: "POST", headers: headers("https://claude.ai"), body });
-  assert.equal(mcp.status, 200, "the wrapper refused claude.ai on /mcp, which src/headers.ts admits");
+  assert.equal(mcp.status, 200, "the wrapper refused claude.ai on /mcp, which src/security-headers.ts admits");
 });
 
 test("the legacy shim has one call site, so deleting src/legacy-era.ts leaves a modern-only server", () => {

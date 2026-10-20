@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { SELF_REPO, ciDispatch, deleteBranch, deleteRepoFile, writeRepoFile } from "../src/github.ts";
-import { mcpOriginProblem } from "../src/headers.ts";
+import { mcpOriginProblem } from "../src/security-headers.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 

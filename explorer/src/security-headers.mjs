@@ -3,7 +3,7 @@
 //
 // The pages carry no inline script or style (src/pages.mjs), so the policy needs no hash or
 // nonce: scripts and styles are 'self'. Violations go to Capsid's /csp-report, the family's one
-// sink (src/headers.ts, REPORT_PATH). Enarratio's charts and Capsomer's map use no style
+// sink (src/security-headers.ts, REPORT_PATH). Enarratio's charts and Capsomer's map use no style
 // attributes, so none are allowed; the browser spec fails on any violation.
 import { buildContentSecurityPolicy } from "@dustinedwards/site-runtime/csp";
 import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/site-runtime/headers";
