@@ -1,4 +1,5 @@
-import { hmacHex, sha256Hex, timingSafeEqual } from "./auth";
+import { hmacHex, sha256Hex } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
 
 // The Worker signs the documents it later acts on: a job's body (src/jobs-claim.ts) and
@@ -75,7 +76,7 @@ export async function verifySignedBody(
   }
   const key = await deriveTaskKey(rootSecret);
   const expected = await hmacHex(key, body);
-  if (!timingSafeEqual(signature.toLowerCase(), expected)) {
+  if (!await safeEqual(signature.toLowerCase(), expected)) {
     return {
       ok: false,
       reason: `this ${what}'s ${TASK_SIGNATURE_FIELD} does not match its body. It was edited after the Worker wrote it. Refusing to execute it.`,

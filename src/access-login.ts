@@ -1,5 +1,6 @@
 import { verifyIdToken, type KeysFetcher } from "./access-jwt";
-import { getCookie, isAdminEmail, sha256Hex, timingSafeEqual } from "./auth";
+import { getCookie, isAdminEmail, sha256Hex } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { b64urlFromBytes, bytesToHex } from "./encoding";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
@@ -149,7 +150,7 @@ export async function completeAccessLogin<T>(
   }
   // A cookie that does not match leaves the state in place, so a stranger holding the
   // callback URL cannot spend the browser's sign-in.
-  if (!timingSafeEqual(await sha256Hex(stateCookie), signIn.binding)) return fail(notThisBrowser, 403);
+  if (!await safeEqual(await sha256Hex(stateCookie), signIn.binding)) return fail(notThisBrowser, 403);
   let state: T;
   try {
     state = parse(signIn.stored);
@@ -184,7 +185,7 @@ export async function completeAccessLogin<T>(
     fetchKeys
   );
   if (!verdict.ok) return fail(`the sign-in could not be verified: ${verdict.reason}. ${flow.restartHint}`, 403);
-  if (!isAdminEmail(env, verdict.email)) {
+  if (!await isAdminEmail(env, verdict.email)) {
     return fail("access denied: this email is not an administrator of capsid (ADMIN_EMAIL or CO_OWNER_EMAILS)", 403);
   }
   return verdict.name ? { ok: true, email: verdict.email, name: verdict.name, state } : { ok: true, email: verdict.email, state };

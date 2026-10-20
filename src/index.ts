@@ -29,7 +29,7 @@ export const SKILLS_REFRESH_CRON = "30 9 * * *";
 const apiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // Checked on every request, not only at sign-in (src/auth.ts adminGrantEmail).
-    const email = adminGrantEmail(env, (ctx as ExecutionContext & { props?: Props }).props);
+    const email = await adminGrantEmail(env, (ctx as ExecutionContext & { props?: Props }).props);
     if (!email) {
       return new Response("forbidden: this grant does not belong to an administrator of capsid", {
         status: 403,

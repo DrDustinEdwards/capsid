@@ -1,4 +1,5 @@
-import { getCookie, timingSafeEqual } from "./auth";
+import { getCookie } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { performControl, previewControl } from "./controls";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
 import { type PortalUser, portalDisplay, portalGate, portalSignOutCookies, sourceAddress } from "./portal-auth";
@@ -73,7 +74,7 @@ export async function gateActionRequest(request: Request, env: Env, now: Date): 
 
   const header = request.headers.get(PORTAL_CSRF_HEADER);
   const cookie = getCookie(request, PORTAL_CSRF_COOKIE);
-  if (!header || !cookie || !timingSafeEqual(cookie, header)) {
+  if (!header || !cookie || !await safeEqual(cookie, header)) {
     return { ok: false, response: textResponse("csrf validation failed: reload Capsid Portal and try again.", 403) };
   }
 

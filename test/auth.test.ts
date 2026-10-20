@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bearerToken, sha256Hex, operatorIdentity, timingSafeEqual } from "../src/auth.ts";
-import { sourceFiles } from "./source-files.ts";
+import { bearerToken, sha256Hex, operatorIdentity } from "../src/auth.ts";
 
 async function grantOf(request: Request, env: { OPERATOR_KEY_HASH?: string }) {
   return (await operatorIdentity(request, env)).grant;
@@ -94,56 +93,6 @@ test("a rejected key yields no grant and no fingerprint", async () => {
   const env = { OPERATOR_KEY_HASH: await sha256Hex("write-key") };
   const bad = await operatorIdentity(keyRequest("not-a-key"), env);
   assert.deepEqual(bad, { grant: null, fingerprint: null });
-});
-
-// timingSafeEqual
-
-// scanner-rule: secret comparisons are constant time. Timing cannot be observed in a test, so the loop's shape is what is checked
-test("timingSafeEqual accumulates rather than short-circuiting", () => {
-  // The behavioural test below pins the answer, which `return a === b` would also
-  // give. Timing assertions are flaky, so the shape is guarded: a running xor over
-  // every character, with no early return inside the loop.
-  const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
-  const body = auth.slice(auth.indexOf("export function timingSafeEqual"), auth.indexOf("export type OperatorGrant"));
-  assert.ok(body.length > 100, "could not bound timingSafeEqual in src/auth.ts");
-  assert.match(body, /diff \|= a\.charCodeAt\(i\) \^ b\.charCodeAt\(i\)/, "timingSafeEqual no longer accumulates");
-  assert.doesNotMatch(body, /return a === b/, "timingSafeEqual short-circuits on ===");
-});
-
-test("timingSafeEqual agrees with === on the answer", () => {
-  assert.equal(timingSafeEqual("abc", "abc"), true);
-  assert.equal(timingSafeEqual("abc", "abd"), false);
-  assert.equal(timingSafeEqual("abc", "ab"), false);
-  assert.equal(timingSafeEqual("", ""), true);
-  // The first character differing must not be distinguishable by early return:
-  // both of these compare the whole string.
-  assert.equal(timingSafeEqual("zzz", "azz"), false);
-  assert.equal(timingSafeEqual("azz", "azy"), false);
-});
-
-test("timingSafeEqual hands the compare to the platform's crypto.subtle.timingSafeEqual when it exists", () => {
-  const subtle = crypto.subtle as unknown as { timingSafeEqual?: (a: Uint8Array, b: Uint8Array) => boolean };
-  const had = Object.getOwnPropertyDescriptor(subtle, "timingSafeEqual");
-  let calls = 0;
-  subtle.timingSafeEqual = (a, b) => {
-    calls++;
-    return Buffer.compare(a, b) === 0;
-  };
-  try {
-    assert.equal(timingSafeEqual("abcd", "abcd"), true);
-    assert.equal(calls, 1, "the platform compare was not used");
-    // A near miss of equal length must fail, and reach the platform compare to do so.
-    assert.equal(timingSafeEqual("abcd", "abce"), false);
-    assert.equal(calls, 2);
-    // A different length fails before any compare is attempted.
-    assert.equal(timingSafeEqual("abcd", "abc"), false);
-    assert.equal(calls, 2, "a length mismatch reached the platform compare");
-    // Equal string length, different UTF-8 length: refused, not passed to the platform.
-    assert.equal(timingSafeEqual("aé", "ab"), false);
-  } finally {
-    if (had) Object.defineProperty(subtle, "timingSafeEqual", had);
-    else delete subtle.timingSafeEqual;
-  }
 });
 
 test("bearerToken: the scheme in any case, one token, nothing else", () => {

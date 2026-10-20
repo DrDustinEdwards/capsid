@@ -25,7 +25,6 @@ on:
       - "src/read-capped.ts"
       - "src/health-format.ts"
       - "src/log.ts"
-      - "src/html.ts"
       - "test/resolve-ts.mjs"
       - "package-lock.json"
       - ".github/workflows/explorer.yml"

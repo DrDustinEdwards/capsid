@@ -1,4 +1,5 @@
-import { bearerToken, operatorIdentity, sha256Hex, timingSafeEqual } from "./auth";
+import { bearerToken, operatorIdentity, sha256Hex } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import {
   AGENT_GRANTS,
   SCOPE_FLAGS,
@@ -143,7 +144,7 @@ async function liveAgentByHash(db: D1Database, hash: string): Promise<AgentRow |
     .bind(hash)
     .first<AgentRow>();
   if (!row) return null;
-  return timingSafeEqual(row.key_hash, hash) ? row : null;
+  return await safeEqual(row.key_hash, hash) ? row : null;
 }
 
 // A revoked agent does not fall through to OPERATOR_KEY_HASH: a key minted as an

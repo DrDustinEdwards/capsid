@@ -8,8 +8,8 @@
 // ways"). Times of day never appear: the documents carry a date and nothing finer.
 import { systemMapHtml } from "capsomer/behaviour/system-map";
 import { barChart, progressRing } from "enarratio";
+import { escapeHtml } from "@dustinedwards/site-runtime/html";
 
-import { escapeHtml as escapeText } from "../../src/html.ts";
 import { codeBySystem, codePages, codePath, codeSummary } from "./code.mjs";
 
 export const SITE = "https://dustinedwards.info";
@@ -27,10 +27,8 @@ const VERB = {
   serves: ["serves", "is served by"],
 };
 
-/** Capsid's own escaper (src/html.ts), for any value. @param {unknown} value */
-export function escapeHtml(value) {
-  return escapeText(String(value));
-}
+// The family's one escaper (site-runtime ./html), for any value; code.mjs and graph.mjs take it from here.
+export { escapeHtml };
 
 /** @param {string} id */
 export const systemPath = (id) => `/s/${id}/`;

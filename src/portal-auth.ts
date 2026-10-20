@@ -1,5 +1,6 @@
 import { clearStateCookie, completeAccessLogin, type LoginFlow, startAccessLogin } from "./access-login";
-import { getCookie, hmacHex, isAdminEmail, timingSafeEqual } from "./auth";
+import { getCookie, hmacHex, isAdminEmail } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { isPortalHost, isSameOriginPath, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
@@ -87,7 +88,7 @@ export async function readPortalSession(request: Request, env: Env, now: Date): 
   if (dot === -1) return null;
   const sig = raw.slice(0, dot);
   const encoded = raw.slice(dot + 1);
-  if (!timingSafeEqual(sig, await hmacHex(env.COOKIE_ENCRYPTION_KEY, encoded))) return null;
+  if (!await safeEqual(sig, await hmacHex(env.COOKIE_ENCRYPTION_KEY, encoded))) return null;
   let payload: SessionPayload;
   try {
     payload = JSON.parse(b64urlDecode(encoded)) as SessionPayload;
@@ -96,7 +97,7 @@ export async function readPortalSession(request: Request, env: Env, now: Date): 
   }
   if (typeof payload?.email !== "string" || typeof payload.exp !== "number") return null;
   if (payload.exp * 1000 <= now.getTime()) return null;
-  if (!isAdminEmail(env, payload.email)) return null;
+  if (!await isAdminEmail(env, payload.email)) return null;
   return typeof payload.name === "string" && payload.name ? { email: payload.email, name: payload.name } : { email: payload.email };
 }
 

@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "./auth";
+import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { noFlags } from "./agents-schema";
 import type { Agent } from "./agents";
 import { bytesToHex } from "./encoding";
@@ -38,7 +38,7 @@ export async function runKeyAgent(db: D1Database, hash: string, now: Date): Prom
     )
     .bind(hash, new Date(now.getTime() - BENCH_STALE_MS).toISOString())
     .first<{ id: string; task_id: string; run_key_hash: string }>();
-  if (!row || !timingSafeEqual(row.run_key_hash, hash)) return null;
+  if (!row || !await safeEqual(row.run_key_hash, hash)) return null;
   const { results: jobs } = await db
     .prepare("SELECT id FROM jobs WHERE namespace = ?1 AND title = ?2 LIMIT 2")
     .bind(BENCH_NAMESPACE, runJobTitle(row.task_id, row.id))
