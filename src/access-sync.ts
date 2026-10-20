@@ -15,7 +15,7 @@ import { textResponse } from "./http";
 // token (ruling 1).
 //
 // - The caller names its namespace and must hold the write grant on it through checkScope
-//   (CLAUDE.md, one enforcement point rule). The group is never named by the caller: it is
+//   (one enforcement point, test/scope.test.ts). The group is never named by the caller: it is
 //   the one pinned for that namespace in access_sync_groups (migrations/0040), so a key
 //   reaches its own app's group alone.
 // - Before writing, the group is read and its name must equal the pinned name, and every

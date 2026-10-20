@@ -8,8 +8,8 @@ import { readConvergence } from "./site-convergence";
 // that opted into Capsid calling its operator API, read live (src/site-convergence.ts).
 // It calls only the site's read (sync_status) and its public health route, and reads the
 // site Worker's secret names from Cloudflare; a repair is the site_repair control, never
-// this route. A route, not a tool, so no grant is checked here (CLAUDE.md, one
-// enforcement point rule): it answers to portalGate, and src/scope.ts lists it among the
+// this route. A route, not a tool, so no grant is checked here
+// (one enforcement point, test/route-gates.test.ts): it answers to portalGate, and src/scope.ts lists it among the
 // routes gated some other way.
 
 export const PORTAL_CONVERGENCE_PATH = "/portal/api/convergence";

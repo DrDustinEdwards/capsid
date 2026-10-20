@@ -65,14 +65,14 @@ const MUTATION_PATTERNS: Array<{ label: string; find: (text: string) => number[]
   { label: "DELETE FROM documents", find: deleteHits },
 ];
 
-// scanner-rule: CLAUDE.md, path mutation rule: a path mutation goes through pathMutation() and nowhere else (count guard)
+// scanner-rule: path mutation invariant: a path mutation goes through pathMutation() and nowhere else (count guard)
 test("the scan reads a plausible number of source files", () => {
   // If the directory walk broke, every offender check below would pass over an empty list.
   assert.ok(SOURCES.length >= 10, `expected to scan the src/ modules, found ${SOURCES.length}`);
   assert.ok(SOURCES.some((f) => f.text.includes(HELPER_START)));
 });
 
-// scanner-rule: CLAUDE.md, path mutation rule: a path mutation goes through pathMutation() and nowhere else
+// scanner-rule: path mutation invariant: a path mutation goes through pathMutation() and nowhere else
 test("every documents.path mutation in src/ lives inside pathMutation()", () => {
   const { file, start, end } = helperRange();
   const offenders: string[] = [];
@@ -96,7 +96,7 @@ test("every documents.path mutation in src/ lives inside pathMutation()", () => 
   );
 });
 
-// scanner-rule: CLAUDE.md, path mutation rule: a path mutation goes through pathMutation() and nowhere else (the scan is not vacuous)
+// scanner-rule: path mutation invariant: a path mutation goes through pathMutation() and nowhere else (the scan is not vacuous)
 test("the helper actually contains both mutation shapes", () => {
   const { text, start, end } = helperRange();
   const body = text.slice(start, end);

@@ -313,7 +313,7 @@ function requirePending(db: D1Database, id: number): D1PreparedStatement {
 /** Approves a proposal: the document is written as the proposal says, as an ordinary
  *  write (snapshot of the live row, the upsert, an audit row naming the approver and the
  *  proposal), guarded in the batch on the base body and on the proposal still pending.
- *  CLAUDE.md, snapshot rule. */
+ *  snapshot invariant, test/write-invariants.test.ts. */
 export async function approveProposal(db: D1Database, actor: string, now: Date, id: number): Promise<Decided> {
   const checked = await checkProposal(db, id, true);
   if (!checked.ok) return checked;
@@ -370,8 +370,8 @@ export async function rejectProposal(db: D1Database, actor: string, now: Date, i
 // ---------------------------------------------------------------------------
 // Approve all (the canon_approve_all control, src/controls.ts): one decision over the
 // whole pending queue, each proposal still decided by approveProposal or rejectProposal
-// above, so its snapshot, audit row and guards are the single decision's (CLAUDE.md,
-// snapshot rule).
+// above, so its snapshot, audit row and guards are the single decision's
+// (snapshot invariant, test/write-invariants.test.ts).
 
 export type SweepOutcome = "approve" | "superseded" | "outdated";
 

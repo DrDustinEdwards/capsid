@@ -17,8 +17,8 @@ import type { Classification } from "./merge-class";
 //   5. otherwise managePr merge pinned to the approved sha: a 409 voids, "head moved", and
 //      success moves the row to merged with the merge sha.
 // It is the only thing that merges an approved pull request. Every state move is
-// `UPDATE ... WHERE id = ? AND status = 'approved' RETURNING id` (CLAUDE.md, path mutation
-// rule), in one batch with its audit row, written as SYSTEM_ACTOR (src/doc-statements.ts) like the tick's own rows.
+// `UPDATE ... WHERE id = ? AND status = 'approved' RETURNING id`
+// (path mutation invariant, test/path-mutation.test.ts), in one batch with its audit row, written as SYSTEM_ACTOR (src/doc-statements.ts) like the tick's own rows.
 
 const APPROVAL_DAYS = 7;
 const DAY_MS = 86_400_000;

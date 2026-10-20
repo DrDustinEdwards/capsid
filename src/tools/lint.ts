@@ -251,7 +251,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         });
         const path = reportPath(now);
         const body = renderTruthReport(report);
-        // Snapshotted and audited like any other document (CLAUDE.md, snapshot rule).
+        // Snapshotted and audited like any other document (snapshot invariant, test/write-invariants.test.ts).
         const prior = await db
           .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
           .bind(namespace, path)

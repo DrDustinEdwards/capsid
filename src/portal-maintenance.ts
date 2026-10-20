@@ -9,7 +9,7 @@ import { portalGate } from "./portal-auth";
 // the daily maintenance pass stored, the same one capsid_run_improve action status serves per namespace, so
 // the Portal and chat cannot disagree. It reads KV only and runs nothing: the pass runs on
 // the five-minute tick once a day. A route, not a tool, so no grant is checked here
-// (CLAUDE.md, one enforcement point rule): it answers to portalGate, and src/scope.ts lists
+// (one enforcement point, test/route-gates.test.ts): it answers to portalGate, and src/scope.ts lists
 // it among the routes gated some other way.
 
 export const PORTAL_MAINTENANCE_PATH = "/portal/api/maintenance";

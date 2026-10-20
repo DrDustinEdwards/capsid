@@ -85,7 +85,7 @@ describe("the route tables are a statement about the Worker that serves them", (
     }
   });
 
-  // scanner-rule: CLAUDE.md, one enforcement point rule. Derived over UNGATED_ROUTES:
+  // scanner-rule: one enforcement point invariant. Derived over UNGATED_ROUTES:
   // every /portal route but the sign-in callback answers to portalGate, so a route
   // added under /portal without it fails here.
   it("PLANT: every Portal route is behind portalGate: a bearer gets 403 and an anonymous caller the sign-in", async () => {

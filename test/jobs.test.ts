@@ -111,7 +111,7 @@ test("every action the schema advertises is one the tool handles", async () => {
   assert.deepEqual(unhandled, [], `the jobs tool has no branch for: ${unhandled.join(", ")}`);
 });
 
-// scanner-rule: CLAUDE.md, path mutation rule: meta.changes cannot count what a batch did, and every transition is a keyed UPDATE with RETURNING. Derived over every UPDATE in the module
+// scanner-rule: path mutation invariant, test/path-mutation.test.ts: meta.changes cannot count what a batch did, and every transition is a keyed UPDATE with RETURNING. Derived over every UPDATE in the module
 test("every queue transition is a keyed UPDATE with RETURNING, never meta.changes", () => {
   // A transition that read meta.changes would be counting the FTS5 triggers on the
   // document write in the same batch.
@@ -130,7 +130,7 @@ test("every queue transition is a keyed UPDATE with RETURNING, never meta.change
   assert.doesNotMatch(code, /meta\.changes/, "a job module reads meta.changes, which the FTS5 triggers inflate");
 });
 
-// scanner-rule: CLAUDE.md, snapshot rule: every overwrite snapshots and audits. A second write path cannot be exercised before it exists
+// scanner-rule: snapshot invariant, test/write-invariants.test.ts: every overwrite snapshots and audits. A second write path cannot be exercised before it exists
 test("the queue's writes go through the shared document statements, not a second write path", () => {
   // The mirror uses docStatements, which carries document_versions and
   // audit_log in the same batch, rather than spelling its own upsert.

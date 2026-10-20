@@ -40,8 +40,8 @@ import { auditStatement } from "./store-guards";
 // tag that exists (so nothing is retagged or moved), and the decision was the merge. The
 // seat turns it off by setting RELEASE_TAGS_SWITCH_KEY to "off"; off, what would be
 // tagged is listed. At most RELEASE_TAG_CAP tags per run; the rest wait for the next.
-// Each tag is audit-logged, before the next, with the repo, tag and sha (CLAUDE.md,
-// snapshot rule: a write leaves its record). A system action of the pass, like the
+// Each tag is audit-logged, before the next, with the repo, tag and sha
+// (snapshot invariant, test/write-invariants.test.ts: a write leaves its record). A system action of the pass, like the
 // branch prune, so it takes no caller's grant; the writes are the ones guardedWrite
 // files for capsid_close_pr action tag and release, through the same helpers.
 

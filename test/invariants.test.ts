@@ -6,7 +6,7 @@ import { TOOL_GRANTS } from "../src/scope.ts";
 
 // The two write-path invariants, guarded.
 //
-// capsid/conventions.md and this repo's CLAUDE.md both state them as rules:
+// They are:
 //   1. Every overwrite and delete snapshots the prior row into document_versions
 //      and appends to audit_log. "Do not add a write path that skips this."
 //   2. Every mutating tool is gated on the write grant, so an `ro:` key cannot
@@ -48,7 +48,7 @@ const BLOCKS: ToolBlock[] = operationBlocks();
 const WRITE_GATED: ReadonlyArray<string> = ["write", "admin"];
 const READ_ONLY: ReadonlyArray<string> = ["read", "admin_read"];
 
-// scanner-rule: CLAUDE.md, one enforcement point rule (count guard for the scans in this file)
+// scanner-rule: one enforcement point invariant (count guard for the scans in this file)
 test("the block scan found the whole tool surface", () => {
   // Vacuity guard: if this parse broke, every assertion below would pass over an
   // empty list.
@@ -64,7 +64,7 @@ test("the block scan found the whole tool surface", () => {
   assert.ok(sourceFiles().length >= 10, "the src/ walk collapsed to a handful of files");
 });
 
-// scanner-rule: CLAUDE.md, one enforcement point rule, derived over every registration
+// scanner-rule: one enforcement point invariant, derived over every registration
 test("every tool action whose operation contains mutating SQL is gated on the write grant", () => {
   const ungated = BLOCKS.flatMap((b) =>
     MUTATING_SQL.test(b.body) && !SCOPE_GATE.test(b.body)
@@ -80,7 +80,7 @@ test("every tool action whose operation contains mutating SQL is gated on the wr
   );
 });
 
-// scanner-rule: CLAUDE.md, one enforcement point rule, derived over every registration
+// scanner-rule: one enforcement point invariant, derived over every registration
 test("EVERY registered tool has a stated requirement, in both directions", () => {
   // A tool missing from TOOL_GRANTS falls back to `write`, safe but still drift. An
   // entry with no tool means a tool was renamed or removed and its requirement left
@@ -89,7 +89,7 @@ test("EVERY registered tool has a stated requirement, in both directions", () =>
   assert.deepEqual(Object.keys(TOOL_GRANTS).sort(), registered);
 });
 
-// scanner-rule: CLAUDE.md, one enforcement point rule, derived over every registration
+// scanner-rule: one enforcement point invariant, derived over every registration
 test("a tool action marked read does not mutate, which is the claim it would be dangerous to get wrong", () => {
   // A write wrongly marked read is admitted for a read-only caller by the registrar and
   // then writes.
@@ -102,7 +102,7 @@ test("a tool action marked read does not mutate, which is the claim it would be 
   assert.ok(reads >= 8, `only ${reads} operations classify as read; the derivation is broken`);
 });
 
-// scanner-rule: CLAUDE.md, one enforcement point rule (count guard for the scans in this file)
+// scanner-rule: one enforcement point invariant (count guard for the scans in this file)
 test("the gate check is not vacuous: several operations are found to be mutating", () => {
   // If a refactor moved every statement into a helper, the test above would pass
   // by matching nothing. This asserts it is still looking at real mutations.

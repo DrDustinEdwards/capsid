@@ -68,8 +68,8 @@ function jobMirrorRefusal(tool: "write" | "restore" | "delete" | "move", namespa
 
 // A supersedes or replaces edge makes the daily pass mark its target superseded
 // (src/supersede.ts), so it is a change to the target and asks what a write to the target
-// asks: the write grant on its namespace, through checkScope (CLAUDE.md, one enforcement
-// point rule), and the seat for a canon document (Grok audit 2026-10, M4). Other edge
+// asks: the write grant on its namespace, through checkScope
+// (one enforcement point, test/scope.test.ts), and the seat for a canon document (Grok audit 2026-10, M4). Other edge
 // types change nothing and may point anywhere. The refusal, or null.
 function supersedingEdgeRefusal(ctx: ToolCtx, namespace: string, edges: LinkEdge[]): string | null {
   for (const edge of edges) {

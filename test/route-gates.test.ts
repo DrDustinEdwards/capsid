@@ -177,7 +177,7 @@ function dispatches(): { path: string; handler: string }[] {
   return found;
 }
 
-// scanner-rule: CLAUDE.md, one enforcement point rule, every route is a decision. Derived over every dispatch line in src/routes.ts
+// scanner-rule: one enforcement point invariant, every route is a decision. Derived over every dispatch line in src/routes.ts
 test("every route in defaultHandler is either gated through checkScope or listed as ungated with a reason", () => {
   const routes = dispatches();
   const paths = new Set(routes.map((r) => r.path));

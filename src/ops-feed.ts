@@ -33,8 +33,8 @@ import { textResponse } from "./http";
 //
 // Both answer to portalGate, as every Portal route does: the administrator's Access
 // session and the ADMIN_EMAIL or CO_OWNER_EMAILS check on every request, and a 403 for any Authorization header.
-// They are routes, not tools, so no grant is checked here (CLAUDE.md, one enforcement
-// point rule); src/scope.ts lists them among the routes gated some other way.
+// They are routes, not tools, so no grant is checked here
+// (one enforcement point, test/route-gates.test.ts); src/scope.ts lists them among the routes gated some other way.
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.

@@ -28,7 +28,7 @@ import { jsonResponse, textResponse } from "./http";
 // the mutator or changes nothing.
 //
 // Every route answers to portalGate, as the feed does. They are routes, not tools, so
-// no grant is checked here (CLAUDE.md, one enforcement point rule); src/scope.ts lists
+// no grant is checked here (one enforcement point, test/route-gates.test.ts); src/scope.ts lists
 // them among the routes gated some other way.
 
 export const PORTAL_PREVIEW_PATH = "/portal/api/actions/preview";

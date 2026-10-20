@@ -263,7 +263,7 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
 });
 
 describe("the capsid_admin_read_claims tool, refused", () => {
-  // scanner-rule: CLAUDE.md, one enforcement point rule. capsid_admin_read_claims is
+  // scanner-rule: one enforcement point, test/scope.test.ts. capsid_admin_read_claims is
   // admin_read in TOOL_GRANTS (the admin identity with the read grant); the refusal
   // must be checkScope's, before the handler reads anything. The route serves Capsid
   // Admin to the administrator alone, and the registrar refuses a non-admin again, which

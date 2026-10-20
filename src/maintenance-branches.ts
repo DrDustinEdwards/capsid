@@ -109,7 +109,7 @@ export async function gatherBranchItems(
     if (settings.prune) {
       // One audit row per deleted branch, written before the next delete, with the sha it
       // pointed at: the deletion is put back by pushing that sha to the branch name
-      // (CLAUDE.md, snapshot rule). A failed audit write stops the deletes and the pass.
+      // (snapshot invariant, test/write-invariants.test.ts). A failed audit write stops the deletes and the pass.
       const done = await readers.prune(plan, PRUNE_CAP, async (c) => {
         await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, { repo: plan.repo, branch: c.branch, sha: c.sha, pr: c.pr }).run();
       });

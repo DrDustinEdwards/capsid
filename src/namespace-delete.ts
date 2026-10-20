@@ -23,8 +23,8 @@ import { pathMutation } from "./tools/docs";
 //
 // WHAT IS DELETED: every live document (any path not under archive/), each snapshotted
 // to document_versions inside the batch before it goes and removed by
-// pathMutation(db, ns, path, null), the one path mutation site (CLAUDE.md, path
-// mutation rule); every edge touching one of those documents, removed by the same
+// pathMutation(db, ns, path, null), the one path mutation site
+// (path mutation invariant, test/path-mutation.test.ts); every edge touching one of those documents, removed by the same
 // helper and recorded whole in the audit row; the ops_sites row and the
 // access_sync_groups pin, each recorded whole in the audit row; and the namespaces row.
 //
@@ -526,7 +526,7 @@ function planGuard(db: D1Database, plan: DeletePlan, pathsJson: string): D1Prepa
 /**
  * The perform: the token, the plan read again, then one batch. Each live document is
  * deleted by pathMutation(db, namespace, path, null), the one site that deletes a
- * documents row (CLAUDE.md, path mutation rule), so the batch is FIXED_STATEMENTS plus
+ * documents row (path mutation invariant, test/path-mutation.test.ts), so the batch is FIXED_STATEMENTS plus
  * two per document and the cap refuses anything larger before it is built.
  */
 export async function performNamespaceDelete(
@@ -639,7 +639,7 @@ export async function performNamespaceDelete(
     return { ok: false, refusal: `delete_namespace failed, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
   }
 
-  // Counted from RETURNING, never meta.changes (CLAUDE.md, path mutation rule). The
+  // Counted from RETURNING, never meta.changes (path mutation invariant, test/path-mutation.test.ts). The
   // batch committed, so the guard held: the live set was exactly `paths`, and
   // pathMutation deleted each of them.
   const snapshots = rows(results[1]).length;

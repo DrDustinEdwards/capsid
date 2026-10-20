@@ -19,7 +19,7 @@ import { logEvent } from "./log";
 //     ran                              'cleared', reopen_after = now + REOPEN_QUIET_MS
 //
 // Every write is keyed on the fingerprint, and a state move is an UPDATE guarded by
-// the state it was read in, with RETURNING (CLAUDE.md, path mutation rule): two passes
+// the state it was read in, with RETURNING (path mutation invariant, test/path-mutation.test.ts): two passes
 // racing (the tick and the Portal's Refresh) cannot both move a row, and the loser is
 // told. The queue's own unique index still refuses a second open job with one title,
 // so a lost race here posts nothing twice.

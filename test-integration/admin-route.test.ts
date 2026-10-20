@@ -19,7 +19,7 @@ import { cimdClient, cimdResponse } from "./cimd-stub";
 //   /ops/mcp        Capsid's 14 and no capsid_admin_ tool, even for the admin key.
 //   /mcp/admin      the administrator's OAuth session, which lists the 8 admin tools.
 //
-// The calls are the ones CLAUDE.md, verify a deploy rule, makes: initialize,
+// The calls are the ones .claude/rules/deploy.md names: initialize,
 // notifications/initialized, tools/list, in the 2025-11-25 era.
 
 const ORIGIN = "https://mcp.dustinedwards.info";
