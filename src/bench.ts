@@ -10,6 +10,7 @@ import { noFlags } from "./agents-schema";
 import { adminFailJob, supersedeJob, workRecorded } from "./jobs-seat";
 import { readJob } from "./jobs-transition";
 import { isMissingRowAbort, requireBenchRunRunning } from "./store-guards";
+import { textResponse } from "./http";
 
 // THE METHODS PAPER'S PAIRED COMPARISON, the Worker's half (job_ecb1b5f80c2d;
 // capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
@@ -69,10 +70,6 @@ const BENCH_ARMS = ["baseline", "treatment", "check-gold", "check-false-claim"] 
 type Arm = (typeof BENCH_ARMS)[number];
 
 type Refusal = { ok: false; refusal: string };
-
-function textResponse(message: string, status: number): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
-}
 
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 const isCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;

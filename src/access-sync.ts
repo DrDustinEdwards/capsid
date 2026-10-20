@@ -5,6 +5,7 @@ import { readBoundedText } from "./signed-requests";
 import { checkRate, type RateLimitPolicy } from "./rate-limit";
 import { checkScope } from "./scope";
 import { auditStatement } from "./store-guards";
+import { textResponse } from "./http";
 
 // THE CLOUDFLARE ACCESS SYNC (job_d0fabaadecb1; design docs/design/design-identity-roles.md,
 // "The Cloudflare sync"; Dustin's rulings of 2026-10-09, people and roles, points 1 and 2).
@@ -352,34 +353,32 @@ const defaultDeps = (): SyncDeps => ({ fetch: (input, init) => fetch(input, init
  * pin, then Cloudflare, so a refused caller spends nothing and reaches nothing.
  */
 export async function handleAccessSync(request: Request, env: Env, deps: SyncDeps = defaultDeps()): Promise<Response> {
-  const plain = (message: string, status: number, extra: Record<string, string> = {}) =>
-    new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store", ...extra } });
   const caller = await resolveAgent(request, env);
-  if (!caller) return plain("unauthorized: the app's own agent key is required", 401, { "WWW-Authenticate": 'Bearer realm="capsid-operator"' });
+  if (!caller) return textResponse("unauthorized: the app's own agent key is required", 401, { "WWW-Authenticate": 'Bearer realm="capsid-operator"' });
   const bounded = await readBoundedText(request, MAX_ACCESS_SYNC_BYTES);
-  if (!bounded.ok) return plain(`request too large: exceeds ${MAX_ACCESS_SYNC_BYTES} bytes`, 413);
+  if (!bounded.ok) return textResponse(`request too large: exceeds ${MAX_ACCESS_SYNC_BYTES} bytes`, 413);
   let body: unknown;
   try {
     body = JSON.parse(bounded.text);
   } catch {
-    return plain("the body must be JSON", 400);
+    return textResponse("the body must be JSON", 400);
   }
   const namespace = (body as { namespace?: unknown } | null)?.namespace;
-  if (typeof namespace !== "string" || namespace === "") return plain("namespace is required", 400);
+  if (typeof namespace !== "string" || namespace === "") return textResponse("namespace is required", 400);
   const refusal = syncCallerRefusal(caller.agent, namespace);
-  if (refusal) return plain(refusal, 403);
+  if (refusal) return textResponse(refusal, 403);
   const parsed = parseSyncBody(body);
-  if (!parsed.ok) return plain(parsed.refusal, 400);
+  if (!parsed.ok) return textResponse(parsed.refusal, 400);
   const rate = await checkRate(env.APP_KV, caller.agent.actor, deps.now, ACCESS_SYNC_LIMIT);
   if (!rate.allowed) {
     return rate.window === "unavailable"
-      ? plain(`the sync rate limit could not be read, so the sync is refused: ${rate.detail}`, 503, { "Retry-After": "60" })
-      : plain(`at most ${rate.limit} syncs per ${rate.window} per key; try again later`, 429, { "Retry-After": rate.window === "hour" ? "3600" : "86400" });
+      ? textResponse(`the sync rate limit could not be read, so the sync is refused: ${rate.detail}`, 503, { "Retry-After": "60" })
+      : textResponse(`at most ${rate.limit} syncs per ${rate.window} per key; try again later`, 429, { "Retry-After": rate.window === "hour" ? "3600" : "86400" });
   }
   const pinned = await deps.pinned(env.DB, namespace);
-  if (!pinned) return plain(`no Access group is pinned for ${namespace}; the seat adds its row to access_sync_groups`, 409);
+  if (!pinned) return textResponse(`no Access group is pinned for ${namespace}; the seat adds its row to access_sync_groups`, 409);
   const creds = syncCredentials(env);
-  if (!creds.ok) return plain(creds.reason, 503);
+  if (!creds.ok) return textResponse(creds.reason, 503);
 
   const result = await runSync(deps.fetch, creds.token, creds.account, pinned, parsed.value);
   await auditStatement(env.DB, caller.agent.actor, ACCESS_SYNC_ACTION, namespace, null, {

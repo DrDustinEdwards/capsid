@@ -3,6 +3,7 @@ import { OPS_RETURN_TO } from "./ops-feed";
 import { packageHistory, readPackageRow, type FetchLike } from "./ops-packages";
 import { portalGate } from "./portal-auth";
 import { readSharedCode } from "./shared-code";
+import { textResponse } from "./http";
 
 // The Packages view's on-demand history: GET /portal/api/packages/history?name=. The
 // daily downloads come from npm's range API when the view asks, not pass by pass
@@ -13,10 +14,6 @@ import { readSharedCode } from "./shared-code";
 // fetch any name from npm.
 
 export const PORTAL_PACKAGE_HISTORY_PATH = "/portal/api/packages/history";
-
-function textResponse(message: string, status: number): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
-}
 
 export async function handlePortalPackageHistory(
   request: Request,

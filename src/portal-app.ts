@@ -2,6 +2,7 @@ import { DASHBOARD_CSP } from "./dashboard-csp";
 import type { Env } from "./env";
 import { PORTAL_PATH, portalGate } from "./portal-auth";
 import { portalBase } from "./portal-host";
+import { textResponse as text } from "./http";
 
 // Capsid Portal's built files, served at /portal/ (capsid/research/design-ops-console.md,
 // moved from /console/app/ by capsid/research/design-portal-unify.md). Every request
@@ -29,10 +30,6 @@ const HASHED_ASSET_PREFIX = "/assets/";
 
 const NOT_DEPLOYED =
   "Capsid Portal is not deployed: this Worker has no ASSETS binding. The built app (dashboard/dist) is served only when the deploy config declares it.";
-
-function text(message: string, status: number, extra: Record<string, string> = {}): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store", ...extra } });
-}
 
 /** A navigation, as opposed to a script or fetch asking for a file: the only kind that
  *  falls back to the app's page, so a client route such as /portal/jobs loads the app

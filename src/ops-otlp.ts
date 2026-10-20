@@ -1,6 +1,7 @@
 import { readBoundedText } from "./signed-requests";
 import { resolveSessionCaller, type SessionCaller } from "./ops-session-auth";
 import { logEvent } from "./log";
+import { jsonResponse as json, textResponse as plain } from "./http";
 
 // Claude Code's OpenTelemetry, received as OTLP/HTTP JSON (docs/telemetry.md).
 //
@@ -316,14 +317,6 @@ function upsertUsage(
            RETURNING session_id`
         );
   return statement.bind(w.session_id, jobId, w.metric, w.kind, w.model, w.value, at, actor);
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
-}
-
-function plain(message: string, status: number): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 /** The request body as text: identity or gzip, at most OTLP_MAX_BYTES either side of

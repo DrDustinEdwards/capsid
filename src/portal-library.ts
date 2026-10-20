@@ -4,6 +4,7 @@ import { MAX_NAMESPACE, MAX_QUERY, MAX_ROWS, pathProblem, SEARCH_ROWS } from "./
 import { OPS_RETURN_TO } from "./ops-feed";
 import type { LibraryEntry, LibraryShelf, PortalLibrary } from "./ops-types";
 import { portalGate } from "./portal-auth";
+import { jsonResponse as json } from "./http";
 
 // The Portal's Library: GET /portal/api/library, read-only, over the knowledge store
 // (capsid/decisions.md 2026-10-09, Portal review item 4: "The knowledge store is NOT
@@ -27,10 +28,6 @@ const LIBRARY_MARK_CLOSE = "\u0003";
 function shelfOf(row: Pick<LibraryEntry, "type" | "path">): LibraryShelf {
   if (row.type === "decision") return "decisions";
   return row.path.startsWith("rulings/") ? "rulings" : "research";
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }
 
 function param(url: URL, name: string): string | null {

@@ -3,6 +3,7 @@ import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalDigest, PortalPlan } from "./ops-types";
 import { digestSinceFrom, readOvernightDigest, readOvernightPlan } from "./overnight-plan";
 import { portalGate } from "./portal-auth";
+import { jsonResponse as json } from "./http";
 
 // The Portal's Tonight plan and its "since you last looked" strip
 // (docs/design/design-portal-evaluation.md, DECIDE 3, ruled 2026-10-09):
@@ -15,8 +16,6 @@ import { portalGate } from "./portal-auth";
 
 export const PORTAL_PLAN_PATH = "/portal/api/plan";
 export const PORTAL_DIGEST_PATH = "/portal/api/digest";
-
-const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 
 /** GET /portal/api/plan: what an overnight run would work, per repo, and what it skips. */
 export async function handlePortalPlan(request: Request, env: Env, now: Date = new Date()): Promise<Response> {

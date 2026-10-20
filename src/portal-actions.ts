@@ -9,6 +9,7 @@ import { readBoundedText } from "./signed-requests";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import type { PortalActivity, PortalNamespaces, PortalPerformed } from "./ops-types";
 import { logEvent } from "./log";
+import { jsonResponse, textResponse } from "./http";
 // The Portal's routes for the controls (src/controls.ts holds the controls): the eight actions, what each will do, the one dispatch to the
 // shared mutators, and the routes the app calls (the contract is the bottom of
 // src/ops-types.ts). They replaced the old /console page's forms, which called this
@@ -47,17 +48,6 @@ const BODY_MAX_BYTES = 65_536;
 
 // ---------------------------------------------------------------------------
 // The routes.
-
-function textResponse(message: string, status: number): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
-}
-
-function jsonResponse(body: unknown, extra: Record<string, string> = {}, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...extra },
-  });
-}
 
 
 type Gated = { ok: true; email: string; user: PortalUser; csrf: string; body: Record<string, unknown> } | { ok: false; response: Response };
@@ -143,7 +133,7 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
   }
   const performed: PortalPerformed = { action, summary: result.summary, warning: result.warning, feed: { ...data, csrf: gated.csrf, user: portalDisplay(gated.user) } };
   // A header value must be printable Latin-1; the error text is not guaranteed to be.
-  return jsonResponse(performed, result.warning ? { "X-Capsid-Warning": result.warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
+  return jsonResponse(performed, 200, result.warning ? { "X-Capsid-Warning": result.warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
 }
 
 /** GET /portal/api/namespaces: every roster namespace as capsid_run_improve action status reports it,
@@ -170,7 +160,7 @@ export async function handlePortalActivity(request: Request, env: Env, now: Date
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const parsed = activityFilterFrom(new URL(request.url));
-  if (!parsed.ok) return new Response(parsed.refusal, { status: 400, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
+  if (!parsed.ok) return textResponse(parsed.refusal, 400);
   const filter = parsed.filter;
   const rows = await loadActivity(env.DB, filter);
   const body: PortalActivity = {
@@ -201,5 +191,5 @@ export async function handlePortalApiNotFound(request: Request, env: Env, now: D
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const path = new URL(request.url).pathname;
-  return jsonResponse({ error: `no Portal route at ${request.method} ${path}` }, {}, 404);
+  return jsonResponse({ error: `no Portal route at ${request.method} ${path}` }, 404);
 }

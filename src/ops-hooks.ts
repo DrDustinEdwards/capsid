@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { readBoundedText } from "./signed-requests";
 import { resolveSessionCaller } from "./ops-session-auth";
+import { textResponse } from "./http";
 
 // The hook receiver: POST /ops/hooks. Claude Code's HTTP hooks post each event's input
 // JSON here (docs/hooks.md), and this keeps a SUMMARY of each session in agent_sessions
@@ -299,10 +300,6 @@ export function hookStatements(db: D1Database, actor: string, binding: HookBindi
       )
       .bind(PRUNE_BATCH, cutoff),
   ];
-}
-
-function textResponse(message: string, status: number, extra: Record<string, string> = {}): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store", ...extra } });
 }
 
 export async function handleOpsHooks(request: Request, env: Env, ctx: ExecutionContext | null, now: Date = new Date()): Promise<Response> {

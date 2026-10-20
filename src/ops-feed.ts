@@ -24,6 +24,7 @@ import { openQuietFindings } from "./watcher-digest";
 import { DEFAULT_CADENCE_MINUTES, gatherFindings, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
 import { logEvent } from "./log";
 import { pendingProposals } from "./canon";
+import { textResponse } from "./http";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
 // /portal/api/ops returns OpsFeed (src/ops-types.ts), the watcher's last pass from KV
@@ -428,10 +429,6 @@ function feedResponse(request: Request, user: PortalUser, data: OpsFeedData, ext
   const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store", ...extra });
   if (csrf.setCookie) headers.set("Set-Cookie", csrf.setCookie);
   return new Response(JSON.stringify(feed), { status: 200, headers });
-}
-
-function textResponse(message: string, status: number, extra: Record<string, string> = {}): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store", ...extra } });
 }
 
 // What the two handlers can be handed in a test in place of the live reads. The

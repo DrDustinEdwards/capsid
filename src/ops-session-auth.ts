@@ -1,5 +1,6 @@
 import { resolveAgent, type Agent } from "./agents";
 import { checkScope, JOBS_TOOL } from "./scope";
+import { textResponse as text } from "./http";
 
 // Who is reporting on a Claude Code session, and which job that session is working.
 // The one caller check for the receivers a session posts to on its own: the hook
@@ -27,10 +28,6 @@ export interface SessionCaller {
   namespace: string | null;
   // last_seen, best effort, after the answer (see handleOperatorMcp in src/routes.ts).
   touch: () => Promise<void>;
-}
-
-function text(message: string, status: number, extra: Record<string, string> = {}): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store", ...extra } });
 }
 
 /** Why this agent may not report on a session, or null. */
