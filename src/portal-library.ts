@@ -7,9 +7,7 @@ import { portalGate } from "./portal-auth";
 import { jsonResponse as json } from "./http";
 
 // The Portal's Library: GET /portal/api/library, read-only, over the knowledge store
-// (capsid/decisions.md 2026-10-09, Portal review item 4: "The knowledge store is NOT
-// chat-only: it gets the read-only Library page"; experience review answer 11: search,
-// decisions, rulings, research, links to jobs). Writing stays in chat and with drivers.
+// (search, decisions, rulings, research, links to jobs). Writing stays in chat and with drivers.
 // Search, one document and its edges go through src/doc-reads.ts, the readers behind
 // capsid_find_docs and capsid_read_doc, so the Library and chat cannot disagree. A route,
 // not a tool, so no grant is checked here (CLAUDE.md, one enforcement point rule): it

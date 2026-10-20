@@ -12,7 +12,7 @@ export function defineClaimsOperations(server: McpServer, ctx: ToolCtx): void {
 
   // What agents said about their work beside what the Worker verified, and every time a
   // human touched a job (migrations/0023_job_claims.sql). Ruled 2026-09-29, "Capsid MCP
-  // roadmap, build or don't build" (capsid/decisions.md). Admin only in whole: the
+  // roadmap, build or don't build". Admin only in whole: the
   // tables span every namespace and every agent, and the export is the whole dataset.
   // TOOL_GRANTS.capsid_admin_read_claims in src/scope.ts states it and the registrar refuses anyone else
   // before this handler runs. It reads only, through src/job-claims-read.ts, which the

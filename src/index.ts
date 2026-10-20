@@ -47,8 +47,7 @@ const apiHandler = {
     // acts through. It never refuses on what the client says.
     await recordAdminInitialize(env.DB, admin.actor, request);
     const observe = adminWriteObserver(env.DB, admin.actor, request.headers.get("User-Agent"));
-    // Capsid Admin on its own route (capsid/rulings/mcp-2026-10-10.md, amendment answer
-    // 2): the eight administrator tools, never on /mcp. Only the administrator's grant
+    // Capsid Admin on its own route: the eight administrator tools, never on /mcp. Only the administrator's grant
     // reaches this handler at all, and the step-up in src/scope.ts guards its risky actions.
     if (adminRoute) {
       return serveMcp(request, env, ctx, ADMIN_MCP_ROUTE, () => buildAdminServer(env, admin, "", observe));
@@ -88,7 +87,7 @@ function oauthProvider(resource: string, registration: boolean) {
     // the URL of its metadata document. The provider advertises CIMD only while the
     // global_fetch_strictly_public compatibility flag is set (wrangler.jsonc.example).
     clientIdMetadataDocumentEnabled: true,
-    // Tightened DCR for Grok and Gemini (capsid/rulings/mcp-2026-10-10.md, rule 13), on
+    // Tightened DCR for Grok and Gemini, on
     // the MCP host only: src/dcr.ts judges every registration before the provider
     // sees it. The old address keeps none; it is going.
     ...(registration ? { clientRegistrationEndpoint: REGISTER_PATH } : {}),

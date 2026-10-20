@@ -7,7 +7,7 @@ import { textResponse } from "./http";
 
 // The Packages view's on-demand history: GET /portal/api/packages/history?name=. The
 // daily downloads come from npm's range API when the view asks, not pass by pass
-// (capsid/decisions.md, 2026-09-29), and are cached (src/ops-packages.ts). A route, not
+// and are cached (src/ops-packages.ts). A route, not
 // a tool, so no grant is checked here (CLAUDE.md, one enforcement point rule): it
 // answers to portalGate, and src/scope.ts lists it among the routes gated some other
 // way. Only a configured package can be asked for, so the route cannot be used to

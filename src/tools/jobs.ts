@@ -42,8 +42,8 @@ function reply(result: JobResult) {
 export function defineJobOperations(server: McpServer, ctx: ToolCtx): void {
   const { env, agent } = ctx;
 
-  // The work queue's one tool, a ruled exception to the tool surface rule (CLAUDE.md;
-  // capsid/decisions.md). Its actions share one tool because they are one subsystem
+  // The work queue's one tool, a ruled exception to the tool surface rule (CLAUDE.md).
+  // Its actions share one tool because they are one subsystem
   // with one row shape, and a caller that has the tool has the whole lifecycle.
   ctx.ops.define(
     "jobs",

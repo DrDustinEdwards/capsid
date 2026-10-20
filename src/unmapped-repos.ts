@@ -3,7 +3,7 @@ import { listInstalledRepos, type InstalledRepo } from "./github/client";
 
 // Repos the GitHub App can see that no namespace maps. A repo is reachable through
 // Capsid's tools only if a namespace maps it, and the mapping is the authorization
-// boundary (capsid/decisions.md 2026-09-13), so this module only finds the gap. It never
+// boundary, so this module only finds the gap. It never
 // maps: the seat or Dustin does, through capsid_admin_manage_namespaces action update.
 
 // Repos that are unmapped on purpose (archived, frozen, or deleted soon), one owner/name

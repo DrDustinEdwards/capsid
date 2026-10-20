@@ -963,7 +963,7 @@ test("PLANT: performing the subscription choice stores the mode and the decision
   const decision = JSON.parse((await w.kv.kv.get("overnight:decision")) ?? "null");
   assert.equal(decision.decided_by, "Dustin Edwards");
   assert.equal(decision.decided_on, "2026-10-04");
-  assert.match(decision.ruling, /capsid\/decisions\.md, 2026-10-04/);
+  assert.match(decision.ruling, /^2026-10-04: overnight runs may use the subscription/);
   assert.match(decision.reasoning, /not shared/);
   assert.equal(decision.set_by, ACTOR);
   assert.equal(decision.set_at, NOW.toISOString());

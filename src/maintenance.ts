@@ -9,8 +9,7 @@ import { gatherModelDriftItems } from "./model-drift";
 import { bundledModel } from "./public-data";
 import { gatherRuleDocItems } from "./rule-docs";
 
-// The actor the merge-resume step records its touches under (capsid/decisions.md,
-// 2026-10-03, stale jobs D1). Spelled here, not imported, so this pass does not depend on
+// The actor the merge-resume step records its touches under. Spelled here, not imported, so this pass does not depend on
 // that step's pull request having landed: until it does, the query finds no rows.
 const MERGE_RESUME_ACTOR = "system:merge-resume";
 

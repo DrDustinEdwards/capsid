@@ -122,7 +122,7 @@ async function holderTransition(
     // work. The caller is only the actor on the audit, mirror and claim rows.
     seatCloses?: boolean;
     // The seat recording the outcome of work done on a QUEUED job nobody claimed
-    // (recordAsSeat; capsid/rulings/mcp-2026-10-10.md, amendment answer 2). The row must
+    // (recordAsSeat). The row must
     // be queued and unheld; the UPDATE credits the recorder as claimed_by, so the outcome
     // row names who said the work was done. recordVerb names the audit and mirror action:
     // "record" for the seat's record, "complete-unclaimed" for a session completing its own

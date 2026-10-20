@@ -191,6 +191,7 @@ test("canon is the conventions, decisions, rulings and every core.md; keys alway
   assert.ok(isCanon("capsid", "conventions-cloud.md"));
   assert.ok(isCanon("capsid", "rulings/testing-2026-10-04.md"));
   assert.ok(isCanon("capsid", "archive/decisions-vol-8.md"));
+  assert.ok(!isCanon("capsid", "decisions.md"), "the old decisions log is gone");
   assert.ok(isCanon("sample", "core.md"));
   assert.ok(!isCanon("capsid", "archive/decisions-vol-1.md"), "a closed log volume is history");
   assert.ok(!isCanon("sample", "rulings/x.md"), "rulings are capsid's");

@@ -4,8 +4,7 @@ import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
 
-// The packages Capsid Portal watches (job_c6e4ab939a54). Ruling: capsid/decisions.md,
-// 2026-09-29, "Portal monitoring is optional and configured per install; packages panel
+// The packages Capsid Portal watches (job_c6e4ab939a54). Ruled 2026-09-29: "Portal monitoring is optional and configured per install; packages panel
 // approved". Configured like the sites (src/ops-sites.ts): rows in D1 (ops_packages,
 // migrations/0028) edited in the Portal's Settings view through the same preview and
 // perform. With no row, the watcher reads nothing for packages and the Portal hides the

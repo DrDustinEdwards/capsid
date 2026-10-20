@@ -989,7 +989,7 @@ export interface PortalStale {
 }
 
 // GET /portal/api/library -> PortalLibrary (src/portal-library.ts). The read-only Library
-// over the knowledge store (capsid/decisions.md 2026-10-09, Portal review item 4). One of
+// over the knowledge store. One of
 // three answers, by the query string: the shelves (no query), a search (?q=) or one
 // document (?ns=&path=). Writing stays in chat and with drivers.
 export type LibraryShelf = "decisions" | "rulings" | "research";

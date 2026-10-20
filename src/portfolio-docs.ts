@@ -1,8 +1,8 @@
 // The portfolio documents every namespace driver may READ in capsid, and nothing else
 // there.
 //
-// Every repo's CLAUDE.md tells a session to follow capsid/conventions.md, the rulings
-// and the decisions log, but a driver minted for one namespace was refused all of
+// Every repo's CLAUDE.md tells a session to follow capsid/conventions.md and Dustin's
+// rulings, but a driver minted for one namespace was refused all of
 // them, so it worked from its repo's CLAUDE.md and the job bodies alone. This is the
 // one statement of what crosses that boundary. checkScope (src/scope.ts) admits a read
 // of a path matched here, the list, glob and search handlers drop every other capsid
@@ -12,14 +12,12 @@
 // test/portfolio-docs.test.ts pins this constant.
 export const PORTFOLIO_DOCS = {
   namespace: "capsid",
-  // Exact paths. The conventions topic files hold the rules conventions.md sends a session
-  // to before work they cover (job_c13dc0d4f22f); conventions-improve.md is Capsid's own.
-  documents: ["conventions.md", "conventions-web.md", "conventions-cloudflare.md", "conventions-testing.md", "conventions-routing.md", "conventions-cloud.md", "conventions-names.md", "conventions-store.md", "core.md", "decisions.md"],
-  // A decisions volume: the prefix, then a volume number, then ".md". The live log
-  // opens decisions-vol-<n>.md when decisions.md reaches its cap, and a closed volume
-  // moves to archive/decisions-vol-<n>.md.
-  volumes: ["decisions-vol-", "archive/decisions-vol-"],
-  // One document directly inside the folder, no deeper.
+  // Exact paths. conventions.md is the one rules file.
+  documents: ["conventions.md", "core.md"],
+  // An archived decisions volume: the prefix, then a volume number, then ".md". The
+  // old decisions log is history kept under archive/; new rulings go in rulings/.
+  volumes: ["archive/decisions-vol-"],
+  // One document directly inside the folder, no deeper. One ruling per file.
   folders: ["rulings/"],
   // The tool actions that may reach capsid for such a caller, as tool.action. Each
   // requires only the read grant (TOOL_GRANTS). A document's versions and links stay

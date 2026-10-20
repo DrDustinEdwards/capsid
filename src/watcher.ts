@@ -645,9 +645,9 @@ export function siteMapFindings(drift: SiteMapDrift): Finding[] {
 }
 
 /** One finding per repo the GitHub App can see that no namespace maps, naming it and the
- *  namespace its name suggests. It proposes; mapping is admin-only and never automatic
- *  (capsid/decisions.md 2026-09-13). Every finding says what the read covered, so a clear
- *  pass is never "0 unmapped" over "0 listed". */
+ *  namespace its name suggests. It proposes; mapping is admin-only and never automatic.
+ *  Every finding says what the read covered, so a clear pass is never "0 unmapped"
+ *  over "0 listed". */
 function unmappedRepoFindings(read: RepoMapRead): Finding[] {
   const covered = `the App's ${read.installations} installation(s) list ${read.installed.length} repos; ${read.mapped.size} are mapped to a namespace; ${read.onPurpose.size} are named unmapped on purpose`;
   return unmappedRepos(read).map((r) =>

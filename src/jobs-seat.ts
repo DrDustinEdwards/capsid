@@ -183,8 +183,7 @@ async function adminCompleteJob(
 }
 
 // record through the work queue tool: the seat writing the outcome of work done on a
-// queued job without a claim (capsid/rulings/mcp-2026-10-10.md, amendment answer 2,
-// "recording a job outcome without claiming"). The seat only, as for completing a job
+// queued job without a claim. The seat only, as for completing a job
 // somebody else blocked, because an outcome credits work and a driver could otherwise
 // record work it did not do. The evidence is verified against GitHub as for a complete.
 export async function recordAsCaller(env: Env, agent: Agent, now: Date, id: string, args: Parameters<typeof completeJob>[4]): Promise<JobResult> {
@@ -836,8 +835,7 @@ export async function resumeJob(
 
 /** The actor that returns a blocked job whose pull requests have all merged
  *  (src/merge-resume.ts). A system actor, not a caller: it holds no grant, passes no
- *  checkScope, and can do exactly what autoResumeJob does. (capsid/decisions.md,
- *  2026-10-03, stale jobs D1.) */
+ *  checkScope, and can do exactly what autoResumeJob does. */
 export const MERGE_RESUME_ACTOR = "system:merge-resume";
 
 /** Resume a BLOCKED job to its holder, or to the queue when the holder cannot act, on

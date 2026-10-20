@@ -12,7 +12,7 @@ export function defineOpsSnapshotOperations(server: McpServer, ctx: ToolCtx): vo
 
   // The watcher's last pass, the value the Portal's Watch Floor reads (ops:snapshot in
   // APP_KV, src/ops-snapshot.ts). Ruled 2026-09-29, "Capsid MCP roadmap, build or don't
-  // build" (capsid/decisions.md). Admin only in whole: the snapshot spans every
+  // build". Admin only in whole: the snapshot spans every
   // namespace's sites, CI and Cloudflare state. TOOL_GRANTS.capsid_admin_read_ops in src/scope.ts
   // states it and the registrar refuses anyone else before this handler runs. It reads
   // one KV value and writes nothing.

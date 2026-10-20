@@ -3,8 +3,7 @@ import { CF_API, cfGet, cloudflareCredentials, CfReadError, type FetchLike } fro
 import { readSiteRow } from "./ops-sites";
 import { externalFence } from "./provenance";
 
-// Cloudflare Workers Builds, read (capsid/rulings/mcp-2026-10-10.md, amendment answer 2:
-// "Cloudflare Workers Builds status and logs in read_ops"), served as
+// Cloudflare Workers Builds, read, served as
 // capsid_admin_read_ops actions builds and build_logs. The Builds API identifies a Worker
 // by its tag (external_script_id), not its name, so a name is resolved through the
 // account's script list first (developers.cloudflare.com/workers/ci-cd/builds/api-reference).

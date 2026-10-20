@@ -4,7 +4,7 @@ import { callerIp, checkRate, type RateLimitPolicy } from "./rate-limit";
 import { logEvent } from "./log";
 import { jsonResponse } from "./http";
 
-// Tightened Dynamic Client Registration (capsid/rulings/mcp-2026-10-10.md, rule 13).
+// Tightened Dynamic Client Registration.
 // Claude, Claude Code and ChatGPT sign in by Client ID Metadata Document. Grok and
 // Gemini still need DCR as of 2026-10-09, so POST /register is back, tightened:
 //

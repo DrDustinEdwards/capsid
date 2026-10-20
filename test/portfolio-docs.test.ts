@@ -8,22 +8,17 @@ import { isPortfolioPath, PORTFOLIO_DOCS } from "../src/portfolio-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, type DocRow } from "./fakes.ts";
 
 // Every namespace driver may READ the portfolio documents in capsid (conventions, the
-// decisions log and its volumes, the rulings, capsid's core) and nothing else there.
+// archived decisions volumes, the rulings, capsid's core) and nothing else there.
 // Every call goes through a real MCP client, so the registrar's check and the listing
 // handlers' filters are both on the path.
 
-// The allowed paths as they exist in the store on 2026-10-08, plus capsid's core.
+// The allowed paths as they exist in the store on 2026-10-20.
 const ALLOWED = [
   "conventions.md",
-  "conventions-web.md",
-  "conventions-store.md",
   "core.md",
-  "decisions.md",
-  "decisions-vol-4.md",
-  "decisions-vol-5.md",
   "archive/decisions-vol-1.md",
   "archive/decisions-vol-7.md",
-  "rulings/testing-2026-10-04.md",
+  "rulings/remove-improve-loop-2026-10-19.md",
   "rulings/shared-homes-2026-10-06.md",
 ];
 
@@ -35,6 +30,9 @@ const DENIED = [
   "repo-structure.md",
   "conventions-improve.md",
   "conventions-capsid.md",
+  "conventions-web.md",
+  "decisions.md",
+  "decisions-vol-5.md",
   "rulings-secret/plan.md",
   "rulings/deeper/nested.md",
   "archive/decisions-notes.md",
@@ -94,8 +92,8 @@ const paths = (r: Result): string[] => (JSON.parse(r.text) as { documents: Array
 test("PORTFOLIO_DOCS is exactly the documents, volumes, folder and tool actions this test names", () => {
   assert.deepEqual(PORTFOLIO_DOCS, {
     namespace: "capsid",
-    documents: ["conventions.md", "conventions-web.md", "conventions-cloudflare.md", "conventions-testing.md", "conventions-routing.md", "conventions-cloud.md", "conventions-names.md", "conventions-store.md", "core.md", "decisions.md"],
-    volumes: ["decisions-vol-", "archive/decisions-vol-"],
+    documents: ["conventions.md", "core.md"],
+    volumes: ["archive/decisions-vol-"],
     folders: ["rulings/"],
     tools: ["capsid_read_doc.read", "capsid_find_docs.list", "capsid_find_docs.glob", "capsid_find_docs.search"],
   });
@@ -106,11 +104,11 @@ test("isPortfolioPath admits the allowed paths and refuses traversal, case, enco
   const refused = [
     ...DENIED,
     "rulings/../policy/gates.md",
-    "rulings/./testing-2026-10-04.md",
+    "rulings/./remove-improve-loop-2026-10-19.md",
     "rulings/%2e%2e/policy/gates.md",
     "rulings/%2E%2E/policy/gates.md",
     "rulings\\..\\policy\\gates.md",
-    "Rulings/testing-2026-10-04.md",
+    "Rulings/remove-improve-loop-2026-10-19.md",
     "CONVENTIONS.md",
     "Conventions.md",
     "conventions.md/",
@@ -119,10 +117,10 @@ test("isPortfolioPath admits the allowed paths and refuses traversal, case, enco
     "/conventions.md",
     "./conventions.md",
     "conventions.md ",
-    "rulings//testing-2026-10-04.md",
-    "decisions-vol-0.md",
-    "decisions-vol-.md",
-    "decisions-vol-5.md.bak",
+    "rulings//remove-improve-loop-2026-10-19.md",
+    "archive/decisions-vol-0.md",
+    "archive/decisions-vol-.md",
+    "archive/decisions-vol-5.md.bak",
     "archive/archive/decisions-vol-1.md",
     "x/conventions.md",
     "",
@@ -156,7 +154,7 @@ test("traversal, case and encoded paths are refused and leak nothing, whichever 
   for (const path of [
     "rulings/../policy/gates.md",
     "rulings/%2e%2e/policy/gates.md",
-    "Rulings/testing-2026-10-04.md",
+    "Rulings/remove-improve-loop-2026-10-19.md",
     "CONVENTIONS.md",
     "rulings/",
     "conventions.md/",
@@ -244,16 +242,7 @@ test("capsid_start_session for any namespace names the portfolio documents to re
   assert.deepEqual(out.portfolio_documents.read_first, [...ALLOWED].sort());
   assert.deepEqual(out.portfolio_documents.allowlist, [
     "conventions.md",
-    "conventions-web.md",
-    "conventions-cloudflare.md",
-    "conventions-testing.md",
-    "conventions-routing.md",
-    "conventions-cloud.md",
-    "conventions-names.md",
-    "conventions-store.md",
     "core.md",
-    "decisions.md",
-    "decisions-vol-<n>.md",
     "archive/decisions-vol-<n>.md",
     "rulings/<name>.md",
   ]);

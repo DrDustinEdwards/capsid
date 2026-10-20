@@ -24,13 +24,12 @@ const OVERNIGHT_MODES = ["api", "subscription", "off"] as const;
 export type OvernightMode = (typeof OVERNIGHT_MODES)[number];
 
 // The ruling, in one place, so the record and the Portal's confirm text say the same
-// thing. The reasoning is Dustin's, from capsid/decisions.md "2026-10-04: overnight runs
-// may use the subscription, by Dustin's choice". Sources and quotes:
+// thing. The reasoning is Dustin's, from his ruling of 2026-10-04. Sources and quotes:
 // capsid/research/terms-scheduled-claude-code.md.
 export const SUBSCRIPTION_DECISION = {
   decided_by: "Dustin Edwards",
   decided_on: "2026-10-04",
-  ruling: "capsid/decisions.md, 2026-10-04: overnight runs may use the subscription, by Dustin's choice",
+  ruling: "2026-10-04: overnight runs may use the subscription, by Dustin's choice",
   reasoning:
     "The use is personal, on Dustin's own repositories, and not shared. Anthropic's Agent SDK support page (updated 2026-06-16) says claude -p on a plan draws from subscription limits and directs shared production automation to API keys; Dustin reads shared as the operative word. The Consumer Terms clause on automated or non-human access (section 3) is the counterweight: the pages do not settle the question and the risk is to Dustin's own account.",
 } as const;

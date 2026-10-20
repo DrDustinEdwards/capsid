@@ -161,7 +161,7 @@ None of their content is removed (conventions 1.3); it moves.
 
 Rules:
 - Each visual answers one named question.
-- Each is drawn with an Enarratio primitive (`capsid/research/enarratio-coverage.md`: all needed types exist) and carries its `*Table` companion as the text equivalent (conventions-web.md rule 8).
+- Each is drawn with an Enarratio primitive (`capsid/research/enarratio-coverage.md`: all needed types exist) and carries its `*Table` companion as the text equivalent.
 - No decorative charts. A table stays wherever the question is a lookup.
 
 **Two prerequisites:**
@@ -238,7 +238,7 @@ In the order Dustin should answer them; each has a recommendation.
 1. **Needs you as the home page**, fed by `/ops/inbox`, replacing the Overview's attention list. Recommend yes.
 2. **Eight pages instead of thirteen** (section 2 menu), with Health absorbing Sites, Deploys, Incidents, Backups and the CI branch table. Recommend yes, built as one change after the inbox.
 3. **Missing screens to build:** supersede, question mark, parked and unpark, digest strip, Tonight plan, PR close, claims export, and the Worker's stale rules. Recommend all eight, in that order.
-4. **Chat-only rulings to record:** knowledge store, job post and edit, agent scopes, namespace admin, Cloudflare config, budget edits, signing (except the typed policy change). Recommend recording all in `capsid/decisions.md`.
+4. **Chat-only rulings to record:** knowledge store, job post and edit, agent scopes, namespace admin, Cloudflare config, budget edits, signing (except the typed policy change). Recommend recording all as rulings.
 5. **The trends route** (`/portal/api/trends`, admin, read-only), which visuals 1, 2, 3, 5, 6, 7 and 11 need. Recommend yes. It also gives the seat the 30-day audit count without a shell.
 6. **The eleven visuals in section 3.** Recommend 1, 2, 7 and 3 first: they measure the goal (minutes, waiting, unattended merges, queue drain). The others follow the Enarratio swap.
 7. **Enarratio delivery** (enarratio-coverage DECIDE 1): recommend a client-side call for the existing charts, measured against the size budget first, as that document says.

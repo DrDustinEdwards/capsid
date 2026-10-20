@@ -1,8 +1,7 @@
 import type { AuditChange, AuditDetail, AuditField } from "./ops-types";
 
 // What an audit row recorded, in plain English, for the Portal's Activity drawer
-// (job_fe0da37c07e0 PR 2; capsid/decisions.md 2026-09-30, "admin panels review
-// adopted", item 2). The reason typed with a change, a field-by-field before and after
+// (job_fe0da37c07e0 PR 2). The reason typed with a change, a field-by-field before and after
 // where the row carries both, and the row's other fields by name.
 //
 // NAMED FIELDS, NEVER RAW PARAMS. The same rule capsid_admin_read_ops follows ("copies

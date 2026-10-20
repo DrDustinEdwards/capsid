@@ -17,7 +17,7 @@ A document is a row: namespace, path, title, body, type, status, tags,
   boundary for repository access: the namespace-to-repository mapping is what
   decides which repository a tool call can reach, so an unmapped selector is
   rejected rather than guessed at.
-- **Path** is a flat filename inside a namespace, like `decisions.md`. Structure
+- **Path** is a flat filename inside a namespace, like `core.md`. Structure
   lives in the path and the type, never in nested namespaces. Consolidated raw
   material moves under an `archive/` prefix and stays there.
 - **Body** is markdown. FTS5 indexes title and body, kept in step by triggers on
@@ -94,11 +94,11 @@ Four invariants, each enforced in code rather than by discipline:
 
 ## Store design choices and why
 
-Ruled 2026-08-13 to 2026-08-17 (capsid/decisions.md). The type and status vocabulary is enforced on write in src/doc-meta.ts, so a new word needs no migration. A version row stores title and body only; metadata changes go in audit_log as prior_meta. if_match compares the stored body inside the write batch, with no hash column, because a stored hash is a mirror that drifts. An overwrite within the hour without if_match warns, never refuses. No cross-namespace move: a namespace is an ownership boundary, not a folder. CI logs are withheld from read-only keys, because logs carry whatever a step printed. Decision documents are exempt from the count lint: a dated log is history.
+Ruled 2026-08-13 to 2026-08-17. The type and status vocabulary is enforced on write in src/doc-meta.ts, so a new word needs no migration. A version row stores title and body only; metadata changes go in audit_log as prior_meta. if_match compares the stored body inside the write batch, with no hash column, because a stored hash is a mirror that drifts. An overwrite within the hour without if_match warns, never refuses. No cross-namespace move: a namespace is an ownership boundary, not a folder. CI logs are withheld from read-only keys, because logs carry whatever a step printed. Decision documents are exempt from the count lint: a dated log is history.
 
 ## Canon is written by proposal
 
-Canon is what every agent is told to trust (capsid/repo-structure.md): `capsid/conventions.md` and `capsid/conventions-<name>.md`, `capsid/repo-structure.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its volumes, live or archived. `CANON_RULES` in `src/canon.ts` is the list, pinned by `test/canon.test.ts` and served by `capsid_run_improve` action `status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
+Canon is what every agent is told to trust (capsid/repo-structure.md): `capsid/conventions.md` and `capsid/conventions-<name>.md`, `capsid/repo-structure.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its archived volumes. `CANON_RULES` in `src/canon.ts` is the list, pinned by `test/canon.test.ts` and served by `capsid_run_improve` action `status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
 
 - **A driver's write to canon (`capsid_write_doc`) is not applied.** The caller is anyone who is not the admin and holds no `can_merge` (the seat test every seat-only job transition uses). The write is assembled as usual (mode, dash normalization, `if_match`), then stored in `canon_proposals` (migration 0034) with the sha256 of the body it was written against, and the response is `action: "pending_review"` with the proposal id. The document does not change. A `canon-proposed` audit row records it. `links` are refused on such a write, because a proposal does not carry them.
 - **`capsid_write_doc` actions `restore` and `move`, and `capsid_delete_doc`, on canon are refused** for the same caller, and so is a `move` onto a canon path. A proposal carries a body; those three do not.
@@ -108,9 +108,9 @@ Canon is what every agent is told to trust (capsid/repo-structure.md): `capsid/c
 
 ## Rule documents are held to their cap and to served tool names
 
-A rule document is one sessions follow as rules rather than read as a record: every namespace's `core.md` (cap 8 KB), `decisions.md` and its live volumes, and in capsid `conventions*.md`, `repo-structure.md`, `schema.md`, `seat-operations.md` and each document directly under `rulings/` (cap 20 KB; both caps are capsid/conventions.md, Capsid section). Dated records (`archive/`, `research/`, `reports/`, `audits/`, `jobs/`) are not. `ruleDocCap` in `src/rule-docs.ts` is the list (job_c13dc0d4f22f).
+A rule document is one sessions follow as rules rather than read as a record: every namespace's `core.md` (cap 8 KB), `decisions.md`, and in capsid `conventions*.md`, `repo-structure.md`, `schema.md`, `seat-operations.md` and each document directly under `rulings/` (cap 20 KB). Dated records (`archive/`, `research/`, `reports/`, `audits/`, `jobs/`) are not. `ruleDocCap` in `src/rule-docs.ts` is the list (job_c13dc0d4f22f).
 
-- **A write may not make a rule document worse.** `capsid_write_doc` (write, restore, and a move onto a rule path) refuses a body over the cap that is larger than the stored one, or one naming a tool or action the Worker does not serve that the stored body did not name. A cut that leaves a document still over its cap passes, so an over-cap document can be fixed in steps. A move from one rule path to another (decisions.md to a volume) and a restore that recreates a deleted document put back what was held, and pass. Checked before the canon branch, so a proposal that could never be applied is refused too.
+- **A write may not make a rule document worse.** `capsid_write_doc` (write, restore, and a move onto a rule path) refuses a body over the cap that is larger than the stored one, or one naming a tool or action the Worker does not serve that the stored body did not name. A cut that leaves a document still over its cap passes, so an over-cap document can be fixed in steps. A move from one rule path to another and a restore that recreates a deleted document put back what was held, and pass. Checked before the canon branch, so a proposal that could never be applied is refused too.
 - **A stale name** is an old tool name (the MCP 4 regroup's mapping, `scripts/tool-names-lib.mjs`) in a backtick span, a call or, for a name with an underscore, anywhere outside backticks; or a `capsid_*` name that is not in `TOOL_GRANTS`, or one given an action its tool does not take.
 - **The lint report and the daily maintenance pass list what is already wrong**: the report's `rule_doc_caps` and `stale_tool_names` checks over its namespace, and the pass's `rule-doc` rule over every namespace (docs/work-queue.md).
 

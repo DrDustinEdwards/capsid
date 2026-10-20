@@ -89,7 +89,7 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_admin_read_ops: "admin_read",
   // The administrator's controls (preview, then perform with a signed single-use
   // token). A control revokes an agent, resumes a job or edits a site, so a caller
-  // that could use one could widen itself (capsid/decisions-vol-5.md, the controls ruling).
+  // that could use one could widen itself.
   capsid_admin_run_controls: "admin",
   // mint_operator_key issues a credential, sign_policy decides whether this Worker may
   // merge without a human, breaker_reset reopens a namespace's queue and overnight
@@ -352,7 +352,7 @@ export function portfolioOnly(agent: Agent, namespace: string | undefined): bool
   return namespace === PORTFOLIO_DOCS.namespace && !allowsScope(agent.scopes.namespaces, namespace);
 }
 
-// STEP-UP (capsid/rulings/mcp-2026-10-10.md, the rule 9 amendment for Capsid Admin):
+// STEP-UP, for Capsid Admin:
 // the admin actions that change who may do what, or that cannot be taken back, need a
 // recent Access sign-in. A grant lives for weeks and is refreshed without a person;
 // this is the point where a person proves they are there. It is a re-authentication,
@@ -691,8 +691,7 @@ export function repoWriteFlags(
   // close deletes the head branch, so a plain write grant could destroy the only copy
   // of a branch somebody else pushed. That is the same blast radius as merge, so it
   // needs can_merge too. Not deleting on close would leave stale branches behind. A tag
-  // or a release can start a deploy as a merge can (capsid/rulings/mcp-2026-10-10.md,
-  // amendment answer 2: "extra permission").
+  // or a release can start a deploy as a merge can.
   if (tool === "capsid_close_pr" && (action === "merge" || action === "close" || action === "tag" || action === "release")) flags.push("can_merge");
   // A forced branch delete too: force lifts the open-PR refusal, so it could delete
   // another agent's open PR head. A delete without force needs no flag.

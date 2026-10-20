@@ -51,7 +51,7 @@ export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", obs
   return build(env, caller, actor, observeAdminWrite, "capsid");
 }
 
-// Capsid Admin (capsid/rulings/mcp-2026-10-10.md, amendment answer 2): the eight
+// Capsid Admin: the eight
 // administrator tools, on their own route for the administrator alone
 // (src/mcp-handler.ts). Every tool on it is admin only in TOOL_GRANTS too, so the route
 // and the registrar refuse a non-admin twice.
