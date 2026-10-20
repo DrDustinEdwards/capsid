@@ -92,7 +92,7 @@ to master.
 - Deleting files recursively.
 - Merging a pull request. A merge is not approvable through this policy; the auto-merge
   policy (`docs/policy/auto-merge.md`) governs which driver pull requests the Worker
-  merges, and the seat merges the rest.
+  merges; a PR not auto-merged is merged on green by its session or the seat.
 
 ## What this policy cannot do
 

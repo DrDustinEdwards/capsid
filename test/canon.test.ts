@@ -8,12 +8,11 @@ import type { Agent } from "../src/agents.ts";
 // documents are canon, who is held to review, and which added lines are flagged. The
 // queue itself runs against real D1 in test-integration/canon.test.ts.
 
-test("the canon list is the four rules the design names, no more", () => {
+test("the canon list is the three rules, no more", () => {
   assert.deepEqual(
     CANON_RULES.map((r) => r.label),
     [
       "capsid/conventions.md and capsid/conventions-<name>.md",
-      "capsid/repo-structure.md",
       "<namespace>/core.md",
       "<namespace>/decisions.md and its archived volumes",
     ]
@@ -24,7 +23,6 @@ test("canon paths match, and their near misses do not", () => {
   const canon: Array<[string, string]> = [
     ["capsid", "conventions.md"],
     ["capsid", "conventions-improve.md"],
-    ["capsid", "repo-structure.md"],
     ["capsid", "core.md"],
     ["sample", "core.md"],
     ["capsid", "decisions.md"],
@@ -35,6 +33,7 @@ test("canon paths match, and their near misses do not", () => {
   const not: Array<[string, string]> = [
     ["sample", "conventions.md"],
     ["sample", "repo-structure.md"],
+    ["capsid", "repo-structure.md"],
     ["capsid", "research/core.md"],
     ["capsid", "core.md.bak"],
     ["capsid", "Core.md"],

@@ -104,7 +104,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
     "brief",
     {
       description:
-        `One-call session start for a namespace. Returns capsid/conventions.md, capsid/repo-structure.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. When conventions, repo-structure and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
+        `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: { namespace: nsName },
     },
     async ({ namespace }) => {
@@ -113,9 +113,8 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
           .prepare("SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND path = ?2")
           .bind(ns, path)
           .first<{ namespace: string; path: string; title: string | null; type: string | null; body: string | null; updated_at: string }>();
-      const [conventions, repoStructure, core, portfolio] = await Promise.all([
+      const [conventions, core, portfolio] = await Promise.all([
         doc("capsid", "conventions.md"),
-        doc("capsid", "repo-structure.md"),
         doc(namespace, "core.md"),
         portfolioDocuments(db),
       ]);
@@ -170,7 +169,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       // audit_log_doc.
       type Keyed = { namespace: string; path: string };
       type Actored<T> = T & { last_actor: string | null };
-      const present = [conventions, repoStructure, core, ...openTasks, ...recentEpisodics].filter((r): r is NonNullable<typeof r> => r !== null);
+      const present = [conventions, core, ...openTasks, ...recentEpisodics].filter((r): r is NonNullable<typeof r> => r !== null);
       const actors = new Map<string, string | null>();
       if (present.length) {
         // A plain SELECT rather than a CTE, and no comment inside prepare(), so
@@ -192,7 +191,6 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         row ? { ...row, last_actor: actors.get(JSON.stringify([row.namespace, row.path])) ?? null } : null;
       const withActors = <T extends Keyed>(rows: T[]): Actored<T>[] => rows.map((r) => withActor(r) as Actored<T>);
       const conventionsA = withActor(conventions);
-      const repoStructureA = withActor(repoStructure);
       const coreA = withActor(core);
       const openTasksA = withActors(openTasks);
       const recentEpisodicsA = withActors(recentEpisodics);
@@ -200,7 +198,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       // Stay under budget by trimming the largest, most re-readable sections to
       // metadata first (episodics, then task bodies), and report what was cut.
       //
-      // Only a cut that happened is reported. Nothing is cut when the three documents
+      // Only a cut that happened is reported. Nothing is cut when the two documents
       // that are never trimmed exceed the budget by themselves, since trimming the
       // rest cannot bring the packet under it; that is reported as
       // floor_exceeds_budget with the sizes.
@@ -210,10 +208,9 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         rows.map((r) => ({ namespace: r.namespace, path: r.path, title: r.title, updated_at: r.updated_at, last_actor: r.last_actor ?? null, body: `(trimmed for size: read it with capsid_read_doc, ${r.namespace}/${r.path})` }));
       const sizes = {
         conventions: conventionsA?.body?.length ?? 0,
-        repo_structure: repoStructureA?.body?.length ?? 0,
         core: coreA?.body?.length ?? 0,
       };
-      const floorChars = sizes.conventions + sizes.repo_structure + sizes.core;
+      const floorChars = sizes.conventions + sizes.core;
       const floorOver = floorChars > BRIEF_BUDGET;
       const trimmed: string[] = [];
       let total = floorChars + bodyChars(openTasksA as Row[]) + bodyChars(recentEpisodicsA as Row[]);
@@ -233,7 +230,6 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       return ok({
         namespace,
         conventions: conventionsA,
-        repo_structure: repoStructureA,
         core: coreA,
         open_tasks: tasksOut,
         recent_episodics: episodicsOut,

@@ -166,11 +166,12 @@ test("gather trims an oversized packet and names what it dropped", async () => {
   for (const row of out.wiki) {
     assert.match(row.body, /^\(trimmed for size: read it with capsid_read_doc, capsid\/concept-\d\.md\)$/);
   }
-  // core and the rules are never trimmed: without them the packet is useless.
+  // core and the rules are never trimmed: without them the packet is useless. capsid/schema.md
+  // is in the store but is not a rule document, so it is not read.
   assert.equal(out.core.body, "the core");
   assert.deepEqual(
     out.rules.map((r: { path: string; body: string }) => r.body).sort(),
-    ["the conventions", "the schema rules"]
+    ["the conventions"]
   );
 });
 
