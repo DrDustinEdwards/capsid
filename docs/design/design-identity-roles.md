@@ -1,8 +1,7 @@
 # People and roles across the family
 
-Job `job_c9f130f528bb`, revising the lab-only design from job_4acb6ae89b9f (capsid PR #304). The ruling this follows
-is Dustin's of 2026-10-09, "people and roles across the family"; where this document and the ruling
-differ, the ruling wins. Design only: nothing built, no account setting changed.
+Job `job_c9f130f528bb`, revising the lab-only design from job_4acb6ae89b9f (capsid PR #304). Design only: nothing built, no account
+setting changed.
 
 ## In brief
 
@@ -11,10 +10,10 @@ differ, the ruling wins. Design only: nothing built, no account setting changed.
   roles). Each app keeps its own member list, and being in one grants nothing in another.
 - Each app's **members page is the only list**. Adding a person there puts their email on that app's Cloudflare
   Access allow list; removing them takes it off and frees their seat. Nobody edits Cloudflare by hand after setup.
-- Sign-in is Cloudflare's **emailed one-time code**, typed in, with a one-month session. No Microsoft or Google.
-- **Layers decide who manages whom; permissions decide what a person can do.** Code checks permissions, never titles.
-- **Dustin is the Primary Owner**, set in deployment configuration. His wife is an Owner who can do everything but
-  remove or demote him.
+- Sign-in is Cloudflare's **emailed one-time code**, typed in, with a one-month session.
+- **Each person holds a title on a layer; permissions decide what they can do.** Code checks permissions, never titles.
+- **Dustin is the Primary Owner**, set in deployment configuration. His wife is an Owner, for
+  continuity.
 - **Access expires by default** (end of semester, end of term), leads renew with one click, every lead gets a
   "still on your team?" review each semester, and every change is audited.
 - App users (Foxing readers and teachers, Foxhound merchants, txasm authors) are not part of this. They sign in
@@ -71,19 +70,15 @@ Every member holds one title. A title is a named bundle of permissions, defined 
 layer. Code asks "does this person hold `edit_inventory`?", never "is this a Lab manager?", so a title can be renamed
 or split without touching a check.
 
-| Layer | Who | How they are set |
+| Layer | Who | Where they are set |
 | --- | --- | --- |
-| 0 | Primary Owner: Dustin, and only Dustin | Deployment configuration, never a members page |
-| 1 | Owner: Dustin's wife, for continuity | Members page, by the Primary Owner only |
-| 2 | Leads: Lab manager; txasm President; Foxing staff leads | Members page, by layer 0 or 1 |
-| 3 | Members: Lab worker; other txasm officers; Foxing staff | Members page, by layers 0 to 2 |
+| 0 | Primary Owner: Dustin | Deployment configuration |
+| 1 | Owner: Dustin's wife, for continuity | Members page |
+| 2 | Leads: Lab manager; txasm President; Foxing staff leads | Members page |
+| 3 | Members: Lab worker; other txasm officers; Foxing staff | Members page |
 
-Two rules, enforced in one shared function:
-
-1. **You manage only people below your own layer.** A Lab manager adds, renews and removes Lab workers, not another
-   Lab manager. The Owner manages leads and members but cannot remove or demote the Primary Owner (who has no row to
-   remove). Only the Primary Owner adds or removes an Owner.
-2. **You grant nothing you do not hold.** The bundle you give must be a subset of your own permissions.
+One rule, enforced in one shared function: **you grant nothing you do not hold.** The bundle you give must be a
+subset of your own permissions.
 
 Each app chooses how many of layers 2 and 3 it uses. The lab's bundles, as an example:
 
@@ -95,7 +90,7 @@ Each app chooses how many of layers 2 and 3 it uses. The lab's bundles, as an ex
 | `read_all_runs` | | yes |
 | `edit_inventory` (items, lots, locations) | | yes |
 | `draft_procedure` (draft only) | | yes |
-| `manage_members` (layer 3 only, by rule 1) | | yes |
+| `manage_members` | | yes |
 
 Publishing stays with the Owners in `/admin`. txasm and Foxing define their bundles when they adopt.
 
@@ -104,11 +99,11 @@ Publishing stays with the Owners in `/admin`. txasm and Foxing define their bund
 One Capsomer component, `people-roles`, used by every app. A lead sees only the people they may manage, plus
 themselves.
 
-- **Add.** Email, name, title (only titles below the lead's layer, within their permissions). The end date fills
+- **Add.** Email, name, title (only titles within the lead's permissions). The end date fills
   in from the title's default and can be shortened. Saving writes the row and an audit row, then updates the
   allow list. The page shows "Ready: they can sign in" once Cloudflare confirms, or "Waiting for Cloudflare" with
   a retry while it has not.
-- **Change title.** A select with a required one-line reason, under both rules above.
+- **Change title.** A select with a required one-line reason, under the rule above.
 - **Renew.** One click sets the end date to the end of the next semester or term.
 - **Remove.** Behind a confirmation. The person is refused on their next request, taken off the allow list and
   removed from Zero Trust so the seat frees. The row stays, marked removed, so their runs and edits keep their name.
@@ -164,7 +159,7 @@ lives and what calls it makes:
 ## Primary Owner and continuity
 
 The Primary Owner's email is a deployment value in each app, `PRIMARY_OWNER_EMAIL`, set with `wrangler secret put`
-so it stays out of public repositories. No page can change it, and changing it needs the Cloudflare account.
+so it stays out of public repositories. Changing it needs the Cloudflare account.
 
 If Dustin cannot act: his wife, using her own Cloudflare and GitHub access (set up as a separate step, not part of
 this build), sets `PRIMARY_OWNER_EMAIL` to her email in each app, adds herself to each admin policy, and from then
@@ -187,8 +182,8 @@ Each app keeps its own `members` and `member_audit` tables in its own database a
 The lab goes first and proves the whole path; the other apps follow one at a time.
 
 1. **site-runtime:** `./access`, with a planted wrong-audience token going red.
-2. **site-runtime:** `./members` and `./access-sync`, with plants: a lead granting their own layer, a bundle wider
-   than the granter's, an Owner demoting the Primary Owner, a sync to a group whose name does not match.
+2. **site-runtime:** `./members` and `./access-sync`, with plants: a bundle wider
+   than the granter's, a sync to a group whose name does not match.
 3. **Capsomer:** `people-roles`, visual.
 4. **Dustin, account step:** the lab's Access application, group and policy; one-time code only; session lengths;
    a second factor on admin applications; the sync token with the three permissions, stored with its holder.
@@ -223,14 +218,13 @@ Kept free so later work slots in without renames. None of the later functions is
 | Tables `members`, `member_audit` | Each app's list and history | Same in every app, so the shared code fits all. |
 | Tables `kb_lots`, `kb_locations`, `kb_runs` | Inventory and runs | The KB plan's names. |
 | Tables `lab_actors`, `lab_instruments`, `lab_approvals`, `lab_studies` | Non-human actors, instruments, approvals for physical runs, studies | One noun each. |
-| Titles `primary_owner`, `owner` | Layers 0 and 1 in every app | The ruling's words. |
+| Titles `primary_owner`, `owner` | Layers 0 and 1 in every app | Same in every app. |
 | Actor ids `agent:<name>`, `instrument:<name>`, `robot:<name>` | Non-human actors in audit rows | Capsid's and Carrel's form. |
-| Capsomer `people-roles` | The members page | The ruling's name. |
+| Capsomer `people-roles` | The members page | Says what it holds. |
 | Capsomer `run-record`, `stop-control`, `actor-badge` | Run provenance, stop control, actor mark | Approvals reuse `approval-sheet`. |
 | Capsid namespace `lab` | Lab automation agents | Per-area namespaces. |
 
-Later, per the ruling and not designed here: passkeys before anything in the lab can trigger a physical action, and
-a second approver for payments in txasm.
+Later, not designed here: a second approver for payments in txasm.
 
 ## Sources
 
@@ -245,7 +239,7 @@ Cloudflare, read 2026-10-09, under https://developers.cloudflare.com:
 
 ## DECIDE
 
-The ruling settled sign-in, layers, owners, expiry and the members page. Still open:
+Still open:
 
 1. **Who holds the sync token.** One holder that apps call with their own key, or a copy in each app.
    **Recommend Capsid as the one holder:** it is already the family's credential boundary, and one copy of a
