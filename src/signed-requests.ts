@@ -1,6 +1,7 @@
 import { hmacHex, timingSafeEqual } from "./auth";
 import type { Env } from "./env";
 import { isOffaccountSite, OFFACCOUNT_DEFAULT_SITE, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES, type OffaccountSite } from "./offaccount";
+import { readCapped } from "@dustinedwards/site-runtime/body";
 
 // The signed endpoints that are not MCP: the backup mirror's credential mint here, and
 // the bench's three (src/bench.ts). Each is HMAC over timestamp and body, refused
@@ -28,27 +29,9 @@ export async function readBoundedText(
   request: { body: ReadableStream<Uint8Array> | null },
   max: number
 ): Promise<{ ok: true; text: string } | { ok: false }> {
-  if (!request.body) return { ok: true, text: "" };
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > max) {
-      await reader.cancel();
-      return { ok: false };
-    }
-    chunks.push(value);
-  }
-  const joined = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    joined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return { ok: true, text: new TextDecoder().decode(joined) };
+  // The family's one capped reader (site-runtime ./body): counted as it arrives, null over the ceiling.
+  const text = await readCapped(request, max);
+  return text === null ? { ok: false } : { ok: true, text };
 }
 
 // Claims a request's nonce, or refuses it. The database decides, not the code. A KV
