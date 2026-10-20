@@ -4,7 +4,7 @@
 //
 //   initial JS (the entry and its static imports)  <= 110 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   all CSS                                         <=  18 KB gzip
+//   all CSS                                         <=  18.5 KB gzip
 //   fonts                                           reported, not budgeted
 //
 // Raised on 2026-10-07 from 100 KB JS and 12 KB CSS (Dustin, after capsid #261): the shell is
@@ -23,13 +23,16 @@
 // drawer and the command menu moved out of the entry to pay back 4.4 KB; this build is 108.2 KB.
 // CSS raised the same day from 15 KB to 18 KB: the header's stylesheets (site-header,
 // theme-switch, popover) load beside admin-shell.css, as Capsomer requires; this build is 17.0 KB.
+// CSS raised on 2026-10-20 from 18 KB to 18.5 KB (Portal UX audit M7 and M8, capsid #476): the
+// contrast and link-underline rules and Capsomer 0.9.1's 320px header rules put the build 53 bytes
+// over; this build is 18.05 KB.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 110 * KB, lazyChunk: 40 * KB, css: 18 * KB };
+const BUDGET = { initialJs: 110 * KB, lazyChunk: 40 * KB, css: 18.5 * KB };
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const manifestPath = join(dist, ".vite", "manifest.json");
