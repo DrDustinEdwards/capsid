@@ -10,7 +10,7 @@ import { jsonResponse as json } from "./http";
 // (search, decisions, rulings, research, links to jobs). Writing stays in chat and with drivers.
 // Search, one document and its edges go through src/doc-reads.ts, the readers behind
 // capsid_find_docs and capsid_read_doc, so the Library and chat cannot disagree. A route,
-// not a tool, so no grant is checked here (CLAUDE.md, one enforcement point rule): it
+// not a tool, so no grant is checked here (one enforcement point, test/route-gates.test.ts): it
 // answers to portalGate, and src/scope.ts lists it among the routes gated some other way.
 // It writes nothing, not even the conventions-read row: that row records an agent
 // loading the rules, and the Portal is the administrator reading them.

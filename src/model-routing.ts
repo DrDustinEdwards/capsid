@@ -136,8 +136,9 @@ const WORKFLOW_FILE = /^\.github\/workflows\/[^/]+\.ya?ml$/i;
 const TEST_FILE = /(^|\/)(test|tests|test-integration|e2e|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/i;
 
 // The sources that hold this repo's invariants and credentials but are not on auto-merge's
-// refused list, because a green PR there may still merge (CLAUDE.md, rules 3 to 5, and the
-// login and key paths). The refused list covers the judges; this covers what they guard.
+// refused list, because a green PR there may still merge (the snapshot, one enforcement
+// point and path mutation invariants, test/write-invariants.test.ts, test/scope.test.ts
+// and test/path-mutation.test.ts, and the login and key paths). The refused list covers the judges; this covers what they guard.
 const GUARD_SOURCES: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   { pattern: /^src\/store-guards\.ts$/i, why: "the snapshot and audit guard every overwrite and delete runs through" },
   { pattern: /^src\/tools\/repo\.ts$/i, why: "guardedWrite, the one gate on repo mutations" },

@@ -282,8 +282,8 @@ function claimSession(db: D1Database, id: string, actor: string, jobId: string |
 
 // The upsert, conditional on the session being this caller's (?8), in the same batch as
 // the claim, so a session another key owns is never written whatever order two
-// requests commit in. RETURNING says which series landed; never meta.changes (CLAUDE.md,
-// path mutation rule). The job a row was first written with is kept (COALESCE).
+// requests commit in. RETURNING says which series landed; never meta.changes
+// (path mutation invariant, test/path-mutation.test.ts). The job a row was first written with is kept (COALESCE).
 // The SELECT carries a WHERE, which SQLite needs to read the ON CONFLICT that follows.
 // Delta points add to the stored total; cumulative points replace it.
 function upsertUsage(

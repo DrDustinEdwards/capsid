@@ -500,7 +500,7 @@ export async function openWatcherFingerprints(env: Env): Promise<Map<string, str
 export async function clearFinding(env: Env, id: string, now: Date, summary: string = CLEARED_SUMMARY): Promise<boolean> {
   const job = await readJob(env.DB, id);
   if (!job || job.status !== "queued" || job.posted_by !== WATCHER_ACTOR) return false;
-  // The mirror document closes in the same batch as the row (CLAUDE.md, snapshot rule),
+  // The mirror document closes in the same batch as the row (snapshot invariant, test/write-invariants.test.ts),
   // and the batch is guarded on the status read above, so a job claimed in between is
   // left alone.
   const result = await markJobFailed(env, job, "queued", summary, "job-cleared", WATCHER_ACTOR, {}, now);

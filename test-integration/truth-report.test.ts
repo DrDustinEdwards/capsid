@@ -55,7 +55,7 @@ describe("lint mode report", () => {
       ).first<{ n: number }>();
       expect(indexed?.n).toBeGreaterThan(0);
 
-      // And the audit row landed in the same batch. CLAUDE.md, snapshot rule.
+      // And the audit row landed in the same batch (snapshot invariant, test/write-invariants.test.ts).
       const audit = await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'lint_report' AND namespace = 'capsid'"
       ).first<{ n: number }>();

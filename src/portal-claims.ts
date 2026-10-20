@@ -7,7 +7,7 @@ import { jsonResponse, textResponse } from "./http";
 
 // The Portal's Claims view: GET /portal/api/claims. The same readers the `capsid_admin_read_claims` tool
 // uses (src/job-claims-read.ts), so the view and the tool cannot disagree. A route, not
-// a tool, so no grant is checked here (CLAUDE.md, one enforcement point rule): it
+// a tool, so no grant is checked here (one enforcement point, test/route-gates.test.ts): it
 // answers to portalGate, the administrator's Access session, and src/scope.ts lists it
 // among the routes gated some other way.
 

@@ -6,7 +6,7 @@ import { auditStatement, snapshotLive } from "./store-guards";
 // that a live document `supersedes` or `replaces` (src/links.ts) is marked superseded,
 // so search hides it by default and the current answer is not shown beside the old
 // one. Each change is an ordinary write: the live row is snapshotted, the status set,
-// and an audit row names the edge (CLAUDE.md, snapshot rule). It never deletes and
+// and an audit row names the edge (snapshot invariant, test/write-invariants.test.ts). It never deletes and
 // never reverses itself. To un-supersede a document, remove the edge as well as editing
 // the status, or the next pass sets it again.
 //

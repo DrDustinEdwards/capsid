@@ -17,8 +17,8 @@ import { auditStatement } from "./store-guards";
 // nothing is half-approved.
 //
 // Every write is in one D1 batch: a void of the pull request's open approval, if any
-// (`UPDATE ... WHERE id = ? AND status = 'approved' RETURNING id`, CLAUDE.md path mutation
-// rule), the new row, and an audit row for each.
+// (`UPDATE ... WHERE id = ? AND status = 'approved' RETURNING id`, path mutation
+// invariant, test/path-mutation.test.ts), the new row, and an audit row for each.
 
 const MAX_PRS = 20;
 const SHA = /^[0-9a-f]{7,40}$/;

@@ -11,7 +11,7 @@ import { jsonResponse as json } from "./http";
 // with view "plan" and view "digest" (src/overnight-plan.ts), over every namespace, so the
 // Portal and chat cannot disagree. Their own routes, read when the page that shows them
 // opens, since OPS_FEED_READS is pinned and the feed does not grow a read. Routes, not
-// tools, so no grant is checked here (CLAUDE.md, one enforcement point rule): each
+// tools, so no grant is checked here (one enforcement point, test/route-gates.test.ts): each
 // answers to portalGate, and src/scope.ts lists them among the routes gated some other way.
 
 export const PORTAL_PLAN_PATH = "/portal/api/plan";

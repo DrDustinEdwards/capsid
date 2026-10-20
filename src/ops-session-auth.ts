@@ -11,7 +11,7 @@ import { textResponse as text } from "./http";
 //   - the admin (a legacy write operator key), for testing.
 // Anything else that resolves is 403; nothing that resolves is 401.
 //
-// The write grant is asked of checkScope (CLAUDE.md, one enforcement point rule): what
+// The write grant is asked of checkScope (one enforcement point, test/scope.test.ts): what
 // these routes write is part of a job's record, so a read-only caller may not send it.
 // The tool named is "jobs", which every caller that works jobs holds.
 //

@@ -9,7 +9,7 @@ import { auditStatement, snapshotLive } from "./store-guards";
 export const SYSTEM_ACTOR = "improve-loop";
 
 // A system document write (a job's mirror document) under the same two invariants as
-// every other write path (CLAUDE.md, snapshot rule): the prior row is snapshotted into
+// every other write path (snapshot invariant, test/write-invariants.test.ts): the prior row is snapshotted into
 // document_versions and audit_log gets a row, in the same batch as the write, so all
 // three land or none do. Returns statements so a caller can batch them with the row
 // update they belong to.

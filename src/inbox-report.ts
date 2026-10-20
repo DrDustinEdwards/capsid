@@ -9,7 +9,7 @@ import type { InboxItem } from "./inbox";
 // its own scoped key, and the inbox reads the last report back as kind "report".
 //
 // - The key must hold the write grant on the namespace the report names, through
-//   checkScope (CLAUDE.md, one enforcement point rule). A report for any other namespace
+//   checkScope (one enforcement point, test/scope.test.ts). A report for any other namespace
 //   is refused.
 // - A report replaces the last one whole and expires after 6 hours: an app that stops
 //   reporting stops being counted, because a stale "needs you" is worse than none.

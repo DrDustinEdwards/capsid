@@ -98,7 +98,7 @@ merge_sha TEXT
 ```
 
 - One open (`approved`) row per (repo, pr), held by a partial unique index.
-- Every state move is `UPDATE ... WHERE id = ? AND status = 'approved' RETURNING id` (CLAUDE.md, path mutation rule).
+- Every state move is `UPDATE ... WHERE id = ? AND status = 'approved' RETURNING id` (path mutation invariant, test/path-mutation.test.ts).
 - Each move writes an audit row: `pr-approved`, `pr-approval-voided`, `pr-approval-expired` and `approved-merged`. Each row carries who, surface, head sha, class and batch.
 
 **Why not reuse `job_touches`?** A touch belongs to a job and is append-only. An approval needs a mutable lifecycle keyed by PR and head sha, and some PRs (Renovate bumps) have no job. The touch is still written beside the row when the PR names a job, so the minutes metric and the methods paper see it.
