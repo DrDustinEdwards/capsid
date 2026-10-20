@@ -2,18 +2,11 @@
    app's own dimensions live here. */
 :root { --top: 44px; }
 
+/* Box sizing, the body's margin, ground, colour and smoothing, inherited control fonts and the
+   button cursor come from Capsomer's reset and base; only the Portal's own face and size are here. */
 @layer cap.base {
-  * { box-sizing: border-box; }
   html, body { min-height: 100%; }
-  body {
-    margin: 0;
-    background: var(--ground);
-    color: var(--text);
-    font: 400 13px/1.4 var(--ui);
-    -webkit-font-smoothing: antialiased;
-  }
-  button, input, select, textarea { font: inherit; color: inherit; }
-  button { cursor: pointer; }
+  body { font: 400 13px/1.4 var(--ui); }
   /* Links keep Capsomer's colour, --accent-text (4.5:1 on every surface); --accent is for fills,
      rings and icons at 3:1. A link in running text is underlined, since colour alone can't set it
      apart from the words around it (WCAG 1.4.1). */
