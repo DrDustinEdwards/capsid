@@ -1,4 +1,4 @@
-import { operatorIdentity, sha256Hex, timingSafeEqual } from "./auth";
+import { bearerToken, operatorIdentity, sha256Hex, timingSafeEqual } from "./auth";
 import {
   AGENT_GRANTS,
   SCOPE_FLAGS,
@@ -133,12 +133,6 @@ export interface ResolvedAgent {
   touch: () => Promise<void>;
 }
 
-function bearerToken(request: Request): string | null {
-  const auth = request.headers.get("Authorization");
-  if (!auth || !auth.startsWith("Bearer ")) return null;
-  const token = auth.slice("Bearer ".length).trim();
-  return token.length > 0 ? token : null;
-}
 
 // An indexed equality on the digest, confirmed with a constant-time compare. The
 // index keeps the lookup O(1) as the table grows; the compare keeps the guarantee if

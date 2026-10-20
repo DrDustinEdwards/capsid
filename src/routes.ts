@@ -75,7 +75,7 @@ const MCP_LOGIN: LoginFlow = {
 };
 
 function textResponse(message: string, status: number): Response {
-  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+  return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 // The approval cookie carries entries from src/approval.ts: a client id bound to a
