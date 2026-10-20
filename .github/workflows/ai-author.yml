@@ -1,6 +1,6 @@
 name: ai-author
 
-# CLAUDE.md, no AI trailer rule. Fails when a commit this push or pull request adds
+# No AI attribution (Dustin). Fails when a commit this push or pull request adds
 # carries Co-Authored-By naming Claude, "Generated with Claude Code", a Claude-Session
 # link or any other trailer naming Claude, and on a pull request a commit authored or
 # committed as Claude. Older commits are not checked (no history rewrite, ruled

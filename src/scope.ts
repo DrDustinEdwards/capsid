@@ -43,8 +43,8 @@ import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS
 // served read-only because it changes nothing (capsid/research/design-mcp-servers.md,
 // section 3, which fixed claims and ops reading as not read-only). They live here, not
 // in a handler, because these tools are admin-only in whole, which the registrar can
-// decide from the tool name alone, and because under the one enforcement point rule
-// (CLAUDE.md) this table is the one statement of what each tool requires. No handler
+// decide from the tool name alone, and because checkScope is the one grant check
+// (test/scope.test.ts) and this table is the one statement of what each tool requires. No handler
 // decides a grant for itself.
 export type ToolRequirement = "read" | "write" | "action" | "admin" | "admin_read";
 

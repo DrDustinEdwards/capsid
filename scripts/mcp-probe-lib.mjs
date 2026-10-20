@@ -24,7 +24,7 @@ export const EXPECTED_TOOLS = 14;
 // The tool the probe reads with.
 export const READ_TOOL = "capsid_read_doc";
 
-// The read: the document /health already depends on (CLAUDE.md, health probe rule), in
+// The read: the document /health already depends on (`capsid/conventions.md` keeps the word "conventions"), in
 // the one namespace the probe agent is scoped to.
 export const PROBE_READ = { namespace: "capsid", path: "conventions.md", word: "conventions" };
 
