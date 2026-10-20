@@ -29,6 +29,7 @@ import { allPages } from "./src/pages.mjs";
 const here = import.meta.dirname;
 const require = createRequire(import.meta.url);
 const LIVE = "https://mcp.dustinedwards.info/public";
+const GENERATED = /\.generated\.[^/]+$/;
 
 /** @param {string} source a path or an https URL */
 async function read(source) {
@@ -86,7 +87,9 @@ async function readCode(source) {
 /**
  * Every module's source, keyed "owner/repo path": from a directory, or from GitHub at the
  * map's commit, a few files at a time. A file GitHub does not have stops the build, since the
- * map says it was there at that commit.
+ * map says it was there at that commit, except a build-time generated one (name.generated.ext):
+ * a repo's code map runs after its install writes them, but git never holds them, so their
+ * pages show no source.
  * @param {any} code @param {string | undefined} dir
  */
 async function readSources(code, dir) {
@@ -105,6 +108,7 @@ async function readSources(code, dir) {
       wanted.slice(i, i + 8).map(async (/** @type {{ repo: string, sha: string, path: string }} */ w) => {
         const url = `https://raw.githubusercontent.com/${w.repo}/${w.sha}/${escapePath(w.path)}`;
         const response = await fetch(url);
+        if (response.status === 404 && GENERATED.test(w.path)) return;
         if (!response.ok) throw new Error(`GET ${url} answered ${response.status}`);
         out.set(`${w.repo} ${w.path}`, await response.text());
       })
