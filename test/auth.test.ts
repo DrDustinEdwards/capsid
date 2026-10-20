@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sha256Hex, operatorIdentity, timingSafeEqual } from "../src/auth.ts";
+import { bearerToken, sha256Hex, operatorIdentity, timingSafeEqual } from "../src/auth.ts";
 import { sourceFiles } from "./source-files.ts";
 
 async function grantOf(request: Request, env: { OPERATOR_KEY_HASH?: string }) {
@@ -144,4 +144,16 @@ test("timingSafeEqual hands the compare to the platform's crypto.subtle.timingSa
     if (had) Object.defineProperty(subtle, "timingSafeEqual", had);
     else delete subtle.timingSafeEqual;
   }
+});
+
+test("bearerToken: the scheme in any case, one token, nothing else", () => {
+  const with_ = (value: string | null) =>
+    bearerToken(new Request("https://example.com/", { headers: value === null ? {} : { Authorization: value } }));
+  assert.equal(with_("Bearer abc"), "abc");
+  assert.equal(with_("bearer abc"), "abc", "RFC 9110: the scheme is case-insensitive");
+  assert.equal(with_("BEARER  abc "), "abc");
+  assert.equal(with_("Bearer "), null);
+  assert.equal(with_("Bearer a b"), null, "a token has no space in it");
+  assert.equal(with_("Basic abc"), null);
+  assert.equal(with_(null), null);
 });

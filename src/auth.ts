@@ -61,13 +61,23 @@ export interface OperatorIdentity {
   fingerprint: string | null;
 }
 
+/**
+ * The token of an `Authorization: Bearer` header, or null. The scheme is case-insensitive
+ * (RFC 6750 via RFC 9110), and a token is one run without whitespace, as in Carrel and
+ * site-api; a header with anything after the token is refused.
+ */
+export function bearerToken(request: Request): string | null {
+  const match = /^Bearer +(\S+) *$/i.exec(request.headers.get("Authorization") ?? "");
+  return match ? match[1] : null;
+}
+
 export async function operatorIdentity(
   request: Request,
   env: { OPERATOR_KEY_HASH?: string }
 ): Promise<OperatorIdentity> {
-  const auth = request.headers.get("Authorization");
-  if (!auth || !auth.startsWith("Bearer ") || !env.OPERATOR_KEY_HASH) return { grant: null, fingerprint: null };
-  const hash = await sha256Hex(auth.slice("Bearer ".length).trim());
+  const token = bearerToken(request);
+  if (!token || !env.OPERATOR_KEY_HASH) return { grant: null, fingerprint: null };
+  const hash = await sha256Hex(token);
   for (const raw of env.OPERATOR_KEY_HASH.split(",")) {
     const entry = raw.trim().toLowerCase();
     if (!entry) continue;
