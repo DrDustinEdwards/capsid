@@ -6,8 +6,7 @@ import { setSiteKey, SITE_SECRET } from "../site-key";
 import { whatsNext } from "../whats-next";
 import { fail, ok, type ToolCtx } from "./docs";
 
-// The operations Capsid Admin added (capsid/rulings/mcp-2026-10-10.md, amendment answer
-// 2): what needs the seat, Workers Builds, and a site's key. Each is served on the admin
+// The operations Capsid Admin added: what needs the seat, Workers Builds, and a site's key. Each is served on the admin
 // server only (src/tools/surface.ts), and each tool is admin only in TOOL_GRANTS.
 
 const run = async (fn: () => Promise<unknown>) => {

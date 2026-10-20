@@ -2,8 +2,7 @@ import type { Env } from "./env";
 import type { OpsTask, OpsTaskRun, OpsTaskRunOutcome } from "./ops-types";
 import { logEvent } from "./log";
 
-// The run ledger (migrations/0029_task_runs.sql; capsid/decisions.md 2026-09-30,
-// "admin panels review adopted", item 1). Every scheduled task goes through runTask,
+// The run ledger (migrations/0029_task_runs.sql). Every scheduled task goes through runTask,
 // which writes one task_runs row per run: start, finish, outcome and a one-line
 // reason. The Portal reads the newest runs of each task (readTaskRuns) and flags a
 // task that has failed or gone quiet (taskStates).

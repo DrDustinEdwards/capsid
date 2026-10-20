@@ -344,7 +344,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   // capsid_inspect_repo actions refs and history are reads and stay open to ro: keys.
   // capsid_close_pr action delete_branch and capsid_run_ci need the write grant: one destroys refs, the other spends CI minutes
   // and can start a deploy. These four are a ruled exception to the tool surface
-  // rule (CLAUDE.md; capsid/decisions.md).
+  // rule (CLAUDE.md).
 
   ctx.ops.define(
     "repo_refs",

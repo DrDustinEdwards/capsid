@@ -8,14 +8,13 @@ import { TOOL_GRANTS } from "../src/scope.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
 // The rule documents' two checks (src/rule-docs.ts, job_c13dc0d4f22f): the cap
-// (capsid/conventions.md, Capsid section) and stale tool names. Each is planted and seen red here; the
+// and stale tool names. Each is planted and seen red here; the
 // maintenance query runs against real D1 in test-integration/maintenance.test.ts.
 
 test("which documents are rule documents, and their caps", () => {
   const rules: Array<[string, string, number]> = [
     ["sample", "core.md", CORE_CAP_BYTES],
     ["sample", "decisions.md", RULE_DOC_CAP_BYTES],
-    ["sample", "decisions-vol-2.md", RULE_DOC_CAP_BYTES],
     ["capsid", "conventions.md", RULE_DOC_CAP_BYTES],
     ["capsid", "conventions-web.md", RULE_DOC_CAP_BYTES],
     ["capsid", "repo-structure.md", RULE_DOC_CAP_BYTES],
@@ -25,6 +24,7 @@ test("which documents are rule documents, and their caps", () => {
   ];
   const records: Array<[string, string]> = [
     ["capsid", "archive/decisions-vol-7.md"],
+    ["sample", "decisions-vol-2.md"],
     ["capsid", "research/design-mcp-servers.md"],
     ["capsid", "reports/lint-2026-09-12.md"],
     ["capsid", "audits/CLOSED-2026-09.md"],
@@ -141,7 +141,7 @@ test("PLANT: capsid_write_doc refuses to grow a rule document past its cap, and 
   try {
     const out = await call(client, { namespace: "capsid", path: "decisions.md", mode: "append", body: "y".repeat(100) });
     assert.equal(out.isError, true, "the decisions log grew past 20KB");
-    assert.match(out.content[0].text, /over the 20480-byte cap.*next volume/);
+    assert.match(out.content[0].text, /over the 20480-byte cap.*Fold rulings into the rules they changed/);
     assert.equal(recorded.length, 0);
     const record = await call(client, { namespace: "capsid", path: "research/long.md", title: "Long", body: "z".repeat(RULE_DOC_CAP_BYTES * 2) });
     assert.equal(record.isError ?? false, false, record.content[0].text);
@@ -150,7 +150,7 @@ test("PLANT: capsid_write_doc refuses to grow a rule document past its cap, and 
   }
 });
 
-test("a move of a rule document to a volume, and a restore that recreates one, put back what was held", async () => {
+test("a move of a rule document to the archive, and a restore that recreates one, put back what was held", async () => {
   const big = "x".repeat(RULE_DOC_CAP_BYTES + 100);
   const moved = await connect({ namespaces, documents: [
       { namespace: "capsid", path: "decisions.md", title: "Log", body: `${big}\nmanage_pr`, type: "decision" },
@@ -158,7 +158,7 @@ test("a move of a rule document to a volume, and a restore that recreates one, p
     ],
   });
   try {
-    const out = (await moved.client.callTool({ name: "capsid_write_doc", arguments: { action: "move", namespace: "capsid", path: "decisions.md", new_path: "decisions-vol-9.md", confirm: true } })) as { isError?: boolean; content: Array<{ text: string }> };
+    const out = (await moved.client.callTool({ name: "capsid_write_doc", arguments: { action: "move", namespace: "capsid", path: "decisions.md", new_path: "archive/decisions-vol-9.md", confirm: true } })) as { isError?: boolean; content: Array<{ text: string }> };
     assert.equal(out.isError ?? false, false, out.content[0].text);
     const onto = (await moved.client.callTool({ name: "capsid_write_doc", arguments: { action: "move", namespace: "capsid", path: "research/big.md", new_path: "schema.md", confirm: true } })) as { isError?: boolean; content: Array<{ text: string }> };
     assert.ok(onto.isError, "a record moved onto a rule path is held to the checks");

@@ -1,7 +1,7 @@
 # People and roles across the family
 
 Job `job_c9f130f528bb`, revising the lab-only design from job_4acb6ae89b9f (capsid PR #304). The ruling this follows
-is `capsid/decisions.md`, "2026-10-09: people and roles across the family"; where this document and the ruling
+is Dustin's of 2026-10-09, "people and roles across the family"; where this document and the ruling
 differ, the ruling wins. Design only: nothing built, no account setting changed.
 
 ## In brief

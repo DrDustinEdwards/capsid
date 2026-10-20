@@ -5,8 +5,7 @@ import { auditStatement } from "./store-guards";
 import { b64urlFromBytes } from "./encoding";
 import { logEvent } from "./log";
 
-// SET A SITE KEY (capsid/rulings/mcp-2026-10-10.md, amendment answer 2: "set_site_key
-// (Admin: create a site key and set it on both sides, never shown)"), served as
+// SET A SITE KEY (create a site key and set it on both sides, never shown), served as
 // capsid_admin_set_site_key. The site key is the site API's key
 // (DrDustinEdwards/site-api): the site's Worker holds it as CARREL_SITE_KEY, and Carrel
 // holds the same value as SITE_<NAMESPACE>_KEY to call that site. This mints a new one

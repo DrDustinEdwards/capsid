@@ -3,7 +3,7 @@ import { z, type ZodType } from "zod";
 // An input shape as the SDK takes it: field name to zod (classic) schema.
 export type Shape = Record<string, ZodType>;
 
-// The operations behind the served tools (capsid/rulings/mcp-2026-10-10.md, MCP 4).
+// The operations behind the served tools (the MCP 4 regroup).
 //
 // Capsid serves 14 tools and Capsid Admin 8, each one whole job with an `action`
 // argument. The work each action does is an operation: a handler with its own input

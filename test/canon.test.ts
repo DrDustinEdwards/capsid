@@ -4,7 +4,7 @@ import { CANON_RULES, canonGuarded, directiveLines, isCanonPath, isDirectiveLine
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 
-// Canon write-protection (capsid/decisions.md, 2026-10-03, OWASP hardening item 2): which
+// Canon write-protection (OWASP hardening item 2): which
 // documents are canon, who is held to review, and which added lines are flagged. The
 // queue itself runs against real D1 in test-integration/canon.test.ts.
 
@@ -15,7 +15,7 @@ test("the canon list is the four rules the design names, no more", () => {
       "capsid/conventions.md and capsid/conventions-<name>.md",
       "capsid/repo-structure.md",
       "<namespace>/core.md",
-      "<namespace>/decisions.md and its volumes, live or archived",
+      "<namespace>/decisions.md and its archived volumes",
     ]
   );
 });
@@ -28,8 +28,8 @@ test("canon paths match, and their near misses do not", () => {
     ["capsid", "core.md"],
     ["sample", "core.md"],
     ["capsid", "decisions.md"],
-    ["capsid", "decisions-vol-5.md"],
     ["capsid", "archive/decisions-vol-4.md"],
+    ["sample", "archive/decisions.md"],
     ["sample", "decisions.md"],
   ];
   const not: Array<[string, string]> = [
@@ -39,6 +39,7 @@ test("canon paths match, and their near misses do not", () => {
     ["capsid", "core.md.bak"],
     ["capsid", "Core.md"],
     ["capsid", "./core.md"],
+    ["capsid", "decisions-vol-5.md"],
     ["capsid", "decisions-vol-x.md"],
     ["capsid", "decisions-notes.md"],
     ["capsid", "archive/decisions.md.old"],

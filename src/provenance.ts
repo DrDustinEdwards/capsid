@@ -1,6 +1,6 @@
 import { actorKind } from "./job-touches";
 
-// PROVENANCE TAGS (capsid/decisions.md, 2026-10-03, OWASP hardening item 1, D2). Text that
+// PROVENANCE TAGS (OWASP hardening item 1). Text that
 // Capsid relays from outside it, into a job body or a message a driver reads, is wrapped
 // in a labelled fence so a reader can tell data from instruction:
 //

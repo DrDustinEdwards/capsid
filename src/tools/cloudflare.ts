@@ -11,7 +11,7 @@ export function defineCloudflareOperations(server: McpServer, ctx: ToolCtx): voi
   const { env } = ctx;
 
   // Cloudflare Access and Email Routing, read. Ruled 2026-09-29, "Capsid MCP roadmap,
-  // build or don't build" (capsid/decisions.md). Admin only in whole: it reads the
+  // build or don't build". Admin only in whole: it reads the
   // account's login gates and mail routes, which span every namespace. TOOL_GRANTS in
   // src/scope.ts states it and the registrar refuses anyone else before this handler
   // runs. It reads only, through src/ops-cloudflare-config.ts, which copies named

@@ -64,7 +64,6 @@ export function isCanon(namespace: string, path: string): boolean {
   if (namespace !== "capsid") return false;
   return (
     /^conventions[^/]*\.md$/.test(path) ||
-    path === "decisions.md" ||
     path === "archive/decisions-vol-4.md" ||
     path === "archive/decisions-vol-8.md" ||
     path.startsWith("rulings/")

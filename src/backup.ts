@@ -42,8 +42,7 @@ function cutoffDay(now: Date, days: number): string {
 }
 
 // The dump itself is @dustinedwards/d1-dump, the package every site installs, so
-// Capsid and the sites run one implementation (capsid/decisions.md, 2026-09-27,
-// "shared functions across the sites", point 1).
+// Capsid and the sites run one implementation.
 //
 // Tables paged rather than read whole. Reading every table in one batch holds the
 // whole database in the isolate, and once version bodies grew past what the isolate

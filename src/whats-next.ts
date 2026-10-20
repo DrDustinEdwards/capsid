@@ -9,8 +9,7 @@ import { appliedMigrations, blockSettled } from "./inbox";
 import { readStaleCache, staleJobs } from "./stale-jobs";
 
 // WHAT NEEDS ME (capsid/research/design-mcp-servers.md, section 3: "the ruling's 'what
-// needs me'"; capsid/rulings/mcp-2026-10-10.md, amendment answer 2: "all open PRs across
-// repos with CI and conflicts"). One read for the seat, served as capsid_admin_whats_next:
+// needs me'": all open PRs across repos with CI and conflicts). One read for the seat, served as capsid_admin_whats_next:
 //
 //   - questions: blocked jobs asking the seat a question, answered with a resume note;
 //   - blocked: blocked jobs waiting on a command the seat runs;

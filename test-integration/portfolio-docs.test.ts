@@ -31,8 +31,8 @@ const ok = async (name: string, args: Record<string, unknown>) => {
   return JSON.parse(result.content[0].text);
 };
 
-const ALLOWED = ["archive/decisions-vol-7.md", "conventions.md", "core.md", "decisions-vol-5.md", "decisions.md", "rulings/testing-2026-10-04.md"];
-const DENIED = ["archive/decisions-notes.md", "policy/gates.md", "research/plan.md", "rulings-secret/plan.md", "rulings/deeper/nested.md", "decisions-vol-x.md"];
+const ALLOWED = ["archive/decisions-vol-7.md", "conventions.md", "core.md", "rulings/remove-improve-loop-2026-10-19.md"];
+const DENIED = ["archive/decisions-notes.md", "decisions-vol-5.md", "decisions.md", "policy/gates.md", "research/plan.md", "rulings-secret/plan.md", "rulings/deeper/nested.md", "decisions-vol-x.md"];
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM audit_log").run();

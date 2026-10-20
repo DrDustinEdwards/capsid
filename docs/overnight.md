@@ -1,6 +1,6 @@
 # The overnight run
 
-What a night of unattended driver work looks like: a plan and a morning digest, plus a switch that now gates nothing. Ruled by Dustin 2026-10-04 (D2 and D3 of `capsid/research/design-automation-for-speed.md`; the amendment is in `capsid/decisions.md`). Code: `src/overnight.ts`, `src/overnight-plan.ts`.
+What a night of unattended driver work looks like: a plan and a morning digest, plus a switch that now gates nothing. Ruled by Dustin 2026-10-04 (D2 and D3 of `capsid/research/design-automation-for-speed.md`). Code: `src/overnight.ts`, `src/overnight-plan.ts`.
 
 **The local Windows scheduler was removed** (job_2c92174d5bff, 2026-10-11): `scripts/schedule-drivers.mjs`, its guard `scripts/overnight-guard.mjs`, the per-job session key it claimed with, and the claim leases and heartbeats it relied on are gone. Routines now start sessions in the cloud (docs/routines.md). The switch below is still stored and shown, and the plan and digest are still served, but nothing reads the switch to start a run.
 

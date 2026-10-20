@@ -1,5 +1,5 @@
 // The rule documents: the ones sessions follow as rules rather than read as records
-// (capsid/conventions.md, the Capsid section; job_c13dc0d4f22f). Two checks hold them:
+// (job_c13dc0d4f22f). Two checks hold them:
 //
 //   - the cap. A namespace's core.md stays under 8KB, any other rule document under 20KB.
 //   - stale tool names. A rule document names no tool or action the Worker does not
@@ -27,7 +27,7 @@ export const RULE_DOC_CAP_BYTES = 20 * 1024;
 // capsid documents that are rules for every session, besides the per-namespace ones.
 const CAPSID_RULE_PATHS = new Set(["repo-structure.md", "schema.md", "seat-operations.md"]);
 const CONVENTIONS = /^conventions(-[a-z0-9]+)*\.md$/;
-const DECISIONS = /^decisions(-vol-[1-9][0-9]{0,3})?\.md$/;
+const DECISIONS = /^decisions\.md$/;
 // One document directly inside rulings/, no deeper (src/portfolio-docs.ts reads it the same way).
 const RULING = /^rulings\/[a-z0-9][a-z0-9._-]*\.md$/;
 
@@ -168,7 +168,7 @@ export function ruleDocWriteRefusal(namespace: string, path: string, before: str
   if (!problem) return null;
   const reasons: string[] = [];
   if (problem.oversize && (before === null || byteLength(after) > byteLength(before))) {
-    const next = path === "core.md" ? "Rewrite it shorter: current facts only (capsid/conventions.md, Capsid section)." : DECISIONS.test(path) ? "Open the next volume (decisions-vol-<n>.md) or fold rulings into the rules they changed." : "Cut it, or split it by subject (capsid/conventions.md, Capsid section).";
+    const next = path === "core.md" ? "Rewrite it shorter: current facts only." : DECISIONS.test(path) ? "Fold rulings into the rules they changed, or move settled ones to archive/." : "Cut it, or split it by subject.";
     reasons.push(`it would be ${problem.bytes} bytes, over the ${problem.cap}-byte cap for this rule document${before === null ? "" : ` and larger than the ${byteLength(before)} bytes stored`}. ${next}`);
   }
   const had = multiset(before === null ? [] : staleToolNames(before).map((s) => s.text));

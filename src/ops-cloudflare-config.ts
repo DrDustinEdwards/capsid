@@ -3,7 +3,7 @@ import { CF_API, CfReadError, cfGetAll, cloudflareCredentials, type FetchLike } 
 
 // The reads behind capsid_admin_read_ops's Cloudflare actions: Access applications and policies, and Email
 // Routing rules and destination addresses. Ruled 2026-09-29, "Capsid MCP roadmap,
-// build or don't build" (capsid/decisions.md). Only src/tools/cloudflare.ts imports
+// build or don't build". Only src/tools/cloudflare.ts imports
 // this module (test/ops-cloudflare-config.test.ts), and that tool is admin only.
 //
 // Every reader copies named fields into a fresh object. Nothing Cloudflare returns is

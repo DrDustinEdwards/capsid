@@ -1,5 +1,5 @@
-// The MCP endpoint on the family domain (capsid/decisions.md 2026-10-01, "one address
-// pattern for the family"; job_2f9671f89e89, approved as a same-day cut):
+// The MCP endpoint on the family domain ("one address pattern for the family";
+// job_2f9671f89e89, approved as a same-day cut):
 // https://mcp.dustinedwards.info, a Custom Domain on this Worker.
 //
 // That host serves the machine surface and nothing else: the MCP endpoints, the OAuth

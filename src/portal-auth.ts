@@ -162,8 +162,7 @@ export async function portalGate(request: Request, env: Env, now: Date, returnTo
   return { ok: true, user };
 }
 
-// The address a Portal request came from, for its audit row (capsid/decisions.md
-// 2026-09-30, "admin panels review adopted", item 6). Cloudflare's edge sets
+// The address a Portal request came from, for its audit row. Cloudflare's edge sets
 // CF-Connecting-IP on every request and replaces any value a client sends, so it is
 // the visitor's address. A value that is not an IPv4 or IPv6 address is recorded as
 // null rather than stored as given.

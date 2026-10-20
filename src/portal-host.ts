@@ -1,5 +1,5 @@
-// Capsid Portal on its own host (capsid/decisions.md 2026-10-01, "one address pattern for
-// the family"): https://portal.dustinedwards.info, a Custom Domain on this Worker. It is a
+// Capsid Portal on its own host ("one address pattern for the family"):
+// https://portal.dustinedwards.info, a Custom Domain on this Worker. It is a
 // separate origin from every public site, and its cookies are host-only.
 //
 // The Portal's routes are written once, under /portal (src/routes.ts). On the Portal host a

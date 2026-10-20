@@ -2,9 +2,8 @@ import type { Env } from "../env";
 import { assertRepoArg, getDefaultBranch, getRefSha, ghFetch, resolveRepo } from "./client";
 import { readRepoFile } from "./contents";
 
-// Tag a commit, and publish its release with the notes from the repo's CHANGELOG
-// (capsid/rulings/mcp-2026-10-10.md, amendment answer 2, "tag and release (a new
-// action)"). Served as capsid_close_pr actions tag and release, which need can_merge
+// Tag a commit, and publish its release with the notes from the repo's CHANGELOG.
+// Served as capsid_close_pr actions tag and release, which need can_merge
 // (src/scope.ts repoWriteFlags): a tag or a release can start a deploy as a merge can.
 //
 // A release is refused before anything is written when its CHANGELOG has no section for

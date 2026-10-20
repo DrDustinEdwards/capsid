@@ -1,4 +1,4 @@
-// One honest set of hints per served tool (capsid/rulings/mcp-2026-10-10.md, rule 6),
+// One honest set of hints per served tool,
 // so a client can confirm before acting. A tool's hints hold for every action it takes:
 // a tool with one action that writes is not read-only. test/tool-annotations.test.ts
 // derives each flag and fails both directions:

@@ -4,8 +4,8 @@ import { callerIsSeat } from "./jobs-transition";
 import { TOOL_GRANTS } from "./scope";
 import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged, requireMissing, snapshotLive } from "./store-guards";
 
-// CANON WRITE-PROTECTION (capsid/decisions.md, 2026-10-03, OWASP hardening item 2, D3;
-// design: capsid/research/design-owasp-hardening.md, "Item 2").
+// CANON WRITE-PROTECTION (OWASP hardening item 2; design:
+// capsid/research/design-owasp-hardening.md, "Item 2").
 //
 // Canon is what every agent is told to trust: the portfolio rules, the layer model, each
 // namespace's core.md and its decisions log (capsid/repo-structure.md, layers 2 to 6
@@ -20,7 +20,7 @@ import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged
 // can_merge, the same test every seat-only job transition uses).
 //
 // Lines a proposal adds that read as instructions to agents are flagged for the
-// reviewer, never auto-rejected: the rulings in decisions.md are themselves
+// reviewer, never auto-rejected: the rulings in a decisions log are themselves
 // instructions to agents, and an automatic reject would refuse the seat's own canon.
 
 export interface CanonRule {
@@ -35,7 +35,7 @@ export const CANON_RULES: readonly CanonRule[] = [
   { namespace: "capsid", pattern: /^conventions(-[a-z0-9]+)*\.md$/, label: "capsid/conventions.md and capsid/conventions-<name>.md" },
   { namespace: "capsid", pattern: /^repo-structure\.md$/, label: "capsid/repo-structure.md" },
   { namespace: "*", pattern: /^core\.md$/, label: "<namespace>/core.md" },
-  { namespace: "*", pattern: /^(archive\/)?decisions(-vol-[1-9][0-9]{0,3})?\.md$/, label: "<namespace>/decisions.md and its volumes, live or archived" },
+  { namespace: "*", pattern: /^(decisions|archive\/decisions(-vol-[1-9][0-9]{0,3})?)\.md$/, label: "<namespace>/decisions.md and its archived volumes" },
 ];
 
 /** Whether a document is canon. Exact strings: documents are keyed by the exact path,

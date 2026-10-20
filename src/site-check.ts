@@ -5,9 +5,7 @@ import { readPage, type FetchLike } from "./live-checks";
 import { probeSite } from "./ops-snapshot";
 import { readSiteRow, sitesFrom } from "./ops-sites";
 
-// A live check of one namespace's site, on demand (capsid/rulings/mcp-2026-10-10.md,
-// amendment answer 2: "live site checks (health, page, 401 probe) in the inspect tool"),
-// served as capsid_inspect_repo action site. Three reads of the site's own configured
+// A live check of one namespace's site, on demand, served as capsid_inspect_repo action site. Three reads of the site's own configured
 // origin, never another host: its health route (as the watcher probes it), one page
 // (its status and the OWASP headers), and one path that must refuse a caller with no
 // credential (its operator API by default).

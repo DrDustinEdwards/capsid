@@ -223,8 +223,7 @@ export function refreshAllowedAt(last: string | null, now: Date): string | null 
   return next > now.getTime() ? new Date(next).toISOString() : null;
 }
 
-// The store's size against D1's cap (capsid/decisions.md 2026-09-30, "admin panels
-// review adopted", item 5). Every D1 result carries the database's size in
+// The store's size against D1's cap. Every D1 result carries the database's size in
 // meta.size_after, so the jobs read below reports it and the feed makes no extra read
 // (Foxhound reads it the same way: PRAGMA page_count is not authorized on D1). 10 GB is
 // the per-database cap on Workers Paid (developers.cloudflare.com/d1/platform/limits);

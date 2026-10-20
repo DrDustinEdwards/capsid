@@ -381,7 +381,7 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
       env.DB.prepare(
         `SELECT path, type, status, updated_at, body FROM documents
          WHERE namespace = ?1 AND path NOT LIKE 'archive/%'
-           AND (type IN (SELECT value FROM json_each(?2)) OR path = 'core.md' OR path LIKE 'decisions%' OR path LIKE 'conventions%' OR path = 'repo-structure.md')
+           AND (type IN (SELECT value FROM json_each(?2)) OR path = 'core.md' OR path = 'decisions.md' OR path LIKE 'conventions%' OR path = 'repo-structure.md')
          ORDER BY path LIMIT ?3`
       ).bind(namespace, JSON.stringify([...CANON_TYPES]), MAX_DOCS_PER_NAMESPACE),
       env.DB.prepare("SELECT from_path, type, to_path FROM document_links WHERE from_ns = ?1 AND to_ns = ?1 LIMIT ?2").bind(namespace, MAX_EDGES_PER_NAMESPACE),

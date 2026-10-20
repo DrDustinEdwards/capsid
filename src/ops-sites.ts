@@ -3,7 +3,7 @@ import { auditStatement } from "./store-guards";
 import { parseOperator } from "./site-operator";
 
 // The sites the watcher probes for Capsid Portal (capsid/research/design-ops-console.md),
-// read from configuration, not code. Ruling: capsid/decisions.md, 2026-09-29, "Portal
+// read from configuration, not code. Ruled 2026-09-29: "Portal
 // monitoring is optional and configured per install". The rows live in D1 (ops_sites,
 // migrations/0022_ops_sites.sql) and are edited in the Portal's Settings view through
 // the same preview and perform as every other control (src/portal-actions.ts). This

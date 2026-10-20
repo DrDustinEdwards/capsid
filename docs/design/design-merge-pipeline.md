@@ -204,7 +204,7 @@ capsid is included in one-tap approval. Its protection is the live gate and the 
 - Immediate effect: the tick suspends that unit (a KV flag, so its PRs fall to `approve`). This only narrows, so it needs no human, and the inbox shows it with Undo.
 - What it raises: a proposal to remove the unit from the signed list, approved the same way.
 
-The learning table proposes and never applies (conventions-routing.md rule 3). Promotion follows the same rule: every widening is one tap and one signature by Dustin.
+The learning table proposes and never applies. Promotion follows the same rule: every widening is one tap and one signature by Dustin.
 
 **Safety meter and shutoff** (`src/merge-safety.ts`; job_cd5ffb1f87b4). A unit's suspension narrows one path class; this narrows a namespace, and adds the one signal nothing recorded, the revert. All of it is done by the tick outside the signed policy, like the suspension, so it needs no new policy version, and it only narrows.
 - *Revert tracking.* Half-hourly, a merged pull request that reverts one the tick auto-merged (GitHub's revert button, "revert #N", or "This reverts commit <sha>") is recorded as an `auto-merge-reverted` audit row. Units read these rows as rollbacks of an unattended merge.
@@ -275,4 +275,4 @@ In the order to answer them. Each has a recommendation.
 
 ## Answered (Dustin, 2026-10-09)
 
-All eleven as recommended. 1: v6 was signed that day by the seat with Dustin's admin login. 5: the phone is Android, so Web Push, plus a daily email digest; turning on Email Routing is Dustin's account step. 3: chat reaches `pr_approvals` through the existing `capsid_admin_run_controls`, no new tool. Why the whole design: what protects a merge is the checks around it, not who presses the button, and a pause that only routes through the seat adds friction without review (capsid/decisions.md, 2026-10-09).
+All eleven as recommended. 1: v6 was signed that day by the seat with Dustin's admin login. 5: the phone is Android, so Web Push, plus a daily email digest; turning on Email Routing is Dustin's account step. 3: chat reaches `pr_approvals` through the existing `capsid_admin_run_controls`, no new tool. Why the whole design: what protects a merge is the checks around it, not who presses the button, and a pause that only routes through the seat adds friction without review.

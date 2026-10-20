@@ -12,7 +12,7 @@ export function defineAgentOperations(server: McpServer, ctx: ToolCtx): void {
   const { db, actor } = ctx;
 
   // The credential control plane's one tool, a ruled exception to the tool surface
-  // rule (CLAUDE.md; capsid/decisions.md). Minting by hand would leave the scope rows
+  // rule (CLAUDE.md). Minting by hand would leave the scope rows
   // with no audit trail and no validation. Its actions share one tool because they
   // are one subsystem with one row shape.
   ctx.ops.define(

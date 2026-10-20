@@ -3,8 +3,7 @@ import { z, type ZodType } from "zod";
 import { hintsFor } from "../tool-annotations";
 import type { OperationResult, Operations, Shape } from "./operations";
 
-// The served surface (capsid/rulings/mcp-2026-10-10.md, amendment answers 2 and 3;
-// capsid/research/design-mcp-servers.md section 3). Capsid serves 14 whole-job tools
+// The served surface (capsid/research/design-mcp-servers.md section 3). Capsid serves 14 whole-job tools
 // on /mcp and /ops/mcp, and Capsid Admin 8 on its own route for the administrator
 // alone (src/mcp-handler.ts). Each tool is named {service}_{action}_{resource}
 // (ruling rule 5) and carries one honest set of hints (rule 6, src/tool-annotations.ts).

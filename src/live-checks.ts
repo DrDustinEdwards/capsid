@@ -9,10 +9,10 @@ import { readCapped } from "./read-capped";
 // by Dustin 2026-10-04). Four things Dustin checked by hand with PowerShell after a
 // deploy, read by the Worker instead: the deployed sha against the default branch, the
 // Web Analytics beacon on public pages, a CSP that lets the beacon load and report,
-// and no beacon on pages that must not carry one (conventions-web.md rule 11).
+// and no beacon on pages that must not carry one.
 //
 // WHAT TO CHECK IS A DOCUMENT, NOT CODE. Which pages carry a beacon is a cross-repo
-// rule (conventions-web.md rule 11), so it lives in Capsid's store at capsid/policy/live-checks.md,
+// rule, so it lives in Capsid's store at capsid/policy/live-checks.md,
 // beside the other policies, and is read each pass. No document means the check does not
 // run: nothing is probed on a guess. It judges nothing but what it is told to look at,
 // and it can only post a job, like every watcher finding. See docs/live-checks.md.

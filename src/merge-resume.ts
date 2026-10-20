@@ -5,7 +5,7 @@ import { readJob } from "./jobs-transition";
 import { prUrlsFromJob } from "./outcome-prs";
 import { nextStaleCache, readStaleCache, STALE_PRS_KEY, tallyPrStates, type PrState, type StalePrCache } from "./stale-jobs";
 
-// The stale-jobs step on the five-minute tick (capsid/decisions.md, 2026-10-03, D1 to D3).
+// The stale-jobs step on the five-minute tick.
 // A merge is not completion, so this never closes anything: it returns a BLOCKED job to
 // its holder (or the queue) once EVERY pull request the job names has merged, with a
 // note per pull request. A pull request that is closed without merging, unreadable or

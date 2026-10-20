@@ -12,7 +12,7 @@ A Cloudflare Worker, run by its owner and the co-owners in `CO_OWNER_EMAILS`, se
 
 Code comments cite these by name ("CLAUDE.md, snapshot rule").
 
-1. **Tool surface.** Every served tool is in `TOOL_GRANTS` and `src/tools/surface.ts`; a new tool needs a ruling in `capsid/decisions.md` first.
+1. **Tool surface.** Every served tool is in `TOOL_GRANTS` and `src/tools/surface.ts`; a new tool needs Dustin's ruling first, recorded as its own file under `capsid/rulings/`.
 2. **Public repo.** Never commit `wrangler.jsonc`, `.dev.vars`, `.env`, a key or real vault content; fixtures use fake data (example.com, namespace "sample"). Never print a token.
 3. **Snapshot.** Every overwrite and delete snapshots to `document_versions` and writes `audit_log`.
 4. **One enforcement point.** `checkScope` is the only grant check; every repo mutation goes through `guardedWrite`.
