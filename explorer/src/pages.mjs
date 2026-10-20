@@ -47,7 +47,7 @@ export const partPath = (c) => `${containersPath(c.system)}#part-${c.id}`;
 
 /**
  * The page around a body: one stylesheet set, one module script, no inline script or style,
- * so the policy in _headers needs no hash (src/headers.mjs).
+ * so the policy in _headers needs no hash (src/security-headers.mjs).
  * @param {{ title: string, description: string, path: string, body: string, asOf: string, script?: boolean }} page
  */
 export function layout({ title, description, path, body, asOf, script = false }) {

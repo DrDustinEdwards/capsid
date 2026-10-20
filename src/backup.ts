@@ -1,7 +1,7 @@
 import { COMPLETE_MARKER, dumpDatabase, pruneDumps, writeCompleteMarker, type DumpResult } from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
-import { REPORT_PREFIX } from "./headers";
+import { REPORT_PREFIX } from "./security-headers";
 import { probeFts } from "./store-probe";
 import { logEvent } from "./log";
 

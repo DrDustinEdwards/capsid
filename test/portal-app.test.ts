@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { assetPath, DASHBOARD_CSP, handlePortalApp, HASHED_ASSET_CACHE, isNavigation } from "../src/portal-app.ts";
-import { CONSENT_DIALOG_HEADERS, withSecurityHeaders } from "../src/headers.ts";
+import { CONSENT_DIALOG_HEADERS, withSecurityHeaders } from "../src/security-headers.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // Capsid Portal's files behind the Portal gate (src/portal-app.ts), with a fake

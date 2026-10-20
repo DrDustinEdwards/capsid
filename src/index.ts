@@ -6,7 +6,7 @@ import { adminWriteObserver, recordAdminInitialize } from "./admin-client-audit"
 import { runBackup } from "./backup";
 import { supersedePass } from "./supersede";
 import { defaultHandler } from "./routes";
-import { mcpOriginProblem, withSecurityHeaders } from "./headers";
+import { mcpOriginProblem, withSecurityHeaders } from "./security-headers";
 import type { Env, Props } from "./env";
 import { buildAdminServer, buildServer } from "./server";
 import { ADMIN_MCP_ROUTE, serveMcp } from "./mcp-handler";

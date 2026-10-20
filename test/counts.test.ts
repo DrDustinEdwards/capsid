@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { AUTHORITATIVE, scanCountClaims } from "../src/counts.ts";
 
 const CAPSID = AUTHORITATIVE.capsid;
-import { CONSENT_DIALOG_HEADERS, securityHeadersFor } from "../src/headers.ts";
+import { CONSENT_DIALOG_HEADERS, securityHeadersFor } from "../src/security-headers.ts";
 // Fixtures derive the tool count rather than spelling it, so a surface change does
 // not break tests that check something else.
 const TOOLS = String(CAPSID.tools);
@@ -36,7 +36,7 @@ test("live gate count matches the distinct gates in verify-live.mjs", () => {
 });
 
 // The HTML surface's enforced headers come from two places, and the count is the
-// union of both: src/headers.ts emits most of them, and the consent dialog in
+// union of both: src/security-headers.ts emits most of them, and the consent dialog in
 // src/routes.ts sets its own enforced CSP, which withSecurityHeaders preserves. An
 // enforced header added to either file moves the number.
 const NOT_SECURITY_HEADERS = new Set(["Content-Type", "Set-Cookie", "Location", "Reporting-Endpoints"]);
@@ -57,7 +57,7 @@ test("header counts match what the header layer and the consent dialog actually 
     enforced.size,
     CAPSID.htmlEnforcedHeaders,
     `the HTML surface enforces ${enforced.size} headers (${[...enforced].sort().join(", ")}): ` +
-      `${fromLayer.length} from src/headers.ts and ${fromConsent.length} from the consent dialog, ` +
+      `${fromLayer.length} from src/security-headers.ts and ${fromConsent.length} from the consent dialog, ` +
       `but counts.ts says ${CAPSID.htmlEnforcedHeaders}`
   );
   // The consent CSP is the one the layer does not emit, and why this count needs two sources.

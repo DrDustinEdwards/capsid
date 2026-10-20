@@ -1,7 +1,7 @@
 import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import worker, { BACKUP_CRON } from "../src/index";
 import { checkRate, CSP_REPORT_LIMIT } from "../src/rate-limit";
-import { REPORT_PREFIX } from "../src/headers";
+import { REPORT_PREFIX } from "../src/security-headers";
 import { describe, expect, it } from "vitest";
 
 // /csp-report's body cap, measured against the real runtime. The cap must count

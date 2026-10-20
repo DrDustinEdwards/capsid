@@ -14,8 +14,11 @@
   }
   button, input, select, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  /* Text takes --accent-text (4.5:1 on every surface); --accent is for fills, rings and icons at
+     3:1. A link in running text is underlined, since colour alone can't set it apart from the words
+     around it (WCAG 1.4.1). */
+  a { color: var(--accent-text); text-decoration: none; }
+  a:hover, main a:not([class], .anchors a) { text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 /* Monospace is for identifiers only: ids, shas, fingerprints, commands, agent and
@@ -413,9 +416,9 @@ dialog { color: var(--text); }
 .stack i.b { background: var(--warn); } .stack i.r { background: var(--info); } .stack i.q { background: var(--line-strong); }
 .meter i.warn { background: var(--warn); } .meter i.crit { background: var(--crit); }
 .btn:disabled { opacity: 0.5; cursor: default; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 600; }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); font-weight: 600; }
 .btn.danger { background: var(--crit-soft); border-color: var(--crit); color: var(--crit); font-weight: 600; }
-.linkbtn { border: 0; padding: 0; background: none; color: var(--accent); font: inherit; }
+.linkbtn { border: 0; padding: 0; background: none; color: var(--accent-text); font: inherit; }
 .linkbtn:hover { text-decoration: underline; }
 .linkbtn:disabled { color: var(--dim); text-decoration: none; cursor: default; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -426,7 +429,7 @@ select.search { padding-right: 6px; }
 .confirm .section-title { margin-bottom: 4px; }
 .confirm form { gap: 6px; }
 .confirm-say { margin: 0; font-size: 14px; }
-.confirm-details > summary { color: var(--accent); min-height: 32px; display: flex; align-items: center; }
+.confirm-details > summary { color: var(--accent-text); min-height: 32px; display: flex; align-items: center; }
 ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
 ul.plain.mono { font-size: var(--fs-detail); }
 [data-open] { cursor: pointer; }

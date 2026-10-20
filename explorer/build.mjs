@@ -22,7 +22,7 @@ import { capsomerTheme } from "capsomer/enarratio-theme";
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
-import { headersFile } from "./src/headers.mjs";
+import { headersFile } from "./src/security-headers.mjs";
 import { codeBySystem, escapePath } from "./src/code.mjs";
 import { allPages } from "./src/pages.mjs";
 

@@ -12,7 +12,7 @@ import {
   REPORT_PATH,
   securityHeadersFor,
   withSecurityHeaders,
-} from "../src/headers.ts";
+} from "../src/security-headers.ts";
 
 // The offline half of the security header checks; the live half is in
 // scripts/verify-live.mjs. These assert the classes, not a list of paths, because a

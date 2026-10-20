@@ -11,7 +11,7 @@ import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-do
 import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
 import { readSiteConfig } from "./ops-sites";
 import { b64urlDecode, b64urlEncode } from "./encoding";
-import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./headers";
+import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./security-headers";
 import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./rate-limit";
 import type { Env, Props } from "./env";
 import { buildAdminServer, buildServer } from "./server";
@@ -148,7 +148,7 @@ ${othersHtml}
     status: 200,
     headers: {
       // The static headers, and why form-action is absent from the CSP: see
-      // CONSENT_DIALOG_HEADERS in ./headers.
+      // CONSENT_DIALOG_HEADERS in ./security-headers.
       ...CONSENT_DIALOG_HEADERS,
       "Set-Cookie": `${CSRF_COOKIE}=${csrf}; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=${STATE_TTL_SECONDS}`,
     },
