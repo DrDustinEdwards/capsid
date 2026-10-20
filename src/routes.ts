@@ -11,8 +11,9 @@ import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-do
 import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
 import { readSiteConfig } from "./ops-sites";
 import { b64urlDecode, b64urlEncode } from "./encoding";
-import { CONSENT_DIALOG_HEADERS, REPORT_PATH, REPORT_PREFIX } from "./security-headers";
-import { callerIp, checkRate, CSP_REPORT_LIMIT, rateLimitedResponse } from "./rate-limit";
+import { CONSENT_DIALOG_HEADERS, REPORT_PATH, securityHeadersFor } from "./security-headers";
+import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";
+import { callerIp, checkRate, CSP_REPORT_LIMIT } from "./rate-limit";
 import type { Env, Props } from "./env";
 import { buildAdminServer, buildServer } from "./server";
 import { ADMIN_OPS_MCP_ROUTE, serveMcp } from "./mcp-handler";
@@ -352,125 +353,25 @@ async function handleInboxReport(request: Request, env: Env): Promise<Response> 
   return Response.json({ ok: true, namespace, items: parsed.value.items.length, expires_in_seconds: REPORT_TTL_SECONDS }, { headers: { "Cache-Control": "no-store" } });
 }
 
-const CSP_REPORT_MAX_BYTES = 16384;
-// application/csp-report is the legacy report-uri type; application/reports+json is
-// the Reporting API type, which is what the COOP trial sends.
-const CSP_REPORT_TYPES = ["application/csp-report", "application/reports+json"];
-
-// A report, or not. Structural rather than a schema: the two wire formats disagree
-// on every key name, and browsers add fields.
-function looksLikeReport(parsed: unknown): boolean {
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    const legacy = (parsed as { "csp-report"?: unknown })["csp-report"];
-    return Boolean(legacy) && typeof legacy === "object";
-  }
-  if (Array.isArray(parsed)) {
-    return parsed.length > 0 && parsed.every((entry) => Boolean(entry) && typeof entry === "object" && "body" in (entry as object));
-  }
-  return false;
-}
-
-function summarizeReport(parsed: unknown): { directive: string; blocked: string; document: string } {
-  // Two wire formats reach here. report-uri sends {"csp-report": {...}} with
-  // hyphenated keys; the Reporting API (report-to) sends an array of
-  // {type, body} with camelCase keys, and COOP reports arrive that way too.
-  const legacy = (parsed as { "csp-report"?: Record<string, unknown> } | null)?.["csp-report"];
-  if (legacy) {
-    return {
-      directive: String(legacy["effective-directive"] ?? legacy["violated-directive"] ?? "?"),
-      blocked: String(legacy["blocked-uri"] ?? "?"),
-      document: String(legacy["document-uri"] ?? "?"),
-    };
-  }
-  const first = Array.isArray(parsed) ? (parsed[0] as { type?: string; body?: Record<string, unknown> }) : null;
-  if (first?.body) {
-    return {
-      directive: String(first.body.effectiveDirective ?? first.type ?? "?"),
-      blocked: String(first.body.blockedURL ?? "?"),
-      document: String(first.body.documentURL ?? "?"),
-    };
-  }
-  return { directive: "?", blocked: "?", document: "?" };
-}
-
+// The family's one receiver (@dustinedwards/site-runtime/csp-report): a POST always
+// gets 204, the body is read to 16 KB and no further, at most ten violations are
+// logged one line each with every URL cut to origin and path, and nothing is stored.
+// Capsid stored every report in R2 until 2026-10-20; nothing read them (the backup
+// prune only deleted them), so the store went with its own parser. The limiter is
+// still asked first, and a refusal is a dropped report rather than a 429.
 async function handleCspReport(request: Request, env: Env): Promise<Response> {
-  // Rate limited first, before the body is read: every accepted report becomes an R2
-  // object, so this is the Worker's most expensive unauthenticated write per call.
-  // The refusal is a 429 rather than the usual 204 (see rateLimitedResponse).
-  const ip = callerIp(request);
-  const rate = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
-  if (!rate.allowed) {
-    // The unavailable refusal has already logged itself.
-    if (rate.window !== "unavailable") {
-      logEvent("error", "CSP_REPORT_RATE_LIMITED", { message: `CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})` });
-    }
-    return rateLimitedResponse(rate);
-  }
-
-  // Content-Type first, before the body is even read.
-  const contentType = (request.headers.get("Content-Type") ?? "").split(";")[0].trim().toLowerCase();
-  if (!CSP_REPORT_TYPES.includes(contentType)) {
-    return new Response(`unsupported content type: expected one of ${CSP_REPORT_TYPES.join(", ")}`, {
-      status: 415,
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-    });
-  }
-  // Bounded at the stream, in bytes: readBoundedText cancels on the chunk that
-  // crosses the cap. Reading the whole text first would buffer an unbounded body on a
-  // public unauthenticated path, and a length check on text counts UTF-16 units, so a
-  // body of multi-byte characters would pass a cap named in bytes at three times it.
-  const bounded = await readBoundedText(request, CSP_REPORT_MAX_BYTES);
-  if (!bounded.ok) return new Response(null, { status: 413 });
-  const raw = bounded.text;
-
-  let parsed: unknown = null;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return new Response("body is not JSON", { status: 400, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-  }
-  if (!looksLikeReport(parsed)) {
-    return new Response('body is not a violation report: expected {"csp-report": {...}} or a non-empty array of {type, body}', {
-      status: 400,
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-    });
-  }
-
-  const now = new Date();
-  // The request's cf-ray has no colo suffix; the response's does. A report keys as
-  // "a29fb43b4ac66c31.json", not "a29fb43b4ac66c31-DFW.json", so looking one up by the
-  // ray off a response finds no such key against an object that is present.
-  const ray = request.headers.get("cf-ray") ?? crypto.randomUUID();
-  const key = `${REPORT_PREFIX}${now.toISOString().slice(0, 10)}/${ray}.json`;
-  const summary = summarizeReport(parsed);
-
-  logEvent("log", "CSP_VIOLATION_STORED", {
-    message: `csp-violation stored at ${key}`,
-    kind: "csp-violation",
-    key,
-    directive: summary.directive,
-    blocked: summary.blocked,
-    document: summary.document,
+  return receiveCspReport(request, {
+    headers: securityHeadersFor("other"),
+    allow: async (r) => {
+      const ip = callerIp(r);
+      const rate = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
+      // The unavailable refusal has already logged itself.
+      if (!rate.allowed && rate.window !== "unavailable") {
+        logEvent("error", "CSP_REPORT_RATE_LIMITED", { message: `CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})` });
+      }
+      return rate.allowed;
+    },
   });
-
-  await env.MEDIA.put(
-    key,
-    JSON.stringify(
-      {
-        received_at: now.toISOString(),
-        ray,
-        content_type: request.headers.get("Content-Type"),
-        user_agent: request.headers.get("User-Agent"),
-        summary,
-        report: parsed,
-      },
-      null,
-      2
-    ),
-    { httpMetadata: { contentType: "application/json" } }
-  );
-
-  return new Response(null, { status: 204 });
 }
 
 // /health lives in src/health.ts: routes.ts pulls cloudflare:workers via the Agents

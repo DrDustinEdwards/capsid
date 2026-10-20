@@ -332,7 +332,8 @@ async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
 
 // Deletes JSON dump runs outside the graduated retention (14 daily, 8 weekly and 6
 // monthly copies, capsid/rulings/shared-homes-2026-10-06.md), which is d1-dump's default
-// policy and is pruneDumps's job, and CSP reports past retention. pruneDumps counts runs
+// policy and is pruneDumps's job, and CSP reports past retention (the sink stopped
+// storing them on 2026-10-20; this reaps the last of them). pruneDumps counts runs
 // and not objects, deletes a run whole, never prunes the newest complete run, and
 // deletes nothing while no complete run exists.
 async function pruneR2(env: Env, now: string): Promise<{ kept: number; pruned: number; locked: number; reports: number }> {
