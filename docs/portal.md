@@ -46,7 +46,7 @@ The pages, grouped by task (docs/design/design-portal-evaluation.md section 2, D
 
 Every menu entry has an icon, so the collapsed menu has no blank button. On a phone the tab bar is Needs you, Health and Pull requests, and the header's menu button lists every page. Every risky control (Mark failed, Remove, Revoke) sits alone in a red "Danger" area, never beside a safe one. The job drawer has one primary action for the job's state, the other safe ones under "More actions". The confirm dialog says what the action does in a sentence; the rows it changes and the audit rows it writes are behind "Details" (open from the start for a rule change, whose lines are the decision). On a phone no text is under 13 px.
 
-Each old view's content moved whole, so nothing it showed was lost (conventions 1.3). An old address, such as a bookmark of `/portal/deploys`, is replaced by the page, tab or section that holds it now (`MOVED` in `dashboard/src/app/ctx.ts`), with no redirect period for the old letters (Dustin, 2026-10-09):
+Each old view's content moved whole, so nothing it showed was lost. An old address, such as a bookmark of `/portal/deploys`, is replaced by the page, tab or section that holds it now (`MOVED` in `dashboard/src/app/ctx.ts`), with no redirect period for the old letters (Dustin, 2026-10-09):
 
 | Was | Is now |
 |---|---|

@@ -47,7 +47,7 @@ The design adds one table, one Portal control that chat reaches through the exis
 | Manual merge | `manage_pr` merge needs `can_merge`, held by the admin, `seat` and `site-seat`. Default method squash, optional sha pin | `src/tools/repo.ts:253-300`, `src/scope.ts:526` |
 | Portal and merging | The Portal never merges and never mints. A test plants a merge and asserts it is refused | `docs/portal.md:200`, `test/portal-actions.test.ts:229,264` |
 | Deploy, capsid | CI deploys on every push to master, then `verify:live` runs 9 gates against `EXPECT_SHA`. On a refusal: `rollback-guard.mjs`, then `wrangler rollback`, then `/health` is polled until the sha moves | `.github/workflows/ci.yml:194-362`, `test/deploy-pipeline.test.ts:45` |
-| Deploy, other repos | dustinedwards deploys by `workflow_dispatch` only. carrel deploys on a push to main. capsomer changes no site until a tag is pinned. Whether carrel has a live gate or rollback was not read here (other repo) | `docs/policy/auto-merge.md`, "What a merge means" |
+| Deploy, other repos | dustinedwards deploys from its deploy workflow after green CI on main (`workflow_run`; corrected 2026-10-20, this row said `workflow_dispatch` only). carrel deploys on a push to main. capsomer changes no site until a tag is pinned. Whether carrel has a live gate or rollback was not read here (other repo) | `docs/policy/auto-merge.md`, "What a merge means" |
 | Live checks | The watcher reads CSP, headers, analytics and sha drift (a sha rule fires after 45 minutes). Read-only, never rolls back | `src/live-checks.ts`, `docs/live-checks.md` |
 | Rollback memory | None in D1. `docs/rollback.md` describes only the manual command and omits the CI rollback | `docs/rollback.md` |
 | Notifications | None. Every surface is pull: `improve_status`, `GET /ops/inbox`, the digest view, and the Portal polling every 60 s | `src/inbox.ts:76`, `docs/overnight.md:32` |
@@ -173,7 +173,7 @@ If Dustin's phone is Android-only, Web Push removes the third party, so the chan
 **What exists per repo.**
 - **capsid** is covered end to end: deploy, 9 live gates, automatic rollback, and `/health` polled until the sha moves.
 - **carrel** deploys on merge. Its live gate and rollback were not read from here.
-- **dustinedwards** ships by dispatch, so a merge deploys nothing.
+- **dustinedwards** deploys from its deploy workflow after green CI on main, so a merge is a deploy (corrected 2026-10-20; this said it ships by dispatch).
 - **The other configured sites** (germomics, foxing, foxhound, txasm, bsw, julieedwards on Vercel, claude-skills) are outside auto-merge. The watcher covers them with probes and sha drift only.
 
 **What is missing.**

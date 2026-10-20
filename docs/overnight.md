@@ -13,24 +13,23 @@ Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is 
 `capsid_work_jobs` action `list` with `view: "plan"` (read grant, no new tool). Per repo, the queued jobs in priority order that fit about eight hours.
 
 - **Eligible:** queued, no required flags, no `min_record`, a title that does not begin `LATER`, and a namespace that maps to a repo. Everything else is in `skipped` with its reason. A parked job is not queued, so it is never planned and never listed as skipped.
-- **Gated jobs are planned** (conventions 2.3: gates apply to risky steps, not whole jobs). A job with `gate_required` is planned like any other and marked `gated: true`. The session does its ordinary work (code, tests, docs, a pull request), lists each risky step (a migration, a deploy, a secret, an account setting, deleting data) in the pull request for the seat, blocks with the exact command, and moves on to the next job. test/overnight.test.ts guards it ("PLANT: a gated job is planned and marked gated").
+- **Gated jobs are planned** (gates apply to risky steps, not whole jobs). A job with `gate_required` is planned like any other and marked `gated: true`. The session does its ordinary work (code, tests, docs, a pull request), lists each risky step (a migration, a deploy, a secret, an account setting, deleting data) in the pull request for the seat, blocks with the exact command, and moves on to the next job. test/overnight.test.ts guards it ("PLANT: a gated job is planned and marked gated").
 - **One lane per repo.** Two namespaces that map to one repo share one lane, so there is never a second session on a repo.
 - **Heavy suites run one session at a time across repos.** Repos that run heavy suites share one budget (`heavy_planned_minutes`), so their lanes add up to one night, not several. Light repos each get the whole night.
 - **Estimates:** the policy document's `estimate`, else the 75th percentile of that namespace's unblocked job durations (at least 5 samples, floor 15 minutes), else 60 minutes. Each planned job says which.
 - A job that does not fit is skipped and a smaller later one may still go in. A job that blocks stops only itself.
 - A caller scoped to one namespace names it and gets that namespace's lane and skips. The plan is built over every namespace first, because the heavy budget is shared.
 
-`capsid/policy/overnight.md` (optional, read each pass): `- heavy <namespace>`, `- budget-minutes <n>` (60 to 1440, default 480) and `- estimate <namespace> <minutes>`. With no document, or one that names no heavy repo, every repo counts as heavy: unknown fails toward one session at a time. A document that does not parse is ignored and the plan says why. A proposed first version for the seat:
+`capsid/policy/overnight.md` (optional, read each pass): `- heavy <namespace>`, `- budget-minutes <n>` (60 to 1440, default 480) and `- estimate <namespace> <minutes>`. With no document, or one that names no heavy repo, every repo counts as heavy: unknown fails toward one session at a time. A document that does not parse is ignored and the plan says why. The stored version, ruled by Dustin 2026-10-06:
 
 ```
 - heavy capsid
-- heavy foxing
-- heavy germomics
+- heavy dustinedwards
 - heavy foxhound
 - budget-minutes 480
 ```
 
-(Which repos run heavy suites locally is Dustin's to say; the list above is a guess from capsid/conventions-testing.md rule 3, which puts private repos' integration and browser suites on his machine.)
+(Which repos run heavy suites is Dustin's to say; that ruling names the three that run real-database integration and browser tests.)
 
 ## The morning digest
 

@@ -2,8 +2,8 @@
 
 Which blocked commands the seat may approve without asking the human. This file is the
 reviewable source. The copy the Worker reads is the signed document at
-`capsid/policy/gates.md` in the store, signed with the same key and envelope as an
-improve loop task document. An unsigned copy, or one edited after signing, approves
+`capsid/policy/gates.md` in the store, signed with the same key and envelope as a
+job body (`signTaskBody`, src/signed-docs.ts). An unsigned copy, or one edited after signing, approves
 nothing.
 
 - version: 3
@@ -86,7 +86,8 @@ to master.
 - A push to a default branch, in the `git push` and the `git -C <path> push` form.
 - `wrangler deploy` or `wrangler rollback`.
 - Editing `wrangler.jsonc`.
-- Changing the improve loop's mode.
+- A command naming `improve_mode` or `improve_run` (the removed improve loop's mode
+  switch; the refusal stays in `src/gate-policy.ts`).
 - Dropping a table, index or column; deleting rows; truncating a table.
 - Deleting files recursively.
 - Merging a pull request. A merge is not approvable through this policy; the auto-merge
