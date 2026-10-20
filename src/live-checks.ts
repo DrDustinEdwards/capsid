@@ -25,8 +25,11 @@ const LIVE_CHECKS_PATH = "policy/live-checks.md";
 
 const BEACON_SCRIPT_HOST = "static.cloudflareinsights.com";
 const BEACON_REPORT_HOST = "cloudflareinsights.com";
-/** The two addresses a source must cover: the script itself and where it reports. */
-const BEACON_SCRIPT_URL = `https://${BEACON_SCRIPT_HOST}/beacon.min.js`;
+/** Where Cloudflare's edge injects the beacon from: a VERSIONED path under the file name, so a
+ *  source naming only /beacon.min.js blocks it (site-runtime csp.mjs, measured in a browser).
+ *  A page that writes its own tag is judged by that tag's src instead (beaconSrc). */
+export const BEACON_INJECTED_URL = `https://${BEACON_SCRIPT_HOST}/beacon.min.js/v0`;
+/** Where the beacon reports from a host not proxied by Cloudflare. */
 const BEACON_REPORT_URL = `https://${BEACON_REPORT_HOST}/cdn-cgi/rum`;
 
 // A push whose deploy has had this long and still has not reached the site is a finding.
@@ -103,11 +106,25 @@ export function parseLiveConfig(body: string): LiveConfig {
  *  attributes name the beacon host. A beacon a page injects with inline script, or one
  *  Cloudflare adds in the browser, is not in the delivered HTML and is not counted. */
 export function beaconCount(html: string): number {
-  let count = 0;
+  return beaconSrcs(html).length;
+}
+
+const BEACON_SRC = new RegExp(`\\bsrc\\s*=\\s*["']?((?:https?:)?//${BEACON_SCRIPT_HOST.replace(/\./g, "\\.")}/[^"'\\s>]*)`, "i");
+
+/** The src of each beacon script tag in the delivered HTML, made absolute (https). */
+function beaconSrcs(html: string): string[] {
+  const out: string[] = [];
   for (const tag of html.matchAll(/<script\b[^>]*>/gi)) {
-    if (new RegExp(`\\bsrc\\s*=\\s*["']?(?:https?:)?//${BEACON_SCRIPT_HOST.replace(/\./g, "\\.")}/`, "i").test(tag[0])) count++;
+    const src = BEACON_SRC.exec(tag[0])?.[1];
+    if (src) out.push(src.startsWith("//") ? `https:${src}` : src.replace(/^http:/i, "https:"));
   }
-  return count;
+  return out;
+}
+
+/** The beacon address a page's CSP must allow: the page's own tag when it writes one, else
+ *  the address the edge injects from. */
+export function beaconSrc(html: string): string {
+  return beaconSrcs(html)[0] ?? BEACON_INJECTED_URL;
 }
 
 type Directives = Map<string, string[]>;
@@ -161,12 +178,12 @@ export interface CspVerdict {
 }
 
 /**
- * Whether every enforced policy lets a script load from the beacon host. A directive a
+ * Whether every enforced policy lets the beacon load from `scriptUrl`. A directive a
  * policy omits falls back to default-src, and a policy with neither allows it. A
  * 'strict-dynamic' script-src ignores host sources, so the beacon, which carries no
  * nonce, is blocked however its host is listed.
  */
-export function cspAllowsBeaconScript(policies: Directives[]): CspVerdict {
+export function cspAllowsBeaconScript(policies: Directives[], scriptUrl: string = BEACON_INJECTED_URL): CspVerdict {
   for (const policy of policies) {
     const sources = policy.get("script-src") ?? policy.get("default-src");
     if (!sources) continue;
@@ -176,8 +193,8 @@ export function cspAllowsBeaconScript(policies: Directives[]): CspVerdict {
     if (sources.length === 0 || sources.some((s) => s.toLowerCase() === "'none'")) {
       return { ok: false, why: `script-src allows no script (${sources.join(" ") || "empty"})` };
     }
-    if (!sources.some((s) => sourceMatches(s, BEACON_SCRIPT_URL))) {
-      return { ok: false, why: `script-src (${sources.join(" ")}) does not cover ${BEACON_SCRIPT_URL}` };
+    if (!sources.some((s) => sourceMatches(s, scriptUrl))) {
+      return { ok: false, why: `script-src (${sources.join(" ")}) does not cover ${scriptUrl}` };
     }
   }
   return { ok: true, why: null };
@@ -267,7 +284,7 @@ export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin"
   const header = page.headers.get("content-security-policy");
   if (header) {
     const policies = parseCsp(header);
-    const script = cspAllowsBeaconScript(policies);
+    const script = cspAllowsBeaconScript(policies, beaconSrc(page.html));
     if (!script.ok) {
       out.push({
         namespace: site.namespace,
