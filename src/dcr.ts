@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { readBoundedText } from "./signed-requests";
 import { callerIp, checkRate, type RateLimitPolicy } from "./rate-limit";
 import { logEvent } from "./log";
+import { jsonResponse } from "./http";
 
 // Tightened Dynamic Client Registration (capsid/rulings/mcp-2026-10-10.md, rule 13).
 // Claude, Claude Code and ChatGPT sign in by Client ID Metadata Document. Grok and
@@ -69,11 +70,9 @@ export const DCR_LIMIT: RateLimitPolicy = {
   onUnavailable: "refuse",
 };
 
+// Never cached, like every other answer (src/http.ts): a registration refusal was the one without no-store.
 function refusal(status: number, error: string, description: string, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify({ error, error_description: description }), {
-    status,
-    headers: { "Content-Type": "application/json", ...headers },
-  });
+  return jsonResponse({ error, error_description: description }, status, headers);
 }
 
 // What the provider should see: the same request with the body this gate read, or the
