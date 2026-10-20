@@ -25,7 +25,6 @@ async function brief(opts: FakeD1Options) {
 const text = (n: number) => "x".repeat(n);
 const floor = (each: number): DocRow[] => [
   { namespace: "capsid", path: "conventions.md", body: text(each) },
-  { namespace: "capsid", path: "repo-structure.md", body: text(each) },
   { namespace: "capsid", path: "core.md", body: text(each) },
 ];
 const task = (i: number, size: number): DocRow => ({
@@ -47,20 +46,19 @@ const episodic = (i: number, size: number): DocRow => ({
 const auditReads = (reads: Array<{ sql: string }>) => reads.filter((r) => /FROM audit_log/i.test(r.sql)).length;
 
 test("a floor over budget with no tasks reports the floor, not a trim of nothing", async () => {
-  const each = Math.ceil(BRIEF_BUDGET / 3) + 1000;
+  const each = Math.ceil(BRIEF_BUDGET / 2) + 1000;
   const { out } = await brief({ documents: floor(each) });
   assert.equal(out.trimmed, undefined, `brief reported a trim it did not make: ${JSON.stringify(out.trimmed)}`);
   assert.deepEqual(out.floor_exceeds_budget, {
     conventions: each,
-    repo_structure: each,
     core: each,
-    floor: each * 3,
+    floor: each * 2,
     budget: BRIEF_BUDGET,
   });
 });
 
 test("a floor over budget leaves task bodies whole, because cutting them cannot fit the packet", async () => {
-  const each = Math.ceil(BRIEF_BUDGET / 3) + 1000;
+  const each = Math.ceil(BRIEF_BUDGET / 2) + 1000;
   const { out } = await brief({ documents: [...floor(each), task(0, 500), task(1, 500)] });
   assert.equal(out.trimmed, undefined);
   assert.ok(out.floor_exceeds_budget);
@@ -105,7 +103,7 @@ test("provenance costs ONE audit_log query however many documents the brief carr
   // drops core_links silently.
   assert.equal(out.core_links?.outgoing.length, 1, "the outgoing-edge read came back empty");
   assert.equal(auditReads(reads), 1, `brief issued ${auditReads(reads)} audit_log queries`);
-  assert.ok(reads.length <= 9, `brief issued ${reads.length} queries, more than 3 documents, the portfolio list, 4 section reads and 1 provenance`);
+  assert.ok(reads.length <= 8, `brief issued ${reads.length} queries, more than 2 documents, the portfolio list, 4 section reads and 1 provenance`);
   // And the answer is still right per document: the newest actor wins, and a
   // document with no audit row reads null rather than borrowing a neighbour's.
   assert.equal(out.core.last_actor, "agent:capsid-driver");
@@ -121,7 +119,6 @@ test("a namespace with no core.md still resolves provenance for what it has", as
   const { out, reads } = await brief({
     documents: [
       { namespace: "capsid", path: "conventions.md", body: "c" },
-      { namespace: "capsid", path: "repo-structure.md", body: "r" },
     ],
     auditLog: [{ namespace: "capsid", path: "conventions.md", actor: "agent:seat" }],
   });

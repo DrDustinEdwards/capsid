@@ -7,9 +7,8 @@ import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged
 // CANON WRITE-PROTECTION (OWASP hardening item 2; design:
 // capsid/research/design-owasp-hardening.md, "Item 2").
 //
-// Canon is what every agent is told to trust: the portfolio rules, the layer model, each
-// namespace's core.md and its decisions log (capsid/repo-structure.md, layers 2 to 6
-// minus the typed docs). A driver's `capsid_write_doc` to one is not applied. It becomes a row in
+// Canon is what every agent is told to trust: the portfolio rules, each namespace's
+// core.md and its decisions log. A driver's `capsid_write_doc` to one is not applied. It becomes a row in
 // canon_proposals (migrations/0034) and the write answers pending_review. The admin
 // approves it, applied as an ordinary write guarded on the body it was written against,
 // or rejects it, through the `canon_approve` and `canon_reject` controls (src/controls.ts,
@@ -33,7 +32,6 @@ export interface CanonRule {
 // test/canon.test.ts pins this list.
 export const CANON_RULES: readonly CanonRule[] = [
   { namespace: "capsid", pattern: /^conventions(-[a-z0-9]+)*\.md$/, label: "capsid/conventions.md and capsid/conventions-<name>.md" },
-  { namespace: "capsid", pattern: /^repo-structure\.md$/, label: "capsid/repo-structure.md" },
   { namespace: "*", pattern: /^core\.md$/, label: "<namespace>/core.md" },
   { namespace: "*", pattern: /^(decisions|archive\/decisions(-vol-[1-9][0-9]{0,3})?)\.md$/, label: "<namespace>/decisions.md and its archived volumes" },
 ];
@@ -57,7 +55,7 @@ export function servedCanonPaths(): Array<{ namespace: string; source: string; l
 /** The refusal restore, delete and move give a guarded caller on a canon path. */
 export function canonRefusal(tool: "restore" | "delete" | "move", namespace: string, path: string): string {
   return (
-    `${namespace}/${path} is canon (capsid/repo-structure.md), and a ${tool} of it by a driver is refused. Nothing changed. ` +
+    `${namespace}/${path} is canon (src/canon.ts), and a ${tool} of it by a driver is refused. Nothing changed. ` +
     `Canon changes by proposal: write the body you want with \`capsid_write_doc\` and it is queued for the seat or Dustin to approve` +
     (tool === "restore" ? " (read the version with `capsid_read_doc` action `versions` to get its body)." : ".")
   );

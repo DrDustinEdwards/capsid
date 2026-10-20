@@ -14,7 +14,7 @@ const LINT_TOOL = "capsid_lint_namespace";
 // Exported so test/lint-description.test.ts can derive the check list from a real
 // buildTruthReport response and assert this names every id.
 export const LINT_DESCRIPTION =
-  "Consolidation loop and truth report for a namespace. mode 'gather' (default, read-only) returns current core.md, the concept and decision docs, every unconsolidated episodic and source doc, and the capsid schema and conventions rules. After writing the updated core.md and concept docs with capsid_write_doc, call mode 'finalize' with consumed: the episodic/source paths that were compiled. Finalize moves them under archive/ (never deletes, never touches core or concept docs) and writes one audit row. mode 'report' measures the store instead of compiling it. It runs eight checks and the response names each one by these ids: `contradictions` (prose asserting a number the artifact disagrees with), `stale_decisions`, `unbound_specs`, `broken_links`, `doc_vs_code_drift` (a repo path named in canon that is no longer in the repo), `unconsolidated` (the episodic and source backlog), `rule_doc_caps` (a rule document over its cap: core.md 8KB, the others 20KB) and `stale_tool_names` (a rule document naming a tool or action the Worker does not serve). It also counts documents by type and returns one integrity percentage, which excludes a check that could not run. It stores the result as <namespace>/reports/lint-<date>.md. capsid_lint_namespace reads only what the caller is scoped to, except capsid/schema.md and capsid/conventions.md, which every caller gets. An edge whose other end is in an out-of-scope namespace is left out of gather and report, and report skips the repo drift check when the namespace's repo is outside the caller's repo scope. finalize and report need the write grant. finalize, and a report that would overwrite one for the same date, need confirmation: elicited when the client supports it, otherwise pass confirm: true.";
+  "Consolidation loop and truth report for a namespace. mode 'gather' (default, read-only) returns current core.md, the concept and decision docs, every unconsolidated episodic and source doc, and capsid/conventions.md, the rules. After writing the updated core.md and concept docs with capsid_write_doc, call mode 'finalize' with consumed: the episodic/source paths that were compiled. Finalize moves them under archive/ (never deletes, never touches core or concept docs) and writes one audit row. mode 'report' measures the store instead of compiling it. It runs eight checks and the response names each one by these ids: `contradictions` (prose asserting a number the artifact disagrees with), `stale_decisions`, `unbound_specs`, `broken_links`, `doc_vs_code_drift` (a repo path named in canon that is no longer in the repo), `unconsolidated` (the episodic and source backlog), `rule_doc_caps` (a rule document over its cap: core.md 8KB, the others 20KB) and `stale_tool_names` (a rule document naming a tool or action the Worker does not serve). It also counts documents by type and returns one integrity percentage, which excludes a check that could not run. It stores the result as <namespace>/reports/lint-<date>.md. capsid_lint_namespace reads only what the caller is scoped to, except capsid/conventions.md, which every caller gets. An edge whose other end is in an out-of-scope namespace is left out of gather and report, and report skips the repo drift check when the namespace's repo is outside the caller's repo scope. finalize and report need the write grant. finalize, and a report that would overwrite one for the same date, need confirmation: elicited when the client supports it, otherwise pass confirm: true.";
 
 export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
   const { env, db, actor } = ctx;
@@ -44,7 +44,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
       // namespace argument, but gather and report also read the far end of every edge
       // that touches this namespace, and the namespace's repo tree. Each is asked of
       // checkScope with this call's action before it is read or returned. capsid's
-      // schema and conventions are exempt: see the rules query in gather.
+      // conventions is exempt: see the rules query in gather.
       const action = mode ?? "gather";
       const reaches = (other: string) => ctx.scope({ tool: LINT_TOOL, action, namespace: other }) === null;
       const withinScope = <T extends { from_ns: unknown; to_ns: unknown }>(rows: T[]) =>
@@ -81,11 +81,11 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
           )
           .bind(namespace)
           .all();
-        // capsid/schema.md and capsid/conventions.md are exempt from the namespace
-        // filter: they are the rules every caller's lint runs under. The exemption is these two paths only; no other
+        // capsid/conventions.md is exempt from the namespace filter: it is the rules
+        // every caller's lint runs under. The exemption is this one path; no other
         // capsid document is read here.
         const rules = await db
-          .prepare("SELECT namespace, path, title, body FROM documents WHERE namespace = 'capsid' AND path IN ('schema.md', 'conventions.md') ORDER BY path")
+          .prepare("SELECT namespace, path, title, body FROM documents WHERE namespace = 'capsid' AND path IN ('conventions.md') ORDER BY path")
           .all();
         // Typed edges whose endpoint no longer exists. Gather is read-only and the
         // client judges, so these are reported, never auto-repaired: a dangling edge

@@ -17,9 +17,6 @@ test("which documents are rule documents, and their caps", () => {
     ["sample", "decisions.md", RULE_DOC_CAP_BYTES],
     ["capsid", "conventions.md", RULE_DOC_CAP_BYTES],
     ["capsid", "conventions-web.md", RULE_DOC_CAP_BYTES],
-    ["capsid", "repo-structure.md", RULE_DOC_CAP_BYTES],
-    ["capsid", "schema.md", RULE_DOC_CAP_BYTES],
-    ["capsid", "seat-operations.md", RULE_DOC_CAP_BYTES],
     ["capsid", "rulings/testing-2026-10-04.md", RULE_DOC_CAP_BYTES],
   ];
   const records: Array<[string, string]> = [
@@ -32,6 +29,10 @@ test("which documents are rule documents, and their caps", () => {
     ["capsid", "rulings/old/one.md"],
     ["sample", "conventions.md"],
     ["sample", "schema.md"],
+    // Reference notes, not rules (Dustin, 2026-10-18: conventions and each repo's CLAUDE.md only).
+    ["capsid", "repo-structure.md"],
+    ["capsid", "schema.md"],
+    ["capsid", "seat-operations.md"],
   ];
   for (const [ns, path, cap] of rules) assert.equal(ruleDocCap(ns, path), cap, `${ns}/${path}`);
   for (const [ns, path] of records) assert.equal(ruleDocCap(ns, path), null, `${ns}/${path} is a record, not a rule document`);
@@ -85,8 +86,8 @@ test("a write may cut an over-cap document or leave an old stale name, never mak
   assert.match(ruleDocWriteRefusal("capsid", "decisions.md", big, `${big}y`) ?? "", /larger than/, "growing an over-cap document");
   assert.equal(ruleDocWriteRefusal("capsid", "decisions.md", big, big.slice(10)), null, "a cut that is still over the cap");
   const old = "a merge stays with manage_pr.\n";
-  assert.equal(ruleDocWriteRefusal("capsid", "schema.md", old, `${old}A new line.\n`), null, "an append beside an old stale name");
-  assert.match(ruleDocWriteRefusal("capsid", "schema.md", old, `${old}Call \`jobs.post\`.\n`) ?? "", /does not serve/, "a second stale name");
+  assert.equal(ruleDocWriteRefusal("capsid", "rulings/sample.md", old, `${old}A new line.\n`), null, "an append beside an old stale name");
+  assert.match(ruleDocWriteRefusal("capsid", "rulings/sample.md", old, `${old}Call \`jobs.post\`.\n`) ?? "", /does not serve/, "a second stale name");
   assert.equal(ruleDocWriteRefusal("capsid", "research/notes.md", null, `${big} manage_pr`), null, "a record");
   assert.equal(ruleDocWriteRefusal("sample", "core.md", "Call `jobs` here. one", "Call `jobs` here. two"), null, "an edit elsewhere on a line that already held a stale name");
 });
@@ -96,7 +97,7 @@ test("the truth report names both checks, judged over the rule documents only", 
   const report = buildTruthReport({
     namespace: "capsid",
     now: new Date("2026-10-11T00:00:00Z"),
-    docs: [doc("decisions.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)), doc("schema.md", "Use `register_namespace`."), doc("conventions.md", "fine"), doc("research/r.md", "manage_pr")],
+    docs: [doc("decisions.md", "x".repeat(RULE_DOC_CAP_BYTES + 1)), doc("rulings/sample.md", "Use `register_namespace`."), doc("conventions.md", "fine"), doc("research/r.md", "manage_pr")],
     edges: [],
     danglingEdges: [],
     countClaims: [],
@@ -105,7 +106,7 @@ test("the truth report names both checks, judged over the rule documents only", 
   const names = report.checks.find((c) => c.check === "stale_tool_names")!;
   assert.equal(caps.subjects, 3, "three rule documents, the research note is a record");
   assert.deepEqual(caps.findings.map((f) => f.subject), ["capsid/decisions.md"]);
-  assert.deepEqual(names.findings.map((f) => f.subject), ["capsid/schema.md"]);
+  assert.deepEqual(names.findings.map((f) => f.subject), ["capsid/rulings/sample.md"]);
 });
 
 // The write tool, over a real MCP connection.
@@ -123,13 +124,13 @@ const call = async (client: Client, args: Record<string, unknown>) =>
 const namespaces = [{ namespace: "capsid", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) }];
 
 test("PLANT: capsid_write_doc refuses a stale tool name in a rule document and writes nothing", async () => {
-  const { client, recorded, close } = await connect({ namespaces, documents: [{ namespace: "capsid", path: "schema.md", title: "Schema", body: "clean", type: "procedural" }] });
+  const { client, recorded, close } = await connect({ namespaces, documents: [{ namespace: "capsid", path: "rulings/sample.md", title: "Sample ruling", body: "clean", type: "procedural" }] });
   try {
-    const out = await call(client, { namespace: "capsid", path: "schema.md", mode: "append", body: "\nUse the `register_namespace` tool." });
+    const out = await call(client, { namespace: "capsid", path: "rulings/sample.md", mode: "append", body: "\nUse the `register_namespace` tool." });
     assert.equal(out.isError, true, "a stale tool name reached a rule document");
     assert.match(out.content[0].text, /rule document .*does not serve/);
     assert.equal(recorded.length, 0, "a refused write still touched the store");
-    const fine = await call(client, { namespace: "capsid", path: "schema.md", mode: "append", body: "\nUse `capsid_admin_manage_namespaces` action `register`." });
+    const fine = await call(client, { namespace: "capsid", path: "rulings/sample.md", mode: "append", body: "\nUse `capsid_admin_manage_namespaces` action `register`." });
     assert.equal(fine.isError ?? false, false, fine.content[0].text);
   } finally {
     await close();
@@ -160,7 +161,7 @@ test("a move of a rule document to the archive, and a restore that recreates one
   try {
     const out = (await moved.client.callTool({ name: "capsid_write_doc", arguments: { action: "move", namespace: "capsid", path: "decisions.md", new_path: "archive/decisions-vol-9.md", confirm: true } })) as { isError?: boolean; content: Array<{ text: string }> };
     assert.equal(out.isError ?? false, false, out.content[0].text);
-    const onto = (await moved.client.callTool({ name: "capsid_write_doc", arguments: { action: "move", namespace: "capsid", path: "research/big.md", new_path: "schema.md", confirm: true } })) as { isError?: boolean; content: Array<{ text: string }> };
+    const onto = (await moved.client.callTool({ name: "capsid_write_doc", arguments: { action: "move", namespace: "capsid", path: "research/big.md", new_path: "rulings/sample.md", confirm: true } })) as { isError?: boolean; content: Array<{ text: string }> };
     assert.ok(onto.isError, "a record moved onto a rule path is held to the checks");
     assert.match(onto.content[0].text, /rule document .*does not serve/);
   } finally {

@@ -31,7 +31,7 @@ After all three, a remap gains a driver nothing: the repos axis refuses independ
 
 - The paths: `conventions.md`, `core.md`, `archive/decisions-vol-<n>.md` (n a number from 1; the old decisions log, kept as history), and `rulings/<name>.md` one level deep. A path must be lowercase letters, digits, `.`, `-`, `_` and `/` with no `..` and no empty segment, so `rulings/../policy/gates.md`, `Rulings/x.md`, `rulings/%2e%2e/x.md`, `rulings-secret/x.md` and `rulings/a/b.md` are all refused.
 - The tools: `capsid_read_doc` action `read`, which must name one of those paths, and `capsid_find_docs` actions `list`, `glob` and `search` with `namespace: "capsid"`, whose handlers keep only those paths for such a caller. Omitting the namespace is still refused to a narrowed caller.
-- Not covered: every other capsid path (research, policy, jobs, reports, episodics, `repo-structure.md`), `capsid_start_session`, `capsid_read_doc` actions `versions` and `links`, every write tool and `capsid_work_jobs`. Versions and links stay out because a version list or an edge can name a capsid path that is not on the list. The `capsid://` resources stay scoped as before.
+- Not covered: every other capsid path (research, policy, jobs, reports, episodics), `capsid_start_session`, `capsid_read_doc` actions `versions` and `links`, every write tool and `capsid_work_jobs`. Versions and links stay out because a version list or an edge can name a capsid path that is not on the list. The `capsid://` resources stay scoped as before.
 - `capsid_start_session` for any namespace returns `portfolio_documents`: the paths above that exist, so a session reads them first.
 
 ### Roles

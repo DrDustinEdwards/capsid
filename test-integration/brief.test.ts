@@ -31,7 +31,6 @@ describe("brief provenance", () => {
         .bind(ns, path, type)
         .run();
     await doc("capsid", "conventions.md", "procedural");
-    await doc("capsid", "repo-structure.md", "procedural");
     await doc("sample", "core.md", "core");
     await doc("sample", "TASK-a.md", "task");
     await doc("sample", "TASK-b.md", "task");

@@ -2,8 +2,8 @@
 
 The `capsid_lint_namespace` tool runs the wiki maintenance loop. The Worker never calls an LLM. The driving client does the reasoning with the ordinary read and write tools.
 
-- `capsid_lint_namespace(namespace, mode: "gather")` returns a read-only packet: the namespace `core.md`, the compiled `concept` and `decision` documents, every un-archived `episodic` and `source` document, and the schema and conventions.
-- `capsid_lint_namespace` reads only what the caller is scoped to, with one exemption: `capsid/schema.md` and `capsid/conventions.md` are returned to every caller as its rules, whatever its scope. No other `capsid` document is read. An edge whose other end is in a namespace the caller is not scoped to is left out of gather and report, and report skips the doc-vs-code drift check when the namespace's repo is outside the caller's repo scope.
+- `capsid_lint_namespace(namespace, mode: "gather")` returns a read-only packet: the namespace `core.md`, the compiled `concept` and `decision` documents, every un-archived `episodic` and `source` document, and `capsid/conventions.md`.
+- `capsid_lint_namespace` reads only what the caller is scoped to, with one exemption: `capsid/conventions.md` is returned to every caller as its rules, whatever its scope. No other `capsid` document is read. An edge whose other end is in a namespace the caller is not scoped to is left out of gather and report, and report skips the doc-vs-code drift check when the namespace's repo is outside the caller's repo scope.
 - `capsid_lint_namespace(namespace, mode: "finalize", consumed: [paths])` archives the consumed entries under an `archive/` prefix and writes one audit row. It moves and never deletes, and `gather` excludes `archive/`, so the loop is idempotent.
 
 ## Destructive writes need confirmation

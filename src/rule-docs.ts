@@ -24,8 +24,6 @@ import type { OpsMaintenanceItem } from "./ops-types";
 export const CORE_CAP_BYTES = 8 * 1024;
 export const RULE_DOC_CAP_BYTES = 20 * 1024;
 
-// capsid documents that are rules for every session, besides the per-namespace ones.
-const CAPSID_RULE_PATHS = new Set(["repo-structure.md", "schema.md", "seat-operations.md"]);
 const CONVENTIONS = /^conventions(-[a-z0-9]+)*\.md$/;
 const DECISIONS = /^decisions\.md$/;
 // One document directly inside rulings/, no deeper (src/portfolio-docs.ts reads it the same way).
@@ -36,7 +34,7 @@ export function ruleDocCap(namespace: string, path: string): number | null {
   if (path === "core.md") return CORE_CAP_BYTES;
   if (DECISIONS.test(path)) return RULE_DOC_CAP_BYTES;
   if (namespace !== "capsid") return null;
-  if (CONVENTIONS.test(path) || RULING.test(path) || CAPSID_RULE_PATHS.has(path)) return RULE_DOC_CAP_BYTES;
+  if (CONVENTIONS.test(path) || RULING.test(path)) return RULE_DOC_CAP_BYTES;
   return null;
 }
 
