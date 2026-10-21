@@ -1,0 +1,26 @@
+name: worker-size
+
+# The Worker bundle size budget (devkit's reusable workflow and its devkit-worker-size bin):
+# `wrangler deploy --dry-run` against .worker-size.json, raw and gzip, set about 10% above the
+# measured Total Upload. Over budget fails the run. The dry run reads wrangler.dryrun.jsonc, which
+# scripts/dry-run-config.mjs builds offline from wrangler.jsonc.example, so no secret is needed.
+# The dashboard's own size budget stays in ci.yml's dashboard build step.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-size-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  worker-size:
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-size.yml@27e0a1ca0747b5839bf7e0433c307ae671de8501 # v0.7.0
+    with:
+      prepare: node scripts/dry-run-config.mjs
