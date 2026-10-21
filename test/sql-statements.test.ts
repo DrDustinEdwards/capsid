@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { extractStatements } from "../scripts/sql-statements.mjs";
+import { extractStatements } from "../scripts/sql-statements.ts";
 
 // Audit 2026-09-25, E2-30 (finding E2-L23). The statement walk that feeds the query-plan
 // check (vitest.config.ts, test-integration/query-plans.test.ts).

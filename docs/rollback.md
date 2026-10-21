@@ -37,7 +37,7 @@ Every other gate stops before the MCP connection: OAuth metadata, `/register`, t
 1. Mint the probe agent (read grant on `capsid`, the `capsid_read_doc` tool only, no repos, no flags). The key goes to `~/.capsid/agent-live-probe.key` and is printed nowhere:
 
    ```
-   CAPSID_OPERATOR_KEY=$CAPSID_OPERATOR_KEY node scripts/mint-agents.mjs --role live-probe --apply
+   CAPSID_OPERATOR_KEY=$CAPSID_OPERATOR_KEY node scripts/mint-agents.ts --role live-probe --apply
    ```
 
 2. Set it as the repo secret the live job reads, from the file, so it never reaches the terminal:

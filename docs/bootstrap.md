@@ -276,7 +276,7 @@ changes once it is gone is how you mint, and that is the next section.
 
 ### Minting once no operator key exists
 
-`scripts/mint-agents.mjs` authenticates only with `CAPSID_OPERATOR_KEY` as a bearer
+`scripts/mint-agents.ts` authenticates only with `CAPSID_OPERATOR_KEY` as a bearer
 on `/ops/mcp` and `/ops/mcp/admin` (where it mints) and exits 2 without it, so with the secret deleted the script cannot
 run at all. The OAuth admin session on `/mcp/admin` is then the only admin, and
 `capsid_admin_manage_agents` action `mint` works there, but it returns the key in its response, which puts a live
@@ -290,7 +290,7 @@ So the path is a temporary re-add, and the secret is the shortest-lived part of 
 node -e "const b=require('crypto').randomBytes(32).toString('hex');console.log('capsid_'+b)"   # keep this, do not paste it anywhere
 node -e "console.log(require('crypto').createHash('sha256').update(process.argv[1]).digest('hex'))" <the key>
 npx wrangler secret put OPERATOR_KEY_HASH        # paste the HASH, not the key
-CAPSID_OPERATOR_KEY=<the key> node scripts/mint-agents.mjs --namespace <ns> --apply
+CAPSID_OPERATOR_KEY=<the key> node scripts/mint-agents.ts --namespace <ns> --apply
 npx wrangler secret delete OPERATOR_KEY_HASH
 ```
 
@@ -303,21 +303,21 @@ read-only tier and nothing else.
 `capsid_admin_manage_agents` tool would need a mode that writes the key somewhere other than its
 response, and there is nowhere good. Capsid Portal is admin-gated and would be the
 natural home, but it never mints by ruling, and a browser download is not mode 0600
-on the machine that needs it. A device-code flow in `scripts/mint-agents.mjs` that
+on the machine that needs it. A device-code flow in `scripts/mint-agents.ts` that
 obtained an admin token the way any OAuth client does would keep the key on the
 machine and off the wire, and that is the shape worth costing if the re-add becomes
 frequent. It is one ruling and a day of work, not a small change.
 
 There is a script for it, and it is the path that keeps a key out of a terminal:
-`scripts/mint-agents.mjs` sends each mint and writes the key straight into
+`scripts/mint-agents.ts` sends each mint and writes the key straight into
 `~/.capsid/agent-<name>.key` at mode 0600, reporting a 12-hex fingerprint and never
 the key itself. It refuses to overwrite an existing file, because a second mint
 leaves a live credential in the table with nothing on disk able to present it.
 
 ```
-CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.mjs                       # dry run, all six
-CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.mjs --apply
-CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.mjs --namespace foxing --apply
+CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts                       # dry run, all six
+CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --apply
+CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --namespace foxing --apply
 ```
 
 `--namespace` mints one project without touching the rest, which is what to run
@@ -380,7 +380,7 @@ The sections above explain each part. This is the order to do them in. The host 
 
 3. Copy `wrangler.jsonc.example` to `wrangler.jsonc` and fill in the ids from step 2. **`APP_KV` and `OAUTH_KV` must be different namespace ids.** The real `wrangler.jsonc` is gitignored. Never commit it.
 4. Apply the migrations (idempotent, `IF NOT EXISTS` everywhere) with `npx wrangler d1 migrations apply capsid --remote`.
-5. Generate an operator key and store its sha256 hash with `npx wrangler secret put OPERATOR_KEY_HASH`. Keep the raw key safe; headless clients send it as the bearer token on `/ops/mcp`. The value is one or more comma-separated lowercase hex sha256 hashes. Prefix an entry with `ro:` to make that key read-only, for example `<full-key-hash>,ro:<agent-key-hash>`. Never store a raw key in the repo. Once agents are minted (section 8), remove the operator hash. Minting another agent after that needs the hash set again for the length of one command, because `scripts/mint-agents.mjs` authenticates with `CAPSID_OPERATOR_KEY` and nothing else (see "Minting once no operator key exists").
+5. Generate an operator key and store its sha256 hash with `npx wrangler secret put OPERATOR_KEY_HASH`. Keep the raw key safe; headless clients send it as the bearer token on `/ops/mcp`. The value is one or more comma-separated lowercase hex sha256 hashes. Prefix an entry with `ro:` to make that key read-only, for example `<full-key-hash>,ro:<agent-key-hash>`. Never store a raw key in the repo. Once agents are minted (section 8), remove the operator hash. Minting another agent after that needs the hash set again for the length of one command, because `scripts/mint-agents.ts` authenticates with `CAPSID_OPERATOR_KEY` and nothing else (see "Minting once no operator key exists").
 6. Create a Cloudflare Access for SaaS application for the logins, in the Zero Trust dashboard: Access, Applications, Add an application, SaaS, OIDC.
    - Redirect URLs, all spelled exactly: `https://capsid.<your-subdomain>.workers.dev/callback` for the MCP flow, `https://capsid.<your-subdomain>.workers.dev/portal/callback` for Capsid Portal, and `https://<your Portal host>/callback` if the Portal has its own host.
    - Scopes openid, email and profile, PKCE on, and a policy that allows your email only (and any co-owner's).

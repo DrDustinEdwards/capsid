@@ -194,7 +194,7 @@ export function driverKeyPath(namespace: string): string {
 
 export function driverMintInstruction(namespace: string): string {
   return (
-    `Mint its driver agent as the admin: node scripts/mint-agents.mjs --namespace ${namespace} --apply. ` +
+    `Mint its driver agent as the admin: node scripts/mint-agents.ts --namespace ${namespace} --apply. ` +
     `The key is returned once and lands in ${driverKeyPath(namespace)} at mode 0600. ` +
     // Cannot import TOOL_GRANTS (src/scope.ts imports this module), so
     // test/audit-2026-09-16.test.ts holds the sentence and the table together.

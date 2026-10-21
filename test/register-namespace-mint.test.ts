@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { driverAgentName, driverKeyPath, driverMintInstruction } from "../src/agents-schema.ts";
-import { keyPath, parseArgs, selectAgents } from "../scripts/mint-agents.mjs";
+import { keyPath, parseArgs, selectAgents } from "../scripts/mint-agents.ts";
 import { sep } from "node:path";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer } from "../src/server.ts";
@@ -37,7 +37,7 @@ test("the instruction it prints is parseable by the script it names", () => {
   // The tool must not tell a human to run a flag the script does not have. Both
   // halves are derived rather than retyped.
   const instruction = driverMintInstruction("txasm");
-  const match = instruction.match(/node scripts\/mint-agents\.mjs ([^.]+)\./);
+  const match = instruction.match(/node scripts\/mint-agents\.ts ([^.]+)\./);
   assert.ok(match, `no runnable command found in: ${instruction}`);
   const argv = match[1].trim().split(/\s+/);
   const parsed = parseArgs(argv);
@@ -59,7 +59,7 @@ test("the path it names is the path the script writes", () => {
 test("a roster namespace's instruction selects exactly that one agent", () => {
   // Ties the three together: the name register would use, the selector
   // the script parses, and the agent the script would actually mint.
-  const found = driverMintInstruction("foxing").match(/mint-agents[.]mjs ([^.]+)[.]/);
+  const found = driverMintInstruction("foxing").match(/mint-agents[.]ts ([^.]+)[.]/);
   assert.ok(found, "the instruction carries no runnable command");
   const parsed = parseArgs(found[1].trim().split(/\s+/));
   const picked = selectAgents(parsed.namespace);

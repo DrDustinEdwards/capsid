@@ -3,9 +3,9 @@ import { readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import type { R2Like } from "@dustinedwards/d1-dump";
-import { SITES, drillSite, firstFailure, onlySearchUnavailable, selectSites } from "../scripts/drill-all.mjs";
+import { SITES, drillSite, firstFailure, onlySearchUnavailable, selectSites } from "../scripts/drill-all.ts";
 
-// scripts/drill-all.mjs: the drill over a site's newest complete backup. The bucket is an
+// scripts/drill-all.ts: the drill over a site's newest complete backup. The bucket is an
 // in-memory R2Like and the drill is the REAL d1-dump CLI on its sqlite backend, so
 // PASS and FAIL are the drill's own verdict. Fake data throughout.
 

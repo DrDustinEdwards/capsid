@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 // EXPLAIN QUERY PLAN over every read in src/, against the real schema.
 //
-// The statements are walked out of the source (scripts/sql-statements.mjs) rather
+// The statements are walked out of the source (scripts/sql-statements.ts) rather
 // than listed here, so a newly added query is covered without anyone adding it.
 //
 // What counts as a finding: SQLite writes "SCAN" both for walking a table with no

@@ -111,7 +111,7 @@ function applyScopes(base: AgentScopes, args: ScopeArgs): AgentScopes {
 
 // The repos axis a mint gets when the caller names none: every repo the named
 // namespaces map. Starting from defaultScopes (repos "*") would give every agent
-// minted through MCP every repo in the portfolio, while scripts/mint-agents.mjs
+// minted through MCP every repo in the portfolio, while scripts/mint-agents.ts
 // derives a narrow list; two mint paths must agree about the default.
 //
 // Derived from the live namespaces mapping, the same table resolveRepo reads and the

@@ -93,7 +93,7 @@ test("a new agent is born with read on its named namespaces and no flags", async
 
 test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wildcard", async () => {
   // defaultScopes has repos "*", so the handler must derive the repos from the
-  // namespace mapping, as scripts/mint-agents.mjs does. Driven through a real MCP
+  // namespace mapping, as scripts/mint-agents.ts does. Driven through a real MCP
   // capsid_admin_manage_agents call.
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
   const body = parse(await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }));
@@ -122,7 +122,7 @@ test("A NAMESPACE SCOPE OF '*' DERIVES '*', because tomorrow's namespace is not 
 });
 
 test("PLANT: a mint for a namespace that maps no repos is REFUSED rather than widened", async () => {
-  // Fail closed, as scripts/mint-agents.mjs reposForNamespace does, rather than fall
+  // Fail closed, as scripts/mint-agents.ts reposForNamespace does, rather than fall
   // back to the wildcard.
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"), []);
   const result = await call({ action: "mint", name: "ghost-driver", kind: "driver", namespaces: ["not-registered"] });

@@ -6,7 +6,7 @@ import { checkScope } from "../src/scope.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { allowsScope, defaultScopes, noFlags, type AgentScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
-import { parseNamespaceRepos, reposForNamespace } from "../scripts/mint-agents.mjs";
+import { parseNamespaceRepos, reposForNamespace } from "../scripts/mint-agents.ts";
 
 // The namespace-remap escalation, closed in both directions. A namespace-scoped
 // driver with the write grant must not be able to call capsid_admin_manage_namespaces

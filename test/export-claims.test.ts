@@ -20,9 +20,9 @@ import {
   toJsonl,
   verifyExport,
   type Row,
-} from "../scripts/export-claims.mjs";
+} from "../scripts/export-claims.ts";
 
-// scripts/export-claims.mjs: the claims dataset, one JSONL file per table with a
+// scripts/export-claims.ts: the claims dataset, one JSONL file per table with a
 // manifest that hashes each file. Driven through a fake `claims` tool, and end to end
 // through the real capsidClient with a fake fetch, so the key's path is the real one.
 

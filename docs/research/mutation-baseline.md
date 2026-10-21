@@ -397,7 +397,7 @@ The baseline above mutates `src/` only. Step 2 measures the other code the unit 
 
 ### Score
 
-Over the 35 files of `scripts/*.mjs` and `dashboard/src/lib`, with the passes combined mutant by mutant: 7,091 mutants, 3,026 killed, 18 timed out, 1,857 survived, 2,155 with no covering test, 35 runtime errors (left out). Score **43.1%**, or 62.1% on covered code. Same Stryker (10.0.0) as the baseline, and not comparable to the 56.5% for `src/`: 769 of the mutants are in eight files that no included unit test runs in-process (`api.ts`, `apps.ts`, `base.ts`, `prefs.ts`, `ci-config.mjs`, `deploy.mjs`, `test-budget.mjs`, `improve-derive-key.mjs`), and several scripts are mostly uncovered because their own test is one of the ten left out for reading the script as text (`schedule-drivers.mjs`, `admin-exposure-check.mjs`, `improve-derive-key.mjs`, `deploy.mjs`). For those files the low score is a limit of this measurement, not evidence that they are untested.
+Over the 35 files of `scripts/*.mjs` and `dashboard/src/lib`, with the passes combined mutant by mutant: 7,091 mutants, 3,026 killed, 18 timed out, 1,857 survived, 2,155 with no covering test, 35 runtime errors (left out). Score **43.1%**, or 62.1% on covered code. Same Stryker (10.0.0) as the baseline, and not comparable to the 56.5% for `src/`: 769 of the mutants are in eight files that no included unit test runs in-process (`api.ts`, `apps.ts`, `base.ts`, `prefs.ts`, `ci-config.mjs`, `deploy.mjs`, `test-budget.mjs`, `improve-derive-key.mjs`), and several scripts are mostly uncovered because their own test is one of the ten left out for reading the script as text (`schedule-drivers.mjs`, `admin-exposure-check.ts`, `improve-derive-key.mjs`, `deploy.mjs`). For those files the low score is a limit of this measurement, not evidence that they are untested.
 
 | Source file | Mutants | Killed | Timeout | Survived | No coverage | Error | Score |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -411,28 +411,28 @@ Over the 35 files of `scripts/*.mjs` and `dashboard/src/lib`, with the passes co
 | dashboard/src/lib/stops.ts | 57 | 41 | 0 | 10 | 6 | 0 | 71.9% |
 | dashboard/src/lib/store.ts | 22 | 21 | 0 | 1 | 0 | 0 | 95.5% |
 | scripts/access-redirect-lib.mjs | 69 | 58 | 0 | 11 | 0 | 0 | 84.1% |
-| scripts/admin-exposure-check.mjs | 83 | 0 | 0 | 9 | 71 | 3 | 0.0% |
+| scripts/admin-exposure-check.ts | 83 | 0 | 0 | 9 | 71 | 3 | 0.0% |
 | scripts/bindings.mjs | 28 | 5 | 0 | 23 | 0 | 0 | 17.9% |
 | scripts/canary-lib.mjs | 113 | 79 | 0 | 19 | 15 | 0 | 69.9% |
-| scripts/capsid-rpc.mjs | 78 | 58 | 0 | 17 | 3 | 0 | 74.4% |
+| scripts/capsid-rpc.ts | 78 | 58 | 0 | 17 | 3 | 0 | 74.4% |
 | scripts/check-commit-trailers.mjs | 220 | 124 | 0 | 39 | 57 | 0 | 56.4% |
 | scripts/ci-config.mjs | 170 | 0 | 0 | 0 | 170 | 0 | 0.0% |
 | scripts/cimd-probe-lib.mjs | 72 | 63 | 0 | 8 | 1 | 0 | 87.5% |
 | scripts/deploy.mjs | 86 | 0 | 0 | 0 | 86 | 0 | 0.0% |
 | scripts/dry-run-config.mjs | 50 | 35 | 0 | 15 | 0 | 0 | 70.0% |
-| scripts/dump-invariants.mjs | 309 | 192 | 0 | 74 | 39 | 4 | 63.0% |
-| scripts/export-claims.mjs | 354 | 262 | 4 | 65 | 20 | 3 | 75.8% |
+| scripts/dump-invariants.ts | 309 | 192 | 0 | 74 | 39 | 4 | 63.0% |
+| scripts/export-claims.ts | 354 | 262 | 4 | 65 | 20 | 3 | 75.8% |
 | scripts/freshness-lib.mjs | 92 | 73 | 0 | 19 | 0 | 0 | 79.3% |
 | scripts/improve-derive-key.mjs | 56 | 0 | 0 | 0 | 56 | 0 | 0.0% |
 | scripts/improve-report.mjs | 732 | 412 | 0 | 320 | 0 | 0 | 56.3% |
 | scripts/lease-keepalive.mjs | 166 | 97 | 6 | 46 | 17 | 0 | 62.0% |
-| scripts/mint-agents.mjs | 401 | 263 | 0 | 69 | 66 | 3 | 66.1% |
+| scripts/mint-agents.ts | 401 | 263 | 0 | 69 | 66 | 3 | 66.1% |
 | scripts/no-bloat-report.mjs | 139 | 6 | 0 | 10 | 122 | 1 | 4.3% |
 | scripts/overnight-guard.mjs | 261 | 212 | 3 | 40 | 6 | 0 | 82.4% |
 | scripts/path-guard.mjs | 139 | 22 | 0 | 7 | 105 | 5 | 16.4% |
 | scripts/rollback-guard.mjs | 121 | 66 | 0 | 19 | 32 | 4 | 56.4% |
 | scripts/schedule-drivers.mjs | 467 | 3 | 0 | 74 | 387 | 3 | 0.6% |
-| scripts/sql-statements.mjs | 122 | 57 | 0 | 57 | 8 | 0 | 46.7% |
+| scripts/sql-statements.ts | 122 | 57 | 0 | 57 | 8 | 0 | 46.7% |
 | scripts/sync-scorer.mjs | 341 | 197 | 0 | 105 | 36 | 3 | 58.3% |
 | scripts/test-budget.mjs | 13 | 0 | 0 | 0 | 13 | 0 | 0.0% |
 | scripts/verify-live.mjs | 743 | 346 | 5 | 392 | 0 | 0 | 47.2% |
@@ -469,7 +469,7 @@ Over the 35 files of `scripts/*.mjs` and `dashboard/src/lib`, with the passes co
 | (b) files | test/prose.test.ts | not a mutation target (README and docs/ for writing rules) | | | | kept (file check) |
 | (b) files | test/public-docs.test.ts | not a mutation target (docs/ for secrets and infrastructure identifiers) | | | | kept (file check) |
 
-**Not measurable:** `schedule-drivers` reads scripts/schedule-drivers.mjs and scripts/capsid-rpc.mjs, the code it tests, as text, so instrumenting them fails it; it cannot be run against its own subject.
+**Not measurable:** `schedule-drivers` reads scripts/schedule-drivers.mjs and scripts/capsid-rpc.ts, the code it tests, as text, so instrumenting them fails it; it cannot be run against its own subject.
 
 
 ### Proposals for the seat

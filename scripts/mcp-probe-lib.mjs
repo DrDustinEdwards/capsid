@@ -6,7 +6,7 @@
 // metadata, /register, the consent page and the Access redirect, and then broke every
 // tool call, passed them all (job_bb06c9be24c4, found in the #331 rollback report).
 // This gate makes the calls a client makes, through /ops/mcp with the live-probe agent's
-// key (scripts/mint-agents.mjs, role live-probe: read grant on capsid, the capsid_read_doc tool
+// key (scripts/mint-agents.ts, role live-probe: read grant on capsid, the capsid_read_doc tool
 // only), in both protocol eras Capsid serves:
 //
 //   2025-11-25  initialize, notifications/initialized, tools/list, tools/call capsid_read_doc

@@ -15,7 +15,7 @@
 // maintenance pass files one finding per violating document. test/rule-docs.test.ts
 // plants both kinds.
 
-import { rewriteProse, OLD_TOOLS } from "../scripts/tool-names-lib.mjs";
+import { rewriteProse, OLD_TOOLS } from "../scripts/tool-names-lib";
 import { TOOL_GRANTS } from "./scope";
 import { COMPOSITES } from "./tools/surface";
 import { JOB_ACTIONS } from "./jobs-schema";

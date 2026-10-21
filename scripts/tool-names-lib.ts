@@ -1,14 +1,14 @@
 // The MCP 4 regroup's data migration, as pure functions (capsid/rulings/mcp-2026-10-10.md:
 // "No legacy names: the same PR rewrites every queued job body, skill and canon doc naming
 // an old tool, and migrates agent credentials' tools lists and grants"). The script that
-// applies them is scripts/migrate-tool-names.mjs; test/tool-names-lib.test.ts drives these.
+// applies them is scripts/migrate-tool-names.ts; test/tool-names-lib.test.ts drives these.
 //
 // THE MAPPING. Every tool the old surface served maps to a new tool and, where the new
 // tool takes one, an action. src/tools/surface.ts is the source of truth for the new side,
 // and the test holds this table to it.
 
 /** Old tools that became one action of a new tool. [new tool, action or null]. */
-export const SIMPLE = {
+export const SIMPLE: Record<string, [string, string | null]> = {
   list: ["capsid_find_docs", "list"],
   find: ["capsid_find_docs", "glob"],
   search: ["capsid_find_docs", "search"],
@@ -40,7 +40,7 @@ export const SIMPLE = {
 };
 
 /** Old tools renamed whole: every action keeps its name. */
-export const RENAMED = {
+export const RENAMED: Record<string, string> = {
   jobs: "capsid_work_jobs",
   lint: "capsid_lint_namespace",
   agents: "capsid_admin_manage_agents",
@@ -50,7 +50,7 @@ export const RENAMED = {
 
 // The actions (lint: modes) of each renamed tool, so `jobs.claimed_by`, a column, is not
 // read as an action. test/tool-names-lib.test.ts holds these to src.
-export const RENAMED_ACTIONS = {
+export const RENAMED_ACTIONS: Record<string, string[]> = {
   jobs: ["post", "list", "claim", "complete", "record", "fail", "block", "resume", "supersede", "release", "begin", "fire", "routine", "edit", "park", "unpark"],
   lint: ["gather", "finalize", "report"],
   agents: ["mint", "list", "revoke", "update_scopes"],
@@ -59,7 +59,7 @@ export const RENAMED_ACTIONS = {
 };
 
 /** Old tools whose actions split across new tools. old action -> [new tool, new action]. */
-export const SPLIT = {
+export const SPLIT: Record<string, Record<string, [string, string]>> = {
   manage_pr: {
     comment: ["capsid_open_pr", "comment"],
     merge: ["capsid_close_pr", "merge"],
@@ -92,19 +92,18 @@ export const SPLIT = {
 
 // The action an omitted `action` meant on the old split tools, for prose that names the
 // tool with no action.
-const SPLIT_DEFAULT = { improve_run: "run" };
+const SPLIT_DEFAULT: Record<string, string> = { improve_run: "run" };
 
 /** Every old tool name. */
-export const OLD_TOOLS = [...Object.keys(SIMPLE), ...Object.keys(RENAMED), ...Object.keys(SPLIT)];
+export const OLD_TOOLS: string[] = [...Object.keys(SIMPLE), ...Object.keys(RENAMED), ...Object.keys(SPLIT)];
 
 // Each new tool's actions that some old tool served. A new tool whose every such action is
 // granted is granted whole, so it also gains the actions this regroup added (site, tag,
 // release, builds, build_logs): the same reading as a bare tool name, which has always
 // meant the whole tool.
-export const OLD_ACTIONS_OF = (() => {
-  /** @type {Record<string, Set<string>>} */
-  const out = {};
-  const add = (/** @type {string} */ tool, /** @type {string | null} */ action) => {
+export const OLD_ACTIONS_OF: Record<string, Set<string>> = (() => {
+  const out: Record<string, Set<string>> = {};
+  const add = (tool: string, action: string | null) => {
     out[tool] ??= new Set();
     if (action !== null) out[tool].add(action);
   };
@@ -117,30 +116,30 @@ export const OLD_ACTIONS_OF = (() => {
 /**
  * What one old tools-axis entry grants on the new surface: [new tool, action] pairs, where
  * action "*" is the whole tool.
- * @param {string} entry an old entry, "tool" or "tool.action"
- * @param {readonly string[]} list the whole old list, for the narrowing rule
- * @returns {Array<[string, string]> | null} null when the entry names no old tool
+ * `entry`: an old entry, "tool" or "tool.action"
+ * `list`: the whole old list, for the narrowing rule
+ * Returns null when the entry names no old tool
  */
-export function grantsOf(entry, list) {
+export function grantsOf(entry: string, list: readonly string[]): Array<[string, string]> | null {
   const dot = entry.indexOf(".");
   const tool = dot < 0 ? entry : entry.slice(0, dot);
   const action = dot < 0 ? undefined : entry.slice(dot + 1);
   if (Object.hasOwn(SIMPLE, tool)) {
     if (action !== undefined) return [];
-    const [next, nextAction] = SIMPLE[/** @type {keyof typeof SIMPLE} */ (tool)];
+    const [next, nextAction] = SIMPLE[tool];
     return [[next, nextAction ?? "*"]];
   }
   if (Object.hasOwn(RENAMED, tool)) {
-    const next = RENAMED[/** @type {keyof typeof RENAMED} */ (tool)];
+    const next = RENAMED[tool];
     if (action !== undefined) return list.includes(tool) ? [[next, action]] : [];
     // A bare name with a qualified sibling is narrowed to the siblings (allowsToolAction).
     return list.some((e) => e.startsWith(`${tool}.`)) ? [] : [[next, "*"]];
   }
   if (Object.hasOwn(SPLIT, tool)) {
-    const actions = SPLIT[/** @type {keyof typeof SPLIT} */ (tool)];
+    const actions = SPLIT[tool];
     if (action !== undefined) {
       if (!list.includes(tool) || !Object.hasOwn(actions, action)) return [];
-      const [next, nextAction] = actions[/** @type {keyof typeof actions} */ (action)];
+      const [next, nextAction] = actions[action];
       return [[next, nextAction]];
     }
     if (list.some((e) => e.startsWith(`${tool}.`))) return [];
@@ -152,13 +151,10 @@ export function grantsOf(entry, list) {
 /**
  * The new tools axis an old one grants. "*" stays "*". An entry that names no old tool (a
  * new name already, or anything else) is kept as written.
- * @param {"*" | readonly string[]} list
- * @returns {"*" | string[]}
  */
-export function newToolsAxis(list) {
+export function newToolsAxis(list: "*" | readonly string[]): "*" | string[] {
   if (list === "*") return "*";
-  /** @type {Map<string, Set<string>>} */
-  const granted = new Map();
+  const granted: Map<string, Set<string>> = new Map();
   const kept = [];
   for (const entry of list) {
     const pairs = grantsOf(entry, list);
@@ -168,7 +164,7 @@ export function newToolsAxis(list) {
     }
     for (const [tool, action] of pairs) {
       if (!granted.has(tool)) granted.set(tool, new Set());
-      /** @type {Set<string>} */ (granted.get(tool)).add(action);
+      (granted.get(tool) as Set<string>).add(action);
     }
   }
   const out = [];
@@ -184,7 +180,7 @@ export function newToolsAxis(list) {
 }
 
 /** True for an entry that names an old tool, bare or qualified. */
-export function isOldEntry(/** @type {string} */ entry) {
+export function isOldEntry(entry: string): boolean {
   const dot = entry.indexOf(".");
   return OLD_TOOLS.includes(dot < 0 ? entry : entry.slice(0, dot));
 }
@@ -193,9 +189,8 @@ export function isOldEntry(/** @type {string} */ entry) {
  * Phase "add": the old entries kept beside the new ones, so the agent works on the old
  * Worker before the deploy, on the new one after it, and on the old one again after a
  * rollback. An old name on the new Worker names no tool and grants nothing.
- * @param {"*" | readonly string[]} list
  */
-export function addedToolsAxis(list) {
+export function addedToolsAxis(list: "*" | readonly string[]): "*" | string[] {
   if (list === "*") return "*";
   const next = newToolsAxis(list);
   if (next === "*") return "*";
@@ -207,9 +202,8 @@ export function addedToolsAxis(list) {
 /**
  * Phase "prune": the old entries removed. Refuses a list that has no new entry for an old
  * one, which means the add phase never ran for it: pruning would leave it with nothing.
- * @param {"*" | readonly string[]} list
  */
-export function prunedToolsAxis(list) {
+export function prunedToolsAxis(list: "*" | readonly string[]): "*" | string[] {
   if (list === "*") return "*";
   const old = list.filter(isOldEntry);
   const rest = list.filter((e) => !isOldEntry(e));
@@ -229,37 +223,36 @@ const NOT_A_TOOL_AFTER = /^\s+(grants?|tables?|columns?|rows?|fields?|flags?|mod
 
 /**
  * The new spelling of an old tool reference.
- * @param {string} tool old tool name
- * @param {string | undefined} action old action, where the reference named one
- * @param {boolean} [called] the reference is a call, name(...)
- * @returns {{ tool: string, action: string | null } | null}
+ * `tool`: old tool name
+ * `action`: old action, where the reference named one
+ * `called`: the reference is a call, name(...)
  */
-export function renamed(tool, action, called = false) {
+export function renamed(tool: string, action: string | undefined, called: boolean = false): { tool: string, action: string | null } | null {
   if (Object.hasOwn(SIMPLE, tool)) {
-    const [next, nextAction] = SIMPLE[/** @type {keyof typeof SIMPLE} */ (tool)];
+    const [next, nextAction] = SIMPLE[tool];
     return { tool: next, action: nextAction };
   }
   if (Object.hasOwn(RENAMED, tool)) {
-    if (action !== undefined && !RENAMED_ACTIONS[/** @type {keyof typeof RENAMED_ACTIONS} */ (tool)].includes(action)) return null;
-    return { tool: RENAMED[/** @type {keyof typeof RENAMED} */ (tool)], action: action ?? null };
+    if (action !== undefined && !RENAMED_ACTIONS[tool].includes(action)) return null;
+    return { tool: RENAMED[tool], action: action ?? null };
   }
   if (Object.hasOwn(SPLIT, tool)) {
-    const actions = SPLIT[/** @type {keyof typeof SPLIT} */ (tool)];
+    const actions = SPLIT[tool];
     // A tool whose every action moved to one new tool is that tool, named bare.
     const targets = new Set(Object.values(actions).map(([next]) => next));
     if (action === undefined && targets.size === 1) return { tool: [...targets][0], action: null };
     // An omitted action meant the old default only in a call; named bare in prose, a split
     // tool means all of it, which no one new tool is.
-    const asked = action ?? (called && Object.hasOwn(SPLIT_DEFAULT, tool) ? SPLIT_DEFAULT[/** @type {keyof typeof SPLIT_DEFAULT} */ (tool)] : undefined);
+    const asked = action ?? (called && Object.hasOwn(SPLIT_DEFAULT, tool) ? SPLIT_DEFAULT[tool] : undefined);
     if (asked === undefined || !Object.hasOwn(actions, asked)) return null;
-    const [next, nextAction] = actions[/** @type {keyof typeof actions} */ (asked)];
+    const [next, nextAction] = actions[asked];
     return { tool: next, action: nextAction };
   }
   return null;
 }
 
 // The new tools whose action an omitted `action` means, so prose need not name it.
-const DEFAULT_ACTIONS = { capsid_find_docs: "list", capsid_read_doc: "read", capsid_write_doc: "write" };
+const DEFAULT_ACTIONS: Record<string, string> = { capsid_find_docs: "list", capsid_read_doc: "read", capsid_write_doc: "write" };
 
 const NAMES = OLD_TOOLS.slice().sort((a, b) => b.length - a.length).join("|");
 
@@ -289,15 +282,21 @@ const CALL_BEFORE = /\b(call|calls|calling|called|tool)\s*$/i;
  * `name(` call. A name that is also a word (AMBIGUOUS) is rewritten only where the text
  * says it is the tool, and listed under `ambiguous` otherwise. Fenced code blocks are
  * left alone and listed under `fenced`. Both lists are for the seat to read.
- * @param {string} text
- * @returns {{ text: string, changes: Array<{ line: number, before: string, after: string }>, fenced: Array<{ line: number, text: string }>, unmapped: Array<{ line: number, text: string }>, ambiguous: Array<{ line: number, text: string }> }}
  */
-export function rewriteProse(text) {
+type LineNote = { line: number; text: string };
+
+export function rewriteProse(text: string): {
+  text: string;
+  changes: Array<{ line: number; before: string; after: string }>;
+  fenced: LineNote[];
+  unmapped: LineNote[];
+  ambiguous: LineNote[];
+} {
   const lines = text.split("\n");
-  const changes = [];
-  const fenced = [];
-  const unmapped = [];
-  const ambiguous = [];
+  const changes: Array<{ line: number; before: string; after: string }> = [];
+  const fenced: LineNote[] = [];
+  const unmapped: LineNote[] = [];
+  const ambiguous: LineNote[] = [];
   let inFence = false;
   const probe = new RegExp("(^|[^\\w./-])(" + NAMES + ")(\\(|\\.[a-z_]+\\b)");
   for (let i = 0; i < lines.length; i++) {
@@ -333,15 +332,15 @@ export function rewriteProse(text) {
       }
       // A qualified name that is not one of the tool's actions is a column or a field
       // (`jobs.claimed_by`), not the tool.
-      if (dotted !== undefined && Object.hasOwn(RENAMED_ACTIONS, tool) && !RENAMED_ACTIONS[/** @type {keyof typeof RENAMED_ACTIONS} */ (tool)].includes(dotted)) return whole;
-      if (dotted !== undefined && Object.hasOwn(SPLIT, tool) && !Object.hasOwn(SPLIT[/** @type {keyof typeof SPLIT} */ (tool)], dotted)) return whole;
+      if (dotted !== undefined && Object.hasOwn(RENAMED_ACTIONS, tool) && !RENAMED_ACTIONS[tool].includes(dotted)) return whole;
+      if (dotted !== undefined && Object.hasOwn(SPLIT, tool) && !Object.hasOwn(SPLIT[tool], dotted)) return whole;
       if (dotted !== undefined && Object.hasOwn(SIMPLE, tool)) return whole;
       const r = renamed(tool, action, Boolean(call));
       if (!r) {
         unmapped.push({ line: i + 1, text: whole });
         return whole;
       }
-      const implied = r.action === null || DEFAULT_ACTIONS[/** @type {keyof typeof DEFAULT_ACTIONS} */ (r.tool)] === r.action;
+      const implied = r.action === null || DEFAULT_ACTIONS[r.tool] === r.action;
       if (dotted !== undefined && !call) return `\`${r.tool}${r.action ? `.${r.action}` : ""}\``;
       if (call) {
         const args = call.slice(1, -1).trim();
@@ -379,6 +378,6 @@ export function rewriteProse(text) {
 const SIGNED = /^---\ncapsid-task-signature: [0-9a-f]+\n---\n/;
 
 /** The signed text of a stored job body. */
-export function unsignedBody(/** @type {string} */ stored) {
+export function unsignedBody(stored: string): string {
   return stored.replace(SIGNED, "");
 }

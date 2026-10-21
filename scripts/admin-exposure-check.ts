@@ -1,6 +1,6 @@
 // Fails when a driver session on this machine could reach Capsid as the admin.
 //
-//   node scripts/admin-exposure-check.mjs [--cwd <project folder>]
+//   node scripts/admin-exposure-check.ts [--cwd <project folder>]
 //
 // Two exposures, both measured from the folder a driver would start in:
 //
@@ -29,15 +29,11 @@ export const ADMIN_URL = /https:\/\/(?:mcp\.dustinedwards\.info|capsid\.dustin-e
 // `claude mcp list` prints one `name: target - status` line per server.
 const SERVER_LINE = /^(.+?): (.+?) - \S/;
 
-export const seatKeyPath = (home = homedir()) => join(home, ".capsid", "agent-seat.key");
+export const seatKeyPath = (home: string = homedir()): string => join(home, ".capsid", "agent-seat.key");
 
-/**
- * @param {string} text the stdout of `claude mcp list`
- * @returns {{ servers_seen: number; admin_servers: string[] }}
- */
-export function classify(text) {
-  /** @type {string[]} */
-  const admin = [];
+/** `text` is the stdout of `claude mcp list`. */
+export function classify(text: string): { servers_seen: number; admin_servers: string[] } {
+  const admin: string[] = [];
   let seen = 0;
   for (const line of text.split(/\r?\n/)) {
     const m = SERVER_LINE.exec(line);
@@ -50,23 +46,23 @@ export function classify(text) {
   return { servers_seen: seen, admin_servers: admin };
 }
 
-/**
- * @typedef {{ status: number | null; stdout?: string | null; stderr?: string | null; error?: Error }} Run
- * @param {{ cwd: string; run?: (cwd: string) => Run; exists?: (path: string) => boolean; home?: string }} opts
- * @returns {{ ok: boolean; servers_seen: number; admin_servers: string[]; seat_key_present: boolean; reasons: string[] }}
- */
+type Run = { status: number | null; stdout?: string | null; stderr?: string | null; error?: Error };
+
 export function checkAdminExposure({
   cwd,
   run = (dir) => spawnSync("claude", ["mcp", "list"], { cwd: dir, encoding: "utf8", timeout: 120_000 }),
   exists = existsSync,
   home = homedir(),
-}) {
-  /** @type {string[]} */
-  const reasons = [];
+}: {
+  cwd: string;
+  run?: (cwd: string) => Run;
+  exists?: (path: string) => boolean;
+  home?: string;
+}): { ok: boolean; servers_seen: number; admin_servers: string[]; seat_key_present: boolean; reasons: string[] } {
+  const reasons: string[] = [];
   const res = run(cwd);
   let servers_seen = 0;
-  /** @type {string[]} */
-  let admin_servers = [];
+  let admin_servers: string[] = [];
   if (res.error) reasons.push(`claude mcp list could not run: ${res.error.message}`);
   else if (res.status !== 0) reasons.push(`claude mcp list exited ${res.status}`);
   else {
@@ -89,7 +85,7 @@ function main() {
 }
 
 // Only when executed, so the pure helpers above are importable by the test suite.
-if (process.argv[1] && process.argv[1].endsWith("admin-exposure-check.mjs")) {
+if (process.argv[1] && process.argv[1].endsWith("admin-exposure-check.ts")) {
   try {
     main();
   } catch (err) {

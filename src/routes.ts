@@ -264,7 +264,7 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
 }
 
 // Capsid Admin for a key (src/mcp-handler.ts ADMIN_OPS_MCP_ROUTE): the seat's scripts
-// (scripts/mint-agents.mjs) reach the administrator tools with its operator key. Only
+// (scripts/mint-agents.ts) reach the administrator tools with its operator key. Only
 // the admin identity is served; any other key is refused here, before a server is
 // built, and every tool on it is admin only in the registrar as well.
 async function handleOperatorAdminMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

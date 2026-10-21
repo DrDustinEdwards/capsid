@@ -28,13 +28,15 @@ export const COMPLETE_MARKER = "_complete.json";
 export const SIDECARS = ["_kv.json"];
 export const OPTIONAL_SIDECARS = ["_schema.json", "_holdout-manifests.json"];
 
-function fail(reason) {
-  const err = new Error(reason);
-  err.invariant = true;
+// Parsed dump JSON, whose shape is what this checks.
+type Json = any;
+
+function fail(reason: string): never {
+  const err = Object.assign(new Error(reason), { invariant: true });
   throw err;
 }
 
-function readJson(dumpDir, file) {
+function readJson(dumpDir: string, file: string): Json {
   try {
     return JSON.parse(readFileSync(join(dumpDir, file), "utf8"));
   } catch (e) {
@@ -42,7 +44,7 @@ function readJson(dumpDir, file) {
   }
 }
 
-function checkSidecar(dumpDir, file, field, valueOk) {
+function checkSidecar(dumpDir: string, file: string, field: string, valueOk: (v: Json) => boolean): void {
   const parsed = readJson(dumpDir, file);
   const inner = parsed?.[field];
   if (!inner || typeof inner !== "object" || Array.isArray(inner)) fail(`${file} carries no '${field}' object`);
@@ -53,17 +55,23 @@ function checkSidecar(dumpDir, file, field, valueOk) {
   if (typeof parsed.exported_at !== "string") fail(`${file} carries no exported_at`);
 }
 
-/**
- * @param {string} dumpDir one run directory: <table>.json files, sidecars and _complete.json
- * @returns {{ files: number, tables: number, rows: number, documents: number, orphanVersions: number, orphanAudits: number }}
- */
-export function checkDump(dumpDir) {
+export interface DumpSummary {
+  files: number;
+  tables: number;
+  rows: number;
+  documents: number;
+  orphanVersions: number;
+  orphanAudits: number;
+}
+
+/** `dumpDir` is one run directory: <table>.json files, sidecars and _complete.json. */
+export function checkDump(dumpDir: string): DumpSummary {
   const files = readdirSync(dumpDir).filter((f) => f.endsWith(".json"));
   if (files.length === 0) fail(`${dumpDir} holds no JSON files; the check read nothing`);
   if (!files.includes(COMPLETE_MARKER)) fail(`${COMPLETE_MARKER} is missing, so this run is not a complete dump`);
 
   const marker = readJson(dumpDir, COMPLETE_MARKER);
-  const listed = (Array.isArray(marker.keys) ? marker.keys : []).map((k) => String(k).split("/").pop()).sort();
+  const listed = (Array.isArray(marker.keys) ? marker.keys : []).map((k: unknown) => String(k).split("/").pop()).sort();
   const present = files.filter((f) => f !== COMPLETE_MARKER).sort();
   if (listed.join(",") !== present.join(",")) {
     fail(`${COMPLETE_MARKER} lists ${listed.join(", ")} but the dump holds ${present.join(", ")}`);
@@ -77,7 +85,7 @@ export function checkDump(dumpDir) {
   // Present is not enough: `{}` exists too.
   checkSidecar(dumpDir, "_kv.json", "keys", (v) => v === null || typeof v === "string" || (typeof v === "object" && !Array.isArray(v) && typeof v.unreadable === "string"));
 
-  const tables = {};
+  const tables: Record<string, Json[]> = {};
   let rows = 0;
   for (const file of files.filter((f) => !f.startsWith("_"))) {
     const name = file.replace(/\.json$/, "");
@@ -87,7 +95,7 @@ export function checkDump(dumpDir) {
     // src/backup.ts dumps SELECT *, so every row of a table has the same keys, null
     // columns included.
     const expected = parsed.rows.length > 0 ? Object.keys(parsed.rows[0]).sort().join(",") : "";
-    parsed.rows.forEach((row, i) => {
+    parsed.rows.forEach((row: Json, i: number) => {
       const keys = Object.keys(row ?? {}).sort().join(",");
       if (keys !== expected) fail(`${file} row ${i} does not carry the columns of row 0 (${keys} against ${expected})`);
     });
@@ -108,7 +116,7 @@ export function checkDump(dumpDir) {
   // Compared as strings, as the SQL it replaces compared them: both are "YYYY-MM-DD HH:MM:SS".
   const newest = documents.reduce((m, d) => (String(d.updated_at ?? "") > m ? String(d.updated_at ?? "") : m), "");
 
-  const torn = [];
+  const torn: string[] = [];
   for (const v of versions) {
     if (torn.length >= 5) break;
     if (v.document_id > maxId && !removed.has(`${v.namespace}\0${v.path}`)) {
@@ -133,11 +141,11 @@ export function checkDump(dumpDir) {
   };
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop());
+const invokedDirectly = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop() ?? "");
 if (invokedDirectly) {
   const dumpDir = process.argv[2];
   if (!dumpDir) {
-    console.error("usage: node scripts/dump-invariants.mjs <dump-run-directory>");
+    console.error("usage: node scripts/dump-invariants.ts <dump-run-directory>");
     process.exit(1);
   }
   try {
@@ -147,7 +155,7 @@ if (invokedDirectly) {
         `cross-table consistent (${s.orphanVersions} version and ${s.orphanAudits} audit rows reference documents no longer in the store, all explained by deletions, archiving or the namespace rename)`
     );
   } catch (e) {
-    console.error(`dump invariants FAILED: ${e.message}`);
+    console.error(`dump invariants FAILED: ${e instanceof Error ? e.message : String(e)}`);
     process.exit(1);
   }
 }
