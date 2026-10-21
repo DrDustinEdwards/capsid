@@ -235,7 +235,7 @@ async function auditDeclineOnChange(
 type Suspended = ReadonlySet<string> | "all";
 type PausedNamespaces = ReadonlyMap<string, string> | "all";
 
-export interface AutoMergeOutcome {
+interface AutoMergeOutcome {
   namespace: string;
   repo: string;
   number: number;

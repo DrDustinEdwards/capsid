@@ -179,7 +179,7 @@ export async function proposeCanon(db: D1Database, actor: string, now: Date, inp
   return { id, base_sha: baseSha, directive_lines: flagged };
 }
 
-export interface ProposalRow {
+interface ProposalRow {
   id: number;
   namespace: string;
   path: string;
@@ -373,7 +373,7 @@ export async function rejectProposal(db: D1Database, actor: string, now: Date, i
 // above, so its snapshot, audit row and guards are the single decision's
 // (snapshot invariant, test/write-invariants.test.ts).
 
-export type SweepOutcome = "approve" | "superseded" | "outdated";
+type SweepOutcome = "approve" | "superseded" | "outdated";
 
 export interface SweepItem {
   proposal: PendingProposal;

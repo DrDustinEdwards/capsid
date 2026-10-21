@@ -131,7 +131,7 @@ export function factClaims(body: string): FactClaim[] {
 
 // ---- Checking ------------------------------------------------------------------------------
 
-export type FactRead<T> = { ok: true; value: T } | { ok: false; reason: string };
+type FactRead<T> = { ok: true; value: T } | { ok: false; reason: string };
 
 /** What the check reads, injected so the tests need no network. */
 export interface FactReaders {

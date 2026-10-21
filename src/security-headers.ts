@@ -28,9 +28,9 @@ export const REPORT_PATH = "/csp-report";
 // is behind Access, so a report sent to its own /csp-report met the sign-in redirect and was
 // lost; every host now reports to this one (routes.ts answers the Portal's preflight).
 export const REPORT_URL = "https://mcp.dustinedwards.info/csp-report";
-export const REPORTING_ENDPOINTS = `csp="${REPORT_URL}"`;
-// Where routes.ts stored reports until 2026-10-20. Nothing stores there now; the
-// backup prune (backup.ts) still reaps what is left, which is gone after its 30 days.
+const REPORTING_ENDPOINTS = `csp="${REPORT_URL}"`;
+// Where CSP reports used to be stored. Nothing writes there; the backup prune
+// (backup.ts) reaps what is left.
 export const REPORT_PREFIX = "reports/csp/";
 
 // Report-Only, never enforced. form-action is deliberately absent.

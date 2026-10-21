@@ -10,6 +10,9 @@
   "compatibility_date": "2026-09-06",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "keep_vars": true,
+  // keep_names stays at its default (true), so stack traces and source maps keep function names.
+  "minify": true,
+  "upload_source_maps": true,
   // Logs on, and traces at one invocation in ten (job_beedff911c01; Cloudflare's Workers
   // best-practices guide says to enable both with head_sampling_rate). Traces are beta,
   // stored traces bill under Observability pricing from 2026-12-01 with 7-day retention,

@@ -23,13 +23,13 @@ import { tokenSet, type FetchLike } from "./site-operator";
 // rate limit stops a stuck check from looping.
 
 const HEALTH_TIMEOUT_MS = 10_000;
-export const WEEK_MS = 7 * 86_400_000;
+const WEEK_MS = 7 * 86_400_000;
 const WEEKLY_PREFIX = "site-weekly:";
 const ALERT_PREFIX = "site-alert:";
 const TEXT_MAX = 300;
 
 /** A finding, in the watcher's terms, without importing the watcher (it imports this). */
-export interface SiteFinding {
+interface SiteFinding {
   fingerprint: string;
   namespace: string;
   headline: string;

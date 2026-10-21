@@ -10,7 +10,7 @@
 // The CHECK on job_touches.kind (migrations/0023, widened by 0031). test/job-touches-migration.test.ts
 // reads the CHECK from the schema every migration builds and compares it with this list both ways.
 export const TOUCH_KINDS = ["gate", "resume", "approval", "correction", "note", "release", "supersede", "admin_fail", "admin_complete", "review"] as const;
-export type TouchKind = (typeof TOUCH_KINDS)[number];
+type TouchKind = (typeof TOUCH_KINDS)[number];
 
 export const ACTOR_KINDS = ["human", "seat", "driver", "policy", "reviewer", "system"] as const;
 export type ActorKind = (typeof ACTOR_KINDS)[number];

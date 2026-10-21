@@ -3,7 +3,7 @@
 // corrupted index; integrity-check passes on an emptied one.
 export const HEALTH_PROBE_NS = "capsid";
 export const HEALTH_PROBE_PATH = "conventions.md";
-export const HEALTH_PROBE_TERM = "conventions";
+const HEALTH_PROBE_TERM = "conventions";
 
 // Returns "ok", or a short reason. Never throws.
 export async function probeFts(db: D1Database): Promise<string> {

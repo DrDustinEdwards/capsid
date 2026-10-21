@@ -14,7 +14,7 @@
 // This errs toward over-redacting. A false positive costs a caller one value in a log;
 // a false negative hands a credential to an agent.
 
-export type RedactionKind =
+type RedactionKind =
   | "private-key"
   | "jwt"
   | "github-token"

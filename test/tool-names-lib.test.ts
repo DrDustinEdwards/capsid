@@ -13,8 +13,8 @@ const served = new Map<string, Set<string> | null>();
 for (const spec of COMPOSITES) served.set(spec.name, new Set(Object.keys(spec.actions)));
 for (const name of Object.keys(SINGLE_TOOLS)) served.set(name, null);
 
-// Targets whose actions went with the improve loop (removed 2026-10-19). The migration
-// ran before then; its map keeps them as the record of what it rewrote.
+// Targets whose actions were removed after the migration ran; its map keeps them as the
+// record of what it rewrote.
 const RETIRED = new Set([
   "capsid_run_improve.run",
   "capsid_run_improve.claim",

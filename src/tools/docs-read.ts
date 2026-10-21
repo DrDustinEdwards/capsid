@@ -95,7 +95,7 @@ export function defineReadOperation(server: McpServer, ctx: ToolCtx): void {
 }
 
 export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
-  const { db, actor, lastActor } = ctx;
+  const { db, actor } = ctx;
 
   // One-call session start: assembles the read ritual so a session cannot skip a
   // piece of it. Pure assembly, no reasoning. Size-bounded so it stays loadable;

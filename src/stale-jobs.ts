@@ -39,7 +39,7 @@ export type StalePrCache = Record<string, StalePrEntry>;
 // The row and its rules are the Portal's contract too (GET /portal/api/stale), so they
 // live in src/ops-types.ts.
 export type { StaleRule };
-export type StaleRow = OpsStaleJob;
+type StaleRow = OpsStaleJob;
 
 /** The counts one job's pull request reads add up to. */
 export function tallyPrStates(states: readonly PrState[], at: string): StalePrEntry {

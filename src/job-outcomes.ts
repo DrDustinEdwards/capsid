@@ -29,7 +29,7 @@ export interface JobEvidence {
 }
 
 // Which fields the Worker checked itself, stored as JSON on the row, written out in full.
-export interface VerifiedFields {
+interface VerifiedFields {
   prs_opened: boolean;
   prs_merged: boolean;
   commits: boolean;

@@ -43,7 +43,7 @@ const METRICS: Record<string, readonly string[]> = {
 const API_ERROR_METRIC = "claude_code.api_error";
 
 const SESSION_SHAPE = /^[A-Za-z0-9._:-]{1,128}$/;
-const MODEL_SHAPE = /^[A-Za-z0-9._:@/\[\]-]{1,100}$/;
+const MODEL_SHAPE = /^[A-Za-z0-9._:@/[\]-]{1,100}$/;
 const JOB_SHAPE = /^job_[0-9a-f]{12}$/;
 const STATUS_SHAPE = /^[1-5][0-9]{2}$/;
 

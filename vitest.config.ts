@@ -1,11 +1,11 @@
-import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 import { extractStatements } from "./scripts/sql-statements.mjs";
 
-// THE INTEGRATION LAYER (audit 2026-09-07). node:test under test/ drives handlers
+// THE INTEGRATION LAYER. node:test under test/ drives handlers
 // against fakes; this runs the whole Worker inside workerd with a real D1, real KV
 // and real R2. Both suites run in CI and neither replaces the other.
 //
@@ -13,13 +13,10 @@ import { extractStatements } from "./scripts/sql-statements.mjs";
 // rows in memory, which proves which statements a handler issues and nothing about
 // whether SQLite accepts them. Every FTS5 trigger, every ON CONFLICT, every
 // RETURNING, the whole OAuth provider (a library this repo does not own, wired into
-// the entry module) and the scheduled handler's cron dispatch were untestable
-// before this file. The 2026-08-09 consent outage lived in exactly that gap for 26
-// days.
+// the entry module) and the scheduled handler's cron dispatch are tested only here.
 //
 // BINDINGS ARE DECLARED HERE, not read from wrangler.jsonc, and that is deliberate.
-// The real wrangler.jsonc is gitignored (capsid/conventions.md, public-repo
-// hygiene), so a fresh clone and CI have none. Pointing the pool at a config file
+// The real wrangler.jsonc is gitignored (CLAUDE.md, public repo rule), so a fresh clone and CI have none. Pointing the pool at a config file
 // that does not exist would make this suite unrunnable in the one place it matters
 // most.
 //
@@ -73,7 +70,7 @@ export default defineConfig({
         // Capsid Portal's files (src/portal-app.ts), a small fake build in
         // test-integration/fixtures/dashboard. Miniflare's own assets option
         // (AssetsOptionsSchema in miniflare's types; the pool forwards
-        // `miniflare.assets` and sets has_user_worker, @cloudflare/vitest-pool-workers
+        // `miniflare.assets` and sets has_user_worker, @cloudflare/vitest-plugin
         // dist/pool/index.mjs; Cloudflare's recipe is
         // https://github.com/cloudflare/workers-sdk/tree/main/fixtures/vitest-plugin-examples/workers-assets).
         // invoke_user_worker_ahead_of_assets is what wrangler's run_worker_first
@@ -101,8 +98,7 @@ export default defineConfig({
           OPERATOR_KEY_HASH: `${sha256(TEST_OPERATOR_KEYS.write)},ro:${sha256(TEST_OPERATOR_KEYS.read)}`,
           // Non-secret vars, matching wrangler.jsonc.example.
           GITHUB_APP_CLIENT_ID: "test-client-id",
-          // Secrets, with obviously fake values. capsid/conventions.md hard rule:
-          // no real content in any fixture. The HMAC tests derive their keys from
+          // Secrets, with obviously fake values (CLAUDE.md, public repo rule). The HMAC tests derive their keys from
           // this root exactly as the Worker does, so a signature that verifies here
           // verifies for the right reason rather than because both sides are stubs.
           IMPROVE_SCORE_SECRET: "integration-root-secret-not-a-real-one",

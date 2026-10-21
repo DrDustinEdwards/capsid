@@ -65,7 +65,7 @@ export function defineAgentOperations(server: McpServer, ctx: ToolCtx): void {
             return ok(await updateAgentScopes(db, actor, args.name, scopeArgs));
           }
         }
-        return fail(`unknown agents action '${args.action}'.`);
+        return fail(`unknown agents action '${String(args.action as unknown as string)}'.`);
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }

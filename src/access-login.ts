@@ -34,7 +34,7 @@ export function clearStateCookie(flow: LoginFlow): string {
   return `${flow.stateCookie}=; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=0`;
 }
 
-export interface AccessSaas {
+interface AccessSaas {
   clientId: string;
   clientSecret: string;
   issuer: string;

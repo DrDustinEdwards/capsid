@@ -41,7 +41,7 @@ export const SEARCH_DIMENSIONS = ["query", "page", "date", "country", "device", 
 export const SEARCH_TYPES = ["web", "image", "video", "news", "discover", "googleNews"] as const;
 export const MAX_ROW_LIMIT = 1000;
 
-export type SearchReport = (typeof SEARCH_REPORTS)[number];
+type SearchReport = (typeof SEARCH_REPORTS)[number];
 
 export interface SearchConsoleArgs {
   report?: SearchReport;

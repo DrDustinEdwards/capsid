@@ -21,7 +21,7 @@ const MAX_FIELD = 200;
 const MAX_INITIALIZE_BODY = 16384;
 const clip = (v: string | null | undefined) => (v ? v.slice(0, MAX_FIELD) : null);
 
-export interface AdminWriteCall {
+interface AdminWriteCall {
   tool: string;
   action: string | undefined;
   namespace: string | undefined;

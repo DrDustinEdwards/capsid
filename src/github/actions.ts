@@ -3,12 +3,10 @@ import { redact, redactText, type Redacted } from "../redact";
 import {
   assertRepoArg,
   cachedGet,
-  encodePath,
   getDefaultBranch,
   ghFetch,
   resolveRepo,
 } from "./client";
-import { logEvent } from "../log";
 
 // Recent CI workflow runs for a namespace's repo, via the GitHub App. Read-only.
 // For the most recent failed run it also returns the failing jobs and steps and a
@@ -474,7 +472,7 @@ async function dispatchWorkflow(
 //
 // `id` and `head_sha` are for ci_dispatch: workflow_dispatch replies 204 with no
 // body, so naming the run it started means looking for one that did not exist before.
-export async function workflowRunsForBranch(
+async function workflowRunsForBranch(
   env: Env,
   namespace: string,
   branch: string,

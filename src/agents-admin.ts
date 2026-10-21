@@ -37,7 +37,7 @@ export interface AgentResult {
 // What an agent looks like to a reader. The stored hash never appears, only its
 // first twelve hex, the same shape as an operator-key fingerprint, so an agent can be
 // matched against an audit row without handing out what it authenticates with.
-export interface PublicAgent {
+interface PublicAgent {
   id: string;
   name: string;
   kind: AgentKind;

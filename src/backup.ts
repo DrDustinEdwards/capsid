@@ -1,4 +1,4 @@
-import { COMPLETE_MARKER, dumpDatabase, pruneDumps, writeCompleteMarker, type DumpResult } from "@dustinedwards/d1-dump";
+import { dumpDatabase, pruneDumps, writeCompleteMarker, type DumpResult } from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./security-headers";
@@ -142,7 +142,7 @@ export const TABLES = [
   "improve_jti",
 ] as const;
 
-export interface BackupSummary {
+interface BackupSummary {
   ran: true;
   json_prefix: string;
   json_keys: string[];
@@ -164,7 +164,7 @@ export interface BackupSummary {
 
 // A run that did not run. Named rather than thrown so the caller can tell a held
 // lease from a failure.
-export interface BackupSkipped {
+interface BackupSkipped {
   ran: false;
   skipped: string;
 }

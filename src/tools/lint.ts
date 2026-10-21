@@ -115,7 +115,10 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         // are held back last, oldest kept, because oldest-first is the compile order.
         // core and rules are never trimmed: they are the rules of the job.
         type PacketRow = { namespace?: unknown; path?: unknown; body?: unknown };
-        const bodyChars = (row: unknown) => String((row as PacketRow | null)?.body ?? "").length;
+        const bodyChars = (row: unknown) => {
+          const body = (row as PacketRow | null)?.body;
+          return typeof body === "string" ? body.length : 0;
+        };
         const sumChars = (rows: unknown[]) => rows.reduce<number>((sum, r) => sum + bodyChars(r), 0);
         const toStub = (row: unknown) => {
           const r = row as PacketRow;

@@ -52,7 +52,7 @@ export const HOOK_EVENTS = [
   "PostToolUse",
   "PostToolUseFailure",
 ] as const;
-export type HookEventName = (typeof HOOK_EVENTS)[number];
+type HookEventName = (typeof HOOK_EVENTS)[number];
 const TOOL_EVENTS: ReadonlySet<HookEventName> = new Set(["PostToolUse", "PostToolUseFailure"]);
 
 // A Notification of one of these types means the session is waiting on a person.
@@ -88,10 +88,10 @@ const TOOL_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,127}$/;
 const FILE_TOOLS: readonly string[] = ["Edit", "Write", "MultiEdit"];
 // A Bash command's first word, kept only when it is a plain program name or path. An
 // env assignment (TOKEN=abc npm test) holds "=", so it fails and nothing is kept.
-const COMMAND_WORD = /^[A-Za-z0-9._+\/-]{1,64}$/;
+const COMMAND_WORD = /^[A-Za-z0-9._+/-]{1,64}$/;
 // The first line of a failed Bash call's error when the command ran and exited.
 const EXIT_LINE = /^Exit code (-?\d{1,4})$/;
-const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:\/[\]-]{0,99}$/;
+const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/[\]-]{0,99}$/;
 
 export interface ParsedHook {
   session_id: string;
@@ -120,6 +120,7 @@ export type HookParse = { ok: true; hook: ParsedHook } | { ok: false; refusal: s
 /** A string field, control characters folded to spaces and capped, or null. */
 function capped(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
+  // oxlint-disable-next-line no-control-regex -- folding control characters is the point
   const clean = value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
   return clean.length === 0 ? null : clean.slice(0, max);
 }

@@ -1,7 +1,5 @@
-export type { RepoEntry, RepoRef } from "./github/client";
 export {
   REPO_SHAPE,
-  assertRepoArg,
   defaultBranchSha,
   encodePath,
   parseReposList,
@@ -41,5 +39,4 @@ export {
   CI_LOG_BUDGET,
   ciDispatch,
   ciStatus,
-  workflowRunsForBranch,
 } from "./github/actions";

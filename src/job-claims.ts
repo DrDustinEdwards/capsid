@@ -274,10 +274,10 @@ export function claimStatement(db: D1Database, row: JobClaimRow): D1PreparedStat
 // gen_ai.evaluation.result event. hidden_tests and scope_respected are in the table's
 // vocabulary for a later evaluator (a model, a human); the worker writes none of them.
 export const WORKER_EVALUATIONS = ["pr_merged", "prs_opened", "commits", "files_changed", "ci_green"] as const;
-export type WorkerEvaluation = (typeof WORKER_EVALUATIONS)[number];
+type WorkerEvaluation = (typeof WORKER_EVALUATIONS)[number];
 
 export type Agreement = "agree" | "disagree" | "unclaimed" | "unchecked";
-export type ScoreLabel = "pass" | "fail" | "unknown";
+type ScoreLabel = "pass" | "fail" | "unknown";
 
 export interface JobEvaluationRow {
   job_id: string;

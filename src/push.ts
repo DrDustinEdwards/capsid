@@ -56,9 +56,9 @@ const jobUrl = (id: string) => portalPath(`/queue/job/${encodeURIComponent(id)}`
 const DEPLOYS_URL = portalPath("/health?tab=deploys");
 const AUTO_MERGE_URL = portalPath("/prs#auto-merge");
 
-export type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr";
+type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr";
 
-export interface Urgent {
+interface Urgent {
   key: string;
   kind: UrgentKind;
   namespace: string;

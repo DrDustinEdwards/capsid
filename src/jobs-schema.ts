@@ -30,7 +30,6 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
 }
 
 export const JOB_ACTIONS = ["post", "list", "claim", "complete", "record", "fail", "block", "resume", "supersede", "release", "begin", "fire", "routine", "edit", "park", "unpark"] as const;
-export type JobAction = (typeof JOB_ACTIONS)[number];
 
 export const JOBS_ROWS_MAX = 100;
 

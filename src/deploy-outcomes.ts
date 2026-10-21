@@ -32,7 +32,7 @@ export function isLiveGateJob(name: string): boolean {
 const ROLLBACK_STEP = /^Roll back/i;
 const RUNS_READ = 3;
 
-export type DeployOutcome = "verified" | "rolled_back" | "rollback_failed" | "rollback_skipped" | "unverified";
+type DeployOutcome = "verified" | "rolled_back" | "rollback_failed" | "rollback_skipped" | "unverified";
 
 interface Job {
   id: number;

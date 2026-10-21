@@ -365,7 +365,7 @@ block and complete act only on a job this caller holds, except as stated above.`
             return reply(await supersedeJob(env, agent, now, args.id, { reason: args.reason ?? "", replaced_by: args.replaced_by }));
           }
         }
-        return fail(`unknown jobs action '${args.action}'.`);
+        return fail(`unknown jobs action '${String(args.action as unknown as string)}'.`);
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }

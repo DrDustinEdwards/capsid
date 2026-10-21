@@ -1,4 +1,3 @@
-import type { Env } from "./env";
 import { findingClass, type FindingClass } from "./watcher";
 import type { OpsFinding } from "./ops-types";
 

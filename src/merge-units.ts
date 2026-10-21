@@ -73,7 +73,7 @@ export interface Suspension {
   reason: string;
 }
 
-export interface UnitProposal {
+interface UnitProposal {
   kind: "promote" | "demote";
   unit: string;
   title: string;

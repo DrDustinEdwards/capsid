@@ -1,4 +1,4 @@
-export type WriteMode = "replace" | "append" | "patch" | "meta";
+type WriteMode = "replace" | "append" | "patch" | "meta";
 
 export interface WriteRequest {
   mode: WriteMode;
@@ -71,7 +71,7 @@ export function narrowWrite(req: WriteRequest): AssembleInput | { error: string 
   return { mode, exists, priorBody, find, replace_with };
 }
 
-export function assemble(input: AssembleInput): AssembleResult {
+function assemble(input: AssembleInput): AssembleResult {
   if (input.mode === "replace") return { body: input.body };
 
   const current = input.priorBody ?? "";

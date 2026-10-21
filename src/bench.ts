@@ -141,7 +141,7 @@ function parseTaskRequest(body: string): { ok: true; jti: string; task: BenchTas
   };
 }
 
-export interface BenchRegistration {
+interface BenchRegistration {
   registration_sha256: string;
   frame_sha256: string;
   seed: string;
@@ -200,7 +200,7 @@ function parseStartRequest(body: string): { ok: true; jti: string; task_id: stri
   return { ok: true, jti, task_id: taskId, arm: r.arm as Arm, gh_run: ghRun };
 }
 
-export interface BenchUsage {
+interface BenchUsage {
   model: string | null;
   claude_code_version: string | null;
   cost_usd: number | null;

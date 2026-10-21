@@ -701,9 +701,8 @@ test("a co-owner's session is refused when CO_OWNER_EMAILS is unset, and a confi
   wroteNothing(w, "a confirmation issued to the primary owner");
 });
 
-// A confirmation is used once (controls design, D2). It was allowed to replay inside its
-// five minutes until 2026-10-06, on the reasoning that every transition is guarded on the
-// state it moves from; the nonce makes the second perform a refusal of its own.
+// A confirmation is used once (controls design, D2): the nonce makes a second perform a
+// refusal of its own.
 test("PLANT: a confirmation is spent by its first perform, and a replay is refused with 409 and writes nothing", async () => {
   const w = world();
   const { token } = await previewOk(w, "overnight", { value: "api", reason: "first supervised night" });

@@ -1,7 +1,7 @@
 import { nsName, pathProblem } from "./limits";
 
 export const LINK_TYPES = ["governs", "references", "supersedes", "replaces", "depends-on"] as const;
-export type LinkType = (typeof LINK_TYPES)[number];
+type LinkType = (typeof LINK_TYPES)[number];
 
 const isLinkType = (value: unknown): value is LinkType =>
   typeof value === "string" && (LINK_TYPES as readonly string[]).includes(value);
