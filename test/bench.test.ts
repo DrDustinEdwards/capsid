@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { countedRuns, isOutageHour, nextSlot, parseDrawRequest, parseScoreRequest, runOutcome, slotAt, type ScoreRequest, type TreatmentJob } from "../src/bench.ts";
+import { countedRuns, isOutageHour, nextSlot, slotAt } from "../src/bench.ts";
+import { parseDrawRequest, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench-requests.ts";
 import { createHmac } from "node:crypto";
 import { verifyBenchRequest } from "../src/signed-requests.ts";
 import { sourceFile } from "./source-files.ts";
 
-// The paired comparison's outcome rules (src/bench.ts runOutcome). These decide the
+// The paired comparison's outcome rules (src/bench-requests.ts runOutcome). These decide the
 // paper's primary outcome, the false success claim, so each rule is pinned here; the
 // endpoints around them are driven against a real D1 in test-integration/bench.test.ts.
 
