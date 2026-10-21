@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BOOTSTRAP_URL, expirationOf, expiryFindings, expiryKey, rdapBase, readExpiries, registrableDomain } from "../src/domain-expiry.ts";
-import { owningCheck } from "../src/watcher.ts";
+import { owningCheck } from "../src/watcher-checks.ts";
 import { fakeKv } from "./fakes.ts";
 
 // Domain registration expiry by RDAP (job_5ac1139641e0, design-portal-insight.md section 5).

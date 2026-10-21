@@ -10,7 +10,7 @@ import { blockJob, claimJob, postJob } from "../src/jobs";
 import type { PortalDigest, PortalPlan } from "../src/ops-types/views";
 import type { PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/ops-types/portal";
 import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight";
-import { PORTAL_ACTIONS } from "../src/controls";
+import { PORTAL_ACTIONS } from "../src/controls-base";
 import {
   PORTAL_ACTIVITY_PATH,
   PORTAL_CSRF_HEADER,

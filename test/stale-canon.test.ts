@@ -18,7 +18,7 @@ import {
   type CanonDoc,
   type MergedChange,
 } from "../src/stale-canon.ts";
-import { findingClass, owningCheck, WATCHER_CHECKS } from "../src/watcher.ts";
+import { findingClass, owningCheck, WATCHER_CHECKS } from "../src/watcher-checks.ts";
 
 // Stale canon after a merge (improvement item 23, src/stale-canon.ts): the pure matching.
 // Fake data throughout: namespace "sample", repo paths of a made-up app.

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLASS_PATTERNS, OWNER_PATTERNS, WATCHER_CHECKS, findingClass, runPass, type Finding, type FindingClass } from "../src/watcher.ts";
+import { runPass } from "../src/watcher.ts";
+import { CLASS_PATTERNS, OWNER_PATTERNS, WATCHER_CHECKS, findingClass, type FindingClass } from "../src/watcher-checks.ts";
+import { type Finding } from "../src/watcher-detect.ts";
 import type { FindingRow } from "../src/watcher-findings.ts";
 import { fakeFindingMemory } from "./fakes.ts";
 

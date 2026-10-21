@@ -212,7 +212,7 @@ async function ciStatusFromRuns(
     event: r.event,
     created_at: r.created_at,
     // When a completed run finished: the watcher's deploy-drift check waits a settle
-    // window after master's own CI run ends (src/watcher.ts, deployVerdict).
+    // window after master's own CI run ends (src/watcher-detect.ts, deployVerdict).
     updated_at: r.updated_at ?? null,
     url: r.html_url,
   }));

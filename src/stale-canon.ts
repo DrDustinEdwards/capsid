@@ -4,7 +4,7 @@ import { ghFetch, resolveRepo } from "./github/client";
 import { readPrFiles, type PrFileRow } from "./github/pr-files";
 import { logEvent } from "./log";
 import { externalFence } from "./provenance";
-import type { Finding } from "./watcher";
+import type { Finding } from "./watcher-detect";
 
 // STALE CANON AFTER A MERGE (Capsid improvement list, item 23: Foxhound's ROUTES.md and
 // DESIGN.md still said the admin reused the app shell after a pull request changed it).

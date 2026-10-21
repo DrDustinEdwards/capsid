@@ -1,4 +1,4 @@
-import type { Finding } from "./watcher";
+import type { Finding } from "./watcher-detect";
 
 // ANOMALY RULES ON THE AUDIT LOG (OWASP agentic hardening item 6, ASI10;
 // capsid/research/design-owasp-hardening.md; Dustin's D4 of 2026-10-03: a hit is a watcher

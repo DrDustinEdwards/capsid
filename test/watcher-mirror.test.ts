@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  MIRROR_DUMP_PREFIX,
-  MIRROR_STALE_HOURS,
   mirrorFindings,
   newestDump,
   parseDumpStamp,
-  type MirrorRun,
-} from "../src/watcher.ts";
+  type MirrorRun
+} from "../src/watcher-detect.ts";
+import {
+  MIRROR_DUMP_PREFIX,
+  MIRROR_STALE_HOURS
+} from "../src/watcher-detect.ts";
 import { BACKUP_STALE_HOURS } from "../src/health.ts";
 
 // The off-account mirror check. A verified POST /backup/credential proves only that

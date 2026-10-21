@@ -1,6 +1,10 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CI_RED_HOURS, WATCHER_ACTOR, WATCHER_CHECKS, ciFindings, siteMapFindings, watcherTick, type Finding, type Gathered } from "../src/watcher";
+import { WATCHER_ACTOR, watcherTick, type Gathered } from "../src/watcher";
+import { WATCHER_CHECKS } from "../src/watcher-checks";
+import { siteMapFindings } from "../src/watcher-detect";
+import { ciFindings, type Finding } from "../src/watcher-detect";
+import { CI_RED_HOURS } from "../src/watcher-detect";
 import { MAX_EVIDENCE, REOPEN_QUIET_MS, d1FindingMemory, type EvidenceEntry, type FindingRow } from "../src/watcher-findings";
 
 // The watcher's memory of a finding across jobs (migrations/0024_watcher_findings.sql),

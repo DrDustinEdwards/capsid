@@ -26,7 +26,8 @@ import {
 import type { OpsSite } from "../src/ops-sites.ts";
 import type { SiteProbe } from "../src/ops-types/sites.ts";
 import type { WebAnalyticsSite } from "../src/ops-types/views.ts";
-import { gatherFindings, owningCheck, WATCHER_CHECKS } from "../src/watcher.ts";
+import { gatherFindings } from "../src/watcher-gather.ts";
+import { owningCheck, WATCHER_CHECKS } from "../src/watcher-checks.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // The watcher's live checks (src/live-checks.ts). The beacon snippet, the CSP

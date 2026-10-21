@@ -5,15 +5,16 @@ import type { OpsSite } from "../src/ops-sites.ts";
 import { buildSnapshot, OPS_SNAPSHOT_KEY, readSnapshot, ringSlot, type OpsSnapshot, type SiteProbe } from "../src/ops-snapshot.ts";
 import type { SiteCloudflare } from "../src/ops-types/sites.ts";
 import {
-  ERROR_RATE_MIN_REQUESTS,
-  ERROR_RATE_THRESHOLD,
-  gatherFindings,
-  owningCheck,
   runPass,
-  siteDownFindings,
-  siteErrorFindings,
-  type Finding,
 } from "../src/watcher.ts";
+import { gatherFindings } from "../src/watcher-gather.ts";
+import { owningCheck } from "../src/watcher-checks.ts";
+import {
+  ERROR_RATE_MIN_REQUESTS,
+  ERROR_RATE_THRESHOLD, siteDownFindings,
+  siteErrorFindings
+} from "../src/watcher-detect.ts";
+import { type Finding } from "../src/watcher-detect.ts";
 import { fakeEnv, fakeFindingMemory, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
@@ -499,7 +500,7 @@ test("only the watcher and the admin capsid_admin_read_ops and capsid_admin_set_
       // A static import, a bare side-effect import, or a dynamic import().
       .filter((f) => new RegExp(`(\\bfrom\\s*|\\bimport\\s*\\(?\\s*)["'](\\.\\.?\\/)+${module}(\\.ts)?["']`).test(f.text))
       .map((f) => f.name);
-  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "site-key.ts", "watcher.ts", "workers-builds.ts"]);
+  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "site-key.ts", "watcher-gather.ts", "workers-builds.ts"]);
   // The config reads (capsid_admin_read_ops's Access and Email Routing actions) run per
   // call of an admin-only MCP tool and nowhere else: not from a Portal route, whose
   // every page load would then call Cloudflare.

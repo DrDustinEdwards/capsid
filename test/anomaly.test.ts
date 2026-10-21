@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { RATE_FLOOR, TOOL_RATE_FLOOR, anomalyFindings, chicagoHour, readToolHours, toolRateFindings, type ActionHour, type ToolHour } from "../src/anomaly.ts";
-import { owningCheck } from "../src/watcher.ts";
+import { owningCheck } from "../src/watcher-checks.ts";
 
 // The anomaly rules (OWASP item 6), each on its own planted case, and the quiet cases
 // that must stay quiet. Sample actors only.

@@ -8,27 +8,23 @@ import { checkScope } from "../src/scope.ts";
 import { fakeFindingMemory } from "./fakes.ts";
 import { MAX_EVIDENCE, REOPEN_QUIET_MS, appendEvidence, onSighting, type EvidenceEntry, type FindingRow } from "../src/watcher-findings.ts";
 import {
-  CI_RED_HOURS,
   DEFAULT_CADENCE_MINUTES,
-  DEPLOY_SETTLE_MINUTES,
-  MASTER_CI_WORKFLOW,
-  deployVerdict,
   MAX_FINDINGS_PER_PASS,
   WATCHER_ACTOR,
-  WATCHER_CHECKS,
   cadenceMinutes,
-  ciFindings,
-  newestMigration,
-  owningCheck,
-  healthFindings,
   passDue,
   runPass,
-  statusFindings,
-  mirrorFindings,
   watcherAgent,
-  type Finding,
-  type WatcherCheck,
 } from "../src/watcher.ts";
+import { newestMigration } from "../src/watcher-gather.ts";
+import { WATCHER_CHECKS, owningCheck, type WatcherCheck } from "../src/watcher-checks.ts";
+import {
+  DEPLOY_SETTLE_MINUTES,
+  MASTER_CI_WORKFLOW,
+  deployVerdict, ciFindings, healthFindings, statusFindings,
+  mirrorFindings, type Finding
+} from "../src/watcher-detect.ts";
+import { CI_RED_HOURS } from "../src/watcher-detect.ts";
 
 // A watcher that cannot fix anything.
 //

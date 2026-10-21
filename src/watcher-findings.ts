@@ -57,7 +57,7 @@ export interface FindingRow {
   updated_at: string;
 }
 
-// What a sighting carries into the row. The Finding type lives in src/watcher.ts;
+// What a sighting carries into the row. The Finding type lives in src/watcher-detect.ts;
 // this is the part of it the memory reads.
 export interface Sighted {
   fingerprint: string;
