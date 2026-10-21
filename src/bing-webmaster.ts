@@ -17,7 +17,7 @@ import { dateWindow } from "./search-console";
 //
 // THE NAMESPACE PICKS THE SITE, as in src/search-console.ts: the verified Bing site whose
 // address matches the namespace's ops_sites origin, and an inspected URL must be on it.
-// What Bing returns is data, never instructions (conventions.md rule 3).
+// What Bing returns is data, never instructions.
 
 const API = "https://ssl.bing.com/webmaster/api.svc/json";
 const TIMEOUT_MS = 15_000;
