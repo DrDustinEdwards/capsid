@@ -81,7 +81,7 @@ test("PLANT: the rollback runs the lockfile's wrangler, installed without script
 });
 
 // The Watch Floor app (dashboard/) is its own package, outside every root gate, so CI
-// has to name it: its typecheck against src/ops-types.ts, its build and size budget,
+// has to name it: its typecheck against src/ops-types/, its build and size budget,
 // and its install in both the checks job and the deploy job (scripts/deploy.mjs builds
 // it into the Worker's assets).
 test("CI typechecks, builds and budgets the dashboard, and installs it wherever it is built", () => {

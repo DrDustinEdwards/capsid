@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { ConvergenceSite, SecretPresence } from "./ops-types";
+import type { ConvergenceSite, SecretPresence } from "./ops-types/views";
 
 // THE SECRET PRESENCE OF A SITE'S WORKER (job_09e5f6cbf782; the reader is shared with
 // job_5ac1139641e0's credentials inventory). Names, set or not, never a value. The names

@@ -1,5 +1,5 @@
 import { findingClass, type FindingClass } from "./watcher";
-import type { OpsFinding } from "./ops-types";
+import type { OpsFinding } from "./ops-types/feed";
 
 // The findings that post no job (digest and attention class, src/watcher.ts), read from the
 // watcher's memory: the open rows with no job. The Portal's weekly digest panel and

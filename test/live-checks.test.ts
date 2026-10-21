@@ -24,7 +24,8 @@ import {
   type LiveRule,
 } from "../src/live-checks.ts";
 import type { OpsSite } from "../src/ops-sites.ts";
-import type { SiteProbe, WebAnalyticsSite } from "../src/ops-types.ts";
+import type { SiteProbe } from "../src/ops-types/sites.ts";
+import type { WebAnalyticsSite } from "../src/ops-types/views.ts";
 import { gatherFindings, owningCheck, WATCHER_CHECKS } from "../src/watcher.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 

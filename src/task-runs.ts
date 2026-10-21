@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { OpsTask, OpsTaskRun, OpsTaskRunOutcome } from "./ops-types";
+import type { OpsTask, OpsTaskRun, OpsTaskRunOutcome } from "./ops-types/feed";
 import { logEvent } from "./log";
 
 // The run ledger (migrations/0029_task_runs.sql). Every scheduled task goes through runTask,

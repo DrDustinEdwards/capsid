@@ -4,7 +4,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { buildAdminServer } from "../src/server";
-import type { ClaimsAggregate, ClaimsJob } from "../src/ops-types";
+import type { ClaimsAggregate, ClaimsJob } from "../src/ops-types/claims";
 import type { ClaimsExportPage } from "../src/job-claims-read";
 
 // The capsid_admin_read_claims tool (Capsid Admin) against a real D1 with

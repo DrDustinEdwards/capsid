@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick.ts";
 import { DIGEST_LAST_KEY, digestProblem, digestState, digestTick } from "../src/digest.ts";
-import type { OvernightDigest } from "../src/ops-types.ts";
+import type { OvernightDigest } from "../src/ops-types/views.ts";
 import { selectRows, type Row } from "./fake-sql.ts";
 import { fakeKv } from "./fakes.ts";
 

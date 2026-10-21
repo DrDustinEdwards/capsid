@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { OPS_RETURN_TO } from "./ops-feed";
-import type { PortalConvergence } from "./ops-types";
+import type { PortalConvergence } from "./ops-types/views";
 import { portalGate } from "./portal-auth";
 import { readConvergence } from "./site-convergence";
 

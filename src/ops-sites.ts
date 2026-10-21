@@ -1,4 +1,4 @@
-import type { OpsSiteConfig, SiteMapDrift } from "./ops-types";
+import type { OpsSiteConfig, SiteMapDrift } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
 import { parseOperator } from "./site-operator";
 

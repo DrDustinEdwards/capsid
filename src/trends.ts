@@ -4,7 +4,7 @@ import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
 import { logEvent } from "./log";
-import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types";
+import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types/views";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
 // ruled 2026-10-09: DECIDE 5, the trends route, and DECIDE 6, all eleven visuals). The feed

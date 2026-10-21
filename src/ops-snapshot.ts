@@ -3,7 +3,7 @@ import type { HealthReport } from "./health";
 import { parseHealth } from "./health-format";
 import { readCapped } from "./read-capped";
 import type { OpsSite } from "./ops-sites";
-import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types";
+import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 import { logEvent } from "./log";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
@@ -25,11 +25,11 @@ const PROBE_TIMEOUT_MS = 5000;
 // huge body cannot hold the watcher pass's memory.
 export const MAX_HEALTH_BYTES = 65_536;
 
-// The shapes live in src/ops-types.ts, the contract the dashboard app reads.
+// The shapes live in src/ops-types/, the contract the dashboard app reads.
 // ok: the health route answered 2xx. degraded: it did not, but the root did.
 // liveness: the site has no health route and its root answered 2xx, which proves it is
 // up and nothing more. down: nothing answered 2xx.
-export type { CiObservation, MirrorObservation, OpsSnapshot, SiteProbe, SiteSnapshot } from "./ops-types";
+export type { CiObservation, MirrorObservation, OpsSnapshot, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 
 export const ringSlot = (at: Date): number => Math.floor(at.getTime() / (RING_SLOT_MINUTES * 60_000));
 

@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { claimsFilterFrom, readClaimsAggregate, readJobClaims } from "./job-claims-read";
 import { OPS_RETURN_TO } from "./ops-feed";
-import type { PortalClaimsAggregate, PortalClaimsJob } from "./ops-types";
+import type { PortalClaimsAggregate, PortalClaimsJob } from "./ops-types/claims";
 import { portalGate } from "./portal-auth";
 import { jsonResponse, textResponse } from "./http";
 

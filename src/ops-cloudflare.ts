@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { OpsSite } from "./ops-sites";
-import type { CfDeploy, HourBucket, SiteCloudflare, WebAnalyticsSite } from "./ops-types";
+import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types/sites";
+import type { WebAnalyticsSite } from "./ops-types/views";
 import { logEvent } from "./log";
 
 // The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns

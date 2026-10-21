@@ -19,7 +19,7 @@ import { rewriteProse, OLD_TOOLS } from "../scripts/tool-names-lib";
 import { TOOL_GRANTS } from "./scope";
 import { COMPOSITES } from "./tools/surface";
 import { JOB_ACTIONS } from "./jobs-schema";
-import type { OpsMaintenanceItem } from "./ops-types";
+import type { OpsMaintenanceItem } from "./ops-types/views";
 
 export const CORE_CAP_BYTES = 8 * 1024;
 export const RULE_DOC_CAP_BYTES = 20 * 1024;

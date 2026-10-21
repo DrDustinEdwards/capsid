@@ -2,12 +2,12 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { readSiteConfig } from "../src/ops-sites";
-import type { OpsSiteConfig } from "../src/ops-types";
+import type { OpsSiteConfig } from "../src/ops-types/sites";
 import { previewControl, performControl } from "../src/controls";
 import { watchSites } from "../src/site-watch";
 import { handlePortalConvergence } from "../src/portal-convergence";
 import { portalSessionCookie } from "../src/portal-auth";
-import type { PortalConvergence } from "../src/ops-types";
+import type { PortalConvergence } from "../src/ops-types/views";
 
 // The site repairs against a real D1 and KV with every migration applied (job_09e5f6cbf782,
 // migrations/0035): the watcher's repair step, its rate limit and its red and green mail,

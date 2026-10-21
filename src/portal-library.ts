@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { documentEdges, readDocument, searchDocuments } from "./doc-reads";
 import { MAX_NAMESPACE, MAX_QUERY, MAX_ROWS, pathProblem, SEARCH_ROWS } from "./limits";
 import { OPS_RETURN_TO } from "./ops-feed";
-import type { LibraryEntry, LibraryShelf, PortalLibrary } from "./ops-types";
+import type { LibraryEntry, LibraryShelf, PortalLibrary } from "./ops-types/views";
 import { portalGate } from "./portal-auth";
 import { jsonResponse as json } from "./http";
 

@@ -7,7 +7,7 @@ import { PORTAL_CSRF_COOKIE } from "../src/ops-feed.ts";
 import { PORTAL_CSRF_HEADER } from "../src/portal-actions.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH, pushTick, type PushPayload } from "../src/push.ts";
-import type { PortalPush } from "../src/ops-types.ts";
+import type { PortalPush } from "../src/ops-types/views.ts";
 import { b64url, fromB64url } from "../src/web-push.ts";
 import { applyWrite, selectRows, type Row, type TableSpec } from "./fake-sql.ts";
 import { fakeKv } from "./fakes.ts";

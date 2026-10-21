@@ -12,7 +12,7 @@ import { integrityOf, REPORTS_PREFIX } from "./truth-report";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { gatherInbox, type InboxApp } from "./inbox";
 import { readSafetyReport } from "./merge-safety";
-import type { OpsMergeSafety } from "./ops-types";
+import type { OpsMergeSafety } from "./ops-types/feed";
 import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 

@@ -5,7 +5,7 @@ import { PORTAL_HOST } from "./portal-host";
 import { gateActionRequest } from "./portal-actions";
 import { portalGate } from "./portal-auth";
 import { OPS_RETURN_TO } from "./ops-feed";
-import type { PortalPush } from "./ops-types";
+import type { PortalPush } from "./ops-types/views";
 import { readPaused } from "./merge-safety";
 import { auditStatement } from "./store-guards";
 import { digestState } from "./digest";

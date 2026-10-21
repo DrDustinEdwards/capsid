@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { InboxItem } from "./ops-types";
+import type { InboxItem } from "./ops-types/feed";
 import { logEvent } from "./log";
 import { auditStatement } from "./store-guards";
 

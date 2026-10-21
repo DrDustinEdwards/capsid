@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readOvernightDigest } from "./overnight-plan";
 import { PORTAL_HOST } from "./portal-host";
-import type { DigestState } from "./ops-types";
+import type { DigestState } from "./ops-types/views";
 import { logEvent } from "./log";
 import { weeklyDigestLines } from "./watcher-digest";
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { AUTO_MERGED_APPROVAL_REASON } from "../src/approval-executor";
 import type { Env } from "../src/env";
-import type { PortalTrends } from "../src/ops-types";
+import type { PortalTrends } from "../src/ops-types/views";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends";
 import { readTrends } from "../src/trends";

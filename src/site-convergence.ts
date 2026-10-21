@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { readSiteConfig } from "./ops-sites";
-import type { ConvergenceCheck, ConvergenceSite, OpsSiteConfig, SiteOperator } from "./ops-types";
+import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
+import type { ConvergenceCheck, ConvergenceSite } from "./ops-types/views";
 import { REPAIR_AUDIT_ACTION } from "./site-repair";
 import { callOperator, tokenSet, toolRefusal, type FetchLike } from "./site-operator";
 import { readStoredSecrets } from "./secret-presence";

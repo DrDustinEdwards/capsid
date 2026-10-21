@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { logEvent } from "./log";
-import type { OpsSiteConfig, SiteOperator } from "./ops-types";
+import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import { runSiteRepair, type RepairOutcome } from "./site-repair";
 import { tokenSet, type FetchLike } from "./site-operator";
 

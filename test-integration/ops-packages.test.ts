@@ -10,7 +10,7 @@ import {
   weekStatement,
   type FetchLike,
 } from "../src/ops-packages";
-import type { PackageSnapshot } from "../src/ops-types";
+import type { PackageSnapshot } from "../src/ops-types/sites";
 
 // The Packages panel against a real D1 and KV (job_c6e4ab939a54): its configuration is
 // written like the sites', its weekly rows are written once a week, and its history is

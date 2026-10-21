@@ -107,7 +107,7 @@ const hours = (v: number) => (v >= 1 ? `${v.toFixed(1)} h` : `${Math.round(v * 6
 
 // The gate classes and who ended a wait, in words (Dustin's review of 2026-10-11: the chart
 // showed needs_human and push_branch). A compound command's classes are joined with "+"
-// (src/ops-types.ts, ClaimsWaitRow); a class this list does not know reads as words.
+// (src/ops-types/, ClaimsWaitRow); a class this list does not know reads as words.
 const GATE_WORDS: Record<string, string> = {
   needs_human: "A step only a person takes",
   additive_migration: "Applying a migration",

@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { OPS_RETURN_TO } from "./ops-feed";
-import type { PortalDigest, PortalPlan } from "./ops-types";
+import type { PortalDigest, PortalPlan } from "./ops-types/views";
 import { digestSinceFrom, readOvernightDigest, readOvernightPlan } from "./overnight-plan";
 import { portalGate } from "./portal-auth";
 import { jsonResponse as json } from "./http";

@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
 import type { MaintenanceItem } from "./maintenance";
-import type { OpsSnapshot } from "./ops-types";
+import type { OpsSnapshot } from "./ops-types/sites";
 import { readSnapshot } from "./ops-snapshot";
 
 // The daily maintenance pass's undeployed-merge rule (job_549550d73d4e, piece 5). Carrel sat

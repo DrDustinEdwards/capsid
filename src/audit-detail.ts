@@ -1,4 +1,4 @@
-import type { AuditChange, AuditDetail, AuditField } from "./ops-types";
+import type { AuditChange, AuditDetail, AuditField } from "./ops-types/portal";
 
 // What an audit row recorded, in plain English, for the Portal's Activity drawer
 // (job_fe0da37c07e0 PR 2). The reason typed with a change, a field-by-field before and after

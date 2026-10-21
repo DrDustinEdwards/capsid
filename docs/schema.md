@@ -491,7 +491,7 @@ body is exactly what an attacker controls.
 
 Capsid Portal (`/portal/`, docs/portal.md) reads the store through the same
 functions the tools call, so the two cannot disagree. `GET /portal/api/ops` is the
-feed, `OpsFeed` in `src/ops-types.ts`. `GET /portal/api/namespaces` returns each
+feed, `OpsFeed` in `src/ops-types/feed.ts`. `GET /portal/api/namespaces` returns each
 roster namespace from `capsidStatus()` (`src/status.ts`), the function behind `capsid_run_improve` action `status`.
 `GET /portal/api/activity?namespace=&actor=` returns the last 50 `audit_log` rows,
 filtered, with ISO times. `GET /portal/api/stale` returns the stale jobs from
