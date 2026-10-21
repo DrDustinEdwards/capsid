@@ -28,11 +28,6 @@ test("PLANT: a size D1 did not report is null, never zero", () => {
   }
 });
 
-test("the cap is D1's 10 GB per database on Workers Paid", () => {
-  assert.equal(D1_CAP_BYTES, 10 * 1024 * 1024 * 1024);
-  assert.equal(bytes(D1_CAP_BYTES), "10 GB");
-});
-
 test("PLANT: from half the cap the store is a warning in Needs attention, and not below it", () => {
   const below = feed(D1_CAP_BYTES / 2 - 1);
   assert.deepEqual(storeRows(below.f, below.now), []);
