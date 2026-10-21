@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
-import { gatherFindings, type Finding, type WatcherCheck } from "../src/watcher.ts";
+import { gatherFindings } from "../src/watcher-gather.ts";
+import { type WatcherCheck } from "../src/watcher-checks.ts";
+import { type Finding } from "../src/watcher-detect.ts";
 
 // The watcher's health checks, driven through gatherFindings and the real repo
 // readers. healthFindings is tested as a pure function elsewhere; a gathering error

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fakeEnv, fakeKv, withFetch, type FetchCall, type Route } from "./fakes.ts";
-import { gatherFindings, owningCheck, WATCHER_CHECKS, type Finding, type WatcherCheck } from "../src/watcher.ts";
+import { gatherFindings } from "../src/watcher-gather.ts";
+import { owningCheck, WATCHER_CHECKS, type WatcherCheck } from "../src/watcher-checks.ts";
+import { type Finding } from "../src/watcher-detect.ts";
 import { parseOnPurpose, suggestNamespace } from "../src/unmapped-repos.ts";
 
 // The unmapped-repo check (job_1e2df2bba342), driven through gatherFindings with a real

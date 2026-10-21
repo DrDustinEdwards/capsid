@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { WATCHER_ACTOR, clearFinding, gatherFindings, openWatcherFingerprints } from "../src/watcher";
+import { WATCHER_ACTOR, clearFinding, openWatcherFingerprints } from "../src/watcher";
+import { gatherFindings } from "../src/watcher-gather";
 
 // The watcher's reads and writes of the jobs table, against a real D1. The rows
 // are seeded and the assertions are on which rows come back or change, not on SQL text.

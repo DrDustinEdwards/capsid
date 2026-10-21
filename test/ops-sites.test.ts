@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { healthPathRefusal, hostnameRefusal, originFrom, siteMapDrift, sitesFrom, validateSite } from "../src/ops-sites.ts";
 import type { OpsSiteConfig } from "../src/ops-types/sites.ts";
-import { siteMapFindings } from "../src/watcher.ts";
+import { siteMapFindings } from "../src/watcher-detect.ts";
 
 // The Portal's site configuration (src/ops-sites.ts): what an edit may say, how rows
 // become probed sites, and the site map against the registered namespaces. The table,

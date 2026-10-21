@@ -277,7 +277,7 @@ export interface OpsLive {
   // What needs Dustin, per app, from the same gatherer GET /ops/inbox answers with
   // (src/inbox.ts), unrestricted: the Portal is the admin's.
   inbox: Inbox;
-  // The watcher's open findings that post no job (src/watcher.ts, findingClass): class
+  // The watcher's open findings that post no job (src/watcher-checks.ts, findingClass): class
   // digest feeds the weekly digest per site, class attention the attention list.
   findings: OpsFinding[];
 }

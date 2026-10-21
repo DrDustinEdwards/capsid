@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
 import { externalFence } from "./provenance";
-import type { Finding } from "./watcher";
+import type { Finding } from "./watcher-detect";
 
 // THE MEMORY OF A ROLLBACK (docs/design/design-merge-pipeline.md section 6, PR 6). Each
 // watcher pass reads, for every DEPLOY_ROSTER repo, its newest completed default-branch push

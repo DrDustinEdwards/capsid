@@ -7,7 +7,7 @@ import { logEvent } from "./log";
 // The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
 // (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never
 // per dashboard request. Two modules import it (test/ops-cloudflare.test.ts):
-// src/watcher.ts, and src/ops-cloudflare-config.ts, the admin-only capsid_admin_read_ops
+// src/watcher-gather.ts, and src/ops-cloudflare-config.ts, the admin-only capsid_admin_read_ops
 // tool's Access and Email Routing reads, which reuse this envelope and paging.
 //
 // The token, CF_OPS_TOKEN, is read-only and holds these permissions:
