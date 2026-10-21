@@ -20,7 +20,7 @@ import {
   PORTAL_PREVIEW_PATH,
   PORTAL_SIGN_OUT_PATH,
 } from "../src/portal-actions.ts";
-import { PORTAL_ACTIONS } from "../src/controls.ts";
+import { PORTAL_ACTIONS } from "../src/controls-base.ts";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { handlePortalStale, PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";

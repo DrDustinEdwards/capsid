@@ -66,7 +66,7 @@ const DESTRUCTIVE = [
   // in src/namespace-delete.ts.
   /\bperformNamespaceDelete\(/,
   // The controls' perform: it can revoke an agent, fail a job or remove a site, through
-  // the mutators src/controls.ts calls.
+  // the mutators src/controls-perform.ts calls.
   /\bperformControl\(/,
   // set_site_key replaces a site's key on its Worker and on Carrel (src/site-key.ts).
   /\bsetSiteKey\(/,
@@ -251,8 +251,8 @@ const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence
     reason: "perform closes a pull request on GitHub and runs a site repair through the site's operator API",
     via: /\bperformControl\(/,
     evidence: [
-      { file: "controls.ts", pattern: /\bmanagePr\(/ },
-      { file: "controls.ts", pattern: /\brunSiteRepair\(/ },
+      { file: "controls-perform.ts", pattern: /\bmanagePr\(/ },
+      { file: "controls-perform.ts", pattern: /\brunSiteRepair\(/ },
       { file: "site-repair.ts", pattern: /\bcallOperator\(/ },
       { file: "site-operator.ts", pattern: /\bfetchImpl\(/ },
     ],
