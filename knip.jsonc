@@ -1,8 +1,7 @@
 {
   // Knip for the Worker package. This file only names what Knip cannot see by convention (knip.dev,
   // "Configuration"): the Worker's entry (wrangler.jsonc is not committed, so the
-  // Wrangler plugin cannot read its "main"), the scripts and tests run by path, the
-  // .d.mts declarations tsc reads beside each .mjs, the dashboard's re-export of the
+  // Wrangler plugin cannot read its "main"), the scripts and tests run by path, the dashboard's re-export of the
   // feed types and the cloudflare: virtual modules @cloudflare/vitest-plugin provides.
   // The dashboard runs on Knip's defaults (its Vite, React and
   // Playwright plugins find its entries) with `knip --directory dashboard`.
