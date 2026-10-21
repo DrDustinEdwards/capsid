@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PreToolUse hook: blocks any Write or Edit whose incoming content carries an em
-# or en dash. Canon: capsid/conventions.md.
+# or en dash.
 #
 # PreToolUse plus exit 2 is the only combination that blocks the tool call.
 # PostToolUse fires after the write has landed and cannot undo it.
@@ -103,7 +103,7 @@ case "$rc" in
   3)
     {
       echo "Blocked: an em dash or en dash is present in the content for $result."
-      echo "Canon (capsid/conventions.md): no em dashes anywhere, including code, copy, comments, and commit messages."
+      echo "No em dashes anywhere, including code, copy, comments, and commit messages."
       echo "Use a comma, a colon, parentheses, or split the sentence. Then retry the write."
       echo "If this is a Bash command that must carry the literal character (a search, a normalizer), write it as an ANSI-C quoted escape instead: a dollar sign, then the backslash-u form in single quotes."
     } >&2

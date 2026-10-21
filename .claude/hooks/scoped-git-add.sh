@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PreToolUse hook on Bash: blocks unscoped git adds (git add -A / --all / .).
-# Canon: capsid/conventions.md, scoped commits with explicit named paths only.
+# Scoped commits with explicit named paths only.
 #
 # PreToolUse plus exit 2 is the only combination that blocks the tool call, and
 # jq is not guaranteed on macOS, so the check is written in Python.
@@ -93,7 +93,7 @@ case "$rc" in
   3)
     {
       echo "Blocked: unscoped git add (-A, --all, or .)."
-      echo "Canon (capsid/conventions.md): scoped commits only. git add the named paths you changed."
+      echo "Scoped commits only. git add the named paths you changed."
       echo "Run git diff on each path first: a named path is not a scoped change if the file carries edits you did not write."
     } >&2
     exit 2
