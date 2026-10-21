@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { OpsMaintenanceItem } from "./ops-types";
+import type { OpsMaintenanceItem } from "./ops-types/views";
 import { ROSTER } from "./roster";
 import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./maintenance-branches";
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
@@ -45,7 +45,7 @@ const FOLLOWUP_PROMISE = /follow(?:[- ]?ups?)?\b[^.]{0,60}\bseparate jobs?/i;
 const LATER_DATE = /\bLATER\b[^0-9]{0,40}(\d{4}-\d{2}-\d{2})/i;
 
 // The item is the Portal's contract too (GET /portal/api/maintenance), so it lives with the
-// other Portal types in src/ops-types.ts.
+// other Portal types in src/ops-types/.
 /** The model drift check, injected so a test can run the pass without GitHub. */
 export type DriftReader = (env: Env) => Promise<{ items: MaintenanceItem[]; read: number }>;
 

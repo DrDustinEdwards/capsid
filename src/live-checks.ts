@@ -2,7 +2,8 @@ import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/chec
 import type { Env } from "./env";
 import { ghFetch, getDefaultBranch, getRefSha, resolveRepo } from "./github/client";
 import type { OpsSite } from "./ops-sites";
-import type { SiteProbe, WebAnalyticsSite } from "./ops-types";
+import type { SiteProbe } from "./ops-types/sites";
+import type { WebAnalyticsSite } from "./ops-types/views";
 import { readCapped } from "./read-capped";
 
 // THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5, ruled

@@ -4,7 +4,7 @@ import worker from "../src/index";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_SHARED_CODE_PATH } from "../src/portal-packages";
 import { SHARED_CODE_CACHE_KEY } from "../src/shared-code";
-import type { SharedCodeView } from "../src/ops-types";
+import type { SharedCodeView } from "../src/ops-types/feed";
 
 // The Shared code view's route through the Worker, against the D1 the migrations build:
 // the six seeded packages are read from configuration, and an app or a tag list that

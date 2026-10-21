@@ -6,7 +6,7 @@ import type { Env } from "../src/env";
 import { APP_ROSTER } from "../src/roster";
 import { RESUME_MARKER } from "../src/jobs";
 import { OPS_FEED_PATH, OPS_FEED_READS, OPS_REFRESH_PATH, opsFeed } from "../src/ops-feed";
-import type { OpsFeed } from "../src/ops-types";
+import type { OpsFeed } from "../src/ops-types/feed";
 import { WATCHER_ACTOR } from "../src/watcher";
 
 // The Watch Floor feed against a real D1 and KV: which rows each list keeps, and how

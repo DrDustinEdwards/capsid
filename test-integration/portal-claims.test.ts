@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
-import type { PortalClaimsAggregate, PortalClaimsJob } from "../src/ops-types";
+import type { PortalClaimsAggregate, PortalClaimsJob } from "../src/ops-types/claims";
 import { PORTAL_CLAIMS_PATH } from "../src/portal-claims";
 
 // GET /portal/api/claims through the whole Worker against a real D1: the route reads

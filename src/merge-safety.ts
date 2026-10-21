@@ -3,7 +3,7 @@ import { loadMergePolicy } from "./auto-merge-policy";
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
 import { logEvent } from "./log";
-import type { OpsMergeSafety, OpsMergeSafetyRow } from "./ops-types";
+import type { OpsMergeSafety, OpsMergeSafetyRow } from "./ops-types/feed";
 import { auditStatement } from "./store-guards";
 import { timeMs } from "./trends";
 import { passDue } from "./watcher";

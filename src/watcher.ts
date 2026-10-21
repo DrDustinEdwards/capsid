@@ -16,7 +16,7 @@ import { cloudflareCredentials, readAccessAppNames, readCloudflare, readSecretNa
 import { checkManualSteps, liveStepReaders } from "./manual-steps";
 import { secretPresence, storeSecrets } from "./secret-presence";
 import { defaultBranchHead, liveChecks, readLiveConfig, type LiveFinding } from "./live-checks";
-import type { PackageSnapshot, SiteCloudflare } from "./ops-types";
+import type { PackageSnapshot, SiteCloudflare } from "./ops-types/sites";
 import { externalFence } from "./provenance";
 import { anomalyFindings, readActionHours, readToolHours, toolRateFindings } from "./anomaly";
 import { archiveRevokedAgents } from "./agents-archive";

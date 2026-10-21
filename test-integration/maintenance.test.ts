@@ -9,7 +9,7 @@ import type { DeployReaders } from "../src/maintenance-deploys";
 import type { ReleaseReaders } from "../src/maintenance-releases";
 import worker from "../src/index";
 import type { Env } from "../src/env";
-import type { PortalMaintenance } from "../src/ops-types";
+import type { PortalMaintenance } from "../src/ops-types/views";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance";
 import { gatherModelDriftItems, UNLISTED_DOC } from "../src/model-drift";

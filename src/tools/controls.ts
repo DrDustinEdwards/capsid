@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { CONTROLS, PORTAL_ACTIONS, performControl, previewControl, TOKEN_TTL_SECONDS } from "../controls";
 import { bounded, MAX_TITLE } from "../limits";
-import type { PortalAction } from "../ops-types";
+import type { PortalAction } from "../ops-types/portal";
 import { fail, ok, type ToolCtx } from "./docs";
 
 const MAX_PARAM = 1024;

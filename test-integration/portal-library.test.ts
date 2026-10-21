@@ -1,7 +1,7 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import worker from "../src/index";
-import type { PortalLibrary } from "../src/ops-types";
+import type { PortalLibrary } from "../src/ops-types/views";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library";
 

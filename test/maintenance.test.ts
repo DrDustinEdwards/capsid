@@ -4,7 +4,7 @@ import { laterPassed, namesPullRequest, promisesFollowUps, readMaintenance } fro
 import { gatherPrItems, greenAwaitingSeat, redTooLong, type OpenPr, type PrCheck, type PrReaders } from "../src/maintenance-prs.ts";
 import { BRANCH_KEEP_KEY, gatherBranchItems, githubBranchReaders, PRUNE_AUDIT_ACTION, PRUNE_CAP, PRUNE_SWITCH_KEY, type BranchReaders } from "../src/maintenance-branches.ts";
 import { gatherDeployItems, type DeployReaders } from "../src/maintenance-deploys.ts";
-import type { OpsSnapshot, SiteSnapshot } from "../src/ops-types.ts";
+import type { OpsSnapshot, SiteSnapshot } from "../src/ops-types/sites.ts";
 import type { Env } from "../src/env.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 

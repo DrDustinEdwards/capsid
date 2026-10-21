@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { DigestBlocked, DigestJob, DigestPr, OvernightDigest, OvernightPlan, PlanLane, SkippedJob, UsageSource, UsageTotals } from "./ops-types";
+import type { DigestBlocked, DigestJob, DigestPr, OvernightDigest, OvernightPlan, PlanLane, SkippedJob, UsageSource, UsageTotals } from "./ops-types/views";
 import { resolveRepo } from "./github/client";
 import { logEvent } from "./log";
 

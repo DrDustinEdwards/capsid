@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { CF_GRAPHQL, DEPLOYS_KEPT, WEB_ANALYTICS_PERMISSION, cloudflareCredentials, errorWindow, readCloudflare, readWebAnalyticsSites } from "../src/ops-cloudflare.ts";
 import type { OpsSite } from "../src/ops-sites.ts";
 import { buildSnapshot, OPS_SNAPSHOT_KEY, readSnapshot, ringSlot, type OpsSnapshot, type SiteProbe } from "../src/ops-snapshot.ts";
-import type { SiteCloudflare } from "../src/ops-types.ts";
+import type { SiteCloudflare } from "../src/ops-types/sites.ts";
 import {
   ERROR_RATE_MIN_REQUESTS,
   ERROR_RATE_THRESHOLD,

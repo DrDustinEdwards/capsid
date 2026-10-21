@@ -24,7 +24,7 @@ import type { JobRow } from "./jobs-schema";
 import { readJob } from "./jobs-transition";
 import { prUrlsFromJob } from "./outcome-prs";
 import { addSite, describeSite, editSite, readSiteRow, removeSite, validateSite, type SiteInput } from "./ops-sites";
-import type { PortalAction, PortalPreview } from "./ops-types";
+import type { PortalAction, PortalPreview } from "./ops-types/portal";
 import { decisionFor, OVERNIGHT_MODE_KEY, overnightState, overnightValueRefusal, setOvernight, type OvernightMode } from "./overnight";
 import { auditStatement } from "./store-guards";
 import { approveProposal, checkProposal, lineChanges, readSweep, rejectProposal, type SweepItem } from "./canon";

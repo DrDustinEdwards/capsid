@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { OpsMaintenanceItem } from "./ops-types";
+import type { OpsMaintenanceItem } from "./ops-types/views";
 import { listInstalledRepos, parseReposList, type InstalledRepo } from "./github/client";
 import { logEvent } from "./log";
 import { readSiteConfig, sitesFrom } from "./ops-sites";

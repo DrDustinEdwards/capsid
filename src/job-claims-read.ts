@@ -11,8 +11,8 @@ import type {
   ClaimsWaitRow,
   JobClaimRow,
   JobEvaluationRow,
-  JobTouchRow,
-} from "./ops-types";
+  JobTouchRow
+} from "./ops-types/claims";
 
 // The read side of claims apart from verified outcomes (migrations/0023_job_claims.sql,
 // roadmap P0). One set of readers, shared by the `capsid_admin_read_claims` tool (src/tools/claims.ts)

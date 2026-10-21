@@ -16,7 +16,7 @@ import { readSiteConfig } from "./ops-sites";
 import { readPackageConfig } from "./ops-packages";
 import { readSnapshot } from "./ops-snapshot";
 import { INCIDENT_FAILURES, NEEDS_INPUT_INCIDENT_MS } from "./ops-hooks";
-import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSession } from "./ops-types";
+import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSession } from "./ops-types/feed";
 import { overnightState } from "./overnight";
 import { auditStatement } from "./store-guards";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
@@ -27,7 +27,7 @@ import { pendingProposals } from "./canon";
 import { textResponse } from "./http";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
-// /portal/api/ops returns OpsFeed (src/ops-types.ts), the watcher's last pass from KV
+// /portal/api/ops returns OpsFeed (src/ops-types/feed.ts), the watcher's last pass from KV
 // plus what changes between passes, read live. POST /portal/api/ops/refresh runs one
 // watcher pass now and returns the new feed.
 //

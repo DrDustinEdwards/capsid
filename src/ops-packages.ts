@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
-import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./ops-types";
+import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
 

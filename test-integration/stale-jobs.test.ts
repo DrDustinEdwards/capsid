@@ -7,7 +7,7 @@ import { MERGE_RESUME_ACTOR } from "../src/jobs-seat";
 import { mergeResumeTick } from "../src/merge-resume";
 import worker from "../src/index";
 import type { Env } from "../src/env";
-import type { PortalStale } from "../src/ops-types";
+import type { PortalStale } from "../src/ops-types/views";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_STALE_PATH } from "../src/portal-stale";
 import { buildServer } from "../src/server";

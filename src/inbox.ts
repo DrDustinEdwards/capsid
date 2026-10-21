@@ -30,9 +30,9 @@ import { readStepCache, stepsSeen, type StaleStepCache } from "./manual-steps";
 // reported item is always needs-you: an app may say a person must act, never that its
 // badge should be quieter.
 
-// The shapes are in the feed contract (src/ops-types.ts), which the Portal also reads.
-export type { Inbox, InboxApp, InboxItem, InboxSeverity } from "./ops-types";
-import type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops-types";
+// The shapes are in the feed contract (src/ops-types/), which the Portal also reads.
+export type { Inbox, InboxApp, InboxItem, InboxSeverity } from "./ops-types/feed";
+import type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops-types/feed";
 
 const MAX_BLOCKED = 200;
 const MAX_ITEMS_PER_APP = 50;

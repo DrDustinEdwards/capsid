@@ -9,7 +9,7 @@ import { healthChecks, statusFields } from "../src/site-convergence.ts";
 import { secretPresence } from "../src/secret-presence.ts";
 import { readSecretNames } from "../src/ops-cloudflare.ts";
 import type { Env } from "../src/env.ts";
-import type { SiteOperator } from "../src/ops-types.ts";
+import type { SiteOperator } from "../src/ops-types/sites.ts";
 
 // A site's operator API (job_09e5f6cbf782): the configuration's rules, the two allowlists,
 // the one call, the watcher's repair plan and rate limit, and the convergence view's

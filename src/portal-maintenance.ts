@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { ROSTER } from "./roster";
 import { readMaintenance } from "./maintenance";
 import { OPS_RETURN_TO } from "./ops-feed";
-import type { PortalMaintenance } from "./ops-types";
+import type { PortalMaintenance } from "./ops-types/views";
 import { portalGate } from "./portal-auth";
 
 // The Portal's Maintenance list: GET /portal/api/maintenance (job_549550d73d4e). The list

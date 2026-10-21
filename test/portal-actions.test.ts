@@ -4,7 +4,8 @@ import { hmacHex } from "../src/auth.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { b64urlDecode, b64urlEncode } from "../src/encoding.ts";
 import { PORTAL_CSRF_COOKIE, type OpsFeedData } from "../src/ops-feed.ts";
-import type { OpsSiteConfig, PortalPerformed, PortalPreview } from "../src/ops-types.ts";
+import type { OpsSiteConfig } from "../src/ops-types/sites.ts";
+import type { PortalPerformed, PortalPreview } from "../src/ops-types/portal.ts";
 import {
   handlePortalActivity,
   handlePortalApiNotFound,

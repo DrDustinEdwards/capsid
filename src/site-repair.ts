@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { logEvent } from "./log";
 import { readSiteRow } from "./ops-sites";
-import type { SiteOperator } from "./ops-types";
+import type { SiteOperator } from "./ops-types/sites";
 import { callLine, callOperator, toolRefusal, type FetchLike, type OperatorCall } from "./site-operator";
 import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";

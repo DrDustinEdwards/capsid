@@ -1,5 +1,5 @@
 import { auditDetail } from "./audit-detail";
-import type { AuditDetail } from "./ops-types";
+import type { AuditDetail } from "./ops-types/portal";
 
 // Recent activity: a bounded, filtered read of audit_log across every namespace, for
 // Capsid Portal's Activity view. The filter comes off a query string, so every value is a

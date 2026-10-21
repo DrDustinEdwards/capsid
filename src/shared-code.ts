@@ -4,7 +4,8 @@ import { ghFetch } from "./github/client";
 import { readRepoFile, repoBlobPaths } from "./github/contents";
 import { readNpm, type FetchLike } from "./ops-packages";
 import { readSiteConfig } from "./ops-sites";
-import type { PackageSnapshot, SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types";
+import type { PackageSnapshot } from "./ops-types/sites";
+import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types/feed";
 
 // SHARED CODE: how far the centralization has got (job_584b4e7f2824; ruling
 // capsid/rulings/shared-homes-2026-10-06.md). For each shared package in configuration

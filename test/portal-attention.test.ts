@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { OpsFeed } from "../src/ops-types.ts";
+import type { OpsFeed } from "../src/ops-types/feed.ts";
 
 // The Overview's Needs attention list, grouped and tiered (dashboard/src/lib/derive.ts,
 // attentionGroups and blockedOrder; capsid/research/audit-ui-patterns.md, rulings 3 and

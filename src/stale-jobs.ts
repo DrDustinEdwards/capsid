@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { MERGE_RESUME_ACTOR } from "./jobs-seat";
-import type { OpsStaleJob, StaleRule } from "./ops-types";
+import type { OpsStaleJob, StaleRule } from "./ops-types/views";
 import { readStepCache, stepsSeen, type StaleStepEntry } from "./manual-steps";
 
 // The stale view (capsid/research/design-stale-jobs.md, D5): `capsid_work_jobs` action list with
@@ -37,7 +37,7 @@ export interface StalePrEntry {
 export type StalePrCache = Record<string, StalePrEntry>;
 
 // The row and its rules are the Portal's contract too (GET /portal/api/stale), so they
-// live in src/ops-types.ts.
+// live in src/ops-types/.
 export type { StaleRule };
 type StaleRow = OpsStaleJob;
 

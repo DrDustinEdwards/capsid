@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { OpsFeed } from "../src/ops-types.ts";
+import type { OpsFeed } from "../src/ops-types/feed.ts";
 
 // Every stop in the command menu (dashboard/src/lib/stops.ts; capsid/decisions.md
 // 2026-09-30, "admin panels review adopted", item 4), on the dashboard's sample feed.

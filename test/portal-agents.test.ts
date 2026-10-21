@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { OpsFeed } from "../src/ops-types.ts";
+import type { OpsFeed } from "../src/ops-types/feed.ts";
 
 // The Agents page's two lists (dashboard/src/lib/derive.ts, job_24e460427d6c): the roster
 // is live credentials only, and the Archive tab holds every revoked one, the next to move

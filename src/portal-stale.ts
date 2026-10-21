@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { OPS_RETURN_TO } from "./ops-feed";
-import type { PortalStale } from "./ops-types";
+import type { PortalStale } from "./ops-types/views";
 import { portalGate } from "./portal-auth";
 import { staleJobs } from "./stale-jobs";
 

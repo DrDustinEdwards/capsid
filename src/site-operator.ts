@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import type { SiteOperator } from "./ops-types";
+import type { SiteOperator } from "./ops-types/sites";
 
 // A SITE'S OPERATOR API (job_09e5f6cbf782, Dustin 2026-10-03). Capsid is the operations
 // hub and may trigger an allowlist of a site's own repair tools, so the repairs, the
