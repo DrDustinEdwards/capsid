@@ -23,7 +23,7 @@ const LEGACY_KV_ROUTE = ["workers", "namespaces"].join("/");
 
 test(`no Cloudflare API call uses the legacy KV route /${LEGACY_KV_ROUTE}/ (dead 2026-10-15)`, () => {
   const groups = {
-    scripts: filesUnder("scripts", /\.mjs$/),
+    scripts: filesUnder("scripts", /\.(mjs|ts)$/),
     src: filesUnder("src", /\.ts$/),
     workflows: filesUnder(".github/workflows", /\.ya?ml$/),
     test: filesUnder("test", /\.ts$/).filter((f) => !f.path.endsWith("cloudflare-platform.test.ts")),

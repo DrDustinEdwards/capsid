@@ -86,7 +86,7 @@ function succeeded(result: ToolResult): Record<string, unknown> {
   return JSON.parse(text) as Record<string, unknown>;
 }
 
-// The reviewer as scripts/mint-agents.mjs mints it: write grant, can_comment_pr and
+// The reviewer as scripts/mint-agents.ts mints it: write grant, can_comment_pr and
 // nothing else, and a tools axis narrowed to capsid_open_pr's comment action.
 function reviewer(): Agent {
   const scopes = defaultScopes(["capsid"]);

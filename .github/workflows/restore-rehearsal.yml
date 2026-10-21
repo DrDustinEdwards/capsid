@@ -1,6 +1,6 @@
 # The restore rehearsal. Weekly and on demand: pull the newest JSON dump from R2 with a
 # minted one-hour credential, check what only Capsid knows about its dump
-# (scripts/dump-invariants.mjs), then run d1-dump's restore drill on it: restore into a
+# (scripts/dump-invariants.ts), then run d1-dump's restore drill on it: restore into a
 # local SQLite database, check counts against the marker, FTS5 agreement and a search,
 # and delete the scratch database. It fails loudly when a dump cannot be rebuilt.
 #
@@ -115,7 +115,7 @@ jobs:
       - name: Check the dump's own invariants
         env:
           RUN_PREFIX: ${{ steps.pull.outputs.run_prefix }}
-        run: node scripts/dump-invariants.mjs "dump/${RUN_PREFIX}"
+        run: node scripts/dump-invariants.ts "dump/${RUN_PREFIX}"
 
       # Fails when the dump is older than 26 hours: the newest prefix is whatever the
       # last successful backup wrote, so without that check a stopped backup keeps this

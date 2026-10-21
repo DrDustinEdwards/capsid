@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ROLES, roleMintCommand, selectAgents } from "../scripts/mint-agents.mjs";
+import { ROLES, roleMintCommand, selectAgents } from "../scripts/mint-agents.ts";
 import { SCOPE_FLAGS, allowsToolAction, defaultScopes, parseScopes, serializeScopes } from "../src/agents-schema.ts";
 import { type Agent } from "../src/agents.ts";
 import { checkScope, repoWriteFlags } from "../src/scope.ts";
@@ -200,7 +200,7 @@ test("DERIVED: no role is a driver in disguise", () => {
 test("each role prints a mint command the script itself can parse", () => {
   for (const role of ROLES) {
     const command = roleMintCommand(role);
-    assert.match(command, /node scripts\/mint-agents\.mjs --role /);
+    assert.match(command, /node scripts\/mint-agents\.ts --role /);
     assert.match(command, new RegExp(`--role ${role.name}\\b`));
     assert.match(command, /--apply/);
     assert.ok(!command.includes("CAPSID_OPERATOR_KEY=<"), "a command with a placeholder key is one nobody can paste");

@@ -280,7 +280,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           # Gate 8 makes a real MCP call through /ops/mcp (initialize or server/discover,
           # tools/list, one read) as the live-probe agent: read grant on capsid, the read
-          # tool only (scripts/mint-agents.mjs). A broken connection refuses (exit 1), so
+          # tool only (scripts/mint-agents.ts). A broken connection refuses (exit 1), so
           # the step below rolls the deploy back. Without the secret the gate SKIPS, says
           # so, and warns.
           CAPSID_LIVE_PROBE_KEY: ${{ secrets.CAPSID_LIVE_PROBE_KEY }}

@@ -1,34 +1,15 @@
 {
-  // scripts/, type-checked as JavaScript.
-  //
-  // WHY IT IS ITS OWN CONFIG: tsconfig.json includes only src, tsconfig.test.json
-  // only src and test, and neither checks a .mjs body. It began with the improve
-  // loop's score report script, which shipped to four repos with ten type errors on
-  // 2026-09-07; that script went with the loop on 2026-10-19.
-  //
-  // checkJs with strict. The .d.mts beside a .mjs types it for TypeScript importers;
-  // this checks the implementation the .d.mts describes.
+  // scripts/: the .ts scripts, plus the .mjs ones that check clean as JavaScript.
+  // Node runs the .ts files by stripping their types, so only erasable syntax is
+  // allowed, and a type-only import must say so.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
     "types": ["node"]
   },
-  // WIDENED ONE FILE AT A TIME. derive-backup-key.mjs (then improve-derive-key.mjs)
-  // was added on 2026-09-25 (audit item E2-31) because its type errors included real
-  // bugs.
-  // export-claims.mjs was written against this config from its first line. The
-  // rest of scripts/ still carries implicit-any gaps; add a file here once it checks
-  // clean.
-  "include": [
-    "scripts/admin-exposure-check.mjs",
-    "scripts/admin-exposure-check.d.mts",
-    "scripts/derive-backup-key.mjs",
-    "scripts/export-claims.mjs",
-    "scripts/export-claims.d.mts",
-    "scripts/drill-all.mjs",
-    "scripts/drill-all.d.mts",
-    "scripts/strip-pr-footer.mjs",
-    "scripts/strip-pr-footer.d.mts"
-  ]
+  "include": ["scripts/*.ts", "scripts/derive-backup-key.mjs"]
 }

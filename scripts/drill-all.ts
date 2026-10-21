@@ -1,6 +1,6 @@
 // Proves every site's backups at once, from the seat's machine.
 //
-//   node scripts/drill-all.mjs [--site <name>]...
+//   node scripts/drill-all.ts [--site <name>]...
 //
 // For each site it opens the site's backup bucket with the caller's own wrangler login
 // (npx wrangler login; no token is read, passed or printed), downloads the newest
@@ -16,7 +16,17 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { COMPLETE_MARKER, latestDump } from "@dustinedwards/d1-dump";
+import { COMPLETE_MARKER, latestDump, type R2Like } from "@dustinedwards/d1-dump";
+
+export interface Site {
+  name: string;
+  bucket: string;
+  noSearch?: boolean;
+}
+export interface DrillRun {
+  code: number;
+  output: string;
+}
 
 // dustinedwards and foxing join this list as their backup jobs land
 // (job_e40ec706c10a, job_d087b66eef22). txasm's bucket is txasm-books (binding BOOKS).
@@ -25,7 +35,7 @@ import { COMPLETE_MARKER, latestDump } from "@dustinedwards/d1-dump";
 // reports PASS (search n/a) when that is the only failing check. Any other failure, or a
 // search failure for any other reason, is still a FAIL. Remove the flag when the site
 // gains an FTS5 table.
-export const SITES = [
+export const SITES: Site[] = [
   { name: "foxhound", bucket: "foxhound-backups" },
   { name: "carrel", bucket: "carrel-backups" },
   { name: "germomics", bucket: "germomics-backups" },
@@ -42,7 +52,7 @@ const DRILL_TIMEOUT_MS = 15 * 60_000;
 const CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "node_modules", "@dustinedwards", "d1-dump", "dist", "cli.js");
 
 /** The real drill: d1-dump's CLI on the sqlite backend, as a child process. */
-export function runDrillCli(dir, prefix) {
+export function runDrillCli(dir: string, prefix: string): DrillRun {
   const r = spawnSync(process.execPath, [CLI, "drill", "--dir", dir, "--backend", "sqlite", "--prefix", prefix, "--max-age-hours", "off"], {
     encoding: "utf8",
     timeout: DRILL_TIMEOUT_MS,
@@ -52,7 +62,7 @@ export function runDrillCli(dir, prefix) {
 }
 
 /** The first failing check of a drill's output, or its first line when none is named. */
-export function firstFailure(output) {
+export function firstFailure(output: string): string {
   const lines = output.split("\n").map((l) => l.trim()).filter(Boolean);
   const failed = lines.find((l) => l.startsWith("FAIL "));
   return (failed ?? lines.find((l) => !l.startsWith("backend:")) ?? "the drill printed nothing").replace(/^FAIL /, "").slice(0, 200);
@@ -62,14 +72,14 @@ export function firstFailure(output) {
  * True when the drill's only failing check is `search` for want of an FTS5 table. A drill
  * that failed with no named check (a crash, a timeout) is not excused.
  */
-export function onlySearchUnavailable(output) {
+export function onlySearchUnavailable(output: string): boolean {
   const failed = output.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("FAIL "));
   return failed.length > 0 && failed.every((l) => /^FAIL search:.*no FTS5 table/.test(l));
 }
 
-async function listAll(bucket, prefix) {
-  const keys = [];
-  let cursor;
+async function listAll(bucket: R2Like, prefix: string): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor: string | undefined;
   do {
     const page = await bucket.list({ prefix, cursor });
     keys.push(...page.objects.map((o) => o.key));
@@ -82,7 +92,15 @@ async function listAll(bucket, prefix) {
  * Drills one site's bucket. Never throws: a bucket that cannot be read, or no complete
  * run, is a FAIL line. Returns { line, ok }.
  */
-export async function drillSite(site, bucket, { now = new Date(), runDrill = runDrillCli, noSearch = false } = {}) {
+export async function drillSite(
+  site: string,
+  bucket: R2Like,
+  {
+    now = new Date(),
+    runDrill = runDrillCli,
+    noSearch = false,
+  }: { now?: Date; runDrill?: (dir: string, prefix: string) => DrillRun | Promise<DrillRun>; noSearch?: boolean } = {}
+): Promise<{ line: string; ok: boolean }> {
   const dir = mkdtempSync(join(tmpdir(), `drill-${site}-`));
   let head = site;
   try {
@@ -102,7 +120,7 @@ export async function drillSite(site, bucket, { now = new Date(), runDrill = run
     const marker = JSON.parse(readFileSync(join(dir, ...latest.prefix.split("/"), COMPLETE_MARKER), "utf8"));
     const age = Math.round(((now.getTime() - Date.parse(latest.exported_at)) / 3_600_000) * 10) / 10;
     const tables = Array.isArray(marker.tables) ? marker.tables : [];
-    const rows = tables.reduce((n, t) => n + (Number.isFinite(t?.rows) ? t.rows : 0), 0);
+    const rows = tables.reduce((n: number, t: { rows?: unknown } | null) => n + (typeof t?.rows === "number" && Number.isFinite(t.rows) ? t.rows : 0), 0);
     const stats = `${head} age_hours=${Number.isNaN(age) ? "unknown" : age.toFixed(1)} tables=${tables.length} rows=${rows}`;
     if (Number.isNaN(age)) return { line: `${stats} FAIL (dump: exported_at is not a time)`, ok: false };
     if (age > MAX_AGE_HOURS) return { line: `${stats} FAIL (dump: the newest complete run is over ${MAX_AGE_HOURS}h old)`, ok: false };
@@ -118,10 +136,10 @@ export async function drillSite(site, bucket, { now = new Date(), runDrill = run
 }
 
 /** The sites named by --site flags, or all of them; an unknown name or argument is an error. */
-export function selectSites(argv, sites = SITES) {
-  const wanted = [];
+export function selectSites(argv: string[], sites: Site[] = SITES): Site[] {
+  const wanted: string[] = [];
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] !== "--site") throw new Error(`unknown argument ${argv[i]}; usage: node scripts/drill-all.mjs [--site <name>]...`);
+    if (argv[i] !== "--site") throw new Error(`unknown argument ${argv[i]}; usage: node scripts/drill-all.ts [--site <name>]...`);
     const name = argv[++i];
     if (!name) throw new Error("--site needs a site name");
     wanted.push(name);
@@ -133,7 +151,7 @@ export function selectSites(argv, sites = SITES) {
 }
 
 // Opens the site's bucket through the caller's wrangler login. Returns the bucket and a dispose.
-async function openBucket(site) {
+async function openBucket(site: Site): Promise<{ bucket: R2Like; dispose: () => Promise<void> }> {
   const { getPlatformProxy } = await import("wrangler");
   const cfgDir = mkdtempSync(join(tmpdir(), `drill-cfg-${site.name}-`));
   const configPath = join(cfgDir, "wrangler.jsonc");
@@ -146,7 +164,7 @@ async function openBucket(site) {
     throw err;
   }
   return {
-    bucket: proxy.env.BACKUPS,
+    bucket: proxy.env.BACKUPS as R2Like,
     dispose: async () => {
       try {
         await proxy.dispose();
@@ -157,7 +175,7 @@ async function openBucket(site) {
   };
 }
 
-export async function main(argv = process.argv.slice(2)) {
+export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   let sites;
   try {
     sites = selectSites(argv);

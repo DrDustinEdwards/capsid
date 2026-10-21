@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
-import { extractStatements } from "./scripts/sql-statements.mjs";
+import { extractStatements } from "./scripts/sql-statements";
 
 // THE INTEGRATION LAYER (audit 2026-09-07). node:test under test/ drives handlers
 // against fakes; this runs the whole Worker inside workerd with a real D1, real KV

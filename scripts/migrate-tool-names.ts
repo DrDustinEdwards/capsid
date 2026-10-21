@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The MCP 4 regroup's data migration, run by the seat with the admin operator key. The
-// pure rules are scripts/tool-names-lib.mjs. Three phases, in this order:
+// pure rules are scripts/tool-names-lib.ts. Three phases, in this order:
 //
 //   1. add    BEFORE the deploy, against the live (old) Worker. Each agent's tools axis
 //             gains the new names beside the old ones, so it works on the old Worker now,
@@ -17,15 +17,15 @@
 // --apply to write. Every write goes through the Worker's own tools, so each is scoped,
 // snapshotted and audited as any other.
 //
-//   CAPSID_OPERATOR_KEY=... node scripts/migrate-tool-names.mjs --phase add [--surface old|new] [--apply]
+//   CAPSID_OPERATOR_KEY=... node scripts/migrate-tool-names.ts --phase add [--surface old|new] [--apply]
 //
 // The key goes into the Authorization header and nowhere else. It is never printed.
 
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { capsidClient, requireHttps } from "./capsid-rpc.mjs";
-import { addedToolsAxis, prunedToolsAxis, rewriteProse, unsignedBody } from "./tool-names-lib.mjs";
+import { capsidClient, requireHttps } from "./capsid-rpc.ts";
+import { addedToolsAxis, prunedToolsAxis, rewriteProse, unsignedBody } from "./tool-names-lib.ts";
 
 const ORIGIN_DEFAULT = "https://mcp.dustinedwards.info";
 const PHASES = ["add", "prose", "prune"];
@@ -34,18 +34,16 @@ const PHASES = ["add", "prose", "prune"];
 const SURFACES = {
   old: {
     route: "/ops/mcp",
-    agents: (/** @type {object} */ args) => ["agents", args],
+    agents: (args: object): [string, object] => ["agents", args],
   },
   new: {
     route: "/ops/mcp/admin",
-    agents: (/** @type {object} */ args) => ["capsid_admin_manage_agents", args],
+    agents: (args: object): [string, object] => ["capsid_admin_manage_agents", args],
   },
 };
 
-/** @param {string[]} argv */
-export function parseArgs(argv) {
-  /** @type {{ phase?: string, surface?: string, apply: boolean }} */
-  const out = { apply: false };
+export function parseArgs(argv: string[]) {
+  const out: { phase?: string, surface?: string, apply: boolean } = { apply: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--apply") out.apply = true;
@@ -60,24 +58,14 @@ export function parseArgs(argv) {
   return out;
 }
 
-/**
- * @typedef {(name: string, args: object) => Promise<string>} Tool
- * @typedef {(line: string) => void} Out
- */
+type Tool = (name: string, args: object) => Promise<string>;
+type Out = (line: string) => void;
 
-/**
- * Phases add and prune: the agents' tools axes.
- * @param {Tool} tool
- * @param {"old" | "new"} surface
- * @param {"add" | "prune"} phase
- * @param {boolean} apply
- * @param {Out} out
- */
-export async function migrateAxes(tool, surface, phase, apply, out) {
+/** Phases add and prune: the agents' tools axes. */
+export async function migrateAxes(tool: Tool, surface: "old" | "new", phase: "add" | "prune", apply: boolean, out: Out) {
   const s = SURFACES[surface];
   const listed = JSON.parse(await tool(...s.agents({ action: "list" })));
-  /** @type {Array<{ name: string, revoked_at: string | null, scopes: { tools: "*" | string[] } }>} */
-  const agents = listed.agents ?? [];
+  const agents: Array<{ name: string, revoked_at: string | null, scopes: { tools: "*" | string[] } }> = listed.agents ?? [];
   let changed = 0;
   for (const agent of agents) {
     if (agent.revoked_at) continue;
@@ -92,15 +80,9 @@ export async function migrateAxes(tool, surface, phase, apply, out) {
   return changed;
 }
 
-/** @param {string} text */
-const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
+const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
 
-/**
- * @param {ReturnType<typeof rewriteProse>} r
- * @param {string} where
- * @param {Out} out
- */
-function report(r, where, out) {
+function report(r: ReturnType<typeof rewriteProse>, where: string, out: Out) {
   for (const c of r.changes) out(`${where}:${c.line}\n  - ${c.before.trim()}\n  + ${c.after.trim()}`);
   for (const u of r.unmapped) out(`${where}:${u.line} NOT REWRITTEN, no mapping: ${u.text}`);
   for (const a of r.ambiguous) out(`${where}:${a.line} NOT REWRITTEN, may not be the tool: ${a.text}`);
@@ -109,11 +91,9 @@ function report(r, where, out) {
 
 /**
  * Phase prose: job bodies, skills and canon docs, on the new Worker.
- * @param {Tool} tool the Capsid client (/ops/mcp)
- * @param {boolean} apply
- * @param {Out} out
+ * `tool`: the Capsid client (/ops/mcp)
  */
-export async function migrateProse(tool, apply, out) {
+export async function migrateProse(tool: Tool, apply: boolean, out: Out) {
   let changed = 0;
   // Jobs: queued and blocked are the bodies a driver will still be handed.
   for (const status of ["queued", "blocked"]) {
@@ -136,10 +116,8 @@ export async function migrateProse(tool, apply, out) {
   }
   // Documents.
   const namespaces = JSON.parse(await tool("capsid_find_docs", { action: "namespaces" }));
-  /** @type {string[]} */
-  const names = (Array.isArray(namespaces) ? namespaces : namespaces.namespaces ?? []).map((/** @type {{ namespace: string }} */ n) => n.namespace);
-  /** @type {Array<{ namespace: string, path: string, improve: boolean }>} */
-  const docs = [];
+  const names = (Array.isArray(namespaces) ? namespaces : namespaces.namespaces ?? []).map((n: { namespace: string }) => n.namespace);
+  const docs: Array<{ namespace: string, path: string, improve: boolean }> = [];
   for (const namespace of names) {
     docs.push({ namespace, path: "core.md", improve: false });
     const skills = JSON.parse(await tool("capsid_find_docs", { action: "glob", namespace, glob: "improve/skills/*.md" }));
@@ -187,16 +165,16 @@ async function main() {
     process.exit(2);
   }
   const origin = requireHttps(process.env.CAPSID_ORIGIN ?? ORIGIN_DEFAULT);
-  const out = (/** @type {string} */ line) => console.log(line);
+  const out = (line: string) => console.log(line);
   out(`${args.apply ? "APPLYING" : "DRY RUN (pass --apply to write)"}: phase ${args.phase} against ${origin} (${args.surface} surface)`);
   if (args.phase === "prose") {
     const client = capsidClient(origin, key, "migrate-tool-names");
     await migrateProse(client.tool, args.apply, out);
   } else {
-    const surface = /** @type {"old" | "new"} */ (args.surface);
-    const route = /** @type {"/ops/mcp" | "/ops/mcp/admin"} */ (SURFACES[surface].route);
+    const surface = (args.surface as "old" | "new");
+    const route = (SURFACES[surface].route as "/ops/mcp" | "/ops/mcp/admin");
     const client = capsidClient(origin, key, "migrate-tool-names", fetch, route);
-    await migrateAxes(client.tool, surface, /** @type {"add" | "prune"} */ (args.phase), args.apply, out);
+    await migrateAxes(client.tool, surface, (args.phase as "add" | "prune"), args.apply, out);
   }
 }
 

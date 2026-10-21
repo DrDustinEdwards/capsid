@@ -4,12 +4,8 @@
 //
 // The key goes into the Authorization header and nowhere else. It is never printed.
 
-/**
- * Refuse any origin that would send a bearer key in clear text.
- * @param {string} origin
- * @returns {string} the origin, unchanged
- */
-export function requireHttps(origin) {
+/** Refuse any origin that would send a bearer key in clear text. Returns the origin unchanged. */
+export function requireHttps(origin: string): string {
   let url;
   try {
     url = new URL(origin);
@@ -25,10 +21,10 @@ export function requireHttps(origin) {
 /**
  * The JSON-RPC message in a response body. Streamable HTTP may answer as SSE; the
  * last `data:` line is the message. A body with no `data:` line is read as plain JSON.
- * @param {string} text
- * @param {string} method for the error message
+ * `method` is for the error message.
  */
-export function parseRpcBody(text, method) {
+// any: a JSON-RPC message of any shape
+export function parseRpcBody(text: string, method: string): any {
   const data = text.split(/\r?\n/).filter((l) => l.startsWith("data:"));
   const payload = data.length > 0 ? data[data.length - 1].slice(5).trim() : text;
   try {
@@ -41,19 +37,19 @@ export function parseRpcBody(text, method) {
 /**
  * A client bound to one origin and one key. `tool` initializes the session on first
  * use and THROWS when the tool refuses, so a refusal can never be reported as done.
- * @param {string} origin
- * @param {string} key
- * @param {string} clientName
- * @param {typeof fetch} [fetchImpl]
- * @param {"/ops/mcp" | "/ops/mcp/admin"} [route]
  */
-export function capsidClient(origin, key, clientName, fetchImpl = fetch, route = "/ops/mcp") {
+export function capsidClient(
+  origin: string,
+  key: string,
+  clientName: string,
+  fetchImpl: typeof fetch = fetch,
+  route: "/ops/mcp" | "/ops/mcp/admin" = "/ops/mcp"
+): { tool(name: string, args: object): Promise<string> } {
   requireHttps(origin);
   let id = 0;
   let initialized = false;
 
-  /** @param {object} message */
-  const post = (message) =>
+  const post = (message: object) =>
     fetchImpl(`${origin}${route}`, {
       method: "POST",
       headers: {
@@ -64,8 +60,7 @@ export function capsidClient(origin, key, clientName, fetchImpl = fetch, route =
       body: JSON.stringify(message),
     });
 
-  /** @param {string} method @param {object} params */
-  async function rpc(method, params) {
+  async function rpc(method: string, params: object) {
     const res = await post({ jsonrpc: "2.0", id: ++id, method, params });
     const text = await res.text();
     if (!res.ok) throw new Error(`${method} -> HTTP ${res.status}: ${text.slice(0, 400)}`);
@@ -85,16 +80,11 @@ export function capsidClient(origin, key, clientName, fetchImpl = fetch, route =
     initialized = true;
   }
 
-  /**
-   * Call a tool and return its text. Throws on a refusal (isError).
-   * @param {string} name
-   * @param {object} args
-   * @returns {Promise<string>}
-   */
-  async function tool(name, args) {
+  /** Call a tool and return its text. Throws on a refusal (isError). */
+  async function tool(name: string, args: object): Promise<string> {
     await initialize();
     const result = await rpc("tools/call", { name, arguments: args });
-    const text = (result?.content ?? []).map((/** @type {{ text?: string }} */ c) => c.text ?? "").join("");
+    const text = (result?.content ?? []).map((c: { text?: string }) => c.text ?? "").join("");
     if (result?.isError) throw new Error(`${name} refused: ${text.slice(0, 400)}`);
     return text;
   }

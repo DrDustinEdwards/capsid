@@ -3,9 +3,9 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { checkDump } from "../scripts/dump-invariants.mjs";
+import { checkDump } from "../scripts/dump-invariants.ts";
 
-// The checks the d1-dump restore drill cannot make (scripts/dump-invariants.mjs). Each
+// The checks the d1-dump restore drill cannot make (scripts/dump-invariants.ts). Each
 // plant removes exactly one property of a good dump and names the reason that fires.
 
 const DOC = { namespace: "sample", title: "t", body: "b", type: "note", status: "published", created_at: "2026-09-01 00:00:00" };

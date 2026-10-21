@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ROLES } from "../scripts/mint-agents.mjs";
+import { ROLES } from "../scripts/mint-agents.ts";
 import { allowsToolAction } from "../src/agents-schema.ts";
 import { checkScope } from "../src/scope.ts";
 import { fakeFindingMemory } from "./fakes.ts";

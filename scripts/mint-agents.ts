@@ -5,11 +5,11 @@
 // file, and this script reports the name and a 12-hex fingerprint of the digest,
 // so a key never lands in terminal scrollback or a CI log.
 //
-//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.mjs                    # dry run, all six
-//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.mjs --apply
-//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.mjs --namespace foxing --apply
-//   node scripts/mint-agents.mjs --roles                                  # print the role mint commands
-//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.mjs --role auditor --apply
+//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.ts                    # dry run, all six
+//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.ts --apply
+//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.ts --namespace foxing --apply
+//   node scripts/mint-agents.ts --roles                                  # print the role mint commands
+//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.ts --role auditor --apply
 //
 // --namespace mints one project's agent. An existing key file is SKIPPED rather than
 // overwritten, so the full run stays safe to repeat.
@@ -26,13 +26,30 @@ import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, unlinkSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { capsidClient } from "./capsid-rpc.mjs";
+import { capsidClient } from "./capsid-rpc.ts";
 
 export const ORIGIN_DEFAULT = "https://mcp.dustinedwards.info";
 
 // The six of docs/bootstrap.md. Drivers carry NO flags: a driver opens pull
 // requests and a human merges them, and can_merge is how that stops being true.
-export const AGENTS = [
+type Tool = (name: string, args: object) => Promise<string>;
+
+// `repos` is OPTIONAL on an entry and required on the wire: main() fills it from the
+// live namespace mapping before anything is minted (attachRepos).
+export interface Agent {
+  name: string;
+  kind: string;
+  namespaces: string[];
+  repos?: string[];
+  grants: string[];
+  flags?: Record<string, boolean>;
+}
+export interface Role extends Agent {
+  tools?: string[];
+  what: string;
+}
+
+export const AGENTS: Agent[] = [
   { name: "capsid-driver",        kind: "driver", namespaces: ["capsid"],        grants: ["read", "write"] },
   { name: "dustinedwards-driver", kind: "driver", namespaces: ["dustinedwards"], grants: ["read", "write"] },
   { name: "foxhound-driver",      kind: "driver", namespaces: ["foxhound"],      grants: ["read", "write"] },
@@ -49,7 +66,7 @@ export const AGENTS = [
 //
 // A role is ONE capability: each entry holds at most one blast-radius flag, and
 // test/roles.test.ts fails the build on a second.
-export const ROLES = [
+export const ROLES: Role[] = [
   {
     name: "auditor",
     kind: "session",
@@ -122,17 +139,17 @@ export const ROLES = [
 
 // What an admin pastes. It names the role rather than restating its scopes, so it
 // cannot drift from ROLES.
-export function roleMintCommand(role) {
-  return `CAPSID_OPERATOR_KEY=$CAPSID_OPERATOR_KEY node scripts/mint-agents.mjs --role ${role.name} --apply`;
+export function roleMintCommand(role: Role): string {
+  return `CAPSID_OPERATOR_KEY=$CAPSID_OPERATOR_KEY node scripts/mint-agents.ts --role ${role.name} --apply`;
 }
 
-export const keyDir = () => join(homedir(), ".capsid");
-export const keyPath = (name) => join(keyDir(), `agent-${name}.key`);
-export const fingerprint = (key) => createHash("sha256").update(key).digest("hex").slice(0, 12);
+export const keyDir = (): string => join(homedir(), ".capsid");
+export const keyPath = (name: string): string => join(keyDir(), `agent-${name}.key`);
+export const fingerprint = (key: string): string => createHash("sha256").update(key).digest("hex").slice(0, 12);
 
 // A driver for a namespace that has no entry in AGENTS, the same shape as the five
 // above: read and write on its own namespace, and NO FLAGS.
-export function driverFor(namespace) {
+export function driverFor(namespace: string): Agent {
   return { name: `${namespace}-driver`, kind: "driver", namespaces: [namespace], grants: ["read", "write"] };
 }
 
@@ -144,7 +161,7 @@ export function driverFor(namespace) {
 // AGENTS is minted a driver on the strength of being REGISTERED; `registered` is
 // passed in rather than fetched so this stays pure. With no `registered`, only
 // AGENTS matches, so a failed lookup refuses instead of inventing a namespace.
-export function selectAgents(namespace, registered, role) {
+export function selectAgents(namespace?: string, registered?: string[], role?: string): Array<Agent | Role> {
   // The role selector is checked first and never falls through: an unknown role
   // refuses rather than returning the whole bootstrap list.
   if (role !== undefined) {
@@ -161,7 +178,7 @@ export function selectAgents(namespace, registered, role) {
   throw new Error(`no agent is scoped to '${namespace}'. Known: ${known}.${also}`);
 }
 
-export function parseArgs(argv) {
+export function parseArgs(argv: string[]): { apply: boolean; namespace: string | undefined; role: string | undefined; roles: boolean } {
   const apply = argv.includes("--apply");
   const i = argv.indexOf("--namespace");
   if (i !== -1 && !argv[i + 1]) throw new Error("--namespace needs a value, for example --namespace foxing.");
@@ -179,7 +196,8 @@ export function parseArgs(argv) {
 // The `namespaces` tool answers with a bare array of rows keyed on `namespace`.
 // Parsed in its own function so the test drives the real response shape rather
 // than a shape this script hopes for.
-function namespaceRows(text) {
+// any: rows of the tool's JSON answer
+function namespaceRows(text: string): any[] {
   let rows;
   try {
     rows = JSON.parse(text);
@@ -190,9 +208,9 @@ function namespaceRows(text) {
   return rows;
 }
 
-export function parseNamespaces(text) {
+export function parseNamespaces(text: string): string[] {
   const rows = namespaceRows(text);
-  const names = rows.map((r) => r?.namespace).filter((n) => typeof n === "string" && n.length > 0);
+  const names = rows.map((r) => r?.namespace).filter((n): n is string => typeof n === "string" && n.length > 0);
   // Vacuity guard. An empty list here would make every --namespace refuse, which
   // reads as "not registered" when it actually means "the shape changed".
   if (names.length === 0) throw new Error("the namespaces tool returned no namespaces; its response shape changed.");
@@ -203,9 +221,9 @@ export function parseNamespaces(text) {
 // mints as the "*" wildcard, which can never refuse; a driver scoped to its own repos
 // is refused on any other even if the mapping is later edited. Read from the
 // `namespaces` response rather than a table in this file, so the two cannot disagree.
-export function parseNamespaceRepos(text) {
+export function parseNamespaceRepos(text: string): Map<string, string[]> {
   const rows = namespaceRows(text);
-  const map = new Map();
+  const map = new Map<string, string[]>();
   for (const row of rows) {
     if (typeof row?.namespace !== "string" || !row.namespace) continue;
     let repos = row.repos;
@@ -217,7 +235,7 @@ export function parseNamespaceRepos(text) {
       }
     }
     const names = Array.isArray(repos)
-      ? repos.map((r) => r?.repo).filter((r) => typeof r === "string" && r.length > 0)
+      ? repos.map((r: { repo?: unknown } | null) => r?.repo).filter((r: unknown): r is string => typeof r === "string" && r.length > 0)
       : [];
     map.set(row.namespace, names);
   }
@@ -227,7 +245,7 @@ export function parseNamespaceRepos(text) {
 
 // The repos a driver for this namespace may reach. REFUSES rather than falling back
 // to the wildcard, so a driver is never minted wide by accident.
-export function reposForNamespace(map, namespace) {
+export function reposForNamespace(map: Map<string, string[]>, namespace: string): string[] {
   const repos = map.get(namespace);
   if (!repos || repos.length === 0) {
     throw new Error(
@@ -240,7 +258,7 @@ export function reposForNamespace(map, namespace) {
 
 // Attach the repos axis to every driver that does not name its own, from the live
 // namespace mapping. Its own function so the test can drive it with a fake tool.
-export async function attachRepos(wanted, tool) {
+export async function attachRepos(wanted: Array<{ kind: string; namespaces: string[]; repos?: string[] }>, tool: Tool): Promise<void> {
   const needsRepos = wanted.filter((a) => a.kind === "driver" && a.repos === undefined);
   if (needsRepos.length === 0) return;
   const mapping = parseNamespaceRepos(await tool("capsid_find_docs", { action: "namespaces" }));
@@ -258,20 +276,17 @@ export async function attachRepos(wanted, tool) {
  * never be minted again). Opening with "wx" proves the directory is writable and the
  * file is absent, atomically; a mint that fails removes the empty file. The key is
  * never printed.
- * @param {(name: string, args: object) => Promise<string>} tool
- * @param {{ name: string, what?: string }} agent
- * @param {string} path
- * @returns {Promise<string>} the report line
+ * Returns the report line
  */
-export async function mintInto(tool, agent, path) {
+export async function mintInto(tool: Tool, agent: { name: string; what?: string }, path: string): Promise<string> {
   let fd;
   try {
     fd = openSync(path, "wx", 0o600);
   } catch (err) {
-    if (/** @type {NodeJS.ErrnoException} */ (err).code === "EEXIST") return `${agent.name}: SKIPPED, ${path} already exists`;
-    throw new Error(`${agent.name}: cannot create ${path} (${/** @type {Error} */ (err).message}). Nothing was minted.`);
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") return `${agent.name}: SKIPPED, ${path} already exists`;
+    throw new Error(`${agent.name}: cannot create ${path} (${(err as Error).message}). Nothing was minted.`);
   }
-  let minted;
+  let minted: string | undefined;
   try {
     // `what` is documentation, not a scope axis, so it does not go over the wire.
     const { what: _what, ...scopes } = agent;
@@ -325,7 +340,7 @@ async function main() {
   // Resolve before branching on --apply, so a dry run against a non-roster
   // namespace says whether it would mint. The network is touched only when AGENTS
   // cannot answer.
-  let wanted;
+  let wanted: Array<Agent | Role>;
   if (role !== undefined) {
     wanted = selectAgents(undefined, undefined, role);
   } else if (namespace !== undefined && !AGENTS.some((a) => a.namespaces.includes(namespace))) {
@@ -359,9 +374,9 @@ async function main() {
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith("mint-agents.mjs")) {
+if (process.argv[1] && process.argv[1].endsWith("mint-agents.ts")) {
   main().catch((e) => {
-    console.error(String(e.message ?? e));
+    console.error(e instanceof Error ? e.message : String(e));
     process.exit(1);
   });
 }

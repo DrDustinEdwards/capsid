@@ -113,7 +113,7 @@ Canon is what every agent is told to trust: `capsid/conventions.md` and `capsid/
 A rule document is one sessions follow as rules rather than read as a record: every namespace's `core.md` (cap 8 KB), `decisions.md`, and in capsid `conventions*.md` and each document directly under `rulings/` (cap 20 KB). Dated records (`archive/`, `research/`, `reports/`, `audits/`, `jobs/`) are not. `ruleDocCap` in `src/rule-docs.ts` is the list (job_c13dc0d4f22f).
 
 - **A write may not make a rule document worse.** `capsid_write_doc` (write, restore, and a move onto a rule path) refuses a body over the cap that is larger than the stored one, or one naming a tool or action the Worker does not serve that the stored body did not name. A cut that leaves a document still over its cap passes, so an over-cap document can be fixed in steps. A move from one rule path to another and a restore that recreates a deleted document put back what was held, and pass. Checked before the canon branch, so a proposal that could never be applied is refused too.
-- **A stale name** is an old tool name (the MCP 4 regroup's mapping, `scripts/tool-names-lib.mjs`) in a backtick span, a call or, for a name with an underscore, anywhere outside backticks; or a `capsid_*` name that is not in `TOOL_GRANTS`, or one given an action its tool does not take.
+- **A stale name** is an old tool name (the MCP 4 regroup's mapping, `scripts/tool-names-lib.ts`) in a backtick span, a call or, for a name with an underscore, anywhere outside backticks; or a `capsid_*` name that is not in `TOOL_GRANTS`, or one given an action its tool does not take.
 - **The lint report and the daily maintenance pass list what is already wrong**: the report's `rule_doc_caps` and `stale_tool_names` checks over its namespace, and the pass's `rule-doc` rule over every namespace (docs/work-queue.md).
 
 test/rule-docs.test.ts plants both kinds, through the write tool too; test-integration/maintenance.test.ts sees the pass list them from a real D1.
@@ -380,7 +380,7 @@ number a human can read on the page.
 ## Roles, and what each one cannot do
 
 Ruled 2026-09-12. Roles are few and separated, and a role is one capability rather
-than a bundle. `scripts/mint-agents.mjs` holds them and a test fails the build if any
+than a bundle. `scripts/mint-agents.ts` holds them and a test fails the build if any
 role names a second blast-radius flag. A role that accumulates flags is still a driver.
 
 A reviewer never writes code. Commenting on a pull request goes through

@@ -27,7 +27,7 @@ import { join } from "node:path";
 // statement's test would start mid-string and could miss its hole.
 const HOLE = /\$\{[^}]*\}/;
 
-function substitute(sql) {
+function substitute(sql: string): { ok: boolean; sql: string } {
   if (!HOLE.test(sql)) return { ok: true, sql };
   // A hole immediately after FROM or INTO or JOIN is a table name.
   let out = sql.replace(/\b(FROM|INTO|JOIN|UPDATE)\s+\$\{[^}]*\}/gi, "$1 documents");
@@ -52,15 +52,10 @@ function substitute(sql) {
  * file calling `.prepare(` yielded a statement. Names are returned relative to srcDir
  * with forward slashes, so a top-level file keeps its basename (backup.ts, which the
  * ALLOW list keys on) and a nested one is addressable as github/client.ts.
- *
- * @param {string} root
- * @returns {string[]}
  */
-function tsFilesUnder(root) {
-  /** @type {string[]} */
-  const out = [];
-  /** @param {string} rel */
-  const walk = (rel) => {
+function tsFilesUnder(root: string): string[] {
+  const out: string[] = [];
+  const walk = (rel: string) => {
     const dir = rel ? join(root, rel) : root;
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const next = rel ? `${rel}/${entry.name}` : entry.name;
@@ -72,13 +67,18 @@ function tsFilesUnder(root) {
   return out.sort();
 }
 
-/**
- * @param {string} srcDir
- * @returns {{ statements: { file: string; sql: string }[]; skipped: { file: string; sql: string }[] }}
- */
-export function extractStatements(srcDir) {
-  const statements = [];
-  const skipped = [];
+// An index signature as well as the two fields, because these cross into miniflare as a
+// JSON binding and miniflare requires an index-signature-bearing shape. Both readers
+// narrow to file and sql.
+export interface ExtractedStatement {
+  [key: string]: string;
+  file: string;
+  sql: string;
+}
+
+export function extractStatements(srcDir: string): { statements: ExtractedStatement[]; skipped: ExtractedStatement[] } {
+  const statements: ExtractedStatement[] = [];
+  const skipped: ExtractedStatement[] = [];
   for (const name of tsFilesUnder(srcDir)) {
     const text = readFileSync(join(srcDir, name), "utf8");
     // `.prepare(` followed by a string or template literal, up to its closing
@@ -107,8 +107,7 @@ export function extractStatements(srcDir) {
 
 // Only the statements SQLite can plan. A plan is meaningless for a write, and EXPLAIN
 // QUERY PLAN on an INSERT reports the plan of its SELECT half or nothing at all.
-/** @param {{ file: string; sql: string }[]} statements */
-export function readStatements(statements) {
+export function readStatements(statements: ExtractedStatement[]): ExtractedStatement[] {
   return statements.filter((s) => /^SELECT\b/i.test(s.sql));
 }
 

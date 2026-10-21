@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { RENAMED_ACTIONS, addedToolsAxis, newToolsAxis, OLD_ACTIONS_OF, OLD_TOOLS, prunedToolsAxis, RENAMED, rewriteProse, SIMPLE, SPLIT, unsignedBody } from "../scripts/tool-names-lib.mjs";
-import { migrateAxes, migrateProse, parseArgs } from "../scripts/migrate-tool-names.mjs";
+import { RENAMED_ACTIONS, addedToolsAxis, newToolsAxis, OLD_ACTIONS_OF, OLD_TOOLS, prunedToolsAxis, RENAMED, rewriteProse, SIMPLE, SPLIT, unsignedBody } from "../scripts/tool-names-lib.ts";
+import { migrateAxes, migrateProse, parseArgs } from "../scripts/migrate-tool-names.ts";
 import { COMPOSITES, SINGLE_TOOLS, CAPSID_TOOLS, CAPSID_ADMIN_TOOLS } from "../src/tools/surface.ts";
 import { TOOL_GRANTS } from "../src/scope.ts";
 
-// The MCP 4 data migration's rules (scripts/tool-names-lib.mjs) and its script
-// (scripts/migrate-tool-names.mjs), with a fake Worker. Nothing here reaches a network.
+// The MCP 4 data migration's rules (scripts/tool-names-lib.ts) and its script
+// (scripts/migrate-tool-names.ts), with a fake Worker. Nothing here reaches a network.
 
 const served = new Map<string, Set<string> | null>();
 for (const spec of COMPOSITES) served.set(spec.name, new Set(Object.keys(spec.actions)));
@@ -146,7 +146,7 @@ test("PLANT: an old split tool named with no action it can map is reported, neve
 
 test("a split tool whose actions all moved to one new tool is renamed bare; a file name is not a tool", () => {
   assert.equal(rewriteProse("Use `delete_namespace` with preview first.").text, "Use `capsid_admin_manage_namespaces` with preview first.");
-  const r = rewriteProse(["```", "node scripts/mint-agents.mjs --apply", "```"].join("\n"));
+  const r = rewriteProse(["```", "node scripts/mint-agents.ts --apply", "```"].join("\n"));
   assert.deepEqual(r.fenced, []);
 });
 

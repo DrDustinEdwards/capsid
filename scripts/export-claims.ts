@@ -1,8 +1,8 @@
 // Export the claims dataset: job_claims, job_evaluations, job_touches and job_outcomes,
 // one JSONL file per table, with a manifest that hashes every file.
 //
-//   CAPSID_OPERATOR_KEY=... node scripts/export-claims.mjs --out <dir>
-//   node scripts/export-claims.mjs --verify <dir>
+//   CAPSID_OPERATOR_KEY=... node scripts/export-claims.ts --out <dir>
+//   node scripts/export-claims.ts --verify <dir>
 //
 // The rows come from the `claims` tool's 'export' action, paged by its cursor until
 // next_after is null. The tool is admin only, so the key is the admin credential, an
@@ -22,7 +22,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { capsidClient, requireHttps } from "./capsid-rpc.mjs";
+import { capsidClient, requireHttps } from "./capsid-rpc.ts";
 
 export const ORIGIN_DEFAULT = "https://mcp.dustinedwards.info";
 
@@ -35,35 +35,25 @@ export const PAGE_LIMIT = 500;
 const MANIFEST = "manifest.json";
 const MANIFEST_SUM = "manifest.sha256";
 
-/** @typedef {Record<string, unknown>} Row */
-/** @typedef {(name: string, args: object) => Promise<string>} Tool */
-/**
- * @typedef {{
- *   generated_at: string,
- *   origin: string,
- *   capsid_sha: string,
- *   tables: Record<string, { file: string, rows: number, sha256: string }>
- * }} Manifest
- */
+export type Row = Record<string, unknown>;
+export type Tool = (name: string, args: object) => Promise<string>;
+export interface Manifest {
+  generated_at: string;
+  origin: string;
+  capsid_sha: string;
+  tables: Record<string, { file: string; rows: number; sha256: string }>;
+}
 
-/**
- * @param {string | Uint8Array} data
- * @returns {string} lowercase hex
- */
-export function sha256Hex(data) {
+/** Returns lowercase hex */
+export function sha256Hex(data: string | Uint8Array): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
-/**
- * @param {unknown} value
- * @returns {unknown}
- */
-function sortKeys(value) {
+function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (value !== null && typeof value === "object") {
-    /** @type {Row} */
-    const out = {};
-    const obj = /** @type {Row} */ (value);
+    const out: Row = {};
+    const obj = (value as Row);
     for (const k of Object.keys(obj).sort()) out[k] = sortKeys(obj[k]);
     return out;
   }
@@ -74,19 +64,13 @@ function sortKeys(value) {
  * JSON with every object's keys sorted, so the same row always serializes to the same
  * bytes whatever column order the query returned. A null stays null: NULL is not false,
  * and a row that dropped its null columns would read as a different row.
- * @param {unknown} value
- * @returns {string}
  */
-export function canonicalJson(value) {
+export function canonicalJson(value: unknown): string {
   return JSON.stringify(sortKeys(value));
 }
 
-/**
- * One row per line, each line ending in a newline. No rows is an empty file.
- * @param {Row[]} rows
- * @returns {string}
- */
-export function toJsonl(rows) {
+/** One row per line, each line ending in a newline. No rows is an empty file. */
+export function toJsonl(rows: Row[]): string {
   let out = "";
   for (const row of rows) out += canonicalJson(row) + "\n";
   return out;
@@ -95,11 +79,8 @@ export function toJsonl(rows) {
 /**
  * The tool's answer for one page: {rows, next_after}. A shape it does not recognize
  * is refused, because a guess here would be an export that silently stops early.
- * @param {string} text
- * @param {string} table
- * @returns {{ rows: Row[], next_after: number | null }}
  */
-export function parsePage(text, table) {
+export function parsePage(text: string, table: string): { rows: Row[], next_after: number | null } {
   let body;
   try {
     body = JSON.parse(text);
@@ -124,18 +105,12 @@ export function parsePage(text, table) {
 /**
  * Every row of one table, pages concatenated in the order the tool served them.
  * A page that does not move the cursor forward is refused rather than looped on.
- * @param {Tool} tool
- * @param {string} table
- * @returns {Promise<Row[]>}
  */
-export async function fetchTable(tool, table) {
-  /** @type {Row[]} */
-  const rows = [];
-  /** @type {number | undefined} */
-  let after;
+export async function fetchTable(tool: Tool, table: string): Promise<Row[]> {
+  const rows: Row[] = [];
+  let after: number | undefined;
   for (;;) {
-    /** @type {{ action: string, table: string, limit: number, after?: number }} */
-    const args = { action: "export", table, limit: PAGE_LIMIT };
+    const args: { action: string, table: string, limit: number, after?: number } = { action: "export", table, limit: PAGE_LIMIT };
     if (after !== undefined) args.after = after;
     const page = parsePage(await tool("capsid_admin_read_claims", args), table);
     for (const row of page.rows) rows.push(row);
@@ -153,9 +128,8 @@ export async function fetchTable(tool, table) {
 /**
  * Refuse a path that holds anything. An absent directory is fine; it is created at
  * write time.
- * @param {string} dir
  */
-export function ensureEmptyDir(dir) {
+export function ensureEmptyDir(dir: string) {
   if (!existsSync(dir)) return;
   if (!statSync(dir).isDirectory()) throw new Error(`${dir} exists and is not a directory; refusing to write an export there.`);
   const entries = readdirSync(dir);
@@ -168,11 +142,8 @@ export function ensureEmptyDir(dir) {
  * The deployed sha from /health, recorded in the manifest so an export says which
  * Worker wrote the rows. A /health that cannot be read fails the export: a manifest
  * with no provenance is not the dataset this script promises.
- * @param {string} origin
- * @param {typeof fetch} [fetchImpl]
- * @returns {Promise<string>}
  */
-export async function fetchCapsidSha(origin, fetchImpl = fetch) {
+export async function fetchCapsidSha(origin: string, fetchImpl: typeof fetch = fetch): Promise<string> {
   requireHttps(origin);
   const res = await fetchImpl(`${origin}/health`, { headers: { "Cache-Control": "no-cache" } });
   const text = await res.text();
@@ -192,13 +163,10 @@ export async function fetchCapsidSha(origin, fetchImpl = fetch) {
 /**
  * Read every table, then write the files, the manifest and its hash. Nothing is
  * written until every table has been read.
- * @param {{ tool: Tool, origin: string, capsidSha: string, outDir: string, now?: Date }} opts
- * @returns {Promise<Manifest>}
  */
-export async function exportClaims({ tool, origin, capsidSha, outDir, now = new Date() }) {
+export async function exportClaims({ tool, origin, capsidSha, outDir, now = new Date() }: { tool: Tool, origin: string, capsidSha: string, outDir: string, now?: Date }): Promise<Manifest> {
   ensureEmptyDir(outDir);
-  /** @type {Array<{ table: string, rows: number, bytes: Buffer }>} */
-  const files = [];
+  const files: Array<{ table: string, rows: number, bytes: Buffer }> = [];
   for (const table of EXPORT_TABLES) {
     const rows = await fetchTable(tool, table);
     files.push({ table, rows: rows.length, bytes: Buffer.from(toJsonl(rows), "utf8") });
@@ -208,8 +176,7 @@ export async function exportClaims({ tool, origin, capsidSha, outDir, now = new 
   ensureEmptyDir(outDir);
   mkdirSync(outDir, { recursive: true });
 
-  /** @type {Manifest} */
-  const manifest = { generated_at: now.toISOString(), origin, capsid_sha: capsidSha, tables: {} };
+  const manifest: Manifest = { generated_at: now.toISOString(), origin, capsid_sha: capsidSha, tables: {} };
   for (const { table, rows, bytes } of files) {
     const file = `${table}.jsonl`;
     writeFileSync(join(outDir, file), bytes, { flag: "wx" });
@@ -225,12 +192,9 @@ export async function exportClaims({ tool, origin, capsidSha, outDir, now = new 
  * Every problem with an export directory. An empty list means every file the manifest
  * lists is present with its hash and row count, the manifest matches manifest.sha256,
  * and all four tables are listed.
- * @param {string} dir
- * @returns {string[]}
  */
-export function verifyExport(dir) {
-  /** @type {string[]} */
-  const problems = [];
+export function verifyExport(dir: string): string[] {
+  const problems: string[] = [];
   const manifestPath = join(dir, MANIFEST);
   if (!existsSync(manifestPath)) return [`${MANIFEST} is missing from ${dir}`];
   const manifestBytes = readFileSync(manifestPath);
@@ -259,7 +223,7 @@ export function verifyExport(dir) {
   for (const table of EXPORT_TABLES) {
     if (!(table in tables)) problems.push(`${MANIFEST} does not list ${table}`);
   }
-  for (const [table, entry] of Object.entries(tables)) {
+  for (const [table, entry] of Object.entries(tables as Record<string, { file?: unknown; sha256?: unknown; rows?: unknown } | null>)) {
     const file = entry?.file;
     // A plain file name in this directory, never a path out of it.
     if (typeof file !== "string" || file.length === 0 || basename(file) !== file || file === "." || file === "..") {
@@ -272,35 +236,26 @@ export function verifyExport(dir) {
       continue;
     }
     const bytes = readFileSync(path);
-    if (sha256Hex(bytes) !== entry.sha256) problems.push(`${file} (${table}) does not match its sha256 in ${MANIFEST}`);
+    if (sha256Hex(bytes) !== entry?.sha256) problems.push(`${file} (${table}) does not match its sha256 in ${MANIFEST}`);
     const lines = bytes.toString("utf8").split("\n").length - 1;
-    if (lines !== entry.rows) problems.push(`${file} (${table}) holds ${lines} rows and ${MANIFEST} says ${entry.rows}`);
+    if (lines !== entry?.rows) problems.push(`${file} (${table}) holds ${lines} rows and ${MANIFEST} says ${String(entry?.rows)}`);
   }
   return problems;
 }
 
-/**
- * Remove every occurrence of the key from text that is about to be printed.
- * @param {string} text
- * @param {string | undefined} key
- * @returns {string}
- */
-export function scrub(text, key) {
+/** Remove every occurrence of the key from text that is about to be printed. */
+export function scrub(text: string, key: string | undefined): string {
   if (!key) return text;
   return text.split(key).join("<CAPSID_OPERATOR_KEY>");
 }
 
-/**
- * @param {string[]} argv
- * @returns {{ out: string | undefined, verify: string | undefined }}
- */
-export function parseArgs(argv) {
+export function parseArgs(argv: string[]): { out: string | undefined, verify: string | undefined } {
   const o = argv.indexOf("--out");
   const v = argv.indexOf("--verify");
   if (o !== -1 && !argv[o + 1]) throw new Error("--out needs a directory, for example --out claims-2026-09-29.");
   if (v !== -1 && !argv[v + 1]) throw new Error("--verify needs the directory an export was written to.");
   if (o !== -1 && v !== -1) throw new Error("--out and --verify are different runs; pass one or the other.");
-  if (o === -1 && v === -1) throw new Error("usage: node scripts/export-claims.mjs --out <dir> | --verify <dir>");
+  if (o === -1 && v === -1) throw new Error("usage: node scripts/export-claims.ts --out <dir> | --verify <dir>");
   return { out: o === -1 ? undefined : argv[o + 1], verify: v === -1 ? undefined : argv[v + 1] };
 }
 
@@ -308,21 +263,11 @@ export function parseArgs(argv) {
  * The whole command, with its outputs injected so the test drives it end to end.
  * Returns the exit code. Every line it prints and every error it reports passes
  * through scrub first.
- * @param {{
- *   argv: string[],
- *   env: Record<string, string | undefined>,
- *   fetchImpl?: typeof fetch,
- *   log?: (line: string) => void,
- *   error?: (line: string) => void,
- * }} opts
- * @returns {Promise<number>}
  */
-export async function run({ argv, env, fetchImpl = fetch, log = console.log, error = console.error }) {
+export async function run({ argv, env, fetchImpl = fetch, log = console.log, error = console.error }: { argv: string[], env: Record<string, string | undefined>, fetchImpl?: typeof fetch, log?: (line: string) => void, error?: (line: string) => void, }): Promise<number> {
   const key = env.CAPSID_OPERATOR_KEY;
-  /** @param {string} line */
-  const out = (line) => log(scrub(line, key));
-  /** @param {string} line */
-  const err = (line) => error(scrub(line, key));
+  const out = (line: string) => log(scrub(line, key));
+  const err = (line: string) => error(scrub(line, key));
   try {
     const args = parseArgs(argv);
     if (args.verify !== undefined) {
@@ -335,7 +280,7 @@ export async function run({ argv, env, fetchImpl = fetch, log = console.log, err
       out(`verify passed: ${args.verify}, manifest and every listed file match.`);
       return 0;
     }
-    const outDir = /** @type {string} */ (args.out);
+    const outDir = (args.out as string);
     if (!key) {
       err("CAPSID_OPERATOR_KEY is not set. It is the admin operator key; this script never reads a file for it.");
       return 2;
@@ -358,7 +303,7 @@ export async function run({ argv, env, fetchImpl = fetch, log = console.log, err
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith("export-claims.mjs")) {
+if (process.argv[1] && process.argv[1].endsWith("export-claims.ts")) {
   run({ argv: process.argv.slice(2), env: process.env }).then(
     (code) => process.exit(code),
     (e) => {

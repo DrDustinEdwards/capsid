@@ -82,7 +82,7 @@ test("deploying, rolling back, revoking, merging and deleting never match", () =
   for (const cmd of [
     "npx wrangler deploy",
     "npx wrangler rollback",
-    "node scripts/mint-agents.mjs --revoke capsid-driver",
+    "node scripts/mint-agents.ts --revoke capsid-driver",
     "gh pr merge 23 --merge --repo DrDustinEdwards/capsid-mcp",
     "rm -rf .improve-build",
   ]) {
@@ -103,7 +103,7 @@ test("classifyCommand places each of the three classes and refuses anything else
   const pr = classifyCommand("gh pr create --fill --base master");
   assert.ok("klasses" in pr && pr.klasses[0] === "open_pr");
 
-  for (const cmd of ["npm test", "node scripts/dump-invariants.mjs", ""]) {
+  for (const cmd of ["npm test", "node scripts/dump-invariants.ts", ""]) {
     assert.ok("refused" in classifyCommand(cmd), `${cmd} must match no class`);
   }
 });
@@ -358,7 +358,7 @@ const NEVER_EXAMPLES: Record<string, { trigger: string; real: string[] }> = {
   [String.raw`\b(wrangler|npx\s+wrangler)\s+secret\b`]: { trigger: "Document the wrangler secret rotation", real: ["npx wrangler secret put IMPROVE_SCORE_SECRET"] },
   [String.raw`\bgh\s+secret\b`]: { trigger: "Explain gh secret usage", real: ["gh secret set CF_API_TOKEN"] },
   [String.raw`\bsecret\s+(put|delete|bulk)\b`]: { trigger: "When to secret put a key", real: ["node scripts/keys.mjs secret put KEY"] },
-  [String.raw`\brevoke\b`]: { trigger: "Revoke stale keys", real: ["node scripts/mint-agents.mjs --revoke capsid-driver"] },
+  [String.raw`\brevoke\b`]: { trigger: "Revoke stale keys", real: ["node scripts/mint-agents.ts --revoke capsid-driver"] },
   [String.raw`--force\b|--force-with-lease\b|(^|\s)-f(\s|$)`]: {
     trigger: "Stop using --force",
     real: ["git push --force origin feat/x", "git push --force-with-lease origin feat/x", "git push -f origin feat/x"],

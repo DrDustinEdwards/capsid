@@ -69,7 +69,7 @@ test("PLANT: the jobs description states the correction cap rather than promisin
 
 // a handler default the scope table cannot see
 
-// An agent minted the way scripts/mint-agents.mjs mints a narrowed one: the tools axis
+// An agent minted the way scripts/mint-agents.ts mints a narrowed one: the tools axis
 // names the tool and one of its actions, which is what opts into the qualifier.
 function narrowedTo(tools: string[]): Agent {
   const scopes = defaultScopes(["capsid"]);

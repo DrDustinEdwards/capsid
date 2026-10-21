@@ -39,7 +39,7 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
         .all();
       // Filtered to the caller's own namespaces. This tool takes no arguments, so
       // namespaceRefusal at the registrar has nothing to fire on. The mapping is what
-      // scripts/mint-agents.mjs uses to set the repos axis and what resolveRepo
+      // scripts/mint-agents.ts uses to set the repos axis and what resolveRepo
       // resolves through, so handing it to a narrowed caller hands it the shape of the
       // boundary it sits behind.
       const scoped = ctx.agent.scopes.namespaces;

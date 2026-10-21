@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { capsidClient, requireHttps } from "../scripts/capsid-rpc.mjs";
+import { capsidClient, requireHttps } from "../scripts/capsid-rpc.ts";
 
-// scripts/capsid-rpc.mjs: the one /ops/mcp client for mint-agents and export-claims.
+// scripts/capsid-rpc.ts: the one /ops/mcp client for mint-agents and export-claims.
 // Driven through a fake fetch, so every case is the real parse and the real error path.
 
 type Sent = { method?: string; id?: number };

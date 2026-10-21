@@ -3,10 +3,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { AGENTS, attachRepos, driverFor, fingerprint, keyPath, mintInto, parseArgs, parseNamespaces, selectAgents } from "../scripts/mint-agents.mjs";
+import { AGENTS, attachRepos, driverFor, fingerprint, keyPath, mintInto, parseArgs, parseNamespaces, selectAgents } from "../scripts/mint-agents.ts";
 import { APP_ROSTER } from "../src/roster.ts";
 
-// scripts/mint-agents.mjs: the six credentials of docs/bootstrap.md.
+// scripts/mint-agents.ts: the six credentials of docs/bootstrap.md.
 //
 // The roster is derived from src/roster.ts rather than retyped, so a project joining
 // the app roster fails here instead of silently having no driver agent and no key

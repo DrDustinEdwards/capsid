@@ -15,7 +15,7 @@ export type TouchKind = (typeof TOUCH_KINDS)[number];
 export const ACTOR_KINDS = ["human", "seat", "driver", "policy", "reviewer", "system"] as const;
 export type ActorKind = (typeof ACTOR_KINDS)[number];
 
-// The seat's minted credentials, by agent name (scripts/mint-agents.mjs: `seat`, and
+// The seat's minted credentials, by agent name (scripts/mint-agents.ts: `seat`, and
 // `site-seat` for dustinedwards). A legacy operator key (`opkey:`) is the seat's too.
 const SEAT_AGENTS = new Set(["agent:seat", "agent:site-seat"]);
 // Credentials that act on a schedule rather than for a person: the watcher

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ADMIN_URL, checkAdminExposure, classify, seatKeyPath } from "../scripts/admin-exposure-check.mjs";
+import { ADMIN_URL, checkAdminExposure, classify, seatKeyPath } from "../scripts/admin-exposure-check.ts";
 
 // job_e1973c5bcb69: a driver session must not be able to reach Capsid as the admin.
 // The check reads `claude mcp list`, so these tests feed it that output.
