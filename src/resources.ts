@@ -75,8 +75,8 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
     if (typeof cursor === "string" && cursor.length > 0) {
       try {
         const parsed = JSON.parse(b64urlDecode(cursor)) as { n?: unknown; p?: unknown };
-        afterNs = String(parsed.n ?? "");
-        afterPath = String(parsed.p ?? "");
+        afterNs = typeof parsed.n === "string" ? parsed.n : "";
+        afterPath = typeof parsed.p === "string" ? parsed.p : "";
       } catch {
         throw new ProtocolError(ProtocolErrorCode.InvalidParams, "invalid resources/list cursor; omit it to start from the beginning");
       }

@@ -15,8 +15,7 @@ name: CI
 # and it already existed with nothing invoking it.
 
 on:
-  # Both names while master moves to main (job_bf05bc756c5e, plan step 1), so a push is
-  # checked on either side of the rename. Step 4 drops master.
+  # Both names while master moves to main.
   push:
     branches: [master, main]
   pull_request:
@@ -42,15 +41,9 @@ concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
-# THIRD PARTY ACTIONS ARE PINNED BY COMMIT SHA, not by tag. A tag is a moving pointer
-# its owner can repoint, and these actions run with this repository's checkout and the
-# deploy job's environment beside them. Dependabot understands the `# v5.x.x` comment
-# form and still offers bumps.
-#
-# The shas below are what actions/checkout@v5 and actions/setup-node@v5 resolved to on
-# 2026-08-13, read with `gh api repos/<action>/git/ref/tags/v5`. Both actions now have a
-# v7; this pins the version already in use rather than riding a major bump in on the
-# back of a security fix.
+# THIRD PARTY ACTIONS ARE PINNED BY COMMIT SHA, not by tag: a tag is a moving pointer
+# its owner can repoint, and these actions run beside the deploy job's secrets. The
+# `# v5.x.x` comment keeps Renovate's bumps working.
 #
 # Nothing here sets continue-on-error, and nothing should.
 jobs:
@@ -62,11 +55,8 @@ jobs:
     # job needs checks only for ordering, and its condition runs it when checks is
     # skipped (see the live job).
     if: github.event_name != 'schedule'
-    # TIMEOUTS ON EVERY JOB (residual 6). Without one a job inherits GitHub's 360-minute
-    # default, so a hung test or a wedged wrangler call burns six hours of the Actions
-    # budget, and holds the
-    # concurrency group against every later push. Each number is roughly four times the
-    # job's observed run.
+    # Every job has a timeout, roughly four times its observed run
+    # (test/workflow-policy.test.ts).
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -90,31 +80,16 @@ jobs:
           npm ci
           npm ci --prefix dashboard
 
-      # FIVE TYPECHECKS IN ONE STEP (audit 2026-09-25, B1). Each config stays separate,
-      # and every one runs even when an earlier one fails, so one red run reports all of
-      # them. The step name is on the auto-merge policy's required CI list.
+      # FIVE TYPECHECKS IN ONE STEP. Each config stays separate, and every one runs even
+      # when an earlier one fails, so one red run reports all of them.
       #
-      # check: tsc --noEmit over src, a conventional single-project config with an
-      # explicit include of ["src"]. See capsid/conventions.md on why `tsc -b` is
-      # required elsewhere in the portfolio.
-      #
-      # check:test: the test suite under its own config (quality audit 10.2).
-      # tsconfig.json includes only src, so until 2026-08-17 the files guarding every
-      # other invariant were never seen by tsc: node's type stripping erases types
-      # without checking them, so a test could stop compiling and still report green.
-      # Two configs rather than one widened include, because only this one carries node
-      # types and the shipping config must keep rejecting a node API in src/.
-      #
-      # check:integration: the integration suite needs the workers-types experimental
-      # surface and the pool's `cloudflare:test` ambient module, and the shipping config
-      # must keep rejecting both in src/.
-      #
-      # check:scripts: the scripts under scripts/, which no other config sees.
-      #
-      # check:dashboard: the Watch Floor app, typechecked against src/ops-types.ts, the
-      # contract its data endpoint returns. The step keeps its name (the scorer script
-      # it names went with the improve loop, 2026-10-19) because the name is on the
-      # auto-merge policy's required CI list.
+      # check: src only. check:test: the tests, with node types, which the shipping
+      # config must keep rejecting in src/ (node's type stripping checks nothing, so
+      # without this a test could stop compiling and still pass). check:integration:
+      # the workers-types experimental surface and the `cloudflare:test` module.
+      # check:scripts: scripts/. check:dashboard: the Watch Floor app against
+      # src/ops-types.ts. The step's name is on the auto-merge policy's required CI
+      # list, so it keeps its old wording.
       - name: Typecheck src, tests, integration tests and the copied scorer script
         run: |
           status=0
@@ -125,19 +100,17 @@ jobs:
           npm run check:dashboard || status=1
           exit $status
 
-      # THE LINTS (audit 2026-09-25, C1-6): the dead-export report and the derived
-      # doc-drift checks, moved out of npm test into test/lint/. They sit BEFORE Tests
-      # on purpose. This step is not on the auto-merge policy's required list, so a
-      # failure here has to stop the job: the Tests step it skips is required, and a
-      # skipped required step refuses the merge.
+      # THE LINTS (test/lint/: dead exports, doc drift, oxlint). BEFORE Tests on
+      # purpose: this step is not on the auto-merge policy's required list, so a failure
+      # here stops the job, and the skipped required Tests step refuses the merge.
       - name: Lint dead exports and doc drift
         run: npm run lint
 
       - name: Tests
         run: npm test
 
-      # THE INTEGRATION LAYER (audit 2026-09-07). The whole Worker inside workerd, with a
-      # real D1 the migrations are applied to, real KV and real R2. A SEPARATE step
+      # THE INTEGRATION LAYER: the whole Worker inside workerd, with a real D1 the
+      # migrations are applied to, real KV and real R2. A SEPARATE step
       # rather than part of `npm test` because the two suites fail differently: a unit
       # failure is a handler issuing the wrong statement, an integration failure is
       # SQLite, the OAuth provider or the runtime refusing it.
@@ -164,7 +137,7 @@ jobs:
   # Ordered after checks: a failing typecheck or test never reaches production. No
   # continue-on-error, and deliberately no `if: secrets.X != ''` guard. A job that skips
   # when its credentials are missing makes "deployed" and "could not deploy"
-  # indistinguishable, which is the fail-open shape capsid/conventions.md rules against.
+  # indistinguishable.
   # If the secrets are absent this job fails loudly.
   deploy:
     name: deploy

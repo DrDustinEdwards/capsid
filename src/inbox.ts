@@ -31,7 +31,7 @@ import { readStepCache, stepsSeen, type StaleStepCache } from "./manual-steps";
 // badge should be quieter.
 
 // The shapes are in the feed contract (src/ops-types.ts), which the Portal also reads.
-export type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops-types";
+export type { Inbox, InboxApp, InboxItem, InboxSeverity } from "./ops-types";
 import type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops-types";
 
 const MAX_BLOCKED = 200;

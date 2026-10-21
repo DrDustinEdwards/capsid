@@ -1,4 +1,3 @@
-import type { Env } from "./env";
 import { isQuestionSummary } from "./jobs-holder";
 import { checkJobText, type SignatureCheck } from "./job-signing";
 
@@ -28,7 +27,7 @@ import { checkJobText, type SignatureCheck } from "./job-signing";
 // action status summary.
 
 export { claimJob, listJobs, postJob } from "./jobs-claim";
-export { blockJob, commandFromSummary, completeJob, failJob, isQuestionSummary, RESUME_MARKER } from "./jobs-holder";
+export { blockJob, commandFromSummary, completeJob, failJob, RESUME_MARKER } from "./jobs-holder";
 export { adminFailJob, completeAsCaller, failAsCaller, recordAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
 export { editJob, jobVersions } from "./jobs-edit";
 export { parkJob, unparkJob } from "./jobs-park";

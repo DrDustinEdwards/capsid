@@ -23,7 +23,7 @@ import { readMaintenance, type MaintenanceItem } from "./maintenance";
 // tool keeps the improve loop's name, which it was served under before the loop was
 // removed (Dustin, 2026-10-19), so no credential's tools list has to change.
 
-export interface NamespaceStatus {
+interface NamespaceStatus {
   namespace: string;
   // The queue's circuit breaker (src/job-breaker.ts): open when the namespace's drivers
   // failed the threshold of jobs in 24 hours, until the seat or Dustin resets it.
@@ -134,9 +134,9 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
 }
 
 /** One signed policy as a driver needs it: which version, and whether it is on. */
-export type ServedPolicy = { version: string; enabled: boolean } | { reason: string };
+type ServedPolicy = { version: string; enabled: boolean } | { reason: string };
 
-export interface PolicyVersions {
+interface PolicyVersions {
   gates: ServedPolicy;
   auto_merge: ServedPolicy;
 }

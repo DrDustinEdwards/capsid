@@ -117,7 +117,7 @@ export interface SiteOperator {
   secrets: string[];
 }
 
-export interface HealthSnapshot {
+interface HealthSnapshot {
   status: "ok" | "degraded";
   sha: string;
   dirty: boolean;
@@ -161,7 +161,7 @@ export interface OpsPackageConfig {
 
 // One part of a package's read: what it said, or why it could not be read. "none" is
 // an answer (no repository configured, no dependents on record), not a failure.
-export type PackagePart<T> = ({ state: "ok" } & T) | { state: "none"; reason: string } | { state: "error"; reason: string };
+type PackagePart<T> = ({ state: "ok" } & T) | { state: "none"; reason: string } | { state: "error"; reason: string };
 
 // What one watcher pass read for one package. Every source is named where it is used
 // (src/ops-packages.ts), with what it counts and what it misses.
@@ -289,7 +289,7 @@ export interface OpsAwaitingSeat {
 
 // The overnight run's switch (src/overnight.ts). decision is present only while the mode is
 // subscription: who decided, when, the ruling and its reasoning, and who set the switch.
-export interface OpsOvernight {
+interface OpsOvernight {
   mode: "off" | "api" | "subscription";
   decision: {
     decided_by: string;
@@ -438,7 +438,7 @@ export interface OpsMergeSafety {
   namespaces: OpsMergeSafetyRow[];
 }
 
-export type OpsMergePolicy = { loads: true; version: string; enabled: boolean } | { loads: false; reason: string };
+type OpsMergePolicy = { loads: true; version: string; enabled: boolean } | { loads: false; reason: string };
 
 export interface OpsLive {
   generated: string;
@@ -779,7 +779,7 @@ export interface ClaimsAgreementCounts {
   unchecked: number;
 }
 
-export interface ClaimsTouchSummary {
+interface ClaimsTouchSummary {
   count: number;
   by_kind: Record<string, number>;
   by_actor_kind: Record<string, number>;
@@ -1009,7 +1009,7 @@ export interface LibraryHit extends LibraryEntry {
   snippet: string;
 }
 
-export interface LibraryDocument extends LibraryEntry {
+interface LibraryDocument extends LibraryEntry {
   tags: string | null;
   created_at: string;
   body: string;
@@ -1200,7 +1200,7 @@ export interface PortalConvergence {
 // "plan" and "digest", and the Portal's GET /portal/api/plan and GET /portal/api/digest,
 // which serve the same readers.
 
-export interface PlannedJob {
+interface PlannedJob {
   id: string;
   namespace: string;
   title: string;

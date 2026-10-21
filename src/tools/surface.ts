@@ -221,7 +221,7 @@ const CHANGE_REPO: CompositeSpec = {
   },
 };
 
-export const OPEN_PR: CompositeSpec = {
+const OPEN_PR: CompositeSpec = {
   name: "capsid_open_pr",
   title: "Open or comment on a pull request",
   summary: "Open a pull request, or comment on one. Needs the write grant; a comment also needs the can_comment_pr flag.",

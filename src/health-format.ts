@@ -2,7 +2,7 @@
 // Capsid defines it so the watcher's sha rule can read every site the same way.
 
 export const HEALTH_STATUSES = ["ok", "degraded", "down"] as const;
-export type HealthStatus = (typeof HEALTH_STATUSES)[number];
+type HealthStatus = (typeof HEALTH_STATUSES)[number];
 
 export interface ParsedHealth {
   // Null when the body does not carry one of the three statuses.

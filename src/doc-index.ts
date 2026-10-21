@@ -41,7 +41,7 @@ const INDEX_METADATA = [
   { field_name: "canon", data_type: "boolean" },
 ] as const;
 
-export interface IndexRow {
+interface IndexRow {
   id: number;
   namespace: string;
   path: string;
@@ -260,7 +260,7 @@ export async function aiSearchUsage(env: Env, now: Date = new Date()): Promise<{
   return { month: now.toISOString().slice(0, 7), hybrid: Number((await env.APP_KV.get(countKey(now))) ?? 0), cap: HYBRID_MONTHLY_CAP };
 }
 
-export type Match = "keyword" | "meaning" | "both";
+type Match = "keyword" | "meaning" | "both";
 export type HybridRow = SearchRow & { match: Match };
 
 function matchOf(chunk: AiSearchSearchResponse["chunks"][number]): Match {

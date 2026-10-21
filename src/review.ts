@@ -14,7 +14,7 @@ import { parseScopes } from "./agents-schema";
 const REVIEW_PREFIX = "REVIEW:";
 
 export const VERDICTS = ["APPROVE", "CHANGES", "BLOCK"] as const;
-export type Verdict = (typeof VERDICTS)[number];
+type Verdict = (typeof VERDICTS)[number];
 
 export interface ReviewComment {
   // GitHub's issue-comment id. The gate counts a verdict only when Capsid posted this

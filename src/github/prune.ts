@@ -118,7 +118,7 @@ export interface PrunePlan {
 
 /** A kept branch with its tip, and whether nothing but its age says it is still wanted:
  *  no pull request, one closed without merging, or commits after the merge. */
-export interface PruneKeptRow extends PruneKept {
+interface PruneKeptRow extends PruneKept {
   sha: string;
   orphan: boolean;
 }

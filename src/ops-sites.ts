@@ -43,7 +43,7 @@ export interface OpsSite {
 export type { OpsSiteConfig, SiteMapDrift };
 
 const SITE_PLATFORMS = ["cloudflare", "vercel"] as const;
-export type SitePlatform = (typeof SITE_PLATFORMS)[number];
+type SitePlatform = (typeof SITE_PLATFORMS)[number];
 
 // A bound, not a page: one row per namespace, and namespaces are registered by hand.
 const SITE_ROWS_LIMIT = 500;
@@ -142,7 +142,7 @@ const LABEL_SHAPE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const SCRIPT_SHAPE = /^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?$/;
 // Unreserved URL characters and the separator only: no query, no fragment, no percent
 // escape, no space. The probe appends this to the origin as it stands.
-const HEALTH_PATH_SHAPE = /^\/[A-Za-z0-9._~\/-]{0,199}$/;
+const HEALTH_PATH_SHAPE = /^\/[A-Za-z0-9._~/-]{0,199}$/;
 const NAME_MAX = 80;
 const LOCAL_SUFFIXES = [".localhost", ".local", ".internal", ".home.arpa"];
 
@@ -200,6 +200,7 @@ export function validateSite(p: Record<string, string | undefined>): Validated {
   const namespace = p.namespace ?? "";
   if (!NAMESPACE_SHAPE.test(namespace)) return refuse(`'${namespace}' is not a namespace name: lowercase letters, digits and hyphens.`);
   const name = p.name ?? namespace;
+  // oxlint-disable-next-line no-control-regex -- refusing control characters is the point
   if (name.length > NAME_MAX || /[\u0000-\u001f\u007f]/.test(name)) return refuse(`the name must be at most ${NAME_MAX} characters with no control characters.`);
 
   // operator: absent leaves an edit's stored value alone, "none" clears it, anything else

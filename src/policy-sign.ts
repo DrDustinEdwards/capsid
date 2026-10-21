@@ -154,7 +154,7 @@ async function commitSigned(
 // `## Auto units` section. The new body must load as the old one did (the same checks,
 // paths and steps the code enforces), or nothing is written.
 
-export type PolicyChange = "promote" | "demote";
+type PolicyChange = "promote" | "demote";
 
 export type PolicyChangePlan =
   | { ok: true; from: string; to: string; unit: string; change: PolicyChange; body: string; prior: { title: string | null; body: string }; changes: string[] }

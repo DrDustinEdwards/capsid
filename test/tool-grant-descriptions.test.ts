@@ -90,7 +90,7 @@ test("DERIVED: every tool's description states the requirement TOOL_GRANTS gives
 
 test("PLANT: every served tool's description fits the 4,096 characters Claude Code shows", async () => {
   // Claude Code cuts a tool description at 4,096 characters, so anything past it is
-  // never read (capsid_work_jobs ran to 8,001 until 2026-10-15). Detail belongs in the
+  // never read. Detail belongs in the
   // parameter descriptions and docs/.
   const served = await servedDescriptions();
   assert.ok(served.size > 0, "the server served no tools");

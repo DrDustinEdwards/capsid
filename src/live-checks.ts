@@ -416,7 +416,7 @@ export async function defaultBranchHead(env: Env, namespace: string): Promise<{ 
   return { sha, committed_at: body.commit?.committer?.date ?? null };
 }
 
-export interface LiveSummary {
+interface LiveSummary {
   pages_expected: number;
   pages_read: number;
   shas_expected: number;

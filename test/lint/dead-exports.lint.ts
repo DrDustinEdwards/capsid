@@ -10,8 +10,7 @@ import { exportsOfSrc, sourceFiles } from "../source-files.ts";
 // than a behaviour of the Worker, so it runs beside the suite instead of inside it.
 //
 // An export is dead only when it has no caller in src/, test/, test-integration/ or
-// scripts/. (Until 2026-10-19 the improve loop's hidden holdout suite was a third
-// consumer, declared in a manifest; it went with the loop.)
+// scripts/.
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
@@ -143,15 +142,8 @@ test("the scan finds the exports at all, so nothing here can pass by reading not
 // Keyed by export name, not by file, so a module move does not change the set.
 const KNOWN_SUSPECTS = [
   "aggregate",
-  "assemble",
-  "BACKUP_BUCKET_NAME",
-  "BACKUP_DUMP_PREFIX",
   "HEALTH_PROBE_NS",
   "HEALTH_PROBE_PATH",
-  "HEALTH_PROBE_TERM",
-  "REPORTING_ENDPOINTS",
-  "assertRepoArg",
-  "workflowRunsForBranch",
 ];
 
 // Two checks, and neither is "the set still matches exactly": splitting a module

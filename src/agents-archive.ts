@@ -15,7 +15,7 @@ import { auditStatement } from "./store-guards";
 // still be read in place for a week.
 export const ARCHIVE_AFTER_DAYS = 7;
 
-export type ArchiveReason = "revoked-7-days" | "runner-job-ended";
+type ArchiveReason = "revoked-7-days" | "runner-job-ended";
 
 // How many agents one pass moves. A pass is not the place to drain a backlog of
 // hundreds; the next pass takes the rest.

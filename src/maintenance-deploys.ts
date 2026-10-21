@@ -21,7 +21,7 @@ import { readSnapshot } from "./ops-snapshot";
 const GRACE_HOURS = 2;
 const MAX_ITEMS = 50;
 
-export interface DefaultHead {
+interface DefaultHead {
   repo: string;
   branch: string;
   sha: string;
@@ -45,7 +45,7 @@ function sameSha(a: string, b: string): boolean {
 }
 
 /** The line for a site whose newest deployment predates its default branch's head, or null. */
-export function behind(
+function behind(
   site: { namespace: string; script: string; deployed_on: string; live_sha: string | null },
   head: DefaultHead,
   now: Date

@@ -6,7 +6,7 @@ import { auditStatement, snapshotLive } from "./store-guards";
 // approved merge executed). The string is the improve loop's, which wrote these rows
 // first; it is kept so audit_log reads as one series and src/job-touches.ts still
 // recognises it.
-export const SYSTEM_ACTOR = "improve-loop";
+const SYSTEM_ACTOR = "improve-loop";
 
 // A system document write (a job's mirror document) under the same two invariants as
 // every other write path (snapshot invariant, test/write-invariants.test.ts): the prior row is snapshotted into

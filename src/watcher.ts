@@ -334,8 +334,7 @@ export interface CiRun {
  *  COMPLETED run, because a run still in flight is not yet an answer.
  *
  *  One incident per namespace, not per commit: the fingerprint is `ci-red-<namespace>`
- *  and the head sha is evidence. It carried the sha until 2026-09-29, and every red
- *  commit on a red branch was filed as a new finding (13 times in three days). */
+ *  and the head sha is evidence, so every red commit on a red branch is not a new finding. */
 export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding[] {
   const latest = runs.find((r) => r.status === "completed");
   if (!latest) return [];
@@ -608,7 +607,7 @@ export const CLASS_PATTERNS: readonly string[] = CLASSES.map(([p]) => p.source);
 
 // What a pass saw, kept for the operations dashboard (src/ops-snapshot.ts). Null
 // where the read failed, so the snapshot says "could not read" rather than "none".
-export interface Observed {
+interface Observed {
   health: HealthReport | null;
   mirror: MirrorObservation | null;
   ci: CiObservation[];

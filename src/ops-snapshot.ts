@@ -29,7 +29,7 @@ export const MAX_HEALTH_BYTES = 65_536;
 // ok: the health route answered 2xx. degraded: it did not, but the root did.
 // liveness: the site has no health route and its root answered 2xx, which proves it is
 // up and nothing more. down: nothing answered 2xx.
-export type { CheckState, CiObservation, MirrorObservation, OpsSnapshot, ProbeState, SiteProbe, SiteSnapshot } from "./ops-types";
+export type { CiObservation, MirrorObservation, OpsSnapshot, SiteProbe, SiteSnapshot } from "./ops-types";
 
 export const ringSlot = (at: Date): number => Math.floor(at.getTime() / (RING_SLOT_MINUTES * 60_000));
 

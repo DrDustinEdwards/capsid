@@ -40,7 +40,7 @@ const MAX_EVIDENCE_LINE = 300;
 export const CLEARED_SUMMARY = "cleared";
 
 const FINDING_STATES = ["open", "dismissed", "cleared"] as const;
-export type FindingState = (typeof FINDING_STATES)[number];
+type FindingState = (typeof FINDING_STATES)[number];
 
 export interface FindingRow {
   fingerprint: string;

@@ -6,8 +6,7 @@ import { MAX_REPORT_BYTES } from "../src/signed-requests";
 // /backup/credential is a write path not behind OAuth. The key is derived from a root
 // secret and the replay cache is an `INSERT ... ON CONFLICT DO NOTHING RETURNING`
 // against a real PRIMARY KEY; only this layer proves SQLite accepts it and that the
-// conflict conflicts. (The improve loop's /improve/score and
-// /improve/holdout-credential went with the loop on 2026-10-19.)
+// conflict conflicts.
 //
 // The key is derived here the way the Worker derives it, from the same root the
 // config binds, so a signature that verifies is not verifying against a stub.

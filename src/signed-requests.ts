@@ -186,10 +186,7 @@ async function mintScopedCredential(
   };
 }
 
-// Matches the R2 pin in bindings.mjs; the two cannot drift without the off-account
-// mirror going dark loudly.
-export const BACKUP_BUCKET_NAME = OFFACCOUNT_SOURCES.capsid.bucket;
-export const BACKUP_DUMP_PREFIX = "backups/json/";
+const BACKUP_DUMP_PREFIX = "backups/json/";
 
 // Derived from its own parent token. One parent covers every pinned site's bucket; the
 // bucket each mint is scoped to comes from the pinned table, never the caller.

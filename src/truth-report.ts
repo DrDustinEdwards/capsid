@@ -1,12 +1,12 @@
 import { ruleDocCap, ruleDocProblem, staleSummary, type RuleDocProblem } from "./rule-docs";
-export interface TruthFinding {
+interface TruthFinding {
   // What was checked, and what did not pass.
   check: string;
   subject: string;
   detail: string;
 }
 
-export interface TruthCheck {
+interface TruthCheck {
   check: string;
   subjects: number;
   ok: number;
@@ -50,7 +50,7 @@ export interface ReportEdge {
 
 // The shape src/counts.ts returns, mirrored so this module stays a pure function
 // over plain data.
-export interface ReportCountClaim {
+interface ReportCountClaim {
   path: string;
   noun: string;
   states: string;
@@ -363,7 +363,7 @@ export function renderTruthReport(report: TruthReport): string {
   lines.push(`- total: ${report.documents.total}`);
   lines.push(`- archived: ${report.documents.archived}`);
   lines.push(`- unconsolidated: ${report.documents.unconsolidated}`);
-  for (const [type, n] of Object.entries(report.documents.by_type).sort()) {
+  for (const [type, n] of Object.entries(report.documents.by_type).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     lines.push(`- type ${type}: ${n}`);
   }
   lines.push("");

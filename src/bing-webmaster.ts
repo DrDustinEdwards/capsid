@@ -26,7 +26,7 @@ type GetMethod = (typeof GET_METHODS)[number];
 
 export const BING_REPORTS = ["queries", "pages", "traffic", "inspect", "sitemaps", "crawl_issues"] as const;
 export const MAX_BING_ROWS = 1000;
-export type BingReport = (typeof BING_REPORTS)[number];
+type BingReport = (typeof BING_REPORTS)[number];
 
 export interface BingArgs {
   report?: BingReport;

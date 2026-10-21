@@ -20,7 +20,7 @@ import type { InboxItem } from "./inbox";
 // - One report per minute per key, fail closed: this is a write path.
 
 const INBOX_REPORT_PATH = "/ops/inbox/report";
-export const REPORT_PREFIX = "inbox:report:";
+const REPORT_PREFIX = "inbox:report:";
 const REPORT_RATE_PREFIX = "inbox:report-rate:";
 export const REPORT_TTL_SECONDS = 6 * 3600;
 // KV's smallest expiry, which is also the rate window.

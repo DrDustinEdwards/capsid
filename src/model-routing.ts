@@ -20,10 +20,10 @@ export const isJobKind = (value: unknown): value is JobKind => typeof value === 
 // plan mode and Sonnet for execution. Ordered cheapest first, which is the order the
 // learning step reads "cheaper" and "more capable" in.
 export const MODELS = ["haiku", "sonnet", "opusplan", "opus"] as const;
-export type RoutedModel = (typeof MODELS)[number];
+type RoutedModel = (typeof MODELS)[number];
 
 const EFFORTS = ["low", "medium", "high"] as const;
-export type Effort = (typeof EFFORTS)[number];
+type Effort = (typeof EFFORTS)[number];
 
 // Bumped when ROUTING_RULES, TRIAL_ARMS or KIND_RULES change, and stored with each recommendation's
 // reason, so an outcome can be read against the rules that chose its model.

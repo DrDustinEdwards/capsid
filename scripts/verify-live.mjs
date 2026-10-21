@@ -437,9 +437,7 @@ async function gateSecurityHeaders(clientId) {
 
 // Gate 5: approving the form redirects to the Access for SaaS sign-in
 // (scripts/access-redirect-lib.mjs says exactly what is checked). This is where the run
-// stops. It never follows the 302 and never touches Access. Until 2026-09-27 the
-// upstream was GitHub, and the old expectation rolled back the deploy that moved it
-// (actions run 36360666932).
+// stops. It never follows the 302 and never touches Access.
 async function gateAccessRedirect(clientId, form) {
   const body = new URLSearchParams({ csrf: form.csrf, req: form.req });
   let resp;

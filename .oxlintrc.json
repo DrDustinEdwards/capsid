@@ -1,5 +1,5 @@
 {
-  "categories": { "correctness": "off" },
+  "categories": { "correctness": "error" },
   "plugins": ["typescript"],
   "rules": { "typescript/no-floating-promises": "error" }
 }

@@ -353,9 +353,7 @@ async function handleInboxReport(request: Request, env: Env): Promise<Response> 
 // The family's one receiver (@dustinedwards/site-runtime/csp-report): a POST always
 // gets 204, the body is read to 16 KB and no further, at most ten violations are
 // logged one line each with every URL cut to origin and path, and nothing is stored.
-// Capsid stored every report in R2 until 2026-10-20; nothing read them (the backup
-// prune only deleted them), so the store went with its own parser. The limiter is
-// still asked first, and a refusal is a dropped report rather than a 429. Every method
+// The limiter is asked first, and a refusal is a dropped report rather than a 429. Every method
 // comes here, so a GET is the receiver's 405 as on the other sites, and the Portal's
 // pages, which report here from their own host, get the preflight the Reporting API sends.
 async function handleCspReport(request: Request, env: Env): Promise<Response> {

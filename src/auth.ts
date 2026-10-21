@@ -32,7 +32,7 @@ export function getCookie(request: Request, name: string): string | null {
 
 // OPERATOR_KEY_HASH: comma-separated sha256 hex. Plain = write, "ro:" = read.
 // Revoke by removing a hash. A single unprefixed hash still parses as write.
-export type OperatorGrant = "write" | "read" | null;
+type OperatorGrant = "write" | "read" | null;
 
 // Fingerprint is 12 hex of the presented key's sha256, not the stored verifier.
 export interface OperatorIdentity {

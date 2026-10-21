@@ -4,7 +4,6 @@ import { revokeAgent } from "./agents-admin";
 import { agentActor } from "./agents-schema";
 import { hmacHex } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
-import { sourceAddress } from "./portal-auth";
 import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { breakerState, resetBreaker } from "./job-breaker";
@@ -73,7 +72,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "automerge_resume",
 ];
 
-export type ActionParams = Record<string, string | undefined>;
+type ActionParams = Record<string, string | undefined>;
 
 // The click's own audit row is `<prefix><action>`. Rows written before the move to
 // /portal say console-<action>; a query across that date names both (docs/schema.md).
@@ -215,7 +214,7 @@ async function auditClick(
   await env.DB.batch([auditStatement(env.DB, actor, name, namespace, null, { ...params, surface, source_address: source })]);
 }
 
-export type ActionResult =
+type ActionResult =
   // It happened. warning is set when the click's own audit row was not written.
   | { ok: true; summary: string; warning: string | null }
   // It did not happen, and why.
@@ -650,7 +649,7 @@ function paramsFrom(action: PortalAction, raw: unknown): { ok: true; params: Rec
 
 // bind: params the plan itself adds to the token, beside the caller's, so the perform
 // carries out what this preview read (canon_approve_all binds its plan this way).
-export type Plan = { ok: true; changes: string[]; audit: string[]; bind?: Record<string, string> } | { ok: false; refusal: string };
+type Plan = { ok: true; changes: string[]; audit: string[]; bind?: Record<string, string> } | { ok: false; refusal: string };
 
 /** A revision param as a positive integer, or null. */
 function revisionOf(raw: string | undefined): number | null {
@@ -1154,7 +1153,7 @@ async function planAction(env: Env, email: string, action: PortalAction, p: Reco
 
 // The confirmation token: base64url of the canonical claims, a dot, and the hex
 // HMAC-SHA256 of that base64url text under the derived key.
-export interface ConfirmClaims {
+interface ConfirmClaims {
   v: 2;
   // A one-time id: a perform spends it in KV, so a confirmation is used once, by whichever
   // surface took it (controls design, D2). Version 1 tokens had none and are retired.
@@ -1186,7 +1185,7 @@ async function signConfirm(env: Env, claims: ConfirmClaims): Promise<string> {
   return `${payload}.${await hmacHex(await confirmKey(env), payload)}`;
 }
 
-export type Verified = { ok: true; claims: ConfirmClaims } | { ok: false; status: number; refusal: string };
+type Verified = { ok: true; claims: ConfirmClaims } | { ok: false; status: number; refusal: string };
 
 async function verifyConfirm(env: Env, token: string, email: string, now: Date): Promise<Verified> {
   if (!TOKEN_SHAPE.test(token)) return { ok: false, status: 403, refusal: "the confirmation token is malformed: preview again." };
@@ -1253,7 +1252,7 @@ export type Previewed = { ok: true; preview: PortalPreview } | { ok: false; stat
  *  now (a read, never a write), and sign a confirmation for the email. */
 export async function previewControl(env: Env, email: string, name: unknown, rawParams: unknown, now: Date, surface: Surface): Promise<Previewed> {
   const control = controlNamed(name);
-  if (!control) return { ok: false, status: 400, refusal: UNKNOWN_ACTION(String(name ?? "")) };
+  if (!control) return { ok: false, status: 400, refusal: UNKNOWN_ACTION(typeof name === "string" ? name : "") };
   const parsed = paramsFrom(control.name, rawParams);
   if (!parsed.ok) return { ok: false, status: 400, refusal: parsed.refusal };
   const plan = await control.plan(env, email, parsed.params, surface);

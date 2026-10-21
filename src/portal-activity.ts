@@ -18,7 +18,7 @@ export interface ActivityFilter {
 // one action, actor and path: one for the job (params carry job_id) and one for its
 // mirror document (params carry the body's sha256, as every document write does).
 // null when the params name neither, or are not JSON.
-export type ActivityTarget = "job" | "document";
+type ActivityTarget = "job" | "document";
 
 export interface ActivityRow {
   id: number;

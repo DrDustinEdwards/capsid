@@ -3,7 +3,7 @@
 // interface, so a binding added to src/env.ts and not to vitest.config.ts is a
 // typecheck failure rather than a runtime `undefined` in an integration test.
 import type { Env as WorkerEnv } from "../src/env";
-import type { D1Migration } from "@cloudflare/vitest-pool-workers";
+import type { D1Migration } from "@cloudflare/vitest-plugin";
 
 declare global {
   namespace Cloudflare {

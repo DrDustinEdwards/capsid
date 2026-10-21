@@ -63,7 +63,7 @@ export interface MergedChange {
   partial: string | null;
 }
 
-export interface NamespaceMerges {
+interface NamespaceMerges {
   repo: string;
   prs: MergedChange[];
 }
@@ -138,7 +138,7 @@ export interface Edge {
   to_path: string;
 }
 
-export interface Cited {
+interface Cited {
   path: string;
   how: "deleted" | "renamed" | "changed";
   to: string | null;
