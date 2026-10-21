@@ -22,6 +22,7 @@ import {
 import { logEvent } from "./log";
 import type { Finding } from "./watcher-detect";
 import { type WatcherCheck, WATCHER_CHECKS, owningCheck, type FindingClass, findingClass } from "./watcher-checks";
+import { MINUTE_MS } from "./time";
 
 // The watcher looks at the surface every half hour and, when something is wrong,
 // posts a job. It holds no blast-radius flag, cannot claim a job and cannot fix
@@ -101,7 +102,7 @@ export function passDue(lastIso: string | null, minutes: number, now: Date): Due
   // A corrupt stamp runs the pass: an extra pass is cheap, a watcher that silently
   // stopped is not.
   if (Number.isNaN(last)) return { due: true, reason: `last-run stamp '${lastIso}' does not parse; running rather than blocking.` };
-  const elapsed = (now.getTime() - last) / 60000;
+  const elapsed = (now.getTime() - last) / MINUTE_MS;
   if (elapsed < minutes) return { due: false, reason: `${Math.floor(elapsed)} of ${minutes} minutes since the last pass.` };
   return { due: true, reason: `${Math.floor(elapsed)} minutes since the last pass, cadence is ${minutes}.` };
 }

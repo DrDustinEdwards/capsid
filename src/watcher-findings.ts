@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { logEvent } from "./log";
+import { HOUR_MS } from "./time";
 
 // THE WATCHER'S MEMORY OF A FINDING, one watcher_findings row per fingerprint, kept
 // across jobs (migrations/0024_watcher_findings.sql says why it exists).
@@ -28,7 +29,7 @@ import { logEvent } from "./log";
 // then cleared, is filed again only when it is seen at least six hours after it
 // cleared. Long enough that a flapping check (a probe, a CI rerun) files once, not
 // once per flap; short enough that a real recurrence the same day is still filed.
-export const REOPEN_QUIET_MS = 6 * 60 * 60 * 1000;
+export const REOPEN_QUIET_MS = 6 * HOUR_MS;
 
 // The newest sightings kept on a row. Older ones are dropped, so a finding that
 // persists for weeks does not grow its row without bound.

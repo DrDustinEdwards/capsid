@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { probeFts } from "./store-probe";
 import { aiSearchUsage } from "./doc-index";
+import { HOUR_MS } from "./time";
 
 export const BACKUP_LAST_OK_KEY = "backup:last-ok";
 // Daily cron is 24h; 26h is that plus a 2h grace so one slow run does not warn.
@@ -27,9 +28,9 @@ async function backupFreshness(
     return { last_ok: lastOk, age_hours: null, warning: `${BACKUP_LAST_OK_KEY} is not a parseable time: ${lastOk.slice(0, 40)}` };
   }
   const ageMs = Date.now() - stamped;
-  const ageHours = Math.round((ageMs / 3_600_000) * 10) / 10;
+  const ageHours = Math.round((ageMs / HOUR_MS) * 10) / 10;
   const result: { last_ok: string; age_hours: number; warning?: string } = { last_ok: lastOk, age_hours: ageHours };
-  if (ageMs > BACKUP_STALE_HOURS * 3_600_000) {
+  if (ageMs > BACKUP_STALE_HOURS * HOUR_MS) {
     result.warning = `last successful backup was ${ageHours}h ago, over the ${BACKUP_STALE_HOURS}h threshold`;
   }
   return result;

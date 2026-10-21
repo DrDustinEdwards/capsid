@@ -29,9 +29,8 @@ export interface OperationResult {
 }
 
 // Handlers keep the argument types their own shape gives them; the dispatcher has parsed
-// them before the call.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type OperationHandler = (args: any) => OperationResult | Promise<OperationResult>;
+// them before the call, so the table stores each one taking unknown.
+type OperationHandler = (args: unknown) => OperationResult | Promise<OperationResult>;
 
 interface Operation {
   config: OperationConfig;

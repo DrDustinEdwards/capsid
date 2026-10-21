@@ -1,7 +1,8 @@
 import { importPKCS8, SignJWT } from "jose";
 import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
-import { readSiteRow, sitesFrom } from "./ops-sites";
+import { pageOnSite, reportSite } from "./site-reports";
+import { MINUTE_MS, DAY_MS } from "./time";
 
 // Google Search Console for a namespace's site, served as capsid_inspect_repo action
 // search (Dustin, 2026-10-18: Search Console tools system wide, in Capsid). Three
@@ -87,7 +88,7 @@ export function resetSearchConsoleToken(): void {
 
 async function accessToken(key: ServiceAccountKey, fetchImpl: FetchLike, now: Date): Promise<string> {
   const nowMs = now.getTime();
-  if (cachedToken && cachedToken.email === key.client_email && cachedToken.expiresAt - 60_000 > nowMs) return cachedToken.token;
+  if (cachedToken && cachedToken.email === key.client_email && cachedToken.expiresAt - MINUTE_MS > nowMs) return cachedToken.token;
   const iat = Math.floor(nowMs / 1000);
   const assertion = await new SignJWT({ scope: SCOPE })
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
@@ -152,7 +153,7 @@ function isoDay(d: Date): string {
 }
 
 function addDays(d: Date, days: number): Date {
-  return new Date(d.getTime() + days * 86_400_000);
+  return new Date(d.getTime() + days * DAY_MS);
 }
 
 export function dateWindow(args: Pick<SearchConsoleArgs, "start_date" | "end_date">, now: Date): { start: string; end: string } {
@@ -162,7 +163,7 @@ export function dateWindow(args: Pick<SearchConsoleArgs, "start_date" | "end_dat
   const end = args.end_date ?? isoDay(addDays(now, -DEFAULT_LAG_DAYS));
   const start = args.start_date ?? isoDay(addDays(new Date(`${end}T00:00:00Z`), -(DEFAULT_WINDOW_DAYS - 1)));
   if (start > end) throw new Error(`start_date ${start} is after end_date ${end}.`);
-  const span = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000;
+  const span = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / DAY_MS;
   if (span > MAX_WINDOW_DAYS) throw new Error(`The window is ${span + 1} days; Search Console keeps about 16 months, so ask for ${MAX_WINDOW_DAYS + 1} days or fewer.`);
   return { start, end };
 }
@@ -174,25 +175,9 @@ export async function searchConsole(env: Env, namespace: string, args: SearchCon
   if (report !== "inspect" && args.url !== undefined) throw new Error(`url is for report inspect; report ${report} does not take it.`);
   if (report === "inspect" && !args.url) throw new Error("report inspect needs url, the page to inspect.");
 
-  const row = await readSiteRow(env.DB, namespace);
-  const site = row ? sitesFrom([row])[0] : undefined;
-  if (!row || !site) {
-    throw new Error(`${namespace} has no site configured (ops_sites), so it has no Search Console property. The admin adds one with capsid_admin_run_controls control site_add.`);
-  }
+  const site = await reportSite(env, namespace, "Search Console property");
 
-  let inspectUrl: string | null = null;
-  if (report === "inspect") {
-    let parsed: URL;
-    try {
-      parsed = new URL(args.url!);
-    } catch {
-      throw new Error("url must be a whole address, such as https://example.com/about.");
-    }
-    if (parsed.protocol !== "https:" || parsed.hostname !== new URL(site.origin).hostname) {
-      throw new Error(`url must be a page on ${namespace}'s site, ${site.origin}.`);
-    }
-    inspectUrl = parsed.toString();
-  }
+  const inspectUrl = report === "inspect" ? pageOnSite(site.origin, namespace, args.url!) : null;
   // Validated before any network call, so a bad window costs nothing.
   const window = report === "performance" ? dateWindow(args, now) : null;
 

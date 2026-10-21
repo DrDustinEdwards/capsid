@@ -3,6 +3,7 @@ import { ghFetch, resolveRepo } from "./github/client";
 import { readAllPages } from "./github/pr-files";
 import { ciVerdict, jobIdFromBody } from "./auto-merge-policy";
 import type { MaintenanceItem } from "./maintenance";
+import { HOUR_MS, DAY_MS } from "./time";
 
 // The daily maintenance pass's pull request rules (job_549550d73d4e, piece 2). Two lists:
 // a green driver pull request that is still open is waiting for the seat, shown with its
@@ -46,7 +47,7 @@ export interface PrReaders {
   failingStep(repo: string, check: PrCheck): Promise<{ step: string | null; problem: string | null }>;
 }
 
-const days = (ms: number): string => `${(ms / 86_400_000).toFixed(1)} days`;
+const days = (ms: number): string => `${(ms / DAY_MS).toFixed(1)} days`;
 
 /** A driver's pull request, not a draft, whose checks are all green: it waits for the seat. */
 export function greenAwaitingSeat(namespace: string, prs: OpenPr[], now: Date): MaintenanceItem[] {
@@ -74,7 +75,7 @@ export function redTooLong(prs: OpenPr[], now: Date): Array<{ pr: OpenPr; since:
       .sort((a, b) => (a.completed_at ?? "").localeCompare(b.completed_at ?? ""));
     const first = failed[0];
     if (!first?.completed_at) continue;
-    if (now.getTime() - Date.parse(first.completed_at) > RED_HOURS * 3_600_000) out.push({ pr, since: first.completed_at, check: first });
+    if (now.getTime() - Date.parse(first.completed_at) > RED_HOURS * HOUR_MS) out.push({ pr, since: first.completed_at, check: first });
   }
   return out;
 }

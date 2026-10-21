@@ -7,6 +7,7 @@ import { verifySignedBody } from "./signed-docs";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
 import { redactText } from "./redact";
+import { MINUTE_MS } from "./time";
 
 // CAPSID STARTS A SESSION ITSELF (job_a7d6f6009242, docs/routines.md). One Claude Code
 // routine serves every namespace, created by Dustin at claude.ai/code/routines on Opus,
@@ -233,8 +234,8 @@ async function reserveFire(db: D1Database, actor: string, job: JobRow, routineId
       jobDocPath(job.id),
       JSON.stringify({ job_id: job.id, routine_id: routineId }),
       job.id,
-      new Date(now.getTime() - REFIRE_MINUTES * 60_000).toISOString(),
-      new Date(now.getTime() - RESERVE_MINUTES * 60_000).toISOString()
+      new Date(now.getTime() - REFIRE_MINUTES * MINUTE_MS).toISOString(),
+      new Date(now.getTime() - RESERVE_MINUTES * MINUTE_MS).toISOString()
     )
     .first<{ id: number }>();
   return row?.id ?? null;

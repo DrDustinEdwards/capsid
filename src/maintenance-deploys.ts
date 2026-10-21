@@ -3,6 +3,7 @@ import { ghFetch, resolveRepo } from "./github/client";
 import type { MaintenanceItem } from "./maintenance";
 import type { OpsSnapshot } from "./ops-types/sites";
 import { readSnapshot } from "./ops-snapshot";
+import { HOUR_MS, DAY_MS } from "./time";
 
 // The daily maintenance pass's undeployed-merge rule (job_549550d73d4e, piece 5). Carrel sat
 // four days behind its default branch before anyone noticed. A site's live Worker is
@@ -35,7 +36,7 @@ export interface DeployReaders {
   defaultHead(namespace: string): Promise<DefaultHead>;
 }
 
-const days = (ms: number): string => `${(ms / 86_400_000).toFixed(1)} days`;
+const days = (ms: number): string => `${(ms / DAY_MS).toFixed(1)} days`;
 
 /** Whether two shas name the same commit, when either may be abbreviated. */
 function sameSha(a: string, b: string): boolean {
@@ -53,7 +54,7 @@ function behind(
   if (site.live_sha && sameSha(site.live_sha, head.sha)) return null;
   const merged = Date.parse(head.committed_at);
   const deployed = Date.parse(site.deployed_on);
-  if (!(deployed < merged) || now.getTime() - merged < GRACE_HOURS * 3_600_000) return null;
+  if (!(deployed < merged) || now.getTime() - merged < GRACE_HOURS * HOUR_MS) return null;
   return {
     rule: "undeployed-merge",
     namespace: site.namespace,

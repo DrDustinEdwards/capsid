@@ -12,7 +12,7 @@
     }
   ],
   "baseline": {
-    "measured_at": "b06e665",
+    "measured_at": "7debbed",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "Unused files": 1,
@@ -21,8 +21,8 @@
       "Duplicate exports": 2
     },
     "jscpd": {
-      "clones": 31,
-      "percentage": 0.54
+      "clones": 29,
+      "percentage": 0.47
     }
   }
 }

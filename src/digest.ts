@@ -5,6 +5,7 @@ import { PORTAL_HOST } from "./portal-host";
 import type { DigestState } from "./ops-types/views";
 import { logEvent } from "./log";
 import { weeklyDigestLines } from "./watcher-digest";
+import { DAY_MS } from "./time";
 
 // THE DAILY EMAIL DIGEST (docs/design/design-merge-pipeline.md section 5; Dustin's DECIDE
 // 5 of 2026-10-09: Web Push for the four urgent things, and everything else in a daily
@@ -26,7 +27,6 @@ import { weeklyDigestLines } from "./watcher-digest";
 export const DIGEST_LAST_KEY = "digest:last";
 // 12:00 UTC is 07:00 in Chicago in summer and 06:00 in winter: before the day starts.
 const DIGEST_HOUR_UTC = 12;
-const DAY_MS = 86_400_000;
 const LIST_MAX = 15;
 const PORTAL_URL = `https://${PORTAL_HOST}/`;
 

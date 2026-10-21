@@ -26,6 +26,7 @@ import { gatherFindings } from "./watcher-gather";
 import { logEvent } from "./log";
 import { pendingProposals } from "./canon";
 import { textResponse } from "./http";
+import { MINUTE_MS, DAY_MS } from "./time";
 
 // The Watch Floor's one read (capsid/research/design-ops-console.md): GET
 // /portal/api/ops returns OpsFeed (src/ops-types/feed.ts), the watcher's last pass from KV
@@ -89,13 +90,12 @@ export function portalCsrf(request: Request): { value: string; setCookie: string
 
 // The refresh's rate limit: one on-demand pass per two minutes, stamped in KV.
 export const OPS_REFRESH_KEY = "ops:refresh:last";
-const OPS_REFRESH_INTERVAL_MS = 2 * 60_000;
+const OPS_REFRESH_INTERVAL_MS = 2 * MINUTE_MS;
 // A cross-site form cannot set a custom header, and a cross-site fetch that sets one
 // is preflighted and refused, so its presence says the request came from this origin.
 export const OPS_REFRESH_HEADER = "X-Capsid-Ops";
 const OPS_REFRESH_HEADER_VALUE = "refresh";
 
-const DAY_MS = 24 * 3_600_000;
 const WEEK_MS = 7 * DAY_MS;
 // The live-sessions read's bound.
 const SESSION_ROWS_LIMIT = 50;

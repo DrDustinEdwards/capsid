@@ -3,6 +3,7 @@ import { logEvent } from "./log";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import { runSiteRepair, type RepairOutcome } from "./site-repair";
 import { tokenSet, type FetchLike } from "./site-operator";
+import { DAY_MS } from "./time";
 
 // THE WATCHER'S SITE REPAIRS (job_09e5f6cbf782), so a site's own watchdog Worker can be
 // retired later. On each watcher pass, for every site that opted in (ops_sites.operator):
@@ -23,7 +24,7 @@ import { tokenSet, type FetchLike } from "./site-operator";
 // rate limit stops a stuck check from looping.
 
 const HEALTH_TIMEOUT_MS = 10_000;
-const WEEK_MS = 7 * 86_400_000;
+const WEEK_MS = 7 * DAY_MS;
 const WEEKLY_PREFIX = "site-weekly:";
 const ALERT_PREFIX = "site-alert:";
 const TEXT_MAX = 300;

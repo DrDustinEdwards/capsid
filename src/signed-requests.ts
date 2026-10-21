@@ -3,6 +3,7 @@ import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
 import { isOffaccountSite, OFFACCOUNT_DEFAULT_SITE, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES, type OffaccountSite } from "./offaccount";
 import { readCapped } from "@dustinedwards/site-runtime/body";
+import { MINUTE_MS } from "./time";
 
 // The signed endpoints that are not MCP: the backup mirror's credential mint here, and
 // the bench's three (src/bench.ts). Each is HMAC over timestamp and body, refused
@@ -17,7 +18,7 @@ export const BACKUP_CREDENTIAL_PATH = "/backup/credential";
 // A signature older than this is refused. It bounds replay to the window in which a
 // request is still plausibly in flight; a CI job that takes over half an hour to POST
 // its own result has a different problem.
-const SIGNATURE_MAX_AGE_MS = 30 * 60 * 1000;
+const SIGNATURE_MAX_AGE_MS = 30 * MINUTE_MS;
 
 // A signed request is a few hundred bytes of JSON. This is three orders of magnitude
 // of headroom and still refuses a body that is trying to be something else.

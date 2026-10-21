@@ -4,7 +4,8 @@ import type { Agent } from "../agents";
 import { type ScopeNeed } from "../scope";
 import type { Operations } from "./operations";
 import { defineListOperation, defineReadOperation, defineBriefOperation, defineHistoryOperation, defineBacklinksOperation, defineFindOperation, defineSearchOperation } from "./docs-read";
-import { defineWriteOperation, defineRestoreOperation, defineDeleteOperation, defineMoveOperation } from "./docs-write";
+import { defineWriteOperation } from "./docs-write";
+import { defineDeleteOperation, defineMoveOperation, defineRestoreOperation } from "./docs-lifecycle";
 import { defineNamespaceOperations } from "./namespaces";
 
 export function ok(data: unknown) {

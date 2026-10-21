@@ -5,6 +5,7 @@ import type { OpsSite } from "./ops-sites";
 import type { SiteProbe } from "./ops-types/sites";
 import type { WebAnalyticsSite } from "./ops-types/views";
 import { readCapped } from "./read-capped";
+import { MINUTE_MS } from "./time";
 
 // THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5, ruled
 // by Dustin 2026-10-04). Four things Dustin checked by hand with PowerShell after a
@@ -327,7 +328,7 @@ export function shaFinding(
   if (deployed.length >= 7 && (head.sha.startsWith(deployed) || deployed.startsWith(head.sha))) return null;
   const committed = head.committed_at ? Date.parse(head.committed_at) : Number.NaN;
   if (Number.isNaN(committed)) return null;
-  const minutes = (now.getTime() - committed) / 60_000;
+  const minutes = (now.getTime() - committed) / MINUTE_MS;
   if (minutes < DEPLOY_GRACE_MINUTES) return null;
   return {
     namespace: site.namespace,

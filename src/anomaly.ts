@@ -1,4 +1,5 @@
 import type { Finding } from "./watcher-detect";
+import { HOUR_MS } from "./time";
 
 // ANOMALY RULES ON THE AUDIT LOG (OWASP agentic hardening item 6, ASI10;
 // capsid/research/design-owasp-hardening.md; Dustin's D4 of 2026-10-03: a hit is a watcher
@@ -45,7 +46,7 @@ export interface ActionHour {
 
 /** The window's start for readActionHours, in audit_log's datetime format. */
 function anomalySince(now: Date): string {
-  return new Date(now.getTime() - (BASELINE_DAYS * 24 + RECENT_HOURS) * 3600_000).toISOString().slice(0, 19).replace("T", " ");
+  return new Date(now.getTime() - (BASELINE_DAYS * 24 + RECENT_HOURS) * HOUR_MS).toISOString().slice(0, 19).replace("T", " ");
 }
 
 /** The read the rules run on: every minted agent's audit rows of the last BASELINE_DAYS
@@ -66,7 +67,7 @@ export async function readActionHours(db: D1Database, now: Date, except: string)
 /** The window's start for readToolHours, in session_events' ISO format
  *  (YYYY-MM-DDTHH:MM:SS.sssZ, unlike audit_log's space-separated datetime). */
 function toolSince(now: Date): string {
-  return new Date(now.getTime() - (BASELINE_DAYS * 24 + RECENT_HOURS) * 3600_000).toISOString();
+  return new Date(now.getTime() - (BASELINE_DAYS * 24 + RECENT_HOURS) * HOUR_MS).toISOString();
 }
 
 /** One row of the tool read: an actor's tool calls in one UTC hour. */
@@ -123,7 +124,7 @@ const mk = (fingerprint: string, headline: string, evidence: string[]): Finding 
 });
 
 export function anomalyFindings(rows: readonly ActionHour[], now: Date): Finding[] {
-  const recentFrom = new Date(now.getTime() - RECENT_HOURS * 3600_000).toISOString().slice(0, 13);
+  const recentFrom = new Date(now.getTime() - RECENT_HOURS * HOUR_MS).toISOString().slice(0, 13);
   const byActor = new Map<string, { base: ActionHour[]; recent: ActionHour[] }>();
   for (const r of rows) {
     const a = byActor.get(r.actor) ?? { base: [], recent: [] };
@@ -166,7 +167,7 @@ export function anomalyFindings(rows: readonly ActionHour[], now: Date): Finding
  *  tool baseline is skipped: tool reporting starts as nobody's baseline, and a first-use
  *  rule would page for every agent on its first day. */
 export function toolRateFindings(rows: readonly ToolHour[], now: Date): Finding[] {
-  const recentFrom = new Date(now.getTime() - RECENT_HOURS * 3600_000).toISOString().slice(0, 13);
+  const recentFrom = new Date(now.getTime() - RECENT_HOURS * HOUR_MS).toISOString().slice(0, 13);
   const byActor = new Map<string, { base: Map<string, number>; recent: Map<string, number> }>();
   for (const r of rows) {
     const a = byActor.get(r.actor) ?? { base: new Map<string, number>(), recent: new Map<string, number>() };

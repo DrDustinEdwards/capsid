@@ -7,6 +7,7 @@ import type { OpsMergeSafety, OpsMergeSafetyRow } from "./ops-types/feed";
 import { auditStatement } from "./store-guards";
 import { timeMs } from "./trends";
 import { passDue } from "./watcher";
+import { DAY_MS } from "./time";
 
 // THE AUTO-MERGE SAFETY METER AND SHUTOFF (docs/design/design-merge-pipeline.md, "The
 // safety meter"). Merge units (src/merge-units.ts) narrow one path class after a bad
@@ -29,7 +30,6 @@ export const LIFTED_KEY = "merge-safety:lifted";
 export const REPORT_KEY = "merge-safety:report";
 export const REVERTS_STAMP_KEY = "merge-safety:reverts-last";
 
-const DAY_MS = 86_400_000;
 const WEEK_MS = 7 * DAY_MS;
 // The previous 30 days are days 7 to 37 before now; the audit window also has to reach
 // the merge a rollback is joined to, so it is the merge units' 90.

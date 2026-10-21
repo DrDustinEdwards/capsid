@@ -5,6 +5,7 @@ import type { SiteOperator } from "./ops-types/sites";
 import { callLine, callOperator, toolRefusal, type FetchLike, type OperatorCall } from "./site-operator";
 import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
+import { MINUTE_MS, DAY_MS } from "./time";
 
 // ONE REPAIR, from the Portal, capsid_admin_run_controls or the watcher (job_09e5f6cbf782). The
 // site_repair control and the watcher's repair step both come here, so the allowlist, the
@@ -20,10 +21,9 @@ import { taskRunStatements } from "./task-runs";
 
 export const REPAIR_AUDIT_ACTION = "site-repair";
 const LIMIT_PREFIX = "site-repair-limit:";
-const MIN_GAP_MS = 2 * 60_000;
-const AUTO_GAP_MS = 30 * 60_000;
+const MIN_GAP_MS = 2 * MINUTE_MS;
+const AUTO_GAP_MS = 30 * MINUTE_MS;
 export const AUTO_PER_DAY = 4;
-const DAY_MS = 86_400_000;
 
 interface LimitRecord {
   last: string;
@@ -51,7 +51,7 @@ export function limitRefusal(record: LimitRecord | null, now: Date, auto: boolea
   if (!record) return null;
   const since = now.getTime() - Date.parse(record.last);
   const gap = auto ? AUTO_GAP_MS : MIN_GAP_MS;
-  if (since < gap) return `it ran ${Math.round(since / 60_000)} minute(s) ago; the next call may go after ${Math.round(gap / 60_000)} minutes.`;
+  if (since < gap) return `it ran ${Math.round(since / MINUTE_MS)} minute(s) ago; the next call may go after ${Math.round(gap / MINUTE_MS)} minutes.`;
   if (auto) {
     const today = record.auto.filter((at) => now.getTime() - Date.parse(at) < DAY_MS);
     if (today.length >= AUTO_PER_DAY) return `the watcher has run it ${today.length} times in the last day, its limit; a person can still run it from the Portal.`;

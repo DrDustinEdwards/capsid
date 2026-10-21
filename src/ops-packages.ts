@@ -3,6 +3,7 @@ import { ghFetch } from "./github/client";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
+import { DAY_MS } from "./time";
 
 // The packages Capsid Portal watches (job_c6e4ab939a54). Ruled 2026-09-29: "Portal monitoring is optional and configured per install; packages panel
 // approved". Configured like the sites (src/ops-sites.ts): rows in D1 (ops_packages,
@@ -311,7 +312,7 @@ export function isoWeek(d: Date): string {
   const day = t.getUTCDay() || 7;
   t.setUTCDate(t.getUTCDate() + 4 - day);
   const yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
-  const week = Math.ceil(((t.getTime() - yearStart) / 86_400_000 + 1) / 7);
+  const week = Math.ceil(((t.getTime() - yearStart) / DAY_MS + 1) / 7);
   return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
@@ -330,7 +331,6 @@ export function weekStatement(db: D1Database, snap: PackageSnapshot, now: Date):
 
 // ---- The daily history, on demand ------------------------------------------------------
 
-const DAY_MS = 86_400_000;
 const dayOf = (d: Date) => d.toISOString().slice(0, 10);
 
 /** When npm first published `name`, from the full document's time.created (the

@@ -4,6 +4,7 @@ import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./security-headers";
 import { probeFts } from "./store-probe";
 import { logEvent } from "./log";
+import { DAY_MS } from "./time";
 
 const JSON_PREFIX = "backups/json/";
 const MARKDOWN_PREFIX = "backups/markdown/";
@@ -38,7 +39,7 @@ function isOlderThan(key: string, prefix: string, cutoffDay: string): boolean {
 }
 
 function cutoffDay(now: Date, days: number): string {
-  return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
+  return new Date(now.getTime() - days * DAY_MS).toISOString().slice(0, 10);
 }
 
 // The dump itself is @dustinedwards/d1-dump, the package every site installs, so

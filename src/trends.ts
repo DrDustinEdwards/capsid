@@ -5,6 +5,7 @@ import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
 import { logEvent } from "./log";
 import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types/views";
+import { MINUTE_MS, DAY_MS } from "./time";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
 // ruled 2026-10-09: DECIDE 5, the trends route, and DECIDE 6, all eleven visuals). The feed
@@ -22,7 +23,6 @@ import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendMerg
 // Visuals 2 and 5 (waits, claim agreement) come from GET /portal/api/claims, which already
 // serves them; 4, 8 and 9 from the plan and the feed. Every time here is UTC.
 
-const DAY_MS = 86_400_000;
 const TRENDS_QUEUE_DAYS = 14;
 const TRENDS_CI_DAYS = 14;
 // A human's activity rows read for the minutes, at most. Far above a real week's count;
@@ -30,7 +30,7 @@ const TRENDS_CI_DAYS = 14;
 // are the ones kept, so a cut costs the oldest week, not this one.
 const MINUTES_ROW_CAP = 20_000;
 // A gap longer than this starts a new session (the experience review's section 8).
-const SESSION_GAP_MS = 5 * 60_000;
+const SESSION_GAP_MS = 5 * MINUTE_MS;
 const CI_CACHE_KEY = "portal:trends-ci:v1";
 const CI_CACHE_SECONDS = 60 * 60;
 const BACKUP_PREFIX = "backups/json/";
@@ -89,7 +89,7 @@ export function sessionMinutes(times: number[], mondays: string[]): Map<string, 
     const week = out.get(mondayOf(dayOf(start)));
     if (!week) continue;
     week.sessions += 1;
-    week.minutes += (end - start) / 60_000 + 1;
+    week.minutes += (end - start) / MINUTE_MS + 1;
   }
   for (const w of out.values()) w.minutes = Math.round(w.minutes);
   return out;

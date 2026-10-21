@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import type { InboxItem } from "./ops-types/feed";
 import { logEvent } from "./log";
 import { auditStatement } from "./store-guards";
+import { DAY_MS } from "./time";
 
 // EARNED PROMOTION AND DEMOTION (docs/design/design-merge-pipeline.md section 7, PR 9;
 // Dustin's DECIDE 9 and 10 of 2026-10-09). A unit is (namespace, path class). REPORT-ONLY:
@@ -32,9 +33,9 @@ export const REPORT_KEY = "merge-units:report";
 // When Dustin lifted each unit's suspension (the unit_resume control): a rollback from
 // before then is answered and suspends the unit no more.
 export const LIFTED_KEY = "merge-units:lifted";
-const WINDOW_MS = 90 * 86_400_000;
+const WINDOW_MS = 90 * DAY_MS;
 const PROMOTE_MERGES = 20;
-const PROMOTE_SPAN_MS = 14 * 86_400_000;
+const PROMOTE_SPAN_MS = 14 * DAY_MS;
 const PROMOTE_MAX_BAD_VOIDS = 1;
 // A void that only says the pull request changed after it was approved is not evidence
 // against the unit: the approval was simply of an older head.
@@ -128,7 +129,7 @@ export function judgeUnits(
   for (const [k, u] of units) {
     const d = demote.find((p) => p.unit === k);
     const span = u.merged.length ? Math.max(...u.merged) - Math.min(...u.merged) : 0;
-    const evidence = { approved_merges: u.merged.length, span_days: Math.floor(span / 86_400_000), rollbacks: u.rollbacks, bad_voids: u.bad };
+    const evidence = { approved_merges: u.merged.length, span_days: Math.floor(span / DAY_MS), rollbacks: u.rollbacks, bad_voids: u.bad };
     if (d) d.evidence = evidence;
     if (nowSuspended.has(k)) continue;
     if (u.merged.length >= PROMOTE_MERGES && span >= PROMOTE_SPAN_MS && u.rollbacks === 0 && u.bad <= PROMOTE_MAX_BAD_VOIDS) {

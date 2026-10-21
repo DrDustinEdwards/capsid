@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Env } from "./env";
 import { bounded } from "./limits";
 import { readSnapshot } from "./ops-snapshot";
+import { MINUTE_MS, DAY_MS } from "./time";
 
 // The public aggregate numbers (ruling capsid/rulings/system-explorer-2026-10-10.md,
 // section 3 and answer 5; design capsid/research/design-system-explorer.md, section 2;
@@ -13,7 +14,6 @@ import { readSnapshot } from "./ops-snapshot";
 // A rate or median over fewer than FLOOR rows is null, so one job cannot be read off it.
 
 export const FLOOR = 10;
-const DAY_MS = 86_400_000;
 
 const Count = z.number().int().min(0);
 const Rate = z.number().min(0).max(1).nullable();
@@ -161,7 +161,7 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
     },
     gates: {
       waits_30d: rows.waits.length,
-      median_wait_minutes_30d: median(rows.waits.map((w) => w.waited_ms / 60_000)),
+      median_wait_minutes_30d: median(rows.waits.map((w) => w.waited_ms / MINUTE_MS)),
       share_ended_by_policy_30d: rate(rows.waits.filter((w) => w.actor_kind === "policy").length, rows.waits.length),
     },
     sites: { watched: rows.rings.length, uptime_7d: rate(up, up + down), slots_measured_7d: up + down },

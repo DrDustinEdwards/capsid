@@ -1,4 +1,5 @@
 import { MIN_SAMPLE, RATE_FLOOR, RATE_GAIN, ROUTING_RULES, ROUTING_RULES_VERSION, TRIAL_ARMS, cellsOf, modelAlias, proposeRuleChanges, trialStatus, type Cell, type OutcomeFact, type Proposal, type TrialStatus } from "./model-routing";
+import { DAY_MS } from "./time";
 
 // WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model,
 // the share of jobs merged with green CI, the corrections spent, and the cost where
@@ -51,7 +52,7 @@ function sameModel(r: Row): boolean {
 }
 
 export async function readModelLearning(db: D1Database, now: Date): Promise<ModelLearning> {
-  const since = new Date(now.getTime() - LEARNING_WINDOW_DAYS * 86_400_000).toISOString();
+  const since = new Date(now.getTime() - LEARNING_WINDOW_DAYS * DAY_MS).toISOString();
   const { results } = await db
     .prepare(
       `SELECT o.job_kind AS kind, o.model_chosen AS model, o.model_actual AS model_actual, o.prs_merged AS prs_merged, o.ci_green AS ci_green,

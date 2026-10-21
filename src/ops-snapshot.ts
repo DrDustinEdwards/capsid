@@ -5,6 +5,7 @@ import { readCapped } from "./read-capped";
 import type { OpsSite } from "./ops-sites";
 import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 import { logEvent } from "./log";
+import { MINUTE_MS } from "./time";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
 // Floor build). Until this, a pass kept only its timestamp: every check's outcome, the
@@ -31,7 +32,7 @@ export const MAX_HEALTH_BYTES = 65_536;
 // up and nothing more. down: nothing answered 2xx.
 export type { CiObservation, MirrorObservation, OpsSnapshot, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 
-export const ringSlot = (at: Date): number => Math.floor(at.getTime() / (RING_SLOT_MINUTES * 60_000));
+export const ringSlot = (at: Date): number => Math.floor(at.getTime() / (RING_SLOT_MINUTES * MINUTE_MS));
 
 /** Adds this pass's result to a site's ring. Slots no pass reached become '-'. Two
  *  passes in one slot (a Refresh run on demand) keep the worse result, so a failure is
@@ -54,7 +55,7 @@ export function advanceRing(
   return { ring, ring_slot: slot };
 }
 
-const RING_SLOT_MS = RING_SLOT_MINUTES * 60_000;
+const RING_SLOT_MS = RING_SLOT_MINUTES * MINUTE_MS;
 
 export interface RingReading {
   namespace: string;

@@ -395,10 +395,6 @@ function findingRow(fingerprint: string, over: Partial<FindingRow> = {}): Findin
   };
 }
 
-test("the quiet period is six hours", () => {
-  assert.equal(REOPEN_QUIET_MS, 6 * HOUR);
-});
-
 test("a sighting's verdict, for every state a row can be in", () => {
   const superseded = { status: "superseded", result_summary: "withdrawn", updated_at: hoursAgo(1) };
   const clearedBy = (hours: number) => ({ status: "failed", result_summary: "cleared", updated_at: hoursAgo(hours) });

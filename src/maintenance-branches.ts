@@ -3,6 +3,7 @@ import { ghFetch } from "./github/client";
 import { deletePruneCandidates, readPrunePlan, type PruneCandidate, type PruneKept, type PrunePlan } from "./github/prune";
 import type { MaintenanceItem } from "./maintenance";
 import { auditStatement } from "./store-guards";
+import { DAY_MS } from "./time";
 
 // The daily maintenance pass's branch rules (job_549550d73d4e, piece 3). A merged branch is
 // one capsid_close_pr action delete_branch with merged:true would prune (job_8779278b8e91, src/github/prune.ts): its
@@ -73,7 +74,7 @@ async function readBranchSettings(kv: KVNamespace): Promise<BranchSettings> {
   return { prune: switchRaw === "on", keep };
 }
 
-const days = (ms: number): number => Math.floor(ms / 86_400_000);
+const days = (ms: number): number => Math.floor(ms / DAY_MS);
 
 /** The branch rules over every namespace in `namespaces`, and how many branches each read,
  *  so "nothing listed" can be told from "nothing read". */
@@ -167,7 +168,7 @@ export async function gatherBranchItems(
     stale.sort((a, b) => b.ms - a.ms);
 
     if (settings.prune && plan.listsComplete) {
-      const old = stale.filter((s) => s.ms >= ORPHAN_DAYS * 86_400_000);
+      const old = stale.filter((s) => s.ms >= ORPHAN_DAYS * DAY_MS);
       const budget = Math.max(0, PRUNE_CAP - prunedHere);
       const done = old.length === 0 ? { deleted: [], skipped: [], remaining: 0 } : await readers.prune({ ...plan, prune: old.map((s) => ({ branch: s.branch, sha: s.sha, pr: null })) }, budget, async (c) => {
         await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, { repo: plan.repo, branch: c.branch, sha: c.sha, pr: null }).run();

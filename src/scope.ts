@@ -6,6 +6,7 @@ import { logEvent } from "./log";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
 import { protectedHits } from "./protected-paths";
 import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
+import { MINUTE_MS, HOUR_MS } from "./time";
 
 // The one enforcement point. Every tool call, and every repo mutation inside one, is
 // checked here and nowhere else.
@@ -369,8 +370,8 @@ export function portfolioOnly(agent: Agent, namespace: string | undefined): bool
 // Only an OAuth session carries a sign-in time (Agent.signedInAt). A key holder (the
 // seat's operator key at its terminal) has no session to refresh and is not stepped up;
 // its key is the credential.
-const STEP_UP_IDLE_MS = 2 * 60 * 60 * 1000;
-const STEP_UP_MAX_MS = 12 * 60 * 60 * 1000;
+const STEP_UP_IDLE_MS = 2 * HOUR_MS;
+const STEP_UP_MAX_MS = 12 * HOUR_MS;
 
 export const STEP_UP: Record<string, readonly string[] | "*"> = {
   capsid_admin_manage_namespaces: ["register", "update", "delete_perform"],
@@ -422,8 +423,8 @@ function stepUpRefusal(agent: Agent, need: ScopeNeed, now: number): string | nul
   if (agent.signedInAt === undefined) return null;
   const asked = need.action === undefined ? need.tool : `${need.tool}.${need.action}`;
   const rule =
-    `A step-up action needs an Access sign-in or a step-up action within the last ${STEP_UP_IDLE_MS / 3600000} hours, ` +
-    `and never more than ${STEP_UP_MAX_MS / 3600000} hours after the sign-in.`;
+    `A step-up action needs an Access sign-in or a step-up action within the last ${STEP_UP_IDLE_MS / HOUR_MS} hours, ` +
+    `and never more than ${STEP_UP_MAX_MS / HOUR_MS} hours after the sign-in.`;
   const fix = `Reconnect the Capsid Admin connector (disconnect, then connect, and sign in), then call it again. Nothing was done.`;
   if (agent.signedInAt === null) {
     return `step-up required: '${asked}' changes who may do what or cannot be taken back. ${rule} This session signed in before sign-in times were recorded. ${fix}`;
@@ -431,10 +432,10 @@ function stepUpRefusal(agent: Agent, need: ScopeNeed, now: number): string | nul
   const sinceSignIn = now - agent.signedInAt;
   const sinceActive = now - Math.max(agent.signedInAt, agent.lastStepUpAt ?? 0);
   if (sinceSignIn <= STEP_UP_MAX_MS && sinceActive <= STEP_UP_IDLE_MS) return null;
-  const minutes = (ms: number): string => `${Math.round(ms / 60000)} minutes ago`;
+  const minutes = (ms: number): string => `${Math.round(ms / MINUTE_MS)} minutes ago`;
   const why =
     sinceSignIn > STEP_UP_MAX_MS
-      ? `this session signed in ${minutes(sinceSignIn)}, past the ${STEP_UP_MAX_MS / 3600000} hour cap`
+      ? `this session signed in ${minutes(sinceSignIn)}, past the ${STEP_UP_MAX_MS / HOUR_MS} hour cap`
       : `this session signed in ${minutes(sinceSignIn)} and its last step-up action was ${agent.lastStepUpAt === undefined ? "none" : minutes(now - agent.lastStepUpAt)}`;
   return `step-up required: '${asked}' changes who may do what or cannot be taken back. ${rule} Here ${why}. ${fix}`;
 }

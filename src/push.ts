@@ -11,6 +11,7 @@ import { auditStatement } from "./store-guards";
 import { digestState } from "./digest";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
 import { jsonResponse as json, textResponse as text } from "./http";
+import { HOUR_MS, DAY_MS } from "./time";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
 // and 6 of 2026-10-09). Web Push to the devices the administrator turned on in the
@@ -37,12 +38,12 @@ import { jsonResponse as json, textResponse as text } from "./http";
 // out per tick, so turning a device on does not empty a backlog onto it at once.
 
 const STATE_KEY = "push:state";
-const SENT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const TYPED_WAIT_MS = 2 * 60 * 60 * 1000;
-const QUESTION_AGE_MS = 4 * 60 * 60 * 1000;
+const SENT_TTL_MS = 30 * DAY_MS;
+const TYPED_WAIT_MS = 2 * HOUR_MS;
+const QUESTION_AGE_MS = 4 * HOUR_MS;
 const QUESTION_PRIORITY = 70;
 // A rollback or a cap older than this when first seen is history, not an alert.
-const RECENT_MS = 24 * 60 * 60 * 1000;
+const RECENT_MS = DAY_MS;
 const MAX_PER_TICK = 3;
 const MAX_DEVICES = 10;
 const PORTAL_URL = `https://${PORTAL_HOST}/`;
@@ -88,7 +89,7 @@ async function readState(env: Env): Promise<PushState> {
   return { typed_seen: parsed.typed_seen ?? {}, sent: parsed.sent ?? {} };
 }
 
-const hours = (ms: number) => `${Math.floor(ms / 3_600_000)}h`;
+const hours = (ms: number) => `${Math.floor(ms / HOUR_MS)}h`;
 
 /** The six triggers, from what the tick, the watcher and the queue already keep. Reads
  *  only; `typedSeen` is updated in place with the typed PRs seen now. */

@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, customFetch, decodeProtectedHeader, errors, jwtVerify } from "jose";
+import { HOUR_MS } from "./time";
 
 // Verifies the ID token Cloudflare Access for SaaS (OIDC) returns at Capsid's login
 // callback (capsid/research/design-capsid-access-login.md; decided 2026-09-27).
@@ -17,7 +18,7 @@ import { createRemoteJWKSet, customFetch, decodeProtectedHeader, errors, jwtVeri
 // the hand-rolled verifier this replaced did, and cacheMaxAge is the hour it used. The
 // resolver is kept per JWKS URL.
 
-const KEYS_TTL_MS = 60 * 60 * 1000;
+const KEYS_TTL_MS = HOUR_MS;
 const ALLOWED_ALGORITHMS = ["RS256"];
 const MAX_NAME = 80;
 

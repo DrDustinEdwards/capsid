@@ -2,6 +2,7 @@ import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { noFlags } from "./agents-schema";
 import type { Agent } from "./agents";
 import { bytesToHex } from "./encoding";
+import { HOUR_MS } from "./time";
 
 // THE RUN KEY (the methods paper's protocol, section 4, "The run key"; decided
 // 2026-10-19). Each treatment run gets its own Capsid key, minted by /bench/start for
@@ -15,7 +16,7 @@ import { bytesToHex } from "./encoding";
 
 // A running row older than this no longer holds a slot (src/bench.ts), and its key no
 // longer resolves.
-export const BENCH_STALE_MS = 3 * 60 * 60 * 1000;
+export const BENCH_STALE_MS = 3 * HOUR_MS;
 export const BENCH_NAMESPACE = "bench";
 
 export function newRunKey(): string {
