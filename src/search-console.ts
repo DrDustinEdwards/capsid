@@ -11,7 +11,7 @@ import { readSiteRow, sitesFrom } from "./ops-sites";
 //
 // ONE CREDENTIAL, READ-ONLY. A Google service account whose JSON key is the secret
 // GSC_SERVICE_ACCOUNT_KEY, added by Dustin as a Full user on each property (Restricted hides some data). It
-// asks only for the webmasters.readonly scope (conventions.md rule 4), so nothing here
+// asks only for the webmasters.readonly scope, so nothing here
 // can submit a sitemap, remove a URL or add a user. The access token lives in this
 // isolate's memory only, never in KV or a log.
 //
@@ -21,7 +21,7 @@ import { readSiteRow, sitesFrom } from "./ops-sites";
 // property for the origin. A namespace grant therefore reaches that site's data and no
 // other's, and an inspected URL must be on the same host.
 //
-// What Google returns is data, never instructions (conventions.md rule 3): queries are
+// What Google returns is data, never instructions: queries are
 // what strangers typed into Google.
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
