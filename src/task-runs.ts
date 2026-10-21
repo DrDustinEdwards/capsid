@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { OpsTask, OpsTaskRun, OpsTaskRunOutcome } from "./ops-types/feed";
 import { logEvent } from "./log";
+import { MINUTE_MS, DAY_MS } from "./time";
 
 // The run ledger (migrations/0029_task_runs.sql). Every scheduled task goes through runTask,
 // which writes one task_runs row per run: start, finish, outcome and a one-line
@@ -40,19 +41,19 @@ export type TaskId =
 //   watcher        on the tick, every cadence_min minutes (src/watcher.ts); its
 //                  period is read from the watcher's own snapshot
 export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number | null }> = [
-  { id: "tick", label: "Five-minute tick", period_ms: 5 * 60_000 },
+  { id: "tick", label: "Five-minute tick", period_ms: 5 * MINUTE_MS },
   { id: "watcher", label: "Watcher pass", period_ms: null },
-  { id: "backup", label: "Backup", period_ms: 24 * 3_600_000 },
-  { id: "skills-refresh", label: "Skills refresh", period_ms: 7 * 24 * 3_600_000 },
+  { id: "backup", label: "Backup", period_ms: DAY_MS },
+  { id: "skills-refresh", label: "Skills refresh", period_ms: 7 * DAY_MS },
   { id: "auto-merge", label: "Auto-merge step", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
   { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },
-  { id: "maintenance", label: "Daily maintenance pass", period_ms: 24 * 3_600_000 },
+  { id: "maintenance", label: "Daily maintenance pass", period_ms: DAY_MS },
   // One row per call to a site's operator API (src/site-repair.ts), from the watcher or a
   // person, so its runs come and go with the drift.
   { id: "site-repair", label: "Site repairs", period_ms: null },
   // The public system model (src/public-data.ts), built once a UTC day on the tick.
-  { id: "public-build", label: "Public model build", period_ms: 24 * 3_600_000 },
+  { id: "public-build", label: "Public model build", period_ms: DAY_MS },
   // Phone alerts (src/push.ts), on the tick; recorded only when an alert was due.
   { id: "push", label: "Phone alerts", period_ms: null },
   // The daily email digest (src/digest.ts), on the tick; off until Email Routing is on,
@@ -93,7 +94,7 @@ function oneLine(text: string): string {
 
 /** The insert and a bounded prune, in one batch. */
 export function taskRunStatements(db: D1Database, task: TaskId, started: Date, finished: Date, outcome: OpsTaskRunOutcome, reason: string): D1PreparedStatement[] {
-  const cutoff = new Date(finished.getTime() - RUN_RETENTION_DAYS * 86_400_000).toISOString();
+  const cutoff = new Date(finished.getTime() - RUN_RETENTION_DAYS * DAY_MS).toISOString();
   return [
     db
       .prepare(`INSERT INTO task_runs (task, started_at, finished_at, outcome, reason) VALUES (?1, ?2, ?3, ?4, ?5)`)
@@ -187,7 +188,7 @@ export function taskStates(runs: Map<TaskId, OpsTaskRun[]>, now: Date, watcherCa
   return TASKS.map((t) => {
     const recent = runs.get(t.id) ?? [];
     const last = recent[0] ?? null;
-    const period = t.id === "watcher" ? watcherCadenceMin * 60_000 : t.period_ms;
+    const period = t.id === "watcher" ? watcherCadenceMin * MINUTE_MS : t.period_ms;
     let flag: OpsTask["flag"] = null;
     if (last === null) flag = "never";
     else if (last.outcome === "threw" || last.outcome === "refused") flag = "failing";

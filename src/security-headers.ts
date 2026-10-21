@@ -1,4 +1,5 @@
 import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
+import { MCP_HOST } from "./mcp-host";
 
 export type SurfaceClass = "html" | "json" | "other";
 
@@ -27,7 +28,7 @@ export const REPORT_PATH = "/csp-report";
 // The sink by its full address on the MCP host, which Access does not cover. The Portal's host
 // is behind Access, so a report sent to its own /csp-report met the sign-in redirect and was
 // lost; every host now reports to this one (routes.ts answers the Portal's preflight).
-export const REPORT_URL = "https://mcp.dustinedwards.info/csp-report";
+export const REPORT_URL = `https://${MCP_HOST}${REPORT_PATH}`;
 const REPORTING_ENDPOINTS = `csp="${REPORT_URL}"`;
 // Where CSP reports used to be stored. Nothing writes there; the backup prune
 // (backup.ts) reaps what is left.

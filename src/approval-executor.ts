@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import { HeadMovedError, managePr } from "./github/refs";
 import { systemAudit } from "./doc-statements";
 import type { Classification } from "./merge-class";
+import { DAY_MS } from "./time";
 
 // THE EXECUTOR (docs/design/design-merge-pipeline.md section 4, PR 4; Dustin's DECIDE of
 // 2026-10-09: approvals void on a new push, red CI or 7 days). The auto-merge tick
@@ -21,7 +22,6 @@ import type { Classification } from "./merge-class";
 // (path mutation invariant, test/path-mutation.test.ts), in one batch with its audit row, written as SYSTEM_ACTOR (src/doc-statements.ts) like the tick's own rows.
 
 const APPROVAL_DAYS = 7;
-const DAY_MS = 86_400_000;
 
 export interface OpenApproval {
   id: number;

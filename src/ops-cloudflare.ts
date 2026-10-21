@@ -3,6 +3,7 @@ import type { OpsSite } from "./ops-sites";
 import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types/sites";
 import type { WebAnalyticsSite } from "./ops-types/views";
 import { logEvent } from "./log";
+import { HOUR_MS } from "./time";
 
 // The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
 // (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never
@@ -37,7 +38,6 @@ export const CF_GRAPHQL = `${CF_API}/graphql`;
 const CF_TIMEOUT_MS = 10_000;
 export const DEPLOYS_KEPT = 10;
 const ERROR_HOURS = 24;
-const HOUR_MS = 3_600_000;
 
 // Script names are inlined into the GraphQL query as a list literal, so only a name
 // that cannot break out of a string literal is sent.

@@ -1,4 +1,5 @@
 import type { CacheHint, ServerOptions } from "@modelcontextprotocol/server";
+import { MINUTE_MS } from "./time";
 
 // Cache hints on the cacheable results of MCP 2026-07-28 (ttlMs and cacheScope on
 // tools/list, prompts/list, resources/list, resources/templates/list, resources/read and
@@ -12,7 +13,7 @@ import type { CacheHint, ServerOptions } from "@modelcontextprotocol/server";
 // which describes the server and not the caller. Prompts and resources are filtered by
 // the caller's namespaces, so theirs are "private".
 
-export const LIST_TTL_MS = 60_000;
+export const LIST_TTL_MS = MINUTE_MS;
 
 export const PUBLIC_LIST: CacheHint = { ttlMs: LIST_TTL_MS, cacheScope: "public" };
 export const PRIVATE_LIST: CacheHint = { ttlMs: LIST_TTL_MS, cacheScope: "private" };

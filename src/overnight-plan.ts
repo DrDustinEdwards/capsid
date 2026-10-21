@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import type { DigestBlocked, DigestJob, DigestPr, OvernightDigest, OvernightPlan, PlanLane, SkippedJob, UsageSource, UsageTotals } from "./ops-types/views";
 import { resolveRepo } from "./github/client";
 import { logEvent } from "./log";
+import { HOUR_MS } from "./time";
 
 // THE OVERNIGHT PLAN AND THE MORNING DIGEST (capsid/research/design-automation-for-speed.md,
 // D2, ruled by Dustin 2026-10-04). Both are read-only views through `capsid_work_jobs` action `list`
@@ -334,7 +335,7 @@ export function chooseUsage(telemetry: UsageTotals, reported: UsageTotals | unde
 }
 
 export function digestSinceFrom(since: string | undefined, now: Date): { ok: true; since: string } | { ok: false; refusal: string } {
-  if (since === undefined || since.trim() === "") return { ok: true, since: new Date(now.getTime() - DIGEST_DEFAULT_HOURS * 3_600_000).toISOString() };
+  if (since === undefined || since.trim() === "") return { ok: true, since: new Date(now.getTime() - DIGEST_DEFAULT_HOURS * HOUR_MS).toISOString() };
   const parsed = Date.parse(since);
   if (!/^\d{4}-\d{2}-\d{2}(T|$)/.test(since) || Number.isNaN(parsed)) {
     return { ok: false, refusal: `since must be an ISO 8601 time such as 2026-10-04 or 2026-10-04T22:00:00Z; got '${since}'.` };

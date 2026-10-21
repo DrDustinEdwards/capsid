@@ -8,6 +8,7 @@ import { gatherReleaseItems, githubReleaseReaders, type ReleaseReaders } from ".
 import { gatherModelDriftItems } from "./model-drift";
 import { bundledModel } from "./public-data";
 import { gatherRuleDocItems } from "./rule-docs";
+import { DAY_MS } from "./time";
 
 // The actor the merge-resume step records its touches under. Spelled here, not imported, so this pass does not depend on
 // that step's pull request having landed: until it does, the query finds no rows.
@@ -158,7 +159,7 @@ export async function gatherMaintenance(
   }
 
   // What the merge-resume step did in the last day, so the seat sees it was done for them.
-  const since = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+  const since = new Date(now.getTime() - DAY_MS).toISOString();
   const resumed = await env.DB.prepare(
     `SELECT t.job_id AS job_id, t.namespace AS namespace FROM job_touches t JOIN jobs j ON j.id = t.job_id
       WHERE t.actor = ?1 AND t.kind = 'resume' AND t.at >= ?2 LIMIT ?3`

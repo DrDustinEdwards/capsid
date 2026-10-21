@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { auditStatement } from "./store-guards";
+import { DAY_MS } from "./time";
 
 // The queue's circuit breaker (job_9e602b31888f, OWASP ASI08, cascading failures).
 //
@@ -14,7 +15,7 @@ import { auditStatement } from "./store-guards";
 // refusing, not a driver failing, so neither trips it.
 
 const BREAKER_THRESHOLD_DEFAULT = 3;
-const BREAKER_WINDOW_MS = 24 * 60 * 60 * 1000;
+const BREAKER_WINDOW_MS = DAY_MS;
 export const BREAKER_THRESHOLD_KEY = "jobs:breaker:threshold";
 export const breakerResetKey = (namespace: string) => `jobs:breaker:reset:${namespace}`;
 

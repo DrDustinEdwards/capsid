@@ -3,6 +3,7 @@ import { PR_URL_SOURCE, ghFetch, parsePrUrl, resolveRepo } from "./github/client
 import { prFacts, verifyEvidence } from "./job-outcomes";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "./log";
+import { DAY_MS } from "./time";
 
 // Merge-state re-verification. An outcome row records merge state when `complete`
 // runs, but the seat merges afterwards, so the row would always read "opened, not
@@ -288,7 +289,7 @@ export async function dueForReverify(
   now: Date,
   limit = REVERIFY_PER_SWEEP
 ): Promise<Array<{ job_id: string; pr_url: string; namespace: string }>> {
-  const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * 86_400_000).toISOString();
+  const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * DAY_MS).toISOString();
   // A superseded job is skipped here and in the seed: no work was done on it.
   const rows = await env.DB.prepare(
     `SELECT p.job_id, p.pr_url, o.namespace
@@ -331,7 +332,7 @@ const BACKFILL_ACTOR = "system:outcome-backfill";
  * pull request GitHub will not answer for is re-read each sweep until it leaves the window.
  */
 async function backfillOutcomes(env: Env, now: Date, limit = REVERIFY_PER_SWEEP): Promise<{ backfilled: number; unread: number }> {
-  const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * 86_400_000).toISOString();
+  const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * DAY_MS).toISOString();
   const candidates = await env.DB.prepare(
     `SELECT o.job_id, o.namespace, j.result_ref, o.prs_opened, o.prs_merged, o.commits, o.files_changed, o.ci_green, o.verified
      FROM job_outcomes o JOIN jobs j ON j.id = o.job_id
@@ -381,7 +382,7 @@ async function backfillOutcomes(env: Env, now: Date, limit = REVERIFY_PER_SWEEP)
  * seed reads those. Every seeded URL is verified against GitHub before it is counted.
  */
 export async function reverifySweep(env: Env, now: Date, limit = REVERIFY_PER_SWEEP): Promise<SweepReport> {
-  const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * 86_400_000).toISOString();
+  const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * DAY_MS).toISOString();
   // First, so a row it corrects gets its join rows with merge state before the seed below
   // would give it empty ones.
   const { backfilled } = await backfillOutcomes(env, now, limit);
@@ -419,7 +420,7 @@ export async function reverifySweep(env: Env, now: Date, limit = REVERIFY_PER_SW
 }
 
 const SWEEP_STAMP_KEY = "outcomes:reverify:last";
-const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const SWEEP_INTERVAL_MS = DAY_MS;
 
 /**
  * Run a sweep at most once a day, on the five-minute tick. The merge path already

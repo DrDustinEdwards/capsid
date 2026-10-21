@@ -5,6 +5,7 @@ import { readPrFiles, type PrFileRow } from "./github/pr-files";
 import { logEvent } from "./log";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
+import { DAY_MS } from "./time";
 
 // STALE CANON AFTER A MERGE (Capsid improvement list, item 23: Foxhound's ROUTES.md and
 // DESIGN.md still said the admin reused the app shell after a pull request changed it).
@@ -33,7 +34,7 @@ import type { Finding } from "./watcher-detect";
 
 const STALE_CANON_KEY = "stale-canon:merges";
 const RETAIN_DAYS = 30;
-const RETAIN_MS = RETAIN_DAYS * 24 * 3_600_000;
+const RETAIN_MS = RETAIN_DAYS * DAY_MS;
 // Reads per pass: one pull request list per namespace (at most MAX_NAMESPACES), the
 // files of at most MAX_PR_READS_PER_PASS pull requests, and two D1 reads per namespace
 // with a remembered merge. A burst of merges is caught up over the next passes.

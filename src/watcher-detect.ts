@@ -6,6 +6,7 @@ import type { LiveFinding } from "./live-checks";
 import { externalFence } from "./provenance";
 import type { StatusReport } from "./status";
 import { type RepoMapRead, unmappedRepos } from "./unmapped-repos";
+import { MINUTE_MS, HOUR_MS } from "./time";
 
 // What the watcher finds (src/watcher.ts runs the pass, src/watcher-gather.ts reads):
 // pure functions from what was read to findings, with no IO.
@@ -98,7 +99,7 @@ export function deployVerdict(runs: readonly HeadRun[] | null, now: Date): Deplo
   if (run.conclusion !== "success") return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run ended ${run.conclusion ?? "with no conclusion"}` };
   const finished = run.updated_at ? Date.parse(run.updated_at) : Number.NaN;
   if (Number.isNaN(finished)) return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run succeeded at an unknown time` };
-  const minutes = (now.getTime() - finished) / 60_000;
+  const minutes = (now.getTime() - finished) / MINUTE_MS;
   if (minutes < DEPLOY_SETTLE_MINUTES) {
     return { wait: true, reason: `master head's ${MASTER_CI_WORKFLOW} run succeeded ${Math.floor(minutes)} minutes ago, inside the ${DEPLOY_SETTLE_MINUTES} minute settle` };
   }
@@ -232,7 +233,7 @@ export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding
   if (latest.conclusion === "success" || latest.conclusion === "skipped" || latest.conclusion === "neutral") return [];
   const since = Date.parse(latest.created_at);
   if (Number.isNaN(since)) return [];
-  const hours = (now.getTime() - since) / 3_600_000;
+  const hours = (now.getTime() - since) / HOUR_MS;
   if (hours < CI_RED_HOURS) return [];
   return [
     finding(namespace, `ci-red-${namespace}`, `${namespace} CI is red on its default branch`, [
@@ -312,7 +313,7 @@ export function mirrorFindings(
     ];
   }
 
-  const hours = (now.getTime() - newest.getTime()) / 3_600_000;
+  const hours = (now.getTime() - newest.getTime()) / HOUR_MS;
   if (hours < MIRROR_STALE_HOURS) return [];
 
   const age = `newest dump: ${newest.toISOString()} (${hours.toFixed(1)} hours old, the window is ${MIRROR_STALE_HOURS})`;

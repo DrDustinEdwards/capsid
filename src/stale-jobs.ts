@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { MERGE_RESUME_ACTOR } from "./jobs-seat";
 import type { OpsStaleJob, StaleRule } from "./ops-types/views";
 import { readStepCache, stepsSeen, type StaleStepEntry } from "./manual-steps";
+import { HOUR_MS, DAY_MS } from "./time";
 
 // The stale view (capsid/research/design-stale-jobs.md, D5): `capsid_work_jobs` action list with
 // stale: true. Four rules, each a fact the Worker already holds, so reading the view
@@ -15,8 +16,8 @@ import { readStepCache, stepsSeen, type StaleStepEntry } from "./manual-steps";
 //     read from the cache that pass writes (src/manual-steps.ts).
 // Nothing here closes or moves a job; the view only says why a job looks stuck.
 
-export const STALE_UNCHANGED_MS = 3 * 24 * 60 * 60 * 1000;
-export const STALE_RESUMED_MS = 24 * 60 * 60 * 1000;
+export const STALE_UNCHANGED_MS = 3 * DAY_MS;
+export const STALE_RESUMED_MS = DAY_MS;
 const STALE_ROWS_MAX = 200;
 
 // One KV value (APP_KV) holding, per blocked job, the states of the pull requests it
@@ -132,7 +133,7 @@ export function classifyStale(
   if (job.auto_resumed_at && ["blocked", "claimed", "queued"].includes(job.status)) {
     const since = Date.parse(job.auto_resumed_at);
     if (Number.isFinite(since) && nowMs - since >= STALE_RESUMED_MS) {
-      const hours = Math.floor((nowMs - since) / (60 * 60 * 1000));
+      const hours = Math.floor((nowMs - since) / HOUR_MS);
       return {
         rule: "resumed-not-completed",
         reason: `auto-resumed by ${MERGE_RESUME_ACTOR} at ${job.auto_resumed_at} and still ${job.status} ${plural(hours, "hour")} later`,
@@ -142,7 +143,7 @@ export function classifyStale(
   if (job.status === "blocked" || job.status === "claimed") {
     const since = Date.parse(job.updated_at);
     if (Number.isFinite(since) && nowMs - since >= STALE_UNCHANGED_MS) {
-      const days = Math.floor((nowMs - since) / (24 * 60 * 60 * 1000));
+      const days = Math.floor((nowMs - since) / DAY_MS);
       return { rule: "unchanged", reason: `${job.status} and unchanged since ${job.updated_at} (${plural(days, "day")})` };
     }
   }

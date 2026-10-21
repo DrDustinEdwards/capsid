@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { ciStatus } from "./github";
 import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import type { JobRow } from "./jobs-schema";
+import { MINUTE_MS } from "./time";
 
 // One outcome row per finished job, written once, carrying counts.
 //
@@ -161,7 +162,7 @@ export function durationMinutes(claimedAt: string | null, now: Date): number | n
   if (!Number.isFinite(started)) return null;
   const elapsed = now.getTime() - started;
   if (elapsed < 0) return null;
-  return Math.round(elapsed / 60000);
+  return Math.round(elapsed / MINUTE_MS);
 }
 
 interface PrFacts {

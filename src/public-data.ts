@@ -5,6 +5,7 @@ import { callerIp, checkRate, rateLimitedResponse, type RateLimitPolicy } from "
 import { parseSystemModel, toPublic, type SystemModel } from "./system-model";
 import { readStatsRows, summarize, type StatsRows } from "./public-stats";
 import { buildPublicCode, readCodeMap } from "./public-code";
+import { HOUR_MS } from "./time";
 
 // The public data build (design capsid/research/design-system-explorer.md, section 2;
 // docs/public-data.md). Once a UTC day the tick reads every repo's visibility from
@@ -24,7 +25,7 @@ export const PUBLIC_CODE_KEY = "public:code:v1";
 export const PUBLIC_BUILD_LAST_KEY = "public:model:last";
 const PUBLIC_CODE_LAST_KEY = "public:code:last";
 // A repo publishes a new code map after each push, so the code document is rebuilt hourly, not daily.
-const CODE_REFRESH_MS = 3_600_000;
+const CODE_REFRESH_MS = HOUR_MS;
 const CACHE_SECONDS = 3600;
 
 // Fail closed: an unreadable counter refuses rather than serve without a limit. The

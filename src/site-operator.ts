@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import type { SiteOperator } from "./ops-types/sites";
+import { MINUTE_MS } from "./time";
 
 // A SITE'S OPERATOR API (job_09e5f6cbf782, Dustin 2026-10-03). Capsid is the operations
 // hub and may trigger an allowlist of a site's own repair tools, so the repairs, the
@@ -123,7 +124,7 @@ export interface OperatorCall {
   error: string | null;
 }
 
-const CALL_TIMEOUT_MS = 60_000;
+const CALL_TIMEOUT_MS = MINUTE_MS;
 const ERROR_MAX = 300;
 
 /** One allowlisted call: POST {tool, args: {}} to the site's operator route with the

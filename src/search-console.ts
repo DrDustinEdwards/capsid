@@ -2,6 +2,7 @@ import { importPKCS8, SignJWT } from "jose";
 import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
 import { readSiteRow, sitesFrom } from "./ops-sites";
+import { MINUTE_MS, DAY_MS } from "./time";
 
 // Google Search Console for a namespace's site, served as capsid_inspect_repo action
 // search (Dustin, 2026-10-18: Search Console tools system wide, in Capsid). Three
@@ -87,7 +88,7 @@ export function resetSearchConsoleToken(): void {
 
 async function accessToken(key: ServiceAccountKey, fetchImpl: FetchLike, now: Date): Promise<string> {
   const nowMs = now.getTime();
-  if (cachedToken && cachedToken.email === key.client_email && cachedToken.expiresAt - 60_000 > nowMs) return cachedToken.token;
+  if (cachedToken && cachedToken.email === key.client_email && cachedToken.expiresAt - MINUTE_MS > nowMs) return cachedToken.token;
   const iat = Math.floor(nowMs / 1000);
   const assertion = await new SignJWT({ scope: SCOPE })
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
@@ -152,7 +153,7 @@ function isoDay(d: Date): string {
 }
 
 function addDays(d: Date, days: number): Date {
-  return new Date(d.getTime() + days * 86_400_000);
+  return new Date(d.getTime() + days * DAY_MS);
 }
 
 export function dateWindow(args: Pick<SearchConsoleArgs, "start_date" | "end_date">, now: Date): { start: string; end: string } {
@@ -162,7 +163,7 @@ export function dateWindow(args: Pick<SearchConsoleArgs, "start_date" | "end_dat
   const end = args.end_date ?? isoDay(addDays(now, -DEFAULT_LAG_DAYS));
   const start = args.start_date ?? isoDay(addDays(new Date(`${end}T00:00:00Z`), -(DEFAULT_WINDOW_DAYS - 1)));
   if (start > end) throw new Error(`start_date ${start} is after end_date ${end}.`);
-  const span = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000;
+  const span = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / DAY_MS;
   if (span > MAX_WINDOW_DAYS) throw new Error(`The window is ${span + 1} days; Search Console keeps about 16 months, so ask for ${MAX_WINDOW_DAYS + 1} days or fewer.`);
   return { start, end };
 }

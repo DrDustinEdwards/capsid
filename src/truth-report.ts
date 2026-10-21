@@ -1,4 +1,5 @@
 import { ruleDocCap, ruleDocProblem, staleSummary, type RuleDocProblem } from "./rule-docs";
+import { DAY_MS } from "./time";
 interface TruthFinding {
   // What was checked, and what did not pass.
   check: string;
@@ -111,7 +112,7 @@ export function isUnscanned(path: string): boolean {
 }
 
 function daysBetween(a: Date, b: Date): number {
-  return Math.abs(a.getTime() - b.getTime()) / 86_400_000;
+  return Math.abs(a.getTime() - b.getTime()) / DAY_MS;
 }
 
 function parseStamp(value: string): Date | null {

@@ -19,6 +19,7 @@ import { defineControlOperations } from "./tools/controls";
 import { defineAdminOperations } from "./tools/admin";
 import { Operations } from "./tools/operations";
 import { registerCapsidAdminTools, registerCapsidTools } from "./tools/surface";
+import { HOUR_MS } from "./time";
 
 export type { ToolGrant };
 
@@ -26,7 +27,7 @@ const SERVER_INFO = { name: "capsid", version: "1.0.0" };
 const ADMIN_SERVER_INFO = { name: "capsid-admin", version: "1.0.0" };
 
 // Warn, never refuse, when overwriting a document touched in the last hour without if_match.
-const CONCURRENT_EDIT_WINDOW_MS = 60 * 60 * 1000;
+const CONCURRENT_EDIT_WINDOW_MS = HOUR_MS;
 
 export function concurrentEditWarning(updatedAt: string | null | undefined, now: number): string | null {
   if (!updatedAt) return null;

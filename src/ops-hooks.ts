@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { readBoundedText } from "./signed-requests";
 import { resolveSessionCaller } from "./ops-session-auth";
 import { textResponse } from "./http";
+import { MINUTE_MS, DAY_MS } from "./time";
 
 // The hook receiver: POST /ops/hooks. Claude Code's HTTP hooks post each event's input
 // JSON here (docs/hooks.md), and this keeps a SUMMARY of each session in agent_sessions
@@ -74,7 +75,7 @@ export const INCIDENT_FAILURES: readonly string[] = [
   "oauth_org_not_allowed",
 ];
 // A session waiting on a person for longer than this is an incident too.
-export const NEEDS_INPUT_INCIDENT_MS = 10 * 60_000;
+export const NEEDS_INPUT_INCIDENT_MS = 10 * MINUTE_MS;
 
 // A type word: notification_type, StopFailure's error, a source or a reason. Claude
 // Code's values are all lowercase snake case; one that is not is stored as null.
@@ -244,7 +245,7 @@ export interface HookBinding {
  *  waiting or ended. */
 export function hookStatements(db: D1Database, actor: string, binding: HookBinding | null, hook: ParsedHook, now: Date): D1PreparedStatement[] {
   const at = now.toISOString();
-  const cutoff = new Date(now.getTime() - EVENT_RETENTION_DAYS * 86_400_000).toISOString();
+  const cutoff = new Date(now.getTime() - EVENT_RETENTION_DAYS * DAY_MS).toISOString();
   return [
     db
       .prepare(

@@ -1,4 +1,5 @@
 import type { Finding } from "./watcher-detect";
+import { DAY_MS } from "./time";
 
 // DOMAIN REGISTRATION EXPIRY, BY RDAP (job_5ac1139641e0, design-portal-insight.md section 5,
 // pulled forward by Dustin on 2026-10-07: dustinedwards.info expires 2026-12-27, and
@@ -25,7 +26,6 @@ export const expiryKey = (domain: string) => `rdap:expiry:v1:${domain}`;
 const EXPIRY_TTL_SECONDS = 86_400;
 const EARLY_DAYS = 30;
 const LATE_DAYS = 7;
-const DAY_MS = 86_400_000;
 const FETCH_TIMEOUT_MS = 8000;
 
 // Suffixes a site may sit under that are a host's, not a registration of ours.
