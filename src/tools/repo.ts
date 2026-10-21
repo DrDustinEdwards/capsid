@@ -65,6 +65,20 @@ function headMovedRefusal(number: number) {
   };
 }
 
+// The two arguments write_repo_file and delete_repo_file share.
+const allowWorkflowWrite = z
+  .boolean()
+  .optional()
+  .describe("Opt in to writing under .github/workflows/, which is refused without it. Needs the can_write_workflows flag; audit-logged.");
+const prOnBranch = z
+  .number()
+  .int()
+  .positive()
+  .optional()
+  .describe(
+    "The number of branch's open pull request, required when branch has one; the commit then lands on it. Refused if it is not that branch's open pull request."
+  );
+
 export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
   const { guardedRead, guardedWrite } = repoGuards(ctx);
@@ -156,20 +170,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
         mode: z.enum(["pr", "direct"]).optional(),
         branch: bounded(MAX_REF).optional(),
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
-        allow_workflow_write: z
-          .boolean()
-          .optional()
-          .describe(
-            "Opt in to writing under .github/workflows/, which is refused without it. Needs the can_write_workflows flag; audit-logged."
-          ),
-        pr: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe(
-            "The number of branch's open pull request, required when branch has one; the commit then lands on it. Refused if it is not that branch's open pull request."
-          ),
+        allow_workflow_write: allowWorkflowWrite,
+        pr: prOnBranch,
       },
     },
     ({ namespace, path, content, message, mode, branch, repo, allow_workflow_write, pr }) =>
@@ -221,20 +223,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
         mode: z.enum(["pr", "direct"]).optional(),
         branch: bounded(MAX_REF).optional(),
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
-        allow_workflow_write: z
-          .boolean()
-          .optional()
-          .describe(
-            "Opt in to writing under .github/workflows/, which is refused without it. Needs the can_write_workflows flag; audit-logged."
-          ),
-        pr: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe(
-            "The number of branch's open pull request, required when branch has one; the commit then lands on it. Refused if it is not that branch's open pull request."
-          ),
+        allow_workflow_write: allowWorkflowWrite,
+        pr: prOnBranch,
       },
     },
     ({ namespace, path, message, mode, branch, repo, allow_workflow_write, pr }) =>
