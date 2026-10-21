@@ -6,7 +6,7 @@ import { defaultScopes, type AgentGrant } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// JOBS.LIST RETURNED EVERY SIGNED BODY (AUDIT-2026-09-16.md).
+// JOBS.LIST RETURNED EVERY SIGNED BODY (2026-09-16 source audit).
 //
 // A job body is the executable prompt a driver runs with shell and repo credentials.
 // list was SELECT * and returned rows whole, so any caller holding READ on a namespace

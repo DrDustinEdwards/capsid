@@ -66,13 +66,10 @@ test("the restore runbook applies EVERY migration, derived from the directory", 
   }
 });
 
-test("the restore runbook names the two dump sidecars", () => {
-  // The dump carries the KV pins and the holdout manifests. A restore that
-  // rebuilds D1 and stops leaves the improve loop with no mode, no
-  // anchor pins and no manifests, which is a loop that refuses every run.
+test("the restore runbook names the KV pins sidecar", () => {
+  // A restore that rebuilds D1 and stops leaves the KV pins behind.
   const restore = restoreRunbook();
   assert.match(restore, /_kv\.json/, "the runbook does not mention the KV pins sidecar");
-  assert.match(restore, /_holdout-manifests\.json/, "the runbook does not mention the holdout manifests sidecar");
 });
 
 test("the README links every document under docs/", () => {

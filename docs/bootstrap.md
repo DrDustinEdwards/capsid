@@ -28,7 +28,6 @@ The two KV namespaces are separate. They shared one for a while,
 which meant the Worker's caches lived in the same keyspace as the provider's
 tokens.
 
-The improve loop's `HOLDOUT` bucket went with the loop (removed 2026-10-19), so
 `MEDIA` is the one bucket.
 
 Resolve by name, verify by id. Assert the resolved id equals a pinned value
@@ -355,14 +354,12 @@ the work needs. The claim refuses a driver that does not hold those flags and
 leaves the job queued for one that does, so the mismatch surfaces at the claim
 rather than after a driver has already taken it.
 
-## 9. The improve loop (removed)
+## 9. Names kept from the removed improve loop
 
-The nightly improve loop, its scorer, holdout suites and switches were removed on
-2026-10-19. Two tools keep the loop's names so agents' tool lists did not change:
 `capsid_run_improve` serves only action `status`, a read-grant read of Capsid's state,
 and `capsid_admin_control_improve` holds the admin's switches (`mint_operator_key`,
-`sign_policy`, `breaker_reset` and `overnight`). `IMPROVE_SCORE_SECRET` keeps its name
-too; it is the root the job, policy and backup credential keys are derived from.
+`sign_policy`, `breaker_reset` and `overnight`). `IMPROVE_SCORE_SECRET` is the root the
+job, policy and backup credential keys are derived from.
 
 ## 10. A fresh install, step by step
 

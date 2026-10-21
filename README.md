@@ -106,8 +106,6 @@ You need a Cloudflare account and a GitHub App. [docs/bootstrap.md](docs/bootstr
 - [docs/backups.md](docs/backups.md) what the daily backup holds and how to restore it
 - [docs/rollback.md](docs/rollback.md) going back to the previous version after a bad deploy
 
-A source audit from 2026-09-16 is in [AUDIT-2026-09-16.md](AUDIT-2026-09-16.md). It is a snapshot, not current.
-
 ## Licence
 
-MIT ([LICENSE](LICENSE)). Built and maintained by one person, Dustin Edwards, for his own use. No support is offered. The repository was named `capsid-mcp` until 2026-09-12.
+MIT ([LICENSE](LICENSE)). Built and maintained by one person, Dustin Edwards, for his own use. No support is offered.
