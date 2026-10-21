@@ -141,7 +141,7 @@ The minted roles each hold at most one blast-radius flag, and `test/roles.test.t
 
 ## Audits
 
-Independent audits of this surface produced these fixes, now in the code: path traversal closed on every document path, OAuth consent bound to the exact redirect it was granted for, protected paths enforced by a deterministic guard, an Origin allowlist on the browser-facing routes, and a replay cache keyed by a database primary key rather than a read-then-write. Two further audits on 2026-09-13, one on the source and one on the test suite, closed four more criticals, each one a check a call path did not reach rather than a rule nobody had written. Each fix ships with a test observed failing against the code it replaced. Private audits live in Capsid. A 2026-09-16 source audit of this Worker is `AUDIT-2026-09-16.md` at the repo root; it is a snapshot, not canon.
+Independent audits of this surface produced these fixes, now in the code: path traversal closed on every document path, OAuth consent bound to the exact redirect it was granted for, protected paths enforced by a deterministic guard, an Origin allowlist on the browser-facing routes, and a replay cache keyed by a database primary key rather than a read-then-write. Each fix ships with a test observed failing against the code it replaced. Private audits live in Capsid.
 
 ## Endpoints
 
@@ -166,7 +166,7 @@ Agents and operators (`/ops/`):
 - `POST /ops/access-sync` an app's members page makes its Cloudflare Access group hold exactly its current members, with the app's own key and the write grant on its namespace. The group is the one the seat pinned for that namespace in `access_sync_groups`, its name checked before every write; removed people's Zero Trust seats are freed, only for people the group held before the write; every call is audited. Capsid holds the only write token, `CF_ACCESS_SYNC_TOKEN` (docs/portal.md)
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 
-Backups and the paired comparison (signed, no bearer; the improve loop's `/improve/score` and `/improve/holdout-credential` were removed 2026-10-19):
+Backups and the paired comparison (signed, no bearer):
 
 - `POST /backup/credential` mints the credential the off-account backup writes with
 - `POST /bench/tasks`, `POST /bench/start`, `POST /bench/score` the capsid-bench repo registers a task, opens a run and reports its result, signed with the bench key; a run starts only while KV `bench:enabled` reads `on` (docs/bench.md)

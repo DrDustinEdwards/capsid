@@ -140,8 +140,7 @@ It also refuses while live documents exist and `cascade` is not true, and while 
 namespace holds signed policy documents (under `policy/`, counted as
 `policy_documents` and listed as `policy_paths`) and `allow_improve_paths` is not
 true. `allow_improve_paths` needs the `can_touch_protected` flag, as it does on a
-document delete. The argument keeps the improve loop's name; since the loop was
-removed (2026-10-19) it covers only the signed policy documents.
+document delete. Despite its name, it covers only the signed policy documents.
 
 What the batch deletes: every live document (every path outside `archive/`), each
 snapshotted to `document_versions` first and then removed by the same path helper a
@@ -473,16 +472,11 @@ than the head commit's committer date because whoever commits sets that date. A
 
 ## Skill records
 
-The stored-skill lifecycle (candidate, live and retired skills, their evaluations,
-bounded edits and attribution) was removed with the improve loop on 2026-10-19. Its
-tables, `improve_skills`, `skill_evaluations`, `skill_edits` and `skill_failures`
-(migrations 0003, 0012 and 0013), and the loop's own `improve_runs`, `improve_attempts`
-and `improve_scores`, were dropped by `migrations/0048_drop_improve_loop.sql` (Dustin,
-2026-10-19); their two remaining rows were exported first, and earlier nightly dumps
-still hold them. `improve_jti` was kept: it is the replay table for the bench and the
-backup credential. The `skill_ids_offered` and `skill_ids_used` columns on
-`job_outcomes` (migration 0013) stay too, unused, with their old values. Skills as
-`SKILL.md` guidance in each repo are separate and stay: the weekly skills refresh
+No skill table is live: `migrations/0048_drop_improve_loop.sql` dropped them with the
+improve loop's own tables, and older nightly dumps still hold their rows. `improve_jti`
+stays as the replay table for the bench and the backup credential, and the
+`skill_ids_offered` and `skill_ids_used` columns on `job_outcomes` stay unused. Skills as
+`SKILL.md` guidance in each repo are separate: the weekly skills refresh
 (`src/skills-refresh.ts`) posts a job in `claude-skills` when a model's prompting guide
 has moved.
 

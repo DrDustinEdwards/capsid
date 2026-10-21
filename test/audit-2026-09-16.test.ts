@@ -11,7 +11,7 @@ import { buildTruthReport, INTEGRITY_LINE, integrityOf, renderTruthReport, repor
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
-// Small defects from AUDIT-2026-09-16.md, one plant each, kept so a fixed defect
+// Small defects from the 2026-09-16 source audit, one plant each, kept so a fixed defect
 // cannot return unnoticed when its file is rewritten. The CSP rate-limit defect is
 // planted in test/csp-rate-limit.test.ts, beside the fail-open tests it reverses.
 
