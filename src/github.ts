@@ -16,10 +16,10 @@ export {
   readRepoFile,
   readRepoFiles,
   repoBlobPaths,
-  searchCode,
   workflowWriteRefusal,
   writeRepoFile,
 } from "./github/contents";
+export { searchCode } from "./github/search";
 export {
   REPO_HISTORY_DEFAULT_LIMIT,
   REPO_HISTORY_MAX_LIMIT,
@@ -32,11 +32,5 @@ export {
   repoRefs,
 } from "./github/refs";
 export { pruneMergedBranches, pruneVerdict } from "./github/prune";
-export {
-  CI_DISPATCH_POLL_INTERVAL_MS,
-  CI_DISPATCH_POLL_MS,
-  CI_JOBS_MAX,
-  CI_LOG_BUDGET,
-  ciDispatch,
-  ciStatus,
-} from "./github/actions";
+export { CI_JOBS_MAX, CI_LOG_BUDGET, ciStatus } from "./github/actions";
+export { CI_DISPATCH_POLL_INTERVAL_MS, CI_DISPATCH_POLL_MS, ciDispatch } from "./github/dispatch";

@@ -5,12 +5,14 @@ import {
   fingerprintDifference,
   NAMESPACE_DELETE_MAX_DOCUMENTS,
   planFingerprint,
-  signDeleteToken,
-  verifyDeleteToken,
-  type DeleteClaims,
   type DeletePlan,
   type PlanCounts,
 } from "../src/namespace-delete.ts";
+import {
+  signDeleteToken,
+  verifyDeleteToken,
+  type DeleteClaims
+} from "../src/namespace-delete-token.ts";
 import { D1_BATCH_STATEMENTS } from "../src/limits.ts";
 import { actionArgFor, defaultActionFor, requiredGrant } from "../src/scope.ts";
 import { hintsFor } from "../src/tool-annotations.ts";

@@ -4,7 +4,8 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import type { Env } from "../src/env";
-import { NAMESPACE_DELETE_MAX_DOCUMENTS, planFingerprint, readDeletePlan, signDeleteToken } from "../src/namespace-delete";
+import { NAMESPACE_DELETE_MAX_DOCUMENTS, planFingerprint, readDeletePlan } from "../src/namespace-delete";
+import { signDeleteToken } from "../src/namespace-delete-token";
 import { buildAdminServer, buildServer } from "../src/server";
 
 // capsid_admin_manage_namespaces delete_preview and delete_perform (Capsid Admin)
