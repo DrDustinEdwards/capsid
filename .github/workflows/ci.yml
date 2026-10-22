@@ -80,6 +80,13 @@ jobs:
           npm ci
           npm ci --prefix dashboard
 
+      # A high advisory in what the Worker or the app ships fails the run (Grok audit
+      # 2026-10-21, CA-12). Dev-only advisories are Renovate's.
+      - name: No high advisory in the shipped dependencies
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm audit --omit=dev --audit-level=high --prefix dashboard
+
       # FIVE TYPECHECKS IN ONE STEP. Each config stays separate, and every one runs even
       # when an earlier one fails, so one red run reports all of them.
       #

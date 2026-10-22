@@ -119,6 +119,17 @@ test("PLANT: prompts/list shows only the caller's namespaces", async () => {
   assert.deepEqual(names.filter((n) => n.startsWith("foxhound/")), [], "another namespace's prompts were listed");
 });
 
+test("PLANT: a caller narrowed away from capsid_read_doc lists no resources and no prompts", async () => {
+  // The read handlers ask checkScope as capsid_read_doc; the lists must ask the same, or a
+  // narrowed key (a bench run key, a jobs-only driver) enumerates paths and prompt names.
+  const narrowed = driver();
+  narrowed.scopes.tools = ["capsid_work_jobs"];
+  const { client, close } = await connect(narrowed);
+  await assert.rejects(client.listResources(), /capsid_read_doc/);
+  await assert.rejects(client.listPrompts(), /capsid_read_doc/);
+  await close();
+});
+
 // the mapping is the boundary, so it is not handed out
 
 test("PLANT: `capsid_find_docs` action `namespaces` shows a scoped caller only its own row", async () => {

@@ -23,6 +23,10 @@ const PROTECTED_PATH_PATTERNS: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /(^|\/)Cargo\.lock$/i, why: "the cargo lockfile" },
   { pattern: /(^|\/)go\.sum$/i, why: "the go module checksums" },
   { pattern: /(^|\/)(poetry|uv)\.lock$/i, why: "a python lockfile" },
+  // The other ecosystems' lockfiles and task runners (Grok audit 2026-10-21, CA-11).
+  { pattern: /(^|\/)(Pipfile\.lock|requirements[^/]*\.txt)$/i, why: "a python lockfile" },
+  { pattern: /(^|\/)(Gemfile\.lock|composer\.lock|flake\.lock|Package\.resolved|gradle\.lockfile)$/i, why: "a lockfile" },
+  { pattern: /(^|\/)(justfile|Taskfile\.ya?ml)$/i, why: "build glue CI executes" },
   { pattern: /(^|\/)\.gitmodules$/i, why: "submodules the checkout would fetch and run" },
   { pattern: /(^|\/)tsconfig[^/]*\.json$/i, why: "compiler configuration" },
   { pattern: /\.(config|conf)\.[cm]?[jt]s$/i, why: "a config file" },

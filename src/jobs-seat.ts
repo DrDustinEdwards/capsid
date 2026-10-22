@@ -209,7 +209,10 @@ export async function recordAsCaller(env: Env, agent: Agent, now: Date, id: stri
 // What a claim would have asked of the caller is asked here, since no claim was made: the
 // job's required_flags and min_record. Every named pull request must be on one of the
 // namespace's repos, and at least one must be named, because without one nothing a
-// reviewer or auto-merge can read ties the work to the job.
+// reviewer or auto-merge can read ties the work to the job. And at least one named pull
+// request's body must name this job id, as auto-merge's body_names_job asks: otherwise any
+// pull request on a mapped repo would close any queued job (Grok audit 2026-10-21, CA-3).
+// GitHub unreachable refuses, since nothing then shows the pull request is this job's.
 async function completeUnclaimed(env: Env, agent: Agent, now: Date, current: JobRow, args: Parameters<typeof completeJob>[4]): Promise<JobResult> {
   const id = current.id;
   const outside = outsideJobNamespace(agent, current.namespace);
@@ -222,18 +225,39 @@ async function completeUnclaimed(env: Env, agent: Agent, now: Date, current: Job
       `${id} is queued and nobody holds it. A job worked without a claim is completed by naming its pull request (a pull request URL in result_ref or evidence.prs): the pull request is the claim. Nothing was written.`
     );
   }
+  let named = false;
   for (const { ref, pr } of prs) {
+    let mapped: { owner: string; repo: string };
     try {
-      await resolveRepo(env, current.namespace, `${pr.owner}/${pr.repo}`);
+      mapped = await resolveRepo(env, current.namespace, `${pr.owner}/${pr.repo}`);
     } catch {
       return refuse("complete", `${ref} is not on a repo mapped to ${current.namespace}, so it is not shown to be ${id}'s work. Nothing was written.`);
     }
+    if (!named) named = await prBodyNames(env, mapped.owner, mapped.repo, pr.number, id);
+  }
+  if (!named) {
+    return refuse(
+      "complete",
+      `none of the named pull requests has ${id} in its description (or GitHub could not be read), so none is shown to be this job's work. Put the job id in the pull request body and complete again. Nothing was written.`
+    );
   }
   const missing = missingForJob(agent, current.namespace, current.required_scopes);
   if (missing) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}') without a claim: ${missing} A claim would have refused it too. Nothing was written.`);
   const shortfall = await recordShortfall(env.DB, agent.actor, current);
   if (shortfall) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}') without a claim: ${shortfall} A claim would have refused it too. Nothing was written.`);
   return completeWithoutClaim(env, agent, now, id, args);
+}
+
+// Whether the pull request's body names the job id. A failed read is false.
+async function prBodyNames(env: Env, owner: string, repo: string, number: number, id: string): Promise<boolean> {
+  try {
+    const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}`);
+    if (!resp.ok) return false;
+    const body = ((await resp.json()) as { body?: string | null }).body ?? "";
+    return new RegExp(`\\b${id}\\b`).test(body);
+  } catch {
+    return false;
+  }
 }
 
 // complete through the capsid_work_jobs tool. The holder completing its own job is an ordinary

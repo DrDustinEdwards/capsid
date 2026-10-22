@@ -168,6 +168,12 @@ describe("the seat completes a blocked job it does not hold", () => {
     // with its pull request is closed without a claim and credits the caller, with no
     // admin_complete touch.
     const queued = await post("queued");
+    // The claimless close reads the pull request's body, which must name the job.
+    stubGitHub((url) =>
+      url.includes("/pulls/3")
+        ? Response.json({ merged: true, commits: 2, changed_files: 3, head: { sha: SHA }, node_id: "PR_node_3", created_at: "2026-10-06T10:00:00Z", body: `Closes ${queued}.` })
+        : null
+    );
     const refusedQueued = await completeAsCaller(jobsEnv(), SEAT, LATER, queued, { result_summary: "x" });
     expect(refusedQueued.ok).toBe(false);
     expect(refusedQueued.refusal).toMatch(/is queued and nobody holds it/);

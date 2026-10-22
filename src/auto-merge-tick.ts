@@ -333,12 +333,15 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     try {
       ({ owner, repo } = await resolveRepo(env, namespace));
       defaultBranch = await getDefaultBranch(env, owner, repo);
-      const listed = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=open&per_page=100`);
-      if (!listed.ok) {
-        logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not list PRs on ${owner}/${repo} (${listed.status})` });
+      // Every page, so a PR past the first hundred is judged and stays in the seat's
+      // queue. A list that cannot be read whole skips the namespace (Grok audit
+      // 2026-10-21, CA-15).
+      const listedPrs = await listOpenPrs(env, owner, repo);
+      if (typeof listedPrs === "string") {
+        logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not list PRs on ${owner}/${repo} (${listedPrs})` });
         continue;
       }
-      prs = (await listed.json()) as OpenPr[];
+      prs = listedPrs;
       try {
         approvals = await readOpenApprovals(env.DB, `${owner}/${repo}`);
       } catch (err) {
@@ -453,6 +456,21 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   };
 }
 
+const OPEN_PR_PAGES = 10;
+
+/** Every open PR on the repo, page by page until a short page, or why the list is not whole. */
+async function listOpenPrs(env: Env, owner: string, repo: string): Promise<OpenPr[] | string> {
+  const all: OpenPr[] = [];
+  for (let page = 1; page <= OPEN_PR_PAGES; page++) {
+    const listed = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=open&per_page=100&page=${page}`);
+    if (!listed.ok) return String(listed.status);
+    const batch = (await listed.json()) as OpenPr[];
+    all.push(...batch);
+    if (batch.length < 100) return all;
+  }
+  return `more than ${OPEN_PR_PAGES * 100} open PRs`;
+}
+
 /** Judge one PR that names a job, merge it when the policy passes, and audit either way.
  *  Pushes exactly one outcome, before its audit row, so a caller can tell a PR that was
  *  judged from one that threw first. */
@@ -515,7 +533,9 @@ async function judgeOnePr(
   // The executor (docs/design/design-merge-pipeline.md section 4): a pull request the
   // policy leaves open but Dustin approved merges here once CI is green on the approved
   // sha, or its approval is voided, expired or refused, and the PR is judged as before.
-  if (!merges && approval) {
+  // Not for a draft: GitHub refuses to merge one, and the hold below says why (Grok audit
+  // 2026-10-21, CA-16).
+  if (!merges && approval && pr.draft !== true) {
     const done = await executeApproval(env, namespace, facts, merge_class, approval, now);
     if (done.done === "merged") {
       outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: done.why, passed: verdict.passed, merge_class });
@@ -572,12 +592,21 @@ async function judgeOnePr(
   outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: null, passed: verdict.passed, merge_class });
   // Merged by the policy on its own: an approval it held has nothing left to do.
   if (approval) await closeAsAutoMerged(env, namespace, facts, approval, (result as { sha?: string }).sha ?? null, now);
-  await env.DB.batch([
-    systemAudit(
-      env.DB,
-      "auto-merged",
-      namespace,
-      mergeParams(policyVersion, facts, verdict.passed, (result as { sha?: string }).sha ?? null, now, merge_class.path_class)
-    ),
-  ]);
+  // The merge has landed, and the tick's catch does not retry a PR whose outcome is pushed,
+  // so the row the safety meter and the merge units read is tried a second time before the
+  // failure is left to that catch (Grok audit 2026-10-21, CA-18).
+  const writeMerged = () =>
+    env.DB.batch([
+      systemAudit(
+        env.DB,
+        "auto-merged",
+        namespace,
+        mergeParams(policyVersion, facts, verdict.passed, (result as { sha?: string }).sha ?? null, now, merge_class.path_class)
+      ),
+    ]);
+  try {
+    await writeMerged();
+  } catch {
+    await writeMerged();
+  }
 }

@@ -29,7 +29,11 @@ const EXECUTED_AT_INSTALL = [
 
 // Other toolchains' lockfiles, and the briefing other agents read beside CLAUDE.md
 // (Grok audit 2026-10, U5).
-const OTHER_TOOLCHAINS = ["bun.lock", "Cargo.lock", "go.sum", "poetry.lock", "uv.lock", "AGENTS.md"];
+const OTHER_TOOLCHAINS = [
+  "bun.lock", "Cargo.lock", "go.sum", "poetry.lock", "uv.lock", "AGENTS.md",
+  // Grok audit 2026-10-21, CA-11.
+  "Gemfile.lock", "composer.lock", "requirements.txt", "Pipfile.lock", "flake.lock", "Package.resolved", "gradle.lockfile", "justfile", "Taskfile.yml",
+];
 
 const STEERS_THE_MEASURED_BUILD = [
   "wrangler.jsonc",
