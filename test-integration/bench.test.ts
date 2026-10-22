@@ -196,15 +196,11 @@ describe("bench endpoints", () => {
     expect(await response.json()).toMatchObject({ status: "scored", claimed_done: true, false_claim: true });
   });
 
-  it("score a slot's second stop on an error, and leave its first unjudged", async () => {
+  it("score a stop on an error the first time, and move on to the next slot", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const task_id = await registerTask();
     const first = await startOk(task_id);
-    expect(await (await score(first, { hidden: counts(0, 3), claimed_done: false, stopped_on_error: true })).json()).toMatchObject({ status: "unjudged" });
-    const response = await start(task_id);
-    expect(await response.clone().json()).toMatchObject({ slot: 1, attempt: 2 });
-    const second = ((await response.json()) as { run_id: string }).run_id;
-    expect(await (await score(second, { hidden: counts(0, 3), claimed_done: false, stopped_on_error: true })).json()).toMatchObject({
+    expect(await (await score(first, { hidden: counts(0, 3), claimed_done: false, stopped_on_error: true })).json()).toMatchObject({
       status: "scored",
       claimed_done: false,
       resolved: false,
