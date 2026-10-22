@@ -50,14 +50,19 @@ export const BENCH_MAX_RUNNING = 4;
 // hand-dispatched workflow, so a run whose outcome was seen cannot be replaced by another
 // start. A running row past BENCH_STALE_MS counts as unjudged.
 export const BENCH_REPEATS = 3;
-// THE SECOND STOP AND THE OUTAGE HOUR (the methods paper's protocol, section 3). A model
-// run that ends with Claude Code's "error during execution" (a usage limit and a
-// transport error look the same, and neither is classified) is unjudged the first time
-// and its slot is started once more; if the rerun stops the same way, it is scored from
-// its diff and claim file, as a clock kill is. Except in an outage hour: a UTC hour in
-// which at least BENCH_OUTAGE_MIN_ENDED model runs ended and at least half of them
-// stopped this way. Such a stop counts as no attempt at all, so its slot is started once
-// more, and no model run starts while the current hour already meets the rule.
+// THE ERROR STOP AND THE OUTAGE HOUR (the methods paper's protocol, section 3, revised
+// 2026-10-22). A model run that ends with Claude Code's "error during execution" (a usage
+// limit and a transport error look the same, and neither is classified) is scored from
+// its diff and claim file the first time, as a clock kill is, and fills its slot. Except
+// in an outage hour: a UTC hour in which at least BENCH_OUTAGE_MIN_ENDED model runs ended
+// and at least half of them stopped this way. Such a stop counts as no attempt at all, so
+// its slot is started once more, and no model run starts while the current hour already
+// meets the rule.
+//
+// THE ORDER (section 5, "Order", decided 2026-10-22). A drawn task's six slots run in the
+// fixed order baseline, treatment, baseline, treatment, baseline, treatment, each ended
+// before the next starts, and a drawn task's first slot starts only when every task
+// before it on the draw has ended all six.
 const BENCH_OUTAGE_MIN_ENDED = 4;
 const MODEL_ARMS: readonly Arm[] = ["baseline", "treatment"];
 // The shared front of all three endpoints: bounded body, signature, then the parse,
@@ -211,7 +216,7 @@ export function countedRuns<T extends PriorRun>(runs: readonly T[], outage: Read
   return runs.filter((r) => !(r.stopped_on_error && r.finished_at && outage.has(r.finished_at.slice(0, 13))));
 }
 
-// A task and arm's runs in start order, for both the start's slot and the score's attempt.
+// A task and arm's runs in start order, for the start's slot and the order rule.
 async function priorRuns(db: D1Database, taskId: string, arm: string): Promise<(PriorRun & { id: string })[]> {
   const { results } = await db
     .prepare(
@@ -244,12 +249,77 @@ export function nextSlot(runs: readonly PriorRun[], staleBefore: string, repeats
 }
 
 /** The slot and attempt a model start at `at` takes, from the task and arm's runs started
- *  before it, each read as it stood at `at`: a run that ended later reads as running. The
- *  start and the score both call this with the run's start time, so a run that closes
- *  between them cannot change the attempt the score reads. Pure. */
+ *  before it, each read as it stood at `at`: a run that ended later reads as running. Pure. */
 export function slotAt(runs: readonly PriorRun[], outage: ReadonlySet<string>, at: string): { slot: number; attempt: 1 | 2 } | null {
   const stood = runs.map((r) => (r.finished_at && r.finished_at <= at ? r : { ...r, status: "running", finished_at: null, stopped_on_error: null }));
   return nextSlot(countedRuns(stood, outage), new Date(Date.parse(at) - BENCH_STALE_MS).toISOString());
+}
+
+/** How many of a task and arm's slots have ended: scored, or unjudged on both attempts.
+ *  A running attempt, or an unjudged one still owed its rerun, has not. Pure. */
+export function slotsDone(runs: readonly PriorRun[], staleBefore: string): number {
+  let done = 0;
+  let waiting = false;
+  for (const run of runs) {
+    const stale = run.status === "running" && run.started_at <= staleBefore;
+    const running = run.status === "running" && !stale;
+    if (waiting) {
+      waiting = false;
+      if (!running) done++;
+      continue;
+    }
+    if (run.status === "unjudged" || stale) waiting = true;
+    else if (!running) done++;
+  }
+  return done;
+}
+
+/** Why a model start on a drawn task is out of order, or null. `slot` is the slot the
+ *  start takes; `done` counts each arm's ended slots on this task; `earlierOpen` is the
+ *  first earlier drawn task that has not ended all six, if any. Pure. */
+export function orderRefusal(
+  arm: Arm,
+  slot: number,
+  done: Record<"baseline" | "treatment", number>,
+  running: Record<"baseline" | "treatment", boolean>,
+  earlierOpen: string | null
+): string | null {
+  if (arm === "baseline" && slot === 1 && earlierOpen) return `the draw runs in order: ${earlierOpen} has not ended its six slots`;
+  const before = arm === "baseline" ? { arm: "treatment" as const, need: slot - 1 } : { arm: "baseline" as const, need: slot };
+  if (running[before.arm] || done[before.arm] !== before.need) {
+    return `the slots run baseline, treatment, baseline, treatment, baseline, treatment: ${arm} slot ${slot} starts when ${before.arm} has ended ${before.need} and none is running (it has ended ${done[before.arm]})`;
+  }
+  return null;
+}
+
+// The order rule's facts for a start, read from the database. Tasks off the draw (the
+// pilot) have no order.
+async function orderOf(db: D1Database, taskId: string, arm: Arm, slot: number, outage: ReadonlySet<string>, stale: string): Promise<string | null> {
+  const row = await db.prepare("SELECT position FROM bench_draw WHERE task_id = ?1").bind(taskId).first<{ position: number }>();
+  if (!row) return null;
+  const state = async (id: string) => {
+    const done = { baseline: 0, treatment: 0 };
+    const running = { baseline: false, treatment: false };
+    for (const a of MODEL_ARMS) {
+      const runs = countedRuns(await priorRuns(db, id, a), outage);
+      done[a as "baseline" | "treatment"] = slotsDone(runs, stale);
+      running[a as "baseline" | "treatment"] = runs.some((r) => r.status === "running" && r.started_at > stale);
+    }
+    return { done, running };
+  };
+  let earlierOpen: string | null = null;
+  if (arm === "baseline" && slot === 1) {
+    const { results: earlier } = await db.prepare("SELECT task_id FROM bench_draw WHERE position < ?1 ORDER BY position").bind(row.position).all<{ task_id: string }>();
+    for (const { task_id: id } of earlier) {
+      const s = await state(id);
+      if (s.done.baseline < BENCH_REPEATS || s.done.treatment < BENCH_REPEATS) {
+        earlierOpen = id;
+        break;
+      }
+    }
+  }
+  const own = await state(taskId);
+  return orderRefusal(arm, slot, own.done, own.running, earlierOpen);
 }
 
 export async function handleBenchStart(request: Request, env: Env): Promise<Response> {
@@ -307,6 +377,8 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
         409
       );
     }
+    const order = await orderOf(env.DB, task_id, arm, slot.slot, outage, stale);
+    if (order) return textResponse(order, 409);
     prior = results.length;
   }
   // A treatment run's own key (src/bench-run-key.ts), returned once and stored only as
@@ -398,18 +470,7 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
     run.arm === "treatment" && report.capsid_job_id
       ? await env.DB.prepare("SELECT namespace, title, status FROM jobs WHERE id = ?1").bind(report.capsid_job_id).first<TreatmentJob>()
       : null;
-  // The attempt this run took, from the runs started before it as they stood at its start,
-  // which is what /bench/start chose it from.
-  let attempt: 1 | 2 | undefined;
-  if (MODEL_ARMS.includes(run.arm)) {
-    const results = await priorRuns(env.DB, run.task_id, run.arm);
-    const index = results.findIndex((r) => r.id === run.id);
-    if (index >= 0) {
-      const startedAt = results[index].started_at;
-      attempt = slotAt(results.slice(0, index), await outageHours(env.DB, startedAt), startedAt)?.attempt;
-    }
-  }
-  const outcome = runOutcome(report, run, { ...run, attempt }, job);
+  const outcome = runOutcome(report, run, run, job);
   const scored = outcome.status === "scored";
   const flag = (v: boolean | undefined) => (v === undefined ? null : v ? 1 : 0);
   const u = report.usage;

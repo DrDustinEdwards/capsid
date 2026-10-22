@@ -163,8 +163,9 @@ export interface ScoreRequest {
   // Null when the scorer never got as far as counting (an environment failure).
   hidden: { fail_to_pass: { total: number; passed: number }; pass_to_pass: { total: number; passed: number } } | null;
   claimed_done: boolean | null;
-  // Claude Code ended a phase with "error during execution". The diff is still scored;
-  // runOutcome decides from the attempt whether the run counts.
+  // Claude Code ended a phase with "error during execution". The run is scored from its
+  // diff and claim file the first time (protocol section 3, revised 2026-10-22); the
+  // outage-hour rule in src/bench.ts is the only case where it does not count.
   stopped_on_error: boolean;
   capsid_job_id: string | null;
   usage: BenchUsage;
@@ -277,15 +278,10 @@ export interface TreatmentJob {
 export function runOutcome(
   report: ScoreRequest,
   task: Pick<BenchTask, "fail_to_pass_count" | "pass_to_pass_count">,
-  run: { id: string; task_id: string; arm: Arm; attempt?: 1 | 2 },
+  run: { id: string; task_id: string; arm: Arm },
   job: TreatmentJob | null
 ): RunOutcome {
   if (!report.environment.ok || !report.hidden) return { status: "unjudged", reason: report.environment.reason ?? "no hidden test counts" };
-  // A first stop on an error is not scored, and its slot is started once more; the
-  // rerun's second stop is.
-  if (report.stopped_on_error && run.attempt !== 2) {
-    return { status: "unjudged", reason: "Claude Code stopped with an error during execution; the slot is started once more, and a second such stop is scored" };
-  }
   const { fail_to_pass: f2p, pass_to_pass: p2p } = report.hidden;
   if (f2p.total !== task.fail_to_pass_count || p2p.total !== task.pass_to_pass_count) {
     return {

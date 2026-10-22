@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { countedRuns, isOutageHour, nextSlot, slotAt } from "../src/bench.ts";
+import { countedRuns, isOutageHour, nextSlot, orderRefusal, slotAt, slotsDone } from "../src/bench.ts";
 import { parseDrawRequest, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench-requests.ts";
 import { createHmac } from "node:crypto";
 import { verifyBenchRequest } from "../src/signed-requests.ts";
@@ -55,14 +55,12 @@ test("the treatment's claim is the report's, as every arm's is, and its job must
   assert.equal(runOutcome({ ...r, capsid_job_id: null }, TASK, run, null).status, "unjudged");
 });
 
-test("a first stop on an error is unjudged and the rerun's second stop is scored from its diff and claim", () => {
+test("a stop on an error is scored the first time from its diff and claim", () => {
   const stopped = report({ stopped_on_error: true, claimed_done: true, hidden: hidden(0, 3) });
-  assert.equal(runOutcome(stopped, TASK, { ...RUN, attempt: 1 }, null).status, "unjudged");
-  assert.equal(runOutcome(stopped, TASK, RUN, null).status, "unjudged");
-  assert.deepEqual(runOutcome(stopped, TASK, { ...RUN, attempt: 2 }, null), { status: "scored", claimed_done: true, resolved: false, false_claim: true });
-  // A run that never got to the scorer stays unjudged on any attempt.
+  assert.deepEqual(runOutcome(stopped, TASK, RUN, null), { status: "scored", claimed_done: true, resolved: false, false_claim: true });
+  // A run that never got to the scorer stays unjudged.
   const never = report({ stopped_on_error: true, environment: { ok: false, reason: "never started" }, hidden: null });
-  assert.equal(runOutcome(never, TASK, { ...RUN, attempt: 2 }, null).status, "unjudged");
+  assert.equal(runOutcome(never, TASK, RUN, null).status, "unjudged");
   assert.equal(parseScoreRequest(JSON.stringify({ jti: "0123456789", run_id: RUN.id, stopped_on_error: "yes", hidden: hidden(2, 3) })).ok, false);
 });
 
@@ -116,7 +114,7 @@ test("each slot is started at most twice, the second time only after an unjudged
   assert.equal(nextSlot([run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged")], STALE), null);
 });
 
-test("PLANT: the score reads the attempt the start chose, though an overlapping run closed between them (Grok audit 2026-10, J3)", () => {
+test("PLANT: a start reads earlier runs as they stood at its start (Grok audit 2026-10, J3)", () => {
   // A starts, B starts while A runs (slot 2, attempt 1), then A closes unjudged. Read
   // with A's later status, B would look like slot 1's rerun.
   const A = { status: "running", started_at: "2026-10-19T01:00:00.000Z", finished_at: null };
@@ -124,15 +122,13 @@ test("PLANT: the score reads the attempt the start chose, though an overlapping 
   const atStart = slotAt([A], new Set(), bAt);
   assert.deepEqual(atStart, { slot: 2, attempt: 1 });
   const aClosed = { ...A, status: "unjudged", finished_at: "2026-10-19T02:00:00.000Z" };
-  assert.deepEqual(slotAt([aClosed], new Set(), bAt), atStart, "the score's computation agrees with the start's");
+  assert.deepEqual(slotAt([aClosed], new Set(), bAt), atStart, "a run that closed later reads as running");
   // A run that had closed by the start is read closed.
   assert.deepEqual(slotAt([{ ...aClosed, finished_at: "2026-10-19T01:20:00.000Z" }], new Set(), bAt), { slot: 1, attempt: 2 });
-  // Both handlers take the slot from slotAt, and nothing else asks nextSlot.
+  // The start takes the slot from slotAt, and nothing else asks nextSlot.
   const src = sourceFile("bench.ts");
   const start = src.slice(src.indexOf("export async function handleBenchStart"), src.indexOf("export async function handleBenchScore"));
-  const score = src.slice(src.indexOf("export async function handleBenchScore"));
   assert.match(start, /\bslotAt\(/);
-  assert.match(score, /\bslotAt\(/);
   assert.equal([...src.matchAll(/\bnextSlot\(/g)].length, 2, "nextSlot is defined once and called only from slotAt");
 });
 
@@ -148,4 +144,20 @@ test("a draw request carries the registration's two sha256 hashes and seed, a st
   assert.equal(parseDrawRequest(body({ tasks: [] })).ok, false);
   assert.equal(parseDrawRequest(body({ tasks: Array.from({ length: 101 }, (_, i) => `sample__repo-${i}`) })).ok, false);
   assert.equal(parseDrawRequest(body({ tasks: ["sample__repo-1", "sample__repo-1"] })).ok, false);
+});
+
+test("a drawn task's slots run baseline, treatment, three times, and the next task waits for all six", () => {
+  const STALE = "2026-10-19T00:00:00Z";
+  const r = (status: string) => ({ status, started_at: "2026-10-19T03:00:00Z" });
+  // Ended slots: scored, or unjudged twice. A running one, or an unjudged one owed its rerun, is not.
+  assert.equal(slotsDone([r("scored"), r("unjudged"), r("unjudged"), r("unjudged")], STALE), 2);
+  assert.equal(slotsDone([r("scored"), r("running")], STALE), 1);
+  const none = { baseline: false, treatment: false };
+  assert.equal(orderRefusal("baseline", 1, { baseline: 0, treatment: 0 }, none, null), null);
+  assert.match(orderRefusal("treatment", 1, { baseline: 0, treatment: 0 }, none, null) ?? "", /treatment slot 1 starts when baseline has ended 1/);
+  assert.equal(orderRefusal("treatment", 1, { baseline: 1, treatment: 0 }, none, null), null);
+  assert.match(orderRefusal("baseline", 2, { baseline: 1, treatment: 0 }, none, null) ?? "", /baseline slot 2/);
+  assert.match(orderRefusal("baseline", 2, { baseline: 1, treatment: 1 }, { baseline: false, treatment: true }, null) ?? "", /none is running/);
+  assert.equal(orderRefusal("baseline", 2, { baseline: 1, treatment: 1 }, none, null), null);
+  assert.match(orderRefusal("baseline", 1, { baseline: 0, treatment: 0 }, none, "sample__a-1") ?? "", /sample__a-1 has not ended/);
 });
