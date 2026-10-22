@@ -459,11 +459,11 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
   if (!front.ok) return front.response;
   const report = front.value.report;
   const run = await env.DB.prepare(
-    `SELECT r.id, r.task_id, r.arm, r.status, t.fail_to_pass_count, t.pass_to_pass_count
+    `SELECT r.id, r.task_id, r.arm, r.status, t.split, t.fail_to_pass_count, t.pass_to_pass_count
      FROM bench_runs r JOIN bench_tasks t ON t.task_id = r.task_id WHERE r.id = ?1`
   )
     .bind(report.run_id)
-    .first<{ id: string; task_id: string; arm: Arm; status: string; fail_to_pass_count: number; pass_to_pass_count: number }>();
+    .first<{ id: string; task_id: string; arm: Arm; status: string; split: string; fail_to_pass_count: number; pass_to_pass_count: number }>();
   if (!run) return textResponse(`no bench run ${report.run_id}`, 404);
   if (run.status !== "running") return textResponse(`bench run ${run.id} is already closed (${run.status})`, 409);
   const job =
@@ -472,7 +472,7 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
       : null;
   const outcome = runOutcome(report, run, run, job);
   const scored = outcome.status === "scored";
-  const flag = (v: boolean | undefined) => (v === undefined ? null : v ? 1 : 0);
+  const flag = (v: boolean | null | undefined) => (v === undefined || v === null ? null : v ? 1 : 0);
   const u = report.usage;
   const finishedAt = new Date();
   const closeRow = env.DB.prepare(

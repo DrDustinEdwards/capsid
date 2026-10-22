@@ -62,7 +62,10 @@ describe("the registration lock", () => {
     expect((await draw(4, [off], { ...REG, seed: "1" })).status).toBe(409);
 
     expect((await start(a)).status).toBe(200);
-    expect((await start(c, "treatment")).status).not.toBe(409);
+    // Past the lock, the order rule answers: c's treatment waits for its baseline.
+    const outOfOrder = await start(c, "treatment");
+    expect(outOfOrder.status).toBe(409);
+    expect(await outOfOrder.text()).toMatch(/slots run baseline, treatment/);
     const undrawn = await start(off);
     expect(undrawn.status).toBe(409);
     expect(await undrawn.text()).toMatch(/not on the draw/);

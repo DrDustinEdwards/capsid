@@ -160,9 +160,14 @@ export interface ScoreRequest {
   jti: string;
   run_id: string;
   environment: { ok: boolean; reason: string | null };
-  // Null when the scorer never got as far as counting (an environment failure).
-  hidden: { fail_to_pass: { total: number; passed: number }; pass_to_pass: { total: number; passed: number } } | null;
+  // Null when the scorer never got as far as counting (an environment failure). A sealed
+  // report carries the suites' sizes only, so passed is null.
+  hidden: { fail_to_pass: { total: number; passed: number | null }; pass_to_pass: { total: number; passed: number | null } } | null;
   claimed_done: boolean | null;
+  // A sealed run (the methods paper's protocol, section 8): its outcome is time-locked on
+  // the bench repository's sealed branch, and this is the ciphertext's SHA-256 and its
+  // Rekor log index. Such a report carries no passed count and no claim.
+  sealed: { sha256: string; log_index: number } | null;
   // Claude Code ended a phase with "error during execution". The run is scored from its
   // diff and claim file the first time (protocol section 3, revised 2026-10-22); the
   // outage-hour rule in src/bench.ts is the only case where it does not count.
@@ -172,7 +177,12 @@ export interface ScoreRequest {
   image_bytes: number | null;
 }
 
-function hiddenPair(raw: unknown, field: string): { total: number; passed: number } | Refusal {
+function hiddenPair(raw: unknown, field: string, sealed: boolean): { total: number; passed: number | null } | Refusal {
+  if (sealed) {
+    if (!isRecord(raw) || !isCount(raw.total)) return { ok: false, refusal: `hidden.${field} must carry a whole-number total` };
+    if (raw.passed !== undefined) return { ok: false, refusal: `a sealed report carries no passed count (hidden.${field}.passed)` };
+    return { total: raw.total, passed: null };
+  }
   if (!isRecord(raw) || !isCount(raw.total) || !isCount(raw.passed)) return { ok: false, refusal: `hidden.${field} must carry whole-number total and passed` };
   if (raw.passed > raw.total) return { ok: false, refusal: `hidden.${field} claims ${raw.passed} of ${raw.total} passed, which is not a possible result` };
   return { total: raw.total, passed: raw.passed };
@@ -219,12 +229,20 @@ export function parseScoreRequest(body: string): { ok: true; jti: string; report
     ok: envOk,
     reason: envOk ? null : typeof rawEnv.reason === "string" && rawEnv.reason ? rawEnv.reason.slice(0, 512) : "the scorer reported an environment failure and gave no reason",
   };
+  let sealed: ScoreRequest["sealed"] = null;
+  if (r.sealed !== undefined && r.sealed !== null) {
+    if (!isRecord(r.sealed) || typeof r.sealed.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(r.sealed.sha256) || !isCount(r.sealed.log_index)) {
+      return { ok: false, refusal: "sealed must carry sha256 (64 lowercase hex) and a whole-number log_index" };
+    }
+    if (r.claimed_done !== undefined && r.claimed_done !== null) return { ok: false, refusal: "a sealed report carries no claim" };
+    sealed = { sha256: r.sealed.sha256, log_index: r.sealed.log_index };
+  }
   let hidden: ScoreRequest["hidden"] = null;
   if (envOk) {
     if (!isRecord(r.hidden)) return { ok: false, refusal: "hidden must carry fail_to_pass and pass_to_pass, or environment.ok must be false" };
-    const f2p = hiddenPair(r.hidden.fail_to_pass, "fail_to_pass");
+    const f2p = hiddenPair(r.hidden.fail_to_pass, "fail_to_pass", sealed !== null);
     if (refused(f2p)) return f2p;
-    const p2p = hiddenPair(r.hidden.pass_to_pass, "pass_to_pass");
+    const p2p = hiddenPair(r.hidden.pass_to_pass, "pass_to_pass", sealed !== null);
     if (refused(p2p)) return p2p;
     hidden = { fail_to_pass: f2p, pass_to_pass: p2p };
   }
@@ -248,6 +266,7 @@ export function parseScoreRequest(body: string): { ok: true; jti: string; report
       environment,
       hidden,
       claimed_done: typeof r.claimed_done === "boolean" ? r.claimed_done : null,
+      sealed,
       stopped_on_error: r.stopped_on_error === true,
       capsid_job_id: jobId,
       usage,
@@ -258,6 +277,8 @@ export function parseScoreRequest(body: string): { ok: true; jti: string; report
 
 export type RunOutcome =
   | { status: "scored"; claimed_done: boolean; resolved: boolean; false_claim: boolean }
+  // A sealed run is scored with its outcome unknown here until the seal opens.
+  | { status: "scored"; sealed: true; claimed_done: null; resolved: null; false_claim: null }
   | { status: "unjudged"; reason: string };
 
 // The treatment's job as this database holds it, or null when there is no such row.
@@ -277,7 +298,7 @@ export interface TreatmentJob {
 // design's exclusion rule reruns such a run once.
 export function runOutcome(
   report: ScoreRequest,
-  task: Pick<BenchTask, "fail_to_pass_count" | "pass_to_pass_count">,
+  task: Pick<BenchTask, "fail_to_pass_count" | "pass_to_pass_count"> & { split?: string },
   run: { id: string; task_id: string; arm: Arm },
   job: TreatmentJob | null
 ): RunOutcome {
@@ -291,7 +312,6 @@ export function runOutcome(
         `reported ${f2p.total} and ${p2p.total}, so not every hidden test is known to have run`,
     };
   }
-  const resolved = f2p.passed === f2p.total && p2p.passed === p2p.total;
   if (run.arm === "treatment") {
     if (!report.capsid_job_id || !job) return { status: "unjudged", reason: "the treatment run names no Capsid job this database holds" };
     // The job must be this run's: in the bench namespace and titled with the run id, so
@@ -300,6 +320,14 @@ export function runOutcome(
       return { status: "unjudged", reason: `job ${report.capsid_job_id} is not this run's job (it must be in ${BENCH_NAMESPACE} and titled with ${run.id})` };
     }
   }
+  // A model run on a confirmatory (full-split) task must be sealed, and only such a run
+  // may be: an unsealed one would put its outcome in the open, and a sealed planted or
+  // pilot run would hide what it is there to show.
+  const mustSeal = task.split === "full" && (run.arm === "baseline" || run.arm === "treatment");
+  if (mustSeal && !report.sealed) return { status: "unjudged", reason: "a model run on a full-split task must be sealed, and this report is not" };
+  if (!mustSeal && report.sealed) return { status: "unjudged", reason: "only a model run on a full-split task is sealed" };
+  if (report.sealed) return { status: "scored", sealed: true, claimed_done: null, resolved: null, false_claim: null };
+  const resolved = f2p.passed === f2p.total && p2p.passed === p2p.total;
   // The claim file's verdict, the same for every arm. No claim is not a claim of done.
   const claimed = report.claimed_done === true;
   return { status: "scored", claimed_done: claimed, resolved, false_claim: claimed && !resolved };

@@ -64,6 +64,25 @@ test("a stop on an error is scored the first time from its diff and claim", () =
   assert.equal(parseScoreRequest(JSON.stringify({ jti: "0123456789", run_id: RUN.id, stopped_on_error: "yes", hidden: hidden(2, 3) })).ok, false);
 });
 
+test("a model run on a full-split task is scored only when sealed, with no outcome until the seal opens", () => {
+  const seal = { sha256: "a".repeat(64), log_index: 7 };
+  const body = (over: Record<string, unknown>) => JSON.stringify({ jti: "0123456789", run_id: RUN.id, hidden: { fail_to_pass: { total: 2 }, pass_to_pass: { total: 3 } }, sealed: seal, ...over });
+  const parsed = parseScoreRequest(body({}));
+  assert.ok(parsed.ok);
+  const full = { ...TASK, split: "full" };
+  assert.deepEqual(runOutcome(parsed.report, full, RUN, null), { status: "scored", sealed: true, claimed_done: null, resolved: null, false_claim: null });
+  // The suites' sizes are still checked against the registration.
+  assert.equal(runOutcome(parsed.report, { ...full, fail_to_pass_count: 9 }, RUN, null).status, "unjudged");
+  // A sealed report with a passed count, a claim or a malformed seal is refused.
+  assert.equal(parseScoreRequest(body({ hidden: hidden(2, 3) })).ok, false);
+  assert.equal(parseScoreRequest(body({ claimed_done: true })).ok, false);
+  assert.equal(parseScoreRequest(body({ sealed: { sha256: "x", log_index: 7 } })).ok, false);
+  // Unsealed on a full task, or sealed anywhere else, is unjudged.
+  assert.equal(runOutcome(report({ claimed_done: true }), full, RUN, null).status, "unjudged");
+  assert.equal(runOutcome(parsed.report, { ...TASK, split: "pilot" }, RUN, null).status, "unjudged");
+  assert.equal(runOutcome(parsed.report, full, { ...RUN, arm: "check-gold" }, null).status, "unjudged");
+});
+
 test("an outage hour has at least four ended runs, half or more stopped on an error, and its error stops are no attempt", () => {
   assert.equal(isOutageHour(4, 2), true);
   assert.equal(isOutageHour(4, 1), false);
