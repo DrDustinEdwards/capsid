@@ -122,4 +122,6 @@ test("pruneVerdict keeps anything it could not see in full, and prunes only a cl
   const unseen = pruneVerdict(b, "main", undefined, false);
   assert.equal(unseen.prune, false);
   assert.match((unseen as { reason: string }).reason, /part of the list that was read/);
+  // A merged clean tip still waits when the list was cut short: a newer PR may be unread.
+  assert.equal(pruneVerdict(b, "main", { number: 5, state: "closed", merged: true, headSha: "t1" }, false).prune, false);
 });

@@ -49,6 +49,7 @@ function accessSaas(env: Env): AccessSaas | null {
   return { clientId, clientSecret, issuer: `${team}/cdn-cgi/access/sso/oidc/${encodeURIComponent(clientId)}` };
 }
 
+const TOKEN_EXCHANGE_TIMEOUT_MS = 15_000;
 const UNCONFIGURED = "the sign-in is not configured (ACCESS_TEAM_DOMAIN, ACCESS_SAAS_CLIENT_ID, ACCESS_SAAS_CLIENT_SECRET), so it is closed";
 
 function refusal(message: string, status: number): Response {
@@ -159,8 +160,10 @@ export async function completeAccessLogin<T>(
     return fail(`stored authorization state is unreadable. ${flow.restartHint}`, 403);
   }
 
+  // Bounded, so a hung token endpoint does not hold the sign-in (Grok audit 2026-10-21, CA-10).
   const tokenResp = await fetch(`${saas.issuer}/token`, {
     method: "POST",
+    signal: AbortSignal.timeout(TOKEN_EXCHANGE_TIMEOUT_MS),
     headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
@@ -170,7 +173,8 @@ export async function completeAccessLogin<T>(
       client_secret: saas.clientSecret,
       code_verifier: signIn.verifier,
     }),
-  });
+  }).catch(() => null);
+  if (!tokenResp) return fail("the Access token exchange did not answer in time", 502);
   if (!tokenResp.ok) return fail(`the Access token exchange failed (${tokenResp.status})`, 502);
   const tokens = (await tokenResp.json().catch(() => ({}))) as { id_token?: unknown };
   if (typeof tokens.id_token !== "string") return fail("the Access token exchange returned no ID token", 502);

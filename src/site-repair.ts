@@ -95,7 +95,9 @@ export async function runSiteRepair(
   const before = await readLimit(env, args.namespace, args.tool);
   const wait = limitRefusal(before, now, args.auto);
   if (wait) return { ran: false, refusal: `${args.tool} on ${args.namespace} waits: ${wait}` };
-  // The limit is written before the call, so two callers racing cannot both go.
+  // The limit is written before the call, which narrows a race between two callers but does
+  // not close it: KV has no compare-and-set, so two that read the same record both go. The
+  // operator API's own limits are the hard bound (Grok audit 2026-10-21, CA-7).
   await writeLimit(env, args.namespace, args.tool, before, now, args.auto);
   const started = new Date();
   const call = await callOperator(env, target, args.tool, fetchImpl);

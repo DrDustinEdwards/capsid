@@ -65,10 +65,11 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
     // The grant, before the query.
     // Every result is filtered to the caller's namespaces, so its cache hint is private
     // (src/cache-hints.ts).
+    // The whole scope check, as resources/read makes it, so a caller narrowed away from
+    // capsid_read_doc (or a bench run key) lists nothing either (Grok audit 2026-10-21, CA-5).
+    const listRefusal = checkScope(agent, { tool: "capsid_read_doc", action: "read", grant: "read" });
+    if (listRefusal) throw new ProtocolError(ProtocolErrorCode.InvalidParams, listRefusal);
     if (visibleNamespaces !== "*" && visibleNamespaces.length === 0) return { resources: [] };
-    if (!agent.scopes.grants.includes("read")) {
-      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no resources.`);
-    }
     const cursor = request.params?.cursor;
     let afterNs = "";
     let afterPath = "";

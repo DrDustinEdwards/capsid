@@ -72,7 +72,10 @@ export async function handlePortalApp(request: Request, env: Env, now: Date = ne
   // A redirect from the assets router names a path inside the assets directory; the
   // browser needs it under the Portal's base on this host (/portal, or the root).
   const location = headers.get("Location");
-  if (location?.startsWith("/")) headers.set("Location", portalBase(url) + location);
+  // A protocol-relative or backslash Location names another host, so it is dropped rather
+  // than forwarded (Grok audit 2026-10-21, CA-8).
+  if (location && (location.startsWith("//") || location.includes("\\"))) headers.delete("Location");
+  else if (location?.startsWith("/")) headers.set("Location", portalBase(url) + location);
 
   if (response.ok && path === "/") {
     headers.set("Cache-Control", "no-store");

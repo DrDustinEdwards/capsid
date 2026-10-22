@@ -1,5 +1,6 @@
 import { McpServer, ProtocolError, ProtocolErrorCode } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
+import { checkScope } from "./scope";
 import { namespaceFilter, resourceRefusal } from "./resources";
 
 export function registerPrompts(server: McpServer, agent: Agent, db: D1Database): void {
@@ -24,9 +25,9 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
   };
   server.server.registerCapabilities({ prompts: { listChanged: false } });
   server.server.setRequestHandler("prompts/list", async () => {
-    if (!agent.scopes.grants.includes("read")) {
-      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `unauthorized: ${agent.actor} holds no read grant, so it lists no prompts.`);
-    }
+    // The whole scope check, as prompts/get makes it (Grok audit 2026-10-21, CA-5).
+    const listRefusal = checkScope(agent, { tool: "capsid_read_doc", action: "read", grant: "read" });
+    if (listRefusal) throw new ProtocolError(ProtocolErrorCode.InvalidParams, listRefusal);
     const { results } = await db
       .prepare("SELECT namespace, path, title, body FROM documents WHERE type = 'prompt' ORDER BY namespace, path")
       .all<{ namespace: string; path: string; title: string | null; body: string | null }>();

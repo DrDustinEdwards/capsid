@@ -50,7 +50,7 @@ function store(jobs: Array<Record<string, unknown>>) {
         statements.map((s) => ({ ...s, sql: s.sql.replace(/summary_sig = CASE WHEN \?3 IS NULL THEN summary_sig ELSE \?8 END/, "summary_sig = ?8") })) as unknown as D1PreparedStatement[]
       ),
   } as unknown as D1Database;
-  return { d1, env: fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, IMPROVE_SCORE_SECRET: SECRET }) };
+  return { d1, env: fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv, IMPROVE_SCORE_SECRET: SECRET }) };
 }
 
 // A driver with read and write on the namespace and no seat flag.
@@ -63,11 +63,12 @@ function driver(namespaces = ["sample"], name = "sample-driver"): Agent {
 const SUMMARY = "Did the sample work in one pull request.";
 const withPr = { result_summary: SUMMARY, result_ref: PR, raw: { result_summary: SUMMARY, result_ref: PR } };
 
-// GitHub is unreachable here: every read gets a 500. Verification and the overlap check
-// report that as notes and never fail the call, as on a real complete.
-async function offline<T>(fn: () => Promise<T>): Promise<T> {
+// GitHub answers only the pull request itself, whose body names the job (completeUnclaimed
+// reads it). Every other read gets a 500: verification and the overlap check report that
+// as notes and never fail the call, as on a real complete.
+async function offline<T>(fn: () => Promise<T>, prBody = `Closes ${ID}.`): Promise<T> {
   let out: T | undefined;
-  await withFetch({}, async () => {
+  await withFetch({ "GET /repos/o/r/pulls/7": { body: { number: 7, body: prBody } } }, async () => {
     out = await fn();
   });
   return out as T;
@@ -112,6 +113,16 @@ test("PLANT: a queued job completed without a pull request is refused, and nothi
   assert.equal(d1.rows.jobs[0].claimed_by, null);
   assert.deepEqual(d1.recorded, []);
   assert.equal(d1.rows.job_outcomes.length, 0);
+});
+
+test("PLANT: a pull request whose body does not name the job is refused, and nothing is written", async () => {
+  // Otherwise any pull request on a mapped repo closes any queued job (CA-3).
+  const { d1, env } = store([job()]);
+  const r = await offline(() => completeAsCaller(env, driver(), NOW, ID, withPr), "Closes job_ffffffffffff.");
+  assert.equal(r.ok, false);
+  assert.match(r.refusal ?? "", /has job_0123456789ab in its description/);
+  assert.equal(d1.rows.jobs[0].status, "queued");
+  assert.deepEqual(d1.recorded, []);
 });
 
 test("PLANT: a caller without write on the job's namespace is refused, and nothing is written", async () => {

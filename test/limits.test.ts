@@ -39,6 +39,7 @@ test("the grammar refuses traversal, absolutes, control characters and empties",
     [`a${String.fromCharCode(0)}b.md`, /control characters/],
     [`a${String.fromCharCode(127)}b.md`, /control characters/],
     [`${"x".repeat(MAX_PATH + 1)}.md`, /longer than/],
+    ["Archive/notes.md", /archive prefix exactly/],
   ];
   for (const [path, expected] of cases) {
     const problem = pathProblem(path);

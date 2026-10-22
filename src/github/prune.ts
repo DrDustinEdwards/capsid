@@ -84,6 +84,9 @@ export function pruneVerdict(
   if (latest.state === "open") return { prune: false, reason: `open pull request #${latest.number}`, orphan: false };
   if (!latest.merged) return { prune: false, reason: `pull request #${latest.number} was closed without merging`, orphan: true };
   if (latest.headSha !== branch.sha) return { prune: false, reason: `commits after pull request #${latest.number} merged`, orphan: true };
+  // A list not read whole may hide a newer open pull request on the same head, so a
+  // delete waits until it can be read whole (Grok audit 2026-10-21, CA-17).
+  if (!listsComplete) return { prune: false, reason: `pull request #${latest.number} merged, but the pull request list was not read whole`, orphan: false };
   return { prune: true, pr: latest.number };
 }
 

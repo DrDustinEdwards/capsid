@@ -67,6 +67,12 @@ export function pathProblem(path: string): string | null {
   if (path.includes("..")) return "path must not contain '..'";
   if (path.includes("//")) return "path must not contain an empty segment ('//')";
   if (hasControlChar(path)) return "path must not contain control characters (including newlines and tabs)";
+  // SQL reads the archive with LIKE 'archive/%', which folds ASCII case, and JavaScript with
+  // startsWith("archive/"), which does not. A path like Archive/x.md would be archived to one
+  // and live to the other, so only the exact prefix is accepted (Grok audit 2026-10-21, CA-4).
+  if (path.slice(0, 8).toLowerCase() === "archive/" && !path.startsWith("archive/")) {
+    return "path must spell the archive prefix exactly 'archive/' (lowercase)";
+  }
   return null;
 }
 
