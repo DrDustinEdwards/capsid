@@ -354,7 +354,7 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "search",
     {
-      description: `Full text search across all documents (FTS5, ranked by bm25). Optional namespace and type filters. This is the cross-project search. Returns the top ${SEARCH_ROWS} matches under \`documents\`; when more matched it sets truncated:true. mode "hybrid" matches by meaning as well as by keyword, for a question phrased in other words than the document uses; each row says how it matched (\`match\`: keyword, meaning or both), closed and superseded documents are left out unless include_retired is true, and current canon ranks first. When the meaning index cannot answer, it falls back to the keyword search and says why under \`fallback\`.`,
+      description: `Full text search across all documents (FTS5, ranked by bm25). Optional namespace and type filters. This is the cross-project search. Returns the top ${SEARCH_ROWS} matches under \`documents\`; when more matched it sets truncated:true. mode defaults to "hybrid", which matches by meaning as well as by keyword, for a question phrased in other words than the document uses; mode "keyword" is the plain FTS5 search; each row says how it matched (\`match\`: keyword, meaning or both), closed and superseded documents are left out unless include_retired is true, and current canon ranks first. When the meaning index cannot answer, it falls back to the keyword search and says why under \`fallback\`.`,
       inputSchema: {
         query: bounded(MAX_QUERY),
         namespace: nsName.optional(),
@@ -378,7 +378,7 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
         );
       const filter = { namespace: namespace ?? null, type: type ?? null, allowed };
       let fallback: string | undefined;
-      if (mode === "hybrid") {
+      if (mode !== "keyword") {
         const hybrid = await hybridSearch(ctx.env, query, { ...filter, includeRetired: include_retired === true });
         if (typeof hybrid !== "string") return ok({ mode: "hybrid", ...bound(hybrid) });
         fallback = hybrid;
