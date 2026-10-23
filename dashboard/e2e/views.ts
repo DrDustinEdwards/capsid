@@ -5,16 +5,13 @@ import { MOVED, VIEWS, placePath, type MovedId, type ViewId } from "../src/app/c
 // count is asserted where it is used: an empty list would otherwise pass vacuously.
 export const ALL_VIEWS = VIEWS.map((v) => ({ id: v.id as ViewId, label: v.label as string }));
 export const VIEW_COUNT = 9;
-// The left menu holds every view, Settings last (the UX audit's M4).
-export const RAIL_VIEWS = ALL_VIEWS;
-export const RAIL_COUNT = VIEW_COUNT;
 
 // A place: a view, or a retired view's id (MOVED in src/app/ctx.ts), which names the page,
 // section or tab that holds its content now.
 export type Place = ViewId | MovedId;
 
 // Relative to the /portal/ base URL.
-export function urlOf(id: Place): string {
+function urlOf(id: Place): string {
   return `.${placePath(id)}`;
 }
 
