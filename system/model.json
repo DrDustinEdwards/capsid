@@ -8,10 +8,18 @@
       "short": "Capsid",
       "family": "system",
       "ring": "core",
-      "public": true,
       "description": "The store, the queue, and the credentials every other project runs through.",
       "domain": "mcp.dustinedwards.info",
       "repos": ["DrDustinEdwards/capsid"]
+    },
+    {
+      "id": "capsid-bench",
+      "name": "capsid-bench",
+      "short": "Bench",
+      "family": "system",
+      "ring": "shared",
+      "description": "The study harness that compares Claude Code with and without Capsid on the same tasks, scored on hidden tests.",
+      "repos": ["DrDustinEdwards/capsid-bench"]
     },
     {
       "id": "capsomer",
@@ -19,7 +27,6 @@
       "short": "Capsomer",
       "family": "system",
       "ring": "shared",
-      "public": true,
       "description": "The tokens, the shell, and the shared controls every app is drawn with, in plain CSS.",
       "domain": "capsomer.dustinedwards.info",
       "repos": ["DrDustinEdwards/capsomer"]
@@ -30,7 +37,6 @@
       "short": "Runtime",
       "family": "plumbing",
       "ring": "shared",
-      "public": true,
       "description": "Security headers, the rate limiter, and the health format that every site imports.",
       "repos": ["DrDustinEdwards/site-runtime"]
     },
@@ -40,9 +46,17 @@
       "short": "d1-dump",
       "family": "plumbing",
       "ring": "shared",
-      "public": true,
       "description": "Backs up each table of a D1 database, keeps the backups on a schedule, and drills the restore.",
       "repos": ["DrDustinEdwards/d1-dump"]
+    },
+    {
+      "id": "capsid-backups",
+      "name": "Capsid backups",
+      "short": "Backups",
+      "family": "plumbing",
+      "ring": "shared",
+      "description": "Mirrors Capsid's daily database dumps off Cloudflare every day, so losing the account does not lose the store.",
+      "repos": ["DrDustinEdwards/capsid-backups"]
     },
     {
       "id": "devkit",
@@ -50,7 +64,6 @@
       "short": "devkit",
       "family": "plumbing",
       "ring": "shared",
-      "public": true,
       "description": "Shared CI workflows, Renovate rules, and test helpers.",
       "repos": ["DrDustinEdwards/devkit"]
     },
@@ -60,7 +73,6 @@
       "short": "site-api",
       "family": "plumbing",
       "ring": "shared",
-      "public": true,
       "description": "The contract Carrel uses to publish.",
       "repos": ["DrDustinEdwards/site-api"]
     },
@@ -70,9 +82,17 @@
       "short": "Prelum",
       "family": "writing",
       "ring": "shared",
-      "public": true,
       "description": "Turns finished writing into pages, feeds, and sitemaps.",
       "repos": ["DrDustinEdwards/prelum"]
+    },
+    {
+      "id": "writing",
+      "name": "Writing",
+      "short": "Books",
+      "family": "writing",
+      "ring": "shared",
+      "description": "Dustin's books: scenes, outlines and story bibles, which Carrel reads and commits through its own GitHub App.",
+      "repos": ["DrDustinEdwards/writing"]
     },
     {
       "id": "carrel",
@@ -80,7 +100,6 @@
       "short": "Carrel",
       "family": "writing",
       "ring": "used",
-      "public": true,
       "description": "The writing desk, where drafts are written, checked, and published.",
       "domain": "carrel.dustinedwards.info",
       "repos": ["DrDustinEdwards/carrel"]
@@ -91,7 +110,6 @@
       "short": "Enarratio",
       "family": "writing",
       "ring": "used",
-      "public": true,
       "description": "An npm package of charts, with a gallery.",
       "domain": "enarratio.dustinedwards.info",
       "repos": ["DrDustinEdwards/enarratio"]
@@ -102,7 +120,6 @@
       "short": "Website",
       "family": "site",
       "ring": "used",
-      "public": true,
       "description": "Dustin's personal site.",
       "domain": "dustinedwards.info",
       "repos": ["DrDustinEdwards/dustinedwards-info"]
@@ -113,7 +130,6 @@
       "short": "Site MCP",
       "family": "plumbing",
       "ring": "used",
-      "public": true,
       "description": "Runs dustinedwards.info from a chat, covering health, mentions, media, registries, citations, and lab procedures. Writing stays in Carrel.",
       "repos": ["DrDustinEdwards/dustinedwards-info"]
     },
@@ -123,10 +139,18 @@
       "short": "Skills",
       "family": "plumbing",
       "ring": "used",
-      "public": true,
       "description": "The instructions AI sessions follow.",
       "repos": ["DrDustinEdwards/claude-skills"],
       "hide_repo_link": true
+    },
+    {
+      "id": "skills-private",
+      "name": "Private skills",
+      "short": "My skills",
+      "family": "plumbing",
+      "ring": "used",
+      "description": "Dustin's own session setup, which every AI session loads beside the public skills.",
+      "repos": ["DrDustinEdwards/claude-skills-private"]
     },
     {
       "id": "germomics",
@@ -134,7 +158,7 @@
       "short": "Germomics",
       "family": "site",
       "ring": "used",
-      "public": false,
+      "description": "A podcast and writing site about microbiology and history, with interactive virus and bacteria data pages and browser games.",
       "domain": "germomics.com",
       "repos": ["DrDustinEdwards/germomics"]
     },
@@ -144,9 +168,28 @@
       "short": "Foxing",
       "family": "product",
       "ring": "used",
-      "public": false,
+      "description": "A reading app and web platform, Letterboxd for books: a web app, an Expo phone reader and a Discord Activity for reading clubs.",
       "domain": "foxing.app",
       "repos": ["DrDustinEdwards/foxing"]
+    },
+    {
+      "id": "foxing-mcp",
+      "name": "Foxing Admin",
+      "short": "Foxing MCP",
+      "family": "plumbing",
+      "ring": "used",
+      "description": "Runs Foxing from a chat: stats, users, badges, journal posts and catalog health, all through the foxing Worker. Built, not yet deployed.",
+      "repos": ["DrDustinEdwards/foxing"]
+    },
+    {
+      "id": "foxing-admin-legacy",
+      "name": "Old Foxing Admin",
+      "short": "Old F. MCP",
+      "family": "plumbing",
+      "ring": "used",
+      "description": "The first Foxing admin MCP, a Next.js app on Vercel that read Supabase, Sentry and Vercel logs. Replaced by Foxing Admin.",
+      "domain": "admin-mcp.foxing.app",
+      "repos": ["DrDustinEdwards/foxing-admin-mcp"]
     },
     {
       "id": "foxhound",
@@ -154,9 +197,39 @@
       "short": "Foxhound",
       "family": "product",
       "ring": "used",
-      "public": false,
+      "description": "Recovers failed Stripe payments, handles disputes and reports subscription health for merchants, and is paid only on money it recovers.",
       "domain": "foxhoundapp.com",
       "repos": ["DrDustinEdwards/foxhound"]
+    },
+    {
+      "id": "foxhound-mcp",
+      "name": "Foxhound Admin",
+      "short": "Foxhound MCP",
+      "family": "plumbing",
+      "ring": "used",
+      "description": "Runs Foxhound from a chat. It holds no Stripe key and no database: every action is a call to the foxhound Worker's admin API.",
+      "domain": "admin-mcp.foxhoundapp.com",
+      "repos": ["DrDustinEdwards/foxhound"]
+    },
+    {
+      "id": "recova",
+      "name": "Recova",
+      "short": "Recova",
+      "family": "product",
+      "ring": "used",
+      "description": "The first version of Foxhound: Next.js on Vercel with Supabase. Frozen to hotfixes, and retired once Foxhound matches it.",
+      "domain": "recovamrr.com",
+      "repos": ["DrDustinEdwards/recova"]
+    },
+    {
+      "id": "recova-mcp",
+      "name": "Recova MCP",
+      "short": "Recova MCP",
+      "family": "plumbing",
+      "ring": "used",
+      "description": "Gives a merchant's AI agents their Recova recovery, intelligence and disputes data over MCP, with per-merchant API keys.",
+      "domain": "mcp.recovamrr.com",
+      "repos": ["DrDustinEdwards/recova-mcp"]
     },
     {
       "id": "txasm",
@@ -164,7 +237,7 @@
       "short": "TXASM",
       "family": "site",
       "ring": "used",
-      "public": false,
+      "description": "Runs the Texas Branch ASM meetings: registration, abstract submission and review, the program, and the abstract book PDF.",
       "domain": "txasm.org",
       "repos": ["DrDustinEdwards/txasm"]
     },
@@ -174,9 +247,19 @@
       "short": "Julie's site",
       "family": "site",
       "ring": "used",
-      "public": false,
+      "description": "Julie Edwards's campaign site for the Bluff Dale ISD school board. Its copy lives in D1 and is edited through Carrel.",
       "domain": "julieedwards.info",
       "repos": ["DrDustinEdwards/julieedwards-info"]
+    },
+    {
+      "id": "bsw",
+      "name": "BioScience Writers",
+      "short": "BSW",
+      "family": "site",
+      "ring": "used",
+      "description": "The marketing site for BioScience Writers, a scientific editing and medical writing company. Not yet launched.",
+      "domain": "bsw.dustin-edwards.workers.dev",
+      "repos": ["DrDustinEdwards/bsw"]
     }
   ],
   "containers": [
@@ -739,6 +822,598 @@
       "kind": "package",
       "technology": "Node CLI",
       "description": "The restore drill: restores a downloaded dump into local SQLite, or a scratch D1 over the REST API, and checks it."
+    },
+    {
+      "id": "germomics-worker",
+      "system": "germomics",
+      "name": "Site Worker",
+      "kind": "worker",
+      "technology": "React Router 8 on a Cloudflare Worker",
+      "description": "Serves germomics.com: episodes, posts, the data pages and the games, with the admin behind Access."
+    },
+    {
+      "id": "germomics-db",
+      "system": "germomics",
+      "name": "germomics",
+      "kind": "database",
+      "technology": "D1",
+      "description": "Episodes, posts, the virus and bacteria data and the site's pages, with full-text search."
+    },
+    {
+      "id": "germomics-audio",
+      "system": "germomics",
+      "name": "germomics-audio",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Podcast audio."
+    },
+    {
+      "id": "germomics-blog-images",
+      "system": "germomics",
+      "name": "germomics-blog-images",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Images for posts."
+    },
+    {
+      "id": "germomics-game-assets",
+      "system": "germomics",
+      "name": "germomics-game-assets",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Sprites and sounds for the browser games."
+    },
+    {
+      "id": "germomics-backups",
+      "system": "germomics",
+      "name": "germomics-backups",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The nightly D1 dumps."
+    },
+    {
+      "id": "germomics-kv",
+      "system": "germomics",
+      "name": "APP_KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "Rate-limit counters, the AI spending cap and the content cache."
+    },
+    {
+      "id": "germomics-cron",
+      "system": "germomics",
+      "name": "Nightly backup",
+      "kind": "cron",
+      "technology": "Workers cron trigger",
+      "description": "Dumps the D1 database into germomics-backups with d1-dump at 03:17 UTC."
+    },
+    {
+      "id": "germomics-access",
+      "system": "germomics",
+      "name": "Cloudflare Access",
+      "kind": "external",
+      "technology": "Access",
+      "description": "Guards the admin."
+    },
+    {
+      "id": "germomics-maps",
+      "system": "germomics",
+      "name": "Google Maps",
+      "kind": "external",
+      "technology": "Maps JavaScript API",
+      "description": "The maps on the data pages."
+    },
+    {
+      "id": "foxing-worker",
+      "system": "foxing",
+      "name": "Web Worker",
+      "kind": "worker",
+      "technology": "React Router 8 and Hono on a Cloudflare Worker",
+      "description": "Serves foxing.app and the /api/v1 the apps call: books, reading, reviews, clubs and the web reader."
+    },
+    {
+      "id": "foxing-db",
+      "system": "foxing",
+      "name": "foxing",
+      "kind": "database",
+      "technology": "D1",
+      "description": "Readers, books, shelves, reviews, annotations, clubs and journal posts, with full-text search."
+    },
+    {
+      "id": "foxing-epubs",
+      "system": "foxing",
+      "name": "foxing-epubs",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Covers, EPUBs, avatars and journal images."
+    },
+    {
+      "id": "foxing-backups",
+      "system": "foxing",
+      "name": "foxing-backups",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The nightly D1 dumps."
+    },
+    {
+      "id": "foxing-kv",
+      "system": "foxing",
+      "name": "APP_KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "Sessions, caches and rate-limit state."
+    },
+    {
+      "id": "foxing-club-room",
+      "system": "foxing",
+      "name": "ClubRoom",
+      "kind": "database",
+      "technology": "Durable Object",
+      "description": "One live room per reading club, fanning out reactions and presence. It never writes D1."
+    },
+    {
+      "id": "foxing-companion-queue",
+      "system": "foxing",
+      "name": "foxing-companion-cache",
+      "kind": "queue",
+      "technology": "Cloudflare Queues",
+      "description": "One message per book, so the consumer writes the AI companion's cached notes."
+    },
+    {
+      "id": "foxing-cron",
+      "system": "foxing",
+      "name": "Scheduled jobs",
+      "kind": "cron",
+      "technology": "Workers cron triggers",
+      "description": "The companion cache at 08:00, a push sweep every five minutes, and the nightly D1 backup."
+    },
+    {
+      "id": "foxing-mobile",
+      "system": "foxing",
+      "name": "Foxing reader",
+      "kind": "external",
+      "technology": "Expo React Native app",
+      "description": "The phone reader, with foliate-js for EPUBs. It calls the web Worker's API."
+    },
+    {
+      "id": "foxing-discord",
+      "system": "foxing",
+      "name": "Discord Activity",
+      "kind": "external",
+      "technology": "Vite and React Discord Activity",
+      "description": "Club reading inside Discord: reactions, polls and sprints."
+    },
+    {
+      "id": "foxing-supabase",
+      "system": "foxing",
+      "name": "Supabase function",
+      "kind": "external",
+      "technology": "Supabase edge function",
+      "description": "Kept only for the phone reader's AI companion."
+    },
+    {
+      "id": "foxing-email",
+      "system": "foxing",
+      "name": "Email",
+      "kind": "external",
+      "technology": "Workers send_email binding",
+      "description": "Sign-in and notification mail."
+    },
+    {
+      "id": "foxing-mcp-worker",
+      "system": "foxing-mcp",
+      "name": "Admin MCP Worker",
+      "kind": "worker",
+      "technology": "Cloudflare Worker",
+      "description": "The MCP door an operator's AI session uses, signed in through Cloudflare Access. It calls the foxing Worker over a service binding."
+    },
+    {
+      "id": "foxing-mcp-oauth-kv",
+      "system": "foxing-mcp",
+      "name": "OAUTH_KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "Grants and tokens for the MCP door's OAuth provider."
+    },
+    {
+      "id": "foxing-mcp-rate-limit",
+      "system": "foxing-mcp",
+      "name": "McpRateLimit",
+      "kind": "database",
+      "technology": "Durable Object",
+      "description": "The per-operator rate limiter."
+    },
+    {
+      "id": "foxing-mcp-tool-log",
+      "system": "foxing-mcp",
+      "name": "ToolCallLog",
+      "kind": "database",
+      "technology": "Durable Object",
+      "description": "A log of every tool call."
+    },
+    {
+      "id": "foxing-admin-legacy-app",
+      "system": "foxing-admin-legacy",
+      "name": "Next.js app",
+      "kind": "site",
+      "technology": "Next.js on Vercel",
+      "description": "One MCP endpoint behind a single operator key."
+    },
+    {
+      "id": "foxing-admin-legacy-supabase",
+      "system": "foxing-admin-legacy",
+      "name": "Supabase",
+      "kind": "external",
+      "technology": "Supabase Postgres",
+      "description": "The old Foxing database it queried."
+    },
+    {
+      "id": "foxing-admin-legacy-sentry",
+      "system": "foxing-admin-legacy",
+      "name": "Sentry and Vercel",
+      "kind": "external",
+      "technology": "Sentry and Vercel APIs",
+      "description": "Recent errors for web and phone, and runtime logs."
+    },
+    {
+      "id": "foxhound-worker",
+      "system": "foxhound",
+      "name": "App Worker",
+      "kind": "worker",
+      "technology": "React Router 8 on a Cloudflare Worker",
+      "description": "Serves foxhoundapp.com: marketing, sign-in, the merchant app, Stripe webhooks and the admin API."
+    },
+    {
+      "id": "foxhound-db",
+      "system": "foxhound",
+      "name": "foxhound",
+      "kind": "database",
+      "technology": "D1",
+      "description": "Accounts, merchants, payments, recoveries, disputes and billing."
+    },
+    {
+      "id": "foxhound-backups",
+      "system": "foxhound",
+      "name": "foxhound-backups",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The nightly D1 dumps."
+    },
+    {
+      "id": "foxhound-money",
+      "system": "foxhound",
+      "name": "MoneyWriter",
+      "kind": "database",
+      "technology": "Durable Object",
+      "description": "Serialises every write that moves money."
+    },
+    {
+      "id": "foxhound-cron-lock",
+      "system": "foxhound",
+      "name": "CronLock",
+      "kind": "database",
+      "technology": "Durable Object",
+      "description": "Keeps each scheduled job to one run at a time."
+    },
+    {
+      "id": "foxhound-rate-limiter",
+      "system": "foxhound",
+      "name": "RateLimiter",
+      "kind": "database",
+      "technology": "Durable Object",
+      "description": "Rate limits for the API."
+    },
+    {
+      "id": "foxhound-auth-rate-limiter",
+      "system": "foxhound",
+      "name": "Auth rate limiter",
+      "kind": "database",
+      "technology": "Durable Object",
+      "description": "Rate limits for sign-in."
+    },
+    {
+      "id": "foxhound-audit-queue",
+      "system": "foxhound",
+      "name": "foxhound-audit",
+      "kind": "queue",
+      "technology": "Cloudflare Queues",
+      "description": "Free revenue audits, run one at a time off the request."
+    },
+    {
+      "id": "foxhound-email-queue",
+      "system": "foxhound",
+      "name": "foxhound-email",
+      "kind": "queue",
+      "technology": "Cloudflare Queues",
+      "description": "Outgoing recovery and account mail."
+    },
+    {
+      "id": "foxhound-email-dlq",
+      "system": "foxhound",
+      "name": "foxhound-email-dlq",
+      "kind": "queue",
+      "technology": "Cloudflare Queues",
+      "description": "Mail that failed every retry."
+    },
+    {
+      "id": "foxhound-email-events",
+      "system": "foxhound",
+      "name": "foxhound-email-events",
+      "kind": "queue",
+      "technology": "Cloudflare Queues",
+      "description": "Delivery events for sent mail."
+    },
+    {
+      "id": "foxhound-cron",
+      "system": "foxhound",
+      "name": "Scheduled jobs",
+      "kind": "cron",
+      "technology": "Workers cron triggers",
+      "description": "Recovery every five minutes, daily sweeps and backup, weekly digests, and monthly billing and audits."
+    },
+    {
+      "id": "foxhound-stripe",
+      "system": "foxhound",
+      "name": "Stripe",
+      "kind": "external",
+      "technology": "Stripe Connect",
+      "description": "Merchants' payments, failures and disputes."
+    },
+    {
+      "id": "foxhound-email",
+      "system": "foxhound",
+      "name": "Email",
+      "kind": "external",
+      "technology": "Workers send_email binding",
+      "description": "Recovery mail from send.foxhoundapp.com, sign-in mail from auth.foxhoundapp.com."
+    },
+    {
+      "id": "foxhound-mcp-worker",
+      "system": "foxhound-mcp",
+      "name": "Admin MCP Worker",
+      "kind": "worker",
+      "technology": "Cloudflare Worker",
+      "description": "The MCP door at admin-mcp.foxhoundapp.com, calling the foxhound Worker over a service binding."
+    },
+    {
+      "id": "foxhound-mcp-oauth-kv",
+      "system": "foxhound-mcp",
+      "name": "OAUTH_KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "Grants and tokens for the MCP door's OAuth provider."
+    },
+    {
+      "id": "recova-app",
+      "system": "recova",
+      "name": "Next.js app",
+      "kind": "site",
+      "technology": "Next.js on Vercel",
+      "description": "The marketing site, the merchant app and the admin."
+    },
+    {
+      "id": "recova-cron",
+      "system": "recova",
+      "name": "Vercel cron jobs",
+      "kind": "cron",
+      "technology": "Vercel Cron",
+      "description": "Recovery, win-back, disputes, metrics, digests, billing and social posting, hourly to monthly."
+    },
+    {
+      "id": "recova-supabase",
+      "system": "recova",
+      "name": "Supabase",
+      "kind": "database",
+      "technology": "Supabase Postgres",
+      "description": "Merchants, recoveries, disputes and billing."
+    },
+    {
+      "id": "recova-redis",
+      "system": "recova",
+      "name": "Upstash Redis",
+      "kind": "kv",
+      "technology": "Upstash Redis",
+      "description": "Rate limits and caches."
+    },
+    {
+      "id": "recova-r2",
+      "system": "recova",
+      "name": "Blog images and evidence",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "recova-blog-images and recova-dispute-evidence."
+    },
+    {
+      "id": "recova-stripe",
+      "system": "recova",
+      "name": "Stripe",
+      "kind": "external",
+      "technology": "Stripe Connect",
+      "description": "Merchants' payments, failures and disputes."
+    },
+    {
+      "id": "recova-resend",
+      "system": "recova",
+      "name": "Resend",
+      "kind": "external",
+      "technology": "Resend",
+      "description": "Recovery and account mail."
+    },
+    {
+      "id": "recova-mcp-app",
+      "system": "recova-mcp",
+      "name": "MCP server",
+      "kind": "site",
+      "technology": "Node on Vercel",
+      "description": "One Streamable HTTP endpoint, with SHA-256 hashed API keys scoped to one merchant or to the operator."
+    },
+    {
+      "id": "recova-mcp-agents",
+      "system": "recova-mcp",
+      "name": "AI agents",
+      "kind": "external",
+      "technology": "MCP clients",
+      "description": "Merchants' own AI agents."
+    },
+    {
+      "id": "txasm-worker",
+      "system": "txasm",
+      "name": "Site Worker",
+      "kind": "worker",
+      "technology": "React Router 8 on a Cloudflare Worker",
+      "description": "Serves txasm.org: registration, abstracts, reviewing, decisions and the program."
+    },
+    {
+      "id": "txasm-db",
+      "system": "txasm",
+      "name": "txasm",
+      "kind": "database",
+      "technology": "D1",
+      "description": "Meetings, people, abstracts, reviews and pages."
+    },
+    {
+      "id": "txasm-uploads",
+      "system": "txasm",
+      "name": "txasm-uploads",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Figures and camera-ready files."
+    },
+    {
+      "id": "txasm-books",
+      "system": "txasm",
+      "name": "txasm-books",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Generated abstract books."
+    },
+    {
+      "id": "txasm-kv",
+      "system": "txasm",
+      "name": "APP_KV",
+      "kind": "kv",
+      "technology": "Workers KV",
+      "description": "Sessions and cache."
+    },
+    {
+      "id": "txasm-cron",
+      "system": "txasm",
+      "name": "Daily jobs",
+      "kind": "cron",
+      "technology": "Workers cron trigger",
+      "description": "Deadline reminders and the nightly D1 backup, at 13:00 UTC."
+    },
+    {
+      "id": "txasm-browser",
+      "system": "txasm",
+      "name": "Browser Rendering",
+      "kind": "external",
+      "technology": "Cloudflare Browser Rendering",
+      "description": "Prints the abstract book PDF."
+    },
+    {
+      "id": "julie-worker",
+      "system": "julieedwards-info",
+      "name": "Site Worker",
+      "kind": "worker",
+      "technology": "React Router 8 on a Cloudflare Worker",
+      "description": "Serves the one-page campaign site."
+    },
+    {
+      "id": "julie-db",
+      "system": "julieedwards-info",
+      "name": "julieedwards",
+      "kind": "database",
+      "technology": "D1",
+      "description": "The site's copy, one row per section."
+    },
+    {
+      "id": "julie-backups",
+      "system": "julieedwards-info",
+      "name": "julieedwards-backups",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The nightly D1 dumps."
+    },
+    {
+      "id": "julie-cron",
+      "system": "julieedwards-info",
+      "name": "Nightly backup",
+      "kind": "cron",
+      "technology": "Workers cron trigger",
+      "description": "Dumps the D1 database with d1-dump at 03:37 UTC."
+    },
+    {
+      "id": "bsw-worker",
+      "system": "bsw",
+      "name": "Site Worker",
+      "kind": "worker",
+      "technology": "React Router 8 on a Cloudflare Worker",
+      "description": "Server-renders the marketing site. No database or storage yet."
+    },
+    {
+      "id": "capsid-backups-mirror",
+      "system": "capsid-backups",
+      "name": "Daily mirror",
+      "kind": "cron",
+      "technology": "GitHub Actions schedule",
+      "description": "At 10:15 UTC it signs a request for a one-hour read-only credential, syncs the dumps, checks them and commits."
+    },
+    {
+      "id": "capsid-backups-store",
+      "system": "capsid-backups",
+      "name": "Mirror",
+      "kind": "package",
+      "technology": "Git repository",
+      "description": "The dumps, kept by d1-dump's graduated retention."
+    },
+    {
+      "id": "bench-run",
+      "system": "capsid-bench",
+      "name": "bench-run workflow",
+      "kind": "package",
+      "technology": "GitHub Actions",
+      "description": "Runs one task in one arm, behind an egress allowlist, then scores and seals it."
+    },
+    {
+      "id": "bench-walk",
+      "system": "capsid-bench",
+      "name": "bench-walk workflow",
+      "kind": "package",
+      "technology": "GitHub Actions",
+      "description": "Draws the accepted task set from the frozen frame with a drand seed."
+    },
+    {
+      "id": "bench-claude",
+      "system": "capsid-bench",
+      "name": "Claude Code",
+      "kind": "external",
+      "technology": "Claude Code on a subscription token",
+      "description": "The agent under study, in both arms."
+    },
+    {
+      "id": "bench-drand",
+      "system": "capsid-bench",
+      "name": "drand and Sigstore",
+      "kind": "external",
+      "technology": "drand quicknet, Sigstore and Rekor",
+      "description": "The public randomness for the draw, and the time-locked, logged seal."
+    },
+    {
+      "id": "writing-repo",
+      "system": "writing",
+      "name": "Books",
+      "kind": "package",
+      "technology": "Git repository",
+      "description": "One folder per book: chapters of scene files, outlines, characters, places and world rules, plus Dustin's own voice passages."
+    },
+    {
+      "id": "skills-private-repo",
+      "system": "skills-private",
+      "name": "Skills",
+      "kind": "package",
+      "technology": "Git repository",
+      "description": "The dustin-workflow skill and the script a session-start hook runs to print it."
     }
   ],
   "relationships": [
@@ -835,7 +1510,151 @@
     { "from": "capsid", "to": "enarratio", "kind": "coordinates" },
     { "from": "capsid", "to": "foxhound", "kind": "coordinates" },
     { "from": "capsid", "to": "foxing", "kind": "coordinates" },
-    { "from": "capsid", "to": "germomics", "kind": "coordinates" }
+    { "from": "capsid", "to": "germomics", "kind": "coordinates" },
+    { "from": "germomics-worker", "to": "germomics-db", "kind": "writes" },
+    { "from": "germomics-worker", "to": "germomics-audio", "kind": "writes" },
+    { "from": "germomics-worker", "to": "germomics-blog-images", "kind": "writes" },
+    { "from": "germomics-worker", "to": "germomics-game-assets", "kind": "reads" },
+    { "from": "germomics-worker", "to": "germomics-kv", "kind": "writes" },
+    { "from": "germomics-worker", "to": "germomics-access", "kind": "reads" },
+    { "from": "germomics-worker", "to": "germomics-maps", "kind": "reads" },
+    { "from": "germomics-cron", "to": "germomics-db", "kind": "reads" },
+    { "from": "germomics-cron", "to": "germomics-backups", "kind": "writes" },
+    { "from": "foxing-worker", "to": "foxing-db", "kind": "writes" },
+    { "from": "foxing-worker", "to": "foxing-epubs", "kind": "writes" },
+    { "from": "foxing-worker", "to": "foxing-kv", "kind": "writes" },
+    { "from": "foxing-worker", "to": "foxing-club-room", "kind": "writes" },
+    { "from": "foxing-worker", "to": "foxing-companion-queue", "kind": "writes" },
+    { "from": "foxing-worker", "to": "foxing-companion-queue", "kind": "reads" },
+    { "from": "foxing-worker", "to": "foxing-mobile", "kind": "serves" },
+    { "from": "foxing-worker", "to": "foxing-discord", "kind": "serves" },
+    { "from": "foxing-worker", "to": "foxing-email", "kind": "writes" },
+    { "from": "foxing-mobile", "to": "foxing-supabase", "kind": "reads" },
+    { "from": "foxing-cron", "to": "foxing-db", "kind": "writes" },
+    { "from": "foxing-cron", "to": "foxing-companion-queue", "kind": "writes" },
+    { "from": "foxing-cron", "to": "foxing-backups", "kind": "writes" },
+    { "from": "foxing-mcp-worker", "to": "foxing-mcp-oauth-kv", "kind": "writes" },
+    { "from": "foxing-mcp-worker", "to": "foxing-mcp-rate-limit", "kind": "writes" },
+    { "from": "foxing-mcp-worker", "to": "foxing-mcp-tool-log", "kind": "writes" },
+    { "from": "foxing-mcp-worker", "to": "foxing-worker", "kind": "writes" },
+    { "from": "foxing-mcp-worker", "to": "foxing-worker", "kind": "reads" },
+    { "from": "foxing-admin-legacy-app", "to": "foxing-admin-legacy-supabase", "kind": "reads" },
+    { "from": "foxing-admin-legacy-app", "to": "foxing-admin-legacy-sentry", "kind": "reads" },
+    { "from": "foxhound-worker", "to": "foxhound-db", "kind": "writes" },
+    { "from": "foxhound-worker", "to": "foxhound-money", "kind": "writes" },
+    { "from": "foxhound-worker", "to": "foxhound-rate-limiter", "kind": "reads" },
+    { "from": "foxhound-worker", "to": "foxhound-auth-rate-limiter", "kind": "reads" },
+    { "from": "foxhound-worker", "to": "foxhound-audit-queue", "kind": "writes" },
+    { "from": "foxhound-worker", "to": "foxhound-audit-queue", "kind": "reads" },
+    { "from": "foxhound-worker", "to": "foxhound-email-queue", "kind": "writes" },
+    { "from": "foxhound-worker", "to": "foxhound-email-queue", "kind": "reads" },
+    { "from": "foxhound-email-queue", "to": "foxhound-email-dlq", "kind": "writes" },
+    { "from": "foxhound-worker", "to": "foxhound-email-events", "kind": "reads" },
+    { "from": "foxhound-worker", "to": "foxhound-email", "kind": "writes" },
+    { "from": "foxhound-worker", "to": "foxhound-stripe", "kind": "reads" },
+    { "from": "foxhound-worker", "to": "foxhound-stripe", "kind": "writes" },
+    { "from": "foxhound-cron", "to": "foxhound-cron-lock", "kind": "writes" },
+    { "from": "foxhound-cron", "to": "foxhound-db", "kind": "writes" },
+    { "from": "foxhound-cron", "to": "foxhound-backups", "kind": "writes" },
+    { "from": "foxhound-cron", "to": "foxhound-email-queue", "kind": "writes" },
+    { "from": "foxhound-mcp-worker", "to": "foxhound-mcp-oauth-kv", "kind": "writes" },
+    { "from": "foxhound-mcp-worker", "to": "foxhound-worker", "kind": "writes" },
+    { "from": "foxhound-mcp-worker", "to": "foxhound-worker", "kind": "reads" },
+    { "from": "recova-app", "to": "recova-supabase", "kind": "writes" },
+    { "from": "recova-app", "to": "recova-redis", "kind": "writes" },
+    { "from": "recova-app", "to": "recova-r2", "kind": "writes" },
+    { "from": "recova-app", "to": "recova-stripe", "kind": "reads" },
+    { "from": "recova-app", "to": "recova-stripe", "kind": "writes" },
+    { "from": "recova-app", "to": "recova-resend", "kind": "writes" },
+    { "from": "recova-cron", "to": "recova-app", "kind": "writes" },
+    { "from": "recova-mcp-app", "to": "recova-mcp-agents", "kind": "serves" },
+    { "from": "txasm-worker", "to": "txasm-db", "kind": "writes" },
+    { "from": "txasm-worker", "to": "txasm-uploads", "kind": "writes" },
+    { "from": "txasm-worker", "to": "txasm-books", "kind": "writes" },
+    { "from": "txasm-worker", "to": "txasm-kv", "kind": "writes" },
+    { "from": "txasm-worker", "to": "txasm-browser", "kind": "reads" },
+    { "from": "txasm-cron", "to": "txasm-db", "kind": "reads" },
+    { "from": "julie-worker", "to": "julie-db", "kind": "reads" },
+    { "from": "julie-cron", "to": "julie-db", "kind": "reads" },
+    { "from": "julie-cron", "to": "julie-backups", "kind": "writes" },
+    { "from": "capsid-backups-mirror", "to": "capsid-media", "kind": "reads" },
+    { "from": "capsid-backups-mirror", "to": "capsid-backups-store", "kind": "writes" },
+    { "from": "bench-run", "to": "capsid-worker", "kind": "writes" },
+    { "from": "bench-run", "to": "bench-claude", "kind": "reads" },
+    { "from": "bench-walk", "to": "bench-drand", "kind": "reads" },
+    { "from": "bench-run", "to": "bench-drand", "kind": "writes" },
+    { "from": "carrel-worker", "to": "writing-repo", "kind": "writes" },
+    { "from": "carrel-worker", "to": "writing-repo", "kind": "reads" },
+    { "from": "recova-mcp", "to": "recova", "kind": "reads" },
+    { "from": "carrel", "to": "txasm", "kind": "publishes-to" },
+    { "from": "carrel", "to": "julieedwards-info", "kind": "publishes-to" },
+    { "from": "carrel", "to": "foxhound", "kind": "publishes-to" },
+    { "from": "carrel", "to": "foxing", "kind": "publishes-to" },
+    { "from": "capsid", "to": "txasm", "kind": "coordinates" },
+    { "from": "capsid", "to": "julieedwards-info", "kind": "coordinates" },
+    { "from": "capsid", "to": "bsw", "kind": "coordinates" },
+    { "from": "capsid", "to": "writing", "kind": "coordinates" },
+    { "from": "capsid", "to": "capsid-bench", "kind": "coordinates" },
+    { "from": "capsid", "to": "recova", "kind": "coordinates" },
+    { "from": "capsid", "to": "skills", "kind": "coordinates" },
+    { "from": "capsid", "to": "devkit", "kind": "installs" },
+    { "from": "capsid", "to": "enarratio", "kind": "installs" },
+    { "from": "capsomer", "to": "devkit", "kind": "installs" },
+    { "from": "capsomer", "to": "site-runtime", "kind": "installs" },
+    { "from": "capsomer", "to": "enarratio", "kind": "installs" },
+    { "from": "carrel", "to": "d1-dump", "kind": "installs" },
+    { "from": "carrel", "to": "devkit", "kind": "installs" },
+    { "from": "carrel", "to": "site-runtime", "kind": "installs" },
+    { "from": "carrel", "to": "capsomer", "kind": "installs" },
+    { "from": "dustinedwards-info", "to": "prelum", "kind": "installs" },
+    { "from": "dustinedwards-info", "to": "d1-dump", "kind": "installs" },
+    { "from": "dustinedwards-info", "to": "devkit", "kind": "installs" },
+    { "from": "dustinedwards-info", "to": "site-api", "kind": "installs" },
+    { "from": "dustinedwards-info", "to": "site-runtime", "kind": "installs" },
+    { "from": "dustinedwards-info", "to": "capsomer", "kind": "installs" },
+    { "from": "dustinedwards-info", "to": "enarratio", "kind": "installs" },
+    { "from": "enarratio", "to": "devkit", "kind": "installs" },
+    { "from": "enarratio", "to": "site-runtime", "kind": "installs" },
+    { "from": "foxhound", "to": "prelum", "kind": "installs" },
+    { "from": "foxhound", "to": "d1-dump", "kind": "installs" },
+    { "from": "foxhound", "to": "devkit", "kind": "installs" },
+    { "from": "foxhound", "to": "site-api", "kind": "installs" },
+    { "from": "foxhound", "to": "site-runtime", "kind": "installs" },
+    { "from": "foxhound", "to": "capsomer", "kind": "installs" },
+    { "from": "foxhound", "to": "enarratio", "kind": "installs" },
+    { "from": "foxing", "to": "d1-dump", "kind": "installs" },
+    { "from": "foxing", "to": "devkit", "kind": "installs" },
+    { "from": "foxing", "to": "site-api", "kind": "installs" },
+    { "from": "foxing", "to": "site-runtime", "kind": "installs" },
+    { "from": "germomics", "to": "prelum", "kind": "installs" },
+    { "from": "germomics", "to": "d1-dump", "kind": "installs" },
+    { "from": "germomics", "to": "devkit", "kind": "installs" },
+    { "from": "germomics", "to": "site-api", "kind": "installs" },
+    { "from": "germomics", "to": "site-runtime", "kind": "installs" },
+    { "from": "germomics", "to": "capsomer", "kind": "installs" },
+    { "from": "julieedwards-info", "to": "prelum", "kind": "installs" },
+    { "from": "julieedwards-info", "to": "d1-dump", "kind": "installs" },
+    { "from": "julieedwards-info", "to": "devkit", "kind": "installs" },
+    { "from": "julieedwards-info", "to": "site-api", "kind": "installs" },
+    { "from": "julieedwards-info", "to": "site-runtime", "kind": "installs" },
+    { "from": "julieedwards-info", "to": "capsomer", "kind": "installs" },
+    { "from": "txasm", "to": "prelum", "kind": "installs" },
+    { "from": "txasm", "to": "d1-dump", "kind": "installs" },
+    { "from": "txasm", "to": "devkit", "kind": "installs" },
+    { "from": "txasm", "to": "site-api", "kind": "installs" },
+    { "from": "txasm", "to": "site-runtime", "kind": "installs" },
+    { "from": "txasm", "to": "capsomer", "kind": "installs" },
+    { "from": "bsw", "to": "devkit", "kind": "installs" },
+    { "from": "bsw", "to": "site-runtime", "kind": "installs" },
+    { "from": "prelum", "to": "devkit", "kind": "installs" },
+    { "from": "prelum", "to": "capsomer", "kind": "installs" },
+    { "from": "prelum", "to": "enarratio", "kind": "installs" },
+    { "from": "site-api", "to": "devkit", "kind": "installs" },
+    { "from": "site-api", "to": "site-runtime", "kind": "installs" },
+    { "from": "site-runtime", "to": "devkit", "kind": "installs" },
+    { "from": "d1-dump", "to": "devkit", "kind": "installs" },
+    { "from": "skills", "to": "devkit", "kind": "installs" },
+    { "from": "capsid-backups", "to": "d1-dump", "kind": "installs" }
   ],
   "flows": [
     {
