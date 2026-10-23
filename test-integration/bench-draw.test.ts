@@ -38,11 +38,13 @@ const draw = (from: number, tasks: string[], registration = REG) => post("/bench
 const start = (task_id: string, arm = "baseline") => post("/bench/start", { task_id, arm, gh_run: "123.1" });
 
 describe("the registration lock", () => {
-  it("starts a pilot task before the registration and refuses a full task until it is on the recorded draw", async () => {
+  it("starts a pilot or excluded task before the registration and refuses a full task until it is on the recorded draw", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const pilot = await registerTask("pilot");
+    const excluded = await registerTask("excluded");
     const [a, b, c, off] = [await registerTask("full"), await registerTask("full"), await registerTask("full"), await registerTask("full")];
     expect((await start(pilot)).status).toBe(200);
+    expect((await start(excluded)).status).toBe(200);
     const early = await start(a);
     expect(early.status).toBe(409);
     expect(await early.text()).toMatch(/no registration is recorded/);
@@ -71,7 +73,8 @@ describe("the registration lock", () => {
     expect(await undrawn.text()).toMatch(/not on the draw/);
     const late = await start(pilot);
     expect(late.status).toBe(409);
-    expect(await late.text()).toMatch(/pilot ends/);
+    expect(await late.text()).toMatch(/pilot runs end/);
+    expect((await start(excluded)).status).toBe(409);
 
     // Once a drawn task has a model run, the draw cannot shrink and the registration stays.
     await expect(env.DB.prepare("DELETE FROM bench_draw WHERE task_id = ?1").bind(b).run()).rejects.toThrow(/cannot shrink/);
