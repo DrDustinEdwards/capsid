@@ -670,10 +670,10 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     // package writes them.
     const pagedRows = (table: string): Array<{ id?: number }> | null =>
       table === "document_versions" ? rows.versions : table === "audit_log" ? rows.audit_log : null;
-    const maxIdOf = flat.match(/^SELECT MAX\("?id"?\) AS max_id FROM "?(\w+)"?$/i);
+    const maxIdOf = flat.match(/^SELECT MAX\("?id"?\) AS max_id, COUNT\(\*\) AS n FROM "?(\w+)"?$/i);
     const maxIdRows = maxIdOf ? pagedRows(maxIdOf[1]) : null;
     if (maxIdRows) {
-      return [{ max_id: maxIdRows.length ? Math.max(...maxIdRows.map((r) => r.id ?? 0)) : null }];
+      return [{ max_id: maxIdRows.length ? Math.max(...maxIdRows.map((r) => r.id ?? 0)) : null, n: maxIdRows.length }];
     }
     const pageOf = flat.match(/^SELECT \* FROM "?(\w+)"? WHERE "?id"? > \?1 AND "?id"? <= \?2 ORDER BY "?id"? LIMIT \?3$/i);
     const pageRows = pageOf ? pagedRows(pageOf[1]) : null;
