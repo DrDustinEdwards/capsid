@@ -56,7 +56,7 @@ ${servers
 <a href="${toolPath(t.name)}"><code>${escapeHtml(t.name)}</code><span class="tool-card-title">${escapeHtml(t.title)}</span></a>
 <p>${prose(sentence(t.description))}</p>
 <p class="tool-tags">${pills(t)}</p>
-<p class="hint">${t.actions.length ? `${t.actions.length} actions: ${t.actions.map((/** @type {any} */ a) => escapeHtml(a.name)).join(", ")}` : "One action"}; ${t.params.length} argument${t.params.length === 1 ? "" : "s"}.</p>
+<p class="hint">${t.actions.length ? `${t.actions.length === 1 ? "One action" : `${t.actions.length} actions`}: ${t.actions.map((/** @type {any} */ a) => escapeHtml(a.name)).join(", ")}` : "One action"}; ${t.params.length} argument${t.params.length === 1 ? "" : "s"}.</p>
 </li>`
       )
       .join("")}</ul>

@@ -72,7 +72,7 @@ function toolShowcase(/** @type {any[]} */ tools) {
 <h3>${escapeHtml(t.title)}</h3>
 <p>${escapeHtml(first(t.description)).replace(/`([^`]+)`/g, "<code>$1</code>")}</p>
 <p class="tool-tags">${words(t).map((w) => `<span class="cap-pill">${escapeHtml(w)}</span>`).join("")}</p>
-${t.actions.length ? `<ul class="tool-actions">${t.actions.map((/** @type {any} */ a) => `<li><code>${escapeHtml(a.name)}</code> ${escapeHtml(a.summary || "")}</li>`).join("")}</ul>` : `<p class="hint">One action, ${t.params.length} argument${t.params.length === 1 ? "" : "s"}.</p>`}
+${t.actions.length ? `<ul class="tool-actions">${t.actions.map((/** @type {any} */ a) => `<li><code>${escapeHtml(a.name)}</code> ${escapeHtml(a.summary || "")}</li>`).join("")}</ul>` : t.params.length ? `<p class="hint">Its ${t.params.length === 1 ? "one argument" : `${t.params.length} arguments`}:</p><p class="tool-args">${t.params.map((/** @type {any} */ p) => `<code>${escapeHtml(p.name)}</code>`).join(" ")}</p>` : `<p class="hint">It takes no arguments.</p>`}
 <p><a href="${toolPath(t.name)}">Every argument of ${escapeHtml(t.name)}</a></p>
 </div>`
     )
@@ -164,7 +164,7 @@ function features(/** @type {any} */ model, /** @type {any} */ stats, /** @type 
       text: "A push, a deploy, a secret or a merge stops the agent until a person or the signed policy says yes.",
       href: "/numbers/#gates",
       link: "Waits, week by week",
-      ui: `<div class="frag frag-gate"><p class="frag-gate-q">Merge #12 into master?</p><p class="frag-gate-a"><span class="cap-btn" data-variant="primary" aria-hidden="true">Approve</span><span class="cap-btn" aria-hidden="true">Ask why</span></p><p class="hint">${percent(stats.gates.share_ended_by_policy_30d)} ended by policy, last 30 days</p></div>`,
+      ui: `<div class="frag frag-gate"><p class="hint">How the Portal asks the owner:</p><p class="frag-gate-q">Merge #12 into master?</p><p class="frag-gate-a"><span class="cap-btn" data-variant="primary" aria-hidden="true">Approve</span><span class="cap-btn" aria-hidden="true">Ask why</span></p><p class="hint">${percent(stats.gates.share_ended_by_policy_30d)} ended by policy, last 30 days</p></div>`,
     },
     {
       title: "The watcher",

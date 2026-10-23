@@ -196,12 +196,15 @@ function neighbourhood(model, id) {
     if (r.from === id) near.add(r.to);
     if (r.to === id) near.add(r.from);
   }
-  if (near.size < 2) return "";
+  // A hub's neighbours stand in one long column that says no more than the list above it.
+  if (near.size < 2 || near.size > 11) return "";
   return graphSvg({
     id: `near-${id}`,
     title: `${byId.get(id).name} and the ${near.size - 1} ${near.size === 2 ? "system" : "systems"} it connects to`,
     boxes: [...near].map((x) => ({ id: x, label: byId.get(x).name, href: systemPath(x), lines: [], sub: RING_NAMES[/** @type {keyof typeof RING_NAMES} */ (byId.get(x).ring)], current: x === id })),
-    wires: model.relationships.filter((/** @type {any} */ r) => near.has(r.from) && near.has(r.to)).map((/** @type {any} */ r) => ({ from: r.from, to: r.to })),
+    // Only its own lines: the lines among its neighbours belong on their pages, and drawn here
+    // they turned a hub's page into a tangle.
+    wires: model.relationships.filter((/** @type {any} */ r) => (r.from === id || r.to === id) && near.has(r.from) && near.has(r.to)).map((/** @type {any} */ r) => ({ from: r.from, to: r.to })),
   });
 }
 
@@ -239,15 +242,16 @@ export function systemPage(model, id, asOf, maps = []) {
     ...(own.length ? [["Parts", `<a href="${containersPath(id)}">${own.length}</a>`]] : []),
     ["Connections", String([...groups.values()].reduce((n, g) => n + g.length, 0))],
     ...(maps.length ? [["Code", `<a href="${codePath(id)}">${escapeHtml(codeSummary(maps))}</a>`]] : []),
+    ["Write-up", `<a href="${sitePath(id)}">${escapeHtml(s.name)} on dustinedwards.info</a>`],
   ];
   const lead = s.description ? escapeHtml(s.description) : s.private ? "Private: its repo is not public." : "";
   const map = systemMapHtml(mapData(model), { id: "family", label: "The family", headingLevel: 3, openLabel: "Its page" });
-  const drawing = s.ring === "core" ? "" : partsDrawing(model, s);
+  // The core's insides are Capsomer's map, as on its parts page; any other system's are dagre's.
+  const drawing = s.ring === "core"
+    ? `<div class="map-host" data-chosen="${escapeHtml(id)}" data-enter>${systemMapHtml(mapData(model), { id: "inside", label: `Inside ${s.name}`, headingLevel: 3 })}</div>`
+    : partsDrawing(model, s);
   const body = `${pageHead([["/", "Overview"], ["/systems/", "Systems"]], s.name, escapeHtml(s.name), lead)}
-<div class="system-top">
 <dl class="facts">${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${v}</dd>`).join("")}</dl>
-<p class="out"><a class="arrow" href="${sitePath(id)}">${escapeHtml(s.name)} on dustinedwards.info</a></p>
-</div>
 ${own.length ? `<section aria-labelledby="inside-title"><h2 id="inside-title">Inside ${escapeHtml(s.name)}</h2>
 <p class="section-sub">Its ${own.length} parts: ${own.map((/** @type {any} */ c) => `<a href="${partPath(c)}">${escapeHtml(c.name)}</a>`).join(", ")}. <a href="${containersPath(id)}">Inside ${escapeHtml(s.name)}: its ${own.length} parts and how they connect</a>.</p>
 ${drawing}</section>` : ""}
@@ -286,7 +290,7 @@ export function containersPage(model, id, asOf) {
   const core = s.ring === "core";
   const map = core ? systemMapHtml(mapData(model), { id: "family", label: `Inside ${s.name}`, headingLevel: 3 }) : "";
   const body = `${pageHead([["/", "Overview"], ["/systems/", "Systems"], [systemPath(id), s.name]], "Inside", `Inside ${escapeHtml(s.name)}`, `Its ${own.length} parts, what each runs on, and the lines between them: the containers of the C4 model, inside the system's boundary${outside.length ? `, and the ${outside.length} it works with outside it` : ""}.`)}
-${core ? `<section aria-labelledby="drawing-title"><h2 id="drawing-title">The drawing</h2><div class="map-host" data-chosen="${escapeHtml(id)}" data-enter>${map}</div></section>` : partsDrawing(model, s)}
+${core ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id="drawing-title" class="cap-sr-only">The drawing</h2><div class="map-host" data-chosen="${escapeHtml(id)}" data-enter>${map}</div></section>` : partsDrawing(model, s)}
 ${scroller("parts", `<table class="cap-table"><caption>The parts of ${escapeHtml(s.name)}</caption>
 <thead><tr><th scope="col">Part</th><th scope="col">Kind</th><th scope="col">Runs on</th><th scope="col">What it does</th></tr></thead>
 <tbody>${own.map((/** @type {any} */ c) => `<tr id="part-${escapeHtml(c.id)}"><th scope="row">${escapeHtml(c.name)}</th><td>${escapeHtml(c.kind)}</td><td>${escapeHtml(c.technology)}</td><td>${escapeHtml(c.description ?? "")}</td></tr>`).join("")}</tbody></table>`, `The parts of ${s.name}`)}
@@ -387,9 +391,9 @@ function flowLinks(model, id) {
 /** What a part is to a step, in words. @param {Step} st @param {Part} p */
 function role(st, p) {
   const end = p.id === st.from.id || p.id === st.to.id;
-  if (end && p.id === st.toward) return "the step moves toward it";
-  if (end) return "the step moves from it";
-  return "lit by the step";
+  if (end && p.id === st.toward) return "where the step arrives";
+  if (end) return "where the step starts";
+  return "also used in the step";
 }
 
 /** The step list, each step a link, the one shown marked. @param {Flow} f @param {number} [current] */
@@ -517,11 +521,13 @@ export function stepPage(model, f, n, asOf) {
   // Play steps through on its own; the script shows it, since without script there is nothing to play.
   const play = drawn ? `<button class="cap-btn" type="button" data-autoplay hidden>Play</button>` : "";
   const body = `${pageHead([["/", "Overview"], ["/flows/", "Flows"], [flowPath(f.id), f.name]], `Step ${n}`, escapeHtml(f.name))}
+<div class="step-layout${drawn ? " step-layout-drawn" : ""}">
 <section class="flow-step" data-swap="step" aria-labelledby="step-title">
 <div class="flow-stack">${f.steps.map((x) => stepText(x, total, systems, x.n === n)).join("")}</div>
 <nav class="flow-nav" aria-label="Steps">${nav}${play}</nav>
 </section>
-${drawn ? `<section aria-labelledby="drawing-title"><h2 id="drawing-title">The drawing</h2><p class="hint" data-keys hidden>Number keys 1 to ${Math.min(total, 9)} go to that step.</p><div class="map-host flow-map" data-flow="${escapeHtml(f.id)}" data-step="${n}" data-steps="${total}">${map}</div></section>` : ""}
+${drawn ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id="drawing-title" class="cap-sr-only">The drawing</h2><p class="hint" data-keys hidden>Number keys 1 to ${Math.min(total, 9)} go to that step.</p><div class="map-host flow-map" data-flow="${escapeHtml(f.id)}" data-step="${n}" data-steps="${total}">${map}</div></section>` : ""}
+</div>
 <section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${stepList(f, n)}</section>`;
   return layout({
     title: `${f.name}, step ${n} of ${total}, Capsid`,

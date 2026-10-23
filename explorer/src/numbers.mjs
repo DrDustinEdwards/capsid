@@ -129,7 +129,7 @@ export function numbersHtml(stats) {
 <p class="measure">The watcher reads every registered site on Capsid's five-minute tick and keeps a ring of half-hour slots per site. A slot it could not measure is left out, never counted as up.</p>
 <div class="charts">${siteRings.join("")}</div></section>
 <section class="numbers-part" id="every" aria-labelledby="every-title"><h3 id="every-title">Every number</h3>
-${scroller("numbers-table", `<table class="cap-table numbers-table"><caption>Every number, as of ${escapeHtml(stats.as_of)}</caption><tbody>
+${scroller("numbers-table", `<table class="cap-table numbers-table"><caption class="cap-sr-only">Every number, as of ${escapeHtml(stats.as_of)}</caption><tbody>
 ${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("\n")}
 </tbody></table>`, "Every number")}
 </section>
