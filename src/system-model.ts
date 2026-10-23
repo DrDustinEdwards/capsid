@@ -7,10 +7,11 @@ import { bounded } from "./limits";
 // changed by pull request. Every map and diagram is drawn from what toPublic makes of
 // it, never from the file itself.
 //
-// The file holds public-safe facts only. A private system is written as its public
-// name, short name, domain, family and ring, plus the repos the drift check reads;
-// toPublic is the second line, so a fact typed into the wrong field still never
-// reaches the published document.
+// Every system is drawn whole, its parts and lines included, whether its repo is public
+// or private (Dustin, 2026-10-23: "do not exclude private repos", "fully wired just like
+// the public ones"). A private repo shows no link and no code map; nothing else differs.
+// The file is in a public repo, so it holds only what may be published: what a system is
+// for and what it is made of, never a secret, an id or an internal address.
 
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -27,28 +28,20 @@ const RINGS = ["core", "shared", "used"] as const;
 const CONTAINER_KINDS = ["worker", "database", "bucket", "kv", "queue", "cron", "package", "site", "external"] as const;
 const RELATIONSHIP_KINDS = ["installs", "publishes-to", "coordinates", "watches", "reads", "writes", "deploys", "serves"] as const;
 
-const System = z
-  .strictObject({
-    id: Id,
-    name: bounded(40).trim().min(1),
-    // The phone map draws a capsomer about 90 px across, so its label is short.
-    short: bounded(12).trim().min(1),
-    family: z.enum(FAMILIES),
-    ring: z.enum(RINGS),
-    public: z.boolean(),
-    description: Text.optional(),
-    domain: bounded(253).regex(DOMAIN).optional(),
-    repos: z.array(bounded(200).regex(REPO)).min(1),
-    // Answer 15: a public system shown without a link to its repo.
-    hide_repo_link: z.boolean().optional(),
-    aliases: z.array(Id).optional(),
-  })
-  .refine((s) => s.public || s.domain !== undefined, {
-    message: "a private system appears only as its public name and domain, so it needs a domain (answer 7: one with no public product is left out)",
-  })
-  .refine((s) => s.public || s.description === undefined, {
-    message: "a private system carries no description; its internals never appear",
-  });
+const System = z.strictObject({
+  id: Id,
+  name: bounded(40).trim().min(1),
+  // The phone map draws a capsomer about 90 px across, so its label is short.
+  short: bounded(12).trim().min(1),
+  family: z.enum(FAMILIES),
+  ring: z.enum(RINGS),
+  description: Text.optional(),
+  domain: bounded(253).regex(DOMAIN).optional(),
+  repos: z.array(bounded(200).regex(REPO)).min(1),
+  // Answer 15: a public system shown without a link to its repo.
+  hide_repo_link: z.boolean().optional(),
+  aliases: z.array(Id).optional(),
+});
 
 const Container = z.strictObject({
   id: Id,
@@ -165,17 +158,8 @@ const PublicSystemOpen = z.strictObject({
   domain: bounded(253).optional(),
   repos: z.array(bounded(512).url()).optional(),
 });
-// Ruling 3: a private system is a public name and a domain, placed on the map.
-export const PRIVATE_SYSTEM_KEYS = ["id", "name", "short", "domain", "family", "ring", "private"] as const;
-const PublicSystemPrivate = z.strictObject({
-  id: Id,
-  name: bounded(40),
-  short: bounded(12),
-  domain: bounded(253),
-  family: z.enum(FAMILIES),
-  ring: z.enum(RINGS),
-  private: z.literal(true),
-});
+// A private system is everything a public one is but its repo link.
+const PublicSystemPrivate = PublicSystemOpen.omit({ repos: true }).extend({ private: z.literal(true) });
 
 export const PublicModelSchema = z.strictObject({
   version: z.literal(1),
@@ -239,10 +223,10 @@ export type RepoPrivacy = ReadonlyMap<string, boolean>;
 /** A relationship's published id, derived from its ends and kind, never copied from text. */
 const relationshipId = (r: { from: string; kind: string; to: string }) => `${r.from}--${r.kind}--${r.to}`;
 
-/** Public only when the model says so AND GitHub says every repo it lists is public.
- *  Any other answer, an unknown repo included, is private. */
+/** Public only when GitHub says every repo the system lists is public. Any other
+ *  answer, an unknown repo included, is private. */
 function isPublicSystem(s: ModelSystem, privacy: RepoPrivacy): boolean {
-  return s.public && s.repos.length > 0 && s.repos.every((r) => privacy.get(r.toLowerCase()) === false);
+  return s.repos.every((r) => privacy.get(r.toLowerCase()) === false);
 }
 
 /** Every repo of a public system, with its system: the only repos whose code maps may be
@@ -255,87 +239,48 @@ export function publicRepos(model: SystemModel, privacy: RepoPrivacy): Array<{ s
  * The public document: what the explorer and the dustinedwards.info map read.
  *
  * Built by picking named fields into new objects, never by copying an input object and
- * deleting from it, so a field nobody listed here cannot pass through. Rules (design
- * section 2): a system is private unless the model and GitHub both say public; a
- * private system is its PRIVATE_SYSTEM_KEYS and nothing else; its containers are
- * dropped; a relationship with a private end survives only between two systems, with
- * no title (answer 6); an output id is derived from its ends, never copied from text;
- * a flow survives only when every step rides a relationship between public ends and
- * lights only public containers, so a private system's flows are dropped whole.
- * Repos that are not in the model are never read here at all (answer 7).
+ * deleting from it, so a field nobody listed here cannot pass through. Every system,
+ * part, line and flow is published; a system is private unless GitHub says every repo
+ * it lists is public, and a private system carries no repo link. An output id is
+ * derived from its ends, never copied from text.
  */
 export function toPublic(model: SystemModel, privacy: RepoPrivacy, asOf: string): PublicModel {
   const open = new Set(model.systems.filter((s) => isPublicSystem(s, privacy)).map((s) => s.id));
-  const systemIds = new Set(model.systems.map((s) => s.id));
 
   const systems: PublicModel["systems"] = model.systems.map((s) => {
-    if (!open.has(s.id)) {
-      // The schema requires a domain on a model system marked private; a system marked
-      // public that GitHub reports private may have none, and then shows its name alone.
-      return { id: s.id, name: s.name, short: s.short, domain: s.domain ?? "", family: s.family, ring: s.ring, private: true };
-    }
-    const out: Extract<PublicModel["systems"][number], { private: false }> = {
-      id: s.id,
-      name: s.name,
-      short: s.short,
-      family: s.family,
-      ring: s.ring,
-      private: false,
-    };
+    const base = { id: s.id, name: s.name, short: s.short, family: s.family, ring: s.ring };
+    const out: PublicModel["systems"][number] = open.has(s.id) ? { ...base, private: false } : { ...base, private: true };
     if (s.description !== undefined) out.description = s.description;
     if (s.domain !== undefined) out.domain = s.domain;
-    if (!s.hide_repo_link) out.repos = s.repos.map((r) => `https://github.com/${r}`);
+    if (!out.private && !s.hide_repo_link) out.repos = s.repos.map((r) => `https://github.com/${r}`);
     return out;
   });
 
-  const owner = new Map<string, string>();
-  for (const s of model.systems) owner.set(s.id, s.id);
-  for (const c of model.containers) owner.set(c.id, c.system);
+  const containers: PublicModel["containers"] = model.containers.map((c) => {
+    const out: PublicModel["containers"][number] = { id: c.id, system: c.system, name: c.name, kind: c.kind, technology: c.technology };
+    if (c.description !== undefined) out.description = c.description;
+    return out;
+  });
 
-  const containers: PublicModel["containers"] = model.containers
-    .filter((c) => open.has(c.system))
-    .map((c) => {
-      const out: PublicModel["containers"][number] = { id: c.id, system: c.system, name: c.name, kind: c.kind, technology: c.technology };
-      if (c.description !== undefined) out.description = c.description;
-      return out;
-    });
+  const relationships: PublicModel["relationships"] = model.relationships.map((r) => {
+    const out: PublicModel["relationships"][number] = { id: relationshipId(r), from: r.from, to: r.to, kind: r.kind };
+    if (r.title !== undefined) out.title = r.title;
+    return out;
+  });
 
-  const relationships: PublicModel["relationships"] = [];
-  // Relationships whose two ends are both public: the only ones a flow may ride.
-  const publicEdges = new Set<string>();
-  for (const r of model.relationships) {
-    const fromOwner = owner.get(r.from);
-    const toOwner = owner.get(r.to);
-    if (fromOwner === undefined || toOwner === undefined) continue;
-    const id = relationshipId(r);
-    if (open.has(fromOwner) && open.has(toOwner)) {
-      publicEdges.add(id);
-      const out: PublicModel["relationships"][number] = { id, from: r.from, to: r.to, kind: r.kind };
-      if (r.title !== undefined) out.title = r.title;
-      relationships.push(out);
-    } else if (systemIds.has(r.from) && systemIds.has(r.to)) {
-      relationships.push({ id, from: r.from, to: r.to, kind: r.kind });
-    }
-  }
-
-  const publicContainers = new Set(containers.map((c) => c.id));
-  const flows: NonNullable<PublicModel["flows"]> = [];
-  for (const f of model.flows ?? []) {
-    const steps = f.steps.map((step) => ({ step, relationship: relationshipId(step) }));
-    const whole = steps.every(({ step, relationship }) => publicEdges.has(relationship) && (step.lights ?? []).every((l) => publicContainers.has(l)));
-    if (!whole) continue;
+  const flows: NonNullable<PublicModel["flows"]> = (model.flows ?? []).map((f) => {
     const out: NonNullable<PublicModel["flows"]>[number] = {
       id: f.id,
       name: f.name,
-      steps: steps.map(({ step, relationship }) => {
-        const s: NonNullable<PublicModel["flows"]>[number]["steps"][number] = { relationship, toward: step.toward, text: step.text };
+      steps: f.steps.map((step) => {
+        const s: NonNullable<PublicModel["flows"]>[number]["steps"][number] = { relationship: relationshipId(step), toward: step.toward, text: step.text };
         if (step.lights?.length) s.lights = [...step.lights];
         return s;
       }),
     };
     if (f.description !== undefined) out.description = f.description;
-    flows.push(out);
-  }
+    return out;
+  });
 
   return {
     version: 1,

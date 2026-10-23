@@ -76,7 +76,7 @@ test("a private page says it is private and carries nothing but its name and add
 
 test("the build refuses a model the privacy filter could not have written", async () => {
   const leaky = structuredClone(model);
-  leaky.systems.find((/** @type {any} */ s) => s.id === "vault").description = "What the vault holds.";
+  leaky.systems.find((/** @type {any} */ s) => s.id === "vault").repos = ["https://github.com/example-org/vault"];
   const file = join(mkdtempSync(join(tmpdir(), "explorer-leak-")), "model.json");
   writeFileSync(file, JSON.stringify(leaky));
   await assert.rejects(build({ model: file, stats: join(fixtures, "stats.json"), out: mkdtempSync(join(tmpdir(), "explorer-out-")) }));
