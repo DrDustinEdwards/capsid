@@ -24,7 +24,8 @@ import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
 import { headersFile } from "./src/security-headers.mjs";
 import { codeBySystem, escapePath } from "./src/code.mjs";
-import { allPages } from "./src/pages.mjs";
+import { allPages, searchDocument } from "./src/pages.mjs";
+import { servedTools } from "./src/surface.mjs";
 
 const here = import.meta.dirname;
 const require = createRequire(import.meta.url);
@@ -127,7 +128,8 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   const sources = await readSources(code, sourceDir);
 
   rmSync(out, { recursive: true, force: true });
-  const pages = allPages(model, stats, code, (repo, path) => sources.get(`${repo} ${path}`));
+  const tools = servedTools();
+  const pages = allPages(model, stats, code, (repo, path) => sources.get(`${repo} ${path}`), tools);
   for (const [path, html] of pages) {
     const file = path === "/404" ? join(out, "404.html") : join(out, decodeURIComponent(path), "index.html");
     mkdirSync(dirname(file), { recursive: true });
@@ -144,6 +146,8 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
     "components/table/table.css",
     "components/status/status.css",
     "components/system-map/system-map.css",
+    "components/tabs/tabs.css",
+    "components/field/field.css",
   ]
     .map((rel) => inlineCss(join(capsomer, rel)))
     .join("\n");
@@ -153,7 +157,10 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // The system map's module and the sibling modules it imports.
   const systemMap = join(capsomer, "dist", "components", "system-map");
   for (const file of readdirSync(systemMap).filter((name) => name.endsWith(".js"))) copyFileSync(join(systemMap, file), join(assets, file));
+  copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(assets, "tabs.js"));
+  copyFileSync(require.resolve("enarratio/enhance"), join(assets, "enhance.js"));
   copyFileSync(join(here, "src", "explorer.js"), join(assets, "explorer.js"));
+  writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
   copyFileSync(join(here, "src", "icon.svg"), join(assets, "icon.svg"));
   writeFileSync(join(out, "_headers"), headersFile());
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
