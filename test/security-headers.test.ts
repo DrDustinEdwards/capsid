@@ -55,13 +55,13 @@ test("the set differs from the package's standard by exactly one header, derived
   assert.ok(Object.keys(STANDARD_SECURITY_HEADERS).length > 5, "the package's set was read, not an empty one");
 });
 
-test("every class passes the package's own check against the set Capsid declared, with a count of what it read", () => {
+test("every class passes the package's own check against the set Capsid declared, reading every header in it", () => {
   for (const cls of ["html", "json", "other"] as const) {
     const results = checkSecurityHeaders(new Headers(withSecurityHeaders(new Response("x", { headers: { "Content-Type": cls === "html" ? "text/html" : cls === "json" ? "application/json" : "text/plain" } })).headers), {
       standard: CAPSID_STANDARD_HEADERS,
       csp: false,
     });
-    assert.equal(results.length, Object.keys(CAPSID_STANDARD_HEADERS).length, `${cls}: the check read a different number of headers than the set holds`);
+    for (const name of Object.keys(CAPSID_STANDARD_HEADERS)) assert.ok(results.some((r) => r.name.startsWith(name)), `${cls}: the check did not read ${name}`);
     assert.deepEqual(failures(results), [], `${cls} fails the package check`);
   }
 });
