@@ -11,7 +11,8 @@ import type { SystemModel } from "./system-model";
 // the model never names, a repo the model names that GitHub no longer lists, a watched
 // site whose host is no model system's domain. Each is one line in the daily maintenance
 // list. The check lists and never edits: the model changes by pull request. Every repo,
-// private ones included, belongs in the model (Dustin, 2026-10-23).
+// private ones included, belongs in the model unless its `left_off` list names it
+// (Dustin, 2026-10-23).
 
 const MAX_ITEMS = 50;
 
@@ -33,7 +34,8 @@ export function modelDrift(model: SystemModel, facts: DriftFacts): { items: OpsM
   const items: OpsMaintenanceItem[] = [];
   const modelRepos = new Map<string, string>();
   for (const s of model.systems) for (const r of s.repos) modelRepos.set(r.toLowerCase(), s.id);
-  const known = (repo: string) => modelRepos.has(repo.toLowerCase());
+  const leftOff = new Set((model.left_off ?? []).map((l) => l.repo.toLowerCase()));
+  const known = (repo: string) => modelRepos.has(repo.toLowerCase()) || leftOff.has(repo.toLowerCase());
   const add = (namespace: string, line: string) => {
     if (items.length < MAX_ITEMS) items.push({ rule: "model-drift", namespace, job: null, line });
   };
@@ -56,6 +58,9 @@ export function modelDrift(model: SystemModel, facts: DriftFacts): { items: OpsM
     }
     for (const [repo, system] of modelRepos) {
       if (!live.has(repo)) add("capsid", `system/model.json names ${repo} (system ${system}), which the App does not list: fix the model, or install the App there.`);
+    }
+    for (const repo of leftOff) {
+      if (!live.has(repo)) add("capsid", `system/model.json leaves ${repo} off the map, but the App no longer lists it: drop it from left_off.`);
     }
   }
 

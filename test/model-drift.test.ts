@@ -55,6 +55,12 @@ test("both ways: a repo the model does not name, and a repo it names that GitHub
   assert.ok(!lines.some((l) => l.includes("example-org/old")));
 });
 
+test("a repo the model leaves off is not asked for, and is named once GitHub stops listing it", () => {
+  const model: SystemModel = { ...MODEL, left_off: [{ repo: "example-org/sample-kept-off", why: "Sample." }, { repo: "example-org/sample-gone", why: "Sample." }] };
+  const out = modelDrift(model, facts({ installed: [...facts().installed!, repo("example-org/sample-kept-off")] }));
+  assert.deepEqual(out.items.map((i) => i.line), ["system/model.json leaves example-org/sample-gone off the map, but the App no longer lists it: drop it from left_off."]);
+});
+
 test("a watched site whose host is no system's domain is named; a subdomain of one is covered", () => {
   const out = modelDrift(MODEL, facts({ sites: [{ namespace: "sample", host: "app.example.org" }, { namespace: "other", host: "notexample.com" }] }));
   assert.deepEqual(out.items.map((i) => [i.namespace, i.line]), [["other", "The watched site notexample.com is no model system's domain: add the domain to its system in system/model.json."]]);
