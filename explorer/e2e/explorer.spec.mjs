@@ -101,7 +101,8 @@ eachTheme((theme) => {
     const map = page.locator(".cap-system-map");
     await expect(map).toHaveAttribute("data-flow", "sample-round");
     await expect(map).toHaveAttribute("data-step", "1");
-    await expect(page.locator("[data-keys]")).toBeVisible();
+    // The script reveals the hint; on a touch screen the stylesheet keeps it out of sight.
+    await expect(page.locator("[data-keys]")).not.toHaveAttribute("hidden");
     const loads = await page.evaluate(() => performance.getEntriesByType("navigation").length);
 
     await page.keyboard.press("3");

@@ -5,9 +5,8 @@
 //
 // Every number is from the public numbers or the model; every sentence that states a fact about
 // how Capsid works is one its own docs state (README.md, docs/work-queue.md, docs/backups.md).
-import { systemMapHtml } from "capsomer/behaviour/system-map";
 
-import { escapeHtml, flowPath, flowsOf, layout, mapData, markStep, minutes, percent, stepPath, systemPath } from "./pages.mjs";
+import { escapeHtml, flowPath, flowStage, flowsOf, layout, minutes, percent, stepPath, systemPath } from "./pages.mjs";
 import { toolPath } from "./tools.mjs";
 
 const RING_WORD = { core: "Runs everything", shared: "Shared part", used: "What people use" };
@@ -28,20 +27,12 @@ function hero(/** @type {any} */ model, /** @type {any} */ stats, /** @type {any
   const core = model.systems.find((/** @type {any} */ s) => s.ring === "core");
   const flows = flowsOf(model).filter((f) => core && f.steps.every((x) => x.touches.every((p) => p.system === core.id)));
   const life = flows.find((f) => f.id === "job-life") ?? flows[0];
-  let stage = "";
-  if (life) {
-    const data = { ...mapData(model), flows: flows.map((f) => ({ id: f.id, name: f.name, steps: f.steps.map((x) => ({ from: x.from.id, to: x.to.id, toward: x.toward, text: x.text, lights: x.lights.map((p) => p.id) })) })) };
-    const map = markStep(systemMapHtml(data, { id: "hero-map", label: `Inside ${core.name}`, headingLevel: 2 }), life.steps[0]);
-    stage = `<div class="hero-stage" data-ui>
-<div class="map-host flow-map hero-map" data-flow="${escapeHtml(life.id)}" data-step="1" data-steps="${life.steps.length}" data-player>${map}</div>
-<p class="hero-play"><button class="cap-btn" type="button" data-autoplay hidden>Play</button><span class="hint">${escapeHtml(life.name)}, in ${life.steps.length} steps, over Capsid's real parts.</span></p>
-</div>`;
-  }
+  const stage = life ? `<div class="hero-stage hero-map" data-ui>${flowStage(model, flows, life, "hero-map")}</div>` : "";
   const lifeHref = life ? stepPath(life.id, 1) : "/flows/";
   return `<section class="hero" aria-labelledby="hero-title">
 <div class="hero-text">
 <h1 id="hero-title">The control plane behind every project</h1>
-<p class="hero-sub">Capsid holds the knowledge, the work queue and the keys for ${model.systems.length} systems, and checks what every agent claims against GitHub before a job counts as done.</p>
+<p class="hero-sub">Capsid holds the knowledge, the work queue and the keys every project runs on, and checks what each agent claims against GitHub before a job counts as done.</p>
 <p class="hero-actions"><a class="cap-btn" data-variant="primary" href="${lifeHref}" data-play-hero>Watch a job's life</a><a class="arrow" href="/systems/">See all ${model.systems.length} systems</a></p>
 <dl class="hero-facts">
 <div><dt>Tools served</dt><dd>${tools.length}</dd></div>
@@ -138,7 +129,7 @@ function bars(/** @type {any} */ stats) {
   return `<section class="edge band" aria-labelledby="edge-title">
 <div class="wrap edge-head">
 <p class="edge-figure">${stats.jobs.completed_30d}</p>
-<h2 id="edge-title">jobs finished in 30 days</h2>
+<h2 id="edge-title">jobs completed in 30 days</h2>
 <p class="section-sub">Each bar is one whole week; the tallest, the week ending ${escapeHtml(weeks[top])}, is marked. <a href="/numbers/">Every number, with its trends</a>.</p>
 </div>
 <ol class="edge-bars" data-ui>${values

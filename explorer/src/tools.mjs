@@ -56,7 +56,7 @@ ${servers
 <a href="${toolPath(t.name)}"><code>${escapeHtml(t.name)}</code><span class="tool-card-title">${escapeHtml(t.title)}</span></a>
 <p>${prose(sentence(t.description))}</p>
 <p class="tool-tags">${pills(t)}</p>
-<p class="hint">${t.actions.length ? `${t.actions.length} actions: ${t.actions.map((/** @type {any} */ a) => escapeHtml(a.name)).join(", ")}` : "One action"}; ${t.params.length} arguments.</p>
+<p class="hint">${t.actions.length ? `${t.actions.length} actions: ${t.actions.map((/** @type {any} */ a) => escapeHtml(a.name)).join(", ")}` : "One action"}; ${t.params.length} argument${t.params.length === 1 ? "" : "s"}.</p>
 </li>`
       )
       .join("")}</ul>
@@ -78,8 +78,10 @@ function split(t) {
   const byAction = new Map();
   const rest = [];
   for (const para of t.description.split("\n\n")) {
-    const m = para.match(/^"([a-z_]+)": ([\s\S]*)$/);
-    if (m && names.has(m[1])) byAction.set(m[1], m[2]);
+    // A paragraph may open with several actions' names: '"merge", "close": ...'.
+    const m = para.match(/^((?:"[a-z_]+"(?:, )?)+): ([\s\S]*)$/);
+    const named = m ? [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]) : [];
+    if (m && named.length && named.every((n) => names.has(n))) for (const n of named) byAction.set(n, m[2]);
     else if (!/^Actions: /.test(para)) rest.push(para);
   }
   return { byAction, rest };

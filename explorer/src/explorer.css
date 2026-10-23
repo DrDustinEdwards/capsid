@@ -4,7 +4,7 @@
 :root {
   --page: 76rem;
   --gutter: clamp(16px, 3vw, 32px);
-  --section: clamp(72px, 10vw, 160px);
+  --section: clamp(56px, 7vw, 112px);
 }
 
 body {
@@ -91,6 +91,9 @@ body {
 @media (max-width: 52rem) {
   .top {
     position: static;
+  }
+  .top-nav a {
+    padding-inline: var(--space-2);
   }
   .top-nav {
     order: 3;
@@ -244,7 +247,19 @@ h3 {
 }
 /* The hero's map shows its drawing and its step line; its own list lives on the flow pages. */
 .hero-map .cap-system-map-list,
-.hero-map details {
+.hero-map details,
+.flow-stage .cap-system-map-list,
+.flow-stage details {
+  display: none;
+}
+.flow-stage {
+  margin-block: var(--space-6);
+  padding: var(--space-4);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+}
+/* A step page has its own Back and Next above the drawing; the map's copies would be a second set. */
+.flow-step ~ section .cap-system-map-detail-actions {
   display: none;
 }
 @media (max-width: 64rem) {
@@ -358,7 +373,7 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 .tool-list {
-  max-block-size: 640px;
+  max-block-size: 560px;
   overflow-y: auto;
 }
 @media (max-width: 52rem) {
@@ -997,6 +1012,16 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
   gap: 8px;
   margin-block: var(--space-6);
+}
+@media (max-width: 40rem) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (pointer: coarse) {
+  [data-keys] {
+    display: none;
+  }
 }
 .stat {
   padding: var(--space-5);
