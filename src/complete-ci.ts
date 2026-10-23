@@ -21,24 +21,38 @@ const CHECKS_MAX_PAGES = 10;
 const AGAIN = "Nothing was written; call complete again once it has.";
 const OR_FAIL = `Fix it and push, then complete again, or call fail with the reason; "not done, here's why" is a good outcome.`;
 
-/** Why complete is refused on CI, on a test taken away, or on a DONE WHEN item no pull
- *  request changed, with the pull request to bind the job to (null for none), or null. */
-export async function ciRefusal(env: Env, namespace: string, urls: readonly string[], jobBody: string): Promise<{ pr: string | null; why: string } | null> {
+/** What the gate reads of the named pull requests: the first refusal, or the paths they
+ *  change, with unread set when one of them could not be read. Null with no GitHub App. */
+export async function readNamedPrs(
+  env: Env,
+  namespace: string,
+  urls: readonly string[],
+  jobBody: string
+): Promise<{ refusal: { pr: string; why: string } } | { changed: string[]; unread: boolean } | null> {
   if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_PRIVATE_KEY) return null;
   const changed: string[] = [];
   let unread = false;
   for (const url of urls) {
     const read = await notGreen(env, namespace, url, jobBody);
     if (read === null) unread = true;
-    else if (typeof read === "string") return { pr: url, why: read };
+    else if (typeof read === "string") return { refusal: { pr: url, why: read } };
     else changed.push(...read);
   }
+  return { changed, unread };
+}
+
+/** Why complete is refused on CI, on a test taken away, or on a DONE WHEN item no pull
+ *  request changed, with the pull request to bind the job to (null when none is named), or null. */
+export async function ciRefusal(env: Env, namespace: string, urls: readonly string[], jobBody: string): Promise<{ pr: string | null; why: string } | null> {
+  const read = await readNamedPrs(env, namespace, urls, jobBody);
+  if (read === null) return null;
+  if ("refusal" in read) return read.refusal;
   // A pull request Capsid could not read may change the path, so the checklist is not judged.
-  if (unread) return null;
-  const missing = unchangedItems(checklistItems(jobBody), changed);
+  if (read.unread) return null;
+  const missing = unchangedItems(checklistItems(jobBody), read.changed);
   if (missing.length === 0) return null;
   return {
-    pr: null,
+    pr: urls[0] ?? null,
     why:
       `${missing.slice(0, 3).join("; ")}${missing.length > 3 ? `; and ${missing.length - 3} more` : ""}, and ${urls.length > 0 ? "no pull request this complete names changes it" : "this complete names no pull request"}. ` +
       `Name the pull request that changes it, or call fail with the reason.`,

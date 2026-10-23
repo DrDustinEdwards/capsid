@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { claimJob, completeJob, postJob } from "../src/jobs";
+import { claimJob, completeJob, failAsCaller, postJob } from "../src/jobs";
+import { breakerState } from "../src/job-breaker";
 import { legacyAgent } from "../src/agents";
 import { readJob } from "../src/jobs-transition";
 
@@ -102,4 +103,21 @@ it("a DONE WHEN item that names a path is not done until a pull request changes 
   expect((await complete(await claimed("checklist missed", body), 6)).refusal).toMatch(/item 1 changes `src\/job-breaker\.ts`, and no pull request/);
   github.set(7, { checks: [run("success")], files: ["src/job-breaker.ts"] });
   expect((await complete(await claimed("checklist met", body), 7)).ok).toBe(true);
+});
+
+it("the breaker leaves out a fail Capsid's refusal forced and one that states its remainder, and counts a plain one", async () => {
+  const forced = await claimed("red ci");
+  github.set(8, { checks: [run("failure")], files: ["src/a.ts"] });
+  await complete(forced, 8);
+  expect((await failAsCaller(jobsEnv(), DRIVER, NOW, forced, "CI stays red; the fix needs a schema change")).ok).toBe(true);
+
+  const partly = await claimed("half done", "DONE WHEN:\n1. changes `src/a.ts`\n2. changes `src/b.ts`");
+  github.set(9, { checks: [run("success")], files: ["src/a.ts"] });
+  await complete(partly, 9);
+  expect((await failAsCaller(jobsEnv(), DRIVER, NOW, partly, "REMAINING: 2\nsrc/b.ts needs a decision first.")).ok).toBe(true);
+
+  const plain = await claimed("plain");
+  expect((await failAsCaller(jobsEnv(), DRIVER, NOW, plain, "REMAINING: 1")).ok).toBe(true);
+
+  expect((await breakerState(jobsEnv(), NS, new Date())).failed).toBe(1);
 });
