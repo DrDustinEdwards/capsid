@@ -214,9 +214,8 @@ details[open] > summary .chev { transform: rotate(45deg); }
 .fleet tbody tr:hover { background: var(--raised); }
 .fleet .site b { font-weight: 700; display: block; }
 .fleet .site span { font-size: var(--fs-detail); color: var(--muted); white-space: nowrap; }
-/* Enarratio's primitives (ui/Enar.tsx): its variables mapped to the Portal's tokens, so
-   both themes follow; ci-strip turns the heat strip's two ends into green and red. */
-:root { --enarratio-text: var(--text); --enarratio-text-muted: var(--muted); --enarratio-grid: var(--line); --enarratio-background: var(--surface); --enarratio-series-1: var(--series-1); --enarratio-series-2: var(--series-2); --enarratio-series-3: var(--series-3); --enarratio-series-4: var(--series-4); --enarratio-series-5: var(--series-5); --enarratio-series-6: var(--series-6); --enarratio-series-7: var(--series-7); --enarratio-series-8: var(--series-8); --enarratio-status-good: var(--ok); --enarratio-status-warning: var(--warn); --enarratio-status-bad: var(--crit); --enarratio-status-unknown: var(--nodata); --enarratio-font: inherit; --enarratio-font-numeric: var(--ui); }
+/* Enarratio's primitives (ui/Enar.tsx) read Capsomer's map (capsomer/tokens.css), so both
+   themes follow; ci-strip turns the heat strip's two ends into green and red. */
 .enar { margin: 0; }
 .agree-chart { --enarratio-series-1: var(--ok); --enarratio-series-2: var(--crit); --enarratio-series-3: var(--nodata); --enarratio-series-4: var(--warn); }
 /* Two charts side by side, each half the row, stacked when the row is narrow. */
@@ -450,9 +449,6 @@ main .sev-crit[data-row]:focus-visible { box-shadow: inset 3px 0 var(--crit), in
   .grid2 { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 820px) {
-  /* Secondary text is 13 px at the least on a phone (the UX audit's m4): the app's small
-     sizes are Capsomer's two detail tokens, raised here, so its components follow. */
-  :root { --fs-label: 13px; --fs-detail: 13px; }
   .fresh .long { display: none; }
   .page { padding: 16px; gap: 16px; }
   .anchors { margin: -16px -16px 0; padding: 6px 16px; }
