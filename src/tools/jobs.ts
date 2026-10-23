@@ -13,6 +13,7 @@ import { parseEvidence } from "../job-outcomes";
 import { claimSchema } from "../job-claims";
 import { staleJobs } from "../stale-jobs";
 import { jobTextRefusal, missingPartsWarning } from "../job-body-check";
+import { checklistWarning } from "../job-checklist";
 import { factCheckBody } from "../job-fact-check";
 import { fail, ok, type ToolCtx } from "./docs";
 
@@ -29,7 +30,8 @@ const MAX_EVIDENCE_PRS = 10;
 function withWarnings(result: JobResult, body: string | undefined, facts: string[] = []): JobResult {
   if (!result.ok) return result;
   const missing = body === undefined ? null : missingPartsWarning(body);
-  const warnings = [...(result.warnings ?? []), ...facts, ...(missing ? [missing] : [])];
+  const long = body === undefined ? null : checklistWarning(body);
+  const warnings = [...(result.warnings ?? []), ...facts, ...(missing ? [missing] : []), ...(long ? [long] : [])];
   return warnings.length > 0 ? { ...result, warnings } : result;
 }
 

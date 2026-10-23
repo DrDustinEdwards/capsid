@@ -568,7 +568,7 @@ async function completeWith(
     const bound = parsePrUrl(held.result_ref) ? [held.result_ref!.trim()] : [];
     const ci = await ciRefusal(env, held.namespace, [...new Set([...bound, ...namedPrUrls(args.evidence, args.result_ref)])], held.body);
     if (ci) {
-      if (!seatCloses && !held.result_ref) {
+      if (!seatCloses && !held.result_ref && ci.pr) {
         const kept = await bindPullRequest(env, agent, now, "complete", held, ci.pr, "job-ci-bound");
         if (!("status" in kept)) return kept;
       }

@@ -5,6 +5,7 @@ import { readCheckRuns, readPrFiles } from "./github/pr-files";
 import { prFacts } from "./job-outcomes";
 import { pathClassOf } from "./merge-class";
 import { weakenedTests } from "./test-protection";
+import { checklistItems, unchangedItems } from "./job-checklist";
 
 // The CI gate on complete (docs/work-queue.md, "CI on complete"). A job handed on as done
 // names its pull requests, and each must show CI that ran and passed on its head. Green
@@ -20,19 +21,34 @@ const CHECKS_MAX_PAGES = 10;
 const AGAIN = "Nothing was written; call complete again once it has.";
 const OR_FAIL = `Fix it and push, then complete again, or call fail with the reason; "not done, here's why" is a good outcome.`;
 
-/** Why complete is refused on CI or on a test taken away, naming the first pull request that is not green, or null. */
-export async function ciRefusal(env: Env, namespace: string, urls: readonly string[], jobBody: string): Promise<{ pr: string; why: string } | null> {
+/** Why complete is refused on CI, on a test taken away, or on a DONE WHEN item no pull
+ *  request changed, with the pull request to bind the job to (null for none), or null. */
+export async function ciRefusal(env: Env, namespace: string, urls: readonly string[], jobBody: string): Promise<{ pr: string | null; why: string } | null> {
   if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_PRIVATE_KEY) return null;
+  const changed: string[] = [];
+  let unread = false;
   for (const url of urls) {
-    const why = await notGreen(env, namespace, url, jobBody);
-    if (why) return { pr: url, why };
+    const read = await notGreen(env, namespace, url, jobBody);
+    if (read === null) unread = true;
+    else if (typeof read === "string") return { pr: url, why: read };
+    else changed.push(...read);
   }
-  return null;
+  // A pull request Capsid could not read may change the path, so the checklist is not judged.
+  if (unread) return null;
+  const missing = unchangedItems(checklistItems(jobBody), changed);
+  if (missing.length === 0) return null;
+  return {
+    pr: null,
+    why:
+      `${missing.slice(0, 3).join("; ")}${missing.length > 3 ? `; and ${missing.length - 3} more` : ""}, and ${urls.length > 0 ? "no pull request this complete names changes it" : "this complete names no pull request"}. ` +
+      `Name the pull request that changes it, or call fail with the reason.`,
+  };
 }
 
-async function notGreen(env: Env, namespace: string, url: string, jobBody: string): Promise<string | null> {
+// A refusal, the paths the pull request changes when it passes, or null when it could not be read.
+async function notGreen(env: Env, namespace: string, url: string, jobBody: string): Promise<string | string[] | null> {
   const parsed = parsePrUrl(url);
-  if (!parsed) return null;
+  if (!parsed) return [];
   try {
     await resolveRepo(env, namespace, `${parsed.owner}/${parsed.repo}`);
   } catch {
@@ -60,9 +76,9 @@ async function notGreen(env: Env, namespace: string, url: string, jobBody: strin
   }
   // Skipped and neutral fail nothing, and pass nothing: a run a paths filter excluded
   // did not judge the change.
-  if (checks.items.some((c) => c.conclusion === "success")) return null;
+  if (checks.items.some((c) => c.conclusion === "success")) return files.paths;
   const code = files.paths.filter((p) => pathClassOf(p) !== "docs");
-  if (code.length === 0) return null;
+  if (code.length === 0) return files.paths;
   return (
     `${url}: no CI check passed on ${sha}, and it changes code (${code.slice(0, 3).join(", ")}${code.length > 3 ? `, and ${code.length - 3} more` : ""}). ` +
     `A change no check ran on is not shown to work. Get CI to run on it, or call fail with the reason.`
