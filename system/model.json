@@ -245,7 +245,7 @@
       "name": "Five-minute tick",
       "kind": "cron",
       "technology": "Workers cron trigger",
-      "description": "Lease sweep, auto-merge, the watcher and the daily passes."
+      "description": "Auto-merge, the watcher and the daily passes."
     },
     {
       "id": "capsid-db",
