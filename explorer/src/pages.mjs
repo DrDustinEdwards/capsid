@@ -66,16 +66,15 @@ function sectionOf(path) {
 }
 
 /**
- * The page around a body: one stylesheet set, one module script, no inline script or style,
- * so the policy in _headers needs no hash (src/security-headers.mjs). A wide page's sections
+ * The page around a body: one stylesheet set, the theme script and one module script, no inline
+ * script or style, so the policy in _headers needs no hash (src/security-headers.mjs). A wide page's sections
  * set their own width, for the front page's full-bleed parts; any other page is one column.
  * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean }} page
  */
 export function layout({ title, description, path, body, asOf, wide = false }) {
   const here = sectionOf(path);
-  const nav = NAV.map(([href, label]) => `<a href="${href}"${href === here ? ' aria-current="page"' : ""}>${label}</a>`).join("");
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-cap-site="capsid">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -87,15 +86,11 @@ export function layout({ title, description, path, body, asOf, wide = false }) {
 <link rel="stylesheet" href="/assets/capsomer.css">
 <link rel="stylesheet" href="/assets/enarratio.css">
 <link rel="stylesheet" href="/assets/explorer.css">
+<script src="/assets/theme.js"></script>
 <script type="module" src="/assets/explorer.js"></script>
 </head>
 <body>
-<a class="skip" href="#main">Skip to the content</a>
-<header class="top">
-<a class="home" href="/"><img src="/assets/icon.svg" alt="" width="28" height="28">Capsid</a>
-<nav class="top-nav" aria-label="Sections">${nav}</nav>
-<a class="top-search" href="/search/"${path === "/search/" ? ' aria-current="page"' : ""} data-search-open>Search<kbd aria-hidden="true">/</kbd></a>
-</header>
+${header(here, path)}
 <main id="main" tabindex="-1"${wide ? ' class="wide"' : ""}>
 ${body}
 </main>
@@ -103,6 +98,38 @@ ${footer(asOf)}
 </body>
 </html>
 `;
+}
+
+/** A 24-box glyph for the header, drawn by Capsomer's stroke. @param {string} body */
+const glyph = (body) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${body}</svg>`;
+
+/** A header control's tip: its name and its key. @param {string} text @param {string} key */
+const tip = (text, key) =>
+  `<span class="cap-site-header-tip cap-popover" data-variant="tooltip" data-side="bottom" data-offset="6" popover="manual" role="tooltip" aria-hidden="true"><span class="cap-site-header-tip-text">${text}</span><span class="cap-keys"><kbd>${key}</kbd></span></span>`;
+
+/**
+ * Capsomer's site header, written by hand (components/site-header): the logo, the sections,
+ * search, the theme button and, on a phone, the menu and its sheet. The theme button's name is
+ * the light page's; theme.js names it for the theme showing before it paints.
+ * @param {string} here the current section @param {string} path
+ */
+function header(here, path) {
+  const link = (/** @type {string} */ href, /** @type {string} */ label, /** @type {string} */ cls) => `<a${cls ? ` class="${cls}"` : ""} href="${href}"${href === here || href === path ? ' aria-current="page"' : ""}>${cls ? label : `<span class="cap-site-header-sheet-name">${label}</span>`}</a>`;
+  return `<header class="cap-site-header" data-cap="site-header" data-links="left">
+<a class="cap-site-header-skip" href="#main">Skip to the content</a>
+<a class="cap-site-header-logo" href="/" aria-label="Capsid"><img src="/assets/icon.svg" alt="" width="24" height="24"><span aria-hidden="true">Capsid</span></a>
+<nav class="cap-site-header-sections" aria-label="Site"><ul>${NAV.map(([href, label]) => `<li>${link(href, label, "cap-site-header-link")}</li>`).join("")}</ul></nav>
+<div class="cap-site-header-tools">
+<div class="cap-site-header-extras"><a class="cap-site-header-icon" href="/search/" aria-label="Search"${path === "/search/" ? ' aria-current="page"' : ""}>${glyph('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>')}${tip("Search", "/")}</a></div>
+<button type="button" class="cap-theme-button cap-site-header-icon cap-site-header-theme" data-cap="theme-switch" data-variant="button" aria-label="Switch to dark theme"><svg class="cap-theme-icon" data-show="light" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="cap-theme-icon" data-show="dark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span class="cap-theme-tip cap-popover" data-variant="tooltip" data-side="bottom" data-offset="6" popover="manual" role="tooltip" aria-hidden="true"><span class="cap-theme-tip-text">Switch to dark theme</span><span class="cap-keys"><kbd>T</kbd></span></span></button>
+<button type="button" class="cap-site-header-icon cap-site-header-menu" aria-label="Menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="site-sheet">${glyph('<path d="M4 7h16M4 12h16M4 17h16"/>')}</button>
+</div>
+<dialog class="cap-dialog cap-site-header-sheet" data-cap="dialog" data-placement="bottom" id="site-sheet" aria-labelledby="site-sheet-title">
+<div class="cap-dialog-header"><h2 id="site-sheet-title" class="cap-dialog-title cap-site-header-sheet-title" tabindex="-1">Capsid menu</h2></div>
+<div class="cap-dialog-body"><nav aria-labelledby="site-sheet-title"><div class="cap-site-header-sheet-label">Pages</div><ul class="cap-site-header-sheet-list">${[...NAV, ["/search/", "Search"]].map(([href, label]) => `<li>${link(href, label, "")}</li>`).join("")}</ul></nav></div>
+<button type="button" class="cap-btn cap-dialog-close" data-variant="quiet" data-icon-only data-cap-part="close" aria-label="Close"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+</dialog>
+</header>`;
 }
 
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
