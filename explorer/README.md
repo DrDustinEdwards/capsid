@@ -6,12 +6,18 @@ Every page is prerendered from Capsid's two public documents (docs/public-data.m
 
 ## Pages
 
-- `/`: the family as a capsid, with the daily numbers as charts and a table.
-- `/s/{system}/`: one system chosen on the map, its facts, its connections, and a link to the same system on dustinedwards.info/systems.
+- `/`: what Capsid is, performed: the core drawn playing a job's life, every tool it serves chosen from a list, how a claim becomes done beside a sample job, the jobs of the last eight weeks as bars, what it is made of, the family as a ledger, and the flows as tabs. Every figure is the day's public numbers.
+- `/systems/`: the family as a capsid, and every system in a table filtered by ring and sorted by any column.
+- `/tools/`: every tool Capsid serves over MCP, read at build from the Worker's own registrations (`src/surface.mjs`), filtered by what each may do. `/tools/{tool}/`: its description, the MCP hints it carries, its actions and every argument.
+- `/numbers/`: the daily numbers as sentences, charts with their weekly trends where the document carries them, and one table.
+- `/code/`: every public repo's size and health, the 25 riskiest functions and the weakest-tested modules.
+- `/flows/`: every flow, each as its steps.
+- `/search/`: every system, part, flow step, tool, action, module and function, from `assets/search.json`; `/` on any page goes there.
+- `/s/{system}/`: one system: its facts, its parts, its connections grouped and drawn with its neighbours, the flows over it, its riskiest functions, the family map with it chosen, and a link to the same system on dustinedwards.info/systems.
 - `/s/{system}/containers/`: inside a public system with parts: a table and the lines between them, with the map's drawing for Capsid, the one system the map draws inside.
 - `/flows/{flow}/`: a flow from the public model, what it is and every step. `/flows/{flow}/{step}/`, counted from 1 (`/flows/job-life/4/`): one step, its sentence, the parts it touches with links to them, Back and Next, every step, and the core drawn with the step's line on and its parts lit. With the script, Back, Next, the step list, number keys and the map's own controls step in place, the address following, and a token travels the line; under reduced motion it jumps. A step on a line the model lacks, or touching a private system, stops the build. The core's page and its parts page link each flow over its parts.
 - `/s/{system}/code/`: a public system's code, from its repos' code maps (docs/public-data.md, "The code maps"): each module by folder with its riskiest function by CRAP and its mutation score, each a Capsomer status (shape, word and number, or "No data" with its reason), and its import cycles as text. Above each folder's table its modules are drawn as a graph, wires from importer to imported, each box edged in its worst status's colour and a module in a cycle ringed; with several folders, the folders are drawn first. dagre lays the drawing out at build, so no layout code ships, and the drawing is hidden from assistive technology since the table holds the same modules. `/s/{system}/code/{path}/`: one module's functions, linked to their lines in its numbered source at the commit the map measured, and its imports both ways. A code map for a system that is not public stops the build before any source is read.
-- A private system's page says it is private and shows its name, and its address if it has one. It has no parts page.
+- A private system's page shows what the public model gives it: its name, its address if it has one, and its description and parts when its owner has made them public, but never a repo link, a flow or code.
 
 ## Commands
 

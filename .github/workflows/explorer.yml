@@ -4,7 +4,7 @@ name: Explorer
 # Capsid's public model and numbers, served by an assets-only Worker of its own
 # (capsid/rulings/system-explorer-2026-10-10.md, answers 4 and 8).
 #
-# A pull request that touches the explorer, or a Capsid module its build loads, is checked from
+# A pull request that touches the explorer, or Capsid's src/ its build loads, is checked from
 # the fixtures: typecheck, the build tests and the browser spec. On master, daily and by hand,
 # the deploy job builds from the live documents and deploys only when the build differs from
 # what capsid.dustinedwards.info serves (build.json's content hash): a new day's numbers or new
@@ -13,19 +13,11 @@ name: Explorer
 on:
   pull_request:
     branches: [master, main]
-    # Every Capsid module build.mjs loads at run time, held to the import graph by
-    # explorer/test/explorer.test.mjs.
+    # The build loads Capsid's schemas and, for the tool catalogue, every tool registration
+    # (explorer/src/surface.mjs), which between them reach most of src/.
     paths:
       - "explorer/**"
-      - "src/system-model.ts"
-      - "src/public-stats.ts"
-      - "src/public-code-schema.ts"
-      - "src/limits.ts"
-      - "src/ops-snapshot.ts"
-      - "src/read-capped.ts"
-      - "src/health-format.ts"
-      - "src/log.ts"
-      - "src/time.ts"
+      - "src/**"
       - "test/resolve-ts.mjs"
       - "package-lock.json"
       - ".github/workflows/explorer.yml"

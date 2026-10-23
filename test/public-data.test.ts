@@ -24,7 +24,7 @@ const NOW = new Date("2026-10-11T00:05:00Z");
 const ctx = { waitUntil: (_p: Promise<unknown>) => {} };
 
 // GitHub's answer for every repo the bundled model names, as measured 2026-10-10.
-const PRIVATE_REPOS = new Set(["germomics", "foxing", "foxhound", "txasm", "julieedwards-info"]);
+const PRIVATE_REPOS = new Set(["recova", "recova-mcp", "foxing-admin-mcp", "capsid-backups", "claude-skills-private", "writing"]);
 const NO_ROWS = (systems: StatsRows["systems"]): StatsRows => ({ finished: [], open: [], outcomes: [], evaluations: [], waits: [], rings: [], documents: 0, namespaces: 0, systems, sha: undefined });
 function githubSays(names: string[]): PublicBuildReaders {
   return {
@@ -35,27 +35,27 @@ function githubSays(names: string[]): PublicBuildReaders {
     codeMap: async () => null,
   };
 }
-const ALL = ["capsid", "capsomer", "site-runtime", "d1-dump", "devkit", "site-api", "prelum", "carrel", "enarratio", "dustinedwards-info", "claude-skills", ...PRIVATE_REPOS];
+const ALL = ["capsid", "capsid-bench", "capsomer", "site-runtime", "d1-dump", "devkit", "site-api", "prelum", "carrel", "enarratio", "dustinedwards-info", "claude-skills", "germomics", "foxing", "foxhound", "txasm", "julieedwards-info", "bsw", ...PRIVATE_REPOS];
 
 test("the model is built once a UTC day and stores the filtered bundled model", async () => {
   const kv = fakeKv();
   const env = fakeEnv({ APP_KV: kv.kv });
   const first = await publicBuildTick(env, NOW, githubSays(ALL));
   assert.equal(first.ran, true, first.note);
-  assert.match(first.note, /12 public and 5 private system\(s\)/);
+  assert.match(first.note, /21 public and 6 private system\(s\)/);
 
   const doc = PublicModelSchema.parse(JSON.parse(kv.store.get(PUBLIC_MODEL_KEY) ?? "null"));
   assert.equal(doc.as_of, "2026-10-11");
-  const foxhound = doc.systems.find((s) => s.id === "foxhound");
-  assert.deepEqual(foxhound, { id: "foxhound", name: "Foxhound", short: "Foxhound", domain: "foxhoundapp.com", family: "product", ring: "used", private: true });
+  // A private system is published whole, its parts included, without its repo link.
+  const recova = doc.systems.find((s) => s.id === "recova");
+  assert.ok(recova?.private && recova.description && !("repos" in recova));
+  assert.ok(doc.containers.some((c) => c.system === "recova"));
   // Answer 15: Skills shows no repo link.
   const skills = doc.systems.find((s) => s.id === "skills");
   assert.ok(skills && !skills.private && skills.repos === undefined);
-  // Answer 6: a public-to-private line keeps its system ends and loses nothing else.
-  assert.ok(doc.relationships.some((r) => r.id === "capsid--coordinates--foxhound"));
   // The numbers are built in the same run, and carry the model's system counts.
   const stats = PublicStatsSchema.parse(JSON.parse(kv.store.get(PUBLIC_STATS_KEY) ?? "null"));
-  assert.deepEqual(stats.systems, { public: 12, private: 5 });
+  assert.deepEqual(stats.systems, { public: 21, private: 6 });
   assert.equal(stats.as_of, "2026-10-11");
 
   // Later that day only the code maps are rebuilt (test/public-code.test.ts).

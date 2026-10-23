@@ -27,7 +27,7 @@ const LINE = 18;
 
 /**
  * @typedef {"crit" | "warn" | "ok" | "nodata"} Tone
- * @typedef {{ id: string, label: string, href: string, lines: Array<{ tone: Tone, text: string }>, cycle?: boolean }} Box
+ * @typedef {{ id: string, label: string, href: string, lines: Array<{ tone: Tone, text: string }>, sub?: string, cycle?: boolean, current?: boolean }} Box
  * @typedef {{ from: string, to: string, count?: number }} Wire
  */
 
@@ -58,8 +58,8 @@ export function graphSvg({ id, title, boxes, wires }) {
   g.setGraph({ rankdir: "TB", nodesep: 24, ranksep: 44, marginx: 12, marginy: 22 });
   g.setDefaultEdgeLabel(() => ({}));
   for (const b of boxes) {
-    const chars = Math.max(b.label.length, ...b.lines.map((l) => l.text.length + 3));
-    g.setNode(b.id, { width: Math.ceil(chars * CHAR + PAD * 2), height: PAD * 2 + LINE * (1 + b.lines.length) - 4 });
+    const chars = Math.max(b.label.length, (b.sub ?? "").length * 0.9, ...b.lines.map((l) => l.text.length + 3));
+    g.setNode(b.id, { width: Math.ceil(chars * CHAR + PAD * 2), height: PAD * 2 + LINE * (1 + b.lines.length + (b.sub ? 1 : 0)) - 4 });
   }
   const ids = new Set(boxes.map((b) => b.id));
   for (const w of wires) if (ids.has(w.from) && ids.has(w.to) && w.from !== w.to) g.setEdge(w.from, w.to);
@@ -77,9 +77,10 @@ export function graphSvg({ id, title, boxes, wires }) {
         return `<g class="code-graph-status" data-tone="${line.tone}"><svg x="${(x + PAD).toFixed(1)}" y="${(ty - 11).toFixed(1)}" width="12" height="12" viewBox="0 0 16 16">${GLYPH[line.tone]}</svg><text x="${(x + PAD + 17).toFixed(1)}" y="${ty.toFixed(1)}">${escapeHtml(line.text)}</text></g>`;
       })
       .join("");
-    return `<a href="${escapeHtml(b.href)}" tabindex="-1"><g class="code-graph-box" data-tone="${b.lines[0]?.tone ?? "nodata"}"${b.cycle ? " data-cycle" : ""}>${
+    const sub = b.sub ? `<text class="code-graph-sub" x="${(x + PAD).toFixed(1)}" y="${(y + PAD + LINE + 9).toFixed(1)}">${escapeHtml(b.sub)}</text>` : "";
+    return `<a href="${escapeHtml(b.href)}" tabindex="-1"><g class="code-graph-box" data-tone="${b.lines[0]?.tone ?? "nodata"}"${b.cycle ? " data-cycle" : ""}${b.current ? " data-current" : ""}>${
       b.cycle ? `<rect class="code-graph-ring" x="${(x - 5).toFixed(1)}" y="${(y - 5).toFixed(1)}" width="${(n.width + 10).toFixed(1)}" height="${(n.height + 10).toFixed(1)}" rx="10"/>` : ""
-    }<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${n.width}" height="${n.height}" rx="6"/><text class="code-graph-name" x="${(x + PAD).toFixed(1)}" y="${(y + PAD + 9).toFixed(1)}">${escapeHtml(b.label)}</text>${text}${
+    }<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${n.width}" height="${n.height}" rx="6"/><text class="code-graph-name" x="${(x + PAD).toFixed(1)}" y="${(y + PAD + 9).toFixed(1)}">${escapeHtml(b.label)}</text>${sub}${text}${
       b.cycle ? `<text class="code-graph-cycle" x="${(x + n.width - 2).toFixed(1)}" y="${(y - 8).toFixed(1)}" text-anchor="end">cycle</text>` : ""
     }</g></a>`;
   });

@@ -49,9 +49,6 @@
               "used"
             ]
           },
-          "public": {
-            "type": "boolean"
-          },
           "description": {
             "type": "string",
             "minLength": 1,
@@ -89,7 +86,6 @@
           "short",
           "family",
           "ring",
-          "public",
           "repos"
         ],
         "additionalProperties": false
