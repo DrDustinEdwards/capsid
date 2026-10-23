@@ -4,7 +4,7 @@ import type { Env } from "./env";
 import { existingTestReason, mergeClass, pathClassOfAll, type Classification, type MergeClass, type PathClass } from "./merge-class";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { HeadMovedError, managePr } from "./github/refs";
-import { PER_PAGE, readAllPages, readPrFiles } from "./github/pr-files";
+import { PER_PAGE, readCheckRuns, readPrFiles } from "./github/pr-files";
 import { systemAudit } from "./doc-statements";
 import {
   type PolicyCheck,
@@ -105,11 +105,7 @@ async function factsForPr(
 
   const [files, checks] = await Promise.all([
     readPrFiles(env, owner, repo, pr.number),
-    readAllPages<{ name: string; status: string; conclusion: string | null }>(
-      env, owner, repo, `/repos/${owner}/${repo}/commits/${pr.head.sha}/check-runs`,
-      (page) => (page as { check_runs: Array<{ name: string; status: string; conclusion: string | null }> }).check_runs,
-      CHECKS_MAX_PAGES
-    ),
+    readCheckRuns(env, owner, repo, pr.head.sha, CHECKS_MAX_PAGES),
   ]);
   const filesProblem = files.problem;
   const changedPaths = files.paths;
