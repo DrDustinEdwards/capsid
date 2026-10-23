@@ -155,6 +155,8 @@ async function reposForNamespaces(db: D1Database, namespaces: "*" | string[]): P
 export async function mintAgent(db: D1Database, actor: string, args: ScopeArgs & { name: string; kind: string }): Promise<AgentResult> {
   const name = args.name.trim();
   if (!name) return refuse("mint", "an agent needs a name: it is the audit identity every row it writes carries.");
+  // A run key's actor is agent:bench-run-<run>, and the breaker skips those fails (src/job-breaker.ts).
+  if (name.startsWith("bench-run-")) return refuse("mint", "names starting bench-run- belong to bench run keys; choose another name.");
   if (!isAgentKind(args.kind)) {
     return refuse("mint", `'${args.kind}' is not an agent kind. One of: ${AGENT_KINDS.join(", ")}.`);
   }
