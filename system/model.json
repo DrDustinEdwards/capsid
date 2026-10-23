@@ -204,7 +204,7 @@
     {
       "id": "foxhound-mcp",
       "name": "Foxhound Admin",
-      "short": "Foxhound MCP",
+      "short": "Hound MCP",
       "family": "plumbing",
       "ring": "used",
       "description": "Runs Foxhound from a chat. It holds no Stripe key and no database: every action is a call to the foxhound Worker's admin API.",
