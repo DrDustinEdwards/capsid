@@ -121,3 +121,11 @@ it("the breaker leaves out a fail Capsid's refusal forced and one that states it
 
   expect((await breakerState(jobsEnv(), NS, new Date())).failed).toBe(1);
 });
+
+it("a job that asks for the test on the base needs its run to have passed", async () => {
+  const body = "Fix the gate.\nTEST ON BASE";
+  github.set(10, { checks: [run("success")], files: ["src/a.ts"] });
+  expect((await complete(await claimed("no run yet", body), 10)).refusal).toMatch(/no test-on-base check passed/);
+  github.set(11, { checks: [run("success"), { name: "test-on-base", status: "completed", conclusion: "success" }], files: ["src/a.ts"] });
+  expect((await complete(await claimed("ran on the base", body), 11)).ok).toBe(true);
+});
