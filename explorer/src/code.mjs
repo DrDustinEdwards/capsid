@@ -9,6 +9,9 @@
 import { graphSvg } from "./graph.mjs";
 import { escapeHtml, layout, pageHead, scroller, systemPath } from "./pages.mjs";
 
+/** The most modules a folder's drawing shows. */
+const MAX_DRAWN = 40;
+
 /** @param {string} id */
 export const codePath = (id) => `/s/${id}/code/`;
 // Each segment escaped as the static assets server writes it (blog.$slug[.md].ts is
@@ -174,9 +177,11 @@ export function codePage(s, maps, asOf) {
             wires: map.modules.flatMap((/** @type {any} */ m) => m.imports.map((/** @type {string} */ to) => ({ from: folderOf(m.path), to: folderOf(to) }))),
           })
         : "";
-    /** The modules of one folder and the imports among them. @param {string} folder @param {any[]} mods */
+    // The modules of one folder and the imports among them. Past MAX_DRAWN boxes a drawing is
+    // a smear no one can read, so a folder that large has its table alone.
+    /** @param {string} folder @param {any[]} mods */
     const moduleGraph = (folder, mods) =>
-      mods.length > 1
+      mods.length > 1 && mods.length <= MAX_DRAWN
         ? graphSvg({
             id: `${folderId(folder)}-graph`,
             title: `The modules of ${folderName(folder)} and the imports among them${folders.size > 1 ? "; imports from other folders are on each module's page" : ""}`,

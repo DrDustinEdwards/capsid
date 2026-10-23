@@ -54,8 +54,23 @@ function smooth(pts) {
  * @param {{ id: string, title: string, boxes: Box[], wires: Wire[] }} graph
  */
 export function graphSvg({ id, title, boxes, wires }) {
+  // Laid out top to bottom, unless that comes out so wide that fitting it to the column would
+  // shrink its text past reading and left to right shrinks it less.
+  const g = layout(boxes, wires, "TB");
+  const tb = g.graph().width ?? 0;
+  const side = tb > COLUMN ? layout(boxes, wires, "LR") : null;
+  const pick = side && (side.graph().width ?? 0) < tb ? side : g;
+  const { width = 0, height = 0 } = pick.graph();
+  return draw(pick, { id, title, boxes, width, height });
+}
+
+// The width of the page's column: a wider drawing is shrunk to fit it.
+const COLUMN = 1150;
+
+/** @param {Box[]} boxes @param {Wire[]} wires @param {"TB" | "LR"} rankdir */
+function layout(boxes, wires, rankdir) {
   const g = new dagre.graphlib.Graph({ multigraph: false });
-  g.setGraph({ rankdir: "TB", nodesep: 24, ranksep: 44, marginx: 12, marginy: 22 });
+  g.setGraph({ rankdir, nodesep: rankdir === "TB" ? 24 : 14, ranksep: rankdir === "TB" ? 44 : 64, marginx: 12, marginy: 22 });
   g.setDefaultEdgeLabel(() => ({}));
   for (const b of boxes) {
     const chars = Math.max(b.label.length, (b.sub ?? "").length * 0.9, ...b.lines.map((l) => l.text.length + 3));
@@ -64,8 +79,11 @@ export function graphSvg({ id, title, boxes, wires }) {
   const ids = new Set(boxes.map((b) => b.id));
   for (const w of wires) if (ids.has(w.from) && ids.has(w.to) && w.from !== w.to) g.setEdge(w.from, w.to);
   dagre.layout(g);
-  const { width = 0, height = 0 } = g.graph();
+  return g;
+}
 
+/** @param {import("@dagrejs/dagre").graphlib.Graph} g @param {{ id: string, title: string, boxes: Box[], width: number, height: number }} o */
+function draw(g, { id, title, boxes, width, height }) {
   const edges = g.edges().map((e) => `<path class="code-graph-wire" d="${smooth(g.edge(e).points)}" marker-end="url(#${id}-arrow)"/>`);
   const nodes = boxes.map((b) => {
     const n = g.node(b.id);

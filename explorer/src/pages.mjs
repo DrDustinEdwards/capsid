@@ -422,19 +422,40 @@ export function markStep(html, st) {
   return marked;
 }
 
-/** A flow's own page: what it is and every step. @param {Flow} f @param {string} asOf */
-export function flowPage(f, asOf) {
+/** A flow's own page: what it is, the core drawn playing it, and every step. @param {any} model @param {Flow} f @param {string} asOf */
+export function flowPage(model, f, asOf) {
+  const stage = flowStage(model, [f], f, "flow-map");
   const body = `${pageHead([["/", "Overview"], ["/flows/", "Flows"]], f.name, escapeHtml(f.name), escapeHtml(f.description ?? `${f.steps.length} steps.`))}
-<p><a class="cap-btn" data-variant="primary" href="${stepPath(f.id, 1)}">Start at step 1 of ${f.steps.length}</a></p>
-<section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${stepList(f)}</section>`;
+${stage ? `<div class="flow-stage" data-ui>${stage}</div>` : ""}
+<section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${bands(f)}</section>
+<p><a class="cap-btn" data-variant="primary" href="${stepPath(f.id, 1)}">Step through it, one page a step</a></p>`;
   return layout({ title: `${f.name}, Capsid`, description: f.description ?? f.name, path: flowPath(f.id), body, asOf });
+}
+
+/** A flow's steps as numbered bands, each leading to its step's page. @param {Flow} f */
+export const bands = (f) =>
+  `<ol class="bands">${f.steps.map((st) => `<li><a href="${stepPath(f.id, st.n)}"><span class="band-text">${escapeHtml(st.text)}</span><span class="band-parts">${st.touches.map((p) => escapeHtml(p.name)).join(", ")}</span></a></li>`).join("")}</ol>`;
+
+/**
+ * The core drawn with a flow on it and a Play button that steps it in place, with no change of
+ * address (src/explorer.js, player). Empty when the flow leaves the core, which the map cannot draw.
+ * @param {any} model @param {Flow[]} flows every flow the drawing can switch to @param {Flow} shown @param {string} id
+ */
+export function flowStage(model, flows, shown, id) {
+  const core = model.systems.find((/** @type {any} */ s) => s.ring === "core");
+  const inside = (/** @type {Flow} */ f) => !!core && f.steps.every((x) => x.touches.every((p) => p.system === core.id));
+  if (!inside(shown)) return "";
+  const data = { ...mapData(model), flows: flows.filter(inside).map((f) => ({ id: f.id, name: f.name, steps: f.steps.map((x) => ({ from: x.from.id, to: x.to.id, toward: x.toward, text: x.text, lights: x.lights.map((p) => p.id) })) })) };
+  const map = markStep(systemMapHtml(data, { id, label: `Inside ${core.name}`, headingLevel: 2 }), shown.steps[0]);
+  return `<div class="map-host flow-map" data-flow="${escapeHtml(shown.id)}" data-step="1" data-steps="${shown.steps.length}" data-player>${map}</div>
+<p class="hero-play"><button class="cap-btn" type="button" data-autoplay hidden>Play</button><span class="hint">${escapeHtml(shown.name)}, in ${shown.steps.length} steps, over ${escapeHtml(core.name)}'s real parts.</span></p>`;
 }
 
 /** Every flow, with what it touches and its first steps. @param {any} model @param {string} asOf */
 export function flowsIndexPage(model, asOf) {
   const flows = flowsOf(model);
   const names = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s.name]));
-  const body = `${pageHead([["/", "Overview"]], "Flows", "What runs, step by step", `${flows.length} walks over the model, each step riding a line the map really has. Play one to see its token travel Capsid's parts.`)}
+  const body = `${pageHead([["/", "Overview"]], "Flows", "What runs, step by step", `The ${flows.length} things Capsid does that are worth watching, each told step by step over the parts it really touches. Open one to watch it run.`)}
 <ul class="flow-cards">${flows
     .map((f) => {
       const systems = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.system)))];
@@ -442,8 +463,8 @@ export function flowsIndexPage(model, asOf) {
       return `<li class="flow-card"><h2><a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a></h2>
 <p>${escapeHtml(f.description ?? "")}</p>
 <p class="hint">${f.steps.length} steps over ${parts.length} parts of ${systems.map((x) => escapeHtml(String(names.get(x) ?? x))).join(", ")}.</p>
-<ol class="bands">${f.steps.map((st) => `<li><a href="${stepPath(f.id, st.n)}"><span class="band-text">${escapeHtml(st.text)}</span><span class="band-parts">${st.touches.map((p) => escapeHtml(p.name)).join(", ")}</span></a></li>`).join("")}</ol>
-<p><a class="cap-btn" data-variant="primary" href="${stepPath(f.id, 1)}">Play it</a></p></li>`;
+${bands(f)}
+<p><a class="cap-btn" data-variant="primary" href="${flowPath(f.id)}">Watch it run</a></p></li>`;
     })
     .join("")}</ul>`;
   return layout({ title: "Flows, Capsid", description: "What Capsid runs, step by step: a job's life, the nightly backup and a Carrel publish.", path: "/flows/", body, asOf });
@@ -550,7 +571,7 @@ export function allPages(model, stats, code = null, sourceOf = () => undefined, 
     if (model.containers.some((/** @type {any} */ c) => c.system === s.id)) pages.push([containersPath(s.id), containersPage(model, s.id, asOf)]);
   }
   for (const f of flowsOf(model)) {
-    pages.push([flowPath(f.id), flowPage(f, asOf)]);
+    pages.push([flowPath(f.id), flowPage(model, f, asOf)]);
     for (const st of f.steps) pages.push([stepPath(f.id, st.n), stepPage(model, f, st.n, asOf)]);
   }
   pages.push(...toolPages(tools, asOf));
