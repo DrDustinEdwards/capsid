@@ -73,12 +73,14 @@ export interface PrFileRow {
   status?: string;
   additions?: number;
   deletions?: number;
+  // The unified diff of the file, which GitHub leaves out for a binary or very large one.
+  patch?: string;
 }
 
 // Where the tests live: capsid's three directories, and anything merge-class names a test
 // (tests/, __tests__/, e2e/, *.test.* and *.spec.*), which is what the other covered repos use.
 const TEST_DIRS = ["test/", "test-integration/", "dashboard/e2e/"];
-const inTestDir = (path: string | undefined) => path !== undefined && (TEST_DIRS.some((d) => path.startsWith(d)) || TEST_FILE.test(path));
+export const inTestDir = (path: string | undefined) => path !== undefined && (TEST_DIRS.some((d) => path.startsWith(d)) || TEST_FILE.test(path));
 
 /** The tests a pull request changes that already exist: a test removed or renamed away
  *  (the old path is deleted), or any file there with a deleted line. A file added whole,

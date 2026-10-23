@@ -18,7 +18,9 @@ function jobsEnv() {
 
 type Check = { name: string; status: string; conclusion: string | null };
 // Per pull request: the check runs on its head, and the files it changes.
-const github = new Map<number, { checks: Check[]; files: string[] }>();
+// A file is its name (modified, lines added only) or GitHub's row for it.
+type File = string | { filename: string; status: string };
+const github = new Map<number, { checks: Check[]; files: File[] }>();
 
 beforeEach(async () => {
   for (const table of ["job_outcomes", "jobs", "audit_log", "job_outcome_prs", "job_claims"]) {
@@ -32,7 +34,7 @@ beforeEach(async () => {
     const pr = /\/pulls\/(\d+)(\/files)?$/.exec(path);
     if (pr) {
       const n = Number(pr[1]);
-      if (pr[2]) return Response.json(github.get(n)!.files.map((filename) => ({ filename, status: "modified", additions: 1, deletions: 0 })));
+      if (pr[2]) return Response.json(github.get(n)!.files.map((f) => (typeof f === "string" ? { filename: f, status: "modified", additions: 1, deletions: 0, patch: "+x" } : f)));
       return Response.json({ merged: false, head: { sha: String(n).padStart(40, "0") }, commits: 1, changed_files: 1 });
     }
     const checks = /\/commits\/0*(\d+)\/check-runs$/.exec(path);
@@ -46,8 +48,8 @@ afterEach(async () => {
   await env.APP_KV.delete("gh:token:v3:example/sample");
 });
 
-async function claimed(title: string) {
-  const posted = await postJob(jobsEnv(), SEAT, NOW, { namespace: NS, title, body: "do the thing" } as Parameters<typeof postJob>[3]);
+async function claimed(title: string, body = "do the thing") {
+  const posted = await postJob(jobsEnv(), SEAT, NOW, { namespace: NS, title, body } as Parameters<typeof postJob>[3]);
   const id = posted.job!.id;
   expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
   return id;
@@ -86,4 +88,10 @@ it("no check that passed is not green for a code change, and is for docs alone",
   const docs = await claimed("no runs, docs");
   github.set(4, { checks: [], files: ["docs/a.md"] });
   expect((await complete(docs, 4)).ok).toBe(true);
+});
+
+it("a pull request that removes a test file is refused, unless the job names it", async () => {
+  github.set(5, { checks: [run("success")], files: ["src/a.ts", { filename: "test/a.test.ts", status: "removed" }] });
+  expect((await complete(await claimed("drops a test"), 5)).refusal).toMatch(/removes the test file test\/a\.test\.ts/);
+  expect((await complete(await claimed("retire a test", "Remove test/a.test.ts; it tests nothing now."), 5)).ok).toBe(true);
 });
