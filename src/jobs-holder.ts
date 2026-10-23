@@ -40,6 +40,7 @@ import { callerIsSeat, correctionsForWork, guardedTransition, readJob, refuse, t
 import { actorKind, touchStatement } from "./job-touches";
 import { externalFence } from "./provenance";
 import { ciRefusal } from "./complete-ci";
+import { breakerExemption, type BreakerExemption } from "./fail-exemption";
 import { parsePrUrl } from "./github/client";
 
 // The transitions the driver holding a job makes: complete, fail and block, and the
@@ -108,6 +109,8 @@ async function holderTransition(
     // that it is keyed and test-integration/query-plans.test.ts can reconstruct it and
     // EXPLAIN it. A statement assembled at runtime is invisible to both.
     bumpBlocked?: boolean;
+    // A holder's fail the breaker does not count, and why (src/fail-exemption.ts).
+    breakerExempt?: BreakerExemption | null;
     // What the driver says this job produced. Verified against GitHub and written into
     // job_outcomes below, on the terminal transitions only.
     evidence?: JobEvidence;
@@ -210,6 +213,7 @@ async function holderTransition(
       ...(patch.result_summary ? { result_summary: patch.result_summary } : {}),
       ...(patch.result_ref ? { result_ref: patch.result_ref } : {}),
       ...(patch.overlaps ? { overlaps: patch.overlaps } : {}),
+      ...(patch.breakerExempt ? { breaker_exempt: patch.breakerExempt } : {}),
     }),
   ];
   if (patch.touches) statements.push(...patch.touches(job));
@@ -629,9 +633,12 @@ export async function failJob(
   const failRaw: ClaimRaw = said.raw ?? { claim: said.claim, reason };
   const review = await reviewRefusal(env, agent, now, "fail", id, null, { said: { claim: failClaim.claim, raw: failRaw, as: "fail" } });
   if (review) return review;
+  const held = await readJob(env.DB, id);
+  const breakerExempt = held && held.claimed_by === agent.actor ? await breakerExemption(env, held, reason) : null;
   return holderTransition(env, agent, now, "fail", id, {
     status: "failed",
     result_summary: reason,
+    breakerExempt,
     said: { claim: failClaim.claim, raw: failRaw },
   });
 }

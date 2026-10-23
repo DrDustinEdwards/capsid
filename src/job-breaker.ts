@@ -14,7 +14,9 @@ import { DAY_MS } from "./time";
 // person cleaning up, and a claim that fails a tampered or corrupt body is the Worker
 // refusing, not a driver failing, so neither trips it. Nor does a bench run's key: its
 // fail is the honest "not done" its job asks for (src/jobs-seat.ts completeAsCaller), and
-// three of them in a day would otherwise stop the study's runs.
+// three of them in a day would otherwise stop the study's runs. A holder's fail that
+// Capsid's own complete refusal forced, or that states its remainder item by item against
+// a diff that shows the rest done, is left out too (src/fail-exemption.ts).
 
 const BREAKER_THRESHOLD_DEFAULT = 3;
 const BREAKER_WINDOW_MS = DAY_MS;
@@ -74,7 +76,11 @@ export async function breakerState(env: Env, namespace: string, now: Date): Prom
   const since = sqlTime(from);
   // A transition writes two audit rows with this action, one for the job and one for
   // its mirror document, both on the job's path; counting paths counts each job once.
-  const row = await env.DB.prepare("SELECT COUNT(DISTINCT path) AS n FROM audit_log WHERE action = 'job-fail' AND namespace = ?1 AND at >= ?2 AND actor NOT LIKE 'agent:bench-run-%'")
+  // A fail exempted when it was written leaves out both of its rows (src/fail-exemption.ts).
+  const row = await env.DB.prepare(
+    `SELECT COUNT(DISTINCT path) AS n FROM audit_log WHERE action = 'job-fail' AND namespace = ?1 AND at >= ?2 AND actor NOT LIKE 'agent:bench-run-%'
+     AND path NOT IN (SELECT path FROM audit_log WHERE action = 'job-fail' AND namespace = ?1 AND at >= ?2 AND json_extract(params, '$.breaker_exempt') IS NOT NULL)`
+  )
     .bind(namespace, since)
     .first<{ n: number }>();
   const failed = row?.n ?? 0;
