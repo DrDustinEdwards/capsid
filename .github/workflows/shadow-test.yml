@@ -1,0 +1,54 @@
+name: shadow-test
+
+# THE SHADOW TEST (docs/work-queue.md, "The shadow test"; scripts/shadow-test.mjs,
+# src/shadow.ts). On a pull request that names its job, a model reads the job and the
+# base, never the diff, and writes one test of what the job asks; it runs on the base and
+# on the head, and Capsid records both. It blocks nothing: the script always exits 0, and
+# complete's CI gate does not wait on this check.
+#
+# On your Claude subscription, not an API key: the repository secret CLAUDE_CODE_OAUTH_TOKEN
+# comes from `claude setup-token`. Capsid is reached with this workflow's OIDC token, so
+# no Capsid key is stored. Same-repository pull requests only: a fork gets neither.
+
+on:
+  pull_request:
+    branches: [master, main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: shadow-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shadow-test:
+    name: shadow-test
+    if: github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, 'job_')
+    runs-on: ubuntu-latest
+    # A model turn budget of 40 plus two npm installs and two test runs.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Claude Code
+        run: curl -fsSL https://claude.ai/install.sh | bash
+
+      - name: Write and run the shadow test
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: PATH="$HOME/.local/bin:$PATH" node scripts/shadow-test.mjs "$BASE_SHA"

@@ -77,8 +77,10 @@ async function notGreen(env: Env, namespace: string, url: string, jobBody: strin
   const [owner, repo] = facts.repo.split("/");
   const checks = await readCheckRuns(env, owner, repo, facts.head_sha, CHECKS_MAX_PAGES);
   if (checks.problem) return `${url}: the check runs on ${sha} could not be read whole (${checks.problem}), so its CI is not shown green. ${AGAIN}`;
-  if (checks.items.length > 0) {
-    const verdict = ciVerdict(checks.items);
+  // The shadow test records and never judges (src/shadow.ts), so complete does not wait on it.
+  const judged = checks.items.filter((c) => c.name !== "shadow-test");
+  if (judged.length > 0) {
+    const verdict = ciVerdict(judged);
     if (verdict.conclusion === "pending") return `${url}: CI on ${sha} has not finished (${verdict.note}). The job stays claimed. ${AGAIN}`;
     if (verdict.conclusion === "failure") return `${url}: CI on ${sha} failed (${verdict.note}). ${OR_FAIL}`;
   }
@@ -101,7 +103,7 @@ async function notGreen(env: Env, namespace: string, url: string, jobBody: strin
   }
   // Skipped and neutral fail nothing, and pass nothing: a run a paths filter excluded
   // did not judge the change.
-  if (checks.items.some((c) => c.conclusion === "success")) return files.paths;
+  if (judged.some((c) => c.conclusion === "success")) return files.paths;
   const code = files.paths.filter((p) => pathClassOf(p) !== "docs");
   if (code.length === 0) return files.paths;
   return (
