@@ -176,12 +176,14 @@ export async function handleBenchDraw(request: Request, env: Env): Promise<Respo
 }
 
 // THE REGISTRATION LOCK, for a model arm. A full-split task starts only once the
-// registration is recorded and the task is on the draw. A pilot task starts only before
-// it: the pilot checks feasibility and may change the budgets, so it precedes the hash.
+// registration is recorded and the task is on the draw. A pilot or excluded task starts
+// only before it: the pilot checks feasibility and may change the budgets, and excluded
+// (pre-cutoff) tasks are where the template is tuned (protocol section 2), so both
+// precede the hash. Neither is sealed or analysed.
 // The planted arms call no model and are not locked.
 async function drawRefusal(db: D1Database, taskId: string, split: string): Promise<string | null> {
   const registered = await db.prepare("SELECT 1 AS one FROM bench_registration WHERE id = 1").first<{ one: number }>();
-  if (split === "pilot") return registered ? `task ${taskId} is a pilot task, and the pilot ends when the registration is recorded` : null;
+  if (split === "pilot" || split === "excluded") return registered ? `task ${taskId} is a ${split} task, and ${split} runs end when the registration is recorded` : null;
   if (!registered) return `no registration is recorded; record it and the draw with ${BENCH_DRAW_PATH} before a model run on a full-split task`;
   const drawn = await db.prepare("SELECT 1 AS one FROM bench_draw WHERE task_id = ?1").bind(taskId).first<{ one: number }>();
   return drawn ? null : `task ${taskId} is not on the draw`;
@@ -337,7 +339,6 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
   if (enabled !== "on") return textResponse(`bench runs are off: ${BENCH_ENABLED_KEY} reads ${JSON.stringify(enabled)}, not "on"`, 403);
   const task = await env.DB.prepare("SELECT split FROM bench_tasks WHERE task_id = ?1").bind(task_id).first<{ split: string }>();
   if (!task) return textResponse(`no task ${task_id} is registered; register it with ${BENCH_TASKS_PATH} first`, 404);
-  if (task.split === "excluded") return textResponse(`task ${task_id} is excluded`, 409);
   const now = new Date();
   if (arm === "treatment") {
     const breaker = await breakerState(env, BENCH_NAMESPACE, now);
