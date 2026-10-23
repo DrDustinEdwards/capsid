@@ -405,7 +405,7 @@ h3 {
   font: 600 clamp(1.375rem, 2.4vw, 2rem) / 1.2 var(--prose);
 }
 .pin.is-live .pin-step {
-  min-block-size: 60vh;
+  min-block-size: 45vh;
   color: var(--muted);
   transition: color var(--dur-base) var(--ease-out);
 }
@@ -609,7 +609,7 @@ h3 {
   flex-direction: column;
   justify-content: space-between;
   gap: var(--space-5);
-  min-block-size: 420px;
+  min-block-size: 340px;
   overflow: hidden;
   border-radius: var(--radius-l);
   background: var(--surface);
@@ -917,7 +917,8 @@ h3 {
 }
 .foot-nav ul {
   display: grid;
-  gap: var(--space-1);
+  grid-template-columns: repeat(2, max-content);
+  gap: var(--space-1) var(--space-6);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -947,7 +948,7 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-block-size: 220px;
+  min-block-size: 168px;
   background: var(--text);
   color: var(--ground);
   font: 600 clamp(4rem, 11vw, 10rem) / 1 var(--prose);
@@ -1057,7 +1058,12 @@ h3 {
 .charts > figure:not(.ring) {
   grid-column: 1 / -1;
   min-width: 0;
-  max-width: 44rem;
+  max-width: 36rem;
+}
+/* Enarratio draws at a phone's width; on a wider page the drawing grows to its column. */
+.charts .enarratio-frame svg {
+  inline-size: 100%;
+  block-size: auto;
 }
 .numbers-table {
   margin-block-start: var(--space-5);
@@ -1167,15 +1173,10 @@ h3 {
 }
 
 /* A system's page. */
-.system-top {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-5);
-  align-items: flex-end;
-  justify-content: space-between;
-}
 .facts {
   display: grid;
+  inline-size: fit-content;
+  max-inline-size: 100%;
   grid-template-columns: max-content 1fr;
   gap: var(--space-2) var(--space-5);
   margin: 0;
@@ -1338,6 +1339,10 @@ th[aria-sort="ascending"] .sort::after {
   margin-block: 0 var(--space-3);
   font-size: 1rem;
 }
+/* "100%" at Enarratio's size touches the ring's inside edge. */
+.ring .enarratio-numeric {
+  font-size: 25px;
+}
 .ring figcaption {
   margin-block-start: var(--space-3);
   color: var(--muted);
@@ -1374,6 +1379,19 @@ th[aria-sort="ascending"] .sort::after {
 }
 .flow-stack h2 {
   margin-block-start: 0;
+}
+/* On a wide screen the step reads beside its drawing, so stepping never sends the eye down the
+   page to see what moved. */
+@media (min-width: 64rem) {
+  .step-layout-drawn {
+    display: grid;
+    grid-template-columns: minmax(18rem, 1fr) 2fr;
+    gap: var(--space-7);
+    align-items: start;
+  }
+  .step-layout-drawn .flow-stack {
+    margin-block-start: var(--space-5);
+  }
 }
 .flow-stack > * {
   grid-area: 1 / 1;
@@ -1653,3 +1671,28 @@ th[aria-sort="ascending"] .sort::after {
 .h-98 { --h: 98%; }
 .h-99 { --h: 99%; }
 .h-100 { --h: 100%; }
+
+/* A one-action tool's arguments, beside its description on the front page. */
+.tool-args {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tool-args code {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-s);
+  background: var(--sunken);
+}
+
+/* The flows' tabs scroll sideways on a phone rather than cutting the last one off. */
+.flows-home .cap-tabs-list {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.flows-home .cap-tab {
+  flex: none;
+}
+/* The sample approval is a picture of the Portal's question, not a control. */
+.frag-gate .cap-btn {
+  pointer-events: none;
+}

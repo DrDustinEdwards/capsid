@@ -102,9 +102,13 @@ function draw(g, { id, title, boxes, width, height }) {
       b.cycle ? `<text class="code-graph-cycle" x="${(x + n.width - 2).toFixed(1)}" y="${(y - 8).toFixed(1)}" text-anchor="end">cycle</text>` : ""
     }</g></a>`;
   });
-  const w = Math.ceil(width);
-  const h = Math.ceil(height);
+  // dagre can route a long wire outside the box it reports, so the frame is the extent of
+  // everything drawn, not the graph's own width and height.
+  let [x0, y0, x1, y1] = [0, 0, width, height];
+  for (const e of g.edges()) for (const p of g.edge(e).points) [x0, y0, x1, y1] = [Math.min(x0, p.x - 8), Math.min(y0, p.y - 8), Math.max(x1, p.x + 8), Math.max(y1, p.y + 8)];
+  const w = Math.ceil(x1 - x0);
+  const h = Math.ceil(y1 - y0);
   // On a phone the drawing keeps its own size and scrolls in a box a keyboard can reach, rather
   // than shrinking past reading.
-  return `<figure class="code-graph"><figcaption id="${id}-caption">${escapeHtml(title)}</figcaption><div class="scroller" role="region" aria-labelledby="${id}-caption" tabindex="0"><svg class="code-graph-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true" focusable="false"><defs><marker id="${id}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="code-graph-head"/></marker></defs>${edges.join("")}${nodes.join("")}</svg></div></figure>`;
+  return `<figure class="code-graph"><figcaption id="${id}-caption">${escapeHtml(title)}</figcaption><div class="scroller" role="region" aria-labelledby="${id}-caption" tabindex="0"><svg class="code-graph-svg" viewBox="${Math.floor(x0)} ${Math.floor(y0)} ${w} ${h}" width="${w}" height="${h}" aria-hidden="true" focusable="false"><defs><marker id="${id}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="code-graph-head"/></marker></defs>${edges.join("")}${nodes.join("")}</svg></div></figure>`;
 }
