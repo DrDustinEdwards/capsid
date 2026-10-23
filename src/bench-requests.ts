@@ -131,6 +131,20 @@ export function parseDrawRequest(body: string): ({ ok: true } & DrawRequest) | R
   };
 }
 
+// The harness's receipt for a treatment run's reproduction test (src/bench.ts handleBenchRepro).
+export function parseReproRequest(body: string): { ok: true; jti: string; run_id: string; passed: boolean; reason: string } | Refusal {
+  const r = parseJson(body);
+  if (refused(r)) return r;
+  const jti = jtiOf(r);
+  if (refused(jti)) return jti;
+  const runId = text(r, "run_id", 64);
+  if (refused(runId)) return runId;
+  if (typeof r.passed !== "boolean") return { ok: false, refusal: "passed must be true or false" };
+  const reason = text(r, "reason", 1000);
+  if (refused(reason)) return reason;
+  return { ok: true, jti, run_id: runId, passed: r.passed, reason };
+}
+
 export function parseStartRequest(body: string): { ok: true; jti: string; task_id: string; arm: Arm; gh_run: string } | Refusal {
   const r = parseJson(body);
   if (refused(r)) return r;

@@ -154,7 +154,7 @@ describe("the run key", () => {
     expect((await resolve(other.run_key))?.benchRun).toEqual({ run: other.run_id, job: otherJob });
   });
 
-  it("completes its job only with a reproduction, and an honest fail does not trip the breaker", async () => {
+  it("completes its job only with the harness's passing receipt, and an honest fail does not trip the breaker", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('bench', '[]')").run();
     const done = await startTreatment();
@@ -162,24 +162,31 @@ describe("the run key", () => {
     const { client, call } = await connect((await resolve(done.run_key))!);
     expect((await call("capsid_work_jobs", { action: "claim", id: doneJob })).ok).toBe(true);
 
-    const reproduction = { test: "tests/test_issue.py", command: "pytest tests/test_issue.py", before: { result: "fail", output: "1 failed" }, after: { result: "pass", output: "1 passed" } };
-    const unproven = [
-      { action: "complete", id: doneJob, result_summary: "fixed" },
-      { action: "complete", id: doneJob, result_summary: "fixed", claim: { reproduction: { ...reproduction, before: { result: "pass", output: "1 passed" } } } },
-    ];
-    for (const args of unproven) {
-      const refused = await call("capsid_work_jobs", args);
+    // No receipt yet, then a receipt that did not pass: both refused, with the receipt's reason.
+    const tryComplete = () => call("capsid_work_jobs", { action: "complete", id: doneJob, result_summary: "fixed" });
+    for (const receipt of [null, { passed: false, reason: "your test did not fail on the base" }]) {
+      if (receipt) expect((await post("/bench/repro", { run_id: done.run_id, ...receipt })).status).toBe(200);
+      const refused = await tryComplete();
       expect(refused.ok, refused.text).toBe(false);
       expect(refused.text).toContain("not done, here's why");
+      if (receipt) expect(refused.text).toContain(receipt.reason);
     }
-    const completed = await call("capsid_work_jobs", { action: "complete", id: doneJob, result_summary: "fixed", claim: { reproduction } });
+    // The receipt is written once, so the refused run stays refused.
+    expect((await post("/bench/repro", { run_id: done.run_id, passed: true, reason: "failed on the base, passed on the diff" })).status).toBe(409);
+
+    const proven = await startTreatment();
+    const provenJob = await postFor("bench", runJobTitle(proven.task_id, proven.run_id));
+    const own = await connect((await resolve(proven.run_key))!);
+    expect((await own.call("capsid_work_jobs", { action: "claim", id: provenJob })).ok).toBe(true);
+    expect((await post("/bench/repro", { run_id: proven.run_id, passed: true, reason: "failed on the base, passed on the diff" })).status).toBe(200);
+    const completed = await own.call("capsid_work_jobs", { action: "complete", id: provenJob, result_summary: "fixed" });
     expect(completed.ok, completed.text).toBe(true);
-    const said = await env.DB.prepare("SELECT raw FROM job_claims WHERE job_id = ?1").bind(doneJob).first<{ raw: string }>();
-    expect(JSON.parse(said!.raw).claim.reproduction).toEqual(reproduction);
+    await own.client.close();
     await client.close();
+    expect((await post("/bench/score", { run_id: done.run_id, hidden: counts, claimed_done: false, capsid_job_id: doneJob })).status).toBe(200);
     // The score step leaves a job the agent closed as it is.
-    expect((await post("/bench/score", { run_id: done.run_id, hidden: counts, claimed_done: true, capsid_job_id: doneJob })).status).toBe(200);
-    expect((await env.DB.prepare("SELECT status FROM jobs WHERE id = ?1").bind(doneJob).first<{ status: string }>())!.status).toBe("done");
+    expect((await post("/bench/score", { run_id: proven.run_id, hidden: counts, claimed_done: true, capsid_job_id: provenJob })).status).toBe(200);
+    expect((await env.DB.prepare("SELECT status FROM jobs WHERE id = ?1").bind(provenJob).first<{ status: string }>())!.status).toBe("done");
 
     // Three honest "not done" runs in a day, the breaker's default threshold.
     for (let i = 0; i < 3; i++) {

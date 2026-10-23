@@ -3,15 +3,15 @@ import type { Env } from "./env";
 import { claimJti, MAX_REPORT_BYTES, readBoundedText, verifyBenchRequest } from "./signed-requests";
 import { breakerRefusal, breakerState } from "./job-breaker";
 import { logEvent } from "./log";
-import { BENCH_NAMESPACE, BENCH_STALE_MS, newRunKey, runJobTitle } from "./bench-run-key";
+import { BENCH_NAMESPACE, BENCH_REPRO_ACTION, BENCH_STALE_MS, newRunKey, readReproReceipt, runJobTitle } from "./bench-run-key";
 import { sha256Hex } from "./auth";
 import type { Agent } from "./agents";
 import { noFlags } from "./agents-schema";
 import { adminFailJob, supersedeJob, workRecorded } from "./jobs-seat";
 import { readJob } from "./jobs-transition";
-import { isMissingRowAbort, requireBenchRunRunning } from "./store-guards";
+import { auditStatement, isMissingRowAbort, requireBenchRunRunning } from "./store-guards";
 import { textResponse } from "./http";
-import { type Arm, type Refusal, JTI_SCOPE, parseTaskRequest, parseDrawRequest, type BenchRegistration, parseStartRequest, parseScoreRequest, type TreatmentJob, runOutcome } from "./bench-requests";
+import { type Arm, type Refusal, JTI_SCOPE, parseTaskRequest, parseDrawRequest, type BenchRegistration, parseStartRequest, parseReproRequest, parseScoreRequest, type TreatmentJob, runOutcome } from "./bench-requests";
 
 // THE METHODS PAPER'S PAIRED COMPARISON, the Worker's half (job_ecb1b5f80c2d;
 // capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
@@ -24,6 +24,7 @@ import { type Arm, type Refusal, JTI_SCOPE, parseTaskRequest, parseDrawRequest, 
 //   /bench/tasks  register a task and its hidden test counts, once
 //   /bench/draw   record the registration and append the drawn task order
 //   /bench/start  open a run, behind the off switch and the concurrency cap
+//   /bench/repro  the harness's receipt for a treatment run's reproduction test
 //   /bench/score  close it: the Worker computes resolved and the false success claim
 //
 // ONE CLAIM RULE FOR EVERY ARM. Each arm's claim is the claim file its run wrote with
@@ -35,6 +36,7 @@ export const BENCH_TASKS_PATH = "/bench/tasks";
 export const BENCH_DRAW_PATH = "/bench/draw";
 export const BENCH_START_PATH = "/bench/start";
 export const BENCH_SCORE_PATH = "/bench/score";
+export const BENCH_REPRO_PATH = "/bench/repro";
 
 // The off switch: off unless it reads exactly "on". Absent, any other value or a read
 // that fails is off, so a run never starts by default or by outage.
@@ -452,6 +454,21 @@ async function finishRun(env: Env, run: { id: string; task_id: string; arm: Arm 
     if (!isMissingRowAbort(err)) throw err;
     return false;
   }
+}
+
+// The receipt is written once, for a running treatment run, and never changes: the
+// harness checks once at the phase break (src/bench-run-key.ts, "THE REPRODUCTION RECEIPT").
+export async function handleBenchRepro(request: Request, env: Env): Promise<Response> {
+  const front = await signedBody(request, env, "BENCH_REPRO_REJECTED", parseReproRequest);
+  if (!front.ok) return front.response;
+  const { run_id, passed, reason } = front.value;
+  const run = await env.DB.prepare("SELECT arm, status FROM bench_runs WHERE id = ?1").bind(run_id).first<{ arm: Arm; status: string }>();
+  if (!run) return textResponse(`no bench run ${run_id}`, 404);
+  if (run.arm !== "treatment") return textResponse(`bench run ${run_id} is a ${run.arm} run; only a treatment run has a reproduction receipt`, 409);
+  if (run.status !== "running") return textResponse(`bench run ${run_id} is already closed (${run.status})`, 409);
+  if (await readReproReceipt(env.DB, run_id)) return textResponse(`bench run ${run_id} already has its reproduction receipt; it is written once`, 409);
+  await auditStatement(env.DB, "system:bench-harness", BENCH_REPRO_ACTION, BENCH_NAMESPACE, run_id, { passed, reason }).run();
+  return Response.json({ ok: true, run_id, passed });
 }
 
 export async function handleBenchScore(request: Request, env: Env): Promise<Response> {

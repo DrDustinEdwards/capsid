@@ -56,3 +56,28 @@ export async function runKeyAgent(db: D1Database, hash: string, now: Date): Prom
     benchRun: { run: row.id, job: jobs?.length === 1 ? jobs[0].id : null },
   };
 }
+
+// THE REPRODUCTION RECEIPT (the methods paper's protocol, section 2, "Prove it before
+// done"). At the phase break the harness runs the test the agent named on the base with
+// only that file applied, then on the agent's diff, and posts what it saw to
+// /bench/repro (src/bench.ts). It is kept as one audit row per run, written once, and a
+// run key's complete is accepted only when it says the test failed on the base and
+// passed on the diff (src/jobs-seat.ts completeAsCaller). The agent's own labels count
+// for nothing.
+export const BENCH_REPRO_ACTION = "bench-repro";
+
+export interface ReproReceipt {
+  passed: boolean;
+  reason: string;
+}
+
+/** The harness's receipt for a run, or null when none was posted. */
+export async function readReproReceipt(db: D1Database, runId: string): Promise<ReproReceipt | null> {
+  const row = await db
+    .prepare("SELECT params FROM audit_log WHERE action = ?1 AND namespace = ?2 AND path = ?3 ORDER BY id LIMIT 1")
+    .bind(BENCH_REPRO_ACTION, BENCH_NAMESPACE, runId)
+    .first<{ params: string }>();
+  if (!row) return null;
+  const parsed = JSON.parse(row.params) as Partial<ReproReceipt>;
+  return { passed: parsed.passed === true, reason: typeof parsed.reason === "string" ? parsed.reason : "" };
+}
