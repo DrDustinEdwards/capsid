@@ -6,6 +6,7 @@ import { prFacts } from "./job-outcomes";
 import { pathClassOf } from "./merge-class";
 import { weakenedTests } from "./test-protection";
 import { checklistItems, unchangedItems } from "./job-checklist";
+import { proseOnly } from "./job-body-check";
 
 // The CI gate on complete (docs/work-queue.md, "CI on complete"). A job handed on as done
 // names its pull requests, and each must show CI that ran and passed on its head. Green
@@ -18,6 +19,8 @@ import { checklistItems, unchangedItems } from "./job-checklist";
 // the job's namespace does not map, its outcome stays unverified as before.
 
 const CHECKS_MAX_PAGES = 10;
+// A job opts into the test on the base with this line in its body.
+const TEST_ON_BASE = /^[ \t]*TEST ON BASE\b/m;
 const AGAIN = "Nothing was written; call complete again once it has.";
 const OR_FAIL = `Fix it and push, then complete again, or call fail with the reason; "not done, here's why" is a good outcome.`;
 
@@ -78,6 +81,14 @@ async function notGreen(env: Env, namespace: string, url: string, jobBody: strin
     const verdict = ciVerdict(checks.items);
     if (verdict.conclusion === "pending") return `${url}: CI on ${sha} has not finished (${verdict.note}). The job stays claimed. ${AGAIN}`;
     if (verdict.conclusion === "failure") return `${url}: CI on ${sha} failed (${verdict.note}). ${OR_FAIL}`;
+  }
+  // A job that opts into the test on the base (scripts/test-on-base.mjs) needs its run to
+  // have passed; running or failed, the verdict above already answered.
+  if (TEST_ON_BASE.test(proseOnly(jobBody)) && !checks.items.some((c) => c.name === "test-on-base" && c.conclusion === "success")) {
+    return (
+      `${url}: the job asks for its tests to be run on the base, and no test-on-base check passed on ${sha}. ` +
+      `Label the pull request test-on-base (the workflow runs in this repository only), then complete again; or call fail with the reason.`
+    );
   }
   const files = await readPrFiles(env, owner, repo, parsed.number);
   if (files.problem) return `${url}: its file list could not be read whole (${files.problem}), so its tests are not shown kept. ${AGAIN}`;
