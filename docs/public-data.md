@@ -29,7 +29,7 @@ Proven in `test/system-model.test.ts`: a private system published whole without 
 
 ## The drift check
 
-The model is written by hand, so the daily maintenance pass compares it with what Capsid and GitHub know (`src/model-drift.ts`; rules `model-drift` and `model-not-checked` in the Portal's Maintenance list, docs/work-queue.md). It lists and never edits: the model changes by pull request. No repo is left off on purpose.
+The model is written by hand, so the daily maintenance pass compares it with what Capsid and GitHub know (`src/model-drift.ts`; rules `model-drift` and `model-not-checked` in the Portal's Maintenance list, docs/work-queue.md). It lists and never edits: the model changes by pull request. A repo is left off only when the model's `left_off` list names it (Dustin keeps bsw, Recova, its MCP and the old Foxing admin off, 2026-10-23); that list is never published, and a repo in it that GitHub stops listing is named so the entry goes.
 
 ## The aggregate numbers
 

@@ -182,16 +182,6 @@
       "repos": ["DrDustinEdwards/foxing"]
     },
     {
-      "id": "foxing-admin-legacy",
-      "name": "Old Foxing Admin",
-      "short": "Old F. MCP",
-      "family": "plumbing",
-      "ring": "used",
-      "description": "The first Foxing admin MCP, a Next.js app on Vercel that read Supabase, Sentry and Vercel logs. Replaced by Foxing Admin.",
-      "domain": "admin-mcp.foxing.app",
-      "repos": ["DrDustinEdwards/foxing-admin-mcp"]
-    },
-    {
       "id": "foxhound",
       "name": "Foxhound",
       "short": "Foxhound",
@@ -212,26 +202,6 @@
       "repos": ["DrDustinEdwards/foxhound"]
     },
     {
-      "id": "recova",
-      "name": "Recova",
-      "short": "Recova",
-      "family": "product",
-      "ring": "used",
-      "description": "The first version of Foxhound: Next.js on Vercel with Supabase. Frozen to hotfixes, and retired once Foxhound matches it.",
-      "domain": "recovamrr.com",
-      "repos": ["DrDustinEdwards/recova"]
-    },
-    {
-      "id": "recova-mcp",
-      "name": "Recova MCP",
-      "short": "Recova MCP",
-      "family": "plumbing",
-      "ring": "used",
-      "description": "Gives a merchant's AI agents their Recova recovery, intelligence and disputes data over MCP, with per-merchant API keys.",
-      "domain": "mcp.recovamrr.com",
-      "repos": ["DrDustinEdwards/recova-mcp"]
-    },
-    {
       "id": "txasm",
       "name": "TXASM",
       "short": "TXASM",
@@ -250,16 +220,6 @@
       "description": "Julie Edwards's campaign site for the Bluff Dale ISD school board. Its copy lives in D1 and is edited through Carrel.",
       "domain": "julieedwards.info",
       "repos": ["DrDustinEdwards/julieedwards-info"]
-    },
-    {
-      "id": "bsw",
-      "name": "BioScience Writers",
-      "short": "BSW",
-      "family": "site",
-      "ring": "used",
-      "description": "The marketing site for BioScience Writers, a scientific editing and medical writing company. Not yet launched.",
-      "domain": "bsw.dustin-edwards.workers.dev",
-      "repos": ["DrDustinEdwards/bsw"]
     }
   ],
   "containers": [
@@ -1032,30 +992,6 @@
       "description": "A log of every tool call."
     },
     {
-      "id": "foxing-admin-legacy-app",
-      "system": "foxing-admin-legacy",
-      "name": "Next.js app",
-      "kind": "site",
-      "technology": "Next.js on Vercel",
-      "description": "One MCP endpoint behind a single operator key."
-    },
-    {
-      "id": "foxing-admin-legacy-supabase",
-      "system": "foxing-admin-legacy",
-      "name": "Supabase",
-      "kind": "external",
-      "technology": "Supabase Postgres",
-      "description": "The old Foxing database it queried."
-    },
-    {
-      "id": "foxing-admin-legacy-sentry",
-      "system": "foxing-admin-legacy",
-      "name": "Sentry and Vercel",
-      "kind": "external",
-      "technology": "Sentry and Vercel APIs",
-      "description": "Recent errors for web and phone, and runtime logs."
-    },
-    {
       "id": "foxhound-worker",
       "system": "foxhound",
       "name": "App Worker",
@@ -1184,78 +1120,6 @@
       "description": "Grants and tokens for the MCP door's OAuth provider."
     },
     {
-      "id": "recova-app",
-      "system": "recova",
-      "name": "Next.js app",
-      "kind": "site",
-      "technology": "Next.js on Vercel",
-      "description": "The marketing site, the merchant app and the admin."
-    },
-    {
-      "id": "recova-cron",
-      "system": "recova",
-      "name": "Vercel cron jobs",
-      "kind": "cron",
-      "technology": "Vercel Cron",
-      "description": "Recovery, win-back, disputes, metrics, digests, billing and social posting, hourly to monthly."
-    },
-    {
-      "id": "recova-supabase",
-      "system": "recova",
-      "name": "Supabase",
-      "kind": "database",
-      "technology": "Supabase Postgres",
-      "description": "Merchants, recoveries, disputes and billing."
-    },
-    {
-      "id": "recova-redis",
-      "system": "recova",
-      "name": "Upstash Redis",
-      "kind": "kv",
-      "technology": "Upstash Redis",
-      "description": "Rate limits and caches."
-    },
-    {
-      "id": "recova-r2",
-      "system": "recova",
-      "name": "Blog images and evidence",
-      "kind": "bucket",
-      "technology": "R2",
-      "description": "recova-blog-images and recova-dispute-evidence."
-    },
-    {
-      "id": "recova-stripe",
-      "system": "recova",
-      "name": "Stripe",
-      "kind": "external",
-      "technology": "Stripe Connect",
-      "description": "Merchants' payments, failures and disputes."
-    },
-    {
-      "id": "recova-resend",
-      "system": "recova",
-      "name": "Resend",
-      "kind": "external",
-      "technology": "Resend",
-      "description": "Recovery and account mail."
-    },
-    {
-      "id": "recova-mcp-app",
-      "system": "recova-mcp",
-      "name": "MCP server",
-      "kind": "site",
-      "technology": "Node on Vercel",
-      "description": "One Streamable HTTP endpoint, with SHA-256 hashed API keys scoped to one merchant or to the operator."
-    },
-    {
-      "id": "recova-mcp-agents",
-      "system": "recova-mcp",
-      "name": "AI agents",
-      "kind": "external",
-      "technology": "MCP clients",
-      "description": "Merchants' own AI agents."
-    },
-    {
       "id": "txasm-worker",
       "system": "txasm",
       "name": "Site Worker",
@@ -1342,14 +1206,6 @@
       "kind": "cron",
       "technology": "Workers cron trigger",
       "description": "Dumps the D1 database with d1-dump at 03:37 UTC."
-    },
-    {
-      "id": "bsw-worker",
-      "system": "bsw",
-      "name": "Site Worker",
-      "kind": "worker",
-      "technology": "React Router 8 on a Cloudflare Worker",
-      "description": "Server-renders the marketing site. No database or storage yet."
     },
     {
       "id": "capsid-backups-mirror",
@@ -1538,8 +1394,6 @@
     { "from": "foxing-mcp-worker", "to": "foxing-mcp-tool-log", "kind": "writes" },
     { "from": "foxing-mcp-worker", "to": "foxing-worker", "kind": "writes" },
     { "from": "foxing-mcp-worker", "to": "foxing-worker", "kind": "reads" },
-    { "from": "foxing-admin-legacy-app", "to": "foxing-admin-legacy-supabase", "kind": "reads" },
-    { "from": "foxing-admin-legacy-app", "to": "foxing-admin-legacy-sentry", "kind": "reads" },
     { "from": "foxhound-worker", "to": "foxhound-db", "kind": "writes" },
     { "from": "foxhound-worker", "to": "foxhound-money", "kind": "writes" },
     { "from": "foxhound-worker", "to": "foxhound-rate-limiter", "kind": "reads" },
@@ -1560,14 +1414,6 @@
     { "from": "foxhound-mcp-worker", "to": "foxhound-mcp-oauth-kv", "kind": "writes" },
     { "from": "foxhound-mcp-worker", "to": "foxhound-worker", "kind": "writes" },
     { "from": "foxhound-mcp-worker", "to": "foxhound-worker", "kind": "reads" },
-    { "from": "recova-app", "to": "recova-supabase", "kind": "writes" },
-    { "from": "recova-app", "to": "recova-redis", "kind": "writes" },
-    { "from": "recova-app", "to": "recova-r2", "kind": "writes" },
-    { "from": "recova-app", "to": "recova-stripe", "kind": "reads" },
-    { "from": "recova-app", "to": "recova-stripe", "kind": "writes" },
-    { "from": "recova-app", "to": "recova-resend", "kind": "writes" },
-    { "from": "recova-cron", "to": "recova-app", "kind": "writes" },
-    { "from": "recova-mcp-app", "to": "recova-mcp-agents", "kind": "serves" },
     { "from": "txasm-worker", "to": "txasm-db", "kind": "writes" },
     { "from": "txasm-worker", "to": "txasm-uploads", "kind": "writes" },
     { "from": "txasm-worker", "to": "txasm-books", "kind": "writes" },
@@ -1585,17 +1431,14 @@
     { "from": "bench-run", "to": "bench-drand", "kind": "writes" },
     { "from": "carrel-worker", "to": "writing-repo", "kind": "writes" },
     { "from": "carrel-worker", "to": "writing-repo", "kind": "reads" },
-    { "from": "recova-mcp", "to": "recova", "kind": "reads" },
     { "from": "carrel", "to": "txasm", "kind": "publishes-to" },
     { "from": "carrel", "to": "julieedwards-info", "kind": "publishes-to" },
     { "from": "carrel", "to": "foxhound", "kind": "publishes-to" },
     { "from": "carrel", "to": "foxing", "kind": "publishes-to" },
     { "from": "capsid", "to": "txasm", "kind": "coordinates" },
     { "from": "capsid", "to": "julieedwards-info", "kind": "coordinates" },
-    { "from": "capsid", "to": "bsw", "kind": "coordinates" },
     { "from": "capsid", "to": "writing", "kind": "coordinates" },
     { "from": "capsid", "to": "capsid-bench", "kind": "coordinates" },
-    { "from": "capsid", "to": "recova", "kind": "coordinates" },
     { "from": "capsid", "to": "skills", "kind": "coordinates" },
     { "from": "capsid", "to": "devkit", "kind": "installs" },
     { "from": "capsid", "to": "enarratio", "kind": "installs" },
@@ -1644,8 +1487,6 @@
     { "from": "txasm", "to": "site-api", "kind": "installs" },
     { "from": "txasm", "to": "site-runtime", "kind": "installs" },
     { "from": "txasm", "to": "capsomer", "kind": "installs" },
-    { "from": "bsw", "to": "devkit", "kind": "installs" },
-    { "from": "bsw", "to": "site-runtime", "kind": "installs" },
     { "from": "prelum", "to": "devkit", "kind": "installs" },
     { "from": "prelum", "to": "capsomer", "kind": "installs" },
     { "from": "prelum", "to": "enarratio", "kind": "installs" },
@@ -1701,5 +1542,11 @@
         { "from": "carrel-cron", "kind": "watches", "to": "website-worker", "toward": "carrel-cron", "text": "Watched: every 15 minutes Carrel runs site-api's conformance suite against the site and emails when its state changes." }
       ]
     }
+  ],
+  "left_off": [
+    { "repo": "DrDustinEdwards/bsw", "why": "Kept off the map (Dustin, 2026-10-23)." },
+    { "repo": "DrDustinEdwards/recova", "why": "Kept off the map (Dustin, 2026-10-23); Foxhound replaces it." },
+    { "repo": "DrDustinEdwards/recova-mcp", "why": "Kept off the map (Dustin, 2026-10-23); goes with Recova." },
+    { "repo": "DrDustinEdwards/foxing-admin-mcp", "why": "Kept off the map (Dustin, 2026-10-23); replaced by Foxing Admin and to be deleted." }
   ]
 }

@@ -87,6 +87,8 @@ export const SystemModelSchema = z
     containers: z.array(Container),
     relationships: z.array(Relationship),
     flows: z.array(Flow).optional(),
+    // Repos Dustin keeps off the map: the drift check skips them, and nothing publishes them.
+    left_off: z.array(z.strictObject({ repo: bounded(200).regex(REPO), why: bounded(200) })).optional(),
   })
   .superRefine((m, ctx) => {
     const ids = new Map<string, string>();
