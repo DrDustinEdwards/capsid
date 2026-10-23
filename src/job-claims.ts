@@ -25,6 +25,9 @@ const MAX_CLAIM_URL = 512;
 const MAX_CLAIM_FILES = 500;
 const MAX_CLAIM_PATH = 512;
 const MAX_CLAIM_VERSION = 128;
+const MAX_CLAIM_COMMAND = 1024;
+const MAX_CLAIM_OUTPUT = 4000;
+const REPRODUCTION_RESULTS = ["fail", "pass", "error"] as const;
 
 const count = z.number().int().nonnegative();
 const version = bounded(MAX_CLAIM_VERSION);
@@ -50,6 +53,20 @@ export const claimSchema = z
       .strict()
       .optional()
       .describe("Tests the agent ran, and their result."),
+    // Recorded in job_claims.raw only, so it needs no column. A run key's complete needs one
+    // that failed before and passed after (reproductionRefusal).
+    reproduction: z
+      .object({
+        test: bounded(MAX_CLAIM_PATH),
+        command: bounded(MAX_CLAIM_COMMAND),
+        before: z.object({ result: z.enum(REPRODUCTION_RESULTS), output: bounded(MAX_CLAIM_OUTPUT) }).strict(),
+        after: z.object({ result: z.enum(REPRODUCTION_RESULTS), output: bounded(MAX_CLAIM_OUTPUT) }).strict(),
+      })
+      .strict()
+      .optional()
+      .describe(
+        "The test that reproduces the issue: its repo-relative path, the command that runs it, and that command's result (fail, pass or error) and the tail of its output, before the fix and after it."
+      ),
     deploy_state: z.enum(CLAIM_DEPLOY_STATES).optional(),
     files_touched: z.array(bounded(MAX_CLAIM_PATH)).max(MAX_CLAIM_FILES).optional().describe("Repo-relative paths the agent touched."),
     usage: z
@@ -85,6 +102,15 @@ export const claimSchema = z
   .strict();
 
 export type JobClaim = z.infer<typeof claimSchema>;
+
+/** Why this claim does not show the issue reproduced and then fixed, or null when it does. */
+export function reproductionRefusal(claim: JobClaim | undefined): string | null {
+  const r = claim?.reproduction;
+  if (!r) return "it records no claim.reproduction";
+  if (r.before.result !== "fail") return `claim.reproduction.before.result is ${r.before.result}, not fail: the test did not reproduce the issue`;
+  if (r.after.result !== "pass") return `claim.reproduction.after.result is ${r.after.result}, not pass: the fix did not make the test pass`;
+  return null;
+}
 
 // A claim arrives as an object or as a JSON string, for the reason evidence does
 // (parseEvidence, src/job-outcomes.ts). Unlike evidence, a field that does not fit is

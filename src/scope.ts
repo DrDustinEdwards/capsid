@@ -320,10 +320,13 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
 // row are refused, so an action added later is closed to it until listed here. A
 // re-check inside the jobs handler carries no call and is not bound here: the
 // registrar's check, which binds every call, has already run.
-const BENCH_RUN_ACTIONS: readonly string[] = ["claim", "list"];
+// complete and fail end the run's own account of its job (complete only with a
+// reproduction, src/jobs-seat.ts completeAsCaller); the score step still decides nothing
+// from them.
+const BENCH_RUN_ACTIONS: readonly string[] = ["claim", "list", "complete", "fail"];
 
 function benchRunRefusal(run: { run: string; job: string | null }, actor: string, need: ScopeNeed): string | null {
-  const refusal = `unauthorized: ${actor} is the run key of bench run ${run.run} and may only claim and read its own job`;
+  const refusal = `unauthorized: ${actor} is the run key of bench run ${run.run} and may only claim, read, complete or fail its own job`;
   if (need.tool !== JOBS_TOOL) return `${refusal}; it cannot use ${need.tool}.`;
   if (!need.call) return null;
   if (!need.action || !BENCH_RUN_ACTIONS.includes(need.action)) return `${refusal}; it cannot ${need.action ?? "call the tool with no action"}.`;

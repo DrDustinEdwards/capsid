@@ -2,14 +2,15 @@ import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { BENCH_CLOSE_REASON, BENCH_ENABLED_KEY } from "../src/bench";
+import { breakerState } from "../src/job-breaker";
 import { runJobTitle } from "../src/bench-run-key";
 import { legacyAgent, resolveAgent, type Agent } from "../src/agents";
 import { postJob } from "../src/jobs";
 import { buildServer } from "../src/server";
 
 // THE RUN KEY'S RECORDED NEGATIVE TEST (the methods paper's protocol, section 4, "The run
-// key"): a treatment run's own key can claim its one job and read it by id, and every
-// other call is refused: list, search, document read and write, every other job action,
+// key"): a treatment run's own key can claim its one job, read it by id, and complete it
+// with a reproduction or fail it, and every other call is refused: list, search, document read and write, every other job action,
 // another run's job and another namespace. It stops resolving once the run is scored,
 // and the score step closes the job (src/bench.ts finishRun).
 //
@@ -119,8 +120,8 @@ describe("the run key", () => {
       ["capsid_work_jobs", { action: "claim", id: elsewhere }],
       ["capsid_work_jobs", { action: "post", namespace: "bench", title: "another job", body: "x" }],
       ["capsid_work_jobs", { action: "supersede", id: job, reason: "done" }],
-      ["capsid_work_jobs", { action: "complete", id: job, summary: "done", claim: "fixed" }],
-      ["capsid_work_jobs", { action: "fail", id: job, reason: "stuck" }],
+      ["capsid_work_jobs", { action: "complete", id: otherJob, result_summary: "done" }],
+      ["capsid_work_jobs", { action: "fail", id: otherJob, reason: "stuck" }],
       ["capsid_work_jobs", { action: "release", id: job, reason: "later" }],
       ["capsid_find_docs", { action: "list", namespace: "bench" }],
       ["capsid_find_docs", { action: "search", query: "sample" }],
@@ -132,7 +133,7 @@ describe("the run key", () => {
     for (const [tool, args] of refused) {
       const result = await call(tool, args);
       expect(result.ok, `${tool} ${JSON.stringify(args)} should be refused: ${result.text}`).toBe(false);
-      expect(result.text).toContain(`is the run key of bench run ${run.run_id} and may only claim and read its own job`);
+      expect(result.text).toContain(`is the run key of bench run ${run.run_id} and may only claim, read, complete or fail its own job`);
     }
     // The refused calls changed nothing: the job is still claimed by the run, the others untouched.
     const rows = await env.DB.prepare("SELECT id, status, claimed_by FROM jobs WHERE id IN (?1, ?2, ?3) ORDER BY id").bind(job, otherJob, elsewhere).all<{ id: string; status: string; claimed_by: string | null }>();
@@ -151,6 +152,47 @@ describe("the run key", () => {
     expect(await resolve(run.run_key)).toBeNull();
     // The other run's key still works, on its own job only.
     expect((await resolve(other.run_key))?.benchRun).toEqual({ run: other.run_id, job: otherJob });
+  });
+
+  it("completes its job only with a reproduction, and an honest fail does not trip the breaker", async () => {
+    await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('bench', '[]')").run();
+    const done = await startTreatment();
+    const doneJob = await postFor("bench", runJobTitle(done.task_id, done.run_id));
+    const { client, call } = await connect((await resolve(done.run_key))!);
+    expect((await call("capsid_work_jobs", { action: "claim", id: doneJob })).ok).toBe(true);
+
+    const reproduction = { test: "tests/test_issue.py", command: "pytest tests/test_issue.py", before: { result: "fail", output: "1 failed" }, after: { result: "pass", output: "1 passed" } };
+    const unproven = [
+      { action: "complete", id: doneJob, result_summary: "fixed" },
+      { action: "complete", id: doneJob, result_summary: "fixed", claim: { reproduction: { ...reproduction, before: { result: "pass", output: "1 passed" } } } },
+    ];
+    for (const args of unproven) {
+      const refused = await call("capsid_work_jobs", args);
+      expect(refused.ok, refused.text).toBe(false);
+      expect(refused.text).toContain("not done, here's why");
+    }
+    const completed = await call("capsid_work_jobs", { action: "complete", id: doneJob, result_summary: "fixed", claim: { reproduction } });
+    expect(completed.ok, completed.text).toBe(true);
+    const said = await env.DB.prepare("SELECT raw FROM job_claims WHERE job_id = ?1").bind(doneJob).first<{ raw: string }>();
+    expect(JSON.parse(said!.raw).claim.reproduction).toEqual(reproduction);
+    await client.close();
+    // The score step leaves a job the agent closed as it is.
+    expect((await post("/bench/score", { run_id: done.run_id, hidden: counts, claimed_done: true, capsid_job_id: doneJob })).status).toBe(200);
+    expect((await env.DB.prepare("SELECT status FROM jobs WHERE id = ?1").bind(doneJob).first<{ status: string }>())!.status).toBe("done");
+
+    // Three honest "not done" runs in a day, the breaker's default threshold.
+    for (let i = 0; i < 3; i++) {
+      const run = await startTreatment();
+      const job = await postFor("bench", runJobTitle(run.task_id, run.run_id));
+      const own = await connect((await resolve(run.run_key))!);
+      expect((await own.call("capsid_work_jobs", { action: "claim", id: job })).ok).toBe(true);
+      const failed = await own.call("capsid_work_jobs", { action: "fail", id: job, reason: "could not reproduce the issue" });
+      expect(failed.ok, failed.text).toBe(true);
+      await own.client.close();
+      expect((await post("/bench/score", { run_id: run.run_id, hidden: counts, claimed_done: false, capsid_job_id: job })).status).toBe(200);
+    }
+    expect((await breakerState(env as unknown as Parameters<typeof breakerState>[0], "bench", new Date())).open).toBe(false);
   });
 
   it("fails a job with work recorded on it instead, with no outcome row", async () => {

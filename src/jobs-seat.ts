@@ -20,7 +20,7 @@ import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from ".
 import { signJobText } from "./job-signing";
 import { commandFromSummary, completeAsSeat, completeJob, completeWithoutClaim, failJob, recordAsSeat } from "./jobs-holder";
 import { actorKind, touchStatement } from "./job-touches";
-import type { ClaimInput, ClaimRaw } from "./job-claims";
+import { parseClaim, reproductionRefusal, type ClaimInput, type ClaimRaw } from "./job-claims";
 import {
   actorShapeRefusal,
   callerIsSeat,
@@ -273,6 +273,20 @@ export async function completeAsCaller(
 ): Promise<JobResult> {
   // An argument completeJob refuses before it reads anything is refused the same way here.
   if (!args.result_summary?.trim()) return completeJob(env, agent, now, id, args);
+  // A bench run proves the fix before it may call its job done (the methods paper's
+  // protocol, section 2): a test that failed before the fix and passes after it. Without
+  // one, "not done, here's why" is the outcome the job asks for, and fail records it.
+  if (agent.benchRun) {
+    const parsed = parseClaim(args.claim);
+    const missing = "error" in parsed ? parsed.error : reproductionRefusal(parsed.claim);
+    if (missing) {
+      return refuse(
+        "complete",
+        `${id} was not completed: ${missing}. A bench run completes its job only with a test that failed before the fix and passes after it. ` +
+          `If you cannot show that, call fail with the reason; "not done, here's why" is a good outcome.`
+      );
+    }
+  }
   const current = await readJob(env.DB, id);
   if (current && current.status === "queued" && current.claimed_by === null) return completeUnclaimed(env, agent, now, current, args);
   if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) return adminCompleteJob(env, agent, now, id, args);
