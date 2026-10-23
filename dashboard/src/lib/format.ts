@@ -89,10 +89,6 @@ export function agentLabel(agent: string): string {
   return /^(agent:)?runner-job_/.test(agent) ? "a seat-started runner" : agent;
 }
 
-export function unique<T>(list: T[]): T[] {
-  return [...new Set(list)];
-}
-
 export function hostOf(origin: string): string {
   try {
     return new URL(origin).host;

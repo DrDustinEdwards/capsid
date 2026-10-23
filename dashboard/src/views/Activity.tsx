@@ -7,13 +7,7 @@ import { actionWords } from "../lib/audit-words";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalActivity } from "../types";
 import { Panel } from "capsomer/react/panel";
-import { PageHead } from "./shared";
-
-interface Load {
-  data: PortalActivity | null;
-  loading: boolean;
-  error: string | null;
-}
+import { PageHead, useAnswer } from "./shared";
 
 function None() {
   return <span className="faint">none</span>;
@@ -26,7 +20,7 @@ function None() {
 const TARGET_LABEL: Record<"job" | "document", string> = { job: "(job)", document: "(mirror document)" };
 
 export function Activity() {
-  const { feed, now: appNow, signOut } = useApp();
+  const { feed, now: appNow } = useApp();
   const search = useSearch();
   const [, navigate] = useLocation();
   const params = new URLSearchParams(search);
@@ -34,7 +28,6 @@ export function Activity() {
   const actor = params.get("actor") ?? "";
   const [nsInput, setNsInput] = useState(namespace);
   const [actorInput, setActorInput] = useState(actor);
-  const [load, setLoad] = useState<Load>({ data: null, loading: true, error: null });
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -42,20 +35,7 @@ export function Activity() {
     setActorInput(actor);
   }, [namespace, actor]);
 
-  useEffect(() => {
-    let alive = true;
-    setLoad((l) => ({ ...l, loading: true }));
-    void fetchActivity({ namespace, actor }).then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
-      if (r.kind === "signed-out") return signOut();
-      const message = r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message;
-      setLoad((l) => ({ ...l, loading: false, error: message }));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [namespace, actor, tick, signOut]);
+  const load = useAnswer<PortalActivity>(() => fetchActivity({ namespace, actor }), [namespace, actor, tick]);
 
   const apply = (ns: string, who: string) => {
     const qs = new URLSearchParams();

@@ -7,7 +7,7 @@ import { age, ago, ms } from "../lib/format";
 import { download, toCsv } from "../lib/csv";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { Panel } from "capsomer/react/panel";
-import { PageHead } from "./shared";
+import { PageHead, useAnswer } from "./shared";
 import { message, byCheck, None, AgreementCounts, totals, counts, wait, JobDetail, AGREEMENTS } from "./ClaimsJob";
 
 // Chart 5, claim against verified per agent, is Enarratio's grouped bar chart, in the same
@@ -35,7 +35,6 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
   const job = params.get("job") ?? "";
   const [input, setInput] = useState<Filter>(filter);
   const [jobInput, setJobInput] = useState(job);
-  const [agg, setAgg] = useState<Load<PortalClaimsAggregate>>({ data: null, loading: true, error: null });
   const [detail, setDetail] = useState<Load<PortalClaimsJob>>({ data: null, loading: false, error: null });
   const [tick, setTick] = useState(0);
   const key = FILTER_KEYS.map((k) => filter[k]).join("\u0000");
@@ -45,19 +44,7 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
     setJobInput(job);
   }, [key, job]);
 
-  useEffect(() => {
-    let alive = true;
-    setAgg((l) => ({ ...l, loading: true }));
-    void fetchClaimsAggregate(filter).then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setAgg({ data: r.value, loading: false, error: null });
-      if (r.kind === "signed-out") return signOut();
-      setAgg((l) => ({ ...l, loading: false, error: message(r) }));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [key, tick, signOut]);
+  const agg = useAnswer<PortalClaimsAggregate>(() => fetchClaimsAggregate(filter), [key, tick]);
 
   useEffect(() => {
     if (!job) return setDetail({ data: null, loading: false, error: null });

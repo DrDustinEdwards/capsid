@@ -5,7 +5,7 @@
 // paths on both (vite.config.ts base), which the Worker serves as they are.
 const PORTAL = "/portal";
 
-export function baseFor(pathname: string): string {
+function baseFor(pathname: string): string {
   return pathname === PORTAL || pathname.startsWith(`${PORTAL}/`) ? PORTAL : "";
 }
 

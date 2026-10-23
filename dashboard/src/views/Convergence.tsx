@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
@@ -6,6 +6,7 @@ import { fetchConvergence } from "../lib/api";
 import { ago, ms } from "../lib/format";
 import type { ConvergenceCheck, ConvergenceSite, PortalConvergence } from "../types";
 import { St } from "../ui/icons";
+import { useAnswer, type Load } from "./shared";
 
 // The convergence view in Sites (job_09e5f6cbf782): for each site that opted into Capsid
 // calling its operator API, GET /portal/api/convergence reads, live, what the site's
@@ -14,26 +15,9 @@ import { St } from "../ui/icons";
 // every control, the allowlist enforced in the Worker. Nothing on this panel is a value
 // of a secret; the Worker never sends one.
 
-type Load = { data: PortalConvergence | null; loading: boolean; error: string | null };
-
-export function useConvergence(): { load: Load; reread: () => void } {
-  const { signOut } = useApp();
-  const [load, setLoad] = useState<Load>({ data: null, loading: true, error: null });
+function useConvergence(): { load: Load<PortalConvergence>; reread: () => void } {
   const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let alive = true;
-    setLoad((l) => ({ ...l, loading: true }));
-    void fetchConvergence().then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
-      if (r.kind === "signed-out") return signOut();
-      const message = r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message;
-      setLoad((l) => ({ ...l, loading: false, error: message }));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [tick, signOut]);
+  const load = useAnswer(fetchConvergence, [tick]);
   return { load, reread: useCallback(() => setTick((t) => t + 1), []) };
 }
 

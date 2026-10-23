@@ -8,6 +8,7 @@ import { ago, ms } from "../lib/format";
 import { readPref, writePref } from "../lib/prefs";
 import type { PortalDigest, PortalPlan } from "../types";
 import { St } from "../ui/icons";
+import { useAnswer, type Load } from "./shared";
 
 // The Tonight plan on the Queue and the "since you last looked" strip on Needs you
 // (docs/design/design-portal-evaluation.md, DECIDE 3, ruled 2026-10-09). Each reads its
@@ -15,32 +16,12 @@ import { St } from "../ui/icons";
 // GET /portal/api/digest, the readers behind `jobs` list view plan and view digest, so
 // the Portal and chat cannot disagree. Neither changes anything.
 
-type Load<T> = { data: T | null; loading: boolean; error: string | null };
-
 // Chart 4, Tonight as a timeline, loads with the Queue that shows it, not with the digest
 // strip Needs you takes from this file.
 const TonightTimeline = lazy(() => import("./TrendCharts").then((m) => ({ default: m.TonightTimeline })));
 
 function useRead<T>(read: () => Promise<Answer<T>>, key: string): Load<T> {
-  const { feed, signOut } = useApp();
-  const [load, setLoad] = useState<Load<T>>({ data: null, loading: true, error: null });
-  const generated = feed.live.generated;
-  useEffect(() => {
-    let alive = true;
-    setLoad((l) => ({ ...l, loading: true }));
-    void read().then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
-      if (r.kind === "signed-out") return signOut();
-      const message = r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message;
-      setLoad((l) => ({ ...l, loading: false, error: message }));
-    });
-    return () => {
-      alive = false;
-    };
-    // read is rebuilt each render; key says when it asks for something else.
-  }, [generated, key, signOut]);
-  return load;
+  return useAnswer(read, [useApp().feed.live.generated, key]);
 }
 
 function Failed({ what, error }: { what: string; error: string | null }) {

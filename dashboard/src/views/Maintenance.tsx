@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
@@ -7,6 +7,7 @@ import type { Kind } from "../lib/derive";
 import { ago, ms } from "../lib/format";
 import type { MaintenanceRule, OpsMaintenanceItem, PortalMaintenance } from "../types";
 import { St } from "../ui/icons";
+import { useAnswer } from "./shared";
 
 // The Maintenance list on the Overview (job_549550d73d4e): what the daily maintenance pass
 // found, from GET /portal/api/maintenance, the list capsid_run_improve action status serves. The seat reads
@@ -43,27 +44,11 @@ const RULE: Record<MaintenanceRule, { kind: Kind; label: string; order: number }
 // Rows shown before "more"; every critical row is shown.
 const ROWS = 8;
 
-type Load = { data: PortalMaintenance | null; loading: boolean; error: string | null };
-
 export function Maintenance() {
-  const { feed, now, signOut } = useApp();
-  const [load, setLoad] = useState<Load>({ data: null, loading: true, error: null });
+  const { feed, now } = useApp();
   const [tick, setTick] = useState(0);
   const [more, setMore] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    setLoad((l) => ({ ...l, loading: true }));
-    void fetchMaintenance().then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
-      if (r.kind === "signed-out") return signOut();
-      const message = r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message;
-      setLoad((l) => ({ ...l, loading: false, error: message }));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [tick, signOut]);
+  const load = useAnswer<PortalMaintenance>(fetchMaintenance, [tick]);
 
   const data = load.data;
   const items = data ? [...data.items].sort((a, b) => RULE[a.rule].order - RULE[b.rule].order) : [];

@@ -83,7 +83,7 @@ export function errorTotals(e: HourBucket[]) {
 // width: the pixel width the chart is drawn into, so its text stays at its set size
 // instead of shrinking with the page. Below 760 the chart keeps 760 and its wrapper
 // scrolls (phone only; from 1024 px up the wrapper is always wider).
-export const TIMELINE_MIN_W = 760;
+const TIMELINE_MIN_W = 760;
 
 export function Timeline({ sites, days, now, width }: { sites: SiteSnapshot[]; days: number; now: number; width?: number | null }) {
   const W = Math.max(TIMELINE_MIN_W, Math.floor(width ?? 1100)), rowH = 24, L = 150, R = 16, T = 26;

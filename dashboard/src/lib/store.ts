@@ -3,7 +3,7 @@ import { bytes } from "./format";
 
 // The D1 store against its cap (capsid/decisions.md 2026-09-30, "admin panels review
 // adopted", item 5): a warning from half, Foxhound's threshold.
-export const STORE_WARN_FRACTION = 0.5;
+const STORE_WARN_FRACTION = 0.5;
 
 export function storeUse(feed: OpsFeed): { fraction: number; warn: boolean } | null {
   const s = feed.live.store;
