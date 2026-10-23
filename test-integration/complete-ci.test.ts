@@ -95,3 +95,11 @@ it("a pull request that removes a test file is refused, unless the job names it"
   expect((await complete(await claimed("drops a test"), 5)).refusal).toMatch(/removes the test file test\/a\.test\.ts/);
   expect((await complete(await claimed("retire a test", "Remove test/a.test.ts; it tests nothing now."), 5)).ok).toBe(true);
 });
+
+it("a DONE WHEN item that names a path is not done until a pull request changes it", async () => {
+  const body = "DONE WHEN:\n1. The breaker skips run keys: changes `src/job-breaker.ts`";
+  github.set(6, { checks: [run("success")], files: ["src/other.ts"] });
+  expect((await complete(await claimed("checklist missed", body), 6)).refusal).toMatch(/item 1 changes `src\/job-breaker\.ts`, and no pull request/);
+  github.set(7, { checks: [run("success")], files: ["src/job-breaker.ts"] });
+  expect((await complete(await claimed("checklist met", body), 7)).ok).toBe(true);
+});
