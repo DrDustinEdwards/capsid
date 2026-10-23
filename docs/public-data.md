@@ -39,6 +39,8 @@ The model is written by hand, so the daily maintenance pass compares it with wha
 | Field | From | Why it cannot leak |
 | --- | --- | --- |
 | `jobs.completed_7d`, `completed_30d`, `failed_30d`, `completed_by_week` (8 whole weeks, oldest first) | `jobs` by status and `updated_at` | counts across every namespace and agent |
+| `jobs.failed_by_week`, `gates.waits_by_week` (the same 8 weeks) | `jobs` by status, `job_touches` that ended a wait | counts across every namespace, agent and command |
+| `verification.agreement_by_week` (the same 8 weeks) | `job_evaluations` by `recorded_at` | a rate per week, null for a week under ten |
 | `jobs.open`, `jobs.blocked` | `jobs` by status, read once a day (answer 5) | one daily count, attributable to nothing |
 | `jobs.median_duration_minutes_30d` | `job_outcomes.duration_minutes` | a median, null under ten |
 | `verification.evaluations_90d`, `agreement_rate_90d` | `job_evaluations.agreement`: agree over agree plus disagree | a count and a rate over every agent |
@@ -47,6 +49,8 @@ The model is written by hand, so the daily maintenance pass compares it with wha
 | `sites.watched`, `uptime_7d`, `slots_measured_7d` | the watcher snapshot's half-hour rings, measured slots only | one number across sites, no site or error text |
 | `store.documents`, `store.namespaces` | row counts | no names |
 | `systems.public`, `systems.private` | the filtered model's counts | counts |
+
+The three weekly series are optional in the schema only so a document written before them (2026-10-23) still parses.
 
 Deploy counts are left out: the snapshot keeps each site's newest ten deploys only, so a 30-day count would be wrong.
 
