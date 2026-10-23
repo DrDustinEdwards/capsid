@@ -135,12 +135,11 @@ function header(here, path) {
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
 function footer(asOf) {
   return `<footer class="foot">
-<div class="foot-tile foot-about"><p>Capsid runs Dustin Edwards's projects and the AI sessions that work on them. This site is built once a day from its public model and numbers.</p><p class="foot-small">Private systems are drawn in full, with no link to their repo. MIT licensed.</p></div>
+<div class="foot-tile foot-about"><p>Capsid runs Dustin Edwards's projects and the AI sessions that work on them. This site is built once a day from its public model and numbers.</p><p class="foot-small">Private systems are drawn in full, with no link to their repo.</p></div>
 <nav class="foot-tile foot-nav" aria-label="Every section"><ul>${[...NAV, ["/search/", "Search"]].map(([href, label]) => `<li><a href="${href}">${label}</a></li>`).join("")}</ul></nav>
 <div class="foot-tile foot-day"><p>Data of</p><p class="foot-big">${escapeHtml(asOf)}</p><p class="foot-small">Whole days, ending at midnight UTC.</p></div>
-<div class="foot-tile foot-out"><p><a href="${SITE}/systems">The family on dustinedwards.info</a></p><p><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</p></div>
+<div class="foot-tile foot-out"><p><a href="${SITE}/systems">The family on dustinedwards.info</a></p><p><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</p><p><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</p></div>
 <p class="foot-tile foot-mark" aria-hidden="true">Capsid</p>
-<a class="foot-tile foot-cta" href="https://github.com/DrDustinEdwards/capsid">Read the source<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true" focusable="false"><path d="M10 38 38 10M16 10h22v22" fill="none" stroke="currentColor" stroke-width="4"/></svg></a>
 </footer>`;
 }
 
@@ -471,14 +470,17 @@ export const bands = (f) =>
  * The core drawn with a flow on it and a Play button that steps it in place, with no change of
  * address (src/explorer.js, player). Empty when the flow leaves the core, which the map cannot draw.
  * @param {any} model @param {Flow[]} flows every flow the drawing can switch to @param {Flow} shown @param {string} id
+ * @param {boolean} [play] whether a Play button follows it (the tour steps it by scrolling instead)
  */
-export function flowStage(model, flows, shown, id) {
+export function flowStage(model, flows, shown, id, play = true) {
   const core = model.systems.find((/** @type {any} */ s) => s.ring === "core");
   const inside = (/** @type {Flow} */ f) => !!core && f.steps.every((x) => x.touches.every((p) => p.system === core.id));
   if (!inside(shown)) return "";
   const data = { ...mapData(model), flows: flows.filter(inside).map((f) => ({ id: f.id, name: f.name, steps: f.steps.map((x) => ({ from: x.from.id, to: x.to.id, toward: x.toward, text: x.text, lights: x.lights.map((p) => p.id) })) })) };
   const map = markStep(systemMapHtml(data, { id, label: `Inside ${core.name}`, headingLevel: 2 }), shown.steps[0]);
-  return `<div class="map-host flow-map" data-flow="${escapeHtml(shown.id)}" data-step="1" data-steps="${shown.steps.length}" data-player>${map}</div>
+  const host = `<div class="map-host flow-map" data-flow="${escapeHtml(shown.id)}" data-step="1" data-steps="${shown.steps.length}" data-player>${map}</div>`;
+  if (!play) return host;
+  return `${host}
 <p class="hero-play"><button class="cap-btn" type="button" data-autoplay hidden>Play</button><span class="hint">${escapeHtml(shown.name)}, in ${shown.steps.length} steps, over ${escapeHtml(core.name)}'s real parts.</span></p>`;
 }
 

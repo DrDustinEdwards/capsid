@@ -1,8 +1,8 @@
 // The explorer's one script. Every page is complete without it: the maps are named pictures with
 // their lists open, every step is a page, every tool and module has an address, and the tables
 // are plain tables. This makes them move: Capsomer's system map (copied from capsomer at build),
-// its tabs, Enarratio's chart tooltips, the flow players, the filters and sorting, the front
-// page's tool panel, pinned steps and ledger, and search.
+// its tabs, Enarratio's chart tooltips, the flow players and the front page's tour, the filters
+// and sorting, and search.
 import { controller } from "./system-map.js";
 import { enhance as enhanceTabs } from "./tabs.js";
 import { enhance as enhanceCharts } from "./enhance.js";
@@ -85,7 +85,8 @@ function autoplay(button, current, total, go) {
 
 /**
  * The front page's player: the map plays its flow in place, with no address of its own, so
- * stepping never adds to the browser's history.
+ * stepping never adds to the browser's history. The tour's chapter nearest the middle of the
+ * screen is the step shown, and its parts' names light with the drawing.
  */
 function player(map, root, host) {
   const flow = host.dataset.flow;
@@ -98,14 +99,21 @@ function player(map, root, host) {
   const go = (n) => (root.dataset.flow === flow ? map.step(n) : map.playFlow(flow, n));
   const play = autoplay(host.parentElement.querySelector("[data-autoplay]"), () => current, total, go);
   root.addEventListener("keydown", () => play.stop());
-  for (const link of document.querySelectorAll("[data-play-hero]")) {
-    link.addEventListener("click", (e) => {
-      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      e.preventDefault();
-      host.scrollIntoView({ block: "nearest", behavior: reduced.matches ? "auto" : "smooth" });
-      play.start();
-    });
-  }
+  const chapters = [...document.querySelectorAll("[data-tour-step]")];
+  if (!chapters.length) return;
+  const show = (n) => {
+    for (const c of chapters) c.classList.toggle("is-on", c.dataset.tourStep === String(n));
+    if (n !== current) go(n);
+  };
+  show(1);
+  const seen = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) if (e.isIntersecting) show(Number(e.target.dataset.tourStep));
+    },
+    // On a narrow screen the drawing covers the top, so the reading line sits lower.
+    { rootMargin: matchMedia("(max-width: 64rem)").matches ? "-70% 0px -28% 0px" : "-45% 0px -45% 0px" }
+  );
+  for (const c of chapters) seen.observe(c);
 }
 
 /**
@@ -190,55 +198,6 @@ function flowPage(map, root, host) {
 
 enhanceTabs();
 enhanceCharts(document, { tooltips: true, filter: true, brush: false, entrance: !reduced.matches });
-
-// The front page's tool panel: a row shows its tool in the panel instead of leaving the page.
-for (const panel of document.querySelectorAll("[data-tool-panel]")) {
-  panel.addEventListener("click", (e) => {
-    const row = e.target.closest?.("a[data-tool]");
-    if (!row || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
-    for (const view of panel.querySelectorAll(".tool-view")) view.hidden = view.id !== row.dataset.tool;
-    for (const r of panel.querySelectorAll("a[data-tool]")) {
-      if (r === row) r.setAttribute("aria-current", "true");
-      else r.removeAttribute("aria-current");
-    }
-  });
-}
-
-// How work becomes done: the statement nearest the middle of the screen shows its state.
-for (const pin of document.querySelectorAll("[data-pin]")) {
-  const steps = [...pin.querySelectorAll("[data-pin-step]")];
-  const states = [...pin.querySelectorAll("[data-pin-state]")];
-  pin.classList.add("is-live");
-  const show = (i) => {
-    for (const s of steps) s.classList.toggle("is-on", s.dataset.pinStep === String(i));
-    for (const s of states) s.classList.toggle("is-on", s.dataset.pinState === String(i));
-  };
-  show(0);
-  const seen = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) if (e.isIntersecting) show(e.target.dataset.pinStep);
-    },
-    { rootMargin: "-45% 0px -45% 0px" }
-  );
-  for (const s of steps) seen.observe(s);
-}
-
-// The ledger: the row under the pointer or the focus shows its system beside the column.
-for (const list of document.querySelectorAll("[data-ledger]")) {
-  const side = list.parentElement.querySelector(".ledger-side");
-  const first = list.querySelector(".ledger-row");
-  const show = (row) => {
-    for (const p of side.querySelectorAll(".ledger-preview")) p.hidden = p.id !== (row ?? first)?.dataset.preview;
-    list.classList.toggle("is-hovering", !!row);
-    for (const r of list.querySelectorAll(".ledger-row")) r.classList.toggle("is-on", r === row);
-  };
-  list.addEventListener("pointerover", (e) => show(e.target.closest?.(".ledger-row")));
-  list.addEventListener("focusin", (e) => show(e.target.closest?.(".ledger-row")));
-  show(null);
-  list.addEventListener("pointerleave", () => show(null));
-  list.addEventListener("focusout", (e) => list.contains(e.relatedTarget) || show(null));
-}
 
 // Filters: a text field and chips over the items of the page they sit on.
 for (const bar of document.querySelectorAll("[data-filter]")) {
@@ -367,7 +326,7 @@ if (field) {
 
 // Each section's parts rise into place once, as it first comes into view.
 if (!reduced.matches && "IntersectionObserver" in window) {
-  const parts = document.querySelectorAll("main.wide > section > *, main.wide .feature, main.wide .ledger-list > li");
+  const parts = document.querySelectorAll("main.wide > section > *, main.wide .deeper-list > li");
   const seen = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {

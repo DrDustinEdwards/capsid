@@ -37,12 +37,8 @@ main.wide {
 main.wide > section {
   margin-block-start: var(--section);
 }
-main.wide > .hero {
+main.wide > .tour {
   margin-block-start: 0;
-}
-.band {
-  padding-block: clamp(56px, 8vw, 112px);
-  background: var(--surface);
 }
 
 h1 {
@@ -89,76 +85,280 @@ h3 {
   content: " \2192";
 }
 
-/* The front page. */
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: var(--space-6) clamp(24px, 4vw, 64px);
-  align-items: center;
-  max-width: 90rem;
-  margin-inline: auto;
-  padding: clamp(32px, 6vw, 88px) var(--gutter) var(--space-6);
+/* The front page: the opening, the tour and where to go deeper. */
+.opening {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-block-size: calc(100vh - var(--header-h));
+  padding-block: var(--space-7);
 }
-.hero h1 {
+.opening h1 {
   max-width: 14ch;
-  margin-block: 0 var(--space-5);
+  margin-block-start: 0;
   font-size: clamp(2.5rem, 5vw, 4.5rem);
   line-height: 1;
   letter-spacing: -0.03em;
 }
-.hero-sub {
-  max-width: 44ch;
-  margin: 0;
-  font-size: clamp(1.0625rem, 1rem + 0.35vw, 1.3125rem);
-  line-height: 1.5;
+.opening .lead {
+  max-width: 52ch;
 }
-.hero-actions {
+
+/* Readings: a figure over what it counts, set like an instrument's dial, in one row. */
+.readings {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  align-items: center;
-  margin-block: var(--space-6) 0;
-}
-.hero-actions .cap-btn {
-  --cap-btn-h: 48px;
-  padding-inline: var(--space-5);
-  font-size: 1.0625rem;
-}
-.hero-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-5);
+  gap: var(--space-5) clamp(20px, 2.5vw, 40px);
   margin: var(--space-7) 0 0;
 }
-.hero-facts div {
+.reading {
   display: flex;
   flex-direction: column-reverse;
+  justify-content: flex-end;
   gap: var(--space-1);
 }
-.hero-facts dt {
+.reading dt {
   color: var(--muted);
+  font-size: 0.875rem;
 }
-.hero-facts dd {
+.reading dd {
   margin: 0;
-  font: 600 clamp(1.75rem, 3vw, 2.5rem) / 1 var(--prose);
+  font: 600 clamp(1.75rem, 3vw, 2.5rem) / 1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.opening .readings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.opening .reading dd {
+  font-size: clamp(1.5rem, 2.4vw, 2.25rem);
+}
+@media (max-width: 40rem) {
+  .opening .readings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.readings-small {
+  margin-block: var(--space-2) var(--space-4);
+}
+.readings-small .reading dd {
+  font-size: 1.5rem;
+}
+
+/* The tour: the words scroll, the drawing stays. */
+.tour-grid {
+  display: grid;
+  grid-template-columns: minmax(18rem, 5fr) minmax(0, 7fr);
+  gap: 0 clamp(24px, 4vw, 64px);
+  align-items: start;
+}
+.tour-title {
+  margin: 0;
+  color: var(--muted);
+  font: 600 0.875rem / 1.4 var(--ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tour-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chapter {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-block-size: 80vh;
+  padding-block: var(--space-6);
+  padding-inline-start: var(--space-5);
+  border-inline-start: 3px solid var(--sunken);
+  color: var(--muted);
+  transition: color var(--dur-slow) var(--ease-out), border-color var(--dur-slow) var(--ease-out);
+}
+/* The chapter being told is in full ink with the accent beside it; the others wait in grey,
+   which still reads at 4.5:1. */
+.chapter.is-on,
+html:not(.js) .chapter {
+  border-inline-start-color: var(--accent);
+  color: var(--text);
+}
+.chapter p {
+  max-width: 44ch;
+  margin: 0 0 var(--space-3);
+  font-size: 1.125rem;
+  line-height: 1.55;
+}
+.chapter h3 {
+  margin: 0 0 var(--space-3);
+  font: 600 clamp(1.75rem, 3vw, 2.5rem) / 1.05 var(--prose);
+  letter-spacing: -0.02em;
+}
+.chapter .chapter-n {
+  color: var(--muted);
+  font: 500 0.875rem / 1 var(--mono);
   font-variant-numeric: tabular-nums;
 }
-.hero-stage {
+/* A chapter's parts are named in the drawing's colour, so the words point at what lights. */
+.chapter-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.part-name {
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  font-size: 0.9375rem;
+}
+.chapter.is-on .part-name {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.chapter .chapter-link {
+  font-size: 0.9375rem;
+}
+.tour-stage {
+  position: sticky;
+  inset-block-start: var(--header-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-block-size: calc(100vh - var(--header-h));
   min-width: 0;
+}
+.tour-stage .map-host {
   padding: var(--space-4);
   border-radius: var(--radius-l);
   background: var(--surface);
 }
-.hero-play {
+/* The words tell each step, so the drawing keeps only itself: no views, no step box. */
+.tour-map .cap-system-map-views,
+.tour-map .cap-system-map-detail {
+  display: none;
+}
+.tour-map .cap-system-map-stage {
+  max-width: min(40rem, calc(100vh - var(--header-h) - 8rem));
+}
+@media (max-width: 64rem) {
+  /* On a narrow screen the opening comes first, then the drawing pins to the top and the
+     chapters pass under it. */
+  .tour-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tour-words {
+    display: contents;
+  }
+  .opening {
+    min-block-size: 0;
+  }
+  .tour-title {
+    order: 1;
+    margin-block-end: var(--space-3);
+  }
+  .tour-stage {
+    order: 2;
+    z-index: 1;
+    min-block-size: 0;
+    margin-inline: calc(-1 * var(--gutter));
+    padding: var(--space-2) var(--gutter);
+    background: var(--ground);
+  }
+  .tour-stage .map-host {
+    padding: var(--space-2);
+  }
+  .tour-map .cap-system-map-head {
+    display: none;
+  }
+  .tour-map .cap-system-map-stage {
+    max-width: min(100%, 34vh);
+  }
+  .tour-steps {
+    order: 3;
+  }
+  .chapter {
+    min-block-size: 55vh;
+  }
+}
+
+/* Where to go deeper: a figure, a name and a line, a row each. */
+.deeper-list {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 var(--space-7);
+  padding: 0;
+  list-style: none;
+}
+.deeper-list a {
+  display: grid;
+  grid-template-columns: 7rem 10rem minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: baseline;
+  padding: var(--space-5);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.deeper-list a:hover {
+  background: var(--accent-soft);
+}
+.deeper-figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font: 600 1.75rem / 1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.deeper-figure small {
+  color: var(--muted);
+  font: 400 0.8125rem / 1.2 var(--ui);
+}
+.deeper-name {
+  font: 600 1.25rem / 1.2 var(--prose);
+}
+.deeper-text {
+  color: var(--muted);
+}
+@media (max-width: 40rem) {
+  .deeper-list a {
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: var(--space-1) var(--space-4);
+    align-items: start;
+  }
+  .deeper-figure {
+    grid-row: span 2;
+  }
+  .deeper-text {
+    grid-column: 2;
+  }
+}
+.system-names {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: center;
-  margin: var(--space-3) 0 0;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-/* The hero's map shows its drawing and its step line; its own list lives on the flow pages. */
-.hero-map .cap-system-map-list,
-.hero-map details,
+.system-names a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 32px;
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  text-decoration: none;
+}
+.system-names a:hover {
+  background: var(--accent-soft);
+}
+
+/* The tour's map shows its drawing and its step line; its own list lives on the flow pages. */
+.tour-map .cap-system-map-list,
+.tour-map details,
 .flow-stage .cap-system-map-list,
 .flow-stage details {
   display: none;
@@ -172,584 +372,6 @@ h3 {
 /* A step page has its own Back and Next above the drawing; the map's copies would be a second set. */
 .flow-step ~ section .cap-system-map-detail-actions {
   display: none;
-}
-@media (max-width: 64rem) {
-  .hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.intro-lead {
-  max-width: 40ch;
-  margin: 0 auto var(--space-8);
-  padding-inline: var(--gutter);
-  font: 400 clamp(1.375rem, 2.2vw, 2rem) / 1.3 var(--prose);
-}
-.intro-lead,
-.intro-cols {
-  max-width: var(--page);
-}
-.intro-cols {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-6);
-  margin-inline: auto;
-  padding-inline: var(--gutter);
-}
-.intro-cols p {
-  margin: 0;
-  line-height: 1.55;
-}
-@media (max-width: 64rem) {
-  .intro-cols {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 36rem) {
-  .intro-cols {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* Every tool, chosen from the rows beside the panel. */
-.tool-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
-  overflow: hidden;
-  border-radius: var(--radius-l);
-  background: var(--sunken);
-}
-.tool-stage {
-  padding: clamp(20px, 3vw, 40px);
-  background: var(--surface);
-}
-.tool-stage h3 {
-  margin-block: var(--space-2) var(--space-3);
-  font: 600 1.5rem / 1.2 var(--prose);
-}
-.tool-name {
-  margin: 0;
-  color: var(--muted);
-}
-.tool-actions {
-  display: grid;
-  gap: var(--space-2);
-  padding: 0;
-  list-style: none;
-}
-.tool-actions code {
-  display: inline-block;
-  min-inline-size: 9ch;
-  margin-inline-end: var(--space-2);
-  color: var(--accent-text);
-}
-.tool-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.tool-list ul {
-  margin: 0;
-  padding: 0 0 var(--space-3);
-  list-style: none;
-}
-.tool-list-head {
-  display: flex;
-  justify-content: space-between;
-  margin: 0;
-  padding: var(--space-4) var(--space-5) var(--space-2);
-  color: var(--muted);
-}
-.tool-row {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-  justify-content: space-between;
-  min-block-size: 40px;
-  padding-inline: var(--space-5);
-  color: var(--text);
-  text-decoration: none;
-  transition: background-color var(--dur-fast) var(--ease-out);
-}
-.tool-row:hover {
-  background: color-mix(in srgb, var(--sunken), var(--text) 6%);
-}
-.tool-row[aria-current] {
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-weight: 600;
-}
-.tool-row-n {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.tool-list {
-  max-block-size: 560px;
-  overflow-y: auto;
-}
-@media (max-width: 52rem) {
-  .tool-panel {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .tool-list {
-    max-block-size: 320px;
-  }
-}
-
-/* How work becomes done: statements on the left, one job's state pinned on the right. */
-.pin-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: var(--space-7);
-  align-items: start;
-}
-.pin-steps {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.pin-step {
-  padding-block: var(--space-6);
-}
-.pin-head {
-  margin: 0 0 var(--space-3);
-  font: 600 clamp(1.375rem, 2.4vw, 2rem) / 1.2 var(--prose);
-}
-.pin.is-live .pin-step {
-  min-block-size: 45vh;
-  color: var(--muted);
-  transition: color var(--dur-base) var(--ease-out);
-}
-.pin.is-live .pin-step.is-on {
-  color: var(--text);
-}
-.pin-stage {
-  display: grid;
-  gap: var(--space-4);
-  padding: clamp(20px, 3vw, 40px);
-  border-radius: var(--radius-l);
-  background: var(--accent-soft);
-}
-.pin.is-live .pin-stage {
-  position: sticky;
-  inset-block-start: 14vh;
-}
-.pin.is-live .job-card {
-  grid-area: 1 / 1;
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
-}
-.pin.is-live .job-card.is-on {
-  opacity: 1;
-  transform: none;
-}
-.pin.is-live .pin-note {
-  grid-area: 2 / 1;
-}
-.job-card {
-  padding: var(--space-5);
-  border-radius: var(--radius-m);
-  background: var(--surface);
-}
-.job-card dl {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-}
-.job-row {
-  display: grid;
-  grid-template-columns: 11rem minmax(0, 1fr);
-  gap: var(--space-3);
-  padding-block: var(--space-2);
-}
-.job-row:nth-child(odd) {
-  background: var(--ground);
-}
-.job-row dt {
-  padding-inline-start: var(--space-3);
-  color: var(--muted);
-}
-.job-row dd {
-  margin: 0;
-}
-.job-row dd[data-tone="ok"]::before {
-  content: "\2713  ";
-  color: var(--ok);
-  font-weight: 700;
-}
-.job-state {
-  display: inline-block;
-  margin: 0 0 var(--space-4);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  font-weight: 600;
-}
-.job-state[data-tone="info"] {
-  background: var(--info-soft);
-}
-.job-state[data-tone="warn"] {
-  background: var(--warn-soft);
-}
-.job-state[data-tone="ok"] {
-  background: var(--ok-soft);
-}
-.pin-note {
-  margin: 0;
-  color: var(--muted);
-}
-@media (max-width: 52rem) {
-  .pin-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .pin.is-live .pin-stage {
-    inset-block-start: 8px;
-    order: -1;
-  }
-  .pin.is-live .pin-step {
-    min-block-size: 46vh;
-  }
-  .job-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-}
-
-/* The weekly jobs, as bars standing on the page's bottom edge. */
-.edge {
-  padding-block-end: 0;
-}
-.edge-head h2 {
-  margin-block: var(--space-2) var(--space-3);
-}
-.edge-figure {
-  margin: 0;
-  font: 600 clamp(5rem, 11vw, 10rem) / 0.9 var(--prose);
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-}
-.edge-bars {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  gap: 8px;
-  align-items: end;
-  block-size: 52vh;
-  min-block-size: 280px;
-  margin: var(--space-7) 0 0;
-  padding: 0;
-  list-style: none;
-}
-.edge-bar {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  block-size: var(--h, 0%);
-  min-block-size: 2.25rem;
-  background: var(--accent-line);
-  outline-offset: -3px;
-  transition: background-color var(--dur-fast) var(--ease-out);
-}
-.edge-bar.is-top {
-  background: var(--accent);
-}
-.edge-bar:hover,
-.edge-bar:focus-visible {
-  background: var(--accent-hover);
-}
-.edge-value {
-  position: absolute;
-  inset-block-end: calc(100% + 6px);
-  inset-inline-start: var(--space-3);
-  font: 600 clamp(1.25rem, 2vw, 1.875rem) / 1 var(--prose);
-  font-variant-numeric: tabular-nums;
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out);
-}
-.edge-value.is-shown,
-.edge-bar:hover .edge-value,
-.edge-bar:focus-visible .edge-value {
-  opacity: 1;
-}
-.edge-week {
-  padding: var(--space-2) var(--space-3);
-  color: var(--primary-fg);
-  font-size: 0.875rem;
-  white-space: nowrap;
-}
-.edge-bar:not(.is-top) .edge-week {
-  color: var(--text);
-}
-@media (max-width: 40rem) {
-  .edge-bars {
-    grid-auto-flow: row;
-    grid-auto-rows: 32px;
-    block-size: auto;
-    min-block-size: 0;
-    align-items: stretch;
-    padding-inline-end: var(--gutter);
-    gap: 6px;
-  }
-  .edge-bar {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    block-size: auto;
-    inline-size: max(var(--h, 0%), 6.5rem);
-  }
-  .edge-value {
-    position: static;
-    padding-inline-end: var(--space-3);
-    font-size: 1.0625rem;
-    opacity: 1;
-  }
-  .edge-week {
-    order: -1;
-  }
-}
-
-/* What it is made of: six cells, text and a fragment, the fragments in a checkerboard. */
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.feature {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: var(--space-5);
-  min-block-size: 340px;
-  overflow: hidden;
-  border-radius: var(--radius-l);
-  background: var(--surface);
-}
-.feature:nth-child(n + 4) {
-  flex-direction: column-reverse;
-}
-.feature:nth-child(2),
-.feature:nth-child(4),
-.feature:nth-child(6) {
-  background: var(--sunken);
-}
-.feature-text {
-  padding: var(--space-5) var(--space-5) 0;
-}
-.feature:nth-child(n + 4) .feature-text {
-  padding-block: 0 var(--space-5);
-}
-.feature-text h3 {
-  margin-block: 0 var(--space-2);
-  font-size: 1.1875rem;
-}
-.feature-ui {
-  padding: 0 var(--space-5) var(--space-5);
-}
-.feature:nth-child(n + 4) .feature-ui {
-  padding-block: var(--space-5) 0;
-}
-.frag {
-  padding: var(--space-4);
-  border-radius: var(--radius-m);
-  background: var(--raised);
-  font-size: 0.9375rem;
-}
-.frag ul,
-.frag ol {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.frag li {
-  display: flex;
-  flex-direction: column;
-  padding-block: var(--space-2);
-}
-.frag li span {
-  color: var(--muted);
-}
-.frag-field {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  margin: 0 0 var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-m);
-}
-.frag-icon {
-  inline-size: 12px;
-  block-size: 12px;
-  border: 2px solid var(--muted);
-  border-radius: 50%;
-}
-.frag-queue {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-}
-.frag-queue p {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: var(--space-3);
-  border-radius: var(--radius-s);
-  background: var(--ground);
-}
-.frag-queue span {
-  color: var(--muted);
-}
-.frag-queue strong {
-  font: 600 1.75rem / 1.1 var(--prose);
-  font-variant-numeric: tabular-nums;
-}
-.frag-gate-q {
-  margin: 0 0 var(--space-3);
-  font-weight: 600;
-}
-.frag-gate-a {
-  display: flex;
-  gap: var(--space-2);
-}
-.frag-uptime strong {
-  font: 600 1.75rem / 1 var(--prose);
-}
-.frag-strip {
-  display: grid;
-  grid-template-columns: repeat(48, minmax(0, 1fr));
-  gap: 2px;
-  margin-block-start: var(--space-3);
-}
-.frag-strip span {
-  block-size: 28px;
-  border-radius: 1px;
-  background: var(--ok);
-}
-.frag-strip span.down {
-  background: var(--crit);
-}
-.frag-steps {
-  counter-reset: frag;
-}
-.frag-steps li {
-  flex-direction: row;
-  gap: var(--space-3);
-  counter-increment: frag;
-}
-.frag-steps li::before {
-  content: counter(frag);
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.frag-code p {
-  margin: 0 0 var(--space-2);
-  overflow-wrap: anywhere;
-}
-@media (max-width: 64rem) {
-  .feature-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .feature:nth-child(n + 4) {
-    flex-direction: column;
-  }
-  .feature:nth-child(n + 4) .feature-text {
-    padding-block: var(--space-5) 0;
-  }
-  .feature:nth-child(n + 4) .feature-ui {
-    padding-block: 0 var(--space-5);
-  }
-}
-@media (max-width: 40rem) {
-  .feature-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .feature {
-    min-block-size: 0;
-  }
-}
-
-/* The family as a ledger: one row a system, its preview beside the column. */
-.ledger-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 40rem) minmax(0, 1fr);
-  gap: var(--space-7);
-  align-items: start;
-}
-.ledger-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.ledger-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-4);
-  align-items: baseline;
-  padding-block: var(--space-3);
-  color: var(--text);
-  text-decoration: none;
-  transition: color var(--dur-fast) var(--ease-out);
-}
-.ledger-name {
-  font-weight: 600;
-  font-size: 1.0625rem;
-}
-.ledger-kind,
-.ledger-domain {
-  color: var(--muted);
-}
-.ledger-domain {
-  text-align: end;
-  overflow-wrap: anywhere;
-}
-.ledger-list.is-hovering .ledger-row:not(.is-on) {
-  color: var(--muted);
-}
-.ledger-row.is-on .ledger-name {
-  color: var(--accent-text);
-}
-.ledger-side {
-  position: sticky;
-  inset-block-start: 14vh;
-}
-.ledger-preview {
-  padding: var(--space-6);
-  border-radius: var(--radius-l);
-  background: var(--accent-soft);
-}
-.ledger-preview p {
-  margin: 0 0 var(--space-2);
-}
-.ledger-preview-name {
-  font: 600 1.75rem / 1.1 var(--prose);
-}
-@media (max-width: 52rem) {
-  .ledger-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .ledger-side {
-    display: none;
-  }
-  .ledger-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .ledger-kind {
-    grid-row: 2;
-    font-size: 0.875rem;
-  }
-}
-
-/* The flows as tabs, each a banded list of its steps. */
-.flows-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  align-items: baseline;
-  justify-content: space-between;
-}
-.flows-head h2 {
-  margin-block-end: var(--space-5);
 }
 .cap-tabs-panel {
   padding-block-start: var(--space-5);
@@ -855,7 +477,7 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 .foot-mark {
-  grid-column: span 8;
+  grid-column: span 12;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -865,41 +487,14 @@ h3 {
   font: 600 clamp(4rem, 11vw, 10rem) / 1 var(--prose);
   letter-spacing: -0.04em;
 }
-.foot-cta {
-  grid-column: span 4;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  background: var(--accent);
-  color: var(--primary-fg);
-  font: 600 1.75rem / 1.15 var(--prose);
-  text-decoration: none;
-  transition: background-color var(--dur-fast) var(--ease-out);
-}
-.foot-cta svg {
-  align-self: flex-end;
-  transition: transform var(--dur-base) var(--ease-out);
-}
-.foot-cta:hover {
-  background: var(--accent-hover);
-}
-.foot-cta:hover svg {
-  transform: translate(4px, -4px);
-}
 @media (max-width: 52rem) {
   .foot {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
   }
-  .foot-mark,
-  .foot-cta {
+  .foot-mark {
     grid-column: span 2;
     min-block-size: 140px;
-  }
-  .foot-mark {
-    order: -2;
-  }
-  .foot-cta {
     order: -1;
   }
   .foot-about,
@@ -1478,132 +1073,4 @@ th[aria-sort="ascending"] .sort::after {
 }
 .code-graph a:hover rect:not(.code-graph-ring) {
   fill: var(--sel);
-}
-
-/* A bar's height, in whole percent (src/home.mjs, heightClass): a class, since the policy refuses style attributes. */
-.h-0 { --h: 0%; }
-.h-1 { --h: 1%; }
-.h-2 { --h: 2%; }
-.h-3 { --h: 3%; }
-.h-4 { --h: 4%; }
-.h-5 { --h: 5%; }
-.h-6 { --h: 6%; }
-.h-7 { --h: 7%; }
-.h-8 { --h: 8%; }
-.h-9 { --h: 9%; }
-.h-10 { --h: 10%; }
-.h-11 { --h: 11%; }
-.h-12 { --h: 12%; }
-.h-13 { --h: 13%; }
-.h-14 { --h: 14%; }
-.h-15 { --h: 15%; }
-.h-16 { --h: 16%; }
-.h-17 { --h: 17%; }
-.h-18 { --h: 18%; }
-.h-19 { --h: 19%; }
-.h-20 { --h: 20%; }
-.h-21 { --h: 21%; }
-.h-22 { --h: 22%; }
-.h-23 { --h: 23%; }
-.h-24 { --h: 24%; }
-.h-25 { --h: 25%; }
-.h-26 { --h: 26%; }
-.h-27 { --h: 27%; }
-.h-28 { --h: 28%; }
-.h-29 { --h: 29%; }
-.h-30 { --h: 30%; }
-.h-31 { --h: 31%; }
-.h-32 { --h: 32%; }
-.h-33 { --h: 33%; }
-.h-34 { --h: 34%; }
-.h-35 { --h: 35%; }
-.h-36 { --h: 36%; }
-.h-37 { --h: 37%; }
-.h-38 { --h: 38%; }
-.h-39 { --h: 39%; }
-.h-40 { --h: 40%; }
-.h-41 { --h: 41%; }
-.h-42 { --h: 42%; }
-.h-43 { --h: 43%; }
-.h-44 { --h: 44%; }
-.h-45 { --h: 45%; }
-.h-46 { --h: 46%; }
-.h-47 { --h: 47%; }
-.h-48 { --h: 48%; }
-.h-49 { --h: 49%; }
-.h-50 { --h: 50%; }
-.h-51 { --h: 51%; }
-.h-52 { --h: 52%; }
-.h-53 { --h: 53%; }
-.h-54 { --h: 54%; }
-.h-55 { --h: 55%; }
-.h-56 { --h: 56%; }
-.h-57 { --h: 57%; }
-.h-58 { --h: 58%; }
-.h-59 { --h: 59%; }
-.h-60 { --h: 60%; }
-.h-61 { --h: 61%; }
-.h-62 { --h: 62%; }
-.h-63 { --h: 63%; }
-.h-64 { --h: 64%; }
-.h-65 { --h: 65%; }
-.h-66 { --h: 66%; }
-.h-67 { --h: 67%; }
-.h-68 { --h: 68%; }
-.h-69 { --h: 69%; }
-.h-70 { --h: 70%; }
-.h-71 { --h: 71%; }
-.h-72 { --h: 72%; }
-.h-73 { --h: 73%; }
-.h-74 { --h: 74%; }
-.h-75 { --h: 75%; }
-.h-76 { --h: 76%; }
-.h-77 { --h: 77%; }
-.h-78 { --h: 78%; }
-.h-79 { --h: 79%; }
-.h-80 { --h: 80%; }
-.h-81 { --h: 81%; }
-.h-82 { --h: 82%; }
-.h-83 { --h: 83%; }
-.h-84 { --h: 84%; }
-.h-85 { --h: 85%; }
-.h-86 { --h: 86%; }
-.h-87 { --h: 87%; }
-.h-88 { --h: 88%; }
-.h-89 { --h: 89%; }
-.h-90 { --h: 90%; }
-.h-91 { --h: 91%; }
-.h-92 { --h: 92%; }
-.h-93 { --h: 93%; }
-.h-94 { --h: 94%; }
-.h-95 { --h: 95%; }
-.h-96 { --h: 96%; }
-.h-97 { --h: 97%; }
-.h-98 { --h: 98%; }
-.h-99 { --h: 99%; }
-.h-100 { --h: 100%; }
-
-/* A one-action tool's arguments, beside its description on the front page. */
-.tool-args {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.tool-args code {
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-s);
-  background: var(--sunken);
-}
-
-/* The flows' tabs scroll sideways on a phone rather than cutting the last one off. */
-.flows-home .cap-tabs-list {
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-.flows-home .cap-tab {
-  flex: none;
-}
-/* The sample approval is a picture of the Portal's question, not a control. */
-.frag-gate .cap-btn {
-  pointer-events: none;
 }
