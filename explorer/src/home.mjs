@@ -220,7 +220,7 @@ function ledger(/** @type {any} */ model) {
     .join("");
   const previews = model.systems
     .map(
-      (/** @type {any} */ s) => `<div class="ledger-preview" id="lp-${escapeHtml(s.id)}" hidden><p class="ledger-preview-name">${escapeHtml(s.name)}</p><p>${escapeHtml(s.description ?? (s.private ? "Private: its name and address only." : ""))}</p><p class="hint">${parts(s.id)} parts drawn, ${links(s.id)} connections</p></div>`
+      (/** @type {any} */ s) => `<div class="ledger-preview" id="lp-${escapeHtml(s.id)}" hidden><p class="ledger-preview-name">${escapeHtml(s.name)}</p><p>${escapeHtml(s.description ?? (s.private ? "Private: its repo is not public." : ""))}</p><p class="hint">${parts(s.id)} parts drawn, ${links(s.id)} connections</p></div>`
     )
     .join("");
   return `<section class="ledger wrap" aria-labelledby="ledger-title">

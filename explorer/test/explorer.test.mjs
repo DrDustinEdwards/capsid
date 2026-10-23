@@ -63,14 +63,13 @@ test("every system page links to the same system on dustinedwards.info, and the 
   for (const s of model.systems) assert.ok(home.includes(`href="${systemPath(s.id)}"`), `the front page does not link ${s.id}`);
 });
 
-test("a private page says it is private and carries nothing but its name and address", () => {
+test("a private page says it is private and carries no repo link", () => {
   const vault = readFileSync(join(out, "s", "vault", "index.html"), "utf8");
-  assert.match(vault, /Private: its name and address only\./);
+  assert.match(vault, /<dd>Private<\/dd>/);
   assert.match(vault, /href="https:\/\/vault\.example\.org"/);
   assert.doesNotMatch(vault, /Source<\/dt>/);
-  assert.doesNotMatch(vault, /Inside Vault/);
   const gone = readFileSync(join(out, "s", "gone", "index.html"), "utf8");
-  assert.match(gone, /Private: its name only\./);
+  assert.match(gone, /Private: its repo is not public\./);
   assert.doesNotMatch(gone, /Address<\/dt>/);
 });
 
@@ -386,19 +385,14 @@ test("a flow step riding an edge the model does not have fails the build", async
   assert.throws(() => allPages(away, stats), /goes toward hub-tick, which is not an end/);
 });
 
-test("a flow touching a private system or a part not in the public model renders nothing", () => {
+test("a flow touching a part the public model does not hold renders nothing", () => {
   const viaEdge = structuredClone(model);
   viaEdge.flows[0].steps[0].relationship = "hub--coordinates--vault";
   viaEdge.flows[0].steps[0].toward = "vault";
-  assert.throws(() => allPages(viaEdge, stats), /touches .*private system|not a part in the public model/);
+  assert.throws(() => allPages(viaEdge, stats), /touches hub, which is not a part in the public model/);
   const viaLight = structuredClone(model);
   viaLight.flows[0].steps[0].lights = ["vault-db"];
   assert.throws(() => allPages(viaLight, stats), /touches vault-db, which is not a part in the public model/);
-  // A part listed under a private system (the filter never writes one) is refused too.
-  const viaPart = structuredClone(model);
-  viaPart.containers.push({ id: "vault-db", system: "vault", name: "Vault store", kind: "database", technology: "D1" });
-  viaPart.flows[0].steps[0].lights = ["vault-db"];
-  assert.throws(() => allPages(viaPart, stats), /touches vault-db, a part of vault, which is not public/);
 });
 
 test("the core's page and its parts page link each flow over its parts, and a system it does not touch does not", () => {

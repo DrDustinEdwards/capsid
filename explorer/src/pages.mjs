@@ -108,7 +108,7 @@ ${footer(asOf)}
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
 function footer(asOf) {
   return `<footer class="foot">
-<div class="foot-tile foot-about"><p>Capsid runs Dustin Edwards's projects and the AI sessions that work on them. This site is built once a day from its public model and numbers.</p><p class="foot-small">Private systems show what their owner has made public, and never a repo. MIT licensed.</p></div>
+<div class="foot-tile foot-about"><p>Capsid runs Dustin Edwards's projects and the AI sessions that work on them. This site is built once a day from its public model and numbers.</p><p class="foot-small">Private systems are drawn in full, with no link to their repo. MIT licensed.</p></div>
 <nav class="foot-tile foot-nav" aria-label="Every section"><ul>${[...NAV, ["/search/", "Search"]].map(([href, label]) => `<li><a href="${href}">${label}</a></li>`).join("")}</ul></nav>
 <div class="foot-tile foot-day"><p>Data of</p><p class="foot-big">${escapeHtml(asOf)}</p><p class="foot-small">Whole days, ending at midnight UTC.</p></div>
 <div class="foot-tile foot-out"><p><a href="${SITE}/systems">The family on dustinedwards.info</a></p><p><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</p></div>
@@ -240,7 +240,7 @@ export function systemPage(model, id, asOf, maps = []) {
     ["Connections", String([...groups.values()].reduce((n, g) => n + g.length, 0))],
     ...(maps.length ? [["Code", `<a href="${codePath(id)}">${escapeHtml(codeSummary(maps))}</a>`]] : []),
   ];
-  const lead = s.description ? escapeHtml(s.description) : s.private ? (s.domain ? "Private: its name and address only." : "Private: its name only.") : "";
+  const lead = s.description ? escapeHtml(s.description) : s.private ? "Private: its repo is not public." : "";
   const map = systemMapHtml(mapData(model), { id: "family", label: "The family", headingLevel: 3, openLabel: "Its page" });
   const drawing = s.ring === "core" ? "" : partsDrawing(model, s);
   const body = `${pageHead([["/", "Overview"], ["/systems/", "Systems"]], s.name, escapeHtml(s.name), lead)}
@@ -342,28 +342,22 @@ ${scroller("systems-table", `<table class="cap-table" data-sortable><caption>Eve
  */
 
 /**
- * A flow's steps read against the model: each step's edge, its two ends and the parts it lights,
- * as parts of public systems. The public document only ever holds whole public flows
- * (src/system-model.ts, toPublic), so anything else here is a document the filter did not write,
- * and the build stops rather than draw a line the map does not have or name a private part
- * (design section 4, "Animated flows"; docs/public-data.md, rule 5).
+ * A flow's steps read against the model: each step's edge, its two ends and the parts it lights.
+ * Every system, part, line and flow is public (src/system-model.ts, toPublic; a private system
+ * only lacks its repo link), so the build stops only for a line the map does not have or a part
+ * it does not hold (design section 4, "Animated flows").
  * @param {any} model @param {any} flow
  * @returns {Flow}
  */
 export function resolveFlow(model, flow) {
   const edges = new Map(model.relationships.map((/** @type {any} */ r) => [r.id, r]));
   const parts = new Map(model.containers.map((/** @type {any} */ c) => [c.id, c]));
-  const systems = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s]));
   const steps = flow.steps.map((/** @type {any} */ st, /** @type {number} */ i) => {
     const where = `flow ${flow.id} step ${i + 1}`;
     /** @param {string} id @returns {Part} */
     const part = (id) => {
       const c = parts.get(id);
-      if (!c) {
-        const s = systems.get(id);
-        throw new Error(s?.private ? `${where} touches ${id}, a private system` : `${where} touches ${id}, which is not a part in the public model`);
-      }
-      if (systems.get(c.system)?.private !== false) throw new Error(`${where} touches ${id}, a part of ${c.system}, which is not public`);
+      if (!c) throw new Error(`${where} touches ${id}, which is not a part in the public model`);
       return { id: c.id, system: c.system, name: c.name };
     };
     const edge = edges.get(st.relationship);
@@ -550,8 +544,7 @@ export function allPages(model, stats, code = null, sourceOf = () => undefined, 
     ["/code/", codeIndexPage(model, bySystem, totals, asOf)],
     ["/search/", searchPage(asOf)],
   ];
-  // A system's parts are published only when the privacy filter let them through, so a private
-  // system has a parts page exactly when the public model gives it parts.
+  // Every system with parts has a parts page, a private one included.
   for (const s of model.systems) {
     pages.push([systemPath(s.id), systemPage(model, s.id, asOf, bySystem.get(s.id))]);
     if (model.containers.some((/** @type {any} */ c) => c.system === s.id)) pages.push([containersPath(s.id), containersPage(model, s.id, asOf)]);
