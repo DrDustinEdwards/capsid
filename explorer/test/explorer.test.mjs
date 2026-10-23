@@ -238,7 +238,8 @@ test("the headers send the shared policy with scripts and styles from the explor
 
 test("the map's script is under 25 KB gzip and all the explorer's script under 105 KB", () => {
   const gz = (/** @type {string} */ f) => gzipSync(readFileSync(join(out, "assets", f)), { level: 9 }).length;
-  assert.ok(gz("system-map.js") < 25 * 1024, `system-map.js is ${gz("system-map.js")} bytes gzip`);
+  const map = readdirSync(join(out, "assets")).filter((f) => f.startsWith("system-map")).reduce((sum, f) => sum + gz(f), 0);
+  assert.ok(map < 25 * 1024, `the system map's modules are ${map} bytes gzip`);
   const all = files.filter((f) => f.endsWith(".js")).reduce((sum, f) => sum + gzipSync(readFileSync(join(out, f)), { level: 9 }).length, 0);
   assert.ok(all < 105 * 1024, `the explorer's script is ${all} bytes gzip`);
   assert.ok(existsSync(join(out, "build.json")));

@@ -150,7 +150,9 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   writeFileSync(join(assets, "capsomer.css"), css);
   writeFileSync(join(assets, "enarratio.css"), stylesheet(capsomerTheme));
   copyFileSync(join(here, "src", "explorer.css"), join(assets, "explorer.css"));
-  copyFileSync(join(capsomer, "dist", "components", "system-map", "system-map.js"), join(assets, "system-map.js"));
+  // The system map's module and the sibling modules it imports.
+  const systemMap = join(capsomer, "dist", "components", "system-map");
+  for (const file of readdirSync(systemMap).filter((name) => name.endsWith(".js"))) copyFileSync(join(systemMap, file), join(assets, file));
   copyFileSync(join(here, "src", "explorer.js"), join(assets, "explorer.js"));
   copyFileSync(join(here, "src", "icon.svg"), join(assets, "icon.svg"));
   writeFileSync(join(out, "_headers"), headersFile());
