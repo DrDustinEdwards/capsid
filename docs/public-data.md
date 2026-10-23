@@ -4,7 +4,7 @@ Ruling: capsid/rulings/system-explorer-2026-10-10.md (answers 1, 2 and 15), and 
 
 ## The model
 
-`system/model.json` is the one hand-written model of Dustin's systems, every repo included: each system's name, short name (for the phone map), family, ring, description, domain and repos; each system's containers; and the relationships between them. Every map and diagram is drawn from it. It changes by pull request.
+`system/model.json` is the one hand-written model of Dustin's systems, every repo included: each system's name, short name (for the phone map), family, ring, description, domain and repos; each system's containers; and the relationships between them. Every map and diagram is drawn from it. The order of `systems` is the map's order, and on dustinedwards.info the systems people use are grouped by family (sites, products, writing, plumbing), each group chained in that order, so a site sits beside its admin. It changes by pull request.
 
 The file is in a public repo, so it holds only what may be published: what each system is for and what it is made of, never a secret, a resource id or an internal address. That holds for a private repo's system too.
 

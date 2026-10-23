@@ -13,13 +13,40 @@
       "repos": ["DrDustinEdwards/capsid"]
     },
     {
-      "id": "capsid-bench",
-      "name": "capsid-bench",
-      "short": "Bench",
-      "family": "system",
+      "id": "d1-dump",
+      "name": "d1-dump",
+      "short": "d1-dump",
+      "family": "plumbing",
       "ring": "shared",
-      "description": "The study harness that compares Claude Code with and without Capsid on the same tasks, scored on hidden tests.",
-      "repos": ["DrDustinEdwards/capsid-bench"]
+      "description": "Backs up each table of a D1 database, keeps the backups on a schedule, and drills the restore.",
+      "repos": ["DrDustinEdwards/d1-dump"]
+    },
+    {
+      "id": "devkit",
+      "name": "devkit",
+      "short": "devkit",
+      "family": "plumbing",
+      "ring": "shared",
+      "description": "Shared CI workflows, Renovate rules, and test helpers.",
+      "repos": ["DrDustinEdwards/devkit"]
+    },
+    {
+      "id": "site-runtime",
+      "name": "site-runtime",
+      "short": "Runtime",
+      "family": "plumbing",
+      "ring": "shared",
+      "description": "Security headers, the rate limiter, and the health format that every site imports.",
+      "repos": ["DrDustinEdwards/site-runtime"]
+    },
+    {
+      "id": "prelum",
+      "name": "Prelum",
+      "short": "Prelum",
+      "family": "writing",
+      "ring": "shared",
+      "description": "Turns finished writing into pages, feeds, and sitemaps.",
+      "repos": ["DrDustinEdwards/prelum"]
     },
     {
       "id": "capsomer",
@@ -32,42 +59,6 @@
       "repos": ["DrDustinEdwards/capsomer"]
     },
     {
-      "id": "site-runtime",
-      "name": "site-runtime",
-      "short": "Runtime",
-      "family": "plumbing",
-      "ring": "shared",
-      "description": "Security headers, the rate limiter, and the health format that every site imports.",
-      "repos": ["DrDustinEdwards/site-runtime"]
-    },
-    {
-      "id": "d1-dump",
-      "name": "d1-dump",
-      "short": "d1-dump",
-      "family": "plumbing",
-      "ring": "shared",
-      "description": "Backs up each table of a D1 database, keeps the backups on a schedule, and drills the restore.",
-      "repos": ["DrDustinEdwards/d1-dump"]
-    },
-    {
-      "id": "capsid-backups",
-      "name": "Capsid backups",
-      "short": "Backups",
-      "family": "plumbing",
-      "ring": "shared",
-      "description": "Mirrors Capsid's daily database dumps off Cloudflare every day, so losing the account does not lose the store.",
-      "repos": ["DrDustinEdwards/capsid-backups"]
-    },
-    {
-      "id": "devkit",
-      "name": "devkit",
-      "short": "devkit",
-      "family": "plumbing",
-      "ring": "shared",
-      "description": "Shared CI workflows, Renovate rules, and test helpers.",
-      "repos": ["DrDustinEdwards/devkit"]
-    },
-    {
       "id": "site-api",
       "name": "site-api",
       "short": "site-api",
@@ -77,22 +68,92 @@
       "repos": ["DrDustinEdwards/site-api"]
     },
     {
-      "id": "prelum",
-      "name": "Prelum",
-      "short": "Prelum",
-      "family": "writing",
-      "ring": "shared",
-      "description": "Turns finished writing into pages, feeds, and sitemaps.",
-      "repos": ["DrDustinEdwards/prelum"]
+      "id": "dustinedwards-mcp",
+      "name": "Dustin Edwards Admin",
+      "short": "Site MCP",
+      "family": "site",
+      "ring": "used",
+      "description": "Runs dustinedwards.info from a chat, covering health, mentions, media, registries, citations, and lab procedures. Writing stays in Carrel.",
+      "repos": ["DrDustinEdwards/dustinedwards-info"]
     },
     {
-      "id": "writing",
-      "name": "Writing",
-      "short": "Books",
-      "family": "writing",
-      "ring": "shared",
-      "description": "Dustin's books: scenes, outlines and story bibles, which Carrel reads and commits through its own GitHub App.",
-      "repos": ["DrDustinEdwards/writing"]
+      "id": "dustinedwards-info",
+      "name": "dustinedwards.info",
+      "short": "Website",
+      "family": "site",
+      "ring": "used",
+      "description": "Dustin's personal site.",
+      "domain": "dustinedwards.info",
+      "repos": ["DrDustinEdwards/dustinedwards-info"]
+    },
+    {
+      "id": "germomics",
+      "name": "Germomics",
+      "short": "Germomics",
+      "family": "site",
+      "ring": "used",
+      "description": "A podcast and writing site about microbiology and history, with interactive virus and bacteria data pages and browser games.",
+      "domain": "germomics.com",
+      "repos": ["DrDustinEdwards/germomics"]
+    },
+    {
+      "id": "txasm",
+      "name": "TXASM",
+      "short": "TXASM",
+      "family": "site",
+      "ring": "used",
+      "description": "Runs the Texas Branch ASM meetings: registration, abstract submission and review, the program, and the abstract book PDF.",
+      "domain": "txasm.org",
+      "repos": ["DrDustinEdwards/txasm"]
+    },
+    {
+      "id": "julieedwards-info",
+      "name": "julieedwards.info",
+      "short": "Julie's site",
+      "family": "site",
+      "ring": "used",
+      "description": "Julie Edwards's campaign site for the Bluff Dale ISD school board. Its copy lives in D1 and is edited through Carrel.",
+      "domain": "julieedwards.info",
+      "repos": ["DrDustinEdwards/julieedwards-info"]
+    },
+    {
+      "id": "foxhound-mcp",
+      "name": "Foxhound Admin",
+      "short": "Hound MCP",
+      "family": "product",
+      "ring": "used",
+      "description": "Runs Foxhound from a chat. It holds no Stripe key and no database: every action is a call to the foxhound Worker's admin API.",
+      "domain": "admin-mcp.foxhoundapp.com",
+      "repos": ["DrDustinEdwards/foxhound"]
+    },
+    {
+      "id": "foxhound",
+      "name": "Foxhound",
+      "short": "Foxhound",
+      "family": "product",
+      "ring": "used",
+      "description": "Recovers failed Stripe payments, handles disputes and reports subscription health for merchants, and is paid only on money it recovers.",
+      "domain": "foxhoundapp.com",
+      "repos": ["DrDustinEdwards/foxhound"]
+    },
+    {
+      "id": "foxing",
+      "name": "Foxing",
+      "short": "Foxing",
+      "family": "product",
+      "ring": "used",
+      "description": "A reading app and web platform, Letterboxd for books: a web app, an Expo phone reader and a Discord Activity for reading clubs.",
+      "domain": "foxing.app",
+      "repos": ["DrDustinEdwards/foxing"]
+    },
+    {
+      "id": "foxing-mcp",
+      "name": "Foxing Admin",
+      "short": "Foxing MCP",
+      "family": "product",
+      "ring": "used",
+      "description": "Runs Foxing from a chat: stats, users, badges, journal posts and catalog health, all through the foxing Worker. Built, not yet deployed.",
+      "repos": ["DrDustinEdwards/foxing"]
     },
     {
       "id": "carrel",
@@ -115,23 +176,13 @@
       "repos": ["DrDustinEdwards/enarratio"]
     },
     {
-      "id": "dustinedwards-info",
-      "name": "dustinedwards.info",
-      "short": "Website",
-      "family": "site",
+      "id": "writing",
+      "name": "Writing",
+      "short": "Books",
+      "family": "writing",
       "ring": "used",
-      "description": "Dustin's personal site.",
-      "domain": "dustinedwards.info",
-      "repos": ["DrDustinEdwards/dustinedwards-info"]
-    },
-    {
-      "id": "dustinedwards-mcp",
-      "name": "Dustin Edwards Admin",
-      "short": "Site MCP",
-      "family": "plumbing",
-      "ring": "used",
-      "description": "Runs dustinedwards.info from a chat, covering health, mentions, media, registries, citations, and lab procedures. Writing stays in Carrel.",
-      "repos": ["DrDustinEdwards/dustinedwards-info"]
+      "description": "Dustin's books: scenes, outlines and story bibles, which Carrel reads and commits through its own GitHub App.",
+      "repos": ["DrDustinEdwards/writing"]
     },
     {
       "id": "skills",
@@ -153,73 +204,22 @@
       "repos": ["DrDustinEdwards/claude-skills-private"]
     },
     {
-      "id": "germomics",
-      "name": "Germomics",
-      "short": "Germomics",
-      "family": "site",
-      "ring": "used",
-      "description": "A podcast and writing site about microbiology and history, with interactive virus and bacteria data pages and browser games.",
-      "domain": "germomics.com",
-      "repos": ["DrDustinEdwards/germomics"]
-    },
-    {
-      "id": "foxing",
-      "name": "Foxing",
-      "short": "Foxing",
-      "family": "product",
-      "ring": "used",
-      "description": "A reading app and web platform, Letterboxd for books: a web app, an Expo phone reader and a Discord Activity for reading clubs.",
-      "domain": "foxing.app",
-      "repos": ["DrDustinEdwards/foxing"]
-    },
-    {
-      "id": "foxing-mcp",
-      "name": "Foxing Admin",
-      "short": "Foxing MCP",
+      "id": "capsid-bench",
+      "name": "capsid-bench",
+      "short": "Bench",
       "family": "plumbing",
       "ring": "used",
-      "description": "Runs Foxing from a chat: stats, users, badges, journal posts and catalog health, all through the foxing Worker. Built, not yet deployed.",
-      "repos": ["DrDustinEdwards/foxing"]
+      "description": "The study harness that compares Claude Code with and without Capsid on the same tasks, scored on hidden tests.",
+      "repos": ["DrDustinEdwards/capsid-bench"]
     },
     {
-      "id": "foxhound",
-      "name": "Foxhound",
-      "short": "Foxhound",
-      "family": "product",
-      "ring": "used",
-      "description": "Recovers failed Stripe payments, handles disputes and reports subscription health for merchants, and is paid only on money it recovers.",
-      "domain": "foxhoundapp.com",
-      "repos": ["DrDustinEdwards/foxhound"]
-    },
-    {
-      "id": "foxhound-mcp",
-      "name": "Foxhound Admin",
-      "short": "Hound MCP",
+      "id": "capsid-backups",
+      "name": "Capsid backups",
+      "short": "Backups",
       "family": "plumbing",
       "ring": "used",
-      "description": "Runs Foxhound from a chat. It holds no Stripe key and no database: every action is a call to the foxhound Worker's admin API.",
-      "domain": "admin-mcp.foxhoundapp.com",
-      "repos": ["DrDustinEdwards/foxhound"]
-    },
-    {
-      "id": "txasm",
-      "name": "TXASM",
-      "short": "TXASM",
-      "family": "site",
-      "ring": "used",
-      "description": "Runs the Texas Branch ASM meetings: registration, abstract submission and review, the program, and the abstract book PDF.",
-      "domain": "txasm.org",
-      "repos": ["DrDustinEdwards/txasm"]
-    },
-    {
-      "id": "julieedwards-info",
-      "name": "julieedwards.info",
-      "short": "Julie's site",
-      "family": "site",
-      "ring": "used",
-      "description": "Julie Edwards's campaign site for the Bluff Dale ISD school board. Its copy lives in D1 and is edited through Carrel.",
-      "domain": "julieedwards.info",
-      "repos": ["DrDustinEdwards/julieedwards-info"]
+      "description": "Mirrors Capsid's daily database dumps off Cloudflare every day, so losing the account does not lose the store.",
+      "repos": ["DrDustinEdwards/capsid-backups"]
     }
   ],
   "containers": [
