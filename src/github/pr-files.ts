@@ -32,6 +32,24 @@ export async function readAllPages<T>(
   return { items, problem: `more than ${maxPages} pages` };
 }
 
+// A commit's check runs, read whole (readAllPages), shared by the auto-merge tick, what's
+// next, the maintenance sweep and complete's CI gate (src/complete-ci.ts).
+export interface CheckRunRow {
+  name: string;
+  status: string;
+  conclusion: string | null;
+}
+
+export async function readCheckRuns<T extends CheckRunRow = CheckRunRow>(
+  env: Env,
+  owner: string,
+  repo: string,
+  sha: string,
+  maxPages: number
+): Promise<{ items: T[]; problem: string | null }> {
+  return readAllPages<T>(env, owner, repo, `/repos/${owner}/${repo}/commits/${sha}/check-runs`, (page) => (page as { check_runs: T[] }).check_runs, maxPages);
+}
+
 export interface PrFiles {
   // A rename is listed under both names, so moving a file counts as touching the old path.
   paths: string[];

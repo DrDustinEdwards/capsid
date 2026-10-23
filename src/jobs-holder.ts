@@ -39,6 +39,8 @@ import { checkOverlaps, overlapLine, prUrlsIn, type OverlapReport } from "./job-
 import { callerIsSeat, correctionsForWork, guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
 import { externalFence } from "./provenance";
+import { ciRefusal } from "./complete-ci";
+import { parsePrUrl } from "./github/client";
 
 // The transitions the driver holding a job makes: complete, fail and block, and the
 // review gate they consult.
@@ -265,6 +267,33 @@ async function holderTransition(
   };
 }
 
+// Binds a claimed job to the pull request a gate read, in result_ref, so a later call
+// naming another pull request is still answered for this one. Returns the row as bound,
+// or the refusal when the caller does not hold the job or the row moved.
+async function bindPullRequest(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  action: string,
+  current: JobRow,
+  pr: string,
+  auditAction: "job-review-bound" | "job-ci-bound"
+): Promise<JobRow | JobResult> {
+  const notHeld = holderRefusal(action, current.id, agent.actor, current);
+  if (notHeld) return notHeld;
+  const job: JobRow = { ...current, result_ref: pr, updated_at: now.toISOString() };
+  const bound = await guardedTransition(env, current, [
+    env.DB.prepare(
+      `UPDATE jobs SET result_ref = ?2, updated_at = ?3
+       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 AND result_ref IS NULL RETURNING id`
+    ).bind(current.id, pr, now.toISOString(), agent.actor),
+    ...(await mirrorStatements(env, job, auditAction, agent.actor)),
+    jobAudit(env.DB, agent.actor, auditAction, job, { result_ref: pr }),
+  ]);
+  if (!bound) return refuse(action, `${current.id} moved between reading it and recording its pull request. Ask again.`);
+  return job;
+}
+
 // The review gate, consulted by complete, fail and block alike.
 //
 // A gate on one of them would not be a gate: a driver that found `complete` refused
@@ -323,19 +352,9 @@ async function reviewRefusal(
   // binding left.
   let read = current;
   if (outcome.pr && !current.result_ref) {
-    const notHeld = holderRefusal(action, id, agent.actor, current);
-    if (notHeld) return notHeld;
-    const job: JobRow = { ...current, result_ref: outcome.pr, updated_at: now.toISOString() };
-    const bound = await guardedTransition(env, current, [
-      env.DB.prepare(
-        `UPDATE jobs SET result_ref = ?2, updated_at = ?3
-         WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 AND result_ref IS NULL RETURNING id`
-      ).bind(id, outcome.pr, now.toISOString(), agent.actor),
-      ...(await mirrorStatements(env, job, "job-review-bound", agent.actor)),
-      jobAudit(env.DB, agent.actor, "job-review-bound", job, { result_ref: outcome.pr }),
-    ]);
-    if (!bound) return refuse(action, `${id} moved between reading it and recording its pull request. Ask again.`);
-    read = job;
+    const bound = await bindPullRequest(env, agent, now, action, current, outcome.pr, "job-review-bound");
+    if (!("status" in bound)) return bound;
+    read = bound;
   }
 
   if (outcome.kind === "proceed") return null;
@@ -540,9 +559,24 @@ async function completeWith(
         said: { claim: claim.claim, raw: completeRaw, as: "complete", evidence: args.evidence },
       });
   if (review) return review;
+  const held = await readJob(env.DB, id);
+  // The CI gate (src/complete-ci.ts): every pull request this complete names, and the one
+  // the job is bound to, must show green CI. A refused holder's job is bound to the pull
+  // request that was not green, so naming a different one next time does not escape it.
+  // The seat's close writes nothing before it is allowed, as with its review gate.
+  if (held) {
+    const bound = parsePrUrl(held.result_ref) ? [held.result_ref!.trim()] : [];
+    const ci = await ciRefusal(env, held.namespace, [...new Set([...bound, ...namedPrUrls(args.evidence, args.result_ref)])]);
+    if (ci) {
+      if (!seatCloses && !held.result_ref) {
+        const kept = await bindPullRequest(env, agent, now, "complete", held, ci.pr, "job-ci-bound");
+        if (!("status" in kept)) return kept;
+      }
+      return refuse("complete", `${id} was not completed: ${ci.why}`);
+    }
+  }
   // Overlap warning (Track A D1): the pull requests this complete names, against every other
   // open one. The line rides in the summary the seat reads; the check cannot fail the call.
-  const held = await readJob(env.DB, id);
   const overlaps = held ? await checkOverlaps(env, held.namespace, namedPrUrls(args.evidence, args.result_ref ?? held.result_ref)) : null;
   const overlap = overlaps ? overlapLine(overlaps) : null;
   return holderTransition(env, agent, now, "complete", id, {

@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { ciVerdict, jobIdFromBody } from "./auto-merge-policy";
 import { ghFetch, parseReposList } from "./github/client";
-import { readAllPages } from "./github/pr-files";
+import { readAllPages, readCheckRuns } from "./github/pr-files";
 import { commandFromSummary, isQuestionSummary } from "./jobs-holder";
 import { readSnapshot } from "./ops-snapshot";
 import { externalFence } from "./provenance";
@@ -90,10 +90,7 @@ async function openPrs(env: Env, namespace: string, full: string, notChecked: st
   if (listed.problem) notChecked.push(`${full} open pull requests: ${listed.problem}`);
   const out: WhatsNextPr[] = [];
   for (const pr of listed.items.slice(0, PRS_PER_REPO)) {
-    const checks = await readAllPages<{ name: string; status: string; conclusion: string | null }>(
-      env, owner, repo, `/repos/${owner}/${repo}/commits/${pr.head.sha}/check-runs`,
-      (page) => (page as { check_runs: Array<{ name: string; status: string; conclusion: string | null }> }).check_runs, CHECKS_MAX_PAGES
-    );
+    const checks = await readCheckRuns(env, owner, repo, pr.head.sha, CHECKS_MAX_PAGES);
     const verdict = checks.problem ? { conclusion: null, note: `check runs not read: ${checks.problem}` } : ciVerdict(checks.items);
     // The list does not carry mergeability; one read of the pull request does. GitHub
     // computes it lazily, so a null mergeable is "not known yet", never "no conflict".

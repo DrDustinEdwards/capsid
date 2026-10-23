@@ -54,7 +54,7 @@ post: queue a job from namespace, title and body. The body is signed; a driver r
 list: filter by namespace, status and id, without bodies; one named id returns its body and edit versions to a writer. stale: true returns blocked or claimed jobs that look stuck (unchanged, resumed-not-completed, prs-settled, steps-seen). view: plan, digest or models.
 claim: take the top queued job in a namespace, or a named id. The claim never expires. Returns the recommended model. Refused without the job's required_flags or min_record, or while the namespace's breaker is open.
 begin: label a queued job started (who, when). Verifies the body's signature; never refuses otherwise.
-complete: needs result_summary; writes one outcome row and verifies each named pull request against GitHub. Also closes a queued job nobody holds when it names the job's pull request (the pull request is the claim), and lets the seat close a blocked job another credential holds.
+complete: needs result_summary; writes one outcome row and verifies each named pull request against GitHub. Refused until CI has passed on the head of each one it names: running waits, red is refused, and no passing check on a code change is not green. Also closes a queued job nobody holds when it names the job's pull request (the pull request is the claim), and lets the seat close a blocked job another credential holds.
 record: the seat's close of a queued job somebody else did, with the same review gate and evidence checks.
 block: needs reason and the command the human must run, or question: true with the question as the reason, answered by a resume note.
 Complete and block that name a pull request also report open pull requests sharing a file (overlaps); a failed read says not checked and never blocks.

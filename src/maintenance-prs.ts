@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
-import { readAllPages } from "./github/pr-files";
+import { readAllPages, readCheckRuns } from "./github/pr-files";
 import { ciVerdict, jobIdFromBody } from "./auto-merge-policy";
 import type { MaintenanceItem } from "./maintenance";
 import { HOUR_MS, DAY_MS } from "./time";
@@ -161,10 +161,7 @@ export function githubPrReaders(env: Env): PrReaders {
       if (listed.items.length > reading.length) problems.push(`${listed.items.length - reading.length} open pull requests were not read`);
       const prs: OpenPr[] = [];
       for (const pr of reading) {
-        const checks = await readAllPages<RawCheck>(
-          env, owner, repo, `/repos/${owner}/${repo}/commits/${pr.head.sha}/check-runs`,
-          (page) => (page as { check_runs: RawCheck[] }).check_runs, CHECKS_MAX_PAGES
-        );
+        const checks = await readCheckRuns<RawCheck>(env, owner, repo, pr.head.sha, CHECKS_MAX_PAGES);
         if (checks.problem) {
           problems.push(`#${pr.number} check runs: ${checks.problem}`);
           continue;
