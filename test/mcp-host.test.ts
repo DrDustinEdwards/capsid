@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hostRefusal, LEGACY_HOST, MCP_HOST, servedOnMcpHost } from "../src/mcp-host.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
+import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope.ts";
 
 // The host rules (src/mcp-host.ts) without the Worker: what the MCP host serves, and the
 // old address's retired /portal. test-integration/mcp-host.test.ts runs them through the
@@ -17,6 +18,16 @@ test("PLANT: the MCP host serves every machine route and nothing else", () => {
   for (const path of ["/", "/portal", "/portal/", "/portal/api/ops", "/console", "/mcpx", "/opsx", "/.well-known/security.txt", "/oauth/clients/other.json"]) {
     assert.equal(servedOnMcpHost(path), false, path);
     assert.equal(at(MCP_HOST, path)?.status, 404, path);
+  }
+});
+
+// The path list is kept by hand, and a route left off it is a 404 in production while every
+// test that calls the handler passes: /bench/repro and /shadow/* shipped that way on
+// 2026-10-23. Every declared route outside the Portal must be on it.
+test("PLANT: the MCP host serves every declared route outside the Portal", () => {
+  for (const path of [...Object.keys(UNGATED_ROUTES), ...Object.keys(ROUTE_GRANTS)]) {
+    if (path === "/portal" || path.startsWith("/portal/")) continue;
+    assert.equal(servedOnMcpHost(path), true, path);
   }
 });
 
