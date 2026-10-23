@@ -1,4 +1,5 @@
 import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, handlePublicDocument } from "./public-data";
+import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResult } from "./shadow";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
@@ -441,6 +442,8 @@ export const defaultHandler = {
     if (url.pathname === BENCH_START_PATH && request.method === "POST") return handleBenchStart(request, env);
     if (url.pathname === BENCH_REPRO_PATH && request.method === "POST") return handleBenchRepro(request, env);
     if (url.pathname === BENCH_SCORE_PATH && request.method === "POST") return handleBenchScore(request, env);
+    if (url.pathname === SHADOW_JOB_PATH && request.method === "GET") return handleShadowJob(request, env);
+    if (url.pathname === SHADOW_RESULT_PATH && request.method === "POST") return handleShadowResult(request, env);
     if (url.pathname === "/authorize" && request.method === "GET") return handleAuthorizeGet(request, env);
     if (url.pathname === "/authorize" && request.method === "POST") return handleAuthorizePost(request, env);
     if (url.pathname === "/callback") return handleCallback(request, env);
