@@ -12,7 +12,7 @@ import type { Env } from "../src/env";
 import type { PortalMaintenance } from "../src/ops-types/views";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance";
-import { gatherModelDriftItems, UNLISTED_DOC } from "../src/model-drift";
+import { gatherModelDriftItems } from "../src/model-drift";
 import type { SystemModel } from "../src/system-model";
 import { gatherRuleDocItems, RULE_DOC_CAP_BYTES } from "../src/rule-docs";
 
@@ -138,21 +138,18 @@ describe("gatherMaintenance", () => {
 });
 
 describe("gatherModelDriftItems", () => {
-  // The reads against the real tables: the namespace mapping, ops_sites and the unlisted
-  // document. The comparison itself is tested in test/model-drift.test.ts.
+  // The reads against the real tables: the namespace mapping and ops_sites. The comparison
+  // itself is tested in test/model-drift.test.ts.
   const MODEL: SystemModel = {
     version: 1,
-    systems: [{ id: "sample-site", name: "Sample", short: "Sample", family: "site", ring: "used", public: true, domain: "example.com", repos: ["example-org/sample-site"] }],
+    systems: [{ id: "sample-site", name: "Sample", short: "Sample", family: "site", ring: "used", domain: "example.com", repos: ["example-org/sample-site"] }],
     containers: [],
     relationships: [],
   };
 
-  it("names a mapped repo the model does not, skips one the unlisted document lists, and reports an unread App list", async () => {
+  it("names a mapped repo the model does not, and reports an unread App list", async () => {
     await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
-      .bind("drift-sample", JSON.stringify([{ repo: "example-org/sample-site", label: "primary" }, { repo: "example-org/sample-docs", label: "docs" }, { repo: "example-org/sample-notes", label: "notes" }]))
-      .run();
-    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body, type, status) VALUES (?1, ?2, 'Unlisted', ?3, 'note', 'published')")
-      .bind(UNLISTED_DOC.namespace, UNLISTED_DOC.path, "- example-org/sample-notes\n")
+      .bind("drift-sample", JSON.stringify([{ repo: "example-org/sample-site", label: "primary" }, { repo: "example-org/sample-docs", label: "docs" }]))
       .run();
     const out = await gatherModelDriftItems(env as never, MODEL, async () => {
       throw new Error("no App key in tests");

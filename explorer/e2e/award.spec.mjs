@@ -31,7 +31,7 @@ const tile = (/** @type {string} */ id) => `.cap-system-map-tile[data-id="${id}"
 const focusedId = () => /** @type {HTMLElement | null} */ (document.activeElement)?.dataset?.id ?? null;
 
 /** @param {import("@playwright/test").Page} page @param {string} [path] */
-async function open(page, path = "/") {
+async function open(page, path = "/systems/") {
   await page.route("https://mcp.dustinedwards.info/**", (route) => route.abort());
   await page.goto(path);
   await expect(page.locator(".cap-system-map")).toHaveAttribute("data-cap-ready", "");
@@ -84,7 +84,7 @@ test("screen-reader list: the list holds every system in the model and no other,
 
   const context = await browser.newContext({ javaScriptEnabled: false });
   const plain = await context.newPage();
-  await plain.goto("/");
+  await plain.goto("/systems/");
   expect(await listed(plain)).toEqual(IDS);
   await context.close();
 });

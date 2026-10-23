@@ -1,9 +1,9 @@
 {
   "version": 1,
   "as_of": "2026-01-15",
-  "jobs": { "completed_7d": 12, "completed_30d": 48, "failed_30d": 3, "completed_by_week": [5, 9, 11, 8, 14, 10, 12, 12], "open": 6, "blocked": 2, "median_duration_minutes_30d": 95 },
-  "verification": { "evaluations_90d": 40, "agreement_rate_90d": 0.9, "pr_merge_rate_90d": 0.85, "ci_green_rate_90d": null },
-  "gates": { "waits_30d": 15, "median_wait_minutes_30d": 42, "share_ended_by_policy_30d": 0.6 },
+  "jobs": { "completed_7d": 12, "completed_30d": 48, "failed_30d": 3, "completed_by_week": [5, 9, 11, 8, 14, 10, 12, 12], "failed_by_week": [0, 1, 0, 1, 0, 0, 1, 0], "open": 6, "blocked": 2, "median_duration_minutes_30d": 95 },
+  "verification": { "evaluations_90d": 40, "agreement_rate_90d": 0.9, "pr_merge_rate_90d": 0.85, "ci_green_rate_90d": null, "agreement_by_week": [null, null, null, null, 0.875, 0.9, 0.92, 0.9] },
+  "gates": { "waits_30d": 15, "median_wait_minutes_30d": 42, "share_ended_by_policy_30d": 0.6, "waits_by_week": [2, 3, 1, 4, 3, 2, 5, 4] },
   "sites": { "watched": 4, "uptime_7d": 0.998, "slots_measured_7d": 1344 },
   "store": { "documents": 1200, "namespaces": 9 },
   "systems": { "public": 5, "private": 2 },

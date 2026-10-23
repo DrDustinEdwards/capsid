@@ -1,14 +1,14 @@
 # The system model and its public documents
 
-Ruling: capsid/rulings/system-explorer-2026-10-10.md (answers 1, 2, 6, 7 and 15). Design: capsid/research/design-system-explorer.md, sections 1 and 2.
+Ruling: capsid/rulings/system-explorer-2026-10-10.md (answers 1, 2 and 15), and Dustin on 2026-10-23: "do not exclude private repos", "fully wired just like the public ones". Design: capsid/research/design-system-explorer.md, sections 1 and 2.
 
 ## The model
 
-`system/model.json` is the one hand-written model of Dustin's systems: each system's name, short name (for the phone map), family, ring, domain and repos; Capsid's containers; and the relationships between them. Every map and diagram is drawn from it. It changes by pull request.
+`system/model.json` is the one hand-written model of Dustin's systems, every repo included: each system's name, short name (for the phone map), family, ring, description, domain and repos; each system's containers; and the relationships between them. Every map and diagram is drawn from it. It changes by pull request.
 
-The file holds public-safe facts only. A private system is written as its public name, short name, domain, family and ring, plus the repos the drift check reads, and the schema refuses a description on it. A private repo with no public product (answer 7) is never named in this file.
+The file is in a public repo, so it holds only what may be published: what each system is for and what it is made of, never a secret, a resource id or an internal address. That holds for a private repo's system too.
 
-The schema is Zod, in `src/system-model.ts`. `system/model.schema.json` is generated from it (`node --import ./test/resolve-ts.mjs scripts/write-system-schema.mjs`) for editors, and `test/system-model.test.ts` fails when the committed file differs from the schema the Worker enforces. The same test file checks the committed model: ids unique, every relationship's ends exist, every container's system exists, and no repo without a public product named.
+The schema is Zod, in `src/system-model.ts`. `system/model.schema.json` is generated from it (`node --import ./test/resolve-ts.mjs scripts/write-system-schema.mjs`) for editors, and `test/system-model.test.ts` fails when the committed file differs from the schema the Worker enforces. The same test file checks the committed model: ids unique, every relationship's ends exist, and every container's system exists.
 
 ### Flows
 
@@ -20,17 +20,16 @@ The first flow is `job-life`, a job from posted to its claims checked against Gi
 
 `toPublic` in `src/system-model.ts` builds the public document by picking named fields into new objects, never by copying and deleting, so a field nobody listed cannot pass through.
 
-1. A system is public only when the model says `public: true` and GitHub reports every repo it lists as public. Anything else, a repo GitHub did not list included, makes it private.
-2. A private system is `id`, `name`, `short`, `domain`, `family`, `ring` and `private: true`, nothing more (`PRIVATE_SYSTEM_KEYS`). Its containers are dropped.
-3. A relationship with a private end survives only between two systems, with no title (answer 6). Every output relationship id is derived from its ends and kind, never copied from the file.
+1. A system is public only when GitHub reports every repo it lists as public. Anything else, a repo GitHub did not list included, makes it private.
+2. Every system, container, relationship and flow is published. A private system carries no repo link, and its code map is never read (below); nothing else differs.
+3. Every output relationship id is derived from its ends and kind, never copied from the file.
 4. A public system marked `hide_repo_link` is published without its repo link (answer 15: Skills).
-5. A flow is published only whole: every step must ride a relationship whose two ends belong to public systems, and light only public containers. Otherwise the flow is dropped, its name and step text with it (design section 2, rule 2).
 
-Proven in `test/system-model.test.ts`: the canary fixture (a private system carrying a marker string in every field it has, and in containers and titles that touch it, none of which reaches the output), visibility both ways, an unmodelled repo, the strict key walk, and 500 seeded random models.
+Proven in `test/system-model.test.ts`: a private system published whole without its repo, under both of GitHub's answers, and a strict schema that refuses a key toPublic does not write, a repo link on a private system included.
 
 ## The drift check
 
-The model is written by hand, so the daily maintenance pass compares it with what Capsid and GitHub know (`src/model-drift.ts`; rules `model-drift` and `model-not-checked` in the Portal's Maintenance list, docs/work-queue.md). It lists and never edits: the model changes by pull request. Repos deliberately left off (answer 7) are listed in the Capsid document `capsid/system/unlisted.md`, which stays private, as `- owner/name` lines.
+The model is written by hand, so the daily maintenance pass compares it with what Capsid and GitHub know (`src/model-drift.ts`; rules `model-drift` and `model-not-checked` in the Portal's Maintenance list, docs/work-queue.md). It lists and never edits: the model changes by pull request. No repo is left off on purpose.
 
 ## The aggregate numbers
 
@@ -39,6 +38,8 @@ The model is written by hand, so the daily maintenance pass compares it with wha
 | Field | From | Why it cannot leak |
 | --- | --- | --- |
 | `jobs.completed_7d`, `completed_30d`, `failed_30d`, `completed_by_week` (8 whole weeks, oldest first) | `jobs` by status and `updated_at` | counts across every namespace and agent |
+| `jobs.failed_by_week`, `gates.waits_by_week` (the same 8 weeks) | `jobs` by status, `job_touches` that ended a wait | counts across every namespace, agent and command |
+| `verification.agreement_by_week` (the same 8 weeks) | `job_evaluations` by `recorded_at` | a rate per week, null for a week under ten |
 | `jobs.open`, `jobs.blocked` | `jobs` by status, read once a day (answer 5) | one daily count, attributable to nothing |
 | `jobs.median_duration_minutes_30d` | `job_outcomes.duration_minutes` | a median, null under ten |
 | `verification.evaluations_90d`, `agreement_rate_90d` | `job_evaluations.agreement`: agree over agree plus disagree | a count and a rate over every agent |
@@ -47,6 +48,8 @@ The model is written by hand, so the daily maintenance pass compares it with wha
 | `sites.watched`, `uptime_7d`, `slots_measured_7d` | the watcher snapshot's half-hour rings, measured slots only | one number across sites, no site or error text |
 | `store.documents`, `store.namespaces` | row counts | no names |
 | `systems.public`, `systems.private` | the filtered model's counts | counts |
+
+The three weekly series are optional in the schema only so a document written before them (2026-10-23) still parses.
 
 Deploy counts are left out: the snapshot keeps each site's newest ten deploys only, so a 30-day count would be wrong.
 

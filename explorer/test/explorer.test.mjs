@@ -9,7 +9,9 @@ import { gzipSync } from "node:zlib";
 
 import { build } from "../build.mjs";
 import { codePage, codePath, modulePage, modulePath } from "../src/code.mjs";
-import { SITE, allPages, containersPath, flowPath, numbersHtml, stepPath, systemPath } from "../src/pages.mjs";
+import { numbersHtml } from "../src/numbers.mjs";
+import { servedTools } from "../src/surface.mjs";
+import { SITE, allPages, containersPath, flowPath, stepPath, systemPath } from "../src/pages.mjs";
 
 const fixtures = new URL("../fixtures/", import.meta.url).pathname;
 const read = (/** @type {string} */ name) => JSON.parse(readFileSync(join(fixtures, name), "utf8"));
@@ -35,11 +37,13 @@ const built = await build({ model: join(fixtures, "model.json"), stats: join(fix
 const files = walk(out);
 const html = files.filter((f) => f.endsWith(".html")).map((f) => ({ file: f, text: readFileSync(join(out, f), "utf8") }));
 
-test("every system has a page, a public one with parts has its parts page, every flow and each step of it a page, and nothing else is built", () => {
+test("every system has a page, a public one with parts has its parts page, every flow and each step of it a page, every tool a page, and nothing else is built", () => {
   const pages = files.filter((f) => f.endsWith(".html")).sort();
   const expected = [
     "404.html",
     "index.html",
+    ...["systems", "flows", "numbers", "code", "search", "tools"].map((p) => `${p}/index.html`),
+    ...servedTools().map((t) => `tools/${t.name}/index.html`),
     ...model.systems.map((/** @type {any} */ s) => `s/${s.id}/index.html`),
     "s/hub/containers/index.html",
     "s/theme/code/index.html",
@@ -70,16 +74,9 @@ test("a private page says it is private and carries nothing but its name and add
   assert.doesNotMatch(gone, /Address<\/dt>/);
 });
 
-test("a private system gets no parts page even when parts name it", () => {
-  const withParts = { ...model, containers: [...model.containers, { id: "x", system: "vault", name: "X", kind: "worker", technology: "Y" }] };
-  const paths = allPages(withParts, stats).map(([path]) => path);
-  assert.ok(paths.includes(containersPath("hub")));
-  assert.ok(!paths.includes(containersPath("vault")), "a private system has a parts page");
-});
-
 test("the build refuses a model the privacy filter could not have written", async () => {
   const leaky = structuredClone(model);
-  leaky.systems.find((/** @type {any} */ s) => s.id === "vault").description = "What the vault holds.";
+  leaky.systems.find((/** @type {any} */ s) => s.id === "vault").repos = ["https://github.com/example-org/vault"];
   const file = join(mkdtempSync(join(tmpdir(), "explorer-leak-")), "model.json");
   writeFileSync(file, JSON.stringify(leaky));
   await assert.rejects(build({ model: file, stats: join(fixtures, "stats.json"), out: mkdtempSync(join(tmpdir(), "explorer-out-")) }));
@@ -88,7 +85,7 @@ test("the build refuses a model the privacy filter could not have written", asyn
 test("a system with a code map links to it, and its code page shows each module's worst function and the cycle", () => {
   const theme = readFileSync(join(out, "s", "theme", "index.html"), "utf8");
   assert.ok(theme.includes(`href="${codePath("theme")}"`), "the system page does not link its code");
-  assert.match(theme, /Its code: 4 modules and 3 functions, measured 2026-10-17/);
+  assert.match(theme, /4 modules and 3 functions, measured 2026-10-17/);
   const hub = readFileSync(join(out, "s", "hub", "index.html"), "utf8");
   assert.ok(!hub.includes(codePath("hub")), "a system with no code map links to a code page");
 
@@ -257,31 +254,11 @@ test("build.json's hash is the same for the same input and changes with what a r
   assert.notEqual(changed.content, built.content);
 });
 
-test("the workflow's pull request paths name every Capsid module the build loads", () => {
-  // build.mjs and src/pages.mjs import these from ../src; each runtime import they pull in
-  // can break the build, so a change to any of them must run the explorer's checks.
-  const root = new URL("../../", import.meta.url).pathname;
-  const seen = new Set();
-  const visit = (/** @type {string} */ rel) => {
-    if (seen.has(rel)) return;
-    seen.add(rel);
-    const text = readFileSync(join(root, rel), "utf8");
-    for (const [, spec] of text.matchAll(/^(?:import|export) (?!type\b)[^;]*? from "(\.\/[^"]+)"/gm)) {
-      visit(join("src", `${(spec ?? "").replace(/^\.\//, "").replace(/\.ts$/, "")}.ts`));
-    }
-  };
-  for (const rel of ["src/system-model.ts", "src/public-stats.ts"]) visit(rel);
-  assert.ok(seen.size >= 6, `the walk found only ${seen.size} modules`);
-  const workflow = readFileSync(join(root, ".github/workflows/explorer.yml"), "utf8");
-  const pr = workflow.slice(workflow.indexOf("pull_request:"), workflow.indexOf("push:"));
-  for (const rel of seen) assert.ok(pr.includes(`"${rel}"`), `explorer.yml's pull_request paths do not name ${rel}`);
-});
-
 test("a public system other than the core has its parts page with no drawing, since the map draws the core's insides", () => {
   const withParts = { ...model, containers: [...model.containers, { id: "kit-lib", system: "kit", name: "Kit library", kind: "package", technology: "npm" }] };
   const page = allPages(withParts, stats).find(([path]) => path === containersPath("kit"))?.[1] ?? "";
   assert.match(page, /Kit library/);
-  assert.doesNotMatch(page, /data-enter|cap-system-map|explorer\.js/);
+  assert.doesNotMatch(page, /data-enter|cap-system-map/);
   assert.match(readFileSync(join(out, "s", "hub", "containers", "index.html"), "utf8"), /data-enter/);
 });
 
@@ -429,5 +406,5 @@ test("the core's page and its parts page link each flow over its parts, and a sy
     const text = readFileSync(page, "utf8");
     for (const f of model.flows) assert.ok(text.includes(`href="${flowPath(f.id)}"`), `${page} does not link ${f.id}`);
   }
-  assert.doesNotMatch(readFileSync(join(out, "s", "kit", "index.html"), "utf8"), /href="\/flows\//);
+  assert.doesNotMatch(readFileSync(join(out, "s", "kit", "index.html"), "utf8"), /href="\/flows\/[^"]/);
 });

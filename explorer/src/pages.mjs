@@ -7,10 +7,14 @@
 // system on dustinedwards.info, and that site's pages link back (section 4, "Deep links both
 // ways"). Times of day never appear: the documents carry a date and nothing finer.
 import { systemMapHtml } from "capsomer/behaviour/system-map";
-import { barChart, progressRing } from "enarratio";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 
-import { codeBySystem, codePages, codePath, codeSummary } from "./code.mjs";
+import { codeBySystem, codeIndexPage, codePages, codePath, codeSummary, codeTotals, riskiest } from "./code.mjs";
+import { graphSvg } from "./graph.mjs";
+import { homePage } from "./home.mjs";
+import { numbersPage } from "./numbers.mjs";
+import { searchIndex, searchPage } from "./search.mjs";
+import { toolPages } from "./tools.mjs";
 
 export const SITE = "https://dustinedwards.info";
 const ORIGIN = "https://capsid.dustinedwards.info";
@@ -43,12 +47,33 @@ export const stepPath = (id, n) => `/flows/${id}/${n}/`;
 /** Where a part is listed: its row on its system's parts page. @param {{ id: string, system: string }} c */
 export const partPath = (c) => `${containersPath(c.system)}#part-${c.id}`;
 
+/** The sections every page leads to, in the bar at the top and the footer. */
+export const NAV = [
+  ["/", "Overview"],
+  ["/systems/", "Systems"],
+  ["/flows/", "Flows"],
+  ["/tools/", "Tools"],
+  ["/numbers/", "Numbers"],
+  ["/code/", "Code"],
+];
+
+/** The section a path belongs to, for the bar's aria-current. @param {string} path */
+function sectionOf(path) {
+  if (path === "/") return "/";
+  if (/^\/s\/[^/]+\/code\//.test(path)) return "/code/";
+  if (path.startsWith("/s/")) return "/systems/";
+  return NAV.find(([href]) => href !== "/" && path.startsWith(href))?.[0] ?? "";
+}
+
 /**
  * The page around a body: one stylesheet set, one module script, no inline script or style,
- * so the policy in _headers needs no hash (src/security-headers.mjs).
- * @param {{ title: string, description: string, path: string, body: string, asOf: string, script?: boolean }} page
+ * so the policy in _headers needs no hash (src/security-headers.mjs). A wide page's sections
+ * set their own width, for the front page's full-bleed parts; any other page is one column.
+ * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean }} page
  */
-export function layout({ title, description, path, body, asOf, script = false }) {
+export function layout({ title, description, path, body, asOf, wide = false }) {
+  const here = sectionOf(path);
+  const nav = NAV.map(([href, label]) => `<a href="${href}"${href === here ? ' aria-current="page"' : ""}>${label}</a>`).join("");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -62,21 +87,49 @@ export function layout({ title, description, path, body, asOf, script = false })
 <link rel="stylesheet" href="/assets/capsomer.css">
 <link rel="stylesheet" href="/assets/enarratio.css">
 <link rel="stylesheet" href="/assets/explorer.css">
-${script ? '<script type="module" src="/assets/explorer.js"></script>\n' : ""}</head>
+<script type="module" src="/assets/explorer.js"></script>
+</head>
 <body>
 <a class="skip" href="#main">Skip to the content</a>
-<header class="top"><a class="home" href="/">Capsid explorer</a><a href="${SITE}/systems">The family on dustinedwards.info</a></header>
-<main id="main" tabindex="-1">
+<header class="top">
+<a class="home" href="/"><img src="/assets/icon.svg" alt="" width="28" height="28">Capsid</a>
+<nav class="top-nav" aria-label="Sections">${nav}</nav>
+<a class="top-search" href="/search/"${path === "/search/" ? ' aria-current="page"' : ""} data-search-open>Search<kbd aria-hidden="true">/</kbd></a>
+</header>
+<main id="main" tabindex="-1"${wide ? ' class="wide"' : ""}>
 ${body}
 </main>
-<footer class="foot"><p>From Capsid's public model and numbers of ${escapeHtml(asOf)}. Private systems show a name and an address only.</p></footer>
+${footer(asOf)}
 </body>
 </html>
 `;
 }
 
+/** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
+function footer(asOf) {
+  return `<footer class="foot">
+<div class="foot-tile foot-about"><p>Capsid runs Dustin Edwards's projects and the AI sessions that work on them. This site is built once a day from its public model and numbers.</p><p class="foot-small">Private systems show what their owner has made public, and never a repo. MIT licensed.</p></div>
+<nav class="foot-tile foot-nav" aria-label="Every section"><ul>${[...NAV, ["/search/", "Search"]].map(([href, label]) => `<li><a href="${href}">${label}</a></li>`).join("")}</ul></nav>
+<div class="foot-tile foot-day"><p>Data of</p><p class="foot-big">${escapeHtml(asOf)}</p><p class="foot-small">Whole days, ending at midnight UTC.</p></div>
+<div class="foot-tile foot-out"><p><a href="${SITE}/systems">The family on dustinedwards.info</a></p><p><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</p></div>
+<p class="foot-tile foot-mark" aria-hidden="true">Capsid</p>
+<a class="foot-tile foot-cta" href="https://github.com/DrDustinEdwards/capsid">Read the source<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true" focusable="false"><path d="M10 38 38 10M16 10h22v22" fill="none" stroke="currentColor" stroke-width="4"/></svg></a>
+</footer>`;
+}
+
+/**
+ * A page's heading block: the trail to it, its title and its lead sentence.
+ * @param {Array<[string, string]>} trail earlier pages as [href, name] @param {string} here @param {string} title @param {string} [lead] html
+ */
+export function pageHead(trail, here, title, lead) {
+  const crumbs = trail.length
+    ? `<nav class="crumbs" aria-label="Breadcrumb">${trail.map(([href, name]) => `<a href="${href}">${escapeHtml(name)}</a> / `).join("")}<span aria-current="page">${escapeHtml(here)}</span></nav>`
+    : "";
+  return `${crumbs}<h1>${title}</h1>${lead ? `<p class="lead">${lead}</p>` : ""}`;
+}
+
 /** The map's data, each system linking to its explorer page. */
-function mapData(/** @type {any} */ model) {
+export function mapData(/** @type {any} */ model) {
   return {
     systems: model.systems.map((/** @type {any} */ s) => ({
       id: s.id,
@@ -85,7 +138,7 @@ function mapData(/** @type {any} */ model) {
       ring: s.ring,
       private: s.private,
       tag: s.ring === "core" ? undefined : s.ring === "shared" ? "shared" : s.family,
-      description: s.private ? undefined : s.description,
+      description: s.description,
       domain: s.domain || undefined,
       href: systemPath(s.id),
     })),
@@ -116,117 +169,100 @@ export function connectionsOf(model, id) {
  * a screen reader names, rather than widening the page.
  * @param {string} id @param {string} inner @param {string} label
  */
-const scroller = (id, inner, label) => `<div class="scroller" id="${id}" role="region" aria-label="${escapeHtml(label)}" tabindex="0">${inner}</div>`;
+export const scroller = (id, inner, label) => `<div class="scroller" id="${id}" role="region" aria-label="${escapeHtml(label)}" tabindex="0">${inner}</div>`;
 
-const percent = (/** @type {number | null} */ rate) => (rate === null ? "not enough data yet" : `${Math.round(rate * 100)}%`);
-const minutes = (/** @type {number | null} */ m) => (m === null ? "not enough data yet" : m < 120 ? `${m} minutes` : `${Math.round(m / 60)} hours`);
+export const percent = (/** @type {number | null} */ rate) => (rate === null ? "not enough data yet" : `${Math.round(rate * 100)}%`);
+export const minutes = (/** @type {number | null} */ m) => (m === null ? "not enough data yet" : m < 120 ? `${m} minutes` : `${Math.round(m / 60)} hours`);
 
-/**
- * The daily numbers: each a sentence, a picture and the table behind it (section 4).
- * @param {any} stats
- */
-export function numbersHtml(stats) {
-  // Each week by its last whole day. as_of is the window's end, the midnight that starts it
-  // (src/public-stats.ts), so the last week ends the day before; each before it seven days earlier.
-  const end = new Date(Date.parse(`${stats.as_of}T00:00:00Z`) - 86_400_000);
-  const weeks = stats.jobs.completed_by_week.map((/** @type {number} */ count, /** @type {number} */ i, /** @type {number[]} */ all) => {
-    const day = new Date(end.getTime() - (all.length - 1 - i) * 7 * 86_400_000);
-    return { week: day.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }), jobs: count };
-  });
-  const total = stats.jobs.completed_by_week.reduce((/** @type {number} */ a, /** @type {number} */ b) => a + b, 0);
-  const perWeek = barChart({
-    id: "jobs-per-week",
-    data: weeks,
-    x: "week",
-    y: "jobs",
-    title: "Jobs completed per week",
-    xLabel: "week ending",
-    // Under Enarratio's 480 the drawing scales to a phone's width instead of scrolling inside
-    // a frame no keyboard can reach (axe, scrollable-region-focusable, on the phone project).
-    width: 440,
-    alt: `Jobs completed in each of the last eight whole weeks, oldest first: ${weeks.map((/** @type {any} */ w) => w.jobs).join(", ")}; ${total} in all.`,
-  });
-  /** A ring, its heading and its sentence: Enarratio's ring is a primitive, so the figure is ours. */
-  const ring = (/** @type {string} */ id, /** @type {string} */ title, /** @type {number} */ rate, /** @type {string} */ sentence) =>
-    `<figure class="ring" aria-labelledby="${id}-title"><h3 id="${id}-title">${escapeHtml(title)}</h3>${progressRing({ value: rate, max: 1, size: 112, alt: sentence })}<figcaption>${escapeHtml(sentence)}</figcaption></figure>`;
-  const rings = [];
-  if (stats.verification.agreement_rate_90d !== null) {
-    rings.push(ring("agreement", "Verification agreement", stats.verification.agreement_rate_90d, `In the last 90 days, ${percent(stats.verification.agreement_rate_90d)} of ${stats.verification.evaluations_90d} checked claims agreed with what GitHub records.`));
-  }
-  if (stats.sites.uptime_7d !== null) {
-    rings.push(ring("uptime", "Uptime, last 7 days", stats.sites.uptime_7d, `The ${stats.sites.watched} watched sites answered in ${percent(stats.sites.uptime_7d)} of ${stats.sites.slots_measured_7d} measured half-hours over the last seven days.`));
-  }
-  const rows = [
-    ["Jobs completed, last 7 days", stats.jobs.completed_7d],
-    ["Jobs completed, last 30 days", stats.jobs.completed_30d],
-    ["Jobs failed, last 30 days", stats.jobs.failed_30d],
-    ["Jobs open today", stats.jobs.open],
-    ["Jobs blocked today", stats.jobs.blocked],
-    ["Median time a job takes, last 30 days", minutes(stats.jobs.median_duration_minutes_30d)],
-    ["Pull requests merged, of those claimed, last 90 days", percent(stats.verification.pr_merge_rate_90d)],
-    ["CI green when claimed, last 90 days", percent(stats.verification.ci_green_rate_90d)],
-    ["Approval waits, last 30 days", stats.gates.waits_30d],
-    ["Median approval wait, last 30 days", minutes(stats.gates.median_wait_minutes_30d)],
-    ["Documents in the store", stats.store.documents],
-  ];
-  return `<section class="numbers" aria-labelledby="numbers-title">
-<h2 id="numbers-title">The daily numbers</h2>
-<p class="lead">Counts and rates across every project and agent, over whole days ending at midnight UTC on ${escapeHtml(stats.as_of)}. A rate over fewer than ten cases is left out.</p>
-<div class="charts">${perWeek}${rings.join("")}</div>
-${scroller("numbers-table", `<table class="cap-table numbers-table"><caption>Every number, as of ${escapeHtml(stats.as_of)}</caption><tbody>
-${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("\n")}
-</tbody></table>`, "Every number")}
-</section>`;
+/** A system's lines to other systems, grouped by what they say, for its page. @param {any} model @param {string} id */
+function connectionGroups(model, id) {
+  /** @type {Map<string, Array<{ id: string, name: string }>>} */
+  const groups = new Map();
+  for (const c of connectionsOf(model, id)) groups.set(c.verb, [...(groups.get(c.verb) ?? []), { id: c.id, name: c.name }]);
+  return groups;
 }
 
-/** @param {any} model @param {any} stats */
-export function homePage(model, stats) {
-  const privates = model.systems.filter((/** @type {any} */ s) => s.private).length;
-  const map = systemMapHtml(mapData(model), {
-    id: "family",
-    label: "The family of systems",
-    caption: "A capsid is the protein shell of a virus, built from repeated parts called capsomers. This family is built the same way: Capsid in the middle, the shared parts around it, what people use on the outside.",
-    headingLevel: 3,
-    openLabel: "Its page",
+/**
+ * One system and the systems it connects to, drawn by dagre at build: a wire for each
+ * relationship between any two of them, the chosen one marked. Hidden from assistive
+ * technology, since the list beside it says the same.
+ * @param {any} model @param {string} id
+ */
+function neighbourhood(model, id) {
+  const byId = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s]));
+  const near = new Set([id]);
+  for (const r of model.relationships) {
+    if (!byId.has(r.from) || !byId.has(r.to) || r.from === r.to) continue;
+    if (r.from === id) near.add(r.to);
+    if (r.to === id) near.add(r.from);
+  }
+  if (near.size < 2) return "";
+  return graphSvg({
+    id: `near-${id}`,
+    title: `${byId.get(id).name} and the ${near.size - 1} ${near.size === 2 ? "system" : "systems"} it connects to`,
+    boxes: [...near].map((x) => ({ id: x, label: byId.get(x).name, href: systemPath(x), lines: [], sub: RING_NAMES[/** @type {keyof typeof RING_NAMES} */ (byId.get(x).ring)], current: x === id })),
+    wires: model.relationships.filter((/** @type {any} */ r) => near.has(r.from) && near.has(r.to)).map((/** @type {any} */ r) => ({ from: r.from, to: r.to })),
   });
-  const body = `<h1>Capsid, inside and out</h1>
-<p class="lead">The ${model.systems.length} systems Dustin Edwards runs, how they connect, and what Capsid, the one in the middle, is made of. Choose a system to see its connections, or open its page. ${privates} are private and show a name and an address only.</p>
-<section aria-labelledby="family-title"><h2 id="family-title">The family</h2>${map}</section>
-${numbersHtml(stats)}`;
-  return layout({ title: "Capsid explorer", description: `The ${model.systems.length} systems Dustin Edwards runs, as a capsid, with Capsid's daily numbers.`, path: "/", body, asOf: stats.as_of, script: true });
+}
+
+/**
+ * A system's own parts and the lines between them, drawn by dagre: Capsomer's map draws only
+ * the core's insides, so every other system's parts are drawn this way.
+ * @param {any} model @param {any} s
+ */
+function partsDrawing(model, s) {
+  const parts = model.containers.filter((/** @type {any} */ c) => c.system === s.id);
+  if (parts.length < 2) return "";
+  const ids = new Set(parts.map((/** @type {any} */ c) => c.id));
+  return graphSvg({
+    id: `parts-${s.id}`,
+    title: `The parts of ${s.name} and the lines between them`,
+    boxes: parts.map((/** @type {any} */ c) => ({ id: c.id, label: c.name, href: partPath(c), lines: [], sub: c.technology })),
+    wires: model.relationships.filter((/** @type {any} */ r) => ids.has(r.from) && ids.has(r.to)).map((/** @type {any} */ r) => ({ from: r.from, to: r.to })),
+  });
 }
 
 /** @param {any} model @param {string} id @param {string} asOf @param {any[]} [maps] its code maps, if it has any */
 export function systemPage(model, id, asOf, maps = []) {
   const s = model.systems.find((/** @type {any} */ x) => x.id === id);
   if (!s) throw new Error(`no system ${id}`);
-  const links = connectionsOf(model, id);
+  const groups = connectionGroups(model, id);
   const parts = model.containers.filter((/** @type {any} */ c) => c.system === id);
+  const own = ownParts(parts);
+  const repos = !s.private && !s.hide_repo_link ? (s.repos ?? []) : [];
   const facts = [
     ["Ring", RING_NAMES[/** @type {keyof typeof RING_NAMES} */ (s.ring)]],
+    ["Kind", s.family],
     ...(s.domain ? [["Address", `<a href="https://${escapeHtml(s.domain)}">${escapeHtml(s.domain)}</a>`]] : []),
-    ...(!s.private && s.repos?.[0] ? [["Source", `<a href="${escapeHtml(s.repos[0])}">${escapeHtml(s.repos[0].replace(/^https:\/\//, ""))}</a>`]] : []),
+    ...(repos.length ? [["Source", repos.map((/** @type {string} */ r) => `<a href="${escapeHtml(r)}">${escapeHtml(r.replace(/^https:\/\//, ""))}</a>`).join("<br>")]] : []),
+    ["Visibility", s.private ? "Private" : "Public"],
+    ...(own.length ? [["Parts", `<a href="${containersPath(id)}">${own.length}</a>`]] : []),
+    ["Connections", String([...groups.values()].reduce((n, g) => n + g.length, 0))],
+    ...(maps.length ? [["Code", `<a href="${codePath(id)}">${escapeHtml(codeSummary(maps))}</a>`]] : []),
   ];
+  const lead = s.description ? escapeHtml(s.description) : s.private ? (s.domain ? "Private: its name and address only." : "Private: its name only.") : "";
   const map = systemMapHtml(mapData(model), { id: "family", label: "The family", headingLevel: 3, openLabel: "Its page" });
-  const body = `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Capsid explorer</a> / <span aria-current="page">${escapeHtml(s.name)}</span></nav>
-<h1>${escapeHtml(s.name)}</h1>
-<p class="lead">${s.private ? (s.domain ? "Private: its name and address only." : "Private: its name only.") : escapeHtml(s.description ?? "")}</p>
+  const drawing = s.ring === "core" ? "" : partsDrawing(model, s);
+  const body = `${pageHead([["/", "Overview"], ["/systems/", "Systems"]], s.name, escapeHtml(s.name), lead)}
+<div class="system-top">
 <dl class="facts">${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${v}</dd>`).join("")}</dl>
-<p class="out"><a href="${sitePath(id)}">${escapeHtml(s.name)} on dustinedwards.info</a></p>
-${parts.length ? `<p><a href="${containersPath(id)}">Inside ${escapeHtml(s.name)}: its ${ownParts(parts).length} parts and how they connect</a></p>` : ""}
-${maps.length ? `<p><a href="${codePath(id)}">Its code: ${escapeHtml(codeSummary(maps))}</a></p>` : ""}
+<p class="out"><a class="arrow" href="${sitePath(id)}">${escapeHtml(s.name)} on dustinedwards.info</a></p>
+</div>
+${own.length ? `<section aria-labelledby="inside-title"><h2 id="inside-title">Inside ${escapeHtml(s.name)}</h2>
+<p class="section-sub">Its ${own.length} parts: ${own.map((/** @type {any} */ c) => `<a href="${partPath(c)}">${escapeHtml(c.name)}</a>`).join(", ")}. <a href="${containersPath(id)}">Inside ${escapeHtml(s.name)}: its ${own.length} parts and how they connect</a>.</p>
+${drawing}</section>` : ""}
 <section aria-labelledby="links-title"><h2 id="links-title">Connections</h2>
-${links.length ? `<ul>${links.map((c) => `<li>${escapeHtml(c.verb)} <a href="${systemPath(c.id)}">${escapeHtml(c.name)}</a></li>`).join("")}</ul>` : "<p>None drawn.</p>"}
+${groups.size ? `<div class="links-grid"><dl class="links">${[...groups].map(([verb, list]) => `<div><dt>${escapeHtml(verb)}</dt><dd>${list.map((c) => `<a href="${systemPath(c.id)}">${escapeHtml(c.name)}</a>`).join(", ")}</dd></div>`).join("")}</dl>${neighbourhood(model, id)}</div>` : "<p>None drawn.</p>"}
 </section>
-${s.private ? "" : flowLinks(model, id)}
+${flowLinks(model, id)}
+${maps.length ? riskiest(id, maps) : ""}
 <section aria-labelledby="family-title"><h2 id="family-title">In the family</h2><div class="map-host" data-chosen="${escapeHtml(id)}">${map}</div></section>`;
   return layout({
-    title: `${s.name}, in the Capsid explorer`,
-    description: s.private ? `${s.name} is private.` : (s.description ?? s.name),
+    title: `${s.name}, Capsid`,
+    description: s.description ?? (s.private ? `${s.name} is private.` : s.name),
     path: systemPath(id),
     body,
     asOf,
-    script: true,
   });
 }
 
@@ -241,18 +277,16 @@ const ownParts = (parts) => parts.filter((c) => c.kind !== "external");
 export function containersPage(model, id, asOf) {
   const s = model.systems.find((/** @type {any} */ x) => x.id === id);
   const parts = model.containers.filter((/** @type {any} */ c) => c.system === id);
-  if (!s || s.private || parts.length === 0) throw new Error(`no containers page for ${id}`);
+  if (!s || parts.length === 0) throw new Error(`no containers page for ${id}`);
   const own = ownParts(parts);
   const outside = parts.filter((/** @type {any} */ c) => c.kind === "external");
   const byId = new Map(parts.map((/** @type {any} */ c) => [c.id, c]));
   const wires = model.relationships.filter((/** @type {any} */ r) => byId.has(r.from) && byId.has(r.to));
-  // Capsomer's map draws the core's insides only, so another system's parts are the table and
-  // the list, with no drawing that would show the core's.
-  const drawn = s.ring === "core";
-  const map = drawn ? systemMapHtml(mapData(model), { id: "family", label: `Inside ${s.name}`, headingLevel: 3 }) : "";
-  const body = `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Capsid explorer</a> / <a href="${systemPath(id)}">${escapeHtml(s.name)}</a> / <span aria-current="page">Inside</span></nav>
-<h1>Inside ${escapeHtml(s.name)}</h1>
-<p class="lead">Its ${own.length} parts, what each runs on, and the lines between them: the containers of the C4 model, inside the system's boundary${outside.length ? `, and the ${outside.length} it works with outside it` : ""}.</p>
+  // Capsomer's map draws the core's insides only; every other system's parts are drawn by dagre.
+  const core = s.ring === "core";
+  const map = core ? systemMapHtml(mapData(model), { id: "family", label: `Inside ${s.name}`, headingLevel: 3 }) : "";
+  const body = `${pageHead([["/", "Overview"], ["/systems/", "Systems"], [systemPath(id), s.name]], "Inside", `Inside ${escapeHtml(s.name)}`, `Its ${own.length} parts, what each runs on, and the lines between them: the containers of the C4 model, inside the system's boundary${outside.length ? `, and the ${outside.length} it works with outside it` : ""}.`)}
+${core ? `<section aria-labelledby="drawing-title"><h2 id="drawing-title">The drawing</h2><div class="map-host" data-chosen="${escapeHtml(id)}" data-enter>${map}</div></section>` : partsDrawing(model, s)}
 ${scroller("parts", `<table class="cap-table"><caption>The parts of ${escapeHtml(s.name)}</caption>
 <thead><tr><th scope="col">Part</th><th scope="col">Kind</th><th scope="col">Runs on</th><th scope="col">What it does</th></tr></thead>
 <tbody>${own.map((/** @type {any} */ c) => `<tr id="part-${escapeHtml(c.id)}"><th scope="row">${escapeHtml(c.name)}</th><td>${escapeHtml(c.kind)}</td><td>${escapeHtml(c.technology)}</td><td>${escapeHtml(c.description ?? "")}</td></tr>`).join("")}</tbody></table>`, `The parts of ${s.name}`)}
@@ -260,11 +294,45 @@ ${outside.length ? `<section aria-labelledby="outside-title"><h2 id="outside-tit
 <ul>${outside.map((/** @type {any} */ c) => `<li id="part-${escapeHtml(c.id)}"><strong>${escapeHtml(c.name)}</strong> (${escapeHtml(c.technology)})${c.description ? `: ${escapeHtml(c.description)}` : ""}</li>`).join("")}</ul>
 </section>` : ""}
 <section aria-labelledby="wires-title"><h2 id="wires-title">How they connect</h2>
-${wires.length ? `<ul>${wires.map((/** @type {any} */ r) => `<li>${escapeHtml(byId.get(r.from).name)} ${escapeHtml(VERB[/** @type {keyof typeof VERB} */ (r.kind)]?.[0] ?? r.kind)} ${escapeHtml(byId.get(r.to).name)}</li>`).join("")}</ul>` : "<p>None drawn.</p>"}
+${wires.length ? `<ul class="wires">${wires.map((/** @type {any} */ r) => `<li>${escapeHtml(byId.get(r.from).name)} <span class="verb">${escapeHtml(VERB[/** @type {keyof typeof VERB} */ (r.kind)]?.[0] ?? r.kind)}</span> ${escapeHtml(byId.get(r.to).name)}</li>`).join("")}</ul>` : "<p>None drawn.</p>"}
 </section>
-${flowLinks(model, id)}
-${drawn ? `<section aria-labelledby="drawing-title"><h2 id="drawing-title">The drawing</h2><div class="map-host" data-chosen="${escapeHtml(id)}" data-enter>${map}</div></section>` : ""}`;
-  return layout({ title: `Inside ${s.name}, in the Capsid explorer`, description: `The parts of ${s.name} and how they connect.`, path: containersPath(id), body, asOf, script: drawn });
+${flowLinks(model, id)}`;
+  return layout({ title: `Inside ${s.name}, Capsid`, description: `The parts of ${s.name} and how they connect.`, path: containersPath(id), body, asOf });
+}
+
+/** The page of every system: the capsid drawing, and a table to sort and filter. @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf */
+export function systemsPage(model, bySystem, asOf) {
+  const map = systemMapHtml(mapData(model), {
+    id: "family",
+    label: "The family of systems",
+    caption: "A capsid is the protein shell of a virus, built from repeated parts called capsomers. This family is built the same way: Capsid in the middle, the shared parts around it, what people use on the outside.",
+    headingLevel: 2,
+    openLabel: "Its page",
+  });
+  const count = (/** @type {string} */ id) => connectionsOf(model, id).length;
+  const modules = (/** @type {string} */ id) => (bySystem.get(id) ?? []).reduce((n, m) => n + m.modules.length, 0);
+  const rows = model.systems
+    .map(
+      (/** @type {any} */ s) => `<tr data-item data-kinds="${escapeHtml(s.ring)}${s.private ? " private" : ""}" data-text="${escapeHtml(`${s.name} ${s.domain ?? ""} ${s.family} ${s.description ?? ""}`.toLowerCase())}"><th scope="row"><a href="${systemPath(s.id)}">${escapeHtml(s.name)}</a></th><td>${escapeHtml(RING_NAMES[/** @type {keyof typeof RING_NAMES} */ (s.ring)])}</td><td>${escapeHtml(s.family)}</td><td>${s.domain ? escapeHtml(s.domain) : ""}</td><td data-sort="${ownParts(model.containers.filter((/** @type {any} */ c) => c.system === s.id)).length}">${ownParts(model.containers.filter((/** @type {any} */ c) => c.system === s.id)).length}</td><td data-sort="${count(s.id)}">${count(s.id)}</td><td data-sort="${modules(s.id)}">${modules(s.id) || ""}</td><td>${s.private ? "Private" : "Public"}</td></tr>`
+    )
+    .join("");
+  const chips = [["all", "All"], ["core", "Runs everything"], ["shared", "Shared parts"], ["used", "What people use"], ["private", "Private"]];
+  const privates = model.systems.filter((/** @type {any} */ s) => s.private).length;
+  const body = `${pageHead([["/", "Overview"]], "Systems", "The family of systems", `The ${model.systems.length} systems Dustin Edwards runs, how they connect, and what Capsid, the one in the middle, is made of. Choose a system to draw its connections, or open its page.${privates ? ` ${privates} are private.` : ""}`)}
+<section aria-labelledby="family-title">${map}</section>
+<section aria-labelledby="table-title"><h2 id="table-title">Every system</h2>
+<div class="filter-bar" data-filter="systems" hidden>
+<label class="cap-sr-only" for="sys-q">Filter the systems</label>
+<input class="cap-input" id="sys-q" type="search" placeholder="Filter by name, address or kind" autocomplete="off" data-filter-q>
+<div class="chips" role="group" aria-label="Show">${chips.map(([k, label], i) => `<button type="button" class="cap-btn" data-size="sm" data-chip="${k}" aria-pressed="${i ? "false" : "true"}">${label}</button>`).join("")}</div>
+<p class="hint" role="status" data-filter-count></p>
+</div>
+${scroller("systems-table", `<table class="cap-table" data-sortable><caption>Every system, with its parts, connections and measured modules</caption>
+<thead><tr><th scope="col">System</th><th scope="col">Ring</th><th scope="col">Kind</th><th scope="col">Address</th><th scope="col">Parts</th><th scope="col">Connections</th><th scope="col">Modules</th><th scope="col">Visibility</th></tr></thead>
+<tbody>${rows}</tbody></table>`, "Every system")}
+<p class="hint" data-filter-empty hidden>No system matches that.</p>
+</section>`;
+  return layout({ title: "Systems, Capsid", description: `The ${model.systems.length} systems Dustin Edwards runs, as a capsid, and how they connect.`, path: "/systems/", body, asOf });
 }
 
 /**
@@ -344,7 +412,7 @@ function stepList(f, current) {
  * a box). Throws when the markup it marks is not there, so a change in Capsomer fails the build.
  * @param {string} html @param {Step} st
  */
-function markStep(html, st) {
+export function markStep(html, st) {
   const root = '<figure class="cap-system-map" data-cap="system-map"';
   if (!html.includes(root)) throw new Error("the map's root is not where the flow page marks it");
   let on = 0;
@@ -362,12 +430,29 @@ function markStep(html, st) {
 
 /** A flow's own page: what it is and every step. @param {Flow} f @param {string} asOf */
 export function flowPage(f, asOf) {
-  const body = `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Capsid explorer</a> / <span aria-current="page">${escapeHtml(f.name)}</span></nav>
-<h1>${escapeHtml(f.name)}</h1>
-<p class="lead">${escapeHtml(f.description ?? `${f.steps.length} steps.`)}</p>
-<p><a href="${stepPath(f.id, 1)}">Start at step 1 of ${f.steps.length}</a></p>
+  const body = `${pageHead([["/", "Overview"], ["/flows/", "Flows"]], f.name, escapeHtml(f.name), escapeHtml(f.description ?? `${f.steps.length} steps.`))}
+<p><a class="cap-btn" data-variant="primary" href="${stepPath(f.id, 1)}">Start at step 1 of ${f.steps.length}</a></p>
 <section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${stepList(f)}</section>`;
-  return layout({ title: `${f.name}, in the Capsid explorer`, description: f.description ?? f.name, path: flowPath(f.id), body, asOf });
+  return layout({ title: `${f.name}, Capsid`, description: f.description ?? f.name, path: flowPath(f.id), body, asOf });
+}
+
+/** Every flow, with what it touches and its first steps. @param {any} model @param {string} asOf */
+export function flowsIndexPage(model, asOf) {
+  const flows = flowsOf(model);
+  const names = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s.name]));
+  const body = `${pageHead([["/", "Overview"]], "Flows", "What runs, step by step", `${flows.length} walks over the model, each step riding a line the map really has. Play one to see its token travel Capsid's parts.`)}
+<ul class="flow-cards">${flows
+    .map((f) => {
+      const systems = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.system)))];
+      const parts = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.name)))];
+      return `<li class="flow-card"><h2><a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a></h2>
+<p>${escapeHtml(f.description ?? "")}</p>
+<p class="hint">${f.steps.length} steps over ${parts.length} parts of ${systems.map((x) => escapeHtml(String(names.get(x) ?? x))).join(", ")}.</p>
+<ol class="bands">${f.steps.map((st) => `<li><a href="${stepPath(f.id, st.n)}"><span class="band-text">${escapeHtml(st.text)}</span><span class="band-parts">${st.touches.map((p) => escapeHtml(p.name)).join(", ")}</span></a></li>`).join("")}</ol>
+<p><a class="cap-btn" data-variant="primary" href="${stepPath(f.id, 1)}">Play it</a></p></li>`;
+    })
+    .join("")}</ul>`;
+  return layout({ title: "Flows, Capsid", description: "What Capsid runs, step by step: a job's life, the nightly backup and a Carrel publish.", path: "/flows/", body, asOf });
 }
 
 /**
@@ -414,31 +499,31 @@ export function stepPage(model, f, n, asOf) {
     n > 1 ? `<a rel="prev" href="${stepPath(f.id, n - 1)}" data-go="${n - 1}">Back<span class="cap-sr-only">: step ${n - 1}</span></a>` : "",
     n < total ? `<a rel="next" href="${stepPath(f.id, n + 1)}" data-go="${n + 1}">Next<span class="cap-sr-only">: step ${n + 1}</span></a>` : "",
   ].join("");
-  const body = `<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Capsid explorer</a> / <a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a> / <span aria-current="page">Step ${n}</span></nav>
-<h1>${escapeHtml(f.name)}</h1>
+  // Play steps through on its own; the script shows it, since without script there is nothing to play.
+  const play = drawn ? `<button class="cap-btn" type="button" data-autoplay hidden>Play</button>` : "";
+  const body = `${pageHead([["/", "Overview"], ["/flows/", "Flows"], [flowPath(f.id), f.name]], `Step ${n}`, escapeHtml(f.name))}
 <section class="flow-step" data-swap="step" aria-labelledby="step-title">
 <div class="flow-stack">${f.steps.map((x) => stepText(x, total, systems, x.n === n)).join("")}</div>
-<nav class="flow-nav" aria-label="Steps">${nav}</nav>
+<nav class="flow-nav" aria-label="Steps">${nav}${play}</nav>
 </section>
 ${drawn ? `<section aria-labelledby="drawing-title"><h2 id="drawing-title">The drawing</h2><p class="hint" data-keys hidden>Number keys 1 to ${Math.min(total, 9)} go to that step.</p><div class="map-host flow-map" data-flow="${escapeHtml(f.id)}" data-step="${n}" data-steps="${total}">${map}</div></section>` : ""}
 <section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${stepList(f, n)}</section>`;
   return layout({
-    title: `${f.name}, step ${n} of ${total}, in the Capsid explorer`,
+    title: `${f.name}, step ${n} of ${total}, Capsid`,
     description: st.text,
     path: stepPath(f.id, n),
     body,
     asOf,
-    script: drawn,
   });
 }
 
 /** @param {string} asOf */
 export function notFoundPage(asOf) {
   return layout({
-    title: "Not found, Capsid explorer",
+    title: "Not found, Capsid",
     description: "No page here.",
     path: "/404",
-    body: `<h1>Nothing here</h1><p class="lead">There is no page at this address. The <a href="/">explorer's front page</a> lists every system.</p>`,
+    body: `<h1>Nothing here</h1><p class="lead">There is no page at this address. <a href="/systems/">Every system</a> is listed, and <a href="/search/">search</a> finds the rest.</p>`,
     asOf,
   });
 }
@@ -449,22 +534,37 @@ export function notFoundPage(asOf) {
  * system with a code map, and the 404.
  * @param {any} model @param {any} stats @param {any} [code] the public code document
  * @param {(repo: string, path: string) => string | undefined} [sourceOf] a module's source at its map's commit
+ * @param {any[]} [tools] the served tools (src/surface.mjs)
  * @returns {Array<[string, string]>}
  */
-export function allPages(model, stats, code = null, sourceOf = () => undefined) {
+export function allPages(model, stats, code = null, sourceOf = () => undefined, tools = []) {
   const asOf = stats.as_of;
   const bySystem = codeBySystem(model, code);
+  const totals = codeTotals(model, bySystem);
   /** @type {Array<[string, string]>} */
-  const pages = [["/", homePage(model, stats)]];
+  const pages = [
+    ["/", homePage(model, stats, tools, totals)],
+    ["/systems/", systemsPage(model, bySystem, asOf)],
+    ["/flows/", flowsIndexPage(model, asOf)],
+    ["/numbers/", numbersPage(stats)],
+    ["/code/", codeIndexPage(model, bySystem, totals, asOf)],
+    ["/search/", searchPage(asOf)],
+  ];
+  // A system's parts are published only when the privacy filter let them through, so a private
+  // system has a parts page exactly when the public model gives it parts.
   for (const s of model.systems) {
     pages.push([systemPath(s.id), systemPage(model, s.id, asOf, bySystem.get(s.id))]);
-    if (!s.private && model.containers.some((/** @type {any} */ c) => c.system === s.id)) pages.push([containersPath(s.id), containersPage(model, s.id, asOf)]);
+    if (model.containers.some((/** @type {any} */ c) => c.system === s.id)) pages.push([containersPath(s.id), containersPage(model, s.id, asOf)]);
   }
   for (const f of flowsOf(model)) {
     pages.push([flowPath(f.id), flowPage(f, asOf)]);
     for (const st of f.steps) pages.push([stepPath(f.id, st.n), stepPage(model, f, st.n, asOf)]);
   }
+  pages.push(...toolPages(tools, asOf));
   pages.push(...codePages(model, bySystem, sourceOf, asOf));
   pages.push(["/404", notFoundPage(asOf)]);
   return pages;
 }
+
+/** The search index: every page worth finding, as the search page's script reads it. @param {any} model @param {any} code @param {any[]} tools */
+export const searchDocument = (model, code, tools) => searchIndex(model, codeBySystem(model, code), flowsOf(model), tools);

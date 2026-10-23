@@ -50,15 +50,6 @@ test("only a public system's repos are read, and a repo with no map is left out"
   PublicCodeSchema.parse(doc);
 });
 
-test("a system the model keeps private is never read, even when GitHub says its repo is public", async () => {
-  const model = bundledModel();
-  const hidden = { ...model, systems: model.systems.map((s) => (s.id === "d1-dump" ? { ...s, public: false } : s)) };
-  const { reads, read } = only({ "DrDustinEdwards/d1-dump": sampleMap() });
-  const doc = await buildPublicCode(env, hidden, privacy, "2026-10-17", read);
-  assert.deepEqual(doc.maps, []);
-  assert.ok(!reads.includes("DrDustinEdwards/d1-dump"));
-});
-
 test("PLANT: a field the schema does not name never reaches the document", async () => {
   const planted = sampleMap();
   (planted as { secret?: string }).secret = "CANARY-7f3e";

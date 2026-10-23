@@ -5,7 +5,7 @@
 import { expect, test } from "@playwright/test";
 import { eachTheme, expectNoAxeViolations } from "capsomer/testing";
 
-const PAGES = ["/", "/s/hub/", "/s/hub/containers/", "/s/kit/", "/s/theme/code/", "/s/theme/code/src/index.ts/", "/s/vault/", "/s/gone/", "/flows/sample-round/", "/flows/sample-round/1/", "/flows/sample-round/2/", "/nope"];
+const PAGES = ["/", "/systems/", "/flows/", "/tools/", "/tools/capsid_work_jobs/", "/numbers/", "/code/", "/search/", "/s/hub/", "/s/hub/containers/", "/s/kit/", "/s/theme/code/", "/s/theme/code/src/index.ts/", "/s/vault/", "/s/gone/", "/flows/sample-round/", "/flows/sample-round/1/", "/flows/sample-round/2/", "/nope"];
 
 /**
  * Every console error, page error and policy violation the page raises. A failed load is one
@@ -60,7 +60,7 @@ eachTheme((theme) => {
 
   test("keyboard: the map is one tab stop, and Enter on the core twice goes inside", async ({ page }) => {
     const problems = await watch(page);
-    await page.goto("/");
+    await page.goto("/systems/");
     const map = page.locator(".cap-system-map");
     await expect(map).toHaveAttribute("data-cap-ready", "");
     await expect(map.locator(".cap-system-map-tile[tabindex='0']")).toHaveCount(1);
@@ -88,7 +88,7 @@ eachTheme((theme) => {
   });
 
   test("behaviour: nothing is wider than a phone's screen", async ({ page }) => {
-    for (const path of ["/s/hub/containers/", "/", "/flows/sample-round/2/"]) {
+    for (const path of ["/s/hub/containers/", "/", "/systems/", "/tools/", "/numbers/", "/code/", "/flows/sample-round/2/"]) {
       await page.goto(path);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), path).toBe(true);
     }
