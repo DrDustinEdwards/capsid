@@ -41,6 +41,17 @@ function parseJson(body: string): Record<string, unknown> | Refusal {
   }
 }
 
+// A signed run request's common head: a JSON object with a jti and a run_id.
+function runRequest(body: string): { r: Record<string, unknown>; jti: string; runId: string } | Refusal {
+  const r = parseJson(body);
+  if (refused(r)) return r;
+  const jti = jtiOf(r);
+  if (refused(jti)) return jti;
+  const runId = text(r, "run_id", 64);
+  if (refused(runId)) return runId;
+  return { r, jti, runId };
+}
+
 export interface BenchTask {
   task_id: string;
   source: (typeof SOURCES)[number];
@@ -131,6 +142,17 @@ export function parseDrawRequest(body: string): ({ ok: true } & DrawRequest) | R
   };
 }
 
+// The harness's receipt for a treatment run's reproduction test (src/bench.ts handleBenchRepro).
+export function parseReproRequest(body: string): { ok: true; jti: string; run_id: string; passed: boolean; reason: string } | Refusal {
+  const head = runRequest(body);
+  if (refused(head)) return head;
+  const { r, jti, runId } = head;
+  if (typeof r.passed !== "boolean") return { ok: false, refusal: "passed must be true or false" };
+  const reason = text(r, "reason", 1000);
+  if (refused(reason)) return reason;
+  return { ok: true, jti, run_id: runId, passed: r.passed, reason };
+}
+
 export function parseStartRequest(body: string): { ok: true; jti: string; task_id: string; arm: Arm; gh_run: string } | Refusal {
   const r = parseJson(body);
   if (refused(r)) return r;
@@ -214,12 +236,9 @@ function usageOf(raw: unknown): BenchUsage | Refusal {
 }
 
 export function parseScoreRequest(body: string): { ok: true; jti: string; report: ScoreRequest } | Refusal {
-  const r = parseJson(body);
-  if (refused(r)) return r;
-  const jti = jtiOf(r);
-  if (refused(jti)) return jti;
-  const runId = text(r, "run_id", 64);
-  if (refused(runId)) return runId;
+  const head = runRequest(body);
+  if (refused(head)) return head;
+  const { r, jti, runId } = head;
   // Only an explicit ok: false is an environment failure, as in the improve scorer.
   // Here that is also the safe direction: an environment failure leaves a run unjudged,
   // and no count is read from a report that has one.

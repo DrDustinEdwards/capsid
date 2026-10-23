@@ -1,5 +1,5 @@
 import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, handlePublicDocument } from "./public-data";
-import { BENCH_DRAW_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
+import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
 import { getCookie, hmacHex } from "./auth";
@@ -439,6 +439,7 @@ export const defaultHandler = {
     if (url.pathname === BENCH_TASKS_PATH && request.method === "POST") return handleBenchTasks(request, env);
     if (url.pathname === BENCH_DRAW_PATH && request.method === "POST") return handleBenchDraw(request, env);
     if (url.pathname === BENCH_START_PATH && request.method === "POST") return handleBenchStart(request, env);
+    if (url.pathname === BENCH_REPRO_PATH && request.method === "POST") return handleBenchRepro(request, env);
     if (url.pathname === BENCH_SCORE_PATH && request.method === "POST") return handleBenchScore(request, env);
     if (url.pathname === "/authorize" && request.method === "GET") return handleAuthorizeGet(request, env);
     if (url.pathname === "/authorize" && request.method === "POST") return handleAuthorizePost(request, env);

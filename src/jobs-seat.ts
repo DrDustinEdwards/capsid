@@ -20,7 +20,8 @@ import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from ".
 import { signJobText } from "./job-signing";
 import { commandFromSummary, completeAsSeat, completeJob, completeWithoutClaim, failJob, recordAsSeat } from "./jobs-holder";
 import { actorKind, touchStatement } from "./job-touches";
-import { parseClaim, reproductionRefusal, type ClaimInput, type ClaimRaw } from "./job-claims";
+import type { ClaimInput, ClaimRaw } from "./job-claims";
+import { readReproReceipt } from "./bench-run-key";
 import {
   actorShapeRefusal,
   callerIsSeat,
@@ -274,16 +275,22 @@ export async function completeAsCaller(
   // An argument completeJob refuses before it reads anything is refused the same way here.
   if (!args.result_summary?.trim()) return completeJob(env, agent, now, id, args);
   // A bench run proves the fix before it may call its job done (the methods paper's
-  // protocol, section 2): a test that failed before the fix and passes after it. Without
-  // one, "not done, here's why" is the outcome the job asks for, and fail records it.
+  // protocol, section 2): the harness ran the test the agent named on the base and on
+  // its diff, and saw it fail and then pass (src/bench-run-key.ts readReproReceipt). What
+  // the agent says about its own test counts for nothing. Without that receipt, "not
+  // done, here's why" is the outcome the job asks for, and fail records it.
   if (agent.benchRun) {
-    const parsed = parseClaim(args.claim);
-    const missing = "error" in parsed ? parsed.error : reproductionRefusal(parsed.claim);
+    const receipt = await readReproReceipt(env.DB, agent.benchRun.run);
+    const missing = !receipt
+      ? "the harness has no check of a reproduction test for this run (name the test with bench-repro before phase one ends)"
+      : receipt.passed
+      ? null
+      : `the harness's check of your reproduction test did not pass: ${receipt.reason}`;
     if (missing) {
       return refuse(
         "complete",
-        `${id} was not completed: ${missing}. A bench run completes its job only with a test that failed before the fix and passes after it. ` +
-          `If you cannot show that, call fail with the reason; "not done, here's why" is a good outcome.`
+        `${id} was not completed: ${missing}. A bench run completes its job only when the harness saw its test fail on the base and pass on its diff. ` +
+          `Call fail with the reason instead; "not done, here's why" is a good outcome.`
       );
     }
   }
