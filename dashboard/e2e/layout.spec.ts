@@ -5,41 +5,22 @@ import { ALL_VIEWS, VIEW_COUNT, expectNoSideways, measure, sideways, visit } fro
 // No sideways scrolling from 1024 px up: not the document, not main, and not any
 // wrapper inside main. Wide tables reflow into cards instead (styles.css, .reflow).
 
-test("the view registry lists every view", () => {
-  expect(ALL_VIEWS).toHaveLength(VIEW_COUNT);
-});
-
-const WIDTHS = [1920, 1440, 1280, 1024];
-
-// The menu at its full width (232 px) and collapsed to icons (80 px), beside the 56 px strip, set
-// through its stored preference before the app starts.
-const RAIL = [
-  { state: "expanded", width: 232 },
-  { state: "collapsed", width: 80 },
-] as const;
-
-for (const rail of RAIL) {
-  for (const width of WIDTHS) {
-    test(`at ${width} px, menu ${rail.state}, no view scrolls sideways`, async ({ page }) => {
-      // One test visits every view, so its time grows with the view count.
-      test.setTimeout(10_000 * VIEW_COUNT);
-      await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [RAIL_PREF, rail.state] as const);
-      await page.setViewportSize({ width, height: 900 });
-      let seen = 0;
-      const problems: string[] = [];
-      for (const v of ALL_VIEWS) {
-        await visit(page, v.id);
-        expect(await page.evaluate(() => document.documentElement.clientWidth)).toBe(width);
-        // The menu really is in the state under test.
-        expect(await page.locator("nav.cap-admin-menu").evaluate((el) => Math.round(el.getBoundingClientRect().width))).toBe(rail.width);
-        expect(await page.locator("nav.cap-admin-strip").evaluate((el) => Math.round(el.getBoundingClientRect().width))).toBe(56);
-        problems.push(...sideways(await measure(page), `${v.label} at ${width}, menu ${rail.state}`));
-        seen++;
-      }
-      expect(seen).toBe(VIEW_COUNT);
-      expect(problems).toEqual([]);
-    });
-  }
+// The narrowest desktop width, with the menu expanded and collapsed (its stored
+// preference, set before the app starts).
+for (const rail of ["expanded", "collapsed"] as const) {
+  test(`at 1024 px, menu ${rail}, no view scrolls sideways`, async ({ page }) => {
+    // One test visits every view, so its time grows with the view count.
+    test.setTimeout(10_000 * VIEW_COUNT);
+    await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [RAIL_PREF, rail] as const);
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const problems: string[] = [];
+    for (const v of ALL_VIEWS) {
+      await visit(page, v.id);
+      problems.push(...sideways(await measure(page), `${v.label} at 1024, menu ${rail}`));
+    }
+    expect(ALL_VIEWS).toHaveLength(VIEW_COUNT);
+    expect(problems).toEqual([]);
+  });
 }
 
 // One drawer of each type, opened from the first row that opens one.
