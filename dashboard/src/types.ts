@@ -11,22 +11,16 @@ export type {
   PortalClaimsJob,
 } from "../../src/ops-types/claims";
 export type {
-  Inbox,
   SharedCodeApp,
   SharedCodePackage,
   SharedCodeView,
   InboxApp,
   InboxItem,
-  InboxKind,
   OpsAgent,
   OpsAwaitingSeat,
   OpsCanonProposal,
   OpsFeed,
-  OpsFinding,
   OpsJob,
-  OpsJobStatus,
-  OpsLive,
-  OpsPr,
   OpsSession,
   OpsTask,
   OpsTaskRun,
@@ -43,7 +37,6 @@ export type {
 } from "../../src/ops-types/portal";
 export type {
   CfDeploy,
-  CheckState,
   CiObservation,
   HourBucket,
   OpsPackageConfig,
@@ -57,13 +50,10 @@ export type {
 } from "../../src/ops-types/sites";
 export type {
   LibraryEntry,
-  LibraryHit,
   LibraryShelf,
   PortalLibrary,
   PortalTrends,
   TrendCiRepo,
-  TrendCostWeek,
-  TrendMinutesWeek,
   PortalStale,
   PortalPush,
   PortalPlan,
@@ -72,7 +62,6 @@ export type {
   PortalConvergence,
   ConvergenceSite,
   ConvergenceCheck,
-  SecretPresence,
   OpsMaintenanceItem,
   MaintenanceRule,
   OpsStaleJob,

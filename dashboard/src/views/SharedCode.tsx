@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
@@ -6,6 +5,7 @@ import { fetchSharedCode } from "../lib/api";
 import { ago, ms } from "../lib/format";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "../types";
 import { St } from "../ui/icons";
+import { useAnswer } from "./shared";
 
 // SHARED CODE (job_584b4e7f2824): how far the centralization has got. One panel per shared
 // package from configuration (shared_packages), each app that uses it with the tag it
@@ -14,23 +14,9 @@ import { St } from "../ui/icons";
 // keeps the answer for an hour. Nothing here changes anything. The Packages view (npm
 // statistics) stays as it is.
 
-type Load = { data: SharedCodeView | null; loading: boolean; error: string | null };
-
 export function SharedCode() {
-  const { now, signOut } = useApp();
-  const [load, setLoad] = useState<Load>({ data: null, loading: true, error: null });
-  useEffect(() => {
-    let alive = true;
-    void fetchSharedCode().then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
-      if (r.kind === "signed-out") return signOut();
-      setLoad({ data: null, loading: false, error: r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message });
-    });
-    return () => {
-      alive = false;
-    };
-  }, [signOut]);
+  const { now } = useApp();
+  const load = useAnswer<SharedCodeView>(fetchSharedCode, []);
   const data = load.data;
   return (
     <div className="embedded">

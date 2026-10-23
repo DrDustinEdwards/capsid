@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { HealthSnapshot } from "./ops-types/sites";
 import { probeFts } from "./store-probe";
 import { aiSearchUsage } from "./doc-index";
 import { HOUR_MS } from "./time";
@@ -64,15 +65,7 @@ async function probeBindings(env: Env): Promise<{ media: string; app_kv: string 
   return { media, app_kv };
 }
 
-export interface HealthReport {
-  status: "ok" | "degraded";
-  sha: string;
-  dirty: boolean;
-  builtAt: string | null;
-  schema_version: string | null;
-  store: { d1: string; fts: string };
-  bindings: { media: string; app_kv: string };
-  backup: { last_ok: string | null; age_hours: number | null; warning?: string };
+export interface HealthReport extends HealthSnapshot {
   // Capsid's own hybrid searches this month against its cap (design-hybrid-search 3.5).
   // Informational; null when KV cannot be read, absent from snapshots taken before it.
   ai_search?: { month: string; hybrid: number; cap: number } | null;

@@ -74,7 +74,7 @@ export interface LibraryEntry {
   updated_at: string;
 }
 
-export interface LibraryHit extends LibraryEntry {
+interface LibraryHit extends LibraryEntry {
   // FTS5's snippet: each matched word between U+0002 and U+0003 (LIBRARY_MARK_OPEN and
   // LIBRARY_MARK_CLOSE in src/portal-library.ts), gaps as " ... ".
   snippet: string;

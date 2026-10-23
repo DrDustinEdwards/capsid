@@ -4,24 +4,24 @@ import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregat
 
 // Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
 // workers.dev, /api/... on portal.dustinedwards.info.
-export const FEED_URL = `${BASE}/api/ops`;
-export const REFRESH_URL = `${BASE}/api/ops/refresh`;
-export const PREVIEW_URL = `${BASE}/api/actions/preview`;
-export const PERFORM_URL = `${BASE}/api/actions/perform`;
-export const NAMESPACES_URL = `${BASE}/api/namespaces`;
-export const ACTIVITY_URL = `${BASE}/api/activity`;
-export const CLAIMS_URL = `${BASE}/api/claims`;
-export const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
-export const SHARED_CODE_URL = `${BASE}/api/shared-code`;
-export const LIBRARY_URL = `${BASE}/api/library`;
-export const TRENDS_URL = `${BASE}/api/trends`;
-export const STALE_URL = `${BASE}/api/stale`;
-export const PLAN_URL = `${BASE}/api/plan`;
-export const DIGEST_URL = `${BASE}/api/digest`;
-export const MAINTENANCE_URL = `${BASE}/api/maintenance`;
-export const CONVERGENCE_URL = `${BASE}/api/convergence`;
-export const SIGN_OUT_URL = `${BASE}/api/sign-out`;
-export const PUSH_URL = `${BASE}/api/push`;
+const FEED_URL = `${BASE}/api/ops`;
+const REFRESH_URL = `${BASE}/api/ops/refresh`;
+const PREVIEW_URL = `${BASE}/api/actions/preview`;
+const PERFORM_URL = `${BASE}/api/actions/perform`;
+const NAMESPACES_URL = `${BASE}/api/namespaces`;
+const ACTIVITY_URL = `${BASE}/api/activity`;
+const CLAIMS_URL = `${BASE}/api/claims`;
+const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
+const SHARED_CODE_URL = `${BASE}/api/shared-code`;
+const LIBRARY_URL = `${BASE}/api/library`;
+const TRENDS_URL = `${BASE}/api/trends`;
+const STALE_URL = `${BASE}/api/stale`;
+const PLAN_URL = `${BASE}/api/plan`;
+const DIGEST_URL = `${BASE}/api/digest`;
+const MAINTENANCE_URL = `${BASE}/api/maintenance`;
+const CONVERGENCE_URL = `${BASE}/api/convergence`;
+const SIGN_OUT_URL = `${BASE}/api/sign-out`;
+const PUSH_URL = `${BASE}/api/push`;
 export const APP_URL = `${BASE}/`;
 export const POLL_MS = 60_000;
 
@@ -144,7 +144,7 @@ async function answer<T>(res: Response, forbidden: boolean): Promise<Answer<T>> 
 
 // How long a control waits for the Worker before it says so. A request with no answer
 // would otherwise leave the dialog busy, with every button disabled and nothing said.
-export const ACTION_TIMEOUT_MS = 20_000;
+const ACTION_TIMEOUT_MS = 20_000;
 
 async function post<T>(url: string, csrf: string, body: unknown, timeoutMs = ACTION_TIMEOUT_MS): Promise<Answer<T>> {
   const abort = new AbortController();

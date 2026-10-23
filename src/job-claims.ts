@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { EvidenceVerdict, JobEvidence } from "./job-outcomes";
 import { bounded } from "./limits";
+import type { JobClaimRow as StoredClaimRow } from "./ops-types/claims";
 
 // WHAT THE AGENT SAID, kept apart from what the Worker verified (migrations/0023).
 //
@@ -153,34 +154,9 @@ export function rawJson(raw: ClaimRaw): string {
   });
 }
 
-export type ClaimAction = "complete" | "fail" | "block";
-
-export interface JobClaimRow {
-  job_id: string;
-  action: ClaimAction;
-  agent: string;
-  namespace: string;
-  raw: string;
-  prs_opened_urls: string | null;
-  prs_merged_urls: string | null;
-  prs_opened: number | null;
-  prs_merged: number | null;
-  commits: number | null;
-  files_changed: number | null;
-  tests_added: number | null;
-  tests_run: number | null;
-  tests_passed: number | null;
-  tests_failed: number | null;
-  tests_result: string | null;
-  deploy_state: string | null;
-  files_touched: string | null;
-  model_id: string | null;
-  client_name: string | null;
-  client_version: string | null;
-  permission_mode: string | null;
-  capsid_sha: string | null;
-  recorded_at: string;
-}
+// The row as inserted: the stored row (src/ops-types/claims.ts) before D1 gives it an id.
+export type JobClaimRow = Omit<StoredClaimRow, "id">;
+type ClaimAction = JobClaimRow["action"];
 
 const listColumn = (list: readonly string[] | undefined): string | null => (list === undefined ? null : JSON.stringify([...list]));
 

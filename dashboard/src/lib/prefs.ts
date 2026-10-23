@@ -21,7 +21,7 @@ export function writePref(key: string, value: string): void {
   }
 }
 
-export function removePref(key: string): void {
+function removePref(key: string): void {
   try {
     localStorage.removeItem(key);
   } catch (e) {
@@ -51,12 +51,12 @@ function subscribe(l: () => void): () => void {
 
 const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-export function themeChoice(): ThemeChoice {
+function themeChoice(): ThemeChoice {
   const t = document.documentElement.getAttribute("data-theme");
   return t === "light" || t === "dark" ? t : "system";
 }
 
-export function currentTheme(): Theme {
+function currentTheme(): Theme {
   const t = themeChoice();
   if (t !== "system") return t;
   return systemDark() ? "dark" : "light";
@@ -101,17 +101,12 @@ export function useThemeChoice(): ThemeChoice {
   return useSyncExternalStore(subscribeTheme, themeChoice);
 }
 
-/** Whether dark is in effect, from a saved choice or from the system. */
-export function useDarkTheme(): boolean {
-  return useSyncExternalStore(subscribeTheme, () => currentTheme() === "dark");
-}
-
 // Single-key shortcuts ("g" then a letter, "j", "t", ...): on unless turned off. Held
 // in memory too, so a failed write still holds for this page load.
-export const SINGLE_KEYS_PREF = "wf-single-keys";
+const SINGLE_KEYS_PREF = "wf-single-keys";
 let singleKeys: boolean | null = null;
 
-export function singleKeysOn(): boolean {
+function singleKeysOn(): boolean {
   if (singleKeys === null) singleKeys = readPref(SINGLE_KEYS_PREF) !== "off";
   return singleKeys;
 }

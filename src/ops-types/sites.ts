@@ -4,7 +4,7 @@
 // from the app. Changing a field here changes both sides, and both typecheck against it.
 
 export type ProbeState = "ok" | "degraded" | "liveness" | "down";
-export type CheckState = "clear" | "finding" | "could-not-run";
+type CheckState = "clear" | "finding" | "could-not-run";
 
 export interface SiteProbe {
   namespace: string;
@@ -117,7 +117,7 @@ export interface SiteOperator {
   secrets: string[];
 }
 
-interface HealthSnapshot {
+export interface HealthSnapshot {
   status: "ok" | "degraded";
   sha: string;
   dirty: boolean;

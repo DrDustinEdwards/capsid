@@ -286,21 +286,9 @@ async function livePrs(db: D1Database, now: Date): Promise<OpsPr[]> {
   }));
 }
 
-export interface SessionFeedRow {
-  session_id: string;
-  agent: string;
-  job_id: string | null;
-  namespace: string | null;
-  source: string | null;
-  model: string | null;
-  permission_mode: string | null;
-  started_at: string;
-  last_event_at: string;
-  last_event: string;
-  last_notification_type: string | null;
-  needs_input: number;
-  last_failure: string | null;
-}
+// The row as D1 holds it: needs_input is SQLite's 0 or 1, and the incident is decided
+// when the feed is read.
+export type SessionFeedRow = Omit<OpsSession, "needs_input" | "incident"> & { needs_input: number };
 
 /** A session as the feed shows it, with its incident decided now: a failure a person
  *  must act on, or input awaited for more than ten minutes (src/ops-hooks.ts). */

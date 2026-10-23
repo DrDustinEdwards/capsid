@@ -25,7 +25,7 @@ export function canApprove(a: OpsAwaitingSeat): a is OpsAwaitingSeat & { head_sh
   return (a.class === "approve" || a.class === "auto") && typeof a.head_sha === "string" && a.head_sha.length > 0;
 }
 
-export function approveItem(a: OpsAwaitingSeat & { head_sha: string }): BatchItem {
+function approveItem(a: OpsAwaitingSeat & { head_sha: string }): BatchItem {
   return { action: "approve_pr", params: { namespace: a.namespace, repo: a.repo, prs: String(a.number), shas: a.head_sha }, label: prName(a) };
 }
 

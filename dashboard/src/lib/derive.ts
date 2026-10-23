@@ -95,9 +95,9 @@ export const JOB: Record<OpsJob["status"], { kind: Kind; label: string }> = {
   parked: { kind: "nodata", label: "Parked" },
 };
 
-export const OPEN_STATUSES: ReadonlyArray<OpsJob["status"]> = ["queued", "claimed", "blocked"];
+const OPEN_STATUSES: ReadonlyArray<OpsJob["status"]> = ["queued", "claimed", "blocked"];
 
-export function isOpen(j: OpsJob): boolean {
+function isOpen(j: OpsJob): boolean {
   return OPEN_STATUSES.includes(j.status);
 }
 
@@ -133,8 +133,8 @@ export function passStale(snap: OpsSnapshot | null, now: number): boolean {
 
 // ---- needs attention ----------------------------------------------------------
 
-export type Sev = "crit" | "warn" | "nodata";
-export type OpenRef = string; // "site:<key>" | "job:<id>" | "agent:<name>" | "view:<id>"
+type Sev = "crit" | "warn" | "nodata";
+type OpenRef = string; // "site:<key>" | "job:<id>" | "agent:<name>" | "view:<id>"
 
 export interface Attention {
   sev: Sev;
@@ -323,10 +323,10 @@ function worstFirst(a: { sev: Sev; at: number }, b: { sev: Sev; at: number }): n
 // attentionItems lists them: a failure is critical, a session waiting on input a
 // warning. The tier follows from the severity, so any new row lands in the right one.
 
-export type Tier = "problem" | "notice";
-export type GroupKey = "blocked" | "pr-seat" | "silent";
+type Tier = "problem" | "notice";
+type GroupKey = "blocked" | "pr-seat" | "silent";
 
-export function tierOf(a: { sev: Sev }): Tier {
+function tierOf(a: { sev: Sev }): Tier {
   return a.sev === "nodata" ? "notice" : "problem";
 }
 
@@ -460,7 +460,7 @@ const HOT = /^(probe|down|mirror|backup)/;
 
 // A session incident in plain words, named by the job's title, not its id: the id is in
 // the job's drawer (D11). Shared by Incidents and Needs attention.
-export function sessionIncidentTitle(s: OpsSession, job: OpsJob | undefined): string {
+function sessionIncidentTitle(s: OpsSession, job: OpsJob | undefined): string {
   const who = job ? `"${job.title}"` : agentLabel(s.agent);
   return s.incident === "failure" ? `Session for ${who} stopped: ${s.last_failure ?? "unknown"}` : `Session for ${who} is waiting on input`;
 }

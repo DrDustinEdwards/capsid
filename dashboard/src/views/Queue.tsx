@@ -1,5 +1,5 @@
 import { ChartSlot } from "../ui/Enar";
-import { lazy, useEffect, useState } from "react";
+import { lazy, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { fetchStale } from "../lib/api";
@@ -10,7 +10,7 @@ import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
-import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
+import { FilterEmpty, NsChips, PageHead, QueueRows, useAnswer, useNsFilter, type Load } from "./shared";
 import { Tonight } from "./Overnight";
 
 // Chart 3, whether the queue is growing or draining, from GET /portal/api/trends. Lazy, so
@@ -65,30 +65,16 @@ const STALE_RULE: Record<StaleRule, string> = {
   unchanged: "Unchanged 3 days",
 };
 
-type StaleLoad = { data: PortalStale | null; loading: boolean; error: string | null };
+type StaleLoad = Load<PortalStale>;
 
 // The stale view (capsid/research/design-stale-jobs.md): GET /portal/api/stale, the same
 // rows `jobs` list with stale: true returns. Read when the Queue opens and again with
 // each feed, so a resume or a close performed from the drawer drops its row.
 function useStale(): { load: StaleLoad; reread: () => void } {
-  const { feed, signOut } = useApp();
-  const [load, setLoad] = useState<StaleLoad>({ data: null, loading: true, error: null });
+  const { feed } = useApp();
   const [tick, setTick] = useState(0);
   const generated = feed.live.generated;
-  useEffect(() => {
-    let alive = true;
-    setLoad((l) => ({ ...l, loading: true }));
-    void fetchStale().then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
-      if (r.kind === "signed-out") return signOut();
-      const message = r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message;
-      setLoad((l) => ({ ...l, loading: false, error: message }));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [generated, tick, signOut]);
+  const load = useAnswer(fetchStale, [generated, tick]);
   return { load, reread: () => setTick((t) => t + 1) };
 }
 

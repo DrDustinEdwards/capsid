@@ -1,9 +1,10 @@
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type DependencyList, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
+import type { Answer } from "../lib/api";
 import { JOB, PROBE, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
 import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
@@ -37,6 +38,32 @@ export function PageHead({ title }: { title: string }) {
 // A view's namespace filter: its own, in the address as ?ns=<namespace>, so picking one
 // on Incidents leaves Sites alone, and a filtered view can be reloaded or shared. "all"
 // when absent. Other query parameters are kept.
+export type Load<T> = { data: T | null; loading: boolean; error: string | null };
+
+// One Portal route, read again whenever deps change. A new read keeps what is on screen
+// and marks it loading; a failed read keeps it too and says why; a session that ended
+// signs out.
+export function useAnswer<T>(read: () => Promise<Answer<T>>, deps: DependencyList): Load<T> {
+  const { signOut } = useApp();
+  const [load, setLoad] = useState<Load<T>>({ data: null, loading: true, error: null });
+  useEffect(() => {
+    let alive = true;
+    setLoad((l) => ({ ...l, loading: true }));
+    void read().then((r) => {
+      if (!alive) return;
+      if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
+      if (r.kind === "signed-out") return signOut();
+      const message = r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message;
+      setLoad((l) => ({ ...l, loading: false, error: message }));
+    });
+    return () => {
+      alive = false;
+    };
+    // read is rebuilt each render; deps say when it asks for something else.
+  }, [...deps, signOut]);
+  return load;
+}
+
 export function useNsFilter(): [string, (ns: string) => void] {
   const search = useSearch();
   const [location, navigate] = useLocation();
@@ -98,7 +125,7 @@ export function NoSnapshot() {
 
 // ---- fleet table -------------------------------------------------------------------------
 
-export function LiveDeployCell({ s }: { s: SiteSnapshot }) {
+function LiveDeployCell({ s }: { s: SiteSnapshot }) {
   const { now } = useApp();
   const cf = cfOk(s);
   if (!cf) return <NoData brief reason={cfShort(s.cloudflare) ?? ""} />;
@@ -115,7 +142,7 @@ export function LiveDeployCell({ s }: { s: SiteSnapshot }) {
   );
 }
 
-export function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
+function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
   const cf = cfOk(s);
   if (!cf) return <NoData brief reason={cfShort(s.cloudflare) ?? ""} />;
   if (!cf.errors24) return <NoData brief reason="the analytics read failed" />;
@@ -137,7 +164,7 @@ export function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
 // column header says so once; each cell says "No data" (design D18).
 const BACKUP_LIMIT_HOURS = 26;
 
-export function BackupCell({ s }: { s: SiteSnapshot }) {
+function BackupCell({ s }: { s: SiteSnapshot }) {
   const { feed } = useApp();
   const backup = s.namespace === "capsid" ? feed.snapshot?.health?.backup : undefined;
   if (!backup) return <NoData brief reason="not reported by the site" />;

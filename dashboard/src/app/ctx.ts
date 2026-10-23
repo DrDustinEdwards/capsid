@@ -56,12 +56,7 @@ export function healthTab(name: string | null | undefined): HealthTab | null {
 
 export type ViewId = (typeof VIEWS)[number]["id"];
 
-// The views on offer: every one. Packages stays with no npm package configured, since its
-// Shared tab is always there; Settings is where the first site and package are added.
 export type ViewDef = (typeof VIEWS)[number];
-export function viewsFor(): ReadonlyArray<ViewDef> {
-  return VIEWS;
-}
 export type DrawerType = "site" | "job" | "agent" | "audit";
 
 export function isView(v: string | undefined): v is ViewId {
