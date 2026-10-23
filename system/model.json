@@ -117,6 +117,16 @@
       "repos": ["DrDustinEdwards/julieedwards-info"]
     },
     {
+      "id": "foxing",
+      "name": "Foxing",
+      "short": "Foxing",
+      "family": "product",
+      "ring": "used",
+      "description": "A reading app and web platform, Letterboxd for books: a web app, an Expo phone reader and a Discord Activity for reading clubs.",
+      "domain": "foxing.app",
+      "repos": ["DrDustinEdwards/foxing"]
+    },
+    {
       "id": "foxhound-mcp",
       "name": "Foxhound Admin",
       "short": "Hound MCP",
@@ -135,16 +145,6 @@
       "description": "Recovers failed Stripe payments, handles disputes and reports subscription health for merchants, and is paid only on money it recovers.",
       "domain": "foxhoundapp.com",
       "repos": ["DrDustinEdwards/foxhound"]
-    },
-    {
-      "id": "foxing",
-      "name": "Foxing",
-      "short": "Foxing",
-      "family": "product",
-      "ring": "used",
-      "description": "A reading app and web platform, Letterboxd for books: a web app, an Expo phone reader and a Discord Activity for reading clubs.",
-      "domain": "foxing.app",
-      "repos": ["DrDustinEdwards/foxing"]
     },
     {
       "id": "foxing-mcp",
