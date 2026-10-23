@@ -77,16 +77,6 @@
       "repos": ["DrDustinEdwards/dustinedwards-info"]
     },
     {
-      "id": "dustinedwards-info",
-      "name": "dustinedwards.info",
-      "short": "Website",
-      "family": "site",
-      "ring": "used",
-      "description": "Dustin's personal site.",
-      "domain": "dustinedwards.info",
-      "repos": ["DrDustinEdwards/dustinedwards-info"]
-    },
-    {
       "id": "germomics",
       "name": "Germomics",
       "short": "Germomics",
@@ -95,6 +85,16 @@
       "description": "A podcast and writing site about microbiology and history, with interactive virus and bacteria data pages and browser games.",
       "domain": "germomics.com",
       "repos": ["DrDustinEdwards/germomics"]
+    },
+    {
+      "id": "dustinedwards-info",
+      "name": "dustinedwards.info",
+      "short": "Dustin",
+      "family": "site",
+      "ring": "used",
+      "description": "Dustin's personal site.",
+      "domain": "dustinedwards.info",
+      "repos": ["DrDustinEdwards/dustinedwards-info"]
     },
     {
       "id": "txasm",
@@ -109,7 +109,7 @@
     {
       "id": "julieedwards-info",
       "name": "julieedwards.info",
-      "short": "Julie's site",
+      "short": "Julie",
       "family": "site",
       "ring": "used",
       "description": "Julie Edwards's campaign site for the Bluff Dale ISD school board. Its copy lives in D1 and is edited through Carrel.",
