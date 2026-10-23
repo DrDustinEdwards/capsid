@@ -13,6 +13,7 @@ import "@fontsource/martian-mono/latin-600.css";
 // Capsomer: its layer order and tokens first, then its components (all in the cap.* layers, so
 // the app's unlayered styles win), then the app's styles.
 import "capsomer/tokens.css";
+import "capsomer/site-capsid.css";
 import "capsomer/status.css";
 import "capsomer/panel.css";
 import "capsomer/empty.css";
