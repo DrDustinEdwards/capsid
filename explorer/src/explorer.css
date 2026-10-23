@@ -13,99 +13,10 @@ body {
   color: var(--text);
 }
 
-.skip {
-  position: absolute;
-  inset-inline-start: -999px;
-}
-.skip:focus {
-  inset-inline-start: var(--space-4);
-  inset-block-start: var(--space-4);
-  z-index: var(--z-overlay);
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-}
-
-/* Links in the accent; a button that is a link keeps Capsomer's colours, which sit in a layer
-   an unlayered rule would beat. */
-:where(a:not(.cap-btn)) {
+/* Links in the accent; a button that is a link, and Capsomer's header, keep Capsomer's
+   colours, which sit in a layer an unlayered rule would beat. */
+:where(main, .foot) :where(a:not(.cap-btn)) {
   color: var(--accent-text);
-}
-
-/* The bar: the wordmark, the sections, and search. */
-.top {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: var(--z-sticky);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
-  align-items: center;
-  padding: var(--space-3) var(--gutter);
-  background: var(--surface);
-}
-.home {
-  display: inline-flex;
-  gap: var(--space-2);
-  align-items: center;
-  color: var(--text);
-  font-weight: 700;
-  font-size: 1.125rem;
-  text-decoration: none;
-}
-.top-nav {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-.top-nav a,
-.top-search {
-  display: inline-flex;
-  gap: var(--space-2);
-  align-items: center;
-  min-block-size: 36px;
-  padding-inline: var(--space-3);
-  border-radius: var(--radius-m);
-  color: var(--text);
-  text-decoration: none;
-  transition: background-color var(--dur-fast) var(--ease-out);
-}
-.top-nav a:hover,
-.top-search:hover {
-  background: var(--sunken);
-}
-.top-nav a[aria-current],
-.top-search[aria-current] {
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-weight: 600;
-}
-.top-search kbd {
-  padding: 0 6px;
-  border-radius: var(--radius-s);
-  background: var(--sunken);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.8125rem;
-}
-@media (max-width: 52rem) {
-  .top {
-    position: static;
-  }
-  .top-nav a {
-    padding-inline: var(--space-2);
-  }
-  .top-nav {
-    order: 3;
-    flex-basis: 100%;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    margin-inline: calc(-1 * var(--gutter));
-    padding-inline: var(--gutter);
-  }
-  .top-search {
-    margin-inline-start: auto;
-  }
 }
 
 /* One column for every page but the front, whose sections set their own width. */

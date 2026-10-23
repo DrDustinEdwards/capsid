@@ -6,11 +6,15 @@
 import { controller } from "./system-map.js";
 import { enhance as enhanceTabs } from "./tabs.js";
 import { enhance as enhanceCharts } from "./enhance.js";
+import { enhance as enhanceHeader } from "./capsomer/site-header/site-header.js";
+import { enhance as enhanceTheme, toggleTheme } from "./capsomer/theme-switch/theme-switch.js";
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const STEP_MS = 3600;
 
 document.documentElement.classList.add("js");
+enhanceHeader();
+enhanceTheme();
 
 for (const root of document.querySelectorAll("[data-cap='system-map']")) {
   if (root.hasAttribute("data-cap-ready")) continue;
@@ -296,10 +300,12 @@ for (const table of document.querySelectorAll("table[data-sortable]")) {
   });
 }
 
-// "/" from anywhere goes to search, or focuses its field there.
+// "/" from anywhere goes to search, or focuses its field there; "t" switches the theme.
 document.addEventListener("keydown", (e) => {
-  if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+  if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
   if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  if (e.key === "t") return toggleTheme();
+  if (e.key !== "/") return;
   e.preventDefault();
   const field = document.querySelector("[data-search]");
   if (field) field.focus();

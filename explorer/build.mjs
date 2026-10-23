@@ -148,6 +148,12 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
     "components/system-map/system-map.css",
     "components/tabs/tabs.css",
     "components/field/field.css",
+    "components/popover/popover.css",
+    "components/tooltip/tooltip.css",
+    "components/dialog/dialog.css",
+    "components/theme-switch/theme-switch.css",
+    "components/site-header/site-header.css",
+    "tokens/site-capsid.css",
   ]
     .map((rel) => inlineCss(join(capsomer, rel)))
     .join("\n");
@@ -158,6 +164,12 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   const systemMap = join(capsomer, "dist", "components", "system-map");
   for (const file of readdirSync(systemMap).filter((name) => name.endsWith(".js"))) copyFileSync(join(systemMap, file), join(assets, file));
   copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(assets, "tabs.js"));
+  // The header's modules keep their folders, because they import each other by "../name/".
+  for (const name of ["site-header", "theme-switch", "dialog", "popover", "tooltip", "shell"]) {
+    mkdirSync(join(assets, "capsomer", name), { recursive: true });
+    copyFileSync(join(capsomer, "dist", "components", name, `${name}.js`), join(assets, "capsomer", name, `${name}.js`));
+  }
+  copyFileSync(join(here, "src", "theme.js"), join(assets, "theme.js"));
   copyFileSync(require.resolve("enarratio/enhance"), join(assets, "enhance.js"));
   copyFileSync(join(here, "src", "explorer.js"), join(assets, "explorer.js"));
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
