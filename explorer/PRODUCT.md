@@ -38,7 +38,7 @@ The site is prerendered once a day from three public documents: the model, the s
 
 ## Brand Commitments
 
-Capsid is presented as a tool any team can run, not as a portrait of Dustin's own projects; the look is not built on the virus metaphor (Dustin, 2026-10-24). The look is a distribution board: every tool is a circuit and every grant a breaker, near-black panels on grey, one mint for what is live and the one action, square corners, Bricolage Grotesque throughout. The README's stance holds: Capsid is not supported for third-party use, and Installation describes how to run a separate instance.
+Capsid is presented as a tool any team can run, not as a portrait of Dustin's own projects; the look is not built on the virus metaphor (Dustin, 2026-10-24). The look is a distribution board: every tool is a circuit and every grant a breaker, deep purple panels on the purple family's neutrals, Capsomer's purple family throughout, its lighter purples lit and glowing for what is live and the one action, square corners, Capsomer's Schibsted Grotesk throughout. The README's stance holds: Capsid is not supported for third-party use, and Installation describes how to run a separate instance.
 
 ## Evidence on Hand
 

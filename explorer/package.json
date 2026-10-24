@@ -10,7 +10,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
-    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/schibsted-grotesk": "^5.3.0",
     "capsomer": "github:DrDustinEdwards/capsomer#v0.14.0",
     "enarratio": "0.1.0-alpha.8"
   },

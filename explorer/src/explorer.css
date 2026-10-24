@@ -1,85 +1,65 @@
 /* The explorer's own look on Capsomer's tokens (assets/capsomer.css): a distribution board.
    Every tool is a circuit and every grant a breaker; the breaker's slot and handle is the one
-   shape, at every scale. The enclosure's greys are the ground, near-black the ink, and one mint,
-   the colour of a live circuit, marks what is on and the one action. Capsomer's forest family
-   (data-family on <html>) gives the green ramp, the statuses and the series; the neutrals are
-   set here. Surfaces are told apart by a step in tone, never by a line or a shadow. Unlayered,
+   shape, at every scale. Every colour is Capsomer's purple family (data-family on <html>), as
+   for the Portal: its neutrals are the ground, its deepest purple the panel, and its lighter
+   purples the lamp, which marks what is live and the one action. A lit lamp glows in the
+   ramp's brightest steps. Surfaces are told apart by a step in tone, never by a line. Unlayered,
    so these win over Capsomer's layers. */
 @font-face {
-  font-family: "Bricolage Grotesque";
+  font-family: "Schibsted Grotesk";
   font-style: normal;
-  font-weight: 200 800;
+  font-weight: 400 900;
   font-display: swap;
-  src: url("/assets/bricolage.woff2") format("woff2-variations");
+  src: url("/assets/schibsted.woff2") format("woff2-variations");
 }
 :root {
   --page: 80rem;
   --gutter: clamp(16px, 3vw, 32px);
   --section: clamp(96px, 11vw, 200px);
-  --face: "Bricolage Grotesque", system-ui, sans-serif;
-  --ui: var(--face);
-  --prose: var(--face);
+  /* Capsomer's own face (--ui), self-hosted below, for headings and running text alike. */
+  --face: var(--ui);
+  --prose: var(--ui);
   --radius-s: 0;
   --radius-m: 0;
   --radius-l: 0;
-  --mint: #a1ffcb;
-  --mint-ink: #10140f;
-  --panel: #171916;
-  --panel-raised: #23261f;
-  --panel-ink: #eef0ea;
-  }
+  /* The purple ramp's steps, by number: the lamp is light 8, its ink light 12; a lit lamp
+     burns at dark 11 with a halo of dark 10; the panel is light 12, raised dark 4. */
+  --lamp: #b29ae3;
+  --lamp-ink: #1d162c;
+  --lamp-lit: #c6b1f2;
+  --lamp-glow: 0 0 6px 1px rgb(155 110 227 / 0.9), 0 0 18px 4px rgb(155 110 227 / 0.45);
+  --panel: #1d162c;
+  --panel-raised: #2c243c;
+  --panel-ink: #ede8f7;
+}
 :root[data-family] {
-  --ground: #e8e9e5;
-  --surface: #f3f4f1;
-  --raised: #fafaf8;
-  --sunken: #d9dbd5;
-  --line: #c6c9c1;
-  --text: #161815;
-  --muted: #545850;
-  --dim: #545850;
-  --primary: var(--mint);
-  --primary-hover: #7ff0b0;
-  --primary-fg: var(--mint-ink);
+  --primary: var(--lamp);
+  --primary-hover: #c8b6ed;
+  --primary-fg: var(--lamp-ink);
   --header-bg: var(--ground);
   --bar: var(--text);
 }
 @media (prefers-color-scheme: dark) {
   :root[data-family]:not([data-theme="light"]) {
-    --ground: #10120f;
-    --surface: #181a17;
-    --raised: #20231f;
-    --sunken: #0a0b09;
-    --line: #30342e;
-    --text: #eef0ea;
-    --muted: #a3a99e;
-    --dim: #a3a99e;
-    --accent-text: var(--mint);
-    --primary: var(--mint);
-    --primary-hover: #c6ffdf;
-    --primary-fg: var(--mint-ink);
-    --panel: #050604;
-    --panel-raised: #1a1d18;
-    --bar: var(--mint);
+    --accent-text: var(--lamp);
+    --primary: var(--lamp);
+    --primary-hover: #c6b1f2;
+    --primary-fg: var(--lamp-ink);
+    --panel: #0e0c11;
+    --panel-raised: #211c2c;
+    --bar: var(--lamp);
   }
 }
 :root[data-family][data-theme="dark"] {
-  --ground: #10120f;
-  --surface: #181a17;
-  --raised: #20231f;
-  --sunken: #0a0b09;
-  --line: #30342e;
-  --text: #eef0ea;
-  --muted: #a3a99e;
-  --dim: #a3a99e;
-  --accent-text: var(--mint);
-  --primary: var(--mint);
-  --primary-hover: #c6ffdf;
-  --primary-fg: var(--mint-ink);
-  --panel: #050604;
-  --panel-raised: #1a1d18;
-  --bar: var(--mint);
+  --accent-text: var(--lamp);
+  --primary: var(--lamp);
+  --primary-hover: #c6b1f2;
+  --primary-fg: var(--lamp-ink);
+  --panel: #0e0c11;
+  --panel-raised: #211c2c;
+  --bar: var(--lamp);
 }
-/* Enarratio's charts on the board's colours: ink bars and rings in light, mint in dark. Enarratio sets its
+/* Enarratio's charts on the board's colours: ink bars and rings in light, the lamp's purple in dark. Enarratio sets its
    variables on the chart itself, so these name the chart under the html element to win. */
 html .enarratio,
 html .enarratio-tooltip {
@@ -290,10 +270,10 @@ html:not(.js) .breakers {
   transition: background-color var(--dur-fast) var(--ease-out);
 }
 .breaker:hover {
-  background: #2d3129;
+  background: #372c4b;
 }
 .breaker:focus-visible {
-  outline: 3px solid var(--mint);
+  outline: 3px solid var(--lamp);
   outline-offset: 2px;
 }
 /* The breaker: a slot and its handle, which sits up when the grant is on. */
@@ -303,26 +283,27 @@ html:not(.js) .breakers {
   display: block;
   inline-size: 28px;
   block-size: 56px;
-  background: #050604;
+  background: #0e0c11;
 }
 .breaker-handle {
   position: absolute;
   inset-inline: 4px;
   inset-block-start: 26px;
   block-size: 26px;
-  background: #5b6156;
-  transition: transform var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out);
+  background: #584976;
+  transition: transform var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 .breaker[aria-pressed="true"] .breaker-handle {
   transform: translateY(-22px);
-  background: var(--mint);
+  background: var(--lamp-lit);
+  box-shadow: var(--lamp-glow); /* taste-skill-ignore: a lit lamp's light, not a raised surface */
 }
 .breaker-name {
   font-weight: 650;
   font-size: 1.0625rem;
 }
 .breaker-does {
-  color: #b5bbb0;
+  color: #c8b6ed;
   font-size: 0.875rem;
   line-height: 1.3;
 }
@@ -346,18 +327,19 @@ html:not(.js) .breakers {
   align-items: baseline;
   padding: 10px var(--space-3);
   background: var(--panel-raised);
-  color: #9aa094;
+  color: #a99fc0;
   text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-base) var(--ease-out);
 }
 .circuit a:hover {
-  background: #2d3129;
+  background: #372c4b;
 }
 .circuit a:focus-visible {
-  outline: 3px solid var(--mint);
+  outline: 3px solid var(--lamp);
   outline-offset: 0;
 }
-/* The lamp: dark when the circuit is dead, mint when live, half lit when only some actions are. */
+/* The lamp: dark when the circuit is dead, lit and glowing when live, half lit when only some
+   actions are. */
 .lamp {
   grid-row: span 2;
   align-self: center;
@@ -365,20 +347,22 @@ html:not(.js) .breakers {
   block-size: 24px;
   display: flex;
   align-items: end;
-  background: #050604;
-  transition: background-color var(--dur-base) var(--ease-out);
+  background: #0e0c11;
+  transition: background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 .circuit[data-on] a {
   color: var(--panel-ink);
 }
 .circuit[data-on="full"] .lamp {
-  background: var(--mint);
+  background: var(--lamp-lit);
+  box-shadow: var(--lamp-glow); /* taste-skill-ignore: a lit lamp's light */
 }
 .circuit[data-on="part"] .lamp::after {
   content: "";
   inline-size: 100%;
   block-size: 50%;
-  background: var(--mint);
+  background: var(--lamp-lit);
+  box-shadow: var(--lamp-glow); /* taste-skill-ignore: a lit lamp's light */
 }
 .circuit-name {
   font-weight: 600;
@@ -489,7 +473,7 @@ html:not(.js) .chapter {
 }
 .chapter.is-on h3::before,
 html:not(.js) .chapter h3::before {
-  background: var(--mint);
+  background: var(--lamp);
 }
 .chapter p {
   max-width: 44ch;
@@ -523,8 +507,8 @@ html:not(.js) .chapter h3::before {
   font-size: 0.9375rem;
 }
 .chapter.is-on .part-name {
-  background: var(--mint);
-  color: var(--mint-ink);
+  background: var(--lamp);
+  color: var(--lamp-ink);
   font-weight: 600;
 }
 .chapter .chapter-link {
@@ -633,11 +617,11 @@ html:not(.js) .chapter h3::before {
   grid-column: 1 / span 6;
   grid-row: 1 / span 3;
   min-block-size: 70vh;
-  background: var(--mint);
-  color: var(--mint-ink);
+  background: var(--lamp);
+  color: var(--lamp-ink);
 }
 :where(main) a.tile-tall {
-  color: var(--mint-ink);
+  color: var(--lamp-ink);
 }
 .tile-ink {
   grid-column: 7 / span 3;
@@ -874,8 +858,8 @@ html:not(.js) .chapter h3::before {
 }
 .mark span:nth-child(2) {
   block-size: 72%;
-  background: var(--mint);
-  color: var(--mint-ink);
+  background: var(--lamp);
+  color: var(--lamp-ink);
 }
 .mark span:nth-child(3) {
   block-size: 86%;
@@ -1094,7 +1078,7 @@ html:not(.js) .chapter h3::before {
   color: var(--text);
 }
 .hints li[data-on="true"]::before {
-  background: var(--mint);
+  background: var(--lamp);
 }
 .actions,
 .said {
@@ -1462,8 +1446,8 @@ th[aria-sort="ascending"] .sort::after {
 }
 .flow-steps a[aria-current],
 .flow-steps a[aria-current] .step-name {
-  background: var(--mint);
-  color: var(--mint-ink);
+  background: var(--lamp);
+  color: var(--lamp-ink);
 }
 .hint {
   color: var(--muted);

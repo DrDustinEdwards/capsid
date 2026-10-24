@@ -74,7 +74,7 @@ function sectionOf(path) {
 export function layout({ title, description, path, body, asOf, wide = false }) {
   const here = sectionOf(path);
   return `<!doctype html>
-<html lang="en" data-cap-site="capsid" data-family="forest">
+<html lang="en" data-cap-site="capsid" data-family="purple">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -83,7 +83,7 @@ export function layout({ title, description, path, body, asOf, wide = false }) {
 <meta name="description" content="${escapeHtml(description)}">
 <link rel="canonical" href="${ORIGIN}${path}">
 <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
-<link rel="preload" href="/assets/bricolage.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/schibsted.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/capsomer.css">
 <link rel="stylesheet" href="/assets/enarratio.css">
 <link rel="stylesheet" href="/assets/explorer.css">
