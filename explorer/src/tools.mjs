@@ -33,6 +33,24 @@ const KIND_WORD = { reads: "Reads only", changes: "Can change or remove", adds: 
 /** @param {any} t */
 const pills = (t) => kindsOf(t).map((k) => `<span class="cap-pill" data-kind="${k}">${KIND_WORD[/** @type {keyof typeof KIND_WORD} */ (k)]}</span>`).join("");
 
+/**
+ * One paragraph of a description, laid out as it is meant to be read. A run of lines each opened
+ * by an action's name ("post: queue a job") is a list, each line beside its name; a long
+ * paragraph breaks where a sentence turns to the next action or mode.
+ * @param {string} para
+ */
+function said(para) {
+  let out = "";
+  let list = "";
+  for (const line of para.split("\n")) {
+    const m = line.match(/^([a-z_]+(?:(?: \/ |, )[a-z_]+)*): ([\s\S]+)$/);
+    if (m) list += `<li><code>${escapeHtml(m[1])}</code><span>${prose(m[2])}</span></li>`;
+    else if (list) list += `<li class="said-note"><span>${prose(line)}</span></li>`;
+    else out += line.split(/(?<=\. )(?=(?:action|mode) ["'][a-z_]+["'])/).map((x) => `<p class="measure">${prose(x)}</p>`).join("");
+  }
+  return out + (list ? `<ul class="said">${list}</ul>` : "");
+}
+
 /** @param {any[]} tools @param {string} asOf */
 export function toolsPage(tools, asOf) {
   const servers = ["Capsid", "Capsid Admin"];
@@ -120,7 +138,7 @@ export function toolPage(t, tools, asOf) {
     : "";
   const body = `${pageHead([["/", "Overview"], ["/tools/", "Tools"]], t.name, `<code>${escapeHtml(t.name)}</code>`, `${escapeHtml(t.title)}, on ${escapeHtml(t.server)}. Needs ${GRANT[/** @type {keyof typeof GRANT} */ (t.grant)] ?? escapeHtml(t.grant)}.`)}
 <p class="tool-tags">${pills(t)}</p>
-<section aria-labelledby="does-title"><h2 id="does-title">What it does</h2>${rest.map((p) => `<p class="measure">${prose(p)}</p>`).join("")}</section>
+<section aria-labelledby="does-title"><h2 id="does-title">What it does</h2>${rest.map(said).join("")}</section>
 <section aria-labelledby="hints-title"><h2 id="hints-title">What a client is told</h2>
 <p class="section-sub">The MCP hints it carries, so a client can ask before it acts (src/tool-annotations.ts).</p>
 <ul class="hints">${hint(t.hints.readOnlyHint, "Reads only: no action changes anything.", "Writes: some action changes state.")}${hint(t.hints.destructiveHint, "Can overwrite or remove what exists.", "Never overwrites or removes.")}${hint(t.hints.idempotentHint, "Repeating a call changes nothing further.", "A repeat can change things again.")}${hint(t.hints.openWorldHint, "Reaches GitHub, Cloudflare or a live site.", "Stays inside Capsid.")}</ul>

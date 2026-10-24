@@ -6,14 +6,11 @@
 import { areaChart, barChart, lineChart, progressRing } from "enarratio";
 
 import { weekLabels } from "./home.mjs";
-import { escapeHtml, layout, minutes, pageHead, percent, scroller } from "./pages.mjs";
+import { escapeHtml, layout, minutes, pageHead, percent, reading, scroller } from "./pages.mjs";
 
 /** A ring, its heading and its sentence: Enarratio's ring is a primitive, so the figure is ours. */
 const ring = (/** @type {string} */ id, /** @type {string} */ title, /** @type {number} */ rate, /** @type {string} */ sentence) =>
   `<figure class="ring" aria-labelledby="${id}-title"><h3 id="${id}-title">${escapeHtml(title)}</h3>${progressRing({ value: rate, max: 1, size: 112, alt: sentence })}<figcaption>${escapeHtml(sentence)}</figcaption></figure>`;
-
-/** A big figure and what it counts. @param {string} value @param {string} label @param {string} [href] */
-const tile = (value, label, href) => `<div class="stat"><p class="stat-value">${escapeHtml(value)}</p><p class="stat-label">${href ? `<a href="${href}">${escapeHtml(label)}</a>` : escapeHtml(label)}</p></div>`;
 
 /**
  * The daily numbers: each a sentence, a picture and the table behind it (design section 4).
@@ -115,7 +112,7 @@ export function numbersHtml(stats) {
   ];
   return `<section class="numbers" aria-labelledby="numbers-title">
 <h2 id="numbers-title" class="cap-sr-only">The daily numbers</h2>
-<div class="stats">${tile(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${tile(percent(v.agreement_rate_90d), "claims agreeing with GitHub", "#verification")}${tile(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${tile(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</div>
+<dl class="readings readings-row">${reading(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${reading(percent(v.agreement_rate_90d), "claims agreeing with GitHub", "#verification")}${reading(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${reading(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
 <section class="numbers-part" id="jobs" aria-labelledby="jobs-title"><h3 id="jobs-title">Jobs</h3>
 <p class="measure">${j.completed_30d} jobs completed and ${j.failed_30d} failed in the last 30 days. Today ${j.open} are open and ${j.blocked} of them blocked on a person. Half of last month's jobs took under ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
 <div class="charts">${jobsChart}</div></section>
