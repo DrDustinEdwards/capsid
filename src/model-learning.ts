@@ -2,10 +2,14 @@ import { MIN_SAMPLE, RATE_FLOOR, RATE_GAIN, ROUTING_RULES, ROUTING_RULES_VERSION
 import { DAY_MS } from "./time";
 
 // WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model,
-// the share of jobs merged with green CI, the corrections spent, and the cost where
-// telemetry recorded one, read from job_outcomes. Merge and CI are GitHub's, read at
-// complete, not the driver's own account (docs/work-queue.md). The result proposes rule
-// changes and applies none: the rules are code and the seat approves each edit.
+// the share of jobs merged with green CI and not undone since, the corrections spent,
+// and the cost where telemetry recorded one, read from job_outcomes. Merge and CI are
+// GitHub's, read at complete, not the driver's own account (docs/work-queue.md). A merge
+// is a weak label on its own (Peralta et al., MSR 2026: reviewers fix and merge, or
+// merge and revert), so a job whose pull request was later reverted (src/merge-safety.ts,
+// `job-pr-reverted`) or whose deploy was rolled back does not count as work that held.
+// The result proposes rule changes and applies none: the rules are code and the seat
+// approves each edit.
 
 const LEARNING_WINDOW_DAYS = 90;
 // One read, bounded. A window with more outcomes than this says so, never a partial table
@@ -39,6 +43,7 @@ interface Row {
   corrections: number | null;
   cost_usd: number | null;
   tokens: number | null;
+  undone: number;
 }
 
 // An outcome is learned under the model Capsid chose, which the Worker recorded.
@@ -57,7 +62,11 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
     .prepare(
       `SELECT o.job_kind AS kind, o.model_chosen AS model, o.model_actual AS model_actual, o.prs_merged AS prs_merged, o.ci_green AS ci_green,
               j.corrections_count AS corrections, o.cost_usd AS cost_usd,
-              CASE WHEN o.tokens_input IS NULL AND o.tokens_output IS NULL THEN NULL ELSE COALESCE(o.tokens_input, 0) + COALESCE(o.tokens_output, 0) END AS tokens
+              CASE WHEN o.tokens_input IS NULL AND o.tokens_output IS NULL THEN NULL ELSE COALESCE(o.tokens_input, 0) + COALESCE(o.tokens_output, 0) END AS tokens,
+              (EXISTS (SELECT 1 FROM audit_log a WHERE a.action = 'job-pr-reverted' AND json_extract(a.params, '$.job_id') = o.job_id)
+               OR EXISTS (SELECT 1 FROM job_outcome_prs p JOIN deploy_outcomes d
+                            ON lower(p.pr_url) = lower('https://github.com/' || d.repo || '/pull/' || d.pr)
+                          WHERE p.job_id = o.job_id AND d.outcome IN ('rolled_back', 'rollback_failed'))) AS undone
        FROM job_outcomes o LEFT JOIN jobs j ON j.id = o.job_id
        WHERE o.job_kind IS NOT NULL AND o.recorded_at >= ?1
        ORDER BY o.recorded_at DESC LIMIT ?2`
@@ -68,7 +77,7 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
   const truncated = rows.length > LEARNING_ROWS_MAX;
   const read = truncated ? rows.slice(0, LEARNING_ROWS_MAX) : rows;
   const facts: OutcomeFact[] = read.filter(sameModel).map((r) => ({
-    kind: r.kind, model: r.model, prs_merged: r.prs_merged, ci_green: r.ci_green, corrections: r.corrections, cost_usd: r.cost_usd, tokens: r.tokens,
+    kind: r.kind, model: r.model, prs_merged: r.prs_merged, ci_green: r.ci_green, corrections: r.corrections, cost_usd: r.cost_usd, tokens: r.tokens, undone: r.undone === 1,
   }));
   const mismatched = read.length - facts.length;
   const cells = cellsOf(facts);

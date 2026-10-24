@@ -248,6 +248,7 @@ export async function docIndexTick(env: Env, now: Date): Promise<IndexReport> {
 // the site's Ask, and a paid hybrid query costs $0.00075, so the cap holds the worst case
 // near $4 a month (Dustin's $5 cap, decision D1 of the design).
 export const HYBRID_MONTHLY_CAP = 5000;
+const RERANK_MODEL = "@cf/baai/bge-reranker-base";
 const SNIPPET_CHARS = 240;
 // Closed tasks and superseded rulings stay searchable on request but are hidden by
 // default, so an old answer does not sit beside the current one (design 3.2).
@@ -303,6 +304,10 @@ export async function hybridSearch(
           // The current canon ranks above a session log that quotes an old ruling (3.3).
           boost_by: [{ field: "canon", direction: "desc" }],
         },
+        // A cross-encoder reorders the fused candidates by how well each answers the
+        // query, the step the usual hybrid pipeline adds after fusion. Threshold 0: it
+        // reorders, it never drops a candidate the fusion found.
+        reranking: { enabled: true, model: RERANK_MODEL, match_threshold: 0 },
       },
     }));
   } catch (err) {

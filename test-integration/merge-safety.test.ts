@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
-import { PAUSED_KEY, readSafetyReport, recordReverts, REPORT_KEY, safetyTick } from "../src/merge-safety";
+import { PAUSED_KEY, readSafetyReport, recordOutcomeReverts, recordReverts, REPORT_KEY, safetyTick } from "../src/merge-safety";
+import { readModelLearning } from "../src/model-learning";
 import { readUnitEvidence, SUSPENDED_KEY, unitsTick } from "../src/merge-units";
 
 // The safety meter against a real D1: revert tracking from the closed pull requests
@@ -19,7 +20,7 @@ let closed: object[] = [];
 beforeEach(async () => {
   closed = [];
   await env.DB.prepare("DELETE FROM deploy_outcomes").run();
-  await env.DB.prepare("DELETE FROM audit_log WHERE action IN ('auto-merged', 'approved-merged', 'auto-merge-reverted', 'auto-merge-paused')").run();
+  await env.DB.prepare("DELETE FROM audit_log WHERE action IN ('auto-merged', 'approved-merged', 'auto-merge-reverted', 'auto-merge-paused', 'job-pr-reverted')").run();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('capsid', ?1)").bind(JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
   for (const key of [PAUSED_KEY, REPORT_KEY, SUSPENDED_KEY, "merge-safety:lifted"]) await env.APP_KV.delete(key);
   await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
@@ -108,5 +109,27 @@ describe("the shutoff against D1", () => {
     await rolledBack(41, 1, 3);
     expect((await safetyTick(env as unknown as Env, NOW, ["capsid"])).newly_paused).toEqual([]);
     expect(await env.APP_KV.get(PAUSED_KEY)).toBeNull();
+  });
+});
+
+describe("what the model routing learns from a revert", () => {
+  it("a job whose merged pull request a later merge reverted, or whose deploy rolled back, is not counted as merged green", async () => {
+    const recorded = new Date(NOW.getTime() - 5 * 86_400_000).toISOString().replace("T", " ").slice(0, 19);
+    for (const [job, pr] of [["job_sample0001", 61], ["job_sample0002", 62], ["job_sample0003", 63]] as const) {
+      await env.DB.prepare("DELETE FROM job_outcomes WHERE job_id = ?1").bind(job).run();
+      await env.DB.prepare("DELETE FROM job_outcome_prs WHERE job_id = ?1").bind(job).run();
+      await env.DB.prepare(
+        `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, ci_green, blocked_count, resumed_count, result_kind, verified, job_kind, model_chosen, recorded_at)
+         VALUES (?1, 'agent:sample', 'capsid', 1, 1, 1, 0, 0, 'pr', '{}', 'docs', 'sonnet', ?2)`
+      ).bind(job, recorded).run();
+      await env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at, recorded_at) VALUES (?1, ?2, 1, ?3, ?3)")
+        .bind(job, `https://github.com/example/capsid/pull/${pr}`, recorded).run();
+    }
+    await rolledBack(63, 7, 2);
+    closed = [{ number: 70, title: 'Revert "Docs"', body: "Reverts example/capsid#61", merged_at: daysAgo(1) }];
+    expect(await recordOutcomeReverts(env as unknown as Env, NOW)).toEqual(["job_sample0001 (example/capsid#61 by #70)"]);
+    expect(await recordOutcomeReverts(env as unknown as Env, NOW)).toEqual([]);
+    const cell = (await readModelLearning(env.DB, NOW)).cells.find((c) => c.kind === "docs" && c.model === "sonnet");
+    expect([cell?.n, cell?.merged_green]).toEqual([3, 1]);
   });
 });
