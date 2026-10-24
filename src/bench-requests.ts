@@ -178,6 +178,9 @@ interface BenchUsage {
   cache_creation_tokens: number | null;
 }
 
+// A practice diff is for reading a miss, and D1 caps a row at 2 MB.
+export const MAX_KEPT_DIFF = 262_144;
+
 export interface ScoreRequest {
   jti: string;
   run_id: string;
@@ -197,6 +200,10 @@ export interface ScoreRequest {
   capsid_job_id: string | null;
   usage: BenchUsage;
   image_bytes: number | null;
+  // The agent's diff, kept only for an excluded (practice) task so a miss can be read
+  // from what the agent changed rather than from its own summary. src/bench.ts refuses
+  // it for any other split, so no study run's diff is ever stored here.
+  diff: string | null;
 }
 
 function hiddenPair(raw: unknown, field: string, sealed: boolean): { total: number; passed: number | null } | Refusal {
@@ -276,6 +283,10 @@ export function parseScoreRequest(body: string): { ok: true; jti: string; report
   if (refused(usage)) return usage;
   const image = r.image_bytes;
   if (image !== undefined && image !== null && !isCount(image)) return { ok: false, refusal: "image_bytes must be a whole number" };
+  if (r.diff !== undefined && r.diff !== null && (typeof r.diff !== "string" || r.diff.length > MAX_KEPT_DIFF)) {
+    return { ok: false, refusal: `diff must be a string of at most ${MAX_KEPT_DIFF} characters` };
+  }
+  if (sealed !== null && typeof r.diff === "string") return { ok: false, refusal: "a sealed report carries no diff" };
   return {
     ok: true,
     jti,
@@ -290,6 +301,7 @@ export function parseScoreRequest(body: string): { ok: true; jti: string; report
       capsid_job_id: jobId,
       usage,
       image_bytes: isCount(image) ? image : null,
+      diff: typeof r.diff === "string" ? r.diff : null,
     },
   };
 }
