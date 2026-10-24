@@ -29,7 +29,7 @@ The site is prerendered once a day from three public documents: the model, the s
 
 ## Capabilities and Constraints
 
-- The family map and Capsid's insides are Capsomer's `system-map` component, which is shared with dustinedwards.info/systems. Charts are Enarratio's.
+- The family map and every system's circle are Capsomer's `system-map` component with circles, the same code as dustinedwards.info/systems. Charts are Enarratio's.
 - The header and the theme switch are Capsomer's site header (`data-cap-site="capsid"`). Both themes are required.
 - Budgets (design section 6): LCP under 1.5 s, CLS under 0.05, TBT under 150 ms, page weight under 3 MB, map script 25 KB gzip, keyboard on every node, axe clean in both themes, a reduced-motion path.
 - A private system is drawn in full, with no link to its repo and no code pages.

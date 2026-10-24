@@ -24,7 +24,7 @@ import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
 import { headersFile } from "./src/security-headers.mjs";
 import { codeBySystem, escapePath } from "./src/code.mjs";
-import { allPages, searchDocument } from "./src/pages.mjs";
+import { CIRCLES_URL, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
 import { servedTools } from "./src/surface.mjs";
 
 const here = import.meta.dirname;
@@ -161,9 +161,10 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   writeFileSync(join(assets, "capsomer.css"), css);
   writeFileSync(join(assets, "enarratio.css"), stylesheet(capsomerTheme));
   copyFileSync(join(here, "src", "explorer.css"), join(assets, "explorer.css"));
-  // The system map's module and the sibling modules it imports.
+  // The system map's module and the sibling modules it imports; its circles are drawn here, not in the browser.
   const systemMap = join(capsomer, "dist", "components", "system-map");
-  for (const file of readdirSync(systemMap).filter((name) => name.endsWith(".js"))) copyFileSync(join(systemMap, file), join(assets, file));
+  for (const file of readdirSync(systemMap).filter((name) => name.endsWith(".js") && !name.startsWith("system-map-circles"))) copyFileSync(join(systemMap, file), join(assets, file));
+  writeFileSync(join(out, CIRCLES_URL), JSON.stringify(circlesOf(model)));
   copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(assets, "tabs.js"));
   // The header's modules keep their folders, because they import each other by "../name/".
   for (const name of ["site-header", "theme-switch", "dialog", "popover", "tooltip", "shell"]) {

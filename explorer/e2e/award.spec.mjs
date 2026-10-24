@@ -89,28 +89,30 @@ test("screen-reader list: the list holds every system in the model and no other,
   await context.close();
 });
 
-test("layout shift: entering the core and stepping a flow move nothing on the page", async ({ page }) => {
+test("layout shift: entering the core moves nothing above the map, and stepping a flow moves nothing on the page", async ({ page }) => {
   /** The map and the step heading by their place in the document, which must not move by a pixel. */
   const place = (/** @type {string[]} */ selectors) =>
     page.evaluate((sels) => sels.map((s) => Math.round((document.querySelector(s)?.getBoundingClientRect().top ?? NaN) + scrollY)), selectors);
-  const observe = () =>
-    page.evaluate(() => {
+  /** With `strict` every shift counts, input-driven ones included; without, only the ones CLS counts. */
+  const observe = (strict = true) =>
+    page.evaluate((strict) => {
       const w = /** @type {Window & { __shift?: number }} */ (window);
       w.__shift = 0;
-      // Every shift counts, input-driven ones included.
       new PerformanceObserver((list) => {
-        for (const e of list.getEntries()) w.__shift = (w.__shift ?? 0) + /** @type {PerformanceEntry & { value: number }} */ (e).value;
+        for (const e of /** @type {Array<PerformanceEntry & { value: number, hadRecentInput: boolean }>} */ (list.getEntries())) if (strict || !e.hadRecentInput) w.__shift = (w.__shift ?? 0) + e.value;
       }).observe({ type: "layout-shift" });
-    });
+    }, strict);
   const shift = () => page.evaluate(() => /** @type {Window & { __shift?: number }} */ (window).__shift ?? -1);
   const settle = () => page.waitForTimeout(400);
 
   await open(page);
-  await observe();
+  // A circle sizes the stage (Capsomer's system map, as on dustinedwards.info/systems), so on a
+  // phone what is below the map moves down on the tap that zooms in; the map itself must not.
+  await observe(false);
   const map = [".cap-system-map [data-cap-part='stage']"];
   const before = await place(map);
   let moved = 0;
-  for (const id of [CORE, CORE]) {
+  for (const id of [CORE]) {
     await page.click(tile(id));
     await settle();
     moved = Math.max(moved, ...(await place(map)).map((y, i) => Math.abs(y - (before[i] ?? NaN))));
@@ -158,10 +160,6 @@ test("INP proxy: under 4x CPU throttling every select, enter and escape is handl
     for (const id of IDS) {
       await page.click(tile(id));
       await page.waitForTimeout(400);
-      if (id === CORE) {
-        await page.click(tile(CORE));
-        await page.waitForTimeout(400);
-      }
       await page.keyboard.press("Escape");
       await page.waitForTimeout(400);
     }
@@ -179,8 +177,6 @@ test("INP proxy: under 4x CPU throttling every select, enter and escape is handl
 
 test("frames: entering the core under 4x throttling, p95 frame gap (warn only)", async ({ page }) => {
   await open(page);
-  // The first click chooses the core; the second goes inside.
-  await page.click(tile(CORE));
   /** @type {number[]} */
   let gaps = [];
   await throttled(page, async () => {

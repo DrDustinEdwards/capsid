@@ -1318,6 +1318,14 @@ th[aria-sort="ascending"] .sort::after {
   }
 }
 
+/* Zoomed in, Back to all systems joins the view buttons; on a phone the three no longer fit beside
+   the title, so there the buttons have their own row from the start and the drawing stays put. */
+@media (max-width: 40rem) {
+  .cap-system-map-views {
+    flex-basis: 100%;
+  }
+}
+
 /* A flow's step page. The page lists every step itself, with links, so the map's own list of
    the same steps is not shown twice; the script still reads it to play the flow. */
 .flow-map .cap-system-map-flows {
