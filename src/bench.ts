@@ -484,6 +484,7 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
     .first<{ id: string; task_id: string; arm: Arm; status: string; split: string; fail_to_pass_count: number; pass_to_pass_count: number }>();
   if (!run) return textResponse(`no bench run ${report.run_id}`, 404);
   if (run.status !== "running") return textResponse(`bench run ${run.id} is already closed (${run.status})`, 409);
+  if (report.diff !== null && run.split !== "excluded") return textResponse(`task ${run.task_id} is a ${run.split} task; a diff is kept only for an excluded (practice) task`, 409);
   const job =
     run.arm === "treatment" && report.capsid_job_id
       ? await env.DB.prepare("SELECT namespace, title, status FROM jobs WHERE id = ?1").bind(report.capsid_job_id).first<TreatmentJob>()

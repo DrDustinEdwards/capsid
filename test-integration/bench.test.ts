@@ -171,6 +171,18 @@ describe("bench endpoints", () => {
     await expect(env.DB.prepare("UPDATE bench_runs SET false_claim = 0 WHERE id = ?1").bind(run_id).run()).rejects.toThrow(/never changes/);
   });
 
+  it("keep a practice run's diff, and refuse a diff for any other split so no study diff is stored", async () => {
+    await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
+    const pilot = await startOk(await registerTask());
+    expect((await score(pilot, { hidden: counts(2, 3), claimed_done: true, diff: "diff --git a/x b/x" })).status).toBe(409);
+    expect((await env.DB.prepare("SELECT status FROM bench_runs WHERE id = ?1").bind(pilot).first())?.status).toBe("running");
+    await score(pilot, { environment: { ok: false, reason: "test cleanup" } });
+    const practice = await startOk(await registerTask({ split: "excluded" }));
+    expect((await score(practice, { hidden: counts(2, 3), claimed_done: true, diff: "diff --git a/x b/x" })).status).toBe(200);
+    const row = await env.DB.prepare("SELECT json_extract(report, '$.diff') AS diff FROM bench_runs WHERE id = ?1").bind(practice).first();
+    expect(row?.diff).toBe("diff --git a/x b/x");
+  });
+
   it("leave a run unjudged when the hidden suite's size disagrees with the registered size", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const run_id = await startOk(await registerTask());
