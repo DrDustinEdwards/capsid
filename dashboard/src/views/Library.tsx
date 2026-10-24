@@ -3,7 +3,7 @@ import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { Link, useLocation, useSearch } from "wouter";
 import { routePath, useApp } from "../app/ctx";
-import { fetchLibrary } from "../lib/api";
+import { fetchLibrary, useAnswer } from "../lib/api";
 import { ago, ms } from "../lib/format";
 import type { LibraryEntry, LibraryShelf, PortalLibrary } from "../types";
 import { St } from "../ui/icons";
@@ -15,7 +15,6 @@ import { PageHead } from "./shared";
 // document opens that job's drawer over the page. Nothing here writes: writing stays in
 // chat and with drivers. Read from GET /portal/api/library.
 
-type Load = { data: PortalLibrary | null; loading: boolean; error: string | null };
 
 const SHELVES: Array<{ id: LibraryShelf; title: string; none: string }> = [
   { id: "decisions", title: "Decisions", none: "No decision record yet." },
@@ -71,30 +70,17 @@ function Snippet({ text }: { text: string }) {
 }
 
 export function Library() {
-  const { now, signOut } = useApp();
+  const { now } = useApp();
   const search = useSearch();
   const [, navigate] = useLocation();
   const params = new URLSearchParams(search);
   const q = params.get("q")?.trim() || "";
   const doc = parseDocParam(params.get("doc"));
   const [draft, setDraft] = useState(q);
-  const [load, setLoad] = useState<Load>({ data: null, loading: true, error: null });
   const docNs = doc?.ns ?? null;
   const docPath = doc?.path ?? null;
   useEffect(() => setDraft(q), [q]);
-  useEffect(() => {
-    let alive = true;
-    setLoad((l) => ({ ...l, loading: true, error: null }));
-    void fetchLibrary(docNs !== null && docPath !== null ? { ns: docNs, path: docPath } : q ? { q } : null).then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
-      if (r.kind === "signed-out") return signOut();
-      setLoad({ data: null, loading: false, error: r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message });
-    });
-    return () => {
-      alive = false;
-    };
-  }, [docNs, docPath, q, signOut]);
+  const load = useAnswer<PortalLibrary>(["library", docNs, docPath, q], () => fetchLibrary(docNs !== null && docPath !== null ? { ns: docNs, path: docPath } : q ? { q } : null));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const next = draft.trim();

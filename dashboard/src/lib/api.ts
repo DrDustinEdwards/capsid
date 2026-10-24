@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { QueryCache, QueryClient, keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { BASE } from "./base";
 import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView } from "../types";
 
@@ -40,45 +41,99 @@ async function asFeed(res: Response): Promise<OpsFeed> {
   return (await res.json()) as OpsFeed;
 }
 
-export interface FeedState {
-  feed: OpsFeed | null;
-  error: string | null;
-  signedOut: boolean;
-  nextPollAt: number;
+// The session ended: thrown by a read so every query stops the same way, and kept here
+// for the app to show the signed-out page. A feed that answers again (a sign-in in
+// another tab) clears it.
+class SignedOut extends Error {}
+
+let ended = false;
+const watchers = new Set<() => void>();
+function setSignedOut(next: boolean): void {
+  if (ended === next) return;
+  ended = next;
+  for (const w of watchers) w();
+}
+function useSignedOut(): boolean {
+  return useSyncExternalStore(
+    (w) => (watchers.add(w), () => void watchers.delete(w)),
+    () => ended,
+  );
 }
 
-// Polls GET /portal/api/ops every 60 s while the tab is visible, pauses while it is
-// hidden, and reads again when the tab comes back or the window takes focus.
+// No retries: a failed read says why at once and the next feed or Read again tries anew.
+// Reads go again only when asked (a key, a feed or a button), never on focus, except
+// the feed itself.
+export const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: (e) => e instanceof SignedOut && setSignedOut(true) }),
+  defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } },
+});
+
+// A route's Answer as a query: its value, or a throw that carries the server's text.
+async function ask<T>(read: () => Promise<Answer<T>>): Promise<T> {
+  const r = await read();
+  if (r.kind === "ok") return r.value;
+  if (r.kind === "signed-out") throw new SignedOut("signed out");
+  throw new Error(r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message);
+}
+
+export type Load<T> = { data: T | null; loading: boolean; error: string | null };
+
+// One Portal route, cached under key. A new key keeps what is on screen and marks it
+// loading (keep: false starts it empty); a failed read keeps it too and says why; a
+// session that ended signs out (SignedOut). reread reads it again now.
+type Read<T> = Load<T> & { reread: () => void };
+
+export function useAnswer<T>(
+  key: readonly unknown[],
+  read: () => Promise<Answer<T>>,
+  { keep = true, staleTime = 0, enabled = true }: { keep?: boolean; staleTime?: number; enabled?: boolean } = {},
+): Read<T> {
+  const q = useQuery({ queryKey: key, queryFn: () => ask(read), placeholderData: keep ? keepPreviousData : undefined, staleTime, enabled });
+  const { refetch } = q;
+  return {
+    data: q.data ?? null,
+    loading: q.isFetching,
+    error: q.error && !(q.error instanceof SignedOut) ? q.error.message : null,
+    reread: useCallback(() => void refetch(), [refetch]),
+  };
+}
+
+async function readFeed(): Promise<OpsFeed> {
+  const res = await fetch(FEED_URL, { credentials: "same-origin", redirect: "manual", cache: "no-store", headers: { accept: "application/json" } });
+  if (sessionEnded(res)) throw new SignedOut("signed out");
+  if (!res.ok) throw new Error(`The feed answered ${res.status}`);
+  return asFeed(res);
+}
+
+const FEED_KEY = ["ops"];
+
+// Reads under this key follow the feed: each new feed reads the shown ones again once
+// they are stale (at once for most; a read kept longer says so with its staleTime).
+export const LIVE = "live";
+
+// Polls GET /portal/api/ops every 60 s after the last answer while the tab is visible,
+// pauses while it is hidden, and reads again when the tab comes back after 5 s or more.
 export function useOpsFeed() {
-  const [state, setState] = useState<FeedState>({ feed: null, error: null, signedOut: false, nextPollAt: Date.now() + POLL_MS });
-  const last = useRef(0);
-  const load = useCallback(async () => {
-    last.current = Date.now();
-    try {
-      const res = await fetch(FEED_URL, { credentials: "same-origin", redirect: "manual", cache: "no-store", headers: { accept: "application/json" } });
-      if (sessionEnded(res)) return setState((s) => ({ ...s, signedOut: true }));
-      if (!res.ok) throw new Error(`The feed answered ${res.status}`);
-      const feed = await asFeed(res);
-      setState({ feed, error: null, signedOut: false, nextPollAt: Date.now() + POLL_MS });
-    } catch (e) {
-      setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e), nextPollAt: Date.now() + POLL_MS }));
-    }
-  }, []);
+  const q = useQuery({ queryKey: FEED_KEY, queryFn: readFeed, refetchInterval: POLL_MS, staleTime: 5000, refetchOnWindowFocus: true });
+  const signedOut = useSignedOut();
+  const generated = q.data?.live.generated;
   useEffect(() => {
-    const visible = () => document.visibilityState === "visible";
-    const timer = setInterval(() => visible() && Date.now() - last.current >= POLL_MS && void load(), 1000);
-    const back = () => visible() && Date.now() - last.current > 5000 && void load();
-    void load();
-    document.addEventListener("visibilitychange", back);
-    window.addEventListener("focus", back);
-    return () => (clearInterval(timer), document.removeEventListener("visibilitychange", back), window.removeEventListener("focus", back));
-  }, [load]);
-  const accept = useCallback((feed: OpsFeed) => {
-    last.current = Date.now();
-    setState({ feed, error: null, signedOut: false, nextPollAt: Date.now() + POLL_MS });
-  }, []);
-  const signOut = useCallback(() => setState((s) => ({ ...s, signedOut: true })), []);
-  return { ...state, reload: load, accept, signOut };
+    if (q.dataUpdatedAt) setSignedOut(false);
+  }, [q.dataUpdatedAt]);
+  useEffect(() => {
+    if (generated)
+      void queryClient.refetchQueries({ queryKey: [LIVE], type: "active", stale: true }, { cancelRefetch: false });
+  }, [generated]);
+  const accept = useCallback((feed: OpsFeed) => queryClient.setQueryData(FEED_KEY, feed), []);
+  const signOut = useCallback(() => setSignedOut(true), []);
+  return {
+    feed: q.data ?? null,
+    error: q.error && !(q.error instanceof SignedOut) ? q.error.message : null,
+    signedOut,
+    nextPollAt: Math.max(q.dataUpdatedAt, q.errorUpdatedAt) + POLL_MS,
+    accept,
+    signOut,
+  };
 }
 
 export type RefreshResult =

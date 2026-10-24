@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../app/ctx";
-import { fetchPackageHistory } from "../lib/api";
+import { fetchPackageHistory, useAnswer } from "../lib/api";
 import { ago, fmtN, ms } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
@@ -20,7 +20,6 @@ function Part({ part, children }: { part: { state: "ok" } | { state: "none" | "e
   return part.state === "none" ? <span className="faint">{part.reason}</span> : <St kind="nodata">Could not read: {part.reason}</St>;
 }
 
-type History = { state: "idle" } | { state: "loading" } | { state: "error"; message: string } | { state: "ok"; data: PortalPackageHistory };
 
 // Daily downloads as an area, the former name's days in the muted tone. Built here, in
 // the view's own chunk, rather than in the shared charts, which ship with the overview.
@@ -61,23 +60,17 @@ function DownloadsChart({ data }: { data: PortalPackageHistory }) {
 }
 
 function HistoryPanel({ name }: { name: string }) {
-  const { signOut } = useApp();
-  const [h, setH] = useState<History>({ state: "idle" });
-  const load = async () => {
-    setH({ state: "loading" });
-    const a = await fetchPackageHistory(name);
-    if (a.kind === "signed-out") return signOut();
-    if (a.kind !== "ok") return setH({ state: "error", message: a.message });
-    setH({ state: "ok", data: a.value });
-  };
-  if (h.state === "idle" || h.state === "loading") {
+  // Read when asked for: the history is a large read the panel does not need.
+  const [asked, setAsked] = useState(false);
+  const h = useAnswer(["packages", "history", name], () => fetchPackageHistory(name), { enabled: asked });
+  if (!h.data && !h.error) {
     return (
-      <button type="button" className="btn" disabled={h.state === "loading"} onClick={load}>
-        {h.state === "loading" ? "Reading npm…" : "Load the daily download history"}
+      <button type="button" className="btn" disabled={h.loading} onClick={() => setAsked(true)}>
+        {h.loading ? "Reading npm…" : "Load the daily download history"}
       </button>
     );
   }
-  if (h.state === "error") return <div className="callout warn">The history could not be read: {h.message}</div>;
+  if (!h.data) return <div className="callout warn">The history could not be read: {h.error}</div>;
   const d = h.data;
   const byName = new Map<string, number>();
   for (const day of d.days) byName.set(day.name, (byName.get(day.name) ?? 0) + day.downloads);

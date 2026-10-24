@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
-import { fetchNamespaces } from "../lib/api";
+import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { agentState, driverOf } from "../lib/derive";
 import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
@@ -15,13 +15,6 @@ import { Panel } from "capsomer/react/panel";
 // Undo in the app's message. A project paused after repeated failures (the queue's circuit
 // breaker, src/job-breaker.ts) is reset one way, so the reset keeps its preview and
 // confirm; Needs you offers the same Reset.
-
-// The last good read stays on screen while a new one runs or after one fails.
-interface Load {
-  data: PortalNamespaces | null;
-  loading: boolean;
-  error: string | null;
-}
 
 type RunsOn = "subscription" | "api";
 const RUNS_ON: ReadonlyArray<{ value: RunsOn; label: string }> = [
@@ -191,25 +184,11 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
 }
 
 export function Projects() {
-  const { now, signOut } = useApp();
-  const [load, setLoad] = useState<Load>({ data: null, loading: true, error: null });
-  const alive = useRef(true);
-  const read = useCallback(async () => {
-    setLoad((l) => ({ ...l, loading: true }));
-    const r = await fetchNamespaces();
-    if (!alive.current) return;
-    if (r.kind === "ok") return setLoad({ data: r.value, loading: false, error: null });
-    if (r.kind === "signed-out") return signOut();
-    const message = r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message;
-    setLoad((l) => ({ ...l, loading: false, error: message }));
-  }, [signOut]);
-  useEffect(() => {
-    alive.current = true;
-    void read();
-    return () => {
-      alive.current = false;
-    };
-  }, [read]);
+  const { now } = useApp();
+  // The roster Needs you reads for its stops, so it follows the feed here too. The last
+  // good read stays on screen while a new one runs or after one fails.
+  const load = useAnswer<PortalNamespaces>([LIVE, "namespaces"], fetchNamespaces);
+  const read = load.reread;
   const data = load.data;
   return (
     <>
@@ -227,7 +206,7 @@ export function Projects() {
         src={
           <>
             {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="btn" disabled={load.loading} onClick={() => void read()}>
+            <button type="button" className="btn" disabled={load.loading} onClick={read}>
               {load.loading ? "Reading..." : "Read again"}
             </button>
           </>
@@ -253,7 +232,7 @@ export function Projects() {
               </thead>
               <tbody>
                 {data.namespaces.map((n) => (
-                  <Row key={n.namespace} n={n} onChanged={() => void read()} />
+                  <Row key={n.namespace} n={n} onChanged={read} />
                 ))}
               </tbody>
             </table>

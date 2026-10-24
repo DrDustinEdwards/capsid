@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "wouter";
 import { useApp } from "../app/ctx";
-import { fetchActivity } from "../lib/api";
+import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalActivity } from "../types";
 import { Panel } from "capsomer/react/panel";
-import { PageHead, useAnswer } from "./shared";
+import { PageHead } from "./shared";
 
 function None() {
   return <span className="faint">none</span>;
@@ -28,14 +28,13 @@ export function Activity() {
   const actor = params.get("actor") ?? "";
   const [nsInput, setNsInput] = useState(namespace);
   const [actorInput, setActorInput] = useState(actor);
-  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     setNsInput(namespace);
     setActorInput(actor);
   }, [namespace, actor]);
 
-  const load = useAnswer<PortalActivity>(() => fetchActivity({ namespace, actor }), [namespace, actor, tick]);
+  const load = useAnswer<PortalActivity>(["activity", namespace, actor], () => fetchActivity({ namespace, actor }));
 
   const apply = (ns: string, who: string) => {
     const qs = new URLSearchParams();
@@ -110,7 +109,7 @@ export function Activity() {
         src={
           <>
             {data ? `newest first, at most ${data.limit} rows · read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="btn" disabled={load.loading} onClick={() => setTick((t) => t + 1)}>
+            <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
               {load.loading ? "Reading..." : "Read again"}
             </button>
           </>

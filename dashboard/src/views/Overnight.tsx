@@ -3,12 +3,11 @@ import { Spinner } from "capsomer/react/empty";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
-import { fetchDigest, fetchPlan, type Answer } from "../lib/api";
+import { LIVE, fetchDigest, fetchPlan, useAnswer } from "../lib/api";
 import { ago, ms } from "../lib/format";
 import { readPref, writePref } from "../lib/prefs";
 import type { PortalDigest, PortalPlan } from "../types";
 import { St } from "../ui/icons";
-import { useAnswer, type Load } from "./shared";
 
 // The Tonight plan on the Queue and the "since you last looked" strip on Needs you
 // (docs/design/design-portal-evaluation.md, DECIDE 3, ruled 2026-10-09). Each reads its
@@ -20,9 +19,6 @@ import { useAnswer, type Load } from "./shared";
 // strip Needs you takes from this file.
 const TonightTimeline = lazy(() => import("./TrendCharts").then((m) => ({ default: m.TonightTimeline })));
 
-function useRead<T>(read: () => Promise<Answer<T>>, key: string): Load<T> {
-  return useAnswer(read, [useApp().feed.live.generated, key]);
-}
 
 function Failed({ what, error }: { what: string; error: string | null }) {
   return error ? (
@@ -42,7 +38,7 @@ const SOURCE: Record<PortalPlan["lanes"][number]["jobs"][number]["estimate_sourc
 
 export function Tonight() {
   const { now } = useApp();
-  const load = useRead<PortalPlan>(fetchPlan, "plan");
+  const load = useAnswer<PortalPlan>([LIVE, "plan"], fetchPlan);
   const plan = load.data;
   const planned = plan ? plan.lanes.reduce((n, l) => n + l.jobs.length, 0) : 0;
   return (
@@ -143,7 +139,7 @@ export function SinceLastLooked() {
   });
   // Once per visit: the clock ticking on is not a new look.
   useEffect(() => writePref(LAST_LOOKED_PREF, new Date(now).toISOString()), []);
-  const load = useRead<PortalDigest>(() => fetchDigest(since), since);
+  const load = useAnswer<PortalDigest>([LIVE, "digest", since], () => fetchDigest(since));
   const d = load.data;
   const merged = d?.pull_requests_merged ?? 0;
   return (

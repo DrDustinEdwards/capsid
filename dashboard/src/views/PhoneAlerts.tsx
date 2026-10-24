@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useApp } from "../app/ctx";
-import { fetchPush, postPush, type PushOp } from "../lib/api";
+import { fetchPush, postPush, queryClient, useAnswer, type Answer, type PushOp } from "../lib/api";
 import { BASE } from "../lib/base";
 import { ago, msSql } from "../lib/format";
 import type { PortalPush } from "../types";
@@ -10,6 +10,8 @@ import { Panel } from "capsomer/react/panel";
 // Push on for this browser, list the devices that have it, turn one off, send a test.
 // Loaded on its own after Settings' first paint, so it adds nothing to the initial
 // script. The alert itself is shown by dashboard/public/sw.js.
+
+const PUSH_KEY = ["push"];
 
 const supported = () => typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
@@ -22,24 +24,20 @@ function deviceLabel(ua: string): string {
 
 export function PhoneAlerts() {
   const { feed, now, signOut } = useApp();
-  const [data, setData] = useState<PortalPush | null>(null);
+  const load = useAnswer(PUSH_KEY, fetchPush);
+  const data = load.data;
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<{ kind: "ok" | "crit"; text: string } | null>(null);
+  const [said, setNote] = useState<{ kind: "ok" | "crit"; text: string } | null>(null);
+  const note = said ?? (load.error ? { kind: "crit" as const, text: load.error } : null);
 
-  const take = useCallback(
-    (r: Awaited<ReturnType<typeof fetchPush>>, ok?: string) => {
-      if (r.kind === "ok") {
-        setData(r.value);
-        if (ok) setNote({ kind: "ok", text: ok });
-      } else if (r.kind === "signed-out") signOut();
-      else setNote({ kind: "crit", text: r.message });
-    },
-    [signOut]
-  );
-
-  useEffect(() => {
-    void fetchPush().then((r) => take(r));
-  }, [take]);
+  // A change answers the devices as they are now, which replaces the read.
+  const take = (r: Answer<PortalPush>, ok: string) => {
+    if (r.kind === "ok") {
+      queryClient.setQueryData(PUSH_KEY, r.value);
+      setNote({ kind: "ok", text: ok });
+    } else if (r.kind === "signed-out") signOut();
+    else setNote({ kind: "crit", text: r.message });
+  };
 
   const send = async (body: PushOp, ok: string) => {
     setBusy(true);

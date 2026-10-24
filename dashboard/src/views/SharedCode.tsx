@@ -1,11 +1,10 @@
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
-import { fetchSharedCode } from "../lib/api";
+import { fetchSharedCode, useAnswer } from "../lib/api";
 import { ago, ms } from "../lib/format";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "../types";
 import { St } from "../ui/icons";
-import { useAnswer } from "./shared";
 
 // SHARED CODE (job_584b4e7f2824): how far the centralization has got. One panel per shared
 // package from configuration (shared_packages), each app that uses it with the tag it
@@ -16,7 +15,7 @@ import { useAnswer } from "./shared";
 
 export function SharedCode() {
   const { now } = useApp();
-  const load = useAnswer<SharedCodeView>(fetchSharedCode, []);
+  const load = useAnswer<SharedCodeView>(["shared-code"], fetchSharedCode);
   const data = load.data;
   return (
     <div className="embedded">

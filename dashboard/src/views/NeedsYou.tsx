@@ -1,7 +1,7 @@
 import { ChartSlot } from "../ui/Enar";
-import { Suspense, lazy, useCallback, useEffect, useId, useState, type ReactNode } from "react";
+import { Suspense, lazy, useId, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
-import { fetchNamespaces } from "../lib/api";
+import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { hasSites, type Kind } from "../lib/derive";
 import { age, agentLabel, ago, ms } from "../lib/format";
 import { approveAllRequest, approveRequest, canApprove, closeRequest, prAnchor, seatFor } from "../lib/pr-actions";
@@ -63,23 +63,8 @@ type Entry = { app: InboxApp; item: InboxItem };
 // Queues stopped by the circuit breaker (src/job-breaker.ts), from the roster read
 // (GET /portal/api/namespaces), read again with each feed so a reset drops its row.
 function useStops(): { stops: PortalNamespace[]; error: string | null; reread: () => void } {
-  const { feed, signOut } = useApp();
-  const [state, setState] = useState<{ stops: PortalNamespace[]; error: string | null }>({ stops: [], error: null });
-  const [tick, setTick] = useState(0);
-  const generated = feed.live.generated;
-  useEffect(() => {
-    let alive = true;
-    void fetchNamespaces().then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setState({ stops: r.value.namespaces.filter((n) => n.breaker.open), error: null });
-      if (r.kind === "signed-out") return signOut();
-      setState((s) => ({ ...s, error: r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message }));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [generated, tick, signOut]);
-  return { ...state, reread: useCallback(() => setTick((t) => t + 1), []) };
+  const load = useAnswer([LIVE, "namespaces"], fetchNamespaces);
+  return { stops: load.data?.namespaces.filter((n) => n.breaker.open) ?? [], error: load.error, reread: load.reread };
 }
 
 function Waiting() {
