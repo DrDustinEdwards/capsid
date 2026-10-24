@@ -1,7 +1,7 @@
 // The explorer's one script. Every page is complete without it: the maps are named pictures with
 // their lists open, every step is a page, every tool and module has an address, and the tables
 // are plain tables. This makes them move: Capsomer's system map (copied from capsomer at build),
-// its tabs, Enarratio's chart tooltips, the flow players and the front page's tour, the filters
+// its tabs, Enarratio's chart tooltips, the flow players, the front page's panel and tour, the filters
 // and sorting, and search.
 import { controller } from "./system-map.js";
 import { enhance as enhanceTabs } from "./tabs.js";
@@ -199,6 +199,42 @@ function flowPage(map, root, host) {
 enhanceTabs();
 enhanceCharts(document, { tooltips: true, filter: true, brush: false, entrance: !reduced.matches });
 
+// The front page's panel: each breaker switches a grant, and every circuit lights by the rule
+// the build drew it with (src/home.mjs, reaches), which is src/scope.ts's needFor.
+for (const panel of document.querySelectorAll("[data-board]")) {
+  const breakers = panel.querySelector(".breakers");
+  const count = panel.querySelector("[data-board-count]");
+  const circuits = [...panel.querySelectorAll(".circuit")];
+  const reaches = (need, h) =>
+    need === "read" ? (h.read ? "full" : "")
+    : need === "write" ? (h.write ? "full" : "")
+    : need === "admin" ? (h.admin && h.write ? "full" : "")
+    : need === "admin_read" ? (h.admin && h.read ? "full" : "")
+    : need === "action" ? (h.read && h.write ? "full" : h.read || h.write ? "part" : "")
+    : "";
+  const who = (h) =>
+    !h.read && !h.write && !h.admin ? "An agent with no grant" : h.admin && h.read && h.write ? "The admin" : h.read && !h.write && !h.admin ? "A read-only agent" : `An agent holding ${[h.read && "read", h.write && "write", h.admin && "the admin identity"].filter(Boolean).join(" and ")}`;
+  const apply = () => {
+    const h = Object.fromEntries([...breakers.querySelectorAll("[data-grant]")].map((b) => [b.dataset.grant, b.getAttribute("aria-pressed") === "true"]));
+    let full = 0;
+    let part = 0;
+    for (const c of circuits) {
+      const on = reaches(c.dataset.need, h);
+      if (on) c.dataset.on = on;
+      else delete c.dataset.on;
+      if (on === "full") full++;
+      if (on === "part") part++;
+    }
+    count.textContent = `${who(h)}: ${full} of ${circuits.length} tools live${part ? `, ${part} in part` : ""}.`;
+  };
+  for (const b of breakers.querySelectorAll("[data-grant]")) {
+    b.addEventListener("click", () => {
+      b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true"));
+      apply();
+    });
+  }
+}
+
 // Filters: a text field and chips over the items of the page they sit on.
 for (const bar of document.querySelectorAll("[data-filter]")) {
   bar.hidden = false;
@@ -326,7 +362,7 @@ if (field) {
 
 // Each section's parts rise into place once, as it first comes into view.
 if (!reduced.matches && "IntersectionObserver" in window) {
-  const parts = document.querySelectorAll("main.wide > section > *, main.wide .deeper-list > li");
+  const parts = document.querySelectorAll("main.wide > section:not(.board) > *, main.wide .poster > li");
   const seen = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {

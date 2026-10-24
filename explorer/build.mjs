@@ -154,6 +154,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
     "components/theme-switch/theme-switch.css",
     "components/site-header/site-header.css",
     "tokens/site-capsid.css",
+    
   ]
     .map((rel) => inlineCss(join(capsomer, rel)))
     .join("\n");
@@ -174,6 +175,9 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   copyFileSync(join(here, "src", "explorer.js"), join(assets, "explorer.js"));
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
   copyFileSync(join(here, "src", "icon.svg"), join(assets, "icon.svg"));
+  // Capsomer's face, served from here because the policy allows fonts from 'self' only: Schibsted
+  // Grotesk's latin cut with its weight axis.
+  copyFileSync(join(dirname(require.resolve("@fontsource-variable/schibsted-grotesk/package.json")), "files", "schibsted-grotesk-latin-wght-normal.woff2"), join(assets, "schibsted.woff2"));
   writeFileSync(join(out, "_headers"), headersFile());
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the

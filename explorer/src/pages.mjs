@@ -74,7 +74,7 @@ function sectionOf(path) {
 export function layout({ title, description, path, body, asOf, wide = false }) {
   const here = sectionOf(path);
   return `<!doctype html>
-<html lang="en" data-cap-site="capsid">
+<html lang="en" data-cap-site="capsid" data-family="purple">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -83,6 +83,7 @@ export function layout({ title, description, path, body, asOf, wide = false }) {
 <meta name="description" content="${escapeHtml(description)}">
 <link rel="canonical" href="${ORIGIN}${path}">
 <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/schibsted.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/capsomer.css">
 <link rel="stylesheet" href="/assets/enarratio.css">
 <link rel="stylesheet" href="/assets/explorer.css">
@@ -134,10 +135,12 @@ function header(here, path) {
 
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
 function footer(asOf) {
-  return `<footer class="foot"><div class="foot-in wrap">
-<div class="foot-about"><p>Capsid runs Dustin Edwards's projects and the AI sessions that work on them. This site is built once a day from its public model and numbers.</p><p class="foot-small">Data of ${escapeHtml(asOf)}, in whole days ending at midnight UTC. Private systems are drawn in full, with no link to their repo.</p></div>
+  return `<footer class="foot">
+<p class="mark" aria-hidden="true">${[..."Capsid"].map((c) => `<span>${c}</span>`).join("")}</p>
+<div class="foot-in wrap">
+<div class="foot-about"><p>Capsid is an MCP server and control plane for AI coding agents, published under the MIT licence. This site is one live instance, rebuilt each day from its public model and numbers.</p><p class="foot-small">Data of ${escapeHtml(asOf)}, in whole days ending at midnight UTC. Private systems are drawn in full, with no link to their repo.</p></div>
 <nav class="foot-nav" aria-label="Every section"><ul>${[...NAV, ["/search/", "Search"]].map(([href, label]) => `<li><a href="${href}">${label}</a></li>`).join("")}</ul></nav>
-<ul class="foot-out"><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li></ul>
+<ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
 </div></footer>`;
 }
 
