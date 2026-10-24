@@ -179,7 +179,7 @@ interface BenchUsage {
 }
 
 // A practice diff is for reading a miss, and D1 caps a row at 2 MB.
-export const MAX_KEPT_DIFF = 262_144;
+const MAX_KEPT_DIFF = 262_144;
 
 export interface ScoreRequest {
   jti: string;
