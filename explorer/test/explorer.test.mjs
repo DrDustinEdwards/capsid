@@ -253,12 +253,14 @@ test("build.json's hash is the same for the same input and changes with what a r
   assert.notEqual(changed.content, built.content);
 });
 
-test("a public system other than the core has its parts page with no drawing, since the map draws the core's insides", () => {
+test("every system's parts page opens zoomed into its circle, the same drawing as dustinedwards.info's", () => {
   const withParts = { ...model, containers: [...model.containers, { id: "kit-lib", system: "kit", name: "Kit library", kind: "package", technology: "npm" }] };
   const page = allPages(withParts, stats).find(([path]) => path === containersPath("kit"))?.[1] ?? "";
-  assert.match(page, /Kit library/);
-  assert.doesNotMatch(page, /data-enter|cap-system-map/);
-  assert.match(readFileSync(join(out, "s", "hub", "containers", "index.html"), "utf8"), /data-enter/);
+  assert.match(page, /<figure class="cap-system-map"[^>]* data-circles data-insides="\/assets\/circles.json" data-selected data-entered data-zoom="kit">/);
+  assert.match(page, /data-layer="inside" data-system="kit" data-shown[^>]*>.*Kit library/);
+  assert.equal(page.match(/data-layer="inside"/g)?.length, 1, "the page carries its own circle; the rest are fetched");
+  const circles = JSON.parse(readFileSync(join(out, "assets", "circles.json"), "utf8"));
+  assert.deepEqual(Object.keys(circles).sort(), model.systems.map((/** @type {any} */ s) => s.id).sort());
 });
 
 test("each week is labelled by its last whole day, the day before as_of for the newest", () => {
@@ -365,7 +367,7 @@ test("each step page names exactly the parts its step touches, and its drawing l
       const lit = [...page.matchAll(/<g class="cap-system-map-box" data-id="([^"]+)" data-lit/g)].map((m) => m[1]).sort();
       assert.deepEqual(lit, [...(st.lights ?? [])].sort(), `${f.id} step ${i + 1} lights the wrong parts`);
       assert.match(page, new RegExp(`data-id="${st.toward}"(?: data-lit)? data-at`));
-      assert.match(page, /<figure class="cap-system-map" data-cap="system-map" data-entered/);
+      assert.match(page, /<figure class="cap-system-map" data-cap="system-map"[^>]* data-entered/);
     });
   }
 });

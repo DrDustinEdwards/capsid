@@ -30,26 +30,12 @@ for (const root of document.querySelectorAll("[data-cap='system-map']")) {
       el.removeAttribute("data-at");
     }
   }
+  // A page drawn zoomed into a system (src/pages.mjs, familyMap) is zoomed again by Capsomer, with no movement.
   const map = controller(root, root.dataset.openLabel ?? "Open");
   if (host?.dataset.flow) {
     if (host.hasAttribute("data-player")) player(map, root, host);
     else flowPage(map, root, host);
-    continue;
   }
-  const chosen = host?.dataset.chosen;
-  if (!chosen) continue;
-  map.select(chosen);
-  if (host.hasAttribute("data-enter")) {
-    // Capsomer's enter() moves focus to Step out, right after a reader's Enter and wrong on
-    // load: the page would open scrolled to the drawing with focus mid-page. So the page keeps
-    // its place and its focus.
-    const [x, y] = [scrollX, scrollY];
-    map.enter();
-    if (document.activeElement instanceof HTMLElement && root.contains(document.activeElement)) document.activeElement.blur();
-    scrollTo(x, y);
-  }
-  // The one tab stop moves to the chosen system, so Tab enters the map where the page is.
-  for (const tile of root.querySelectorAll(".cap-system-map-tile[data-id]")) tile.setAttribute("tabindex", tile.dataset.id === chosen ? "0" : "-1");
 }
 
 /**

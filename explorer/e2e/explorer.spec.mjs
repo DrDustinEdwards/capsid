@@ -58,30 +58,34 @@ eachTheme((theme) => {
     });
   }
 
-  test("keyboard: the map is one tab stop, and Enter on the core twice goes inside", async ({ page }) => {
+  test("keyboard: the map is one tab stop, and Enter on the core zooms into its circle", async ({ page }) => {
     const problems = await watch(page);
     await page.goto("/systems/");
     const map = page.locator(".cap-system-map");
     await expect(map).toHaveAttribute("data-cap-ready", "");
     await expect(map.locator(".cap-system-map-tile[tabindex='0']")).toHaveCount(1);
-    await map.locator(".cap-system-map-views button").last().focus();
+    await map.locator(".cap-system-map-views button:not([hidden])").last().focus();
     await page.keyboard.press("Tab");
     expect(await page.evaluate(() => /** @type {HTMLElement} */ (document.activeElement).dataset.id)).toBe("hub");
     await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
-    await expect(map).toHaveAttribute("data-entered", "");
+    await expect(map).toHaveAttribute("data-zoom", "hub");
+    await expect(map.locator("svg[data-system='hub'][data-shown]")).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(map).not.toHaveAttribute("data-entered", "");
+    await expect(map).not.toHaveAttribute("data-zoom");
+    expect(await page.evaluate(() => /** @type {HTMLElement} */ (document.activeElement).dataset.id)).toBe("hub");
     expect(problems).toEqual([]);
   });
 
-  test("behaviour: a system's page opens with that system chosen, and its parts page inside", async ({ page }) => {
+  test("behaviour: a system's page and its parts page open zoomed into its circle", async ({ page }) => {
     await watch(page);
     await page.goto("/s/kit/");
+    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-zoom", "kit");
     await expect(page.locator(".cap-system-map-tile[data-id='kit']")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator(".cap-system-map-tile[data-id='kit']")).toHaveAttribute("tabindex", "0");
+    // A system on the rim zooms there.
+    await page.locator(".cap-system-map-rim[data-goto='hub']").first().click();
+    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-zoom", "hub");
     await page.goto("/s/hub/containers/");
-    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-entered", "");
+    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-zoom", "hub");
     // Entered on load without taking the reader there: the page opens at its top, focus unmoved.
     expect(await page.evaluate(() => scrollY)).toBe(0);
     expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
