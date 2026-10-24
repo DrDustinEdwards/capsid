@@ -1,4 +1,3 @@
-import type { Answer } from "../lib/api";
 import type { Kind } from "../lib/derive";
 import { age, utc, ms, ago } from "../lib/format";
 import type { ClaimsGroup, ClaimsAgreementCounts, JobClaimRow, ClaimsAgreement, JobEvaluationRow, PortalClaimsJob } from "../types";
@@ -13,12 +12,6 @@ const AGREEMENT_KIND: Record<ClaimsAgreement, Kind> = { agree: "ok", disagree: "
 
 export function None({ what = "none" }: { what?: string }) {
   return <span className="faint">{what}</span>;
-}
-
-export function message<T>(r: Answer<T>): string {
-  if (r.kind === "refused") return `HTTP ${r.status}: ${r.message}`;
-  if (r.kind === "expired" || r.kind === "error") return r.message;
-  return "";
 }
 
 // A wait in milliseconds as "3.2h". Null is no wait measured, never zero.

@@ -1,8 +1,8 @@
 import { ChartSlot } from "../ui/Enar";
-import { lazy, useState } from "react";
+import { lazy } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
-import { fetchStale } from "../lib/api";
+import { LIVE, fetchStale, useAnswer, type Load } from "../lib/api";
 import { JOB } from "../lib/derive";
 import { agentLabel, ago, ms } from "../lib/format";
 import type { OpsJob, PortalStale, StaleRule } from "../types";
@@ -10,7 +10,7 @@ import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
-import { FilterEmpty, NsChips, PageHead, QueueRows, useAnswer, useNsFilter, type Load } from "./shared";
+import { FilterEmpty, NsChips, PageHead, QueueRows, useNsFilter } from "./shared";
 import { Tonight } from "./Overnight";
 
 // Chart 3, whether the queue is growing or draining, from GET /portal/api/trends. Lazy, so
@@ -71,11 +71,8 @@ type StaleLoad = Load<PortalStale>;
 // rows `jobs` list with stale: true returns. Read when the Queue opens and again with
 // each feed, so a resume or a close performed from the drawer drops its row.
 function useStale(): { load: StaleLoad; reread: () => void } {
-  const { feed } = useApp();
-  const [tick, setTick] = useState(0);
-  const generated = feed.live.generated;
-  const load = useAnswer(fetchStale, [generated, tick]);
-  return { load, reread: () => setTick((t) => t + 1) };
+  const load = useAnswer([LIVE, "stale"], fetchStale);
+  return { load, reread: load.reread };
 }
 
 // The panel. A row opens the job's drawer, which holds the controls (Resume, Close as

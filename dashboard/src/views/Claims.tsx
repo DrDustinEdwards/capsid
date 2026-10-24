@@ -2,23 +2,17 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "wouter";
 import { useApp } from "../app/ctx";
-import { fetchClaimsAggregate, fetchClaimsJob } from "../lib/api";
+import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
 import { age, ago, ms } from "../lib/format";
 import { download, toCsv } from "../lib/csv";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { Panel } from "capsomer/react/panel";
-import { PageHead, useAnswer } from "./shared";
-import { message, byCheck, None, AgreementCounts, totals, counts, wait, JobDetail, AGREEMENTS } from "./ClaimsJob";
+import { PageHead } from "./shared";
+import { byCheck, None, AgreementCounts, totals, counts, wait, JobDetail, AGREEMENTS } from "./ClaimsJob";
 
 // Chart 5, claim against verified per agent, is Enarratio's grouped bar chart, in the same
 // lazy chunk as the Portal's other charts.
 const AgreementChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.AgreementChart })));
-
-interface Load<T> {
-  data: T | null;
-  loading: boolean;
-  error: string | null;
-}
 
 const FILTER_KEYS = ["namespace", "agent", "since", "until"] as const;
 type FilterKey = (typeof FILTER_KEYS)[number];
@@ -27,7 +21,7 @@ type Filter = Record<FilterKey, string>;
 // The filters and the open job live in the address (?namespace=&agent=&since=&until=&job=),
 // so a view can be reloaded or shared. The inputs apply on submit.
 export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
-  const { feed, now, signOut } = useApp();
+  const { feed, now } = useApp();
   const search = useSearch();
   const [, navigate] = useLocation();
   const params = new URLSearchParams(search);
@@ -35,8 +29,6 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
   const job = params.get("job") ?? "";
   const [input, setInput] = useState<Filter>(filter);
   const [jobInput, setJobInput] = useState(job);
-  const [detail, setDetail] = useState<Load<PortalClaimsJob>>({ data: null, loading: false, error: null });
-  const [tick, setTick] = useState(0);
   const key = FILTER_KEYS.map((k) => filter[k]).join("\u0000");
 
   useEffect(() => {
@@ -44,22 +36,8 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
     setJobInput(job);
   }, [key, job]);
 
-  const agg = useAnswer<PortalClaimsAggregate>(() => fetchClaimsAggregate(filter), [key, tick]);
-
-  useEffect(() => {
-    if (!job) return setDetail({ data: null, loading: false, error: null });
-    let alive = true;
-    setDetail({ data: null, loading: true, error: null });
-    void fetchClaimsJob(job).then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setDetail({ data: r.value, loading: false, error: null });
-      if (r.kind === "signed-out") return signOut();
-      setDetail({ data: null, loading: false, error: message(r) });
-    });
-    return () => {
-      alive = false;
-    };
-  }, [job, tick, signOut]);
+  const agg = useAnswer<PortalClaimsAggregate>(["claims", key], () => fetchClaimsAggregate(filter));
+  const detail = useAnswer<PortalClaimsJob>(["claims", "job", job], () => fetchClaimsJob(job), { keep: false, enabled: job !== "" });
 
   const go = (next: Filter, nextJob: string) => {
     // Claims is Agents' tab, so the tab stays in the address beside the filter.
@@ -138,7 +116,10 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
         src={
           <>
             {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="btn" disabled={agg.loading} onClick={() => setTick((t) => t + 1)}>
+            <button type="button" className="btn" disabled={agg.loading} onClick={() => {
+                agg.reread();
+                if (job) detail.reread();
+              }}>
               {agg.loading ? "Reading..." : "Read again"}
             </button>
           </>

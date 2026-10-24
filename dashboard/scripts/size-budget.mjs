@@ -2,7 +2,7 @@
 // dist/, a missing or unreadable manifest, a manifest with no entry, or any file over
 // its budget exits non-zero.
 //
-//   initial JS (the entry and its static imports)  <= 110 KB gzip
+//   initial JS (the entry and its static imports)  <= 115 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
 //   all CSS                                         <=  18.5 KB gzip
 //   fonts                                           reported, not budgeted
@@ -26,13 +26,16 @@
 // CSS raised on 2026-10-20 from 18 KB to 18.5 KB (Portal UX audit M7 and M8, capsid #476): the
 // contrast and link-underline rules and Capsomer 0.9.1's 320px header rules put the build 53 bytes
 // over; this build is 18.05 KB.
+// Initial JS raised on 2026-10-24 from 110 KB to 115 KB (Dustin: move the Portal's data and
+// polling onto TanStack Query, as Foxing's are): the query client the feed polls through is
+// 9.5 KB gzip in the entry. Master was 104.0 KB; this build is 113.6 KB.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 110 * KB, lazyChunk: 40 * KB, css: 18.5 * KB };
+const BUDGET = { initialJs: 115 * KB, lazyChunk: 40 * KB, css: 18.5 * KB };
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const manifestPath = join(dist, ".vite", "manifest.json");

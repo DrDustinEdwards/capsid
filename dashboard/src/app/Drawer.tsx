@@ -2,8 +2,8 @@ import { ChartSlot } from "../ui/Enar";
 import { Fragment, lazy, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
-import type { PortalActivityRow, SiteSnapshot } from "../types";
-import { fetchActivity } from "../lib/api";
+import type { SiteSnapshot } from "../types";
+import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
 import { JOB, PROBE, cfNoData, cfOk, siteKey } from "../lib/derive";
 import { ago, hostOf, ms, shortId, utc } from "../lib/format";
@@ -131,22 +131,9 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
 // typed with the change, a field-by-field before and after, and the row's other fields
 // by name (src/audit-detail.ts). Never the raw params.
 function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
-  const { now, signOut } = useApp();
-  const [state, setState] = useState<{ row: PortalActivityRow | null; error: string | null; loading: boolean }>({ row: null, error: null, loading: true });
-  useEffect(() => {
-    let alive = true;
-    setState({ row: null, error: null, loading: true });
-    void fetchActivity({ id }).then((r) => {
-      if (!alive) return;
-      if (r.kind === "signed-out") return signOut();
-      if (r.kind === "ok") return setState({ row: r.value.rows[0] ?? null, error: null, loading: false });
-      setState({ row: null, error: r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message, loading: false });
-    });
-    return () => {
-      alive = false;
-    };
-  }, [id, signOut]);
-  if (state.loading) {
+  const { now } = useApp();
+  const load = useAnswer(["activity", "row", id], () => fetchActivity({ id }), { keep: false });
+  if (!load.data && load.loading) {
     return (
       <>
         <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
@@ -158,19 +145,19 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
       </>
     );
   }
-  if (state.error !== null) {
+  if (!load.data) {
     return (
       <>
         <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
         <div className="dbody">
           <div className="callout crit" role="alert">
-            Could not read the row: {state.error}
+            Could not read the row: {load.error}
           </div>
         </div>
       </>
     );
   }
-  const r = state.row;
+  const r = load.data.rows[0];
   if (!r) {
     return (
       <>

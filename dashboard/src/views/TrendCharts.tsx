@@ -2,14 +2,13 @@ import { heatStrip, heatStripTable, timeline, timelineTable, type TimelineEvent 
 import { areaChart } from "enarratio/lite/area";
 import { barChart } from "enarratio/lite/bar";
 import { lineChart } from "enarratio/lite/line";
-import { useEffect, useState } from "react";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
-import { fetchClaimsAggregate, type Answer } from "../lib/api";
+import { fetchClaimsAggregate, useAnswer } from "../lib/api";
 import { cfNoData, cfOk } from "../lib/derive";
 import { DAY, HOUR, MIN, fmtN, ms, pct, shortId, utc } from "../lib/format";
 import { useTrends } from "../lib/trends";
-import type { ClaimsAgreement, ClaimsGroup, ClaimsWaitRow, PortalClaimsAggregate, PortalPlan, PortalTrends, SiteSnapshot, TrendCiRepo } from "../types";
+import type { ClaimsAgreement, ClaimsGroup, ClaimsWaitRow, PortalPlan, PortalTrends, SiteSnapshot, TrendCiRepo } from "../types";
 import { EnarChart } from "../ui/Enar";
 import { EnarFigure } from "../ui/EnarFigure";
 import { errorTotals } from "../ui/charts";
@@ -147,41 +146,14 @@ export function waitRows(waits: ClaimsWaitRow[]): { rows: Array<{ gate: string; 
 
 /** The header chart on Needs you: one bar per gate class, stacked by who ended the wait,
  *  over the last 14 days. Reads the claims aggregate once when the page opens. */
-// The claims read behind chart 2, shared and kept for ten minutes like useTrends: the page can
-// be left and reopened without reading the aggregate again. A failed read is not kept.
-const KEEP_MS = 10 * 60_000;
-let keptWaits: { at: number; read: Promise<Answer<PortalClaimsAggregate>> } | null = null;
-
-function readWaits(now: number): Promise<Answer<PortalClaimsAggregate>> {
-  if (keptWaits && Date.now() - keptWaits.at < KEEP_MS) return keptWaits.read;
-  const since = new Date(now - 14 * DAY).toISOString();
-  const reading = fetchClaimsAggregate({ namespace: "", agent: "", since, until: "" }).then((r) => {
-    if (r.kind !== "ok" && keptWaits?.read === reading) keptWaits = null;
-    return r;
-  });
-  keptWaits = { at: Date.now(), read: reading };
-  return reading;
-}
-
+// The claims read behind chart 2, kept for ten minutes like useTrends: the page can be left
+// and reopened without reading the aggregate again. The window is fixed when the read is made.
 export function WaitingChart() {
-  const { signOut, now } = useApp();
-  const [load, setLoad] = useState<{ waits: ClaimsWaitRow[] | null; cut: boolean; error: string | null; loading: boolean }>({ waits: null, cut: false, error: null, loading: true });
-  useEffect(() => {
-    let alive = true;
-    void readWaits(now).then((r) => {
-      if (!alive) return;
-      if (r.kind === "ok") return setLoad({ waits: r.value.waits, cut: r.value.truncated.includes("waits"), error: null, loading: false });
-      if (r.kind === "signed-out") return signOut();
-      setLoad({ waits: null, cut: false, error: r.kind === "refused" ? `HTTP ${r.status}: ${r.message}` : r.message, loading: false });
-    });
-    return () => {
-      alive = false;
-    };
-    // The window is fixed when the read is made; a later tick of now must not read again.
-  }, [signOut]);
-  if (load.loading) return null;
-  if (!load.waits) return <p className="faint wait-none">Where waiting goes could not be read: {load.error}</p>;
-  const { rows, classes, shown, allHours } = waitRows(load.waits);
+  const { now } = useApp();
+  const load = useAnswer(["claims", "waits"], () => fetchClaimsAggregate({ namespace: "", agent: "", since: new Date(now - 14 * DAY).toISOString(), until: "" }), { staleTime: 10 * 60_000 });
+  if (!load.data && load.loading) return null;
+  if (!load.data) return <p className="faint wait-none">Where waiting goes could not be read: {load.error}</p>;
+  const { rows, classes, shown, allHours } = waitRows(load.data.waits);
   if (!rows.length) return <p className="faint wait-none">No wait ended in the last 14 days.</p>;
   const top = rows.filter((r) => r.gate === rows[0]!.gate).reduce((a, r) => a + r.hours, 0);
   const opts = {
@@ -205,7 +177,7 @@ export function WaitingChart() {
       </div>
       <EnarFigure draw={(width) => barChart({ ...opts, width })}>
         <p className="d">
-          Total time between a job stopping at a gate and the gate being answered, last 14 days{classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.{load.cut ? " Cut at the read's row limit, so the figure is low." : ""}
+          Total time between a job stopping at a gate and the gate being answered, last 14 days{classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.{load.data.truncated.includes("waits") ? " Cut at the read's row limit, so the figure is low." : ""}
         </p>
       </EnarFigure>
     </div>

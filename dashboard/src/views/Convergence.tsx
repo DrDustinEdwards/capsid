@@ -1,12 +1,10 @@
-import { useCallback, useState } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
-import { fetchConvergence } from "../lib/api";
+import { fetchConvergence, useAnswer, type Load } from "../lib/api";
 import { ago, ms } from "../lib/format";
 import type { ConvergenceCheck, ConvergenceSite, PortalConvergence } from "../types";
 import { St } from "../ui/icons";
-import { useAnswer, type Load } from "./shared";
 
 // The convergence view in Sites (job_09e5f6cbf782): for each site that opted into Capsid
 // calling its operator API, GET /portal/api/convergence reads, live, what the site's
@@ -16,9 +14,8 @@ import { useAnswer, type Load } from "./shared";
 // of a secret; the Worker never sends one.
 
 function useConvergence(): { load: Load<PortalConvergence>; reread: () => void } {
-  const [tick, setTick] = useState(0);
-  const load = useAnswer(fetchConvergence, [tick]);
-  return { load, reread: useCallback(() => setTick((t) => t + 1), []) };
+  const load = useAnswer(["convergence"], fetchConvergence);
+  return { load, reread: load.reread };
 }
 
 export function Convergence({ ns }: { ns: string }) {
