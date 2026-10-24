@@ -1,22 +1,118 @@
-/* The explorer's page layout, on Capsomer's tokens (assets/capsomer.css). The map, the tables,
-   the tabs, the pills and the buttons are Capsomer's own; this file places them and draws the
-   front page's parts. Surfaces are told apart by a step in tone, never by a line or a shadow. */
+/* The explorer's own look on Capsomer's tokens (assets/capsomer.css): a distribution board.
+   Every tool is a circuit and every grant a breaker; the breaker's slot and handle is the one
+   shape, at every scale. The enclosure's greys are the ground, near-black the ink, and one mint,
+   the colour of a live circuit, marks what is on and the one action. Capsomer's forest family
+   (data-family on <html>) gives the green ramp, the statuses and the series; the neutrals are
+   set here. Surfaces are told apart by a step in tone, never by a line or a shadow. Unlayered,
+   so these win over Capsomer's layers. */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/assets/bricolage.woff2") format("woff2-variations");
+}
 :root {
-  --page: 76rem;
+  --page: 80rem;
   --gutter: clamp(16px, 3vw, 32px);
-  --section: clamp(56px, 7vw, 112px);
+  --section: clamp(96px, 11vw, 200px);
+  --face: "Bricolage Grotesque", system-ui, sans-serif;
+  --ui: var(--face);
+  --prose: var(--face);
+  --radius-s: 0;
+  --radius-m: 0;
+  --radius-l: 0;
+  --mint: #a1ffcb;
+  --mint-ink: #10140f;
+  --panel: #171916;
+  --panel-raised: #23261f;
+  --panel-ink: #eef0ea;
+  }
+:root[data-family] {
+  --ground: #e8e9e5;
+  --surface: #f3f4f1;
+  --raised: #fafaf8;
+  --sunken: #d9dbd5;
+  --line: #c6c9c1;
+  --text: #161815;
+  --muted: #545850;
+  --dim: #545850;
+  --primary: var(--mint);
+  --primary-hover: #7ff0b0;
+  --primary-fg: var(--mint-ink);
+  --header-bg: var(--ground);
+  --bar: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-family]:not([data-theme="light"]) {
+    --ground: #10120f;
+    --surface: #181a17;
+    --raised: #20231f;
+    --sunken: #0a0b09;
+    --line: #30342e;
+    --text: #eef0ea;
+    --muted: #a3a99e;
+    --dim: #a3a99e;
+    --accent-text: var(--mint);
+    --primary: var(--mint);
+    --primary-hover: #c6ffdf;
+    --primary-fg: var(--mint-ink);
+    --panel: #050604;
+    --panel-raised: #1a1d18;
+    --bar: var(--mint);
+  }
+}
+:root[data-family][data-theme="dark"] {
+  --ground: #10120f;
+  --surface: #181a17;
+  --raised: #20231f;
+  --sunken: #0a0b09;
+  --line: #30342e;
+  --text: #eef0ea;
+  --muted: #a3a99e;
+  --dim: #a3a99e;
+  --accent-text: var(--mint);
+  --primary: var(--mint);
+  --primary-hover: #c6ffdf;
+  --primary-fg: var(--mint-ink);
+  --panel: #050604;
+  --panel-raised: #1a1d18;
+  --bar: var(--mint);
+}
+/* Enarratio's charts on the board's colours: ink bars and rings in light, mint in dark. Enarratio sets its
+   variables on the chart itself, so these name the chart under the html element to win. */
+html .enarratio,
+html .enarratio-tooltip {
+  --enarratio-font: var(--face);
+  --enarratio-font-numeric: var(--face);
+  --enarratio-background: var(--ground);
+  --enarratio-text: var(--text);
+  --enarratio-text-muted: var(--muted);
+  --enarratio-grid: var(--line);
+  --enarratio-focus: var(--text);
+  --enarratio-series-1: var(--bar);
+  --enarratio-series-2: var(--muted);
 }
 
 body {
   margin: 0;
   background: var(--ground);
   color: var(--text);
+  font-family: var(--face);
+  font-size: 1.0625rem;
+  /* While the face loads, the fallback is scaled to its x-height, so the swap moves nothing. */
+  font-size-adjust: from-font;
+  line-height: 1.5;
 }
 
 /* Links in the accent; a button that is a link, and Capsomer's header, keep Capsomer's
    colours, which sit in a layer an unlayered rule would beat. */
 :where(main, .foot) :where(a:not(.cap-btn)) {
   color: var(--accent-text);
+  text-underline-offset: 0.18em;
+}
+.cap-btn[data-variant="primary"] {
+  font-weight: 600;
 }
 
 /* One column for every page but the front, whose sections set their own width. */
@@ -37,32 +133,34 @@ main.wide {
 main.wide > section {
   margin-block-start: var(--section);
 }
-main.wide > .tour {
+main.wide > .board {
   margin-block-start: 0;
 }
 
 h1 {
-  max-width: 20ch;
+  max-width: 18ch;
   margin-block: var(--space-6) var(--space-4);
-  font: 600 clamp(2.25rem, 4.4vw, 3.75rem) / 1.02 var(--prose);
-  letter-spacing: -0.03em;
+  font: 650 clamp(2.5rem, 5.2vw, 4.75rem) / 0.95 var(--face);
+  letter-spacing: -0.04em;
 }
 h1 code {
-  font-size: 0.8em;
+  font-size: 0.72em;
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 h2 {
   margin-block: var(--space-8) var(--space-3);
-  font: 600 clamp(1.5rem, 2.4vw, 2rem) / 1.15 var(--prose);
-  letter-spacing: -0.01em;
+  font: 650 clamp(1.75rem, 3vw, 2.75rem) / 1 var(--face);
+  letter-spacing: -0.03em;
 }
 h3 {
-  font-size: 1.125rem;
+  font-size: 1.1875rem;
+  font-weight: 600;
 }
 .lead {
-  max-width: 60ch;
-  font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem);
-  line-height: 1.5;
+  max-width: 54ch;
+  font-size: clamp(1.1875rem, 1.05rem + 0.5vw, 1.5rem);
+  line-height: 1.4;
 }
 .section-sub,
 .measure {
@@ -85,26 +183,7 @@ h3 {
   content: " \2192";
 }
 
-/* The front page: the opening, the tour and where to go deeper. */
-.opening {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-block-size: calc(100vh - var(--header-h));
-  padding-block: var(--space-7);
-}
-.opening h1 {
-  max-width: 14ch;
-  margin-block-start: 0;
-  font-size: clamp(2.5rem, 5vw, 4.5rem);
-  line-height: 1;
-  letter-spacing: -0.03em;
-}
-.opening .lead {
-  max-width: 52ch;
-}
-
-/* Readings: a figure over what it counts, set like an instrument's dial, in one row. */
+/* Readings: a figure over what it counts. */
 .readings {
   display: flex;
   flex-wrap: wrap;
@@ -119,31 +198,246 @@ h3 {
 }
 .reading dt {
   color: var(--muted);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
 }
 .reading dd {
   margin: 0;
-  font: 600 clamp(1.75rem, 3vw, 2.5rem) / 1 var(--mono);
+  font: 650 clamp(2rem, 3.4vw, 3rem) / 1 var(--face);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-.opening .readings {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-.opening .reading dd {
-  font-size: clamp(1.5rem, 2.4vw, 2.25rem);
-}
-@media (max-width: 40rem) {
-  .opening .readings {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  letter-spacing: -0.03em;
 }
 .readings-small {
   margin-block: var(--space-2) var(--space-4);
 }
 .readings-small .reading dd {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
+}
+
+/* The panel: what Capsid is beside every tool it serves, each a circuit lit by the grants an
+   agent holds. The enclosure is one near-black field running off the right edge. */
+.board {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  min-block-size: calc(100vh - var(--header-h));
+}
+.board-words {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-8) clamp(24px, 4vw, 64px) var(--space-8) max(var(--gutter), calc((100vw - var(--page)) / 2 + var(--gutter)));
+}
+.board h1 {
+  max-width: 11ch;
+  margin-block: 0 var(--space-5);
+  font-size: clamp(3rem, 5.6vw, 6rem);
+  line-height: 0.9;
+}
+.board-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-6);
+  margin-block: var(--space-5) 0;
+}
+.board-actions .cap-btn {
+  min-block-size: 52px;
+  padding-inline: var(--space-6);
+  font-size: 1.0625rem;
+}
+.board-link {
+  font-weight: 600;
+}
+.board-note {
+  max-width: 40ch;
+  margin-block: var(--space-7) 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+.board-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-7) max(var(--gutter), calc((100vw - var(--page)) / 2 + var(--gutter))) var(--space-7) clamp(24px, 3vw, 48px);
+  background: var(--panel);
+  color: var(--panel-ink);
+}
+.breakers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+/* Capsomer's buttons carry a faint shadow; on the board everything is flat. */
+.cap-btn,
+.cap-site-header-skip {
+  box-shadow: none; /* taste-skill-ignore: removes one */
+}
+html:not(.js) .breakers {
+  display: none;
+}
+.breaker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px var(--space-3);
+  align-items: center;
+  min-block-size: 88px;
+  padding: var(--space-3);
+  border: 0;
+  background: var(--panel-raised);
+  color: var(--panel-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.breaker:hover {
+  background: #2d3129;
+}
+.breaker:focus-visible {
+  outline: 3px solid var(--mint);
+  outline-offset: 2px;
+}
+/* The breaker: a slot and its handle, which sits up when the grant is on. */
+.breaker-slot {
+  grid-row: span 2;
+  position: relative;
+  display: block;
+  inline-size: 28px;
+  block-size: 56px;
+  background: #050604;
+}
+.breaker-handle {
+  position: absolute;
+  inset-inline: 4px;
+  inset-block-start: 26px;
+  block-size: 26px;
+  background: #5b6156;
+  transition: transform var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out);
+}
+.breaker[aria-pressed="true"] .breaker-handle {
+  transform: translateY(-22px);
+  background: var(--mint);
+}
+.breaker-name {
+  font-weight: 650;
+  font-size: 1.0625rem;
+}
+.breaker-does {
+  color: #b5bbb0;
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+.board-count {
+  margin: 0;
+  font: 650 clamp(1.25rem, 1.6vw, 1.625rem) / 1.2 var(--face);
+  letter-spacing: -0.01em;
+}
+.circuits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.circuit a {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 0 var(--space-3);
+  align-items: baseline;
+  padding: 10px var(--space-3);
+  background: var(--panel-raised);
+  color: #9aa094;
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+.circuit a:hover {
+  background: #2d3129;
+}
+.circuit a:focus-visible {
+  outline: 3px solid var(--mint);
+  outline-offset: 0;
+}
+/* The lamp: dark when the circuit is dead, mint when live, half lit when only some actions are. */
+.lamp {
+  grid-row: span 2;
+  align-self: center;
+  inline-size: 12px;
+  block-size: 24px;
+  display: flex;
+  align-items: end;
+  background: #050604;
+  transition: background-color var(--dur-base) var(--ease-out);
+}
+.circuit[data-on] a {
+  color: var(--panel-ink);
+}
+.circuit[data-on="full"] .lamp {
+  background: var(--mint);
+}
+.circuit[data-on="part"] .lamp::after {
+  content: "";
+  inline-size: 100%;
+  block-size: 50%;
+  background: var(--mint);
+}
+.circuit-name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  line-height: 1.3;
+}
+.circuit code {
+  font-size: 0.8125rem;
+  color: inherit;
+  overflow-wrap: anywhere;
+  opacity: 0.85;
+}
+@media (max-width: 64rem) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+    min-block-size: 0;
+  }
+  .board-words {
+    padding: var(--space-7) var(--gutter);
+  }
+  .board h1 {
+    font-size: clamp(3rem, 14vw, 5.5rem);
+  }
+  .board-panel {
+    padding: var(--space-6) var(--gutter);
+  }
+}
+/* On a phone the panel stays one screen: three breakers abreast, the circuits by name only,
+   two to a row (each tool's page has its code name). */
+@media (max-width: 40rem) {
+  .breaker {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    gap: var(--space-2);
+    min-block-size: 0;
+  }
+  .breaker-slot {
+    grid-row: auto;
+  }
+  .breaker-does,
+  .circuit code {
+    display: none;
+  }
+  .breaker-name {
+    font-size: 0.9375rem;
+  }
+  .circuit a {
+    grid-template-columns: 8px minmax(0, 1fr);
+    gap: 0 var(--space-2);
+    padding: 8px var(--space-2);
+  }
+  .lamp {
+    grid-row: auto;
+    inline-size: 8px;
+    block-size: 18px;
+  }
+  .circuit-name {
+    font-size: 0.875rem;
+  }
 }
 
 /* The tour: the words scroll, the drawing stays. */
@@ -154,11 +448,14 @@ h3 {
   align-items: start;
 }
 .tour-title {
-  margin: 0;
-  color: var(--muted);
-  font: 600 0.875rem / 1.4 var(--ui);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  max-width: 12ch;
+  margin: 0 0 var(--space-4);
+  font-size: clamp(2.5rem, 5vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+.tour-words > .lead {
+  margin-block-end: var(--space-6);
 }
 .tour-steps {
   margin: 0;
@@ -171,8 +468,6 @@ h3 {
   justify-content: center;
   min-block-size: 80vh;
   padding-block: var(--space-6);
-  padding-inline-start: var(--space-5);
-  border-inline-start: 3px solid var(--sunken);
   color: var(--muted);
   transition: color var(--dur-slow) var(--ease-out), border-color var(--dur-slow) var(--ease-out);
 }
@@ -180,8 +475,21 @@ h3 {
    which still reads at 4.5:1. */
 .chapter.is-on,
 html:not(.js) .chapter {
-  border-inline-start-color: var(--accent);
   color: var(--text);
+}
+/* Each chapter's lamp, the board's own mark: lit for the step being told. */
+.chapter h3::before {
+  content: "";
+  display: inline-block;
+  inline-size: 0.3em;
+  block-size: 0.62em;
+  margin-inline-end: 0.3em;
+  background: var(--sunken);
+  transition: background-color var(--dur-slow) var(--ease-out);
+}
+.chapter.is-on h3::before,
+html:not(.js) .chapter h3::before {
+  background: var(--mint);
 }
 .chapter p {
   max-width: 44ch;
@@ -191,12 +499,15 @@ html:not(.js) .chapter {
 }
 .chapter h3 {
   margin: 0 0 var(--space-3);
-  font: 600 clamp(1.75rem, 3vw, 2.5rem) / 1.05 var(--prose);
-  letter-spacing: -0.02em;
+  font: 650 clamp(2rem, 3.4vw, 3rem) / 1 var(--face);
+  letter-spacing: -0.03em;
 }
 .chapter .chapter-n {
+  margin-inline-start: 0.35em;
   color: var(--muted);
-  font: 500 0.875rem / 1 var(--mono);
+  font-size: 0.45em;
+  font-weight: 500;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 /* A chapter's parts are named in the drawing's colour, so the words point at what lights. */
@@ -212,8 +523,8 @@ html:not(.js) .chapter {
   font-size: 0.9375rem;
 }
 .chapter.is-on .part-name {
-  background: var(--accent-soft);
-  color: var(--accent-text);
+  background: var(--mint);
+  color: var(--mint-ink);
   font-weight: 600;
 }
 .chapter .chapter-link {
@@ -250,12 +561,9 @@ html:not(.js) .chapter {
   .tour-words {
     display: contents;
   }
-  .opening {
-    min-block-size: 0;
-  }
-  .tour-title {
+  .tour-title,
+  .tour-words > .lead {
     order: 1;
-    margin-block-end: var(--space-3);
   }
   .tour-stage {
     order: 2;
@@ -282,57 +590,157 @@ html:not(.js) .chapter {
   }
 }
 
-/* Where to go deeper: a figure, a name and a line, a row each. */
-.deeper-list {
+/* Its own record: three figures on tiles that refuse to line up, the heading in the notch. */
+.record {
   display: grid;
-  gap: 4px;
-  margin: 0 0 var(--space-7);
-  padding: 0;
-  list-style: none;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: auto;
+  gap: 8px;
+  align-items: start;
 }
-.deeper-list a {
-  display: grid;
-  grid-template-columns: 7rem 10rem minmax(0, 1fr);
-  gap: var(--space-4);
-  align-items: baseline;
-  padding: var(--space-5);
-  border-radius: var(--radius-m);
-  background: var(--surface);
-  color: var(--text);
-  text-decoration: none;
-  transition: background-color var(--dur-fast) var(--ease-out);
+.record h2 {
+  grid-column: 7 / span 6;
+  grid-row: 1;
+  align-self: start;
+  margin: 0;
 }
-.deeper-list a:hover {
-  background: var(--accent-soft);
-}
-.deeper-figure {
+.tile {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  font: 600 1.75rem / 1 var(--mono);
+  justify-content: space-between;
+  padding: 28px;
+  color: inherit;
+  text-decoration: none;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+:where(main) a.tile {
+  color: inherit;
+}
+.tile:hover {
+  transform: translateY(-4px);
+}
+.tile-figure {
+  font: 650 clamp(3.5rem, 6vw, 6.5rem) / 0.9 var(--face);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.tile-caption {
+  max-width: 28ch;
+  font-size: 1.0625rem;
+  line-height: 1.35;
+}
+.tile-tall {
+  grid-column: 1 / span 6;
+  grid-row: 1 / span 3;
+  min-block-size: 70vh;
+  background: var(--mint);
+  color: var(--mint-ink);
+}
+:where(main) a.tile-tall {
+  color: var(--mint-ink);
+}
+.tile-ink {
+  grid-column: 7 / span 3;
+  grid-row: 2;
+  min-block-size: 44vh;
+  background: var(--text);
+  color: var(--ground);
+}
+:where(main) a.tile-ink {
+  color: var(--ground);
+}
+.tile-mid {
+  grid-column: 10 / span 3;
+  grid-row: 2;
+  margin-block-start: 12vh;
+  min-block-size: 34vh;
+  background: var(--sunken);
+}
+.tile-ink .tile-figure,
+.tile-mid .tile-figure {
+  font-size: clamp(2.5rem, 3.6vw, 4rem);
+}
+.record h2 {
+  padding-block: 6vh 4vh;
+}
+@media (max-width: 52rem) {
+  .record {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .record h2 {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    padding-block: 0 var(--space-3);
+  }
+  .tile-tall {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-block-size: 56vw;
+  }
+  .tile-ink,
+  .tile-mid {
+    grid-row: 3;
+    min-block-size: 48vw;
+    margin-block-start: 0;
+  }
+  .tile-ink {
+    grid-column: 1;
+  }
+  .tile-mid {
+    grid-column: 2;
+    margin-block-start: 32px;
+  }
+}
+
+/* Everything it holds, as a poster: giant names left, small facts right, one baseline. */
+.poster {
+  margin: 0;
+  padding: 0 var(--gutter);
+  list-style: none;
+}
+.poster a {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0 var(--space-5);
+  color: var(--text);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+:where(main) .poster a {
+  color: var(--text);
+}
+.poster-name {
+  font: 700 clamp(4rem, 11vw, 10rem) / 0.92 var(--face);
+  letter-spacing: -0.05em;
+  text-transform: lowercase;
+}
+.poster-fact {
+  font-size: 1.1875rem;
   font-variant-numeric: tabular-nums;
 }
-.deeper-figure small {
-  color: var(--muted);
-  font: 400 0.8125rem / 1.2 var(--ui);
+.poster a:hover .poster-name,
+.poster a:focus-visible .poster-name {
+  color: var(--accent);
 }
-.deeper-name {
-  font: 600 1.25rem / 1.2 var(--prose);
-}
-.deeper-text {
-  color: var(--muted);
+.holds .wrap {
+  margin-block-start: var(--section);
 }
 @media (max-width: 40rem) {
-  .deeper-list a {
-    grid-template-columns: 6.5rem minmax(0, 1fr);
-    gap: var(--space-1) var(--space-4);
-    align-items: start;
+  .poster a {
+    display: block;
+    padding-block-end: 22px;
   }
-  .deeper-figure {
-    grid-row: span 2;
+  .poster-name {
+    display: block;
+    font-size: 15vw;
   }
-  .deeper-text {
-    grid-column: 2;
+  .poster-fact {
+    display: block;
+    margin-block-start: 6px;
+    font-size: 1rem;
   }
 }
 .system-names {
@@ -404,7 +812,7 @@ html:not(.js) .chapter {
 .bands a::before {
   content: counter(band);
   color: var(--muted);
-  font: 600 1rem / 1.4 var(--mono);
+  font: 600 1rem / 1.4 var(--face);
   font-variant-numeric: tabular-nums;
 }
 .bands a:hover {
@@ -434,9 +842,54 @@ html:not(.js) .chapter {
   }
 }
 
-/* The close of every page: one band, what the site is, every section and where else to go. */
+/* The close of every page: the name built from blocks, as breakers in a row, then one band of
+   what the site is, every section and where else to go. */
 .foot {
+  margin-block-start: 0;
   background: var(--surface);
+}
+.mark {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  box-sizing: border-box;
+  max-inline-size: var(--page);
+  block-size: 34svh;
+  min-block-size: 180px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--gutter) 0;
+  overflow: hidden;
+}
+.mark span {
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  justify-content: center;
+  block-size: 100%;
+  padding-block-end: 0.24em;
+  background: var(--text);
+  color: var(--surface);
+  font: 700 clamp(4rem, 14vw, 13rem) / 0.8 var(--face);
+  letter-spacing: -0.04em;
+}
+.mark span:nth-child(2) {
+  block-size: 72%;
+  background: var(--mint);
+  color: var(--mint-ink);
+}
+.mark span:nth-child(3) {
+  block-size: 86%;
+}
+.mark span:nth-child(4) {
+  block-size: 64%;
+  background: var(--sunken);
+  color: var(--text);
+}
+.mark span:nth-child(5) {
+  block-size: 92%;
+}
+.mark span:nth-child(6) {
+  block-size: 78%;
 }
 .foot-in {
   display: grid;
@@ -448,7 +901,7 @@ html:not(.js) .chapter {
   margin: 0 0 var(--space-2);
 }
 .foot-about {
-  max-width: 44ch;
+  max-width: 46ch;
   font-size: 1.0625rem;
 }
 .foot-nav ul,
@@ -470,11 +923,15 @@ html:not(.js) .chapter {
 }
 .foot-small {
   color: var(--muted);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
 }
 @media (max-width: 52rem) {
   .foot-in {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .mark {
+    block-size: 22svh;
+    min-block-size: 120px;
   }
 }
 
@@ -621,13 +1078,23 @@ html:not(.js) .chapter {
   list-style: none;
 }
 .hints li {
-  padding: var(--space-1) 0 var(--space-1) var(--space-4);
-  border-inline-start: 3px solid var(--sunken);
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: var(--space-3);
   color: var(--muted);
 }
+/* A hint the tool carries is a lit lamp; one it lacks is dark. */
+.hints li::before {
+  content: "";
+  block-size: 1.25rem;
+  margin-block-start: 0.15em;
+  background: var(--sunken);
+}
 .hints li[data-on="true"] {
-  border-color: var(--accent);
   color: var(--text);
+}
+.hints li[data-on="true"]::before {
+  background: var(--mint);
 }
 .actions,
 .said {
@@ -888,7 +1355,8 @@ th[aria-sort="ascending"] .sort::after {
 .flow-stack h2 {
   margin-block: 0;
   color: var(--muted);
-  font: 600 0.875rem / 1.4 var(--mono);
+  font: 600 0.9375rem / 1.4 var(--face);
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0;
 }
 .step-head {
@@ -973,7 +1441,6 @@ th[aria-sort="ascending"] .sort::after {
 .flow-steps a {
   display: block;
   padding: var(--space-3) var(--space-4);
-  border-inline-start: 3px solid var(--sunken);
   color: var(--muted);
   text-decoration: none;
 }
@@ -986,17 +1453,17 @@ th[aria-sort="ascending"] .sort::after {
   display: inline-block;
   min-inline-size: 2ch;
   margin-inline-end: var(--space-3);
-  font-family: var(--mono);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .flow-steps .step-name {
   color: var(--text);
   font-weight: 600;
 }
-.flow-steps a[aria-current] {
-  border-color: var(--accent);
-  background: var(--surface);
-  color: var(--text);
+.flow-steps a[aria-current],
+.flow-steps a[aria-current] .step-name {
+  background: var(--mint);
+  color: var(--mint-ink);
 }
 .hint {
   color: var(--muted);
@@ -1024,8 +1491,6 @@ th[aria-sort="ascending"] .sort::after {
   margin: 0;
   overflow: auto;
   padding-block: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-m);
   background: var(--sunken);
   font: 0.8125rem / 1.6 var(--mono);
   tab-size: 2;
