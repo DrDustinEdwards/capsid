@@ -24,7 +24,7 @@ import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
 import { headersFile } from "./src/security-headers.mjs";
 import { codeBySystem, escapePath } from "./src/code.mjs";
-import { CIRCLES_URL, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
+import { CIRCLES_URL, ORIGIN, allPages, circlesOf, escapeHtml, searchDocument } from "./src/pages.mjs";
 import { servedTools } from "./src/surface.mjs";
 
 const here = import.meta.dirname;
@@ -118,6 +118,24 @@ async function readSources(code, dir) {
   return out;
 }
 
+/** The site's llms.txt: what Capsid is and where each part of the explorer is. @param {number} systems @param {number} tools */
+const llmsTxt = (systems, tools) => `# Capsid
+
+> Capsid is an open-source (MIT) MCP server and control plane for AI coding agents, on one Cloudflare Worker: a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub before a job counts as done. This site is one live instance, seen from outside, rebuilt every day from its public data.
+
+- Code: https://github.com/DrDustinEdwards/capsid
+- Author: Dustin Edwards, https://dustinedwards.info
+
+## Pages
+
+- [Overview](${ORIGIN}/): what Capsid is and how a job runs through it
+- [Systems](${ORIGIN}/systems/): the ${systems} systems this instance runs, and what each is made of
+- [Flows](${ORIGIN}/flows/): what runs through Capsid, step by step
+- [Tools](${ORIGIN}/tools/): the ${tools} MCP tools Capsid serves and their arguments
+- [Numbers](${ORIGIN}/numbers/): the instance's daily numbers
+- [Code](${ORIGIN}/code/): each system's code and its health
+`;
+
 /** @param {{ model?: string, stats?: string, code?: string, source?: string, out?: string }} [options] */
 export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stats: statsSource = `${LIVE}/stats/v1.json`, code: codeSource = modelSource === `${LIVE}/model/v1.json` ? `${LIVE}/code/v1.json` : undefined, source: sourceDir, out = join(here, "dist") } = {}) {
   const model = PublicModelSchema.parse(await read(modelSource));
@@ -180,6 +198,12 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // Grotesk's latin cut with its weight axis.
   copyFileSync(join(dirname(require.resolve("@fontsource-variable/schibsted-grotesk/package.json")), "files", "schibsted-grotesk-latin-wght-normal.woff2"), join(assets, "schibsted.woff2"));
   writeFileSync(join(out, "_headers"), headersFile());
+  // For search engines and language models: every page in a sitemap, robots.txt pointing to it,
+  // and llms.txt (https://llmstxt.org), a short guide. Cloudflare puts its own robots.txt lines first.
+  const listed = pages.map(([path]) => path).filter((path) => path !== "/404" && path !== "/search/");
+  writeFileSync(join(out, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${listed.map((path) => `<url><loc>${escapeHtml(ORIGIN + path)}</loc></url>`).join("\n")}\n</urlset>\n`);
+  writeFileSync(join(out, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n# LLM guide: ${ORIGIN}/llms.txt\n`);
+  writeFileSync(join(out, "llms.txt"), llmsTxt(model.systems.length, tools.length));
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the
   // explorer's own files changed. Written last, so the hash cannot cover itself.
