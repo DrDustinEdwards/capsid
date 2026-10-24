@@ -7,7 +7,7 @@
 // Every status is Capsomer's: a glyph whose shape carries it, a word, and the tone's colour
 // (components/status). A number nobody measured is "No data" with its reason, never a zero.
 import { graphSvg } from "./graph.mjs";
-import { escapeHtml, layout, pageHead, scroller, systemPath } from "./pages.mjs";
+import { escapeHtml, layout, pageHead, reading, scroller, systemPath } from "./pages.mjs";
 
 /** The most modules a folder's drawing shows. */
 const MAX_DRAWN = 40;
@@ -340,14 +340,14 @@ export function codeIndexPage(model, bySystem, totals, asOf) {
     .sort((a, b) => /** @type {number} */ (a.score) - /** @type {number} */ (b.score))
     .slice(0, 15);
   const body = `${head}
-<div class="stats">${[
+<dl class="readings readings-row">${[
     [totals.repos, "public repos"],
     [totals.modules.toLocaleString("en-GB"), "modules"],
     [totals.functions.toLocaleString("en-GB"), "functions"],
     [totals.lines.toLocaleString("en-GB"), "lines"],
   ]
-    .map(([v, l]) => `<div class="stat"><p class="stat-value">${escapeHtml(String(v))}</p><p class="stat-label">${escapeHtml(String(l))}</p></div>`)
-    .join("")}</div>
+    .map(([v, l]) => reading(String(v), String(l)))
+    .join("")}</dl>
 <section aria-labelledby="repos-title"><h2 id="repos-title">Every repo</h2>
 ${scroller("repos", `<table class="cap-table code-table" data-sortable><caption>Each public repo's size and health; choose a heading to sort</caption><thead><tr><th scope="col">Repo</th><th scope="col">Lines</th><th scope="col">Modules</th><th scope="col">Functions</th><th scope="col">Covered</th><th scope="col">Critical</th><th scope="col">Cycles</th><th scope="col">Mutation</th></tr></thead><tbody>${repoRows}</tbody></table>`, "Every repo")}
 </section>

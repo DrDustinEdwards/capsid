@@ -11,7 +11,7 @@ import { build } from "../build.mjs";
 import { codePage, codePath, modulePage, modulePath } from "../src/code.mjs";
 import { numbersHtml } from "../src/numbers.mjs";
 import { servedTools } from "../src/surface.mjs";
-import { SITE, allPages, containersPath, flowPath, stepPath, systemPath } from "../src/pages.mjs";
+import { SITE, allPages, containersPath, escapeHtml, flowPath, stepPath, stepWords, systemPath } from "../src/pages.mjs";
 
 const fixtures = new URL("../fixtures/", import.meta.url).pathname;
 const read = (/** @type {string} */ name) => JSON.parse(readFileSync(join(fixtures, name), "utf8"));
@@ -298,7 +298,8 @@ test("every step of every flow has its page, saying the flow's name, where it is
       const page = stepFile(f.id, i + 1);
       assert.ok(page.includes(`<h1>${f.name.replace("'", "&#39;")}</h1>`), `${f.id} step ${i + 1} does not name its flow`);
       assert.ok(page.includes(`Step ${i + 1} of ${f.steps.length}`), `${f.id} step ${i + 1} does not say where it is`);
-      assert.ok(page.includes(`<p class="flow-text">${st.text.replace("'", "&#39;")}</p>`), `${f.id} step ${i + 1} does not say what happens`);
+      const w = stepWords({ n: i + 1, text: st.text });
+      assert.ok(page.includes(`<p class="step-head">${escapeHtml(w.name)}</p>\n<p class="flow-text">${escapeHtml(w.text)}</p>`), `${f.id} step ${i + 1} does not say what happens`);
       seen++;
     });
   }

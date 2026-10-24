@@ -27,7 +27,7 @@ main {
 }
 main.wide {
   max-width: none;
-  padding: 0;
+  padding: 0 0 var(--section);
 }
 .wrap {
   max-width: var(--page);
@@ -42,10 +42,10 @@ main.wide > .tour {
 }
 
 h1 {
-  max-width: 22ch;
+  max-width: 20ch;
   margin-block: var(--space-6) var(--space-4);
-  font: 600 clamp(2rem, 3.6vw, 3rem) / 1.05 var(--prose);
-  letter-spacing: -0.02em;
+  font: 600 clamp(2.25rem, 4.4vw, 3.75rem) / 1.02 var(--prose);
+  letter-spacing: -0.03em;
 }
 h1 code {
   font-size: 0.8em;
@@ -376,9 +376,11 @@ html:not(.js) .chapter {
 .cap-tabs-panel {
   padding-block-start: var(--space-5);
 }
+/* A flow's steps, one row a step: its number, its name over what happens, and the parts it
+   touches, told apart from the next by a step in tone. */
 .bands {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -389,7 +391,7 @@ html:not(.js) .chapter {
 }
 .bands a {
   display: grid;
-  grid-template-columns: 3rem minmax(0, 1fr) minmax(0, 16rem);
+  grid-template-columns: 2.5rem minmax(0, 1fr) minmax(0, 18rem);
   gap: var(--space-4);
   align-items: baseline;
   padding: var(--space-4) var(--space-5);
@@ -399,62 +401,66 @@ html:not(.js) .chapter {
   text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease-out);
 }
-.bands li:nth-child(even) a {
-  background: var(--sunken);
-}
 .bands a::before {
   content: counter(band);
-  font: 600 1.25rem / 1 var(--prose);
+  color: var(--muted);
+  font: 600 1rem / 1.4 var(--mono);
   font-variant-numeric: tabular-nums;
 }
 .bands a:hover {
   background: var(--accent-soft);
 }
+.band-text {
+  line-height: 1.5;
+}
+.band-name {
+  display: block;
+  font: 600 1.25rem / 1.3 var(--prose);
+}
 .band-parts {
-  color: var(--muted);
-  font-size: 0.875rem;
-  text-align: end;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
 }
 @media (max-width: 40rem) {
   .bands a {
-    grid-template-columns: 2rem minmax(0, 1fr);
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    padding: var(--space-4);
   }
   .band-parts {
     grid-column: 2;
-    text-align: start;
+    justify-content: flex-start;
   }
 }
 
-/* The close of every page, as tiles. */
+/* The close of every page: one band, what the site is, every section and where else to go. */
 .foot {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 8px;
-  padding: 8px;
-}
-.foot-tile {
-  margin: 0;
-  padding: var(--space-5);
-  border-radius: var(--radius-l);
   background: var(--surface);
 }
-.foot-tile p {
+.foot-in {
+  display: grid;
+  grid-template-columns: minmax(0, 6fr) minmax(0, 3fr) minmax(0, 3fr);
+  gap: var(--space-6);
+  padding-block: var(--space-7);
+}
+.foot p {
   margin: 0 0 var(--space-2);
 }
 .foot-about {
-  grid-column: span 4;
-  font-size: 1.125rem;
+  max-width: 44ch;
+  font-size: 1.0625rem;
 }
-.foot-nav {
-  grid-column: span 3;
-}
-.foot-nav ul {
+.foot-nav ul,
+.foot-out {
   display: grid;
-  grid-template-columns: repeat(2, max-content);
   gap: var(--space-1) var(--space-6);
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.foot-nav ul {
+  grid-template-columns: repeat(2, max-content);
 }
 .foot-nav a,
 .foot-out a {
@@ -462,89 +468,41 @@ html:not(.js) .chapter {
   align-items: center;
   min-block-size: 28px;
 }
-.foot-day {
-  grid-column: span 2;
-}
-.foot-out {
-  grid-column: span 3;
-}
 .foot-small {
   color: var(--muted);
   font-size: 0.875rem;
 }
-.foot-big {
-  font: 600 1.5rem / 1.2 var(--prose);
-  font-variant-numeric: tabular-nums;
-}
-.foot-mark {
-  grid-column: span 12;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-block-size: 168px;
-  background: var(--text);
-  color: var(--ground);
-  font: 600 clamp(4rem, 11vw, 10rem) / 1 var(--prose);
-  letter-spacing: -0.04em;
-}
 @media (max-width: 52rem) {
-  .foot {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-  }
-  .foot-mark {
-    grid-column: span 2;
-    min-block-size: 140px;
-    order: -1;
-  }
-  .foot-about,
-  .foot-nav,
-  .foot-day,
-  .foot-out {
-    grid-column: span 1;
-  }
-}
-@media (max-width: 30rem) {
-  .foot-about,
-  .foot-nav,
-  .foot-day,
-  .foot-out {
-    grid-column: span 2;
+  .foot-in {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* Big figures, in a row. */
-.stats {
+/* Readings set as a page's headline figures, and a system's facts set the same way, smaller. */
+.readings-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-  gap: 8px;
-  margin-block: var(--space-6);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-block: var(--space-6) var(--space-7);
 }
 @media (max-width: 40rem) {
-  .stats {
+  .readings-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+.readings-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  margin-block: var(--space-6) 0;
+}
+.readings-facts .reading dd {
+  font: 500 1.125rem / 1.35 var(--ui);
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 @media (pointer: coarse) {
   [data-keys] {
     display: none;
   }
-}
-.stat {
-  padding: var(--space-5);
-  border-radius: var(--radius-l);
-  background: var(--surface);
-}
-.stat p {
-  margin: 0;
-}
-.stat-value {
-  font: 600 clamp(2rem, 4vw, 3rem) / 1 var(--prose);
-  font-variant-numeric: tabular-nums;
-}
-.stat-label {
-  margin-block-start: var(--space-2) !important;
-  color: var(--muted);
 }
 
 /* The numbers page. */
@@ -603,21 +561,29 @@ html:not(.js) .chapter {
   color: var(--accent-text);
 }
 
-/* The tools page. */
+/* The tools page: one row a tool, its name beside what it does. */
 .tool-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
-  gap: 8px;
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .tool-card {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--space-1) var(--space-6);
   padding: var(--space-5);
-  border-radius: var(--radius-l);
+  border-radius: var(--radius-m);
   background: var(--surface);
 }
+.tool-card > * {
+  grid-column: 2;
+  margin: 0;
+}
 .tool-card > a {
+  grid-column: 1;
+  grid-row: 1 / span 3;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -630,45 +596,90 @@ html:not(.js) .chapter {
 }
 .tool-card-title {
   color: var(--text);
-  font: 600 1.25rem / 1.2 var(--prose);
+  font: 600 1.375rem / 1.2 var(--prose);
 }
 .tool-card > a:hover .tool-card-title {
   color: var(--accent-text);
   text-decoration: underline;
 }
+@media (max-width: 52rem) {
+  .tool-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tool-card > *,
+  .tool-card > a {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+/* A tool's page. Its hints, each marked on or off by the same left rule a tour chapter uses. */
 .hints {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: 8px;
+  gap: var(--space-4) var(--space-6);
   padding: 0;
   list-style: none;
 }
 .hints li {
-  padding: var(--space-4);
-  border-radius: var(--radius-m);
-  background: var(--surface);
+  padding: var(--space-1) 0 var(--space-1) var(--space-4);
+  border-inline-start: 3px solid var(--sunken);
+  color: var(--muted);
 }
 .hints li[data-on="true"] {
-  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
 }
-.actions {
+.actions,
+.said {
   display: grid;
-  gap: 8px;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.action {
+.action,
+.said li {
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-6);
   padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-m);
   background: var(--surface);
+}
+.action dt code,
+.said code {
+  color: var(--accent-text);
+  font: 600 1rem / 1.5 var(--mono);
+  overflow-wrap: anywhere;
 }
 .action dt {
   font-weight: 600;
 }
 .action dt code {
-  margin-inline-end: var(--space-2);
-  color: var(--accent-text);
+  display: block;
 }
 .action dd {
   margin: 0;
+}
+.action dd p {
+  margin: 0 0 var(--space-2);
+}
+.said {
+  max-width: 60rem;
+  margin-block: var(--space-4);
+}
+.said-note span {
+  grid-column: 2;
+  color: var(--muted);
+}
+@media (max-width: 40rem) {
+  .action,
+  .said li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .said-note span {
+    grid-column: 1;
+  }
 }
 .pager {
   display: flex;
@@ -679,24 +690,6 @@ html:not(.js) .chapter {
 }
 
 /* A system's page. */
-.facts {
-  display: grid;
-  inline-size: fit-content;
-  max-inline-size: 100%;
-  grid-template-columns: max-content 1fr;
-  gap: var(--space-2) var(--space-5);
-  margin: 0;
-  padding: var(--space-5);
-  border-radius: var(--radius-l);
-  background: var(--surface);
-}
-.facts dt {
-  color: var(--muted);
-}
-.facts dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
 .links-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -733,6 +726,14 @@ html:not(.js) .chapter {
 }
 .flow-card h2 {
   margin-block-start: 0;
+}
+.flow-card h2 a {
+  color: var(--text);
+  text-decoration: none;
+}
+.flow-card h2 a:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
 }
 
 /* Search. */
@@ -883,8 +884,22 @@ th[aria-sort="ascending"] .sort::after {
      it meets the page title's as it did before the stack. */
   margin-block-start: var(--space-7);
 }
+/* A step reads as a tour chapter does: its number, its name large, then what happens. */
 .flow-stack h2 {
-  margin-block-start: 0;
+  margin-block: 0;
+  color: var(--muted);
+  font: 600 0.875rem / 1.4 var(--mono);
+  letter-spacing: 0;
+}
+.step-head {
+  margin-block: var(--space-2) var(--space-3);
+  font: 600 clamp(1.75rem, 3vw, 2.5rem) / 1.1 var(--prose);
+  letter-spacing: -0.02em;
+}
+/* The step page tells the step itself, so the map's own card and list of it are not shown twice. */
+.step-drawing .cap-system-map-detail,
+.step-drawing details {
+  display: none;
 }
 /* On a wide screen the step reads beside its drawing, so stepping never sends the eye down the
    page to see what moved. */
@@ -909,6 +924,29 @@ th[aria-sort="ascending"] .sort::after {
   margin-block: var(--space-5) var(--space-2);
   font-size: 1rem;
 }
+.flow-touches {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.flow-touches li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+.flow-touches li > :first-child {
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  font-size: 0.9375rem;
+}
+.touch-role {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
 .flow-nav {
   display: flex;
   flex-wrap: wrap;
@@ -919,21 +957,46 @@ th[aria-sort="ascending"] .sort::after {
   padding-block: var(--space-2);
   font-weight: 600;
 }
-/* Each step's link is a 24 px target at least, apart from its neighbours (WCAG 2.5.8). */
+/* Every step, one row each, its name first; the shown one carries the accent rule. */
+.flow-steps {
+  display: grid;
+  gap: 2px;
+  max-width: 60rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
 .flow-steps li {
-  margin-block: var(--space-1);
+  counter-increment: step;
 }
-/* Top-aligned, so a step that wraps keeps its number beside its first line. */
 .flow-steps a {
-  display: inline-block;
-  vertical-align: top;
-  padding-block: var(--space-1);
-  min-block-size: 24px;
+  display: block;
+  padding: var(--space-3) var(--space-4);
+  border-inline-start: 3px solid var(--sunken);
+  color: var(--muted);
+  text-decoration: none;
 }
-.flow-steps a[aria-current] {
+.flow-steps a:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+.flow-steps a::before {
+  content: counter(step);
+  display: inline-block;
+  min-inline-size: 2ch;
+  margin-inline-end: var(--space-3);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.flow-steps .step-name {
   color: var(--text);
   font-weight: 600;
-  text-decoration-thickness: 2px;
+}
+.flow-steps a[aria-current] {
+  border-color: var(--accent);
+  background: var(--surface);
+  color: var(--text);
 }
 .hint {
   color: var(--muted);

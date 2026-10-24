@@ -6,7 +6,7 @@
 // Every number is from the public numbers or the model; every sentence that states a fact about
 // how Capsid works is the model's own flow text.
 
-import { escapeHtml, flowStage, flowsOf, layout, minutes, percent, stepPath, systemPath } from "./pages.mjs";
+import { escapeHtml, flowStage, flowsOf, layout, minutes, percent, reading, stepPath, stepWords, systemPath } from "./pages.mjs";
 
 /** The week each bar of a weekly series ends on, labelled as the numbers page does. @param {any} stats */
 export function weekLabels(stats) {
@@ -15,9 +15,6 @@ export function weekLabels(stats) {
     new Date(end.getTime() - (all.length - 1 - i) * 7 * 86_400_000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).replace("Sept", "Sep")
   );
 }
-
-/** One instrument reading: a figure and what it counts. @param {string} value @param {string} label */
-const reading = (value, label) => `<div class="reading"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
 
 /**
  * The reading Capsid keeps for each moment of a job's life, by the step's own name (the words
@@ -57,10 +54,7 @@ function tour(/** @type {any} */ model, /** @type {any} */ stats, /** @type {any
   const readings = readingsByStep(stats);
   const chapters = life.steps
     .map((st) => {
-      const [head, ...rest] = st.text.split(": ");
-      const name = rest.length ? head : `Step ${st.n}`;
-      const said = rest.length ? rest.join(": ") : st.text;
-      const text = said.charAt(0).toUpperCase() + said.slice(1);
+      const { name, text } = stepWords(st);
       const kept = readings[name.toLowerCase()] ?? [];
       return `<li class="chapter" data-tour-step="${st.n}">
 <p class="chapter-n">${st.n} of ${life.steps.length}</p>
