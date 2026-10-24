@@ -321,13 +321,15 @@ export interface OutcomeFact {
   corrections: number | null;
   cost_usd: number | null;
   tokens: number | null;
+  // Its pull request was later reverted, or its deploy rolled back (src/model-learning.ts).
+  undone?: boolean;
 }
 
 export interface Cell {
   kind: string;
   model: string;
   n: number;
-  // Jobs with a verified merge and green CI, over n.
+  // Jobs with a verified merge and green CI that was not later reverted or rolled back, over n.
   merged_green: number;
   rate: number;
   corrections_mean: number | null;
@@ -357,7 +359,7 @@ export function cellsOf(facts: readonly OutcomeFact[]): Cell[] {
   const cells: Cell[] = [];
   for (const [key, rows] of groups) {
     const [kind, model] = key.split("\u0000") as [string, string];
-    const good = rows.filter((r) => (r.prs_merged ?? 0) >= 1 && r.ci_green === 1).length;
+    const good = rows.filter((r) => (r.prs_merged ?? 0) >= 1 && r.ci_green === 1 && !r.undone).length;
     const corr = rows.filter((r) => r.corrections !== null);
     const costed = rows.filter((r) => r.cost_usd !== null);
     cells.push({

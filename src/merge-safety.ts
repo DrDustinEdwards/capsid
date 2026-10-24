@@ -1,7 +1,7 @@
 import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import { loadMergePolicy } from "./auto-merge-policy";
 import type { Env } from "./env";
-import { ghFetch, resolveRepo } from "./github/client";
+import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import { logEvent } from "./log";
 import type { OpsMergeSafety, OpsMergeSafetyRow } from "./ops-types/feed";
 import { auditStatement } from "./store-guards";
@@ -162,16 +162,95 @@ export async function recordReverts(env: Env, namespace: string, now: Date): Pro
   return recorded;
 }
 
-/** The revert pass over every namespace the signed merge policy covers, at most once in
- *  30 minutes (a KV stamp, like the watcher's). A policy that does not load, or a GitHub
- *  failure for one namespace, is logged and the rest go on. */
+// A job's merged pull request that a later merge reverted, in any repo a recent outcome
+// names, auto-merged or not. The model routing learns from it (src/model-learning.ts): a
+// merge that had to be undone is not work that held. Recorded once per (job, pull
+// request, revert) as a `job-pr-reverted` audit row.
+const OUTCOME_REPOS_MAX = 30;
+const SHA_LOOKUPS_MAX = 20;
+
+/** The revert pass over the repos of the last 90 days' merged outcome pull requests.
+ *  Returns what it recorded; a GitHub failure for one repo is logged and the rest go on. */
+export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[]> {
+  const since = new Date(now.getTime() - WINDOW_MS).toISOString().replace("T", " ").slice(0, 19);
+  const { results } = await env.DB.prepare(
+    `SELECT p.job_id AS job_id, p.pr_url AS pr_url, o.namespace AS namespace FROM job_outcome_prs p JOIN job_outcomes o ON o.job_id = p.job_id
+     WHERE p.merged = 1 AND p.recorded_at >= ?1 ORDER BY p.recorded_at DESC LIMIT ?2`
+  )
+    .bind(since, AUDIT_ROWS_LIMIT)
+    .all<{ job_id: string; pr_url: string; namespace: string }>();
+  const repos = new Map<string, { owner: string; repo: string; prs: Map<number, Array<{ job_id: string; namespace: string }>> }>();
+  for (const row of results ?? []) {
+    const ref = parsePrUrl(row.pr_url);
+    if (!ref) continue;
+    const key = `${ref.owner}/${ref.repo}`.toLowerCase();
+    const entry = repos.get(key) ?? (repos.set(key, { owner: ref.owner, repo: ref.repo, prs: new Map() }), repos.get(key)!);
+    entry.prs.set(ref.number, [...(entry.prs.get(ref.number) ?? []), { job_id: row.job_id, namespace: row.namespace }]);
+  }
+  const recorded: string[] = [];
+  for (const { owner, repo, prs } of [...repos.values()].slice(0, OUTCOME_REPOS_MAX)) {
+    const full = `${owner}/${repo}`;
+    try {
+      const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${CLOSED_PRS_READ}`);
+      if (!resp.ok) throw new Error(`the closed pull requests of ${full} returned ${resp.status}`);
+      let shaLookups = 0;
+      for (const closed of (await resp.json()) as ClosedPr[]) {
+        if (!closed.merged_at || now.getTime() - Date.parse(closed.merged_at) > WINDOW_MS) continue;
+        const targets = revertTargets(closed.title ?? "", closed.body ?? "", full);
+        const numbers = new Set(targets.prs);
+        // git's "This reverts commit <sha>" names a commit: GitHub says which pull request
+        // brought it in.
+        for (const sha of targets.shas) {
+          if (shaLookups++ >= SHA_LOOKUPS_MAX) break;
+          const pulls = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/commits/${sha}/pulls`);
+          if (pulls.ok) for (const p of (await pulls.json()) as Array<{ number: number }>) numbers.add(p.number);
+        }
+        for (const pr of numbers) {
+          if (pr === closed.number) continue;
+          for (const job of prs.get(pr) ?? []) {
+            const seen = await env.DB.prepare(
+              `SELECT 1 AS found FROM audit_log WHERE action = 'job-pr-reverted' AND json_extract(params, '$.job_id') = ?1
+                 AND json_extract(params, '$.pr') = ?2 AND json_extract(params, '$.reverted_by') = ?3 LIMIT 1`
+            )
+              .bind(job.job_id, pr, closed.number)
+              .first<{ found: number }>();
+            if (seen) continue;
+            await env.DB.batch([
+              auditStatement(env.DB, ACTOR, "job-pr-reverted", job.namespace, null, {
+                job_id: job.job_id,
+                repo: full,
+                pr,
+                reverted_by: closed.number,
+                merged_at: closed.merged_at,
+                at: now.toISOString(),
+              }),
+            ]);
+            recorded.push(`${job.job_id} (${full}#${pr} by #${closed.number})`);
+          }
+        }
+      }
+    } catch (err) {
+      logEvent("error", "MERGE_SAFETY", { message: `MERGE_SAFETY could not read the reverts of ${full}: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+  return recorded;
+}
+
+/** The revert pass over every namespace the signed merge policy covers, and over the
+ *  repos of recent job outcomes, at most once in 30 minutes (a KV stamp, like the
+ *  watcher's). A policy that does not load, or a GitHub failure for one namespace, is
+ *  logged and the rest go on. */
 export async function revertsTick(env: Env, now: Date, policy?: Awaited<ReturnType<typeof loadMergePolicy>>): Promise<RevertsReport> {
   const last = await env.APP_KV.get(REVERTS_STAMP_KEY).catch(() => null);
   const due = passDue(last, REVERTS_EVERY_MINUTES, now);
   if (!due.due) return { ran: false, note: due.reason, recorded: [] };
+  const outcomes = await recordOutcomeReverts(env, now);
   const loaded = policy ?? (await loadMergePolicy(env));
-  if ("error" in loaded) return { ran: false, note: loaded.error, recorded: [] };
-  const recorded: string[] = [];
+  if ("error" in loaded) {
+    await env.APP_KV.put(REVERTS_STAMP_KEY, now.toISOString());
+    return { ran: true, note: `${outcomes.length} revert(s) of job pull requests recorded; ${loaded.error}`, recorded: outcomes };
+  }
+  const recorded: string[] = [...outcomes];
   for (const namespace of loaded.policy.namespaces) {
     try {
       recorded.push(...(await recordReverts(env, namespace, now)));
@@ -180,7 +259,7 @@ export async function revertsTick(env: Env, now: Date, policy?: Awaited<ReturnTy
     }
   }
   await env.APP_KV.put(REVERTS_STAMP_KEY, now.toISOString());
-  return { ran: true, note: `${recorded.length} revert(s) of auto-merged pull requests recorded${recorded.length ? `: ${recorded.join(", ")}` : ""}`, recorded };
+  return { ran: true, note: `${recorded.length} revert(s) recorded (job and auto-merged pull requests)${recorded.length ? `: ${recorded.join(", ")}` : ""}`, recorded };
 }
 
 // ---------------------------------------------------------------------------

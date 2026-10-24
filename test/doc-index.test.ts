@@ -246,6 +246,7 @@ test("hybrid search keeps the index's order and reads every hit back from D1 wit
   assert.equal(retrieval?.return_on_failure, false, "a failure throws, so the caller falls back instead of seeing nothing");
   assert.deepEqual(retrieval?.filters, { namespace: { $eq: "sample" }, status: { $nin: ["closed", "superseded"] } });
   assert.deepEqual(retrieval?.boost_by, [{ field: "canon", direction: "desc" }]);
+  assert.deepEqual(seen?.ai_search_options?.reranking, { enabled: true, model: "@cf/baai/bge-reranker-base", match_threshold: 0 }, "reranking reorders and drops nothing");
   assert.equal(await kv.kv.get("doc-index:queries:2026-10"), "1", "the query is counted");
   assert.deepEqual(await aiSearchUsage(env, DAY1), { month: "2026-10", hybrid: 1, cap: HYBRID_MONTHLY_CAP }, "and reported for /health");
 
