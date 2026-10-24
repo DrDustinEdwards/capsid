@@ -18,7 +18,7 @@ import { searchIndex, searchPage } from "./search.mjs";
 import { toolPages } from "./tools.mjs";
 
 export const SITE = "https://dustinedwards.info";
-const ORIGIN = "https://capsid.dustinedwards.info";
+export const ORIGIN = "https://capsid.dustinedwards.info";
 
 const RING_NAMES = { core: "Runs everything", shared: "Shared parts", used: "What people use" };
 const VERB = {
