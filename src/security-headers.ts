@@ -1,3 +1,4 @@
+import { buildPolicy, reportingEndpoints } from "@dustinedwards/site-runtime/csp";
 import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 import { MCP_HOST } from "./mcp-host";
 
@@ -8,9 +9,9 @@ export type SurfaceClass = "html" | "json" | "other";
 // defaults, so none is typed here. Capsid keeps what the package cannot express, and names it:
 //   - Cross-Origin-Opener-Policy-Report-Only: COOP ships on trial, never enforced, pending a
 //     demonstrated case and a ruling, so the package's enforced COOP is removed below.
-//   - Reporting-Endpoints and the report-only CSP on non-HTML: they carry this Worker's own
-//     /csp-report sink (REPORT_PATH), which the package's builder does not model.
-//   - The consent dialog's enforced CSP (CONSENT_DIALOG_HEADERS), set by routes.ts.
+//   - The report-only CSP on non-HTML and the consent dialog's enforced CSP (CONSENT_DIALOG_HEADERS,
+//     set by routes.ts). Neither is a page policy: both leave form-action out (below), which
+//     buildContentSecurityPolicy always writes, so they go through the package's plain buildPolicy.
 // No preload on HSTS: that is a vendor-list submission and effectively irreversible.
 export const CAPSID_STANDARD_HEADERS: Readonly<Record<string, string>> = buildSecurityHeaders({
   overrides: {
@@ -29,14 +30,13 @@ export const REPORT_PATH = "/csp-report";
 // is behind Access, so a report sent to its own /csp-report met the sign-in redirect and was
 // lost; every host now reports to this one (routes.ts answers the Portal's preflight).
 export const REPORT_URL = `https://${MCP_HOST}${REPORT_PATH}`;
-const REPORTING_ENDPOINTS = `csp="${REPORT_URL}"`;
+const REPORTING_ENDPOINTS = reportingEndpoints("csp", REPORT_URL);
 // Where CSP reports used to be stored. Nothing writes there; the backup prune
 // (backup.ts) reaps what is left.
 export const REPORT_PREFIX = "reports/csp/";
 
 // Report-Only, never enforced. form-action is deliberately absent.
-export const CSP_REPORT_ONLY_NON_HTML =
-  `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; report-uri ${REPORT_URL}; report-to csp`;
+export const CSP_REPORT_ONLY_NON_HTML = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]);
 
 export const COOP_REPORT_ONLY = "same-origin";
 
@@ -60,7 +60,7 @@ export const COOP_REPORT_ONLY = "same-origin";
 // because the approvedClients fast path 302s out of the GET and never submits a form.
 export const CONSENT_DIALOG_HEADERS: Readonly<Record<string, string>> = {
   "Content-Type": "text/html;charset=utf-8",
-  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+  "Content-Security-Policy": buildPolicy(["default-src 'none'", "style-src 'unsafe-inline'", "base-uri 'none'", "frame-ancestors 'none'"]),
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "X-Frame-Options": "DENY",
@@ -109,11 +109,11 @@ export function withSecurityHeaders(response: Response): Response {
   const surface = classifySurface(response.headers.get("Content-Type"));
   const wanted = securityHeadersFor(surface);
 
-  const absent = Object.keys(wanted).filter((k) => !response.headers.has(k));
+  const absent = Object.entries(wanted).filter(([k]) => !response.headers.has(k));
   if (absent.length === 0) return response;
 
   // Headers on an already-constructed Response can be immutable, so rebuild.
   const headers = new Headers(response.headers);
-  for (const key of absent) headers.set(key, wanted[key]);
+  for (const [key, value] of absent) headers.set(key, value);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
