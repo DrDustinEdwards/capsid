@@ -51,9 +51,14 @@ async function sql(fetchImpl: FetchLike, token: string, account: string, query: 
     body: JSON.stringify({ query, params, scope: { accountTag: account } }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  const body = (await resp.json().catch(() => null)) as { data?: unknown; errors?: Array<{ message?: string }>; message?: string } | null;
+  const text = await resp.text();
+  let body: { data?: unknown; errors?: Array<{ message?: string }>; message?: string; error?: string } | null = null;
+  try {
+    body = JSON.parse(text);
+  } catch {}
   if (!resp.ok || !Array.isArray(body?.data)) {
-    const why = (body?.errors?.map((e) => e.message).filter(Boolean).join("; ") || body?.message || "").slice(0, 300) || "no message";
+    // The beta's error shape is not documented, so the raw body stands in for a message.
+    const why = (body?.errors?.map((e) => e.message).filter(Boolean).join("; ") || body?.message || body?.error || text).slice(0, 300) || "no message";
     if (resp.status === 403) throw new Error(`Cloudflare refused the traffic query (403: ${why}). CF_OPS_TOKEN needs Account / Account Analytics / Read.`);
     throw new Error(`Cloudflare's SQL API answered ${resp.status}: ${why}`);
   }
