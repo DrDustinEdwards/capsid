@@ -85,10 +85,22 @@ const VITALS = ["largestContentfulPaint", "interactionToNextPaint", "cumulativeL
 const P = ["P50", "P75", "P90"] as const;
 
 async function siteTagFor(fetchImpl: FetchLike, token: string, account: string, host: string): Promise<string> {
-  const rows = (await cfGetAll(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/rum/site_info/list`, "the Web Analytics sites list", 50)) as Array<{ host?: unknown; site_tag?: unknown }>;
-  const row = rows.find((r) => typeof r?.host === "string" && r.host.toLowerCase() === host);
-  if (!row || typeof row.site_tag !== "string") throw new Error(`${host} has no Web Analytics site, so there are no visitor measurements. Turn Web Analytics on for it in the Cloudflare dashboard.`);
-  return row.site_tag;
+  const rows = (await cfGetAll(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/rum/site_info/list`, "the Web Analytics sites list", 50)) as Array<Record<string, unknown>>;
+  // A site names its host at the top for a manual setup, and through its ruleset's zone
+  // (or its rules' hosts) for the automatic one; the reference does not say which a row
+  // carries, so every place is read.
+  const lower = (v: unknown) => (typeof v === "string" ? v.toLowerCase() : "");
+  const hostsOf = (r: Record<string, unknown>) => {
+    const ruleset = (r.ruleset ?? {}) as Record<string, unknown>;
+    const rules = Array.isArray(r.rules) ? (r.rules as Array<Record<string, unknown>>) : [];
+    return [lower(r.host), lower(ruleset.zone_name), ...rules.map((x) => lower(x?.host))].filter(Boolean);
+  };
+  const exact = rows.find((r) => hostsOf(r).includes(host));
+  const zone = exact ?? rows.find((r) => hostsOf(r).some((h) => host.endsWith(`.${h}`)));
+  if (zone && typeof zone.site_tag === "string") return zone.site_tag;
+  const seen = rows.flatMap(hostsOf).slice(0, 20).join(", ") || "none";
+  const fields = [...new Set(rows.flatMap((r) => Object.keys(r)))].join(", ") || "none";
+  throw new Error(`${host} has no Web Analytics site among the account's ${rows.length} (hosts seen: ${seen}; fields: ${fields}), so there are no visitor measurements.`);
 }
 
 async function webVitals(fetchImpl: FetchLike, token: string, account: string, host: string, start: string, end: string) {
