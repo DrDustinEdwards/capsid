@@ -94,7 +94,8 @@ export function layout({ title, description, path, body, asOf, wide = false }) {
 <body>
 ${header(here, path)}
 <main id="main" tabindex="-1"${wide ? ' class="wide"' : ""}>
-${path === "/" ? body : `${manualHead(path)}${numbered(body, path)}`}
+${path === "/" ? "" : manualHead(path)}${numbered(body, path)}
+${folio(path)}
 </main>
 ${footer(asOf)}
 </body>
@@ -140,39 +141,50 @@ function header(here, path) {
  */
 const SECTIONS = [...NAV, ["/search/", "Search"]].map(([href, label], i) => ({ href, label, no: i + 1 }));
 
+/** A section by its own path. @param {string} href */
+export const sectionAt = (href) => SECTIONS.find((section) => section.href === href);
+
 /** The section a page is numbered in: search is a section of its own here. @param {string} path */
-const sectionFor = (path) => SECTIONS.find(({ href }) => href === (path === "/search/" ? path : sectionOf(path)));
+const sectionFor = (path) => sectionAt(path === "/search/" ? path : sectionOf(path));
 
 /**
- * A page's header, as each page of the manual opens: the section's number and name over a heavy
- * rule, the site on the right. The page's own trail and heading follow it as text.
+ * A page's head, as the manual's index names a section (NHB 1430.2, page i): its number and name
+ * in bold on the left, the site on the right as the cover sets the handbook's number, over a
+ * hairline. The page's own trail and heading follow it as text.
  * @param {string} path
  */
 export function manualHead(path) {
   const section = sectionFor(path);
   if (!section) return "";
-  return `<div class="manual-head" aria-hidden="true"><span class="manual-no">${section.no}.0</span><span class="manual-name">${section.label}</span><span class="manual-site">Capsid · ${ORIGIN.replace("https://", "")}</span></div>`;
+  return `<div class="manual-head" aria-hidden="true"><span class="manual-name"><span class="manual-no">${section.no}</span>${section.label}</span><span class="manual-site">Capsid<br>${ORIGIN.replace("https://", "")}</span></div>`;
+}
+
+/** A page's folio, set at the foot on the right as every page of the manual is numbered. @param {string} path */
+export function folio(path) {
+  const section = sectionFor(path);
+  return section ? `<p class="folio" aria-hidden="true">${section.no}.0</p>` : "";
 }
 
 /**
  * Each visible second-level heading of a page numbered in its section, n.1 onwards, in reading
- * order. A heading kept for screen readers alone keeps no number.
+ * order. A heading kept for screen readers alone keeps no number, nor does one inside a Capsomer
+ * component (a drawing's own lists) or one marked plain (a flow's steps, swapped in place).
  * @param {string} body @param {string} path
  */
 export function numbered(body, path) {
   const section = sectionFor(path);
   if (!section) return body;
   let n = 0;
-  return body.replace(/<h2(\s[^>]*)?>/g, (tag, attrs = "") => (/cap-sr-only/.test(attrs) ? tag : `<h2${attrs} data-no="${section.no}.${++n}">`));
+  return body.replace(/<h2(\s[^>]*)?>/g, (tag, attrs = "") => (/class="cap-|data-plain/.test(attrs) ? tag : `<h2${attrs} data-no="${section.no}.${++n}">`));
 }
 
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
 function footer(asOf) {
   return `<footer class="foot">
-<p class="mark" aria-hidden="true">${[..."Capsid"].map((c) => `<span>${c}</span>`).join("")}</p>
+<div class="foot-plate wrap" aria-hidden="true"><p class="foot-logo">Capsid</p><p class="foot-lockup">MCP server and control plane<br><b>capsid.dustinedwards.info</b></p><p class="foot-doc">Capsid standards<br>Data of ${escapeHtml(asOf)}</p></div>
 <div class="foot-in wrap">
 <div class="foot-about"><p>Capsid is an MCP server and control plane for AI coding agents, published under the MIT licence. This site is one live instance, rebuilt each day from its public model and numbers.</p><p class="foot-small">Data of ${escapeHtml(asOf)}, in whole days ending at midnight UTC. Private systems are drawn in full, with no link to their repo.</p></div>
-<nav class="foot-nav" aria-label="Every section"><ul>${[...NAV, ["/search/", "Search"]].map(([href, label]) => `<li><a href="${href}">${label}</a></li>`).join("")}</ul></nav>
+<nav class="foot-nav" aria-label="Every section"><ul>${SECTIONS.map(({ href, label, no }) => `<li><a href="${href}"><span class="foot-no" aria-hidden="true">${no}.0</span>${label}</a></li>`).join("")}</ul></nav>
 <ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
 </div></footer>`;
 }
@@ -572,7 +584,7 @@ function stepText(st, total, systems, shown) {
     .map((p) => `<li${shown ? ` data-part="${escapeHtml(p.id)}"` : ""}>${link(partPath(p), escapeHtml(p.name))}<span class="touch-role">${role(st, p)}, in ${link(systemPath(p.system), escapeHtml(systems.get(p.system)?.name ?? p.system))}</span></li>`)
     .join("");
   return `<div${shown ? "" : ' class="flow-unseen" aria-hidden="true" inert'}>
-<h2${shown ? ' id="step-title"' : ""}>Step ${st.n} of ${total}</h2>
+<h2${shown ? ' id="step-title"' : ""} data-plain>Step ${st.n} of ${total}</h2>
 <p class="step-head">${escapeHtml(stepWords(st).name)}</p>
 <p class="flow-text">${escapeHtml(stepWords(st).text)}</p>
 <h3>What it touches</h3>

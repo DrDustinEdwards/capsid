@@ -1,12 +1,12 @@
 // The front page. First the panel: every tool Capsid serves as a circuit, lit by the grants a
 // caller holds, which the reader switches. Then one job's life as a guided tour, the drawing of
 // Capsid's insides pinned beside the chapters; then three of the day's figures, and everything it
-// holds as a poster. Pure, as pages.mjs is.
+// holds as the manual's contents. Pure, as pages.mjs is.
 //
 // Every number is from the public numbers or the model; every sentence that states a fact about
 // how Capsid works is the model's own flow text.
 
-import { escapeHtml, flowStage, flowsOf, layout, manualHead, minutes, percent, reading, stepPath, stepWords, systemPath } from "./pages.mjs";
+import { escapeHtml, flowStage, flowsOf, layout, manualHead, minutes, percent, reading, sectionAt, stepPath, stepWords, systemPath } from "./pages.mjs";
 import { toolPath } from "./tools.mjs";
 
 /** The week each bar of a weekly series ends on, labelled as the numbers page does. @param {any} stats */
@@ -137,33 +137,34 @@ ${kept.length ? `<dl class="readings readings-small">${kept.map(([value, label])
 </section>`;
 }
 
-/** Its own record: three of the day's figures on tiles that refuse to line up. @param {any} stats */
+/** Its own record: three of the day's figures, each on a rule as the manual sets a figure. @param {any} stats */
 function record(stats) {
   const { jobs: j, verification: v, gates: g } = stats;
   return `<section class="record wrap" aria-labelledby="record-title">
 <h2 id="record-title">Its own record</h2>
-<a class="tile tile-tall" href="/numbers/#verification"><span class="tile-figure">${escapeHtml(percent(v.agreement_rate_90d))}</span><span class="tile-caption">of ${v.evaluations_90d.toLocaleString("en-GB")} claims agreed with what GitHub records, last 90 days</span></a>
-<a class="tile tile-ink" href="/numbers/#jobs"><span class="tile-figure">${escapeHtml(String(j.completed_30d))}</span><span class="tile-caption">jobs completed, last 30 days</span></a>
-<a class="tile tile-mid" href="/numbers/#gates"><span class="tile-figure">${escapeHtml(minutes(g.median_wait_minutes_30d))}</span><span class="tile-caption">median wait for a person or the signed policy</span></a>
+<dl class="readings readings-row">${reading(percent(v.agreement_rate_90d), `of ${v.evaluations_90d.toLocaleString("en-GB")} claims agreed with what GitHub records, last 90 days`, "/numbers/#verification")}${reading(String(j.completed_30d), "jobs completed, last 30 days", "/numbers/#jobs")}${reading(minutes(g.median_wait_minutes_30d), "median wait for a person or the signed policy", "/numbers/#gates")}</dl>
 </section>`;
 }
 
-/** What one Worker holds, set as a poster, each line leading on; then every system by name. */
+/** What one Worker holds, as the manual's index sets it: each section by number and name, a dotted leader to what it holds; then every system by name. */
 function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {any[]} */ tools, /** @type {any} */ codeIndex) {
   const rows = [
-    ["/tools/", "Tools", `${tools.length} served over MCP`],
-    ["/flows/", "Flows", `${flowsOf(model).length} told step by step`],
-    ["/systems/", "Systems", `${model.systems.length} drawn with their parts`],
-    ["/numbers/", "Numbers", `${stats.store.documents.toLocaleString("en-GB")} documents held`],
-    ...(codeIndex ? [["/code/", "Code", `${codeIndex.modules.toLocaleString("en-GB")} modules scored`]] : []),
+    ["/systems/", `${model.systems.length} drawn with their parts`],
+    ["/flows/", `${flowsOf(model).length} told step by step`],
+    ["/tools/", `${tools.length} served over MCP`],
+    ["/numbers/", `${stats.store.documents.toLocaleString("en-GB")} documents held`],
+    ...(codeIndex ? [["/code/", `${codeIndex.modules.toLocaleString("en-GB")} modules scored`]] : []),
   ];
-  return `<section class="holds" aria-labelledby="holds-title">
-<h2 id="holds-title" class="cap-sr-only">Everything it holds</h2>
-<ul class="poster">${rows.map(([href, name, fact]) => `<li><a href="${href}"><span class="poster-name">${name}</span><span class="poster-fact">${escapeHtml(fact)}</span></a></li>`).join("")}</ul>
-<div class="wrap">
+  return `<section class="holds wrap" aria-labelledby="holds-title">
+<h2 id="holds-title">Contents</h2>
+<ol class="contents">${rows
+    .map(([href, fact]) => {
+      const section = sectionAt(href);
+      return `<li><a href="${href}"><span class="contents-no">${section?.no}.0</span><span class="contents-name">${section?.label}</span><span class="contents-dots" aria-hidden="true"></span><span class="contents-fact">${escapeHtml(fact)}</span></a></li>`;
+    })
+    .join("")}</ol>
 <h3>Every system</h3>
 <ul class="system-names">${model.systems.map((/** @type {any} */ s) => `<li><a href="${systemPath(s.id)}">${escapeHtml(s.name)}</a></li>`).join("")}</ul>
-</div>
 </section>`;
 }
 
