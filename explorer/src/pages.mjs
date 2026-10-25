@@ -9,6 +9,8 @@
 import { modelMapData, systemMapHtml } from "capsomer/behaviour/system-map";
 import { circleLayers } from "capsomer/system-map-circles";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
+import { headHtml, headTags } from "@drdustinedwards/site-helpers/head";
+import { jsonLd } from "@drdustinedwards/site-helpers/schema";
 
 import { codeBySystem, codeIndexPage, codePages, codePath, codeSummary, codeTotals, riskiest } from "./code.mjs";
 import { graphSvg } from "./graph.mjs";
@@ -66,23 +68,29 @@ function sectionOf(path) {
   return NAV.find(([href]) => href !== "/" && path.startsWith(href))?.[0] ?? "";
 }
 
+/** The card every page shares (src/og-card.png, the front page's opening). */
+export const CARD = { url: "/assets/og-card.png", width: 1200, height: 630, alt: "Capsid: one panel for every AI agent" };
+
 /**
  * The page around a body: one stylesheet set, the theme script and one module script, no inline
- * script or style, so the policy in _headers needs no hash (src/security-headers.mjs). A wide page's sections
- * set their own width, for the front page's full-bleed parts; any other page is one column.
- * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean }} page
+ * script or style, so the policy in _headers needs no hash (src/security-headers.mjs); JSON-LD is
+ * data, not script, so the policy does not apply to it. The head's tags are Prelum's, with the
+ * production origin, so the 404 says noindex and claims no canonical. A wide page's sections set
+ * their own width, for the front page's full-bleed parts; any other page is one column.
+ * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean, data?: Record<string, unknown>[] }} page
  */
-export function layout({ title, description, path, body, asOf, wide = false }) {
+export function layout({ title, description, path, body, asOf, wide = false, data = [] }) {
   const here = sectionOf(path);
+  const missing = path === "/404";
+  const tags = headTags({ origin: ORIGIN, path, title, description, image: CARD, siteName: "Capsid", locale: "en_US", noindex: missing });
+  const head = headHtml([...tags.filter((tag) => !(missing && "tagName" in tag && tag.rel === "canonical")), ...data.map(jsonLd)]);
   return `<!doctype html>
 <html lang="en" data-cap-site="capsid" data-family="teal">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>${escapeHtml(title)}</title>
-<meta name="description" content="${escapeHtml(description)}">
-<link rel="canonical" href="${ORIGIN}${path}">
+${head}
 <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
 <link rel="preload" href="/assets/schibsted.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/capsomer.css">

@@ -197,7 +197,8 @@ test("the build refuses a code map for a system that is not public, and a code d
 
 test("no page carries an inline script, an inline style or a time of day", () => {
   for (const { file, text } of html) {
-    assert.doesNotMatch(text, /<script(?![^>]*\bsrc=)[^>]*>/, `${file} has an inline script`);
+    // JSON-LD is a data block, which the policy does not govern.
+    assert.doesNotMatch(text, /<script(?![^>]*\bsrc=)(?![^>]*type="application\/ld\+json")[^>]*>/, `${file} has an inline script`);
     assert.doesNotMatch(text, /<style[\s>]/, `${file} has an inline style element`);
     assert.doesNotMatch(text, /\sstyle="/, `${file} has a style attribute`);
     assert.doesNotMatch(text, /\b\d{1,2}:\d{2}\b/, `${file} shows a time of day`);

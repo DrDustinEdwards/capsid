@@ -16,6 +16,9 @@ import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { parseArgs } from "node:util";
 
+import { llmsDocument } from "@drdustinedwards/site-helpers/llms";
+import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
+import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { stylesheet } from "enarratio";
 import { capsomerTheme } from "capsomer/enarratio-theme";
 
@@ -24,7 +27,7 @@ import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
 import { headersFile } from "./src/security-headers.mjs";
 import { codeBySystem, escapePath } from "./src/code.mjs";
-import { CIRCLES_URL, ORIGIN, allPages, circlesOf, escapeHtml, searchDocument } from "./src/pages.mjs";
+import { CIRCLES_URL, ORIGIN, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
 import { servedTools } from "./src/surface.mjs";
 
 const here = import.meta.dirname;
@@ -119,22 +122,25 @@ async function readSources(code, dir) {
 }
 
 /** The site's llms.txt: what Capsid is and where each part of the explorer is. @param {number} systems @param {number} tools */
-const llmsTxt = (systems, tools) => `# Capsid
-
-> Capsid is an open-source (MIT) MCP server and control plane for AI coding agents, on one Cloudflare Worker: a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub before a job counts as done. This site is one live instance, seen from outside, rebuilt every day from its public data.
-
-- Code: https://github.com/DrDustinEdwards/capsid
-- Author: Dustin Edwards, https://dustinedwards.info
-
-## Pages
-
-- [Overview](${ORIGIN}/): what Capsid is and how a job runs through it
-- [Systems](${ORIGIN}/systems/): the ${systems} systems this instance runs, and what each is made of
-- [Flows](${ORIGIN}/flows/): what runs through Capsid, step by step
-- [Tools](${ORIGIN}/tools/): the ${tools} MCP tools Capsid serves and their arguments
-- [Numbers](${ORIGIN}/numbers/): the instance's daily numbers
-- [Code](${ORIGIN}/code/): each system's code and its health
-`;
+const llmsTxt = (systems, tools) =>
+  llmsDocument({
+    title: "Capsid",
+    summary: "Capsid is an open-source (MIT) MCP server and control plane for AI coding agents, on one Cloudflare Worker: a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub before a job counts as done. This site is one live instance, seen from outside, rebuilt every day from its public data.",
+    intro: ["- Code: https://github.com/DrDustinEdwards/capsid\n- Author: Dustin Edwards, https://dustinedwards.info"],
+    sections: [
+      {
+        heading: "Pages",
+        links: [
+          { title: "Overview", url: `${ORIGIN}/`, description: "what Capsid is and how a job runs through it" },
+          { title: "Systems", url: `${ORIGIN}/systems/`, description: `the ${systems} systems this instance runs, and what each is made of` },
+          { title: "Flows", url: `${ORIGIN}/flows/`, description: "what runs through Capsid, step by step" },
+          { title: "Tools", url: `${ORIGIN}/tools/`, description: `the ${tools} MCP tools Capsid serves and their arguments` },
+          { title: "Numbers", url: `${ORIGIN}/numbers/`, description: "the instance's daily numbers" },
+          { title: "Code", url: `${ORIGIN}/code/`, description: "each system's code and its health" },
+        ],
+      },
+    ],
+  });
 
 /** @param {{ model?: string, stats?: string, code?: string, source?: string, out?: string }} [options] */
 export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stats: statsSource = `${LIVE}/stats/v1.json`, code: codeSource = modelSource === `${LIVE}/model/v1.json` ? `${LIVE}/code/v1.json` : undefined, source: sourceDir, out = join(here, "dist") } = {}) {
@@ -195,15 +201,19 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   copyFileSync(join(here, "src", "explorer.js"), join(assets, "explorer.js"));
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
   copyFileSync(join(here, "src", "icon.svg"), join(assets, "icon.svg"));
+  copyFileSync(join(here, "src", "og-card.png"), join(assets, "og-card.png"));
   // Capsomer's face, served from here because the policy allows fonts from 'self' only: Schibsted
   // Grotesk's latin cut with its weight axis.
   copyFileSync(join(dirname(require.resolve("@fontsource-variable/schibsted-grotesk/package.json")), "files", "schibsted-grotesk-latin-wght-normal.woff2"), join(assets, "schibsted.woff2"));
   writeFileSync(join(out, "_headers"), headersFile());
-  // For search engines and language models: every page in a sitemap, robots.txt pointing to it,
-  // and llms.txt (https://llmstxt.org), a short guide. Cloudflare puts its own robots.txt lines first.
+  // For search engines and language models, from Prelum: every page in a sitemap, robots.txt (the
+  // family bot policy; Cloudflare puts its own lines first), ai.txt (citation welcome, training
+  // reserved, as the tdm-reservation header in _headers says) and llms.txt (https://llmstxt.org),
+  // a short guide.
   const listed = pages.map(([path]) => path).filter((path) => path !== "/404" && path !== "/search/");
-  writeFileSync(join(out, "sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${listed.map((path) => `<url><loc>${escapeHtml(ORIGIN + path)}</loc></url>`).join("\n")}\n</urlset>\n`);
-  writeFileSync(join(out, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n# LLM guide: ${ORIGIN}/llms.txt\n`);
+  writeFileSync(join(out, "sitemap.xml"), sitemapDocument(listed.map((path) => ({ loc: ORIGIN + path }))));
+  writeFileSync(join(out, "robots.txt"), robotsDocument({ origin: ORIGIN, notes: [`AI usage policy: ${ORIGIN}/ai.txt`, `LLM guide: ${ORIGIN}/llms.txt`] }));
+  writeFileSync(join(out, "ai.txt"), aiTxt({ origin: ORIGIN, name: "Capsid", contact: "contact@dustinedwards.info" }));
   writeFileSync(join(out, "llms.txt"), llmsTxt(model.systems.length, tools.length));
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the
