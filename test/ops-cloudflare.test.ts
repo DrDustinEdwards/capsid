@@ -494,13 +494,13 @@ test("a site down on two probes in a row, and a Worker over the error rate, reac
 });
 
 // scanner-rule: Cloudflare is read in the watcher pass only, never per dashboard request
-test("only the watcher and the admin capsid_admin_read_ops and capsid_admin_set_site_key calls import the Cloudflare read, so no dashboard request can call Cloudflare", () => {
+test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_site_key calls and the capsid_inspect_repo traffic call import the Cloudflare read, so no dashboard request can call Cloudflare", () => {
   const importersOf = (module: string) =>
     sourceFiles()
       // A static import, a bare side-effect import, or a dynamic import().
       .filter((f) => new RegExp(`(\\bfrom\\s*|\\bimport\\s*\\(?\\s*)["'](\\.\\.?\\/)+${module}(\\.ts)?["']`).test(f.text))
       .map((f) => f.name);
-  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "site-key.ts", "watcher-gather.ts", "workers-builds.ts"]);
+  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "site-key.ts", "site-traffic.ts", "watcher-gather.ts", "workers-builds.ts"]);
   // The config reads (capsid_admin_read_ops's Access and Email Routing actions) run per
   // call of an admin-only MCP tool and nowhere else: not from a Portal route, whose
   // every page load would then call Cloudflare.
@@ -509,6 +509,8 @@ test("only the watcher and the admin capsid_admin_read_ops and capsid_admin_set_
   // site key's secret write (capsid_admin_set_site_key), both from the admin tool module.
   assert.deepEqual(importersOf("workers-builds"), ["tools/admin.ts"]);
   assert.deepEqual(importersOf("site-key"), ["tools/admin.ts"]);
+  // The 404 report (capsid_inspect_repo traffic) reads per call of that MCP tool only.
+  assert.deepEqual(importersOf("site-traffic"), ["tools/repo.ts"]);
 });
 
 // The live checks' Web Analytics read (GET /accounts/{id}/rum/site_info/list).

@@ -32,6 +32,7 @@ import { tagRelease } from "../github/releases";
 import { siteCheck } from "../site-check";
 import { BING_REPORTS, bingWebmaster, MAX_BING_ROWS } from "../bing-webmaster";
 import { MAX_ROW_LIMIT, SEARCH_DIMENSIONS, SEARCH_REPORTS, SEARCH_TYPES, searchConsole } from "../search-console";
+import { MAX_TRAFFIC_DAYS, MAX_TRAFFIC_ROWS, siteTraffic, TRAFFIC_REPORTS } from "../site-traffic";
 import { repoGuards } from "./repo-guards";
 
 import { HeadMovedError } from "../github/refs";
@@ -520,6 +521,27 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     async ({ namespace, ...args }) => {
       try {
         return ok(await bingWebmaster(env, namespace, args));
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+
+  ctx.ops.define(
+    "site_traffic",
+    {
+      description:
+        "The 404s Cloudflare recorded at the site, with where visitors came from: from_site (a broken link on its own pages) first, scanner probes last. Sampled estimates.",
+      inputSchema: {
+        namespace: nsName,
+        report: z.enum(TRAFFIC_REPORTS).optional().describe("not_found. Defaults to not_found."),
+        days: z.number().int().min(1).max(MAX_TRAFFIC_DAYS).optional().describe(`How many days back, 1 to ${MAX_TRAFFIC_DAYS}. Defaults to 7.`),
+        row_limit: z.number().int().min(1).max(MAX_TRAFFIC_ROWS).optional().describe(`Paths to return, 1 to ${MAX_TRAFFIC_ROWS}. Defaults to 25.`),
+      },
+    },
+    async ({ namespace, ...args }) => {
+      try {
+        return ok(await siteTraffic(env, namespace, args));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
