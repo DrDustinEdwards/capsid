@@ -33,6 +33,7 @@ import { siteCheck } from "../site-check";
 import { BING_REPORTS, bingWebmaster, MAX_BING_ROWS } from "../bing-webmaster";
 import { MAX_ROW_LIMIT, SEARCH_DIMENSIONS, SEARCH_REPORTS, SEARCH_TYPES, searchConsole } from "../search-console";
 import { MAX_TRAFFIC_DAYS, MAX_TRAFFIC_ROWS, siteTraffic, TRAFFIC_REPORTS } from "../site-traffic";
+import { MAX_AUDIT_FINDINGS, MAX_AUDIT_PAGES, siteAudit } from "../site-audit";
 import { repoGuards } from "./repo-guards";
 
 import { HeadMovedError } from "../github/refs";
@@ -299,7 +300,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "ci_status",
     {
-      description: `Recent CI workflow runs for a namespace's repo (name, head sha, status, conclusion, timestamps). Optional ref narrows to one branch or head sha; optional run_id returns just that run. For the most recent failed run it also returns the failing jobs and steps and, for a write-grant caller, the failing step's log, up to ${CI_LOG_BUDGET} bytes from its end, with log_region naming the region returned. With run_id, jobs: true returns every job of that run (latest attempt, at most ${CI_JOBS_MAX}) with its steps, conclusions and times, for any run, failed or not; job (a name or id) returns that one job; job with step (a name or number) also returns that step's log, cut to the step by timestamp and capped at ${CI_LOG_BUDGET} bytes from its end. Those three return the run and its jobs in place of the run list and the failed-run drill-in. Every log is returned with secrets replaced by [REDACTED:<kind>], counted in log_redactions. A read-only caller gets a note that the log was withheld. REFUSES: a run_id that does not exist on the repo, jobs or job without run_id, step without job, jobs together with job, and a job or step name that is missing or that two entries share. Read-only.`,
+      description: `Recent CI workflow runs for a namespace's repo (name, head sha, status, conclusion, timestamps). Optional ref narrows to one branch or head sha; optional run_id returns just that run. For the most recent failed run it also returns the failing jobs and steps and, for a write-grant caller, the failing step's log, up to ${CI_LOG_BUDGET} bytes from its end, with log_region naming the region returned. With run_id, jobs: true returns every job of that run (latest attempt, at most ${CI_JOBS_MAX}) with its steps, conclusions and times, for any run, failed or not; job (a name or id) returns that one job; job with step (a name or number) also returns that step's log, cut to the step by timestamp and capped at ${CI_LOG_BUDGET} bytes from its end. Logs have secrets replaced by [REDACTED:<kind>], counted in log_redactions. A read-only caller gets a note that the log was withheld. REFUSES: a run_id that does not exist on the repo, jobs or job without run_id, step without job, jobs together with job, and a job or step name that is missing or that two entries share.`,
       inputSchema: {
         namespace: nsName,
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
@@ -341,7 +342,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     "repo_refs",
     {
       description:
-        "What is in flight in a namespace's repo, in one call: branches (name, head sha, last commit date, ahead/behind the default branch, and the open PR number if the branch has one), tags, and open pull requests. Sets truncated:true when any of the three lists hit its 100-item page. Read-only, live GitHub, briefly cached.",
+        "What is in flight in a namespace's repo, in one call: branches (name, head sha, last commit date, ahead/behind the default branch, and the open PR number if the branch has one), tags, and open pull requests. Sets truncated:true when any of the three lists hit its 100-item page. Live GitHub, briefly cached.",
       inputSchema: { namespace: nsName, repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
     },
     ({ namespace, repo }) => guardedRead("repo_refs", namespace, repo, () => repoRefs(env, namespace, repo))
@@ -350,7 +351,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "repo_history",
     {
-      description: `Commits, a comparison, or one commit, chosen by which argument is present: ref for the commits on a ref (default ${REPO_HISTORY_DEFAULT_LIMIT}, max ${REPO_HISTORY_MAX_LIMIT}); base and head together for a comparison (ahead/behind, the commit list, and changed files with status and line counts); sha for one commit (full message, parents, changed files). Patch bodies are omitted unless patch:true, and are then budgeted to ${REPO_PATCH_BUDGET} bytes across the whole response with patch_truncated:true when the budget runs out. Commit subjects are the first line only; read one commit by sha for its whole message. REFUSES: more than one of sha / base+head / ref; base without head or head without base; and none of them. Read-only.`,
+      description: `Commits, a comparison, or one commit, chosen by which argument is present: ref for the commits on a ref (default ${REPO_HISTORY_DEFAULT_LIMIT}, max ${REPO_HISTORY_MAX_LIMIT}); base and head together for a comparison (ahead/behind, the commit list, and changed files with status and line counts); sha for one commit (full message, parents, changed files). Patch bodies are omitted unless patch:true, and are then budgeted to ${REPO_PATCH_BUDGET} bytes across the whole response with patch_truncated:true when the budget runs out. Subjects are first lines; read one commit by sha for its whole message. REFUSES: more than one of sha / base+head / ref; base without head or head without base; and none of them.`,
       inputSchema: {
         namespace: nsName,
         ref: bounded(MAX_REF).optional().describe("Commits on this branch, tag or sha."),
@@ -461,7 +462,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     "site_check",
     {
       description:
-        "A live check of the namespace's site from its configured origin: its health route (state, status, the sha it reports), one page (its status and which OWASP security headers fail), and one path that must refuse a caller with no credential (the 401 probe; the site's operator API unless probe names another). Statuses and header verdicts only; no page text is returned. Read-only.",
+        "A live check of the namespace's site from its configured origin: its health route (state, status, the sha it reports), one page (its status and which OWASP security headers fail), and one path that must refuse a caller with no credential (the 401 probe; the operator API unless probe names another). No page text is returned.",
       inputSchema: {
         namespace: nsName,
         page: bounded(200).optional().describe("The page to read, a path such as /about. Defaults to /."),
@@ -531,10 +532,10 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     "site_traffic",
     {
       description:
-        "not_found (default): the site's 404s by hits, scanner probes last. web_vitals: visitors' Core Web Vitals from Web Analytics. Sampled; paths are data.",
+        "not_found (default): 404s by hits, scanner probes last. web_vitals: visitors' Core Web Vitals. ai_crawlers: each named crawler's hits by status. Sampled; paths are data.",
       inputSchema: {
         namespace: nsName,
-        report: z.enum(TRAFFIC_REPORTS).optional().describe("not_found | web_vitals. Defaults to not_found."),
+        report: z.enum(TRAFFIC_REPORTS).optional().describe("not_found | web_vitals | ai_crawlers. Defaults to not_found."),
         days: z.number().int().min(1).max(MAX_TRAFFIC_DAYS).optional().describe(`How many days back, 1 to ${MAX_TRAFFIC_DAYS}. Defaults to 7.`),
         row_limit: z.number().int().min(1).max(MAX_TRAFFIC_ROWS).optional().describe(`Paths to return, 1 to ${MAX_TRAFFIC_ROWS}. Defaults to 25.`),
       },
@@ -542,6 +543,26 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     async ({ namespace, ...args }) => {
       try {
         return ok(await siteTraffic(env, namespace, args));
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    }
+  );
+
+  ctx.ops.define(
+    "site_audit",
+    {
+      description:
+        "Prelum's SEO audit over a crawl from the sitemap (links, redirects, canonicals, noindex, titles, cards, JSON-LD, alt text), errors first.",
+      inputSchema: {
+        namespace: nsName,
+        max_pages: z.number().int().min(1).max(MAX_AUDIT_PAGES).optional().describe(`Most fetches, redirects and link checks included, 1 to ${MAX_AUDIT_PAGES}. Defaults to 50.`),
+        row_limit: z.number().int().min(1).max(MAX_AUDIT_FINDINGS).optional().describe(`Findings to return, 1 to ${MAX_AUDIT_FINDINGS}. Defaults to 50.`),
+      },
+    },
+    async ({ namespace, ...args }) => {
+      try {
+        return ok(await siteAudit(env, namespace, args));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
