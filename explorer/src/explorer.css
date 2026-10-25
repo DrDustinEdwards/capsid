@@ -3,14 +3,22 @@
    shape, at every scale. Every colour is Capsomer's teal family (data-family on <html>; Dustin,
    2026-10-25): its neutrals are the ground, its deepest teal the panel, and its lighter
    teals the lamp, which marks what is live and the one action. A lit lamp glows in the
-   ramp's brightest steps. Surfaces are told apart by a step in tone, never by a line. Unlayered,
-   so these win over Capsomer's layers. */
+   ramp's brightest steps. The page is laid out as NASA's own papers (the NASA block at the end):
+   one near-white ground, as the manual bars pale tints, and parts told apart by hairlines.
+   Unlayered, so these win over Capsomer's layers. */
 @font-face {
   font-family: "Schibsted Grotesk";
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
   src: url("/assets/schibsted.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Martian Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/assets/martian-mono.woff2") format("woff2-variations");
 }
 :root {
   --page: 80rem;
@@ -36,6 +44,7 @@
   --primary: var(--lamp);
   --primary-hover: #a1cacc;
   --primary-fg: var(--lamp-ink);
+  --ground: var(--surface);
   --header-bg: var(--ground);
   --bar: var(--text);
 }
@@ -120,8 +129,8 @@ main.wide > .board {
 h1 {
   max-width: 18ch;
   margin-block: var(--space-6) var(--space-4);
-  font: 650 clamp(2.5rem, 5.2vw, 4.75rem) / 0.95 var(--face);
-  letter-spacing: -0.04em;
+  font: 500 clamp(2.5rem, 5.2vw, 4.75rem) / 0.95 var(--face);
+  letter-spacing: -0.035em;
 }
 h1 code {
   font-size: 0.72em;
@@ -183,7 +192,6 @@ h3 {
 .reading dd {
   margin: 0;
   font: 650 clamp(2rem, 3.4vw, 3rem) / 1 var(--face);
-  font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
 }
 .readings-small {
@@ -749,9 +757,6 @@ html:not(.js) .chapter h3::before {
 /* The numbers page. */
 .numbers-part {
   margin-block-start: var(--space-8);
-}
-.numbers-part h3 {
-  font: 600 clamp(1.375rem, 2vw, 1.75rem) / 1.2 var(--prose);
 }
 .charts {
   display: grid;
@@ -1448,17 +1453,135 @@ main h2[data-no]::before {
   font: 400 0.9375rem / 1 var(--face);
   letter-spacing: 0;
 }
-.folio {
-  margin: var(--space-8) 0 0;
-  padding-block-end: var(--space-5);
-  font: 400 0.9375rem / 1 var(--face);
-  text-align: end;
+/* The title block: a row of ruled boxes, each a small label in Capsomer's mono over its value,
+   the page number last and boldest (MSC Form 29). */
+.title-block {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr);
+  margin: var(--space-8) 0 var(--space-6);
+  border-block-start: 1px solid var(--text);
+  border-inline-start: 1px solid var(--text);
 }
-main.wide > .folio {
-  box-sizing: border-box;
-  max-inline-size: var(--page);
+main.wide > .title-block {
+  inline-size: min(100% - 2 * var(--gutter), var(--page) - 2 * var(--gutter));
   margin-inline: auto;
-  padding-inline: var(--gutter);
+}
+.title-block div {
+  padding: 6px var(--space-3) var(--space-2);
+  border-inline-end: 1px solid var(--text);
+  border-block-end: 1px solid var(--text);
+}
+.title-block dt {
+  color: var(--muted);
+  font: 500 0.6875rem / 1.4 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.title-block dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.title-block div:last-child dd {
+  font-weight: 700;
+}
+@media (max-width: 40rem) {
+  .title-block {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* Each part of a page set as the manual sets a page: its title on the left over a rule across the
+   whole width, what it says beside it, and its figures full width below (5.1, 5.17). */
+@media (min-width: 52rem) {
+  main:not(.wide) :is(section, li):has(> h2[data-no]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    column-gap: var(--gutter);
+    align-items: start;
+    margin-block-start: var(--space-8);
+    padding-block-start: var(--space-3);
+    border-block-start: 1px solid var(--text);
+  }
+  main:not(.wide) :is(section, li):has(> h2[data-no]) > * {
+    grid-column: 1 / -1;
+  }
+  main:not(.wide) :is(section, li):has(> h2[data-no]) > h2[data-no] {
+    grid-column: 1;
+    margin-block-start: 0;
+    padding-block-start: 0;
+    border: 0;
+  }
+  main:not(.wide) :is(section, li):has(> h2[data-no]) > h2[data-no]::before {
+    inset-block-start: 0.3em;
+  }
+  main:not(.wide) :is(section, li):has(> h2[data-no]) > h2[data-no] + :is(p, ul) {
+    grid-column: 2;
+    margin-block-start: 0;
+  }
+}
+
+/* Technical drawings in outline boxes, as the manual asks of every diagram (5.17). */
+.map-host,
+.flow-stage {
+  padding: var(--space-4);
+  border: 1px solid var(--text);
+}
+/* Table heads in the mono, as today's nasa.gov sets its small labels (Horizon Design System). */
+main .cap-table thead th {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+}
+
+/* Lists of things set as ruled rows, not tinted cards: a hairline under each, a rule over the first. */
+.bands,
+.tool-cards,
+.search-results {
+  gap: 0;
+}
+.bands a {
+  background: none;
+}
+.bands a,
+.tool-card,
+.search-results a,
+.action,
+.said li {
+  border-radius: 0;
+  border-block-end: 1px solid var(--line);
+}
+.filter-bar {
+  padding-inline: 0;
+  border-block: 1px solid var(--line);
+  border-radius: 0;
+}
+.part-name,
+.flow-touches li > :first-child,
+.system-names a {
+  border: 1px solid var(--line-strong);
+  background: none;
+}
+.chapter.is-on .part-name {
+  border-color: var(--accent);
+}
+
+/* A flow's steps on the flight plan's time line: a ruled scale down the left, ticked between
+   steps, each step's number at its mark. */
+.bands {
+  margin-inline-start: 1.25rem;
+  border-inline-start: 1px solid var(--text);
+  background: repeating-linear-gradient(var(--line-strong) 0 1px, transparent 1px 10px) 0 0 / 6px 100% no-repeat;
+}
+.bands li {
+  position: relative;
+}
+.bands li::before {
+  content: "";
+  position: absolute;
+  inset-block-start: calc(var(--space-4) + 0.7em);
+  inset-inline-start: 0;
+  inline-size: 14px;
+  border-block-start: 1px solid var(--text);
 }
 
 /* Readings as a form's boxes: each figure in a ruled box, what it counts set small above it. */

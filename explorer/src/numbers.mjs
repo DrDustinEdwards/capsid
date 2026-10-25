@@ -111,27 +111,26 @@ export function numbersHtml(stats) {
     ...(stats.systems ? [["Systems, public and private", `${stats.systems.public} and ${stats.systems.private}`]] : []),
     ["Capsid's commit", stats.capsid.sha7],
   ];
-  return `<section class="numbers" aria-labelledby="numbers-title">
-<h2 id="numbers-title" class="cap-sr-only">The daily numbers</h2>
+  return `<section class="numbers">
 <dl class="readings readings-row">${reading(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${reading(percent(v.agreement_rate_90d), "claims agreeing with GitHub", "#verification")}${reading(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${reading(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
-<section class="numbers-part" id="jobs" aria-labelledby="jobs-title"><h3 id="jobs-title">Jobs</h3>
+<section class="numbers-part" id="jobs" aria-labelledby="jobs-title"><h2 id="jobs-title">Jobs</h2>
 <p class="measure">${j.completed_30d} jobs completed and ${j.failed_30d} failed in the last 30 days. Today ${j.open} are open and ${j.blocked} of them blocked on a person. Half of last month's jobs took under ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
 <div class="charts">${jobsChart}</div></section>
-<section class="numbers-part" id="verification" aria-labelledby="verification-title"><h3 id="verification-title">Claims, checked against GitHub</h3>
+<section class="numbers-part" id="verification" aria-labelledby="verification-title"><h2 id="verification-title">Claims, checked against GitHub</h2>
 <p class="measure">When a job completes, the Worker reads its pull requests, commits and CI from GitHub and records each claim beside what GitHub says. Only fields the Worker verified count toward a rate.</p>
 <div class="charts">${agreementChart}${rings.join("")}</div></section>
-<section class="numbers-part" id="gates" aria-labelledby="gates-title"><h3 id="gates-title">Approval gates</h3>
+<section class="numbers-part" id="gates" aria-labelledby="gates-title"><h2 id="gates-title">Approval gates</h2>
 <p class="measure">A push, a deploy, a secret or a merge stops the agent. The job waits with the exact command until a person, or the signed policy, answers. ${g.waits_30d} waits ended in the last 30 days; half within ${minutes(g.median_wait_minutes_30d)}.</p>
 <div class="charts">${waitsChart}${gateRings.join("")}</div></section>
-<section class="numbers-part" id="sites" aria-labelledby="sites-title"><h3 id="sites-title">Sites</h3>
+<section class="numbers-part" id="sites" aria-labelledby="sites-title"><h2 id="sites-title">Sites</h2>
 <p class="measure">The watcher reads every registered site on Capsid's five-minute tick and keeps a ring of half-hour slots per site. A slot it could not measure is left out, never counted as up.</p>
 <div class="charts">${siteRings.join("")}</div></section>
-<section class="numbers-part" id="every" aria-labelledby="every-title"><h3 id="every-title">Every number</h3>
+<section class="numbers-part" id="every" aria-labelledby="every-title"><h2 id="every-title">Every number</h2>
 ${scroller("numbers-table", `<table class="cap-table numbers-table"><caption class="cap-sr-only">Every number, as of ${escapeHtml(stats.as_of)}</caption><tbody>
 ${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("\n")}
 </tbody></table>`, "Every number")}
 </section>
-<section class="numbers-part" id="how" aria-labelledby="how-title"><h3 id="how-title">How they are counted</h3>
+<section class="numbers-part" id="how" aria-labelledby="how-title"><h2 id="how-title">How they are counted</h2>
 <ul class="measure">
 <li>Counts and rates across every namespace, agent and site at once: nothing here names a project, a job or a person.</li>
 <li>Every window is whole UTC days ending at midnight, so a day's work appears the next day and no number says when anything happened.</li>

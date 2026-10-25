@@ -205,6 +205,8 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // Capsomer's face, served from here because the policy allows fonts from 'self' only: Schibsted
   // Grotesk's latin cut with its weight axis.
   copyFileSync(join(dirname(require.resolve("@fontsource-variable/schibsted-grotesk/package.json")), "files", "schibsted-grotesk-latin-wght-normal.woff2"), join(assets, "schibsted.woff2"));
+  // Capsomer's mono, Martian Mono, for code and the title block's labels, likewise.
+  copyFileSync(join(dirname(require.resolve("@fontsource-variable/martian-mono/package.json")), "files", "martian-mono-latin-wght-normal.woff2"), join(assets, "martian-mono.woff2"));
   writeFileSync(join(out, "_headers"), headersFile());
   // For search engines and language models, from Prelum: every page in a sitemap, robots.txt (the
   // family bot policy; Cloudflare puts its own lines first), ai.txt (citation welcome, training

@@ -103,7 +103,7 @@ ${head}
 ${header(here, path)}
 <main id="main" tabindex="-1"${wide ? ' class="wide"' : ""}>
 ${path === "/" ? "" : manualHead(path)}${numbered(body, path)}
-${folio(path)}
+${titleBlock(path, asOf)}
 </main>
 ${footer(asOf)}
 </body>
@@ -167,10 +167,16 @@ export function manualHead(path) {
   return `<div class="manual-head" aria-hidden="true"><span class="manual-name"><span class="manual-no">${section.no}</span>${section.label}</span><span class="manual-site">Capsid<br>${ORIGIN.replace("https://", "")}</span></div>`;
 }
 
-/** A page's folio, set at the foot on the right as every page of the manual is numbered. @param {string} path */
-export function folio(path) {
+/**
+ * A page's title block, as the foot of every page of the Apollo flight plans (MSC Form 29, 1969)
+ * boxes its mission, date and page; the page is numbered as the manual numbers its folios, n.0
+ * for a section's own page. @param {string} path @param {string} asOf
+ */
+export function titleBlock(path, asOf) {
   const section = sectionFor(path);
-  return section ? `<p class="folio" aria-hidden="true">${section.no}.0</p>` : "";
+  if (!section) return "";
+  const cell = (/** @type {string} */ label, /** @type {string} */ value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  return `<dl class="title-block" aria-hidden="true">${cell("Site", ORIGIN.replace("https://", ""))}${cell("Section", `${section.no} ${section.label}`)}${cell("Data of", escapeHtml(asOf))}${cell("Page", section.href === path ? `${section.no}.0` : String(section.no))}</dl>`;
 }
 
 /**
