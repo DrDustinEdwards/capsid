@@ -72,6 +72,9 @@ const BREAKERS = [
   ["admin", "Admin identity", "Mints agents and holds the switches"],
 ];
 
+/** The circuits in the order the breakers light them, so each grant lights a block of its own. */
+const ORDER = ["read", "action", "write", "admin_read", "admin"];
+
 /**
  * Whether a caller holding these grants reaches a tool: "full", "part" (an action tool, some of
  * whose actions need the grant it lacks) or "" (src/scope.ts: needFor, checkScope). The script
@@ -101,10 +104,11 @@ export function reachSentence(tools, held) {
  */
 function board(tools) {
   const held = { read: true, write: false, admin: false };
-  const circuits = tools
+  const circuits = [...tools]
+    .sort((a, b) => ORDER.indexOf(a.grant) - ORDER.indexOf(b.grant))
     .map((t) => {
       const on = reaches(t.grant, held);
-      return `<li class="circuit" data-need="${escapeHtml(t.grant)}"${on ? ` data-on="${on}"` : ""}><a href="${toolPath(t.name)}"><span class="lamp" aria-hidden="true"></span><span class="circuit-name">${escapeHtml(t.title)}</span><code>${escapeHtml(t.name)}</code></a><span class="cap-sr-only">: needs ${NEED[/** @type {keyof typeof NEED} */ (t.grant)] ?? escapeHtml(t.grant)}</span></li>`;
+      return `<li class="circuit" data-need="${escapeHtml(t.grant)}"${on ? ` data-on="${on}"` : ""}><a href="${toolPath(t.name)}"><span class="lamp" aria-hidden="true"></span><span class="circuit-name">${escapeHtml(t.title)}</span></a><span class="cap-sr-only">: needs ${NEED[/** @type {keyof typeof NEED} */ (t.grant)] ?? escapeHtml(t.grant)}</span></li>`;
     })
     .join("");
   return `<section class="board" aria-labelledby="board-title">
