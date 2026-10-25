@@ -1,8 +1,8 @@
 /* The explorer's own look on Capsomer's tokens (assets/capsomer.css): a distribution board.
    Every tool is a circuit and every grant a breaker; the breaker's slot and handle is the one
-   shape, at every scale. Every colour is Capsomer's purple family (data-family on <html>), as
-   for the Portal: its neutrals are the ground, its deepest purple the panel, and its lighter
-   purples the lamp, which marks what is live and the one action. A lit lamp glows in the
+   shape, at every scale. Every colour is Capsomer's teal family (data-family on <html>; Dustin,
+   2026-10-25): its neutrals are the ground, its deepest teal the panel, and its lighter
+   teals the lamp, which marks what is live and the one action. A lit lamp glows in the
    ramp's brightest steps. Surfaces are told apart by a step in tone, never by a line. Unlayered,
    so these win over Capsomer's layers. */
 @font-face {
@@ -22,19 +22,19 @@
   --radius-s: 0;
   --radius-m: 0;
   --radius-l: 0;
-  /* The purple ramp's steps, by number: the lamp is light 8, its ink light 12; a lit lamp
+  /* The teal ramp's steps, by number: the lamp is light 8, its ink light 12; a lit lamp
      burns at dark 11 with a halo of dark 10; the panel is light 12, raised dark 4. */
-  --lamp: #b29ae3;
-  --lamp-ink: #1d162c;
-  --lamp-lit: #c6b1f2;
-  --lamp-glow: 0 0 6px 1px rgb(155 110 227 / 0.9), 0 0 18px 4px rgb(155 110 227 / 0.45);
-  --panel: #1d162c;
-  --panel-raised: #2c243c;
-  --panel-ink: #ede8f7;
+  --lamp: #7db5b7;
+  --lamp-ink: #0c1e1f;
+  --lamp-lit: #97c8cb;
+  --lamp-glow: 0 0 6px 1px rgb(36 147 152 / 0.9), 0 0 18px 4px rgb(36 147 152 / 0.45);
+  --panel: #0c1e1f;
+  --panel-raised: #1a2d2e;
+  --panel-ink: #e3eeee;
 }
 :root[data-family] {
   --primary: var(--lamp);
-  --primary-hover: #c8b6ed;
+  --primary-hover: #a1cacc;
   --primary-fg: var(--lamp-ink);
   --header-bg: var(--ground);
   --bar: var(--text);
@@ -43,23 +43,23 @@
   :root[data-family]:not([data-theme="light"]) {
     --accent-text: var(--lamp);
     --primary: var(--lamp);
-    --primary-hover: #c6b1f2;
+    --primary-hover: #97c8cb;
     --primary-fg: var(--lamp-ink);
-    --panel: #0e0c11;
-    --panel-raised: #211c2c;
+    --panel: #0b0e0e;
+    --panel-raised: #162222;
     --bar: var(--lamp);
   }
 }
 :root[data-family][data-theme="dark"] {
   --accent-text: var(--lamp);
   --primary: var(--lamp);
-  --primary-hover: #c6b1f2;
+  --primary-hover: #97c8cb;
   --primary-fg: var(--lamp-ink);
-  --panel: #0e0c11;
-  --panel-raised: #211c2c;
+  --panel: #0b0e0e;
+  --panel-raised: #162222;
   --bar: var(--lamp);
 }
-/* Enarratio's charts on the board's colours: ink bars and rings in light, the lamp's purple in dark. Enarratio sets its
+/* Enarratio's charts on the board's colours: ink bars and rings in light, the lamp's teal in dark. Enarratio sets its
    variables on the chart itself, so these name the chart under the html element to win. */
 html .enarratio,
 html .enarratio-tooltip {
@@ -270,7 +270,7 @@ html:not(.js) .breakers {
   transition: background-color var(--dur-fast) var(--ease-out);
 }
 .breaker:hover {
-  background: #372c4b;
+  background: #1f3839;
 }
 .breaker:focus-visible {
   outline: 3px solid var(--lamp);
@@ -283,14 +283,14 @@ html:not(.js) .breakers {
   display: block;
   inline-size: 28px;
   block-size: 56px;
-  background: #0e0c11;
+  background: #0b0e0e;
 }
 .breaker-handle {
   position: absolute;
   inset-inline: 4px;
   inset-block-start: 26px;
   block-size: 26px;
-  background: #584976;
+  background: #365a5b;
   transition: transform var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 .breaker[aria-pressed="true"] .breaker-handle {
@@ -303,7 +303,7 @@ html:not(.js) .breakers {
   font-size: 1.0625rem;
 }
 .breaker-does {
-  color: #c8b6ed;
+  color: #a1cacc;
   font-size: 0.875rem;
   line-height: 1.3;
 }
@@ -327,12 +327,12 @@ html:not(.js) .breakers {
   align-items: baseline;
   padding: 10px var(--space-3);
   background: var(--panel-raised);
-  color: #a99fc0;
+  color: #91acac;
   text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-base) var(--ease-out);
 }
 .circuit a:hover {
-  background: #372c4b;
+  background: #1f3839;
 }
 .circuit a:focus-visible {
   outline: 3px solid var(--lamp);
@@ -347,7 +347,7 @@ html:not(.js) .breakers {
   block-size: 24px;
   display: flex;
   align-items: end;
-  background: #0e0c11;
+  background: #0b0e0e;
   transition: background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 .circuit[data-on] a {

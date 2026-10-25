@@ -75,7 +75,7 @@ function sectionOf(path) {
 export function layout({ title, description, path, body, asOf, wide = false }) {
   const here = sectionOf(path);
   return `<!doctype html>
-<html lang="en" data-cap-site="capsid" data-family="purple">
+<html lang="en" data-cap-site="capsid" data-family="teal">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

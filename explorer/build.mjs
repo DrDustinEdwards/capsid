@@ -159,6 +159,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   const capsomer = dirname(require.resolve("capsomer/package.json"));
   const css = [
     "css/tokens.css",
+    "tokens/family-teal.css",
     "css/base.css",
     "components/button/button.css",
     "components/table/table.css",
