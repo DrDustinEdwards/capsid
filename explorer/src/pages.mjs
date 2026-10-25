@@ -197,7 +197,7 @@ function footer(asOf) {
   return `<footer class="foot">
 <div class="foot-plate wrap" aria-hidden="true"><p class="foot-logo">Capsid</p><p class="foot-lockup">MCP server and control plane<br><b>capsid.dustinedwards.info</b></p></div>
 <div class="foot-in wrap">
-<div class="foot-about"><p>Capsid is an MCP server and control plane for AI coding agents, published under the MIT licence. This site is one live instance, rebuilt each day from its public model and numbers.</p><p class="foot-small">Data of ${escapeHtml(asOf)}, in whole days ending at midnight UTC. Private systems are drawn in full, with no link to their repo.</p></div>
+<div class="foot-about"><p>Capsid is an MCP server and control plane for AI coding agents, published under the MIT license. This site is one live instance, rebuilt each day from its public model and numbers.</p><p class="foot-small">Data of ${escapeHtml(asOf)}, in whole days ending at midnight UTC. Private systems are drawn in full, with no link to their repo.</p></div>
 <nav class="foot-nav" aria-label="Every section"><ul>${SECTIONS.map(({ href, label, no }) => `<li><a href="${href}"><span class="foot-no" aria-hidden="true">${no}.0</span>${label}</a></li>`).join("")}</ul></nav>
 <ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
 </div></footer>`;
