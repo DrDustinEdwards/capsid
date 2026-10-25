@@ -13,7 +13,9 @@ export const REPORT_URI = "https://mcp.dustinedwards.info/csp-report";
 
 /** The text of _headers. */
 export function headersFile() {
-  const csp = buildContentSecurityPolicy({ reportUri: REPORT_URI });
+  // Cloudflare's edge injects its Web Analytics beacon into every page of the proxied host, so the
+  // policy names it, or every page logs a blocked script.
+  const csp = buildContentSecurityPolicy({ reportUri: REPORT_URI, cloudflareWebAnalytics: true });
   const lines = ["/*", `  ${csp.name}: ${csp.value}`];
   for (const [name, value] of Object.entries({ ...STANDARD_SECURITY_HEADERS, ...TDM_RESERVATION_HEADERS })) lines.push(`  ${name}: ${value}`);
   // The data changes once a day and the assets with each build, which renames nothing, so an

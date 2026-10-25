@@ -256,6 +256,14 @@
       "description": "Documents, jobs, agents and the audit log."
     },
     {
+      "id": "capsid-search",
+      "system": "capsid",
+      "name": "Search index",
+      "kind": "database",
+      "technology": "Cloudflare AI Search",
+      "description": "A meaning index of every document, derived from D1 and rebuildable from it. D1 stays the record."
+    },
+    {
       "id": "capsid-media",
       "system": "capsid",
       "name": "capsid-media",
@@ -1287,6 +1295,9 @@
     { "from": "capsid-github", "to": "capsid-worker", "kind": "watches" },
     { "from": "capsid-tick", "to": "capsid-db", "kind": "writes" },
     { "from": "capsid-tick", "to": "capsid-kv", "kind": "writes" },
+    { "from": "capsid-tick", "to": "capsid-search", "kind": "writes" },
+    { "from": "capsid-worker", "to": "capsid-search", "kind": "reads" },
+    { "from": "capsid-worker", "to": "capsid-db", "kind": "reads" },
     { "from": "carrel-worker", "to": "carrel-db", "kind": "writes" },
     { "from": "carrel-worker", "to": "website-worker", "kind": "reads" },
     { "from": "carrel-worker", "to": "website-worker", "kind": "publishes-to" },
@@ -1512,6 +1523,32 @@
         { "from": "capsid-github", "kind": "deploys", "to": "capsid-worker", "toward": "capsid-worker", "text": "Deployed: the merge to master runs CI on GitHub Actions, which deploys the Worker." },
         { "from": "capsid-github", "kind": "watches", "to": "capsid-worker", "toward": "capsid-github", "text": "Verified: CI's live gate reads the Worker's /health and checks it reports the commit that was merged." },
         { "from": "capsid-worker", "kind": "reads", "to": "capsid-github", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Claims checked: when the job completes, the Worker reads the pull request, its commits and CI from GitHub and records each claim beside what GitHub says." }
+      ]
+    },
+    {
+      "id": "doc-search",
+      "name": "A search",
+      "description": "One question to the knowledge base, answered by keyword and by meaning, every hit checked against the record before it is shown.",
+      "steps": [
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "text": "Asked: an agent calls Find documents with a question. The Worker checks its read grant and the namespaces it may see." },
+        { "from": "capsid-worker", "kind": "reads", "to": "capsid-db", "toward": "capsid-worker", "text": "By keyword: the question runs through SQLite's full-text search on D1, ranked by bm25." },
+        { "from": "capsid-worker", "kind": "reads", "to": "capsid-search", "toward": "capsid-worker", "text": "By meaning: the same question goes to the AI Search index, which finds documents that say it in other words." },
+        { "from": "capsid-worker", "kind": "reads", "to": "capsid-db", "toward": "capsid-worker", "text": "Re-checked: every meaning hit is read back from D1, so a moved or deleted document is never served. Closed and superseded documents are left out unless asked for." },
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "text": "Answered: one list, the current canon first, each row marked keyword, meaning or both. If the index cannot answer, the keyword results come back with the reason." },
+        { "from": "capsid-tick", "kind": "writes", "to": "capsid-search", "toward": "capsid-search", "text": "Kept fresh: every five minutes the tick sends the index the documents changed since its last pass, 100 at a time, and a daily pass removes what D1 no longer holds." }
+      ]
+    },
+    {
+      "id": "session-start",
+      "name": "A session starts",
+      "description": "How a coding session picks up where the last one left off: it starts from the project's notes and writes back what it decides.",
+      "steps": [
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "text": "Started: a coding session calls Start a session with its project's namespace." },
+        { "from": "capsid-worker", "kind": "reads", "to": "capsid-db", "toward": "capsid-worker", "text": "Gathered: the Worker reads the conventions, the project's core.md, the portfolio's decisions and rulings, the open tasks and the three latest session notes, each with when it last changed." },
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "text": "Handed over: one answer of about 40 KB. When it runs over, what was trimmed is listed by name, so nothing is dropped without a word." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Written back: what the session decides goes into documents with Write a document. The old body is kept as a version, and an audit row records who changed it." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Guarded: a change to the conventions, a core.md or the decisions from anyone but the seat or the admin is held as a proposal until it is approved." },
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "text": "Remembered: the next session, on any machine, starts from the same notes." }
       ]
     },
     {

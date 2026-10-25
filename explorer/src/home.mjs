@@ -1,5 +1,6 @@
 // The front page. First what Capsid is, beside one claim checked against GitHub, which the
-// reader can change. Then the panel: every tool Capsid serves as a circuit, lit by the grants a
+// reader can change. Then what it remembers: a search and a session start over an example
+// store. Then the panel: every tool Capsid serves as a circuit, lit by the grants a
 // caller holds, which the reader switches. Then one job's life as a guided tour, the drawing of
 // Capsid's insides pinned beside the chapters, each with its day's figures; then everything it
 // holds as the manual's contents. Pure, as pages.mjs is.
@@ -12,7 +13,7 @@ import { graph, thing, website } from "@drdustinedwards/site-helpers/schema";
 import { ORIGIN, SITE, escapeHtml, flowStage, flowsOf, layout, manualHead, minutes, percent, reading, sectionAt, stepPath, stepWords } from "./pages.mjs";
 import { toolPath } from "./tools.mjs";
 
-const DESCRIPTION = "Capsid is an MCP server on one Cloudflare Worker: a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub.";
+const DESCRIPTION = "Capsid is an MCP server on one Cloudflare Worker: a shared memory agents search and start from, a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub.";
 /** The front page's JSON-LD: this site, and the code it is about. A function, because pages.mjs imports this module. */
 const siteData = (AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: "Dustin Edwards", url: SITE }) => graph([
   website({ origin: ORIGIN, name: "Capsid", description: DESCRIPTION, searchUrl: `${ORIGIN}/search/?q={search_term_string}`, publisher: AUTHOR }),
@@ -137,7 +138,7 @@ function hero(stats) {
 ${manualHead("/")}
 <div class="hero-words">
 <h1 id="hero-title">One panel, every agent</h1>
-<p class="lead">Capsid is an MCP server on one Cloudflare Worker. Agents claim signed jobs, act only through the grants they hold, and a job counts as done only when GitHub agrees.</p>
+<p class="lead">Capsid is an MCP server on one Cloudflare Worker. Agents start from a shared memory, claim signed jobs, act only through the grants they hold, and a job counts as done only when GitHub agrees.</p>
 <p class="hero-actions"><a class="cap-btn" data-variant="primary" href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a><a class="hero-link" href="#tour">Follow one job</a></p>
 <p class="hero-note">This is a live instance. Every tool, step and number here is its own, rebuilt each day.</p>
 </div>
@@ -152,6 +153,97 @@ ${manualHead("/")}
 <p class="desk-verdict" role="status" data-desk-verdict>${verdict(kind, read, read)}</p>
 <p class="desk-play"><button type="button" class="cap-btn" data-variant="primary" data-desk-fool>Try to fool it</button><span data-desk-tally></span></p>
 <p class="desk-fact">This instance has checked ${v.evaluations_90d.toLocaleString("en-US")} claims in 90 days, and ${percent(v.agreement_rate_90d)} agreed with GitHub. <a href="/numbers/">The numbers</a></p>
+</div>
+</section>`;
+}
+
+/**
+ * The knowledge base's example store: three questions, and the documents each finds. A row
+ * matches by keyword, by meaning or both; canon is the current conventions, core or decisions,
+ * which rank first (src/doc-index.ts, isCanon). Fake data, in the namespace "sample", as the
+ * public repo's fixtures are (CLAUDE.md, public repo rule).
+ * @type {{ q: string, retired: number, rows: [string, string, boolean, boolean, boolean][] }[]}
+ */
+const SEARCHES = [
+  {
+    q: "How does an agent prove a job is done?",
+    retired: 1,
+    rows: [
+      ["Decisions", "sample/decisions.md", false, true, true],
+      ["Checking claims against GitHub", "sample/specs/verification.md", true, true, false],
+      ["Outcome rows", "sample/specs/outcomes.md", false, true, false],
+      ["Session: the claim check", "sample/sessions/2026-10-20.md", true, false, false],
+    ],
+  },
+  {
+    q: "Where do old versions of a document go?",
+    retired: 0,
+    rows: [
+      ["Sample core", "sample/core.md", false, true, true],
+      ["Document history", "sample/specs/versions.md", true, true, false],
+      ["Restoring a page from a backup", "sample/runbooks/restore.md", false, true, false],
+      ["Session: moved the old notes", "sample/sessions/2026-10-02.md", true, false, false],
+    ],
+  },
+  {
+    q: "Who is allowed to merge?",
+    retired: 2,
+    rows: [
+      ["Decisions", "sample/decisions.md", false, true, true],
+      ["The signed merge policy", "sample/specs/merge-policy.md", true, true, false],
+      ["Grants and flags", "sample/specs/grants.md", false, true, false],
+      ["Session: who may merge", "sample/sessions/2026-10-18.md", true, false, false],
+    ],
+  },
+];
+
+/** What Start a session hands over (src/tools/docs-read.ts, brief), for the example store: name, path, kilobytes. */
+const BRIEF = [
+  ["The conventions", "capsid/conventions.md", 6],
+  ["The project's core", "sample/core.md", 9],
+  ["Decisions and rulings", "sample/decisions.md", 11],
+  ["Open tasks, 3", "sample/tasks/", 5],
+  ["The latest session notes, 3", "sample/sessions/", 6],
+];
+
+/**
+ * The knowledge base: what Capsid remembers, as two things a reader can do with the example
+ * store. Ask it a question by keyword alone or by keyword and meaning; start a session, write a
+ * note, and start again to find the note there. The figure under them is this instance's own.
+ * Each links to its flow once the model has it.
+ * @param {any} model @param {any} stats
+ */
+function knowledge(model, stats) {
+  const more = (/** @type {string} */ id, /** @type {string} */ words) => (flowsOf(model).some((f) => f.id === id) ? `<p class="kb-more"><a href="/flows/${id}/">${words}</a></p>` : "");
+  const tag = (/** @type {boolean} */ kw, /** @type {boolean} */ mean) => (kw && mean ? "both" : kw ? "keyword" : "meaning");
+  const results = SEARCHES.map(
+    (x, i) => `<ol class="kb-results" data-q="${i}"${i ? " hidden" : ""}>${x.rows
+      .map(
+        ([title, path, kw, mean, canon]) =>
+          `<li${kw ? " data-kw" : ""}${mean ? " data-mean" : ""}><span class="kb-doc"><span class="kb-title">${escapeHtml(title)}</span><code>${escapeHtml(path)}</code></span><span class="kb-tags">${canon ? `<span class="kb-tag" data-canon>canon</span>` : ""}<span class="kb-tag kb-how">${tag(kw, mean)}</span><span class="kb-tag kb-kw">keyword</span></span></li>`
+      )
+      .join("")}</ol><p class="kb-left" data-q="${i}"${i ? " hidden" : ""}>${x.retired ? `${x.retired} closed or superseded ${x.retired === 1 ? "document" : "documents"} left out.` : "Nothing closed or superseded matched."} Every meaning hit is read back from the record before it is shown.</p><p class="kb-left kb-kwnote" data-q="${i}"${i ? " hidden" : ""}>${x.rows.filter((r) => r[2]).length} of ${x.rows.length} found by keyword alone. Add meaning to find the ones that say it in other words.</p>`
+  ).join("");
+  const total = BRIEF.reduce((n, b) => n + Number(b[2]), 0);
+  return `<section class="kb wrap" id="memory" aria-labelledby="kb-title">
+<h2 id="kb-title">What it remembers</h2>
+<p class="lead">Every project's notes, decisions and session logs live in one store that agents search and start from, and every edit keeps the old version. This instance holds ${stats.store.documents.toLocaleString("en-US")} documents in ${stats.store.namespaces} namespaces.</p>
+<div class="kb-grid">
+<div class="kb-box" data-ui data-kb-search data-mode="hybrid">
+<h3 class="kb-head">Ask it <span>An example store</span></h3>
+<div class="kb-qs" role="group" aria-label="The question">${SEARCHES.map((x, i) => `<button type="button" class="kb-q" data-ask="${i}" aria-pressed="${i === 0}">${escapeHtml(x.q)}</button>`).join("")}</div>
+<div class="kb-modes" role="group" aria-label="How it searches"><button type="button" class="kb-mode" data-mode-set="keyword" aria-pressed="false">Keyword</button><button type="button" class="kb-mode" data-mode-set="hybrid" aria-pressed="true">Keyword and meaning</button></div>
+<div class="kb-out" aria-live="polite">${results}</div>
+${more("doc-search", "How a search runs")}
+</div>
+<div class="kb-box" data-ui data-session>
+<h3 class="kb-head">Start from it <span>The same store</span></h3>
+<p class="kb-actions"><button type="button" class="cap-btn" data-variant="primary" data-start>Start a session</button><button type="button" class="cap-btn" data-write disabled>Write a note</button></p>
+<ol class="kb-brief">${BRIEF.map(([name, path, kb]) => `<li data-brief><span class="kb-doc"><span class="kb-title">${name}</span><code>${path}</code></span><span class="kb-size">${kb} KB</span></li>`).join("")}<li data-brief data-mine hidden><span class="kb-doc"><span class="kb-title">Your note, from the last session</span><code>sample/sessions/2026-10-25.md</code></span><span class="kb-size">1 KB</span></li></ol>
+<p class="kb-budget"><progress max="40" value="${total}" data-budget>${total} of 40 KB</progress><span data-budget-words>${total} KB of the 40 KB a start may hand over. Nothing trimmed.</span></p>
+<p class="kb-said" role="status" data-session-said>One call hands a new session the project's notes.</p>
+${more("session-start", "How a session starts")}
+</div>
 </div>
 </section>`;
 }
@@ -239,7 +331,7 @@ function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {an
  * @param {any} codeIndex totals over the code maps (code.mjs, codeTotals), or null
  */
 export function homePage(model, stats, tools, codeIndex) {
-  const body = [hero(stats), board(tools), tour(model, stats), holds(model, stats, tools, codeIndex)].join("\n");
+  const body = [hero(stats), knowledge(model, stats), board(tools), tour(model, stats), holds(model, stats, tools, codeIndex)].join("\n");
   return layout({
     title: "Capsid: one panel for every AI agent",
     description: DESCRIPTION,
