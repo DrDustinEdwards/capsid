@@ -11,7 +11,7 @@ import { build } from "../build.mjs";
 import { codePage, codePath, modulePage, modulePath } from "../src/code.mjs";
 import { numbersHtml } from "../src/numbers.mjs";
 import { servedTools } from "../src/surface.mjs";
-import { SITE, allPages, containersPath, escapeHtml, flowPath, stepPath, stepWords, systemPath } from "../src/pages.mjs";
+import { SITE, allPages, containersPath, escapeHtml, flowPath, percent, stepPath, stepWords, systemPath } from "../src/pages.mjs";
 
 const fixtures = new URL("../fixtures/", import.meta.url).pathname;
 const read = (/** @type {string} */ name) => JSON.parse(readFileSync(join(fixtures, name), "utf8"));
@@ -405,4 +405,21 @@ test("the core's page and its parts page link each flow over its parts, and a sy
     for (const f of model.flows) assert.ok(text.includes(`href="${flowPath(f.id)}"`), `${page} does not link ${f.id}`);
   }
   assert.doesNotMatch(readFileSync(join(out, "s", "kit", "index.html"), "utf8"), /href="\/flows\/[^"]/);
+});
+
+test("two systems that share a repo get its code pages once, under the one named after it, and the other links there", () => {
+  const shared = { ...model, systems: model.systems.map((/** @type {any} */ s) => (s.id === "kit" ? { ...s, repos: ["https://github.com/example/theme"] } : s)) };
+  const twice = { ...code, maps: [{ ...code.maps[0], system: "kit" }, ...code.maps] };
+  const paths = allPages(shared, stats, twice).map(([path]) => path);
+  assert.ok(paths.includes(codePath("theme")));
+  assert.ok(!paths.some((p) => p.startsWith(codePath("kit"))), "kit's copy of theme's code was built");
+  const kit = allPages(shared, stats, twice).find(([path]) => path === systemPath("kit"))?.[1] ?? "";
+  assert.match(kit, new RegExp(`<a href="${codePath("theme")}">Measured with`));
+});
+
+test("a rate that rounds to all or none, and is not, keeps one place", () => {
+  assert.equal(percent(0.999), "99.9%");
+  assert.equal(percent(1), "100%");
+  assert.equal(percent(0.004), "0.4%");
+  assert.equal(percent(0.981), "98%");
 });

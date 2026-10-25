@@ -126,17 +126,23 @@ const blobUrl = (map, path, line, end) => `${repoUrl(map.repo)}/blob/${map.sha}/
 /**
  * The code maps of public systems, checked against the model: a map for a system the model does
  * not have as public stops the build, as a flow touching a private part does (design section 2,
- * rule 2), so the explorer can never draw a private system's code.
+ * rule 2), so the explorer can never draw a private system's code. Two systems that share a repo
+ * (a site and its admin connector) get its pages once, under the system named after the repo, or
+ * else the first to list it, so no page is served twice under two addresses.
  * @param {any} model @param {any} code
  * @returns {Map<string, any[]>} system id to its maps
  */
 export function codeBySystem(model, code) {
   const systems = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s]));
+  const maps = code?.maps ?? [];
   /** @type {Map<string, any[]>} */
   const out = new Map();
-  for (const map of code?.maps ?? []) {
+  for (const map of maps) {
     const s = systems.get(map.system);
     if (!s || s.private !== false) throw new Error(`the code map of ${map.repo} belongs to ${map.system}, which is not a public system in the model`);
+    const name = map.repo.split("/")[1];
+    const owner = maps.find((/** @type {any} */ x) => x.repo === map.repo && x.system === name) ?? maps.find((/** @type {any} */ x) => x.repo === map.repo);
+    if (owner !== map) continue;
     const theirs = out.get(s.id) ?? [];
     // A module's address is its path under the system, so two repos of one system must not share a path.
     const clash = map.modules.find((/** @type {any} */ m) => theirs.some((o) => o.modules.some((/** @type {any} */ x) => x.path === m.path)));
@@ -257,20 +263,19 @@ export function codePages(model, bySystem, sourceOf, asOf) {
   return pages;
 }
 
-/**
- * Every measured function of the public repos, once each: two systems that share a repo (the
- * site and its admin connector) share its map, so a repo is counted once, under the first
- * system that lists it.
- * @param {any} model @param {Map<string, any[]>} bySystem
- */
+/** Every public repo's map with the system its pages sit under. @param {any} model @param {Map<string, any[]>} bySystem */
 function reposOf(model, bySystem) {
-  /** @type {Map<string, { repo: string, system: any, map: any }>} */
-  const out = new Map();
-  for (const [id, maps] of bySystem) {
-    const system = model.systems.find((/** @type {any} */ s) => s.id === id);
-    for (const map of maps) if (!out.has(map.repo)) out.set(map.repo, { repo: map.repo, system, map });
-  }
-  return [...out.values()];
+  return [...bySystem].flatMap(([id, maps]) => maps.map((map) => ({ repo: map.repo, system: model.systems.find((/** @type {any} */ s) => s.id === id), map })));
+}
+
+/**
+ * The system whose code pages hold another system's repo, when the two share it, or undefined.
+ * @param {any} model @param {Map<string, any[]>} bySystem @param {string} id
+ */
+export function codeHome(model, bySystem, id) {
+  const repos = (model.systems.find((/** @type {any} */ s) => s.id === id)?.repos ?? []).map((/** @type {string} */ r) => r.replace(/^https:\/\/github\.com\//, ""));
+  for (const [home, maps] of bySystem) if (home !== id && maps.some((map) => repos.includes(map.repo))) return model.systems.find((/** @type {any} */ s) => s.id === home);
+  return undefined;
 }
 
 /** @param {any} map */

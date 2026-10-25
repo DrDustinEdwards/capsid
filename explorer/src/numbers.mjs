@@ -23,6 +23,9 @@ export function numbersHtml(stats) {
   const v = stats.verification;
   const g = stats.gates;
   const weeks = weekLabels(stats);
+  // The bars name each week by its day, with its month at the first, the newest and wherever the
+  // month changes, so eight labels fit under eight bars.
+  const days = weeks.map((/** @type {string} */ w, /** @type {number} */ i) => (i && i < weeks.length - 1 && w.split(" ")[1] === weeks[i - 1].split(" ")[1] ? w.split(" ")[0] : w));
   const total = j.completed_by_week.reduce((/** @type {number} */ a, /** @type {number} */ b) => a + b, 0);
   // Under Enarratio's 480 the drawing scales to a phone's width instead of scrolling inside a
   // frame no keyboard can reach (axe, scrollable-region-focusable, on the phone project).
@@ -30,7 +33,7 @@ export function numbersHtml(stats) {
   const jobsChart = j.failed_by_week
     ? barChart({
         id: "jobs-per-week",
-        data: weeks.flatMap((/** @type {string} */ week, /** @type {number} */ i) => [
+        data: days.flatMap((/** @type {string} */ week, /** @type {number} */ i) => [
           { week, outcome: "Completed", jobs: j.completed_by_week[i] },
           { week, outcome: "Failed", jobs: j.failed_by_week[i] },
         ]),
@@ -45,7 +48,7 @@ export function numbersHtml(stats) {
       })
     : barChart({
         id: "jobs-per-week",
-        data: weeks.map((/** @type {string} */ week, /** @type {number} */ i) => ({ week, jobs: j.completed_by_week[i] })),
+        data: days.map((/** @type {string} */ week, /** @type {number} */ i) => ({ week, jobs: j.completed_by_week[i] })),
         x: "week",
         y: "jobs",
         title: "Jobs completed per week",

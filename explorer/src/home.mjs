@@ -1,6 +1,6 @@
 // The front page. First the panel: every tool Capsid serves as a circuit, lit by the grants a
 // caller holds, which the reader switches. Then one job's life as a guided tour, the drawing of
-// Capsid's insides pinned beside the chapters; then three of the day's figures, and everything it
+// Capsid's insides pinned beside the chapters, each with its day's figures; then everything it
 // holds as the manual's contents. Pure, as pages.mjs is.
 //
 // Every number is from the public numbers or the model; every sentence that states a fact about
@@ -8,7 +8,7 @@
 
 import { graph, thing, website } from "@drdustinedwards/site-helpers/schema";
 
-import { ORIGIN, SITE, escapeHtml, flowStage, flowsOf, layout, manualHead, minutes, percent, reading, sectionAt, stepPath, stepWords, systemPath } from "./pages.mjs";
+import { ORIGIN, SITE, escapeHtml, flowStage, flowsOf, layout, manualHead, minutes, percent, reading, sectionAt, stepPath, stepWords } from "./pages.mjs";
 import { toolPath } from "./tools.mjs";
 
 const DESCRIPTION = "Capsid is an MCP server on one Cloudflare Worker: a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub.";
@@ -156,16 +156,7 @@ ${kept.length ? `<dl class="readings readings-small">${kept.map(([value, label])
 </section>`;
 }
 
-/** Its own record: three of the day's figures, each on a rule as the manual sets a figure. @param {any} stats */
-function record(stats) {
-  const { jobs: j, verification: v, gates: g } = stats;
-  return `<section class="record wrap" aria-labelledby="record-title">
-<h2 id="record-title">Its own record</h2>
-<dl class="readings readings-row">${reading(percent(v.agreement_rate_90d), `of ${v.evaluations_90d.toLocaleString("en-GB")} claims agreed with what GitHub records, last 90 days`, "/numbers/#verification")}${reading(String(j.completed_30d), "jobs completed, last 30 days", "/numbers/#jobs")}${reading(minutes(g.median_wait_minutes_30d), "median wait for a person or the signed policy", "/numbers/#gates")}</dl>
-</section>`;
-}
-
-/** What one Worker holds, as the manual's index sets it: each section by number and name, a dotted leader to what it holds; then every system by name. */
+/** What one Worker holds, as the manual's index sets it: each section by number and name, a dotted leader to what it holds. */
 function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {any[]} */ tools, /** @type {any} */ codeIndex) {
   const rows = [
     ["/systems/", `${model.systems.length} drawn with their parts`],
@@ -182,8 +173,6 @@ function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {an
       return `<li><a href="${href}"><span class="contents-no">${section?.no}.0</span><span class="contents-name">${section?.label}</span><span class="contents-dots" aria-hidden="true"></span><span class="contents-fact">${escapeHtml(fact)}</span></a></li>`;
     })
     .join("")}</ol>
-<h3>Every system</h3>
-<ul class="system-names">${model.systems.map((/** @type {any} */ s) => `<li><a href="${systemPath(s.id)}">${escapeHtml(s.name)}</a></li>`).join("")}</ul>
 </section>`;
 }
 
@@ -192,7 +181,7 @@ function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {an
  * @param {any} codeIndex totals over the code maps (code.mjs, codeTotals), or null
  */
 export function homePage(model, stats, tools, codeIndex) {
-  const body = [board(tools), tour(model, stats), record(stats), holds(model, stats, tools, codeIndex)].join("\n");
+  const body = [board(tools), tour(model, stats), holds(model, stats, tools, codeIndex)].join("\n");
   return layout({
     title: "Capsid: one panel for every AI agent",
     description: DESCRIPTION,

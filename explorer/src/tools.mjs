@@ -119,7 +119,7 @@ export function toolPage(t, tools, asOf) {
 <tbody>${t.params
           .map(
             (/** @type {any} */ p) =>
-              `<tr id="arg-${escapeHtml(p.name)}"><th scope="row"><code>${escapeHtml(p.name)}</code></th><td>${escapeHtml(p.type)}${p.values.length ? `: ${p.values.map((/** @type {string} */ v) => `<code>${escapeHtml(v)}</code>`).join(", ")}` : ""}</td><td>${p.required ? "always" : "no"}</td><td>${prose(p.description)}</td></tr>`
+              `<tr id="arg-${escapeHtml(p.name)}"><th scope="row"><code>${escapeHtml(p.name)}</code></th><td>${escapeHtml(p.type)}${p.values.length ? `: ${p.values.map((/** @type {string} */ v) => `<code>${escapeHtml(v)}</code>`).join(", ")}` : ""}</td><td>${p.required ? "always" : "no"}</td><td data-wrap>${prose(p.description)}</td></tr>`
           )
           .join("")}</tbody></table>`,
         `The arguments of ${t.name}`
@@ -136,7 +136,7 @@ export function toolPage(t, tools, asOf) {
         )
         .join("")}</dl></section>`
     : "";
-  const body = `${pageHead([["/", "Overview"], ["/tools/", "Tools"]], t.name, `<code>${escapeHtml(t.name)}</code>`, `${escapeHtml(t.title)}, on ${escapeHtml(t.server)}. Needs ${GRANT[/** @type {keyof typeof GRANT} */ (t.grant)] ?? escapeHtml(t.grant)}.`)}
+  const body = `${pageHead([["/", "Overview"], ["/tools/", "Tools"]], t.name, escapeHtml(t.title), `<code>${escapeHtml(t.name)}</code>, on ${escapeHtml(t.server)}. Needs ${GRANT[/** @type {keyof typeof GRANT} */ (t.grant)] ?? escapeHtml(t.grant)}.`)}
 <p class="tool-tags">${pills(t)}</p>
 <section aria-labelledby="does-title"><h2 id="does-title">What it does</h2>${rest.map(said).join("")}</section>
 <section aria-labelledby="hints-title"><h2 id="hints-title">What a client is told</h2>

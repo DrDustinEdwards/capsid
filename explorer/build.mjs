@@ -94,12 +94,12 @@ async function readCode(source) {
  * map says it was there at that commit, except a build-time generated one (name.generated.ext):
  * a repo's code map runs after its install writes them, but git never holds them, so their
  * pages show no source.
- * @param {any} code @param {string | undefined} dir
+ * @param {any[]} maps the code maps the pages are built from @param {string | undefined} dir
  */
-async function readSources(code, dir) {
+async function readSources(maps, dir) {
   /** @type {Map<string, string>} */
   const out = new Map();
-  const wanted = (code?.maps ?? []).flatMap((/** @type {any} */ map) => map.modules.map((/** @type {any} */ m) => ({ repo: map.repo, sha: map.sha, path: m.path })));
+  const wanted = maps.flatMap((/** @type {any} */ map) => map.modules.map((/** @type {any} */ m) => ({ repo: map.repo, sha: map.sha, path: m.path })));
   if (dir) {
     for (const w of wanted) {
       const file = join(dir, w.repo, w.path);
@@ -148,8 +148,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   const stats = PublicStatsSchema.parse(await read(statsSource));
   const code = await readCode(codeSource);
   // Checked against the model before any source is read, so no private system's file is fetched.
-  codeBySystem(model, code);
-  const sources = await readSources(code, sourceDir);
+  const sources = await readSources([...codeBySystem(model, code).values()].flat(), sourceDir);
 
   rmSync(out, { recursive: true, force: true });
   const tools = servedTools();
