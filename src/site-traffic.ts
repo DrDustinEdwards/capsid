@@ -189,7 +189,7 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
       fetchImpl,
       creds.token,
       creds.account,
-      `SELECT clientRequestUserAgent AS ua, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host GROUP BY clientRequestUserAgent, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
+      `SELECT userAgent AS ua, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host GROUP BY userAgent, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
       { start, host }
     );
     return {
