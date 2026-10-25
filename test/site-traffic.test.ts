@@ -5,7 +5,7 @@ import { fakeEnv } from "./fakes.ts";
 
 // The traffic report for a namespace's site (src/site-traffic.ts), served as
 // capsid_inspect_repo action traffic: the 404s Cloudflare's edge recorded for the
-// namespace's own host, a broken link on the site first and scanners' probes last.
+// namespace's own host, scanners' probes last.
 
 const NOW = new Date("2026-10-25T12:00:00.000Z");
 const ROW = {
@@ -32,17 +32,15 @@ const siteDb = () => ({
   }),
 });
 
-test("not_found asks for the namespace's own host only and ranks a broken link on the site above stale links, direct hits and probes", async () => {
+test("not_found asks for the namespace's own host only and lists scanners' probes after real pages", async () => {
   const calls: Array<{ url: string; body: { query: string; params: Record<string, unknown>; scope: unknown } }> = [];
   const impl = async (url: string, init?: RequestInit) => {
     calls.push({ url, body: JSON.parse(String(init?.body)) });
     return Response.json({
       data: [
-        { path: "/wp-login.php", referrer: "", hits: 90 },
-        { path: "/old-post", referrer: "", hits: 40 },
-        { path: "/old-post", referrer: "news.example.org", hits: 12 },
-        { path: "/papers/typo", referrer: "sample.example.com", hits: 3 },
-        { path: "/gone", referrer: "", hits: 5 },
+        { path: "/wp-login.php", hits: 90 },
+        { path: "/old-post", hits: 40 },
+        { path: "/gone", hits: 5 },
       ],
     });
   };
@@ -55,9 +53,7 @@ test("not_found asks for the namespace's own host only and ranks a broken link o
   assert.deepEqual(calls[0].body.scope, { accountTag: "0123456789abcdef0123456789abcdef" });
   assert.match(calls[0].body.query, /edgeResponseStatus = 404/);
 
-  assert.deepEqual(r.paths.map((p) => p.path), ["/papers/typo", "/old-post", "/gone", "/wp-login.php"]);
-  assert.deepEqual(r.paths[1], { path: "/old-post", hits: 52, from_site: 0, from_elsewhere: 12, direct: 40, top_referrers: [{ referrer: "news.example.org", hits: 12 }], probe: false });
-  assert.equal(r.broken_links_on_site, 1);
+  assert.deepEqual(r.paths.map((p) => p.path), ["/old-post", "/gone", "/wp-login.php"]);
   assert.equal(r.probes, 1);
   await assert.rejects(() => siteTraffic(env, "sample", { days: 31 }, impl, NOW), /days must be a whole number from 1 to 30/);
 });

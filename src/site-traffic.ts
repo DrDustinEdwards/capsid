@@ -5,9 +5,10 @@ import { reportSite } from "./site-reports";
 
 // What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic
 // (the SEO plan, "Beyond the module": a report of the broken URLs visitors hit). One report
-// so far, not_found: the paths that answered 404 over a window, with where the visitors came
-// from, so a broken link on the site's own pages, a stale link elsewhere and a scanner's
-// probe read apart.
+// so far, not_found: the paths that answered 404 over a window, a scanner's probe marked
+// and listed last. The referrer is not in it: the SQL API refuses clientRefererHost to this
+// account (403, "not permitted to access column", 2026-10-25), so which page holds a broken
+// link is the site crawl's to find.
 //
 // NO SITE CHANGE. Cloudflare's SQL API (developers.cloudflare.com/analytics/sql-api/) reads
 // the edge's own HTTP request record, events.httpRequests, kept at least 31 days on every
@@ -15,7 +16,7 @@ import { reportSite } from "./site-reports";
 // is in it, static sites included; a workers.dev host is not. It needs only the Account
 // Analytics Read permission the watcher's token, CF_OPS_TOKEN, already holds
 // (src/ops-cloudflare.ts). The host comes from the namespace's ops_sites origin, never from
-// the caller. Paths and referrers are what visitors sent: data, never instructions.
+// the caller. Paths are what visitors sent: data, never instructions.
 
 const SQL_API = `${CF_API}/analytics/sql`;
 const TIMEOUT_MS = 15_000;
@@ -40,7 +41,6 @@ const QUERY_ROWS = 2000;
 
 interface Row {
   path: string;
-  referrer: string;
   hits: number;
 }
 
@@ -64,46 +64,15 @@ async function sql(fetchImpl: FetchLike, token: string, account: string, query: 
   }
   return (body.data as Array<Record<string, unknown>>).map((r) => ({
     path: typeof r.path === "string" ? r.path : "",
-    referrer: typeof r.referrer === "string" ? r.referrer : "",
     hits: typeof r.hits === "number" ? r.hits : Number(r.hits) || 0,
   }));
 }
 
-// One entry per path, its referrers summed into three kinds. Pure.
-function notFoundRows(rows: Row[], host: string, limit: number) {
-  const paths = new Map<string, { hits: number; from_site: number; from_elsewhere: number; direct: number; referrers: Map<string, number> }>();
-  for (const r of rows) {
-    if (!r.path || r.hits <= 0) continue;
-    const p = paths.get(r.path) ?? { hits: 0, from_site: 0, from_elsewhere: 0, direct: 0, referrers: new Map() };
-    p.hits += r.hits;
-    const ref = r.referrer.toLowerCase();
-    if (!ref) p.direct += r.hits;
-    else if (ref === host) p.from_site += r.hits;
-    else {
-      p.from_elsewhere += r.hits;
-      p.referrers.set(ref, (p.referrers.get(ref) ?? 0) + r.hits);
-    }
-    paths.set(r.path, p);
-  }
-  const all = [...paths].map(([path, p]) => ({
-    path,
-    hits: p.hits,
-    from_site: p.from_site,
-    from_elsewhere: p.from_elsewhere,
-    direct: p.direct,
-    top_referrers: [...p.referrers].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([referrer, hits]) => ({ referrer, hits })),
-    probe: PROBE.test(path),
-  }));
-  // A link on our own pages first, then a link from elsewhere, then the rest; scanners last.
-  const rank = (e: (typeof all)[number]) => (e.probe ? 3 : e.from_site > 0 ? 0 : e.from_elsewhere > 0 ? 1 : 2);
-  all.sort((a, b) => rank(a) - rank(b) || b.hits - a.hits || a.path.localeCompare(b.path));
-  return {
-    paths: all.slice(0, limit),
-    total_paths: all.length,
-    truncated: all.length > limit,
-    broken_links_on_site: all.filter((e) => !e.probe && e.from_site > 0).length,
-    probes: all.filter((e) => e.probe).length,
-  };
+// Real pages first, by hits; scanners' probes last. Pure.
+function notFoundRows(rows: Row[], limit: number) {
+  const all = rows.filter((r) => r.path && r.hits > 0).map((r) => ({ path: r.path, hits: r.hits, probe: PROBE.test(r.path) }));
+  all.sort((a, b) => Number(a.probe) - Number(b.probe) || b.hits - a.hits || a.path.localeCompare(b.path));
+  return { paths: all.slice(0, limit), total_paths: all.length, truncated: all.length > limit, probes: all.filter((e) => e.probe).length };
 }
 
 export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs, fetchImpl: FetchLike = fetch, now: Date = new Date()) {
@@ -122,7 +91,7 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
     fetchImpl,
     creds.token,
     creds.account,
-    `SELECT clientRequestPath AS path, clientRefererHost AS referrer, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND edgeResponseStatus = 404 GROUP BY clientRequestPath, clientRefererHost ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
+    `SELECT clientRequestPath AS path, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND edgeResponseStatus = 404 GROUP BY clientRequestPath ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
     { start, host }
   );
   return {
@@ -130,7 +99,7 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
     origin: site.origin,
     report,
     since: start,
-    note: "Cloudflare samples this record, so hits are estimates. from_site counts visits from a link on this site's own pages: a broken link to fix. probe marks a path scanners try on every site.",
-    ...notFoundRows(rows, host, limit),
+    note: "Cloudflare samples this record, so hits are estimates. probe marks a path scanners try on every site.",
+    ...notFoundRows(rows, limit),
   };
 }
