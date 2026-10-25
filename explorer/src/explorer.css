@@ -1,8 +1,7 @@
 /* The explorer's own look on Capsomer's tokens (assets/capsomer.css): a distribution board.
    Every tool is a circuit and every grant a breaker; the breaker's slot and handle is the one
    shape, at every scale. Every colour is Capsomer's teal family (data-family on <html>; Dustin,
-   2026-10-25): its neutrals are the ground, its deepest teal the panel, and its lighter
-   teals the lamp, which marks what is live and the one action. A lit lamp glows in the
+   2026-10-25): its neutrals are the ground and the ink, and its lighter teals the lamp, which marks what is live and the one action. A lit lamp glows in the
    ramp's brightest steps. The page is laid out as NASA's own papers (the NASA block at the end):
    one near-white ground, as the manual bars pale tints, and parts told apart by hairlines.
    Unlayered, so these win over Capsomer's layers. */
@@ -31,14 +30,14 @@
   --radius-m: 0;
   --radius-l: 0;
   /* The teal ramp's steps, by number: the lamp is light 8, its ink light 12; a lit lamp
-     burns at dark 11 with a halo of dark 10; the panel is light 12, raised dark 4. */
+     burns at dark 11 with a halo of dark 10. */
   --lamp: #7db5b7;
   --lamp-ink: #0c1e1f;
-  --lamp-lit: #97c8cb;
   --lamp-glow: 0 0 6px 1px rgb(36 147 152 / 0.9), 0 0 18px 4px rgb(36 147 152 / 0.45);
-  --panel: #0c1e1f;
-  --panel-raised: #1a2d2e;
-  --panel-ink: #e3eeee;
+  /* A lit lamp on the page: on the near-white ground, the family's accent (light 9), solid, as
+     the pale lamp would wash out; in dark, the lamp with its glow. */
+  --lamp-on: #008489;
+  --lamp-on-glow: none;
 }
 :root[data-family] {
   --primary: var(--lamp);
@@ -54,9 +53,9 @@
     --primary: var(--lamp);
     --primary-hover: #97c8cb;
     --primary-fg: var(--lamp-ink);
-    --panel: #0b0e0e;
-    --panel-raised: #162222;
     --bar: var(--lamp);
+    --lamp-on: var(--lamp);
+    --lamp-on-glow: var(--lamp-glow);
   }
 }
 :root[data-family][data-theme="dark"] {
@@ -64,9 +63,9 @@
   --primary: var(--lamp);
   --primary-hover: #97c8cb;
   --primary-fg: var(--lamp-ink);
-  --panel: #0b0e0e;
-  --panel-raised: #162222;
   --bar: var(--lamp);
+  --lamp-on: var(--lamp);
+  --lamp-on-glow: var(--lamp-glow);
 }
 /* Enarratio's charts on the board's colours: ink bars and rings in light, the lamp's teal in dark. Enarratio sets its
    variables on the chart itself, so these name the chart under the html element to win. */
@@ -203,23 +202,24 @@ h3 {
 }
 
 /* The panel: what Capsid is beside every tool it serves, each a circuit lit by the grants an
-   agent holds. The enclosure is one near-black field running off the right edge. */
+   agent holds. Set as the rest of the page is set: the panel is an instrument in an outline box
+   (NHB 1430.2, 5.17), its circuits ruled rows, and the lamp's teal the one colour, lit only for
+   what is live. The opening starts at the top of the page, as every other page does. */
 .board {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  min-block-size: calc(100vh - var(--header-h));
+  gap: var(--space-6) clamp(24px, 4vw, 64px);
+  align-items: start;
+  max-width: var(--page);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
 }
-.board-words {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: var(--space-8) clamp(24px, 4vw, 64px) var(--space-8) max(var(--gutter), calc((100vw - var(--page)) / 2 + var(--gutter)));
+.board .manual-head {
+  grid-column: 1 / -1;
 }
 .board h1 {
   max-width: 11ch;
-  margin-block: 0 var(--space-5);
-  font-size: clamp(3rem, 5.6vw, 6rem);
-  line-height: 0.9;
+  margin-block-start: 0;
 }
 .board-actions {
   display: flex;
@@ -238,24 +238,25 @@ h3 {
 }
 .board-note {
   max-width: 40ch;
-  margin-block: var(--space-7) 0;
+  margin-block: var(--space-6) 0;
   color: var(--muted);
   font-size: 0.9375rem;
 }
 .board-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-7) max(var(--gutter), calc((100vw - var(--page)) / 2 + var(--gutter))) var(--space-7) clamp(24px, 3vw, 48px);
-  background: var(--panel);
-  color: var(--panel-ink);
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--text);
 }
 .breakers {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 0;
+  border-block-start: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
 }
-/* Capsomer's buttons carry a faint shadow; on the board everything is flat. */
+/* Capsomer's buttons carry a faint shadow; here everything is flat. */
 .cap-btn,
 .cap-site-header-skip {
   box-shadow: none; /* taste-skill-ignore: removes one */
@@ -268,110 +269,110 @@ html:not(.js) .breakers {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 2px var(--space-3);
   align-items: center;
-  min-block-size: 88px;
   padding: var(--space-3);
   border: 0;
-  background: var(--panel-raised);
-  color: var(--panel-ink);
+  border-inline-end: 1px solid var(--line);
+  border-block-end: 1px solid var(--line);
+  background: none;
+  color: var(--text);
   font: inherit;
   text-align: start;
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease-out);
 }
 .breaker:hover {
-  background: #1f3839;
+  background: var(--sunken);
 }
 .breaker:focus-visible {
-  outline: 3px solid var(--lamp);
-  outline-offset: 2px;
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
 }
-/* The breaker: a slot and its handle, which sits up when the grant is on. */
+/* The breaker: a slot and its handle, which sits up and lights when the grant is on. */
 .breaker-slot {
   grid-row: span 2;
   position: relative;
   display: block;
-  inline-size: 28px;
-  block-size: 56px;
-  background: #0b0e0e;
+  inline-size: 22px;
+  block-size: 44px;
+  border: 1px solid var(--text);
 }
 .breaker-handle {
   position: absolute;
-  inset-inline: 4px;
-  inset-block-start: 26px;
-  block-size: 26px;
-  background: #365a5b;
+  inset-inline: 3px;
+  inset-block-start: 21px;
+  block-size: 18px;
+  background: var(--line-strong);
   transition: transform var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 .breaker[aria-pressed="true"] .breaker-handle {
-  transform: translateY(-22px);
-  background: var(--lamp-lit);
-  box-shadow: var(--lamp-glow); /* taste-skill-ignore: a lit lamp's light, not a raised surface */
+  transform: translateY(-16px);
+  background: var(--lamp-on);
+  box-shadow: var(--lamp-on-glow); /* taste-skill-ignore: a lit lamp's light, not a raised surface */
 }
 .breaker-name {
-  font-weight: 650;
-  font-size: 1.0625rem;
+  font-weight: 700;
 }
 .breaker-does {
-  color: #a1cacc;
+  color: var(--muted);
   font-size: 0.875rem;
   line-height: 1.3;
 }
 .board-count {
   margin: 0;
-  font: 650 clamp(1.25rem, 1.6vw, 1.625rem) / 1.2 var(--face);
-  letter-spacing: -0.01em;
+  font: 700 clamp(1.125rem, 1.4vw, 1.375rem) / 1.25 var(--face);
 }
 .circuits {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  gap: 0 var(--space-5);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .circuit a {
   display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
+  grid-template-columns: 8px minmax(0, 1fr);
   gap: 0 var(--space-3);
   align-items: baseline;
-  padding: 10px var(--space-3);
-  background: var(--panel-raised);
-  color: #91acac;
+  padding: 8px 0;
+  border-block-end: 1px solid var(--line);
+  color: var(--muted);
   text-decoration: none;
-  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-base) var(--ease-out);
+  transition: color var(--dur-base) var(--ease-out);
 }
 .circuit a:hover {
-  background: #1f3839;
+  color: var(--accent-text);
 }
 .circuit a:focus-visible {
-  outline: 3px solid var(--lamp);
+  outline: 2px solid var(--ring);
   outline-offset: 0;
 }
-/* The lamp: dark when the circuit is dead, lit and glowing when live, half lit when only some
+/* The lamp: unlit when the circuit is dead, lit and glowing when live, half lit when only some
    actions are. */
 .lamp {
   grid-row: span 2;
   align-self: center;
-  inline-size: 12px;
-  block-size: 24px;
+  inline-size: 8px;
+  block-size: 22px;
   display: flex;
   align-items: end;
-  background: #0b0e0e;
+  border: 1px solid var(--line-strong);
   transition: background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 .circuit[data-on] a {
-  color: var(--panel-ink);
+  color: var(--text);
 }
 .circuit[data-on="full"] .lamp {
-  background: var(--lamp-lit);
-  box-shadow: var(--lamp-glow); /* taste-skill-ignore: a lit lamp's light */
+  border-color: var(--lamp-on);
+  background: var(--lamp-on);
+  box-shadow: var(--lamp-on-glow); /* taste-skill-ignore: a lit lamp's light */
 }
 .circuit[data-on="part"] .lamp::after {
   content: "";
   inline-size: 100%;
   block-size: 50%;
-  background: var(--lamp-lit);
-  box-shadow: var(--lamp-glow); /* taste-skill-ignore: a lit lamp's light */
+  background: var(--lamp-on);
+  box-shadow: var(--lamp-on-glow); /* taste-skill-ignore: a lit lamp's light */
 }
 .circuit-name {
   font-weight: 600;
@@ -379,34 +380,21 @@ html:not(.js) .breakers {
   line-height: 1.3;
 }
 .circuit code {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   color: inherit;
   overflow-wrap: anywhere;
-  opacity: 0.85;
 }
 @media (max-width: 64rem) {
   .board {
     grid-template-columns: minmax(0, 1fr);
-    min-block-size: 0;
-  }
-  .board-words {
-    padding: var(--space-7) var(--gutter);
-  }
-  .board h1 {
-    font-size: clamp(3rem, 14vw, 5.5rem);
-  }
-  .board-panel {
-    padding: var(--space-6) var(--gutter);
   }
 }
-/* On a phone the panel stays one screen: three breakers abreast, the circuits by name only,
-   two to a row (each tool's page has its code name). */
+/* On a phone the circuits go by name only (each tool's page has its code name). */
 @media (max-width: 40rem) {
   .breaker {
     grid-template-columns: minmax(0, 1fr);
     justify-items: start;
     gap: var(--space-2);
-    min-block-size: 0;
   }
   .breaker-slot {
     grid-row: auto;
@@ -418,15 +406,8 @@ html:not(.js) .breakers {
   .breaker-name {
     font-size: 0.9375rem;
   }
-  .circuit a {
-    grid-template-columns: 8px minmax(0, 1fr);
-    gap: 0 var(--space-2);
-    padding: 8px var(--space-2);
-  }
-  .lamp {
-    grid-row: auto;
-    inline-size: 8px;
-    block-size: 18px;
+  .circuits {
+    column-gap: var(--space-3);
   }
   .circuit-name {
     font-size: 0.875rem;
@@ -459,7 +440,7 @@ html:not(.js) .breakers {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-block-size: 80vh;
+  min-block-size: 70vh;
   padding-block: var(--space-6);
   color: var(--muted);
   transition: color var(--dur-slow) var(--ease-out), border-color var(--dur-slow) var(--ease-out);
@@ -470,19 +451,23 @@ html:not(.js) .breakers {
 html:not(.js) .chapter {
   color: var(--text);
 }
-/* Each chapter's lamp, the board's own mark: lit for the step being told. */
+/* The step being told carries the lamp's mark at its title, as a flow's current step does. */
+.chapter {
+  position: relative;
+  padding-inline-start: var(--space-5);
+}
 .chapter h3::before {
   content: "";
-  display: inline-block;
-  inline-size: 0.3em;
-  block-size: 0.62em;
-  margin-inline-end: 0.3em;
-  background: var(--sunken);
+  position: absolute;
+  inset-inline-start: 0;
+  inline-size: 6px;
+  block-size: 1.2em;
+  background: var(--line);
   transition: background-color var(--dur-slow) var(--ease-out);
 }
 .chapter.is-on h3::before,
 html:not(.js) .chapter h3::before {
-  background: var(--lamp);
+  background: var(--lamp-on);
 }
 .chapter p {
   max-width: 44ch;
@@ -492,15 +477,13 @@ html:not(.js) .chapter h3::before {
 }
 .chapter h3 {
   margin: 0 0 var(--space-3);
-  font: 650 clamp(2rem, 3.4vw, 3rem) / 1 var(--face);
-  letter-spacing: -0.03em;
+  font: 700 clamp(1.25rem, 1.8vw, 1.625rem) / 1.2 var(--face);
 }
 .chapter .chapter-n {
-  margin-inline-start: 0.35em;
+  margin-inline-start: 0.5em;
   color: var(--muted);
-  font-size: 0.45em;
+  font-size: 0.9375rem;
   font-weight: 500;
-  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 /* A chapter's parts are named in the drawing's colour, so the words point at what lights. */
@@ -515,11 +498,6 @@ html:not(.js) .chapter h3::before {
   background: var(--sunken);
   font-size: 0.9375rem;
 }
-.chapter.is-on .part-name {
-  background: var(--lamp);
-  color: var(--lamp-ink);
-  font-weight: 600;
-}
 .chapter .chapter-link {
   font-size: 0.9375rem;
 }
@@ -531,11 +509,6 @@ html:not(.js) .chapter h3::before {
   justify-content: center;
   min-block-size: calc(100vh - var(--header-h));
   min-width: 0;
-}
-.tour-stage .map-host {
-  padding: var(--space-4);
-  border-radius: var(--radius-l);
-  background: var(--surface);
 }
 /* The words tell each step, so the drawing keeps only itself: no views, no step box. */
 .tour-map .cap-system-map-views,
@@ -566,9 +539,6 @@ html:not(.js) .chapter h3::before {
     padding: var(--space-2) var(--gutter);
     background: var(--ground);
   }
-  .tour-stage .map-host {
-    padding: var(--space-2);
-  }
   .tour-map .cap-system-map-head {
     display: none;
   }
@@ -592,9 +562,6 @@ html:not(.js) .chapter h3::before {
 }
 .flow-stage {
   margin-block: var(--space-6);
-  padding: var(--space-4);
-  border-radius: var(--radius-l);
-  background: var(--surface);
 }
 /* A step page has its own Back and Next above the drawing; the map's copies would be a second set. */
 .flow-step ~ section .cap-system-map-detail-actions {
@@ -1415,9 +1382,6 @@ th[aria-sort="ascending"] .sort::after {
 .manual-head + .crumbs {
   margin-block-start: var(--space-3);
 }
-.board-words .manual-head {
-  margin-block: 0 var(--space-5);
-}
 main h2[data-no] {
   position: relative;
   padding-block-start: var(--space-3);
@@ -1509,17 +1473,8 @@ main.wide > .title-block {
   }
 }
 
-/* Technical drawings in outline boxes, as the manual asks of every diagram (5.17): one box, so a
-   flow's drawing and its Play button share the stage's. */
-.map-host,
-.flow-stage {
-  padding: var(--space-4);
-  border: 1px solid var(--text);
-}
-.flow-stage .map-host {
-  padding: 0;
-  border: 0;
-}
+/* The manual boxes every diagram (5.17), but the hexagon map stands unboxed: its cells move
+   and regroup between views, and a frame would cut them off mid-move (Dustin, 2026-10-25). */
 .hero-play {
   display: flex;
   flex-wrap: wrap;
@@ -1550,9 +1505,7 @@ main .cap-table thead th {
 .action,
 .said li,
 .search-results a,
-.filter-bar,
-.flow-stage,
-.tour-stage .map-host {
+.filter-bar {
   background: none;
 }
 .bands a,
@@ -1575,7 +1528,8 @@ main .cap-pill {
   background: none;
 }
 .chapter.is-on .part-name {
-  border-color: var(--accent);
+  border-color: var(--text);
+  font-weight: 600;
 }
 
 /* The list of every flow names each step alone, a row each, the time line still beside them. */
