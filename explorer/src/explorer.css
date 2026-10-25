@@ -38,7 +38,6 @@
   --primary-fg: var(--lamp-ink);
   --header-bg: var(--ground);
   --bar: var(--text);
-  --tile-pale: var(--sunken);
 }
 @media (prefers-color-scheme: dark) {
   :root[data-family]:not([data-theme="light"]) {
@@ -49,7 +48,6 @@
     --panel: #0b0e0e;
     --panel-raised: #162222;
     --bar: var(--lamp);
-    --tile-pale: var(--accent-5);
   }
 }
 :root[data-family][data-theme="dark"] {
@@ -60,7 +58,6 @@
   --panel: #0b0e0e;
   --panel-raised: #162222;
   --bar: var(--lamp);
-  --tile-pale: var(--accent-5);
 }
 /* Enarratio's charts on the board's colours: ink bars and rings in light, the lamp's teal in dark. Enarratio sets its
    variables on the chart itself, so these name the chart under the html element to win. */
@@ -505,7 +502,7 @@ html:not(.js) .chapter h3::before {
 }
 .part-name {
   padding: 2px var(--space-3);
-  border-radius: var(--radius-full);
+  border-radius: 0;
   background: var(--sunken);
   font-size: 0.9375rem;
 }
@@ -577,159 +574,6 @@ html:not(.js) .chapter h3::before {
   }
 }
 
-/* Its own record: three figures on tiles that refuse to line up, the heading in the notch. */
-.record {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-template-rows: auto;
-  gap: 8px;
-  align-items: start;
-}
-.record h2 {
-  grid-column: 7 / span 6;
-  grid-row: 1;
-  align-self: start;
-  margin: 0;
-}
-.tile {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 28px;
-  color: inherit;
-  text-decoration: none;
-  transition: transform var(--dur-base) var(--ease-out);
-}
-:where(main) a.tile {
-  color: inherit;
-}
-.tile:hover {
-  transform: translateY(-4px);
-}
-.tile-figure {
-  font: 650 clamp(3.5rem, 6vw, 6.5rem) / 0.9 var(--face);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.04em;
-}
-.tile-caption {
-  max-width: 28ch;
-  font-size: 1.0625rem;
-  line-height: 1.35;
-}
-.tile-tall {
-  grid-column: 1 / span 6;
-  grid-row: 1 / span 3;
-  min-block-size: 70vh;
-  background: var(--lamp);
-  color: var(--lamp-ink);
-}
-:where(main) a.tile-tall {
-  color: var(--lamp-ink);
-}
-.tile-ink {
-  grid-column: 7 / span 3;
-  grid-row: 2;
-  min-block-size: 44vh;
-  background: var(--text);
-  color: var(--ground);
-}
-:where(main) a.tile-ink {
-  color: var(--ground);
-}
-.tile-mid {
-  grid-column: 10 / span 3;
-  grid-row: 2;
-  margin-block-start: 12vh;
-  min-block-size: 34vh;
-  background: var(--sunken);
-}
-.tile-ink .tile-figure,
-.tile-mid .tile-figure {
-  font-size: clamp(2.5rem, 3.6vw, 4rem);
-}
-.record h2 {
-  padding-block: 6vh 4vh;
-}
-@media (max-width: 52rem) {
-  .record {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-  }
-  .record h2 {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    padding-block: 0 var(--space-3);
-  }
-  .tile-tall {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    min-block-size: 56vw;
-  }
-  .tile-ink,
-  .tile-mid {
-    grid-row: 3;
-    min-block-size: 48vw;
-    margin-block-start: 0;
-  }
-  .tile-ink {
-    grid-column: 1;
-  }
-  .tile-mid {
-    grid-column: 2;
-    margin-block-start: 32px;
-  }
-}
-
-/* Everything it holds, as a poster: giant names left, small facts right, one baseline. */
-.poster {
-  margin: 0;
-  padding: 0 var(--gutter);
-  list-style: none;
-}
-.poster a {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0 var(--space-5);
-  color: var(--text);
-  text-decoration: none;
-  transition: color var(--dur-fast) var(--ease-out);
-}
-:where(main) .poster a {
-  color: var(--text);
-}
-.poster-name {
-  font: 700 clamp(4rem, 11vw, 10rem) / 0.92 var(--face);
-  letter-spacing: -0.05em;
-  text-transform: lowercase;
-}
-.poster-fact {
-  font-size: 1.1875rem;
-  font-variant-numeric: tabular-nums;
-}
-.poster a:hover .poster-name,
-.poster a:focus-visible .poster-name {
-  color: var(--accent);
-}
-.holds .wrap {
-  margin-block-start: var(--section);
-}
-@media (max-width: 40rem) {
-  .poster a {
-    display: block;
-    padding-block-end: 22px;
-  }
-  .poster-name {
-    display: block;
-    font-size: 15vw;
-  }
-  .poster-fact {
-    display: block;
-    margin-block-start: 6px;
-    font-size: 1rem;
-  }
-}
 .system-names {
   display: flex;
   flex-wrap: wrap;
@@ -743,7 +587,7 @@ html:not(.js) .chapter h3::before {
   align-items: center;
   min-block-size: 32px;
   padding-inline: var(--space-4);
-  border-radius: var(--radius-full);
+  border-radius: 0;
   background: var(--surface);
   text-decoration: none;
 }
@@ -829,54 +673,11 @@ html:not(.js) .chapter h3::before {
   }
 }
 
-/* The close of every page: the name built from blocks, as breakers in a row, then one band of
-   what the site is, every section and where else to go. */
+/* The close of every page: the letterhead, then one band of what the site is, every section and
+   where else to go. */
 .foot {
   margin-block-start: 0;
   background: var(--surface);
-}
-.mark {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  box-sizing: border-box;
-  max-inline-size: var(--page);
-  block-size: 34svh;
-  min-block-size: 180px;
-  margin: 0 auto;
-  padding: var(--space-6) var(--gutter) 0;
-  overflow: hidden;
-}
-.mark span {
-  display: flex;
-  flex: 1 1 0;
-  align-items: flex-end;
-  justify-content: center;
-  block-size: 100%;
-  padding-block-end: 0.24em;
-  background: var(--text);
-  color: var(--surface);
-  font: 700 clamp(4rem, 14vw, 13rem) / 0.8 var(--face);
-  letter-spacing: -0.04em;
-}
-.mark span:nth-child(2) {
-  block-size: 72%;
-  background: var(--lamp);
-  color: var(--lamp-ink);
-}
-.mark span:nth-child(3) {
-  block-size: 86%;
-}
-.mark span:nth-child(4) {
-  block-size: 64%;
-  background: var(--tile-pale);
-  color: var(--text);
-}
-.mark span:nth-child(5) {
-  block-size: 92%;
-}
-.mark span:nth-child(6) {
-  block-size: 78%;
 }
 .foot-in {
   display: grid;
@@ -915,10 +716,6 @@ html:not(.js) .chapter h3::before {
 @media (max-width: 52rem) {
   .foot-in {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .mark {
-    block-size: 22svh;
-    min-block-size: 120px;
   }
 }
 
@@ -1402,7 +1199,7 @@ th[aria-sort="ascending"] .sort::after {
 }
 .flow-touches li > :first-child {
   padding: 2px var(--space-3);
-  border-radius: var(--radius-full);
+  border-radius: 0;
   background: var(--sunken);
   font-size: 0.9375rem;
 }
@@ -1598,77 +1395,211 @@ th[aria-sort="ascending"] .sort::after {
   fill: var(--sel);
 }
 
-/* The NASA Graphics Standards Manual's page (Danne & Blackburn, 1976): each section numbered and
-   named over a heavy rule, each heading numbered in the margin, figures on rules, flush left. The
-   teal is kept, as the manual kept NASA Red, for the one action and what is lit. */
+/* The NASA Graphics Standards Manual (NHB 1430.2, Danne & Blackburn, 1976), from its own pages:
+   the index's bold section label over a hairline (page i), titles small and bold (5.1), forms
+   ruled into labelled boxes (4.1), signs as dark panels of white type with an arrow (6.1, 6.2),
+   the letterhead's logotype beside its address (3.1), and the folio at the foot on the right.
+   Teal is kept as the manual kept NASA Red: one colour, for the one action and what is lit. */
 .manual-head {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 8fr) auto;
-  align-items: end;
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
   gap: var(--gutter);
   margin-block-start: var(--space-6);
-  padding-block-end: 10px;
-  border-block-end: 6px solid var(--text);
-  font: 600 0.9375rem / 1.2 var(--face);
-}
-.manual-no {
-  font: 700 clamp(3rem, 6vw, 5.5rem) / 0.8 var(--face);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.04em;
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--text);
+  font: 400 0.9375rem / 1.3 var(--face);
 }
 .manual-name {
-  font: 700 clamp(1.4rem, 2.2vw, 2rem) / 1 var(--face);
-  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+.manual-no {
+  display: inline-block;
+  min-inline-size: 2.5ch;
 }
 .manual-site {
   color: var(--muted);
   text-align: end;
 }
 .manual-head + .crumbs {
-  margin-block-start: 10px;
+  margin-block-start: var(--space-3);
 }
 .board-words .manual-head {
-  grid-template-columns: auto minmax(0, 1fr);
   margin-block: 0 var(--space-5);
-}
-.board-words .manual-no {
-  font-size: clamp(2.5rem, 4vw, 3.5rem);
-}
-.board-words .manual-site {
-  display: none;
 }
 main h2[data-no] {
   position: relative;
-  padding-block-start: 12px;
+  padding-block-start: var(--space-3);
   padding-inline-start: 4.5rem;
-  border-block-start: 2px solid var(--text);
+  border-block-start: 1px solid var(--text);
+  font-size: clamp(1.25rem, 1.8vw, 1.625rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.tour-title[data-no] {
+  padding-block-start: calc(var(--space-3) + 1.5rem);
+  padding-inline-start: 0;
 }
 main h2[data-no]::before {
   content: attr(data-no) / "";
   position: absolute;
-  inset-block-start: calc(12px + 0.35em);
+  inset-block-start: calc(var(--space-3) + 0.3em);
   inset-inline-start: 0;
-  color: var(--muted);
-  font: 600 0.9375rem / 1 var(--face);
-  font-variant-numeric: tabular-nums;
+  font: 400 0.9375rem / 1 var(--face);
   letter-spacing: 0;
+}
+.folio {
+  margin: var(--space-8) 0 0;
+  padding-block-end: var(--space-5);
+  font: 400 0.9375rem / 1 var(--face);
+  text-align: end;
+}
+main.wide > .folio {
+  box-sizing: border-box;
+  max-inline-size: var(--page);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* Readings as a form's boxes: each figure in a ruled box, what it counts set small above it. */
+.readings-row,
+.readings-facts {
+  gap: 0;
+  border-block-start: 1px solid var(--text);
+  border-inline-start: 1px solid var(--text);
 }
 .readings-row .reading,
 .readings-facts .reading {
-  padding-block-start: 10px;
-  border-block-start: 2px solid var(--text);
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-inline-end: 1px solid var(--text);
+  border-block-end: 1px solid var(--text);
+}
+.readings-row .reading dt,
+.readings-facts .reading dt {
+  color: var(--text);
+  font-size: 0.8125rem;
+  line-height: 1.3;
 }
 .readings-row .reading dd {
   font-weight: 700;
 }
+
+/* The contents, set as the manual's index: number and name in bold, a dotted leader, the figure. */
+.contents {
+  margin: var(--space-5) 0 var(--space-7);
+  padding: 0;
+  border-block-start: 1px solid var(--text);
+  list-style: none;
+}
+.contents a {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  border-block-end: 1px solid var(--line);
+  text-decoration: none;
+}
+:where(main) .contents a {
+  color: var(--text);
+}
+.contents-no {
+  min-inline-size: 3ch;
+}
+.contents-name {
+  font-weight: 700;
+}
+.contents-dots {
+  flex: 1 1 2rem;
+  border-block-end: 2px dotted var(--muted);
+}
+.contents-fact {
+  text-align: end;
+}
+.contents a:hover .contents-name,
+.contents a:focus-visible .contents-name {
+  color: var(--accent-text);
+}
+
+/* The ways on, as the manual's directional signs: a dark panel of light type and an arrow; the
+   way forward carries the one colour along its top. */
+.pager a,
+.flow-nav a[rel] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 48px;
+  padding: var(--space-2) var(--space-4);
+  background: var(--text);
+  color: var(--ground);
+  font-weight: 500;
+  text-decoration: none;
+}
+.pager a[rel="prev"]::before,
+.flow-nav a[rel="prev"]::before {
+  content: "\2190" / "";
+}
+.pager a[rel="next"]::after,
+.flow-nav a[rel="next"]::after {
+  content: "\2192" / "";
+}
+.flow-nav a[rel="next"] {
+  box-shadow: inset 0 6px 0 var(--lamp);
+}
+.pager a code {
+  background: none;
+  color: inherit;
+}
+
+/* The letterhead: the name as the logotype, the address beside it in Regular and Medium, and on
+   the right what the cover sets beside the handbook's name: the document and its date. */
+.foot-plate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-3) var(--space-6);
+  padding-block: var(--space-7) 0;
+}
+.foot .foot-plate p {
+  margin: 0;
+}
+.foot-logo {
+  font: 700 clamp(3rem, 7vw, 5.5rem) / 0.8 var(--face);
+  letter-spacing: -0.045em;
+}
+.foot-lockup b {
+  font-weight: 600;
+}
+.foot-doc {
+  color: var(--muted);
+  text-align: end;
+}
+.foot-no {
+  display: inline-block;
+  min-inline-size: 2.75rem;
+  color: var(--muted);
+}
 @media (max-width: 40rem) {
-  .manual-head {
-    grid-template-columns: auto minmax(0, 1fr);
+  .foot-plate {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .foot-doc {
+    text-align: start;
+  }
+  main h2[data-no] {
+    padding-inline-start: 3rem;
   }
   .manual-site {
     display: none;
   }
-  main h2[data-no] {
-    padding-inline-start: 3rem;
+}
+.record .readings-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 40rem) {
+  .record .readings-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
