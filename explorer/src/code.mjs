@@ -209,7 +209,7 @@ ${[...folders].map(([folder, mods]) => `<div class="code-folder" id="${folderId(
 </section>`;
   });
   const body = `${pageHead([["/", "Overview"], ["/code/", "Code"], [systemPath(s.id), s.name]], "Code", `The code of ${escapeHtml(s.name)}`)}
-<p class="lead">Each module by folder, with its riskiest function by CRAP (complexity weighed against how much of it the tests run: over ${CRAP_CRIT} is critical, over ${CRAP_WATCH} worth watching) and its mutation score (the share of deliberate bugs its tests catch: under ${SCORE_WATCH}% is critical, under ${SCORE_OK}% worth watching). Choose a module for its functions and source.</p>
+<p class="lead">Each module by folder, with two scores. CRAP shows its riskiest function: it rises when code is complex and its tests cover little of it. Over ${CRAP_CRIT} is critical, and over ${CRAP_WATCH} is worth a look. The mutation score is the share of planted bugs its tests catch. Under ${SCORE_WATCH}% is critical, and under ${SCORE_OK}% is worth a look. Pick a module to see its functions and source.</p>
 ${sections.join("\n")}`;
   return layout({ title: `The code of ${s.name}, Capsid`, description: `${s.name}'s modules, import cycles and riskiest functions.`, path: codePath(s.id), body, asOf });
 }
@@ -322,7 +322,7 @@ ${scroller("risk", `<table class="cap-table code-table"><caption>The five functi
 export function codeIndexPage(model, bySystem, totals, asOf) {
   const repos = reposOf(model, bySystem);
   const head = pageHead([["/", "Overview"]], "Code", "The code, measured", totals
-    ? `${totals.lines.toLocaleString("en-GB")} lines in ${totals.modules.toLocaleString("en-GB")} modules and ${totals.functions.toLocaleString("en-GB")} functions across ${totals.repos} public repos, measured after each push. CRAP weighs a function's complexity against how much of it the tests run (over ${CRAP_CRIT} is critical); a mutation score is the share of deliberate bugs the tests catch (under ${SCORE_WATCH}% is critical).`
+    ? `${totals.lines.toLocaleString("en-US")} lines in ${totals.modules.toLocaleString("en-US")} modules and ${totals.functions.toLocaleString("en-US")} functions across ${totals.repos} public repos, measured after each push. Two scores flag risky code. CRAP rises when a function is complex and its tests cover little of it; over ${CRAP_CRIT} is critical. The mutation score is the share of planted bugs the tests catch; under ${SCORE_WATCH}% is critical.`
     : "No code maps have been published yet.");
   if (!totals) return layout({ title: "Code, Capsid", description: "The public repos' code, measured.", path: "/code/", body: head, asOf });
   const repoRows = repos
@@ -333,7 +333,7 @@ export function codeIndexPage(model, bySystem, totals, asOf) {
       const coverage = covered.length ? covered.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + f.coverage, 0) / covered.length : null;
       const score = moduleScore({ functions: fns });
       const loc = r.map.modules.reduce((/** @type {number} */ n, /** @type {any} */ m) => n + m.loc, 0);
-      return `<tr><th scope="row"><a href="${codePath(r.system.id)}">${escapeHtml(r.repo.split("/")[1])}</a></th><td data-sort="${loc}">${loc.toLocaleString("en-GB")}</td><td data-sort="${r.map.modules.length}">${r.map.modules.length}</td><td data-sort="${fns.length}">${fns.length}</td><td data-sort="${coverage ?? -1}">${coverage === null ? "" : `${Math.round(coverage * 100)}%`}</td><td data-sort="${crit}">${crit}</td><td data-sort="${r.map.cycles.length}">${r.map.cycles.length}</td><td data-sort="${score ?? -1}">${scoreStatus(score, r.map.tools.mutation ? "no mutants in this code" : "mutation testing has not run on this repo yet")}</td></tr>`;
+      return `<tr><th scope="row"><a href="${codePath(r.system.id)}">${escapeHtml(r.repo.split("/")[1])}</a></th><td data-sort="${loc}">${loc.toLocaleString("en-US")}</td><td data-sort="${r.map.modules.length}">${r.map.modules.length}</td><td data-sort="${fns.length}">${fns.length}</td><td data-sort="${coverage ?? -1}">${coverage === null ? "" : `${Math.round(coverage * 100)}%`}</td><td data-sort="${crit}">${crit}</td><td data-sort="${r.map.cycles.length}">${r.map.cycles.length}</td><td data-sort="${score ?? -1}">${scoreStatus(score, r.map.tools.mutation ? "no mutants in this code" : "mutation testing has not run on this repo yet")}</td></tr>`;
     })
     .join("");
   const all = repos.flatMap((r) => functionsOf(r.map).map((/** @type {any} */ f) => ({ ...f, repo: r.repo, system: r.system.id })));
@@ -347,9 +347,9 @@ export function codeIndexPage(model, bySystem, totals, asOf) {
   const body = `${head}
 <dl class="readings readings-row">${[
     [totals.repos, "public repos"],
-    [totals.modules.toLocaleString("en-GB"), "modules"],
-    [totals.functions.toLocaleString("en-GB"), "functions"],
-    [totals.lines.toLocaleString("en-GB"), "lines"],
+    [totals.modules.toLocaleString("en-US"), "modules"],
+    [totals.functions.toLocaleString("en-US"), "functions"],
+    [totals.lines.toLocaleString("en-US"), "lines"],
   ]
     .map(([v, l]) => reading(String(v), String(l)))
     .join("")}</dl>

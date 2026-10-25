@@ -41,12 +41,12 @@ export function searchIndex(model, bySystem, flows, tools) {
 
 /** @param {string} asOf */
 export function searchPage(asOf) {
-  const body = `${pageHead([["/", "Overview"]], "Search", "Search", "Every system, part, flow step, tool, action, module and function the explorer shows. Press / on any page to come here.")}
+  const body = `${pageHead([["/", "Overview"]], "Search", "Search", "Find any system, part, step, tool, module or function on this site. Press / on any page to jump here.")}
 <form class="search-form" action="/search/" method="get" role="search">
 <label class="cap-sr-only" for="q">Search the explorer</label>
 <input class="cap-input search-input" id="q" name="q" type="search" placeholder="Try “backup”, “merge” or “verifyIdToken”" autocomplete="off" data-search>
 </form>
-<p class="hint" role="status" data-search-count>Search needs script. Without it, start from <a href="/systems/">the systems</a>, <a href="/tools/">the tools</a> or <a href="/code/">the code</a>.</p>
+<p class="hint" role="status" data-search-count>Search needs JavaScript. Without it, browse <a href="/systems/">the systems</a>, <a href="/tools/">the tools</a> or <a href="/code/">the code</a>.</p>
 <ol class="search-results" data-search-results></ol>`;
   return layout({ title: "Search, Capsid", description: "Search every system, tool, flow step, module and function in the Capsid explorer.", path: "/search/", body, asOf });
 }

@@ -8,7 +8,7 @@
       "short": "Capsid",
       "family": "system",
       "ring": "core",
-      "description": "The store, the queue, and the credentials every other project runs through.",
+      "description": "Shared memory, the job queue and the GitHub access that every other project's agents work through.",
       "domain": "mcp.dustinedwards.info",
       "repos": ["DrDustinEdwards/capsid"]
     },
@@ -54,7 +54,7 @@
       "short": "Capsomer",
       "family": "system",
       "ring": "shared",
-      "description": "The tokens, the shell, and the shared controls every app is drawn with, in plain CSS.",
+      "description": "Design tokens, the app shell and shared controls in plain CSS, used by every app.",
       "domain": "capsomer.dustinedwards.info",
       "repos": ["DrDustinEdwards/capsomer"]
     },
@@ -1512,71 +1512,71 @@
     {
       "id": "job-life",
       "name": "A job's life",
-      "description": "One job from the moment it is posted to the moment GitHub's record is checked against what its agent claimed.",
+      "description": "One job, from the moment a session posts it to the moment Capsid checks the agent's claims against GitHub.",
       "steps": [
-        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Posted: a session posts a job over MCP. The Worker checks the caller's grant, picks the model, signs the body and stores the job." },
-        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Claimed: an agent claims it. The Worker verifies the body's signature first and records who holds the job." },
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Posted: a session posts a job over MCP. The Worker checks that the caller may post, picks a model, signs the job and stores it." },
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Claimed: an agent claims the job. The Worker checks the signature first, then records which agent holds it." },
         { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Worked: the agent works on one branch of one repo." },
-        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "lights": ["capsid-db"], "text": "Blocked: at a push, a deploy, a secret or a merge the agent stops. The job waits with the exact command a person or the signed policy must approve, and resume hands it back." },
-        { "from": "capsid-worker", "kind": "writes", "to": "capsid-github", "toward": "capsid-github", "text": "Pull request: the pull request opens through Capsid's GitHub App, and CI runs on it." },
-        { "from": "capsid-tick", "kind": "writes", "to": "capsid-github", "toward": "capsid-github", "text": "Merged: the five-minute tick merges a pull request whose CI is green on its exact head under the signed auto-merge policy, or the session that opened it merges it on green." },
-        { "from": "capsid-github", "kind": "deploys", "to": "capsid-worker", "toward": "capsid-worker", "text": "Deployed: the merge to master runs CI on GitHub Actions, which deploys the Worker." },
-        { "from": "capsid-github", "kind": "watches", "to": "capsid-worker", "toward": "capsid-github", "text": "Verified: CI's live gate reads the Worker's /health and checks it reports the commit that was merged." },
-        { "from": "capsid-worker", "kind": "reads", "to": "capsid-github", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Claims checked: when the job completes, the Worker reads the pull request, its commits and CI from GitHub and records each claim beside what GitHub says." }
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "lights": ["capsid-db"], "text": "Blocked: before a push, a deploy, a secret or a merge, the agent stops. The job waits with the exact command until a person or the signed policy approves it, and resume hands it back." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-github", "toward": "capsid-github", "text": "Pull request: the agent opens a pull request through Capsid's GitHub App, and CI runs on it." },
+        { "from": "capsid-tick", "kind": "writes", "to": "capsid-github", "toward": "capsid-github", "text": "Merged: every five minutes, Capsid merges a pull request when CI passed on its latest commit and the signed auto-merge policy allows it. The session that opened it can also merge it once CI passes." },
+        { "from": "capsid-github", "kind": "deploys", "to": "capsid-worker", "toward": "capsid-worker", "text": "Deployed: the merge to master starts CI on GitHub Actions, which deploys the Worker." },
+        { "from": "capsid-github", "kind": "watches", "to": "capsid-worker", "toward": "capsid-github", "text": "Verified: CI reads the Worker's /health page and checks that it reports the merged commit." },
+        { "from": "capsid-worker", "kind": "reads", "to": "capsid-github", "toward": "capsid-worker", "lights": ["capsid-db"], "text": "Claims checked: when the job finishes, the Worker reads the pull request, its commits and CI from GitHub, and saves each claim next to what GitHub says." }
       ]
     },
     {
       "id": "doc-search",
       "name": "A search",
-      "description": "One question to the knowledge base, answered by keyword and by meaning, every hit checked against the record before it is shown.",
+      "description": "One question to the knowledge base, searched by keyword and by meaning. Capsid checks every match against the database before it shows it.",
       "steps": [
-        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "text": "Asked: an agent calls Find documents with a question. The Worker checks its read grant and the namespaces it may see." },
-        { "from": "capsid-worker", "kind": "reads", "to": "capsid-db", "toward": "capsid-worker", "text": "By keyword: the question runs through SQLite's full-text search on D1, ranked by bm25." },
-        { "from": "capsid-worker", "kind": "reads", "to": "capsid-search", "toward": "capsid-worker", "text": "By meaning: the same question goes to the AI Search index, which finds documents that say it in other words." },
-        { "from": "capsid-worker", "kind": "reads", "to": "capsid-db", "toward": "capsid-worker", "text": "Re-checked: every meaning hit is read back from D1, so a moved or deleted document is never served. Closed and superseded documents are left out unless asked for." },
-        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "text": "Answered: one list, the current canon first, each row marked keyword, meaning or both. If the index cannot answer, the keyword results come back with the reason." },
-        { "from": "capsid-tick", "kind": "writes", "to": "capsid-search", "toward": "capsid-search", "text": "Kept fresh: every five minutes the tick sends the index the documents changed since its last pass, 100 at a time, and a daily pass removes what D1 no longer holds." }
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "text": "Asked: an agent calls Find documents with a question. The Worker checks that the agent has read access and which namespaces it may see." },
+        { "from": "capsid-worker", "kind": "reads", "to": "capsid-db", "toward": "capsid-worker", "text": "By keyword: the Worker runs the question through SQLite's full-text search on D1 and ranks the matches with bm25." },
+        { "from": "capsid-worker", "kind": "reads", "to": "capsid-search", "toward": "capsid-worker", "text": "By meaning: the same question goes to the AI Search index, which finds documents that use different words for the same idea." },
+        { "from": "capsid-worker", "kind": "reads", "to": "capsid-db", "toward": "capsid-worker", "text": "Re-checked: the Worker rereads every meaning match from D1, so it never serves a moved or deleted document. It leaves out closed and replaced documents unless the agent asks for them." },
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "text": "Answered: the agent gets one list, core documents first, each marked keyword, meaning or both. If the index fails, the agent still gets the keyword results and the reason." },
+        { "from": "capsid-tick", "kind": "writes", "to": "capsid-search", "toward": "capsid-search", "text": "Kept fresh: every five minutes, Capsid sends the index up to 100 documents changed since its last pass. A daily pass removes documents D1 no longer has." }
       ]
     },
     {
       "id": "session-start",
       "name": "A session starts",
-      "description": "How a coding session picks up where the last one left off: it starts from the project's notes and writes back what it decides.",
+      "description": "How a coding session picks up where the last one stopped: it starts from the project's notes and writes back what it decides.",
       "steps": [
         { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-worker", "text": "Started: a coding session calls Start a session with its project's namespace." },
-        { "from": "capsid-worker", "kind": "reads", "to": "capsid-db", "toward": "capsid-worker", "text": "Gathered: the Worker reads the conventions, the project's core.md, the portfolio's decisions and rulings, the open tasks and the three latest session notes, each with when it last changed." },
-        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "text": "Handed over: one answer of about 40 KB. When it runs over, what was trimmed is listed by name, so nothing is dropped without a word." },
-        { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Written back: what the session decides goes into documents with Write a document. The old body is kept as a version, and an audit row records who changed it." },
-        { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Guarded: a change to the conventions, a core.md or the decisions from anyone but the seat or the admin is held as a proposal until it is approved." },
+        { "from": "capsid-worker", "kind": "reads", "to": "capsid-db", "toward": "capsid-worker", "text": "Gathered: the Worker reads the shared rules, the project's core.md, the decisions and rulings, the open tasks and the three latest session notes, each with the date it last changed." },
+        { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "text": "Handed over: the session gets one answer of about 40 KB. If the notes run over, the answer names what it cut." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Written back: the session saves what it decides with Write a document. Capsid keeps the old version and logs who made the change." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Guarded: when anyone but the admin or an agent allowed to merge edits the rules, a core.md or the decisions, Capsid holds the edit as a proposal until someone approves it." },
         { "from": "capsid-worker", "kind": "serves", "to": "capsid-agents", "toward": "capsid-agents", "text": "Remembered: the next session, on any machine, starts from the same notes." }
       ]
     },
     {
       "id": "nightly-backup",
       "name": "The nightly backup",
-      "description": "Once a day the Worker copies the whole store to R2, keeps a graduated set of copies, trims old history only once a copy holds it, and the watcher checks that the copy kept off the account is fresh.",
+      "description": "Once a day the Worker copies the whole store to R2, keeps daily, weekly and monthly copies, and trims old history only after a copy holds it. A watcher checks that the copy outside the account is fresh.",
       "steps": [
-        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "lights": ["capsid-db"], "text": "Dumped: at 09:00 UTC a daily cron in the Worker dumps every table to R2 with d1-dump, one JSON file each plus the schema." },
-        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "lights": ["capsid-db"], "text": "Marked complete: a completion marker is written last, and only when the dumped tables match the ones the migrations create. A run without it is never counted as a backup." },
-        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "lights": ["capsid-db"], "text": "Mirrored: every document body is written beside the dump as plain markdown, one file per document." },
-        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "text": "Pruned: the newest complete run of each of the last 14 days, 8 weeks and 6 months is kept, and every other run is deleted whole. The newest complete run is never deleted." },
-        { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Trimmed: document versions older than 90 days and audit rows older than 180 are pruned, after the dump, so every pruned row is in a kept copy." },
-        { "from": "capsid-worker", "kind": "writes", "to": "capsid-kv", "toward": "capsid-kv", "text": "Stamped: the run records its success, and /health warns once that stamp is more than 26 hours old." },
-        { "from": "capsid-tick", "kind": "reads", "to": "capsid-github", "toward": "capsid-tick", "text": "Watched: every half hour the watcher reads the newest copy kept off the Cloudflare account and files a finding once it is more than 36 hours old." }
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "lights": ["capsid-db"], "text": "Dumped: at 09:00 UTC, a cron job in the Worker uses d1-dump to write every table to R2, one JSON file per table, plus the schema." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "lights": ["capsid-db"], "text": "Marked complete: the Worker writes a completion marker last, and only when the dumped tables match the ones the migrations create. A run without the marker never counts as a backup." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "lights": ["capsid-db"], "text": "Mirrored: the Worker also writes every document as a plain Markdown file beside the dump." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-media", "toward": "capsid-media", "text": "Pruned: the Worker keeps the newest complete run from each of the last 14 days, 8 weeks and 6 months and deletes every other run. It never deletes the newest complete run." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-db", "toward": "capsid-db", "text": "Trimmed: after the dump, the Worker deletes document versions older than 90 days and audit rows older than 180, so every deleted row is in a kept copy." },
+        { "from": "capsid-worker", "kind": "writes", "to": "capsid-kv", "toward": "capsid-kv", "text": "Stamped: the run records its success, and /health warns once that record is more than 26 hours old." },
+        { "from": "capsid-tick", "kind": "reads", "to": "capsid-github", "toward": "capsid-tick", "text": "Watched: every half hour, the watcher reads the newest copy stored outside the Cloudflare account and files a finding once it is more than 36 hours old." }
       ]
     },
     {
       "id": "carrel-publish",
       "name": "Publishing a post",
-      "description": "A post goes from a private draft in Carrel to a live page on dustinedwards.info, through the one contract every site speaks, with the site deciding what may go live.",
+      "description": "A post goes from a private draft in Carrel to a live page on dustinedwards.info. Every site speaks the same contract, and the site decides what may go live.",
       "steps": [
-        { "from": "carrel-worker", "kind": "writes", "to": "carrel-db", "toward": "carrel-db", "text": "Drafted: the writer works in Carrel's editor, which autosaves a working draft only that person can see." },
-        { "from": "carrel-worker", "kind": "reads", "to": "website-worker", "toward": "carrel-worker", "text": "Previewed: Carrel shows the site's own render of the draft in a sandbox, with the checks' flags and any reviewer's beside it." },
-        { "from": "carrel-worker", "kind": "publishes-to", "to": "website-worker", "toward": "website-worker", "lights": ["website-db"], "text": "Saved: an Editor or the Owner saves the draft to the site, naming the version it replaces. The site refuses a stale one, so nobody overwrites a newer save." },
-        { "from": "carrel-worker", "kind": "publishes-to", "to": "website-worker", "toward": "website-worker", "lights": ["website-db"], "text": "Published: only the Owner publishes, and a first publish asks for confirmation. The site's own publish policy decides, so there is one authority." },
-        { "from": "carrel-worker", "kind": "publishes-to", "to": "website-worker", "toward": "website-worker", "lights": ["website-db"], "text": "Or by instruction: the Owner's AI session may publish through the MCP door, never while a flag is open. It sends no text, so only the saved version goes live, and Dustin is emailed an unpublish link." },
-        { "from": "carrel-worker", "kind": "writes", "to": "carrel-db", "toward": "carrel-db", "text": "Recorded: Carrel indexes the live post, records who published it (an AI session by its client name) and clears the draft that was sent." },
-        { "from": "carrel-cron", "kind": "watches", "to": "website-worker", "toward": "carrel-cron", "text": "Watched: every 15 minutes Carrel runs site-api's conformance suite against the site and emails when its state changes." }
+        { "from": "carrel-worker", "kind": "writes", "to": "carrel-db", "toward": "carrel-db", "text": "Drafted: the writer works in Carrel's editor, which autosaves a draft only that person can see." },
+        { "from": "carrel-worker", "kind": "reads", "to": "website-worker", "toward": "carrel-worker", "text": "Previewed: Carrel shows the draft as the site will render it, in a sandbox, next to any flags from the checks and reviewers." },
+        { "from": "carrel-worker", "kind": "publishes-to", "to": "website-worker", "toward": "website-worker", "lights": ["website-db"], "text": "Saved: an Editor or the Owner saves the draft to the site and names the version it replaces. The site refuses an out-of-date save, so nobody overwrites newer work." },
+        { "from": "carrel-worker", "kind": "publishes-to", "to": "website-worker", "toward": "website-worker", "lights": ["website-db"], "text": "Published: only the Owner can publish, and a first publish asks for confirmation. The site's own publish policy makes the call, so one place decides." },
+        { "from": "carrel-worker", "kind": "publishes-to", "to": "website-worker", "toward": "website-worker", "lights": ["website-db"], "text": "Or by instruction: the Owner's AI session can publish through MCP, but never while a flag is open. It sends no text, so only the saved version goes live, and Dustin gets an email with an unpublish link." },
+        { "from": "carrel-worker", "kind": "writes", "to": "carrel-db", "toward": "carrel-db", "text": "Recorded: Carrel indexes the live post, records who published it (an AI session by its client name) and clears the sent draft." },
+        { "from": "carrel-cron", "kind": "watches", "to": "website-worker", "toward": "carrel-cron", "text": "Watched: every 15 minutes, Carrel runs site-api's conformance suite against the site and sends an email when the result changes." }
       ]
     }
   ],

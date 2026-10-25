@@ -221,7 +221,7 @@ test("a rate with too few cases is said so, and has no picture", () => {
   thin.sites.uptime_7d = null;
   const section = numbersHtml(thin);
   assert.doesNotMatch(section, /id="agreement-title"|id="uptime-title"/);
-  assert.match(section, /CI green when claimed, last 90 days<\/th><td>not enough data yet/);
+  assert.match(section, /Checked jobs with passing CI, last 90 days<\/th><td>not enough data yet/);
 });
 
 test("the headers send the shared policy with scripts and styles from the explorer itself", () => {
@@ -264,11 +264,11 @@ test("every system's parts page opens zoomed into its circle, the same drawing a
   assert.deepEqual(Object.keys(circles).sort(), model.systems.map((/** @type {any} */ s) => s.id).sort());
 });
 
-test("each week is labelled by its last whole day, the day before as_of for the newest", () => {
+test("each week is labeled by its last whole day, the day before as_of for the newest", () => {
   const section = numbersHtml(stats);
   assert.equal(stats.as_of, "2026-01-15");
-  assert.match(section, /14 Jan/);
-  assert.match(section, /26 Nov/);
+  assert.match(section, /Jan 14/);
+  assert.match(section, /Nov 26/);
   assert.doesNotMatch(section, /15 Jan/);
 });
 
@@ -277,7 +277,7 @@ test("an external container is listed outside the system, never as one of its pa
   const table = page.slice(page.indexOf("<table"), page.indexOf("</table>"));
   assert.doesNotMatch(table, /Agents/);
   assert.match(page, /<h2 id="outside-title"[^>]*>Outside it<\/h2>\s*<ul><li id="part-hub-agents"><strong>Agents<\/strong> \(Sample sessions\)/);
-  assert.match(page, /Its 3 parts, .*, and the 1 it works with outside it\./);
+  assert.match(page, /Its 3 parts, .*, plus the one outside system it works with\./);
   assert.match(readFileSync(join(out, "s", "hub", "index.html"), "utf8"), /its 3 parts and how they connect/);
 });
 

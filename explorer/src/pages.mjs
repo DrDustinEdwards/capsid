@@ -197,7 +197,7 @@ function footer(asOf) {
   return `<footer class="foot">
 <div class="foot-plate wrap" aria-hidden="true"><p class="foot-logo">Capsid</p><p class="foot-lockup">MCP server and control plane<br><b>capsid.dustinedwards.info</b></p></div>
 <div class="foot-in wrap">
-<div class="foot-about"><p>Capsid is an MCP server and control plane for AI coding agents, published under the MIT license. This site is one live instance, rebuilt each day from its public model and numbers.</p><p class="foot-small">Data of ${escapeHtml(asOf)}, in whole days ending at midnight UTC. Private systems are drawn in full, with no link to their repo.</p></div>
+<div class="foot-about"><p>Capsid is an open-source MCP server for AI coding agents, under the MIT license. This site runs on one live Capsid server and rebuilds every day from its public data.</p><p class="foot-small">Data as of ${escapeHtml(asOf)}, counted in whole days to midnight UTC. Private systems appear in full but without a link to their code.</p></div>
 <nav class="foot-nav" aria-label="Every section"><ul>${SECTIONS.map(({ href, label, no }) => `<li><a href="${href}"><span class="foot-no" aria-hidden="true">${no}.0</span>${label}</a></li>`).join("")}</ul></nav>
 <ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
 </div></footer>`;
@@ -387,7 +387,7 @@ export function containersPage(model, id, asOf) {
   const byId = new Map(parts.map((/** @type {any} */ c) => [c.id, c]));
   const wires = model.relationships.filter((/** @type {any} */ r) => byId.has(r.from) && byId.has(r.to));
   const map = familyMap(model, { id: "family", label: `Inside ${s.name}`, headingLevel: 3, openLabel: "Its page" }, undefined, id);
-  const body = `${pageHead([["/", "Overview"], ["/systems/", "Systems"], [systemPath(id), s.name]], "Inside", `Inside ${escapeHtml(s.name)}`, `Its ${own.length} parts, what each runs on, and the lines between them: the containers of the C4 model, inside the system's boundary${outside.length ? `, and the ${outside.length} it works with outside it` : ""}.`)}
+  const body = `${pageHead([["/", "Overview"], ["/systems/", "Systems"], [systemPath(id), s.name]], "Inside", `Inside ${escapeHtml(s.name)}`, `Its ${own.length} parts, what each runs on, and how they connect${outside.length ? `, plus ${outside.length === 1 ? "the one outside system" : `the ${outside.length} outside systems`} it works with` : ""}.`)}
 <section class="step-drawing" aria-labelledby="drawing-title"><h2 id="drawing-title" class="cap-sr-only">The drawing</h2><div class="map-host">${map}</div></section>
 ${scroller("parts", `<table class="cap-table"><caption>The parts of ${escapeHtml(s.name)}</caption>
 <thead><tr><th scope="col">Part</th><th scope="col">Kind</th><th scope="col">Runs on</th><th scope="col">What it does</th></tr></thead>
@@ -420,7 +420,7 @@ export function systemsPage(model, bySystem, asOf) {
     .join("");
   const chips = [["all", "All"], ["core", "Runs everything"], ["shared", "Shared parts"], ["used", "What people use"], ["private", "Private"]];
   const privates = model.systems.filter((/** @type {any} */ s) => s.private).length;
-  const body = `${pageHead([["/", "Overview"]], "Systems", "The family of systems", `The ${model.systems.length} systems this instance of Capsid runs, how they connect, and what Capsid, the one in the middle, is made of. Choose a system to see its wiring, or open its page.${privates ? ` ${privates} are private.` : ""}`)}
+  const body = `${pageHead([["/", "Overview"]], "Systems", "The family of systems", `The ${model.systems.length} systems this Capsid server runs and how they connect, with Capsid in the middle. Pick a system to see its connections, or open its page.${privates ? ` ${privates} are private.` : ""}`)}
 <section aria-labelledby="family-title">${map}</section>
 <section aria-labelledby="table-title"><h2 id="table-title">Every system</h2>
 <div class="filter-bar" data-filter="systems" hidden>
@@ -434,7 +434,7 @@ ${scroller("systems-table", `<table class="cap-table" data-sortable><caption>Eve
 <tbody>${rows}</tbody></table>`, "Every system")}
 <p class="hint" data-filter-empty hidden>No system matches that.</p>
 </section>`;
-  return layout({ title: "Systems, Capsid", description: `The ${model.systems.length} systems this instance of Capsid runs, drawn as a capsid, and how they connect.`, path: "/systems/", body, asOf });
+  return layout({ title: "Systems, Capsid", description: `The ${model.systems.length} systems this Capsid server runs and how they connect.`, path: "/systems/", body, asOf });
 }
 
 /**
@@ -584,7 +584,7 @@ export function flowStage(model, flows, shown, id, play = true) {
 export function flowsIndexPage(model, asOf) {
   const flows = flowsOf(model);
   const names = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s.name]));
-  const body = `${pageHead([["/", "Overview"]], "Flows", "What runs, step by step", `The ${flows.length} things Capsid does that are worth watching, each told step by step over the parts it really touches. Open one to watch it run.`)}
+  const body = `${pageHead([["/", "Overview"]], "Flows", "What runs, step by step", `${flows.length} processes Capsid runs, each shown step by step on the parts it uses. Open one to watch it run.`)}
 <ul class="flow-cards">${flows
     .map((f) => {
       const systems = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.system)))];
@@ -596,7 +596,7 @@ ${bands(f, true)}
 <p><a class="cap-btn" data-variant="primary" href="${flowPath(f.id)}">Watch it run</a></p></li>`;
     })
     .join("")}</ul>`;
-  return layout({ title: "Flows, Capsid", description: "What Capsid runs, step by step: a job's life, the nightly backup and a Carrel publish.", path: "/flows/", body, asOf });
+  return layout({ title: "Flows, Capsid", description: "Each process Capsid runs, shown step by step on the parts it uses.", path: "/flows/", body, asOf });
 }
 
 /**
@@ -666,7 +666,7 @@ export function notFoundPage(asOf) {
     title: "Not found, Capsid",
     description: "No page here.",
     path: "/404",
-    body: `<h1>Nothing here</h1><p class="lead">There is no page at this address. <a href="/systems/">Every system</a> is listed, and <a href="/search/">search</a> finds the rest.</p>`,
+    body: `<h1>Nothing here</h1><p class="lead">No page lives at this address. Try <a href="/systems/">the systems</a> or <a href="/search/">search</a>.</p>`,
     asOf,
   });
 }

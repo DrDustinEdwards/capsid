@@ -76,7 +76,7 @@ export function numbersHtml(stats) {
           data: weeks.map((/** @type {string} */ week, /** @type {number} */ i) => ({ week, agreement: v.agreement_by_week[i] === null ? null : Math.round(v.agreement_by_week[i] * 1000) / 10 })),
           x: "week",
           y: "agreement",
-          title: "Claims agreeing with GitHub, per week",
+          title: "Claims matching GitHub, per week",
           xLabel: "week ending",
           yLabel: "percent",
           points: true,
@@ -86,27 +86,27 @@ export function numbersHtml(stats) {
         })
       : "";
   const rings = [];
-  if (v.agreement_rate_90d !== null) rings.push(ring("agreement", "Claims agreeing", v.agreement_rate_90d, `In the last 90 days, ${percent(v.agreement_rate_90d)} of ${v.evaluations_90d} checked claims agreed with what GitHub records.`));
-  if (v.pr_merge_rate_90d !== null) rings.push(ring("merged", "Pull requests merged", v.pr_merge_rate_90d, `${percent(v.pr_merge_rate_90d)} of the pull requests agents said they opened, as GitHub verified them, merged.`));
-  if (v.ci_green_rate_90d !== null) rings.push(ring("green", "CI green", v.ci_green_rate_90d, `${percent(v.ci_green_rate_90d)} of the jobs whose CI the Worker verified were green on their head.`));
+  if (v.agreement_rate_90d !== null) rings.push(ring("agreement", "Claims matching", v.agreement_rate_90d, `In the last 90 days, ${percent(v.agreement_rate_90d)} of ${v.evaluations_90d} checked claims matched what GitHub shows.`));
+  if (v.pr_merge_rate_90d !== null) rings.push(ring("merged", "Pull requests merged", v.pr_merge_rate_90d, `GitHub shows that ${percent(v.pr_merge_rate_90d)} of the pull requests agents opened were merged.`));
+  if (v.ci_green_rate_90d !== null) rings.push(ring("green", "CI passing", v.ci_green_rate_90d, `${percent(v.ci_green_rate_90d)} of the jobs whose CI the Worker checked had passing CI on their latest commit.`));
   const gateRings = [];
-  if (g.share_ended_by_policy_30d !== null) gateRings.push(ring("policy", "Ended by policy", g.share_ended_by_policy_30d, `${percent(g.share_ended_by_policy_30d)} of the approval waits in the last 30 days were ended by the signed auto-merge policy, not a person.`));
+  if (g.share_ended_by_policy_30d !== null) gateRings.push(ring("policy", "Ended by policy", g.share_ended_by_policy_30d, `The signed auto-merge policy, not a person, ended ${percent(g.share_ended_by_policy_30d)} of the approval waits in the last 30 days.`));
   const siteRings = [];
-  if (stats.sites.uptime_7d !== null) siteRings.push(ring("uptime", "Uptime, last 7 days", stats.sites.uptime_7d, `The ${stats.sites.watched} watched sites answered in ${percent(stats.sites.uptime_7d)} of ${stats.sites.slots_measured_7d} measured half-hours over the last seven days.`));
+  if (stats.sites.uptime_7d !== null) siteRings.push(ring("uptime", "Uptime, last 7 days", stats.sites.uptime_7d, `The ${stats.sites.watched} watched sites were up in ${percent(stats.sites.uptime_7d)} of ${stats.sites.slots_measured_7d} measured half-hours over the last 7 days.`));
   const rows = [
     ["Jobs completed, last 7 days", j.completed_7d],
     ["Jobs completed, last 30 days", j.completed_30d],
     ["Jobs failed, last 30 days", j.failed_30d],
     ["Jobs open today", j.open],
-    ["Jobs blocked today", j.blocked],
+    ["Jobs waiting on a person today", j.blocked],
     ["Median time a job takes, last 30 days", minutes(j.median_duration_minutes_30d)],
     ["Claims checked, last 90 days", v.evaluations_90d],
-    ["Claims agreeing with GitHub, last 90 days", percent(v.agreement_rate_90d)],
-    ["Pull requests merged, of those claimed, last 90 days", percent(v.pr_merge_rate_90d)],
-    ["CI green when claimed, last 90 days", percent(v.ci_green_rate_90d)],
+    ["Claims matching GitHub, last 90 days", percent(v.agreement_rate_90d)],
+    ["Agents' pull requests merged, last 90 days", percent(v.pr_merge_rate_90d)],
+    ["Checked jobs with passing CI, last 90 days", percent(v.ci_green_rate_90d)],
     ["Approval waits, last 30 days", g.waits_30d],
     ["Median approval wait, last 30 days", minutes(g.median_wait_minutes_30d)],
-    ["Waits ended by the signed policy, last 30 days", percent(g.share_ended_by_policy_30d)],
+    ["Waits the signed policy cleared, last 30 days", percent(g.share_ended_by_policy_30d)],
     ["Sites watched", stats.sites.watched],
     ["Half-hours measured, last 7 days", stats.sites.slots_measured_7d],
     ["Documents in the store", stats.store.documents],
@@ -115,37 +115,37 @@ export function numbersHtml(stats) {
     ["Capsid's commit", stats.capsid.sha7],
   ];
   return `<section class="numbers">
-<dl class="readings readings-row">${reading(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${reading(percent(v.agreement_rate_90d), "claims agreeing with GitHub", "#verification")}${reading(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${reading(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
+<dl class="readings readings-row">${reading(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${reading(percent(v.agreement_rate_90d), "claims matching GitHub", "#verification")}${reading(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${reading(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
 <section class="numbers-part" id="jobs" aria-labelledby="jobs-title"><h2 id="jobs-title">Jobs</h2>
-<p class="measure">${j.completed_30d} jobs completed and ${j.failed_30d} failed in the last 30 days. Today ${j.open} are open and ${j.blocked} of them blocked on a person. Half of last month's jobs took under ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
+<p class="measure">In the last 30 days, ${j.completed_30d} jobs finished and ${j.failed_30d} failed. ${j.open} are open today, and ${j.blocked} of those are waiting on a person. The median job took ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
 <div class="charts">${jobsChart}</div></section>
-<section class="numbers-part" id="verification" aria-labelledby="verification-title"><h2 id="verification-title">Claims, checked against GitHub</h2>
-<p class="measure">When a job completes, the Worker reads its pull requests, commits and CI from GitHub and records each claim beside what GitHub says. Only fields the Worker verified count toward a rate.</p>
+<section class="numbers-part" id="verification" aria-labelledby="verification-title"><h2 id="verification-title">Claims checked against GitHub</h2>
+<p class="measure">When a job finishes, the Worker reads its pull requests, commits and CI from GitHub and saves each claim next to what GitHub says. A rate counts only the fields the Worker checked.</p>
 <div class="charts">${agreementChart}${rings.join("")}</div></section>
 <section class="numbers-part" id="gates" aria-labelledby="gates-title"><h2 id="gates-title">Approval gates</h2>
-<p class="measure">A push, a deploy, a secret or a merge stops the agent. The job waits with the exact command until a person, or the signed policy, answers. ${g.waits_30d} waits ended in the last 30 days; half within ${minutes(g.median_wait_minutes_30d)}.</p>
+<p class="measure">Before a push, a deploy, a secret or a merge, the agent stops. The job waits with the exact command until a person or the signed policy answers. ${g.waits_30d} waits ended in the last 30 days, and half ended within ${minutes(g.median_wait_minutes_30d)}.</p>
 <div class="charts">${waitsChart}${gateRings.join("")}</div></section>
 <section class="numbers-part" id="sites" aria-labelledby="sites-title"><h2 id="sites-title">Sites</h2>
-<p class="measure">The watcher reads every registered site on Capsid's five-minute tick and keeps a ring of half-hour slots per site. A slot it could not measure is left out, never counted as up.</p>
+<p class="measure">Every five minutes, the watcher checks each registered site and keeps a ring of half-hour slots for it. When it can't measure a slot, it leaves the slot out instead of counting it as up.</p>
 <div class="charts">${siteRings.join("")}</div></section>
 <section class="numbers-part" id="every" aria-labelledby="every-title"><h2 id="every-title">Every number</h2>
 ${scroller("numbers-table", `<table class="cap-table numbers-table"><caption class="cap-sr-only">Every number, as of ${escapeHtml(stats.as_of)}</caption><tbody>
 ${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("\n")}
 </tbody></table>`, "Every number")}
 </section>
-<section class="numbers-part" id="how" aria-labelledby="how-title"><h2 id="how-title">How they are counted</h2>
+<section class="numbers-part" id="how" aria-labelledby="how-title"><h2 id="how-title">How Capsid counts</h2>
 <ul class="measure">
-<li>Counts and rates across every namespace, agent and site at once: nothing here names a project, a job or a person.</li>
-<li>Every window is whole UTC days ending at midnight, so a day's work appears the next day and no number says when anything happened.</li>
-<li>A rate or median over fewer than ten cases is left out rather than shown, so no single job can be read off it.</li>
-<li>The document is built once a day by the Worker and served at <a href="https://mcp.dustinedwards.info/public/stats/v1.json">/public/stats/v1.json</a>; <a href="https://github.com/DrDustinEdwards/capsid/blob/master/docs/public-data.md">docs/public-data.md</a> says what each field is read from.</li>
+<li>Every count and rate covers all namespaces, agents and sites together, so nothing here names a project, a job or a person.</li>
+<li>Each window counts whole UTC days to midnight, so a day's work shows up the next day and no number says when anything happened.</li>
+<li>The page leaves out any rate or median based on fewer than ten cases, so nobody can work out a single job from it.</li>
+<li>The Worker builds the data once a day and serves it at <a href="https://mcp.dustinedwards.info/public/stats/v1.json">/public/stats/v1.json</a>. <a href="https://github.com/DrDustinEdwards/capsid/blob/master/docs/public-data.md">docs/public-data.md</a> says where each field comes from.</li>
 </ul></section>
 </section>`;
 }
 
 /** @param {any} stats */
 export function numbersPage(stats) {
-  const body = `${pageHead([["/", "Overview"]], "Numbers", "The daily numbers", `Capsid's own record of its work, as of ${escapeHtml(stats.as_of)}: jobs, claims checked against GitHub, approval waits and uptime.`)}
+  const body = `${pageHead([["/", "Overview"]], "Numbers", "The daily numbers", `What this Capsid server recorded up to ${escapeHtml(stats.as_of)}: jobs, claims checked against GitHub, approval waits and uptime.`)}
 ${numbersHtml(stats)}`;
   return layout({ title: "Numbers, Capsid", description: "Capsid's daily numbers: jobs, verified claims, approval waits and uptime.", path: "/numbers/", body, asOf: stats.as_of });
 }
