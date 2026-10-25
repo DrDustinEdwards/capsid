@@ -94,7 +94,7 @@ export function layout({ title, description, path, body, asOf, wide = false }) {
 <body>
 ${header(here, path)}
 <main id="main" tabindex="-1"${wide ? ' class="wide"' : ""}>
-${body}
+${path === "/" ? body : `${manualHead(path)}${numbered(body, path)}`}
 </main>
 ${footer(asOf)}
 </body>
@@ -132,6 +132,38 @@ function header(here, path) {
 <button type="button" class="cap-btn cap-dialog-close" data-variant="quiet" data-icon-only data-cap-part="close" aria-label="Close"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
 </dialog>
 </header>`;
+}
+
+/**
+ * Every section's number, as the NASA Graphics Standards Manual (Danne & Blackburn, 1976) numbers
+ * its parts: the section is n.0 and each heading on its pages n.1, n.2 and on.
+ */
+const SECTIONS = [...NAV, ["/search/", "Search"]].map(([href, label], i) => ({ href, label, no: i + 1 }));
+
+/** The section a page is numbered in: search is a section of its own here. @param {string} path */
+const sectionFor = (path) => SECTIONS.find(({ href }) => href === (path === "/search/" ? path : sectionOf(path)));
+
+/**
+ * A page's header, as each page of the manual opens: the section's number and name over a heavy
+ * rule, the site on the right. The page's own trail and heading follow it as text.
+ * @param {string} path
+ */
+export function manualHead(path) {
+  const section = sectionFor(path);
+  if (!section) return "";
+  return `<div class="manual-head" aria-hidden="true"><span class="manual-no">${section.no}.0</span><span class="manual-name">${section.label}</span><span class="manual-site">Capsid · ${ORIGIN.replace("https://", "")}</span></div>`;
+}
+
+/**
+ * Each visible second-level heading of a page numbered in its section, n.1 onwards, in reading
+ * order. A heading kept for screen readers alone keeps no number.
+ * @param {string} body @param {string} path
+ */
+export function numbered(body, path) {
+  const section = sectionFor(path);
+  if (!section) return body;
+  let n = 0;
+  return body.replace(/<h2(\s[^>]*)?>/g, (tag, attrs = "") => (/cap-sr-only/.test(attrs) ? tag : `<h2${attrs} data-no="${section.no}.${++n}">`));
 }
 
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */

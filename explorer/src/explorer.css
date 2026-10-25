@@ -38,6 +38,7 @@
   --primary-fg: var(--lamp-ink);
   --header-bg: var(--ground);
   --bar: var(--text);
+  --tile-pale: var(--sunken);
 }
 @media (prefers-color-scheme: dark) {
   :root[data-family]:not([data-theme="light"]) {
@@ -48,6 +49,7 @@
     --panel: #0b0e0e;
     --panel-raised: #162222;
     --bar: var(--lamp);
+    --tile-pale: var(--accent-5);
   }
 }
 :root[data-family][data-theme="dark"] {
@@ -58,6 +60,7 @@
   --panel: #0b0e0e;
   --panel-raised: #162222;
   --bar: var(--lamp);
+  --tile-pale: var(--accent-5);
 }
 /* Enarratio's charts on the board's colours: ink bars and rings in light, the lamp's teal in dark. Enarratio sets its
    variables on the chart itself, so these name the chart under the html element to win. */
@@ -866,7 +869,7 @@ html:not(.js) .chapter h3::before {
 }
 .mark span:nth-child(4) {
   block-size: 64%;
-  background: var(--sunken);
+  background: var(--tile-pale);
   color: var(--text);
 }
 .mark span:nth-child(5) {
@@ -1593,4 +1596,79 @@ th[aria-sort="ascending"] .sort::after {
 }
 .code-graph a:hover rect:not(.code-graph-ring) {
   fill: var(--sel);
+}
+
+/* The NASA Graphics Standards Manual's page (Danne & Blackburn, 1976): each section numbered and
+   named over a heavy rule, each heading numbered in the margin, figures on rules, flush left. The
+   teal is kept, as the manual kept NASA Red, for the one action and what is lit. */
+.manual-head {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 8fr) auto;
+  align-items: end;
+  gap: var(--gutter);
+  margin-block-start: var(--space-6);
+  padding-block-end: 10px;
+  border-block-end: 6px solid var(--text);
+  font: 600 0.9375rem / 1.2 var(--face);
+}
+.manual-no {
+  font: 700 clamp(3rem, 6vw, 5.5rem) / 0.8 var(--face);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.manual-name {
+  font: 700 clamp(1.4rem, 2.2vw, 2rem) / 1 var(--face);
+  letter-spacing: -0.02em;
+}
+.manual-site {
+  color: var(--muted);
+  text-align: end;
+}
+.manual-head + .crumbs {
+  margin-block-start: 10px;
+}
+.board-words .manual-head {
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-block: 0 var(--space-5);
+}
+.board-words .manual-no {
+  font-size: clamp(2.5rem, 4vw, 3.5rem);
+}
+.board-words .manual-site {
+  display: none;
+}
+main h2[data-no] {
+  position: relative;
+  padding-block-start: 12px;
+  padding-inline-start: 4.5rem;
+  border-block-start: 2px solid var(--text);
+}
+main h2[data-no]::before {
+  content: attr(data-no) / "";
+  position: absolute;
+  inset-block-start: calc(12px + 0.35em);
+  inset-inline-start: 0;
+  color: var(--muted);
+  font: 600 0.9375rem / 1 var(--face);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.readings-row .reading,
+.readings-facts .reading {
+  padding-block-start: 10px;
+  border-block-start: 2px solid var(--text);
+}
+.readings-row .reading dd {
+  font-weight: 700;
+}
+@media (max-width: 40rem) {
+  .manual-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .manual-site {
+    display: none;
+  }
+  main h2[data-no] {
+    padding-inline-start: 3rem;
+  }
 }
