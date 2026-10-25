@@ -277,6 +277,11 @@ const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence
     via: /\bbingWebmaster\(/,
     evidence: [{ file: "bing-webmaster.ts", pattern: /\bfetchImpl\(/ }],
   },
+  site_traffic: {
+    reason: "reads the site's request record from Cloudflare's SQL API",
+    via: /\bsiteTraffic\(/,
+    evidence: [{ file: "site-traffic.ts", pattern: /\bfetchImpl\(/ }],
+  },
 };
 
 // The names a file imports, as values, from src/github* or src/ops-cloudflare*.ts.
