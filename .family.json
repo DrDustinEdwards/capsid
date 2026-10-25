@@ -24,6 +24,7 @@
       "ended cancelled"
     ],
     "skip": [
+      "docs/policy/gates.md",
       "migrations/**",
       "test/adversarial/corpus/**"
     ]

@@ -869,8 +869,8 @@ test("the shipped policy document names exactly the checks the code enforces", (
   assert.deepEqual(parsed.policy.namespaces, ["dustinedwards", "carrel", "capsomer", "capsid"]);
   assert.deepEqual(parsed.policy.allowedPaths, namespacedAllowedPaths());
   // Version 7 drops author_is_driver and adds the size cap (job_e68de044f8a4); version 8 is
-  // version 7 as amended on 2026-10-19.
-  assert.equal(parsed.policy.version, "8");
+  // version 7 as amended on 2026-10-19; version 9 is version 8 in American spelling.
+  assert.equal(parsed.policy.version, "9");
   // The cap is a number in the code; the document states the same one in its check.
   const capLine = shipped.split("\n").find((l) => l.startsWith("- `size_within_cap`"));
   assert.match(capLine ?? "", new RegExp(`at most ${AUTO_MERGE_SIZE_CAP.toLocaleString("en-US")} lines`));
