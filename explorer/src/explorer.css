@@ -105,14 +105,15 @@ body {
 }
 
 /* One column for every page but the front, whose sections set their own width. */
+/* The title block closes every page, so the footer follows it at the section gap's foot. */
 main {
   max-width: var(--page);
   margin-inline: auto;
-  padding: 0 var(--gutter) var(--section);
+  padding: 0 var(--gutter) var(--space-8);
 }
 main.wide {
   max-width: none;
-  padding: 0 0 var(--section);
+  padding: 0 0 var(--space-8);
 }
 .wrap {
   max-width: var(--page);
@@ -582,27 +583,6 @@ html:not(.js) .chapter h3::before {
   }
 }
 
-.system-names {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.system-names a {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: 32px;
-  padding-inline: var(--space-4);
-  border-radius: 0;
-  background: var(--surface);
-  text-decoration: none;
-}
-.system-names a:hover {
-  background: var(--accent-soft);
-}
-
 /* The tour's map shows its drawing and its step line; its own list lives on the flow pages. */
 .tour-map .cap-system-map-list,
 .tour-map details,
@@ -685,7 +665,6 @@ html:not(.js) .chapter h3::before {
    where else to go. */
 .foot {
   margin-block-start: 0;
-  background: var(--surface);
 }
 .foot-in {
   display: grid;
@@ -739,9 +718,13 @@ html:not(.js) .chapter h3::before {
   }
 }
 .readings-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  display: flex;
+  flex-wrap: wrap;
   margin-block: var(--space-6) 0;
+}
+/* Each fact grows to fill its row, so no box is left empty at the end of the last. */
+.readings-facts .reading {
+  flex: 1 1 10rem;
 }
 .readings-facts .reading dd {
   font: 500 1.125rem / 1.35 var(--ui);
@@ -764,11 +747,16 @@ html:not(.js) .chapter h3::before {
   gap: var(--space-6);
   align-items: start;
 }
-/* A chart takes the whole row; the rings share the row beside or below it. */
+/* A chart takes the whole row on a phone and two columns on a wider page, its rings beside it. */
 .charts > figure:not(.ring) {
   grid-column: 1 / -1;
   min-width: 0;
   max-width: 36rem;
+}
+@media (min-width: 52rem) {
+  .charts > figure:not(.ring) {
+    grid-column: span 2;
+  }
 }
 /* Enarratio draws at a phone's width; on a wider page the drawing grows to its column. */
 .charts .enarratio-frame svg {
@@ -1088,7 +1076,10 @@ th[aria-sort="ascending"] .sort::after {
   stroke: var(--line-strong);
 }
 
+/* Positioned, so the screen-reader words inside a wide table (each status's word) are clipped with
+   it too; left to the page, they stood out past the table's edge and the page scrolled sideways. */
 .scroller {
+  position: relative;
   overflow-x: auto;
 }
 .scroller:focus-visible {
@@ -1257,10 +1248,9 @@ th[aria-sort="ascending"] .sort::after {
   color: var(--text);
   font-weight: 600;
 }
-.flow-steps a[aria-current],
-.flow-steps a[aria-current] .step-name {
-  background: var(--lamp);
-  color: var(--lamp-ink);
+.flow-steps a[aria-current] {
+  color: var(--text);
+  box-shadow: inset 6px 0 0 var(--lamp);
 }
 .hint {
   color: var(--muted);
@@ -1288,7 +1278,7 @@ th[aria-sort="ascending"] .sort::after {
   margin: 0;
   overflow: auto;
   padding-block: var(--space-3);
-  background: var(--sunken);
+  border: 1px solid var(--text);
   font: 0.8125rem / 1.6 var(--mono);
   tab-size: 2;
 }
@@ -1422,10 +1412,6 @@ th[aria-sort="ascending"] .sort::after {
   display: inline-block;
   min-inline-size: 2.5ch;
 }
-.manual-site {
-  color: var(--muted);
-  text-align: end;
-}
 .manual-head + .crumbs {
   margin-block-start: var(--space-3);
 }
@@ -1442,6 +1428,7 @@ main h2[data-no] {
   letter-spacing: -0.01em;
 }
 .tour-title[data-no] {
+  max-width: none;
   padding-block-start: calc(var(--space-3) + 1.5rem);
   padding-inline-start: 0;
 }
@@ -1458,7 +1445,7 @@ main h2[data-no]::before {
 .title-block {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr);
-  margin: var(--space-8) 0 var(--space-6);
+  margin: var(--space-8) 0 0;
   border-block-start: 1px solid var(--text);
   border-inline-start: 1px solid var(--text);
 }
@@ -1479,14 +1466,16 @@ main.wide > .title-block {
 }
 .title-block dd {
   margin: 0;
-  overflow-wrap: anywhere;
 }
 .title-block div:last-child dd {
   font-weight: 700;
 }
 @media (max-width: 40rem) {
   .title-block {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+  .title-block div:first-child {
+    grid-column: 1 / -1;
   }
 }
 
@@ -1520,11 +1509,28 @@ main.wide > .title-block {
   }
 }
 
-/* Technical drawings in outline boxes, as the manual asks of every diagram (5.17). */
+/* Technical drawings in outline boxes, as the manual asks of every diagram (5.17): one box, so a
+   flow's drawing and its Play button share the stage's. */
 .map-host,
 .flow-stage {
   padding: var(--space-4);
   border: 1px solid var(--text);
+}
+.flow-stage .map-host {
+  padding: 0;
+  border: 0;
+}
+.hero-play {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-end: 0;
+}
+/* A table's sentences wrap at a reading width, wider than Capsomer's 36ch, as these are the
+   widest column (Capsomer's table, data-wrap). */
+main .cap-table [data-wrap] {
+  max-width: 60ch;
 }
 /* Table heads in the mono, as today's nasa.gov sets its small labels (Horizon Design System). */
 main .cap-table thead th {
@@ -1539,7 +1545,14 @@ main .cap-table thead th {
 .search-results {
   gap: 0;
 }
-.bands a {
+.bands a,
+.tool-card,
+.action,
+.said li,
+.search-results a,
+.filter-bar,
+.flow-stage,
+.tour-stage .map-host {
   background: none;
 }
 .bands a,
@@ -1557,12 +1570,21 @@ main .cap-table thead th {
 }
 .part-name,
 .flow-touches li > :first-child,
-.system-names a {
+main .cap-pill {
   border: 1px solid var(--line-strong);
   background: none;
 }
 .chapter.is-on .part-name {
   border-color: var(--accent);
+}
+
+/* The list of every flow names each step alone, a row each, the time line still beside them. */
+.bands-brief a {
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  padding-block: var(--space-2);
+}
+.bands-brief li::before {
+  inset-block-start: calc(var(--space-2) + 0.7em);
 }
 
 /* A flow's steps on the flight plan's time line: a ruled scale down the left, ticked between
@@ -1594,7 +1616,7 @@ main .cap-table thead th {
 .readings-row .reading,
 .readings-facts .reading {
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3) var(--space-3);
   border-inline-end: 1px solid var(--text);
@@ -1676,11 +1698,11 @@ main .cap-table thead th {
   color: inherit;
 }
 
-/* The letterhead: the name as the logotype, the address beside it in Regular and Medium, and on
-   the right what the cover sets beside the handbook's name: the document and its date. */
+/* The letterhead: the name as the logotype, the address beside it in Regular and Medium. The
+   date is the title block's, above it. */
 .foot-plate {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: end;
   gap: var(--space-3) var(--space-6);
   padding-block: var(--space-7) 0;
@@ -1695,9 +1717,12 @@ main .cap-table thead th {
 .foot-lockup b {
   font-weight: 600;
 }
-.foot-doc {
-  color: var(--muted);
-  text-align: end;
+.foot-nav a {
+  text-decoration: none;
+}
+.foot-nav a:hover,
+.foot-nav a:focus-visible {
+  text-decoration: underline;
 }
 .foot-no {
   display: inline-block;
@@ -1708,21 +1733,12 @@ main .cap-table thead th {
   .foot-plate {
     grid-template-columns: minmax(0, 1fr);
   }
-  .foot-doc {
-    text-align: start;
-  }
   main h2[data-no] {
     padding-inline-start: 3rem;
   }
-  .manual-site {
-    display: none;
-  }
 }
-.record .readings-row {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-@media (max-width: 40rem) {
-  .record .readings-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
+/* Capsomer's pills, set square and outlined as every other name on these pages. */
+main .cap-pill {
+  border-radius: 0;
+  color: var(--text);
 }
