@@ -1,4 +1,5 @@
-// The front page. First the panel: every tool Capsid serves as a circuit, lit by the grants a
+// The front page. First what Capsid is, beside one claim checked against GitHub, which the
+// reader can change. Then the panel: every tool Capsid serves as a circuit, lit by the grants a
 // caller holds, which the reader switches. Then one job's life as a guided tour, the drawing of
 // Capsid's insides pinned beside the chapters, each with its day's figures; then everything it
 // holds as the manual's contents. Pure, as pages.mjs is.
@@ -72,8 +73,8 @@ const BREAKERS = [
   ["admin", "Admin identity", "Mints agents and holds the switches"],
 ];
 
-/** The circuits in the order the breakers light them, so each grant lights a block of its own. */
-const ORDER = ["read", "action", "write", "admin_read", "admin"];
+/** The breaker each tool hangs under: the grant it cannot work without beyond read (src/scope.ts, needFor). */
+const FEEDS = { read: "read", action: "write", write: "write", admin_read: "admin", admin: "admin" };
 
 /**
  * Whether a caller holding these grants reaches a tool: "full", "part" (an action tool, some of
@@ -98,32 +99,85 @@ export function reachSentence(tools, held) {
 }
 
 /**
- * The first screen: what Capsid is, the two ways on, and its panel: every tool it serves as a
- * circuit, each lit when the grants switched on reach it. It opens as a read-only agent sees it.
+ * The checks the Worker runs on a claim (src/job-claims.ts, WORKER_EVALUATIONS), as the hero's
+ * example job: what GitHub reads for it, and the claim's words. ci_green is a yes or a no.
+ */
+/** @type {[string, string, number][]} */
+const CHECKS = [
+  ["pr_merged", "Pull requests merged", 2],
+  ["commits", "Commits", 7],
+  ["files_changed", "Files changed", 12],
+  ["ci_green", "CI green", 1],
+];
+
+/** A check's value in words: a count as itself, CI green as yes or no. @param {string} kind @param {number} n */
+export const valueWords = (kind, n) => (kind === "ci_green" ? (n ? "Yes" : "No") : String(n));
+
+/**
+ * What Capsid records for a claim (src/job-claims.ts, evaluationRows): GitHub's value, with the
+ * agent's beside it and the two marked as agreeing or not. @param {string} kind @param {number} said @param {number} read
+ */
+export function verdict(kind, said, read) {
+  const r = valueWords(kind, read);
+  return said === read
+    ? `Agrees. The record keeps GitHub's ${r}.`
+    : `Caught. The record keeps GitHub's ${r}, with the agent's ${valueWords(kind, said)} beside it, marked as disagreeing.`;
+}
+
+/**
+ * The first screen: what Capsid is, the two ways on, and one claim checked, which the reader
+ * can change to see Capsid catch it. The example's numbers are an example; the figure under
+ * it is this instance's own.
+ * @param {any} stats
+ */
+function hero(stats) {
+  const v = stats.verification;
+  const [kind, , read] = CHECKS[0];
+  return `<section class="hero" aria-labelledby="hero-title">
+${manualHead("/")}
+<div class="hero-words">
+<h1 id="hero-title">One panel, every agent</h1>
+<p class="lead">Capsid is an MCP server on one Cloudflare Worker. Agents claim signed jobs, act only through the grants they hold, and a job counts as done only when GitHub agrees.</p>
+<p class="hero-actions"><a class="cap-btn" data-variant="primary" href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a><a class="hero-link" href="#tour">Follow one job</a></p>
+<p class="hero-note">This is a live instance. Every tool, step and number here is its own, rebuilt each day.</p>
+</div>
+<div class="desk" data-ui data-desk>
+<h2 class="desk-title" data-plain>A claim, checked <span>An example job. Change what the agent says.</span></h2>
+<div class="desk-kinds" role="group" aria-label="What the agent claims">${CHECKS.map(([k, name, n], i) => `<button type="button" class="desk-kind" data-kind="${k}" data-read="${n}" aria-pressed="${i === 0}">${name}</button>`).join("")}</div>
+<div class="desk-row">
+<div class="desk-cell"><span class="desk-label">The agent says</span><span class="desk-value" data-desk-said>${valueWords(kind, read)}</span><span class="desk-step"><button type="button" data-desk-step="-1" aria-label="The agent claims one fewer">\u2212</button><button type="button" data-desk-step="1" aria-label="The agent claims one more">+</button></span></div>
+<div class="desk-cell desk-github"><span class="desk-label">GitHub reads</span><span class="desk-value" data-desk-read>${valueWords(kind, read)}</span></div>
+<div class="desk-cell desk-kept" data-agree><span class="desk-label">Capsid records</span><span class="desk-value" data-desk-kept>${valueWords(kind, read)}</span><span class="desk-stamp" aria-hidden="true" data-desk-stamp>Agrees</span></div>
+</div>
+<p class="desk-verdict" role="status" data-desk-verdict>${verdict(kind, read, read)}</p>
+<p class="desk-play"><button type="button" class="cap-btn" data-variant="primary" data-desk-fool>Try to fool it</button><span data-desk-tally></span></p>
+<p class="desk-fact">This instance has checked ${v.evaluations_90d.toLocaleString("en-US")} claims in 90 days, and ${percent(v.agreement_rate_90d)} agreed with GitHub. <a href="/numbers/">The numbers</a></p>
+</div>
+</section>`;
+}
+
+/**
+ * The panel: every tool Capsid serves as a circuit, each lit when the grants switched on reach
+ * it. It opens as a read-only agent sees it. Full width, so the whole board is in view.
  * @param {any[]} tools
  */
 function board(tools) {
   const held = { read: true, write: false, admin: false };
-  const circuits = [...tools]
-    .sort((a, b) => ORDER.indexOf(a.grant) - ORDER.indexOf(b.grant))
-    .map((t) => {
-      const on = reaches(t.grant, held);
-      return `<li class="circuit" data-need="${escapeHtml(t.grant)}"${on ? ` data-on="${on}"` : ""}><a href="${toolPath(t.name)}"><span class="lamp" aria-hidden="true"></span><span class="circuit-name">${escapeHtml(t.title)}</span></a><span class="cap-sr-only">: needs ${NEED[/** @type {keyof typeof NEED} */ (t.grant)] ?? escapeHtml(t.grant)}</span></li>`;
-    })
-    .join("");
-  return `<section class="board" aria-labelledby="board-title">
-${manualHead("/")}
-<div class="board-words">
-<h1 id="board-title">One panel, every agent</h1>
-<p class="lead">Capsid is an MCP server on one Cloudflare Worker. Agents claim signed jobs, act only through the grants they hold, and a job counts as done only when GitHub agrees.</p>
-<p class="board-actions"><a class="cap-btn" data-variant="primary" href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a><a class="board-link" href="#tour">Follow one job</a></p>
-<p class="board-note">This is a live instance. Every tool, step and number here is its own, rebuilt each day.</p>
-</div>
+  const circuit = (/** @type {any} */ t) => {
+    const on = reaches(t.grant, held);
+    return `<li class="circuit" data-need="${escapeHtml(t.grant)}"${on ? ` data-on="${on}"` : ""}><a href="${toolPath(t.name)}"><span class="lamp" aria-hidden="true"></span><span class="circuit-name">${escapeHtml(t.title)}</span></a><span class="cap-sr-only">: needs ${NEED[/** @type {keyof typeof NEED} */ (t.grant)] ?? escapeHtml(t.grant)}</span></li>`;
+  };
+  const cols = BREAKERS.map(([grant, name, does]) => {
+    const fed = tools.filter((t) => FEEDS[/** @type {keyof typeof FEEDS} */ (t.grant)] === grant);
+    return `<div class="board-col"><button type="button" class="breaker" data-grant="${grant}" aria-pressed="${grant === "read"}"><span class="breaker-slot" aria-hidden="true"><span class="breaker-handle"></span></span><span class="breaker-name">${name}</span><span class="breaker-does">${does}</span></button>
+<ol class="circuits" aria-label="Tools under the ${name.toLowerCase()}">${fed.map(circuit).join("")}</ol></div>`;
+  }).join("");
+  return `<section class="board wrap" aria-labelledby="board-title">
+<h2 id="board-title">What an agent can reach</h2>
+<p class="lead">Every tool Capsid serves, under the grant it needs, lit by the grants an agent holds. Switch a grant on or off.</p>
 <div class="board-panel" data-ui data-board data-read>
-<h2 class="cap-sr-only">The panel</h2>
-<div class="breakers" role="group" aria-label="What the agent holds">${BREAKERS.map(([grant, name, does]) => `<button type="button" class="breaker" data-grant="${grant}" aria-pressed="${grant === "read"}"><span class="breaker-slot" aria-hidden="true"><span class="breaker-handle"></span></span><span class="breaker-name">${name}</span><span class="breaker-does">${does}</span></button>`).join("")}</div>
 <p class="board-count" role="status" data-board-count>A read-only agent: ${reachSentence(tools, held)}</p>
-<ol class="circuits">${circuits}</ol>
+<div class="board-cols">${cols}</div>
 </div>
 </section>`;
 }
@@ -185,7 +239,7 @@ function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {an
  * @param {any} codeIndex totals over the code maps (code.mjs, codeTotals), or null
  */
 export function homePage(model, stats, tools, codeIndex) {
-  const body = [board(tools), tour(model, stats), holds(model, stats, tools, codeIndex)].join("\n");
+  const body = [hero(stats), board(tools), tour(model, stats), holds(model, stats, tools, codeIndex)].join("\n");
   return layout({
     title: "Capsid: one panel for every AI agent",
     description: DESCRIPTION,

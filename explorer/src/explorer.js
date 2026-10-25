@@ -188,7 +188,7 @@ enhanceCharts(document, { tooltips: true, filter: true, brush: false, entrance: 
 // The front page's panel: each breaker switches a grant, and every circuit lights by the rule
 // the build drew it with (src/home.mjs, reaches), which is src/scope.ts's needFor.
 for (const panel of document.querySelectorAll("[data-board]")) {
-  const breakers = panel.querySelector(".breakers");
+  const breakers = panel;
   const count = panel.querySelector("[data-board-count]");
   const circuits = [...panel.querySelectorAll(".circuit")];
   const reaches = (need, h) =>
@@ -219,6 +219,87 @@ for (const panel of document.querySelectorAll("[data-board]")) {
       apply();
     });
   }
+}
+
+// The front page's claim: the reader changes what the agent says, or lets it lie at random, and
+// the check plays out: the claim goes to GitHub, GitHub's reading comes back, and the record
+// is stamped. What it keeps is the rule the build wrote it with (src/home.mjs, verdict), which
+// is src/job-claims.ts's evaluationRows.
+for (const desk of document.querySelectorAll("[data-desk]")) {
+  const words = (kind, n) => (kind === "ci_green" ? (n ? "Yes" : "No") : String(n));
+  const said = desk.querySelector("[data-desk-said]");
+  const read = desk.querySelector("[data-desk-read]");
+  const kept = desk.querySelector("[data-desk-kept]");
+  const cell = desk.querySelector(".desk-kept");
+  const stamp = desk.querySelector("[data-desk-stamp]");
+  const out = desk.querySelector("[data-desk-verdict]");
+  const tally = desk.querySelector("[data-desk-tally]");
+  const kinds = [...desk.querySelectorAll("[data-kind]")];
+  let kind = kinds[0].dataset.kind;
+  let truth = Number(kinds[0].dataset.read);
+  let claim = truth;
+  let tries = 0;
+  let caught = 0;
+  let run = 0;
+  const wait = (ms) => new Promise((r) => setTimeout(r, reduced.matches ? 0 : ms));
+  const check = async (counted) => {
+    const mine = ++run;
+    const agree = claim === truth;
+    said.textContent = words(kind, claim);
+    desk.dataset.phase = "sent";
+    out.textContent = "The agent reports. Capsid asks GitHub\u2026";
+    await wait(350);
+    if (mine !== run) return;
+    desk.dataset.phase = "reading";
+    read.textContent = kept.textContent = "\u2026";
+    await wait(700);
+    if (mine !== run) return;
+    read.textContent = words(kind, truth);
+    await wait(250);
+    if (mine !== run) return;
+    kept.textContent = words(kind, truth);
+    if (agree) cell.dataset.agree = "";
+    else delete cell.dataset.agree;
+    stamp.textContent = agree ? "Agrees" : "Caught";
+    desk.dataset.phase = "done";
+    out.textContent = agree
+      ? `Agrees. The record keeps GitHub's ${words(kind, truth)}.`
+      : `Caught. The record keeps GitHub's ${words(kind, truth)}, with the agent's ${words(kind, claim)} beside it, marked as disagreeing.`;
+    if (counted) {
+      tries++;
+      if (!agree) caught++;
+      tally.textContent = `Caught ${caught} of ${tries} ${tries === 1 ? "try" : "tries"}`;
+    }
+  };
+  const pick = (k) => {
+    for (const o of kinds) o.setAttribute("aria-pressed", String(o === k));
+    kind = k.dataset.kind;
+    truth = Number(k.dataset.read);
+  };
+  for (const k of kinds) {
+    k.addEventListener("click", () => {
+      pick(k);
+      claim = truth;
+      check(false);
+    });
+  }
+  for (const b of desk.querySelectorAll("[data-desk-step]")) {
+    b.addEventListener("click", () => {
+      const max = kind === "ci_green" ? 1 : 99;
+      claim = Math.min(max, Math.max(0, claim + Number(b.dataset.deskStep)));
+      check(false);
+    });
+  }
+  // A lie at random: any of the checks, a claim that is never what GitHub reads.
+  desk.querySelector("[data-desk-fool]").addEventListener("click", () => {
+    pick(kinds[Math.floor(Math.random() * kinds.length)]);
+    if (kind === "ci_green") claim = 1 - truth;
+    else {
+      const off = 1 + Math.floor(Math.random() * 3);
+      claim = truth - off >= 0 && Math.random() < 0.4 ? truth - off : truth + off;
+    }
+    check(true);
+  });
 }
 
 // Filters: a text field and chips over the items of the page they sit on.
