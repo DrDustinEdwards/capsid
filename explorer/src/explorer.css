@@ -292,24 +292,25 @@ html:not(.js) .breakers {
   grid-row: span 2;
   position: relative;
   display: block;
-  inline-size: 22px;
-  block-size: 44px;
+  inline-size: 28px;
+  block-size: 56px;
   border: 1px solid var(--text);
 }
 .breaker-handle {
   position: absolute;
   inset-inline: 3px;
-  inset-block-start: 21px;
-  block-size: 18px;
+  inset-block-start: 27px;
+  block-size: 24px;
   background: var(--line-strong);
   transition: transform var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 .breaker[aria-pressed="true"] .breaker-handle {
-  transform: translateY(-16px);
+  transform: translateY(-22px);
   background: var(--lamp-on);
   box-shadow: var(--lamp-on-glow); /* taste-skill-ignore: a lit lamp's light, not a raised surface */
 }
 .breaker-name {
+  font-size: 1.0625rem;
   font-weight: 700;
 }
 .breaker-does {
@@ -321,41 +322,48 @@ html:not(.js) .breakers {
   margin: 0;
   font: 700 clamp(1.125rem, 1.4vw, 1.375rem) / 1.25 var(--face);
 }
+/* The circuits: a cell each, ruled like the breakers, in the order the grants light them, so
+   the whole board is in view beside the words and a switch lights a block of it. */
 .circuits {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 var(--space-5);
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
   margin: 0;
   padding: 0;
   list-style: none;
+  border-block-start: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
+}
+.circuit {
+  display: flex;
+  border-inline-end: 1px solid var(--line);
+  border-block-end: 1px solid var(--line);
 }
 .circuit a {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr);
-  gap: 0 var(--space-3);
-  align-items: baseline;
-  padding: 8px 0;
-  border-block-end: 1px solid var(--line);
+  flex: 1;
+  grid-template-columns: 6px minmax(0, 1fr);
+  gap: 0 var(--space-2);
+  align-items: stretch;
+  min-block-size: clamp(40px, 6vh, 60px);
+  padding: 6px var(--space-2) 6px 6px;
   color: var(--muted);
   text-decoration: none;
-  transition: color var(--dur-base) var(--ease-out);
+  transition: color var(--dur-base) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
 .circuit a:hover {
-  color: var(--accent-text);
+  background: var(--sunken);
+  color: var(--text);
 }
 .circuit a:focus-visible {
   outline: 2px solid var(--ring);
-  outline-offset: 0;
+  outline-offset: -2px;
 }
 /* The lamp: unlit when the circuit is dead, lit and glowing when live, half lit when only some
    actions are. */
 .lamp {
-  grid-row: span 2;
-  align-self: center;
-  inline-size: 8px;
-  block-size: 22px;
   display: flex;
   align-items: end;
+  min-block-size: 22px;
   border: 1px solid var(--line-strong);
   transition: background-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
@@ -375,14 +383,10 @@ html:not(.js) .breakers {
   box-shadow: var(--lamp-on-glow); /* taste-skill-ignore: a lit lamp's light */
 }
 .circuit-name {
-  font-weight: 600;
+  align-self: center;
   font-size: 0.9375rem;
-  line-height: 1.3;
-}
-.circuit code {
-  font-size: 0.75rem;
-  color: inherit;
-  overflow-wrap: anywhere;
+  font-weight: 600;
+  line-height: 1.25;
 }
 @media (max-width: 64rem) {
   .board {
@@ -399,15 +403,17 @@ html:not(.js) .breakers {
   .breaker-slot {
     grid-row: auto;
   }
-  .breaker-does,
-  .circuit code {
+  .breaker-does {
     display: none;
   }
   .breaker-name {
     font-size: 0.9375rem;
   }
   .circuits {
-    column-gap: var(--space-3);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .circuit a {
+    min-block-size: 40px;
   }
   .circuit-name {
     font-size: 0.875rem;
