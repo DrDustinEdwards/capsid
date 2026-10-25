@@ -1,14 +1,15 @@
 import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
 import { CF_API, CF_GRAPHQL, cfGetAll, cloudflareCredentials } from "./ops-cloudflare";
+import { AI_SEARCH_BOTS, AI_TRAINING_BOTS, DENIED_BOTS, SEARCH_ENGINE_BOTS } from "@drdustinedwards/site-helpers/robots";
 import { reportSite } from "./site-reports";
 
 // What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic
-// (the SEO plan, "Beyond the module": a report of the broken URLs visitors hit). One report
-// so far, not_found: the paths that answered 404 over a window, a scanner's probe marked
-// and listed last. The referrer is not in it: the SQL API refuses clientRefererHost to this
-// account (403, "not permitted to access column", 2026-10-25), so which page holds a broken
-// link is the site crawl's to find.
+// (the SEO plan, "Beyond the module"). not_found: the paths that answered 404 over a
+// window, a scanner's probe marked and listed last; web_vitals and ai_crawlers are below.
+// The referrer is not in it: the SQL API refuses clientRefererHost to this account (403,
+// "not permitted to access column", 2026-10-25), so which page holds a broken link is the
+// site audit's to find (src/site-audit.ts).
 //
 // NO SITE CHANGE. Cloudflare's SQL API (developers.cloudflare.com/analytics/sql-api/) reads
 // the edge's own HTTP request record, events.httpRequests, kept at least 31 days on every
@@ -22,7 +23,7 @@ const SQL_API = `${CF_API}/analytics/sql`;
 const TIMEOUT_MS = 15_000;
 const DAY_MS = 86_400_000;
 
-export const TRAFFIC_REPORTS = ["not_found", "web_vitals"] as const;
+export const TRAFFIC_REPORTS = ["not_found", "web_vitals", "ai_crawlers"] as const;
 export const MAX_TRAFFIC_DAYS = 30;
 export const MAX_TRAFFIC_ROWS = 200;
 type TrafficReport = (typeof TRAFFIC_REPORTS)[number];
@@ -45,7 +46,7 @@ interface Row {
   hits: number;
 }
 
-async function sql(fetchImpl: FetchLike, token: string, account: string, query: string, params: Record<string, string | number>): Promise<Row[]> {
+async function sql(fetchImpl: FetchLike, token: string, account: string, query: string, params: Record<string, string | number>): Promise<Array<Record<string, unknown>>> {
   const resp = await fetchImpl(SQL_API, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "capsid (site traffic)" },
@@ -63,14 +64,14 @@ async function sql(fetchImpl: FetchLike, token: string, account: string, query: 
     if (resp.status === 403) throw new Error(`Cloudflare refused the traffic query (403: ${why}). CF_OPS_TOKEN needs Account / Account Analytics / Read.`);
     throw new Error(`Cloudflare's SQL API answered ${resp.status}: ${why}`);
   }
-  return (body.data as Array<Record<string, unknown>>).map((r) => ({
-    path: typeof r.path === "string" ? r.path : "",
-    hits: typeof r.hits === "number" ? r.hits : Number(r.hits) || 0,
-  }));
+  return body.data as Array<Record<string, unknown>>;
 }
 
+const count = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
+
 // Real pages first, by hits; scanners' probes last. Pure.
-function notFoundRows(rows: Row[], limit: number) {
+function notFoundRows(raw: Array<Record<string, unknown>>, limit: number) {
+  const rows: Row[] = raw.map((r) => ({ path: typeof r.path === "string" ? r.path : "", hits: count(r.hits) }));
   const all = rows.filter((r) => r.path && r.hits > 0).map((r) => ({ path: r.path, hits: r.hits, probe: PROBE.test(r.path) }));
   all.sort((a, b) => Number(a.probe) - Number(b.probe) || b.hits - a.hits || a.path.localeCompare(b.path));
   return { paths: all.slice(0, limit), total_paths: all.length, truncated: all.length > limit, probes: all.filter((e) => e.probe).length };
@@ -123,6 +124,39 @@ async function webVitals(fetchImpl: FetchLike, token: string, account: string, h
   return { page_views_measured: groups[0]?.count ?? 0, unit: "milliseconds, except cumulativeLayoutShift", vitals };
 }
 
+// ai_crawlers: the requests each named crawler made, by the status the edge answered, so
+// the bot policy (the SEO plan: search and citation bots free, training bots charged or
+// blocked, Bytespider denied) shows working: a training bot should get 402 or 403, a
+// search bot 200. The names are Prelum's own lists (./robots), the ones every site's
+// robots.txt is built from. Google-Extended and Applebot-Extended are robots.txt tokens
+// only, never a user agent, so they never show here.
+const CRAWLER_CLASSES = [
+  ["denied", DENIED_BOTS],
+  ["training", AI_TRAINING_BOTS],
+  ["ai_search", AI_SEARCH_BOTS],
+  ["search", SEARCH_ENGINE_BOTS],
+] as const;
+// Longest name first, so Claude-SearchBot is not read as a shorter name it contains.
+const CRAWLERS = CRAWLER_CLASSES.flatMap(([kind, names]) => names.map((name) => ({ name, kind, lower: name.toLowerCase() }))).sort((a, b) => b.name.length - a.name.length);
+
+// Rows of (user agent, status, hits) to one entry per named crawler. Pure.
+function crawlerRows(raw: Array<Record<string, unknown>>) {
+  const by = new Map<string, { name: string; kind: string; hits: number; statuses: Record<string, number> }>();
+  for (const r of raw) {
+    const ua = typeof r.ua === "string" ? r.ua.toLowerCase() : "";
+    const bot = CRAWLERS.find((c) => ua.includes(c.lower));
+    if (!bot) continue;
+    const e = by.get(bot.name) ?? { name: bot.name, kind: bot.kind, hits: 0, statuses: {} };
+    const hits = count(r.hits);
+    e.hits += hits;
+    const status = typeof r.status === "number" || typeof r.status === "string" ? String(r.status) : "?";
+    e.statuses[status] = (e.statuses[status] ?? 0) + hits;
+    by.set(bot.name, e);
+  }
+  const order = CRAWLER_CLASSES.map(([kind]) => kind as string);
+  return [...by.values()].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || b.hits - a.hits);
+}
+
 export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs, fetchImpl: FetchLike = fetch, now: Date = new Date()) {
   const report: TrafficReport = args.report ?? "not_found";
   const days = args.days ?? 7;
@@ -137,6 +171,25 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
   const start = new Date(now.getTime() - days * DAY_MS).toISOString();
   if (report === "web_vitals") {
     return { namespace, origin: site.origin, report, since: start, ...(await webVitals(fetchImpl, creds.token, creds.account, host, start, now.toISOString())) };
+  }
+  if (report === "ai_crawlers") {
+    const raw = await sql(
+      fetchImpl,
+      creds.token,
+      creds.account,
+      `SELECT clientRequestUserAgent AS ua, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host GROUP BY clientRequestUserAgent, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
+      { start, host }
+    );
+    return {
+      namespace,
+      origin: site.origin,
+      report,
+      since: start,
+      note: "Sampled, so hits are estimates. The policy: search and ai_search free (200), training charged (402) or blocked (403), denied blocked. A user agent can be faked.",
+      crawlers: crawlerRows(raw),
+      // The query keeps the busiest user agents; a quiet crawler can fall past the cut.
+      truncated: raw.length >= QUERY_ROWS,
+    };
   }
   const rows = await sql(
     fetchImpl,

@@ -58,3 +58,24 @@ test("not_found asks for the namespace's own host only and lists scanners' probe
   assert.equal(r.probes, 1);
   await assert.rejects(() => siteTraffic(env, "sample", { days: 31 }, impl, NOW), /days must be a whole number from 1 to 30/);
 });
+
+test("ai_crawlers names each crawler by Prelum's lists, the longest name first, with hits by status", async () => {
+  const impl = async () =>
+    Response.json({
+      data: [
+        { ua: "Mozilla/5.0 (compatible; Claude-SearchBot/1.0)", status: 200, hits: 30 },
+        { ua: "Mozilla/5.0 (compatible; ClaudeBot/1.0)", status: 402, hits: 12 },
+        { ua: "Mozilla/5.0 (compatible; ClaudeBot/1.0)", status: 200, hits: 3 },
+        { ua: "Mozilla/5.0 (Linux; Android 10; K) Bytespider", status: 403, hits: 7 },
+        { ua: "Mozilla/5.0 (Windows NT 10.0) Chrome/140", status: 200, hits: 900 },
+      ],
+    });
+  const env = fakeEnv({ DB: siteDb(), CF_OPS_TOKEN: "fake-token", CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef" });
+  const r = await siteTraffic(env, "sample", { report: "ai_crawlers" }, impl, NOW);
+  assert.ok("crawlers" in r);
+  assert.deepEqual(r.crawlers, [
+    { name: "Bytespider", kind: "denied", hits: 7, statuses: { "403": 7 } },
+    { name: "ClaudeBot", kind: "training", hits: 15, statuses: { "402": 12, "200": 3 } },
+    { name: "Claude-SearchBot", kind: "ai_search", hits: 30, statuses: { "200": 30 } },
+  ]);
+});
