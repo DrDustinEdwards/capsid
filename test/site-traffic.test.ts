@@ -53,6 +53,7 @@ test("not_found asks for the namespace's own host only and lists scanners' probe
   assert.deepEqual(calls[0].body.scope, { accountTag: "0123456789abcdef0123456789abcdef" });
   assert.match(calls[0].body.query, /edgeResponseStatus = 404/);
 
+  assert.ok("paths" in r);
   assert.deepEqual(r.paths.map((p) => p.path), ["/old-post", "/gone", "/wp-login.php"]);
   assert.equal(r.probes, 1);
   await assert.rejects(() => siteTraffic(env, "sample", { days: 31 }, impl, NOW), /days must be a whole number from 1 to 30/);

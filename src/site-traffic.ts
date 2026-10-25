@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
-import { CF_API, cloudflareCredentials } from "./ops-cloudflare";
+import { CF_API, CF_GRAPHQL, cfGetAll, cloudflareCredentials } from "./ops-cloudflare";
 import { reportSite } from "./site-reports";
 
 // What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic
@@ -22,7 +22,7 @@ const SQL_API = `${CF_API}/analytics/sql`;
 const TIMEOUT_MS = 15_000;
 const DAY_MS = 86_400_000;
 
-export const TRAFFIC_REPORTS = ["not_found"] as const;
+export const TRAFFIC_REPORTS = ["not_found", "web_vitals"] as const;
 export const MAX_TRAFFIC_DAYS = 30;
 export const MAX_TRAFFIC_ROWS = 200;
 type TrafficReport = (typeof TRAFFIC_REPORTS)[number];
@@ -34,7 +34,8 @@ export interface TrafficArgs {
 }
 
 // What no page of ours ever was: the paths scanners try on every host.
-const PROBE = /\.(php\d?|aspx?|jsp|cgi|env|ini|sql|bak|ya?ml)$|\/wp-|\/\.(git|env|aws|ssh)|xmlrpc|phpmyadmin|\/cgi-bin\//i;
+const PROBE =
+  /\.(php\d?|aspx?|jsp|cgi|env|ini|sql|bak|db|sqlite|ya?ml)$|\/wp-|\/\.(?!well-known\/)[a-z]|xmlrpc|php(myadmin|info)|\/cgi-bin\/|credential|secret|service-account|aws-exports|appsettings|\/config(\/|\.(js|json))|env\.js|\/(bedrock|anthropic|openai|llm)\//i;
 
 // The most rows the query returns; a 404 list longer than this is noise past its top.
 const QUERY_ROWS = 2000;
@@ -75,6 +76,53 @@ function notFoundRows(rows: Row[], limit: number) {
   return { paths: all.slice(0, limit), total_paths: all.length, truncated: all.length > limit, probes: all.filter((e) => e.probe).length };
 }
 
+// web_vitals: what real visitors' browsers measured, from Web Analytics (the GraphQL
+// dataset rumWebVitalsEventsAdaptiveGroups, account-scoped, filtered to the site's Web
+// Analytics siteTag). Values come back in microseconds; CLS is unitless. The site's
+// siteTag is read from the rum site_info list, the same list the live checks read.
+const VITALS = ["largestContentfulPaint", "interactionToNextPaint", "cumulativeLayoutShift", "firstContentfulPaint", "timeToFirstByte"] as const;
+const P = ["P50", "P75", "P90"] as const;
+
+async function siteTagFor(fetchImpl: FetchLike, token: string, account: string, host: string): Promise<string> {
+  const rows = (await cfGetAll(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/rum/site_info/list`, "the Web Analytics sites list", 50)) as Array<{ host?: unknown; site_tag?: unknown }>;
+  const row = rows.find((r) => typeof r?.host === "string" && r.host.toLowerCase() === host);
+  if (!row || typeof row.site_tag !== "string") throw new Error(`${host} has no Web Analytics site, so there are no visitor measurements. Turn Web Analytics on for it in the Cloudflare dashboard.`);
+  return row.site_tag;
+}
+
+async function webVitals(fetchImpl: FetchLike, token: string, account: string, host: string, start: string, end: string) {
+  const siteTag = await siteTagFor(fetchImpl, token, account, host);
+  const fields = VITALS.flatMap((v) => P.map((p) => `${v}${p}`)).join(" ");
+  const query = `query($account: string!, $siteTag: string!, $start: Time!, $end: Time!) { viewer { accounts(filter: { accountTag: $account }) { rumWebVitalsEventsAdaptiveGroups(filter: { siteTag: $siteTag, datetime_geq: $start, datetime_leq: $end }, limit: 1) { count quantiles { ${fields} } } } } }`;
+  const resp = await fetchImpl(CF_GRAPHQL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "capsid (site traffic)" },
+    body: JSON.stringify({ query, variables: { account, siteTag, start, end } }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  const text = await resp.text();
+  let body: { data?: { viewer?: { accounts?: Array<{ rumWebVitalsEventsAdaptiveGroups?: Array<{ count?: number; quantiles?: Record<string, number> }> }> } }; errors?: Array<{ message?: string }> } | null = null;
+  try {
+    body = JSON.parse(text);
+  } catch {}
+  const groups = body?.data?.viewer?.accounts?.[0]?.rumWebVitalsEventsAdaptiveGroups;
+  if (!resp.ok || body?.errors?.length || !Array.isArray(groups)) {
+    const why = (body?.errors?.map((e) => e.message).filter(Boolean).join("; ") || text).slice(0, 300) || "no message";
+    throw new Error(`Cloudflare's analytics query for web vitals answered ${resp.status}: ${why}`);
+  }
+  const q = groups[0]?.quantiles ?? {};
+  // A negative value means Cloudflare has no measurement for it.
+  const at = (v: string, p: string) => {
+    const n = q[`${v}${p}`];
+    return typeof n === "number" && n >= 0 ? n : null;
+  };
+  const ms = (n: number | null) => (n === null ? null : Math.round(n / 1000));
+  const vitals = Object.fromEntries(
+    VITALS.map((v) => [v, Object.fromEntries(P.map((p) => [p.toLowerCase(), v === "cumulativeLayoutShift" ? at(v, p) : ms(at(v, p))]))])
+  );
+  return { page_views_measured: groups[0]?.count ?? 0, unit: "milliseconds, except cumulativeLayoutShift", vitals };
+}
+
 export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs, fetchImpl: FetchLike = fetch, now: Date = new Date()) {
   const report: TrafficReport = args.report ?? "not_found";
   const days = args.days ?? 7;
@@ -87,6 +135,9 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
   if (!creds.ok) throw new Error(`The traffic report reads Cloudflare with the watcher's token, and ${creds.reason}.`);
 
   const start = new Date(now.getTime() - days * DAY_MS).toISOString();
+  if (report === "web_vitals") {
+    return { namespace, origin: site.origin, report, since: start, ...(await webVitals(fetchImpl, creds.token, creds.account, host, start, now.toISOString())) };
+  }
   const rows = await sql(
     fetchImpl,
     creds.token,
