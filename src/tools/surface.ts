@@ -199,7 +199,7 @@ const READ_REPO: CompositeSpec = {
 const INSPECT_REPO: CompositeSpec = {
   name: "capsid_inspect_repo",
   title: "Inspect a repo and its site",
-  summary: "What state a namespace's repo and site are in: its branches, tags and open pull requests, its commit history, its CI runs, a live check of its site, its Google Search Console and Bing Webmaster Tools data, and the 404s Cloudflare recorded at it. Read-only.",
+  summary: "What state a namespace's repo and site are in: its branches, tags and open pull requests, its commit history, its CI runs, a live check of its site, its Google Search Console and Bing Webmaster Tools data, and Cloudflare's 404s and web vitals for it. Read-only.",
   actions: {
     refs: { op: "repo_refs", summary: "Branches, tags and open pull requests." },
     history: { op: "repo_history", summary: "Commits and comparisons." },
@@ -207,7 +207,7 @@ const INSPECT_REPO: CompositeSpec = {
     site: { op: "site_check", summary: "The live site." },
     search: { op: "search_console", summary: "The site's Google Search Console data." },
     bing: { op: "bing_webmaster", summary: "The site's Bing Webmaster Tools data." },
-    traffic: { op: "site_traffic", summary: "The 404s visitors hit." },
+    traffic: { op: "site_traffic", summary: "404s and web vitals." },
   },
 };
 
