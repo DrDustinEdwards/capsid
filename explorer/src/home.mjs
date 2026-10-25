@@ -108,8 +108,8 @@ function board(tools) {
     })
     .join("");
   return `<section class="board" aria-labelledby="board-title">
-<div class="board-words">
 ${manualHead("/")}
+<div class="board-words">
 <h1 id="board-title">One panel, every agent</h1>
 <p class="lead">Capsid is an MCP server on one Cloudflare Worker. Agents claim signed jobs, act only through the grants they hold, and a job counts as done only when GitHub agrees.</p>
 <p class="board-actions"><a class="cap-btn" data-variant="primary" href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a><a class="board-link" href="#tour">Follow one job</a></p>
