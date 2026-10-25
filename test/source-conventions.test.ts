@@ -7,7 +7,7 @@ import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // One definition, imported. Conventions about the shape of src/ rather than the
-// behaviour of any one module: each guard asks whether a fact is still stated once,
+// behavior of any one module: each guard asks whether a fact is still stated once,
 // and scans all of src/ rather than a list of files where a copy might appear.
 //
 // That the backup prune still reaps the report prefix the CSP sink stored under until

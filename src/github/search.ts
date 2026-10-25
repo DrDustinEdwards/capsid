@@ -1,7 +1,9 @@
-import { base64Decode } from "../encoding";
 import type { RepoEnv as Env } from "../env";
 import { DEFAULT_SCAN_RESULTS, MAX_SCAN_CAP, DEFAULT_SCAN_FILES } from "../limits";
 import { ghFetch, resolveRepo, getDefaultBranch } from "./client";
+import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
+
+const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
 
 // search_code is a server-side tree walk, not the REST search API. GET /search/code
 // returns HTTP 200 with total_count 0 for private repos under a GitHub App
@@ -118,7 +120,7 @@ async function scanBlobs(
     if (blobData.encoding !== "base64" || !blobData.content) continue;
     let text: string;
     try {
-      text = base64Decode(blobData.content);
+      text = decodeBase64(blobData.content);
     } catch {
       continue; // binary that slipped past the extension filter
     }

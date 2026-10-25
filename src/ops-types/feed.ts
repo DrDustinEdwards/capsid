@@ -83,7 +83,7 @@ export interface OpsAwaitingSeat {
   class_reasons?: string[];
   // The head the tick judged; the Portal's Approve sends it as the sha approved.
   head_sha?: string;
-  // A pull request labelled visual (src/visual-pr.ts): its title, the live preview its
+  // A pull request labeled visual (src/visual-pr.ts): its title, the live preview its
   // description names, and its screenshots, all read from the pull request itself.
   visual?: { title: string; preview: string | null; shots: string[] };
 }

@@ -225,7 +225,7 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
     ...["Run npm ci", "Run npm run check:conformance", "Run npm run check:plants"].map(ciStep("gates")),
   ],
   // Every blocking step of Capsomer's `check` job, read off its ci.yml on main on
-  // 2026-10-07. The steps its own file marks warn-only (forced-colours screenshots, size,
+  // 2026-10-07. The steps its own file marks warn-only (forced-colors screenshots, size,
   // token check, the site summary and the artifact upload) are left out: they run with
   // continue-on-error or always(), so a pass proves nothing about the change. The
   // `results` job runs on a push to main only and is skipped on a pull request. The
@@ -234,7 +234,7 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
     "Install",
     "Palette, scales, unit tests, types",
     "Every family's contrast pairs, both themes (blocking, rule 18)",
-    "Build the behaviour modules and wrappers",
+    "Build the behavior modules and wrappers",
     "Build the site and every states page",
     "Install Chromium",
     "Keyboard and accessibility tests, both themes",
@@ -309,7 +309,7 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
     .split(",")
     .map((n) => n.trim())
     .filter(Boolean);
-  if (namespaces.length === 0) return { error: "the policy document covers no namespaces, so it authorises nothing." };
+  if (namespaces.length === 0) return { error: "the policy document covers no namespaces, so it authorizes nothing." };
   const unknown = namespaces.filter((n) => !onRoster(n));
   if (unknown.length > 0) {
     return {
@@ -376,7 +376,7 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
   }
   // Fails closed: a document with no author allowlist loads nothing.
   if (authors.length === 0) {
-    return { error: "the policy document names no PR author, so it authorises no pull request. Refusing rather than merging with no author allowlist." };
+    return { error: "the policy document names no PR author, so it authorizes no pull request. Refusing rather than merging with no author allowlist." };
   }
   return { policy: { version, enabled: enabled.toLowerCase() === "true", namespaces, checks, refusedPaths, allowedPaths, authors, requiredCi, units } };
 }

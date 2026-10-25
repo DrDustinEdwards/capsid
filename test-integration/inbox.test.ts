@@ -1,11 +1,12 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { sha256Hex } from "../src/auth";
+
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import { legacyAgent } from "../src/agents";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import { capsidStatus } from "../src/status";
 import type { Inbox } from "../src/inbox";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // "What needs Dustin, per app" (job_84e901d8eb71), driven through the whole Worker with the
 // credentials a caller would present: GET /ops/inbox, and the same answer in improve_status.

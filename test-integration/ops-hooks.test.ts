@@ -1,10 +1,11 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { sha256Hex } from "../src/auth";
+
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import type { Env } from "../src/env";
 import { opsFeed } from "../src/ops-feed";
 import { OPS_HOOKS_PATH } from "../src/ops-hooks";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The hook receiver through the whole Worker, on real D1 (src/ops-hooks.ts,
 // migrations/0025): who may post, the job a session binds to, the needs_input cycle, a

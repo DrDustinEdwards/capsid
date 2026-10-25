@@ -17,7 +17,7 @@ import { TOOL_GRANTS } from "../src/scope.ts";
 // job.
 //
 // This file is the source-guard half (invariant 2, plus a structural check that
-// invariant 1's statements exist per tool). The behavioural half is
+// invariant 1's statements exist per tool). The behavioral half is
 // test/write-invariants.test.ts, which drives the real handlers against a fake D1.
 //
 // It scans every file under src/, because these are properties of a tool, wherever

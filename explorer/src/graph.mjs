@@ -1,7 +1,7 @@
 // The code level's drawing (capsid/research/design-system-explorer.md, section 5, "Drawing it"):
 // a repo's folders, then the modules in each folder, laid out by dagre at build and written as an
 // SVG, so no layout code reaches the browser. Each module box shows its worst CRAP and, once
-// mutation has run, its mutation score, as a shape, a word's colour and a number; a module in an
+// mutation has run, its mutation score, as a shape, a word's color and a number; a module in an
 // import cycle wears a dashed ring marked "cycle".
 //
 // The drawing repeats the table under it for a pointer and the eye. The SVG is hidden from

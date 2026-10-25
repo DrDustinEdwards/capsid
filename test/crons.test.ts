@@ -54,6 +54,6 @@ test("every cron the config fires is handled", () => {
 });
 
 // That the three expressions are distinct, and that the handler dispatches on
-// controller.cron (each does only its own work, an unrecognised one does nothing, a
+// controller.cron (each does only its own work, an unrecognized one does nothing, a
 // throwing branch does not stop a later cron), is driven in
 // test-integration/scheduled.test.ts.

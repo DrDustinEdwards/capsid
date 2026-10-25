@@ -1,9 +1,10 @@
 import type { Env } from "./env";
-import { sha256Hex } from "./auth";
+
 import { POLICY_PREFIX, policyPin, policyPinKey, signTaskBody, splitSignedTask } from "./signed-docs";
 import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged, snapshotLive } from "./store-guards";
 import { AUTO_MERGE_POLICY_PATH, checkMergePolicyBody, loadMergePolicy, parseMergePolicy } from "./auto-merge-policy";
 import { readRepoFile } from "./github/contents";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Signing a policy document: the one path that mints the signature the auto-merge and
 // gate policies are verified against. Its constraints:
@@ -71,7 +72,7 @@ export async function signPolicyDocument(
   const stored = prior.body ?? "";
   const { signature: existing, body } = splitSignedTask(stored);
   if (body.trim().length === 0) {
-    return refuse(`${namespace}/${path} has an empty body below its frontmatter. An empty policy authorises nothing and is not signed.`);
+    return refuse(`${namespace}/${path} has an empty body below its frontmatter. An empty policy authorizes nothing and is not signed.`);
   }
   const committed = await commitSigned(env, "sign_policy", namespace, path, prior, body, (sig, sha, bytes) =>
     // The signature and hash, not the body, which the document and snapshot hold.
@@ -329,7 +330,7 @@ export async function planPolicyFromRepo(env: Env): Promise<RepoPolicyPlan> {
   if (splitSignedTask(content).signature !== null || content.startsWith("---\n")) {
     return refuse(`${REPO_POLICY_PATH} opens with frontmatter. The repo file is the unsigned source, and the signature is added here, so nothing is signed.`);
   }
-  if (content.trim().length === 0) return refuse(`${REPO_POLICY_PATH} is empty. An empty policy authorises nothing and is not signed.`);
+  if (content.trim().length === 0) return refuse(`${REPO_POLICY_PATH} is empty. An empty policy authorizes nothing and is not signed.`);
   // The checks the loader makes, so what is signed here is a body the Worker will load.
   const loaded = checkMergePolicyBody(content);
   if ("error" in loaded) return refuse(`${REPO_POLICY_PATH} would not load, so nothing is signed: ${loaded.error}`);

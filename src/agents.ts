@@ -1,4 +1,4 @@
-import { bearerToken, operatorIdentity, sha256Hex } from "./auth";
+import { bearerToken, operatorIdentity } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import {
   AGENT_GRANTS,
@@ -13,6 +13,7 @@ import {
 } from "./agents-schema";
 import { runKeyAgent } from "./bench-run-key";
 import { logEvent } from "./log";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // A bearer resolves to a caller, not to a tier. A bare "read" or "write" plus a key
 // fingerprint cannot say whose credential did something, and cannot give a queue
@@ -133,7 +134,6 @@ export interface ResolvedAgent {
   // failed write cannot look like a failed auth.
   touch: () => Promise<void>;
 }
-
 
 // An indexed equality on the digest, confirmed with a constant-time compare. The
 // index keeps the lookup O(1) as the table grows; the compare keeps the guarantee if

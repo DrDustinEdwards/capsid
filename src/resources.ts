@@ -1,8 +1,10 @@
 import { McpServer, ProtocolError, ProtocolErrorCode, ResourceTemplate } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
 import { checkScope } from "./scope";
-import { b64urlDecode, b64urlEncode } from "./encoding";
 import { MAX_ROWS } from "./limits";
+import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+
+const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // Scopes for resources and prompts. guardRegistrations wraps registerTool only, and
 // a raw request handler is not a registration, so these handlers check scope here.
@@ -75,7 +77,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
     let afterPath = "";
     if (typeof cursor === "string" && cursor.length > 0) {
       try {
-        const parsed = JSON.parse(b64urlDecode(cursor)) as { n?: unknown; p?: unknown };
+        const parsed = JSON.parse(decodeBase64url(cursor)) as { n?: unknown; p?: unknown };
         afterNs = typeof parsed.n === "string" ? parsed.n : "";
         afterPath = typeof parsed.p === "string" ? parsed.p : "";
       } catch {
@@ -115,7 +117,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
         title: row.title ?? undefined,
         mimeType: "text/markdown",
       })),
-      ...(more && last ? { nextCursor: b64urlEncode(JSON.stringify({ n: last.namespace, p: last.path })) } : {}),
+      ...(more && last ? { nextCursor: base64url(JSON.stringify({ n: last.namespace, p: last.path })) } : {}),
     };
   });
 }

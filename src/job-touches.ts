@@ -63,7 +63,7 @@ export interface Touch {
   kind: TouchKind;
   actor: string;
   actor_kind: ActorKind;
-  // JSON-serialised as given; undefined keys drop out.
+  // JSON-serialized as given; undefined keys drop out.
   detail?: Record<string, unknown> | null;
   // The touch ends a wait: waited_ms is measured from the job's latest gate row.
   sinceGate: boolean;

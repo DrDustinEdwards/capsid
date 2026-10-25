@@ -51,7 +51,7 @@ export interface Paused {
 // 1. Revert tracking
 
 /** The pull requests and commits a merged pull request says it reverts. Pure.
- *  Recognised: GitHub's revert button ("Reverts owner/repo#N" in the body, with a title
+ *  Recognized: GitHub's revert button ("Reverts owner/repo#N" in the body, with a title
  *  `Revert "..."`), "reverts #N" or "revert #N" at the start of the title or of a body line
  *  (same repo only, any letter case), and git's "This reverts commit <sha>" (7 to 40 hex). A mention of
  *  another repo's pull request names none of this repo's. */
@@ -292,7 +292,7 @@ export interface SafetyCounts {
   // Rollbacks and reverts of pull requests the tick merged unattended, one per pull
   // request however many deploys or reverts it drew, before the lifted time is applied.
   bad_auto_7d: number;
-  // The times (ms) behind the judgement, over days 0 to 37: each bad event of an
+  // The times (ms) behind the judgment, over days 0 to 37: each bad event of an
   // unattended pull request, and each unattended merge. judgeShutoff windows and lifts
   // them, counting a pull request once per window at its latest event after the lift.
   bad_at: Array<{ key: string; ms: number }>;

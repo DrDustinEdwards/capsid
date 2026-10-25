@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hmacHex } from "../src/auth.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
-import { b64urlDecode, b64urlEncode } from "../src/encoding.ts";
 import { PORTAL_CSRF_COOKIE, type OpsFeedData } from "../src/ops-feed.ts";
 import type { OpsSiteConfig } from "../src/ops-types/sites.ts";
 import type { PortalPerformed, PortalPreview } from "../src/ops-types/portal.ts";
@@ -36,6 +35,9 @@ import { PAUSED_KEY } from "../src/merge-safety.ts";
 import { policyPin, policyPinKey, signTaskBody } from "../src/signed-docs.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+
+const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // approve_pr reads the pull request's head from GitHub at preview and at perform. Only
 // that read is answered; nothing in this file reaches GitHub otherwise.
@@ -331,14 +333,14 @@ async function previewOk(w: { env: never }, action: string, params: Record<strin
 // The token's payload, decoded, edited and re-encoded with the original signature.
 function tamper(token: string, edit: (claims: Record<string, unknown>) => void): string {
   const [payload, sig] = token.split(".");
-  const claims = JSON.parse(b64urlDecode(payload)) as Record<string, unknown>;
+  const claims = JSON.parse(decodeBase64url(payload)) as Record<string, unknown>;
   edit(claims);
-  return `${b64urlEncode(JSON.stringify(claims))}.${sig}`;
+  return `${base64url(JSON.stringify(claims))}.${sig}`;
 }
 
 // A token signed the way the Worker signs one, for claims no preview would issue.
 async function forge(claims: Record<string, unknown>): Promise<string> {
-  const payload = b64urlEncode(JSON.stringify(claims));
+  const payload = base64url(JSON.stringify(claims));
   return `${payload}.${await hmacHex(await hmacHex(SECRET, "capsid-portal-confirm:v2"), payload)}`;
 }
 
@@ -463,7 +465,7 @@ test("an approve all preview lists each proposal and its flagged lines, and its 
   assert.ok(body.changes.includes("instruction (proposal 7, capsid/core.md): - Agents must call write after every job."), JSON.stringify(body.changes));
   assert.ok(body.changes.some((c) => /^approve proposal 7 \(capsid\/core\.md, from agent:capsid-driver\): capsid\/core\.md is created; 3 line\(s\) added, 0 removed\.$/.test(c)), JSON.stringify(body.changes));
   assert.equal(body.changes.at(-1), `Your reason "the rules audit" is recorded in the portal-canon_approve_all audit row.`);
-  const claims = JSON.parse(b64urlDecode(body.token.split(".")[0])) as { params: Record<string, string> };
+  const claims = JSON.parse(decodeBase64url(body.token.split(".")[0])) as { params: Record<string, string> };
   assert.deepEqual(claims.params, { reason: "the rules audit", plan: "7:approve" });
 });
 

@@ -1,6 +1,6 @@
 // Test on the base (docs/work-queue.md, "CI on complete"; Grok design review 2026-10-23,
 // build step 4). Run by .github/workflows/test-on-base.yml on a capsid pull request
-// labelled test-on-base, which a job opts into with a TEST ON BASE line in its body.
+// labeled test-on-base, which a job opts into with a TEST ON BASE line in its body.
 //
 //   node scripts/test-on-base.mjs <base-sha> <head-sha>
 //

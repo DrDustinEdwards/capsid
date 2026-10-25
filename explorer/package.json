@@ -7,13 +7,14 @@
     "build": "node --import ../test/resolve-ts.mjs build.mjs",
     "check": "tsc -p .",
     "test": "node --import ../test/resolve-ts.mjs --test \"test/*.test.mjs\"",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "indexnow": "node indexnow.mjs"
   },
   "dependencies": {
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.8.0",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#77b1ddbb950ec6853b94fc18b787cabd70779c0c",
     "@fontsource-variable/martian-mono": "^5.3.0",
     "@fontsource-variable/schibsted-grotesk": "^5.3.0",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.20.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.21.0",
     "enarratio": "0.3.1"
   },
   "devDependencies": {

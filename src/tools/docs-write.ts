@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
 import { surfaceOf } from "./surface";
-import { sha256Hex } from "../auth";
+
 import { auditStatement, documentUpsert, guardedCommit, snapshotLive, snapshotTaken } from "../store-guards";
 import { normalizeDashes } from "../normalize";
 import { parseLinks, type LinkEdge } from "../links";
@@ -15,6 +15,7 @@ import { concurrentEditWarning } from "../server";
 import { canonGuarded, proposeCanon } from "../canon";
 import { ruleDocWriteRefusal } from "../rule-docs";
 import { ok, fail, type ToolCtx, requireConfirmation } from "./docs";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The document tools that change the store: write, restore, delete and move.
 // defineDocOperations in ./docs registers them in the published order.

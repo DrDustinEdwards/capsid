@@ -5,7 +5,7 @@ import { fakeD1 } from "./fakes.ts";
 
 // Recent activity: the last 50 audit rows, filterable by namespace and actor. The
 // filter comes from a browser's query string, so it is untrusted input reaching SQL,
-// and the defence is that both values are bound rather than interpolated. The tests
+// and the defense is that both values are bound rather than interpolated. The tests
 // check the statement's shape, because a bound parameter that becomes a template
 // literal passes every results-only test.
 

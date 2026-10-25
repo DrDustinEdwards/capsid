@@ -1,4 +1,4 @@
-import { bytesToHex } from "./encoding";
+import { toHex } from "@dustinedwards/site-runtime/encoding";
 
 // The vocabulary of a scoped credential, in one module so the table
 // (migrations/0008_agents.sql), the tool (src/tools/agents.ts) and the enforcement
@@ -164,14 +164,14 @@ export function describeScope(list: ScopeList): string {
 
 // agent_<12 hex>. See the migration for why it is not a sequence.
 export function mintAgentId(): string {
-  return `agent_${bytesToHex(crypto.getRandomValues(new Uint8Array(6)))}`;
+  return `agent_${toHex(crypto.getRandomValues(new Uint8Array(6)))}`;
 }
 
 // 32 bytes of entropy behind a greppable prefix, so a key pasted into a file, a log
 // or a commit is findable by searching for one string. Returned ONCE by the mint
 // action and stored nowhere: what the table holds is its sha256.
 export function mintAgentKey(): string {
-  return `capsid_agent_${bytesToHex(crypto.getRandomValues(new Uint8Array(32)))}`;
+  return `capsid_agent_${toHex(crypto.getRandomValues(new Uint8Array(32)))}`;
 }
 
 // The audit identity, in the vocabulary audit_log.actor and jobs.claimed_by already

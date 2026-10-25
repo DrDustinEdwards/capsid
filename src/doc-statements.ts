@@ -1,11 +1,12 @@
-import { sha256Hex } from "./auth";
+
 import { normalizeDashes } from "./normalize";
 import { auditStatement, snapshotLive } from "./store-guards";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The audit actor of the Worker's own unattended actions (the auto-merge tick, an
 // approved merge executed). The string is the improve loop's, which wrote these rows
 // first; it is kept so audit_log reads as one series and src/job-touches.ts still
-// recognises it.
+// recognizes it.
 const SYSTEM_ACTOR = "improve-loop";
 
 // A system document write (a job's mirror document) under the same two invariants as

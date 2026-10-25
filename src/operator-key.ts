@@ -1,7 +1,7 @@
-import { sha256Hex } from "./auth";
-import { bytesToHex } from "./encoding";
+
 import type { Env } from "./env";
 import { systemAudit } from "./doc-statements";
+import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
 
 export interface MintedOperatorKey {
   action: "mint_operator_key";
@@ -26,7 +26,7 @@ export async function mintOperatorKey(env: Env, actor: string): Promise<MintedOp
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   // Hex through bytesToHex (src/encoding.ts).
-  const key = `capsid_${bytesToHex(bytes)}`;
+  const key = `capsid_${toHex(bytes)}`;
   // The `ro:` prefix goes on the list entry, not the key: src/auth.ts compares the
   // key's hash to each entry with the prefix stripped. Backwards, this mints a write key.
   const hash = await sha256Hex(key);

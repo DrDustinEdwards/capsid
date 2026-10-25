@@ -1,6 +1,6 @@
 /* The explorer's own look on Capsomer's tokens (assets/capsomer.css): a distribution board.
    Every tool is a circuit and every grant a breaker; the breaker's slot and handle is the one
-   shape, at every scale. Every colour is Capsomer's teal family (data-family on <html>; Dustin,
+   shape, at every scale. Every color is Capsomer's teal family (data-family on <html>; Dustin,
    2026-10-25): its neutrals are the ground and the ink, and its lighter teals the lamp, which marks what is live and the one action. A lit lamp glows in the
    ramp's brightest steps. The page is laid out as NASA's own papers (the NASA block at the end):
    one near-white ground, as the manual bars pale tints, and parts told apart by hairlines.
@@ -67,7 +67,7 @@
   --lamp-on: var(--lamp);
   --lamp-on-glow: var(--lamp-glow);
 }
-/* Enarratio's charts on the board's colours: ink bars and rings in light, the lamp's teal in dark. Enarratio sets its
+/* Enarratio's charts on the board's colors: ink bars and rings in light, the lamp's teal in dark. Enarratio sets its
    variables on the chart itself, so these name the chart under the html element to win. */
 html .enarratio,
 html .enarratio-tooltip {
@@ -94,7 +94,7 @@ body {
 }
 
 /* Links in the accent; a button that is a link, and Capsomer's header, keep Capsomer's
-   colours, which sit in a layer an unlayered rule would beat. */
+   colors, which sit in a layer an unlayered rule would beat. */
 :where(main, .foot) :where(a:not(.cap-btn)) {
   color: var(--accent-text);
   text-underline-offset: 0.18em;
@@ -203,7 +203,7 @@ h3 {
 
 /* The opening: what Capsid is, beside one claim checked against GitHub. It starts at the top of
    the page, as every other page does, and the claim is set as a form of the manual's: a title
-   strip and ruled, labelled boxes (NHB 1430.2, 4.1). */
+   strip and ruled, labeled boxes (NHB 1430.2, 4.1). */
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
@@ -353,7 +353,7 @@ html:not(.js) .desk-kinds {
 }
 /* The check playing out: the claim's cell answers as it is sent, a reading line runs across
    GitHub's while it is read, and the record is stamped, the manual's inspection stamp in the
-   one colour when the claim stands and in ink when it is caught. */
+   one color when the claim stands and in ink when it is caught. */
 .desk-cell {
   position: relative;
   overflow: hidden;
@@ -472,7 +472,7 @@ html:not(.js) .desk-play {
 
 /* The panel: every tool Capsid serves, each a circuit lit by the grants an agent holds, full
    width so the whole board is in view. An instrument in an outline box (NHB 1430.2, 5.17), its
-   circuits ruled cells, and the lamp's teal the one colour, lit only for what is live. */
+   circuits ruled cells, and the lamp's teal the one color, lit only for what is live. */
 .board-panel {
   display: flex;
   flex-direction: column;
@@ -662,7 +662,7 @@ html:not(.js) .breaker {
   color: var(--muted);
   transition: color var(--dur-slow) var(--ease-out), border-color var(--dur-slow) var(--ease-out);
 }
-/* The chapter being told is in full ink with the accent beside it; the others wait in grey,
+/* The chapter being told is in full ink with the accent beside it; the others wait in gray,
    which still reads at 4.5:1. */
 .chapter.is-on,
 html:not(.js) .chapter {
@@ -703,7 +703,7 @@ html:not(.js) .chapter h3::before {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
-/* A chapter's parts are named in the drawing's colour, so the words point at what lights. */
+/* A chapter's parts are named in the drawing's color, so the words point at what lights. */
 .chapter-parts {
   display: flex;
   flex-wrap: wrap;
@@ -1492,7 +1492,7 @@ th[aria-sort="ascending"] .sort::after {
 }
 
 /* The code level's drawing (src/graph.mjs): boxes on the surface, each edged in its worst
-   status's colour, with the status's glyph and number; a module in a cycle in a dashed ring. */
+   status's color, with the status's glyph and number; a module in a cycle in a dashed ring. */
 .code-graph {
   margin: var(--space-5) 0;
 }
@@ -1576,9 +1576,9 @@ th[aria-sort="ascending"] .sort::after {
 
 /* The NASA Graphics Standards Manual (NHB 1430.2, Danne & Blackburn, 1976), from its own pages:
    the index's bold section label over a hairline (page i), titles small and bold (5.1), forms
-   ruled into labelled boxes (4.1), signs as dark panels of white type with an arrow (6.1, 6.2),
+   ruled into labeled boxes (4.1), signs as dark panels of white type with an arrow (6.1, 6.2),
    the letterhead's logotype beside its address (3.1), and the folio at the foot on the right.
-   Teal is kept as the manual kept NASA Red: one colour, for the one action and what is lit. */
+   Teal is kept as the manual kept NASA Red: one color, for the one action and what is lit. */
 .manual-head {
   display: flex;
   justify-content: space-between;
@@ -1840,7 +1840,7 @@ main .cap-pill {
 }
 
 /* The ways on, as the manual's directional signs: a dark panel of light type and an arrow; the
-   way forward carries the one colour along its top. */
+   way forward carries the one color along its top. */
 .pager a,
 .flow-nav a[rel] {
   display: inline-flex;

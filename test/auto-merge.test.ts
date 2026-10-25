@@ -734,7 +734,7 @@ test("loadMergePolicy accepts the signed policy and refuses one that names fewer
   assert.equal(ok.policy.version, "1");
 
   // The document is what a human reads to know what the machine may do alone, so a
-  // code check it does not name is a merge nobody authorised.
+  // code check it does not name is a merge nobody authorized.
   const short = GOOD_POLICY.replace(`- \`ci_green\` refuses on its own.\n`, "");
   const refused = await loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, short)));
   assert.ok("error" in refused);
@@ -1952,7 +1952,7 @@ test("Dustin's approval still merges a PR in a paused namespace, and one that ch
   });
 });
 
-// A pull request labelled visual waits for Dustin's look (src/visual-pr.ts,
+// A pull request labeled visual waits for Dustin's look (src/visual-pr.ts,
 // job_0368576da167): held as class approve with what he needs to look at, judged even when
 // its body names no job, and merged by his approval on green CI.
 

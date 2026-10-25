@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sha256Hex } from "../src/auth.ts";
+
 import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { ACCESS_SYNC_PERMISSION, handleAccessSync, parseSyncBody, runSync, type PinnedGroup } from "../src/access-sync.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The Access sync (src/access-sync.ts): an app's members list made its pinned Access
 // group, with Capsid's token only. What matters is what it refuses to write: a group whose

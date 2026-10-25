@@ -132,7 +132,7 @@ test("capsid_run_ci refuses more than 10 workflow inputs at the schema", async (
 });
 
 // The history bound and the live-row snapshot are proven against real SQLite in
-// test-integration/live-snapshot.test.ts, because the node fake neither honours
+// test-integration/live-snapshot.test.ts, because the node fake neither honors
 // LIMIT nor evaluates INSERT ... SELECT. The elicited delete's body guard is driven
 // with a racing writer in test/write-invariants.test.ts.
 

@@ -189,7 +189,7 @@ block and complete act only on a job this caller holds, except as stated above.`
         if (args.action === "list") {
           // The read action needs the read grant. The registrar names no grant for
           // an "action" tool, so it is checked here, and a read the caller may not
-          // make is refused for its own reason rather than by a neighbouring check.
+          // make is refused for its own reason rather than by a neighboring check.
           const listRefusal = ctx.scope({ tool: JOBS_TOOL, action: "list", grant: "read", namespace: args.namespace });
           if (listRefusal) return fail(listRefusal);
           // The stale view (src/stale-jobs.ts). Its own view of the queue, so it does not

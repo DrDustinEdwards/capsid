@@ -9,8 +9,8 @@
 import type { Env } from "./env";
 import type { Agent } from "./agents";
 import { postJob } from "./jobs";
-import { bytesToHex } from "./encoding";
 import { noFlags } from "./agents-schema";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 const DOCS = "https://platform.claude.com/docs/en";
 const OVERVIEW = `${DOCS}/about-claude/models/overview.md`;
@@ -34,10 +34,6 @@ export function discoverModels(overview: string): string[] {
   const ids = new Set<string>();
   for (const m of overview.matchAll(MODEL_ID)) ids.add(m[0]);
   return [...new Set([...ids].map((id) => id.replace(/^claude-/, "").replace(DATED_SUFFIX, "")))].sort();
-}
-
-export async function sha256Hex(text: string): Promise<string> {
-  return bytesToHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
 }
 
 export interface Schedule {

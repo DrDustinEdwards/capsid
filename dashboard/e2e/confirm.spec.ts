@@ -96,7 +96,7 @@ test("a preview with no answer ends in a message, not a dialog stuck busy", asyn
 
 test.describe("on a phone", () => {
   // A mobile browser widens its layout viewport to fit a page that overflows, and a
-  // centred dialog then sits off the visible screen. Measured before the fix: at 390 px
+  // centered dialog then sits off the visible screen. Measured before the fix: at 390 px
   // the document was 1189 px wide (the tab bar), and tapping Preview hit the dialog
   // element instead of the button.
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

@@ -1,7 +1,9 @@
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { hmacHex } from "./auth";
-import { b64urlEncode, b64urlDecode } from "./encoding";
 import type { Env } from "./env";
+import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+
+const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // The namespace delete's confirmation token (src/namespace-delete.ts previews and
 // performs the delete).
@@ -12,7 +14,6 @@ import type { Env } from "./env";
 const TOKEN_CONTEXT = "capsid-namespace-delete:v1";
 
 const TOKEN_SHAPE = /^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/;
-
 
 export interface DeleteClaims {
   v: 1;
@@ -44,7 +45,7 @@ async function tokenKey(env: Pick<Env, "COOKIE_ENCRYPTION_KEY">): Promise<string
 }
 
 export async function signDeleteToken(env: Pick<Env, "COOKIE_ENCRYPTION_KEY">, claims: DeleteClaims): Promise<string> {
-  const payload = b64urlEncode(canonicalClaims(claims));
+  const payload = base64url(canonicalClaims(claims));
   return `${payload}.${await hmacHex(await tokenKey(env), payload)}`;
 }
 
@@ -66,7 +67,7 @@ export async function verifyDeleteToken(
   }
   let claims: DeleteClaims;
   try {
-    claims = JSON.parse(b64urlDecode(payload)) as DeleteClaims;
+    claims = JSON.parse(decodeBase64url(payload)) as DeleteClaims;
   } catch (err) {
     // Signed by this Worker and unreadable: a defect, said so.
     return { ok: false, refusal: `the confirmation token verifies but does not parse (${err instanceof Error ? err.message : String(err)}): preview again.` };

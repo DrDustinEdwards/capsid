@@ -1,6 +1,6 @@
 // VISUAL PULL REQUESTS (job_0368576da167; Dustin, 2026-10-14: "i still want to see them
 // first, but you need to notify and then provide a way for me to see them. that will be
-// true for all sites/repos."). A pull request labelled `visual` waits for Dustin's yes on
+// true for all sites/repos."). A pull request labeled `visual` waits for Dustin's yes on
 // every roster repo. The auto-merge tick holds it for him (src/auto-merge-tick.ts), reads
 // what he needs to look at from the pull request itself, and the phone alert
 // (src/push.ts), the inbox (src/inbox.ts) and the Portal's Pull requests page carry it.

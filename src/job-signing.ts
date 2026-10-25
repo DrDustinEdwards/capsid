@@ -19,7 +19,7 @@ export type JobTextKind = "resume-note" | "summary";
 export type SignatureCheck =
   // The signature matches the text and the job.
   | "verified"
-  // Written before signing existed, or by a writer that does not sign: shown, labelled.
+  // Written before signing existed, or by a writer that does not sign: shown, labeled.
   | "legacy-unsigned"
   // A signature is present and does not match: the text or the signature was changed.
   | "mismatch"

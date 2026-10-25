@@ -252,8 +252,8 @@ export interface FakeD1Rows {
   versions: VersionRow[];
   namespaces: Array<{ namespace: string; repos?: string }>;
   links: Array<Record<string, unknown>>;
-  // The replay cache (migrations/0004). Row-backed so the PRIMARY KEY behaviour is
-  // modelled: a second claim of the same (scope, jti) returns no row.
+  // The replay cache (migrations/0004). Row-backed so the PRIMARY KEY behavior is
+  // modeled: a second claim of the same (scope, jti) returns no row.
   improve_jti: Array<Record<string, unknown>>;
   audit_log: Array<{ id?: number; namespace: string; path: string; actor: string | null }>;
   agents: Array<Record<string, unknown>>;
@@ -730,7 +730,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     if (/FROM documents_fts/i.test(flat)) {
       if (opts.ftsHit === false) return [];
       // One hit by default. ftsRows asks for more so the search tool's page bound
-      // can be driven; the LIMIT is honoured from its bound param.
+      // can be driven; the LIMIT is honored from its bound param.
       const wanted = opts.ftsRows ?? 1;
       const limit = /LIMIT \?\d+/.test(flat) && typeof params[params.length - 1] === "number"
         ? (params[params.length - 1] as number)
@@ -740,7 +740,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       }));
     }
     // The portfolio documents (src/portfolio-docs.ts): exact paths from one JSON array
-    // and GLOB patterns from another, both json_each subqueries, so modelled by name.
+    // and GLOB patterns from another, both json_each subqueries, so modeled by name.
     if (/FROM json_each\(\?3\) AS g WHERE documents\.path GLOB g\.value/i.test(flat)) {
       const [ns, exactJson, globsJson] = params as [string, string, string];
       const exact = JSON.parse(exactJson) as string[];
@@ -751,7 +751,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         .map((r) => project(flat, r as unknown as Record<string, unknown>));
     }
     // Multi-row document selects: list, find, the resource listing and gather's two
-    // section queries. The LIMIT is honoured from its bound param, so a handler that
+    // section queries. The LIMIT is honored from its bound param, so a handler that
     // stops asking the database for a bounded page fails here instead of being rescued
     // by the fake returning everything.
     if (/FROM documents/i.test(flat) && /ORDER BY/i.test(flat) && !/SELECT updated_at/i.test(flat)) {
@@ -819,7 +819,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       else if (/ORDER BY updated_at/i.test(flat)) out.sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at)));
       else out.sort((a, b) => a.namespace.localeCompare(b.namespace) || a.path.localeCompare(b.path));
       if (/ORDER BY \w+ DESC/i.test(flat)) out.reverse();
-      // Some queries bind their LIMIT and some write it inline; honour both, or a
+      // Some queries bind their LIMIT and some write it inline; honor both, or a
       // literal one is silently ignored and the fake over-answers.
       const literalLimit = flat.match(/LIMIT (\d+)/i);
       return out.slice(0, literalLimit ? Number(literalLimit[1]) : limit).map((r) => project(flat, r as unknown as Record<string, unknown>));

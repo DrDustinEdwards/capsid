@@ -117,7 +117,7 @@ test("DERIVED: every verdict maps to an outcome, so none of them falls through",
 
 // the pull request a job finished with
 
-test("a pull request URL is recognised, with its owner, repo and number", () => {
+test("a pull request URL is recognized, with its owner, repo and number", () => {
   assert.deepEqual(parsePrUrl("https://github.com/DrDustinEdwards/capsid-mcp/pull/27"), {
     owner: "DrDustinEdwards",
     repo: "capsid-mcp",

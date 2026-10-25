@@ -243,7 +243,7 @@ test("claim and verified side by side: a driver's count GitHub contradicts is a 
   const rows = byName(evaluationRows(claim, facts({ merged: { [PR]: true }, commits: 3, files_changed: 1, ci_green: 1 }), ctx));
   assert.deepEqual([rows.commits.claimed, rows.commits.verified, rows.commits.agreement], ["2", "3", "disagree"]);
   assert.equal(rows.commits.score_value, 3);
-  assert.equal(rows.commits.score_label, "fail", "a count GitHub contradicts is never labelled pass");
+  assert.equal(rows.commits.score_label, "fail", "a count GitHub contradicts is never labeled pass");
   assert.equal(rows.files_changed.score_label, "pass", "a count GitHub agrees with passes");
   assert.deepEqual([rows.files_changed.claimed, rows.files_changed.verified, rows.files_changed.agreement], ["1", "1", "agree"]);
   assert.deepEqual([rows.pr_merged.claimed, rows.pr_merged.verified, rows.pr_merged.agreement, rows.pr_merged.score_label], ["1", "1", "agree", "pass"]);

@@ -12,7 +12,7 @@ export interface RateLimitPolicy {
   perDay: number;
   label: string;
   // What an unreadable counter means, decided per endpoint. Allowing on every KV
-  // failure gives one answer to two different questions, so the judgement is stated
+  // failure gives one answer to two different questions, so the judgment is stated
   // on the policy, next to the endpoint it is about, not in the limiter.
   onUnavailable: "allow" | "refuse";
 }

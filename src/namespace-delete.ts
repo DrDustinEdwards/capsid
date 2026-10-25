@@ -1,4 +1,4 @@
-import { sha256Hex } from "./auth";
+
 import type { Env } from "./env";
 import { onRoster } from "./roster";
 import { POLICY_PREFIX } from "./signed-docs";
@@ -7,6 +7,7 @@ import { D1_BATCH_STATEMENTS } from "./limits";
 import { isMissingRowAbort } from "./store-guards";
 import { pathMutation } from "./tools/docs";
 import { signDeleteToken, type Verified, verifyDeleteToken } from "./namespace-delete-token";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and
 // delete_perform): the plan, the refusals, the signed confirmation and the one batch.

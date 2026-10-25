@@ -106,7 +106,7 @@ function github(comments: Record<string, string[]>): string[] {
       return json(bodies.map((body, i) => ({ id: COMMENT_IDS[i], user: { login: "reviewer" }, body, created_at: `2026-09-12T1${i}:00:00Z` })));
     }
     if (/\/pulls\/\d+$/.test(new URL(url).pathname)) return json({ head: { sha: HEAD_SHA } });
-    return new Response("not modelled", { status: 404 });
+    return new Response("not modeled", { status: 404 });
   });
   return asked;
 }

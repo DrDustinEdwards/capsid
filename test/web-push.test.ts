@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { b64url, encryptPayload, fromB64url, readVapidKey, sendPush, subscriptionProblem, vapidJwt } from "../src/web-push.ts";
+import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+import { encryptPayload, readVapidKey, sendPush, subscriptionProblem, vapidJwt } from "../src/web-push.ts";
 
 // Web Push from the Worker (docs/design/design-merge-pipeline.md section 5, PR 7). The
 // encryption is checked against RFC 8291's worked example (Appendix A) byte for byte, and
@@ -19,8 +20,8 @@ const BODY =
   "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN";
 
 function jwkOf(d: string, publicKey: string): JsonWebKey {
-  const p = fromB64url(publicKey);
-  return { kty: "EC", crv: "P-256", d, x: b64url(p.slice(1, 33)), y: b64url(p.slice(33, 65)) };
+  const p = fromBase64url(publicKey);
+  return { kty: "EC", crv: "P-256", d, x: base64url(p.slice(1, 33)), y: base64url(p.slice(33, 65)) };
 }
 
 const ENDPOINT = "https://fcm.googleapis.com/fcm/send/abc123";
@@ -54,14 +55,14 @@ async function decrypt(body: Uint8Array, uaJwk: JsonWebKey, uaPublic: Uint8Array
 }
 
 test("the body matches RFC 8291's worked example byte for byte", async () => {
-  const body = await encryptPayload(SUB, new TextEncoder().encode(PLAINTEXT), { privateJwk: jwkOf(AS_PRIVATE, AS_PUBLIC), salt: fromB64url(SALT) });
-  assert.equal(b64url(body), BODY);
+  const body = await encryptPayload(SUB, new TextEncoder().encode(PLAINTEXT), { privateJwk: jwkOf(AS_PRIVATE, AS_PUBLIC), salt: fromBase64url(SALT) });
+  assert.equal(base64url(body), BODY);
 });
 
 test("a fresh key and salt decrypt to the payload on the receiving side", async () => {
   const body = await encryptPayload(SUB, new TextEncoder().encode('{"kind":"rollback"}'));
-  assert.notEqual(b64url(body.slice(0, 16)), SALT, "the salt is fresh");
-  const text = await decrypt(body, jwkOf(UA_PRIVATE, UA_PUBLIC), fromB64url(UA_PUBLIC), fromB64url(AUTH));
+  assert.notEqual(base64url(body.slice(0, 16)), SALT, "the salt is fresh");
+  const text = await decrypt(body, jwkOf(UA_PRIVATE, UA_PUBLIC), fromBase64url(UA_PUBLIC), fromBase64url(AUTH));
   assert.equal(text, '{"kind":"rollback"}');
 });
 
@@ -84,10 +85,10 @@ test("the VAPID JWT verifies with the public key and names the push service's or
   const now = new Date("2026-10-11T12:00:00Z");
   const jwt = await vapidJwt(key, "https://fcm.googleapis.com", "mailto:admin@example.com", now);
   const [h, c, s] = jwt.split(".");
-  const pub = await crypto.subtle.importKey("raw", fromB64url(AS_PUBLIC), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
-  const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pub, fromB64url(s!), new TextEncoder().encode(`${h}.${c}`));
+  const pub = await crypto.subtle.importKey("raw", fromBase64url(AS_PUBLIC), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+  const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pub, fromBase64url(s!), new TextEncoder().encode(`${h}.${c}`));
   assert.ok(ok, "the signature verifies");
-  const claims = JSON.parse(new TextDecoder().decode(fromB64url(c!)));
+  const claims = JSON.parse(new TextDecoder().decode(fromBase64url(c!)));
   assert.equal(claims.aud, "https://fcm.googleapis.com");
   assert.equal(claims.sub, "mailto:admin@example.com");
   assert.equal(claims.exp, Math.floor(now.getTime() / 1000) + 12 * 3600);
@@ -118,7 +119,7 @@ test("sendPush posts the encrypted body with the VAPID header, and a 410 says th
   assert.equal(seen[0]!.url, ENDPOINT);
   assert.equal(headers["Content-Encoding"], "aes128gcm");
   assert.match(headers.Authorization!, new RegExp(`^vapid t=[^,]+, k=${AS_PUBLIC}$`));
-  const text = await decrypt(seen[0]!.init.body as Uint8Array, jwkOf(UA_PRIVATE, UA_PUBLIC), fromB64url(UA_PUBLIC), fromB64url(AUTH));
+  const text = await decrypt(seen[0]!.init.body as Uint8Array, jwkOf(UA_PRIVATE, UA_PUBLIC), fromBase64url(UA_PUBLIC), fromBase64url(AUTH));
   assert.deepEqual(JSON.parse(text), { kind: "rollback" });
   assert.deepEqual(await sendPush(key, "mailto:a@example.com", SUB, {}, new Date(), answer(410)), { status: 410, gone: true });
   assert.deepEqual(await sendPush(key, "mailto:a@example.com", SUB, {}, new Date(), answer(404)), { status: 404, gone: true });

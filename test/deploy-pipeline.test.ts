@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 // Deploy pipeline wiring that no node test can execute (a workflow, docs, and the
 // cron entry point, which pulls cloudflare:workers), asserted as text so an edit that
-// drops one goes red. The behavioural pieces are in health.test.ts and backup.test.ts.
+// drops one goes red. The behavioral pieces are in health.test.ts and backup.test.ts.
 
 const ROOT = join(import.meta.dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");

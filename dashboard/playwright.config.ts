@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 // The app's browser tests: the production build (dashboard/dist) under `vite preview`,
 // with the dev mock answering the API and the Worker's page CSP on every response
 // (dev/mock-api.ts). Build first: `npm run build`, then `npm run e2e`. The Worker's own
-// behaviour behind these routes is tested in workerd (test-integration/).
+// behavior behind these routes is tested in workerd (test-integration/).
 const PORT = 4174;
 
 export default defineConfig({

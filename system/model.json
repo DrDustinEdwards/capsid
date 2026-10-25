@@ -1021,7 +1021,7 @@
       "name": "MoneyWriter",
       "kind": "database",
       "technology": "Durable Object",
-      "description": "Serialises every write that moves money."
+      "description": "Serializes every write that moves money."
     },
     {
       "id": "foxhound-cron-lock",

@@ -166,7 +166,7 @@ export interface PortalActivityRow {
   detail: AuditDetail;
 }
 
-// One field of an audit row's params, labelled in plain English.
+// One field of an audit row's params, labeled in plain English.
 export interface AuditField {
   name: string;
   value: string;

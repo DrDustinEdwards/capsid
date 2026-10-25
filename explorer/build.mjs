@@ -19,6 +19,7 @@ import { parseArgs } from "node:util";
 import { llmsDocument } from "@drdustinedwards/site-helpers/llms";
 import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
+import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { stylesheet } from "enarratio";
 import { capsomerTheme } from "capsomer/enarratio-theme";
 
@@ -27,7 +28,10 @@ import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
 import { headersFile } from "./src/security-headers.mjs";
 import { codeBySystem, escapePath } from "./src/code.mjs";
-import { CIRCLES_URL, ORIGIN, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
+import { CIRCLES_URL, INDEXNOW_KEY, ORIGIN, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
+
+/** When security.txt lapses (RFC 9116 asks for under a year); renew it before then. */
+const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 import { servedTools } from "./src/surface.mjs";
 
 const here = import.meta.dirname;
@@ -216,6 +220,10 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   writeFileSync(join(out, "robots.txt"), robotsDocument({ origin: ORIGIN, notes: [`AI usage policy: ${ORIGIN}/ai.txt`, `LLM guide: ${ORIGIN}/llms.txt`] }));
   writeFileSync(join(out, "ai.txt"), aiTxt({ origin: ORIGIN, name: "Capsid", contact: "contact@dustinedwards.info" }));
   writeFileSync(join(out, "llms.txt"), llmsTxt(model.systems.length, tools.length));
+  // The family's security contact (RFC 9116) and the IndexNow key file the deploy pings with.
+  mkdirSync(join(out, ".well-known"), { recursive: true });
+  writeFileSync(join(out, ".well-known", "security.txt"), securityTxt({ origin: ORIGIN, contact: "security@dustinedwards.info", expires: SECURITY_TXT_EXPIRES }));
+  writeFileSync(join(out, `${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the
   // explorer's own files changed. Written last, so the hash cannot cover itself.

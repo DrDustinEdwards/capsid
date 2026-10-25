@@ -1,7 +1,7 @@
 // The numbers page: every public number Capsid computes (docs/public-data.md), each as a sentence,
 // a picture and the table behind it, with the weekly trends where the document carries them.
 // Enarratio draws the charts on the server; its enhance step (src/explorer.js) adds tooltips and
-// keyboard reading. No chart takes a colour of its own, which would need a style attribute the
+// keyboard reading. No chart takes a color of its own, which would need a style attribute the
 // policy refuses. Pure.
 import { progressRing } from "enarratio";
 import { areaChart, barChart, lineChart } from "enarratio/lite";

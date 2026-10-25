@@ -1,9 +1,11 @@
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { hmacHex } from "./auth";
 import { isPortalAction, UNKNOWN_ACTION } from "./controls-base";
-import { b64urlEncode, b64urlDecode } from "./encoding";
 import type { Env } from "./env";
 import type { PortalAction } from "./ops-types/portal";
+import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+
+const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // The confirmation token: base64url of the canonical claims, a dot, and the hex
 // HMAC-SHA256 of that base64url text under the derived key.
@@ -39,7 +41,7 @@ async function confirmKey(env: Env): Promise<string> {
 }
 
 export async function signConfirm(env: Env, claims: ConfirmClaims): Promise<string> {
-  const payload = b64urlEncode(canonical(claims));
+  const payload = base64url(canonical(claims));
   return `${payload}.${await hmacHex(await confirmKey(env), payload)}`;
 }
 
@@ -54,7 +56,7 @@ export async function verifyConfirm(env: Env, token: string, email: string, now:
   }
   let claims: ConfirmClaims;
   try {
-    claims = JSON.parse(b64urlDecode(payload)) as ConfirmClaims;
+    claims = JSON.parse(decodeBase64url(payload)) as ConfirmClaims;
   } catch (err) {
     // Signed by this Worker and unreadable: a defect, said so.
     return { ok: false, status: 403, refusal: `the confirmation token verifies but does not parse (${err instanceof Error ? err.message : String(err)}): preview again.` };

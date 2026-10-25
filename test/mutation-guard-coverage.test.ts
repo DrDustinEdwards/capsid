@@ -111,7 +111,7 @@ test("PLANT: with the opt-in and without can_touch_protected, every tool that ta
   for (const [op, plant] of Object.entries(PLANTS).filter(([op]) => op !== "lint")) {
     const { tool, args } = servedCall(op, { ...plant, allow_improve_paths: true });
     const { result, recorded } = await callAs(driver([]), tool, args);
-    assert.equal(result.isError, true, `${tool} honoured the opt-in without the flag`);
+    assert.equal(result.isError, true, `${tool} honored the opt-in without the flag`);
     assert.match(result.content[0].text, /needs the can_touch_protected flag/, `${tool}: ${result.content[0].text}`);
     assert.deepEqual(recorded, [], `${tool} committed statements after refusing`);
   }

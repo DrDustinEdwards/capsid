@@ -105,7 +105,7 @@ test("provenance costs ONE audit_log query however many documents the brief carr
   assert.equal(auditReads(reads), 1, `brief issued ${auditReads(reads)} audit_log queries`);
   assert.ok(reads.length <= 8, `brief issued ${reads.length} queries, more than 2 documents, the portfolio list, 4 section reads and 1 provenance`);
   // And the answer is still right per document: the newest actor wins, and a
-  // document with no audit row reads null rather than borrowing a neighbour's.
+  // document with no audit row reads null rather than borrowing a neighbor's.
   assert.equal(out.core.last_actor, "agent:capsid-driver");
   assert.equal(out.conventions.last_actor, null);
   const byPath = new Map(out.open_tasks.map((t: { path: string; last_actor: string | null }) => [t.path, t.last_actor]));

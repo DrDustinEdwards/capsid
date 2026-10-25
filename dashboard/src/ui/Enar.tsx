@@ -8,7 +8,7 @@ import { useWidth } from "./useWidth";
 // with role="img", its own text alternative and a <title> per mark, built with its
 // escapeHtml from the values passed in, and no inline style or script, so it passes the
 // page's CSP. The companion table states the same numbers as text (conventions 7.6).
-// Colours come from the --enarratio-* variables styles.css maps to the Portal's tokens.
+// Colors come from the --enarratio-* variables styles.css maps to the Portal's tokens.
 
 // draw runs here, not in the caller: Enarratio refuses input it cannot draw honestly (no
 // value at all, say) by throwing, and one chart's refusal must not take the page down.

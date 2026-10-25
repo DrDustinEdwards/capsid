@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sha256Hex } from "../src/auth.ts";
+
 import { completeAccessLogin, startAccessLogin, type LoginFlow } from "../src/access-login.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The state cookie that binds a sign-in to the browser that started it
 // (src/access-login.ts). The round trip through Access is test-integration/oauth-round-trip.test.ts.
@@ -16,7 +17,7 @@ function env() {
     kv,
     env: fakeEnv({
       OAUTH_KV: kv.kv,
-      ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.example.com",
+      ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
       ACCESS_SAAS_CLIENT_ID: "sample-client",
       ACCESS_SAAS_CLIENT_SECRET: "sample-secret",
     }),

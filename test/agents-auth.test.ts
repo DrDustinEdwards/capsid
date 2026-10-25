@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sha256Hex } from "../src/auth.ts";
+
 import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, legacyAgent, resolveAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // A bearer resolves to a caller, not to a tier, so the audit log can say whose
 // credential did a write. Two properties hold:

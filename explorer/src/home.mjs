@@ -29,7 +29,7 @@ const siteData = (AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: 
   }),
 ]);
 
-/** The week each bar of a weekly series ends on, labelled as the numbers page does. @param {any} stats */
+/** The week each bar of a weekly series ends on, labeled as the numbers page does. @param {any} stats */
 export function weekLabels(stats) {
   const end = new Date(Date.parse(`${stats.as_of}T00:00:00Z`) - 86_400_000);
   return stats.jobs.completed_by_week.map((/** @type {number} */ _c, /** @type {number} */ i, /** @type {number[]} */ all) =>
