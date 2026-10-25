@@ -6,8 +6,27 @@
 // Every number is from the public numbers or the model; every sentence that states a fact about
 // how Capsid works is the model's own flow text.
 
-import { escapeHtml, flowStage, flowsOf, layout, manualHead, minutes, percent, reading, sectionAt, stepPath, stepWords, systemPath } from "./pages.mjs";
+import { graph, thing, website } from "@drdustinedwards/site-helpers/schema";
+
+import { ORIGIN, SITE, escapeHtml, flowStage, flowsOf, layout, manualHead, minutes, percent, reading, sectionAt, stepPath, stepWords, systemPath } from "./pages.mjs";
 import { toolPath } from "./tools.mjs";
+
+const DESCRIPTION = "Capsid is an MCP server on one Cloudflare Worker: a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub.";
+/** The front page's JSON-LD: this site, and the code it is about. A function, because pages.mjs imports this module. */
+const siteData = (AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: "Dustin Edwards", url: SITE }) => graph([
+  website({ origin: ORIGIN, name: "Capsid", description: DESCRIPTION, searchUrl: `${ORIGIN}/search/?q={search_term_string}`, publisher: AUTHOR }),
+  thing("SoftwareSourceCode", {
+    "@id": `${ORIGIN}/#code`,
+    name: "Capsid",
+    description: DESCRIPTION,
+    url: ORIGIN,
+    codeRepository: "https://github.com/DrDustinEdwards/capsid",
+    license: "https://opensource.org/licenses/MIT",
+    programmingLanguage: "TypeScript",
+    runtimePlatform: "Cloudflare Workers",
+    author: AUTHOR,
+  }),
+]);
 
 /** The week each bar of a weekly series ends on, labelled as the numbers page does. @param {any} stats */
 export function weekLabels(stats) {
@@ -176,10 +195,11 @@ export function homePage(model, stats, tools, codeIndex) {
   const body = [board(tools), tour(model, stats), record(stats), holds(model, stats, tools, codeIndex)].join("\n");
   return layout({
     title: "Capsid: one panel for every AI agent",
-    description: "Capsid is an MCP server on one Cloudflare Worker: a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub.",
+    description: DESCRIPTION,
     path: "/",
     body,
     asOf: stats.as_of,
     wide: true,
+    data: [siteData()],
   });
 }
