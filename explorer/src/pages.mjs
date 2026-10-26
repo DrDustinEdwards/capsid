@@ -195,11 +195,11 @@ export function numbered(body, path) {
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
 function footer(asOf) {
   return `<footer class="foot">
-<div class="foot-plate wrap" aria-hidden="true"><p class="foot-logo">Capsid</p><p class="foot-lockup">MCP server and control plane<br><b>capsid.dustinedwards.info</b></p></div>
+<div class="foot-plate wrap" aria-hidden="true"><p class="foot-logo">Capsid</p><p class="foot-lockup">Shared memory and checks for AI coding agents<br><b>capsid.dustinedwards.info</b></p></div>
 <div class="foot-in wrap">
 <div class="foot-about"><p>Capsid is an open-source MCP server for AI coding agents, under the MIT license. This site runs on one live Capsid server and rebuilds every day from its public data.</p><p class="foot-small">Data as of ${escapeHtml(asOf)}, counted in whole days to midnight UTC. Private systems appear in full but without a link to their code.</p></div>
 <nav class="foot-nav" aria-label="Every section"><ul>${SECTIONS.map(({ href, label, no }) => `<li><a href="${href}"><span class="foot-no" aria-hidden="true">${no}.0</span>${label}</a></li>`).join("")}</ul></nav>
-<ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
+<ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Install it</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
 </div></footer>`;
 }
 

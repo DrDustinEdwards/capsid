@@ -144,6 +144,9 @@ function flowPage(map, root, host) {
       document.querySelector(`[data-swap="${fresh.dataset.swap}"]`)?.replaceWith(document.adoptNode(fresh));
     }
     document.title = doc.title;
+    // The trail names the step too, so it moves with it.
+    const crumbs = doc.querySelector(".crumbs");
+    if (crumbs) document.querySelector(".crumbs")?.replaceWith(document.adoptNode(crumbs));
     host.dataset.step = String(n);
     if (push && !play.playing?.()) history.pushState({ step: n }, "", url);
     else history.replaceState({ step: n }, "", url);

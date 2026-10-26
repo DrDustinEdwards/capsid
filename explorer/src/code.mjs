@@ -14,12 +14,14 @@ const MAX_DRAWN = 40;
 
 /** @param {string} id */
 export const codePath = (id) => `/s/${id}/code/`;
-// Each segment escaped as the static assets server writes it (blog.$slug[.md].ts is
-// blog.%24slug%5B.md%5D.ts; it redirects any other spelling). build.mjs writes the page
-// under the decoded path, and the server decodes the request to match it.
+/** A repo path as GitHub's URLs take it, each segment escaped. */
 export const escapePath = (/** @type {string} */ path) => path.split("/").map(encodeURIComponent).join("/");
+// A page's own address keeps to letters, digits, dots, dashes and underscores, anything else an
+// underscore (blog.$slug[.md].ts is blog._slug_.md_.ts): the assets server and Cloudflare's
+// cache spelled $ and brackets differently, and Chrome looped on the redirect between them.
+const pageSegment = (/** @type {string} */ s) => s.replace(/[^A-Za-z0-9._-]/g, "_");
 /** A module's page, its repo path under the system's code page. @param {string} id @param {string} path */
-export const modulePath = (id, path) => `/s/${id}/code/${escapePath(path)}/`;
+export const modulePath = (id, path) => `/s/${id}/code/${path.split("/").map(pageSegment).join("/")}/`;
 
 // Section 5: CRAP up to 5 ok, 5 to 30 watch, over 30 critical (crap4j's threshold); mutation
 // 80% and up ok, 60 to 80 watch, under 60 critical.
@@ -258,7 +260,14 @@ export function codePages(model, bySystem, sourceOf, asOf) {
   for (const [id, maps] of bySystem) {
     const s = model.systems.find((/** @type {any} */ x) => x.id === id);
     pages.push([codePath(id), codePage(s, maps, asOf)]);
-    for (const map of maps) for (const m of map.modules) pages.push([modulePath(id, m.path), modulePage(s, map, m, sourceOf(map.repo, m.path), asOf)]);
+    const seen = new Map();
+    for (const map of maps)
+      for (const m of map.modules) {
+        const at = modulePath(id, m.path);
+        if (seen.has(at)) throw new Error(`${m.path} and ${seen.get(at)} would share the page ${at}`);
+        seen.set(at, m.path);
+        pages.push([at, modulePage(s, map, m, sourceOf(map.repo, m.path), asOf)]);
+      }
   }
   return pages;
 }

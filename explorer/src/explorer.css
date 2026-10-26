@@ -105,10 +105,13 @@ body {
 
 /* One column for every page but the front, whose sections set their own width. */
 /* The title block closes every page, so the footer follows it at the section gap's foot. */
+/* A long name in running text (a file path, an argument) breaks rather than pushing a phone's
+   page sideways; tables keep their columns, since break-word leaves their widths alone. */
 main {
   max-width: var(--page);
   margin-inline: auto;
   padding: 0 var(--gutter) var(--space-8);
+  overflow-wrap: break-word;
 }
 main.wide {
   max-width: none;
@@ -141,6 +144,13 @@ h2 {
   margin-block: var(--space-8) var(--space-3);
   font: 650 clamp(1.75rem, 3vw, 2.75rem) / 1 var(--face);
   letter-spacing: -0.03em;
+}
+/* The plain map's group names are labels, as Capsomer sets them; the page's h2 above outranked
+   them and the long ones ran into the next column. */
+.cap-system-map-group-name {
+  margin: 0 0 var(--space-3);
+  font: 600 var(--fs-label) var(--ui);
+  letter-spacing: 0.08em;
 }
 h3 {
   font-size: 1.1875rem;
@@ -2074,9 +2084,14 @@ main .cap-pill {
 .flow-nav a[rel="next"] {
   box-shadow: inset 0 6px 0 var(--lamp);
 }
+.pager a {
+  max-width: 100%;
+}
 .pager a code {
+  min-width: 0;
   background: none;
   color: inherit;
+  overflow-wrap: anywhere;
 }
 
 /* The letterhead: the name as the logotype, the address beside it in Regular and Medium. The

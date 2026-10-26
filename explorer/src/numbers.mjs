@@ -86,7 +86,7 @@ export function numbersHtml(stats) {
         })
       : "";
   const rings = [];
-  if (v.agreement_rate_90d !== null) rings.push(ring("agreement", "Claims matching", v.agreement_rate_90d, `In the last 90 days, ${percent(v.agreement_rate_90d)} of ${v.evaluations_90d} checked claims matched what GitHub shows.`));
+  if (v.agreement_rate_90d !== null) rings.push(ring("agreement", "Claims matching", v.agreement_rate_90d, `In the last 90 days, ${percent(v.agreement_rate_90d)} of ${v.evaluations_90d.toLocaleString("en-US")} checked claims matched what GitHub shows.`));
   if (v.pr_merge_rate_90d !== null) rings.push(ring("merged", "Pull requests merged", v.pr_merge_rate_90d, `GitHub shows that ${percent(v.pr_merge_rate_90d)} of the pull requests agents opened were merged.`));
   if (v.ci_green_rate_90d !== null) rings.push(ring("green", "CI passing", v.ci_green_rate_90d, `${percent(v.ci_green_rate_90d)} of the jobs whose CI the Worker checked had passing CI on their latest commit.`));
   const gateRings = [];
