@@ -70,8 +70,12 @@ function sectionOf(path) {
   return NAV.find(([href]) => href !== "/" && path.startsWith(href))?.[0] ?? "";
 }
 
-/** The card every page shares (src/og-card.png, the front page's opening). */
-export const CARD = { url: "/assets/og-card.png", width: 1200, height: 630, alt: "Capsid: one panel for every AI agent" };
+/**
+ * The card every page shares (src/og-card.png): a travel poster in the manner of JPL's Visions of
+ * the Future (2016), after the 1930s national-park posters, flat layered shapes in the family's
+ * teal under an amber sun. Drawn by og-card.mjs.
+ */
+export const CARD = { url: "/assets/og-card.png", width: 1200, height: 630, alt: "A travel poster: Visit Capsid. AI agents say it's done. Capsid checks." };
 
 /**
  * The page around a body: one stylesheet set, the theme script and one module script, no inline
@@ -197,6 +201,7 @@ export function numbered(body, path) {
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
 function footer(asOf) {
   return `<footer class="foot">
+<div class="livery" aria-hidden="true"></div>
 <div class="foot-plate wrap" aria-hidden="true"><p class="foot-logo">Capsid</p><p class="foot-lockup">Shared memory and checks for AI coding agents<br><b>capsid.dustinedwards.info</b></p></div>
 <div class="foot-in wrap">
 <div class="foot-about"><p>Capsid is an open-source MCP server for AI coding agents, under the MIT license. This site runs on one live Capsid server and rebuilds every day from its public data.</p><p class="foot-small">Data as of ${escapeHtml(asOf)}, counted in whole days to midnight UTC. Private systems appear in full but without a link to their code.</p></div>
@@ -206,14 +211,41 @@ function footer(asOf) {
 }
 
 /**
- * A page's heading block: the trail to it, its title and its lead sentence.
+ * A page's heading block: the trail to it, its title and its lead sentence. The trail is a
+ * direction strip, as the manual's signs point the way (6.2), and the block is drawn on its
+ * layout grid, the columns and baseline the manual prints in fine red lines (5.1).
  * @param {Array<[string, string]>} trail earlier pages as [href, name] @param {string} here @param {string} title @param {string} [lead] html
  */
 export function pageHead(trail, here, title, lead) {
   const crumbs = trail.length
-    ? `<nav class="crumbs" aria-label="Breadcrumb">${trail.map(([href, name]) => `<a href="${href}">${escapeHtml(name)}</a> / `).join("")}<span aria-current="page">${escapeHtml(here)}</span></nav>`
+    ? `<nav class="crumbs" aria-label="Breadcrumb">${trail.map(([href, name]) => `<a href="${href}">${escapeHtml(name)}</a><span class="crumb-arrow" aria-hidden="true"></span>`).join("")}<span aria-current="page">${escapeHtml(here)}</span></nav>`
     : "";
-  return `${crumbs}<h1>${title}</h1>${lead ? `<p class="lead">${lead}</p>` : ""}`;
+  return `<div class="page-head">${crumbs}<h1>${title}</h1>${lead ? `<p class="lead">${lead}</p>` : ""}</div>`;
+}
+
+/**
+ * A flow's steps as the blocks painted round a Saturn V, which showed the cameras on the ground
+ * how far it had rolled: one block a step, filled for those done, lit for the one shown.
+ * @param {number} total @param {number} n
+ */
+export const rollBlocks = (total, n) =>
+  `<ol class="roll" aria-hidden="true">${Array.from({ length: total }, (_, i) => `<li data-state="${i + 1 < n ? "done" : i + 1 === n ? "now" : "ahead"}"></li>`).join("")}</ol>`;
+
+/**
+ * A flow's patch, as every Apollo crew wore its mission's: the flow's name round the top, its
+ * number in the section round the foot, and its steps as dots round a disc with their count.
+ * @param {Flow} f @param {string} no the flow's number, as 3.1
+ */
+export function patch(f, no) {
+  const total = f.steps.length;
+  const dots = f.steps
+    .map((_, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / total;
+      return `<circle class="patch-dot" cx="${(70 + 36 * Math.cos(a)).toFixed(2)}" cy="${(70 + 36 * Math.sin(a)).toFixed(2)}" r="3.4"/>`;
+    })
+    .join("");
+  const id = `patch-${escapeHtml(f.id)}`;
+  return `<svg class="patch" viewBox="0 0 140 140" aria-hidden="true" focusable="false"><defs><path id="${id}-top" d="M 22 70 A 48 48 0 0 1 118 70"/><path id="${id}-foot" d="M 27 74 A 43 43 0 0 0 113 74"/></defs><circle class="patch-rim" cx="70" cy="70" r="68"/><circle class="patch-field" cx="70" cy="70" r="61"/><circle class="patch-disc" cx="70" cy="70" r="36"/>${dots}<text class="patch-name" text-anchor="middle"><textPath href="#${id}-top" startOffset="50%">${escapeHtml(f.name.toUpperCase())}</textPath></text><text class="patch-foot" text-anchor="middle"><textPath href="#${id}-foot" startOffset="50%">CAPSID ${no}</textPath></text><text class="patch-count" x="70" y="77" text-anchor="middle">${total}</text><text class="patch-unit" x="70" y="89" text-anchor="middle">STEPS</text></svg>`;
 }
 
 /** The map's data, each system linking to its explorer page: the same as dustinedwards.info's (Capsomer's modelMapData). */
@@ -491,9 +523,9 @@ function flowLinks(model, id) {
 /** What a part is to a step, in words. @param {Step} st @param {Part} p */
 function role(st, p) {
   const end = p.id === st.from.id || p.id === st.to.id;
-  if (end && p.id === st.toward) return "where the step arrives";
-  if (end) return "where the step starts";
-  return "also used in the step";
+  if (end && p.id === st.toward) return "step arrives";
+  if (end) return "step starts";
+  return "also used";
 }
 
 /** The step list, each step a link, the one shown marked. @param {Flow} f @param {number} [current] */
@@ -543,7 +575,8 @@ function mapFlows(model, flows) {
 /** A flow's own page: what it is, the core drawn playing it, and every step. @param {any} model @param {Flow} f @param {string} asOf */
 export function flowPage(model, f, asOf) {
   const stage = flowStage(model, [f], f, "flow-map");
-  const body = `${pageHead([["/", "Overview"], ["/flows/", "Flows"]], f.name, escapeHtml(f.name), escapeHtml(f.description ?? `${f.steps.length} steps.`))}
+  const no = `${sectionAt("/flows/")?.no}.${flowsOf(model).findIndex((x) => x.id === f.id) + 1}`;
+  const body = `<div class="patched">${pageHead([["/", "Overview"], ["/flows/", "Flows"]], f.name, escapeHtml(f.name), escapeHtml(f.description ?? `${f.steps.length} steps.`))}${patch(f, no)}</div>
 ${stage ? `<div class="flow-stage" data-ui>${stage}</div>` : ""}
 <section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${bands(f)}</section>
 <p><a class="cap-btn" data-variant="primary" href="${stepPath(f.id, 1)}">Step through it, one page a step</a></p>`;
@@ -588,10 +621,10 @@ export function flowsIndexPage(model, asOf) {
   const names = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s.name]));
   const body = `${pageHead([["/", "Overview"]], "Flows", "What runs, step by step", `${flows.length} processes Capsid runs, each shown step by step on the parts it uses. Open one to watch it run.`)}
 <ul class="flow-cards">${flows
-    .map((f) => {
+    .map((f, i) => {
       const systems = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.system)))];
       const parts = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.name)))];
-      return `<li class="flow-card"><h2><a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a></h2>
+      return `<li class="flow-card">${patch(f, `${sectionAt("/flows/")?.no}.${i + 1}`)}<h2><a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a></h2>
 <p>${escapeHtml(f.description ?? "")}</p>
 <p class="hint">${f.steps.length} steps over ${parts.length} parts of ${systems.map((x) => escapeHtml(String(names.get(x) ?? x))).join(", ")}.</p>
 ${bands(f, true)}
@@ -605,15 +638,19 @@ ${bands(f, true)}
  * One step's heading, sentence and parts. The shown step is read; every other step is laid in the
  * same grid cell, unseen and out of the accessibility tree, so the section is as tall as the
  * longest step at any width and stepping never moves the drawing below it (design section 6,
- * CLS). The unseen copies carry no id and no link.
- * @param {Step} st @param {number} total @param {Map<string, any>} systems @param {boolean} shown
+ * CLS). The unseen copies carry no id and no link. Each is set as an Apollo cue card: a dark strip
+ * naming the flow and the card, the roll blocks under it, short lines in capitals, and a box to
+ * tick beside each part with a dotted leader to what it is to the step.
+ * @param {Step} st @param {number} total @param {Map<string, any>} systems @param {boolean} shown @param {string} name the flow's
  */
-function stepText(st, total, systems, shown) {
+function stepText(st, total, systems, shown, name) {
   const link = (/** @type {string} */ href, /** @type {string} */ text) => (shown ? `<a href="${href}">${text}</a>` : `<span>${text}</span>`);
   const parts = st.touches
-    .map((p) => `<li${shown ? ` data-part="${escapeHtml(p.id)}"` : ""}>${link(partPath(p), escapeHtml(p.name))}<span class="touch-role">${role(st, p)}, in ${link(systemPath(p.system), escapeHtml(systems.get(p.system)?.name ?? p.system))}</span></li>`)
+    .map((p) => `<li${shown ? ` data-part="${escapeHtml(p.id)}"` : ""}>${link(partPath(p), escapeHtml(p.name))}<span class="touch-role">${role(st, p)}</span><span class="touch-in">in ${link(systemPath(p.system), escapeHtml(systems.get(p.system)?.name ?? p.system))}</span></li>`)
     .join("");
-  return `<div${shown ? "" : ' class="flow-unseen" aria-hidden="true" inert'}>
+  return `<div class="${shown ? "cue" : "cue flow-unseen"}"${shown ? "" : ' aria-hidden="true" inert'}>
+<p class="cue-strip" aria-hidden="true"><span>${escapeHtml(name)}</span><span>Card ${st.n}</span></p>
+${rollBlocks(total, st.n)}
 <h2${shown ? ' id="step-title"' : ""} data-plain>Step ${st.n} of ${total}</h2>
 <p class="step-head">${escapeHtml(stepWords(st).name)}</p>
 <p class="flow-text">${escapeHtml(stepWords(st).text)}</p>
@@ -647,10 +684,10 @@ export function stepPage(model, f, n, asOf) {
   const body = `${pageHead([["/", "Overview"], ["/flows/", "Flows"], [flowPath(f.id), f.name]], `Step ${n}`, escapeHtml(f.name))}
 <div class="step-layout${drawn ? " step-layout-drawn" : ""}">
 <section class="flow-step" data-swap="step" aria-labelledby="step-title">
-<div class="flow-stack">${f.steps.map((x) => stepText(x, total, systems, x.n === n)).join("")}</div>
+<div class="flow-stack">${f.steps.map((x) => stepText(x, total, systems, x.n === n, f.name)).join("")}</div>
 <nav class="flow-nav" aria-label="Steps">${nav}${play}</nav>
 </section>
-${drawn ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id="drawing-title" class="cap-sr-only">The drawing</h2><p class="hint" data-keys hidden>Number keys 1 to ${Math.min(total, 9)} go to that step.</p><div class="map-host flow-map" data-flow="${escapeHtml(f.id)}" data-step="${n}" data-steps="${total}">${map}</div></section>` : ""}
+${drawn ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id="drawing-title" class="cap-sr-only">The drawing</h2><div class="map-host flow-map" data-flow="${escapeHtml(f.id)}" data-step="${n}" data-steps="${total}">${map}</div><p class="hint" data-keys hidden>Number keys 1 to ${Math.min(total, 9)} go to that step.</p></section>` : ""}
 </div>
 <section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${stepList(f, n)}</section>`;
   return layout({
