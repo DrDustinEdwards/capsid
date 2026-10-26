@@ -1471,11 +1471,6 @@ th[aria-sort="ascending"] .sort::after {
   fill: var(--muted) !important;
   font-size: 12px;
 }
-.code-graph-box[data-current] > rect {
-  fill: var(--accent-soft);
-  stroke: var(--accent);
-  stroke-width: 2.5;
-}
 .code-graph-box[data-tone="nodata"] > rect:not(.code-graph-ring) {
   stroke: var(--line-strong);
 }
@@ -1673,42 +1668,6 @@ th[aria-sort="ascending"] .sort::after {
 }
 .nowrap {
   white-space: nowrap;
-}
-
-/* A module's source: its own scroll box, so a long line never widens the page, with line
-   numbers a reader's selection and a screen reader both skip. */
-.code {
-  max-block-size: 80vh;
-  margin: 0;
-  overflow: auto;
-  padding-block: var(--space-3);
-  border: 1px solid var(--text);
-  font: 0.8125rem / 1.6 var(--mono);
-  tab-size: 2;
-}
-/* The block is as wide as its longest line, so a marked line's band runs under all of it. */
-.code code {
-  display: inline-block;
-  min-inline-size: 100%;
-}
-.code:focus-visible {
-  outline: 2px solid var(--ring);
-}
-.code-line {
-  display: block;
-  padding-inline-end: var(--space-4);
-  scroll-margin-block: 30vh;
-}
-.code-line:target {
-  background: var(--sel);
-}
-.code-ln {
-  display: inline-block;
-  inline-size: 4ch;
-  margin-inline-end: var(--space-4);
-  color: var(--muted);
-  text-align: end;
-  user-select: none;
 }
 
 /* The code level's drawing (src/graph.mjs): boxes on the surface, each edged in its worst
