@@ -93,9 +93,9 @@ body {
   line-height: 1.5;
 }
 
-/* Links in the accent; a button that is a link, and Capsomer's header, keep Capsomer's
-   colors, which sit in a layer an unlayered rule would beat. */
-:where(main, .foot) :where(a:not(.cap-btn)) {
+/* Links in the accent; a button, a sign or an index entry that is a link, and Capsomer's header,
+   keep Capsomer's colors, which sit in a layer an unlayered rule would beat. */
+:where(main, .foot) :where(a:not(.cap-btn, .cap-sign, .cap-leader-index-link)) {
   color: var(--accent-text);
   text-underline-offset: 0.18em;
 }
@@ -223,7 +223,7 @@ h3 {
   margin-inline: auto;
   padding-inline: var(--gutter);
 }
-.hero .manual-head {
+.hero .cap-running-head {
   grid-column: 1 / -1;
 }
 .hero h1 {
@@ -1112,14 +1112,7 @@ html:not(.js) .chapter h3::before {
 
 /* Readings set as a page's headline figures, and a system's facts set the same way, smaller. */
 .readings-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-block: var(--space-6) var(--space-7);
-}
-@media (max-width: 40rem) {
-  .readings-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 .readings-facts {
   display: flex;
@@ -1759,25 +1752,8 @@ th[aria-sort="ascending"] .sort::after {
    ruled into labeled boxes (4.1), signs as dark panels of white type with an arrow (6.1, 6.2),
    the letterhead's logotype beside its address (3.1), and the folio at the foot on the right.
    Teal is kept as the manual kept NASA Red: one color, for the one action and what is lit. */
-.manual-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: var(--gutter);
+.cap-running-head {
   margin-block-start: var(--space-6);
-  padding-block-end: var(--space-3);
-  border-block-end: 1px solid var(--text);
-  font: 400 0.9375rem / 1.3 var(--face);
-}
-.manual-name {
-  font-weight: 700;
-}
-.manual-no {
-  display: inline-block;
-  min-inline-size: 2.5ch;
-}
-.manual-head + .crumbs {
-  margin-block-start: var(--space-3);
 }
 main h2[data-no] {
   position: relative;
@@ -1801,43 +1777,14 @@ main h2[data-no]::before {
   font: 400 0.9375rem / 1 var(--face);
   letter-spacing: 0;
 }
-/* The title block: a row of ruled boxes, each a small label in Capsomer's mono over its value,
-   the page number last and boldest (MSC Form 29). */
+/* The title block (Capsomer's form boxes), closing the page as the foot of every page of the
+   Apollo flight plans does (MSC Form 29). */
 .title-block {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr);
   margin: var(--space-8) 0 0;
-  border-block-start: 1px solid var(--text);
-  border-inline-start: 1px solid var(--text);
 }
 main.wide > .title-block {
   inline-size: min(100% - 2 * var(--gutter), var(--page) - 2 * var(--gutter));
   margin-inline: auto;
-}
-.title-block div {
-  padding: 6px var(--space-3) var(--space-2);
-  border-inline-end: 1px solid var(--text);
-  border-block-end: 1px solid var(--text);
-}
-.title-block dt {
-  color: var(--muted);
-  font: 500 0.6875rem / 1.4 var(--mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.title-block dd {
-  margin: 0;
-}
-.title-block div:last-child dd {
-  font-weight: 700;
-}
-@media (max-width: 40rem) {
-  .title-block {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-  }
-  .title-block div:first-child {
-    grid-column: 1 / -1;
-  }
 }
 
 /* Each part of a page set as the manual sets a page: its title on the left over a rule across the
@@ -1957,14 +1904,12 @@ main .cap-pill {
   border-block-start: 1px solid var(--text);
 }
 
-/* Readings as a form's boxes: each figure in a ruled box, what it counts set small above it. */
-.readings-row,
+/* A system's facts as a form's boxes: each in a ruled box, what it is set small above it. */
 .readings-facts {
   gap: 0;
   border-block-start: 1px solid var(--text);
   border-inline-start: 1px solid var(--text);
 }
-.readings-row .reading,
 .readings-facts .reading {
   flex-direction: column;
   justify-content: flex-start;
@@ -1973,80 +1918,18 @@ main .cap-pill {
   border-inline-end: 1px solid var(--text);
   border-block-end: 1px solid var(--text);
 }
-.readings-row .reading dt,
 .readings-facts .reading dt {
   color: var(--text);
   font-size: 0.8125rem;
   line-height: 1.3;
 }
-.readings-row .reading dd {
-  font-weight: 700;
-}
 
-/* The contents, set as the manual's index: number and name in bold, a dotted leader, the figure. */
+/* The contents (Capsomer's leader index). */
 .contents {
   margin: var(--space-5) 0 var(--space-7);
-  padding: 0;
-  border-block-start: 1px solid var(--text);
-  list-style: none;
-}
-.contents a {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  padding-block: var(--space-3);
-  border-block-end: 1px solid var(--line);
-  text-decoration: none;
-}
-:where(main) .contents a {
-  color: var(--text);
-}
-.contents-no {
-  min-inline-size: 3ch;
-}
-.contents-name {
-  font-weight: 700;
-}
-.contents-dots {
-  flex: 1 1 2rem;
-  border-block-end: 2px dotted var(--muted);
-}
-.contents-fact {
-  text-align: end;
-}
-.contents a:hover .contents-name,
-.contents a:focus-visible .contents-name {
-  color: var(--accent-text);
 }
 
-/* The ways on, as the manual's directional signs: a dark panel of light type and an arrow; the
-   way forward carries the one color along its top. */
-.pager a,
-.flow-nav a[rel] {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-block-size: 48px;
-  padding: var(--space-2) var(--space-4);
-  background: var(--text);
-  color: var(--ground);
-  font-weight: 500;
-  text-decoration: none;
-}
-.pager a[rel="prev"]::before,
-.flow-nav a[rel="prev"]::before {
-  content: "\2190" / "";
-}
-.pager a[rel="next"]::after,
-.flow-nav a[rel="next"]::after {
-  content: "\2192" / "";
-}
-.flow-nav a[rel="next"] {
-  box-shadow: inset 0 6px 0 var(--lamp);
-}
-.pager a {
-  max-width: 100%;
-}
+/* The ways on are Capsomer's signs; a tool's name on one keeps the sign's colors. */
 .pager a code {
   min-width: 0;
   background: none;
@@ -2054,24 +1937,10 @@ main .cap-pill {
   overflow-wrap: anywhere;
 }
 
-/* The letterhead: the name as the logotype, the address beside it in Regular and Medium. The
-   date is the title block's, above it. */
-.foot-plate {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: end;
-  gap: var(--space-3) var(--space-6);
-  padding-block: var(--space-7) 0;
-}
-.foot .foot-plate p {
-  margin: 0;
-}
-.foot-logo {
-  font: 700 clamp(3rem, 7vw, 5.5rem) / 0.8 var(--face);
-  letter-spacing: -0.045em;
-}
-.foot-lockup b {
-  font-weight: 600;
+/* The letterhead (Capsomer's) under the livery, which already draws the band above it. */
+.foot .cap-letterhead {
+  padding-block-end: 0;
+  border-block-start: 0;
 }
 .foot-nav a {
   text-decoration: none;
@@ -2086,9 +1955,6 @@ main .cap-pill {
   color: var(--muted);
 }
 @media (max-width: 40rem) {
-  .foot-plate {
-    grid-template-columns: minmax(0, 1fr);
-  }
   main h2[data-no] {
     padding-inline-start: 3rem;
   }
@@ -2116,34 +1982,11 @@ main .cap-pill {
   --on-lamp: var(--lamp-ink);
 }
 
-/* The section head as one of the manual's building signs (6.1): a dark panel of light type in
-   bold, the one color in a strip along its top, the section's number on a plate of its own. */
-.manual-head {
-  padding: var(--space-3) var(--space-4) var(--space-4);
-  border: 0;
-  border-block-start: 10px solid var(--lamp-on);
-  background: var(--text);
-  color: var(--ground);
-  font-size: clamp(1.25rem, 2.4vw, 1.75rem);
-}
-.manual-name {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6em;
-  letter-spacing: -0.01em;
-}
-.manual-no {
-  min-inline-size: 1.5em;
-  padding-inline: 0.2em;
-  background: var(--ground);
-  color: var(--text);
-  text-align: center;
-}
-/* The trail under it as the directional strip of the manual's signs (6.2): arrows between the
-   ways, the page you are on lit. */
-.manual-head + .page-head > .crumbs,
-.manual-head + .patched > .page-head > .crumbs,
-.manual-head + .crumbs {
+/* The trail under the section's sign as the directional strip of the manual's signs (6.2): arrows
+   between the ways, the page you are on lit. */
+.cap-running-head + .page-head > .crumbs,
+.cap-running-head + .patched > .page-head > .crumbs,
+.cap-running-head + .crumbs {
   margin-block-start: 0;
 }
 .crumbs {
@@ -2234,23 +2077,6 @@ main .cap-pill {
   padding-block-start: var(--space-4);
 }
 
-/* Figures on a tone scale, as the manual sets type on stepped grays (7.2): one ink, lightest to
-   darkest across the row, the type turning light on the dark steps. */
-.readings-row .reading:nth-child(4n + 1) {
-  background: color-mix(in oklab, var(--text) 6%, var(--ground));
-}
-.readings-row .reading:nth-child(4n + 2) {
-  background: color-mix(in oklab, var(--text) 22%, var(--ground));
-}
-.readings-row .reading:nth-child(4n + 3) {
-  background: color-mix(in oklab, var(--text) 62%, var(--ground));
-}
-.readings-row .reading:nth-child(4n + 4) {
-  background: var(--text);
-}
-.readings-row .reading:is(:nth-child(4n + 3), :nth-child(4n + 4)) :is(dt, dd, a) {
-  color: var(--ground);
-}
 
 /* A step as an Apollo cue card: a ruled box, a dark strip naming the flow and the card, short
    lines in capitals, a box to tick by each part and a dotted leader to what it is to the step. */
@@ -2360,52 +2186,11 @@ main .cap-pill {
   opacity: 0.4;
 }
 
-/* A flow's patch, as each Apollo crew wore its mission's, the steps as dots round its disc. */
-.patch {
-  inline-size: 140px;
-  block-size: 140px;
-  flex: none;
-}
-.patch-rim {
-  fill: var(--text);
-}
-.patch-field {
-  fill: var(--ground);
-  stroke: var(--lamp-on);
-  stroke-width: 3;
-}
-.patch-disc {
-  fill: var(--lamp-on);
-}
-.patch-dot {
-  fill: var(--ground);
-  stroke: var(--text);
-  stroke-width: 1.2;
-}
-.patch-name,
-.patch-foot,
-.patch-unit {
-  fill: var(--text);
-  font: 700 10px var(--mono);
-  letter-spacing: 1.4px;
-}
-.patch-foot {
-  font-size: 9px;
-  letter-spacing: 2px;
-}
-.patch-count {
-  fill: var(--on-lamp);
-  font: 700 24px var(--face);
-}
-.patch-unit {
-  fill: var(--on-lamp);
-  font-size: 7px;
-  letter-spacing: 1px;
-}
+/* A flow's patch (Capsomer's) beside its card and on its page's head. */
 .flow-card {
   position: relative;
 }
-.flow-card > .patch {
+.flow-card > .cap-patch {
   position: absolute;
   inset-block-start: calc(var(--space-4) + 5rem);
   inset-inline-end: 0;
@@ -2416,7 +2201,7 @@ main .cap-pill {
 .patched {
   position: relative;
 }
-.patched > .patch {
+.patched > .cap-patch {
   position: absolute;
   inset-block-end: var(--space-5);
   inset-inline-end: var(--space-3);
@@ -2425,11 +2210,11 @@ main .cap-pill {
   margin-inline-end: 170px;
 }
 @media (max-width: 40rem) {
-  .patch {
+  .cap-patch {
     inline-size: 96px;
     block-size: 96px;
   }
-  .flow-card > .patch {
+  .flow-card > .cap-patch {
     position: static;
     display: block;
     margin-block-end: var(--space-3);
@@ -2437,7 +2222,7 @@ main .cap-pill {
   .flow-card > .bands {
     margin-inline-end: 0;
   }
-  .patched > .patch {
+  .patched > .cap-patch {
     position: static;
     display: block;
     margin-block-start: var(--space-3);
@@ -2446,7 +2231,7 @@ main .cap-pill {
     margin-inline-end: 0;
   }
 }
-.readings-row .reading dt a {
+.readings-row dt a {
   color: inherit;
 }
 /* Every link on the card keeps a 24px target (WCAG 2.2, 2.5.8), and the unseen cards' plain

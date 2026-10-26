@@ -8,6 +8,7 @@
 // ways"). Times of day never appear: the documents carry a date and nothing finer.
 import { modelMapData, systemMapHtml } from "capsomer/behavior/system-map";
 import { circleLayers } from "capsomer/system-map-circles";
+import { patchSvg } from "capsomer/behavior/manual";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { headHtml, headTags } from "@drdustinedwards/site-helpers/head";
 import { jsonLd } from "@drdustinedwards/site-helpers/schema";
@@ -162,15 +163,15 @@ export const sectionAt = (href) => SECTIONS.find((section) => section.href === h
 const sectionFor = (path) => sectionAt(path === "/search/" ? path : sectionOf(path));
 
 /**
- * A page's head, as the manual's index names a section (NHB 1430.2, page i): its number and name
- * in bold over a hairline. The site is named in the header and the title block, so not again here.
- * The page's own trail and heading follow it as text.
+ * A page's head, Capsomer's running head set as one of the manual's building signs (NHB 1430.2, 6.1):
+ * its section's number and name. The site is named in the header and the title block, so not again
+ * here. The page's own trail and heading follow it as text.
  * @param {string} path
  */
 export function manualHead(path) {
   const section = sectionFor(path);
   if (!section) return "";
-  return `<div class="manual-head" aria-hidden="true"><span class="manual-name"><span class="manual-no">${section.no}</span>${section.label}</span></div>`;
+  return `<div class="cap-running-head" data-variant="sign" aria-hidden="true"><span class="cap-running-head-name"><span class="cap-running-head-no">${section.no}</span>${section.label}</span></div>`;
 }
 
 /**
@@ -181,8 +182,9 @@ export function manualHead(path) {
 export function titleBlock(path, asOf) {
   const section = sectionFor(path);
   if (!section) return "";
-  const cell = (/** @type {string} */ label, /** @type {string} */ value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
-  return `<dl class="title-block" aria-hidden="true">${cell("Site", ORIGIN.replace("https://", ""))}${cell("Section", `${section.no} ${section.label}`)}${cell("Data of", escapeHtml(asOf))}${cell("Page", section.href === path ? `${section.no}.0` : String(section.no))}</dl>`;
+  const cell = (/** @type {string} */ label, /** @type {string} */ value, bold = false) =>
+    `<div class="cap-form-boxes-box"${bold ? ' data-weight="bold"' : ""}><dt>${label}</dt><dd>${value}</dd></div>`;
+  return `<dl class="cap-form-boxes title-block" aria-hidden="true">${cell("Site", ORIGIN.replace("https://", ""))}${cell("Section", `${section.no} ${section.label}`)}${cell("Data of", escapeHtml(asOf))}${cell("Page", section.href === path ? `${section.no}.0` : String(section.no), true)}</dl>`;
 }
 
 /**
@@ -202,7 +204,7 @@ export function numbered(body, path) {
 function footer(asOf) {
   return `<footer class="foot">
 <div class="livery" aria-hidden="true"></div>
-<div class="foot-plate wrap" aria-hidden="true"><p class="foot-logo">Capsid</p><p class="foot-lockup">Shared memory and checks for AI coding agents<br><b>capsid.dustinedwards.info</b></p></div>
+<div class="cap-letterhead wrap" aria-hidden="true"><p class="cap-letterhead-logo">Capsid</p><p class="cap-letterhead-address">Shared memory and checks for AI coding agents<br><b>capsid.dustinedwards.info</b></p></div>
 <div class="foot-in wrap">
 <div class="foot-about"><p>Capsid is an open-source MCP server for AI coding agents, under the MIT license. This site runs on one live Capsid server and rebuilds every day from its public data.</p><p class="foot-small">Data as of ${escapeHtml(asOf)}, counted in whole days to midnight UTC. Private systems appear in full but without a link to their code.</p></div>
 <nav class="foot-nav" aria-label="Every section"><ul>${SECTIONS.map(({ href, label, no }) => `<li><a href="${href}"><span class="foot-no" aria-hidden="true">${no}.0</span>${label}</a></li>`).join("")}</ul></nav>
@@ -232,21 +234,15 @@ export const rollBlocks = (total, n) =>
   `<ol class="roll" aria-hidden="true">${Array.from({ length: total }, (_, i) => `<li data-state="${i + 1 < n ? "done" : i + 1 === n ? "now" : "ahead"}"></li>`).join("")}</ol>`;
 
 /**
- * A flow's patch, as every Apollo crew wore its mission's: the flow's name round the top, its
- * number in the section round the foot, and its steps as dots round a disc with their count.
+ * A flow's patch (Capsomer's patchSvg), as every Apollo crew wore its mission's: the flow's name
+ * round the top, its number in the section round the foot, and its steps as dots round the disc.
  * @param {Flow} f @param {string} no the flow's number, as 3.1
  */
-export function patch(f, no) {
-  const total = f.steps.length;
-  const dots = f.steps
-    .map((_, i) => {
-      const a = -Math.PI / 2 + (i * 2 * Math.PI) / total;
-      return `<circle class="patch-dot" cx="${(70 + 36 * Math.cos(a)).toFixed(2)}" cy="${(70 + 36 * Math.sin(a)).toFixed(2)}" r="3.4"/>`;
-    })
-    .join("");
-  const id = `patch-${escapeHtml(f.id)}`;
-  return `<svg class="patch" viewBox="0 0 140 140" aria-hidden="true" focusable="false"><defs><path id="${id}-top" d="M 22 70 A 48 48 0 0 1 118 70"/><path id="${id}-foot" d="M 27 74 A 43 43 0 0 0 113 74"/></defs><circle class="patch-rim" cx="70" cy="70" r="68"/><circle class="patch-field" cx="70" cy="70" r="61"/><circle class="patch-disc" cx="70" cy="70" r="36"/>${dots}<text class="patch-name" text-anchor="middle"><textPath href="#${id}-top" startOffset="50%">${escapeHtml(f.name.toUpperCase())}</textPath></text><text class="patch-foot" text-anchor="middle"><textPath href="#${id}-foot" startOffset="50%">CAPSID ${no}</textPath></text><text class="patch-count" x="70" y="77" text-anchor="middle">${total}</text><text class="patch-unit" x="70" y="89" text-anchor="middle">STEPS</text></svg>`;
-}
+const patch = (f, no) => patchSvg({ id: f.id, name: f.name, foot: `Capsid ${no}`, count: f.steps.length, unit: "steps" });
+
+/** A headline figure as one of Capsomer's form boxes, linked to where it is counted. @param {string} value @param {string} label @param {string} [href] */
+export const readingBox = (value, label, href) =>
+  `<div class="cap-form-boxes-box"><dt>${href ? `<a href="${href}">${escapeHtml(label)}</a>` : escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
 
 /** The map's data, each system linking to its explorer page: the same as dustinedwards.info's (Capsomer's modelMapData). */
 export const mapData = (/** @type {any} */ model) => modelMapData(model, systemPath);
@@ -676,8 +672,8 @@ export function stepPage(model, f, n, asOf) {
   const drawn = mapFlows(model, [f]).length > 0;
   const map = drawn ? markStep(familyMap(model, { id: "family", label: `Inside ${core.name}`, headingLevel: 3 }, { ...mapData(model), flows: mapFlows(model, [f]) }, core.id), st) : "";
   const nav = [
-    n > 1 ? `<a rel="prev" href="${stepPath(f.id, n - 1)}" data-go="${n - 1}">Back<span class="cap-sr-only">: step ${n - 1}</span></a>` : "",
-    n < total ? `<a rel="next" href="${stepPath(f.id, n + 1)}" data-go="${n + 1}">Next<span class="cap-sr-only">: step ${n + 1}</span></a>` : "",
+    n > 1 ? `<a rel="prev" href="${stepPath(f.id, n - 1)}" data-go="${n - 1}" class="cap-sign">Back<span class="cap-sr-only">: step ${n - 1}</span></a>` : "",
+    n < total ? `<a rel="next" href="${stepPath(f.id, n + 1)}" data-go="${n + 1}" class="cap-sign">Next<span class="cap-sr-only">: step ${n + 1}</span></a>` : "",
   ].join("");
   // Play steps through on its own; the script shows it, since without script there is nothing to play.
   const play = drawn ? `<button class="cap-btn" type="button" data-autoplay hidden>Play</button>` : "";

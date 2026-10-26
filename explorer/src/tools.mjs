@@ -145,7 +145,7 @@ export function toolPage(t, tools, asOf) {
 </section>
 ${actions}
 <section aria-labelledby="args-title"><h2 id="args-title">Arguments</h2>${params}</section>
-<nav class="pager" aria-label="Other tools">${near.map((n) => `<a href="${toolPath(n.name)}" rel="${tools.indexOf(n) < i ? "prev" : "next"}">${tools.indexOf(n) < i ? "Previous" : "Next"}: <code>${escapeHtml(n.name).replaceAll("_", "_<wbr>")}</code></a>`).join("")}</nav>`;
+<nav class="pager cap-signs" aria-label="Other tools">${near.map((n) => `<a class="cap-sign" href="${toolPath(n.name)}" rel="${tools.indexOf(n) < i ? "prev" : "next"}">${tools.indexOf(n) < i ? "Previous" : "Next"}: <code>${escapeHtml(n.name).replaceAll("_", "_<wbr>")}</code></a>`).join("")}</nav>`;
   return layout({ title: `${t.name}, Capsid tools`, description: `${t.title}: ${t.description.split("\n\n")[0]}`, path: toolPath(t.name), body, asOf });
 }
 
