@@ -1090,49 +1090,9 @@ html:not(.js) .chapter h3::before {
   }
 }
 
-/* The close of every page: the letterhead, then one band of what the site is, every section and
-   where else to go. */
+/* The close of every page: the family footer, with Capsid's own part (capsomer/family-footer). */
 .foot {
   margin-block-start: 0;
-}
-.foot-in {
-  display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 3fr) minmax(0, 3fr);
-  gap: var(--space-6);
-  padding-block: var(--space-7);
-}
-.foot-in p {
-  margin: 0 0 var(--space-2);
-}
-.foot-about {
-  max-width: 46ch;
-  font-size: 1.0625rem;
-}
-.foot-nav ul,
-.foot-out {
-  display: grid;
-  gap: var(--space-1) var(--space-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.foot-nav ul {
-  grid-template-columns: repeat(2, max-content);
-}
-.foot-nav a,
-.foot-out a {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: 28px;
-}
-.foot-small {
-  color: var(--muted);
-  font-size: 0.9375rem;
-}
-@media (max-width: 52rem) {
-  .foot-in {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 /* Readings set as a page's headline figures, and a system's facts set the same way, smaller. */
@@ -1938,21 +1898,9 @@ main .cap-pill {
   overflow-wrap: anywhere;
 }
 
-/* Capsid's letterhead, without its heavy rule: the family footer's band under it is the page's one band (Dustin, 2026-10-26). */
-.foot > .cap-letterhead {
-  padding-block-end: 0;
-  border-block-start: 0;
-}
-.foot-nav a {
-  text-decoration: none;
-}
-.foot-nav a:hover,
-.foot-nav a:focus-visible {
-  text-decoration: underline;
-}
 .foot-no {
   display: inline-block;
-  min-inline-size: 2.75rem;
+  min-inline-size: 2.5rem;
   color: var(--muted);
 }
 @media (max-width: 40rem) {

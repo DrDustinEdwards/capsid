@@ -201,16 +201,25 @@ export function numbered(body, path) {
   return body.replace(/<h2(\s[^>]*)?>/g, (tag, attrs = "") => (/class="cap-|data-plain/.test(attrs) ? tag : `<h2${attrs} data-no="${section.no}.${++n}">`));
 }
 
-/** The close of every page: what the site is, where to go, the day of its data and the source, then the family footer every dustinedwards.info site closes with, whose teal band is the page's only one (Dustin, 2026-10-26). @param {string} asOf */
+/**
+ * The close of every page: the family footer every dustinedwards.info site ends with (capsomer/family-footer,
+ * Dustin, 2026-10-26), with Capsid's own part under its thin teal stripe: what the site is, every section,
+ * where else to go and the day of its data. @param {string} asOf
+ */
 function footer(asOf) {
-  return `<footer class="foot">
-<div class="cap-letterhead wrap" aria-hidden="true"><p class="cap-letterhead-logo">Capsid</p><p class="cap-letterhead-address">Shared memory and checks for AI coding agents<br><b>capsid.dustinedwards.info</b></p></div>
-<div class="foot-in wrap">
-<div class="foot-about"><p>Capsid is an open-source MCP server for AI coding agents, under the MIT license. This site runs on one live Capsid server and rebuilds every day from its public data.</p><p class="foot-small">Data as of ${escapeHtml(asOf)}, counted in whole days to midnight UTC. Private systems appear in full but without a link to their code.</p></div>
-<nav class="foot-nav" aria-label="Every section"><ul>${SECTIONS.map(({ href, label, no }) => `<li><a href="${href}"><span class="foot-no" aria-hidden="true">${no}.0</span>${label}</a></li>`).join("")}</ul></nav>
-<ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Install it</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
+  /** @param {{ href: string, label: string, no: number }} s */
+  const link = ({ href, label, no }) => `<li><a href="${href}"><span class="foot-no" aria-hidden="true">${no}.0</span>${label}</a></li>`;
+  const half = Math.ceil(SECTIONS.length / 2);
+  const center = `<div class="cap-family-footer-center">
+<div><p class="cap-family-footer-center-name">Capsid</p><p class="cap-family-footer-about">An open-source MCP server for AI coding agents. This site runs on one live Capsid server and rebuilds every day from its public data.</p></div>
+<div class="cap-family-footer-columns">
+<nav aria-label="Every section"><ul class="cap-family-footer-links">${SECTIONS.slice(0, half).map(link).join("")}</ul></nav>
+<ul class="cap-family-footer-links" aria-label="More sections">${SECTIONS.slice(half).map(link).join("")}</ul>
+<ul class="cap-family-footer-links"><li><a href="https://github.com/DrDustinEdwards/capsid">Source, MIT licensed</a></li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Install it</a></li><li><a href="https://portal.dustinedwards.info">The Portal, for the owners</a></li></ul>
 </div>
-<div class="wrap">${familyFooterHtml()}</div></footer>`;
+<p class="cap-family-footer-stamp"><span>Data as of ${escapeHtml(asOf)}</span><span>Days counted to midnight UTC</span><span>Private systems shown without links to their code</span></p>
+</div>`;
+  return `<footer class="foot"><div class="wrap">${familyFooterHtml({ site: "capsid", center })}</div></footer>`;
 }
 
 /**
