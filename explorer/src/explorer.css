@@ -1938,7 +1938,7 @@ main .cap-pill {
   overflow-wrap: anywhere;
 }
 
-/* The letterhead (Capsomer's) under the livery, which already draws the band above it. */
+/* Capsid's letterhead, without its heavy rule: the family footer's band under it is the page's one band (Dustin, 2026-10-26). */
 .foot > .cap-letterhead {
   padding-block-end: 0;
   border-block-start: 0;

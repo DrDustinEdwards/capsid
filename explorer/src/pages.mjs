@@ -201,10 +201,9 @@ export function numbered(body, path) {
   return body.replace(/<h2(\s[^>]*)?>/g, (tag, attrs = "") => (/class="cap-|data-plain/.test(attrs) ? tag : `<h2${attrs} data-no="${section.no}.${++n}">`));
 }
 
-/** The close of every page: what the site is, where to go, the day of its data and the source, then the family footer every dustinedwards.info site closes with, its band in teal (Dustin, 2026-10-26). @param {string} asOf */
+/** The close of every page: what the site is, where to go, the day of its data and the source, then the family footer every dustinedwards.info site closes with, whose teal band is the page's only one (Dustin, 2026-10-26). @param {string} asOf */
 function footer(asOf) {
   return `<footer class="foot">
-<div class="cap-livery" aria-hidden="true"></div>
 <div class="cap-letterhead wrap" aria-hidden="true"><p class="cap-letterhead-logo">Capsid</p><p class="cap-letterhead-address">Shared memory and checks for AI coding agents<br><b>capsid.dustinedwards.info</b></p></div>
 <div class="foot-in wrap">
 <div class="foot-about"><p>Capsid is an open-source MCP server for AI coding agents, under the MIT license. This site runs on one live Capsid server and rebuilds every day from its public data.</p><p class="foot-small">Data as of ${escapeHtml(asOf)}, counted in whole days to midnight UTC. Private systems appear in full but without a link to their code.</p></div>
