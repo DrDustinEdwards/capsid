@@ -71,7 +71,7 @@ export function NsChips({ list }: { list: string[] }) {
 }
 
 // What a filtered list says when the filter leaves it empty: which filter, and a way back
-// (pattern catalogue, N-empty).
+// (pattern catalog, N-empty).
 export function FilterEmpty({ children, onShowAll }: { children: ReactNode; onShowAll: () => void }) {
   return (
     <div role="status" data-filter-empty="">

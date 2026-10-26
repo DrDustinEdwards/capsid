@@ -143,7 +143,7 @@ const GUARD_SOURCES: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   { pattern: /^src\/store-guards\.ts$/i, why: "the snapshot and audit guard every overwrite and delete runs through" },
   { pattern: /^src\/tools\/repo\.ts$/i, why: "guardedWrite, the one gate on repo mutations" },
   { pattern: /^src\/tools\/docs\.ts$/i, why: "pathMutation, the only way a path changes" },
-  { pattern: /^src\/(access-jwt|access-login|ops-session-auth|portal-auth)\.ts$/i, why: "a login or session check" },
+  { pattern: /^src\/(access-login|ops-session-auth|portal-auth)\.ts$/i, why: "a login or session check" },
   { pattern: /^src\/(job-signing)\.ts$/i, why: "a key or a signature" },
   { pattern: /^src\/agents(-admin)?\.ts$/i, why: "the minting and grants of agent credentials" },
 ];
@@ -340,7 +340,7 @@ export interface Cell {
 }
 
 /** The alias a model id reduces to: "claude-opus-5-5" and "opus" are both opus. A
- *  model it does not recognise is kept as reported, so it shows as its own cell. */
+ *  model it does not recognize is kept as reported, so it shows as its own cell. */
 export function modelAlias(id: string | null): string | null {
   if (!id) return null;
   const lower = id.toLowerCase();

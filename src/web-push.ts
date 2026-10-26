@@ -3,11 +3,13 @@
 // knows what is being said or why: src/push.ts decides that. This module encrypts one
 // payload for one browser subscription (RFC 8291, aes128gcm) and signs the request to its
 // push service with the VAPID key (RFC 8292), with WebCrypto only, so no third party and
-// no dependency is added.
+// no dependency is added beyond the family's own encoding (site-runtime).
 //
 // The VAPID key is one secret, VAPID_PRIVATE_KEY: a P-256 private key as a JWK (its x and
 // y are the public half, which the Portal hands the browser when it subscribes).
 // scripts/vapid-keys.mjs makes one and puts it with wrangler without printing it.
+
+import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 
 export interface PushSubscriptionKeys {
   endpoint: string;
@@ -36,20 +38,6 @@ const PUSH_HOSTS: readonly RegExp[] = [
   /^[a-z0-9-]+\.notify\.windows\.com$/,
 ];
 
-export function b64url(bytes: Uint8Array): string {
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-export function fromB64url(text: string): Uint8Array {
-  const b64 = text.replace(/-/g, "+").replace(/_/g, "/");
-  const bin = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
 function concat(...parts: Uint8Array[]): Uint8Array {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;
@@ -75,8 +63,8 @@ export function subscriptionProblem(sub: Partial<PushSubscriptionKeys>): string 
   if (url.protocol !== "https:") return "the subscription's endpoint is not https.";
   if (!PUSH_HOSTS.some((h) => h.test(url.hostname))) return `the subscription's endpoint is on ${url.hostname}, which is not a known push service.`;
   try {
-    if (typeof sub.p256dh !== "string" || fromB64url(sub.p256dh).length !== 65) return "the subscription's p256dh key is not a 65-byte P-256 point.";
-    if (typeof sub.auth !== "string" || fromB64url(sub.auth).length !== 16) return "the subscription's auth secret is not 16 bytes.";
+    if (typeof sub.p256dh !== "string" || fromBase64url(sub.p256dh).length !== 65) return "the subscription's p256dh key is not a 65-byte P-256 point.";
+    if (typeof sub.auth !== "string" || fromBase64url(sub.auth).length !== 16) return "the subscription's auth secret is not 16 bytes.";
   } catch {
     return "the subscription's keys are not base64url.";
   }
@@ -93,9 +81,9 @@ export function readVapidKey(secret: string | undefined): VapidKey | string {
     return "VAPID_PRIVATE_KEY is not JSON: it must be a P-256 private key as a JWK.";
   }
   if (jwk.kty !== "EC" || jwk.crv !== "P-256" || !jwk.d || !jwk.x || !jwk.y) return "VAPID_PRIVATE_KEY is not a P-256 private key as a JWK (kty EC, crv P-256, d, x and y).";
-  const point = concat(new Uint8Array([4]), fromB64url(jwk.x), fromB64url(jwk.y));
+  const point = concat(new Uint8Array([4]), fromBase64url(jwk.x), fromBase64url(jwk.y));
   if (point.length !== 65) return "VAPID_PRIVATE_KEY's x and y are not 32 bytes each.";
-  return { jwk: { kty: "EC", crv: "P-256", d: jwk.d, x: jwk.x, y: jwk.y }, publicKey: b64url(point) };
+  return { jwk: { kty: "EC", crv: "P-256", d: jwk.d, x: jwk.x, y: jwk.y }, publicKey: base64url(point) };
 }
 
 async function hkdf(salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, bytes: number): Promise<Uint8Array> {
@@ -112,14 +100,14 @@ export interface Ephemeral {
 
 /** RFC 8291: the aes128gcm body for one subscription, a single record. */
 export async function encryptPayload(sub: PushSubscriptionKeys, plaintext: Uint8Array, fixed: Ephemeral = {}): Promise<Uint8Array> {
-  const uaPublic = fromB64url(sub.p256dh);
-  const authSecret = fromB64url(sub.auth);
+  const uaPublic = fromBase64url(sub.p256dh);
+  const authSecret = fromBase64url(sub.auth);
   const ecdh = { name: "ECDH", namedCurve: "P-256" } as const;
   let asPrivate: CryptoKey;
   let asPublic: Uint8Array;
   if (fixed.privateJwk) {
     asPrivate = await crypto.subtle.importKey("jwk", fixed.privateJwk, ecdh, false, ["deriveBits"]);
-    asPublic = concat(new Uint8Array([4]), fromB64url(fixed.privateJwk.x!), fromB64url(fixed.privateJwk.y!));
+    asPublic = concat(new Uint8Array([4]), fromBase64url(fixed.privateJwk.x!), fromBase64url(fixed.privateJwk.y!));
   } else {
     const pair = (await crypto.subtle.generateKey(ecdh, true, ["deriveBits"])) as CryptoKeyPair;
     asPrivate = pair.privateKey;
@@ -147,12 +135,12 @@ export async function encryptPayload(sub: PushSubscriptionKeys, plaintext: Uint8
 
 /** RFC 8292: the Authorization header's JWT for one push service origin. */
 export async function vapidJwt(vapid: VapidKey, audience: string, subject: string, now: Date): Promise<string> {
-  const header = b64url(utf8(JSON.stringify({ typ: "JWT", alg: "ES256" })));
-  const claims = b64url(utf8(JSON.stringify({ aud: audience, exp: Math.floor(now.getTime() / 1000) + JWT_LIFETIME_SECONDS, sub: subject })));
+  const header = base64url(utf8(JSON.stringify({ typ: "JWT", alg: "ES256" })));
+  const claims = base64url(utf8(JSON.stringify({ aud: audience, exp: Math.floor(now.getTime() / 1000) + JWT_LIFETIME_SECONDS, sub: subject })));
   const key = await crypto.subtle.importKey("jwk", vapid.jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
   // WebCrypto's ECDSA signature is r || s, which is JWS's ES256 form already.
   const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, utf8(`${header}.${claims}`)));
-  return `${header}.${claims}.${b64url(sig)}`;
+  return `${header}.${claims}.${base64url(sig)}`;
 }
 
 export interface PushSent {

@@ -192,7 +192,7 @@ The lab goes first and proves the whole path; the other apps follow one at a tim
 6. **dustinedwards-info:** `members` and `member_audit`, the `/lab` gate, `PRIMARY_OWNER_EMAIL`, the lab's titles,
    `/lab/members`, the daily expiry job. Plants: an admin token refused at `/lab` and a lab token refused at
    `/admin`; a removed or expired member refused; a worker 404 at `/lab/members`.
-7. **dustinedwards-info and Carrel:** adopt `./access` for their admin checks, no behaviour change.
+7. **dustinedwards-info and Carrel:** adopt `./access` for their admin checks, no behavior change.
 8. **txasm, then Foxing, then Foxing Edu:** each defines its titles and adopts the page, one PR per app.
 9. **Carrel:** `/people` on `people-roles` when it suits.
 

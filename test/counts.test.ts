@@ -157,7 +157,7 @@ test("'all seven' about anything else is NOT flagged", () => {
 
 test("the scan never returns a rewritten body, only a flag", () => {
   // Flag, never auto-correct: a "corrected" or "replacement" field would be a program
-  // editing canon on its own judgement.
+  // editing canon on its own judgment.
   const claims = scanCountClaims([{ path: "core.md", type: "core", body: "19 tools" }], "capsid");
   // Exactly one claim, or the loop below passes without checking anything.
   assert.equal(claims.length, 1, `expected one claim for a stale tool count: ${JSON.stringify(claims)}`);

@@ -1,4 +1,4 @@
-/* Colours, fonts, shadows: Capsomer's tokens, loaded before this file (main.tsx). Only the
+/* Colors, fonts, shadows: Capsomer's tokens, loaded before this file (main.tsx). Only the
    app's own dimensions live here. */
 :root { --top: 44px; }
 
@@ -15,7 +15,7 @@
   button, input, select, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; }
   /* Text takes --accent-text (4.5:1 on every surface); --accent is for fills, rings and icons at
-     3:1. A link in running text is underlined, since colour alone can't set it apart from the words
+     3:1. A link in running text is underlined, since color alone can't set it apart from the words
      around it (WCAG 1.4.1). */
   a { color: var(--accent-text); text-decoration: none; }
   a:hover, main a:not([class], .anchors a) { text-decoration: underline; }
@@ -56,14 +56,14 @@
 /* main is the containing block for anything absolutely positioned inside it (.sr-only
    text in a table header, say). Without it such an element is placed against the whole
    document, past the scrolling table, and a mobile browser widens its layout viewport to
-   reach it: at 390 px the document was 1189 px wide and a centred dialog sat off screen. */
+   reach it: at 390 px the document was 1189 px wide and a centered dialog sat off screen. */
 main { min-width: 0; position: relative; }
 .page { padding: 16px 24px 48px; display: grid; gap: 14px; max-width: 1480px; }
 /* The heading alone: what a view is for is in the shortcut sheet (design D13). */
 .pagehead { display: flex; align-items: end; gap: 16px; flex-wrap: wrap; }
 .pagehead h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
 
-/* status vocabulary: shape + text + colour */
+/* status vocabulary: shape + text + color */
 .st { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: var(--fs-detail); white-space: nowrap; }
 .st svg { flex: none; }
 .st.ok { color: var(--ok); } .st.warn { color: var(--warn); } .st.crit { color: var(--crit); }

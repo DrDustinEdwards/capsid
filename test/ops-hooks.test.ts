@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sha256Hex } from "../src/auth.ts";
+
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
 import { defaultScopes, serializeScopes, type AgentKind, type AgentRow } from "../src/agents-schema.ts";
 import { opsSessionFrom, type SessionFeedRow } from "../src/ops-feed.ts";
@@ -16,6 +16,7 @@ import {
 } from "../src/ops-hooks.ts";
 import { sessionCallerRefusal } from "../src/ops-session-auth.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The hook receiver's parse, its allowlist and its caller check (src/ops-hooks.ts).
 // The writes themselves, the auth through the whole Worker, the needs_input cycle and

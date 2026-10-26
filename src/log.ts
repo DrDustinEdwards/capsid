@@ -4,7 +4,7 @@
 //
 // This file depends on nothing in the Worker (no Env), so any module can import it.
 // It never throws: a log call sits inside catch blocks and cron steps, and a field
-// that cannot be serialised (a circular object, a BigInt) must not turn a handled
+// that cannot be serialized (a circular object, a BigInt) must not turn a handled
 // failure into a new one.
 
 export type LogLevel = "log" | "warn" | "error";

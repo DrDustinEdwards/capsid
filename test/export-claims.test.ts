@@ -1,3 +1,4 @@
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,7 +17,6 @@ import {
   parsePage,
   run,
   scrub,
-  sha256Hex,
   toJsonl,
   verifyExport,
   type Row,
@@ -139,7 +139,7 @@ test("an export writes every table, and the manifest's hashes and counts match t
     for (const [table, entry] of Object.entries(manifest.tables)) {
       assert.equal(entry.file, `${table}.jsonl`);
       const bytes = readFileSync(join(out, entry.file));
-      assert.equal(sha256Hex(bytes), entry.sha256, `${table}'s hash does not match its file`);
+      assert.equal(await sha256Hex(bytes), entry.sha256, `${table}'s hash does not match its file`);
     }
     // The pages are concatenated in order in the file too.
     const lines = readFileSync(join(out, "job_claims.jsonl"), "utf8").trimEnd().split("\n");
@@ -148,7 +148,7 @@ test("an export writes every table, and the manifest's hashes and counts match t
 
     const manifestBytes = readFileSync(join(out, "manifest.json"));
     assert.deepEqual(JSON.parse(new TextDecoder().decode(manifestBytes)), manifest);
-    assert.equal(readFileSync(join(out, "manifest.sha256"), "utf8"), `${sha256Hex(manifestBytes)}  manifest.json\n`);
+    assert.equal(readFileSync(join(out, "manifest.sha256"), "utf8"), `${await sha256Hex(manifestBytes)}  manifest.json\n`);
     assert.deepEqual(readdirSync(out).sort(), [...EXPORT_TABLES.map((t) => `${t}.jsonl`), "manifest.json", "manifest.sha256"].sort());
   });
 });
@@ -197,7 +197,7 @@ async function writtenExport(root: string): Promise<string> {
 test("--verify passes on the directory an export wrote", async () => {
   await withDir(async (root) => {
     const out = await writtenExport(root);
-    assert.deepEqual(verifyExport(out), []);
+    assert.deepEqual(await verifyExport(out), []);
   });
 });
 
@@ -211,7 +211,7 @@ test("PLANT: verify fails when a byte of an export file changes", async () => {
     assert.ok(at >= 0, "the fixture carries no '4' to change");
     bytes[at] = "5".charCodeAt(0);
     writeFileSync(path, bytes);
-    const problems = verifyExport(out);
+    const problems = await verifyExport(out);
     assert.equal(problems.length, 1, problems.join("\n"));
     assert.match(problems[0], /job_claims\.jsonl \(job_claims\) does not match its sha256/);
   });
@@ -221,7 +221,7 @@ test("PLANT: verify fails when a listed file is missing", async () => {
   await withDir(async (root) => {
     const out = await writtenExport(root);
     rmSync(join(out, "job_touches.jsonl"));
-    const problems = verifyExport(out);
+    const problems = await verifyExport(out);
     assert.equal(problems.length, 1, problems.join("\n"));
     assert.match(problems[0], /job_touches\.jsonl \(job_touches\) is listed in manifest\.json and missing/);
   });
@@ -232,7 +232,7 @@ test("PLANT: verify fails when the manifest is edited without its hash", async (
     const out = await writtenExport(root);
     const path = join(out, "manifest.json");
     writeFileSync(path, readFileSync(path, "utf8").replace('"abc1234"', '"def5678"'));
-    assert.match(verifyExport(out).join("\n"), /manifest\.json does not match the hash in manifest\.sha256/);
+    assert.match((await verifyExport(out)).join("\n"), /manifest\.json does not match the hash in manifest\.sha256/);
   });
 });
 
@@ -245,13 +245,13 @@ test("verify fails on a missing manifest, a dropped table and a file name that l
     delete manifest.tables.job_outcomes;
     manifest.tables.job_touches.file = "../job_touches.jsonl";
     writeFileSync(path, JSON.stringify(manifest));
-    const problems = verifyExport(out).join("\n");
+    const problems = (await verifyExport(out)).join("\n");
     assert.match(problems, /manifest\.sha256 is missing/);
     assert.match(problems, /does not list job_outcomes/);
     assert.match(problems, /job_touches: the manifest's file "\.\.\/job_touches\.jsonl" is not a file name/);
 
     rmSync(path);
-    assert.deepEqual(verifyExport(out), [`manifest.json is missing from ${out}`]);
+    assert.deepEqual(await verifyExport(out), [`manifest.json is missing from ${out}`]);
   });
 });
 

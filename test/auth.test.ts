@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bearerToken, sha256Hex, operatorIdentity } from "../src/auth.ts";
+import { bearerToken, operatorIdentity } from "../src/auth.ts";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 async function grantOf(request: Request, env: { OPERATOR_KEY_HASH?: string }) {
   return (await operatorIdentity(request, env)).grant;

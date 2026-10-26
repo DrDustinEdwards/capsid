@@ -6,7 +6,7 @@
 // datetime('now'), `||` and `+` in a value; single-table SELECTs with COUNT and SUM
 // aggregates, GROUP BY, ORDER BY and LIMIT. Anything else throws, so a new shape is a
 // loud failure to model rather than a filter silently ignored. A subquery (EXISTS,
-// IN (SELECT ...)) and a JOIN are refused here: the callers that issue one are modelled
+// IN (SELECT ...)) and a JOIN are refused here: the callers that issue one are modeled
 // by name in fakes.ts.
 
 export type Row = Record<string, unknown>;

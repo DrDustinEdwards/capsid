@@ -6,8 +6,9 @@ import { test } from "node:test";
 import { mintAgent, listAgents } from "../src/agents-admin.ts";
 import { ARCHIVE_AFTER_DAYS, archiveRevokedAgents, listArchivedAgents } from "../src/agents-archive.ts";
 import { resolveAgent } from "../src/agents.ts";
-import { sha256Hex } from "../src/auth.ts";
+
 import { agentSummaries } from "../src/status.ts";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Revoked agents move to agents_archive and keep their history (job_24e460427d6c). The
 // move is SQL across five tables, so these run every migration with Node's SQLite and

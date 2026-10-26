@@ -28,7 +28,7 @@ test("PLANT: CI runs both suites and typechecks all four configs", () => {
 
 test("the integration compatibility date is not AHEAD of the deploy date", () => {
   // The pool's workerd caps at a date behind production, so the two may differ. A
-  // suite at a later date than deploys would pass on behaviour production does not have.
+  // suite at a later date than deploys would pass on behavior production does not have.
   const integration = CONFIG.match(/INTEGRATION_COMPAT_DATE = "([\d-]+)"/)?.[1];
   assert.ok(integration, "the integration compatibility date is not declared where this test can read it");
   const bindings = read("scripts/bindings.mjs");
@@ -36,7 +36,7 @@ test("the integration compatibility date is not AHEAD of the deploy date", () =>
   assert.ok(deployed, "scripts/bindings.mjs no longer declares COMPATIBILITY_DATE where this test can read it");
   assert.ok(
     integration! <= deployed!,
-    `the integration suite runs at ${integration}, ahead of the deployed ${deployed}: it would pass on behaviour production does not have`
+    `the integration suite runs at ${integration}, ahead of the deployed ${deployed}: it would pass on behavior production does not have`
   );
 });
 

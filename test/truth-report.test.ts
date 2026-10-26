@@ -18,7 +18,7 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 // The truth report. No repo gate can check a number that lives only in Capsid, so
 // report mode writes a document and the trend is kept as documents.
 //
-// The pure function is tested against hand-built inputs, where every judgement
+// The pure function is tested against hand-built inputs, where every judgment
 // lives; the handler is driven over a real MCP connection, where the write path lives.
 
 const NOW = new Date("2026-09-07T12:00:00Z");

@@ -102,7 +102,7 @@ describe("resume notes", () => {
     expect((await latestResumeNote(jobsEnv(), { id, namespace: "capsid", resumed_count: 1 }))?.signature).toBe("mismatch");
   });
 
-  it("a note written before signing is served, labelled legacy-unsigned, and does not fail the claim", async () => {
+  it("a note written before signing is served, labeled legacy-unsigned, and does not fail the claim", async () => {
     const id = await resumedToQueue();
     await tamperNote(id, (p) => void delete p.sig);
     const claimed = await claimJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, { id });

@@ -1,6 +1,6 @@
 # The knowledge model
 
-Capsid stores documents. This describes how they are organised and what the rules
+Capsid stores documents. This describes how they are organized and what the rules
 around them are.
 
 **This document is redacted from the private canon.** Capsid documents itself, in
@@ -263,7 +263,7 @@ pull request re-verification in `src/outcome-prs.ts`).
 | `agent`, `namespace` | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later release clears that column |
 | `prs_opened`, `prs_merged` | GitHub's answer whenever the driver named any pull request |
 | `commits`, `files_changed` | the pull requests' own counts when there are any, the driver's otherwise |
-| `tests_added` | the driver's claim, never verifiable here: "a test was added" is a judgement about a diff, not a property of it |
+| `tests_added` | the driver's claim, never verifiable here: "a test was added" is a judgment about a diff, not a property of it |
 | `ci_green` | `1`, `0`, or `NULL` for not checked. A run still going is `NULL`, because "CI has not answered" is not "CI failed" |
 | `blocked_count`, `resumed_count` | how many gates the job hit and how many times a human sent it back, the two numbers the Worker knows first-hand |
 | `duration_minutes` | claimed to recorded. The final working stretch: `resume` does not restart the clock from the first claim, so time spent blocked waiting on a human is excluded |

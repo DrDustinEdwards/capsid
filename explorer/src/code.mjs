@@ -4,7 +4,7 @@
 // the map measured. Pure, as pages.mjs is: build.mjs reads the code document and the source and
 // passes them in.
 //
-// Every status is Capsomer's: a glyph whose shape carries it, a word, and the tone's colour
+// Every status is Capsomer's: a glyph whose shape carries it, a word, and the tone's color
 // (components/status). A number nobody measured is "No data" with its reason, never a zero.
 import { graphSvg } from "./graph.mjs";
 import { escapeHtml, layout, pageHead, reading, scroller, systemPath } from "./pages.mjs";

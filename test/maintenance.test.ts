@@ -34,7 +34,7 @@ test("a pull request URL matches as a whole number, never as the prefix of a lon
   assert.equal(namesPullRequest("no link here", url), false);
 });
 
-test("a promise of follow-up jobs is recognised in the ways drivers write it", () => {
+test("a promise of follow-up jobs is recognized in the ways drivers write it", () => {
   assert.equal(promisesFollowUps("Piece 1 done. The rest will follow as separate jobs."), true);
   assert.equal(promisesFollowUps("Follow-ups to be posted as separate job after the merge"), true);
   assert.equal(promisesFollowUps("Done. Nothing further."), false);
@@ -127,7 +127,7 @@ const BRANCHES = [
   { name: "main", commit: { sha: "m1" } },
   { name: "feat/merged-clean", commit: { sha: "a1" } },
   { name: "review/grok", commit: { sha: "k1" } },
-  { name: "review/colour-audit", commit: { sha: "k2" } },
+  { name: "review/color-audit", commit: { sha: "k2" } },
   { name: "feat/reopened", commit: { sha: "z1" } },
   { name: "feat/open-old", commit: { sha: "o1" } },
   { name: "feat/old-orphan", commit: { sha: "n1" } },
@@ -141,7 +141,7 @@ const COMMITTED: Record<string, string> = {
   m1: "2026-10-08T00:00:00Z", a1: "2026-08-01T00:00:00Z", k1: "2026-08-01T00:00:00Z", k2: "2026-08-01T00:00:00Z",
   z1: "2026-08-01T00:00:00Z", o1: "2026-08-01T00:00:00Z", n1: "2026-08-30T12:00:00Z", n2: "2026-10-01T00:00:00Z",
 };
-const KEEP = JSON.stringify({ sample: ["review/grok", "review/colour-audit"] });
+const KEEP = JSON.stringify({ sample: ["review/grok", "review/color-audit"] });
 
 function branchRoutes(branches = BRANCHES) {
   const r: Record<string, unknown> = {

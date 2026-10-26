@@ -6,7 +6,6 @@ import {
   guideKey,
   readSchedule,
   SCHEDULE_KEY,
-  sha256Hex,
   SKILLS_NAMESPACE,
   SKILLS_REFRESH_ACTOR,
   skillsRefreshAgent,
@@ -62,7 +61,7 @@ test("A KV THAT THREW DISABLES THE RUN", async () => {
   assert.match(schedule.reason ?? "", /KV is down/);
 });
 
-test("an explicit disable is honoured", async () => {
+test("an explicit disable is honored", async () => {
   const schedule = await readSchedule(fakeKv({ [SCHEDULE_KEY]: '{"enabled":false}' }));
   assert.equal(schedule.enabled, false);
 });
@@ -100,11 +99,4 @@ test("the cron agent may reach exactly one namespace and holds no blast-radius f
 test("the guide key is namespaced per model", () => {
   assert.equal(guideKey("fable-5-1"), "skills:guides:fable-5-1");
   assert.notEqual(guideKey("opus-5"), guideKey("sonnet-5"));
-});
-
-test("sha256Hex matches a known digest", async () => {
-  assert.equal(
-    await sha256Hex("abc"),
-    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-  );
 });

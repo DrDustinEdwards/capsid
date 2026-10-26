@@ -28,7 +28,7 @@ export const REGISTER_PATH = "/register";
 
 // The callbacks that are the same for every user, matched exactly.
 //   Grok: its custom connector callback.
-//   ChatGPT: the connector platform's legacy callback, which OpenAI still honours.
+//   ChatGPT: the connector platform's legacy callback, which OpenAI still honors.
 export const FIXED_REDIRECTS: readonly string[] = [
   "https://grok.com/connectors/oauth/callback",
   "https://chatgpt.com/connector_platform_oauth_redirect",

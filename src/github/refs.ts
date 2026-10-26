@@ -294,7 +294,7 @@ export const REPO_HISTORY_DEFAULT_LIMIT = 20;
 export const REPO_HISTORY_MAX_LIMIT = 100;
 export const REPO_PATCH_BUDGET = 200 * 1024;
 
-function summariseCommit(c: { sha: string; commit: { message: string; author: { name: string; date: string } } }) {
+function summarizeCommit(c: { sha: string; commit: { message: string; author: { name: string; date: string } } }) {
   return {
     sha: c.sha,
     date: c.commit.author.date,
@@ -409,7 +409,7 @@ export async function repoHistory(
       ahead_by: c.ahead_by,
       behind_by: c.behind_by,
       total_commits: c.total_commits,
-      commits: c.commits.slice(0, limit).map(summariseCommit),
+      commits: c.commits.slice(0, limit).map(summarizeCommit),
       files: filesWithBudget(c.files ?? [], args.patch === true),
     };
   }
@@ -417,7 +417,7 @@ export async function repoHistory(
   const resp = await cachedGet(env, owner, repo, `${apiBase}/commits?sha=${encodeURIComponent(args.ref as string)}&per_page=${limit}`);
   if (!resp.ok) throw new Error(`repo_history commits failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
   const rows = (await resp.json()) as Array<{ sha: string; commit: { message: string; author: { name: string; date: string } } }>;
-  return { repo: full, mode: "commits" as const, ref: args.ref, limit, commits: rows.map(summariseCommit) };
+  return { repo: full, mode: "commits" as const, ref: args.ref, limit, commits: rows.map(summarizeCommit) };
 }
 
 /** Delete a branch. Three refusals; force lifts only two, never the default branch. */

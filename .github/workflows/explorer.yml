@@ -13,7 +13,7 @@ name: Explorer
 on:
   pull_request:
     branches: [master, main]
-    # The build loads Capsid's schemas and, for the tool catalogue, every tool registration
+    # The build loads Capsid's schemas and, for the tool catalog, every tool registration
     # (explorer/src/surface.mjs), which between them reach most of src/.
     paths:
       - "explorer/**"
@@ -158,3 +158,9 @@ jobs:
           done
           echo "::error::capsid.dustinedwards.info still serves $live, not $want" >&2
           exit 1
+
+      # Tell IndexNow the pages changed (explorer/indexnow.mjs, Prelum's submitIndexNow). A refused
+      # or failed ping is a warning, never a failure: the engines then crawl on their own.
+      - name: Tell IndexNow
+        if: steps.compare.outputs.deploy == 'true'
+        run: npm --prefix explorer run indexnow

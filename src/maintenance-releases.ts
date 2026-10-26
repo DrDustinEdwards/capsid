@@ -1,10 +1,12 @@
 import type { Env } from "./env";
-import { base64Decode } from "./encoding";
 import { ghFetch, getDefaultBranch } from "./github/client";
 import { createTag, publishRelease, releaseNotes } from "./github/releases";
 import type { MaintenanceItem } from "./maintenance";
 import { readRootManifest, readSharedConfig, releaseDecision } from "./shared-code";
 import { auditStatement } from "./store-guards";
+import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
+
+const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
 
 // The daily maintenance pass's release-tag rule (Capsid improvement list, item 13:
 // releases without Dustin's PC). A cloud session cannot push a tag, so a shared package's
@@ -253,7 +255,7 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
         throw new Error(`GitHub answered ${resp.status} for ${repo}'s ${CHANGELOG_PATH}`);
       }
       const data = (await resp.json()) as { content?: unknown; encoding?: unknown };
-      return data.encoding === "base64" && typeof data.content === "string" ? base64Decode(data.content) : null;
+      return data.encoding === "base64" && typeof data.content === "string" ? decodeBase64(data.content) : null;
     },
     async tag(repo, tag, sha) {
       const { owner, name } = split(repo);

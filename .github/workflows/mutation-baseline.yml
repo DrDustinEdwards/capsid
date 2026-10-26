@@ -185,7 +185,7 @@ jobs:
           # one, so a shard would have mutated a single file.
           npx stryker run stryker.run.json --mutate "$(paste -sd, shard-files.txt)"
 
-      - name: Summarise the shard
+      - name: Summarize the shard
         if: always()
         run: |
           node -e '

@@ -3,7 +3,7 @@ import { useApp, type UndoRequest } from "../app/ctx";
 import { runAction } from "../lib/api";
 import type { PortalActionRequest } from "../types";
 
-// The switch pattern (APG Switch; capsid/research/ui-pattern-catalogue.md). Its name is
+// The switch pattern (APG Switch; capsid/research/ui-pattern-catalog.md). Its name is
 // fixed, given by label, and never changes with its state: the state is aria-checked,
 // and the word On or Off beside the track is shown but not part of the name.
 export function Switch({

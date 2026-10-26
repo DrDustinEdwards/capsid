@@ -257,7 +257,7 @@ export function aggregate(points: UsagePoint[]): SeriesWrite[] {
  * The job each session's usage is recorded against. A session already bound (its
  * agent_sessions row, written by the hook receiver) keeps that job. Otherwise the
  * caller's binding. The capsid.job_id attribute never picks a job on its own: it is
- * set by whoever configured the exporter, so it is honoured only where it agrees with
+ * set by whoever configured the exporter, so it is honored only where it agrees with
  * the binding, and a disagreement is reported rather than recorded.
  */
 export function jobForSession(caller: SessionCaller, bound: string | null | undefined, attr: string | null): { job: string | null; mismatch: boolean } {

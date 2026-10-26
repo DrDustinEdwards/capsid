@@ -17,7 +17,7 @@ const FIXTURE = fileURLToPath(new URL("../dev/sample-feed.json", import.meta.url
 type Theme = "light" | "dark";
 
 // Before the app starts: the theme the app would restore (lib/prefs.ts, wf-theme), the
-// matching colour scheme, and the browser's clock pinned to the mock's.
+// matching color scheme, and the browser's clock pinned to the mock's.
 async function prepare(page: Page, theme: Theme): Promise<void> {
   await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
   await page.addInitScript((t) => {
@@ -82,6 +82,8 @@ test("a control's preview open, light", async ({ page }) => {
   await expect(dialog).toBeVisible();
   await dialog.getByLabel("Reason (required)").pressSequentially("maintenance window");
   await dialog.getByRole("button", { name: "Preview" }).click();
+  // The rows it changes are behind Details (e2e/confirm.spec.ts); the shot opens them.
+  await dialog.getByText("Details", { exact: true }).click();
   await expect(dialog.getByText("What changes")).toBeVisible();
   // Stops at the preview: the perform button is on screen and never pressed.
   await expect(dialog.getByRole("button", { name: "Mark failed", exact: true })).toBeVisible();

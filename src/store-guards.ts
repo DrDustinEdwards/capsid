@@ -1,4 +1,4 @@
-import { sha256Hex } from "./auth";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // INSERT that violates NOT NULL, guarded by NOT EXISTS, so a missing row aborts
 // the batch. A pre-read is a different transaction. meta.changes is inflated by

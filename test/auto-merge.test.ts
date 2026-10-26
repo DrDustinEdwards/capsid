@@ -734,7 +734,7 @@ test("loadMergePolicy accepts the signed policy and refuses one that names fewer
   assert.equal(ok.policy.version, "1");
 
   // The document is what a human reads to know what the machine may do alone, so a
-  // code check it does not name is a merge nobody authorised.
+  // code check it does not name is a merge nobody authorized.
   const short = GOOD_POLICY.replace(`- \`ci_green\` refuses on its own.\n`, "");
   const refused = await loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, short)));
   assert.ok("error" in refused);
@@ -869,8 +869,8 @@ test("the shipped policy document names exactly the checks the code enforces", (
   assert.deepEqual(parsed.policy.namespaces, ["dustinedwards", "carrel", "capsomer", "capsid"]);
   assert.deepEqual(parsed.policy.allowedPaths, namespacedAllowedPaths());
   // Version 7 drops author_is_driver and adds the size cap (job_e68de044f8a4); version 8 is
-  // version 7 as amended on 2026-10-19.
-  assert.equal(parsed.policy.version, "8");
+  // version 7 as amended on 2026-10-19; version 9 is version 8 in American spelling.
+  assert.equal(parsed.policy.version, "9");
   // The cap is a number in the code; the document states the same one in its check.
   const capLine = shipped.split("\n").find((l) => l.startsWith("- `size_within_cap`"));
   assert.match(capLine ?? "", new RegExp(`at most ${AUTO_MERGE_SIZE_CAP.toLocaleString("en-US")} lines`));
@@ -1952,7 +1952,7 @@ test("Dustin's approval still merges a PR in a paused namespace, and one that ch
   });
 });
 
-// A pull request labelled visual waits for Dustin's look (src/visual-pr.ts,
+// A pull request labeled visual waits for Dustin's look (src/visual-pr.ts,
 // job_0368576da167): held as class approve with what he needs to look at, judged even when
 // its body names no job, and merged by his approval on green CI.
 

@@ -1,10 +1,11 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { sha256Hex } from "../src/auth";
+
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import { legacyAgent } from "../src/agents";
 import { claimJob, completeJob, postJob } from "../src/jobs";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The OTLP receiver through the whole Worker, against a real D1 (migrations/0025):
 // who may send, the upsert's delta and cumulative arithmetic, and the per-job totals

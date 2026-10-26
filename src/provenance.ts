@@ -2,7 +2,7 @@ import { actorKind } from "./job-touches";
 
 // PROVENANCE TAGS (OWASP hardening item 1). Text that
 // Capsid relays from outside it, into a job body or a message a driver reads, is wrapped
-// in a labelled fence so a reader can tell data from instruction:
+// in a labeled fence so a reader can tell data from instruction:
 //
 //   ~~~external source=<kind> ref=<id>
 //   ...the relayed text...

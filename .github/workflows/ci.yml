@@ -36,7 +36,7 @@ permissions:
 # Rapid pushes supersede each other: a newer run on the same ref cancels the older one,
 # so two push deploys cannot interleave. Keyed on the event name too, because the
 # six-hourly schedule run shares refs/heads/master with push runs and must never cancel
-# a deploy mid-flight, nor be cancelled by one.
+# a deploy mid-flight, nor be canceled by one.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
@@ -235,7 +235,7 @@ jobs:
       # from the lockfile itself, only when it is about to roll back.
 
       # EXPECT_SHA is this run's commit when deploy succeeded, and master head on a
-      # schedule run. Empty otherwise: the ternary below is the behaviour.
+      # schedule run. Empty otherwise: the ternary below is the behavior.
       #
       # EXIT 1 IS A REFUSAL, EXIT 3 IS "COULD NOT RUN". A gate whose requests never got
       # an answer (a reset connection, a timeout) has not refused the deploy; on

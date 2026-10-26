@@ -12,7 +12,6 @@ import { gatherInbox, restrictInbox } from "./inbox";
 import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
 import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
 import { readSiteConfig } from "./ops-sites";
-import { b64urlDecode, b64urlEncode } from "./encoding";
 import { CONSENT_DIALOG_HEADERS, REPORT_PATH, securityHeadersFor } from "./security-headers";
 import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";
 import { callerIp, checkRate, CSP_REPORT_LIMIT } from "./rate-limit";
@@ -63,6 +62,9 @@ import { handlePortalPackageHistory, handlePortalSharedCode, PORTAL_PACKAGE_HIST
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
 import { logEvent } from "./log";
 import { textResponse } from "./http";
+import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+
+const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 const APPROVAL_COOKIE = "capsid_approved";
 const CSRF_COOKIE = "capsid_csrf";
@@ -90,7 +92,7 @@ async function approvedClients(request: Request, secret: string): Promise<string
   const payload = raw.slice(dot + 1);
   if (!await safeEqual(sig, await hmacHex(secret, payload))) return [];
   try {
-    const parsed = JSON.parse(b64urlDecode(payload));
+    const parsed = JSON.parse(decodeBase64url(payload));
     return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : [];
   } catch {
     return [];
@@ -98,7 +100,7 @@ async function approvedClients(request: Request, secret: string): Promise<string
 }
 
 async function approvalCookie(tags: string[], secret: string): Promise<string> {
-  const payload = b64urlEncode(JSON.stringify(tags));
+  const payload = base64url(JSON.stringify(tags));
   const sig = await hmacHex(secret, payload);
   return `${APPROVAL_COOKIE}=${sig}.${payload}; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=${APPROVAL_MAX_AGE_SECONDS}`;
 }
@@ -106,7 +108,7 @@ async function approvalCookie(tags: string[], secret: string): Promise<string> {
 function renderApprovalDialog(oauthReq: AuthRequest, clientName: string, csrf: string, registeredUris: string[] | undefined): Response {
   const name = escapeHtml(clientName);
   const redirect = escapeHtml(oauthReq.redirectUri);
-  const req = b64urlEncode(JSON.stringify(oauthReq));
+  const req = base64url(JSON.stringify(oauthReq));
   // Every registered redirect URI is shown, not just the requested one. A client's
   // metadata document may name several and the approval covers only the requested
   // one, so listing the rest is what shows the admin that a client with a familiar
@@ -207,7 +209,7 @@ async function handleAuthorizePost(request: Request, env: Env): Promise<Response
   if (!csrfCookie || !await safeEqual(csrfCookie, csrf)) return textResponse("csrf validation failed: restart the flow", 403);
   let oauthReq: AuthRequest;
   try {
-    oauthReq = JSON.parse(b64urlDecode(req)) as AuthRequest;
+    oauthReq = JSON.parse(decodeBase64url(req)) as AuthRequest;
   } catch {
     return textResponse("bad request", 400);
   }

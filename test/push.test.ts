@@ -8,7 +8,7 @@ import { PORTAL_CSRF_HEADER } from "../src/portal-actions.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH, pushTick, type PushPayload } from "../src/push.ts";
 import type { PortalPush } from "../src/ops-types/views.ts";
-import { b64url, fromB64url } from "../src/web-push.ts";
+import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 import { applyWrite, selectRows, type Row, type TableSpec } from "./fake-sql.ts";
 import { fakeKv } from "./fakes.ts";
 
@@ -25,12 +25,12 @@ const sqlTime = (ms: number) => iso(ms).replace("T", " ").slice(0, 19);
 async function keyPair(): Promise<{ jwk: JsonWebKey; raw: string }> {
   const pair = (await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"])) as CryptoKeyPair;
   const jwk = (await crypto.subtle.exportKey("jwk", pair.privateKey)) as JsonWebKey;
-  const raw = b64url(new Uint8Array((await crypto.subtle.exportKey("raw", pair.publicKey)) as ArrayBuffer));
+  const raw = base64url(new Uint8Array((await crypto.subtle.exportKey("raw", pair.publicKey)) as ArrayBuffer));
   return { jwk: { kty: "EC", crv: "P-256", d: jwk.d, x: jwk.x, y: jwk.y }, raw };
 }
 const VAPID = await keyPair();
 const DEVICE = await keyPair();
-const AUTH = b64url(crypto.getRandomValues(new Uint8Array(16)));
+const AUTH = base64url(crypto.getRandomValues(new Uint8Array(16)));
 const ENDPOINT = "https://fcm.googleapis.com/fcm/send/device-1";
 
 // D1 over the generic evaluator in test/fake-sql.ts, so every WHERE is applied.
@@ -112,7 +112,7 @@ async function decrypt(body: Uint8Array): Promise<string> {
   const hk = async (s: Uint8Array, ikm: Uint8Array, info: Uint8Array, n: number) =>
     new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt: s, info }, await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]), n * 8));
   const enc = new TextEncoder();
-  const ikm = await hk(fromB64url(AUTH), shared, new Uint8Array([...enc.encode("WebPush: info\0"), ...fromB64url(DEVICE.raw), ...asPublic]), 32);
+  const ikm = await hk(fromBase64url(AUTH), shared, new Uint8Array([...enc.encode("WebPush: info\0"), ...fromBase64url(DEVICE.raw), ...asPublic]), 32);
   const cek = await hk(salt, ikm, enc.encode("Content-Encoding: aes128gcm\0"), 16);
   const nonce = await hk(salt, ikm, enc.encode("Content-Encoding: nonce\0"), 12);
   const key = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["decrypt"]);

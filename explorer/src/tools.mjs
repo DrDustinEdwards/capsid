@@ -1,6 +1,6 @@
 // The tools Capsid serves over MCP: one page listing them all, filterable by what each may do,
 // and one page per tool with its actions and every argument. Built from the Worker's own
-// registrations (src/surface.mjs), so the catalogue cannot drift from what is served. Pure.
+// registrations (src/surface.mjs), so the catalog cannot drift from what is served. Pure.
 import { escapeHtml, layout, pageHead, scroller } from "./pages.mjs";
 
 /** @param {string} name */

@@ -180,7 +180,7 @@ describe("query plans", () => {
         .all<{ detail: string }>();
       const plan = result.results.map((r) => r.detail).join(" | ");
       expect(plan, `activity ${label} does not use ${index}`).toContain(index);
-      expect(plan, `activity ${label} sorts its rows to honour the LIMIT`).not.toContain("TEMP B-TREE");
+      expect(plan, `activity ${label} sorts its rows to honor the LIMIT`).not.toContain("TEMP B-TREE");
     }
   });
 

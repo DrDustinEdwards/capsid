@@ -1,4 +1,4 @@
-import { sha256Hex } from "./auth";
+
 import {
   AGENT_GRANTS,
   AGENT_KINDS,
@@ -15,6 +15,7 @@ import {
   type AgentScopes,
 } from "./agents-schema";
 import { auditStatement } from "./store-guards";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The control plane for credentials: mint, list, revoke, re-scope. Admin only (see
 // ADMIN_REASON in src/scope.ts): an agent that could mint another could widen itself.

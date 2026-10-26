@@ -122,7 +122,7 @@ test("PLANT: read returns a hostile body verbatim, with provenance, and writes n
       assert.ok(!result.isError, `read failed for ${entry.file}`);
       const payload = JSON.parse(textOf(result)) as { body: string; last_actor: string | null };
 
-      // 1. Verbatim: not escaped, stripped or summarised, or one client sees safe
+      // 1. Verbatim: not escaped, stripped or summarized, or one client sees safe
       //    text and another sees the original.
       assert.equal(payload.body, corpusText(entry.file), `${entry.file} did not round-trip byte-for-byte`);
       assert.ok(payload.body.includes(entry.canary));

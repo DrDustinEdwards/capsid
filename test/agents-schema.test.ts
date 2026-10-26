@@ -62,7 +62,7 @@ test("a scopes column that cannot be read grants the least there is, never the m
   leastPrivilege(parseScopes("{}"), "an object with no keys");
 });
 
-test("an unrecognised grant, flag or list entry is dropped rather than carried", () => {
+test("an unrecognized grant, flag or list entry is dropped rather than carried", () => {
   const scopes = parseScopes(
     JSON.stringify({
       namespaces: ["capsid", 7, null],

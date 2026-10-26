@@ -1,7 +1,7 @@
-import { verifyIdToken, type KeysFetcher } from "./access-jwt";
-import { getCookie, isAdminEmail, sha256Hex } from "./auth";
+import { accessSaas, authorizationUrl, finishSignIn, newSignIn, type KeySource } from "@dustinedwards/site-runtime/access-login";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
-import { b64urlFromBytes, bytesToHex } from "./encoding";
+import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
+import { getCookie, isAdminEmail } from "./auth";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
 // identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27), shared
@@ -9,12 +9,10 @@ import type { Env } from "./env";
 // (src/portal-auth.ts). What differs between them is passed in as a LoginFlow; what
 // each stores and does with the admitted email stays in the caller. A state token is
 // stored in OAUTH_KV for ten minutes, bound to the browser by a cookie holding a random
-// value of its own whose digest the stored state keeps, and used once. PKCE and an OIDC nonce are kept in the stored state, and the
-// ID token is verified in src/access-jwt.ts. The person is the email in the token,
+// value of its own whose digest the stored state keeps, and used once. PKCE and an OIDC nonce are kept in the stored state.
+// The endpoints, the authorization URL, the code exchange and the ID token check are
+// site-runtime's access-login, the sign-in every family MCP server uses. The person is the email in the token,
 // admitted only when it equals ADMIN_EMAIL or a CO_OWNER_EMAILS entry exactly.
-//
-// Every endpoint derives from the team domain and the client id, as the SaaS app's
-// discovery document states them (measured 2026-09-27).
 
 // How long a started login stays usable: the KV state entry and the state cookie.
 export const STATE_TTL_SECONDS = 600;
@@ -34,30 +32,18 @@ export function clearStateCookie(flow: LoginFlow): string {
   return `${flow.stateCookie}=; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=0`;
 }
 
-interface AccessSaas {
-  clientId: string;
-  clientSecret: string;
-  issuer: string;
-}
-
-// The SaaS app's settings, or null while any is unset: the login is then closed.
-function accessSaas(env: Env): AccessSaas | null {
-  const team = env.ACCESS_TEAM_DOMAIN?.trim().replace(/\/+$/, "");
-  const clientId = env.ACCESS_SAAS_CLIENT_ID?.trim();
-  const clientSecret = env.ACCESS_SAAS_CLIENT_SECRET?.trim();
-  if (!team || !clientId || !clientSecret) return null;
-  return { clientId, clientSecret, issuer: `${team}/cdn-cgi/access/sso/oidc/${encodeURIComponent(clientId)}` };
-}
-
-const TOKEN_EXCHANGE_TIMEOUT_MS = 15_000;
 const UNCONFIGURED = "the sign-in is not configured (ACCESS_TEAM_DOMAIN, ACCESS_SAAS_CLIENT_ID, ACCESS_SAAS_CLIENT_SECRET), so it is closed";
+
+// site-runtime's refusal codes, in the words a person reading the page needs.
+const REFUSALS: Record<string, string> = {
+  "invalid-id-token": "the ID token's signature, issuer, audience or dates do not check out",
+  "nonce-mismatch": "the ID token's nonce is not this sign-in's",
+  "email-not-verified": "the ID token says the email is not verified",
+  "no-email": "the ID token carries no email",
+};
 
 function refusal(message: string, status: number): Response {
   return new Response(message, { status, headers: { "Content-Type": "text/plain;charset=utf-8" } });
-}
-
-async function s256(verifier: string): Promise<string> {
-  return b64urlFromBytes(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
 }
 
 // What the KV state holds: the caller's own value, this sign-in's PKCE verifier and
@@ -84,24 +70,11 @@ export async function startAccessLogin(
   // The browser binding is random and unrelated to the state token. A cookie derived
   // from the token could be computed by anyone holding the callback URL, which carries
   // the token, and would bind nothing (Grok audit 2026-10, S6).
-  const binding = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
-  const signIn: StoredSignIn = {
-    stored,
-    verifier: b64urlFromBytes(crypto.getRandomValues(new Uint8Array(32))),
-    nonce: crypto.randomUUID(),
-    binding: await sha256Hex(binding),
-  };
+  const binding = toHex(crypto.getRandomValues(new Uint8Array(32)));
+  const signIn: StoredSignIn = { stored, ...newSignIn(), binding: await sha256Hex(binding) };
   await env.OAUTH_KV.put(`${flow.kvPrefix}${stateToken}`, JSON.stringify(signIn), { expirationTtl: STATE_TTL_SECONDS });
-  const target = new URL(`${saas.issuer}/authorization`);
-  target.searchParams.set("client_id", saas.clientId);
-  target.searchParams.set("redirect_uri", `${new URL(request.url).origin}${flow.callbackPath}`);
-  target.searchParams.set("response_type", "code");
-  target.searchParams.set("scope", "openid email profile");
-  target.searchParams.set("state", stateToken);
-  target.searchParams.set("nonce", signIn.nonce);
-  target.searchParams.set("code_challenge", await s256(signIn.verifier));
-  target.searchParams.set("code_challenge_method", "S256");
-  const headers = new Headers({ Location: target.href });
+  const target = await authorizationUrl(saas, { redirectUri: `${new URL(request.url).origin}${flow.callbackPath}`, state: stateToken, verifier: signIn.verifier, nonce: signIn.nonce });
+  const headers = new Headers({ Location: target });
   // The state cookie carries the binding, which neither the URL nor the stored state holds.
   headers.append("Set-Cookie", `${flow.stateCookie}=${binding}; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=${STATE_TTL_SECONDS}`);
   for (const cookie of extraCookies) headers.append("Set-Cookie", cookie);
@@ -120,7 +93,7 @@ export async function completeAccessLogin<T>(
   flow: LoginFlow,
   parse: (stored: string) => T,
   now: Date = new Date(),
-  fetchKeys?: KeysFetcher
+  keys?: KeySource
 ): Promise<AccessLoginResult<T>> {
   const fail = (message: string, status: number): AccessLoginResult<T> => ({ ok: false, response: refusal(message, status) });
   const saas = accessSaas(env);
@@ -160,35 +133,16 @@ export async function completeAccessLogin<T>(
     return fail(`stored authorization state is unreadable. ${flow.restartHint}`, 403);
   }
 
-  // Bounded, so a hung token endpoint does not hold the sign-in (Grok audit 2026-10-21, CA-10).
-  const tokenResp = await fetch(`${saas.issuer}/token`, {
-    method: "POST",
-    signal: AbortSignal.timeout(TOKEN_EXCHANGE_TIMEOUT_MS),
-    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: `${url.origin}${flow.callbackPath}`,
-      client_id: saas.clientId,
-      client_secret: saas.clientSecret,
-      code_verifier: signIn.verifier,
-    }),
-  }).catch(() => null);
-  if (!tokenResp) return fail("the Access token exchange did not answer in time", 502);
-  if (!tokenResp.ok) return fail(`the Access token exchange failed (${tokenResp.status})`, 502);
-  const tokens = (await tokenResp.json().catch(() => ({}))) as { id_token?: unknown };
-  if (typeof tokens.id_token !== "string") return fail("the Access token exchange returned no ID token", 502);
-  // The state is consumed after the exchange, so a transient Access error does not burn
-  // it. Replay is bounded by Access, which honours a code once.
+  // The state is consumed once the exchange is attempted, except when Access did not
+  // answer or failed, so a transient Access error does not burn it. Replay is bounded by
+  // Access, which honors a code once. The exchange gives up after 15 seconds (Grok audit
+  // 2026-10-21, CA-10, now in site-runtime).
+  const verdict = await finishSignIn(saas, { code, redirectUri: `${url.origin}${flow.callbackPath}`, verifier: signIn.verifier, nonce: signIn.nonce, now: now.getTime() }, keys);
+  if (!verdict.ok && verdict.reason === "token-exchange-unanswered") return fail("the Access token exchange did not answer in time", 502);
+  if (!verdict.ok && verdict.reason.startsWith("token-exchange-")) return fail(`the Access token exchange failed (${verdict.reason.slice("token-exchange-".length)})`, 502);
+  if (!verdict.ok && verdict.reason === "no-id-token") return fail("the Access token exchange returned no ID token", 502);
   await env.OAUTH_KV.delete(stateKey);
-
-  const verdict = await verifyIdToken(
-    tokens.id_token,
-    { issuer: saas.issuer, clientId: saas.clientId, jwksUrl: `${saas.issuer}/jwks`, nonce: signIn.nonce },
-    now,
-    fetchKeys
-  );
-  if (!verdict.ok) return fail(`the sign-in could not be verified: ${verdict.reason}. ${flow.restartHint}`, 403);
+  if (!verdict.ok) return fail(`the sign-in could not be verified: ${REFUSALS[verdict.reason] ?? verdict.reason}. ${flow.restartHint}`, 403);
   if (!await isAdminEmail(env, verdict.email)) {
     return fail("access denied: this email is not an administrator of capsid (ADMIN_EMAIL or CO_OWNER_EMAILS)", 403);
   }

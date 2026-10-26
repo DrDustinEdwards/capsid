@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { capsidStatus } from "../src/status.ts";
-import { sha256Hex } from "../src/auth.ts";
+
 import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2 } from "./fakes.ts";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The agent inventory is in capsid_run_improve action status, which a session calls at the start of a
 // run and the console renders, so last_seen is seen by someone who can act on it.

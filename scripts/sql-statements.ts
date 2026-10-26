@@ -1,6 +1,6 @@
 // EVERY SQL STATEMENT IN src/, EXTRACTED FROM THE SOURCE.
 //
-// A walk rather than a list, because a hand-maintained catalogue misses the next query
+// A walk rather than a list, because a hand-maintained catalog misses the next query
 // somebody adds.
 //
 // WHAT IT CAN AND CANNOT SEE. It reads the argument of every `.prepare(...)` call, which

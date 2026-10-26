@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { clearIdTokenKeysCache, type Jwk } from "../src/access-jwt.ts";
+import { forgetKeys, type Jwk } from "@dustinedwards/site-runtime/access-login";
 import { handlePortalCallback, portalSignOutCookies, readPortalSession, startPortalLogin } from "../src/portal-auth.ts";
 import { portalCsrf } from "../src/ops-feed.ts";
 import { PORTAL_HOST } from "../src/portal-host.ts";
@@ -37,7 +37,7 @@ async function idToken(claims: Record<string, unknown>): Promise<string> {
 }
 
 beforeEach(() => {
-  clearIdTokenKeysCache();
+  forgetKeys();
 });
 
 afterEach(() => {
@@ -191,7 +191,7 @@ for (const [name, claims, overrides, pattern] of [
   ["a wrong issuer", { iss: "https://other.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client" }, {}, /could not be verified/],
   ["a wrong audience", { aud: "other-client" }, {}, /could not be verified/],
   ["a nonce from another sign-in", { nonce: "someone-elses-nonce" }, {}, /could not be verified/],
-  ["an expired token", { exp: Math.floor(Date.now() / 1000) - 60 }, {}, /could not be verified/],
+  ["an expired token", { exp: Math.floor(Date.now() / 1000) - 120 }, {}, /could not be verified/],
 ] as const) {
   test(`${name} is refused and gets no session`, async () => {
     const e = env(overrides);

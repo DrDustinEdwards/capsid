@@ -6,9 +6,13 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as a signed job body. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 8
+- version: 9
 - enabled: true
 - namespaces: dustinedwards, carrel, capsomer, capsid
+
+Version 9 is version 8 in American spelling (Dustin, 2026-10-25). Capsomer renamed its CI
+step to `Build the behavior modules and wrappers`, so the required step names it that way.
+Every check is unchanged.
 
 Version 8 is version 7 as amended on 2026-10-19 (Grok audit U2 and U5, improve loop removal).
 
@@ -33,7 +37,7 @@ step, so no dustinedwards pull request could pass `ci_green`. The amended list n
 steps of both of its CI jobs as they are on `main` on 2026-10-18. It also says what has
 been true since 2026-09-23: a merge to dustinedwards-info's `main` deploys. Dustin
 decided on 2026-10-15 that an auto-merge there may deploy, for pull requests not
-labelled `visual` only. Every check is unchanged.
+labeled `visual` only. Every check is unchanged.
 
 Version 7 makes the pull request the claim (job_e68de044f8a4, ruled by Dustin
 2026-10-10, plan step 2). Cloud sessions all sign in as the admin login, which may hold
@@ -300,7 +304,7 @@ because this repo does not hold that workflow.
 ## Required CI, capsomer
 
 Every blocking step of the `check` job in Capsomer's `ci.yml`, read off `main` on
-2026-10-07. The steps that file marks warn-only are not listed: the forced-colours
+2026-10-07. The steps that file marks warn-only are not listed: the forced-colors
 screenshots, the size report, the token check, the site summary and the artifact upload
 run with `continue-on-error` or `always()`, so their success proves nothing about the
 change. The `results` job runs on a push to `main` only and is skipped on a pull request.
@@ -309,7 +313,7 @@ The separate `No bloat` workflow is warn-only by Capsomer's own ruling and is no
 - step `.github/workflows/ci.yml / check / Install`
 - step `.github/workflows/ci.yml / check / Palette, scales, unit tests, types`
 - step `.github/workflows/ci.yml / check / Every family's contrast pairs, both themes (blocking, rule 18)`
-- step `.github/workflows/ci.yml / check / Build the behaviour modules and wrappers`
+- step `.github/workflows/ci.yml / check / Build the behavior modules and wrappers`
 - step `.github/workflows/ci.yml / check / Build the site and every states page`
 - step `.github/workflows/ci.yml / check / Install Chromium`
 - step `.github/workflows/ci.yml / check / Keyboard and accessibility tests, both themes`
@@ -321,7 +325,7 @@ default branch. capsid does, so a capsid auto-merge is an unattended production 
 of a docs or stylesheet change, and of nothing else. Under versions 1 to 4, capsid pull
 requests of any unrefused path merged and deployed with no human (the first was PR #52,
 ruled 2026-09-16), with the checks above as the whole condition and the live gate's
-rollback as the backstop. Extending this policy to another namespace authorises
+rollback as the backstop. Extending this policy to another namespace authorizes
 unattended production deploys there too, and is decided one namespace at a time.
 
 **dustinedwards-info does.** Since 2026-09-23 (Dustin, reversing the 2026-08-25 ruling
@@ -329,7 +333,7 @@ that kept deploys a separate decision) its `deploy.yml` runs on `workflow_run` a
 concludes success on `main`, and ships that exact sha through `npm run ship`, unless the
 repository variable `AUTO_DEPLOY` is `off`. So a dustinedwards auto-merge is an
 unattended production deploy of the site. Dustin decided on 2026-10-15 that this is
-allowed for pull requests not labelled `visual` only. A pull request labelled `visual`
+allowed for pull requests not labeled `visual` only. A pull request labeled `visual`
 is held for his look even when every check passes (`visual_awaits_look`,
 `src/visual-pr.ts`), so it merges only on his approval. Measured from that workflow on
 2026-10-18.

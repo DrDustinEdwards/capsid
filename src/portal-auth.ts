@@ -1,9 +1,11 @@
 import { clearStateCookie, completeAccessLogin, type LoginFlow, startAccessLogin } from "./access-login";
 import { getCookie, hmacHex, isAdminEmail } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
-import { b64urlDecode, b64urlEncode } from "./encoding";
 import type { Env } from "./env";
 import { isPortalHost, isSameOriginPath, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
+import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+
+const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // Capsid Portal's own session. The OAuth provider mints tokens for MCP clients, and a
 // browser opening /portal has nothing to present, so the Portal signs in through the
@@ -65,7 +67,7 @@ export async function portalSessionCookie(user: PortalUser, secret: string, now:
     ...(user.name ? { name: user.name } : {}),
     exp: Math.floor(now.getTime() / 1000) + PORTAL_SESSION_TTL_SECONDS,
   };
-  const encoded = b64urlEncode(JSON.stringify(payload));
+  const encoded = base64url(JSON.stringify(payload));
   const sig = await hmacHex(secret, encoded);
   return `${PORTAL_SESSION_COOKIE}=${sig}.${encoded}; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`;
 }
@@ -91,7 +93,7 @@ export async function readPortalSession(request: Request, env: Env, now: Date): 
   if (!await safeEqual(sig, await hmacHex(env.COOKIE_ENCRYPTION_KEY, encoded))) return null;
   let payload: SessionPayload;
   try {
-    payload = JSON.parse(b64urlDecode(encoded)) as SessionPayload;
+    payload = JSON.parse(decodeBase64url(encoded)) as SessionPayload;
   } catch {
     return null;
   }

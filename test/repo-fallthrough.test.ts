@@ -487,7 +487,7 @@ test("ci_status run_id returns just that run, and refuses one that does not exis
   });
 });
 
-// A realistic job log: every line timestamped, groups labelled "Run <command>"
+// A realistic job log: every line timestamped, groups labeled "Run <command>"
 // rather than by step name, and post-run cleanup at the end. The step name appears
 // nowhere in it.
 const JOB_LOG = [

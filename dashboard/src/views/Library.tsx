@@ -61,7 +61,7 @@ function withJobLinks(text: string, back: string): ReactNode[] {
 }
 
 /** FTS5's snippet, its matched words (between U+0002 and U+0003, which no document
- *  holds, so a bracket in the text is never taken for a match) in bold: no colour needed,
+ *  holds, so a bracket in the text is never taken for a match) in bold: no color needed,
  *  so it reads the same in both themes. */
 function Snippet({ text }: { text: string }) {
   const parts = text.split(/\u0002([^\u0003]*)\u0003/g);

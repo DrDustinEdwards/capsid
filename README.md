@@ -7,7 +7,7 @@ Capsid is a Model Context Protocol (MCP) server and control plane for AI coding 
 - per-agent credentials with explicit scopes, enforced at a single authorization point;
 - mediated access to GitHub repositories through a GitHub App, with a record of each agent's reported outcome alongside the outcome GitHub confirms.
 
-The repository contains the source of one production deployment, operated by its owner and the co-owners listed in `CO_OWNER_EMAILS`. It is published under the MIT licence for reference. It is not a hosted service and is not supported for third-party use; [Installation](#installation) describes how to run a separate instance.
+The repository contains the source of one production deployment, operated by its owner and the co-owners listed in `CO_OWNER_EMAILS`. It is published under the MIT license for reference. It is not a hosted service and is not supported for third-party use; [Installation](#installation) describes how to run a separate instance.
 
 [![The Capsid system explorer](docs/images/explorer-light.png)](https://capsid.dustinedwards.info)
 
@@ -23,7 +23,7 @@ The repository contains the source of one production deployment, operated by its
 - [Installation](#installation)
 - [Development](#development)
 - [Documentation](#documentation)
-- [Licence](#licence)
+- [License](#license)
 
 ## Architecture
 
@@ -255,6 +255,6 @@ The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#12-checks
 - [docs/backups.md](docs/backups.md): backup contents and restore procedure.
 - [docs/rollback.md](docs/rollback.md): reverting a deploy.
 
-## Licence
+## License
 
 MIT. See [LICENSE](LICENSE). Citation metadata is in [CITATION.cff](CITATION.cff).

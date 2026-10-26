@@ -5,11 +5,11 @@
 // namespace from the D1 namespaces table, then reads and writes over the GitHub
 // REST API. No PAT, no clone.
 
-import { b64urlFromBytes, b64urlEncode } from "../encoding";
 import { repoPathProblem } from "../limits";
 // RepoEnv, not Env: this module must not be able to name the credentials it omits.
 import type { RepoEnv as Env } from "../env";
 import { logEvent } from "../log";
+import { base64url } from "@dustinedwards/site-runtime/encoding";
 
 const GH = "https://api.github.com";
 const GH_HEADERS: Record<string, string> = {
@@ -63,12 +63,12 @@ async function createAppJwt(env: Env): Promise<string> {
     throw new Error("GitHub App not configured: set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY");
   }
   const now = Math.floor(Date.now() / 1000);
-  const header = b64urlEncode(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payload = b64urlEncode(JSON.stringify({ iss: env.GITHUB_APP_CLIENT_ID, iat: now - 60, exp: now + 540 }));
+  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = base64url(JSON.stringify({ iss: env.GITHUB_APP_CLIENT_ID, iat: now - 60, exp: now + 540 }));
   const signingInput = `${header}.${payload}`;
   const key = await importPrivateKey(env.GITHUB_APP_PRIVATE_KEY);
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(signingInput));
-  return `${signingInput}.${b64urlFromBytes(new Uint8Array(signature))}`;
+  return `${signingInput}.${base64url(new Uint8Array(signature))}`;
 }
 
 async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Response> {
@@ -79,7 +79,6 @@ async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Res
     signal: init?.signal ?? AbortSignal.timeout(GH_TIMEOUT_MS),
   });
 }
-
 
 async function getInstallationId(env: Env, owner: string, repo: string): Promise<string> {
   const cached = await env.APP_KV.get(installKey(owner));

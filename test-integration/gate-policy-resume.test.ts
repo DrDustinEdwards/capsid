@@ -298,7 +298,7 @@ function githubWithMigrationAt(files: { head: string | null; defaultBranch: stri
       if (body === null) return json({ message: "Not Found" }, 404);
       return json({ type: "file", encoding: "base64", content: btoa(body), size: body.length, sha: "f".repeat(40) });
     }
-    return new Response("not modelled", { status: 404 });
+    return new Response("not modeled", { status: 404 });
   });
   return reads;
 }

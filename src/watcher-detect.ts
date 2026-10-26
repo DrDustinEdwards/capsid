@@ -88,7 +88,7 @@ export type DeployVerdict = { wait: true; reason: string } | { wait: false; evid
 
 /** Whether master head's own CI run leaves a drift finding premature. `runs` is the
  *  run list for that sha, newest first, or null when it could not be read. A failed
- *  or cancelled run, no run at all, and an unreadable list all keep the finding. */
+ *  or canceled run, no run at all, and an unreadable list all keep the finding. */
 export function deployVerdict(runs: readonly HeadRun[] | null, now: Date): DeployVerdict {
   if (runs === null) return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run could not be read` };
   const run = runs

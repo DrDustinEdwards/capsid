@@ -1,4 +1,3 @@
-import { base64Decode, base64Encode } from "../encoding";
 import { pathProblem } from "../limits";
 import type { RepoEnv as Env } from "../env";
 import {
@@ -14,6 +13,9 @@ import {
 } from "./client";
 import { ensureBranch, openPr } from "./refs";
 import { SEARCH_TREE_LIMIT } from "./search";
+import { fromBase64, toBase64 } from "@dustinedwards/site-runtime/encoding";
+
+const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
 
 export async function listRepoTree(env: Env, namespace: string, path = "", ref?: string, repoSelector?: string) {
   if (path) assertRepoArg("path", path);
@@ -53,13 +55,13 @@ export async function readRepoFile(env: Env, namespace: string, path: string, re
   if (data.type !== "file") throw new Error(`${path} is not a file (type: ${data.type})`);
   let content: string;
   if (data.encoding === "base64" && data.content) {
-    content = base64Decode(data.content);
+    content = decodeBase64(data.content);
   } else {
     // Files over 1 MB come back without inline content; fetch the blob by sha.
     const blob = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/blobs/${data.sha}`);
     if (!blob.ok) throw new Error(`read_repo_file blob fetch failed (${blob.status})`);
     const blobData = (await blob.json()) as { content: string; encoding: string };
-    content = base64Decode(blobData.content);
+    content = decodeBase64(blobData.content);
   }
   return { repo: `${owner}/${repo}`, path, size: data.size, sha: data.sha, content };
 }
@@ -95,7 +97,7 @@ async function putFile(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message,
-      content: base64Encode(content),
+      content: toBase64(content),
       branch,
       ...(sha ? { sha } : {}),
       ...commitAuthor(env),
@@ -123,7 +125,7 @@ const WORKFLOW_DIR = ".github/workflows/";
 
 export function workflowWriteRefusal(path: string, allow: boolean | undefined): string | null {
   if (allow === true) return null;
-  // Normalised the way encodePath will see it, so "./.github/workflows/x.yml" and a
+  // Normalized the way encodePath will see it, so "./.github/workflows/x.yml" and a
   // leading slash cannot slip past a bare startsWith.
   const segments = path.split("/").filter((seg) => seg.length > 0 && seg !== ".");
   const joined = `${segments.join("/")}/`;

@@ -2,8 +2,8 @@ import type { Env } from "./env";
 import { CF_API, type FetchLike } from "./ops-cloudflare";
 import { readSiteRow } from "./ops-sites";
 import { auditStatement } from "./store-guards";
-import { b64urlFromBytes } from "./encoding";
 import { logEvent } from "./log";
+import { base64url } from "@dustinedwards/site-runtime/encoding";
 
 // SET A SITE KEY (create a site key and set it on both sides, never shown), served as
 // capsid_admin_set_site_key. The site key is the site API's key
@@ -35,7 +35,7 @@ export function carrelSecretName(namespace: string): string {
 
 /** A new key: 32 random bytes, base64url, 43 characters (site-api refuses under 32). */
 export function mintSiteKey(): string {
-  return b64urlFromBytes(crypto.getRandomValues(new Uint8Array(KEY_BYTES)));
+  return base64url(crypto.getRandomValues(new Uint8Array(KEY_BYTES)));
 }
 
 async function putSecret(fetchImpl: FetchLike, token: string, account: string, script: string, name: string, value: string): Promise<{ ok: true } | { ok: false; error: string }> {

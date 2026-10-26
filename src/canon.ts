@@ -1,8 +1,9 @@
 import type { Agent } from "./agents";
-import { sha256Hex } from "./auth";
+
 import { callerIsSeat } from "./jobs-transition";
 import { TOOL_GRANTS } from "./scope";
 import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged, requireMissing, snapshotLive } from "./store-guards";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // CANON WRITE-PROTECTION (OWASP hardening item 2; design:
 // capsid/research/design-owasp-hardening.md, "Item 2").

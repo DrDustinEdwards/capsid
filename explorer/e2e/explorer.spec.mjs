@@ -76,7 +76,7 @@ eachTheme((theme) => {
     expect(problems).toEqual([]);
   });
 
-  test("behaviour: a system's page and its parts page open zoomed into its circle", async ({ page }) => {
+  test("behavior: a system's page and its parts page open zoomed into its circle", async ({ page }) => {
     await watch(page);
     await page.goto("/s/kit/");
     await expect(page.locator(".cap-system-map")).toHaveAttribute("data-zoom", "kit");
@@ -91,7 +91,7 @@ eachTheme((theme) => {
     expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
   });
 
-  test("behaviour: nothing is wider than a phone's screen", async ({ page }) => {
+  test("behavior: nothing is wider than a phone's screen", async ({ page }) => {
     for (const path of ["/s/hub/containers/", "/", "/systems/", "/tools/", "/numbers/", "/code/", "/flows/sample-round/2/"]) {
       await page.goto(path);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), path).toBe(true);

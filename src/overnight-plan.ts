@@ -42,7 +42,7 @@ const SUMMARY_CHARS = 600;
 // THE POLICY DOCUMENT. `- heavy <namespace>` marks a repo whose suites are heavy,
 // `- budget-minutes <n>` sets the night, `- estimate <namespace> <minutes>` overrides a
 // namespace's estimate. Only lines that begin `- ` and name one of those are read; the
-// rest is prose. An unrecognised rule line refuses the document, because a rule that
+// rest is prose. An unrecognized rule line refuses the document, because a rule that
 // silently did not apply reads as a repo that was planned correctly.
 
 export interface OvernightPolicy {

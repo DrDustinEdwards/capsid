@@ -1,9 +1,5 @@
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
-import { bytesToHex } from "./encoding";
-
-export async function sha256Hex(input: string): Promise<string> {
-  return bytesToHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input)));
-}
+import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
 
 // HMAC-SHA256, hex. The one definition.
 export async function hmacHex(secret: string, payload: string): Promise<string> {
@@ -15,7 +11,7 @@ export async function hmacHex(secret: string, payload: string): Promise<string> 
     ["sign"]
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
-  return bytesToHex(sig);
+  return toHex(sig);
 }
 
 // Cookie lookup, once, for the consent flow and the Portal session.

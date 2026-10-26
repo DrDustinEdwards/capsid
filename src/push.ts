@@ -21,7 +21,7 @@ import { HOUR_MS, DAY_MS } from "./time";
 //   3. a job at the correction cap (blocked with the retry-cap reason);
 //   4. a question over 4 hours old on a job with priority 70 or more;
 //   5. auto-merge paused for a namespace by the safety shutoff (src/merge-safety.ts);
-//   6. a pull request labelled visual waiting for Dustin to look at it (src/visual-pr.ts),
+//   6. a pull request labeled visual waiting for Dustin to look at it (src/visual-pr.ts),
 //      once per head, so a new push asks again (job_0368576da167).
 // Everything else waits for the digest.
 //
