@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   no-bloat:
-    uses: DrDustinEdwards/devkit/.github/workflows/no-bloat.yml@505cda4815ae1e0dfcd318c48b287238108e1a30 # v0.12.0
+    uses: DrDustinEdwards/devkit/.github/workflows/no-bloat.yml@be78f8296e6c4dfc5cbf0aa17223f15ce4ff4ec8 # v0.13.1
     with:
       # The knip (dashboard) run reads dashboard/, its own package.
       install: npm ci && npm ci --prefix dashboard
