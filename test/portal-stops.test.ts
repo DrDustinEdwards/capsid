@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { OpsFeed } from "../src/ops-types/feed.ts";
 
-// Every stop in the command menu (dashboard/src/lib/stops.ts; capsid/decisions.md
+// Every stop in the command menu (dashboard/src/lib/stops.ts, built with Capsomer's stopCommand; capsid/decisions.md
 // 2026-09-30, "admin panels review adopted", item 4), on the dashboard's sample feed.
 // Each is listed only while there is something to stop, and each runs the control it
 // stands for: a switch in Settings' Automation panel, or the confirm dialog.
@@ -19,7 +19,7 @@ function run(f: OpsFeed) {
     flip: (id) => void calls.push(`flip ${id}`),
     confirm: (r) => void calls.push(`confirm ${r.action} ${JSON.stringify(r.params)}`),
   });
-  return { list, calls, texts: list.map((c) => c.text) };
+  return { list, calls, texts: list.map((c) => c.label) };
 }
 
 test("PLANT: a revoked agent has no Revoke, and an off switch no Turn off", () => {

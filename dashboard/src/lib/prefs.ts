@@ -1,122 +1,40 @@
 import { useSyncExternalStore } from "react";
+import { readPref, writePref } from "capsomer/behavior/shell";
+import { SINGLE_KEYS_PREF, setSingleKeys, singleKeysOn } from "capsomer/behavior/shortcuts";
+import { applyStoredTheme, toggleTheme as toggleCapTheme, type ThemeChoice } from "capsomer/behavior/theme-switch";
 
-// Per-viewer conveniences in localStorage. Storage can be blocked (private windows,
-// cleared site data); a failed read falls back to the default and a failed write
-// leaves the choice for this page load only. Both are reported to the console.
-
-export function readPref(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch (e) {
-    console.warn(`Watch Floor: could not read ${key} from localStorage`, e);
-    return null;
-  }
-}
-
-export function writePref(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch (e) {
-    console.warn(`Watch Floor: could not save ${key} to localStorage`, e);
-  }
-}
-
-function removePref(key: string): void {
-  try {
-    localStorage.removeItem(key);
-  } catch (e) {
-    console.warn(`Watch Floor: could not remove ${key} from localStorage`, e);
-  }
-}
+// Per-viewer conveniences in localStorage, through Capsomer: the theme (theme-switch), the
+// side menu (admin-shell) and single-key shortcuts (shortcuts). Blocked storage falls back to
+// the default, and a choice then lasts for this page load only.
+export { readPref, writePref, setSingleKeys };
 
 // The side menu's state: "collapsed" or "expanded". Anything else, including no value or
 // storage that cannot be read, is expanded.
 export const RAIL_PREF = "wf-rail";
 
-// The theme: "light" or "dark" saved, or nothing saved, which follows the system
-// (prefers-color-scheme). The choice is the data-theme attribute on <html>; with none,
-// Capsomer's tokens follow the system.
+// The theme: "light" or "dark" saved, or nothing saved, which follows the system.
 export const THEME_PREF = "wf-theme";
-export type Theme = "light" | "dark";
-export type ThemeChoice = "system" | Theme;
 
-// Listeners for the display preferences, so the top bar, the shortcut sheet and
-// Settings show the same state whichever of them changed it.
-const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((l) => l());
-function subscribe(l: () => void): () => void {
-  listeners.add(l);
-  return () => listeners.delete(l);
-}
+// Before Capsomer's shortcut registry the Portal kept single keys under its own key. An "off"
+// saved there is carried over once, so nobody who turned them off finds them on again.
+const OLD_SINGLE_KEYS_PREF = "wf-single-keys";
 
-const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-function themeChoice(): ThemeChoice {
-  const t = document.documentElement.getAttribute("data-theme");
-  return t === "light" || t === "dark" ? t : "system";
-}
-
-function currentTheme(): Theme {
-  const t = themeChoice();
-  if (t !== "system") return t;
-  return systemDark() ? "dark" : "light";
-}
-
+// Run before first paint.
 export function applySavedTheme(): void {
-  const saved = readPref(THEME_PREF);
-  if (saved === "light" || saved === "dark") document.documentElement.setAttribute("data-theme", saved);
+  applyStoredTheme(THEME_PREF);
+  if (readPref(OLD_SINGLE_KEYS_PREF) === "off" && readPref(SINGLE_KEYS_PREF) === null) setSingleKeys(false);
 }
 
-/** System removes the saved choice and the attribute, so prefers-color-scheme applies. */
-export function setThemeChoice(choice: ThemeChoice): void {
-  if (choice === "system") {
-    document.documentElement.removeAttribute("data-theme");
-    removePref(THEME_PREF);
-  } else {
-    document.documentElement.setAttribute("data-theme", choice);
-    writePref(THEME_PREF, choice);
-  }
-  // The header's theme button (Capsomer's theme switch) renames itself on this event.
-  document.dispatchEvent(new CustomEvent("cap-theme", { detail: { choice: currentTheme() } }));
-  emit();
+export function toggleTheme(): ThemeChoice {
+  return toggleCapTheme(THEME_PREF);
 }
 
-export function toggleTheme(): Theme {
-  const next: Theme = currentTheme() === "dark" ? "light" : "dark";
-  setThemeChoice(next);
-  return next;
+function subscribeSingleKeys(l: () => void): () => void {
+  document.addEventListener("cap-single-keys", l);
+  return () => document.removeEventListener("cap-single-keys", l);
 }
 
-function subscribeTheme(l: () => void): () => void {
-  const mq = window.matchMedia("(prefers-color-scheme: dark)");
-  mq.addEventListener("change", l);
-  // A press on the header's theme button arrives as Capsomer's cap-theme event.
-  document.addEventListener("cap-theme", l);
-  const off = subscribe(l);
-  return () => (mq.removeEventListener("change", l), document.removeEventListener("cap-theme", l), off());
-}
-
-/** The saved choice (system, light or dark), kept current. */
-export function useThemeChoice(): ThemeChoice {
-  return useSyncExternalStore(subscribeTheme, themeChoice);
-}
-
-// Single-key shortcuts ("g" then a letter, "j", "t", ...): on unless turned off. Held
-// in memory too, so a failed write still holds for this page load.
-const SINGLE_KEYS_PREF = "wf-single-keys";
-let singleKeys: boolean | null = null;
-
-function singleKeysOn(): boolean {
-  if (singleKeys === null) singleKeys = readPref(SINGLE_KEYS_PREF) !== "off";
-  return singleKeys;
-}
-
-export function setSingleKeys(on: boolean): void {
-  singleKeys = on;
-  writePref(SINGLE_KEYS_PREF, on ? "on" : "off");
-  emit();
-}
-
+// Single-key shortcuts ("g" then a letter, "j", "t", ...): on unless turned off.
 export function useSingleKeys(): boolean {
-  return useSyncExternalStore(subscribe, singleKeysOn);
+  return useSyncExternalStore(subscribeSingleKeys, singleKeysOn);
 }

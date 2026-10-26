@@ -5,7 +5,8 @@ import { Link, useLocation, useSearch } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
 import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
-import { RAIL_PREF, THEME_PREF, readPref, setSingleKeys, toggleTheme, useSingleKeys, writePref } from "../lib/prefs";
+import { RAIL_PREF, THEME_PREF, readPref, toggleTheme, useSingleKeys, writePref } from "../lib/prefs";
+import { register, setSheetOpener } from "capsomer/behavior/shortcuts";
 import { NavIcon } from "../ui/icons";
 import { FreshRing } from "../ui/charts";
 import { AppCtx, MOVED, VIEWS, parseRoute, placePath, routePath, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
@@ -34,8 +35,23 @@ const Drawer = lazy(() => import("./Drawer").then((m) => ({ default: m.Drawer })
 const CommandPalette = lazy(() => import("./CommandMenu").then((m) => ({ default: m.CommandPalette })));
 // Loaded on the first control a person opens.
 const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
-// Loaded the first time it is opened, then kept: the initial bundle does not carry it.
-const HelpSheet = lazy(() => import("./HelpSheet").then((m) => ({ default: m.HelpSheet })));
+// Capsomer's "?" sheet, which lists every shortcut registered below. Loaded the first time it
+// is opened, then kept: the initial bundle does not carry it.
+const ShortcutSheet = lazy(() => import("./ShortcutSheet").then((m) => ({ default: m.ShortcutSheet })));
+
+// What each view is for, in a line, under its "g" shortcut in the sheet (design D13 moved
+// the views' intro sentences there). Jobs, Pull requests and the rest that need none have none.
+const ABOUT: Partial<Record<ViewId, string>> = {
+  needs: "The home: every decision waiting for you, with its buttons, then every problem worst first.",
+  queue: "Every job by state. A blocked job shows what it waits on; open it to answer or resume it.",
+  prs: "The pull requests waiting for you, with Approve and Close, then those recorded against jobs.",
+  health: "One line on whether anything is broken, the tiles, then a tab each for sites, problems, deploys, backups and CI. Deploys are from Cloudflare's own record, so a hand-run wrangler deploy shows up too.",
+  activity: "The audit log, newest first: who did what, where.",
+  agents: "Every credential and when it was last seen; Checks sets what each agent said beside what the Worker verified.",
+  packages: "Published: each npm package configured in Settings. Shared: the tag each app pins, who is behind, and the local copies left.",
+  library: "The knowledge store, read-only: decisions, rulings and research, a search, and each document with its links and jobs.",
+  settings: "The automation switches first, then phone alerts and email, sites, packages, projects and display. Every change is previewed first.",
+};
 
 // The phone tab bar (the Portal UX audit's sitemap, 2026-10): Needs you, Health and Pull
 // requests, the three pages a person opens most. The header's menu button opens every page
@@ -320,72 +336,29 @@ export function App() {
     el.scrollIntoView({ block: "nearest" });
   };
 
-  // Keyboard grammar. Latest values through a ref so one listener serves.
-  const confirming = confirmReq != null;
-  const keys = useRef({ singleKeys, palette, help, confirming, route, views });
-  keys.current = { singleKeys, palette, help, confirming, route, views };
+  // Keyboard grammar, in Capsomer's shortcut registry: one listener, single keys that can be
+  // switched off (Settings, Display, and the sheet), and a modal dialog (the drawer, the
+  // confirm dialog, the menu, the sheet) owns every key while it is open. Latest values
+  // through a ref so each shortcut is registered once.
   const act = useRef({ go, refresh, theme, toggleRail, step });
   act.current = { go, refresh, theme, toggleRail, step };
   useEffect(() => {
-    let gAt = 0;
-    const onKey = (e: KeyboardEvent) => {
-      const k = keys.current;
-      const a = act.current;
-      if (k.confirming) return; // the confirm dialog owns every key, Ctrl K included
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setHelp(false);
-        setPalette((p) => !p);
-        return;
-      }
-      if (k.palette || k.help) return; // the open dialog owns the keys; Esc closes it natively
-      // The drawer is a modal dialog: its own cancel event closes it on Esc (Drawer.tsx).
-      if (e.key === "Escape") return;
-      const t = e.target as HTMLElement;
-      if (t.closest("input, textarea, select, [contenteditable='true']") || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (!k.singleKeys) return;
-      if (gAt && Date.now() - gAt < 1200) {
-        gAt = 0;
-        const v = k.views.find((x) => x.key === e.key);
-        if (v) (e.preventDefault(), a.go(v.id));
-        return;
-      }
-      switch (e.key) {
-        case "g":
-          gAt = Date.now();
-          return;
-        case "/":
-          e.preventDefault();
-          setPalette(true);
-          return;
-        case "?":
-          setHelp(true);
-          return;
-        case "r":
-          void a.refresh();
-          return;
-        case "t":
-          a.theme();
-          return;
-        case "[":
-          a.toggleRail();
-          return;
-        case "f": {
-          const s = document.getElementById("qsearch");
-          if (s) (e.preventDefault(), s.focus());
-          return;
-        }
-        case "j":
-        case "k":
-          if (k.route.drawer) return;
-          e.preventDefault();
-          a.step(e.key === "j" ? 1 : -1);
-          return;
-      }
+    setSheetOpener(() => setHelp(true));
+    const a = () => act.current;
+    const offs = [
+      register({ key: ["Mod+k", "/"], label: "Open the command menu", group: "General", run: () => setPalette(true) }),
+      ...views.map((v) => register({ key: `g ${v.key}`, label: v.label, about: ABOUT[v.id], group: "Go to", run: () => a().go(v.id) })),
+      register({ key: ["j", "k"], label: "Move through the list on screen", about: "Enter opens the selected row.", group: "This page", run: (e) => a().step(e.key === "j" ? 1 : -1) }),
+      register({ key: "f", label: "Filter the list", group: "This page", when: () => !!document.getElementById("qsearch"), run: () => document.getElementById("qsearch")?.focus() }),
+      register({ key: "r", label: "Refresh now", group: "General", run: () => void a().refresh() }),
+      register({ key: "t", label: "Switch light and dark", group: "General", run: () => a().theme() }),
+      register({ key: "[", label: "Collapse or expand the side menu", group: "General", run: () => a().toggleRail() }),
+    ];
+    return () => {
+      offs.forEach((off) => off());
+      setSheetOpener(null);
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [views]);
 
   // Tooltips (data-tip): the uptime ticks, and the collapsed side menu. Shown on pointer
   // hover and on keyboard focus. data-tip-side="right" puts the tip beside the element
@@ -438,7 +411,7 @@ export function App() {
       const until = Date.now() + 3000;
       const press = () => {
         const el = document.getElementById(id);
-        if (el instanceof HTMLButtonElement && !el.disabled) {
+        if (el instanceof HTMLInputElement && !el.disabled) {
           el.focus();
           el.click();
         } else if (Date.now() < until) setTimeout(press, 50);
@@ -640,7 +613,7 @@ export function App() {
       )}
       {helpUsed && (
         <Suspense fallback={null}>
-          <HelpSheet open={help} onClose={() => setHelp(false)} views={views} singleKeys={singleKeys} setSingleKeys={setSingleKeys} />
+          <ShortcutSheet open={help} onOpenChange={setHelp} />
         </Suspense>
       )}
       {confirmReq && feed && (

@@ -96,7 +96,7 @@ test("PLANT: Close on a pull request row asks a reason, then previews pr_close w
   const sent = previews(page);
   await visit(page, "needs");
   await group(page, "w-prs").getByRole("button", { name: "Close example-org/sample-c #33", exact: true }).click();
-  await dialog(page).getByLabel("Reason (required)").fill("replaced by a newer pull request");
+  await dialog(page).getByRole("textbox", { name: "Reason", exact: true }).fill("replaced by a newer pull request");
   await dialog(page).getByRole("button", { name: "Preview" }).click();
   await expect(dialog(page).getByRole("button", { name: "Close pull request", exact: true })).toBeVisible();
   expect(sent).toEqual([{ action: "pr_close", params: { namespace: "sample-c", repo: "example-org/sample-c", number: "33", reason: "replaced by a newer pull request" } }]);
@@ -168,7 +168,7 @@ test("PLANT: a rule change's Review previews canon_approve and Reject canon_reje
   await expect(dialog(page).getByRole("button", { name: "Approve and write" })).toBeVisible();
   await dialog(page).getByRole("button", { name: "Cancel" }).click();
   await rules.locator('[data-canon="6"]').getByRole("button", { name: /^Reject / }).click();
-  await dialog(page).getByLabel("Reason (required)").fill("outdated");
+  await dialog(page).getByRole("textbox", { name: "Reason", exact: true }).fill("outdated");
   await dialog(page).getByRole("button", { name: "Preview" }).click();
   await expect(dialog(page).getByRole("button", { name: "Reject proposal" })).toBeVisible();
   await dialog(page).getByRole("button", { name: "Cancel" }).click();

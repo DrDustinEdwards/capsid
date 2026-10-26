@@ -4,6 +4,9 @@
 
 @layer cap.base {
   * { box-sizing: border-box; }
+  /* As Capsomer's base.css: its components hide parts with the hidden attribute (the reason
+     form, a field's error) over their own display rules. */
+  [hidden] { display: none !important; }
   html, body { min-height: 100%; }
   body {
     margin: 0;
@@ -153,7 +156,7 @@ tr:has(.stretch) { position: relative; }
 .trends { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .trends > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 10px 16px; min-height: 44px; font-weight: 600; list-style: none; }
 summary { cursor: pointer; }
-.trends > summary::-webkit-details-marker, .confirm-details > summary::-webkit-details-marker, summary.btn::-webkit-details-marker { display: none; }
+.trends > summary::-webkit-details-marker, summary.btn::-webkit-details-marker { display: none; }
 .trends > summary .faint { font-weight: 400; font-size: var(--fs-detail); }
 details[open] > summary .chev { transform: rotate(45deg); }
 .trends-body { padding: 4px 16px 0; min-height: 320px; }
@@ -351,34 +354,7 @@ table.list, table.fleet, table.brief { width: 100%; border-collapse: collapse; }
 .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
 .callout.crit { border-color: var(--crit); background: var(--crit-soft); }
 
-/* palette: a native <dialog>, opened with showModal() */
 dialog { color: var(--text); }
-.palette {
-  position: fixed; left: 50%; top: 12vh; margin: 0; padding: 0; transform: translateX(-50%); width: min(620px, calc(100% - 32px));
-  max-width: none; max-height: none;
-  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: var(--shadow);
-  overflow: hidden; transition: opacity 0.14s, transform 0.14s;
-}
-.palette::backdrop { background: transparent; }
-@starting-style { .palette[open] { opacity: 0; transform: translateX(-50%) translateY(-6px); } }
-.palette input { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 14px 16px; font-size: 15px; outline: none; }
-/* The unlayered outline: none above beats the base layer's ring, so the ring is restored here. */
-.palette input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.palette ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow-y: auto; }
-.palette li { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
-.palette li[aria-selected="true"] { background: var(--accent-soft); }
-.palette li .k { font-family: var(--mono); font-size: var(--fs-label); color: var(--dim); }
-.palette li .grp { font-size: var(--fs-label); color: var(--muted); }
-.palette .foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: var(--fs-label); color: var(--muted); flex-wrap: wrap; }
-
-.help { margin: auto; padding: 0; border: 0; background: transparent; width: min(560px, calc(100% - 32px)); max-width: none; max-height: none; overflow: visible; transition: opacity 0.14s; }
-.help::backdrop { background: var(--scrim); }
-@starting-style { .help[open] { opacity: 0; } }
-.help .card { background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: var(--shadow); width: 100%; padding: 18px 20px; display: grid; gap: 14px; max-height: 80vh; overflow-y: auto; }
-.help h2 { margin: 0; font-size: 16px; }
-.help dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; margin: 0; font-size: 13px; }
-.help dt { display: flex; gap: 4px; }
-.help label { display: flex; gap: 8px; align-items: center; font-size: 13px; }
 
 .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 12px); background: var(--text); color: var(--ground); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; opacity: 0; transition: opacity 0.16s, transform 0.16s; z-index: 70; pointer-events: none; }
 .toast.on { opacity: 1; transform: translate(-50%, 0); }
@@ -409,7 +385,6 @@ dialog { color: var(--text); }
 .nodata-cell { display: grid; gap: 2px; }
 .nodata-cell .src { white-space: normal; max-width: 22ch; }
 .th-note { display: block; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--dim); }
-.help .about { display: block; font-size: var(--fs-detail); color: var(--muted); }
 .chip.flag { height: 20px; font-size: var(--fs-label); margin-right: 4px; }
 .stack { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--sunken); }
 .stack i.b { background: var(--warn); } .stack i.r { background: var(--info); } .stack i.q { background: var(--line-strong); }
@@ -425,10 +400,6 @@ dialog { color: var(--text); }
 .prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .nowrap { white-space: nowrap; }
 select.search { padding-right: 6px; }
-.confirm .section-title { margin-bottom: 4px; }
-.confirm form { gap: 6px; }
-.confirm-say { margin: 0; font-size: 14px; }
-.confirm-details > summary { color: var(--accent-text); min-height: 32px; display: flex; align-items: center; }
 ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
 ul.plain.mono { font-size: var(--fs-detail); }
 [data-open] { cursor: pointer; }
@@ -481,19 +452,6 @@ td.ctl .toolbar { flex-wrap: nowrap; justify-content: flex-end; }
 /* A control cell with more than one button stacks them, so the column is as wide as one. */
 td.ctl .toolbar.col { flex-direction: column; align-items: flex-end; }
 
-/* Switches (ui/Switch.tsx): the name is fixed, the On or Off word beside the track. An
-   automation switch opens a one-line reason beside it and moves only once applied. */
-.switch { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; padding: 4px 0; font-weight: 600; min-width: 64px; }
-.switch .track { width: 34px; height: 20px; border-radius: 999px; background: var(--sunken); border: 1px solid var(--line-strong); position: relative; flex: none; }
-.switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform 0.12s; }
-.switch[aria-checked="true"] .track { background: var(--accent); border-color: var(--accent); }
-.switch[aria-checked="true"] .track::after { transform: translateX(14px); background: var(--surface); }
-.switch[aria-busy="true"] .track { outline: 2px dashed var(--accent-line); outline-offset: 2px; }
-.switch:disabled { opacity: 0.5; cursor: default; }
-.autoctl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
-.reason { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; flex: 1 1 260px; }
-.reason label { font-size: var(--fs-detail); color: var(--muted); }
-.reason .field { flex: 1 1 180px; max-width: 420px; height: 30px; }
 .field[aria-invalid="true"] { border-color: var(--crit); }
 .err { color: var(--crit); font-size: var(--fs-detail); font-weight: 500; flex-basis: 100%; }
 .state-note { font-size: var(--fs-detail); color: var(--muted); }
@@ -511,8 +469,6 @@ td.ctl .toolbar.col { flex-direction: column; align-items: flex-end; }
 .prefrow { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .device-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .device-list .prefrow { flex-wrap: wrap; }
-.radios { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
-.radios label { display: flex; gap: 8px; align-items: center; }
 .when .faint { white-space: nowrap; }
 
 /* The result of an action: stays until dismissed or replaced, not on a timer. */

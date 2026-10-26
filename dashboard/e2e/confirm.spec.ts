@@ -27,7 +27,7 @@ test("Mark failed with a typed reason, then Preview, shows the preview and perfo
     await route.fulfill({ json: { action: "fail_job", summary: `Marked ${JOB} failed.`, warning: null, feed } });
   });
   const dialog = await openReasonDialog(page);
-  await dialog.getByLabel("Reason (required)").pressSequentially("testing");
+  await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("testing");
   await dialog.getByRole("button", { name: "Preview" }).click();
   // A plain sentence first; the rows it changes and the audit rows are behind Details
   // (UX audit M5).
@@ -55,12 +55,12 @@ test("a reason the browser filled in without an input event still previews", asy
   const dialog = await openReasonDialog(page);
   // Autofill and similar set the field's value with no input event, so the app's state
   // never hears of it. The click must read the field.
-  await dialog.getByLabel("Reason (required)").evaluate((el: HTMLTextAreaElement) => {
+  await dialog.getByRole("textbox", { name: "Reason", exact: true }).evaluate((el: HTMLTextAreaElement) => {
     el.value = "filled by the browser";
   });
   await dialog.getByRole("button", { name: "Preview" }).click();
   await expect(dialog.locator("[data-summary]")).toBeVisible();
-  await expect(dialog.locator("details.confirm-details")).toHaveCount(1);
+  await expect(dialog.locator("details.cap-disclosure")).toHaveCount(1);
 });
 
 test("a refusal from the Worker is shown in the dialog, verbatim", async ({ page }) => {
@@ -68,7 +68,7 @@ test("a refusal from the Worker is shown in the dialog, verbatim", async ({ page
     route.fulfill({ status: 403, contentType: "text/plain", body: "csrf validation failed: reload Capsid Portal and try again." })
   );
   const dialog = await openReasonDialog(page);
-  await dialog.getByLabel("Reason (required)").pressSequentially("testing");
+  await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("testing");
   await dialog.getByRole("button", { name: "Preview" }).click();
   await expect(dialog.getByRole("alert")).toContainText("csrf validation failed: reload Capsid Portal and try again.");
 });
@@ -76,7 +76,7 @@ test("a refusal from the Worker is shown in the dialog, verbatim", async ({ page
 test("a request the network drops is shown in the dialog", async ({ page }) => {
   await page.route(PREVIEW_URL, (route) => route.abort("connectionreset"));
   const dialog = await openReasonDialog(page);
-  await dialog.getByLabel("Reason (required)").pressSequentially("testing");
+  await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("testing");
   await dialog.getByRole("button", { name: "Preview" }).click();
   await expect(dialog.getByRole("alert")).toContainText("Could not reach the server");
 });
@@ -86,9 +86,9 @@ test("a preview with no answer ends in a message, not a dialog stuck busy", asyn
   // Held, never answered.
   await page.route(PREVIEW_URL, () => undefined);
   const dialog = await openReasonDialog(page);
-  await dialog.getByLabel("Reason (required)").pressSequentially("testing");
+  await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("testing");
   await dialog.getByRole("button", { name: "Preview" }).click();
-  await expect(dialog.getByRole("button", { name: "Checking..." })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Preview" })).toHaveAttribute("aria-busy", "true");
   await page.clock.runFor(21_000);
   await expect(dialog.getByRole("alert")).toContainText("no answer within 20 seconds");
   await expect(dialog.getByRole("button", { name: "Try again" })).toBeEnabled();
@@ -106,7 +106,7 @@ test.describe("on a phone", () => {
     for (const name of ["Preview", "Cancel"]) {
       await expect(dialog.getByRole("button", { name })).toBeInViewport({ ratio: 1 });
     }
-    await dialog.getByLabel("Reason (required)").pressSequentially("testing");
+    await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("testing");
     await dialog.getByRole("button", { name: "Preview" }).tap();
     await expect(dialog.locator("[data-summary]")).toBeVisible();
     await dialog.getByText("Details", { exact: true }).tap();

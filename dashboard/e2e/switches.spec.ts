@@ -21,12 +21,12 @@ test("PLANT: flipping a switch opens a reason field and does not move it; an emp
   let sent = 0;
   await page.route(PREVIEW_URL, (route) => (sent++, route.continue()));
   await visit(page, "namespaces");
-  await expect(seat(page)).toHaveAttribute("aria-checked", "false");
+  await expect(seat(page)).not.toBeChecked();
   await seat(page).click();
   const field = page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/);
   await expect(field).toBeFocused();
   // Not moved: the reason has not been applied.
-  await expect(seat(page)).toHaveAttribute("aria-checked", "false");
+  await expect(seat(page)).not.toBeChecked();
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(field).toHaveAttribute("aria-invalid", "true");
   const err = page.getByText("Type a reason. It is recorded with the change.");
@@ -34,7 +34,7 @@ test("PLANT: flipping a switch opens a reason field and does not move it; an emp
   const errId = await err.getAttribute("id");
   expect(errId).toBeTruthy();
   expect((await field.getAttribute("aria-describedby"))?.split(" ")).toContain(errId);
-  await expect(seat(page)).toHaveAttribute("aria-checked", "false");
+  await expect(seat(page)).not.toBeChecked();
   expect(sent).toBe(0);
 });
 
@@ -44,9 +44,9 @@ test("PLANT: Esc cancels the reason and returns focus to the switch, which has n
   const field = page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/);
   await field.fill("typed, then thought better of it");
   await page.keyboard.press("Escape");
-  await expect(field).toHaveCount(0);
+  await expect(field).toBeHidden();
   await expect(seat(page)).toBeFocused();
-  await expect(seat(page)).toHaveAttribute("aria-checked", "false");
+  await expect(seat(page)).not.toBeChecked();
 });
 
 test("PLANT: the switch's accessible name is the same in both states", async ({ page }) => {
@@ -55,11 +55,11 @@ test("PLANT: the switch's accessible name is the same in both states", async ({ 
   await seat(page).click();
   await page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/).fill("checking the name");
   await page.keyboard.press("Enter");
-  await expect(seat(page)).toHaveAttribute("aria-checked", "true");
+  await expect(seat(page)).toBeChecked();
   await expect(seat(page)).toHaveAccessibleName("Overnight run");
   // Leave it as found.
   await message(page).getByRole("button", { name: "Undo" }).click();
-  await expect(seat(page)).toHaveAttribute("aria-checked", "false");
+  await expect(seat(page)).not.toBeChecked();
 });
 
 test("PLANT: applying moves the switch, returns focus to it, and leaves a message with Undo that is still there after 10 seconds; Undo reverses it as its own action", async ({ page }) => {
@@ -68,7 +68,7 @@ test("PLANT: applying moves the switch, returns focus to it, and leaves a messag
   await seat(page).click();
   await page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/).fill("queued jobs are waiting");
   await page.keyboard.press("Enter");
-  await expect(seat(page)).toHaveAttribute("aria-checked", "true");
+  await expect(seat(page)).toBeChecked();
   await expect(seat(page)).toBeFocused();
   await expect(message(page)).toHaveAttribute("role", "status");
   await expect(message(page)).toContainText("The overnight run is now api.");
@@ -80,7 +80,7 @@ test("PLANT: applying moves the switch, returns focus to it, and leaves a messag
   await expect(undo).toBeVisible();
 
   await undo.click();
-  await expect(seat(page)).toHaveAttribute("aria-checked", "false");
+  await expect(seat(page)).not.toBeChecked();
   await expect(seat(page)).toBeFocused();
   await expect(message(page)).toContainText("Undone.");
   await expect(message(page).getByRole("button", { name: "Undo" })).toHaveCount(0);
@@ -96,8 +96,8 @@ test("PLANT: a refusal from the Worker is shown beside the switch in plain words
   await seat(page).click();
   await page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/).fill("anything");
   await page.keyboard.press("Enter");
-  await expect(page.locator(".autoctl").getByRole("alert")).toContainText("overnight needs a reason");
-  await expect(seat(page)).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator(".cap-switch-reason").getByRole("alert")).toContainText("overnight needs a reason");
+  await expect(seat(page)).not.toBeChecked();
   await expect(message(page)).toHaveText("");
 });
 
@@ -116,13 +116,13 @@ const overnight = (page: Page) => page.getByRole("switch", { name: "Overnight ru
 
 test("PLANT: the overnight run is off and runs on the API key by default, and turning it on asks a reason before it moves", async ({ page }) => {
   await visit(page, "namespaces");
-  await expect(overnight(page)).toHaveAttribute("aria-checked", "false");
+  await expect(overnight(page)).not.toBeChecked();
   await expect(page.locator("#overnight-runs-on-api")).toBeChecked();
   await expect(page.locator("#overnight-runs-on-subscription")).not.toBeChecked();
   await overnight(page).click();
   const field = page.getByLabel("Turning the overnight run on, on API. Reason:");
   await expect(field).toBeFocused();
-  await expect(overnight(page)).toHaveAttribute("aria-checked", "false");
+  await expect(overnight(page)).not.toBeChecked();
   await page.keyboard.press("Escape");
   await expect(overnight(page)).toBeFocused();
 });
@@ -135,7 +135,7 @@ test("PLANT: choosing the subscription records Dustin's decision, its date and i
   await overnight(page).click();
   await page.getByLabel("Turning the overnight run on, on Subscription. Reason:").fill("first supervised night");
   await page.keyboard.press("Enter");
-  await expect(overnight(page)).toHaveAttribute("aria-checked", "true");
+  await expect(overnight(page)).toBeChecked();
   await expect(message(page)).toContainText("The overnight run is now subscription.");
   const decision = page.locator("#overnight-decision");
   await expect(decision).toContainText("Decision recorded: Sample Person, 2026-10-04.");
@@ -145,7 +145,7 @@ test("PLANT: choosing the subscription records Dustin's decision, its date and i
 
   // Leave it as found.
   await message(page).getByRole("button", { name: "Undo" }).click();
-  await expect(overnight(page)).toHaveAttribute("aria-checked", "false");
+  await expect(overnight(page)).not.toBeChecked();
   await expect(page.locator("#overnight-decision")).toHaveCount(0);
   expect(await newestActivity(page)).toBe("portal.undo-overnight");
 });

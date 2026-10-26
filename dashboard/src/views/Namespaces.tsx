@@ -5,9 +5,14 @@ import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { agentState, driverOf } from "../lib/derive";
 import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
-import { AutomationSwitch, ReasonForm, useApplySwitch } from "../ui/Switch";
+import { ReasonForm, SwitchWithReason } from "capsomer/react/switch-reason";
+import { useApplySwitch } from "../ui/applySwitch";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
+import "capsomer/button.css";
+import "capsomer/field.css";
+import "capsomer/switch.css";
+import "capsomer/switch-reason.css";
 
 // The Automation panel and the Projects roster, both on Settings (ruled 2026-09-30, DECIDE
 // 5, 6 and 7; the UX audit's M3 put Automation first). Every automation change is a switch
@@ -50,9 +55,10 @@ export function Automation() {
             <b>Overnight run</b>
             <span>Runs the per-namespace drivers on this machine overnight, one session per repo, from the overnight plan. Hand-started tabs are unaffected.</span>
           </div>
-          <AutomationSwitch
+          <SwitchWithReason
             id="sw-overnight"
             label="Overnight run"
+            name="the overnight run"
             checked={nightOn}
             verb={(next) => (next ? `Turning the overnight run on, on ${runsOnLabel(nightChosen)}` : "Turning the overnight run off")}
             onApply={(next, why) =>
@@ -61,9 +67,8 @@ export function Automation() {
                 { action: "overnight", params: { value: night.mode, reason: `Undo: ${why}`, undo: "true" }, focus: "sw-overnight" },
               )
             }
-          >
-            <span className="state-note">{nightOn ? `Running on ${runsOnLabel(night.mode as RunsOn)}.` : `Off. It runs on ${runsOnLabel(nightChosen)} when turned on.`}</span>
-          </AutomationSwitch>
+            note={nightOn ? `Running on ${runsOnLabel(night.mode as RunsOn)}.` : `Off. It runs on ${runsOnLabel(nightChosen)} when turned on.`}
+          />
           <div className="runs">
             <span id="overnight-runs-on-label">Runs on</span>
             <span className="seg" role="radiogroup" aria-labelledby="overnight-runs-on-label">
@@ -84,27 +89,24 @@ export function Automation() {
                 </Fragment>
               ))}
             </span>
-            {pendingNight && (
-              <ReasonForm
-                id="overnight-runs-on-why"
-                verb={`Changing the overnight run to run on ${runsOnLabel(pendingNight)}`}
-                onCancel={() => {
-                  setPendingNight(null);
-                  nightFocus();
-                }}
-                onApply={async (why) => {
-                  const err = await apply(
-                    { action: "overnight", params: { value: pendingNight, reason: why } },
-                    { action: "overnight", params: { value: night.mode, reason: `Undo: ${why}`, undo: "true" }, focus: `overnight-runs-on-${night.mode}` },
-                  );
-                  if (!err) {
-                    setPendingNight(null);
-                    nightFocus();
-                  }
-                  return err;
-                }}
-              />
-            )}
+            <ReasonForm
+              open={pendingNight !== null}
+              id="overnight-runs-on-why"
+              verb={`Changing the overnight run to run on ${runsOnLabel(pendingNight ?? nightChosen)}`}
+              onCancel={() => {
+                setPendingNight(null);
+                nightFocus();
+              }}
+              onApply={async (why) => {
+                if (!pendingNight) return;
+                await apply(
+                  { action: "overnight", params: { value: pendingNight, reason: why } },
+                  { action: "overnight", params: { value: night.mode, reason: `Undo: ${why}`, undo: "true" }, focus: `overnight-runs-on-${night.mode}` },
+                );
+                setPendingNight(null);
+                nightFocus();
+              }}
+            />
           </div>
           {night.decision && (
             <p className="state-note" id="overnight-decision">
