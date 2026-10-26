@@ -317,10 +317,10 @@ function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {an
   ];
   return `<section class="holds wrap" aria-labelledby="holds-title">
 <h2 id="holds-title">Contents</h2>
-<ol class="contents">${rows
+<ol class="cap-leader-index contents">${rows
     .map(([href, fact]) => {
       const section = sectionAt(href);
-      return `<li><a href="${href}"><span class="contents-no">${section?.no}.0</span><span class="contents-name">${section?.label}</span><span class="contents-dots" aria-hidden="true"></span><span class="contents-fact">${escapeHtml(fact)}</span></a></li>`;
+      return `<li><a class="cap-leader-index-link" href="${href}"><span class="cap-leader-index-no">${section?.no}.0</span><span class="cap-leader-index-name">${section?.label}</span><span class="cap-leader-index-dots" aria-hidden="true"></span><span class="cap-leader-index-fact">${escapeHtml(fact)}</span></a></li>`;
     })
     .join("")}</ol>
 </section>`;

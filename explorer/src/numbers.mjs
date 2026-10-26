@@ -7,7 +7,7 @@ import { progressRing } from "enarratio";
 import { areaChart, barChart, lineChart } from "enarratio/lite";
 
 import { weekLabels } from "./home.mjs";
-import { escapeHtml, layout, minutes, pageHead, percent, reading, scroller } from "./pages.mjs";
+import { escapeHtml, layout, minutes, pageHead, percent, readingBox, scroller } from "./pages.mjs";
 
 /** A ring, its heading and its sentence: Enarratio's ring is a primitive, so the figure is ours. */
 const ring = (/** @type {string} */ id, /** @type {string} */ title, /** @type {number} */ rate, /** @type {string} */ sentence) =>
@@ -115,7 +115,7 @@ export function numbersHtml(stats) {
     ["Capsid's commit", stats.capsid.sha7],
   ];
   return `<section class="numbers">
-<dl class="readings readings-row">${reading(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${reading(percent(v.agreement_rate_90d), "claims matching GitHub", "#verification")}${reading(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${reading(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
+<dl class="cap-form-boxes readings-row" data-variant="tones">${readingBox(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${readingBox(percent(v.agreement_rate_90d), "claims matching GitHub", "#verification")}${readingBox(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${readingBox(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
 <section class="numbers-part" id="jobs" aria-labelledby="jobs-title"><h2 id="jobs-title">Jobs</h2>
 <p class="measure">In the last 30 days, ${j.completed_30d} jobs finished and ${j.failed_30d} failed. ${j.open} are open today, and ${j.blocked} of those are waiting on a person. The median job took ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
 <div class="charts">${jobsChart}</div></section>

@@ -142,6 +142,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
     "components/dialog/dialog.css",
     "components/theme-switch/theme-switch.css",
     "components/site-header/site-header.css",
+    "components/manual/manual.css",
     "tokens/site-capsid.css",
     
   ]
