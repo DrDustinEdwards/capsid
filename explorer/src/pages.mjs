@@ -215,7 +215,7 @@ function footer(asOf) {
 <div class="cap-family-footer-columns">
 <nav aria-label="Every section"><ul class="cap-family-footer-links">${SECTIONS.slice(0, half).map(link).join("")}</ul></nav>
 <ul class="cap-family-footer-links" aria-label="More sections">${SECTIONS.slice(half).map(link).join("")}</ul>
-<ul class="cap-family-footer-links"><li><a href="https://github.com/DrDustinEdwards/capsid">Source, MIT licensed</a></li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Install it</a></li><li><a href="https://portal.dustinedwards.info">The Portal, for the owners</a></li></ul>
+<ul class="cap-family-footer-links"><li><a href="https://github.com/DrDustinEdwards/capsid">Source, MIT licensed</a></li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Install it</a></li></ul>
 </div>
 <p class="cap-family-footer-stamp"><span>Data as of ${escapeHtml(asOf)}</span><span>Days counted to midnight UTC</span><span>Private systems shown without links to their code</span></p>
 </div>`;
