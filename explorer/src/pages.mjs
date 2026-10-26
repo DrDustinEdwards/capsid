@@ -687,7 +687,7 @@ export function stepPage(model, f, n, asOf) {
 <div class="flow-stack">${f.steps.map((x) => stepText(x, total, systems, x.n === n, f.name)).join("")}</div>
 <nav class="flow-nav" aria-label="Steps">${nav}${play}</nav>
 </section>
-${drawn ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id="drawing-title" class="cap-sr-only">The drawing</h2><p class="hint" data-keys hidden>Number keys 1 to ${Math.min(total, 9)} go to that step.</p><div class="map-host flow-map" data-flow="${escapeHtml(f.id)}" data-step="${n}" data-steps="${total}">${map}</div></section>` : ""}
+${drawn ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id="drawing-title" class="cap-sr-only">The drawing</h2><div class="map-host flow-map" data-flow="${escapeHtml(f.id)}" data-step="${n}" data-steps="${total}">${map}</div><p class="hint" data-keys hidden>Number keys 1 to ${Math.min(total, 9)} go to that step.</p></section>` : ""}
 </div>
 <section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${stepList(f, n)}</section>`;
   return layout({
