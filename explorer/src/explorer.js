@@ -302,6 +302,68 @@ for (const desk of document.querySelectorAll("[data-desk]")) {
   });
 }
 
+// The front page's search: the question and the mode are the box's own state; the stylesheet
+// shows each row by how it matched (src/home.mjs, knowledge).
+for (const box of document.querySelectorAll("[data-kb-search]")) {
+  const asks = [...box.querySelectorAll("[data-ask]")];
+  const modes = [...box.querySelectorAll("[data-mode-set]")];
+  for (const a of asks) {
+    a.addEventListener("click", () => {
+      for (const o of asks) o.setAttribute("aria-pressed", String(o === a));
+      for (const el of box.querySelectorAll(".kb-out [data-q]")) el.hidden = el.dataset.q !== a.dataset.ask;
+    });
+  }
+  for (const m of modes) {
+    m.addEventListener("click", () => {
+      for (const o of modes) o.setAttribute("aria-pressed", String(o === m));
+      box.dataset.mode = m.dataset.modeSet;
+    });
+  }
+}
+
+// The front page's session start: the brief arrives a document at a time; a note written
+// in one session is there when the next one starts.
+for (const box of document.querySelectorAll("[data-session]")) {
+  const start = box.querySelector("[data-start]");
+  const write = box.querySelector("[data-write]");
+  const items = [...box.querySelectorAll("[data-brief]")];
+  const mine = box.querySelector("[data-mine]");
+  const budget = box.querySelector("[data-budget]");
+  const budgetWords = box.querySelector("[data-budget-words]");
+  const said = box.querySelector("[data-session-said]");
+  const kb = (li) => Number.parseInt(li.querySelector(".kb-size").textContent, 10);
+  let written = false;
+  let run = 0;
+  box.dataset.ready = "";
+  for (const li of items) li.hidden = true;
+  budget.value = 0;
+  budgetWords.textContent = "Nothing handed over yet.";
+  start.addEventListener("click", async () => {
+    const mine0 = ++run;
+    write.disabled = true;
+    const shown = items.filter((li) => li !== mine || written);
+    for (const li of items) li.hidden = true;
+    let total = 0;
+    said.textContent = "Starting: the Worker reads the project's notes\u2026";
+    for (const li of shown) {
+      await new Promise((r) => setTimeout(r, reduced.matches ? 0 : 220));
+      if (mine0 !== run) return;
+      li.hidden = false;
+      total += kb(li);
+      budget.value = total;
+      budgetWords.textContent = `${total} KB of the 40 KB a start may hand over.`;
+    }
+    budgetWords.textContent = `${total} KB of the 40 KB a start may hand over. Nothing trimmed.`;
+    said.textContent = written ? "A new session, and your note from the last one is there." : "The session has the project's notes. Write something down, then start again.";
+    write.disabled = written;
+  });
+  write.addEventListener("click", () => {
+    written = true;
+    write.disabled = true;
+    said.textContent = "Saved to sample/sessions/2026-10-25.md. The old body is kept as a version, and an audit row records who wrote it. Start a new session.";
+  });
+}
+
 // Filters: a text field and chips over the items of the page they sit on.
 for (const bar of document.querySelectorAll("[data-filter]")) {
   bar.hidden = false;
