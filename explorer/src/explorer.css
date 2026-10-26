@@ -2097,3 +2097,361 @@ main .cap-pill {
   border-radius: 0;
   color: var(--text);
 }
+
+/* More of NASA's own marks, laid on the same pages (Dustin, 2026-10-26). Teal stays the one color.
+   Type on a lit lamp: white on the light page's deep teal, the lamp's ink on the dark page's pale one. */
+:root {
+  --on-lamp: #fff;
+  --grid-line: color-mix(in oklab, var(--crit) 45%, transparent);
+  --grid-soft: color-mix(in oklab, var(--crit) 14%, transparent);
+  --grid-fill: color-mix(in oklab, var(--crit) 4%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-family]:not([data-theme="light"]) {
+    --on-lamp: var(--lamp-ink);
+  }
+}
+:root[data-family][data-theme="dark"] {
+  --on-lamp: var(--lamp-ink);
+}
+
+/* The section head as one of the manual's building signs (6.1): a dark panel of light type in
+   bold, the one color in a strip along its top, the section's number on a plate of its own. */
+.manual-head {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 0;
+  border-block-start: 10px solid var(--lamp-on);
+  background: var(--text);
+  color: var(--ground);
+  font-size: clamp(1.25rem, 2.4vw, 1.75rem);
+}
+.manual-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  letter-spacing: -0.01em;
+}
+.manual-no {
+  min-inline-size: 1.5em;
+  padding-inline: 0.2em;
+  background: var(--ground);
+  color: var(--text);
+  text-align: center;
+}
+/* The trail under it as the directional strip of the manual's signs (6.2): arrows between the
+   ways, the page you are on lit. */
+.manual-head + .page-head > .crumbs,
+.manual-head + .patched > .page-head > .crumbs,
+.manual-head + .crumbs {
+  margin-block-start: 0;
+}
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  background: color-mix(in oklab, var(--text) 86%, var(--ground));
+  color: var(--ground);
+  font-weight: 600;
+}
+.crumbs a {
+  color: var(--ground);
+  text-decoration: none;
+}
+.crumbs a:hover,
+.crumbs a:focus-visible {
+  text-decoration: underline;
+}
+.crumb-arrow::before {
+  content: "\2192" / "";
+  margin-inline: 0.6em;
+  color: var(--lamp);
+  font-weight: 700;
+}
+.crumbs [aria-current] {
+  padding-inline: 0.5em;
+  background: var(--lamp-on);
+  color: var(--on-lamp);
+}
+
+/* The head of a page drawn on the manual's layout grid (5.1), as it prints its grids in fine
+   red lines: twelve columns with their gutters, and the baseline every 24 pixels; four columns
+   on a phone. The grid's own label sits at its top right. */
+.page-head {
+  position: relative;
+  isolation: isolate;
+  padding-block: var(--space-3) var(--space-5);
+  --cols: 12;
+  --gap: 24px;
+}
+.page-head::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 23px, var(--grid-soft) 23px 24px),
+    linear-gradient(to right, var(--grid-line) 0 1px, var(--grid-fill) 1px calc(100% - var(--gap) - 1px), var(--grid-line) calc(100% - var(--gap) - 1px) calc(100% - var(--gap)), transparent calc(100% - var(--gap))) 0 0 / calc((100% + var(--gap)) / var(--cols)) 100% repeat-x;
+}
+.page-head::after {
+  content: "12 columns, 24 px baseline" / "";
+  position: absolute;
+  inset-block-end: 4px;
+  inset-inline-end: 0;
+  color: var(--crit);
+  font: 500 0.625rem / 1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+@media (max-width: 40rem) {
+  .page-head {
+    --cols: 4;
+    --gap: 16px;
+  }
+  .page-head::after {
+    content: "4 columns, 24 px baseline" / "";
+  }
+}
+
+/* The livery: one bold band of the color with a thin pin stripe under it, as the manual paints
+   every NASA car, van and plane (7.1 to 7.6), across the foot of every page. */
+.livery {
+  block-size: 40px;
+  margin-block-start: var(--space-8);
+  background: var(--lamp-on);
+  box-shadow: 0 9px 0 -4px var(--ground), 0 9px 0 0 var(--lamp-on);
+}
+/* Each tool and flow card carries a short length of the same band. */
+.tool-card,
+.flow-card {
+  border-block-start: 6px solid var(--lamp-on);
+}
+.tool-card {
+  padding-block-start: var(--space-4);
+}
+.flow-card {
+  padding-block-start: var(--space-4);
+}
+
+/* Figures on a tone scale, as the manual sets type on stepped grays (7.2): one ink, lightest to
+   darkest across the row, the type turning light on the dark steps. */
+.readings-row .reading:nth-child(4n + 1) {
+  background: color-mix(in oklab, var(--text) 6%, var(--ground));
+}
+.readings-row .reading:nth-child(4n + 2) {
+  background: color-mix(in oklab, var(--text) 22%, var(--ground));
+}
+.readings-row .reading:nth-child(4n + 3) {
+  background: color-mix(in oklab, var(--text) 62%, var(--ground));
+}
+.readings-row .reading:nth-child(4n + 4) {
+  background: var(--text);
+}
+.readings-row .reading:is(:nth-child(4n + 3), :nth-child(4n + 4)) :is(dt, dd, a) {
+  color: var(--ground);
+}
+
+/* A step as an Apollo cue card: a ruled box, a dark strip naming the flow and the card, short
+   lines in capitals, a box to tick by each part and a dotted leader to what it is to the step. */
+.cue {
+  padding-block-end: var(--space-4);
+  border: 2px solid var(--text);
+  background: var(--ground);
+}
+.cue > :not(.cue-strip, .roll) {
+  padding-inline: var(--space-4);
+}
+.cue-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--text);
+  color: var(--ground);
+  font: 700 0.75rem / 1.2 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cue .step-head {
+  font: 700 clamp(1.25rem, 2vw, 1.5rem) / 1.2 var(--mono);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.cue h3 {
+  margin-block-start: var(--space-4);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--text);
+  font: 700 0.75rem / 1.2 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cue .flow-touches {
+  gap: var(--space-1);
+  font: 500 0.8125rem / 1.5 var(--mono);
+  text-transform: uppercase;
+}
+.cue .flow-touches li {
+  display: grid;
+  grid-template-columns: auto auto minmax(1rem, 1fr) minmax(0, max-content);
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.cue .flow-touches li::before {
+  content: "";
+  inline-size: 12px;
+  block-size: 12px;
+  border: 1.5px solid var(--text);
+  transform: translateY(1px);
+}
+.cue .flow-touches li > :first-child {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: inherit;
+  font-weight: 700;
+}
+.cue .flow-touches li::after {
+  content: "";
+  grid-column: 3;
+  grid-row: 1;
+  border-block-end: 1.5px dotted var(--text);
+}
+.cue .touch-role {
+  grid-column: 4;
+  grid-row: 1;
+  color: var(--text);
+  font-size: inherit;
+  text-align: end;
+}
+.touch-in {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.cue .touch-in {
+  grid-column: 2 / -1;
+  font-size: 0.6875rem;
+}
+
+/* The roll blocks painted round a Saturn V, so the cameras could see how far it had turned: one
+   block a step, its quarters filled for a step done and lit for the one shown. */
+.roll {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 var(--space-3);
+  padding: 0 var(--space-4);
+  list-style: none;
+}
+.roll li {
+  inline-size: 22px;
+  block-size: 22px;
+  border: 2px solid var(--text);
+}
+.roll [data-state="done"] {
+  background: conic-gradient(var(--text) 0 25%, transparent 0 50%, var(--text) 0 75%, transparent 0);
+}
+.roll [data-state="now"] {
+  border-color: var(--lamp-on);
+  background: conic-gradient(var(--lamp-on) 0 25%, transparent 0 50%, var(--lamp-on) 0 75%, transparent 0);
+}
+.roll [data-state="ahead"] {
+  opacity: 0.4;
+}
+
+/* A flow's patch, as each Apollo crew wore its mission's, the steps as dots round its disc. */
+.patch {
+  inline-size: 140px;
+  block-size: 140px;
+  flex: none;
+}
+.patch-rim {
+  fill: var(--text);
+}
+.patch-field {
+  fill: var(--ground);
+  stroke: var(--lamp-on);
+  stroke-width: 3;
+}
+.patch-disc {
+  fill: var(--lamp-on);
+}
+.patch-dot {
+  fill: var(--ground);
+  stroke: var(--text);
+  stroke-width: 1.2;
+}
+.patch-name,
+.patch-foot,
+.patch-unit {
+  fill: var(--text);
+  font: 700 10px var(--mono);
+  letter-spacing: 1.4px;
+}
+.patch-foot {
+  font-size: 9px;
+  letter-spacing: 2px;
+}
+.patch-count {
+  fill: var(--on-lamp);
+  font: 700 24px var(--face);
+}
+.patch-unit {
+  fill: var(--on-lamp);
+  font-size: 7px;
+  letter-spacing: 1px;
+}
+.flow-card {
+  position: relative;
+}
+.flow-card > .patch {
+  position: absolute;
+  inset-block-start: calc(var(--space-4) + 5rem);
+  inset-inline-end: 0;
+}
+.flow-card > .bands {
+  margin-inline-end: 180px;
+}
+.patched {
+  position: relative;
+}
+.patched > .patch {
+  position: absolute;
+  inset-block-end: var(--space-5);
+  inset-inline-end: var(--space-3);
+}
+.patched > .page-head > :is(h1, .lead) {
+  margin-inline-end: 170px;
+}
+@media (max-width: 40rem) {
+  .patch {
+    inline-size: 96px;
+    block-size: 96px;
+  }
+  .flow-card > .patch {
+    position: static;
+    display: block;
+    margin-block-end: var(--space-3);
+  }
+  .flow-card > .bands {
+    margin-inline-end: 0;
+  }
+  .patched > .patch {
+    position: static;
+    display: block;
+    margin-block-start: var(--space-3);
+  }
+  .patched > .page-head > :is(h1, .lead) {
+    margin-inline-end: 0;
+  }
+}
+.readings-row .reading dt a {
+  color: inherit;
+}
+/* Every link on the card keeps a 24px target (WCAG 2.2, 2.5.8), and the unseen cards' plain
+   names keep the same line, so every card in the stack is as tall as it is when shown. */
+.cue .flow-touches :is(a, li > span:first-child, .touch-in > span) {
+  display: inline-block;
+  min-block-size: 24px;
+  line-height: 24px;
+}

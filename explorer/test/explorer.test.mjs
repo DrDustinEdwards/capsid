@@ -289,12 +289,12 @@ test("each step page lays every step's text in one stack, the shown one alone re
     for (let n = 1; n <= f.steps.length; n++) {
       const page = stepFile(f.id, n);
       const stack = page.slice(page.indexOf('<div class="flow-stack">'), page.indexOf('<nav class="flow-nav"'));
-      const blocks = stack.split(/(?=<div(?: class="flow-unseen"[^>]*)?>\n<h2)/).slice(1);
+      const blocks = stack.split(/(?=<div class="cue(?: flow-unseen"[^>]*|")>\n)/).slice(1);
       assert.equal(blocks.length, f.steps.length, `${f.id} step ${n} stacks ${blocks.length} steps`);
       blocks.forEach((b, i) => {
         const shown = i + 1 === n;
         assert.ok(b.includes(`Step ${i + 1} of ${f.steps.length}`), `${f.id} step ${n}: block ${i + 1} is out of order`);
-        assert.equal(b.startsWith('<div class="flow-unseen" aria-hidden="true" inert>'), !shown, `${f.id} step ${n}: block ${i + 1} is ${shown ? "hidden" : "read"}`);
+        assert.equal(b.startsWith('<div class="cue flow-unseen" aria-hidden="true" inert>'), !shown, `${f.id} step ${n}: block ${i + 1} is ${shown ? "hidden" : "read"}`);
         assert.equal(/<a |id=|data-part=/.test(b), shown, `${f.id} step ${n}: block ${i + 1} ${shown ? "lacks" : "carries"} links or ids`);
       });
       pages++;
