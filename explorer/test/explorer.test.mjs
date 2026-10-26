@@ -276,7 +276,7 @@ test("every step of every flow has its page, saying the flow's name, where it is
       assert.ok(page.includes(`<h1>${f.name.replace("'", "&#39;")}</h1>`), `${f.id} step ${i + 1} does not name its flow`);
       assert.ok(page.includes(`Step ${i + 1} of ${f.steps.length}`), `${f.id} step ${i + 1} does not say where it is`);
       const w = stepWords({ n: i + 1, text: st.text });
-      assert.ok(page.includes(`<p class="step-head">${escapeHtml(w.name)}</p>\n<p class="flow-text">${escapeHtml(w.text)}</p>`), `${f.id} step ${i + 1} does not say what happens`);
+      assert.ok(page.includes(`<p class="cap-cue-title step-head">${escapeHtml(w.name)}</p>\n<p class="flow-text">${escapeHtml(w.text)}</p>`), `${f.id} step ${i + 1} does not say what happens`);
       seen++;
     });
   }
@@ -289,12 +289,12 @@ test("each step page lays every step's text in one stack, the shown one alone re
     for (let n = 1; n <= f.steps.length; n++) {
       const page = stepFile(f.id, n);
       const stack = page.slice(page.indexOf('<div class="flow-stack">'), page.indexOf('<nav class="flow-nav"'));
-      const blocks = stack.split(/(?=<div class="cue(?: flow-unseen"[^>]*|")>\n)/).slice(1);
+      const blocks = stack.split(/(?=<div class="cap-cue(?: flow-unseen"[^>]*|")>\n)/).slice(1);
       assert.equal(blocks.length, f.steps.length, `${f.id} step ${n} stacks ${blocks.length} steps`);
       blocks.forEach((b, i) => {
         const shown = i + 1 === n;
         assert.ok(b.includes(`Step ${i + 1} of ${f.steps.length}`), `${f.id} step ${n}: block ${i + 1} is out of order`);
-        assert.equal(b.startsWith('<div class="cue flow-unseen" aria-hidden="true" inert>'), !shown, `${f.id} step ${n}: block ${i + 1} is ${shown ? "hidden" : "read"}`);
+        assert.equal(b.startsWith('<div class="cap-cue flow-unseen" aria-hidden="true" inert>'), !shown, `${f.id} step ${n}: block ${i + 1} is ${shown ? "hidden" : "read"}`);
         assert.equal(/<a |id=|data-part=/.test(b), shown, `${f.id} step ${n}: block ${i + 1} ${shown ? "lacks" : "carries"} links or ids`);
       });
       pages++;
@@ -329,9 +329,9 @@ test("each step page names exactly the parts its step touches, and its drawing l
       const r = edge(st.relationship);
       const want = [...new Set([r.from, r.to, ...(st.lights ?? [])])].sort();
       // The shown step's list, after its heading; the unseen steps around it carry no data-part.
-      const at = page.indexOf('<ul class="flow-touches">', page.indexOf('id="step-title"'));
+      const at = page.indexOf('<ul class="cap-cue-lines flow-touches">', page.indexOf('id="step-title"'));
       const touches = page.slice(at, page.indexOf("</ul>", at));
-      const named = [...touches.matchAll(/<li data-part="([^"]+)"><a href="([^"]+)">/g)];
+      const named = [...touches.matchAll(/<li data-part="([^"]+)"><a class="cap-cue-name" href="([^"]+)">/g)];
       assert.deepEqual(named.map((m) => m[1]).sort(), want, `${f.id} step ${i + 1} names the wrong parts`);
       for (const [, id, href] of named) {
         const c = model.containers.find((/** @type {any} */ x) => x.id === id);

@@ -203,7 +203,7 @@ export function numbered(body, path) {
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
 function footer(asOf) {
   return `<footer class="foot">
-<div class="livery" aria-hidden="true"></div>
+<div class="cap-livery" aria-hidden="true"></div>
 <div class="cap-letterhead wrap" aria-hidden="true"><p class="cap-letterhead-logo">Capsid</p><p class="cap-letterhead-address">Shared memory and checks for AI coding agents<br><b>capsid.dustinedwards.info</b></p></div>
 <div class="foot-in wrap">
 <div class="foot-about"><p>Capsid is an open-source MCP server for AI coding agents, under the MIT license. This site runs on one live Capsid server and rebuilds every day from its public data.</p><p class="foot-small">Data as of ${escapeHtml(asOf)}, counted in whole days to midnight UTC. Private systems appear in full but without a link to their code.</p></div>
@@ -220,9 +220,9 @@ function footer(asOf) {
  */
 export function pageHead(trail, here, title, lead) {
   const crumbs = trail.length
-    ? `<nav class="crumbs" aria-label="Breadcrumb">${trail.map(([href, name]) => `<a href="${href}">${escapeHtml(name)}</a><span class="crumb-arrow" aria-hidden="true"></span>`).join("")}<span aria-current="page">${escapeHtml(here)}</span></nav>`
+    ? `<nav class="cap-direction crumbs" aria-label="Breadcrumb"><ol>${trail.map(([href, name]) => `<li><a href="${href}">${escapeHtml(name)}</a></li>`).join("")}<li><span aria-current="page">${escapeHtml(here)}</span></li></ol></nav>`
     : "";
-  return `<div class="page-head">${crumbs}<h1>${title}</h1>${lead ? `<p class="lead">${lead}</p>` : ""}</div>`;
+  return `<div class="page-head cap-layout-grid">${crumbs}<h1>${title}</h1>${lead ? `<p class="lead">${lead}</p>` : ""}</div>`;
 }
 
 /**
@@ -231,7 +231,7 @@ export function pageHead(trail, here, title, lead) {
  * @param {number} total @param {number} n
  */
 export const rollBlocks = (total, n) =>
-  `<ol class="roll" aria-hidden="true">${Array.from({ length: total }, (_, i) => `<li data-state="${i + 1 < n ? "done" : i + 1 === n ? "now" : "ahead"}"></li>`).join("")}</ol>`;
+  `<ol class="cap-roll" aria-hidden="true">${Array.from({ length: total }, (_, i) => `<li data-state="${i + 1 < n ? "done" : i + 1 === n ? "now" : "ahead"}"></li>`).join("")}</ol>`;
 
 /**
  * A flow's patch (Capsomer's patchSvg), as every Apollo crew wore its mission's: the flow's name
@@ -620,7 +620,7 @@ export function flowsIndexPage(model, asOf) {
     .map((f, i) => {
       const systems = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.system)))];
       const parts = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.name)))];
-      return `<li class="flow-card">${patch(f, `${sectionAt("/flows/")?.no}.${i + 1}`)}<h2><a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a></h2>
+      return `<li class="flow-card" data-livery>${patch(f, `${sectionAt("/flows/")?.no}.${i + 1}`)}<h2><a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a></h2>
 <p>${escapeHtml(f.description ?? "")}</p>
 <p class="hint">${f.steps.length} steps over ${parts.length} parts of ${systems.map((x) => escapeHtml(String(names.get(x) ?? x))).join(", ")}.</p>
 ${bands(f, true)}
@@ -640,18 +640,19 @@ ${bands(f, true)}
  * @param {Step} st @param {number} total @param {Map<string, any>} systems @param {boolean} shown @param {string} name the flow's
  */
 function stepText(st, total, systems, shown, name) {
-  const link = (/** @type {string} */ href, /** @type {string} */ text) => (shown ? `<a href="${href}">${text}</a>` : `<span>${text}</span>`);
+  const link = (/** @type {string} */ href, /** @type {string} */ text, cls = "") =>
+    shown ? `<a${cls ? ` class="${cls}"` : ""} href="${href}">${text}</a>` : `<span${cls ? ` class="${cls}"` : ""}>${text}</span>`;
   const parts = st.touches
-    .map((p) => `<li${shown ? ` data-part="${escapeHtml(p.id)}"` : ""}>${link(partPath(p), escapeHtml(p.name))}<span class="touch-role">${role(st, p)}</span><span class="touch-in">in ${link(systemPath(p.system), escapeHtml(systems.get(p.system)?.name ?? p.system))}</span></li>`)
+    .map((p) => `<li${shown ? ` data-part="${escapeHtml(p.id)}"` : ""}>${link(partPath(p), escapeHtml(p.name), "cap-cue-name")}<span class="cap-cue-value touch-role">${role(st, p)}</span><span class="touch-in">in ${link(systemPath(p.system), escapeHtml(systems.get(p.system)?.name ?? p.system))}</span></li>`)
     .join("");
-  return `<div class="${shown ? "cue" : "cue flow-unseen"}"${shown ? "" : ' aria-hidden="true" inert'}>
-<p class="cue-strip" aria-hidden="true"><span>${escapeHtml(name)}</span><span>Card ${st.n}</span></p>
+  return `<div class="${shown ? "cap-cue" : "cap-cue flow-unseen"}"${shown ? "" : ' aria-hidden="true" inert'}>
+<p class="cap-cue-strip" aria-hidden="true"><span>${escapeHtml(name)}</span><span>Card ${st.n}</span></p>
 ${rollBlocks(total, st.n)}
 <h2${shown ? ' id="step-title"' : ""} data-plain>Step ${st.n} of ${total}</h2>
-<p class="step-head">${escapeHtml(stepWords(st).name)}</p>
+<p class="cap-cue-title step-head">${escapeHtml(stepWords(st).name)}</p>
 <p class="flow-text">${escapeHtml(stepWords(st).text)}</p>
 <h3>What it touches</h3>
-<ul class="flow-touches">${parts}</ul>
+<ul class="cap-cue-lines flow-touches">${parts}</ul>
 </div>`;
 }
 
