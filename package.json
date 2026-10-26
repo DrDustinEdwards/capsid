@@ -44,7 +44,7 @@
     "wrangler": "4.151.3"
   },
   "dependencies": {
-    "@cloudflare/workers-oauth-provider": "1.2.3",
+    "@cloudflare/workers-oauth-provider": "1.2.4",
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.14.0",
     "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.6.0",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.24.0",
