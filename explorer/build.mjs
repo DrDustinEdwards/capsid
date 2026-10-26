@@ -189,15 +189,15 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   writeFileSync(join(assets, "capsomer.css"), css);
   writeFileSync(join(assets, "enarratio.css"), stylesheet(capsomerTheme));
   copyFileSync(join(here, "src", "explorer.css"), join(assets, "explorer.css"));
-  // The system map's module and the sibling modules it imports; its circles are drawn here, not in the browser.
-  const systemMap = join(capsomer, "dist", "components", "system-map");
-  for (const file of readdirSync(systemMap).filter((name) => name.endsWith(".js") && !name.startsWith("system-map-circles"))) copyFileSync(join(systemMap, file), join(assets, file));
   writeFileSync(join(out, CIRCLES_URL), JSON.stringify(circlesOf(model)));
   copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(assets, "tabs.js"));
-  // The header's modules keep their folders, because they import each other by "../name/".
-  for (const name of ["site-header", "theme-switch", "dialog", "popover", "tooltip", "shell"]) {
+  // The system map's and the header's modules, each folder whole (its React wrapper aside),
+  // because they import their siblings by "./" and each other by "../name/" (the map takes
+  // email's escapeHtml). The map's circles are drawn here, not in the browser.
+  for (const name of ["system-map", "email", "site-header", "theme-switch", "dialog", "popover", "tooltip", "shell"]) {
+    const dir = join(capsomer, "dist", "components", name);
     mkdirSync(join(assets, "capsomer", name), { recursive: true });
-    copyFileSync(join(capsomer, "dist", "components", name, `${name}.js`), join(assets, "capsomer", name, `${name}.js`));
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js") && !f.startsWith("system-map-circles"))) copyFileSync(join(dir, file), join(assets, "capsomer", name, file));
   }
   copyFileSync(join(here, "src", "theme.js"), join(assets, "theme.js"));
   copyFileSync(require.resolve("enarratio/enhance"), join(assets, "enhance.js"));

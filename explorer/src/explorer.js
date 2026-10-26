@@ -3,7 +3,7 @@
 // are plain tables. This makes them move: Capsomer's system map (copied from capsomer at build),
 // its tabs, Enarratio's chart tooltips, the flow players, the front page's panel and tour, the filters
 // and sorting, and search.
-import { controller } from "./system-map.js";
+import { controller } from "./capsomer/system-map/system-map.js";
 import { enhance as enhanceTabs } from "./tabs.js";
 import { enhance as enhanceCharts } from "./enhance.js";
 import { enhance as enhanceHeader } from "./capsomer/site-header/site-header.js";
