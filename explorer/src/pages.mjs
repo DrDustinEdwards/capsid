@@ -9,6 +9,7 @@
 import { modelMapData, systemMapHtml } from "capsomer/behavior/system-map";
 import { circleLayers } from "capsomer/system-map-circles";
 import { patchSvg } from "capsomer/behavior/manual";
+import { familyFooterHtml } from "capsomer/behavior/family-footer";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { headHtml, headTags } from "@drdustinedwards/site-helpers/head";
 import { jsonLd } from "@drdustinedwards/site-helpers/schema";
@@ -200,7 +201,7 @@ export function numbered(body, path) {
   return body.replace(/<h2(\s[^>]*)?>/g, (tag, attrs = "") => (/class="cap-|data-plain/.test(attrs) ? tag : `<h2${attrs} data-no="${section.no}.${++n}">`));
 }
 
-/** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
+/** The close of every page: what the site is, where to go, the day of its data and the source, then the family footer every dustinedwards.info site closes with, its band in teal (Dustin, 2026-10-26). @param {string} asOf */
 function footer(asOf) {
   return `<footer class="foot">
 <div class="cap-livery" aria-hidden="true"></div>
@@ -209,7 +210,8 @@ function footer(asOf) {
 <div class="foot-about"><p>Capsid is an open-source MCP server for AI coding agents, under the MIT license. This site runs on one live Capsid server and rebuilds every day from its public data.</p><p class="foot-small">Data as of ${escapeHtml(asOf)}, counted in whole days to midnight UTC. Private systems appear in full but without a link to their code.</p></div>
 <nav class="foot-nav" aria-label="Every section"><ul>${SECTIONS.map(({ href, label, no }) => `<li><a href="${href}"><span class="foot-no" aria-hidden="true">${no}.0</span>${label}</a></li>`).join("")}</ul></nav>
 <ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Install it</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
-</div></footer>`;
+</div>
+<div class="wrap">${familyFooterHtml()}</div></footer>`;
 }
 
 /**

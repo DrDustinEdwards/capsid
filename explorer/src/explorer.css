@@ -93,9 +93,9 @@ body {
   line-height: 1.5;
 }
 
-/* Links in the accent; a button, a sign or an index entry that is a link, and Capsomer's header,
-   keep Capsomer's colors, which sit in a layer an unlayered rule would beat. */
-:where(main, .foot) :where(a:not(.cap-btn, .cap-sign, .cap-leader-index-link)) {
+/* Links in the accent; a button, a sign or an index entry that is a link, Capsomer's header and the
+   family footer keep Capsomer's colors, which sit in a layer an unlayered rule would beat. */
+:where(main, .foot) :where(a:not(.cap-btn, .cap-sign, .cap-leader-index-link, .cap-family-footer a)) {
   color: var(--accent-text);
   text-underline-offset: 0.18em;
 }
@@ -140,7 +140,7 @@ h1 code {
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
-h2 {
+h2:not(.cap-family-footer-heading) {
   margin-block: var(--space-8) var(--space-3);
   font: 650 clamp(1.75rem, 3vw, 2.75rem) / 1 var(--face);
   letter-spacing: -0.03em;
@@ -1101,7 +1101,7 @@ html:not(.js) .chapter h3::before {
   gap: var(--space-6);
   padding-block: var(--space-7);
 }
-.foot p {
+.foot-in p {
   margin: 0 0 var(--space-2);
 }
 .foot-about {
@@ -1939,7 +1939,7 @@ main .cap-pill {
 }
 
 /* The letterhead (Capsomer's) under the livery, which already draws the band above it. */
-.foot .cap-letterhead {
+.foot > .cap-letterhead {
   padding-block-end: 0;
   border-block-start: 0;
 }
