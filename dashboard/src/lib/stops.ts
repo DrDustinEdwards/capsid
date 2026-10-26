@@ -1,14 +1,6 @@
+import { stopCommand, type Command } from "capsomer/behavior/command-menu";
 import type { ConfirmRequest } from "../app/ctx";
 import type { OpsFeed } from "../types";
-
-// One row of the command menu (app/CommandMenu.tsx). Here, not there, so this module
-// has no JSX and a node test can import it.
-export interface Command {
-  group: string;
-  text: string;
-  hint: string;
-  run: () => void;
-}
 
 // A stop's own control: the confirm dialog (preview then perform), or a switch on
 // Namespaces, pressed so that its reason field opens. Nothing is written from here.
@@ -18,14 +10,14 @@ export interface StopActions {
 }
 
 // Every way to stop something, in one place (capsid/decisions.md 2026-09-30, "admin
-// panels review adopted", item 4): type "stop" to find them all. Each is
-// listed only while there is something to stop.
+// panels review adopted", item 4): type "stop" to find them all. Each is listed only while
+// there is something to stop. Here, not in app/CommandMenu.tsx, so a node test can import it.
 export function stopCommands(feed: OpsFeed | null, a: StopActions): Command[] {
   if (!feed) return [];
   const out: Command[] = [];
-  if (feed.live.overnight.mode !== "off") out.push({ group: "Stop", text: "Turn the overnight run off", hint: "asks a reason", run: () => a.flip("sw-overnight") });
+  if (feed.live.overnight.mode !== "off") out.push(stopCommand({ id: "stop-overnight", label: "Turn the overnight run off", ask: "reason", run: () => a.flip("sw-overnight") }));
   for (const g of feed.live.agents) {
-    if (!g.revoked_at) out.push({ group: "Stop", text: `Revoke ${g.name}`, hint: "preview first", run: () => a.confirm({ action: "revoke_agent", params: { name: g.name }, title: `Revoke agent ${g.name}` }) });
+    if (!g.revoked_at) out.push(stopCommand({ id: `stop-agent-${g.name}`, label: `Revoke ${g.name}`, ask: "preview", keywords: ["revoke"], run: () => a.confirm({ action: "revoke_agent", params: { name: g.name }, title: `Revoke agent ${g.name}` }) }));
   }
   return out;
 }

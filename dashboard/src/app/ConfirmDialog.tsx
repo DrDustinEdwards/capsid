@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Alert } from "capsomer/react/banner";
+import { Button } from "capsomer/react/button";
+import { Dialog, DialogBody, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "capsomer/react/dialog";
+import { Disclosure } from "capsomer/react/disclosure";
+import { Field } from "capsomer/react/field";
+import "capsomer/banner.css";
+import "capsomer/button.css";
+import "capsomer/disclosure.css";
+import "capsomer/field.css";
 import { performAction, previewAction, type Answer } from "../lib/api";
 import { ago, ms, utc } from "../lib/format";
 import type { PortalPerformed, PortalPreview } from "../types";
@@ -8,11 +17,12 @@ import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, TYPED_CONFIRM, performL
 // lines are what the person is deciding.
 const OPEN_DETAILS: ReadonlySet<string> = new Set(["canon_approve", "canon_approve_all", "canon_reject", "sign_policy_from_repo"]);
 
-// The one confirm dialog every control opens. It collects a reason where the action
-// needs one, previews (which writes nothing), shows what will change and the audit
-// rows, and performs only on the button named for the action (performLabel). Cancel and
-// Esc close it; a click outside does not, so a typed reason is never lost that way. For
-// a one-way action the preview puts focus on Cancel, not on perform (audit DECIDE 11).
+// The one confirm dialog every control opens, on Capsomer's dialog. It collects a reason
+// where the action needs one, previews (which writes nothing), shows what will change and
+// the audit rows, and performs only on the button named for the action (performLabel).
+// Cancel, Close and Esc close it; a click outside does not, so a typed reason is never lost
+// that way. For a one-way action the preview puts focus on Cancel, not on perform (audit
+// DECIDE 11).
 interface DialogProps {
   req: ConfirmRequest;
   csrf: string;
@@ -25,16 +35,41 @@ export function ConfirmDialog(props: DialogProps) {
   return props.req.batch ? <BatchDialog {...props} items={props.req.batch} /> : <SingleDialog {...props} />;
 }
 
+// Open until finish(), then closed by Capsomer's dialog, which hands focus back to the
+// control that opened it, or, when that control is gone (a revoked agent loses its Revoke
+// button), to the drawer or the page.
+function useClosing({ onClose, onSignedOut }: Pick<DialogProps, "onClose" | "onSignedOut">) {
+  const [open, setOpen] = useState(true);
+  const result = useRef<PortalPerformed | null | "signed-out">(null);
+  const closed = useRef(false);
+  const [returnTo] = useState(() => document.querySelector<HTMLElement>("dialog.drawer[open] [data-close]") ?? document.querySelector<HTMLElement>("main"));
+  const finish = (r: PortalPerformed | null | "signed-out") => {
+    result.current = r;
+    setOpen(false);
+  };
+  const onOpenChange = (o: boolean) => {
+    if (o || closed.current) return;
+    closed.current = true;
+    setOpen(false);
+    const r = result.current;
+    if (r === "signed-out") onSignedOut();
+    else onClose(r);
+  };
+  return { open, finish, onOpenChange, returnTo };
+}
+
+function ErrorText({ children }: { children: ReactNode }) {
+  return <span className="prewrap">{children}</span>;
+}
+
 function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
-  const dlg = useRef<HTMLDialogElement>(null);
+  const { open, finish, onOpenChange, returnTo } = useClosing({ onClose, onSignedOut });
   const doIt = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const confirmRef = useRef<HTMLInputElement>(null);
-  const opener = useRef<Element | null>(null);
   const started = useRef(false);
-  const finished = useRef(false);
   const alive = useRef(true);
   const needsReason = NEEDS_REASON.has(req.action);
   // A reason typed before the dialog opened (the reply box on a Needs you row) is the
@@ -50,33 +85,13 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   const [typedVersion, setTypedVersion] = useState("");
   const [preview, setPreview] = useState<PortalPreview | null>(null);
   const [pending, setPending] = useState<null | "preview" | "perform">(null);
-  // field: the error is about the reason field itself, so the field is marked invalid.
+  // field: the error is about the reason or version field itself, so it is shown there.
   const [error, setError] = useState<{ text: string; expired: boolean; field?: boolean } | null>(null);
   const label = performLabel(req.action, req.params);
   const destructive = DESTRUCTIVE.has(req.action);
 
-  const finish = (performed: PortalPerformed | null) => {
-    if (finished.current) return;
-    finished.current = true;
-    const d = dlg.current;
-    if (d?.open) d.close();
-    const from = opener.current;
-    onClose(performed);
-    // Hand focus back to the control that opened the dialog, or, when that control is
-    // gone (a revoked agent loses its Revoke button), to the drawer or the page. After
-    // the next frame, so the new feed has rendered first.
-    requestAnimationFrame(() => {
-      const back = from instanceof HTMLElement && from.isConnected ? from : (document.querySelector<HTMLElement>("dialog.drawer[open] [data-close]") ?? document.querySelector<HTMLElement>("main"));
-      back?.focus();
-    });
-  };
-
   const failed = (r: Exclude<Answer<unknown>, { kind: "ok" }>) => {
-    if (r.kind === "signed-out") {
-      finished.current = true;
-      if (dlg.current?.open) dlg.current.close();
-      return onSignedOut();
-    }
+    if (r.kind === "signed-out") return finish("signed-out");
     if (r.kind === "expired") return setError({ text: r.message, expired: true });
     if (r.kind === "refused") return setError({ text: r.message, expired: false });
     setError({ text: `Could not reach the server: ${r.message}`, expired: false });
@@ -138,11 +153,6 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
 
   useEffect(() => {
     alive.current = true;
-    const d = dlg.current;
-    if (d && !d.open) {
-      opener.current = document.activeElement;
-      d.showModal();
-    }
     // Once, even under StrictMode's double effect: an action without a reason
     // previews as soon as the dialog opens.
     if (!started.current) {
@@ -159,46 +169,35 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
   }, [preview]);
 
   const busy = pending != null;
+  const fieldError = error?.field ? error.text : undefined;
 
   let primary = null;
   if (preview) {
     primary = (
-      <button ref={doIt} type="button" className={destructive ? "btn danger ml-auto" : "btn primary"} disabled={busy} onClick={() => void runPerform()}>
-        {pending === "perform" ? "Working..." : label}
-      </button>
+      <Button ref={doIt} variant={destructive ? "danger" : "primary"} pending={pending === "perform"} onClick={() => void runPerform()}>
+        {label}
+      </Button>
     );
-  } else if (askReason || typesConfirm || error) {
+  } else if (askReason || typesConfirm || (error && !error.field)) {
     primary = (
       // A plain button with its own handler: Preview never depends on the form's submit
-      // event, and it is disabled only while a request is in flight, never silently
-      // because the reason is empty (that click says so instead).
-      <button type="button" className="btn primary" disabled={busy} onClick={() => void runPreview(reasonNow())}>
-        {pending === "preview" ? "Checking..." : error?.expired ? "Preview again" : error ? "Try again" : "Preview"}
-      </button>
+      // event, and it is held only while a request is in flight, never silently because
+      // the reason is empty (that click says so instead).
+      <Button variant="primary" pending={pending === "preview"} onClick={() => void runPreview(reasonNow())}>
+        {error?.expired ? "Preview again" : error && !error.field ? "Try again" : "Preview"}
+      </Button>
     );
   }
 
   return (
-    <dialog
-      ref={dlg}
-      className="help confirm"
-      aria-labelledby="confirmTitle"
-      aria-busy={busy}
-      onCancel={(e) => {
-        // Esc while a request is in flight would hide its answer.
-        if (busy) e.preventDefault();
-      }}
-      onClose={() => finish(null)}
-    >
-      <div className="card">
+    <Dialog className="confirm" open={open} onOpenChange={onOpenChange} modalLock busy={busy} returnTo={returnTo} size="md">
+      <DialogHeader>
         {/* The heading stays in plain words (req.title); the server's summary, which can
             name a job by its id, sits under it once the preview answers. */}
-        <h2 id="confirmTitle">{req.title}</h2>
-        {preview && (
-          <p className="confirm-say" data-summary="">
-            {preview.summary}
-          </p>
-        )}
+        <DialogTitle>{req.title}</DialogTitle>
+        {preview && <DialogDescription data-summary="">{preview.summary}</DialogDescription>}
+      </DialogHeader>
+      <DialogBody className="stack-gap">
         {given && (
           <div>
             <p className="section-title">Your reply</p>
@@ -209,82 +208,49 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
         )}
         {typesConfirm && !askReason && !preview && (
           <form
-            id="confirmForm"
             className="stack-gap"
+            noValidate
             onSubmit={(e) => {
               e.preventDefault();
               if (!busy) void runPreview("");
             }}
           >
-            <label htmlFor="confirmVersion" className="section-title">
-              Version to sign (required)
-            </label>
-            <input
-              ref={confirmRef}
-              id="confirmVersion"
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              autoFocus
-              value={typedVersion}
-              disabled={busy}
-              aria-invalid={error?.field ? true : undefined}
-              aria-describedby={error?.field ? "confirmError" : undefined}
-              onChange={(e) => setTypedVersion(e.target.value)}
-            />
-            <p className="faint note">The version number in the policy file. It decides what merges with no human, so it is typed, not clicked.</p>
+            <Field label="Version to sign" required help="The version number in the policy file. It decides what merges with no human, so it is typed, not clicked." error={fieldError} announce>
+              <input ref={confirmRef} className="cap-input" type="text" inputMode="numeric" autoComplete="off" autoFocus value={typedVersion} readOnly={busy} onChange={(e) => setTypedVersion(e.target.value)} />
+            </Field>
           </form>
         )}
         {askReason && !preview && (
           <form
-            id="confirmForm"
             className="stack-gap"
+            noValidate
             onSubmit={(e) => {
               e.preventDefault();
               if (!busy) void runPreview(reasonNow());
             }}
           >
-            <label htmlFor="confirmReason" className="section-title">
-              Reason (required)
-            </label>
-            <textarea
-              ref={reasonRef}
-              id="confirmReason"
-              rows={3}
-              autoFocus
-              value={reason}
-              disabled={busy}
-              aria-invalid={error?.field ? true : undefined}
-              aria-describedby={error?.field ? "confirmError" : undefined}
-              onChange={(e) => setReason(e.target.value)}
-              onKeyDown={(e) => {
-                // Ctrl or Cmd with Enter previews; a plain Enter is a new line.
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !busy) {
-                  e.preventDefault();
-                  void runPreview(reasonNow());
-                }
-              }}
-            />
-            <p className="faint note">Recorded with the change. Preview shows what will change before anything is written.</p>
+            <Field label="Reason" required help="Recorded with the change. Preview shows what will change before anything is written." error={fieldError} announce>
+              <textarea
+                ref={reasonRef}
+                className="cap-input"
+                rows={3}
+                autoFocus
+                value={reason}
+                readOnly={busy}
+                onChange={(e) => setReason(e.target.value)}
+                onKeyDown={(e) => {
+                  // Ctrl or Cmd with Enter previews; a plain Enter is a new line.
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !busy) {
+                    e.preventDefault();
+                    void runPreview(reasonNow());
+                  }
+                }}
+              />
+            </Field>
             {takesNote && (
-              <>
-                <label htmlFor="confirmNote" className="section-title">
-                  Note for the driver (optional)
-                </label>
-                <textarea
-                  ref={noteRef}
-                  id="confirmNote"
-                  rows={4}
-                  maxLength={16384}
-                  value={note}
-                  disabled={busy}
-                  aria-describedby="confirmNoteHelp"
-                  onChange={(e) => setNote(e.target.value)}
-                />
-                <p className="faint note" id="confirmNoteHelp">
-                  The full approval, when a line is not enough. The driver reads it with the job on its next claim.
-                </p>
-              </>
+              <Field label="Note for the driver (optional)" help="The full approval, when a line is not enough. The driver reads it with the job on its next claim.">
+                <textarea ref={noteRef} className="cap-input" rows={4} maxLength={16384} value={note} readOnly={busy} onChange={(e) => setNote(e.target.value)} />
+              </Field>
             )}
           </form>
         )}
@@ -297,12 +263,8 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
             writes are the server's own text, behind Details (the UX audit's M5). A rule
             change's lines are what is being decided, so they start open. */}
         {preview && (
-          <details className="confirm-details" open={OPEN_DETAILS.has(req.action)}>
-            <summary>
-              <span className="chev" aria-hidden="true" />
-              Details
-            </summary>
-            <div className="stack-gap mt8">
+          <Disclosure summary="Details" defaultOpen={OPEN_DETAILS.has(req.action)}>
+            <div className="stack-gap">
               <div>
                 <p className="section-title">What changes</p>
                 {preview.changes.length ? (
@@ -331,24 +293,22 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
                 This confirmation is good until {utc(ms(preview.expires_at))} ({ago(ms(preview.expires_at))}).
               </p>
             </div>
-          </details>
+          </Disclosure>
         )}
-        {error && (
-          <div className="callout crit" role="alert" id="confirmError">
-            {error.expired && <b>The confirmation expired. Preview again to get a new one. </b>}
-            <span className="prewrap">{error.text}</span>
-          </div>
+        {error && !error.field && (
+          <Alert title={error.expired ? "The confirmation expired. Preview again to get a new one." : undefined}>
+            <ErrorText>{error.text}</ErrorText>
+          </Alert>
         )}
-        {/* A destructive perform sits apart from Cancel, at the far end, after it. */}
-        <div className="toolbar">
-          {!(preview && destructive) && primary}
-          <button ref={cancelRef} type="button" className="btn" disabled={busy} onClick={() => finish(null)}>
-            Cancel
-          </button>
-          {preview && destructive && primary}
-        </div>
-      </div>
-    </dialog>
+      </DialogBody>
+      {/* A destructive perform sits apart from Cancel, at the far end. */}
+      <DialogFooter align={preview && destructive ? "between" : undefined}>
+        <Button ref={cancelRef} onClick={() => !busy && finish(null)}>
+          Cancel
+        </Button>
+        {primary}
+      </DialogFooter>
+    </Dialog>
   );
 }
 
@@ -357,9 +317,8 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
 // sends each item's own token, one after another, and a refusal of one does not stop the
 // rest. The result names what was done and, lasting, what was not.
 function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & { items: ReadonlyArray<BatchItem> }) {
-  const dlg = useRef<HTMLDialogElement>(null);
+  const { open, finish, onOpenChange, returnTo } = useClosing({ onClose, onSignedOut });
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const opener = useRef<Element | null>(null);
   const started = useRef(false);
   const finished = useRef(false);
   const alive = useRef(true);
@@ -371,22 +330,13 @@ function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & {
   const first = items[0];
   const label = first ? performLabel(first.action, first.params) : "Go";
 
-  const finish = (performed: PortalPerformed | null) => {
-    if (finished.current) return;
+  const done = (r: PortalPerformed | null | "signed-out") => {
     finished.current = true;
-    if (dlg.current?.open) dlg.current.close();
-    const from = opener.current;
-    onClose(performed);
-    requestAnimationFrame(() => {
-      const back = from instanceof HTMLElement && from.isConnected ? from : document.querySelector<HTMLElement>("main");
-      back?.focus();
-    });
+    finish(r);
   };
   const words = (r: Exclude<Answer<unknown>, { kind: "ok" }>): string | null => {
     if (r.kind === "signed-out") {
-      finished.current = true;
-      if (dlg.current?.open) dlg.current.close();
-      onSignedOut();
+      done("signed-out");
       return null;
     }
     return r.kind === "error" ? `Could not reach the server: ${r.message}` : r.message;
@@ -413,7 +363,7 @@ function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & {
   const performAll = async () => {
     setPending("perform");
     setError(null);
-    const done: PortalPerformed[] = [];
+    const ok: PortalPerformed[] = [];
     const failed: string[] = [];
     for (const r of rows) {
       if (!r.preview) {
@@ -422,7 +372,7 @@ function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & {
       }
       const a = await performAction(csrf, r.preview.token);
       if (!alive.current) return;
-      if (a.kind === "ok") done.push(a.value);
+      if (a.kind === "ok") ok.push(a.value);
       else {
         const w = words(a);
         if (w === null) return;
@@ -430,19 +380,14 @@ function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & {
       }
     }
     setPending(null);
-    const last = done[done.length - 1];
+    const last = ok[ok.length - 1];
     if (!last) return setError(`Nothing was done. ${failed.join(" ")}`);
-    const warnings = [...done.map((d) => d.warning).filter((w): w is string => w !== null), ...(failed.length ? [`${failed.length} not done: ${failed.join(" ")}`] : [])];
-    finish({ ...last, summary: done.map((d) => d.summary).join(" "), warning: warnings.length ? warnings.join(" ") : null });
+    const warnings = [...ok.map((d) => d.warning).filter((w): w is string => w !== null), ...(failed.length ? [`${failed.length} not done: ${failed.join(" ")}`] : [])];
+    done({ ...last, summary: ok.map((d) => d.summary).join(" "), warning: warnings.length ? warnings.join(" ") : null });
   };
 
   useEffect(() => {
     alive.current = true;
-    const d = dlg.current;
-    if (d && !d.open) {
-      opener.current = document.activeElement;
-      d.showModal();
-    }
     if (!started.current) {
       started.current = true;
       void previewAll();
@@ -459,9 +404,11 @@ function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & {
 
   const busy = pending !== null;
   return (
-    <dialog ref={dlg} className="help confirm" aria-labelledby="confirmTitle" aria-busy={busy} onCancel={(e) => busy && e.preventDefault()} onClose={() => finish(null)}>
-      <div className="card">
-        <h2 id="confirmTitle">{req.title}</h2>
+    <Dialog className="confirm" open={open} onOpenChange={onOpenChange} modalLock busy={busy} returnTo={returnTo} size="md">
+      <DialogHeader>
+        <DialogTitle>{req.title}</DialogTitle>
+      </DialogHeader>
+      <DialogBody className="stack-gap">
         <ol className="plain batch-list">
           {rows.map((r) => (
             <li key={r.item.label} data-batch-item={r.item.label}>
@@ -469,9 +416,9 @@ function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & {
               {r.preview ? (
                 <span className="muted note"> {r.preview.summary}</span>
               ) : r.error ? (
-                <span className="callout crit prewrap" role="alert">
-                  {r.error}
-                </span>
+                <Alert>
+                  <ErrorText>{r.error}</ErrorText>
+                </Alert>
               ) : (
                 <span className="faint"> Checking...</span>
               )}
@@ -484,21 +431,21 @@ function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & {
           </div>
         )}
         {error && (
-          <div className="callout crit prewrap" role="alert">
-            {error}
-          </div>
+          <Alert>
+            <ErrorText>{error}</ErrorText>
+          </Alert>
         )}
-        <div className="toolbar">
-          {pending !== "preview" && ready.length > 0 && (
-            <button type="button" className="btn primary" disabled={busy} onClick={() => void performAll()}>
-              {pending === "perform" ? "Working..." : `${label} ${ready.length}`}
-            </button>
-          )}
-          <button ref={cancelRef} type="button" className="btn" disabled={busy} onClick={() => finish(null)}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    </dialog>
+      </DialogBody>
+      <DialogFooter>
+        <Button ref={cancelRef} onClick={() => !busy && finish(null)}>
+          Cancel
+        </Button>
+        {pending !== "preview" && ready.length > 0 && (
+          <Button variant="primary" pending={pending === "perform"} onClick={() => void performAll()}>
+            {`${label} ${ready.length}`}
+          </Button>
+        )}
+      </DialogFooter>
+    </Dialog>
   );
 }
