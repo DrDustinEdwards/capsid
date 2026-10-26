@@ -70,7 +70,7 @@ ${servers
 <ul class="tool-cards">${tools
       .filter((t) => t.server === server)
       .map(
-        (t) => `<li class="tool-card" data-item data-kinds="${kindsOf(t).join(" ")}" data-text="${escapeHtml([t.name, t.title, ...t.actions.map((/** @type {any} */ a) => a.name), ...t.params.map((/** @type {any} */ p) => p.name)].join(" ").toLowerCase())}">
+        (t) => `<li class="tool-card" data-livery data-item data-kinds="${kindsOf(t).join(" ")}" data-text="${escapeHtml([t.name, t.title, ...t.actions.map((/** @type {any} */ a) => a.name), ...t.params.map((/** @type {any} */ p) => p.name)].join(" ").toLowerCase())}">
 <a href="${toolPath(t.name)}"><code>${escapeHtml(t.name)}</code><span class="tool-card-title">${escapeHtml(t.title)}</span></a>
 <p>${prose(sentence(t.description))}</p>
 <p class="tool-tags">${pills(t)}</p>
