@@ -1,8 +1,8 @@
 // Search over everything the explorer publishes: systems, parts, flows and their steps, tools,
-// their actions and arguments, and every measured module and function. The index is one JSON
+// their actions, and each measured repo's code page. The index is one JSON
 // file the search page's script reads from the explorer itself, so no request leaves the site.
 // Each entry is [kind, name, detail, address]. Pure.
-import { modulePath } from "./code.mjs";
+import { codePath } from "./code.mjs";
 import { flowPath, layout, pageHead, partPath, stepPath, systemPath } from "./pages.mjs";
 import { toolPath } from "./tools.mjs";
 
@@ -29,11 +29,7 @@ export function searchIndex(model, bySystem, flows, tools) {
     for (const map of maps) {
       if (seen.has(map.repo)) continue;
       seen.add(map.repo);
-      const repo = map.repo.split("/")[1];
-      for (const m of map.modules) {
-        entries.push(["Module", m.path, `${repo} · ${m.loc} lines, ${m.functions.length} functions`, modulePath(id, m.path)]);
-        for (const fn of m.functions) if (!fn.name.startsWith("<")) entries.push(["Function", fn.name, `${repo} · ${m.path} · complexity ${fn.cc}`, `${modulePath(id, m.path)}#L${fn.line}`]);
-      }
+      entries.push(["Code", map.repo.split("/")[1], `${map.modules.length} modules, measured ${map.date}`, codePath(id)]);
     }
   }
   return { entries };
@@ -41,13 +37,13 @@ export function searchIndex(model, bySystem, flows, tools) {
 
 /** @param {string} asOf */
 export function searchPage(asOf) {
-  const body = `${pageHead([["/", "Overview"]], "Search", "Search", "Find any system, part, step, tool, module or function on this site. Press / on any page to jump here.")}
+  const body = `${pageHead([["/", "Overview"]], "Search", "Search", "Find any system, part, step, tool or repo on this site. Press / on any page to jump here.")}
 <form class="search-form" action="/search/" method="get" role="search">
 <label class="cap-sr-only" for="q">Search the explorer</label>
-<input class="cap-input search-input" id="q" name="q" type="search" placeholder="Try “backup”, “merge” or “verifyIdToken”" autocomplete="off" data-search>
+<input class="cap-input search-input" id="q" name="q" type="search" placeholder="Try “backup”, “merge” or “session”" autocomplete="off" data-search>
 </form>
 <p class="hint" role="status" data-search-count>Search needs JavaScript. Without it, browse <a href="/systems/">the systems</a>, <a href="/tools/">the tools</a> or <a href="/code/">the code</a>.</p>
 <ol class="search-results" data-search-results></ol>`;
-  return layout({ title: "Search, Capsid", description: "Search every system, tool, flow step, module and function in the Capsid explorer.", path: "/search/", body, asOf });
+  return layout({ title: "Search, Capsid", description: "Search every system, part, step, tool and repo in the Capsid explorer.", path: "/search/", body, asOf });
 }
 

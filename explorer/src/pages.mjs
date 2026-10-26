@@ -197,11 +197,11 @@ export function numbered(body, path) {
 /** The close of every page: what the site is, where to go, the day of its data, and the source. @param {string} asOf */
 function footer(asOf) {
   return `<footer class="foot">
-<div class="foot-plate wrap" aria-hidden="true"><p class="foot-logo">Capsid</p><p class="foot-lockup">MCP server and control plane<br><b>capsid.dustinedwards.info</b></p></div>
+<div class="foot-plate wrap" aria-hidden="true"><p class="foot-logo">Capsid</p><p class="foot-lockup">Shared memory and checks for AI coding agents<br><b>capsid.dustinedwards.info</b></p></div>
 <div class="foot-in wrap">
 <div class="foot-about"><p>Capsid is an open-source MCP server for AI coding agents, under the MIT license. This site runs on one live Capsid server and rebuilds every day from its public data.</p><p class="foot-small">Data as of ${escapeHtml(asOf)}, counted in whole days to midnight UTC. Private systems appear in full but without a link to their code.</p></div>
 <nav class="foot-nav" aria-label="Every section"><ul>${SECTIONS.map(({ href, label, no }) => `<li><a href="${href}"><span class="foot-no" aria-hidden="true">${no}.0</span>${label}</a></li>`).join("")}</ul></nav>
-<ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
+<ul class="foot-out"><li><a href="https://github.com/DrDustinEdwards/capsid">The source</a>, MIT licensed</li><li><a href="https://github.com/DrDustinEdwards/capsid#installation">Install it</a></li><li><a href="${SITE}/systems">The family on dustinedwards.info</a></li><li><a href="https://portal.dustinedwards.info">The Portal</a>, for the owners</li></ul>
 </div></footer>`;
 }
 
@@ -678,11 +678,10 @@ export function notFoundPage(asOf) {
  * public system with parts, one per flow and one per step of it, the code pages of each public
  * system with a code map, and the 404.
  * @param {any} model @param {any} stats @param {any} [code] the public code document
- * @param {(repo: string, path: string) => string | undefined} [sourceOf] a module's source at its map's commit
  * @param {any[]} [tools] the served tools (src/surface.mjs)
  * @returns {Array<[string, string]>}
  */
-export function allPages(model, stats, code = null, sourceOf = () => undefined, tools = []) {
+export function allPages(model, stats, code = null, tools = []) {
   const asOf = stats.as_of;
   const bySystem = codeBySystem(model, code);
   const totals = codeTotals(model, bySystem);
@@ -705,7 +704,7 @@ export function allPages(model, stats, code = null, sourceOf = () => undefined, 
     for (const st of f.steps) pages.push([stepPath(f.id, st.n), stepPage(model, f, st.n, asOf)]);
   }
   pages.push(...toolPages(tools, asOf));
-  pages.push(...codePages(model, bySystem, sourceOf, asOf));
+  pages.push(...codePages(model, bySystem, asOf));
   pages.push(["/404", notFoundPage(asOf)]);
   return pages;
 }

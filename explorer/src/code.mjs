@@ -14,12 +14,8 @@ const MAX_DRAWN = 40;
 
 /** @param {string} id */
 export const codePath = (id) => `/s/${id}/code/`;
-// Each segment escaped as the static assets server writes it (blog.$slug[.md].ts is
-// blog.%24slug%5B.md%5D.ts; it redirects any other spelling). build.mjs writes the page
-// under the decoded path, and the server decodes the request to match it.
+/** A repo path as GitHub's URLs take it, each segment escaped. */
 export const escapePath = (/** @type {string} */ path) => path.split("/").map(encodeURIComponent).join("/");
-/** A module's page, its repo path under the system's code page. @param {string} id @param {string} path */
-export const modulePath = (id, path) => `/s/${id}/code/${escapePath(path)}/`;
 
 // Section 5: CRAP up to 5 ok, 5 to 30 watch, over 30 critical (crap4j's threshold); mutation
 // 80% and up ok, 60 to 80 watch, under 60 critical.
@@ -190,8 +186,8 @@ export function codePage(s, maps, asOf) {
       mods.length > 1 && mods.length <= MAX_DRAWN
         ? graphSvg({
             id: `${folderId(folder)}-graph`,
-            title: `The modules of ${folderName(folder)} and the imports among them${folders.size > 1 ? "; imports from other folders are on each module's page" : ""}`,
-            boxes: mods.map((m) => ({ id: m.path, label: baseName(m.path), href: modulePath(s.id, m.path), lines: boxLines(map, [m]), cycle: !!m.cycle })),
+            title: `The modules of ${folderName(folder)} and the imports among them`,
+            boxes: mods.map((m) => ({ id: m.path, label: baseName(m.path), href: blobUrl(map, m.path), lines: boxLines(map, [m]), cycle: !!m.cycle })),
             wires: mods.flatMap((m) => m.imports.map((/** @type {string} */ to) => ({ from: m.path, to }))),
           })
         : "";
@@ -201,66 +197,26 @@ export function codePage(s, maps, asOf) {
       map.tools.coverage ? `By CRAP, ${counts.crit} critical, ${counts.warn} to watch and ${counts.ok} ok.` : "No coverage report, so no CRAP scores."
     } ${map.tools.mutation ? mutationNote(map, fns) : "Mutation testing has not run on it yet."}</p>
 <h3 id="${id("cycles")}">Import cycles</h3>
-${map.cycles.length ? `<ul>${map.cycles.map((/** @type {string[]} */ c) => `<li>${c.map((p) => `<a href="${modulePath(s.id, p)}">${escapeHtml(p)}</a>`).join(" imports ")}, and back</li>`).join("")}</ul>` : "<p>None: no module imports itself, however indirectly.</p>"}
+${map.cycles.length ? `<ul>${map.cycles.map((/** @type {string[]} */ c) => `<li>${c.map((p) => `<a href="${blobUrl(map, p)}">${escapeHtml(p)}</a>`).join(" imports ")}, and back</li>`).join("")}</ul>` : "<p>None: no module imports itself, however indirectly.</p>"}
 ${folderGraph}
 ${[...folders].map(([folder, mods]) => `<div class="code-folder" id="${folderId(folder)}">${moduleGraph(folder, mods)}${scroller(`${folderId(folder)}-table`, `<table class="cap-table code-table"><caption>${escapeHtml(folderName(folder))}</caption>
 <thead><tr><th scope="col">Module</th><th scope="col">Lines</th><th scope="col">Functions</th><th scope="col">Worst function</th><th scope="col">Mutation</th></tr></thead>
-<tbody>${mods.map((/** @type {any} */ m) => `<tr${m.cycle ? ' data-cycle=""' : ""}><th scope="row"><a href="${modulePath(s.id, m.path)}">${escapeHtml(baseName(m.path))}</a>${m.cycle ? ' <span class="cap-pill" data-variant="outline">cycle</span>' : ""}</th><td>${m.loc}</td><td>${m.functions.length}</td><td>${m.functions.length ? crapStatus(worstCrap(m), r.fnCrap) : '<span class="code-none">No functions</span>'}</td><td>${scoreStatus(moduleScore(m), scoreReason(r, m.functions))}</td></tr>`).join("")}</tbody></table>`, `${folder}, ${map.repo}`)}</div>`).join("\n")}
+<tbody>${mods.map((/** @type {any} */ m) => `<tr${m.cycle ? ' data-cycle=""' : ""}><th scope="row"><a href="${blobUrl(map, m.path)}">${escapeHtml(baseName(m.path))}</a>${m.cycle ? ' <span class="cap-pill" data-variant="outline">cycle</span>' : ""}</th><td>${m.loc}</td><td>${m.functions.length}</td><td>${m.functions.length ? crapStatus(worstCrap(m), r.fnCrap) : '<span class="code-none">No functions</span>'}</td><td>${scoreStatus(moduleScore(m), scoreReason(r, m.functions))}</td></tr>`).join("")}</tbody></table>`, `${folder}, ${map.repo}`)}</div>`).join("\n")}
 </section>`;
   });
   const body = `${pageHead([["/", "Overview"], ["/code/", "Code"], [systemPath(s.id), s.name]], "Code", `The code of ${escapeHtml(s.name)}`)}
-<p class="lead">Each module by folder, with two scores. CRAP shows its riskiest function: it rises when code is complex and its tests cover little of it. Over ${CRAP_CRIT} is critical, and over ${CRAP_WATCH} is worth a look. The mutation score is the share of planted bugs its tests catch. Under ${SCORE_WATCH}% is critical, and under ${SCORE_OK}% is worth a look. Pick a module to see its functions and source.</p>
+<p class="lead">Each module by folder, with two scores. CRAP shows its riskiest function: it rises when code is complex and its tests cover little of it. Over ${CRAP_CRIT} is critical, and over ${CRAP_WATCH} is worth a look. The mutation score is the share of planted bugs its tests catch. Under ${SCORE_WATCH}% is critical, and under ${SCORE_OK}% is worth a look. Each module links to its source on GitHub.</p>
 ${sections.join("\n")}`;
   return layout({ title: `The code of ${s.name}, Capsid`, description: `${s.name}'s modules, import cycles and riskiest functions.`, path: codePath(s.id), body, asOf });
 }
 
 /**
- * One module: its functions, what it imports and what imports it, and its numbered source, each
- * function linked to its lines.
- * @param {any} s the system @param {any} map @param {any} m the module @param {string | undefined} source @param {string} asOf
- */
-export function modulePage(s, map, m, source, asOf) {
-  const r = reasons(map);
-  const importers = map.modules.filter((/** @type {any} */ x) => x.imports.includes(m.path));
-  const lines = source === undefined ? [] : source.replace(/\n$/, "").split("\n");
-  const link = (/** @type {string} */ p) => `<a href="${modulePath(s.id, p)}">${escapeHtml(p)}</a>`;
-  const fnRows = m.functions
-    .map(
-      (/** @type {any} */ f) =>
-        `<tr><th scope="row"><a href="#L${f.line}">${escapeHtml(f.name)}</a></th><td>${f.line} to ${f.end}</td><td>${f.cc}</td><td>${f.coverage === null ? status("nodata", "", r.fnCrap) : `${Math.round(f.coverage * 100)}%`}</td><td>${crapStatus(f.crap, r.fnCrap)}</td><td>${scoreStatus(f.mutants ? f.score : null, scoreReason(r, [f]))}</td></tr>`
-    )
-    .join("");
-  const code = lines.length
-    ? `<pre class="code" tabindex="0" aria-label="${escapeHtml(m.path)}, ${lines.length} lines"><code>${lines.map((l, i) => `<span class="code-line" id="L${i + 1}"><span class="code-ln" aria-hidden="true">${i + 1}</span>${escapeHtml(l)}\n</span>`).join("")}</code></pre>`
-    : `<p>The source was not read for this build. <a href="${blobUrl(map, m.path)}">Read it on GitHub</a>.</p>`;
-  const body = `${pageHead([["/", "Overview"], ["/code/", "Code"], [systemPath(s.id), s.name], [codePath(s.id), "Code"]], m.path, `<code>${escapeHtml(m.path)}</code>`)}
-<p class="lead">${m.loc} lines and ${m.functions.length} functions in ${escapeHtml(map.repo)}, at commit <code>${escapeHtml(map.sha.slice(0, 7))}</code> on <span class="nowrap">${escapeHtml(map.date)}</span>.${m.cycle ? " It is in an import cycle." : ""} <a href="${blobUrl(map, m.path)}">This file on GitHub</a>.</p>
-<section aria-labelledby="fns-title"><h2 id="fns-title">Functions</h2>
-${m.functions.length ? scroller("fns", `<table class="cap-table code-table"><caption>The functions of ${escapeHtml(baseName(m.path))}</caption>
-<thead><tr><th scope="col">Function</th><th scope="col">Lines</th><th scope="col">Complexity</th><th scope="col">Covered</th><th scope="col">CRAP</th><th scope="col">Mutation</th></tr></thead>
-<tbody>${fnRows}</tbody></table>`, `The functions of ${m.path}`) : "<p>None: it only declares types or values.</p>"}
-</section>
-<section aria-labelledby="imports-title"><h2 id="imports-title">Imports</h2>
-<p>${m.imports.length ? `It imports ${m.imports.map(link).join(", ")}.` : "It imports no other module of this repo."} ${importers.length ? `Imported by ${importers.map((/** @type {any} */ x) => link(x.path)).join(", ")}.` : "No module of this repo imports it."}</p>
-</section>
-<section aria-labelledby="source-title"><h2 id="source-title">Source</h2>${code}</section>`;
-  return layout({ title: `${m.path}, ${s.name}, Capsid`, description: `${m.path} in ${map.repo}: ${m.functions.length} functions.`, path: modulePath(s.id, m.path), body, asOf });
-}
-
-/**
- * Every code page: one per public system with a map, and one per module in it.
- * @param {any} model @param {Map<string, any[]>} bySystem @param {(repo: string, path: string) => string | undefined} sourceOf @param {string} asOf
+ * Every code page: one per public system with a map.
+ * @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf
  * @returns {Array<[string, string]>}
  */
-export function codePages(model, bySystem, sourceOf, asOf) {
-  /** @type {Array<[string, string]>} */
-  const pages = [];
-  for (const [id, maps] of bySystem) {
-    const s = model.systems.find((/** @type {any} */ x) => x.id === id);
-    pages.push([codePath(id), codePage(s, maps, asOf)]);
-    for (const map of maps) for (const m of map.modules) pages.push([modulePath(id, m.path), modulePage(s, map, m, sourceOf(map.repo, m.path), asOf)]);
-  }
-  return pages;
+export function codePages(model, bySystem, asOf) {
+  return [...bySystem].map(([id, maps]) => [codePath(id), codePage(model.systems.find((/** @type {any} */ x) => x.id === id), maps, asOf)]);
 }
 
 /** Every public repo's map with the system its pages sit under. @param {any} model @param {Map<string, any[]>} bySystem */
@@ -279,7 +235,7 @@ export function codeHome(model, bySystem, id) {
 }
 
 /** @param {any} map */
-const functionsOf = (map) => map.modules.flatMap((/** @type {any} */ m) => m.functions.map((/** @type {any} */ f) => ({ ...f, path: m.path })));
+const functionsOf = (map) => map.modules.flatMap((/** @type {any} */ m) => m.functions.map((/** @type {any} */ f) => ({ ...f, path: m.path, href: blobUrl(map, m.path, f.line, f.end) })));
 
 /**
  * Totals over every public repo's code map, for the front page and the code overview, or null
@@ -296,13 +252,13 @@ export function codeTotals(model, bySystem) {
     modules: repos.reduce((n, r) => n + r.map.modules.length, 0),
     functions: fns.length,
     lines: repos.reduce((n, r) => n + r.map.modules.reduce((/** @type {number} */ k, /** @type {any} */ m) => k + m.loc, 0), 0),
-    worst: worst && { name: worst.name, path: `${worst.repo.split("/")[1]}/${worst.path}`, crap: worst.crap, cc: worst.cc, href: `${modulePath(worst.system, worst.path)}#L${worst.line}` },
+    worst: worst && { name: worst.name, path: `${worst.repo.split("/")[1]}/${worst.path}`, crap: worst.crap, cc: worst.cc, href: worst.href },
   };
 }
 
-/** A function's row in a table of the riskiest, linked to its lines. @param {any} f @param {string} system @param {boolean} [repo] */
-const riskRow = (f, system, repo = false) =>
-  `<tr><th scope="row"><a href="${modulePath(system, f.path)}#L${f.line}"><code>${escapeHtml(f.name)}</code></a></th>${repo ? `<td>${escapeHtml(f.repo.split("/")[1])}</td>` : ""}<td>${escapeHtml(f.path)}</td><td data-sort="${f.cc}">${f.cc}</td><td data-sort="${f.coverage ?? -1}">${f.coverage === null ? "" : `${Math.round(f.coverage * 100)}%`}</td><td data-sort="${f.crap ?? -1}">${crapStatus(f.crap, "no coverage report in this map")}</td></tr>`;
+/** A function's row in a table of the riskiest, linked to its lines on GitHub. @param {any} f @param {boolean} [repo] */
+const riskRow = (f, repo = false) =>
+  `<tr><th scope="row"><a href="${f.href}"><code>${escapeHtml(f.name)}</code></a></th>${repo ? `<td>${escapeHtml(f.repo.split("/")[1])}</td>` : ""}<td>${escapeHtml(f.path)}</td><td data-sort="${f.cc}">${f.cc}</td><td data-sort="${f.coverage ?? -1}">${f.coverage === null ? "" : `${Math.round(f.coverage * 100)}%`}</td><td data-sort="${f.crap ?? -1}">${crapStatus(f.crap, "no coverage report in this map")}</td></tr>`;
 
 /** A system page's five riskiest functions, by CRAP. @param {string} id @param {any[]} maps */
 export function riskiest(id, maps) {
@@ -310,8 +266,8 @@ export function riskiest(id, maps) {
   if (!fns.length) return "";
   return `<section aria-labelledby="risk-title"><h2 id="risk-title">Its riskiest functions</h2>
 <p class="section-sub">CRAP is a risk score: a function's complexity weighed against how much of it the tests run. Over ${CRAP_CRIT} is critical, and a complex function no test runs scores highest.</p>
-${scroller("risk", `<table class="cap-table code-table"><caption>The five functions with the highest CRAP</caption><thead><tr><th scope="col">Function</th><th scope="col">Module</th><th scope="col">Complexity</th><th scope="col">Covered</th><th scope="col">CRAP</th></tr></thead><tbody>${fns.map((/** @type {any} */ f) => riskRow(f, id)).join("")}</tbody></table>`, "Its riskiest functions")}
-<p><a class="arrow" href="${codePath(id)}">Every module and function</a></p></section>`;
+${scroller("risk", `<table class="cap-table code-table"><caption>The five functions with the highest CRAP</caption><thead><tr><th scope="col">Function</th><th scope="col">Module</th><th scope="col">Complexity</th><th scope="col">Covered</th><th scope="col">CRAP</th></tr></thead><tbody>${fns.map((/** @type {any} */ f) => riskRow(f)).join("")}</tbody></table>`, "Its riskiest functions")}
+<p><a class="arrow" href="${codePath(id)}">Every module</a></p></section>`;
 }
 
 /**
@@ -357,12 +313,12 @@ export function codeIndexPage(model, bySystem, totals, asOf) {
 ${scroller("repos", `<table class="cap-table code-table" data-sortable><caption>Each public repo's size and health; choose a heading to sort</caption><thead><tr><th scope="col">Repo</th><th scope="col">Lines</th><th scope="col">Modules</th><th scope="col">Functions</th><th scope="col">Covered</th><th scope="col">Critical</th><th scope="col">Cycles</th><th scope="col">Mutation</th></tr></thead><tbody>${repoRows}</tbody></table>`, "Every repo")}
 </section>
 <section aria-labelledby="worst-title"><h2 id="worst-title">The 25 riskiest functions</h2>
-${scroller("worst", `<table class="cap-table code-table" data-sortable><caption>By CRAP, highest first, across every public repo</caption><thead><tr><th scope="col">Function</th><th scope="col">Repo</th><th scope="col">Module</th><th scope="col">Complexity</th><th scope="col">Covered</th><th scope="col">CRAP</th></tr></thead><tbody>${worst.map((f) => riskRow(f, f.system, true)).join("")}</tbody></table>`, "The riskiest functions")}
+${scroller("worst", `<table class="cap-table code-table" data-sortable><caption>By CRAP, highest first, across every public repo</caption><thead><tr><th scope="col">Function</th><th scope="col">Repo</th><th scope="col">Module</th><th scope="col">Complexity</th><th scope="col">Covered</th><th scope="col">CRAP</th></tr></thead><tbody>${worst.map((f) => riskRow(f, true)).join("")}</tbody></table>`, "The riskiest functions")}
 </section>
 ${weak.length ? `<section aria-labelledby="weak-title"><h2 id="weak-title">The weakest-tested modules</h2>
 <p class="section-sub">Mutation runs weekly on the repos that have it; these modules' tests caught the smallest share of deliberate bugs.</p>
 ${scroller("weak", `<table class="cap-table code-table" data-sortable><caption>By mutation score, lowest first</caption><thead><tr><th scope="col">Module</th><th scope="col">Repo</th><th scope="col">Functions</th><th scope="col">Mutation</th></tr></thead><tbody>${weak
-    .map((x) => `<tr><th scope="row"><a href="${modulePath(x.r.system.id, x.m.path)}">${escapeHtml(x.m.path)}</a></th><td>${escapeHtml(x.r.repo.split("/")[1])}</td><td>${x.m.functions.length}</td><td data-sort="${x.score}">${scoreStatus(x.score, "")}</td></tr>`)
+    .map((x) => `<tr><th scope="row"><a href="${blobUrl(x.r.map, x.m.path)}">${escapeHtml(x.m.path)}</a></th><td>${escapeHtml(x.r.repo.split("/")[1])}</td><td>${x.m.functions.length}</td><td data-sort="${x.score}">${scoreStatus(x.score, "")}</td></tr>`)
     .join("")}</tbody></table>`, "The weakest-tested modules")}</section>` : ""}`;
   return layout({ title: "Code, Capsid", description: `${totals.modules} modules across ${totals.repos} public repos, scored for risk and for how well their tests catch bugs.`, path: "/code/", body, asOf });
 }

@@ -27,7 +27,7 @@ const LINE = 18;
 
 /**
  * @typedef {"crit" | "warn" | "ok" | "nodata"} Tone
- * @typedef {{ id: string, label: string, href: string, lines: Array<{ tone: Tone, text: string }>, sub?: string, cycle?: boolean, current?: boolean }} Box
+ * @typedef {{ id: string, label: string, href: string, lines: Array<{ tone: Tone, text: string }>, sub?: string, cycle?: boolean }} Box
  * @typedef {{ from: string, to: string, count?: number }} Wire
  */
 
@@ -96,7 +96,7 @@ function draw(g, { id, title, boxes, width, height }) {
       })
       .join("");
     const sub = b.sub ? `<text class="code-graph-sub" x="${(x + PAD).toFixed(1)}" y="${(y + PAD + LINE + 9).toFixed(1)}">${escapeHtml(b.sub)}</text>` : "";
-    return `<a href="${escapeHtml(b.href)}" tabindex="-1"><g class="code-graph-box" data-tone="${b.lines[0]?.tone ?? "nodata"}"${b.cycle ? " data-cycle" : ""}${b.current ? " data-current" : ""}>${
+    return `<a href="${escapeHtml(b.href)}" tabindex="-1"><g class="code-graph-box" data-tone="${b.lines[0]?.tone ?? "nodata"}"${b.cycle ? " data-cycle" : ""}>${
       b.cycle ? `<rect class="code-graph-ring" x="${(x - 5).toFixed(1)}" y="${(y - 5).toFixed(1)}" width="${(n.width + 10).toFixed(1)}" height="${(n.height + 10).toFixed(1)}" rx="10"/>` : ""
     }<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${n.width}" height="${n.height}" rx="6"/><text class="code-graph-name" x="${(x + PAD).toFixed(1)}" y="${(y + PAD + 9).toFixed(1)}">${escapeHtml(b.label)}</text>${sub}${text}${
       b.cycle ? `<text class="code-graph-cycle" x="${(x + n.width - 2).toFixed(1)}" y="${(y - 8).toFixed(1)}" text-anchor="end">cycle</text>` : ""

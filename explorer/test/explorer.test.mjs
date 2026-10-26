@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 
 import { build } from "../build.mjs";
-import { codePage, codePath, modulePage, modulePath } from "../src/code.mjs";
+import { codePage, codePath } from "../src/code.mjs";
 import { numbersHtml } from "../src/numbers.mjs";
 import { servedTools } from "../src/surface.mjs";
 import { SITE, allPages, containersPath, escapeHtml, flowPath, percent, stepPath, stepWords, systemPath } from "../src/pages.mjs";
@@ -18,7 +18,9 @@ const read = (/** @type {string} */ name) => JSON.parse(readFileSync(join(fixtur
 const model = read("model.json");
 const stats = read("stats.json");
 const code = read("code.json");
-const withCode = { code: join(fixtures, "code.json"), source: join(fixtures, "source") };
+const withCode = { code: join(fixtures, "code.json") };
+/** A module's file on GitHub at the fixture map's commit. @param {string} path */
+const blob = (path) => `https://github.com/example/theme/blob/${code.maps[0].sha}/${path}`;
 
 /** Every file under a directory, as paths relative to it. */
 function walk(/** @type {string} */ dir, /** @type {string} */ root = dir) {
@@ -47,7 +49,6 @@ test("every system has a page, a public one with parts has its parts page, every
     ...model.systems.map((/** @type {any} */ s) => `s/${s.id}/index.html`),
     "s/hub/containers/index.html",
     "s/theme/code/index.html",
-    ...code.maps[0].modules.map((/** @type {any} */ m) => `s/theme/code/${m.path}/index.html`),
     ...model.flows.flatMap((/** @type {any} */ f) => [`flows/${f.id}/index.html`, ...f.steps.map((/** @type {any} */ _s, /** @type {number} */ i) => `flows/${f.id}/${i + 1}/index.html`)]),
   ].sort();
   assert.deepEqual(pages, expected);
@@ -98,7 +99,7 @@ test("a system with a code map links to it, and its code page shows each module'
   assert.match(page, /No data<span class="cap-sr-only">: mutation testing has not run on this repo yet<\/span>/);
   assert.match(page, /src\/tokens\.ts.*?<span class="code-none">No functions<\/span>/s);
   assert.doesNotMatch(page, /CRAP 0\b|>0%</);
-  assert.ok(page.includes(`<li><a href="${modulePath("theme", "src/util/a.ts")}">src/util/a.ts</a> imports <a href="${modulePath("theme", "src/util/b.ts")}">src/util/b.ts</a>, and back</li>`));
+  assert.ok(page.includes(`<li><a href="${blob("src/util/a.ts")}">src/util/a.ts</a> imports <a href="${blob("src/util/b.ts")}">src/util/b.ts</a>, and back</li>`));
   assert.match(page, /<caption>src\/util\/<\/caption>/);
 });
 
@@ -111,8 +112,8 @@ test("the code page draws the folders, then each folder's modules, every box lin
   assert.match(figures[0], /<a href="#theme-f-src" tabindex="-1"><g class="code-graph-box" data-tone="crit">/);
   assert.match(figures[0], /<a href="#theme-f-src-util" tabindex="-1"><g class="code-graph-box" data-tone="warn" data-cycle>/);
   assert.equal((figures[0].match(/class="code-graph-wire"/g) ?? []).length, 1);
-  // The util folder's modules, each linked to its page, both in the cycle, with a wire each way.
-  assert.ok(figures[2].includes(`<a href="${modulePath("theme", "src/util/a.ts")}" tabindex="-1"><g class="code-graph-box" data-tone="ok" data-cycle>`));
+  // The util folder's modules, each linked to its file on GitHub, both in the cycle, with a wire each way.
+  assert.ok(figures[2].includes(`<a href="${blob("src/util/a.ts")}" tabindex="-1"><g class="code-graph-box" data-tone="ok" data-cycle>`));
   assert.equal((figures[2].match(/class="code-graph-wire"/g) ?? []).length, 2);
   assert.equal((figures[2].match(/>cycle<\/text>/g) ?? []).length, 2);
   // The drawing repeats the table: hidden from assistive technology, its links no tab stop.
@@ -124,20 +125,11 @@ test("the code page draws the folders, then each folder's modules, every box lin
   for (const id of ["theme-f-src", "theme-f-src-util"]) assert.ok(page.includes(`id="${id}"`), `the folder anchor ${id} is missing`);
 });
 
-test("a route file name with $ and brackets gets a page under its own name, linked with the brackets escaped", async () => {
-  const route = "src/routes/blog.$slug[.md].ts";
-  const withRoute = structuredClone(code);
-  withRoute.maps[0].modules.push({ path: route, loc: 1, imports: ["src/index.ts"], functions: [] });
-  const dir = mkdtempSync(join(tmpdir(), "explorer-route-"));
-  writeFileSync(join(dir, "code.json"), JSON.stringify(withRoute));
-  const routeOut = mkdtempSync(join(tmpdir(), "explorer-route-out-"));
-  await build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), code: join(dir, "code.json"), source: join(fixtures, "source"), out: routeOut });
-  assert.equal(modulePath("theme", route), "/s/theme/code/src/routes/blog.%24slug%5B.md%5D.ts/");
-  assert.ok(existsSync(join(routeOut, "s", "theme", "code", "src", "routes", "blog.$slug[.md].ts", "index.html")), "the page is not under the file's own name");
-  const page = readFileSync(join(routeOut, "s", "theme", "code", "index.html"), "utf8");
-  assert.ok(page.includes(`href="/s/theme/code/src/routes/blog.%24slug%5B.md%5D.ts/"`), "the code page does not link the route module escaped");
-  const own = readFileSync(join(routeOut, "s", "theme", "code", "src", "routes", "blog.$slug[.md].ts", "index.html"), "utf8");
-  assert.ok(own.includes("/blob/0123456789abcdef0123456789abcdef01234567/src/routes/blog.%24slug%5B.md%5D.ts"), "the GitHub link is not escaped");
+test("a route file name with $ and brackets links to GitHub escaped", () => {
+  const map = structuredClone(code.maps[0]);
+  map.modules.push({ path: "src/routes/blog.$slug[.md].ts", loc: 1, imports: ["src/index.ts"], functions: [] });
+  const page = codePage(model.systems.find((/** @type {any} */ s) => s.id === "theme"), [map], "2026-10-17");
+  assert.ok(page.includes(`href="${blob("src/routes/blog.%24slug%5B.md%5D.ts")}"`), "the route module is not linked escaped");
 });
 
 test("a function changed since the mutation run shows no score and says why, and the page dates the run", () => {
@@ -156,24 +148,6 @@ test("a function changed since the mutation run shows no score and says why, and
   assert.match(page, /data-tone="crit">.*?Critical<span class="code-num">50%<\/span>/);
   assert.match(page, /data-tone="warn">.*?Watch<span class="code-num">75%<\/span>/);
   assert.doesNotMatch(page, /mutation testing has not run/);
-  const fn = modulePage(theme, map, a, undefined, "2026-10-17");
-  assert.match(fn, /No data<span class="cap-sr-only">: changed since the last mutation run<\/span>/);
-  assert.doesNotMatch(fn, /no mutants in this code/);
-});
-
-test("a module page lists its functions linked to their lines over its numbered source, and its imports both ways", () => {
-  const page = readFileSync(join(out, "s", "theme", "code", "src", "index.ts", "index.html"), "utf8");
-  assert.ok(page.includes('<a href="#L4">choose</a>'));
-  assert.match(page, /<span class="code-line" id="L4"><span class="code-ln" aria-hidden="true">4<\/span>export function choose\(tokens: Token\[\], dark: boolean, wide: boolean\): Token \| undefined \{/);
-  assert.ok(page.includes("&lt;") || !page.includes("<T>"), "source is not escaped");
-  assert.ok(page.includes(`href="https://github.com/example/theme/blob/${code.maps[0].sha}/src/index.ts"`));
-  assert.ok(page.includes(`It imports <a href="${modulePath("theme", "src/tokens.ts")}">src/tokens.ts</a>, <a href="${modulePath("theme", "src/util/a.ts")}">src/util/a.ts</a>.`));
-  const a = readFileSync(join(out, "s", "theme", "code", "src", "util", "a.ts", "index.html"), "utf8");
-  assert.ok(a.includes("&lt;T&gt;"), "a generic's angle brackets reached the page unescaped");
-  assert.match(a, /It is in an import cycle\./);
-  assert.match(a, /Imported by <a href="[^"]+">src\/index\.ts<\/a>, <a href="[^"]+">src\/util\/b\.ts<\/a>\./);
-  const tokens = readFileSync(join(out, "s", "theme", "code", "src", "tokens.ts", "index.html"), "utf8");
-  assert.match(tokens, /None: it only declares types or values\./);
 });
 
 test("the build refuses a code map for a system that is not public, and a code document with a field it does not name", async () => {
@@ -183,7 +157,7 @@ test("the build refuses a code map for a system that is not public, and a code d
     writeFileSync(file, JSON.stringify(doc));
     return file;
   };
-  const run = (/** @type {string} */ file) => build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), code: file, source: join(fixtures, "source"), out: mkdtempSync(join(tmpdir(), "explorer-out-")) });
+  const run = (/** @type {string} */ file) => build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), code: file, out: mkdtempSync(join(tmpdir(), "explorer-out-")) });
   const vault = structuredClone(code);
   vault.maps[0].system = "vault";
   await assert.rejects(run(write("vault.json", vault)), /belongs to vault, which is not a public system/);

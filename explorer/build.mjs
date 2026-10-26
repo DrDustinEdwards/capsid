@@ -1,17 +1,15 @@
 // Builds the explorer into explorer/dist: every page prerendered, the assets beside them, and
 // _headers. Run by .github/workflows/explorer.yml, which fetches the two public documents first.
 //
-//   npm run build -- [--model <file or url>] [--stats <file or url>] [--code <file or url>] [--source <dir>] [--out <dir>]
+//   npm run build -- [--model <file or url>] [--stats <file or url>] [--code <file or url>] [--out <dir>]
 //
 // The defaults are the live documents Capsid serves (src/public-data.ts); a model from a file
-// builds no code pages unless --code names a code document too. Each code map's
-// source is read from GitHub at the commit the map measured, or from <dir>/<owner>/<repo>/<path>
-// with --source. Every document is checked with
+// builds no code pages unless --code names a code document too. Every document is checked with
 // Capsid's own schemas before anything is written, so the explorer can only publish what the
 // privacy filter's output shape allows (the third line, design section 2). The tests build from
 // explorer/fixtures, which are invented.
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { parseArgs } from "node:util";
@@ -27,7 +25,6 @@ import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
 import { headersFile } from "./src/security-headers.mjs";
-import { codeBySystem, escapePath } from "./src/code.mjs";
 import { CIRCLES_URL, INDEXNOW_KEY, ORIGIN, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
 
 /** When security.txt lapses (RFC 9116 asks for under a year); renew it before then. */
@@ -37,7 +34,6 @@ import { servedTools } from "./src/surface.mjs";
 const here = import.meta.dirname;
 const require = createRequire(import.meta.url);
 const LIVE = "https://mcp.dustinedwards.info/public";
-const GENERATED = /\.generated\.[^/]+$/;
 
 /** @param {string} source a path or an https URL */
 async function read(source) {
@@ -92,44 +88,11 @@ async function readCode(source) {
   return PublicCodeSchema.parse(JSON.parse(readFileSync(source, "utf8")));
 }
 
-/**
- * Every module's source, keyed "owner/repo path": from a directory, or from GitHub at the
- * map's commit, a few files at a time. A file GitHub does not have stops the build, since the
- * map says it was there at that commit, except a build-time generated one (name.generated.ext):
- * a repo's code map runs after its install writes them, but git never holds them, so their
- * pages show no source.
- * @param {any[]} maps the code maps the pages are built from @param {string | undefined} dir
- */
-async function readSources(maps, dir) {
-  /** @type {Map<string, string>} */
-  const out = new Map();
-  const wanted = maps.flatMap((/** @type {any} */ map) => map.modules.map((/** @type {any} */ m) => ({ repo: map.repo, sha: map.sha, path: m.path })));
-  if (dir) {
-    for (const w of wanted) {
-      const file = join(dir, w.repo, w.path);
-      if (existsSync(file)) out.set(`${w.repo} ${w.path}`, readFileSync(file, "utf8"));
-    }
-    return out;
-  }
-  for (let i = 0; i < wanted.length; i += 8) {
-    await Promise.all(
-      wanted.slice(i, i + 8).map(async (/** @type {{ repo: string, sha: string, path: string }} */ w) => {
-        const url = `https://raw.githubusercontent.com/${w.repo}/${w.sha}/${escapePath(w.path)}`;
-        const response = await fetch(url);
-        if (response.status === 404 && GENERATED.test(w.path)) return;
-        if (!response.ok) throw new Error(`GET ${url} answered ${response.status}`);
-        out.set(`${w.repo} ${w.path}`, await response.text());
-      })
-    );
-  }
-  return out;
-}
-
 /** The site's llms.txt: what Capsid is and where each part of the explorer is. @param {number} systems @param {number} tools */
 const llmsTxt = (systems, tools) =>
   llmsDocument({
     title: "Capsid",
-    summary: "Capsid is an open-source (MIT) MCP server and control plane for AI coding agents, on one Cloudflare Worker: a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub before a job counts as done. This site is one live instance, seen from outside, rebuilt every day from its public data.",
+    summary: "Capsid is an open-source (MIT) MCP server for AI coding agents, run on one Cloudflare Worker. Agents start every session from shared project notes, each one can use only the tools it is allowed, and when an agent says a job is done, Capsid checks GitHub. This site runs on one live Capsid server and rebuilds every day from its public data.",
     intro: ["- Code: https://github.com/DrDustinEdwards/capsid\n- Author: Dustin Edwards, https://dustinedwards.info"],
     sections: [
       {
@@ -140,23 +103,21 @@ const llmsTxt = (systems, tools) =>
           { title: "Flows", url: `${ORIGIN}/flows/`, description: "what runs through Capsid, step by step" },
           { title: "Tools", url: `${ORIGIN}/tools/`, description: `the ${tools} MCP tools Capsid serves and their arguments` },
           { title: "Numbers", url: `${ORIGIN}/numbers/`, description: "the instance's daily numbers" },
-          { title: "Code", url: `${ORIGIN}/code/`, description: "each system's code and its health" },
+          { title: "Code", url: `${ORIGIN}/code/`, description: "each public repo's code, scored for risk" },
         ],
       },
     ],
   });
 
-/** @param {{ model?: string, stats?: string, code?: string, source?: string, out?: string }} [options] */
-export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stats: statsSource = `${LIVE}/stats/v1.json`, code: codeSource = modelSource === `${LIVE}/model/v1.json` ? `${LIVE}/code/v1.json` : undefined, source: sourceDir, out = join(here, "dist") } = {}) {
+/** @param {{ model?: string, stats?: string, code?: string, out?: string }} [options] */
+export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stats: statsSource = `${LIVE}/stats/v1.json`, code: codeSource = modelSource === `${LIVE}/model/v1.json` ? `${LIVE}/code/v1.json` : undefined, out = join(here, "dist") } = {}) {
   const model = PublicModelSchema.parse(await read(modelSource));
   const stats = PublicStatsSchema.parse(await read(statsSource));
   const code = await readCode(codeSource);
-  // Checked against the model before any source is read, so no private system's file is fetched.
-  const sources = await readSources([...codeBySystem(model, code).values()].flat(), sourceDir);
 
   rmSync(out, { recursive: true, force: true });
   const tools = servedTools();
-  const pages = allPages(model, stats, code, (repo, path) => sources.get(`${repo} ${path}`), tools);
+  const pages = allPages(model, stats, code, tools);
   for (const [path, html] of pages) {
     const file = path === "/404" ? join(out, "404.html") : join(out, decodeURIComponent(path), "index.html");
     mkdirSync(dirname(file), { recursive: true });
@@ -233,7 +194,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
 }
 
 if (process.argv[1] === import.meta.filename) {
-  const { values } = parseArgs({ options: { model: { type: "string" }, stats: { type: "string" }, code: { type: "string" }, source: { type: "string" }, out: { type: "string" } } });
+  const { values } = parseArgs({ options: { model: { type: "string" }, stats: { type: "string" }, code: { type: "string" }, out: { type: "string" } } });
   const result = await build(/** @type {any} */ (values));
   console.log(`explorer: built ${result.pages} pages into ${result.out}`);
 }
