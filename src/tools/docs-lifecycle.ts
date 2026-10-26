@@ -1,12 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { sha256Hex } from "../auth";
+
 import { auditStatement, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive, snapshotTaken } from "../store-guards";
 import { bounded, MAX_SHA, nsName, docPath } from "../limits";
 import { canonGuarded, canonRefusal } from "../canon";
 import { ruleDocCap, ruleDocWriteRefusal } from "../rule-docs";
 import { ok, fail, type ToolCtx, requireConfirmation, pathMutation, edgesTouching } from "./docs";
 import { policyPathsRefusal, requireRegisteredNamespace } from "./docs-write";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The document lifecycle beyond writing (src/tools/docs-write.ts writes): restore an
 // earlier version, delete, and move.

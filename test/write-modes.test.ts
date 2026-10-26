@@ -198,7 +198,7 @@ test("patch keeps a realistic canon fragment byte-exact", () => {
     replace_with: replacement,
   });
   // Expected is CONCATENATED, not produced by any replace(), so the assertion
-  // cannot inherit the behaviour it is checking.
+  // cannot inherit the behavior it is checking.
   assert.deepEqual(result, { body: before + replacement + after });
   assert.ok("body" in result);
   assert.ok(result.body.includes("$'000s"));

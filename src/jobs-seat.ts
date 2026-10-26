@@ -103,7 +103,7 @@ export async function adminFailJob(
   // An outcome row, for the same reason `fail` writes one: a job the seat had to close
   // because its driver never came back is the kind of ending the record should show.
   //
-  // Only when somebody held it. A queued job the seat cancelled was never worked, and
+  // Only when somebody held it. A queued job the seat canceled was never worked, and
   // inventing an agent would put a failure on a credential that had not touched the
   // job. No evidence argument either: the seat did not do the work.
   if (job.claimed_by && opts.outcome !== false) {

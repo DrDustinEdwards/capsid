@@ -7,8 +7,8 @@ import { sourceFiles } from "./source-files.ts";
 // a renamed or removed document. Application code is the only thing that can, so
 // delete, move and lint finalize all route through pathMutation().
 //
-// These tests are a source guard rather than a behavioural one: they fail when a
-// new mutation site appears, which a behavioural test over the known callers would
+// These tests are a source guard rather than a behavioral one: they fail when a
+// new mutation site appears, which a behavioral test over the known callers would
 // not catch.
 
 // The guard scans every file under src/, because a path mutation can be written in

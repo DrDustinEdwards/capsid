@@ -58,7 +58,7 @@ const SHAPES: Record<Kind, ReactNode> = {
 };
 
 // The inbox's kinds each get their own mark (Dustin's review of 2026-10-11: every row had the
-// same pause icon). The colour still says who acts: warning for a person, critical for a
+// same pause icon). The color still says who acts: warning for a person, critical for a
 // machine fault.
 const INBOX_SHAPES: Record<string, ReactNode> = {
   "blocked-job": SHAPES.blocked,
@@ -111,7 +111,7 @@ export function Icon({ kind, style }: { kind: Kind; style?: CSSProperties }) {
   return <S style={style}>{SHAPES[kind]}</S>;
 }
 
-// Status text: shape, word and colour together, never colour alone.
+// Status text: shape, word and color together, never color alone.
 export function St({ kind, children }: { kind: Kind; children: ReactNode }) {
   const cls = kind === "done" ? "ok" : kind;
   return (

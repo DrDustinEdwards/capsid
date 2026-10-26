@@ -1,10 +1,9 @@
-import { bytesToHex } from "./encoding";
 import type { Env } from "./env";
 import { claimJti, MAX_REPORT_BYTES, readBoundedText, verifyBenchRequest } from "./signed-requests";
 import { breakerRefusal, breakerState } from "./job-breaker";
 import { logEvent } from "./log";
 import { BENCH_NAMESPACE, BENCH_REPRO_ACTION, BENCH_STALE_MS, newRunKey, readReproReceipt, runJobTitle } from "./bench-run-key";
-import { sha256Hex } from "./auth";
+
 import type { Agent } from "./agents";
 import { noFlags } from "./agents-schema";
 import { adminFailJob, supersedeJob, workRecorded } from "./jobs-seat";
@@ -12,6 +11,7 @@ import { readJob } from "./jobs-transition";
 import { auditStatement, isMissingRowAbort, requireBenchRunRunning } from "./store-guards";
 import { textResponse } from "./http";
 import { type Arm, type Refusal, JTI_SCOPE, parseTaskRequest, parseDrawRequest, type BenchRegistration, parseStartRequest, parseReproRequest, parseScoreRequest, type TreatmentJob, runOutcome } from "./bench-requests";
+import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
 
 // THE METHODS PAPER'S PAIRED COMPARISON, the Worker's half (job_ecb1b5f80c2d;
 // capsid/research/design-paired-comparison.md, section 2; migrations/0047_bench.sql).
@@ -179,7 +179,7 @@ export async function handleBenchDraw(request: Request, env: Env): Promise<Respo
 // registration is recorded and the task is on the draw. A pilot or excluded task starts
 // only before it: the pilot checks feasibility and may change the budgets, and excluded
 // (pre-cutoff) tasks are where the template is tuned (protocol section 2), so both
-// precede the hash. Neither is sealed or analysed.
+// precede the hash. Neither is sealed or analyzed.
 // The planted arms call no model and are not locked.
 async function drawRefusal(db: D1Database, taskId: string, split: string): Promise<string | null> {
   const registered = await db.prepare("SELECT 1 AS one FROM bench_registration WHERE id = 1").first<{ one: number }>();
@@ -344,7 +344,7 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     const breaker = await breakerState(env, BENCH_NAMESPACE, now);
     if (breaker.open) return textResponse(`no treatment run starts while the bench job breaker is open: ${breakerRefusal(breaker)}`, 409);
   }
-  const id = `bench_${bytesToHex(crypto.getRandomValues(new Uint8Array(6)))}`;
+  const id = `bench_${toHex(crypto.getRandomValues(new Uint8Array(6)))}`;
   const stale = new Date(now.getTime() - BENCH_STALE_MS).toISOString();
   let slot: { slot: number; attempt: 1 | 2 } | null = null;
   let prior = -1;

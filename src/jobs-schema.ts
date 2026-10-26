@@ -1,7 +1,7 @@
-import { bytesToHex } from "./encoding";
 import { SCOPE_FLAGS, type ScopeFlag } from "./agents-schema";
 import type { Agent } from "./agents";
 import { checkScope, JOBS_TOOL } from "./scope";
+import { toHex } from "@dustinedwards/site-runtime/encoding";
 
 // The work queue's vocabulary, in one place so the table, the tool and the driver
 // cannot disagree about it.
@@ -204,7 +204,7 @@ export function outsideJobNamespace(agent: Agent, namespace: string): string | n
 // to address a job by arithmetic. The PRIMARY KEY refuses a collision.
 // Hex through bytesToHex (src/encoding.ts).
 export function mintJobId(): string {
-  return `job_${bytesToHex(crypto.getRandomValues(new Uint8Array(6)))}`;
+  return `job_${toHex(crypto.getRandomValues(new Uint8Array(6)))}`;
 }
 
 // What a job needs of the driver's history (migrations/0011): a scope says what a

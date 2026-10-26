@@ -6,7 +6,7 @@
 // page that says it is private, so no link to one 404s. Every system page links to the same
 // system on dustinedwards.info, and that site's pages link back (section 4, "Deep links both
 // ways"). Times of day never appear: the documents carry a date and nothing finer.
-import { modelMapData, systemMapHtml } from "capsomer/behaviour/system-map";
+import { modelMapData, systemMapHtml } from "capsomer/behavior/system-map";
 import { circleLayers } from "capsomer/system-map-circles";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { headHtml, headTags } from "@drdustinedwards/site-helpers/head";
@@ -21,6 +21,8 @@ import { toolPages } from "./tools.mjs";
 
 export const SITE = "https://dustinedwards.info";
 export const ORIGIN = "https://capsid.dustinedwards.info";
+/** The IndexNow key, served as /<key>.txt (build.mjs) and sent by indexnow.mjs after a deploy. Public by design. */
+export const INDEXNOW_KEY = "a2cbc5ceca2a712d80485582eb13b926";
 
 const RING_NAMES = { core: "Runs everything", shared: "Shared parts", used: "What people use" };
 const VERB = {
@@ -238,7 +240,7 @@ export function circlesOf(model) {
 
 /**
  * The family map where one tap on any system zooms into its circle, delivered zoomed into `chosen` when given.
- * @param {any} model @param {import("capsomer/behaviour/system-map").SystemMapOptions} options @param {any} [data] @param {string} [chosen]
+ * @param {any} model @param {import("capsomer/behavior/system-map").SystemMapOptions} options @param {any} [data] @param {string} [chosen]
  */
 const familyMap = (model, options, data = mapData(model), chosen = undefined) =>
   systemMapHtml(data, { ...options, circles: { src: CIRCLES_URL, layers: chosen ? { [chosen]: circlesOf(model)[chosen] } : {}, chosen } });
@@ -314,13 +316,13 @@ function neighbourhood(model, id) {
     if (r.from === id) near.add(r.to);
     if (r.to === id) near.add(r.from);
   }
-  // A hub's neighbours stand in one long column that says no more than the list above it.
+  // A hub's neighbors stand in one long column that says no more than the list above it.
   if (near.size < 2 || near.size > 11) return "";
   return graphSvg({
     id: `near-${id}`,
     title: `${byId.get(id).name} and the ${near.size - 1} ${near.size === 2 ? "system" : "systems"} it connects to`,
     boxes: [...near].map((x) => ({ id: x, label: byId.get(x).name, href: systemPath(x), lines: [], sub: RING_NAMES[/** @type {keyof typeof RING_NAMES} */ (byId.get(x).ring)], current: x === id })),
-    // Only its own lines: the lines among its neighbours belong on their pages, and drawn here
+    // Only its own lines: the lines among its neighbors belong on their pages, and drawn here
     // they turned a hub's page into a tangle.
     wires: model.relationships.filter((/** @type {any} */ r) => (r.from === id || r.to === id) && near.has(r.from) && near.has(r.to)).map((/** @type {any} */ r) => ({ from: r.from, to: r.to })),
   });

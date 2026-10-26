@@ -91,7 +91,7 @@ test("a system with a code map links to it, and its code page shows each module'
 
   const page = readFileSync(join(out, "s", "theme", "code", "index.html"), "utf8");
   assert.match(page, /By CRAP, 1 critical, 1 to watch and 1 ok\./);
-  // Each status is a glyph, a word and the number: never colour alone.
+  // Each status is a glyph, a word and the number: never color alone.
   assert.match(page, /data-tone="crit"><svg class="cap-status-glyph"[^>]*aria-hidden="true"[^>]*>.*?<\/svg>Critical<span class="code-num">CRAP 90<\/span>/);
   assert.match(page, /data-tone="warn">.*?Watch<span class="code-num">CRAP 12<\/span>/);
   assert.match(page, /data-tone="ok">.*?Ok<span class="code-num">CRAP 2<\/span>/);
@@ -103,7 +103,7 @@ test("a system with a code map links to it, and its code page shows each module'
   assert.match(page, /<caption>src\/util\/<\/caption>/);
 });
 
-test("the code page draws the folders, then each folder's modules, every box linked and coloured by its worst function", () => {
+test("the code page draws the folders, then each folder's modules, every box linked and colored by its worst function", () => {
   const page = readFileSync(join(out, "s", "theme", "code", "index.html"), "utf8");
   const figures = [...page.matchAll(/<figure class="code-graph">(.*?)<\/figure>/gs)].map((m) => m[1]);
   assert.equal(figures.length, 3, "one drawing of the folders and one for each folder with more than one module");

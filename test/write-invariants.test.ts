@@ -4,10 +4,10 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer, type ToolGrant } from "../src/server.ts";
 import { fakeD1, fakeEnv, type FakeD1Rows, type Recorded } from "./fakes.ts";
 
-// The behavioural half of the write-path invariants. test/invariants.test.ts reads the
+// The behavioral half of the write-path invariants. test/invariants.test.ts reads the
 // source; this file drives the real tool handlers over a real MCP connection and records
 // the SQL they issue. A source guard cannot tell whether a statement is reached; a
-// behavioural test cannot tell whether a new tool skipped the invariant entirely.
+// behavioral test cannot tell whether a new tool skipped the invariant entirely.
 //
 // The store is the shared row-backed fake from ./fakes.ts: WHERE clauses resolve against
 // the bound values, so a lookup for a missing row finds nothing. It proves which

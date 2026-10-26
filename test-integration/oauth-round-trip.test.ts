@@ -1,7 +1,7 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
-import { clearIdTokenKeysCache } from "../src/access-jwt";
+import { forgetKeys } from "@dustinedwards/site-runtime/access-login";
 import { stubAccess } from "@dustinedwards/devkit/access";
 import { cimdClient, cimdResponse } from "./cimd-stub";
 
@@ -90,7 +90,7 @@ async function authorize(email: string, extra: Record<string, unknown> = {}, sam
 
   // Each stub signs with a key of its own under the same kid, and the verifier keeps the
   // keys it read per JWKS URL, so the last sign-in's key is dropped first.
-  clearIdTokenKeysCache();
+  forgetKeys();
   // The stub swaps the global fetch outright, so it is put back here rather than by
   // vi.restoreAllMocks. The token exchange after it finds the client documents again.
   const access = await stubAccess({ issuer: ISSUER, audience: env.ACCESS_SAAS_CLIENT_ID!, email, authorizationUrl: signIn.href, claims: extra, fallback: (u) => cimdResponse(u) ?? undefined });

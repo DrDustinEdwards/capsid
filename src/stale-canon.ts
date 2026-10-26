@@ -27,7 +27,7 @@ import { DAY_MS } from "./time";
 //
 // Nothing here writes a document. The finding is the whole act.
 //
-// Out of scope for this version: a document that describes the old behaviour in words
+// Out of scope for this version: a document that describes the old behavior in words
 // without naming a path (Foxhound's own case), edges from another namespace's documents,
 // and a namespace's repos other than its primary. Those need a reader of meaning, not of
 // paths.

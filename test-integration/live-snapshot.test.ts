@@ -6,7 +6,7 @@ import { HISTORY_ROWS } from "../src/limits";
 
 // write, delete and restore snapshot the live row inside their batch, and the history
 // listing is bounded. These run against real D1 because the node fake neither
-// evaluates INSERT ... SELECT nor honours the listing's LIMIT.
+// evaluates INSERT ... SELECT nor honors the listing's LIMIT.
 //
 // The race is staged by wrapping the real D1: the first batch() call rewrites the body
 // and then runs the handler's batch unchanged. That is after the handler's pre-read, so

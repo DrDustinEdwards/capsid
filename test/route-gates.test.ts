@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { sha256Hex } from "../src/auth.ts";
+
 import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
 import { PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "../src/portal-auth.ts";
@@ -43,6 +43,7 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";
 import { ADMIN_OPS_MCP_ROUTE } from "../src/mcp-handler.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Every route goes through the one enforcement point, or says why it does not. A
 // route that checks only the write grant lets a driver minted for one namespace act

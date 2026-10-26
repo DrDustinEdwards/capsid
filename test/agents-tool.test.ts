@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer } from "../src/server.ts";
-import { sha256Hex } from "../src/auth.ts";
+
 import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, type FakeD1 } from "./fakes.ts";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Minting, over a real MCP connection. The property is who may call it: a minted
 // agent that can mint another could mint itself a seat scoped to everything. So

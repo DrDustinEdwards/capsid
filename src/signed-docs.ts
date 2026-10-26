@@ -1,6 +1,7 @@
-import { hmacHex, sha256Hex } from "./auth";
+import { hmacHex } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // The Worker signs the documents it later acts on: a job's body (src/jobs-claim.ts) and
 // the two autonomy policies (src/policy-sign.ts). One key, derived from

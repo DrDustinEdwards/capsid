@@ -104,7 +104,7 @@ describe("the three cron expressions", () => {
     expect((await ledger("skills-refresh")).map((r) => r.outcome)).toEqual(["ok"]);
   });
 
-  it("an unrecognised cron expression does no work at all", async () => {
+  it("an unrecognized cron expression does no work at all", async () => {
     // The dispatch is on the expression, so a cron added to the config and
     // not to the handler must be inert rather than falling into the backup branch.
     const before = (await env.MEDIA.list()).objects.length;
@@ -141,7 +141,7 @@ describe("the replay table is real", () => {
   it("the jti replay cache really has a PRIMARY KEY, so a duplicate claim conflicts", async () => {
     // migrations/0004_improve_jti.sql, kept for the bench and the backup credential when
     // the improve loop went. Only a real database proves the conflict happens, and the
-    // replay defence rests on it.
+    // replay defense rests on it.
     const first = await env.DB.prepare(
       "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('bench:capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti"
     ).first<{ jti: string }>();

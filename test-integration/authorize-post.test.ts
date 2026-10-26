@@ -35,7 +35,7 @@ describe("/authorize POST bounds the body before parsing it", () => {
     expect(resp.status).toBe(413);
   });
 
-  it("an ordinary form still reaches the CSRF check, which is the behaviour that must not change", async () => {
+  it("an ordinary form still reaches the CSRF check, which is the behavior that must not change", async () => {
     // 403 (csrf) rather than 413 (too large) or 500, which catches a bound so tight
     // or early that it broke consent.
     const resp = await postForm("csrf=nonsense&req=nonsense");

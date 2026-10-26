@@ -245,7 +245,7 @@ interface AutoMergeOutcome {
   // The merge pipeline's class (src/merge-class.ts), report-only; null when the PR's
   // files were never read (the body names no job, or the tick threw).
   merge_class?: Classification | null;
-  // For a pull request labelled visual: what Dustin looks at before he approves it
+  // For a pull request labeled visual: what Dustin looks at before he approves it
   // (src/visual-pr.ts).
   visual?: VisualPr;
 }
@@ -272,7 +272,7 @@ export interface AwaitingSeat {
   // The head the tick judged (absent on sets written before this field). The Portal's
   // Approve sends it as the sha Dustin approved, so a later push voids the approval.
   head_sha?: string;
-  // A pull request labelled visual: its title, preview and screenshots (src/visual-pr.ts).
+  // A pull request labeled visual: its title, preview and screenshots (src/visual-pr.ts).
   visual?: VisualPr;
 }
 
@@ -489,7 +489,7 @@ async function judgeOnePr(
   units: readonly string[] = [],
   // The namespaces the safety shutoff paused, or "all" when they could not be read.
   paused: PausedNamespaces = new Map(),
-  // Labelled visual: it waits for Dustin's look even when the policy would merge it.
+  // Labeled visual: it waits for Dustin's look even when the policy would merge it.
   visual = false
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);

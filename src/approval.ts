@@ -1,4 +1,4 @@
-import { sha256Hex } from "./auth";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // 30 days. Consent is a one-second decision on a dialog that prints one redirect.
 export const APPROVAL_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;

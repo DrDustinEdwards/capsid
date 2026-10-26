@@ -1,3 +1,4 @@
+import { isoDay } from "@drdustinedwards/site-helpers/xml";
 import { importPKCS8, SignJWT } from "jose";
 import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
@@ -148,10 +149,6 @@ export function pickProperty(origin: string, entries: Array<{ siteUrl?: string; 
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * DAY_MS);
 }
@@ -160,8 +157,8 @@ export function dateWindow(args: Pick<SearchConsoleArgs, "start_date" | "end_dat
   for (const [label, v] of [["start_date", args.start_date], ["end_date", args.end_date]] as const) {
     if (v !== undefined && (!DATE.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`)))) throw new Error(`${label} must be a date written YYYY-MM-DD.`);
   }
-  const end = args.end_date ?? isoDay(addDays(now, -DEFAULT_LAG_DAYS));
-  const start = args.start_date ?? isoDay(addDays(new Date(`${end}T00:00:00Z`), -(DEFAULT_WINDOW_DAYS - 1)));
+  const end = args.end_date ?? isoDay(addDays(now, -DEFAULT_LAG_DAYS)) ?? "";
+  const start = args.start_date ?? isoDay(addDays(new Date(`${end}T00:00:00Z`), -(DEFAULT_WINDOW_DAYS - 1))) ?? "";
   if (start > end) throw new Error(`start_date ${start} is after end_date ${end}.`);
   const span = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / DAY_MS;
   if (span > MAX_WINDOW_DAYS) throw new Error(`The window is ${span + 1} days; Search Console keeps about 16 months, so ask for ${MAX_WINDOW_DAYS + 1} days or fewer.`);

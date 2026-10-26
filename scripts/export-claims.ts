@@ -19,7 +19,7 @@
 //
 // --verify recomputes every hash and row count and exits 1 on any mismatch or missing
 // file. It needs no key.
-import { createHash } from "node:crypto";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { capsidClient, requireHttps } from "./capsid-rpc.ts";
@@ -42,11 +42,6 @@ export interface Manifest {
   origin: string;
   capsid_sha: string;
   tables: Record<string, { file: string; rows: number; sha256: string }>;
-}
-
-/** Returns lowercase hex */
-export function sha256Hex(data: string | Uint8Array): string {
-  return createHash("sha256").update(data).digest("hex");
 }
 
 function sortKeys(value: unknown): unknown {
@@ -180,11 +175,11 @@ export async function exportClaims({ tool, origin, capsidSha, outDir, now = new 
   for (const { table, rows, bytes } of files) {
     const file = `${table}.jsonl`;
     writeFileSync(join(outDir, file), bytes, { flag: "wx" });
-    manifest.tables[table] = { file, rows, sha256: sha256Hex(bytes) };
+    manifest.tables[table] = { file, rows, sha256: await sha256Hex(bytes) };
   }
   const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2) + "\n", "utf8");
   writeFileSync(join(outDir, MANIFEST), manifestBytes, { flag: "wx" });
-  writeFileSync(join(outDir, MANIFEST_SUM), `${sha256Hex(manifestBytes)}  ${MANIFEST}\n`, { flag: "wx" });
+  writeFileSync(join(outDir, MANIFEST_SUM), `${await sha256Hex(manifestBytes)}  ${MANIFEST}\n`, { flag: "wx" });
   return manifest;
 }
 
@@ -193,7 +188,7 @@ export async function exportClaims({ tool, origin, capsidSha, outDir, now = new 
  * lists is present with its hash and row count, the manifest matches manifest.sha256,
  * and all four tables are listed.
  */
-export function verifyExport(dir: string): string[] {
+export async function verifyExport(dir: string): Promise<string[]> {
   const problems: string[] = [];
   const manifestPath = join(dir, MANIFEST);
   if (!existsSync(manifestPath)) return [`${MANIFEST} is missing from ${dir}`];
@@ -205,7 +200,7 @@ export function verifyExport(dir: string): string[] {
   } else {
     const match = /^([0-9a-f]{64}) {2}manifest\.json\n?$/.exec(readFileSync(sumPath, "utf8"));
     if (!match) problems.push(`${MANIFEST_SUM} is not one line of '<sha256>  ${MANIFEST}'`);
-    else if (match[1] !== sha256Hex(manifestBytes)) problems.push(`${MANIFEST} does not match the hash in ${MANIFEST_SUM}`);
+    else if (match[1] !== await sha256Hex(manifestBytes)) problems.push(`${MANIFEST} does not match the hash in ${MANIFEST_SUM}`);
   }
 
   let manifest;
@@ -236,7 +231,7 @@ export function verifyExport(dir: string): string[] {
       continue;
     }
     const bytes = readFileSync(path);
-    if (sha256Hex(bytes) !== entry?.sha256) problems.push(`${file} (${table}) does not match its sha256 in ${MANIFEST}`);
+    if (await sha256Hex(bytes) !== entry?.sha256) problems.push(`${file} (${table}) does not match its sha256 in ${MANIFEST}`);
     const lines = bytes.toString("utf8").split("\n").length - 1;
     if (lines !== entry?.rows) problems.push(`${file} (${table}) holds ${lines} rows and ${MANIFEST} says ${String(entry?.rows)}`);
   }
@@ -271,7 +266,7 @@ export async function run({ argv, env, fetchImpl = fetch, log = console.log, err
   try {
     const args = parseArgs(argv);
     if (args.verify !== undefined) {
-      const problems = verifyExport(args.verify);
+      const problems = await verifyExport(args.verify);
       if (problems.length > 0) {
         err(`verify FAILED for ${args.verify}:`);
         for (const p of problems) err(`  ${p}`);

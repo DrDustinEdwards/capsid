@@ -1,13 +1,14 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
-import { clearIdTokenKeysCache } from "../src/access-jwt";
-import { sha256Hex } from "../src/auth";
+import { forgetKeys } from "@dustinedwards/site-runtime/access-login";
+
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
 import { ADMIN_MCP_ROUTE, ADMIN_OPS_MCP_ROUTE } from "../src/mcp-handler";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface";
 import { stubAccess } from "@dustinedwards/devkit/access";
 import { cimdClient, cimdResponse } from "./cimd-stub";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // CAPSID ADMIN ON ITS OWN ROUTES (capsid/rulings/mcp-2026-10-10.md, amendment answer 2),
 // through the WHOLE Worker: the host rules, the OAuth provider, src/routes.ts
@@ -220,7 +221,7 @@ async function adminToken(): Promise<string> {
   const stateCookie = cookieValues(approved).find((c) => c.startsWith("capsid_state=")) ?? "";
   // Each stub signs with a key of its own under the same kid, and the verifier keeps the
   // keys it read per JWKS URL, so the last sign-in's key is dropped first.
-  clearIdTokenKeysCache();
+  forgetKeys();
   const access = await stubAccess({
     issuer: `${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/sso/oidc/${env.ACCESS_SAAS_CLIENT_ID}`,
     audience: env.ACCESS_SAAS_CLIENT_ID!,

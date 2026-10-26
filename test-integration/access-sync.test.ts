@@ -1,7 +1,8 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { sha256Hex } from "../src/auth";
+
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // POST /ops/access-sync through the whole Worker, on the migrated database: the pinned group
 // is read from access_sync_groups (migrations/0040) with the real statement. No Cloudflare

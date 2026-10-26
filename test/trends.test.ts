@@ -51,7 +51,7 @@ test("PLANT: a CI day is the last completed run's verdict, carried over days wit
     [
       run("2026-10-09T08:00:00Z", "success"),
       run("2026-10-09T10:00:00Z", "failure"),
-      // Cancelled and still running decide nothing.
+      // Canceled and still running decide nothing.
       run("2026-10-09T11:00:00Z", "cancelled"),
       run("2026-10-11T03:00:00Z", null, "in_progress"),
       run("2026-10-11T02:00:00Z", "success"),

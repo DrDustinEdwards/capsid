@@ -521,7 +521,7 @@ These test scripts, workflows, docs, config or the Portal's `dashboard/` code ra
 
 ### B. Kill no mutant in `src/` but import from it (3)
 
-This group was first labelled the clearest weak-oracle candidates. That label was wrong. The three files import constants from `src/`, which is why they "run mutated code", but what they test is elsewhere: `freshness` and `schedule-drivers` test code in `scripts/`, and `job-touches-migration` runs migration SQL. A run that mutates `src/` cannot judge any of them. All three are kept; the reasons are in the section after the candidate groups.
+This group was first labeled the clearest weak-oracle candidates. That label was wrong. The three files import constants from `src/`, which is why they "run mutated code", but what they test is elsewhere: `freshness` and `schedule-drivers` test code in `scripts/`, and `job-touches-migration` runs migration SQL. A run that mutates `src/` cannot judge any of them. All three are kept; the reasons are in the section after the candidate groups.
 
 - test/freshness.test.ts (covers 4 mutants)
 - test/job-touches-migration.test.ts (covers 7 mutants)

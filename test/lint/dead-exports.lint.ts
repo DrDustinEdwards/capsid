@@ -7,7 +7,7 @@ import { exportsOfSrc, sourceFiles } from "../source-files.ts";
 // The dead-export lint. Run by `npm run lint:dead-exports` (and `npm run lint`), in
 // the checks job of .github/workflows/ci.yml; not part of `npm test`. It fails when
 // an export has no caller, which is a review prompt about the code as a whole rather
-// than a behaviour of the Worker, so it runs beside the suite instead of inside it.
+// than a behavior of the Worker, so it runs beside the suite instead of inside it.
 //
 // An export is dead only when it has no caller in src/, test/, test-integration/ or
 // scripts/.

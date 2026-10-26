@@ -153,7 +153,7 @@ test("master head's CI run queued, in progress, or green inside the settle windo
   }
 });
 
-test("master head's CI run failed, cancelled, never started, unreadable or long green keeps the drift finding", () => {
+test("master head's CI run failed, canceled, never started, unreadable or long green keeps the drift finding", () => {
   const cases: Array<[Parameters<typeof deployVerdict>[0], RegExp]> = [
     [[ciRun("completed", "failure", 1)], /ended failure/],
     [[ciRun("completed", "cancelled", 1)], /ended cancelled/],

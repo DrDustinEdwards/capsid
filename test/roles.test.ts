@@ -22,7 +22,7 @@ function scopedAgent(mutate: (scopes: ReturnType<typeof defaultScopes>) => void 
 
 // the qualified tool entry, as a pure rule
 
-test("a wildcard tools axis allows every action, so no existing agent changes behaviour", () => {
+test("a wildcard tools axis allows every action, so no existing agent changes behavior", () => {
   // Agents with "*" must keep every action.
   assert.equal(allowsToolAction("*", "capsid_work_jobs", "post"), true);
   assert.equal(allowsToolAction("*", "capsid_work_jobs", "claim"), true);

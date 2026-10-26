@@ -1,8 +1,8 @@
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { noFlags } from "./agents-schema";
 import type { Agent } from "./agents";
-import { bytesToHex } from "./encoding";
 import { HOUR_MS } from "./time";
+import { toHex } from "@dustinedwards/site-runtime/encoding";
 
 // THE RUN KEY (the methods paper's protocol, section 4, "The run key"; decided
 // 2026-10-19). Each treatment run gets its own Capsid key, minted by /bench/start for
@@ -20,7 +20,7 @@ export const BENCH_STALE_MS = 3 * HOUR_MS;
 export const BENCH_NAMESPACE = "bench";
 
 export function newRunKey(): string {
-  return `capsid_run_${bytesToHex(crypto.getRandomValues(new Uint8Array(32)))}`;
+  return `capsid_run_${toHex(crypto.getRandomValues(new Uint8Array(32)))}`;
 }
 
 // The job a run works: the one job in the bench namespace titled as the harness titles
