@@ -7,11 +7,11 @@ import { escapeHtml, layout, pageHead, scroller } from "./pages.mjs";
 export const toolPath = (name) => `/tools/${name}/`;
 
 const GRANT = {
-  read: "the read grant",
-  write: "the write grant",
-  action: "a grant that depends on the action",
-  admin: "the admin identity and the write grant",
-  admin_read: "the admin identity and the read grant",
+  read: "read access",
+  write: "write access",
+  action: "read or write access, by action",
+  admin: "admin and write access",
+  admin_read: "admin and read access",
 };
 
 /** Text from a tool's description, its `code` spans kept as code. @param {string} text */
@@ -55,7 +55,7 @@ function said(para) {
 export function toolsPage(tools, asOf) {
   const servers = ["Capsid", "Capsid Admin"];
   const chips = [["all", "All"], ["reads", "Reads only"], ["changes", "Can change"], ["admin", "Admin only"], ["outside", "Reaches outside"]];
-  const body = `${pageHead([["/", "Overview"]], "Tools", "Every tool Capsid serves", `${tools.length} tools over MCP, ${tools.filter((t) => t.server === "Capsid").length} on Capsid for project work and ${tools.filter((t) => t.server === "Capsid Admin").length} on Capsid Admin for the administrator alone. Each is read at build from the registrations the Worker makes, with the grant it needs, what it may do, its actions and its arguments.`)}
+  const body = `${pageHead([["/", "Overview"]], "Tools", "Every tool Capsid serves", `${tools.length} tools over MCP, ${tools.filter((t) => t.server === "Capsid").length} on Capsid for project work and ${tools.filter((t) => t.server === "Capsid Admin").length} on Capsid Admin for the admin only. Each entry comes straight from the server's code: the access it needs, what it can change, its actions and its arguments.`)}
 <div class="filter-bar" data-filter="tools" hidden>
 <label class="cap-sr-only" for="tool-q">Filter the tools</label>
 <input class="cap-input" id="tool-q" type="search" placeholder="Filter by name, action or argument" autocomplete="off" data-filter-q>

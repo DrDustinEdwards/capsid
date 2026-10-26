@@ -13,7 +13,7 @@ import { graph, thing, website } from "@drdustinedwards/site-helpers/schema";
 import { ORIGIN, SITE, escapeHtml, flowStage, flowsOf, layout, manualHead, minutes, percent, reading, sectionAt, stepPath, stepWords } from "./pages.mjs";
 import { toolPath } from "./tools.mjs";
 
-const DESCRIPTION = "Capsid is an MCP server on one Cloudflare Worker: a shared memory agents search and start from, a signed work queue, scoped grants checked at one point, and every agent's claim checked against GitHub.";
+const DESCRIPTION = "Capsid is an open-source MCP server for AI coding agents. It gives them a shared memory, limits what each one can do, and checks their finished work against GitHub.";
 /** The front page's JSON-LD: this site, and the code it is about. A function, because pages.mjs imports this module. */
 const siteData = (AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: "Dustin Edwards", url: SITE }) => graph([
   website({ origin: ORIGIN, name: "Capsid", description: DESCRIPTION, searchUrl: `${ORIGIN}/search/?q={search_term_string}`, publisher: AUTHOR }),
@@ -34,7 +34,7 @@ const siteData = (AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: 
 export function weekLabels(stats) {
   const end = new Date(Date.parse(`${stats.as_of}T00:00:00Z`) - 86_400_000);
   return stats.jobs.completed_by_week.map((/** @type {number} */ _c, /** @type {number} */ i, /** @type {number[]} */ all) =>
-    new Date(end.getTime() - (all.length - 1 - i) * 7 * 86_400_000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).replace("Sept", "Sep")
+    new Date(end.getTime() - (all.length - 1 - i) * 7 * 86_400_000).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" })
   );
 }
 
@@ -47,31 +47,31 @@ function readingsByStep(stats) {
   const { jobs: j, verification: v, gates: g } = stats;
   return {
     posted: [[String(j.completed_30d), "jobs completed, last 30 days"]],
-    claimed: [[String(j.open), "open today"], [String(j.blocked), "blocked on a person"]],
-    worked: [[minutes(j.median_duration_minutes_30d), "half of last month's jobs took under"]],
+    claimed: [[String(j.open), "open now"], [String(j.blocked), "waiting on a person"]],
+    worked: [[minutes(j.median_duration_minutes_30d), "median job time, last 30 days"]],
     blocked: [[String(g.waits_30d), "approval waits, last 30 days"], [minutes(g.median_wait_minutes_30d), "median wait"]],
-    "pull request": [[percent(v.pr_merge_rate_90d), "of claimed pull requests merged"]],
-    merged: [[percent(g.share_ended_by_policy_30d), "of waits ended by the signed policy"]],
-    deployed: [[percent(v.ci_green_rate_90d), "of claimed CI green on its head"]],
-    verified: [[stats.capsid.sha7, "the commit live right now"]],
-    "claims checked": [[percent(v.agreement_rate_90d), `of ${v.evaluations_90d} claims agreed with GitHub, 90 days`]],
+    "pull request": [[percent(v.pr_merge_rate_90d), "of agents' pull requests merged"]],
+    merged: [[percent(g.share_ended_by_policy_30d), "of waits the signed policy cleared"]],
+    deployed: [[percent(v.ci_green_rate_90d), "of checked jobs with passing CI"]],
+    verified: [[stats.capsid.sha7, "the commit running now"]],
+    "claims checked": [[percent(v.agreement_rate_90d), `of ${v.evaluations_90d} claims matched GitHub, last 90 days`]],
   };
 }
 
 /** What each grant requirement asks of a caller, in words (src/scope.ts, needFor). */
 const NEED = {
-  read: "the read grant",
-  write: "the write grant",
-  action: "the read grant for some actions and the write grant for the rest",
-  admin: "the admin identity and the write grant",
-  admin_read: "the admin identity and the read grant",
+  read: "read access",
+  write: "write access",
+  action: "read access for some actions and write access for the rest",
+  admin: "admin and write access",
+  admin_read: "admin and read access",
 };
 
 /** The grants a caller can hold, as the panel's breakers. */
 const BREAKERS = [
-  ["read", "Read grant", "Reads documents, repos and the queue"],
-  ["write", "Write grant", "Writes documents, branches and pull requests"],
-  ["admin", "Admin identity", "Mints agents and holds the switches"],
+  ["read", "Read", "Read notes, repos and the job queue"],
+  ["write", "Write", "Edit notes, branches and pull requests"],
+  ["admin", "Admin", "Create agents and change settings"],
 ];
 
 /** The breaker each tool hangs under: the grant it cannot work without beyond read (src/scope.ts, needFor). */
@@ -96,7 +96,7 @@ export function reaches(need, held) {
 export function reachSentence(tools, held) {
   const full = tools.filter((t) => reaches(t.grant, held) === "full").length;
   const part = tools.filter((t) => reaches(t.grant, held) === "part").length;
-  return `${full} of ${tools.length} tools live${part ? `, ${part} in part` : ""}.`;
+  return `can use ${full} of ${tools.length} tools${part ? `, and ${part} more in part` : ""}.`;
 }
 
 /**
@@ -108,7 +108,7 @@ const CHECKS = [
   ["pr_merged", "Pull requests merged", 2],
   ["commits", "Commits", 7],
   ["files_changed", "Files changed", 12],
-  ["ci_green", "CI green", 1],
+  ["ci_green", "CI passed", 1],
 ];
 
 /** A check's value in words: a count as itself, CI green as yes or no. @param {string} kind @param {number} n */
@@ -121,8 +121,8 @@ export const valueWords = (kind, n) => (kind === "ci_green" ? (n ? "Yes" : "No")
 export function verdict(kind, said, read) {
   const r = valueWords(kind, read);
   return said === read
-    ? `Agrees. The record keeps GitHub's ${r}.`
-    : `Caught. The record keeps GitHub's ${r}, with the agent's ${valueWords(kind, said)} beside it, marked as disagreeing.`;
+    ? `They match. Capsid saves ${r}.`
+    : `Caught. The agent said ${valueWords(kind, said)} and GitHub says ${r}. Capsid saves GitHub's answer and flags the mismatch.`;
 }
 
 /**
@@ -137,22 +137,22 @@ function hero(stats) {
   return `<section class="hero" aria-labelledby="hero-title">
 ${manualHead("/")}
 <div class="hero-words">
-<h1 id="hero-title">One panel, every agent</h1>
-<p class="lead">Capsid is an MCP server on one Cloudflare Worker. Agents start from a shared memory, claim signed jobs, act only through the grants they hold, and a job counts as done only when GitHub agrees.</p>
-<p class="hero-actions"><a class="cap-btn" data-variant="primary" href="https://github.com/DrDustinEdwards/capsid#installation">Run your own</a><a class="hero-link" href="#tour">Follow one job</a></p>
-<p class="hero-note">This is a live instance. Every tool, step and number here is its own, rebuilt each day.</p>
+<h1 id="hero-title">AI agents say it's done. Capsid checks.</h1>
+<p class="lead">Capsid is an open-source MCP server you run on Cloudflare. Your agents start every session from the same project notes. Each one can use only the tools you allow. When an agent says a job is done, Capsid asks GitHub whether it is.</p>
+<p class="hero-actions"><a class="cap-btn" data-variant="primary" href="https://github.com/DrDustinEdwards/capsid#installation">Install it</a><a class="hero-link" href="#tour">See how a job runs</a></p>
+<p class="hero-note">This site runs on a live Capsid server. The tools, steps and numbers come from it and update every day.</p>
 </div>
 <div class="desk" data-ui data-desk>
-<h2 class="desk-title" data-plain>A claim, checked <span>An example job. Change what the agent says.</span></h2>
-<div class="desk-kinds" role="group" aria-label="What the agent claims">${CHECKS.map(([k, name, n], i) => `<button type="button" class="desk-kind" data-kind="${k}" data-read="${n}" aria-pressed="${i === 0}">${name}</button>`).join("")}</div>
+<h2 class="desk-title" data-plain>Catch an agent <span>An example job. Change what the agent reports.</span></h2>
+<div class="desk-kinds" role="group" aria-label="What the agent reports">${CHECKS.map(([k, name, n], i) => `<button type="button" class="desk-kind" data-kind="${k}" data-read="${n}" aria-pressed="${i === 0}">${name}</button>`).join("")}</div>
 <div class="desk-row">
-<div class="desk-cell"><span class="desk-label">The agent says</span><span class="desk-value" data-desk-said>${valueWords(kind, read)}</span><span class="desk-step"><button type="button" data-desk-step="-1" aria-label="The agent claims one fewer">\u2212</button><button type="button" data-desk-step="1" aria-label="The agent claims one more">+</button></span></div>
-<div class="desk-cell desk-github"><span class="desk-label">GitHub reads</span><span class="desk-value" data-desk-read>${valueWords(kind, read)}</span></div>
-<div class="desk-cell desk-kept" data-agree><span class="desk-label">Capsid records</span><span class="desk-value" data-desk-kept>${valueWords(kind, read)}</span><span class="desk-stamp" aria-hidden="true" data-desk-stamp>Agrees</span></div>
+<div class="desk-cell"><span class="desk-label">The agent says</span><span class="desk-value" data-desk-said>${valueWords(kind, read)}</span><span class="desk-step"><button type="button" data-desk-step="-1" aria-label="One less">\u2212</button><button type="button" data-desk-step="1" aria-label="One more">+</button></span></div>
+<div class="desk-cell desk-github"><span class="desk-label">GitHub says</span><span class="desk-value" data-desk-read>${valueWords(kind, read)}</span></div>
+<div class="desk-cell desk-kept" data-agree><span class="desk-label">Capsid saves</span><span class="desk-value" data-desk-kept>${valueWords(kind, read)}</span><span class="desk-stamp" aria-hidden="true" data-desk-stamp>Match</span></div>
 </div>
 <p class="desk-verdict" role="status" data-desk-verdict>${verdict(kind, read, read)}</p>
 <p class="desk-play"><button type="button" class="cap-btn" data-variant="primary" data-desk-fool>Try to fool it</button><span data-desk-tally></span></p>
-<p class="desk-fact">This instance has checked ${v.evaluations_90d.toLocaleString("en-US")} claims in 90 days, and ${percent(v.agreement_rate_90d)} agreed with GitHub. <a href="/numbers/">The numbers</a></p>
+<p class="desk-fact">In the last 90 days this server checked ${v.evaluations_90d.toLocaleString("en-US")} claims, and ${percent(v.agreement_rate_90d)} matched GitHub. <a href="/numbers/">All the numbers</a></p>
 </div>
 </section>`;
 }
@@ -199,11 +199,11 @@ const SEARCHES = [
 
 /** What Start a session hands over (src/tools/docs-read.ts, brief), for the example store: name, path, kilobytes. */
 const BRIEF = [
-  ["The conventions", "capsid/conventions.md", 6],
-  ["The project's core", "sample/core.md", 9],
-  ["Decisions and rulings", "sample/decisions.md", 11],
-  ["Open tasks, 3", "sample/tasks/", 5],
-  ["The latest session notes, 3", "sample/sessions/", 6],
+  ["Rules for every project", "capsid/conventions.md", 6],
+  ["Project overview", "sample/core.md", 9],
+  ["Decisions", "sample/decisions.md", 11],
+  ["3 open tasks", "sample/tasks/", 5],
+  ["Last 3 session notes", "sample/sessions/", 6],
 ];
 
 /**
@@ -220,28 +220,28 @@ function knowledge(model, stats) {
     (x, i) => `<ol class="kb-results" data-q="${i}"${i ? " hidden" : ""}>${x.rows
       .map(
         ([title, path, kw, mean, canon]) =>
-          `<li${kw ? " data-kw" : ""}${mean ? " data-mean" : ""}><span class="kb-doc"><span class="kb-title">${escapeHtml(title)}</span><code>${escapeHtml(path)}</code></span><span class="kb-tags">${canon ? `<span class="kb-tag" data-canon>canon</span>` : ""}<span class="kb-tag kb-how">${tag(kw, mean)}</span><span class="kb-tag kb-kw">keyword</span></span></li>`
+          `<li${kw ? " data-kw" : ""}${mean ? " data-mean" : ""}><span class="kb-doc"><span class="kb-title">${escapeHtml(title)}</span><code>${escapeHtml(path)}</code></span><span class="kb-tags">${canon ? `<span class="kb-tag" data-canon>core</span>` : ""}<span class="kb-tag kb-how">${tag(kw, mean)}</span><span class="kb-tag kb-kw">keyword</span></span></li>`
       )
-      .join("")}</ol><p class="kb-left" data-q="${i}"${i ? " hidden" : ""}>${x.retired ? `${x.retired} closed or superseded ${x.retired === 1 ? "document" : "documents"} left out.` : "Nothing closed or superseded matched."} Every meaning hit is read back from the record before it is shown.</p><p class="kb-left kb-kwnote" data-q="${i}"${i ? " hidden" : ""}>${x.rows.filter((r) => r[2]).length} of ${x.rows.length} found by keyword alone. Add meaning to find the ones that say it in other words.</p>`
+      .join("")}</ol><p class="kb-left" data-q="${i}"${i ? " hidden" : ""}>${x.retired ? `Left out ${x.retired} closed or replaced ${x.retired === 1 ? "document" : "documents"}.` : "No closed or replaced documents matched."} Capsid rereads every meaning match from the database first, so it never shows a deleted document.</p><p class="kb-left kb-kwnote" data-q="${i}"${i ? " hidden" : ""}>Keywords alone find ${x.rows.filter((r) => r[2]).length} of ${x.rows.length}. Add meaning to find documents that use other words.</p>`
   ).join("");
   const total = BRIEF.reduce((n, b) => n + Number(b[2]), 0);
   return `<section class="kb wrap" id="memory" aria-labelledby="kb-title">
-<h2 id="kb-title">What it remembers</h2>
-<p class="lead">Every project's notes, decisions and session logs live in one store that agents search and start from, and every edit keeps the old version. This instance holds ${stats.store.documents.toLocaleString("en-US")} documents in ${stats.store.namespaces} namespaces.</p>
+<h2 id="kb-title">Agents remember the project</h2>
+<p class="lead">Capsid keeps each project's notes, decisions and session logs in one place. Agents search it, and every new session starts from it. Each edit keeps the old version. This server holds ${stats.store.documents.toLocaleString("en-US")} documents in ${stats.store.namespaces} namespaces.</p>
 <div class="kb-grid">
 <div class="kb-box" data-ui data-kb-search data-mode="hybrid">
-<h3 class="kb-head">Ask it <span>An example store</span></h3>
+<h3 class="kb-head">Search it <span>Example notes</span></h3>
 <div class="kb-qs" role="group" aria-label="The question">${SEARCHES.map((x, i) => `<button type="button" class="kb-q" data-ask="${i}" aria-pressed="${i === 0}">${escapeHtml(x.q)}</button>`).join("")}</div>
 <div class="kb-modes" role="group" aria-label="How it searches"><button type="button" class="kb-mode" data-mode-set="keyword" aria-pressed="false">Keyword</button><button type="button" class="kb-mode" data-mode-set="hybrid" aria-pressed="true">Keyword and meaning</button></div>
 <div class="kb-out" aria-live="polite">${results}</div>
-${more("doc-search", "How a search runs")}
+${more("doc-search", "How search works")}
 </div>
 <div class="kb-box" data-ui data-session>
-<h3 class="kb-head">Start from it <span>The same store</span></h3>
+<h3 class="kb-head">Start a session <span>The same notes</span></h3>
 <p class="kb-actions"><button type="button" class="cap-btn" data-variant="primary" data-start>Start a session</button><button type="button" class="cap-btn" data-write disabled>Write a note</button></p>
-<ol class="kb-brief">${BRIEF.map(([name, path, kb]) => `<li data-brief><span class="kb-doc"><span class="kb-title">${name}</span><code>${path}</code></span><span class="kb-size">${kb} KB</span></li>`).join("")}<li data-brief data-mine hidden><span class="kb-doc"><span class="kb-title">Your note, from the last session</span><code>sample/sessions/2026-10-25.md</code></span><span class="kb-size">1 KB</span></li></ol>
-<p class="kb-budget"><progress max="40" value="${total}" data-budget>${total} of 40 KB</progress><span data-budget-words>${total} KB of the 40 KB a start may hand over. Nothing trimmed.</span></p>
-<p class="kb-said" role="status" data-session-said>One call hands a new session the project's notes.</p>
+<ol class="kb-brief">${BRIEF.map(([name, path, kb]) => `<li data-brief><span class="kb-doc"><span class="kb-title">${name}</span><code>${path}</code></span><span class="kb-size">${kb} KB</span></li>`).join("")}<li data-brief data-mine hidden><span class="kb-doc"><span class="kb-title">Your note from last session</span><code>sample/sessions/2026-10-25.md</code></span><span class="kb-size">1 KB</span></li></ol>
+<p class="kb-budget"><progress max="40" value="${total}" data-budget>${total} of 40 KB</progress><span data-budget-words>${total} KB of the 40 KB limit. Nothing cut.</span></p>
+<p class="kb-said" role="status" data-session-said>One call gives a new session the project's notes.</p>
 ${more("session-start", "How a session starts")}
 </div>
 </div>
@@ -262,13 +262,13 @@ function board(tools) {
   const cols = BREAKERS.map(([grant, name, does]) => {
     const fed = tools.filter((t) => FEEDS[/** @type {keyof typeof FEEDS} */ (t.grant)] === grant);
     return `<div class="board-col"><button type="button" class="breaker" data-grant="${grant}" aria-pressed="${grant === "read"}"><span class="breaker-slot" aria-hidden="true"><span class="breaker-handle"></span></span><span class="breaker-name">${name}</span><span class="breaker-does">${does}</span></button>
-<ol class="circuits" aria-label="Tools under the ${name.toLowerCase()}">${fed.map(circuit).join("")}</ol></div>`;
+<ol class="circuits" aria-label="Tools that need ${name.toLowerCase()} access">${fed.map(circuit).join("")}</ol></div>`;
   }).join("");
   return `<section class="board wrap" aria-labelledby="board-title">
-<h2 id="board-title">What an agent can reach</h2>
-<p class="lead">Every tool Capsid serves, under the grant it needs, lit by the grants an agent holds. Switch a grant on or off.</p>
+<h2 id="board-title">Agents use only what you allow</h2>
+<p class="lead">Each light is one Capsid tool, grouped by the access it needs. Flip a switch to see which tools an agent with that access can use.</p>
 <div class="board-panel" data-ui data-board data-read>
-<p class="board-count" role="status" data-board-count>A read-only agent: ${reachSentence(tools, held)}</p>
+<p class="board-count" role="status" data-board-count>A read-only agent ${reachSentence(tools, held)}</p>
 <div class="board-cols">${cols}</div>
 </div>
 </section>`;
@@ -290,15 +290,15 @@ function tour(/** @type {any} */ model, /** @type {any} */ stats) {
 <p>${escapeHtml(text)}</p>
 <p class="chapter-parts">${st.touches.map((p) => `<span class="part-name" data-part="${escapeHtml(p.id)}">${escapeHtml(p.name)}</span>`).join("")}</p>
 ${kept.length ? `<dl class="readings readings-small">${kept.map(([value, label]) => reading(value, label)).join("")}</dl>` : ""}
-<p class="chapter-link"><a href="${stepPath(life.id, st.n)}">This step on its own</a></p>
+<p class="chapter-link"><a href="${stepPath(life.id, st.n)}">Open this step</a></p>
 </li>`;
     })
     .join("");
   return `<section class="tour" id="tour" aria-labelledby="tour-title">
 <div class="tour-grid wrap">
 <div class="tour-words">
-<h2 class="tour-title" id="tour-title">Follow one job through it</h2>
-<p class="lead">${escapeHtml(life.description ?? "")} Scroll, and the job moves through Capsid's real parts.</p>
+<h2 class="tour-title" id="tour-title">How a job runs</h2>
+<p class="lead">${escapeHtml(life.description ?? "")} Scroll to move the job through the parts of Capsid it uses.</p>
 <ol class="tour-steps">${chapters}</ol>
 </div>
 <div class="tour-stage tour-map" data-ui>${flowStage(model, flows, life, "tour-map", false)}</div>
@@ -312,8 +312,8 @@ function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {an
     ["/systems/", `${model.systems.length} drawn with their parts`],
     ["/flows/", `${flowsOf(model).length} told step by step`],
     ["/tools/", `${tools.length} served over MCP`],
-    ["/numbers/", `${stats.store.documents.toLocaleString("en-GB")} documents held`],
-    ...(codeIndex ? [["/code/", `${codeIndex.modules.toLocaleString("en-GB")} modules scored`]] : []),
+    ["/numbers/", `${stats.store.documents.toLocaleString("en-US")} documents held`],
+    ...(codeIndex ? [["/code/", `${codeIndex.modules.toLocaleString("en-US")} modules scored`]] : []),
   ];
   return `<section class="holds wrap" aria-labelledby="holds-title">
 <h2 id="holds-title">Contents</h2>
@@ -333,7 +333,7 @@ function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {an
 export function homePage(model, stats, tools, codeIndex) {
   const body = [hero(stats), knowledge(model, stats), board(tools), tour(model, stats), holds(model, stats, tools, codeIndex)].join("\n");
   return layout({
-    title: "Capsid: one panel for every AI agent",
+    title: "Capsid: shared memory and a fact-check for AI coding agents",
     description: DESCRIPTION,
     path: "/",
     body,

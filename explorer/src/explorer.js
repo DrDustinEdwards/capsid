@@ -199,7 +199,7 @@ for (const panel of document.querySelectorAll("[data-board]")) {
     : need === "action" ? (h.read && h.write ? "full" : h.read || h.write ? "part" : "")
     : "";
   const who = (h) =>
-    !h.read && !h.write && !h.admin ? "An agent with no grant" : h.admin && h.read && h.write ? "The admin" : h.read && !h.write && !h.admin ? "A read-only agent" : `An agent holding ${[h.read && "read", h.write && "write", h.admin && "the admin identity"].filter(Boolean).join(" and ")}`;
+    !h.read && !h.write && !h.admin ? "An agent with no access" : h.admin && h.read && h.write ? "The admin" : h.read && !h.write && !h.admin ? "A read-only agent" : `An agent with ${[h.read && "read", h.write && "write", h.admin && "admin"].filter(Boolean).join(" and ")} access`;
   const apply = () => {
     const h = Object.fromEntries([...breakers.querySelectorAll("[data-grant]")].map((b) => [b.dataset.grant, b.getAttribute("aria-pressed") === "true"]));
     let full = 0;
@@ -211,7 +211,7 @@ for (const panel of document.querySelectorAll("[data-board]")) {
       if (on === "full") full++;
       if (on === "part") part++;
     }
-    count.textContent = `${who(h)}: ${full} of ${circuits.length} tools live${part ? `, ${part} in part` : ""}.`;
+    count.textContent = `${who(h)} can use ${full} of ${circuits.length} tools${part ? `, and ${part} more in part` : ""}.`;
   };
   for (const b of breakers.querySelectorAll("[data-grant]")) {
     b.addEventListener("click", () => {
@@ -247,7 +247,7 @@ for (const desk of document.querySelectorAll("[data-desk]")) {
     const agree = claim === truth;
     said.textContent = words(kind, claim);
     desk.dataset.phase = "sent";
-    out.textContent = "The agent reports. Capsid asks GitHub\u2026";
+    out.textContent = "Checking with GitHub\u2026";
     await wait(350);
     if (mine !== run) return;
     desk.dataset.phase = "reading";
@@ -260,15 +260,15 @@ for (const desk of document.querySelectorAll("[data-desk]")) {
     kept.textContent = words(kind, truth);
     if (agree) cell.dataset.agree = "";
     else delete cell.dataset.agree;
-    stamp.textContent = agree ? "Agrees" : "Caught";
+    stamp.textContent = agree ? "Match" : "Caught";
     desk.dataset.phase = "done";
     out.textContent = agree
-      ? `Agrees. The record keeps GitHub's ${words(kind, truth)}.`
-      : `Caught. The record keeps GitHub's ${words(kind, truth)}, with the agent's ${words(kind, claim)} beside it, marked as disagreeing.`;
+      ? `They match. Capsid saves ${words(kind, truth)}.`
+      : `Caught. The agent said ${words(kind, claim)} and GitHub says ${words(kind, truth)}. Capsid saves GitHub's answer and flags the mismatch.`;
     if (counted) {
       tries++;
       if (!agree) caught++;
-      tally.textContent = `Caught ${caught} of ${tries} ${tries === 1 ? "try" : "tries"}`;
+      tally.textContent = `Caught ${caught} of ${tries} ${tries === 1 ? "lie" : "lies"}`;
     }
   };
   const pick = (k) => {
@@ -337,30 +337,30 @@ for (const box of document.querySelectorAll("[data-session]")) {
   box.dataset.ready = "";
   for (const li of items) li.hidden = true;
   budget.value = 0;
-  budgetWords.textContent = "Nothing handed over yet.";
+  budgetWords.textContent = "Nothing sent yet.";
   start.addEventListener("click", async () => {
     const mine0 = ++run;
     write.disabled = true;
     const shown = items.filter((li) => li !== mine || written);
     for (const li of items) li.hidden = true;
     let total = 0;
-    said.textContent = "Starting: the Worker reads the project's notes\u2026";
+    said.textContent = "Reading the project's notes\u2026";
     for (const li of shown) {
       await new Promise((r) => setTimeout(r, reduced.matches ? 0 : 220));
       if (mine0 !== run) return;
       li.hidden = false;
       total += kb(li);
       budget.value = total;
-      budgetWords.textContent = `${total} KB of the 40 KB a start may hand over.`;
+      budgetWords.textContent = `${total} KB of the 40 KB limit.`;
     }
-    budgetWords.textContent = `${total} KB of the 40 KB a start may hand over. Nothing trimmed.`;
-    said.textContent = written ? "A new session, and your note from the last one is there." : "The session has the project's notes. Write something down, then start again.";
+    budgetWords.textContent = `${total} KB of the 40 KB limit. Nothing cut.`;
+    said.textContent = written ? "New session. Your note from last time is there." : "The session has the project's notes. Write a note, then start again.";
     write.disabled = written;
   });
   write.addEventListener("click", () => {
     written = true;
     write.disabled = true;
-    said.textContent = "Saved to sample/sessions/2026-10-25.md. The old body is kept as a version, and an audit row records who wrote it. Start a new session.";
+    said.textContent = "Saved to sample/sessions/2026-10-25.md, and the log records who wrote it. Now start a new session.";
   });
 }
 
@@ -453,7 +453,7 @@ if (field) {
     history.replaceState(null, "", url);
     if (!words.length || !entries) {
       out.replaceChildren();
-      count.textContent = entries ? `${entries.length} things to find.` : "Loading the index.";
+      count.textContent = entries ? `${entries.length} things to search.` : "Loading the index.";
       return;
     }
     const scored = [];
@@ -485,7 +485,7 @@ if (field) {
       entries = doc.entries;
       run();
     })
-    .catch(() => (count.textContent = "The index did not load. Start from the systems, the tools or the code instead."));
+    .catch(() => (count.textContent = "Search didn't load. Browse the systems, tools or code instead."));
   field.focus();
 }
 
