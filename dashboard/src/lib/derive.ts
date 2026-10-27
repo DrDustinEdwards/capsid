@@ -331,7 +331,7 @@ function tierOf(a: { sev: Sev }): Tier {
 }
 
 // A group shows up to this many children, then a link to the full view.
-const GROUP_CHILDREN = 5;
+export const GROUP_CHILDREN = 5;
 // Past this many problem rows the rest of the warnings wait behind "N more warnings".
 // Critical rows are always shown.
 export const PROBLEM_ROWS = 8;
@@ -434,7 +434,7 @@ export function attentionGroups(feed: OpsFeed, now: number, skip?: ReadonlySet<s
 // Priority first (high first), then the newest update first. A job blocked for more than
 // 7 days goes after the rest. all is the two in that order.
 
-const STALE_BLOCKED_MS = 7 * DAY;
+export const STALE_BLOCKED_MS = 7 * DAY;
 
 export function blockedOrder(jobs: OpsJob[], now: number): { blocked: OpsJob[]; stale: OpsJob[]; all: OpsJob[] } {
   const list = jobs.filter((j) => j.status === "blocked").sort((a, b) => b.priority - a.priority || ms(b.updated_at) - ms(a.updated_at));
