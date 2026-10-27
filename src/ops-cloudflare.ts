@@ -240,7 +240,7 @@ function errorsQuery(scripts: string[]): string {
         limit: 10000
         filter: { scriptName_in: ${JSON.stringify(scripts)}, datetime_geq: $datetimeStart, datetime_lt: $datetimeEnd }
       ) {
-        sum { requests errors }
+        sum { requests errors cpuTimeUs }
         dimensions { scriptName datetimeHour }
       }
     }
@@ -283,14 +283,15 @@ async function readErrors(
   if (!Array.isArray(rows)) throw new Error("the analytics query returned no workersInvocationsAdaptive rows");
 
   const index = new Map(hours.map((h, i) => [h, i]));
-  const out = new Map<string, HourBucket[]>(scripts.map((s) => [s, hours.map((hour) => ({ hour, requests: 0, errors: 0 }))]));
-  for (const row of rows as Array<{ sum?: { requests?: unknown; errors?: unknown }; dimensions?: { scriptName?: unknown; datetimeHour?: unknown } }>) {
+  const out = new Map<string, HourBucket[]>(scripts.map((s) => [s, hours.map((hour) => ({ hour, requests: 0, errors: 0, cpu_ms: 0 }))]));
+  for (const row of rows as Array<{ sum?: { requests?: unknown; errors?: unknown; cpuTimeUs?: unknown }; dimensions?: { scriptName?: unknown; datetimeHour?: unknown } }>) {
     const script = row?.dimensions?.scriptName;
     const hourRaw = row?.dimensions?.datetimeHour;
     const requests = row?.sum?.requests;
     const errors = row?.sum?.errors;
-    if (typeof script !== "string" || typeof hourRaw !== "string" || typeof requests !== "number" || typeof errors !== "number") {
-      throw new Error("the analytics query returned a row without scriptName, datetimeHour, requests and errors");
+    const cpuUs = row?.sum?.cpuTimeUs;
+    if (typeof script !== "string" || typeof hourRaw !== "string" || typeof requests !== "number" || typeof errors !== "number" || typeof cpuUs !== "number") {
+      throw new Error("the analytics query returned a row without scriptName, datetimeHour, requests, errors and cpuTimeUs");
     }
     const at = Date.parse(hourRaw);
     const i = Number.isNaN(at) ? undefined : index.get(new Date(at).toISOString());
@@ -300,6 +301,7 @@ async function readErrors(
     if (i === undefined || !buckets) throw new Error(`the analytics query returned a row outside the asked window or scripts (${script} ${hourRaw})`);
     buckets[i].requests += requests;
     buckets[i].errors += errors;
+    buckets[i].cpu_ms += Math.round(cpuUs / 1000);
   }
   return out;
 }

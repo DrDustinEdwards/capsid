@@ -39,6 +39,8 @@ export interface HourBucket {
   hour: string;
   requests: number;
   errors: number;
+  // Billed CPU time, in milliseconds.
+  cpu_ms: number;
 }
 
 // Cloudflare's view of one site. Every state but "ok" is shown as no data, with its

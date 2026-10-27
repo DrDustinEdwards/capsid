@@ -422,6 +422,32 @@ export function siteDownFindings(prev: OpsSnapshot | null, probes: SiteProbe[]):
   return out;
 }
 
+// The CPU threshold: a Worker that used more than a million CPU milliseconds in the most
+// recent complete hour, a thirtieth of the Workers Paid plan's monthly allowance. Normal
+// hours stay under 100,000 on every site; on 2026-10-12, 18:00 to 19:00 UTC, dustinedwards
+// used 13.6 million in one hour from 2.46 million invocations, and nothing said so until the bill.
+export const CPU_HOUR_LIMIT_MS = 1_000_000;
+
+/** A site whose Worker used more than CPU_HOUR_LIMIT_MS of CPU time in the most recent
+ *  complete hour. A site with no analytics this pass is not judged. */
+export function siteCpuFindings(sites: ReadonlyArray<{ namespace: string; name: string }>, cloudflare: Record<string, SiteCloudflare>): Finding[] {
+  const out: Finding[] = [];
+  for (const site of sites) {
+    const cf = cloudflare[site.namespace];
+    if (cf?.state !== "ok" || !cf.errors24 || cf.errors24.length === 0) continue;
+    const hour = cf.errors24[cf.errors24.length - 1];
+    if (hour.cpu_ms <= CPU_HOUR_LIMIT_MS) continue;
+    out.push(
+      finding(site.namespace, `site-cpu-${site.namespace}`, `${site.name} used over ${CPU_HOUR_LIMIT_MS.toLocaleString("en-US")} CPU ms in one hour`, [
+        `script: ${cf.script}`,
+        `hour from ${hour.hour}: ${hour.cpu_ms} CPU ms over ${hour.requests} invocations`,
+        "Workers Paid includes 30 million CPU ms a month; each million over costs $0.02. Find what is invoking the Worker.",
+      ])
+    );
+  }
+  return out;
+}
+
 // The error-rate threshold (capsid/research/design-ops-console.md, approved): more
 // than 1 percent of requests errored in the most recent complete hour, over at least
 // 100 requests, so a quiet site's single error is not an alert.
