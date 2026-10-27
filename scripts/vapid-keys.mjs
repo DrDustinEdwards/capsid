@@ -5,7 +5,7 @@
 //
 //   node scripts/vapid-keys.mjs
 //
-// The Worker is named explicitly (--name capsid) because the seat's clones hold no
+// The Worker is named explicitly (--name capsid-mcp) because the seat's clones hold no
 // wrangler.jsonc, and npx runs through the shell on Windows, where it is npx.cmd.
 //
 // Running it again replaces the key, and every device must then turn alerts on again in
@@ -20,7 +20,7 @@ const jwk = await webcrypto.subtle.exportKey("jwk", pair.privateKey);
 const secret = JSON.stringify({ kty: "EC", crv: "P-256", d: jwk.d, x: jwk.x, y: jwk.y });
 const raw = new Uint8Array(await webcrypto.subtle.exportKey("raw", pair.publicKey));
 
-const put = spawnSync("npx", ["wrangler", "secret", "put", "VAPID_PRIVATE_KEY", "--name", "capsid"], {
+const put = spawnSync("npx", ["wrangler", "secret", "put", "VAPID_PRIVATE_KEY", "--name", "capsid-mcp"], {
   input: secret,
   stdio: ["pipe", "inherit", "inherit"],
   shell: process.platform === "win32",

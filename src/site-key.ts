@@ -22,7 +22,7 @@ import { base64url } from "@dustinedwards/site-runtime/encoding";
 // not, Carrel's calls to the site are refused until the two match; the answer says so
 // and that calling again mints a fresh key and sets both. Nothing is retried silently.
 
-export const CARREL_SCRIPT = "carrel";
+export const CARREL_SCRIPT = "carrel-desk";
 export const SITE_SECRET = "CARREL_SITE_KEY";
 const SCRIPT = /^[A-Za-z0-9_-]{1,63}$/;
 const KEY_BYTES = 32;

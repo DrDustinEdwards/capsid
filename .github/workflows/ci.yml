@@ -310,7 +310,7 @@ jobs:
           # ranges at job time, next to the deploy token. No install scripts run, and the
           # rollback is an API call that needs none (Grok audit 2026-10, U3).
           npm ci --ignore-scripts --no-audit --no-fund
-          node_modules/.bin/wrangler rollback --name capsid --message "live gate failed for ${GITHUB_SHA}" --yes
+          node_modules/.bin/wrangler rollback --name capsid-mcp --message "live gate failed for ${GITHUB_SHA}" --yes
           # The rollout is not instant, so read the sha back rather than assuming, and
           # say so when it never moved.
           ROLLBACK_TO=unreadable
