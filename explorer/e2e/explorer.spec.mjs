@@ -133,6 +133,11 @@ eachTheme((theme) => {
     expect(problems).toEqual([]);
   });
 
+  // Animations that run over time. The letterhead's fade follows the scroll position, not the
+  // clock, so it stays listed as running and moves nothing when a step changes.
+  const timedAnimations = () =>
+    document.getAnimations().filter((a) => a.timeline instanceof DocumentTimeline).length;
+
   test("flow: under reduced motion a step jumps, with no animation running", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const problems = await watch(page);
@@ -142,10 +147,10 @@ eachTheme((theme) => {
     await page.keyboard.press("2");
     await expect(page.locator("#step-title")).toHaveText("Step 2 of 3");
     await expect(page.locator(".cap-system-map-token")).toBeVisible();
-    expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+    expect(await page.evaluate(timedAnimations)).toBe(0);
     await page.locator(".flow-nav a[rel='next']").click();
     await expect(page.locator("#step-title")).toHaveText("Step 3 of 3");
-    expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+    expect(await page.evaluate(timedAnimations)).toBe(0);
     expect(await page.evaluate(() => /** @type {any} */ (window).tokenMoves)).toBe(0);
     expect(problems).toEqual([]);
   });

@@ -4,7 +4,7 @@
 //
 //   initial JS (the entry and its static imports)  <= 119 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   initial CSS (the entry's and its imports')      <=  19 KB gzip
+//   initial CSS (the entry's and its imports')      <=  20.5 KB gzip
 //   lazy CSS (every other stylesheet), together     <=  12 KB gzip
 //   fonts                                           reported, not budgeted
 //
@@ -39,13 +39,16 @@
 // 114.3 KB; this build is 118.2 KB. CSS is split: the dialogs' stylesheets (button, field, alert,
 // details, switch, listbox) load with their chunks, so they are budgeted apart from the entry's.
 // Initial CSS stays at 19 KB (this build 18.4 KB, master 18.9 KB); lazy CSS is 8.7 KB.
+// Initial CSS raised on 2026-10-27 from 19 KB to 20.5 KB (Dustin: one shared letterhead across
+// the family, the Portal's included): Capsomer 0.28.1's letterhead band, its second row of links
+// and their underline are in the entry's site-header.css. Master was 18.8 KB; this build is 20.0 KB.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 119 * KB, lazyChunk: 40 * KB, css: 19 * KB, lazyCss: 12 * KB };
+const BUDGET = { initialJs: 119 * KB, lazyChunk: 40 * KB, css: 20.5 * KB, lazyCss: 12 * KB };
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const manifestPath = join(dist, ".vite", "manifest.json");
