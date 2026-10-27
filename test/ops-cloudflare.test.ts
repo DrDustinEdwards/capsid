@@ -12,7 +12,9 @@ import { owningCheck } from "../src/watcher-checks.ts";
 import {
   ERROR_RATE_MIN_REQUESTS,
   ERROR_RATE_THRESHOLD, siteDownFindings,
-  siteErrorFindings
+  siteErrorFindings,
+  siteCpuFindings,
+  CPU_HOUR_LIMIT_MS
 } from "../src/watcher-detect.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 import { fakeEnv, fakeFindingMemory, fakeKv, withFetch } from "./fakes.ts";
@@ -81,11 +83,11 @@ const deploy = (id: string, created_on: string, versions: Array<[string, number]
 });
 const deployments = (list: unknown[]) => ok({ deployments: list });
 const LAST_HOUR = "2026-09-28T11:00:00Z";
-const graph = (rows: Array<[string, string, number, number]>) => ({
+const graph = (rows: Array<[string, string, number, number, number?]>) => ({
   body: {
     data: {
       viewer: {
-        accounts: [{ workersInvocationsAdaptive: rows.map(([scriptName, datetimeHour, requests, errors]) => ({ sum: { requests, errors }, dimensions: { scriptName, datetimeHour } })) }],
+        accounts: [{ workersInvocationsAdaptive: rows.map(([scriptName, datetimeHour, requests, errors, cpuTimeUs = 0]) => ({ sum: { requests, errors, cpuTimeUs }, dimensions: { scriptName, datetimeHour } })) }],
       },
     },
     errors: null,
@@ -230,7 +232,7 @@ test("ONE analytics query covers every script: 24 hourly buckets, oldest first, 
     [`GET ${API}/workers/scripts/sample-web/deployments`]: deployments([]),
     [`GET ${API}/workers/scripts/sample-dev/deployments`]: deployments([]),
     [`POST ${CF_GRAPHQL}`]: graph([
-      ["sample-web", LAST_HOUR, 200, 3],
+      ["sample-web", LAST_HOUR, 200, 3, 2_500_400],
       ["sample-dev", "2026-09-27T12:00:00Z", 10, 1],
       ["sample-dev", "2026-09-27T12:00:00Z", 5, 0],
     ]),
@@ -247,9 +249,9 @@ test("ONE analytics query covers every script: 24 hourly buckets, oldest first, 
   const dev = read.bySite["sample-dev"];
   assert.ok(web.state === "ok" && dev.state === "ok");
   assert.equal(web.errors24?.length, 24);
-  assert.deepEqual(web.errors24?.at(-1), { hour: "2026-09-28T11:00:00.000Z", requests: 200, errors: 3 });
-  assert.deepEqual(web.errors24?.[0], { hour: "2026-09-27T12:00:00.000Z", requests: 0, errors: 0 });
-  assert.deepEqual(dev.errors24?.[0], { hour: "2026-09-27T12:00:00.000Z", requests: 15, errors: 1 });
+  assert.deepEqual(web.errors24?.at(-1), { hour: "2026-09-28T11:00:00.000Z", requests: 200, errors: 3, cpu_ms: 2500 });
+  assert.deepEqual(web.errors24?.[0], { hour: "2026-09-27T12:00:00.000Z", requests: 0, errors: 0, cpu_ms: 0 });
+  assert.deepEqual(dev.errors24?.[0], { hour: "2026-09-27T12:00:00.000Z", requests: 15, errors: 1, cpu_ms: 0 });
   assert.equal(web.errors_reason, null);
   assert.deepEqual(errorWindow(NOW).hours.slice(-1), ["2026-09-28T11:00:00.000Z"]);
 });
@@ -321,13 +323,13 @@ test("a site is down only on two failed probes in a row", () => {
   assert.deepEqual(siteDownFindings(null, [probe("a", "down")]), [], "a first pass has no previous probe");
 });
 
-const hourly = (requests: number, errors: number, earlier: { requests: number; errors: number } = { requests: 0, errors: 0 }): Extract<SiteCloudflare, { state: "ok" }> => ({
+const hourly = (requests: number, errors: number, earlier: { requests: number; errors: number; cpu_ms?: number } = { requests: 0, errors: 0 }, cpu_ms = 0): Extract<SiteCloudflare, { state: "ok" }> => ({
   state: "ok",
   script: "sample-web",
   deploys: [],
   errors24: [
-    ...Array.from({ length: 23 }, (_, i) => ({ hour: `h${i}`, ...earlier })),
-    { hour: "2026-09-28T11:00:00.000Z", requests, errors },
+    ...Array.from({ length: 23 }, (_, i) => ({ hour: `h${i}`, cpu_ms: 0, ...earlier })),
+    { hour: "2026-09-28T11:00:00.000Z", requests, errors, cpu_ms },
   ],
   errors_reason: null,
 });
@@ -345,6 +347,17 @@ test("the error rate fires above 1 percent of at least 100 requests in the last 
   assert.deepEqual(fires(hourly(100, 0, { requests: 1000, errors: 900 })), [], "an earlier hour fired");
   assert.deepEqual(fires({ ...hourly(100, 50), errors24: null, errors_reason: "query failed" }), [], "no data was judged");
   assert.deepEqual(fires({ state: "no-token", reason: "CF_OPS_TOKEN is not set" }), []);
+});
+
+test("the CPU finding fires above a million CPU ms in the last complete hour, and only there", () => {
+  assert.equal(CPU_HOUR_LIMIT_MS, 1_000_000);
+  const sites = [{ namespace: "sample", name: "Sample" }];
+  const fires = (cf: SiteCloudflare) => siteCpuFindings(sites, { sample: cf }).map((f) => f.fingerprint);
+  assert.deepEqual(fires(hourly(2_000_000, 0, undefined, 1_000_001)), ["site-cpu-sample"]);
+  assert.deepEqual(fires(hourly(2_000_000, 0, undefined, 1_000_000)), [], "exactly the limit fired");
+  assert.deepEqual(fires(hourly(10, 0, { requests: 10, errors: 0, cpu_ms: 9_000_000 })), [], "an earlier hour fired");
+  assert.deepEqual(fires({ ...hourly(10, 0, undefined, 5_000_000), errors24: null, errors_reason: "query failed" }), [], "no data was judged");
+  assert.equal(owningCheck("site-cpu-sample"), "cloudflare");
 });
 
 test("site-down is owned by the probes and site-errors by the cloudflare check, so each clears only when its check ran", async () => {

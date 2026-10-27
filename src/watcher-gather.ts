@@ -20,7 +20,7 @@ import { capsidStatus } from "./status";
 import { readRepoMap } from "./unmapped-repos";
 import { type Gathered, type Observed, WATCHER_ACTOR } from "./watcher";
 import type { WatcherCheck } from "./watcher-checks";
-import { type Finding, type DeployVerdict, deployVerdict, healthFindings, statusFindings, MIRROR_DUMP_PREFIX, MIRROR_REPO_LABEL, type MirrorRun, newestDump, mirrorFindings, latestMirrorRun, type CiRun, ciFindings, siteMapFindings, unmappedRepoFindings, repoMapUnreadableFinding, siteDownFindings, liveFinding, finding, siteErrorFindings } from "./watcher-detect";
+import { type Finding, type DeployVerdict, deployVerdict, healthFindings, statusFindings, MIRROR_DUMP_PREFIX, MIRROR_REPO_LABEL, type MirrorRun, newestDump, mirrorFindings, latestMirrorRun, type CiRun, ciFindings, siteMapFindings, unmappedRepoFindings, repoMapUnreadableFinding, siteDownFindings, liveFinding, finding, siteErrorFindings, siteCpuFindings } from "./watcher-detect";
 
 // The watcher's reads (src/watcher.ts runs the pass): every surface it checks, read
 // once per pass and turned into findings by src/watcher-detect.ts.
@@ -241,7 +241,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     ran.add("site repairs");
   }
 
-  // Cloudflare's view of each site: deploys and hourly errors (src/ops-cloudflare.ts).
+  // Cloudflare's view of each site: deploys, and hourly errors and CPU time (src/ops-cloudflare.ts).
   // With no token nothing is fetched, each site says why, and the check is not run.
   // With no site configured there is nothing to read, and nothing is fetched.
   if (sites && sites.length > 0) {
@@ -249,7 +249,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     if (cf) {
       observed.cloudflare = cf.bySite;
       if (cf.ran) ran.add("cloudflare");
-      out.push(...siteErrorFindings(sites, cf.bySite));
+      out.push(...siteErrorFindings(sites, cf.bySite), ...siteCpuFindings(sites, cf.bySite));
     } else {
       observed.cloudflare = Object.fromEntries(
         sites.map((s) => [s.namespace, { state: "error", reason: "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)" } as const])
