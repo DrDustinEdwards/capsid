@@ -434,7 +434,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "t") return toggleTheme();
   if (e.key !== "/") return;
   e.preventDefault();
-  const field = document.querySelector("[data-search]");
+  const field = document.querySelector("[data-search]") ?? document.querySelector(".cap-site-header-search input");
   if (field) field.focus();
   else location.assign("/search/");
 });

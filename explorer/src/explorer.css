@@ -22,6 +22,9 @@
 :root {
   --page: 80rem;
   --gutter: clamp(16px, 3vw, 32px);
+  /* The family letterhead lines up with the page's column. */
+  --header-max: calc(var(--page) - 2 * var(--gutter));
+  --header-gutter: var(--gutter);
   --section: clamp(96px, 11vw, 200px);
   /* Capsomer's own face (--ui), self-hosted below, for headings and running text alike. */
   --face: var(--ui);
