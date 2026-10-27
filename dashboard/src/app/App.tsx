@@ -543,12 +543,15 @@ export function App() {
     );
   }
 
-  // Capsomer 0.9.0's owner shell (design-site-header.md): the header holds Search, the inbox,
-  // the theme button and the avatar, whose menu holds Help; the strip holds the family's apps.
+  // Capsomer's owner shell in the family letterhead: the header's top row holds Search, the inbox,
+  // the theme button and the avatar, whose menu holds Help; its second row says where you are and
+  // links to the public site. The strip holds the family's apps.
   // The top bar says how fresh the page is and holds Refresh.
   const shell = (
     <AdminShell
       app="portal"
+      letterhead
+      viewSite="https://capsid.dustinedwards.info"
       page={signedOut ? "Signed out" : VIEWS.find((v) => v.id === route.view)?.label}
       nav={menu}
       tabs={tabEntries}

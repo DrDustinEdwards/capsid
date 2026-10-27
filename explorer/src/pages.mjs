@@ -10,6 +10,7 @@ import { modelMapData, systemMapHtml } from "capsomer/behavior/system-map";
 import { circleLayers } from "capsomer/system-map-circles";
 import { patchSvg } from "capsomer/behavior/manual";
 import { familyFooterHtml } from "capsomer/behavior/family-footer";
+import { letterheadHtml } from "capsomer/behavior/site-header";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { headHtml, headTags } from "@drdustinedwards/site-helpers/head";
 import { jsonLd } from "@drdustinedwards/site-helpers/schema";
@@ -119,36 +120,20 @@ ${footer(asOf)}
 `;
 }
 
-/** A 24-box glyph for the header, drawn by Capsomer's stroke. @param {string} body */
-const glyph = (body) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${body}</svg>`;
-
-/** A header control's tip: its name and its key. @param {string} text @param {string} key */
-const tip = (text, key) =>
-  `<span class="cap-site-header-tip cap-popover" data-variant="tooltip" data-side="bottom" data-offset="6" popover="manual" role="tooltip" aria-hidden="true"><span class="cap-site-header-tip-text">${text}</span><span class="cap-keys"><kbd>${key}</kbd></span></span>`;
-
 /**
- * Capsomer's site header, written by hand (components/site-header): the logo, the sections,
- * search, the theme button and, on a phone, the menu and its sheet. The theme button's name is
- * the light page's; theme.js names it for the theme showing before it paints.
+ * The family letterhead (capsomer/site-header): the mark with "Dustin Edwards" over Capsid, search,
+ * the theme button, and the sections in a second row, Home first. explorer.js wires it.
  * @param {string} here the current section @param {string} path
  */
 function header(here, path) {
-  const link = (/** @type {string} */ href, /** @type {string} */ label, /** @type {string} */ cls) => `<a${cls ? ` class="${cls}"` : ""} href="${href}"${href === here || href === path ? ' aria-current="page"' : ""}>${cls ? label : `<span class="cap-site-header-sheet-name">${label}</span>`}</a>`;
-  return `<header class="cap-site-header" data-cap="site-header" data-links="left">
-<a class="cap-site-header-skip" href="#main">Skip to the content</a>
-<a class="cap-site-header-logo" href="/" aria-label="Capsid"><img src="/assets/icon.svg" alt="" width="24" height="24"><span aria-hidden="true">Capsid</span></a>
-<nav class="cap-site-header-sections" aria-label="Site"><ul>${NAV.map(([href, label]) => `<li>${link(href, label, "cap-site-header-link")}</li>`).join("")}</ul></nav>
-<div class="cap-site-header-tools">
-<div class="cap-site-header-extras"><a class="cap-site-header-icon" href="/search/" aria-label="Search"${path === "/search/" ? ' aria-current="page"' : ""}>${glyph('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>')}${tip("Search", "/")}</a></div>
-<button type="button" class="cap-theme-button cap-site-header-icon cap-site-header-theme" data-cap="theme-switch" data-variant="button" aria-label="Switch to dark theme"><svg class="cap-theme-icon" data-show="light" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="cap-theme-icon" data-show="dark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span class="cap-theme-tip cap-popover" data-variant="tooltip" data-side="bottom" data-offset="6" popover="manual" role="tooltip" aria-hidden="true"><span class="cap-theme-tip-text">Switch to dark theme</span><span class="cap-keys"><kbd>T</kbd></span></span></button>
-<button type="button" class="cap-site-header-icon cap-site-header-menu" aria-label="Menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="site-sheet">${glyph('<path d="M4 7h16M4 12h16M4 17h16"/>')}</button>
-</div>
-<dialog class="cap-dialog cap-site-header-sheet" data-cap="dialog" data-placement="bottom" id="site-sheet" aria-labelledby="site-sheet-title">
-<div class="cap-dialog-header"><h2 id="site-sheet-title" class="cap-dialog-title cap-site-header-sheet-title" tabindex="-1">Capsid menu</h2></div>
-<div class="cap-dialog-body"><nav aria-labelledby="site-sheet-title"><div class="cap-site-header-sheet-label">Pages</div><ul class="cap-site-header-sheet-list">${[...NAV, ["/search/", "Search"]].map(([href, label]) => `<li>${link(href, label, "")}</li>`).join("")}</ul></nav></div>
-<button type="button" class="cap-btn cap-dialog-close" data-variant="quiet" data-icon-only data-cap-part="close" aria-label="Close"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
-</dialog>
-</header>`;
+  const current = NAV.find(([href]) => href === here || href === path)?.[1];
+  return letterheadHtml({
+    name: "Capsid",
+    mark: '<img src="/assets/icon.svg" alt="" width="32" height="32">',
+    links: NAV.map(([href, label]) => [href, href === "/" ? "Home" : label]),
+    current: current === "Overview" ? "Home" : current,
+    search: { action: "/search/", label: "Search Capsid" },
+  });
 }
 
 /**
@@ -164,15 +149,15 @@ export const sectionAt = (href) => SECTIONS.find((section) => section.href === h
 const sectionFor = (path) => sectionAt(path === "/search/" ? path : sectionOf(path));
 
 /**
- * A page's head, Capsomer's running head set as one of the manual's building signs (NHB 1430.2, 6.1):
- * its section's number and name. The site is named in the header and the title block, so not again
+ * A page's head, Capsomer's running head: its section's number and name over the manual's rule (a
+ * plain head, not the building sign, so it never stacks a second dark slab under the letterhead). The site is named in the header and the title block, so not again
  * here. The page's own trail and heading follow it as text.
  * @param {string} path
  */
 export function manualHead(path) {
   const section = sectionFor(path);
   if (!section) return "";
-  return `<div class="cap-running-head" data-variant="sign" aria-hidden="true"><span class="cap-running-head-name"><span class="cap-running-head-no">${section.no}</span>${section.label}</span></div>`;
+  return `<div class="cap-running-head" aria-hidden="true"><span class="cap-running-head-name"><span class="cap-running-head-no">${section.no}</span>${section.label}</span></div>`;
 }
 
 /**
