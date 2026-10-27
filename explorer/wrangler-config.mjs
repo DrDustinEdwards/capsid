@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 const [directory, flag] = process.argv.slice(2);
 if (!directory) throw new Error("usage: node explorer/wrangler-config.mjs <assets directory> [--local]");
 const config = {
-  name: "capsid-explorer",
+  name: "capsid",
   // An assets-only Worker runs no code a compatibility date changes. This is a date the workerd
   // in capsid's pinned wrangler runs (it stops at 2026-07-08), so `wrangler dev` (the browser
   // spec) serves the same config that deploys.

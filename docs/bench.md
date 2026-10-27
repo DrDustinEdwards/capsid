@@ -8,12 +8,12 @@ All four are signed like the backup credential endpoint: `X-Bench-Timestamp` and
 
 ```
 $k = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-$k | npx wrangler secret put BENCH_SECRET --name capsid
+$k | npx wrangler secret put BENCH_SECRET --name capsid-mcp
 $k | gh secret set BENCH_KEY --repo DrDustinEdwards/capsid-bench
 Remove-Variable k
 ```
 
-(PowerShell. `--name capsid` lets wrangler run without a local `wrangler.jsonc`.)
+(PowerShell. `--name capsid-mcp` lets wrangler run without a local `wrangler.jsonc`.)
 
 - `POST /bench/tasks` registers a task with its source, split (`pilot`, `full` or `excluded`), repo, issue date and the counts of its `FAIL_TO_PASS` and `PASS_TO_PASS` tests. The same registration again is a no-op; a different one is refused. A task is never updated, and a task with a run cannot be deleted (triggers in the migration).
 - `POST /bench/draw` records the registration (the registration's sha256, the frame file's sha256 and the sampling seed) and appends the drawn task order: a batch is the draw from position `from` on. The first call records the registration and every later call must carry the same one. Positions already recorded must hold the same tasks and the rest are appended, so a batch can be sent again and the draw only grows. A drawn task must be registered in the `full` split. Both tables are insert-only, and neither can be deleted once a drawn task has a model run (triggers in the migration).

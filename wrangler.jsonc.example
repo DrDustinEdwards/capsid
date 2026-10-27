@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "capsid",
+  "name": "capsid-mcp",
   "main": "src/index.ts",
   // Bumped 2026-06-01 -> 2026-09-06 (platform arc). nodejs_compat is enabled by
   // default for dates >= 2026-08-04, so the explicit flag below is now redundant;
