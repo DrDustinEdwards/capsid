@@ -225,7 +225,7 @@ function knowledge(model, stats) {
       .join("")}</ol><p class="kb-left" data-q="${i}"${i ? " hidden" : ""}>${x.retired ? `Left out ${x.retired} closed or replaced ${x.retired === 1 ? "document" : "documents"}.` : "No closed or replaced documents matched."} Capsid rereads every meaning match from the database first, so it never shows a deleted document.</p><p class="kb-left kb-kwnote" data-q="${i}"${i ? " hidden" : ""}>Keywords alone find ${x.rows.filter((r) => r[2]).length} of ${x.rows.length}. Add meaning to find documents that use other words.</p>`
   ).join("");
   const total = BRIEF.reduce((n, b) => n + Number(b[2]), 0);
-  return `<section class="kb wrap" id="memory" aria-labelledby="kb-title">
+  return `<section class="kb cap-page" id="memory" aria-labelledby="kb-title">
 <h2 id="kb-title">Agents remember the project</h2>
 <p class="lead">Capsid keeps each project's notes, decisions and session logs in one place. Agents search it, and every new session starts from it. Each edit keeps the old version. This server holds ${stats.store.documents.toLocaleString("en-US")} documents in ${stats.store.namespaces} namespaces.</p>
 <div class="kb-grid">
@@ -264,7 +264,7 @@ function board(tools) {
     return `<div class="board-col"><button type="button" class="breaker" data-grant="${grant}" aria-pressed="${grant === "read"}"><span class="breaker-slot" aria-hidden="true"><span class="breaker-handle"></span></span><span class="breaker-name">${name}</span><span class="breaker-does">${does}</span></button>
 <ol class="circuits" aria-label="Tools that need ${name.toLowerCase()} access">${fed.map(circuit).join("")}</ol></div>`;
   }).join("");
-  return `<section class="board wrap" aria-labelledby="board-title">
+  return `<section class="board cap-page" aria-labelledby="board-title">
 <h2 id="board-title">Agents use only what you allow</h2>
 <p class="lead">Each light is one Capsid tool, grouped by the access it needs. Flip a switch to see which tools an agent with that access can use.</p>
 <div class="board-panel" data-ui data-board data-read>
@@ -295,7 +295,7 @@ ${kept.length ? `<dl class="readings readings-small">${kept.map(([value, label])
     })
     .join("");
   return `<section class="tour" id="tour" aria-labelledby="tour-title">
-<div class="tour-grid wrap">
+<div class="tour-grid cap-page">
 <div class="tour-words">
 <h2 class="tour-title" id="tour-title">How a job runs</h2>
 <p class="lead">${escapeHtml(life.description ?? "")} Scroll to move the job through the parts of Capsid it uses.</p>
@@ -315,7 +315,7 @@ function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {an
     ["/numbers/", `${stats.store.documents.toLocaleString("en-US")} documents held`],
     ...(codeIndex ? [["/code/", `${codeIndex.modules.toLocaleString("en-US")} modules scored`]] : []),
   ];
-  return `<section class="holds wrap" aria-labelledby="holds-title">
+  return `<section class="holds cap-page" aria-labelledby="holds-title">
 <h2 id="holds-title">Contents</h2>
 <ol class="cap-leader-index contents">${rows
     .map(([href, fact]) => {

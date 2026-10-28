@@ -14,7 +14,7 @@
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.15.0",
     "@fontsource-variable/martian-mono": "5.3.0",
     "@fontsource-variable/schibsted-grotesk": "5.3.0",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.28.1",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.29.0",
     "enarratio": "0.3.1"
   },
   "devDependencies": {
