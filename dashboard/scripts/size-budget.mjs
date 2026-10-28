@@ -4,7 +4,7 @@
 //
 //   initial JS (the entry and its static imports)  <= 121 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   initial CSS (the entry's and its imports')      <=  20.5 KB gzip
+//   initial CSS (the entry's and its imports')      <=  21 KB gzip
 //   lazy CSS (every other stylesheet), together     <=  12 KB gzip
 //   fonts                                           reported, not budgeted
 //
@@ -44,13 +44,16 @@
 // and their underline are in the entry's site-header.css. Master was 18.8 KB; this build is 20.0 KB.
 // Initial JS raised on 2026-10-28 from 119 KB to 121 KB (Capsomer 0.31.0): the admin shell's header
 // now carries the search field's combobox. Master was 118.7 KB; this build is 120.0 KB.
+// Initial CSS raised on 2026-10-28 from 20.5 KB to 21 KB (Capsomer 0.33: the admin letterhead keeps
+// the public pages' pixels, Dustin): its inset padding and the ground above it. Master was 20,961 B;
+// this build is 21,023 B.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 121 * KB, lazyChunk: 40 * KB, css: 20.5 * KB, lazyCss: 12 * KB };
+const BUDGET = { initialJs: 121 * KB, lazyChunk: 40 * KB, css: 21 * KB, lazyCss: 12 * KB };
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const manifestPath = join(dist, ".vite", "manifest.json");
