@@ -9,7 +9,7 @@
 // privacy filter's output shape allows (the third line, design section 2). The tests build from
 // explorer/fixtures, which are invented.
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { parseArgs } from "node:util";
@@ -128,6 +128,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   mkdirSync(assets, { recursive: true });
   const capsomer = dirname(require.resolve("capsomer/package.json"));
   const css = [
+    "css/fonts.css",
     "css/tokens.css",
     "tokens/family-teal.css",
     "css/base.css",
@@ -168,11 +169,9 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
   copyFileSync(join(here, "src", "icon.svg"), join(assets, "icon.svg"));
   copyFileSync(join(here, "src", "og-card.png"), join(assets, "og-card.png"));
-  // Capsomer's face, served from here because the policy allows fonts from 'self' only: Schibsted
-  // Grotesk's latin cut with its weight axis.
-  copyFileSync(join(dirname(require.resolve("@fontsource-variable/schibsted-grotesk/package.json")), "files", "schibsted-grotesk-latin-wght-normal.woff2"), join(assets, "schibsted.woff2"));
-  // Capsomer's mono, Martian Mono, for code and the title block's labels, likewise.
-  copyFileSync(join(dirname(require.resolve("@fontsource-variable/martian-mono/package.json")), "files", "martian-mono-latin-wght-normal.woff2"), join(assets, "martian-mono.woff2"));
+  // The family's faces (capsomer/fonts.css, inlined above), served from here because the policy
+  // allows fonts from 'self' only: Capsomer's fonts/ beside assets/, where its "../fonts/" points.
+  cpSync(join(capsomer, "fonts"), join(out, "fonts"), { recursive: true });
   writeFileSync(join(out, "_headers"), headersFile());
   // For search engines and language models, from Prelum: every page in a sitemap, robots.txt (the
   // family bot policy; Cloudflare puts its own lines first), ai.txt (citation welcome, training

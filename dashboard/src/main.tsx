@@ -2,15 +2,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Router } from "wouter";
-// Self-hosted fonts, latin subset, only the weights the styles use (CSP font-src 'self').
-import "@fontsource/schibsted-grotesk/latin-400.css";
-import "@fontsource/schibsted-grotesk/latin-500.css";
-import "@fontsource/schibsted-grotesk/latin-600.css";
-import "@fontsource/schibsted-grotesk/latin-700.css";
-import "@fontsource/schibsted-grotesk/latin-800.css";
-import "@fontsource/martian-mono/latin-400.css";
-import "@fontsource/martian-mono/latin-500.css";
-import "@fontsource/martian-mono/latin-600.css";
+// The family's faces, self-hosted (CSP font-src 'self'): one variable file each, every weight.
+import "capsomer/fonts.css";
 // Capsomer: its layer order and tokens first, then its components (all in the cap.* layers, so
 // the app's unlayered styles win), then the app's styles.
 import "capsomer/tokens.css";

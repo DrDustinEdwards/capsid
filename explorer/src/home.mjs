@@ -134,7 +134,7 @@ export function verdict(kind, said, read) {
 function hero(stats) {
   const v = stats.verification;
   const [kind, , read] = CHECKS[0];
-  return `<section class="hero" aria-labelledby="hero-title">
+  return `<section class="hero cap-page" aria-labelledby="hero-title">
 ${manualHead("/")}
 <div class="hero-words">
 <h1 id="hero-title">AI agents say it's done. Capsid checks.</h1>

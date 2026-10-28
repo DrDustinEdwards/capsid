@@ -13,7 +13,9 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const STEP_MS = 3600;
 
 document.documentElement.classList.add("js");
-enhanceHeader();
+enhanceHeader(document, {
+  suggest: async (query) => rank(await entriesOf(), query).map(([kind, title, detail, url]) => ({ url, title, kind, detail })),
+});
 enhanceTheme();
 
 for (const root of document.querySelectorAll("[data-cap='system-map']")) {
@@ -427,21 +429,37 @@ for (const table of document.querySelectorAll("table[data-sortable]")) {
   });
 }
 
-// "/" from anywhere goes to search, or focuses its field there; "t" switches the theme.
+// "t" switches the theme ("/" opens the header's search: Capsomer's).
 document.addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
   if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
-  if (e.key === "t") return toggleTheme();
-  if (e.key !== "/") return;
-  e.preventDefault();
-  const field = document.querySelector("[data-search]") ?? document.querySelector(".cap-site-header-search input");
-  if (field) field.focus();
-  else location.assign("/search/");
+  if (e.key === "t") toggleTheme();
 });
 
 const KIND_RANK = { System: 0, Flow: 1, Tool: 2, Part: 3, Step: 4, Action: 5, Module: 6, Function: 7 };
 
-// Search: the index is read once, from the explorer itself, and matched as you type.
+// Search: the index is read once, from the explorer itself, and matched as you type, on the
+// search page and in the header's field.
+let index = null;
+const entriesOf = () => (index ??= fetch("/assets/search.json").then((r) => r.json()).then((doc) => doc.entries));
+
+/** Every entry holding every word of the query, best first. */
+function rank(entries, query) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const scored = [];
+  for (const e of entries) {
+    const name = e[1].toLowerCase();
+    const all = `${name} ${e[2].toLowerCase()} ${e[0].toLowerCase()}`;
+    if (!words.every((w) => all.includes(w))) continue;
+    // An exact name first, then names holding every word, then the rest; within each, the
+    // kinds a reader most likely wants (a system before a function), then shorter names.
+    const tier = name === words.join(" ") ? 0 : words.every((w) => name.includes(w)) ? 1 : 2;
+    scored.push([tier * 100 + (KIND_RANK[e[0]] ?? 9) * 10 + Math.min(name.length, 90) / 10, e]);
+  }
+  return scored.sort((a, b) => a[0] - b[0]).map(([, e]) => e);
+}
+
 const field = document.querySelector("[data-search]");
 if (field) {
   const out = document.querySelector("[data-search-results]");
@@ -449,31 +467,19 @@ if (field) {
   let entries = null;
   const escape = (s) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   const run = () => {
-    const words = field.value.toLowerCase().split(/\s+/).filter(Boolean);
     const url = new URL(location.href);
-    if (words.length) url.searchParams.set("q", field.value);
+    if (field.value.trim()) url.searchParams.set("q", field.value);
     else url.searchParams.delete("q");
     history.replaceState(null, "", url);
-    if (!words.length || !entries) {
+    const found = entries ? rank(entries, field.value) : [];
+    if (!field.value.trim() || !entries) {
       out.replaceChildren();
       count.textContent = entries ? `${entries.length} things to search.` : "Loading the index.";
       return;
     }
-    const scored = [];
-    for (const e of entries) {
-      const name = e[1].toLowerCase();
-      const all = `${name} ${e[2].toLowerCase()} ${e[0].toLowerCase()}`;
-      if (!words.every((w) => all.includes(w))) continue;
-      // An exact name first, then names holding every word, then the rest; within each, the
-      // kinds a reader most likely wants (a system before a function), then shorter names.
-      const tier = name === words.join(" ") ? 0 : words.every((w) => name.includes(w)) ? 1 : 2;
-      const score = tier * 100 + (KIND_RANK[e[0]] ?? 9) * 10 + Math.min(name.length, 90) / 10;
-      scored.push([score, e]);
-    }
-    scored.sort((a, b) => a[0] - b[0]);
-    const shown = scored.slice(0, 60);
-    out.innerHTML = shown.map(([, e]) => `<li><a href="${escape(e[3])}"><span class="search-kind">${escape(e[0])}</span><span class="search-name">${escape(e[1])}</span><span class="search-detail">${escape(e[2])}</span></a></li>`).join("");
-    count.textContent = scored.length ? `${scored.length} found${scored.length > shown.length ? `, the first ${shown.length} shown` : ""}.` : `Nothing matches “${field.value.trim()}”.`;
+    const shown = found.slice(0, 60);
+    out.innerHTML = shown.map((e) => `<li><a href="${escape(e[3])}"><span class="search-kind">${escape(e[0])}</span><span class="search-name">${escape(e[1])}</span><span class="search-detail">${escape(e[2])}</span></a></li>`).join("");
+    count.textContent = found.length ? `${found.length} found${found.length > shown.length ? `, the first ${shown.length} shown` : ""}.` : `Nothing matches “${field.value.trim()}”.`;
   };
   field.addEventListener("input", run);
   field.form?.addEventListener("submit", (e) => {
@@ -482,10 +488,9 @@ if (field) {
   });
   field.value = new URL(location.href).searchParams.get("q") ?? "";
   count.textContent = "Loading the index.";
-  fetch("/assets/search.json")
-    .then((r) => r.json())
-    .then((doc) => {
-      entries = doc.entries;
+  entriesOf()
+    .then((all) => {
+      entries = all;
       run();
     })
     .catch(() => (count.textContent = "Search didn't load. Browse the systems, tools or code instead."));

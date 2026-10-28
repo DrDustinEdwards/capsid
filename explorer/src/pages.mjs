@@ -101,7 +101,7 @@ export function layout({ title, description, path, body, asOf, wide = false, dat
 <meta name="color-scheme" content="light dark">
 ${head}
 <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
-<link rel="preload" href="/assets/schibsted.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/capsomer.css">
 <link rel="stylesheet" href="/assets/enarratio.css">
 <link rel="stylesheet" href="/assets/explorer.css">
@@ -110,7 +110,7 @@ ${head}
 </head>
 <body>
 ${header(here, path)}
-<main id="main" tabindex="-1"${wide ? ' class="wide"' : ""}>
+<main id="main" tabindex="-1" class="${wide ? "wide" : "cap-page"}">
 ${path === "/" ? "" : manualHead(path)}${numbered(body, path)}
 ${titleBlock(path, asOf)}
 </main>
