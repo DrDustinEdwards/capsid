@@ -21,12 +21,6 @@
 }
 :root {
   --section: clamp(96px, 11vw, 200px);
-  /* Capsomer's own face (--ui), self-hosted below, for headings and running text alike. */
-  --face: var(--ui);
-  --prose: var(--ui);
-  --radius-s: 0;
-  --radius-m: 0;
-  --radius-l: 0;
   /* The teal ramp's steps, by number: the lamp is light 8, its ink light 12; a lit lamp
      burns at dark 11 with a halo of dark 10. */
   --lamp: #7db5b7;
@@ -38,29 +32,17 @@
   --lamp-on-glow: none;
 }
 :root[data-family] {
-  --primary: var(--lamp);
-  --primary-hover: #a1cacc;
-  --primary-fg: var(--lamp-ink);
-  --ground: var(--surface);
   --header-bg: var(--ground);
   --bar: var(--text);
 }
 @media (prefers-color-scheme: dark) {
   :root[data-family]:not([data-theme="light"]) {
-    --accent-text: var(--lamp);
-    --primary: var(--lamp);
-    --primary-hover: #97c8cb;
-    --primary-fg: var(--lamp-ink);
     --bar: var(--lamp);
     --lamp-on: var(--lamp);
     --lamp-on-glow: var(--lamp-glow);
   }
 }
 :root[data-family][data-theme="dark"] {
-  --accent-text: var(--lamp);
-  --primary: var(--lamp);
-  --primary-hover: #97c8cb;
-  --primary-fg: var(--lamp-ink);
   --bar: var(--lamp);
   --lamp-on: var(--lamp);
   --lamp-on-glow: var(--lamp-glow);
