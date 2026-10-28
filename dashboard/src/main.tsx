@@ -8,6 +8,7 @@ import "capsomer/fonts.css";
 // the app's unlayered styles win), then the app's styles.
 import "capsomer/tokens.css";
 import "capsomer/utilities.css";
+import "capsomer/family-teal.css";
 import "capsomer/site-capsid-portal.css";
 import "capsomer/status.css";
 import "capsomer/panel.css";
