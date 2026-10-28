@@ -5,20 +5,6 @@
    ramp's brightest steps. The page is laid out as NASA's own papers (the NASA block at the end):
    one near-white ground, as the manual bars pale tints, and parts told apart by hairlines.
    Unlayered, so these win over Capsomer's layers. */
-@font-face {
-  font-family: "Schibsted Grotesk";
-  font-style: normal;
-  font-weight: 400 900;
-  font-display: swap;
-  src: url("/assets/schibsted.woff2") format("woff2-variations");
-}
-@font-face {
-  font-family: "Martian Mono";
-  font-style: normal;
-  font-weight: 100 800;
-  font-display: swap;
-  src: url("/assets/martian-mono.woff2") format("woff2-variations");
-}
 :root {
   --section: clamp(96px, 11vw, 200px);
   /* The teal ramp's steps, by number: the lamp is light 8, its ink light 12; a lit lamp
@@ -32,7 +18,6 @@
   --lamp-on-glow: none;
 }
 :root[data-family] {
-  --header-bg: var(--ground);
   --bar: var(--text);
 }
 @media (prefers-color-scheme: dark) {
@@ -67,7 +52,6 @@ body {
   background: var(--ground);
   color: var(--text);
   font-family: var(--face);
-  font-size: 1.0625rem;
   /* While the face loads, the fallback is scaled to its x-height, so the swap moves nothing. */
   font-size-adjust: from-font;
   line-height: 1.5;
@@ -83,19 +67,12 @@ body {
   font-weight: 600;
 }
 
-/* One column for every page but the front, whose sections set their own width. */
+/* One column (.cap-page) for every page but the front, whose sections set their own width. */
 /* The title block closes every page, so the footer follows it at the section gap's foot. */
 /* A long name in running text (a file path, an argument) breaks rather than pushing a phone's
    page sideways; tables keep their columns, since break-word leaves their widths alone. */
 main {
-  max-width: var(--page-max);
-  margin-inline: auto;
-  padding: 0 var(--page-gutter);
   overflow-wrap: break-word;
-}
-main.wide {
-  max-width: none;
-  padding: 0;
 }
 main.wide > section {
   margin-block-start: var(--section);
@@ -219,9 +196,6 @@ h3 {
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   gap: var(--space-6) clamp(24px, 4vw, 64px);
   align-items: start;
-  max-width: var(--page-max);
-  margin-inline: auto;
-  padding-inline: var(--page-gutter);
 }
 .hero .cap-running-head {
   grid-column: 1 / -1;

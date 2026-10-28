@@ -11,7 +11,9 @@ import { chromium } from "@playwright/test";
 
 const here = import.meta.dirname;
 const require = createRequire(import.meta.url);
-const font = readFileSync(join(dirname(require.resolve("@fontsource-variable/schibsted-grotesk/package.json")), "files", "schibsted-grotesk-latin-wght-normal.woff2")).toString("base64");
+// The family's faces (capsomer/fonts.css), each file inlined, as the page is set from a string.
+const fonts = join(dirname(require.resolve("capsomer/package.json")), "fonts");
+const faces = readFileSync(require.resolve("capsomer/fonts.css"), "utf8").replace(/url\("\.\.\/fonts\/([^"]+)"\)/g, (_m, /** @type {string} */ file) => `url(data:font/woff2;base64,${readFileSync(join(fonts, file)).toString("base64")})`);
 
 // Capsomer's teal ramp (light 2, 8, 9 and the ink) and its amber (dark 9).
 const sky = "#e6f2f2";
@@ -30,7 +32,7 @@ const cell = (x, y, r) => {
 };
 
 const html = `<!doctype html><meta charset="utf-8"><style>
-@font-face { font-family: "Schibsted Grotesk"; font-weight: 400 900; src: url(data:font/woff2;base64,${font}) format("woff2-variations"); }
+${faces}
 html, body { margin: 0; }
 .card { position: relative; width: 1200px; height: 630px; overflow: hidden; font-family: "Schibsted Grotesk", sans-serif; color: ${ink}; }
 svg { position: absolute; inset: 0; }
