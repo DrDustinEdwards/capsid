@@ -90,12 +90,12 @@ body {
 main {
   max-width: var(--page-max);
   margin-inline: auto;
-  padding: 0 var(--page-gutter) var(--space-8);
+  padding: 0 var(--page-gutter);
   overflow-wrap: break-word;
 }
 main.wide {
   max-width: none;
-  padding: 0 0 var(--space-8);
+  padding: 0;
 }
 main.wide > section {
   margin-block-start: var(--section);
@@ -1066,9 +1066,6 @@ html:not(.js) .chapter h3::before {
 }
 
 /* The close of every page: the family footer, with Capsid's own part (capsomer/family-footer). */
-.foot {
-  margin-block-start: 0;
-}
 
 /* Readings set as a page's headline figures, and a system's facts set the same way, smaller. */
 .readings-row {
@@ -1464,6 +1461,16 @@ th[aria-sort="ascending"] .sort::after {
     display: inline-flex !important;
     visibility: hidden;
   }
+}
+
+/* The caption is meant to have the row under the title and the view buttons to itself (Capsomer's
+   flex-basis: 100%), but its max-width: var(--measure) clamps that basis, so at the family's
+   1064px page it shared their row, and Back to all systems, joining the buttons on the way in,
+   wrapped it under them and moved the map down 39px (e2e/award.spec.mjs, layout shift). Its own
+   row from the start, with the measure kept as padding, so the way in moves nothing. */
+.cap-system-map-caption {
+  max-width: none;
+  padding-inline-end: max(0px, 100% - var(--measure));
 }
 
 /* Zoomed in, Back to all systems joins the view buttons; on a phone the three no longer fit beside
