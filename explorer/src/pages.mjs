@@ -204,7 +204,7 @@ function footer(asOf) {
 </div>
 <p class="cap-family-footer-stamp"><span>Data as of ${escapeHtml(asOf)}</span><span>Days counted to midnight UTC</span><span>Private systems shown without links to their code</span></p>
 </div>`;
-  return `<footer class="foot"><div class="wrap">${familyFooterHtml({ site: "capsid", center })}</div></footer>`;
+  return `<footer class="foot"><div class="cap-page">${familyFooterHtml({ site: "capsid", center })}</div></footer>`;
 }
 
 /**

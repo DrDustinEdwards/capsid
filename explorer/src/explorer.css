@@ -20,18 +20,7 @@
   src: url("/assets/martian-mono.woff2") format("woff2-variations");
 }
 :root {
-  --page: 80rem;
-  --gutter: clamp(16px, 3vw, 32px);
-  /* The family letterhead lines up with the page's column. */
-  --header-max: calc(var(--page) - 2 * var(--gutter));
-  --header-gutter: var(--gutter);
   --section: clamp(96px, 11vw, 200px);
-  /* Capsomer's own face (--ui), self-hosted below, for headings and running text alike. */
-  --face: var(--ui);
-  --prose: var(--ui);
-  --radius-s: 0;
-  --radius-m: 0;
-  --radius-l: 0;
   /* The teal ramp's steps, by number: the lamp is light 8, its ink light 12; a lit lamp
      burns at dark 11 with a halo of dark 10. */
   --lamp: #7db5b7;
@@ -43,29 +32,17 @@
   --lamp-on-glow: none;
 }
 :root[data-family] {
-  --primary: var(--lamp);
-  --primary-hover: #a1cacc;
-  --primary-fg: var(--lamp-ink);
-  --ground: var(--surface);
   --header-bg: var(--ground);
   --bar: var(--text);
 }
 @media (prefers-color-scheme: dark) {
   :root[data-family]:not([data-theme="light"]) {
-    --accent-text: var(--lamp);
-    --primary: var(--lamp);
-    --primary-hover: #97c8cb;
-    --primary-fg: var(--lamp-ink);
     --bar: var(--lamp);
     --lamp-on: var(--lamp);
     --lamp-on-glow: var(--lamp-glow);
   }
 }
 :root[data-family][data-theme="dark"] {
-  --accent-text: var(--lamp);
-  --primary: var(--lamp);
-  --primary-hover: #97c8cb;
-  --primary-fg: var(--lamp-ink);
   --bar: var(--lamp);
   --lamp-on: var(--lamp);
   --lamp-on-glow: var(--lamp-glow);
@@ -111,19 +88,14 @@ body {
 /* A long name in running text (a file path, an argument) breaks rather than pushing a phone's
    page sideways; tables keep their columns, since break-word leaves their widths alone. */
 main {
-  max-width: var(--page);
+  max-width: var(--page-max);
   margin-inline: auto;
-  padding: 0 var(--gutter) var(--space-8);
+  padding: 0 var(--page-gutter);
   overflow-wrap: break-word;
 }
 main.wide {
   max-width: none;
-  padding: 0 0 var(--space-8);
-}
-.wrap {
-  max-width: var(--page);
-  margin-inline: auto;
-  padding-inline: var(--gutter);
+  padding: 0;
 }
 main.wide > section {
   margin-block-start: var(--section);
@@ -247,9 +219,9 @@ h3 {
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   gap: var(--space-6) clamp(24px, 4vw, 64px);
   align-items: start;
-  max-width: var(--page);
+  max-width: var(--page-max);
   margin-inline: auto;
-  padding-inline: var(--gutter);
+  padding-inline: var(--page-gutter);
 }
 .hero .cap-running-head {
   grid-column: 1 / -1;
@@ -1000,8 +972,8 @@ html:not(.js) .chapter h3::before {
     order: 2;
     z-index: 1;
     min-block-size: 0;
-    margin-inline: calc(-1 * var(--gutter));
-    padding: var(--space-2) var(--gutter);
+    margin-inline: calc(-1 * var(--page-gutter));
+    padding: var(--space-2) var(--page-gutter);
     background: var(--ground);
   }
   .tour-map .cap-system-map-head {
@@ -1094,9 +1066,6 @@ html:not(.js) .chapter h3::before {
 }
 
 /* The close of every page: the family footer, with Capsid's own part (capsomer/family-footer). */
-.foot {
-  margin-block-start: 0;
-}
 
 /* Readings set as a page's headline figures, and a system's facts set the same way, smaller. */
 .readings-row {
@@ -1494,6 +1463,16 @@ th[aria-sort="ascending"] .sort::after {
   }
 }
 
+/* The caption is meant to have the row under the title and the view buttons to itself (Capsomer's
+   flex-basis: 100%), but its max-width: var(--measure) clamps that basis, so at the family's
+   1064px page it shared their row, and Back to all systems, joining the buttons on the way in,
+   wrapped it under them and moved the map down 39px (e2e/award.spec.mjs, layout shift). Its own
+   row from the start, with the measure kept as padding, so the way in moves nothing. */
+.cap-system-map-caption {
+  max-width: none;
+  padding-inline-end: max(0px, 100% - var(--measure));
+}
+
 /* Zoomed in, Back to all systems joins the view buttons; on a phone the three no longer fit beside
    the title, so there the buttons have their own row from the start and the drawing stays put. */
 @media (max-width: 40rem) {
@@ -1748,7 +1727,7 @@ main h2[data-no]::before {
   margin: var(--space-8) 0 0;
 }
 main.wide > .title-block {
-  inline-size: min(100% - 2 * var(--gutter), var(--page) - 2 * var(--gutter));
+  inline-size: min(100% - 2 * var(--page-gutter), var(--page-max) - 2 * var(--page-gutter));
   margin-inline: auto;
 }
 
@@ -1758,7 +1737,7 @@ main.wide > .title-block {
   main:not(.wide) :is(section, li):has(> h2[data-no]) {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-    column-gap: var(--gutter);
+    column-gap: var(--page-gutter);
     align-items: start;
     margin-block-start: var(--space-8);
     padding-block-start: var(--space-3);
