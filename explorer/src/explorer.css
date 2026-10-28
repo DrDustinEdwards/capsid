@@ -1437,16 +1437,6 @@ th[aria-sort="ascending"] .sort::after {
   }
 }
 
-/* The caption is meant to have the row under the title and the view buttons to itself (Capsomer's
-   flex-basis: 100%), but its max-width: var(--measure) clamps that basis, so at the family's
-   1064px page it shared their row, and Back to all systems, joining the buttons on the way in,
-   wrapped it under them and moved the map down 39px (e2e/award.spec.mjs, layout shift). Its own
-   row from the start, with the measure kept as padding, so the way in moves nothing. */
-.cap-system-map-caption {
-  max-width: none;
-  padding-inline-end: max(0px, 100% - var(--measure));
-}
-
 /* Zoomed in, Back to all systems joins the view buttons; on a phone the three no longer fit beside
    the title, so there the buttons have their own row from the start and the drawing stays put. */
 @media (max-width: 40rem) {
