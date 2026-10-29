@@ -4,7 +4,7 @@
 //
 //   initial JS (the entry and its static imports)  <= 121 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   initial CSS (the entry's and its imports')      <=  22.5 KB gzip
+//   initial CSS (the entry's and its imports')      <=  23 KB gzip
 //   lazy CSS (every other stylesheet), together     <=  12 KB gzip
 //   fonts                                           reported, not budgeted
 //
@@ -49,13 +49,15 @@
 // this build is 21,023 B.
 // Initial CSS raised on 2026-10-28 from 21 KB to 22.5 KB: the Portal takes the explorer's teal family
 // (Dustin: "match the theme of the site"), family-teal.css at 1.6 KB gzip. This build is 21.7 KB.
+// Initial CSS raised on 2026-10-29 from 22.5 KB to 23 KB: Capsomer 0.37 to 0.41 grows the shared
+// stylesheet. This build is 23,240 B.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 121 * KB, lazyChunk: 40 * KB, css: 22.5 * KB, lazyCss: 12 * KB };
+const BUDGET = { initialJs: 121 * KB, lazyChunk: 40 * KB, css: 23 * KB, lazyCss: 12 * KB };
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const manifestPath = join(dist, ".vite", "manifest.json");
