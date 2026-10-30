@@ -24,7 +24,7 @@ import { capsomerTheme } from "capsomer/enarratio-theme";
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
-import { headersFile } from "./src/security-headers.mjs";
+import { explorerHeadersFile } from "./src/security-headers.mjs";
 import { CIRCLES_URL, INDEXNOW_KEY, ORIGIN, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
 
 /** When security.txt lapses (RFC 9116 asks for under a year); renew it before then. */
@@ -172,7 +172,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // The family's faces (capsomer/fonts.css, inlined above), served from here because the policy
   // allows fonts from 'self' only: Capsomer's fonts/ beside assets/, where its "../fonts/" points.
   cpSync(join(capsomer, "fonts"), join(out, "fonts"), { recursive: true });
-  writeFileSync(join(out, "_headers"), headersFile());
+  writeFileSync(join(out, "_headers"), explorerHeadersFile());
   // For search engines and language models, from Prelum: every page in a sitemap, robots.txt (the
   // family bot policy; Cloudflare puts its own lines first), ai.txt (citation welcome, training
   // reserved, as the tdm-reservation header in _headers says) and llms.txt (https://llmstxt.org),

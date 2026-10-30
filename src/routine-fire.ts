@@ -5,7 +5,7 @@ import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { callerIsSeat, guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
 import { verifySignedBody } from "./signed-docs";
 import { auditStatement } from "./store-guards";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { redactText } from "./redact";
 import { MINUTE_MS } from "./time";
 
@@ -343,7 +343,7 @@ export async function fireRoutine(env: Env, agent: Agent, now: Date, id: string)
     // The session exists whatever D1 says, so the answer still returns it; the reservation
     // row holds off a second fire for RESERVE_MINUTES.
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("error", "ROUTINE_FIRE_UNRECORDED", { message: `ROUTINE_FIRE_UNRECORDED: ${job.id} ${sessionId ?? "(no session id)"}: ${message}` });
+    logEvent("ROUTINE_FIRE_UNRECORDED", { message: `ROUTINE_FIRE_UNRECORDED: ${job.id} ${sessionId ?? "(no session id)"}: ${message}` }, { level: "error" });
     unrecorded = ` The fire could not be recorded (${message}); keep this session URL.`;
   }
   const marked = await markStarted(env, agent, job, now, sessionUrl);

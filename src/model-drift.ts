@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { OpsMaintenanceItem } from "./ops-types/views";
 import { listInstalledRepos, parseReposList, type InstalledRepo } from "./github/client";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { readSiteConfig, sitesFrom } from "./ops-sites";
 import type { SystemModel } from "./system-model";
 
@@ -93,7 +93,7 @@ export async function gatherModelDriftItems(
   try {
     installed = (await listRepos(env)).repos;
   } catch (e) {
-    logEvent("error", "MODEL_DRIFT_LIST_FAILED", { message: `MODEL_DRIFT_LIST_FAILED ${e instanceof Error ? e.message : String(e)}` });
+    logEvent("MODEL_DRIFT_LIST_FAILED", { message: `MODEL_DRIFT_LIST_FAILED ${e instanceof Error ? e.message : String(e)}` }, { level: "error" });
   }
 
   const sites = sitesFrom(await readSiteConfig(env.DB)).map((s) => ({ namespace: s.namespace, host: new URL(s.origin).hostname }));

@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { readBoundedText } from "./signed-requests";
 import { callerIp, checkRate, type RateLimitPolicy } from "./rate-limit";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { jsonResponse } from "./http";
 
 // Tightened Dynamic Client Registration.
@@ -51,7 +51,7 @@ export function allowedRedirects(env: Pick<Env, "DCR_REDIRECT_URIS">): Set<strin
     const uri = raw.trim();
     if (!uri) continue;
     if (PER_CONNECTOR_SHAPES.some((shape) => shape.test(uri))) allowed.add(uri);
-    else logEvent("error", "DCR_REDIRECT_IGNORED", { message: `DCR_REDIRECT_URIS names ${uri}, which is not a Google or ChatGPT connector callback; it is not allowed` });
+    else logEvent("DCR_REDIRECT_IGNORED", { message: `DCR_REDIRECT_URIS names ${uri}, which is not a Google or ChatGPT connector callback; it is not allowed` }, { level: "error" });
   }
   return allowed;
 }
@@ -105,7 +105,7 @@ export async function gateRegistration(request: Request, env: Env, now: Date): P
   const allowed = allowedRedirects(env);
   const unlisted = (redirects as string[]).filter((u) => !allowed.has(u));
   if (unlisted.length > 0) {
-    logEvent("error", "DCR_REDIRECT_REFUSED", { message: `DCR_REDIRECT_REFUSED ${unlisted.join(" ")}` });
+    logEvent("DCR_REDIRECT_REFUSED", { message: `DCR_REDIRECT_REFUSED ${unlisted.join(" ")}` }, { level: "error" });
     return {
       refuse: refusal(
         400,

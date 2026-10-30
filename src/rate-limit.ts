@@ -1,4 +1,4 @@
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 
 // Best-effort, not exact. Each check reads both KV counters, compares, then writes
 // count + 1, with no compare-and-swap, so concurrent requests can read the same count
@@ -48,9 +48,9 @@ function windowKeys(prefix: string, ip: string, now: Date): { hour: string; day:
 // `onUnavailable` decides. The log line is the only output on the allow side.
 function unavailable(policy: RateLimitPolicy, ip: string, detail: string): RateVerdict {
   const event = `${policy.label}_RATE_LIMIT_UNAVAILABLE`;
-  logEvent("error", event, {
+  logEvent(event, {
     message: `${event} ${detail} for ${ip}, ${policy.onUnavailable === "allow" ? "allowing" : "refusing"}`,
-  });
+  }, { level: "error" });
   return policy.onUnavailable === "allow" ? { allowed: true } : { allowed: false, window: "unavailable", detail };
 }
 

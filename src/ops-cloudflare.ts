@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import type { OpsSite } from "./ops-sites";
 import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types/sites";
 import type { WebAnalyticsSite } from "./ops-types/views";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
 // The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
@@ -334,7 +334,7 @@ export async function readCloudflare(
   }
   const failed = (what: string, err: unknown): string => {
     const reason = reasonOf(err);
-    logEvent("error", "WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED cloudflare ${what}: ${reason}` });
+    logEvent("WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED cloudflare ${what}: ${reason}` }, { level: "error" });
     return reason;
   };
 

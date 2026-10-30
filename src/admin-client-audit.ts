@@ -1,5 +1,5 @@
 import { auditStatement } from "./store-guards";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 
 // job_e1973c5bcb69, DECIDE 2: for 30 days, record which client the admin acts through,
 // so the seat can see whether a Claude Code session ever reaches /mcp as the admin.
@@ -35,7 +35,7 @@ interface AdminWriteCall {
 export type AdminWriteObserver = (call: AdminWriteCall, clientName: string | null) => Promise<string | null>;
 
 function reportFailure(what: string, err: unknown): void {
-  logEvent("error", "ADMIN_CLIENT_AUDIT_FAILED", { message: `ADMIN_CLIENT_AUDIT_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}` });
+  logEvent("ADMIN_CLIENT_AUDIT_FAILED", { message: `ADMIN_CLIENT_AUDIT_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
 }
 
 export function adminWriteObserver(db: D1Database, actor: string, userAgent: string | null, now: () => number = Date.now): AdminWriteObserver {

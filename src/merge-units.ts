@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { InboxItem } from "./ops-types/feed";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
 
@@ -226,7 +226,7 @@ export async function readUnitEvidence(env: Env, now: Date): Promise<{ approvals
       p = JSON.parse(row.params);
     } catch (err) {
       // One malformed row must not fail the step that suspends units.
-      logEvent("error", "MERGE_UNITS", { message: `MERGE_UNITS skipped an unreadable auto-merge-reverted row: ${err instanceof Error ? err.message : String(err)}` });
+      logEvent("MERGE_UNITS", { message: `MERGE_UNITS skipped an unreadable auto-merge-reverted row: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
       continue;
     }
     rollbacks.push({

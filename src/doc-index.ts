@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { SEARCH_ROWS } from "./limits";
 import type { SearchFilter, SearchRow } from "./doc-reads";
 
@@ -115,7 +115,7 @@ async function ensureInstance(env: Env, ns: AiSearchNamespace): Promise<AiSearch
       fusion_method: "rrf",
       custom_metadata: INDEX_METADATA.map((m) => ({ ...m })),
     });
-    logEvent("log", "DOC_INDEX_CREATED", { message: `DOC_INDEX_CREATED ${INDEX_INSTANCE}` });
+    logEvent("DOC_INDEX_CREATED", { message: `DOC_INDEX_CREATED ${INDEX_INSTANCE}` });
   }
   await env.APP_KV.put(READY_KEY, "ready");
   return instance;
@@ -151,7 +151,7 @@ async function upload(instance: AiSearchInstance, row: IndexRow): Promise<string
     return null;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("error", "DOC_INDEX_UPLOAD_FAILED", { message: `DOC_INDEX_UPLOAD_FAILED ${row.namespace}/${row.path}: ${message}` });
+    logEvent("DOC_INDEX_UPLOAD_FAILED", { message: `DOC_INDEX_UPLOAD_FAILED ${row.namespace}/${row.path}: ${message}` }, { level: "error" });
     return message;
   }
 }
@@ -312,7 +312,7 @@ export async function hybridSearch(
     }));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("warn", "DOC_INDEX_SEARCH_FAILED", { message: `DOC_INDEX_SEARCH_FAILED ${message}` });
+    logEvent("DOC_INDEX_SEARCH_FAILED", { message: `DOC_INDEX_SEARCH_FAILED ${message}` }, { level: "warn" });
     return `the search index refused the query: ${message}`;
   }
 

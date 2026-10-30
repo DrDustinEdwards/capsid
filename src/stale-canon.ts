@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { isCanonPath } from "./canon";
 import { ghFetch, resolveRepo } from "./github/client";
 import { readPrFiles, type PrFileRow } from "./github/pr-files";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
 import { DAY_MS } from "./time";
@@ -321,7 +321,7 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
   if ("problem" in parsed) {
     // Logged and started again, never silently dropped. The findings it held are not
     // cleared on this pass: the check does not count as run.
-    logEvent("error", "STALE_CANON_MEMORY_UNREADABLE", { message: `STALE_CANON_MEMORY_UNREADABLE: ${parsed.problem}; starting it again` });
+    logEvent("STALE_CANON_MEMORY_UNREADABLE", { message: `STALE_CANON_MEMORY_UNREADABLE: ${parsed.problem}; starting it again` }, { level: "error" });
     complete = false;
   }
   const before = "memory" in parsed ? JSON.stringify(parsed.memory) : null;

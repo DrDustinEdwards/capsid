@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { claimJti, MAX_REPORT_BYTES, readBoundedText, verifyBenchRequest } from "./signed-requests";
 import { breakerRefusal, breakerState } from "./job-breaker";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { BENCH_NAMESPACE, BENCH_REPRO_ACTION, BENCH_STALE_MS, newRunKey, readReproReceipt, runJobTitle } from "./bench-run-key";
 
 import type { Agent } from "./agents";
@@ -88,7 +88,7 @@ async function signedBody<T extends { jti: string }>(
     new Date()
   );
   if (!verdict.ok) {
-    logEvent("error", event, { message: `${event} ${verdict.refusal}` });
+    logEvent(event, { message: `${event} ${verdict.refusal}` }, { level: "error" });
     return { ok: false, response: textResponse(verdict.refusal, verdict.status) };
   }
   const parsed = parse(bounded.text);
@@ -171,7 +171,7 @@ export async function handleBenchDraw(request: Request, env: Env): Promise<Respo
       return textResponse(`the draw was not extended (${err instanceof Error ? err.message : String(err)}); a task already drawn, or another batch landed at the same time`, 409);
     }
   }
-  logEvent("log", "BENCH_DRAW_RECORDED", { message: `BENCH_DRAW_RECORDED added=${fresh.length} size=${count + fresh.length}` });
+  logEvent("BENCH_DRAW_RECORDED", { message: `BENCH_DRAW_RECORDED added=${fresh.length} size=${count + fresh.length}` });
   return Response.json({ ok: true, added: fresh.length, size: count + fresh.length });
 }
 
@@ -408,7 +408,7 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     return textResponse(`${BENCH_MAX_RUNNING} bench runs are already running; try again when one finishes`, 429);
   }
   const at = slot ? ` slot=${slot.slot} attempt=${slot.attempt}` : "";
-  logEvent("log", "BENCH_RUN_STARTED", { message: `BENCH_RUN_STARTED ${id} task=${task_id} arm=${arm} gh_run=${gh_run}${at}` });
+  logEvent("BENCH_RUN_STARTED", { message: `BENCH_RUN_STARTED ${id} task=${task_id} arm=${arm} gh_run=${gh_run}${at}` });
   return Response.json({ ok: true, run_id: id, ...(slot ? { slot: slot.slot, attempt: slot.attempt } : {}), ...(runKey ? { run_key: runKey } : {}) });
 }
 
@@ -529,6 +529,6 @@ export async function handleBenchScore(request: Request, env: Env): Promise<Resp
     if (after?.status !== "running") return textResponse(`bench run ${run.id} was closed by another report`, 409);
     return textResponse(`bench run ${run.id}'s job changed while it was being closed, so nothing was scored; send the report again`, 409);
   }
-  logEvent("log", "BENCH_RUN_SCORED", { message: `BENCH_RUN_SCORED ${run.id} ${outcome.status}` });
+  logEvent("BENCH_RUN_SCORED", { message: `BENCH_RUN_SCORED ${run.id} ${outcome.status}` });
   return Response.json({ ok: true, run_id: run.id, ...outcome });
 }

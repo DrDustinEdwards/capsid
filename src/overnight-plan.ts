@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { DigestBlocked, DigestJob, DigestPr, OvernightDigest, OvernightPlan, PlanLane, SkippedJob, UsageSource, UsageTotals } from "./ops-types/views";
 import { resolveRepo } from "./github/client";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
 // THE OVERNIGHT PLAN AND THE MORNING DIGEST (capsid/research/design-automation-for-speed.md,
@@ -233,7 +233,7 @@ export async function readOvernightPlan(env: Env, args: { namespace?: string }, 
       // Said in the skip reason, not swallowed: an unmapped namespace and a corrupt
       // mapping have different fixes.
       const problem = err instanceof Error ? err.message : String(err);
-      logEvent("error", "OVERNIGHT_PLAN", { message: `OVERNIGHT_PLAN no repo for ${ns}: ${problem}` });
+      logEvent("OVERNIGHT_PLAN", { message: `OVERNIGHT_PLAN no repo for ${ns}: ${problem}` }, { level: "error" });
       repoOf.set(ns, { problem });
     }
   }

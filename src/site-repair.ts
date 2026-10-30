@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { readSiteRow } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
 import { callLine, callOperator, toolRefusal, type FetchLike, type OperatorCall } from "./site-operator";
@@ -41,7 +41,7 @@ async function readLimit(env: Pick<Env, "APP_KV">, namespace: string, tool: stri
   } catch {
     // A record that does not parse is replaced by the next call's; it limits nothing until
     // then, and that is logged so it is not silent.
-    logEvent("warn", "SITE_REPAIR_LIMIT_UNREADABLE", { message: `SITE_REPAIR_LIMIT_UNREADABLE ${namespace} ${tool}` });
+    logEvent("SITE_REPAIR_LIMIT_UNREADABLE", { message: `SITE_REPAIR_LIMIT_UNREADABLE ${namespace} ${tool}` }, { level: "warn" });
     return null;
   }
 }
@@ -121,7 +121,7 @@ export async function runSiteRepair(
     ]);
   } catch (err) {
     recorded = false;
-    logEvent("error", "SITE_REPAIR_NOT_RECORDED", { message: `SITE_REPAIR_NOT_RECORDED ${args.namespace} ${args.tool}: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("SITE_REPAIR_NOT_RECORDED", { message: `SITE_REPAIR_NOT_RECORDED ${args.namespace} ${args.tool}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }
   return { ran: true, call, line, recorded };
 }

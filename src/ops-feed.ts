@@ -23,7 +23,7 @@ import { readTaskRuns, taskStates, TASKS } from "./task-runs";
 import { openQuietFindings } from "./watcher-digest";
 import { DEFAULT_CADENCE_MINUTES, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { pendingProposals } from "./canon";
 import { textResponse } from "./http";
 import { MINUTE_MS, DAY_MS } from "./time";
@@ -209,7 +209,7 @@ export function awaitingFrom(raw: string | null): OpsAwaitingSeat[] {
     if (!Array.isArray(parsed)) throw new Error("not an array");
     return parsed as OpsAwaitingSeat[];
   } catch (err) {
-    logEvent("error", "OPS_FEED_AWAITING_UNREADABLE", { message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("OPS_FEED_AWAITING_UNREADABLE", { message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
     return [];
   }
 }
@@ -392,7 +392,7 @@ async function scheduled(env: Env): Promise<{ read: Awaited<ReturnType<typeof re
     return { read: await readTaskRuns(env.DB) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("error", "OPS_FEED_TASK_RUNS_UNREADABLE", { message: `OPS_FEED_TASK_RUNS_UNREADABLE ${message}` });
+    logEvent("OPS_FEED_TASK_RUNS_UNREADABLE", { message: `OPS_FEED_TASK_RUNS_UNREADABLE ${message}` }, { level: "error" });
     return { error: message };
   }
 }
@@ -448,7 +448,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     last = await env.APP_KV.get(OPS_REFRESH_KEY);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("error", "OPS_REFRESH_LIMIT_UNREADABLE", { message: `OPS_REFRESH_LIMIT_UNREADABLE ${message}` });
+    logEvent("OPS_REFRESH_LIMIT_UNREADABLE", { message: `OPS_REFRESH_LIMIT_UNREADABLE ${message}` }, { level: "error" });
     return textResponse(`the refresh rate limit could not be read (${message}), so no pass was run. Try again shortly.`, 503);
   }
   const allowedAt = refreshAllowedAt(last, now);
@@ -462,7 +462,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     await env.APP_KV.put(OPS_REFRESH_KEY, now.toISOString());
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("error", "OPS_REFRESH_LIMIT_UNWRITABLE", { message: `OPS_REFRESH_LIMIT_UNWRITABLE ${message}` });
+    logEvent("OPS_REFRESH_LIMIT_UNWRITABLE", { message: `OPS_REFRESH_LIMIT_UNWRITABLE ${message}` }, { level: "error" });
     return textResponse(`the refresh rate limit could not be written (${message}), so no pass was run. Try again shortly.`, 503);
   }
 
@@ -473,7 +473,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     report = await watcherTick(env, now, () => gather(env, now), { force: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("error", "OPS_REFRESH_PASS_FAILED", { message: `OPS_REFRESH_PASS_FAILED ${message}` });
+    logEvent("OPS_REFRESH_PASS_FAILED", { message: `OPS_REFRESH_PASS_FAILED ${message}` }, { level: "error" });
     await env.DB.batch([auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: false, error: message, source_address: sourceAddress(request) })]);
     return textResponse(`the watcher pass failed: ${message}`, 500);
   }
@@ -488,7 +488,7 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     // The pass happened; only its audit row failed. Said in a header and the log, not
     // turned into a failure of a pass that ran.
     warning = `the pass ran, but the Portal audit row naming ${actor} was not written: ${err instanceof Error ? err.message : String(err)}`;
-    logEvent("error", "OPS_REFRESH_AUDIT_FAILED", { message: warning });
+    logEvent("OPS_REFRESH_AUDIT_FAILED", { message: warning }, { level: "error" });
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
   return feedResponse(request, gate.user, feed, warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {});

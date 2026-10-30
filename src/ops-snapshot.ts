@@ -4,7 +4,7 @@ import { parseHealth } from "./health-format";
 import { readCapped } from "./read-capped";
 import type { OpsSite } from "./ops-sites";
 import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS } from "./time";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
@@ -241,7 +241,7 @@ export async function readSnapshot(env: Pick<Env, "APP_KV">): Promise<OpsSnapsho
     if (parsed?.version !== 1 || !Array.isArray(parsed.sites)) throw new Error(`unexpected shape (version ${String(parsed?.version)})`);
     return parsed;
   } catch (err) {
-    logEvent("error", "OPS_SNAPSHOT_UNREADABLE", { message: `OPS_SNAPSHOT_UNREADABLE ${err instanceof Error ? err.message : String(err)}; starting the rings again` });
+    logEvent("OPS_SNAPSHOT_UNREADABLE", { message: `OPS_SNAPSHOT_UNREADABLE ${err instanceof Error ? err.message : String(err)}; starting the rings again` }, { level: "error" });
     return null;
   }
 }

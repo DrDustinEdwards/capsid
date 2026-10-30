@@ -8,7 +8,7 @@
 import { repoPathProblem } from "../limits";
 // RepoEnv, not Env: this module must not be able to name the credentials it omits.
 import type { RepoEnv as Env } from "../env";
-import { logEvent } from "../log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { base64url } from "@dustinedwards/site-runtime/encoding";
 
 const GH = "https://api.github.com";
@@ -265,9 +265,9 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
     // The commit already landed. Failing the tool call because a cache sweep failed
     // would misreport the write, so this is logged by name and the stale window
     // stays bounded by the 60 second TTL.
-    logEvent("error", "GH_CACHE_INVALIDATION_FAILED", {
+    logEvent("GH_CACHE_INVALIDATION_FAILED", {
       message: `GH_CACHE_INVALIDATION_FAILED ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}`,
-    });
+    }, { level: "error" });
   }
   return deleted;
 }

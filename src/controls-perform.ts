@@ -21,7 +21,7 @@ import { resetBreaker } from "./job-breaker";
 import { parkJob, unparkJob } from "./jobs-park";
 import { resumeJob, releaseJob, adminFailJob, completeAsCaller, supersedeJob } from "./jobs-seat";
 import { readJob } from "./jobs-transition";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { resumeNamespace } from "./merge-safety";
 import { liftSuspension } from "./merge-units";
 import { removePackage, validatePackage, addPackage, editPackage, describePackage } from "./ops-packages";
@@ -376,7 +376,7 @@ export async function performAction(
             else failed.push({ id, outcome: item.outcome, target, refusal: result.refusal });
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            logEvent("error", "CANON_APPROVE_ALL_ITEM_FAILED", { id, outcome: item.outcome, message });
+            logEvent("CANON_APPROVE_ALL_ITEM_FAILED", { message, id, outcome: item.outcome }, { level: "error" });
             failed.push({ id, outcome: item.outcome, target, refusal: message });
           }
         }
@@ -421,7 +421,7 @@ export async function performAction(
     if (committed) {
       // The action happened; only the Portal's own audit row failed, so no refusal.
       const warning = `${action} completed, but the Portal audit row naming ${actor} was not written: ${message}`;
-      logEvent("error", "PORTAL_ACTION_AUDIT_FAILED", { message: warning });
+      logEvent("PORTAL_ACTION_AUDIT_FAILED", { message: warning }, { level: "error" });
       return { ok: true, summary, warning };
     }
     return { ok: false, refusal: message };
