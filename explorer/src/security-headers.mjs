@@ -6,20 +6,21 @@
 // sink (src/security-headers.ts, REPORT_PATH). Enarratio's charts and Capsomer's map use no style
 // attributes, so none are allowed; the browser spec fails on any violation.
 import { buildContentSecurityPolicy } from "@dustinedwards/site-runtime/csp";
-import { STANDARD_SECURITY_HEADERS } from "@dustinedwards/site-runtime/headers";
+import { headersFile, STANDARD_SECURITY_HEADERS } from "@dustinedwards/site-runtime/headers";
 import { TDM_RESERVATION_HEADERS } from "@drdustinedwards/site-helpers/robots";
 
 export const REPORT_URI = "https://mcp.dustinedwards.info/csp-report";
 
 /** The text of _headers. */
-export function headersFile() {
+export function explorerHeadersFile() {
   // Cloudflare's edge injects its Web Analytics beacon into every page of the proxied host, so the
   // policy names it, or every page logs a blocked script.
   const csp = buildContentSecurityPolicy({ reportUri: REPORT_URI, cloudflareWebAnalytics: true });
-  const lines = ["/*", `  ${csp.name}: ${csp.value}`];
-  for (const [name, value] of Object.entries({ ...STANDARD_SECURITY_HEADERS, ...TDM_RESERVATION_HEADERS })) lines.push(`  ${name}: ${value}`);
   // The data changes once a day and the assets with each build, which renames nothing, so an
   // hour at the edge and in the browser is the most a reader can be behind.
-  lines.push("  Cache-Control: public, max-age=3600");
-  return `${lines.join("\n")}\n`;
+  const set = { ...STANDARD_SECURITY_HEADERS, ...TDM_RESERVATION_HEADERS, "Cache-Control": "public, max-age=3600" };
+  // headersFile leaves the policy off its `/*` block, since a Worker site sets it per page. The
+  // explorer is static with no Worker, so its one policy goes on every path in a second `/*`
+  // block; Cloudflare applies both.
+  return headersFile(set, { paths: { "/*": { [csp.name]: csp.value } } });
 }

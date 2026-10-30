@@ -5,7 +5,7 @@ import type { Env } from "./env";
 import { defaultBranchSha, ciStatus, listRepoTree } from "./github";
 import { healthReport } from "./health";
 import { readLiveConfig, liveChecks, defaultBranchHead } from "./live-checks";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { checkManualSteps, liveStepReaders } from "./manual-steps";
 import { cloudflareCredentials, readWebAnalyticsSites, readCloudflare, readSecretNames, readAccessAppNames } from "./ops-cloudflare";
 import { readPackageConfig, readPackage, npmVersions } from "./ops-packages";
@@ -33,7 +33,7 @@ async function attempt<T>(what: string, fn: () => Promise<T>): Promise<T | null>
   try {
     return await fn();
   } catch (err) {
-    logEvent("error", "WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
     return null;
   }
 }
@@ -146,7 +146,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   if (staleCanon) {
     if (staleCanon.complete) ran.add("stale canon");
     out.push(...staleCanon.findings);
-    logEvent("log", "WATCHER_STALE_CANON", { message: `WATCHER_STALE_CANON ${staleCanon.note}` });
+    logEvent("WATCHER_STALE_CANON", { message: `WATCHER_STALE_CANON ${staleCanon.note}` });
   }
 
   // The site configuration, read each pass (src/ops-sites.ts). Unreadable, every site
@@ -176,7 +176,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     out.push(...unmappedRepoFindings(repoMap));
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    logEvent("error", "WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED repo map: ${reason}` });
+    logEvent("WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED repo map: ${reason}` }, { level: "error" });
     out.push(repoMapUnreadableFinding(reason));
   }
 
@@ -221,7 +221,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
       if (live.ran) ran.add("live checks");
       out.push(...live.findings.map(liveFinding));
       // The count beside the verdict: no findings over zero pages read is not a clean bill.
-      logEvent("log", "WATCHER_LIVE", { message: `WATCHER_LIVE pages ${live.summary.pages_read}/${live.summary.pages_expected} shas ${live.summary.shas_read}/${live.summary.shas_expected} analytics ${live.summary.analytics_read}/${live.summary.analytics_expected} findings ${live.findings.length}` });
+      logEvent("WATCHER_LIVE", { message: `WATCHER_LIVE pages ${live.summary.pages_read}/${live.summary.pages_expected} shas ${live.summary.shas_read}/${live.summary.shas_expected} analytics ${live.summary.analytics_read}/${live.summary.analytics_expected} findings ${live.findings.length}` });
     }
   }
 
@@ -234,7 +234,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     if (repairs) {
       if (repairs.complete) ran.add("site repairs");
       out.push(...repairs.findings.map((f) => finding(f.namespace, f.fingerprint, f.headline, f.evidence)));
-      if (repairs.lines.length) logEvent("log", "WATCHER_SITE_REPAIRS", { message: `WATCHER_SITE_REPAIRS ${repairs.lines.join(" | ")}` });
+      if (repairs.lines.length) logEvent("WATCHER_SITE_REPAIRS", { message: `WATCHER_SITE_REPAIRS ${repairs.lines.join(" | ")}` });
     }
   } else if (config) {
     // No site opted in: nothing to judge, so nothing open can be stale.
@@ -305,7 +305,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     if (read) {
       out.push(...expiryFindings(read.expiries, now));
       if (read.failed.length === 0) ran.add("domains");
-      for (const f of read.failed) logEvent("warn", "WATCHER_DOMAIN_UNREAD", { message: `${f.domain}: ${f.error}` });
+      for (const f of read.failed) logEvent("WATCHER_DOMAIN_UNREAD", { message: `${f.domain}: ${f.error}` }, { level: "warn" });
     }
   }
 
@@ -340,7 +340,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
       })
     )
   );
-  if (steps && steps.seen.length > 0) logEvent("log", "WATCHER_STEPS_SEEN", { message: `WATCHER_STEPS_SEEN ${steps.note}` });
+  if (steps && steps.seen.length > 0) logEvent("WATCHER_STEPS_SEEN", { message: `WATCHER_STEPS_SEEN ${steps.note}` });
 
   return { findings: out, ran, observed };
 }

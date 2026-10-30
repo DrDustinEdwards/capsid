@@ -3,7 +3,7 @@ import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./security-headers";
 import { probeFts } from "./store-probe";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
 
 const JSON_PREFIX = "backups/json/";
@@ -208,7 +208,7 @@ async function listAllKeys(bucket: R2Bucket, prefix: string): Promise<string[]> 
 export async function runBackup(env: Env): Promise<BackupResult> {
   const held = await env.APP_KV.get(LEASE_KEY);
   if (held !== null) {
-    logEvent("error", "BACKUP_LEASE_HELD", { message: `BACKUP_LEASE_HELD another run holds ${LEASE_KEY} (started ${held}); this run pruned nothing` });
+    logEvent("BACKUP_LEASE_HELD", { message: `BACKUP_LEASE_HELD another run holds ${LEASE_KEY} (started ${held}); this run pruned nothing` }, { level: "error" });
     return { ran: false, skipped: "lease-held" };
   }
   const now = new Date().toISOString();
@@ -221,7 +221,7 @@ export async function runBackup(env: Env): Promise<BackupResult> {
     // and another run took the key, deleting it would let a third run start.
     const current = await env.APP_KV.get(LEASE_KEY);
     if (current === lease) await env.APP_KV.delete(LEASE_KEY);
-    else logEvent("error", "BACKUP_LEASE_LOST", { message: `BACKUP_LEASE_LOST ${LEASE_KEY} is no longer this run's (now ${current}); left in place` });
+    else logEvent("BACKUP_LEASE_LOST", { message: `BACKUP_LEASE_LOST ${LEASE_KEY} is no longer this run's (now ${current}); left in place` }, { level: "error" });
   }
 }
 
@@ -389,11 +389,11 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
     if (holder !== lease) pruneRefused = `lease-lost: ${LEASE_KEY} is now ${holder}`;
   }
   if (pruneRefused !== null) {
-    logEvent("error", "BACKUP_PREFLIGHT_REFUSED", {
+    logEvent("BACKUP_PREFLIGHT_REFUSED", {
       message:
         `BACKUP_PREFLIGHT_REFUSED reason=${pruneRefused} documents=${docs.length} fts=${fts} ` +
         `dumps_written=${jsonKeys.length} prefix=${jsonPrefix}; nothing was written to or deleted from the mirror`,
-    });
+    }, { level: "error" });
     return {
       ran: true,
       json_prefix: jsonPrefix,

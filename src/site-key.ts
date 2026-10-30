@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { CF_API, type FetchLike } from "./ops-cloudflare";
 import { readSiteRow } from "./ops-sites";
 import { auditStatement } from "./store-guards";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { base64url } from "@dustinedwards/site-runtime/encoding";
 
 // SET A SITE KEY (create a site key and set it on both sides, never shown), served as
@@ -91,7 +91,7 @@ export async function setSiteKey(env: Env, actor: string, namespace: string, fet
   try {
     await auditStatement(env.DB, actor, "set_site_key", namespace, null, result).run();
   } catch (err) {
-    logEvent("error", "AUDIT_INSERT_FAILED", { message: `AUDIT_INSERT_FAILED set_site_key ${namespace}: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("AUDIT_INSERT_FAILED", { message: `AUDIT_INSERT_FAILED set_site_key ${namespace}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }
   return {
     ...result,

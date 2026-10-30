@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
 
 // The packages Capsid Portal watches (job_c6e4ab939a54). Ruled 2026-09-29: "Portal monitoring is optional and configured per install; packages panel
@@ -391,7 +391,7 @@ export async function packageHistory(env: Env, cfg: OpsPackageConfig, fetchImpl:
     const raw = await env.APP_KV.get(key);
     cached = raw ? JSON.parse(raw) : null;
   } catch (err) {
-    logEvent("warn", "PACKAGES_HISTORY_CACHE_UNREADABLE", { message: `PACKAGES_HISTORY_CACHE_UNREADABLE ${key}: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("PACKAGES_HISTORY_CACHE_UNREADABLE", { message: `PACKAGES_HISTORY_CACHE_UNREADABLE ${key}: ${err instanceof Error ? err.message : String(err)}` }, { level: "warn" });
   }
   // A cache written before the former name changed is not this package's history.
   if (!cached || cached.formerly !== cfg.formerly) {

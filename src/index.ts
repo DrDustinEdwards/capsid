@@ -16,7 +16,7 @@ import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
 import { portalHostRequest } from "./portal-host";
 import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 
 // Spelled once. wrangler.jsonc declares them; test/crons.test.ts derives one list
 // from the other and fails in both directions.
@@ -145,11 +145,11 @@ export default {
           () => runBackup(env),
           (result): TaskResult => {
             if (!result.ran) {
-              logEvent("error", "BACKUP_CRON_SKIPPED", { message: `BACKUP_CRON_SKIPPED ${result.skipped}` });
+              logEvent("BACKUP_CRON_SKIPPED", { message: `BACKUP_CRON_SKIPPED ${result.skipped}` }, { level: "error" });
               return { outcome: "skipped", reason: `skipped: ${result.skipped}` };
             }
             if (result.prune_refused !== null) {
-              logEvent("error", "BACKUP_CRON_REFUSED_PRUNE", { message: `BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}` });
+              logEvent("BACKUP_CRON_REFUSED_PRUNE", { message: `BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}` }, { level: "error" });
               return { outcome: "refused", reason: `wrote ${result.json_keys.length} dump objects, and the prune refused: ${result.prune_refused}` };
             }
             return {
@@ -196,13 +196,13 @@ export default {
           () => runSkillsRefresh(env, new Date()),
           (outcome): TaskResult => {
             if (!outcome.ran) {
-              logEvent("log", "SKILLS_REFRESH_SKIPPED", { message: `SKILLS_REFRESH_SKIPPED ${outcome.skipped}` });
+              logEvent("SKILLS_REFRESH_SKIPPED", { message: `SKILLS_REFRESH_SKIPPED ${outcome.skipped}` });
               // Not its day of the week is not a run; switched off is a skip worth showing.
               return outcome.skipped?.startsWith(NOT_ITS_DAY) ? null : { outcome: "skipped", reason: `skipped: ${outcome.skipped ?? "no reason given"}` };
             }
             const line = `checked=${outcome.checked} changed=${outcome.changed.join(",") || "none"} posted=${outcome.posted.join(",") || "none"}`;
-            logEvent("log", "SKILLS_REFRESH", { message: `SKILLS_REFRESH ${line}` });
-            for (const r of outcome.refused) logEvent("error", "SKILLS_REFRESH_REFUSED", { message: `SKILLS_REFRESH_REFUSED ${r.slug}: ${r.reason}` });
+            logEvent("SKILLS_REFRESH", { message: `SKILLS_REFRESH ${line}` });
+            for (const r of outcome.refused) logEvent("SKILLS_REFRESH_REFUSED", { message: `SKILLS_REFRESH_REFUSED ${r.slug}: ${r.reason}` }, { level: "error" });
             return outcome.refused.length > 0
               ? { outcome: "refused", reason: `${line}; refused ${outcome.refused.map((r) => `${r.slug}: ${r.reason}`).join("; ")}` }
               : { outcome: "ok", reason: line };

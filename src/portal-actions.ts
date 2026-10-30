@@ -9,7 +9,7 @@ import { capsidStatus } from "./status";
 import { readBoundedText } from "./signed-requests";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import type { PortalActivity, PortalNamespaces, PortalPerformed } from "./ops-types/portal";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { jsonResponse, textResponse } from "./http";
 // The Portal's routes for the controls (src/controls.ts holds the controls): the eight actions, what each will do, the one dispatch to the
 // shared mutators, and the routes the app calls (the contract is the bottom of
@@ -129,7 +129,7 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
     // The action happened; only the read after it failed. Said as a failure of the
     // read, never as a failure of the action.
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("error", "PORTAL_PERFORM_FEED_FAILED", { message: `PORTAL_PERFORM_FEED_FAILED ${action}: ${message}` });
+    logEvent("PORTAL_PERFORM_FEED_FAILED", { message: `PORTAL_PERFORM_FEED_FAILED ${action}: ${message}` }, { level: "error" });
     return textResponse(`${result.summary} It completed, but reading the feed afterwards failed (${message}). Reload Capsid Portal.`, 500);
   }
   const performed: PortalPerformed = { action, summary: result.summary, warning: result.warning, feed: { ...data, csrf: gated.csrf, user: portalDisplay(gated.user) } };

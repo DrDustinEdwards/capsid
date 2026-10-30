@@ -12,7 +12,7 @@ import { pushTick } from "./push";
 import { digestTick } from "./digest";
 import { unitsTick } from "./merge-units";
 import { mergeSafetyTick } from "./merge-safety";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 
 // The five-minute tick's steps, in order. Each is its own task in the run ledger
 // (src/task-runs.ts): runTask records a run, and records and logs a throw without
@@ -28,7 +28,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     () => autoMergeTick(env, now),
     (merged): TaskResult => {
       if (merged.ran) {
-        logEvent("log", "AUTO_MERGE", { message: `AUTO_MERGE ${merged.note}` });
+        logEvent("AUTO_MERGE", { message: `AUTO_MERGE ${merged.note}` });
         return { outcome: "ok", reason: merged.note };
       }
       return merged.policy_version === null ? { outcome: "refused", reason: merged.note } : null;
@@ -44,7 +44,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     () => watcherTick(env, now, () => gatherFindings(env, now)),
     (watched): TaskResult => {
       if (!watched.ran) return null;
-      logEvent("log", "WATCHER", { message: `WATCHER ${watched.note}` });
+      logEvent("WATCHER", { message: `WATCHER ${watched.note}` });
       return { outcome: "ok", reason: watched.note };
     },
     { tag: "WATCHER_THREW:", rethrow: false }
@@ -60,7 +60,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     () => unitsTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent(report.newly_suspended.length ? "error" : "log", "MERGE_UNITS", { message: `MERGE_UNITS ${report.note}` });
+      logEvent("MERGE_UNITS", { message: `MERGE_UNITS ${report.note}` }, { level: report.newly_suspended.length ? "error" : "log" });
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MERGE_UNITS_THREW:", rethrow: false }
@@ -76,7 +76,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     () => mergeSafetyTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent(report.newly_paused.length ? "error" : "log", "MERGE_SAFETY", { message: `MERGE_SAFETY ${report.note}` });
+      logEvent("MERGE_SAFETY", { message: `MERGE_SAFETY ${report.note}` }, { level: report.newly_paused.length ? "error" : "log" });
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MERGE_SAFETY_THREW:", rethrow: false }
@@ -93,11 +93,11 @@ export async function runTick(env: Env, now: Date): Promise<void> {
       // A stale:prs cache that could not be written is recorded even on a pass that
       // resumed nothing, so the stale view's missing rows have a cause on the ledger.
       if (report.cache_error) {
-        logEvent("error", "MERGE_RESUME_CACHE", { message: `MERGE_RESUME_CACHE ${report.note}` });
+        logEvent("MERGE_RESUME_CACHE", { message: `MERGE_RESUME_CACHE ${report.note}` }, { level: "error" });
         return { outcome: "refused", reason: report.note };
       }
       if (report.resumed.length === 0) return null;
-      logEvent("log", "MERGE_RESUME", { message: `MERGE_RESUME ${report.note}` });
+      logEvent("MERGE_RESUME", { message: `MERGE_RESUME ${report.note}` });
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MERGE_RESUME_THREW:", rethrow: false }
@@ -115,7 +115,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     () => maintenanceTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent("log", "MAINTENANCE", { message: `MAINTENANCE ${report.note}` });
+      logEvent("MAINTENANCE", { message: `MAINTENANCE ${report.note}` });
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MAINTENANCE_THREW:", rethrow: false }
@@ -134,7 +134,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
       if (!report.ran) return null;
       // A code map that would not parse is a refusal the ledger shows; the model was still built.
       const failed = "codeFailed" in report;
-      logEvent(failed ? "error" : "log", "PUBLIC_BUILD", { message: `PUBLIC_BUILD ${report.note}` });
+      logEvent("PUBLIC_BUILD", { message: `PUBLIC_BUILD ${report.note}` }, { level: failed ? "error" : "log" });
       return { outcome: failed ? "refused" : "ok", reason: report.note };
     },
     { tag: "PUBLIC_BUILD_THREW:", rethrow: false }
@@ -149,7 +149,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     () => docIndexTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent(report.failed > 0 ? "error" : "log", "DOC_INDEX", { message: `DOC_INDEX ${report.note}` });
+      logEvent("DOC_INDEX", { message: `DOC_INDEX ${report.note}` }, { level: report.failed > 0 ? "error" : "log" });
       return { outcome: report.failed > 0 ? "refused" : "ok", reason: report.note };
     },
     { tag: "DOC_INDEX_THREW:", rethrow: false }
@@ -167,7 +167,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     (swept): TaskResult => {
       if (!swept) return null;
       const line = `checked ${swept.checked}, changed ${swept.changed}, seeded ${swept.seeded}, backfilled ${swept.backfilled}`;
-      logEvent("log", "OUTCOME_SWEEP", { message: `OUTCOME_SWEEP ${line}` });
+      logEvent("OUTCOME_SWEEP", { message: `OUTCOME_SWEEP ${line}` });
       return { outcome: "ok", reason: line };
     },
     { tag: "OUTCOME_SWEEP_THREW:", rethrow: false }
@@ -183,7 +183,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     () => pushTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent("log", "PUSH", { message: `PUSH ${report.note}` });
+      logEvent("PUSH", { message: `PUSH ${report.note}` });
       return { outcome: report.sent.length > 0 ? "ok" : "refused", reason: report.note };
     },
     { tag: "PUSH_THREW:", rethrow: false }
@@ -197,7 +197,7 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     () => digestTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent(report.sent ? "log" : "error", "DIGEST", { message: `DIGEST ${report.note}` });
+      logEvent("DIGEST", { message: `DIGEST ${report.note}` }, { level: report.sent ? "log" : "error" });
       return { outcome: report.sent ? "ok" : "refused", reason: report.note };
     },
     { tag: "DIGEST_THREW:", rethrow: false }

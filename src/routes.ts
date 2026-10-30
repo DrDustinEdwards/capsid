@@ -60,7 +60,7 @@ import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "./portal-library";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "./portal-trends";
 import { handlePortalPackageHistory, handlePortalSharedCode, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { textResponse } from "./http";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 
@@ -368,7 +368,7 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
       const rate = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
       // The unavailable refusal has already logged itself.
       if (!rate.allowed && rate.window !== "unavailable") {
-        logEvent("error", "CSP_REPORT_RATE_LIMITED", { message: `CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})` });
+        logEvent("CSP_REPORT_RATE_LIMITED", { message: `CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})` }, { level: "error" });
       }
       return rate.allowed;
     },
@@ -398,7 +398,7 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
 
   const verdict = await verifyBackupCredentialRequest(env, { timestamp, signature, body }, new Date());
   if (!verdict.ok) {
-    logEvent("error", "BACKUP_CREDENTIAL_REJECTED", { message: `BACKUP_CREDENTIAL_REJECTED ${verdict.refusal}` });
+    logEvent("BACKUP_CREDENTIAL_REJECTED", { message: `BACKUP_CREDENTIAL_REJECTED ${verdict.refusal}` }, { level: "error" });
     return textResponse(verdict.refusal, verdict.status);
   }
 
@@ -410,10 +410,10 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
 
   const minted = await mintBackupCredential(env, parsed.site);
   if (!minted.ok) {
-    logEvent("error", "BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED site=${parsed.site} ${minted.refusal}` });
+    logEvent("BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED site=${parsed.site} ${minted.refusal}` }, { level: "error" });
     return textResponse(minted.refusal, minted.status);
   }
-  logEvent("log", "BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED site=${parsed.site} ttl=${minted.credential.expires_in}s` });
+  logEvent("BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED site=${parsed.site} ttl=${minted.credential.expires_in}s` });
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 

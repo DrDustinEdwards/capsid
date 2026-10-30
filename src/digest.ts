@@ -3,7 +3,7 @@ import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readOvernightDigest } from "./overnight-plan";
 import { PORTAL_HOST } from "./portal-host";
 import type { DigestState } from "./ops-types/views";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { weeklyDigestLines } from "./watcher-digest";
 import { DAY_MS } from "./time";
 
@@ -110,7 +110,7 @@ async function composeDigest(env: Env, now: Date, since: string, read: DigestRea
     try {
       weekly = await weeklyDigestLines(env.DB, now);
     } catch (err) {
-      logEvent("error", "DIGEST_WEEKLY_UNREAD", { message: `DIGEST_WEEKLY_UNREAD: ${err instanceof Error ? err.message : String(err)}` });
+      logEvent("DIGEST_WEEKLY_UNREAD", { message: `DIGEST_WEEKLY_UNREAD: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
       weekly = ["Weekly digest could not be read."];
     }
   }

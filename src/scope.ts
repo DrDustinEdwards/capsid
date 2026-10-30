@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
 import { protectedHits } from "./protected-paths";
 import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
@@ -409,7 +409,7 @@ export async function readLastStepUp(kv: KVNamespace, actor: string, signedInAt:
     const value = Number(await kv.get(stepUpKey(actor, signedInAt)));
     return Number.isFinite(value) && value > 0 && value <= now ? value : undefined;
   } catch (error) {
-    logEvent("error", "STEP_UP_READ_FAILED", { message: `STEP_UP_READ_FAILED: ${error instanceof Error ? error.message : String(error)}; using the sign-in time alone` });
+    logEvent("STEP_UP_READ_FAILED", { message: `STEP_UP_READ_FAILED: ${error instanceof Error ? error.message : String(error)}; using the sign-in time alone` }, { level: "error" });
     return undefined;
   }
 }
@@ -421,7 +421,7 @@ async function recordStepUp(kv: KVNamespace, agent: Agent, signedInAt: number, n
   try {
     await kv.put(stepUpKey(agent.actor, signedInAt), String(now), { expirationTtl: STEP_UP_MAX_MS / 1000 + 3600 });
   } catch (error) {
-    logEvent("error", "STEP_UP_WRITE_FAILED", { message: `STEP_UP_WRITE_FAILED: ${error instanceof Error ? error.message : String(error)}; the action succeeded and the idle clock was not reset` });
+    logEvent("STEP_UP_WRITE_FAILED", { message: `STEP_UP_WRITE_FAILED: ${error instanceof Error ? error.message : String(error)}; the action succeeded and the idle clock was not reset` }, { level: "error" });
   }
 }
 

@@ -3,7 +3,7 @@ import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types/views";
 import { MINUTE_MS, DAY_MS } from "./time";
 
@@ -309,7 +309,7 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
     }
   } catch (err) {
     // An unreadable cache entry is read again from GitHub below.
-    logEvent("warn", "TRENDS_CI_CACHE_UNREADABLE", { message: `TRENDS_CI_CACHE_UNREADABLE ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("TRENDS_CI_CACHE_UNREADABLE", { message: `TRENDS_CI_CACHE_UNREADABLE ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}` }, { level: "warn" });
   }
   const repos: TrendCiRepo[] = [];
   const notRead: Array<{ namespace: string; error: string }> = [];
@@ -325,7 +325,7 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
     try {
       await env.APP_KV.put(CI_CACHE_KEY, JSON.stringify(out), { expirationTtl: CI_CACHE_SECONDS });
     } catch (err) {
-      logEvent("warn", "TRENDS_CI_CACHE_WRITE_FAILED", { message: `TRENDS_CI_CACHE_WRITE_FAILED ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}` });
+      logEvent("TRENDS_CI_CACHE_WRITE_FAILED", { message: `TRENDS_CI_CACHE_WRITE_FAILED ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}` }, { level: "warn" });
     }
   }
   return out;

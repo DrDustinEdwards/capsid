@@ -19,7 +19,7 @@ import {
   type OpsSnapshot,
   type SiteProbe,
 } from "./ops-snapshot";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { Finding } from "./watcher-detect";
 import { type WatcherCheck, WATCHER_CHECKS, owningCheck, type FindingClass, findingClass } from "./watcher-checks";
 import { MINUTE_MS } from "./time";
@@ -207,7 +207,7 @@ const movedSummary = (klass: FindingClass): string =>
 // A keyed write that moved nothing lost a race with another pass (the tick and the
 // Portal's Refresh). Said, not swallowed; the next pass reads the row again.
 function moved(ok: boolean, fingerprint: string, what: string): void {
-  if (!ok) logEvent("error", "WATCHER_FINDING_MOVED", { message: `WATCHER_FINDING_MOVED ${fingerprint}: the row changed between the read and the ${what}; left for the next pass` });
+  if (!ok) logEvent("WATCHER_FINDING_MOVED", { message: `WATCHER_FINDING_MOVED ${fingerprint}: the row changed between the read and the ${what}; left for the next pass` }, { level: "error" });
 }
 
 export async function runPass(readers: PassReaders, now: Date): Promise<PassResult> {
@@ -317,7 +317,7 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
           "record of its new job"
         );
       } else {
-        logEvent("error", "WATCHER_POST_REFUSED", { message: `WATCHER_POST_REFUSED ${f.fingerprint}: ${result.refusal ?? "no reason given"}` });
+        logEvent("WATCHER_POST_REFUSED", { message: `WATCHER_POST_REFUSED ${f.fingerprint}: ${result.refusal ?? "no reason given"}` }, { level: "error" });
         if (row) moved(await readers.memory.sight(row, f, now), f.fingerprint, "sighting");
       }
     }
@@ -385,7 +385,7 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
     try {
       await env.DB.batch(weekly);
     } catch (err) {
-      logEvent("error", "WATCHER_PACKAGE_WEEKS_FAILED", { message: `WATCHER_PACKAGE_WEEKS_FAILED: ${err instanceof Error ? err.message : String(err)}` });
+      logEvent("WATCHER_PACKAGE_WEEKS_FAILED", { message: `WATCHER_PACKAGE_WEEKS_FAILED: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
     }
   }
 
@@ -394,12 +394,12 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
   try {
     const moved = await archiveRevokedAgents(env.DB, WATCHER_ACTOR, now);
     if (moved.archived.length > 0 || moved.skipped.length > 0) {
-      logEvent("log", "WATCHER_AGENTS_ARCHIVED", {
+      logEvent("WATCHER_AGENTS_ARCHIVED", {
         message: `WATCHER_AGENTS_ARCHIVED ${moved.archived.map((a) => `${a.name} (${a.reason})`).join(", ") || "none"}; changed under the move: ${moved.skipped.join(", ") || "none"}`,
       });
     }
   } catch (err) {
-    logEvent("error", "WATCHER_AGENTS_ARCHIVE_FAILED", { message: `WATCHER_AGENTS_ARCHIVE_FAILED: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("WATCHER_AGENTS_ARCHIVE_FAILED", { message: `WATCHER_AGENTS_ARCHIVE_FAILED: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }
 
   // Written last and only on a pass that ran. A stamp written first would make a

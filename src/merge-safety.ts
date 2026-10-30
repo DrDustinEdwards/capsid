@@ -2,7 +2,7 @@ import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import { loadMergePolicy } from "./auto-merge-policy";
 import type { Env } from "./env";
 import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { OpsMergeSafety, OpsMergeSafetyRow } from "./ops-types/feed";
 import { auditStatement } from "./store-guards";
 import { timeMs } from "./trends";
@@ -230,7 +230,7 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
         }
       }
     } catch (err) {
-      logEvent("error", "MERGE_SAFETY", { message: `MERGE_SAFETY could not read the reverts of ${full}: ${err instanceof Error ? err.message : String(err)}` });
+      logEvent("MERGE_SAFETY", { message: `MERGE_SAFETY could not read the reverts of ${full}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
     }
   }
   return recorded;
@@ -255,7 +255,7 @@ export async function revertsTick(env: Env, now: Date, policy?: Awaited<ReturnTy
     try {
       recorded.push(...(await recordReverts(env, namespace, now)));
     } catch (err) {
-      logEvent("error", "MERGE_SAFETY", { message: `MERGE_SAFETY could not read the reverts of ${namespace}: ${err instanceof Error ? err.message : String(err)}` });
+      logEvent("MERGE_SAFETY", { message: `MERGE_SAFETY could not read the reverts of ${namespace}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
     }
   }
   await env.APP_KV.put(REVERTS_STAMP_KEY, now.toISOString());

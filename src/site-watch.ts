@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import { runSiteRepair, type RepairOutcome } from "./site-repair";
 import { tokenSet, type FetchLike } from "./site-operator";
@@ -183,7 +183,7 @@ async function mailOnChange(env: Env, namespace: string, name: string, finding: 
     const raw = await env.APP_KV.get(key);
     before = raw ? (JSON.parse(raw) as AlertState) : null;
   } catch (err) {
-    logEvent("error", "SITE_ALERT_STATE_UNREADABLE", { message: `SITE_ALERT_STATE_UNREADABLE ${namespace}: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("SITE_ALERT_STATE_UNREADABLE", { message: `SITE_ALERT_STATE_UNREADABLE ${namespace}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }
   const red = finding !== null;
   // No state yet and healthy: nothing changed that anyone needs to hear about.
@@ -199,13 +199,13 @@ async function mailOnChange(env: Env, namespace: string, name: string, finding: 
       note = `${namespace}: mailed "${subject}"`;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logEvent("error", "SITE_ALERT_MAIL_FAILED", { message: `SITE_ALERT_MAIL_FAILED ${namespace}: ${message}` });
+      logEvent("SITE_ALERT_MAIL_FAILED", { message: `SITE_ALERT_MAIL_FAILED ${namespace}: ${message}` }, { level: "error" });
       // The state stays, so the next pass sends it again.
       return [`${namespace}: the "${subject}" mail did not send (${clip(message)}); it is retried next pass`];
     }
   } else {
     note = `${namespace}: "${subject}" was not mailed: no send_email binding (EMAIL, ALERT_EMAIL, ALERT_FROM) is configured`;
-    logEvent("warn", "SITE_ALERT_NOT_MAILED", { message: note });
+    logEvent("SITE_ALERT_NOT_MAILED", { message: note }, { level: "warn" });
   }
   await env.APP_KV.put(key, JSON.stringify({ red, since: now.toISOString() } satisfies AlertState));
   return [note];

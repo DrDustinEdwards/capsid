@@ -15,7 +15,7 @@ import {
   evaluatePolicy,
   ciVerdict,
 } from "./auto-merge-policy";
-import { logEvent } from "./log";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import { isVisual, visualDetails, type VisualPr } from "./visual-pr";
 import { closeAsAutoMerged, executeApproval, expireStaleApprovals, readOpenApprovals, type OpenApproval } from "./approval-executor";
 
@@ -214,7 +214,7 @@ async function auditDeclineOnChange(
   try {
     if ((await env.APP_KV.get(key)) === decision) return;
   } catch (err) {
-    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }
   // The row first, so a failed KV write repeats a row on the next tick rather than
   // losing one.
@@ -222,7 +222,7 @@ async function auditDeclineOnChange(
   try {
     await env.APP_KV.put(key, decision, { expirationTtl: LAST_DECLINE_TTL_SECONDS });
   } catch (err) {
-    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not record the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not record the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }
 }
 
@@ -300,7 +300,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   try {
     suspended = new Set((await readSuspended(env.APP_KV)).map((s) => s.unit));
   } catch (err) {
-    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read the suspended merge units, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read the suspended merge units, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
     suspended = "all";
   }
 
@@ -310,7 +310,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   try {
     paused = new Map(Object.entries(await readPaused(env.APP_KV)).map(([ns, p]) => [ns, p.reason]));
   } catch (err) {
-    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read the paused namespaces, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read the paused namespaces, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
     paused = "all";
   }
 
@@ -334,17 +334,17 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       // 2026-10-21, CA-15).
       const listedPrs = await listOpenPrs(env, owner, repo);
       if (typeof listedPrs === "string") {
-        logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not list PRs on ${owner}/${repo} (${listedPrs})` });
+        logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not list PRs on ${owner}/${repo} (${listedPrs})` }, { level: "error" });
         continue;
       }
       prs = listedPrs;
       try {
         approvals = await readOpenApprovals(env.DB, `${owner}/${repo}`);
       } catch (err) {
-        logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read the approvals on ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}` });
+        logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read the approvals on ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
       }
     } catch (err) {
-      logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not read ${namespace}: ${err instanceof Error ? err.message : String(err)}` });
+      logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read ${namespace}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
       continue;
     }
 
@@ -370,7 +370,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
             systemAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, skippedFacts, skipped, now))
           );
         } catch (err) {
-          logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}` });
+          logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
         }
         continue;
       }
@@ -384,7 +384,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
           await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended, policy.units, paused, visual);
         } catch (err) {
           const why = err instanceof Error ? err.message : String(err);
-          logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` });
+          logEvent("AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` }, { level: "error" });
           // An outcome already pushed is the true one; only its audit row failed.
           if (outcomes.length > before) continue;
           outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, failed: "error", why: `the tick could not judge or merge this PR: ${why}`, passed: [] });
@@ -400,7 +400,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
               }),
             ]);
           } catch (auditErr) {
-            logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}` });
+            logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}` }, { level: "error" });
           }
         }
       } finally {
@@ -417,7 +417,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   try {
     await expireStaleApprovals(env, now);
   } catch (err) {
-    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not expire old approvals: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not expire old approvals: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }
 
   // The full awaiting-seat set, written whole, and written even when it is empty, so a
@@ -440,7 +440,7 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   try {
     await env.APP_KV.put(AWAITING_SEAT_KEY, JSON.stringify(awaiting));
   } catch (err) {
-    logEvent("error", "AUTO_MERGE", { message: `AUTO_MERGE could not record the awaiting-seat set: ${err instanceof Error ? err.message : String(err)}` });
+    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not record the awaiting-seat set: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }
 
   const merged = outcomes.filter((o) => o.merged).length;
