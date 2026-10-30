@@ -4,7 +4,8 @@
 -- with curl on 2026-10-30 and answered 200 with a JSON health body:
 --   foxing         https://foxing.app/health
 --   foxhound       https://foxhoundapp.com/health
---   txasm          https://txasm.dustin-edwards.workers.dev/health (txasm.org is still
+--   txasm          https://txasm.dustin-edwards.workers.dev/health, Worker script txasm
+--                  as its workers.dev host proves (txasm.org is still
 --                  the old WordPress site until cutover, and answers 404 there)
 --   bsw            https://bsw.dustin-edwards.workers.dev/health
 --   julieedwards   https://julieedwards.info/health, served by Cloudflare, not Vercel
@@ -28,7 +29,7 @@ UPDATE ops_sites SET health_path = 'https://carrel-mcp.dustinedwards.info/health
 UPDATE ops_sites SET health_path = '/health', revision = revision + 1, updated_at = datetime('now')
   WHERE namespace IN ('foxing', 'foxhound', 'bsw') AND origin IS NOT NULL AND health_path IS NULL;
 
-UPDATE ops_sites SET origin = 'https://txasm.dustin-edwards.workers.dev', health_path = '/health', revision = revision + 1, updated_at = datetime('now')
+UPDATE ops_sites SET origin = 'https://txasm.dustin-edwards.workers.dev', script = 'txasm', health_path = '/health', revision = revision + 1, updated_at = datetime('now')
   WHERE namespace = 'txasm' AND origin = 'https://txasm.org' AND health_path IS NULL;
 
 UPDATE ops_sites SET platform = 'cloudflare', health_path = '/health', revision = revision + 1, updated_at = datetime('now')
