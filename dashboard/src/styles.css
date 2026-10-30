@@ -2,11 +2,8 @@
    app's own dimensions live here. */
 :root { --top: 44px; }
 
+/* After Capsomer's base.css (main.tsx) in the same layer, so the Portal's denser type wins. */
 @layer cap.base {
-  * { box-sizing: border-box; }
-  /* As Capsomer's base.css: its components hide parts with the hidden attribute (the reason
-     form, a field's error) over their own display rules. */
-  [hidden] { display: none !important; }
   html, body { min-height: 100%; }
   body {
     margin: 0;
@@ -15,7 +12,6 @@
     font: 400 13px/1.4 var(--ui);
     -webkit-font-smoothing: antialiased;
   }
-  button, input, select, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; }
   /* Text takes --accent-text (4.5:1 on every surface); --accent is for fills, rings and icons at
      3:1. A link in running text is underlined, since color alone can't set it apart from the words

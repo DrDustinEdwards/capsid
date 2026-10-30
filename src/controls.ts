@@ -1,3 +1,4 @@
+import { toHex } from "@dustinedwards/site-runtime/encoding";
 import type { Env } from "./env";
 import type { PortalAction, PortalPreview } from "./ops-types/portal";
 import { type ActionResult, performAction } from "./controls-perform";
@@ -167,10 +168,7 @@ function controlNamed(name: unknown): Control | null {
   return typeof name === "string" ? (CONTROLS.find((c) => c.name === name) ?? null) : null;
 }
 
-const randomJti = (): string => {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-};
+const randomJti = (): string => toHex(crypto.getRandomValues(new Uint8Array(16)));
 
 const NONCE_PREFIX = "control-nonce:";
 

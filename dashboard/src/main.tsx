@@ -4,10 +4,11 @@ import { createRoot } from "react-dom/client";
 import { Router } from "wouter";
 // The family's faces, self-hosted (CSP font-src 'self'): one variable file each, every weight.
 import "capsomer/fonts.css";
-// Capsomer: its layer order and tokens first, then its components (all in the cap.* layers, so
+// Capsomer: its layer order and tokens first, then its element defaults (base.css, which carries
+// the utility classes), then its components (all in the cap.* layers, so
 // the app's unlayered styles win), then the app's styles.
 import "capsomer/tokens.css";
-import "capsomer/utilities.css";
+import "capsomer/base.css";
 import "capsomer/family-teal.css";
 import "capsomer/site-capsid-portal.css";
 import "capsomer/status.css";
