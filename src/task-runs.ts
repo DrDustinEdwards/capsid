@@ -28,7 +28,8 @@ export type TaskId =
   | "merge-units"
   | "merge-safety"
   | "doc-index"
-  | "supersede";
+  | "supersede"
+  | "site-pulse";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -71,6 +72,9 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   // The daily supersede pass (src/supersede.ts), with the backup; recorded only when it
   // marked something.
   { id: "supersede", label: "Supersede pass", period_ms: null },
+  // The five-minute site pulse (src/site-pulse.ts), on the tick; recorded only when a site
+  // was called down or came back.
+  { id: "site-pulse", label: "Site pulse", period_ms: null },
 ];
 
 const STALE_PERIODS = 2;

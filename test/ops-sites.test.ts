@@ -93,15 +93,16 @@ test("hostnameRefusal names what is wrong", () => {
 
 // Health paths
 
-const GOOD_PATHS = ["/", "/health", "/api/health", "/v1/status.json", "/_health", "/a~b/c-d", "/health/"];
+const GOOD_PATHS = ["/", "/health", "/api/health", "/v1/status.json", "/_health", "/a~b/c-d", "/health/", "https://health.example.com/health"];
 // scanner-rule: every health path that could change what the probe fetches is refused
-const BAD_PATHS = ["health", "/health?full=1", "/health#x", "/he alth", "/%2e%2e/admin", "//evil.example.com", "/a//b", "/../admin", "/./health", `/${"a".repeat(200)}`, ""];
+const BAD_PATHS = ["health", "/health?full=1", "/health#x", "/he alth", "/%2e%2e/admin", "//evil.example.com", "/a//b", "/../admin", "/./health", `/${"a".repeat(200)}`, "", "https://localhost/health", "https://user@example.com/health", "https://example.com/health?x=1", "http://example.com/health"];
 
 test("PLANT: a health path is a plain absolute path; a query, a fragment, an escape or a dot segment is refused", () => {
   for (const p of GOOD_PATHS) assert.equal(healthPathRefusal(p), null, `${p} was refused`);
-  // Eleven: no leading slash, query, fragment, space, percent escape, a protocol-relative
-  // start, an empty segment, '..', '.', too long, and empty.
-  assert.equal(BAD_PATHS.length, 11);
+  // Fifteen: no leading slash, query, fragment, space, percent escape, a protocol-relative
+  // start, an empty segment, '..', '.', too long, and empty; and on another host, a local
+  // name, credentials, a query and plain http.
+  assert.equal(BAD_PATHS.length, 15);
   for (const p of BAD_PATHS) assert.ok(healthPathRefusal(p), `${JSON.stringify(p)} was accepted`);
 });
 
