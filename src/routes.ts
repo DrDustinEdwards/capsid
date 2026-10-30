@@ -2,8 +2,7 @@ import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, ha
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResult } from "./shadow";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
-import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
-import { getCookie, hmacHex } from "./auth";
+import { getCookie } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { resolveAgent } from "./agents";
 import { backupHttpStatus, runBackup } from "./backup";
@@ -66,7 +65,6 @@ import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 
 const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
-const APPROVAL_COOKIE = "capsid_approved";
 const CSRF_COOKIE = "capsid_csrf";
 
 // The MCP authorization flow's sign-in, through Cloudflare Access for SaaS
@@ -79,32 +77,6 @@ const MCP_LOGIN: LoginFlow = {
   restartHint: "Restart from your MCP client.",
 };
 
-// The approval cookie carries entries from src/approval.ts: a client id bound to a
-// digest of its redirect set, signed with COOKIE_ENCRYPTION_KEY, kept 30 days.
-// Cookies cap near 4KB; an entry is about 36 bytes of JSON, and the 30 day expiry
-// bounds the growth.
-async function approvedClients(request: Request, secret: string): Promise<string[]> {
-  const raw = getCookie(request, APPROVAL_COOKIE);
-  if (!raw) return [];
-  const dot = raw.indexOf(".");
-  if (dot === -1) return [];
-  const sig = raw.slice(0, dot);
-  const payload = raw.slice(dot + 1);
-  if (!await safeEqual(sig, await hmacHex(secret, payload))) return [];
-  try {
-    const parsed = JSON.parse(decodeBase64url(payload));
-    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-async function approvalCookie(tags: string[], secret: string): Promise<string> {
-  const payload = base64url(JSON.stringify(tags));
-  const sig = await hmacHex(secret, payload);
-  return `${APPROVAL_COOKIE}=${sig}.${payload}; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=${APPROVAL_MAX_AGE_SECONDS}`;
-}
-
 function renderApprovalDialog(oauthReq: AuthRequest, clientName: string, csrf: string, registeredUris: string[] | undefined): Response {
   const name = escapeHtml(clientName);
   const redirect = escapeHtml(oauthReq.redirectUri);
@@ -114,6 +86,12 @@ function renderApprovalDialog(oauthReq: AuthRequest, clientName: string, csrf: s
   // one, so listing the rest is what shows the admin that a client with a familiar
   // name also carries an attacker's redirect.
   const others = (registeredUris ?? []).filter((u) => u !== oauthReq.redirectUri);
+  // A loopback callback hands the access to an app on this computer, as site-runtime's
+  // mcp-login consent page warns.
+  const host = new URL(oauthReq.redirectUri).hostname;
+  const loopback = /^(localhost|127(\.\d{1,3}){3}|\[::1\])$/.test(host)
+    ? "<p><strong>This sends access to an app on your computer.</strong> Continue only if you just started signing in from it.</p>\n"
+    : "";
   const othersHtml = others.length
     ? `<p>This client also has these registered redirect URIs (not covered by this approval):</p><ul>${others
         .map((u) => `<li><code>${escapeHtml(u)}</code></li>`)
@@ -137,12 +115,12 @@ button { background: #1a7f37; color: #fff; border: 0; border-radius: 6px; paddin
 <h1>Capsid access request</h1>
 <p><strong>${name}</strong> is asking to connect to this MCP server.</p>
 <p>Requested redirect URI: <code>${redirect}</code></p>
-${othersHtml}
-<p>Approving will send you to GitHub to sign in. Only the configured admin account is admitted.</p>
+${loopback}${othersHtml}
+<p>Next you sign in with Cloudflare Access. Only the administrator and the co-owners are admitted.</p>
 <form method="post" action="/authorize">
 <input type="hidden" name="csrf" value="${csrf}">
 <input type="hidden" name="req" value="${req}">
-<button type="submit">Approve and continue to GitHub</button>
+<button type="submit">Continue to sign in</button>
 </form>
 </div>
 </body>
@@ -158,15 +136,6 @@ ${othersHtml}
   });
 }
 
-async function startSignIn(
-  request: Request,
-  env: Env,
-  oauthReq: AuthRequest,
-  extraCookies: string[] = []
-): Promise<Response> {
-  return startAccessLogin(request, env, MCP_LOGIN, JSON.stringify(oauthReq), extraCookies);
-}
-
 async function handleAuthorizeGet(request: Request, env: Env): Promise<Response> {
   let oauthReq: AuthRequest;
   try {
@@ -175,15 +144,10 @@ async function handleAuthorizeGet(request: Request, env: Env): Promise<Response>
     return textResponse(`invalid authorization request: ${err instanceof Error ? err.message : String(err)}`, 400);
   }
   if (!oauthReq.clientId) return textResponse("invalid authorization request: missing client_id", 400);
-  // The lookup runs before the cookie check: the approval is bound to this client's
-  // redirect set, and reading the client is the only way to check it. A client id
-  // that no longer resolves cannot ride an old cookie past the dialog.
+  // Every authorization shows the dialog: nothing remembers an approval, so a later grant
+  // to the same client is a decision of its own (checklist H5).
   const client = await env.OAUTH_PROVIDER.lookupClient(oauthReq.clientId);
   if (!client) return textResponse("unknown client", 400);
-  const approved = await approvedClients(request, env.COOKIE_ENCRYPTION_KEY);
-  if (approved.includes(await approvalTag(oauthReq.clientId, oauthReq.redirectUri))) {
-    return startSignIn(request, env, oauthReq);
-  }
   return renderApprovalDialog(oauthReq, client.clientName ?? oauthReq.clientId, crypto.randomUUID(), client.redirectUris);
 }
 
@@ -215,14 +179,8 @@ async function handleAuthorizePost(request: Request, env: Env): Promise<Response
   }
   const client = oauthReq.clientId ? await env.OAUTH_PROVIDER.lookupClient(oauthReq.clientId) : null;
   if (!client) return textResponse("unknown client", 400);
-  const approved = await approvedClients(request, env.COOKIE_ENCRYPTION_KEY);
-  const tag = await approvalTag(oauthReq.clientId, oauthReq.redirectUri);
-  if (!approved.includes(tag)) approved.push(tag);
-  const cookies = [
-    await approvalCookie(approved, env.COOKIE_ENCRYPTION_KEY),
-    `${CSRF_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=0`,
-  ];
-  return startSignIn(request, env, oauthReq, cookies);
+  const clearCsrf = `${CSRF_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=0`;
+  return startAccessLogin(request, env, MCP_LOGIN, JSON.stringify(oauthReq), [clearCsrf]);
 }
 
 async function handleCallback(request: Request, env: Env): Promise<Response> {

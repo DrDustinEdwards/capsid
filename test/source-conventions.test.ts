@@ -19,7 +19,6 @@ test("every secret compare goes through safeEqual, in every file", () => {
   const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
   const handler = sourceFiles().find((f) => f.name === "routes.ts")!.text;
   assert.ok(auth.includes("await safeEqual(readonly ? entry.slice(3) : entry, hash)"));
-  assert.match(handler, /await safeEqual\(sig, await hmacHex/);
   assert.match(handler, /await safeEqual\(csrfCookie, csrf\)/);
   const accessLogin = sourceFiles().find((f) => f.name === "access-login.ts")!.text;
   assert.match(accessLogin, /await safeEqual\(await sha256Hex\(stateCookie\), signIn\.binding\)/);

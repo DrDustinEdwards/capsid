@@ -10,7 +10,7 @@ import { mcpOriginProblem, withSecurityHeaders } from "./security-headers";
 import type { Env, Props } from "./env";
 import { buildAdminServer, buildServer } from "./server";
 import { ADMIN_MCP_ROUTE, serveMcp } from "./mcp-handler";
-import { gateRegistration, REGISTER_PATH } from "./dcr";
+import { DCR_CALLBACKS, registrationLimited, registrationRefusal } from "@dustinedwards/site-runtime/mcp-login";
 import { runTick } from "./tick";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
@@ -75,7 +75,7 @@ function withCacheDefault(response: Response, pathname: string): Response {
 // own provider only for the hours of the same-day cut (job_2f9671f89e89), so the
 // claude.ai connector, authorized there, works until it is switched. Both share OAUTH_KV.
 // The step that turns workers.dev off removes legacyProvider.
-function oauthProvider(resource: string, registration: boolean) {
+function oauthProvider(resource: string, registrationAllowlist: string | null) {
   return new OAuthProvider({
     apiRoute: "/mcp",
     apiHandler,
@@ -87,15 +87,42 @@ function oauthProvider(resource: string, registration: boolean) {
     // the URL of its metadata document. The provider advertises CIMD only while the
     // global_fetch_strictly_public compatibility flag is set (wrangler.jsonc.example).
     clientIdMetadataDocumentEnabled: true,
-    // Tightened DCR for Grok and Gemini, on
-    // the MCP host only: src/dcr.ts judges every registration before the provider
-    // sees it. The old address keeps none; it is going.
-    ...(registration ? { clientRegistrationEndpoint: REGISTER_PATH } : {}),
+    // Tightened DCR for Grok and Gemini (capsid/rulings/mcp-2026-10-10.md rule 13), on the
+    // MCP host only: site-runtime's registrationRefusal admits a registration only when every
+    // redirect URI it names is listed exactly. It grants nothing; the consent page and the
+    // Access sign-in still decide. The old address keeps none; it is going. REMOVAL
+    // CONDITION: when Grok and Gemini sign in by CIMD, at the latest when the MCP
+    // specification removes DCR (after summer 2027).
+    ...(registrationAllowlist === null
+      ? {}
+      : {
+          clientRegistrationEndpoint: REGISTER_PATH,
+          clientRegistrationCallback: ({ clientMetadata }: { clientMetadata: Record<string, unknown> }) => {
+            const why = registrationRefusal(registrationAllowlist, clientMetadata);
+            if (!why) return undefined;
+            logEvent("DCR_REDIRECT_REFUSED", { message: `DCR_REDIRECT_REFUSED ${why}` }, { level: "error" });
+            return { code: "invalid_redirect_uri", description: why };
+          },
+        }),
   });
 }
 
-const provider = oauthProvider(MCP_URL, true);
-const legacyProvider = oauthProvider(LEGACY_MCP_URL, false);
+const REGISTER_PATH = "/register";
+
+// The allowlist is fixed when a provider is built, and DCR_REDIRECT_URIS is in env, so the
+// MCP host's provider is built per allowlist: the callbacks every user shares, and the
+// per-connector ones (Gemini's, ChatGPT's) the seat lists exactly.
+const providers = new Map<string, OAuthProvider<Env>>();
+function mcpProvider(env: Env): OAuthProvider<Env> {
+  const allowlist = [...DCR_CALLBACKS, env.DCR_REDIRECT_URIS ?? ""].join(",");
+  let built = providers.get(allowlist);
+  if (!built) {
+    built = oauthProvider(MCP_URL, allowlist);
+    providers.set(allowlist, built);
+  }
+  return built;
+}
+const legacyProvider = oauthProvider(LEGACY_MCP_URL, null);
 
 export default {
   async fetch(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -120,13 +147,12 @@ export default {
       }
     }
     const legacy = new URL(request.url).hostname === LEGACY_HOST;
-    let forwarded = request;
+    // Counted before the provider sees it: five an hour per address, thirty a day in all.
     if (!legacy && pathname === REGISTER_PATH && request.method === "POST") {
-      const gate = await gateRegistration(request, env, new Date());
-      if ("refuse" in gate) return withSecurityHeaders(withCacheDefault(gate.refuse, pathname));
-      forwarded = gate.forward;
+      const limited = await registrationLimited(request, env.APP_KV);
+      if (limited) return withSecurityHeaders(limited);
     }
-    const response = await (legacy ? legacyProvider : provider).fetch(forwarded, env, ctx);
+    const response = await (legacy ? legacyProvider : mcpProvider(env)).fetch(request, env, ctx);
     return withSecurityHeaders(withCacheDefault(response, pathname));
   },
   // Dispatch on controller.cron, not the clock: 09:00 UTC matches all three

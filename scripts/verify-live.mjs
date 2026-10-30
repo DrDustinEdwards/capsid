@@ -10,13 +10,10 @@
 // Two hard requirements. Violating either makes this gate pass against a fully broken
 // server:
 //
-//   1. NEVER THE APPROVED FAST PATH. handleAuthorizeGet short-circuits for a client id
-//      already in the capsid_approved cookie and 302s straight out of the GET, never
-//      rendering a form. This script sends no capsid_approved cookie, and gate 3
-//      asserts the consent FORM renders. A 302 at gate 3 means the fast path was hit
-//      and the run is VOID. The probe client is a fixed metadata document
-//      (scripts/cimd-probe-lib.mjs), never a registered one; the fast path is
-//      keyed on the cookie, not on the client being new.
+//   1. THE FORM, NOT A REDIRECT. Every authorization renders the consent form (no
+//      approval is remembered), and gate 3 asserts it does. A 302 at gate 3 means the
+//      dialog was skipped and the run is VOID. The probe client is a fixed metadata
+//      document (scripts/cimd-probe-lib.mjs), never a registered one.
 //
 //   2. POLL, NEVER SINGLE-FETCH, on header assertions. The first post-deploy read can
 //      return the previous version's headers.

@@ -1,8 +1,7 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
-import { APPROVAL_MAX_AGE_SECONDS } from "../src/approval";
-import { cimdClient, withdrawCimdClient } from "./cimd-stub";
+import { cimdClient } from "./cimd-stub";
 
 // The consent and callback flow, as a browser drives it. Node cannot load
 // src/routes.ts or src/index.ts, so this runs here: the Worker's own fetch handler is
@@ -20,8 +19,7 @@ afterEach(() => {
 
 async function call(request: Request): Promise<Response> {
   const ctx = createExecutionContext();
-  // The approval cookie is signed, and the pool binds no key for it, so one is supplied.
-  const response = await worker.fetch!(request as never, { ...env, COOKIE_ENCRYPTION_KEY: "integration-cookie-key" } as never, ctx);
+  const response = await worker.fetch!(request as never, env as never, ctx);
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
@@ -67,40 +65,23 @@ async function approve(id: string, redirect: string): Promise<Response> {
   );
 }
 
-describe("approval", () => {
-  it("the approval cookie lives 30 days", async () => {
+describe("consent", () => {
+  it("PLANT: approving once does not skip the dialog the next time (no remembered approval, H5)", async () => {
     const id = await clientId([HTTPS_REDIRECT]);
     const approved = await approve(id, HTTPS_REDIRECT);
     expect(approved.status).toBe(302);
-    const cookies = approved.headers.getSetCookie();
-    expect(cookies.some((c) => c.includes(`Max-Age=${APPROVAL_MAX_AGE_SECONDS}`)), cookies.join(" | ")).toBe(true);
-    expect(APPROVAL_MAX_AGE_SECONDS).toBe(30 * 24 * 60 * 60);
+    const again = await call(new Request(authorizeUrl(id, HTTPS_REDIRECT), { headers: { Cookie: cookieValues(approved).join("; ") } }));
+    expect(again.status, "a second authorization skipped the consent dialog").toBe(200);
   });
 
-  it("an approval covers the exact redirect it was given, and a sibling redirect comes back to the dialog", async () => {
+  it("the dialog lists every redirect the client registered, and warns when the requested one is on this computer", async () => {
     const id = await clientId([HTTPS_REDIRECT, LOOPBACK_REDIRECT]);
-    const approved = await approve(id, HTTPS_REDIRECT);
-    const cookie = cookieValues(approved).join("; ");
-    const same = await call(new Request(authorizeUrl(id, HTTPS_REDIRECT), { headers: { Cookie: cookie } }));
-    expect(same.status, "the approved redirect did not skip the dialog").toBe(302);
-    const sibling = await call(new Request(authorizeUrl(id, LOOPBACK_REDIRECT), { headers: { Cookie: cookie } }));
-    expect(sibling.status, "approving one redirect skipped the dialog for another").toBe(200);
-  });
-
-  it("the dialog lists every redirect the client registered, not only the requested one", async () => {
-    const id = await clientId([HTTPS_REDIRECT, LOOPBACK_REDIRECT]);
-    const dialog = await call(new Request(authorizeUrl(id, HTTPS_REDIRECT)));
-    const html = await dialog.text();
-    expect(html).toContain(HTTPS_REDIRECT);
-    expect(html).toContain(LOOPBACK_REDIRECT);
-  });
-
-  it("an approval for a client that no longer resolves does not skip anything", async () => {
-    const id = await clientId([HTTPS_REDIRECT]);
-    const cookie = cookieValues(await approve(id, HTTPS_REDIRECT)).join("; ");
-    withdrawCimdClient(id);
-    const after = await call(new Request(authorizeUrl(id, HTTPS_REDIRECT), { headers: { Cookie: cookie } }));
-    expect(after.status).not.toBe(302);
+    const https = await (await call(new Request(authorizeUrl(id, HTTPS_REDIRECT)))).text();
+    expect(https).toContain(HTTPS_REDIRECT);
+    expect(https).toContain(LOOPBACK_REDIRECT);
+    expect(https).not.toContain("an app on your computer");
+    const loopback = await (await call(new Request(authorizeUrl(id, LOOPBACK_REDIRECT)))).text();
+    expect(loopback).toContain("an app on your computer");
   });
 });
 

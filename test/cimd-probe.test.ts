@@ -6,7 +6,7 @@ import { PROBE_CLIENT_PATH, PROBE_REDIRECT, probeClientId, probeDocumentProblem,
 import { VERIFY_LIVE_CLIENT_PATH, clientDocument } from "../src/oauth-client-docs.ts";
 
 // verify-live gate 2 (scripts/cimd-probe-lib.mjs): CIMD is on, tightened DCR refuses a
-// registration naming the probe's unlisted redirect (src/dcr.ts), and the probe client's
+// registration naming the probe's unlisted redirect (src/index.ts), and the probe client's
 // metadata document is one the Worker accepts. The live half is the gate; these pin its
 // decisions and the document the Worker serves.
 

@@ -8,7 +8,7 @@ import { cimdClient } from "./cimd-stub";
 //
 // Asserted here is what a browser and a client depend on: the discovery documents
 // describe this server, /register takes only the allowlisted Grok, Gemini and ChatGPT
-// callbacks and grants nothing (tightened DCR, src/dcr.ts), the consent dialog renders for a
+// callbacks and grants nothing (tightened DCR, site-runtime registrationRefusal), the consent dialog renders for a
 // client known by its metadata document with its security headers, and the state
 // cookie is scoped so a stolen one is not reusable.
 
@@ -46,8 +46,8 @@ describe("discovery", () => {
     expect(serverDoc.token_endpoint).toContain("/token");
     // PKCE is the provider default, asserted so it cannot change unnoticed.
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
-    // CIMD for Claude, Claude Code and ChatGPT, and tightened DCR for Grok and Gemini
-    // (src/dcr.ts), on the MCP host only.
+    // CIMD for Claude, Claude Code and ChatGPT, and tightened DCR for Grok and Gemini,
+    // on the MCP host only.
     expect(serverDoc.registration_endpoint).toBe("https://capsid.test/register");
     const legacy = (await (await SELF.fetch("https://capsid.dustin-edwards.workers.dev/.well-known/oauth-authorization-server")).json()) as { registration_endpoint?: string };
     expect(legacy.registration_endpoint).toBeUndefined();

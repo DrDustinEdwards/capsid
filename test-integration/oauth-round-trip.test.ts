@@ -230,11 +230,12 @@ describe("the OAuth round trip", () => {
     expect(await response.text()).toMatch(/ACCESS_SAAS_CLIENT_SECRET/);
   });
 
-  it("/mcp without a token is a 401 that names the resource metadata", async () => {
+  it("/mcp without a token is a 401 that names the resource metadata and no error (RFC 6750 3.1)", async () => {
     const response = await call(
       new Request(`${ORIGIN}/mcp`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }) })
     );
     expect(response.status).toBe(401);
     expect(response.headers.get("WWW-Authenticate") ?? "").toMatch(/resource_metadata=/);
+    expect(response.headers.get("WWW-Authenticate") ?? "").not.toMatch(/error=/);
   });
 });

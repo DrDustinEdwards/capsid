@@ -67,7 +67,7 @@ export const GITHUB_APP_CLIENT_ID = "Iv23lik2O8SPPksxbc6O";
 //   wrangler kv key get "client:<id>" --namespace-id <OAUTH_KV> --remote --text > canary.json
 //   wrangler kv key put "client:<id>" --namespace-id <OAUTH_KV> --remote --path canary.json
 //
-// /register is back as tightened DCR (src/dcr.ts), but it admits only the Grok, Gemini
+// /register is back as tightened DCR (site-runtime registrationRefusal, src/index.ts), but it admits only the Grok, Gemini
 // and ChatGPT connector callbacks, so the canary cannot be minted again that way. If it
 // is lost, restore the record from a backup of OAUTH_KV or a saved canary.json with the
 // second command above.

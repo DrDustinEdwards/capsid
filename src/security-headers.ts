@@ -57,7 +57,7 @@ export const COOP_REPORT_ONLY = "same-origin";
 // and claude.ai alongside 'self' was rejected: it holds until the next client appears.
 //
 // `form-action 'self'` shipped in 423bbd6 and broke hop two for 26 days, undetected
-// because the approvedClients fast path 302s out of the GET and never submits a form.
+// because a remembered approval (removed since) 302'd out of the GET and never submitted a form.
 export const CONSENT_DIALOG_HEADERS: Readonly<Record<string, string>> = {
   "Content-Type": "text/html;charset=utf-8",
   "Content-Security-Policy": buildPolicy(["default-src 'none'", "style-src 'unsafe-inline'", "base-uri 'none'", "frame-ancestors 'none'"]),

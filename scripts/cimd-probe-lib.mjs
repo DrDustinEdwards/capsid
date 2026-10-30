@@ -4,7 +4,7 @@
 //
 // The Worker takes Claude, Claude Code and ChatGPT by Client ID Metadata Document, and
 // Grok and Gemini by a tightened Dynamic Client Registration that admits only the
-// connector callbacks it allowlists exactly (src/dcr.ts, capsid/rulings/mcp-2026-10-10.md
+// connector callbacks it allowlists exactly (src/index.ts, capsid/rulings/mcp-2026-10-10.md
 // rule 13). The probe client is therefore a fixed document the Worker serves itself at
 // PROBE_CLIENT_PATH (src/oauth-client-docs.ts), and the gate asserts three things: CIMD is on, a
 // registration naming the probe's unlisted redirect is refused, and the probe document

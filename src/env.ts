@@ -71,9 +71,9 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // finding still opens in Incidents, and each pass says the mail was not sent.
   // Each site's operator token is a secret named by that site's configuration
   // (<NAME>_OPERATOR_TOKEN, src/site-operator.ts), read by name and never declared here.
-  // The per-connector DCR callbacks (src/dcr.ts): Gemini's and ChatGPT's exact
-  // redirect URIs, comma separated, set by the seat in wrangler.jsonc. Unset, only the
-  // fixed Grok and ChatGPT callbacks can register.
+  // The per-connector DCR callbacks (src/index.ts, site-runtime's registrationRefusal):
+  // Gemini's and ChatGPT's exact https redirect URIs, comma or space separated, set by the
+  // seat in wrangler.jsonc. Unset, only site-runtime's DCR_CALLBACKS can register.
   DCR_REDIRECT_URIS?: string;
   EMAIL?: SendEmail;
   // The daily digest (src/digest.ts) sends only when this var is "on", which the seat sets

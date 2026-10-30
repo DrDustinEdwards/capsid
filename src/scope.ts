@@ -181,7 +181,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/authorize": "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
   "/callback": "the OAuth callback, which validates state before issuing anything",
   "/register":
-    "tightened Dynamic Client Registration for Grok and Gemini (src/dcr.ts): rate limited per caller and failing closed, a 16KB body cap, every redirect URI matched exactly against the allowlist; it writes a client record and grants nothing, since the client still meets the consent page and the Access sign-in",
+    "tightened Dynamic Client Registration for Grok and Gemini (site-runtime's registrationLimited and registrationRefusal, src/index.ts): rate limited per address and in all, every redirect URI matched exactly against the allowlist; it writes a client record and grants nothing, since the client still meets the consent page and the Access sign-in",
   "/portal/callback": "Capsid Portal's Access for SaaS callback, which validates state before issuing a session",
   "/portal/api/ops": "the Portal's feed, gated by portalGate: the administrator's Access session, and a 403 for any bearer",
   "/portal/api/ops/refresh":
