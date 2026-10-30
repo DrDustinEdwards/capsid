@@ -111,6 +111,7 @@ These read more when they open, and not on every poll:
 - **Agents**, in its Checks tab, reads `GET /portal/api/claims` (and exports the aggregate on screen as three CSV files, by agent, waits and usage, under the filter in force; a cell a spreadsheet would read as a formula is prefixed with an apostrophe): what agents said beside what the Worker verified (below).
 - **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
 - **Packages**, in its Shared tab, reads `GET /portal/api/shared-code` when it opens (below).
+- **Packages**, in its Completeness tab, reads `GET /portal/api/completeness` when it opens (below).
 - **Library** reads `GET /portal/api/library` when it opens, searches and opens a document (below).
 
 ## Scheduled tasks
@@ -172,6 +173,12 @@ Charts 2 and 5 (waits, claim agreement) read `GET /portal/api/claims`, which ser
 How far the centralization has got (job_584b4e7f2824; ruling capsid/rulings/shared-homes-2026-10-06.md). One panel per shared package in configuration, the `shared_packages` table (`migrations/0036_shared_packages.sql`, seeded with Capsomer, site-api, d1-dump, Prelum, site-runtime and devkit, each with its repo's earlier names and the known local copies it replaces). Each panel shows the package's newest release tag, every app that pins it with the tag and how many releases behind it is ("Current", "2 releases behind", "Unpinned" for a branch or a bare preset), whether it is pinned through the repo's old name, and each known local copy as still there or removed. Its header line also gives the version in the package repo's own `package.json` on the default branch, marked "untagged" while no tag names it (the daily maintenance pass tags it, docs/work-queue.md), and, unless that `package.json` is private, npm's latest dist-tag from the registry's abbreviated document, so the panel says tagged, on npm, and behind.
 
 `src/shared-code.ts` reads it through the GitHub App the watcher uses. The apps are the configured sites' namespaces (ops_sites), each on its default branch: one recursive tree, every `package.json` outside `node_modules` (at most eight), the lockfile only for a git dependency with no tag, and the Renovate config for presets (devkit). Every shared package is a git dependency, so the tag is in the manifest. The tags come from each package repo's `/tags`, and the version from its root `package.json`. The answer is cached in KV for an hour (`portal:shared-code:v2`), and the page says how many apps it read and which it could not. With no table yet it says the migration is the seat's to apply; with no row it says none is configured. Nothing on the tab changes anything. The Published tab (npm statistics) is unchanged. Tests: test/shared-code.test.ts, test-integration/shared-code.test.ts, dashboard/e2e/shared.spec.ts.
+
+## Completeness (Packages, Completeness tab)
+
+devkit's completeness scoreboard: each of the 12 areas of the shared code against the package and every live site, as complete, partial, missing or does not apply. devkit decides every cell (devkit README, "The scoreboard"): its daily live run checks the live sites, a verifier thread that did not build the area signs a verdict file, and a cell is complete only when both agree and no run has failed since. Capsid only reads the result, so no thread can mark its own work complete here either.
+
+`src/completeness.ts` reads `board.json` from devkit's `scoreboard` branch through the GitHub App, keeps only the fields it names (bounded, and only https proof links), and caches the answer in KV for ten minutes (`portal:completeness:v1`). The tab shows a verdict line, the grid of areas by sites, and a panel per area: who built it, who verified it, the merged pull requests' lines added and removed, and each cell that is not complete with its reason, its first errors and its proof. Cells that say the same thing share one line. A board that cannot be read says why. Nothing on the tab changes anything. Test: test-integration/completeness.test.ts.
 
 ## Claims
 

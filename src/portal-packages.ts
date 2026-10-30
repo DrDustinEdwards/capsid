@@ -3,6 +3,7 @@ import { OPS_RETURN_TO } from "./ops-feed";
 import { packageHistory, readPackageRow, type FetchLike } from "./ops-packages";
 import { portalGate } from "./portal-auth";
 import { readSharedCode } from "./shared-code";
+import { readCompleteness } from "./completeness";
 import { textResponse } from "./http";
 
 // The Packages view's on-demand history: GET /portal/api/packages/history?name=. The
@@ -40,5 +41,17 @@ export async function handlePortalSharedCode(request: Request, env: Env, now: Da
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const body = await readSharedCode(env, now);
+  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+}
+
+// The Completeness view's read: GET /portal/api/completeness (src/completeness.ts). devkit's
+// daily scoreboard, read through the GitHub App from devkit's scoreboard branch. Gated and
+// cached like the Shared code view above; it reads that one file and nothing else.
+export const PORTAL_COMPLETENESS_PATH = "/portal/api/completeness";
+
+export async function handlePortalCompleteness(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
+  if (!gate.ok) return gate.response;
+  const body = await readCompleteness(env, now);
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }

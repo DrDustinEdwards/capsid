@@ -1,7 +1,7 @@
 import { QueryCache, QueryClient, keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView } from "../types";
 
 // Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
 // workers.dev, /api/... on portal.dustinedwards.info.
@@ -14,6 +14,7 @@ const ACTIVITY_URL = `${BASE}/api/activity`;
 const CLAIMS_URL = `${BASE}/api/claims`;
 const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
 const SHARED_CODE_URL = `${BASE}/api/shared-code`;
+const COMPLETENESS_URL = `${BASE}/api/completeness`;
 const LIBRARY_URL = `${BASE}/api/library`;
 const TRENDS_URL = `${BASE}/api/trends`;
 const STALE_URL = `${BASE}/api/stale`;
@@ -293,6 +294,12 @@ export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageH
 // the local copies left (src/shared-code.ts), cached by the Worker for an hour.
 export function fetchSharedCode(): Promise<Answer<SharedCodeView>> {
   return get<SharedCodeView>(SHARED_CODE_URL);
+}
+
+// GET /portal/api/completeness: devkit's daily scoreboard (src/completeness.ts), cached by the
+// Worker for ten minutes.
+export function fetchCompleteness(): Promise<Answer<CompletenessView>> {
+  return get<CompletenessView>(COMPLETENESS_URL);
 }
 
 // GET /portal/api/push: the key a browser subscribes with and the devices with phone
