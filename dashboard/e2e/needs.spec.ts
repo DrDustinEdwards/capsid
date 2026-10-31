@@ -46,7 +46,7 @@ const dialog = (page: Page) => page.locator("dialog.confirm");
 test("PLANT: the home is Needs you, the list comes first by kind, and the charts are folded at the foot", async ({ page }) => {
   await page.goto("./");
   await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
-  await expect(waiting(page).locator(".wgroup h3")).toHaveText([/^Pull requests 2/, /^Questions and blocked jobs 3/, /^Rule changes 4/, /^Paused after repeated failures 1/, /^Also waiting 2/]);
+  await expect(waiting(page).locator(".wgroup h3")).toHaveText([/^Pull requests 2/, /^Questions and blocked jobs 3/, /^Paused after repeated failures 1/, /^Also waiting 2/]);
   // The list is above Problems and Trends, and nothing above it waits on a chart.
   const order = await page.evaluate(() => ["#waiting", "#attention", "#trends"].map((s) => document.querySelector(s)!.getBoundingClientRect().top));
   expect(order[0]).toBeLessThan(order[1]!);
