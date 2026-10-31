@@ -1,6 +1,6 @@
 import { gatherInbox } from "./inbox";
 import { adminAgentForEmail } from "./agents";
-import { cookieName, getCookie } from "./auth";
+import { capsidCookie, getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
 import { loadMergePolicy } from "./auto-merge-policy";
 import { readSafetyReport } from "./merge-safety";
@@ -107,7 +107,7 @@ export function portalCsrf(request: Request): { value: string; setCookie: string
   const path = portalCookiePath(new URL(request.url));
   return {
     value,
-    setCookie: `${cookieName(PORTAL_CSRF_COOKIE, path)}=${value}; HttpOnly; Secure; SameSite=Lax; Path=${path}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`,
+    setCookie: capsidCookie(PORTAL_CSRF_COOKIE, value, path, PORTAL_SESSION_TTL_SECONDS),
   };
 }
 

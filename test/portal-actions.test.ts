@@ -850,7 +850,7 @@ test("sign out expires the session and CSRF cookies at Path=/portal, and ends a 
   for (const c of cookies) {
     assert.match(c, /; Max-Age=0(;|$)/, `${c} does not expire the cookie`);
     assert.match(c, /; Path=\/portal(;|$)/, `${c} is not scoped to the Portal, so it would not clear the cookie the login set`);
-    assert.match(c, /HttpOnly; Secure; SameSite=Lax/);
+    assert.match(c, /; Secure; HttpOnly; SameSite=Lax/);
   }
   wroteNothing(w, "sign out");
   // The same session cookie, sent again from anywhere, is a sign-in redirect now.

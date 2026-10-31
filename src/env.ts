@@ -23,6 +23,10 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // co-owner cannot change ADMIN_EMAIL or this list: both are set only in Cloudflare.
   // Optional; unset or empty means no co-owners. Ignored while ADMIN_EMAIL is unset.
   CO_OWNER_EMAILS?: string;
+  // The Audience tag of the self-hosted Access application that covers only
+  // portal.dustinedwards.info/admin/access-drift, Service Auth only, for the drift check's
+  // service token (src/index.ts). Unset, that path is 404 to everyone.
+  ACCESS_DRIFT_AUD?: string;
   // The Watch Floor's Cloudflare read (src/ops-cloudflare.ts): a read-only API token
   // with Account Analytics Read and Workers Scripts Read, and the account it reads.
   // Unset, the deploy and error columns show no data and say why.
