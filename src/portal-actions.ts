@@ -6,6 +6,7 @@ import { type PortalUser, portalDisplay, portalGate, portalSignOutCookies, sourc
 import { portalCookiePath } from "./portal-host";
 import { LOGOUT_HEADERS } from "@dustinedwards/site-runtime/headers";
 import { refuseCrossSite } from "@dustinedwards/site-runtime/origin";
+import { requireJson } from "@dustinedwards/site-runtime/body";
 import type { Env } from "./env";
 import { capsidStatus } from "./status";
 import { readBoundedText } from "./signed-requests";
@@ -55,7 +56,7 @@ const BODY_MAX_BYTES = 65_536;
 
 type Gated = { ok: true; email: string; user: PortalUser; csrf: string; body: Record<string, unknown> } | { ok: false; response: Response };
 
-/** The checks both POSTs run, in order: the session, the fetch metadata, the body cap,
+/** The checks both POSTs run, in order: the session, the fetch metadata, the content type, the body cap,
  *  the CSRF pair, then the JSON. Nothing here reads or writes state. */
 export async function gateActionRequest(request: Request, env: Env, now: Date): Promise<Gated> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
@@ -65,6 +66,10 @@ export async function gateActionRequest(request: Request, env: Env, now: Date): 
   // Neither header (an older browser, or curl with the cookies) is let through to the CSRF check.
   const crossSite = refuseCrossSite(request);
   if (crossSite) return { ok: false, response: crossSite };
+  // R4: a text/plain or form body is refused before it is read, so no cross-site form or no-cors fetch reaches an
+  // action as a simple request (site-runtime ./body requireJson; the signed-in crawl probes it).
+  const notJson = requireJson(request);
+  if (notJson) return { ok: false, response: notJson };
 
   const bounded = await readBoundedText(request, BODY_MAX_BYTES);
   if (!bounded.ok) return { ok: false, response: new Response(null, { status: 413, headers: { "Cache-Control": "no-store" } }) };
