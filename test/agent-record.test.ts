@@ -51,7 +51,7 @@ test("job states come from the jobs table, because a blocked job has no outcome 
       { actor: ACTOR, status: "done", n: 5 },
       { actor: ACTOR, status: "failed", n: 2 },
       { actor: ACTOR, status: "blocked", n: 1 },
-      { actor: "agent:foxing-driver", status: "done", n: 40 },
+      { actor: "agent:sample-driver", status: "done", n: 40 },
       // A bare name is a different caller. The queue records agent:<name>, and
       // matching the name alone would credit somebody else's work.
       { actor: "capsid-driver", status: "done", n: 99 },
@@ -127,7 +127,7 @@ test("gates hit and resumes are totals over the agent's own rows", () => {
       outcome({ blocked_count: 2, resumed_count: 2 }),
       outcome({ blocked_count: 1, resumed_count: 1 }),
       // Another credential's job, which must not land on this record.
-      outcome({ agent: "agent:foxing-driver", blocked_count: 9, resumed_count: 9 }),
+      outcome({ agent: "agent:sample-driver", blocked_count: 9, resumed_count: 9 }),
     ],
   });
   assert.equal(record.gates_hit, 3);

@@ -7,7 +7,7 @@
 //
 //   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.ts                    # dry run, all six
 //   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.ts --apply
-//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.ts --namespace foxing --apply
+//   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.ts --namespace sample --apply
 //   node scripts/mint-agents.ts --roles                                  # print the role mint commands
 //   CAPSID_OPERATOR_KEY=... node scripts/mint-agents.ts --role auditor --apply
 //
@@ -181,7 +181,7 @@ export function selectAgents(namespace?: string, registered?: string[], role?: s
 export function parseArgs(argv: string[]): { apply: boolean; namespace: string | undefined; role: string | undefined; roles: boolean } {
   const apply = argv.includes("--apply");
   const i = argv.indexOf("--namespace");
-  if (i !== -1 && !argv[i + 1]) throw new Error("--namespace needs a value, for example --namespace foxing.");
+  if (i !== -1 && !argv[i + 1]) throw new Error("--namespace needs a value, for example --namespace sample.");
   const r = argv.indexOf("--role");
   if (r !== -1 && !argv[r + 1]) throw new Error(`--role needs a value, one of: ${ROLES.map((x) => x.name).join(", ")}.`);
   if (i !== -1 && r !== -1) throw new Error("--namespace and --role select different things; pass one or the other.");

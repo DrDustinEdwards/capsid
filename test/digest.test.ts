@@ -30,7 +30,7 @@ const FULL: OvernightDigest = {
   finished: [{ id: "job_done", namespace: "capsid", title: "Ship the thing", status: "done", result_kind: "pr", duration_minutes: 30, blocked_count: 0, usage, usage_source: "none" }],
   blocked: [
     { id: "job_q", namespace: "carrel", title: "Which domain?", at: NOON.toISOString(), summary: "QUESTION: which domain?", pull_requests: [], usage, usage_source: "none" },
-    { id: "job_b", namespace: "foxing", title: "Create the bucket", at: NOON.toISOString(), summary: "run this", pull_requests: [], usage, usage_source: "none" },
+    { id: "job_b", namespace: "sample", title: "Create the bucket", at: NOON.toISOString(), summary: "run this", pull_requests: [], usage, usage_source: "none" },
   ],
   pull_requests_ready: [{ job_id: "job_done", namespace: "capsid", url: "https://github.com/owner/capsid/pull/9", state: "open", source: "outcome" }],
   pull_requests_merged: 2,
@@ -129,7 +129,7 @@ test("the mail lists what waits by class, questions, blocked jobs, rollbacks and
   assert.match(m.text, /owner\/capsid#8, class approve \(visual: look at https:\/\/pr-8\.sample\.workers\.dev\/ and approve in the Portal\)/);
   assert.doesNotMatch(m.text, /#9/, "a wait-class pull request was listed as waiting on Dustin");
   assert.match(m.text, /Questions \(1\)\n- carrel job_q: Which domain\?/);
-  assert.match(m.text, /Blocked \(1\)\n- foxing job_b: Create the bucket/);
+  assert.match(m.text, /Blocked \(1\)\n- sample job_b: Create the bucket/);
   assert.match(m.text, /Rollbacks \(1\)\n- owner\/capsid at aaaaaaa: rolled back/);
   assert.match(m.text, /Finished \(1\), 2 pull request\(s\) merged/);
   assert.match(m.text, /https:\/\/portal\.dustinedwards\.info\//);

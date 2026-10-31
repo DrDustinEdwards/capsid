@@ -32,7 +32,7 @@ async function row(name: string, overrides: Record<string, unknown> = {}) {
 test("capsid_run_improve action status carries the agent inventory, with last_seen", async () => {
   const env = await statusEnv([
     await row("capsid-driver", { last_seen: "2026-09-11 02:00:00" }),
-    await row("foxing-driver"),
+    await row("sample-driver"),
   ]);
   const status = await capsidStatus(env);
   assert.ok(Array.isArray(status.agents), "capsid_run_improve action status does not report the agents");

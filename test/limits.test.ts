@@ -18,8 +18,8 @@ test("the grammar accepts the paths the store actually holds", () => {
   for (const path of [
     "core.md",
     "conventions.md",
-    "archive/session-2026-08-11-foxhound-ci-migrations-turnstile-and-the-staging-name.md",
-    "recova/parity/INVENTORY-SEED.md",
+    "archive/session-2026-08-11-examples-ci-migrations-turnstile-and-the-staging-name.md",
+    "sample/parity/INVENTORY-SEED.md",
     "a.md",
   ]) {
     assert.equal(pathProblem(path), null, `${path} was rejected`);
