@@ -1,4 +1,4 @@
-import { ChartSlot } from "../ui/Enar";
+import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy, useId, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";

@@ -213,40 +213,16 @@ details[open] > summary .chev { transform: rotate(45deg); }
 .fleet tbody tr:hover { background: var(--raised); }
 .fleet .site b { font-weight: 700; display: block; }
 .fleet .site span { font-size: var(--fs-detail); color: var(--muted); white-space: nowrap; }
-/* Enarratio's primitives (ui/Enar.tsx) read Capsomer's map (capsomer/tokens.css), so both
-   themes follow; ci-strip turns the heat strip's two ends into green and red. */
-.enar { margin: 0; }
+/* Enarratio's charts read Capsomer's map (capsomer/tokens.css), so both themes follow. Two
+   charts whose colors mean a status take the status tokens: the agreement bars, and ci-strip,
+   which turns the heat strip's two ends into green and red. */
 .agree-chart { --enarratio-series-1: var(--ok); --enarratio-series-2: var(--crit); --enarratio-series-3: var(--nodata); --enarratio-series-4: var(--warn); }
 /* Two charts side by side, each half the row, stacked when the row is narrow. */
 .chart-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 0 32px; align-items: start; }
-.wait-chart, .minutes-chart { margin: 0 0 16px; min-width: 0; }
-.wait-chart .t1 .l, .minutes-chart .t1 .l { font-size: 13px; font-weight: 600; }
-.minutes-now { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 4px 0 2px; }
-.minutes-now .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.minutes-now .v small { font-size: var(--fs-detail); font-weight: 400; color: var(--muted); }
-.minutes-change { font-size: var(--fs-detail); font-weight: 600; color: var(--muted); }
-/* More of your time is the worse direction. */
-.minutes-change.up { color: var(--warn); } .minutes-change.down { color: var(--ok); }
-/* Every chart is drawn at the width it is given (Enar.tsx), so a wide chart's 30rem floor
-   would only make it scroll on a phone. */
-.enarratio-frame-wide > svg { min-width: 0; }
-.enar-fig .d { font-size: var(--fs-detail); color: var(--muted); margin: 6px 0 0; }
-.enar-fig details.enarratio-data { font-size: var(--fs-detail); color: var(--muted); }
+.wait-chart, .minutes-chart { margin: 0 0 16px; }
 .ci-strip { --enarratio-sequential-1: var(--ok); --enarratio-sequential-5: var(--crit); }
-.enar-table { font-size: var(--fs-detail); color: var(--muted); }
 .slot-head { font-size: var(--fs-detail); margin-bottom: 4px; overflow-wrap: anywhere; }
 .upct { font-size: var(--fs-label); color: var(--muted); display: flex; justify-content: space-between; margin-top: 3px; }
-.backupbar { width: 84px; height: 6px; border-radius: 3px; background: var(--sunken); position: relative; overflow: hidden; margin-top: 4px; }
-.backupbar i { position: absolute; inset: 0 auto 0 0; background: var(--ok); }
-.backupbar i.warn { background: var(--warn); } .backupbar i.crit { background: var(--crit); }
-
-/* timeline */
-.tl .scroll-x > svg { display: block; width: 100%; height: auto; }
-@media (max-width: 820px) { .tl .scroll-x > svg { min-width: 760px; } }
-.tl-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: var(--fs-detail); color: var(--muted); }
-.tl-head { display: inline-flex; gap: 14px; flex-wrap: wrap; align-items: center; }
-.tl-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.tl-legend svg { flex: none; }
 
 /* queue */
 .qgroup > h3 { margin: 0; display: flex; align-items: center; gap: 8px; padding: 6px 16px; font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--raised); }
@@ -374,10 +350,8 @@ dialog { color: var(--text); }
 .stack-gap { display: grid; gap: 12px; }
 .row-gap { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .conv-h { margin: 0; font-size: 13px; font-weight: 600; }
-.tl-pad { padding: 6px 8px 0; }
 .src.hot, .mono.hot, .num.hot { color: var(--crit); }
-.spark { overflow: visible; display: block; }
-.chart { width: 100%; height: auto; display: block; }
+.spark, .fleet .cap-uptime-strip { display: block; }
 .nodata-cell { display: grid; gap: 2px; }
 .nodata-cell .src { white-space: normal; max-width: 22ch; }
 .th-note { display: block; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--dim); }

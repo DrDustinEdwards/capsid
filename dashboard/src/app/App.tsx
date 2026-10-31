@@ -8,7 +8,6 @@ import { ago, ms, portalNow, utc } from "../lib/format";
 import { RAIL_PREF, THEME_PREF, readPref, toggleTheme, useSingleKeys, writePref } from "../lib/prefs";
 import { register, setSheetOpener } from "capsomer/behavior/shortcuts";
 import { NavIcon } from "../ui/icons";
-import { FreshRing } from "../ui/charts";
 import { AppCtx, MOVED, VIEWS, parseRoute, placePath, routePath, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
@@ -675,5 +674,18 @@ export function App() {
       </div>
       <div className="tip" ref={tipRef} aria-hidden="true" />
     </>
+  );
+}
+
+// The countdown to the next poll. Decorative, not data: the words beside it say when the data
+// was read, so it stays a few lines of SVG here rather than pulling Enarratio into the entry.
+function FreshRing({ frac, stale }: { frac: number; stale: boolean }) {
+  const r = 6.5;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg className="ring" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r={r} fill="none" stroke="var(--line-strong)" strokeWidth="2" />
+      <circle cx="8" cy="8" r={r} fill="none" stroke={stale ? "var(--warn)" : "var(--accent)"} strokeWidth="2" strokeDasharray={`${(c * frac).toFixed(2)} ${c.toFixed(2)}`} transform="rotate(-90 8 8)" strokeLinecap="round" />
+    </svg>
   );
 }

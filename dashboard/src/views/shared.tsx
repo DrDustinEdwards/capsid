@@ -1,15 +1,19 @@
 import { Empty } from "capsomer/react/empty";
+import { Meter } from "capsomer/react/meter";
+import "capsomer/meter.css";
 import { Panel } from "capsomer/react/panel";
-import { useCallback, useState, type ReactNode } from "react";
+import { lazy, useCallback, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
 import { JOB, PROBE, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
 import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
-import { Spark, Timeline, TimelineLegend, UptimeFoot, errorTotals } from "../ui/charts";
-import { UptimeTicks } from "../ui/uptime-ticks";
-import { useWidth } from "../ui/useWidth";
+import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
+import { ChartSlot } from "../ui/ChartSlot";
+
+// The deploys timeline loads with the tab that shows it, in the charts' lazy chunk.
+const DeployTimeline = lazy(() => import("./TrendCharts").then((m) => ({ default: m.DeployTimeline })));
 
 // The risky controls, set apart from the safe ones (the UX audit's M9): a red-edged area
 // under its own "Danger" label, after everything else, so a Remove or a Mark failed is never
@@ -124,7 +128,7 @@ function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
   const hot = t.rate != null && t.rate > 0.01;
   return (
     <>
-      <Spark values={cf.errors24.map((x) => x.errors)} color={hot ? "var(--crit)" : "var(--muted)"} label={`Errors per hour for ${s.name}, last 24 hours: ${fmtN(t.err)} of ${fmtN(t.req)} requests`} />
+      <ErrorSpark values={cf.errors24.map((x) => x.errors)} label={`Errors per hour for ${s.name}, last 24 hours: ${fmtN(t.err)} of ${fmtN(t.req)} requests`} />
       <div className={`src${hot ? " hot" : ""}`}>
         {fmtN(t.err)} / {fmtN(t.req)} · {pct(t.rate)}
       </div>
@@ -143,16 +147,8 @@ function BackupCell({ s }: { s: SiteSnapshot }) {
   const backup = s.namespace === "capsid" ? feed.snapshot?.health?.backup : undefined;
   if (!backup) return <NoData brief reason="not reported by the site" />;
   if (backup.age_hours == null) return <St kind="crit">Never</St>;
-  const over = backup.age_hours > BACKUP_LIMIT_HOURS;
-  const width = Math.min(100, (backup.age_hours / BACKUP_LIMIT_HOURS) * 100);
-  return (
-    <>
-      <span className={over ? "num hot" : "num"}>{backup.age_hours.toFixed(1)}h</span> <span className="faint num">/ {BACKUP_LIMIT_HOURS}h</span>
-      <div className="backupbar" role="img" aria-label={`Backup age ${backup.age_hours.toFixed(1)} of ${BACKUP_LIMIT_HOURS} hours`}>
-        <i className={over ? "crit" : backup.age_hours > BACKUP_LIMIT_HOURS * 0.75 ? "warn" : ""} style={{ width: `${width}%` }} />
-      </div>
-    </>
-  );
+  const age = backup.age_hours.toFixed(1);
+  return <Meter size="sm" label={<span className="cap-sr-only">Backup age</span>} value={Math.min(backup.age_hours, BACKUP_LIMIT_HOURS)} max={BACKUP_LIMIT_HOURS} warnAt={0.75} critAt={1} valueText={`${age} of ${BACKUP_LIMIT_HOURS} hours`} display={`${age}h / ${BACKUP_LIMIT_HOURS}h`} />;
 }
 
 export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
@@ -367,22 +363,18 @@ export function IncidentFeed({ ns }: { ns?: string }) {
 // ---- timeline panel ------------------------------------------------------------------------
 
 export function TimelinePanel({ title, days, src, id, section }: { title: string; days: number; src: string; id?: string; section?: string }) {
-  const { feed, now } = useApp();
-  const [width, ref] = useWidth();
+  const { feed } = useApp();
   const sites = hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
-  // The legend sits in the header beside the source, so the chart is all the body holds.
   return (
-    <Panel flush title={title} src={sites.length ? <span className="tl-head"><TimelineLegend /><span>{src}</span></span> : src} className="tl" id={id} section={section}>
+    <Panel flush title={title} src={src} id={id} section={section}>
       {!hasSites(feed) ? (
         <div className="body faint">No site is configured, so there is no probe to chart. Add one in Settings.</div>
       ) : sites.length ? (
-        <>
-          {/* Wider than a phone, so it scrolls: a keyboard reaches it with Tab and scrolls it
-              with the arrow keys (the UX audit's m10). */}
-          <div className="scroll-x tl-pad" ref={ref} tabIndex={0} role="region" aria-label={`${title}, scrolls sideways`}>
-            <Timeline sites={sites} days={days} now={now} width={width} />
-          </div>
-        </>
+        <div className="body">
+          <ChartSlot>
+            <DeployTimeline sites={sites} days={days} />
+          </ChartSlot>
+        </div>
       ) : (
         <NoSnapshot />
       )}

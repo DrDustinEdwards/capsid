@@ -1,4 +1,4 @@
-import { ChartSlot } from "../ui/Enar";
+import { ChartSlot } from "../ui/ChartSlot";
 import { Fragment, lazy, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
@@ -6,12 +6,15 @@ import type { SiteSnapshot } from "../types";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
 import { JOB, PROBE, cfNoData, cfOk, siteKey } from "../lib/derive";
-import { ago, hostOf, ms, shortId, utc } from "../lib/format";
+import { ago, hostOf, ms, pct, shortId, utc } from "../lib/format";
 import { NoData, Pill, St } from "../ui/icons";
 import { When } from "../ui/When";
-import { UptimeFoot } from "../ui/charts";
-import { UptimeTicks } from "../ui/uptime-ticks";
-import { agentState, nsList } from "../lib/derive";
+import { uptimeOptions } from "../ui/charts";
+import { agentState, nsList, ringOf, uptime } from "../lib/derive";
+import { ChartFrame } from "capsomer/react/chart-frame";
+import "capsomer/chart-frame.css";
+import "capsomer/uptime-strip.css";
+import { uptimeStrip } from "enarratio";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
 
 // Chart 9 (error rate with deploy markers) is an Enarratio line chart, loaded when a site's
@@ -31,6 +34,34 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
   );
 }
 
+// The site's uptime as Capsomer's uptime strip: Enarratio's figure with the week's and the
+// day's share up at the end of its title's line, and the key after it.
+const UPTIME_KEYS = [
+  ["up", "Up"],
+  ["degraded", "Degraded"],
+  ["down", "Down"],
+  ["nodata", "No data"],
+] as const;
+
+function SiteUptime({ s }: { s: SiteSnapshot }) {
+  const ring = ringOf(s);
+  const p7 = uptime(ring);
+  const p24 = uptime(ring.slice(-48));
+  const subtitle = `${p7 == null ? "no data" : pct(p7)} up over 7 days, ${p24 == null ? "no data" : pct(p24, 1)} over 24 hours`;
+  return (
+    <ChartFrame inline chart={uptimeStrip({ ...uptimeOptions(s), title: "Uptime, 7 days", subtitle, source: { name: "The watcher's probes, every half hour" } })}>
+      <ul className="cap-uptime-legend" aria-label="Key">
+        {UPTIME_KEYS.map(([key, word]) => (
+          <li key={key}>
+            <span className="cap-uptime-key" data-key={key} aria-hidden="true" />
+            {word}
+          </li>
+        ))}
+      </ul>
+    </ChartFrame>
+  );
+}
+
 function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
   const { now } = useApp();
   const p = PROBE[s.state];
@@ -41,17 +72,10 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
       <Head label={`Site · ${s.namespace}`} title={s.name} sub={hostOf(s.origin)} badge={<Pill kind={p.kind}>{p.label}</Pill>} onClose={onClose} />
       <div className="dbody">
         {detail && <div className={`callout ${s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : ""}`}>{detail}</div>}
-        <div>
-          <p className="section-title">Uptime, 7 days</p>
-          <UptimeTicks site={s} />
-          <UptimeFoot site={s} long />
-        </div>
-        <div>
-          <p className="section-title">Requests and error rate, 24 hours</p>
-          <ChartSlot>
-            <ErrorRate site={s} />
-          </ChartSlot>
-        </div>
+        <SiteUptime s={s} />
+        <ChartSlot>
+          <ErrorRate site={s} />
+        </ChartSlot>
         <div>
           <p className="section-title">Probe</p>
           <dl className="kv">

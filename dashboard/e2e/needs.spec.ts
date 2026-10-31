@@ -52,7 +52,7 @@ test("PLANT: the home is Needs you, the list comes first by kind, and the charts
   expect(order[0]).toBeLessThan(order[1]!);
   expect(order[1]).toBeLessThan(order[2]!);
   await expect(page.locator("#trends")).not.toHaveAttribute("open", "");
-  await expect(page.locator("#trends .enar")).toHaveCount(0);
+  await expect(page.locator("#trends .cap-chart")).toHaveCount(0);
   await expect(waiting(page).getByText(/^Nothing waiting: /)).toContainText("Sample D");
   // The inbox's count is the header's Inbox, once; the menu entry carries no second copy.
   await expect(page.locator("header.cap-site-header").getByRole("link", { name: "Inbox, 7 waiting on you" })).toHaveCount(1);

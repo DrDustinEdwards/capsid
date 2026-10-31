@@ -17,36 +17,16 @@
   --lamp-on: #008489;
   --lamp-on-glow: none;
 }
-:root[data-family] {
-  --bar: var(--text);
-}
 @media (prefers-color-scheme: dark) {
   :root[data-family]:not([data-theme="light"]) {
-    --bar: var(--lamp);
     --lamp-on: var(--lamp);
     --lamp-on-glow: var(--lamp-glow);
   }
 }
 :root[data-family][data-theme="dark"] {
-  --bar: var(--lamp);
   --lamp-on: var(--lamp);
   --lamp-on-glow: var(--lamp-glow);
 }
-/* Enarratio's charts on the board's colors: ink bars and rings in light, the lamp's teal in dark. Enarratio sets its
-   variables on the chart itself, so these name the chart under the html element to win. */
-html .enarratio,
-html .enarratio-tooltip {
-  --enarratio-font: var(--face);
-  --enarratio-font-numeric: var(--face);
-  --enarratio-background: var(--ground);
-  --enarratio-text: var(--text);
-  --enarratio-text-muted: var(--muted);
-  --enarratio-grid: var(--line);
-  --enarratio-focus: var(--text);
-  --enarratio-series-1: var(--bar);
-  --enarratio-series-2: var(--muted);
-}
-
 body {
   margin: 0;
   background: var(--ground);
@@ -622,29 +602,7 @@ html:not(.js) .kb-actions {
   font-variant-numeric: tabular-nums;
 }
 .kb-budget {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
   border-block-end: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.9375rem;
-}
-.kb-budget progress {
-  appearance: none;
-  inline-size: 100%;
-  block-size: 10px;
-  border: 1px solid var(--text);
-  background: none;
-}
-.kb-budget progress::-webkit-progress-bar {
-  background: none;
-}
-.kb-budget progress::-webkit-progress-value {
-  background: var(--lamp-on);
-  transition: inline-size var(--dur-base) var(--ease-out);
-}
-.kb-budget progress::-moz-progress-bar {
-  background: var(--lamp-on);
 }
 @media (max-width: 64rem) {
   .kb-grid {
@@ -1076,20 +1034,14 @@ html:not(.js) .chapter h3::before {
   align-items: start;
 }
 /* A chart takes the whole row on a phone and two columns on a wider page, its rings beside it. */
-.charts > figure:not(.ring) {
+.charts > .cap-chart:not(:has(.enarratio-progress-ring)) {
   grid-column: 1 / -1;
-  min-width: 0;
   max-width: 36rem;
 }
 @media (min-width: 52rem) {
-  .charts > figure:not(.ring) {
+  .charts > .cap-chart:not(:has(.enarratio-progress-ring)) {
     grid-column: span 2;
   }
-}
-/* Enarratio draws at a phone's width; on a wider page the drawing grows to its column. */
-.charts .enarratio-frame svg {
-  inline-size: 100%;
-  block-size: auto;
 }
 .numbers-table {
   margin-block-start: var(--space-5);
@@ -1407,22 +1359,6 @@ th[aria-sort="ascending"] .sort::after {
 }
 .scroller:focus-visible {
   outline: 2px solid var(--ring);
-}
-
-.ring {
-  margin: 0;
-}
-.ring h3 {
-  margin-block: 0 var(--space-3);
-  font-size: 1rem;
-}
-/* "100%" at Enarratio's size touches the ring's inside edge. */
-.ring .enarratio-numeric {
-  font-size: 25px;
-}
-.ring figcaption {
-  margin-block-start: var(--space-3);
-  color: var(--muted);
 }
 
 /* The map's view buttons need its script, so Capsomer ships them hidden and shows them once it
