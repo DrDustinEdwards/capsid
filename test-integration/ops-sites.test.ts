@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { addSite, editSite, readSiteConfig, removeSite, sitesFrom, validateSite, type SiteInput } from "../src/ops-sites";
 
 // The Portal's site configuration against a real D1 with every migration applied
-// (migrations/0022_ops_sites.sql): the seed, the schema's own checks, and the three
-// guarded writes with their audit rows.
+// (migrations/0022_ops_sites.sql, and 0051's health routes): the seed, the schema's own
+// checks, and the three guarded writes with their audit rows.
 
 const ACTOR = "access:admin@example.com";
 
@@ -23,6 +23,20 @@ const BEFORE_THE_MOVE = [
   { namespace: "txasm", name: "TXASM", origin: "https://txasm.org", health_path: null, platform: "cloudflare", script: null, self_probe: false },
 ];
 
+// migrations/0051_ops_sites_health.sql: every live site's health route, read with curl on
+// 2026-10-30, and Carrel's row.
+const HEALTH_ROUTES: Record<string, Partial<(typeof BEFORE_THE_MOVE)[number]>> = {
+  bsw: { health_path: "/health" },
+  foxhound: { health_path: "/health" },
+  foxing: { health_path: "/health" },
+  julieedwards: { health_path: "/health", platform: "cloudflare" },
+  txasm: { origin: "https://txasm.dustin-edwards.workers.dev", health_path: "/health", script: "txasm" },
+};
+const SEEDED = [
+  ...BEFORE_THE_MOVE.map((row) => ({ ...row, ...HEALTH_ROUTES[row.namespace] })),
+  { namespace: "carrel", name: "Carrel", origin: "https://carrel.dustinedwards.info", health_path: "https://carrel-mcp.dustinedwards.info/health", platform: "cloudflare", script: null, self_probe: false },
+].sort((a, b) => a.namespace.localeCompare(b.namespace));
+
 async function auditRows(): Promise<Array<{ actor: string; action: string; namespace: string; params: string }>> {
   const { results } = await env.DB.prepare("SELECT actor, action, namespace, params FROM audit_log ORDER BY id").all<{ actor: string; action: string; namespace: string; params: string }>();
   return results ?? [];
@@ -33,21 +47,21 @@ function input(over: Partial<SiteInput> = {}): SiteInput {
 }
 
 describe("the seed", () => {
-  it("is exactly the list the code held before the move: eight sites and one namespace with none", async () => {
+  it("is the list the code held before the move with 0051's health routes: nine sites and one namespace with none", async () => {
     const rows = await readSiteConfig(env.DB);
-    expect(rows.map(({ revision: _r, updated_at: _u, operator: _o, operator_problem: _p, ...rest }) => rest)).toEqual(BEFORE_THE_MOVE);
+    expect(rows.map(({ revision: _r, updated_at: _u, operator: _o, operator_problem: _p, ...rest }) => rest)).toEqual(SEEDED);
     // migrations/0035 opts dustinedwards alone into Capsid calling its operator API.
     expect(rows.filter((r) => r.operator).map((r) => [r.namespace, r.operator?.auth_var])).toEqual([["dustinedwards", "DUSTINEDWARDS_OPERATOR_TOKEN"]]);
     expect(rows.every((r) => r.operator_problem === null)).toBe(true);
-    expect(rows.every((r) => r.revision === 1)).toBe(true);
-    expect(sitesFrom(rows)).toHaveLength(8);
+    expect(rows.filter((r) => r.revision !== 1).map((r) => r.namespace)).toEqual(["bsw", "carrel", "foxhound", "foxing", "julieedwards", "txasm"]);
+    expect(sitesFrom(rows)).toHaveLength(9);
   });
 
   // scanner-rule: a seeded script is named only where the host proves it
   it("names a script only where the host proves it, a workers.dev host's first label, and self-probes Capsid alone", async () => {
     const sites = sitesFrom(await readSiteConfig(env.DB));
     const named = sites.filter((s) => s.script !== undefined);
-    expect(named.map((s) => s.script).sort()).toEqual(["bsw", "capsid"]);
+    expect(named.map((s) => s.script).sort()).toEqual(["bsw", "capsid", "txasm"]);
     for (const s of sites) {
       const host = new URL(s.origin).hostname;
       if (host.endsWith(".workers.dev")) expect(s.script, `${s.namespace} is on workers.dev and does not name its script`).toBe(host.split(".")[0]);
