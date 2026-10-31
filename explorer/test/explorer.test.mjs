@@ -203,7 +203,8 @@ test("the headers send the shared policy with scripts and styles from the explor
   assert.match(headers, /^\/\*\n/);
   assert.match(headers, /Content-Security-Policy: default-src 'self'; script-src 'self' https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js\/; style-src 'self';/);
   assert.doesNotMatch(headers, /unsafe-inline|unsafe-eval/);
-  assert.match(headers, /report-uri https:\/\/mcp\.dustinedwards\.info\/csp-report/);
+  assert.match(headers, /report-uri https:\/\/mcp\.dustinedwards\.info\/csp-report; report-to csp/);
+  assert.match(headers, /Reporting-Endpoints: csp="https:\/\/mcp\.dustinedwards\.info\/csp-report"/);
   assert.match(headers, /X-Frame-Options: deny/);
 });
 
