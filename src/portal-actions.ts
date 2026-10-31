@@ -6,7 +6,6 @@ import { type PortalUser, portalDisplay, portalGate, portalSignOutCookies, sourc
 import { portalCookiePath } from "./portal-host";
 import { LOGOUT_HEADERS } from "@dustinedwards/site-runtime/headers";
 import { refuseCrossSite } from "@dustinedwards/site-runtime/origin";
-import { requireJson } from "@dustinedwards/site-runtime/body";
 import type { Env } from "./env";
 import { capsidStatus } from "./status";
 import { readBoundedText } from "./signed-requests";
@@ -66,10 +65,6 @@ export async function gateActionRequest(request: Request, env: Env, now: Date): 
   // Neither header (an older browser, or curl with the cookies) is let through to the CSRF check.
   const crossSite = refuseCrossSite(request);
   if (crossSite) return { ok: false, response: crossSite };
-  // A body that is not typed JSON is a 415 before a byte is read (site-runtime requireJson): a form or text/plain post
-  // is one any page can send with the session cookie and no preflight.
-  const notJson = requireJson(request);
-  if (notJson) return { ok: false, response: notJson };
 
   const bounded = await readBoundedText(request, BODY_MAX_BYTES);
   if (!bounded.ok) return { ok: false, response: new Response(null, { status: 413, headers: { "Cache-Control": "no-store" } }) };
