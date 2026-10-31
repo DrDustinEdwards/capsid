@@ -19,7 +19,7 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
     "restore",
     {
       description:
-        "Restore a document's title and body from one of its retained versions (see capsid_read_doc action versions). The current body is snapshotted first and the restore is audit-logged, so a restore can itself be undone. The stored bytes go back exactly, with no dash normalization; type, status, tags and links are not restored. Restoring a deleted document recreates it. Refused on a canon document for a caller that is not the seat or the admin (see capsid_write_doc action write). Optional if_match: the sha256 of the body you believe is live; the restore is refused if it changed. Needs the write grant and confirm: true.",
+        "Restore a document's title and body from one of its retained versions (see capsid_read_doc action versions). The current body is snapshotted first and the restore is audit-logged, so a restore can itself be undone. The stored bytes go back exactly, with no dash normalization; type, status, tags and links are not restored. Restoring a deleted document recreates it. Refused on a canon document for a key scoped to some namespaces (see capsid_write_doc action write). Optional if_match: the sha256 of the body you believe is live; the restore is refused if it changed. Needs the write grant and confirm: true.",
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -136,7 +136,7 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "delete",
     {
-      description: "Delete a document. Snapshots it first and writes an audit log entry. Refused on a canon document for a caller that is not the seat or the admin (see capsid_write_doc). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+      description: "Delete a document. Snapshots it first and writes an audit log entry. Refused on a canon document for a key scoped to some namespaces (see capsid_write_doc). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: { namespace: nsName, path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
     },
     async ({ namespace, path, confirm, allow_improve_paths }) => {
@@ -214,14 +214,14 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "move",
     {
-      description: "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Refused when either path is a canon document, for a caller that is not the seat or the admin (see capsid_write_doc action write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+      description: "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Refused when either path is a canon document, for a key scoped to some namespaces (see capsid_write_doc action write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
       inputSchema: { namespace: nsName, path: docPath, new_path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
     },
     async ({ namespace, path, new_path, confirm, allow_improve_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
       // Both ends: moving canon away empties it, and moving a document onto a canon path
-      // that does not exist yet creates canon without review.
+      // that does not exist yet creates canon from a caller that may not write it.
       for (const end of [path, new_path]) {
         if (canonGuarded(ctx.agent, namespace, end)) return fail(canonRefusal("move", namespace, end));
       }

@@ -308,9 +308,6 @@ export interface OpsLive {
   // The D1 store's size, from the jobs read's meta.size_after (null when D1 did not
   // report it), against the per-database cap (D1_CAP_BYTES in src/ops-feed.ts).
   store: { size_bytes: number | null; cap_bytes: number };
-  // Drivers' writes to canon documents waiting for approval (src/canon.ts), oldest
-  // first, at most 50.
-  canon_proposals: OpsCanonProposal[];
   // What needs Dustin, per app, from the same gatherer GET /ops/inbox answers with
   // (src/inbox.ts), unrestricted: the Portal is the admin's.
   inbox: Inbox;
@@ -329,22 +326,6 @@ export interface OpsFinding {
   seen_count: number;
   // The newest sighting's evidence lines, at most three.
   evidence: string[];
-}
-
-// One pending canon proposal, measured against the document as it is now. stale: the
-// document moved past the body the proposal was written against, so it can only be
-// rejected. directive_lines: the added lines that read as instructions to agents.
-export interface OpsCanonProposal {
-  id: number;
-  namespace: string;
-  path: string;
-  proposer: string;
-  created_at: string;
-  creates: boolean;
-  stale: boolean;
-  added: number;
-  removed: number;
-  directive_lines: string[];
 }
 
 // The run ledger (src/task-runs.ts): each scheduled task's newest runs, and its flag

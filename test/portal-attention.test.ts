@@ -61,7 +61,7 @@ test("one pull request stays a row of its own", () => {
 test("PLANT: with WAITING_KINDS skipped, Problems hold nothing Needs you lists with its buttons", () => {
   const { f, now } = feed();
   const all = attentionGroups(f, now).problems.map((r) => r.kind);
-  for (const k of ["Queue", "Canon", "PR"]) assert.ok(all.includes(k), `the sample has a ${k} row to skip`);
+  for (const k of ["Queue", "PR"]) assert.ok(all.includes(k), `the sample has a ${k} row to skip`);
   const left = attentionGroups(f, now, WAITING_KINDS).problems.map((r) => r.kind);
   assert.deepEqual(left.filter((k) => WAITING_KINDS.has(k)), []);
   assert.ok(left.length > 0, "the other problems stay");

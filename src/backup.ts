@@ -136,9 +136,9 @@ export const TABLES = [
   // Each job's earlier versions, kept by capsid_work_jobs action "edit" (migrations/0033_job_versions.sql).
   // Nothing prunes it, and the job's row holds only the newest version.
   "job_versions",
-  // Drivers' proposed changes to canon documents, pending or decided
-  // (migrations/0034_canon_proposals.sql). Nothing prunes it: a decided row is the
-  // record of who proposed and who approved a canon change.
+  // Drivers' proposed changes to canon documents (migrations/0034_canon_proposals.sql),
+  // from the review queue retired 2026-10-31 (src/canon.ts). Kept, with its decided
+  // rows, until a migration drops it.
   "canon_proposals",
   // The shared packages the Shared code view follows (migrations/0036_shared_packages.sql):
   // configuration, seeded by its migration, so a restore empties it before importing.

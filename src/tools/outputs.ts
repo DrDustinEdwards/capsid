@@ -128,7 +128,6 @@ const OUTPUTS: Record<string, Shape> = {
   ]),
   backlinks: { namespace: str, path: str, outgoing: rows, incoming: rows },
   write: mergeOutputs([
-    { namespace: str, path: str, action: str, proposal: num, base_sha256: nullable(str), directive_lines: strs, note: str },
     {
       namespace: str,
       path: str,
@@ -348,7 +347,7 @@ const OUTPUTS: Record<string, Shape> = {
     { ok: bool, action: str, models: obj },
     { generated: str, since: str, for_namespace: nullable(str), finished: rows, blocked: rows, pull_requests_ready: rows, pull_requests_merged: num, totals: obj, truncated: strs },
   ]),
-  status: { canon_paths: rows, canon_proposals: rows.optional(), policies: obj, overnight: obj, merge_safety: nullable(obj), agents: rows.optional(), namespaces: rows },
+  status: { canon_paths: rows, policies: obj, overnight: obj, merge_safety: nullable(obj), agents: rows.optional(), namespaces: rows },
   admin_control: mergeOutputs([
     { ok: z.literal(true), action: str, namespace: str, path: str, signature: str, sha256: str, bytes: num, resigned: bool },
     { action: str, mode: str, decision: nullable(obj) },
