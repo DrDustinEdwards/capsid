@@ -132,9 +132,9 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // pipeline's PR 6): recorded in deploy_outcomes, and a rollback is a finding. The check
   // counts as run only when every repo was read, so a failed read never clears one.
   let deploysRead = 0;
-  for (const { key, namespace, selector } of DEPLOY_ROSTER) {
+  for (const { key, namespace, selector, workflow } of DEPLOY_ROSTER) {
     // Wrapped, since a repo with no deploy yet reads as null and a failed read does too.
-    const read = await attempt(`deploys ${key}`, async () => ({ newest: await readDeployOutcomes(env, namespace, selector) }));
+    const read = await attempt(`deploys ${key}`, async () => ({ newest: await readDeployOutcomes(env, namespace, selector, workflow) }));
     if (!read) continue;
     deploysRead++;
     if (read.newest) out.push(...deployFindings(namespace, read.newest, key));
