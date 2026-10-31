@@ -1,8 +1,7 @@
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { remoteKeys, verifyJwt, type KeySource } from "@dustinedwards/site-runtime/access-login";
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
 import { textResponse } from "./http";
-import { HOUR_MS } from "./time";
 import { readJob } from "./jobs-transition";
 import { jobDocPath } from "./jobs-schema";
 import { splitSignedTask } from "./signed-docs";
@@ -39,14 +38,14 @@ const testKey = (jobId: string) => `shadow:test:${jobId}`;
 
 // The key set's address comes from the issuer's discovery document, as OIDC defines,
 // and must be on the issuer's own host.
-let keys: ReturnType<typeof createRemoteJWKSet> | null = null;
-async function issuerKeys(): Promise<ReturnType<typeof createRemoteJWKSet>> {
+let keys: KeySource | null = null;
+async function issuerKeys(): Promise<KeySource> {
   if (keys) return keys;
   const resp = await fetch(`${ISSUER}/.well-known/openid-configuration`);
   if (!resp.ok) throw new Error(`the issuer's discovery document answered ${resp.status}`);
   const uri = new URL(String(((await resp.json()) as { jwks_uri?: unknown }).jwks_uri));
   if (uri.origin !== ISSUER) throw new Error("the issuer's key set is on another host");
-  keys = createRemoteJWKSet(uri, { cacheMaxAge: HOUR_MS });
+  keys = remoteKeys(uri.href);
   return keys;
 }
 
@@ -59,7 +58,9 @@ async function caller(request: Request, env: Env): Promise<Caller> {
   let claims: Record<string, unknown>;
   const claim = (name: string) => (typeof claims[name] === "string" ? (claims[name] as string) : "");
   try {
-    ({ payload: claims } = await jwtVerify(token, await issuerKeys(), { issuer: ISSUER, audience: AUDIENCE, algorithms: ["RS256"], requiredClaims: ["exp"] }));
+    const verdict = await verifyJwt(token, await issuerKeys(), { issuer: ISSUER, audience: AUDIENCE });
+    if (!verdict.ok) return refuse(401, "the OIDC token does not verify");
+    claims = verdict.claims;
   } catch {
     return refuse(401, "the OIDC token does not verify");
   }
