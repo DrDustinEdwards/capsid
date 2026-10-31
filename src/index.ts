@@ -109,10 +109,27 @@ function withCacheDefault(response: Response, pathname: string): Response {
 // DCR_REDIRECT_URIS gets a new provider, never a stale one.
 const providers = new Map<string, OAuthProvider<Env>>();
 
+function dcrAllowlist(env: Env): string {
+  return [...DCR_CALLBACKS, env.DCR_REDIRECT_URIS ?? ""].join(",");
+}
+
+// A registration the allowlist refuses writes nothing, so it spends none of the limit: the
+// provider's callback still answers it 400 invalid_redirect_uri. Counting refusals let the
+// live gate's own unlisted-redirect probe, one per deploy, use up the daily 30 and roll a
+// deploy back on a 429 (run 41245505021). Only a registration that would be written counts.
+async function registrationWouldBeRefused(request: Request, env: Env): Promise<boolean> {
+  try {
+    const metadata = (await request.clone().json()) as Record<string, unknown>;
+    return metadata !== null && typeof metadata === "object" && registrationRefusal(dcrAllowlist(env), metadata) !== null;
+  } catch {
+    return false;
+  }
+}
+
 function providerFor(env: Env, resource: string, registration: boolean): OAuthProvider<Env> {
   // The callbacks every user shares (Grok, ChatGPT, Gemini) and the per-connector ones the
   // seat lists in DCR_REDIRECT_URIS, each matched exactly.
-  const allowed = [...DCR_CALLBACKS, env.DCR_REDIRECT_URIS ?? ""].join(",");
+  const allowed = dcrAllowlist(env);
   const key = `${resource} ${registration} ${allowed}`;
   let provider = providers.get(key);
   if (provider) return provider;
@@ -188,7 +205,7 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
     if (foreign) return secured(foreign, pathname);
   }
   const legacy = new URL(request.url).hostname === LEGACY_HOST;
-  if (!legacy && pathname === "/register" && request.method === "POST") {
+  if (!legacy && pathname === "/register" && request.method === "POST" && !(await registrationWouldBeRefused(request, env))) {
     const limited = await registrationLimited(request, env.OAUTH_KV);
     if (limited) return secured(limited, pathname);
   }
