@@ -1,5 +1,5 @@
 import { buildPolicy, CSP_REPORT_GROUP, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
-import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
+import { applyHeaderSet, buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
 import { capsidMcp, capsidPortal } from "@dustinedwards/site-runtime/sites";
 import { MCP_HOST } from "./mcp-host";
@@ -64,13 +64,7 @@ export function securityHeadersFor(host: string): Record<string, string> {
 }
 
 export function withSecurityHeaders(response: Response, host: string = MCP_HOST): Response {
-  const wanted = securityHeadersFor(host);
-
-  const absent = Object.entries(wanted).filter(([k]) => !response.headers.has(k));
-  if (absent.length === 0) return response;
-
-  // Headers on an already-constructed Response can be immutable, so rebuild.
-  const headers = new Headers(response.headers);
-  for (const [key, value] of absent) headers.set(key, value);
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  // A route's own value wins (overwrite: false). applyHeaderSet also gives a text or XML Content-Type with no charset
+  // `charset=utf-8` (H2): the assets binding serves the Portal's page and scripts without one.
+  return applyHeaderSet(response, securityHeadersFor(host), { overwrite: false });
 }
