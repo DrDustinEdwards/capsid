@@ -90,7 +90,7 @@ describe("/portal through the assets router", () => {
     const authorize = await SELF.fetch(`${ORIGIN}/authorize`, { headers: NAV, redirect: "manual" });
     const authorizeBody = await authorize.text();
     expect(authorizeBody).not.toContain(INDEX_MARK);
-    expect(authorizeBody, "the Worker's own refusal of an empty authorization request").toMatch(/invalid authorization request/);
+    expect(authorizeBody, "the Worker's own refusal of an empty authorization request").toMatch(/client_id is required/);
 
     const callback = await SELF.fetch(`${ORIGIN}/portal/callback`, { headers: NAV, redirect: "manual" });
     expect(callback.status, "the Portal callback with no state is refused by the Worker").toBeGreaterThanOrEqual(400);

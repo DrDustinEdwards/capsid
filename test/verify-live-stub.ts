@@ -48,8 +48,8 @@ export function healthy(req: IncomingMessage, res: ServerResponse) {
     return res.end();
   }
   if (url.pathname === "/authorize" && url.searchParams.get("client_id")) {
-    res.writeHead(200, { ...HTML, "set-cookie": "__Secure-capsid_csrf=c1; Path=/authorize; HttpOnly; Secure; SameSite=Lax" });
-    return res.end(`<form method="post" action="/authorize"><input name="csrf" value="c1"><input name="req" value="r1"></form>`);
+    res.writeHead(200, { ...HTML, "set-cookie": "__Host-oauth-consent-0123456789abcdef=c1; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600" });
+    return res.end(`<form method="post"><input type="hidden" name="handle" value="h1"></form>`);
   }
   if (url.pathname.startsWith("/.well-known/")) return json(200, {});
   // The Portal's own host, played under /portal-host (PORTAL_ORIGIN below): with no

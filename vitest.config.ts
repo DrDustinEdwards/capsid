@@ -67,6 +67,12 @@ export default defineConfig({
         d1Databases: ["DB"],
         kvNamespaces: ["APP_KV", "OAUTH_KV"],
         r2Buckets: ["MEDIA", "HOLDOUT"],
+        // site-runtime's two SQLite Durable Objects, exported by src/index.ts as in
+        // wrangler.jsonc.example.
+        durableObjects: {
+          RATE_LIMITER: { className: "RateLimiter", useSQLite: true },
+          TOOL_CALL_LOG: { className: "ToolCallLog", useSQLite: true },
+        },
         // Capsid Portal's files (src/portal-app.ts), a small fake build in
         // test-integration/fixtures/dashboard. Miniflare's own assets option
         // (AssetsOptionsSchema in miniflare's types; the pool forwards

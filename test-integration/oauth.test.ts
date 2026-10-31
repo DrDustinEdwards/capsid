@@ -8,9 +8,9 @@ import { cimdClient } from "./cimd-stub";
 //
 // Asserted here is what a browser and a client depend on: the discovery documents
 // describe this server, /register takes only the allowlisted Grok, Gemini and ChatGPT
-// callbacks and grants nothing (tightened DCR, src/dcr.ts), the consent dialog renders for a
-// client known by its metadata document with its security headers, and the state
-// cookie is scoped so a stolen one is not reusable.
+// callbacks and grants nothing (tightened DCR, site-runtime's registrationRefusal in
+// src/index.ts), the consent dialog renders for a client known by its metadata document
+// with its security headers, and a callback from another browser is refused.
 
 describe("discovery", () => {
   it("serves protected-resource and authorization-server metadata", async () => {
@@ -46,8 +46,8 @@ describe("discovery", () => {
     expect(serverDoc.token_endpoint).toContain("/token");
     // PKCE is the provider default, asserted so it cannot change unnoticed.
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
-    // CIMD for Claude, Claude Code and ChatGPT, and tightened DCR for Grok and Gemini
-    // (src/dcr.ts), on the MCP host only.
+    // CIMD for Claude, Claude Code and ChatGPT, and tightened DCR for Grok and Gemini,
+    // on the MCP host only.
     expect(serverDoc.registration_endpoint).toBe("https://capsid.test/register");
     const legacy = (await (await SELF.fetch("https://capsid.dustin-edwards.workers.dev/.well-known/oauth-authorization-server")).json()) as { registration_endpoint?: string };
     expect(legacy.registration_endpoint).toBeUndefined();
@@ -95,7 +95,7 @@ describe("tightened dynamic client registration", () => {
     }
     const dialog = await SELF.fetch(url.toString(), { redirect: "manual" });
     expect(dialog.status, "a registered client skipped the consent page").toBe(200);
-    expect(await dialog.text()).toContain('action="/authorize"');
+    expect(await dialog.text()).toContain('name="handle"');
   });
 });
 
@@ -120,7 +120,6 @@ describe("authorize", () => {
     const html = await response.text();
     // The dialog itself, which a CSP set elsewhere can blank by blocking its inline
     // style and form.
-    expect(html).toContain('action="/authorize"');
     expect(html).toContain("method=\"post\"");
 
     // The enforced CSP is set by the dialog rather than by src/security-headers.ts.
@@ -146,11 +145,11 @@ describe("authorize", () => {
 
 describe("callback", () => {
   it("PLANT: a callback with no state cookie is refused rather than followed", async () => {
-    // The state cookie is sha256(state) with Path=/callback, so a code arriving
-    // without the browser that started the flow has nothing to match against.
+    // The provider's upstream state is bound to the browser that started the flow by its
+    // own cookie, so a code arriving without it has nothing to match against.
     const response = await SELF.fetch("https://capsid.test/callback?code=abc&state=whatever", { redirect: "manual" });
     expect(response.status).not.toBe(302);
-    expect(await response.text()).toMatch(/state|expired|session/i);
+    expect(await response.text()).toMatch(/sign-in/i);
   });
 });
 
@@ -184,7 +183,6 @@ describe("F10: the Origin allowlist on /mcp", () => {
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
     });
     expect(response.status).toBe(403);
-    expect(await response.text()).toContain("is not allowed on /mcp");
   });
 
   it("THE INNOCENT DIRECTION: no Origin and claude.ai are not refused by THIS guard", async () => {

@@ -6,11 +6,12 @@ import { adminWriteObserver, recordAdminInitialize } from "./admin-client-audit"
 import { runBackup } from "./backup";
 import { supersedePass } from "./supersede";
 import { defaultHandler } from "./routes";
-import { mcpOriginProblem, withSecurityHeaders } from "./security-headers";
+import { withSecurityHeaders } from "./security-headers";
 import type { Env, Props } from "./env";
 import { buildAdminServer, buildServer } from "./server";
-import { ADMIN_MCP_ROUTE, serveMcp } from "./mcp-handler";
-import { gateRegistration, REGISTER_PATH } from "./dcr";
+import { ADMIN_MCP_ROUTE, mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
+import { mcpOriginRefusal } from "@dustinedwards/site-runtime/mcp-server";
+import { DCR_CALLBACKS, registrationLimited, registrationRefusal } from "@dustinedwards/site-runtime/mcp-login";
 import { runTick } from "./tick";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
@@ -23,6 +24,10 @@ const SECURITY_TXT_PATH = "/.well-known/security.txt";
 // Under a year out (RFC 9116); the family check reminds a month ahead.
 const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 
+// The Durable Objects wrangler.jsonc binds (RATE_LIMITER, TOOL_CALL_LOG), from site-runtime.
+export { RateLimiter } from "@dustinedwards/site-runtime/rate-limit/durable-object";
+export { ToolCallLog } from "@dustinedwards/site-runtime/audit-log";
+
 // Spelled once. wrangler.jsonc declares them; test/crons.test.ts derives one list
 // from the other and fails in both directions.
 export const BACKUP_CRON = "0 9 * * *";
@@ -31,19 +36,30 @@ export const TICK_CRON = "*/5 * * * *";
 // the weekly schedule changes without a redeploy.
 export const SKILLS_REFRESH_CRON = "30 9 * * *";
 
+// What the OAuth provider hands its API handler: the grant's props, and what it verified
+// about the token, its scopes among them.
+type ApiContext = ExecutionContext & { props?: Props; auth?: { scope?: string[]; clientId?: string } };
+
 const apiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const { props, auth } = ctx as ApiContext;
     // Checked on every request, not only at sign-in (src/auth.ts adminGrantEmail).
-    const email = await adminGrantEmail(env, (ctx as ExecutionContext & { props?: Props }).props);
+    const email = await adminGrantEmail(env, props);
     if (!email) {
       return new Response("forbidden: this grant does not belong to an administrator of capsid", {
         status: 403,
       });
     }
-    // The admin agent holds every scope; the email Access verified is the audit actor.
-    const props = (ctx as ExecutionContext & { props?: Props }).props;
+    const limited = await mcpRateLimited(env, `access:${email}`);
+    if (limited) return limited;
+    // The admin agent holds every scope the token does: every namespace, tool and flag,
+    // and the write grant only when the consent page's box was ticked (capsid.write). A
+    // grant from before the scopes existed carries neither, and reads until its client
+    // signs in again. The email Access verified is the audit actor.
     const signedInAt = typeof props?.signed_in_at === "number" ? props.signed_in_at : null;
     const admin = adminAgentForEmail(email, signedInAt);
+    if (!auth?.scope?.includes(SCOPES.write)) admin.scopes = { ...admin.scopes, grants: ["read"] };
+    const clientId = auth?.clientId;
     // Only Capsid Admin serves step-up actions, so only its route reads the clock. A KV
     // failure leaves it undefined, which falls back to the sign-in time alone (src/scope.ts STEP_UP).
     const adminRoute = new URL(request.url).pathname === ADMIN_MCP_ROUTE;
@@ -55,9 +71,9 @@ const apiHandler = {
     // Capsid Admin on its own route: the eight administrator tools, never on /mcp. Only the administrator's grant
     // reaches this handler at all, and the step-up in src/scope.ts guards its risky actions.
     if (adminRoute) {
-      return serveMcp(request, env, ctx, ADMIN_MCP_ROUTE, () => buildAdminServer(env, admin, "", observe));
+      return serveMcp(request, env, ctx, ADMIN_MCP_ROUTE, () => buildAdminServer(env, admin, "", observe, clientId));
     }
-    return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, admin, "", observe));
+    return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, admin, "", observe, clientId));
   },
 };
 
@@ -79,28 +95,54 @@ function withCacheDefault(response: Response, pathname: string): Response {
 // serve /mcp on two hosts. The MCP endpoint lives at MCP_URL; the old address keeps its
 // own provider only for the hours of the same-day cut (job_2f9671f89e89), so the
 // claude.ai connector, authorized there, works until it is switched. Both share OAUTH_KV.
-// The step that turns workers.dev off removes legacyProvider.
-function oauthProvider(resource: string, registration: boolean) {
-  return new OAuthProvider({
+// The step that turns workers.dev off removes the legacy one.
+//
+// Each is built once per registration allowlist, which is the env's: a changed
+// DCR_REDIRECT_URIS gets a new provider, never a stale one.
+const providers = new Map<string, OAuthProvider<Env>>();
+
+function providerFor(env: Env, resource: string, registration: boolean): OAuthProvider<Env> {
+  // The callbacks every user shares (Grok, ChatGPT, Gemini) and the per-connector ones the
+  // seat lists in DCR_REDIRECT_URIS, each matched exactly.
+  const allowed = [...DCR_CALLBACKS, env.DCR_REDIRECT_URIS ?? ""].join(",");
+  const key = `${resource} ${registration} ${allowed}`;
+  let provider = providers.get(key);
+  if (provider) return provider;
+  provider = new OAuthProvider<Env>({
     apiRoute: "/mcp",
     apiHandler,
     defaultHandler,
     authorizeEndpoint: "/authorize",
     tokenEndpoint: "/token",
-    resourceMetadata: { resource },
+    // The read scope is what a client asks for first (the 401's scope= and the protected
+    // resource metadata's scopes_supported); write is added on the consent page.
+    scopesSupported: SCOPES.all,
+    requiredScopes: [SCOPES.read],
+    resourceMetadata: { resource, resource_name: "Capsid" },
     // CIMD first (capsid/mcp-wrapper-standard.md, amendment 2026-09-27): a client's id is
     // the URL of its metadata document. The provider advertises CIMD only while the
     // global_fetch_strictly_public compatibility flag is set (wrangler.jsonc.example).
     clientIdMetadataDocumentEnabled: true,
-    // Tightened DCR for Grok and Gemini, on
-    // the MCP host only: src/dcr.ts judges every registration before the provider
-    // sees it. The old address keeps none; it is going.
-    ...(registration ? { clientRegistrationEndpoint: REGISTER_PATH } : {}),
+    // Tightened DCR for Grok and Gemini, on the MCP host only (rule 13): exact redirect
+    // URIs only, rate limited before the provider sees it (default export below), and a
+    // registration grants nothing, since the consent page and Access still decide. Remove
+    // when both sign in by CIMD, at the latest when the specification removes DCR. The old
+    // address keeps none; it is going.
+    ...(registration
+      ? {
+          clientRegistrationEndpoint: "/register",
+          clientRegistrationCallback: ({ clientMetadata }: { clientMetadata: Record<string, unknown> }) => {
+            const why = registrationRefusal(allowed, clientMetadata);
+            if (!why) return undefined;
+            logEvent("DCR_REDIRECT_REFUSED", { message: `DCR_REDIRECT_REFUSED ${why}` }, { level: "error" });
+            return { code: "invalid_redirect_uri", description: why };
+          },
+        }
+      : {}),
   });
+  providers.set(key, provider);
+  return provider;
 }
-
-const provider = oauthProvider(MCP_URL, true);
-const legacyProvider = oauthProvider(LEGACY_MCP_URL, false);
 
 export default {
   async fetch(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -122,18 +164,18 @@ export default {
     const pathname = new URL(request.url).pathname;
     const refused = hostRefusal(request);
     if (refused) return secured(refused, pathname);
+    // Before the token check, so a page on another origin learns nothing from a 401 (DNS
+    // rebinding): a missing Origin, this origin and claude.ai pass.
     if (pathname === "/mcp" || pathname === ADMIN_MCP_ROUTE) {
-      const originProblem = mcpOriginProblem(request);
-      if (originProblem) return secured(new Response(originProblem, { status: 403 }), pathname);
+      const foreign = mcpOriginRefusal(request, ["https://claude.ai"]);
+      if (foreign) return secured(foreign, pathname);
     }
     const legacy = new URL(request.url).hostname === LEGACY_HOST;
-    let forwarded = request;
-    if (!legacy && pathname === REGISTER_PATH && request.method === "POST") {
-      const gate = await gateRegistration(request, env, new Date());
-      if ("refuse" in gate) return secured(gate.refuse, pathname);
-      forwarded = gate.forward;
+    if (!legacy && pathname === "/register" && request.method === "POST") {
+      const limited = await registrationLimited(request, env.OAUTH_KV);
+      if (limited) return secured(limited, pathname);
     }
-    const response = await (legacy ? legacyProvider : provider).fetch(forwarded, env, ctx);
+    const response = await providerFor(env, legacy ? LEGACY_MCP_URL : MCP_URL, !legacy).fetch(request, env, ctx);
     return secured(response, pathname);
   },
   // Dispatch on controller.cron, not the clock: 09:00 UTC matches all three

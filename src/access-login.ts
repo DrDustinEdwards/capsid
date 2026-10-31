@@ -4,10 +4,10 @@ import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
 import { cookieName, getCookie, isAdminEmail } from "./auth";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
-// identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27), shared
-// by the MCP authorization flow (src/routes.ts) and Capsid Portal's login
-// (src/portal-auth.ts). What differs between them is passed in as a LoginFlow; what
-// each stores and does with the admitted email stays in the caller. A state token is
+// identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27) for
+// Capsid Portal's login (src/portal-auth.ts); the MCP authorization flow is
+// site-runtime's loginHandler (src/routes.ts). What the Portal stores and does with the
+// admitted email stays in the caller. A state token is
 // stored in OAUTH_KV for ten minutes, bound to the browser by a cookie holding a random
 // value of its own whose digest the stored state keeps, and used once. PKCE and an OIDC nonce are kept in the stored state.
 // The endpoints, the authorization URL, the code exchange and the ID token check are
@@ -15,7 +15,7 @@ import type { Env } from "./env";
 // admitted only when it equals ADMIN_EMAIL or a CO_OWNER_EMAILS entry exactly.
 
 // How long a started login stays usable: the KV state entry and the state cookie.
-export const STATE_TTL_SECONDS = 600;
+const STATE_TTL_SECONDS = 600;
 
 export interface LoginFlow {
   // The path Access redirects back to, on this Worker's origin.

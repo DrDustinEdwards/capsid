@@ -139,7 +139,7 @@ test("PLANT: a deploy whose store lost the document is refused at the read", asy
 
 test("PLANT: a deploy that dropped the legacy shim is refused for 2025-11-25 clients", async () => {
   const env = probeEnv();
-  // src/mcp-handler.ts with the legacy-era call site deleted: the modern handler alone.
+  // src/mcp-handler.ts without isLegacyRequest: the modern handler alone.
   const modernOnly: Serve = (request) => createMcpHandler(() => buildServer(env, probeAgent()), { route: "/ops/mcp", legacy: "reject" })(request, env, ctx());
   await refused(modernOnly, /2025-11-25 initialize: /);
 });
