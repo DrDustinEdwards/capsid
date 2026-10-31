@@ -1,4 +1,4 @@
-import { ChartSlot } from "../ui/Enar";
+import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy } from "react";
 import { useApp } from "../app/ctx";
 import { ciState } from "../lib/derive";

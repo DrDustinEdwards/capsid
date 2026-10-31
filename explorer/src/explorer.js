@@ -8,6 +8,7 @@ import { enhance as enhanceTabs } from "./tabs.js";
 import { enhance as enhanceCharts } from "./enhance.js";
 import { enhance as enhanceHeader } from "./capsomer/site-header/site-header.js";
 import { enhance as enhanceTheme, toggleTheme } from "./capsomer/theme-switch/theme-switch.js";
+import { enhance as enhanceMeters } from "./capsomer/meter/meter.js";
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const STEP_MS = 3600;
@@ -341,7 +342,13 @@ for (const box of document.querySelectorAll("[data-session]")) {
   let run = 0;
   box.dataset.ready = "";
   for (const li of items) li.hidden = true;
-  budget.value = 0;
+  // The meter redraws its bar when its value changes (Capsomer's meter behavior).
+  const setBudget = (kb) => {
+    budget.setAttribute("aria-valuenow", String(kb));
+    budget.setAttribute("aria-valuetext", `${kb} KB of the 40 KB limit`);
+  };
+  enhanceMeters(box);
+  setBudget(0);
   budgetWords.textContent = "Nothing sent yet.";
   start.addEventListener("click", async () => {
     const mine0 = ++run;
@@ -355,7 +362,7 @@ for (const box of document.querySelectorAll("[data-session]")) {
       if (mine0 !== run) return;
       li.hidden = false;
       total += kb(li);
-      budget.value = total;
+      setBudget(total);
       budgetWords.textContent = `${total} KB of the 40 KB limit.`;
     }
     budgetWords.textContent = `${total} KB of the 40 KB limit. Nothing cut.`;

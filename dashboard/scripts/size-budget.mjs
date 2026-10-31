@@ -51,11 +51,10 @@
 // (Dustin: "match the theme of the site"), family-teal.css at 1.6 KB gzip. This build is 21.7 KB.
 // Initial CSS raised on 2026-10-29 from 22.5 KB to 23 KB: Capsomer 0.37 to 0.41 grows the shared
 // stylesheet. This build is 23,240 B.
-// Initial CSS raised on 2026-10-31 from 23 KB to 24.5 KB: Enarratio 0.4.0's base.css, which the
-// entry loads before styles.css maps its variables to the Portal's tokens, grows from 2.1 KB to
-// 4.3 KB gzip. Master was 22.8 KB; this build is 24.2 KB. The same change moves the uptime strip
-// out of ui/charts.tsx, so Enarratio's renderer leaves the entry and initial JS falls from
-// master's 120.6 KB to 118.1 KB.
+// Initial CSS raised on 2026-10-31 from 23 KB to 24.5 KB (the charts checklist, area 10): Enarratio
+// 0.4's base.css doubles to 4.2 KB gzip (textures, forced colors, print, the figure's own head and
+// "Show data"), and Capsomer 0.53's map grows with it. Master was 22.8 KB; this build is 24.0 KB,
+// with the chart frame's, uptime strip's and meter's own stylesheets loading with their chunks.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

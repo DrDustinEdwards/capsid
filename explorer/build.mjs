@@ -20,7 +20,7 @@ import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { stylesheet } from "enarratio";
-import { capsomerTheme } from "capsomer/enarratio-theme";
+import { capsomerMoreTheme, capsomerTheme } from "capsomer/enarratio-theme";
 
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
@@ -146,20 +146,21 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
     "components/site-header/site-header.css",
     "components/manual/manual.css",
     "components/family-footer/family-footer.css",
+    "components/chart-frame/chart-frame.css",
+    "components/meter/meter.css",
     "tokens/site-capsid.css",
-    
   ]
     .map((rel) => inlineCss(join(capsomer, rel)))
     .join("\n");
   writeFileSync(join(assets, "capsomer.css"), css);
-  writeFileSync(join(assets, "enarratio.css"), stylesheet(capsomerTheme));
+  writeFileSync(join(assets, "enarratio.css"), stylesheet(capsomerTheme, { highContrast: capsomerMoreTheme }));
   copyFileSync(join(here, "src", "explorer.css"), join(assets, "explorer.css"));
   writeFileSync(join(out, CIRCLES_URL), JSON.stringify(circlesOf(model)));
   copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(assets, "tabs.js"));
   // The system map's and the header's modules, each folder whole (its React wrapper aside),
   // because they import their siblings by "./" and each other by "../name/" (the map takes
   // email's escapeHtml). The map's circles are drawn here, not in the browser.
-  for (const name of ["system-map", "email", "site-header", "theme-switch", "dialog", "popover", "tooltip", "shell"]) {
+  for (const name of ["system-map", "email", "site-header", "theme-switch", "dialog", "popover", "tooltip", "shell", "meter"]) {
     const dir = join(capsomer, "dist", "components", name);
     mkdirSync(join(assets, "capsomer", name), { recursive: true });
     for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js") && !f.startsWith("system-map-circles"))) copyFileSync(join(dir, file), join(assets, "capsomer", name, file));
