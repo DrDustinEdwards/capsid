@@ -43,6 +43,9 @@ const ERROR_HOURS = 24;
 // that cannot break out of a string literal is sent.
 const SCRIPT_NAME = /^[A-Za-z0-9_-]{1,63}$/;
 
+// The scriptName Cloudflare's analytics gives a row it cannot name.
+const UNKNOWN_SCRIPT = "__unknown__";
+
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export type CfCredentials = { ok: true; token: string; account: string } | { ok: false; reason: string };
@@ -284,6 +287,7 @@ async function readErrors(
 
   const index = new Map(hours.map((h, i) => [h, i]));
   const out = new Map<string, HourBucket[]>(scripts.map((s) => [s, hours.map((hour) => ({ hour, requests: 0, errors: 0, cpu_ms: 0 }))]));
+  let unattributed = 0;
   for (const row of rows as Array<{ sum?: { requests?: unknown; errors?: unknown; cpuTimeUs?: unknown }; dimensions?: { scriptName?: unknown; datetimeHour?: unknown } }>) {
     const script = row?.dimensions?.scriptName;
     const hourRaw = row?.dimensions?.datetimeHour;
@@ -292,6 +296,14 @@ async function readErrors(
     const cpuUs = row?.sum?.cpuTimeUs;
     if (typeof script !== "string" || typeof hourRaw !== "string" || typeof requests !== "number" || typeof errors !== "number" || typeof cpuUs !== "number") {
       throw new Error("the analytics query returned a row without scriptName, datetimeHour, requests, errors and cpuTimeUs");
+    }
+    // Cloudflare names a row it could not tie to a Worker "__unknown__", even under a
+    // scriptName_in filter (live on every pass from 2026-10-31: "__unknown__
+    // 2026-10-31T15:00:00Z"). No site owns it, so it is set aside and counted, never
+    // a reason to drop every site's read.
+    if (script === UNKNOWN_SCRIPT) {
+      unattributed += requests;
+      continue;
     }
     const at = Date.parse(hourRaw);
     const i = Number.isNaN(at) ? undefined : index.get(new Date(at).toISOString());
@@ -303,6 +315,7 @@ async function readErrors(
     buckets[i].errors += errors;
     buckets[i].cpu_ms += Math.round(cpuUs / 1000);
   }
+  if (unattributed > 0) logEvent("WATCHER_ANALYTICS_UNATTRIBUTED", { message: `the analytics query returned ${unattributed} requests under ${UNKNOWN_SCRIPT}, set aside` });
   return out;
 }
 

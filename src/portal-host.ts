@@ -10,9 +10,13 @@
 //     old link lands on the new address;
 //   - /portal/assets/... is served as it is, not redirected. The built app names its
 //     hashed files by that absolute path (dashboard/vite.config.ts base), on both hosts.
-// Nothing else is reachable on the Portal host: /mcp, /health and the /ops routes are on
-// mcp.dustinedwards.info (src/mcp-host.ts), and on this host they are Portal paths behind
-// the gate.
+// One more: /health is the Worker's own health route on this host too (area 8, H1, round 2),
+// so the Portal's address answers the shared health with the deployed sha without a sign-in.
+// It reports what mcp.dustinedwards.info/health reports, never a document. Cloudflare Access
+// in front of the host lets it through by its own Bypass application for
+// portal.dustinedwards.info/health (src/access-sync.ts). Nothing else is reachable on the
+// Portal host: /mcp and the /ops routes are on mcp.dustinedwards.info (src/mcp-host.ts), and
+// on this host they are Portal paths behind the gate.
 
 // The same values as portal-auth's PORTAL_PATH and PORTAL_PREFIX, stated here rather than
 // imported, because portal-auth imports this module.
@@ -21,6 +25,7 @@ const PORTAL_PREFIX = "/portal/";
 
 export const PORTAL_HOST = "portal.dustinedwards.info";
 const PORTAL_ASSETS_PREFIX = "/portal/assets/";
+const HEALTH_PATH = "/health";
 
 export function isPortalHost(url: URL): boolean {
   return url.hostname === PORTAL_HOST;
@@ -56,6 +61,7 @@ export function portalHostRequest(request: Request): { redirect: Response } | { 
   const url = new URL(request.url);
   if (!isPortalHost(url)) return { request };
   const path = url.pathname;
+  if (path === HEALTH_PATH) return { request };
   const underPortal = path === PORTAL_PATH || path.startsWith(PORTAL_PREFIX);
   if (underPortal && !path.startsWith(PORTAL_ASSETS_PREFIX)) {
     const publicPath = publicPortalPath(url, path);

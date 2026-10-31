@@ -13,6 +13,7 @@ import type { OpsFeed } from "./feed";
 //   GET  /portal/api/activity?namespace=&actor= | ?id=           -> PortalActivity
 //   GET  /portal/api/claims?job= | ?namespace=&agent=&since=&until= -> PortalClaimsJob | PortalClaimsAggregate
 //   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
+//   GET  /portal/api/not-found                                    -> PortalNotFound
 //   GET  /portal/api/stale                                        -> PortalStale
 //   GET  /portal/api/plan                                         -> PortalPlan
 //   GET  /portal/api/digest?since=                                -> PortalDigest

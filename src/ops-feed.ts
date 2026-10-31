@@ -16,7 +16,7 @@ import { readSiteConfig } from "./ops-sites";
 import { readPackageConfig } from "./ops-packages";
 import { readSnapshot } from "./ops-snapshot";
 import { INCIDENT_FAILURES, NEEDS_INPUT_INCIDENT_MS } from "./ops-hooks";
-import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSession, OpsUptime } from "./ops-types/feed";
+import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSession, OpsUptime, OpsUptimeCounts } from "./ops-types/feed";
 import { DAILY_RETENTION_DAYS } from "./backup";
 import { overnightState } from "./overnight";
 import { auditStatement } from "./store-guards";
@@ -52,7 +52,7 @@ import { MINUTE_MS, DAY_MS } from "./time";
 //     9  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
 //     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
-//     1  ops_uptime_daily: each site's last 90 days, grouped (siteUptime below)
+//     1  ops_uptime_daily: each site's last 90 days, by month (siteUptime below)
 //     3  gatherInbox (src/inbox.ts): the blocked jobs, the applied migrations (a block
 //        on a migration already applied is settled) and the site configuration again,
 //        so Needs you counts exactly what GET /ops/inbox answers with
@@ -82,13 +82,24 @@ async function siteUptime(env: Env, now: Date): Promise<OpsUptime | null> {
   const since = new Date(now.getTime() - (DAILY_RETENTION_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
   try {
     const { results } = await env.DB.prepare(
-      `SELECT namespace, SUM(probes) AS probes, SUM(up) AS up, COUNT(*) AS days,
+      `SELECT namespace, substr(day, 1, 7) AS month, SUM(probes) AS probes, SUM(up) AS up, COUNT(*) AS days,
               SUM(CASE WHEN up * 1000 < probes * 999 THEN 1 ELSE 0 END) AS below
-       FROM ops_uptime_daily WHERE day >= ?1 GROUP BY namespace ORDER BY namespace`
+       FROM ops_uptime_daily WHERE day >= ?1 GROUP BY namespace, month ORDER BY namespace, month`
     )
       .bind(since)
-      .all<OpsUptime["sites"][number]>();
-    return { target: UPTIME_TARGET, days: DAILY_RETENTION_DAYS, sites: results ?? [] };
+      .all<{ namespace: string; month: string } & OpsUptimeCounts>();
+    // One row per site and month, folded into each site's totals and its months.
+    const sites = new Map<string, OpsUptime["sites"][number]>();
+    for (const { namespace, month, probes, up, days, below } of results ?? []) {
+      const s = sites.get(namespace) ?? { namespace, probes: 0, up: 0, days: 0, below: 0, months: [] };
+      s.probes += probes;
+      s.up += up;
+      s.days += days;
+      s.below += below;
+      s.months.push({ month, probes, up, days, below });
+      sites.set(namespace, s);
+    }
+    return { target: UPTIME_TARGET, days: DAILY_RETENTION_DAYS, sites: [...sites.values()] };
   } catch (err) {
     logEvent("OPS_FEED_UPTIME_UNREADABLE", { message: `OPS_FEED_UPTIME_UNREADABLE ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
     return null;

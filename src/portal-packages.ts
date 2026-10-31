@@ -5,6 +5,8 @@ import { portalGate } from "./portal-auth";
 import { readSharedCode } from "./shared-code";
 import { readCompleteness } from "./completeness";
 import { textResponse } from "./http";
+import { notFoundReport } from "@dustinedwards/site-runtime/not-found";
+import type { PortalNotFound } from "./ops-types/sites";
 
 // The Packages view's on-demand history: GET /portal/api/packages/history?name=. The
 // daily downloads come from npm's range API when the view asks, not pass by pass
@@ -29,6 +31,26 @@ export async function handlePortalPackageHistory(
   const cfg = await readPackageRow(env.DB, name);
   if (!cfg) return textResponse(`${name} is not a configured package.`, 404);
   const body = await packageHistory(env, cfg, fetchImpl, now);
+  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+}
+
+// The Sites view's 404 panel (area 8, N4): GET /portal/api/not-found. Capsid's own counts,
+// page_404_daily, read with site-runtime's notFoundReport; each other site keeps its table in
+// its own D1, which Capsid does not read. Gated like the reads above; it reads D1 only.
+export const PORTAL_NOT_FOUND_PATH = "/portal/api/not-found";
+const NOT_FOUND_DAYS = 30;
+
+export async function handlePortalNotFound(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
+  if (!gate.ok) return gate.response;
+  let body: PortalNotFound;
+  try {
+    const all = await notFoundReport(env.DB, { days: NOT_FOUND_DAYS, limit: 500, includeProbes: true, now });
+    const pages = all.filter((e) => e.kind === "page").slice(0, 50).map(({ path, hits, referrers }) => ({ path, hits, referrers }));
+    body = { days: NOT_FOUND_DAYS, generated: now.toISOString(), pages, probes: all.filter((e) => e.kind === "probe").reduce((n, e) => n + e.hits, 0), error: null };
+  } catch (err) {
+    body = { days: NOT_FOUND_DAYS, generated: now.toISOString(), pages: null, probes: null, error: (err instanceof Error ? err.message : String(err)).slice(0, 200) };
+  }
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }
 

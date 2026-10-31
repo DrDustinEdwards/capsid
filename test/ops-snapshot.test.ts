@@ -82,16 +82,23 @@ const HEALTH: HealthReport = {
 };
 
 test("a health route that answers 2xx is ok, with the sha it reports", async () => {
-  const f = fetchFor({ "https://sample.example.com/health": { status: 200, body: JSON.stringify({ status: "ok", sha: "deadbee" }) } });
+  const f = fetchFor({ "https://sample.example.com/health": { status: 200, body: JSON.stringify({ status: "ok", sha: "deadbee" }) }, "https://sample.example.com/": 404 });
   const p = await probeSite(site({}), f.impl, NOW, null);
-  assert.equal(p.state, "ok");
+  assert.equal(p.state, "ok", "an API host's 404 at its root is not a failure");
   assert.equal(p.sha, "deadbee");
   assert.equal(p.http_status, 200);
-  assert.deepEqual(f.asked, ["https://sample.example.com/health"]);
+  assert.deepEqual(f.asked.sort(), ["https://sample.example.com/", "https://sample.example.com/health"]);
+});
+
+test("U1: the home page is read every pass, so a 5xx there degrades a site whose health passes", async () => {
+  const f = fetchFor({ "https://sample.example.com/health": { status: 200, body: JSON.stringify({ status: "ok", sha: "deadbee" }) }, "https://sample.example.com/": 500 });
+  const p = await probeSite(site({}), f.impl, NOW, null);
+  assert.equal(p.state, "degraded");
+  assert.match(String(p.error), /home page answered 500/);
 });
 
 test("a health body with no sha is ok and reports no sha", async () => {
-  const f = fetchFor({ "https://sample.example.com/health": { status: 200, body: "not json" } });
+  const f = fetchFor({ "https://sample.example.com/health": { status: 200, body: "not json" }, "https://sample.example.com/": 200 });
   const p = await probeSite(site({}), f.impl, NOW, null);
   assert.equal(p.state, "ok");
   assert.equal(p.sha, null);
@@ -121,7 +128,7 @@ test("a site where nothing answers 2xx is down, with both reasons", async () => 
 });
 
 test("a 2xx health body that admits a problem is degraded and names it; a fail body is a failed route", async () => {
-  const warn = fetchFor({ "https://sample.example.com/health": { status: 200, body: JSON.stringify({ ok: true, backup: { warning: "last backup 38h ago" } }) } });
+  const warn = fetchFor({ "https://sample.example.com/health": { status: 200, body: JSON.stringify({ ok: true, backup: { warning: "last backup 38h ago" } }) }, "https://sample.example.com/": 200 });
   const degraded = await probeSite(site({}), warn.impl, NOW, null);
   assert.equal(degraded.state, "degraded");
   assert.equal(degraded.error, "backup: last backup 38h ago");

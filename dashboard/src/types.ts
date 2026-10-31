@@ -47,6 +47,7 @@ export type {
   PackageSnapshot,
   OpsSiteConfig,
   OpsSnapshot,
+  PortalNotFound,
   PortalPackageHistory,
   ProbeState,
   SiteCloudflare,

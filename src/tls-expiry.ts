@@ -12,7 +12,7 @@ import { DAY_MS } from "./time";
 // is being issued beside the old one, the old date would alert for nothing.
 //
 // The watcher pass reads it (src/watcher-gather.ts) and keeps it in KV; the five-minute push
-// (src/push.ts) sends each host once at 14 days and once at 3, keyed by the date, so a
+// (src/push.ts) sends each host once at 21 days and once at 3, keyed by the date, so a
 // renewal that moves the date clears it and a new near date alerts again. Hosts on Vercel
 // or a hosting suffix are not on a Cloudflare zone of ours and are left out.
 //
@@ -20,7 +20,7 @@ import { DAY_MS } from "./time";
 // for this read; without it the read fails, is logged, and the stored dates are kept.
 
 export const TLS_EXPIRY_KEY = "tls:expiry:v1";
-const EARLY_DAYS = 14;
+const EARLY_DAYS = 21;
 const LATE_DAYS = 3;
 
 export interface TlsExpiry {
@@ -87,7 +87,7 @@ export async function readTlsExpiry(env: Env, origins: ReadonlyArray<{ origin: s
   return out;
 }
 
-/** The alerts the stored dates stand behind now: 14 days out and 3 days out, each once per
+/** The alerts the stored dates stand behind now: 21 days out and 3 days out, each once per
  *  certificate date. */
 export function tlsAlerts(read: TlsExpiry | null, now: Date): Array<{ key: string; title: string; body: string }> {
   const out: Array<{ key: string; title: string; body: string }> = [];
@@ -96,7 +96,7 @@ export function tlsAlerts(read: TlsExpiry | null, now: Date): Array<{ key: strin
     if (days > EARLY_DAYS) continue;
     const late = days <= LATE_DAYS;
     out.push({
-      key: `tls-${late ? "3d" : "14d"}:${host}:${expires}`,
+      key: `tls-${late ? "3d" : "21d"}:${host}:${expires}`,
       title: days < 0 ? `${host}'s TLS certificate has expired` : `${host}'s TLS certificate expires in ${days} days`,
       body: `Cloudflare's certificate packs say it expires at ${expires} (read ${read?.read_at}). Cloudflare renews its own certificates; one this close means renewal is stuck: check the zone's Edge Certificates.`,
     });
