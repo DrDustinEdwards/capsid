@@ -1,5 +1,6 @@
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
+import { hostCookie } from "@dustinedwards/site-runtime/headers";
 
 // HMAC-SHA256, hex. The one definition.
 export async function hmacHex(secret: string, payload: string): Promise<string> {
@@ -16,8 +17,16 @@ export async function hmacHex(secret: string, payload: string): Promise<string> 
 
 // A cookie's name with the prefix its scope earns. Every Capsid cookie is Secure with no Domain, so one scoped to the
 // whole host (Path=/) is __Host-, which no sibling subdomain can set or shadow, and one scoped to a path is __Secure-.
-export function cookieName(name: string, path: string): string {
+function cookieName(name: string, path: string): string {
   return `${path === "/" ? "__Host-" : "__Secure-"}${name}`;
+}
+
+// A Capsid cookie's Set-Cookie, HttpOnly and SameSite=Lax: site-runtime's hostCookie for one scoped to the whole host,
+// and the same attributes under __Secure- for one scoped to a path (the Portal under /portal on the MCP host), which
+// hostCookie, being Path=/ only, cannot write. `maxAge: 0` with an empty value ends it.
+export function capsidCookie(name: string, value: string, path: string, maxAge: number): string {
+  if (path === "/") return hostCookie(name, value, { maxAge });
+  return `${cookieName(name, path)}=${value}; Path=${path}; Secure; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
 // Cookie lookup, once, for the consent flow and the Portal session: the prefixed name first, then the bare name the

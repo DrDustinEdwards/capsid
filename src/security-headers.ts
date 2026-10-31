@@ -1,4 +1,4 @@
-import { buildPolicy, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
+import { CSP_REPORT_GROUP, buildPolicy, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
 import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
 import { capsidMcp, capsidPortal } from "@dustinedwards/site-runtime/sites";
@@ -19,15 +19,16 @@ export const REPORT_PATH = "/csp-report";
 // is behind Access, so a report sent to its own /csp-report met the sign-in redirect and was
 // lost; every host now reports to this one (routes.ts answers the Portal's preflight).
 export const REPORT_URL = `https://${MCP_HOST}${REPORT_PATH}`;
-const REPORTING_ENDPOINTS = reportingEndpoints("csp", REPORT_URL);
+const REPORTING_ENDPOINTS = reportingEndpoints(CSP_REPORT_GROUP, REPORT_URL);
 // Where CSP reports used to be stored. Nothing writes there; the backup prune
 // (backup.ts) reaps what is left.
 export const REPORT_PREFIX = "reports/csp/";
 
 // The policy on every response that names none of its own (the Portal page and the consent dialog do): nothing
-// loads, nothing may frame it, no <base>. A JSON or text answer needs none of that, and an HTML page left without a
-// policy gets the strictest one rather than none. form-action is deliberately absent, as below.
-const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]);
+// loads, nothing may frame it, no <base>, and no string reaches a script sink (Trusted Types; nothing here runs
+// script, the door's promise in the registry). A JSON or text answer needs none of that, and an HTML page left without
+// a policy gets the strictest one rather than none. form-action is deliberately absent, as below.
+const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", `report-uri ${REPORT_URL}`, `report-to ${CSP_REPORT_GROUP}`]);
 
 // The OAuth consent dialog's own headers (src/routes.ts, renderApprovalDialog), less
 // its per-request Set-Cookie; withSecurityHeaders adds the shared set. Kept here so node
@@ -35,7 +36,7 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 //
 // The dialog is site-runtime's (./mcp-login): one inline <style>, CONSENT_STYLE, trusted
 // by its hash, and a form that posts back to /authorize. No scripts or images, so
-// everything else is locked down.
+// everything else is locked down, Trusted Types included.
 //
 // form-action is deliberately absent. Approving submits this form into a redirect
 // chain: POST /authorize, 302 to the Access sign-in, back to /callback, 302 out to the
@@ -51,7 +52,15 @@ let consentHeaders: Promise<Readonly<Record<string, string>>> | undefined;
 export function consentDialogHeaders(): Promise<Readonly<Record<string, string>>> {
   consentHeaders ??= scriptHash(CONSENT_STYLE).then((hash) => ({
     "Content-Type": "text/html;charset=utf-8",
-    "Content-Security-Policy": buildPolicy(["default-src 'none'", `style-src '${hash}'`, "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]),
+    "Content-Security-Policy": buildPolicy([
+      "default-src 'none'",
+      `style-src '${hash}'`,
+      "base-uri 'none'",
+      "frame-ancestors 'none'",
+      "require-trusted-types-for 'script'",
+      `report-uri ${REPORT_URL}`,
+      `report-to ${CSP_REPORT_GROUP}`,
+    ]),
   }));
   return consentHeaders;
 }

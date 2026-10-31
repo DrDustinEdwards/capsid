@@ -8,10 +8,12 @@
 // Capsid's own schemas before anything is written, so the explorer can only publish what the
 // privacy filter's output shape allows (the third line, design section 2). The tests build from
 // explorer/fixtures, which are invented.
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { webManifest } from "@drdustinedwards/site-helpers/icons";
@@ -19,13 +21,13 @@ import { llmsDocument } from "@drdustinedwards/site-helpers/llms";
 import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
+import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
 import { stylesheet } from "enarratio";
 import { capsomerMoreTheme, capsomerTheme } from "capsomer/enarratio-theme";
 
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
-import { explorerHeadersFile } from "./src/security-headers.mjs";
 import { CIRCLES_URL, INDEXNOW_KEY, ORIGIN, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
 
 /** When security.txt lapses (RFC 9116 asks for under a year); renew it before then. */
@@ -176,7 +178,10 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // The family's faces (capsomer/fonts.css, inlined above), served from here because the policy
   // allows fonts from 'self' only: Capsomer's fonts/ beside assets/, where its "../fonts/" points.
   cpSync(join(capsomer, "fonts"), join(out, "fonts"), { recursive: true });
-  writeFileSync(join(out, "_headers"), explorerHeadersFile());
+  // _headers from the explorer's entry in site-runtime's registry (capsid), by its one bin: the shared set, the page
+  // policy reporting to Capsid's /csp-report, and Prelum's training reservation (the TDMRep header ai.txt names).
+  const headersBin = join(dirname(fileURLToPath(import.meta.resolve("@dustinedwards/site-runtime/sites"))), "bin", "site-runtime-headers.mjs");
+  execFileSync(process.execPath, [headersBin, "--site", "capsid", "--out", join(out, "_headers"), "--header", "tdm-reservation: 1"]);
   // For search engines and language models, from Prelum: every page in a sitemap, robots.txt (the
   // family bot policy; Cloudflare puts its own lines first), ai.txt (citation welcome, training
   // reserved, as the tdm-reservation header in _headers says) and llms.txt (https://llmstxt.org),
@@ -193,6 +198,8 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the
   // explorer's own files changed. Written last, so the hash cannot cover itself.
+  // A sha384 integrity and crossorigin on every page's two script tags, for Integrity-Policy (site-runtime ./sri).
+  await writeIntegrity(out);
   const content = contentHash(out);
   writeFileSync(join(out, "build.json"), `${JSON.stringify({ model_as_of: model.as_of, stats_as_of: stats.as_of, code_as_of: code?.as_of ?? null, systems: model.systems.length, content }, null, 2)}\n`);
   return { pages: pages.length, out, content };
