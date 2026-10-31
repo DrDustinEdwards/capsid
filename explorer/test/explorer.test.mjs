@@ -181,13 +181,16 @@ test("no page carries an inline script, an inline style or a time of day", () =>
   }
 });
 
-test("every link inside the explorer reaches a page or an asset it built", () => {
+test("every link inside the explorer reaches a page or an asset it built, and the Worker preloads what the home page links first", () => {
   const targets = new Set(files.map((f) => `/${f}`.replace(/index\.html$/, "")));
   for (const { file, text } of html) {
     for (const [, href] of text.matchAll(/(?:href|src)="(\/[^"#]*)"/g)) {
       assert.ok(targets.has(href ?? ""), `${file} links to ${href}, which the build did not write`);
     }
   }
+  const home = readFileSync(join(out, "index.html"), "utf8");
+  const linked = [...home.matchAll(/<link rel="(?:stylesheet|preload)" href="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(PAGE_PRELOADS.links.map((link) => link.href).sort(), linked.sort());
 });
 
 test("a rate with too few cases is said so, and has no picture", () => {
@@ -197,12 +200,6 @@ test("a rate with too few cases is said so, and has no picture", () => {
   const section = numbersHtml(thin);
   assert.doesNotMatch(section, /id="agreement-title"|id="uptime-title"/);
   assert.match(section, /Checked jobs with passing CI, last 90 days<\/th><td>not enough data yet/);
-});
-
-test("the Worker's preload header names exactly what the home page links first", () => {
-  const home = readFileSync(join(out, "index.html"), "utf8");
-  const linked = [...home.matchAll(/<link rel="(?:stylesheet|preload)" href="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(PAGE_PRELOADS.links.map((link) => link.href).sort(), linked.sort());
 });
 
 test("the map's script is under 25 KB gzip and all the explorer's script under 105 KB", () => {
