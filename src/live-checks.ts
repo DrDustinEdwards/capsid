@@ -27,13 +27,6 @@ const LIVE_CHECKS_NAMESPACE = "capsid";
 const LIVE_CHECKS_PATH = "policy/live-checks.md";
 
 const BEACON_SCRIPT_HOST = "static.cloudflareinsights.com";
-const BEACON_REPORT_HOST = "cloudflareinsights.com";
-/** Where Cloudflare's edge injects the beacon from: a VERSIONED path under the file name, so a
- *  source naming only /beacon.min.js blocks it (site-runtime csp.mjs, measured in a browser).
- *  A page that writes its own tag is judged by that tag's src instead (beaconSrc). */
-export const BEACON_INJECTED_URL = `https://${BEACON_SCRIPT_HOST}/beacon.min.js/v0`;
-/** Where the beacon reports from a host not proxied by Cloudflare. */
-const BEACON_REPORT_URL = `https://${BEACON_REPORT_HOST}/cdn-cgi/rum`;
 
 // A push whose deploy has had this long and still has not reached the site is a finding.
 // Shorter and the watcher would file a job every time a pass landed inside a normal
@@ -109,120 +102,11 @@ export function parseLiveConfig(body: string): LiveConfig {
  *  attributes name the beacon host. A beacon a page injects with inline script, or one
  *  Cloudflare adds in the browser, is not in the delivered HTML and is not counted. */
 export function beaconCount(html: string): number {
-  return beaconSrcs(html).length;
+  return [...html.matchAll(/<script\b[^>]*>/gi)].filter((tag) => BEACON_SRC.test(tag[0])).length;
 }
 
 const BEACON_SRC = new RegExp(`\\bsrc\\s*=\\s*["']?((?:https?:)?//${BEACON_SCRIPT_HOST.replace(/\./g, "\\.")}/[^"'\\s>]*)`, "i");
 
-/** The src of each beacon script tag in the delivered HTML, made absolute (https). */
-function beaconSrcs(html: string): string[] {
-  const out: string[] = [];
-  for (const tag of html.matchAll(/<script\b[^>]*>/gi)) {
-    const src = BEACON_SRC.exec(tag[0])?.[1];
-    if (src) out.push(src.startsWith("//") ? `https:${src}` : src.replace(/^http:/i, "https:"));
-  }
-  return out;
-}
-
-/** The beacon address a page's CSP must allow: the page's own tag when it writes one, else
- *  the address the edge injects from. */
-export function beaconSrc(html: string): string {
-  return beaconSrcs(html)[0] ?? BEACON_INJECTED_URL;
-}
-
-type Directives = Map<string, string[]>;
-
-/** One Content-Security-Policy header value as its enforced policies, each a map of
- *  directive to sources. A header can carry several, comma separated; every one
- *  applies. The first occurrence of a directive in a policy wins, as in the spec. */
-export function parseCsp(header: string): Directives[] {
-  return header
-    .split(",")
-    .map((policy) => {
-      const directives: Directives = new Map();
-      for (const part of policy.split(";")) {
-        const [name, ...sources] = part.trim().split(/\s+/);
-        if (!name) continue;
-        const key = name.toLowerCase();
-        if (!directives.has(key)) directives.set(key, sources);
-      }
-      return directives;
-    })
-    .filter((d) => d.size > 0);
-}
-
-/**
- * Whether a CSP source expression covers `url` (CSP3, "Does url match expression"): its
- * host, and its path when it has one. A path ending in "/" covers everything under it;
- * any other path covers only itself, so https://cloudflareinsights.com/x does not let the
- * beacon report. The beacon is always https, which an http: source upgrades to; a port
- * other than 443 or * does not match it.
- */
-function sourceMatches(source: string, url: string): boolean {
-  const s = source.toLowerCase();
-  if (s === "*" || s === "https:") return true;
-  const target = new URL(url);
-  const m = /^(?:([a-z][a-z0-9+.-]*):\/\/)?([^/:?#]+)(?::(\d+|\*))?(\/[^?#]*)?/.exec(s);
-  if (!m) return false;
-  const [, scheme, host, port, path] = m;
-  if (scheme && scheme !== "https" && scheme !== "http") return false;
-  if (port && port !== "*" && port !== "443") return false;
-  // A wildcard needs a subdomain, so *.cloudflareinsights.com does not name the apex.
-  const hostOk = host === target.hostname || (host.startsWith("*.") && target.hostname.endsWith(host.slice(1)));
-  if (!hostOk) return false;
-  if (!path || path === "/") return true;
-  const decoded = decodeURIComponent(path);
-  return decoded.endsWith("/") ? target.pathname.startsWith(decoded) : target.pathname === decoded;
-}
-
-export interface CspVerdict {
-  ok: boolean;
-  why: string | null;
-}
-
-/**
- * Whether every enforced policy lets the beacon load from `scriptUrl`. A directive a
- * policy omits falls back to default-src, and a policy with neither allows it. A
- * 'strict-dynamic' script-src ignores host sources, so the beacon, which carries no
- * nonce, is blocked however its host is listed.
- */
-export function cspAllowsBeaconScript(policies: Directives[], scriptUrl: string = BEACON_INJECTED_URL): CspVerdict {
-  for (const policy of policies) {
-    const sources = policy.get("script-src") ?? policy.get("default-src");
-    if (!sources) continue;
-    if (sources.some((s) => s.toLowerCase() === "'strict-dynamic'")) {
-      return { ok: false, why: "script-src uses 'strict-dynamic', which ignores host sources, and the beacon script has no nonce" };
-    }
-    if (sources.length === 0 || sources.some((s) => s.toLowerCase() === "'none'")) {
-      return { ok: false, why: `script-src allows no script (${sources.join(" ") || "empty"})` };
-    }
-    if (!sources.some((s) => sourceMatches(s, scriptUrl))) {
-      return { ok: false, why: `script-src (${sources.join(" ")}) does not cover ${scriptUrl}` };
-    }
-  }
-  return { ok: true, why: null };
-}
-
-/**
- * Whether every enforced policy lets the beacon report. Cloudflare sends it to the
- * site's own /cdn-cgi/rum when the site is proxied through Cloudflare, so 'self' is
- * enough there; any other host sends it to cloudflareinsights.com
- * (developers.cloudflare.com/web-analytics/faq).
- */
-export function cspAllowsBeaconReport(policies: Directives[], platform: "cloudflare" | "vercel"): CspVerdict {
-  for (const policy of policies) {
-    const sources = policy.get("connect-src") ?? policy.get("default-src");
-    if (!sources) continue;
-    if (sources.length === 0 || sources.some((s) => s.toLowerCase() === "'none'")) {
-      return { ok: false, why: `connect-src allows no connection (${sources.join(" ") || "empty"})` };
-    }
-    const self = platform === "cloudflare" && sources.some((s) => s.toLowerCase() === "'self'");
-    if (!self && !sources.some((s) => sourceMatches(s, BEACON_REPORT_URL))) {
-      return { ok: false, why: `connect-src (${sources.join(" ")}) does not cover ${BEACON_REPORT_URL}${platform === "cloudflare" ? " or 'self'" : ""}` };
-    }
-  }
-  return { ok: true, why: null };
-}
 
 // FINDINGS.
 
@@ -251,7 +135,7 @@ export interface PageRead {
 /** The findings one beacon or nobeacon rule produces from one page read. A page that
  *  could not be read yields none about the beacon (not read is not absent); the caller
  *  reports it as unread. */
-export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin" | "platform">, rule: Extract<LiveRule, { path: string }>, page: PageRead): LiveFinding[] {
+export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin">, rule: Extract<LiveRule, { path: string }>, page: PageRead): LiveFinding[] {
   if (page.problem !== null || page.html === null || page.headers === null) return [];
   const url = `${site.origin}${rule.path}`;
   const where = slug(rule.path);
@@ -284,27 +168,16 @@ export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin"
     }
     return out;
   }
-  const header = page.headers.get("content-security-policy");
-  if (header) {
-    const policies = parseCsp(header);
-    const script = cspAllowsBeaconScript(policies, beaconSrc(page.html));
-    if (!script.ok) {
-      out.push({
-        namespace: site.namespace,
-        fingerprint: `live-csp-script-${site.namespace}-${where}`,
-        headline: `${site.name}'s CSP blocks the Web Analytics beacon script`,
-        evidence: [`page: ${url}`, script.why ?? "", `header: ${header.slice(0, 300)}`],
-      });
-    }
-    const report = cspAllowsBeaconReport(policies, site.platform);
-    if (!report.ok) {
-      out.push({
-        namespace: site.namespace,
-        fingerprint: `live-csp-report-${site.namespace}-${where}`,
-        headline: `${site.name}'s CSP blocks the Web Analytics beacon from reporting`,
-        evidence: [`page: ${url}`, report.why ?? "", `header: ${header.slice(0, 300)}`],
-      });
-    }
+  // A beacon rule: site-runtime's C15, the beacon's script path prefix and its report to the site itself, graded as
+  // if the site declared cloudflareWebAnalytics, so the watcher holds no second CSP parser.
+  const blocked = failures(checkSecurityHeaders(page.headers, { site: siteForOrigin(site.origin), cloudflareWebAnalytics: true })).filter((r) => r.id === "C15");
+  if (blocked.length > 0) {
+    out.push({
+      namespace: site.namespace,
+      fingerprint: `live-csp-beacon-${site.namespace}-${where}`,
+      headline: `${site.name}'s CSP blocks the Web Analytics beacon`,
+      evidence: [`page: ${url}`, ...blocked.map((r) => `${r.name}: ${r.detail}`)],
+    });
   }
   return out;
 }

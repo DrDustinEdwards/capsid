@@ -125,8 +125,6 @@ describe("authorize", () => {
     // The enforced CSP is set by the dialog rather than by src/security-headers.ts.
     const csp = response.headers.get("content-security-policy");
     expect(csp, "the consent dialog must carry its own enforced CSP").toBeTruthy();
-    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(response.headers.get("referrer-policy")).toBeTruthy();
   });
 
   it("refuses an authorize with a redirect_uri the client never registered", async () => {

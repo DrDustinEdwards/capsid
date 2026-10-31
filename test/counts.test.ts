@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { AUTHORITATIVE, scanCountClaims } from "../src/counts.ts";
 
 const CAPSID = AUTHORITATIVE.capsid;
-import { CONSENT_DIALOG_HEADERS, securityHeadersFor } from "../src/security-headers.ts";
+import { consentDialogHeaders, securityHeadersFor } from "../src/security-headers.ts";
 import { MCP_HOST } from "../src/mcp-host.ts";
 // Fixtures derive the tool count rather than spelling it, so a surface change does
 // not break tests that check something else.
@@ -36,12 +36,12 @@ test("live gate count matches the distinct gates in verify-live.mjs", () => {
   );
 });
 
-// The consent page's enforced headers: its own (src/routes.ts spreads CONSENT_DIALOG_HEADERS into its Response) and
+// The consent page's enforced headers: its own (src/routes.ts spreads consentDialogHeaders() into its Response) and
 // what the header layer adds on the MCP host. An enforced header added to either moves the number.
 const NOT_SECURITY_HEADERS = new Set(["Content-Type", "Reporting-Endpoints"]);
 
-test("the header count matches what the header layer and the consent dialog emit", () => {
-  const names = [...Object.keys(securityHeadersFor(MCP_HOST)), ...Object.keys(CONSENT_DIALOG_HEADERS)];
+test("the header count matches what the header layer and the consent dialog emit", async () => {
+  const names = [...Object.keys(securityHeadersFor(MCP_HOST)), ...Object.keys(await consentDialogHeaders())];
   const enforced = new Set(names.filter((name) => !NOT_SECURITY_HEADERS.has(name) && !/-Report-Only$/i.test(name)));
   assert.equal(enforced.size, CAPSID.htmlEnforcedHeaders, `the consent page enforces ${enforced.size} headers (${[...enforced].sort().join(", ")}), but counts.ts says ${CAPSID.htmlEnforcedHeaders}`);
 });
