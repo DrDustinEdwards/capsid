@@ -1,4 +1,4 @@
-import { DASHBOARD_CSP } from "./dashboard-csp";
+import { DASHBOARD_CSP, DASHBOARD_CSP_REPORT_ONLY } from "./dashboard-csp";
 import type { Env } from "./env";
 import { PORTAL_PATH, portalGate } from "./portal-auth";
 import { portalBase } from "./portal-host";
@@ -81,6 +81,7 @@ export async function handlePortalApp(request: Request, env: Env, now: Date = ne
     headers.set("Cache-Control", "no-store");
     // Referrer-Policy, X-Frame-Options and the rest come from withSecurityHeaders (src/security-headers.ts).
     headers.set("Content-Security-Policy", DASHBOARD_CSP);
+    headers.set("Content-Security-Policy-Report-Only", DASHBOARD_CSP_REPORT_ONLY);
   } else if (response.ok && path.startsWith(HASHED_ASSET_PREFIX)) {
     headers.set("Cache-Control", HASHED_ASSET_CACHE);
   } else {

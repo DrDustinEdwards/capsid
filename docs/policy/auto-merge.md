@@ -6,9 +6,18 @@ source. The copy the Worker actually reads is the signed document at
 same key and envelope as a signed job body. An unsigned copy, or one
 edited after signing, merges nothing.
 
-- version: 9
+- version: 10
 - enabled: true
 - namespaces: dustinedwards, carrel, capsomer, capsid
+
+Version 10 lets a promoted unit stand in for the job trace (Dustin, 2026-10-31, thread
+"Measure how much Claude uses Capsid"). Since mid-October work comes from project
+threads, not the job queue, so no pull request named a job and nothing had merged
+unattended since 2026-10-08. A pull request that names no job now passes
+`body_names_job`, `job_handed_on` and `pr_recorded_for_job` when its unit (namespace and
+path class) is listed under Auto units, which a unit earns from Dustin's recorded
+approvals. Every other check still applies, and with no unit listed nothing new merges
+unattended.
 
 Version 9 is version 8 in American spelling (Dustin, 2026-10-25). Capsomer renamed its CI
 step to `Build the behavior modules and wrappers`, so the required step names it that way.
@@ -146,7 +155,9 @@ are the never-list, and the per-namespace limit follows them.
 - `head_in_base_repo` The PR's head branch is on the same repo as its base. A PR from
   a fork, or one whose fork GitHub no longer reports, is left for the seat.
 - `body_names_job` The PR body carries the id of the job the work came from, so a
-  merged change traces back to a request somebody made.
+  merged change traces back to a request somebody made, or the PR names no job and its
+  unit is listed under Auto units, which a unit earns from Dustin's recorded approvals.
+  Such a PR passes `job_handed_on` and `pr_recorded_for_job` on the unit too.
 - `pr_author_allowed` The GitHub account that opened the PR is under Allowed PR
   authors below, compared without regard to letter case. A PR from any other account,
   or one GitHub reports no author for, is left for the seat.

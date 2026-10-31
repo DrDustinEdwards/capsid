@@ -20,7 +20,7 @@ export const ERAS = ["2025-11-25", "2026-07-28"];
 // What tools/list must return on /mcp: Capsid's tools, not Capsid Admin's.
 // test/live-gate-mcp.test.ts holds it to CAPSID_TOOLS in src/tools/surface.ts, so a
 // change to the served surface changes this in the same commit.
-export const EXPECTED_TOOLS = 14;
+export const EXPECTED_TOOLS = 11;
 
 // The tool the probe reads with.
 export const READ_TOOL = "capsid_read_doc";

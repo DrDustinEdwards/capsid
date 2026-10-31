@@ -43,10 +43,6 @@ export type PortalAction =
   | "package_add"
   | "package_edit"
   | "package_remove"
-  | "canon_approve"
-  | "canon_reject"
-  // Every pending canon proposal in one decision (src/canon.ts, readSweep).
-  | "canon_approve_all"
   | "site_repair"
   // The merge units (docs/design/design-merge-pipeline.md section 7): a signed policy
   // change that promotes or removes a unit, and the Undo of a unit's suspension.
@@ -97,14 +93,6 @@ export type PortalAction =
 //   package_add   { name, repo?, formerly? }
 //   package_edit  { name, revision, repo?, formerly? }   the row as it will be
 //   package_remove { name, revision }
-//   canon_approve { id }                  a pending canon proposal (src/canon.ts); refused
-//                 when the document moved past the body it was written against
-//   canon_reject  { id, reason }          reason required; the proposer reads it
-//   canon_approve_all { reason? }         every pending proposal: the newest on each
-//                 document approved unless stale, older ones rejected as superseded,
-//                 stale ones as outdated. The token also binds the plan the preview read
-//                 (params.plan, "<id>:<outcome>,..."), and a perform whose plan reads
-//                 differently now is refused. reason is recorded in the click row.
 //   site_repair   { namespace, tool }     one allowlisted tool on a site's operator API
 //                 (src/site-repair.ts); refused for a tool outside the site's list or the
 //                 Worker's ceiling, and while the rate limit holds

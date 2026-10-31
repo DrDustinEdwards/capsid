@@ -35,7 +35,7 @@ export function defineAgentOperations(server: McpServer, ctx: ToolCtx): void {
           .describe(
             'The repos this agent may reach, as "owner/name" entries, or the single entry "*". Omitted, the mint derives it from the namespaces\' repo mapping, and refuses when a namespace maps no repo. A namespace scope of "*" derives "*".'
           ),
-        tools: z.array(bounded(64)).optional().describe('Tool names this agent may call, or the single entry "*". Defaults to every tool its grant allows. An entry "tool.action" (for example "capsid_open_pr.comment") narrows that tool to the actions named.'),
+        tools: z.array(bounded(64)).optional().describe('Tool names this agent may call, or the single entry "*". Defaults to every tool its grant allows. An entry "tool.action" (for example "capsid_work_jobs.post") narrows that tool to the actions named.'),
         grants: z.array(z.enum(AGENT_GRANTS)).optional().describe(`read, or read and write. A new agent gets read.`),
         flags: z
           .object(Object.fromEntries(SCOPE_FLAGS.map((flag) => [flag, z.boolean().optional()])))

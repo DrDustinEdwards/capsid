@@ -886,11 +886,11 @@ for (const { label, tool, args } of F30_CASES) {
   });
 }
 
-// A landed GitHub write is not reported as a failure.
+// A landed GitHub change is not reported as a failure.
 
-test("capsid_change_repo write_file reports success with a warning when the audit insert fails", async () => {
-  // guardedWrite commits to GitHub and then writes its audit row, and the two cannot share
-  // a transaction. Reporting a failure would invite a retry, which is a second commit.
+test("capsid_close_pr close reports success with a warning when the audit insert fails", async () => {
+  // guardedWrite changes GitHub and then writes its audit row, and the two cannot share
+  // a transaction. Reporting a failure would invite a retry of a change already made.
   const { db } = fakeD1(connectOptions({}));
   (db as { prepare: unknown }).prepare = ((sql: string) => {
     const base = { bind: () => base, first: async () => null, all: async () => ({ results: [], meta: { changes: 0 } }), run: async () => ({ meta: { changes: 1 } }) } as Record<string, unknown>;
@@ -912,23 +912,21 @@ test("capsid_change_repo write_file reports success with a warning when the audi
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
     const method = (init?.method ?? "GET").toUpperCase();
     const path = new URL(url).pathname;
-    if (path === "/repos/o/r" && method === "GET") return new Response(JSON.stringify({ default_branch: "main" }), { status: 200 });
-    if (path === "/repos/o/r/contents/doc.md" && method === "GET") return new Response("{}", { status: 404 });
-    if (path === "/repos/o/r/contents/doc.md" && method === "PUT") {
-      return new Response(JSON.stringify({ commit: { sha: "landed-sha" }, content: { sha: "file-sha" } }), { status: 201 });
+    if (path === "/repos/o/r/pulls/7" && method === "PATCH") {
+      return new Response(JSON.stringify({ number: 7, state: "closed", html_url: "https://github.com/o/r/pull/7" }), { status: 200 });
     }
     return new Response("unexpected", { status: 500 });
   }) as typeof fetch;
 
   try {
     const result = (await client.callTool({
-      name: "capsid_change_repo",
-      arguments: { action: "write_file", namespace: "capsid", path: "doc.md", content: "hi", message: "m", mode: "direct" },
+      name: "capsid_close_pr",
+      arguments: { action: "close", namespace: "capsid", number: 7 },
     })) as { isError?: boolean; content: Array<{ text: string }> };
-    assert.ok(!result.isError, `the landed write was reported as a failure: ${result.content?.[0]?.text}`);
-    const payload = JSON.parse(result.content[0].text) as { commitSha?: string; audit_warning?: string };
+    assert.ok(!result.isError, `the landed close was reported as a failure: ${result.content?.[0]?.text}`);
+    const payload = JSON.parse(result.content[0].text) as { state?: string; audit_warning?: string };
     // The result still describes what landed, and says the log does not know.
-    assert.equal(payload.commitSha, "landed-sha");
+    assert.equal(payload.state, "closed");
     assert.match(payload.audit_warning ?? "", /SUCCEEDED/);
     assert.match(payload.audit_warning ?? "", /no such table: audit_log/);
     assert.match(payload.audit_warning ?? "", /Do not retry/);
@@ -937,103 +935,6 @@ test("capsid_change_repo write_file reports success with a warning when the audi
     await client.close();
   }
 });
-
-// What guardedWrite files. A fake D1 that answers the namespace lookup and records every
-// audit_log insert, and a server over it.
-async function connectAuditRecording() {
-  const { db } = fakeD1(connectOptions({}));
-  const audits: unknown[][] = [];
-  (db as { prepare: unknown }).prepare = ((sql: string) => {
-    let bound: unknown[] = [];
-    const base = {
-      bind: (...args: unknown[]) => {
-        bound = args;
-        return base;
-      },
-      first: async () => null,
-      all: async () => ({ results: [], meta: { changes: 0 } }),
-      run: async () => {
-        if (/INSERT INTO audit_log/i.test(sql)) audits.push(bound);
-        return { meta: { changes: 1 } };
-      },
-    } as Record<string, unknown>;
-    if (/FROM namespaces/i.test(sql)) base.first = async () => ({ repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) });
-    return base;
-  }) as never;
-  const server = buildServer(fakeEnv({ DB: db, APP_KV: { get: async (k: string) => (k.startsWith("gh:token:") ? "t" : null), put: async () => {}, delete: async () => {}, list: async () => ({ keys: [], list_complete: true }) } }), "write", "test:guard");
-  const client = new Client({ name: "f3-test", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  return { client, audits };
-}
-
-test("a pr-mode write whose commit landed but whose PR open failed is audited and reported, not failed", async () => {
-  // The commit is on the work branch before openPr runs, so a failed PR open must still
-  // be audited and reported as landed, or the caller retries into a second commit.
-  const { client, audits } = await connectAuditRecording();
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (url: string, init?: RequestInit) => {
-    const method = (init?.method ?? "GET").toUpperCase();
-    const path = new URL(url).pathname;
-    if (path === "/repos/o/r" && method === "GET") return new Response(JSON.stringify({ default_branch: "main" }), { status: 200 });
-    if (path === "/repos/o/r/git/ref/heads/main") return new Response(JSON.stringify({ object: { sha: "base-sha" } }), { status: 200 });
-    if (path === "/repos/o/r/git/refs" && method === "POST") return new Response("{}", { status: 201 });
-    if (path === "/repos/o/r/contents/doc.md" && method === "GET") return new Response("{}", { status: 404 });
-    if (path === "/repos/o/r/contents/doc.md" && method === "PUT") {
-      return new Response(JSON.stringify({ commit: { sha: "landed-sha" }, content: { sha: "file-sha" } }), { status: 201 });
-    }
-    if (path === "/repos/o/r/pulls" && method === "POST") return new Response("secondary rate limit", { status: 403 });
-    return new Response("unexpected", { status: 500 });
-  }) as typeof fetch;
-
-  try {
-    const result = (await client.callTool({
-      name: "capsid_change_repo",
-      arguments: { action: "write_file", namespace: "capsid", path: "doc.md", content: "hi", message: "m" },
-    })) as { isError?: boolean; content: Array<{ text: string }> };
-    assert.ok(!result.isError, `the landed commit was reported as a failure: ${result.content?.[0]?.text}`);
-    const payload = JSON.parse(result.content[0].text) as { commitSha?: string; pr?: unknown; pr_error?: string; branch?: string };
-    assert.equal(payload.commitSha, "landed-sha");
-    assert.equal(payload.pr, null);
-    assert.match(payload.pr_error ?? "", /THE COMMIT LANDED/);
-    assert.match(payload.pr_error ?? "", /secondary rate limit/);
-    assert.match(payload.pr_error ?? "", /Do not retry/);
-    assert.equal(audits.length, 1, "the landed commit has no audit row");
-    assert.equal(audits[0][1], "write_repo_file");
-    assert.match(String(audits[0][4]), /landed-sha/);
-  } finally {
-    globalThis.fetch = original;
-    await client.close();
-  }
-});
-
-// manage_pr's comment is capsid_open_pr action comment, and its merge is capsid_close_pr
-// action merge, which takes no comment.
-for (const { label, tool, args } of [
-  { label: "a comment action with no comment", tool: "capsid_open_pr", args: { namespace: "capsid", number: 7, action: "comment" } },
-  { label: "a comment on a merge", tool: "capsid_close_pr", args: { namespace: "capsid", number: 7, action: "merge", comment: "lgtm" } },
-]) {
-  test(`${tool} refuses ${label} as an error with no audit row`, async () => {
-    // A refusal returned from inside guardedWrite would be filed as a landed result.
-    const { client, audits } = await connectAuditRecording();
-    const original = globalThis.fetch;
-    let fetched = 0;
-    globalThis.fetch = (async () => {
-      fetched++;
-      return new Response("unexpected", { status: 500 });
-    }) as typeof fetch;
-    try {
-      const result = (await client.callTool({ name: tool, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
-      assert.equal(result.isError, true, `the refusal read as success: ${result.content?.[0]?.text}`);
-      assert.match(result.content[0].text, /comment/);
-      assert.equal(audits.length, 0, "a refused call wrote an audit row");
-      assert.equal(fetched, 0, "a refused call reached GitHub");
-    } finally {
-      globalThis.fetch = original;
-      await client.close();
-    }
-  });
-}
 
 // Patch uniqueness, through capsid_write_doc. test/write-modes.test.ts proves the rule on
 // `assembleBody` directly; these prove the handler applies it. A handler that treated

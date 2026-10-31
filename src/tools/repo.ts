@@ -2,17 +2,12 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { surfaceOf } from "./surface";
 import { z } from "zod";
 import {
-  CI_DISPATCH_POLL_MS,
   CI_JOBS_MAX,
   CI_LOG_BUDGET,
-  ciDispatch,
   ciStatus,
-  createBranch,
   deleteBranch,
-  deleteRepoFile,
   listRepoTree,
   managePr,
-  openPr,
   pruneMergedBranches,
   readRepoFile,
   readRepoFiles,
@@ -24,9 +19,8 @@ import {
   repoHistory,
   repoRefs,
   searchCode,
-  writeRepoFile,
 } from "../github";
-import { bounded, CI_DISPATCH_MAX_INPUTS, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, MAX_BODY, MAX_CI_NAME, MAX_COMMIT_MESSAGE, MAX_PATH, MAX_PR_BODY, MAX_PR_COMMENT, MAX_PR_TITLE, MAX_QUERY, MAX_REF, MAX_REPO_SELECTOR, MAX_SCAN_CAP, MAX_SHA, nsName } from "../limits";
+import { bounded, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, MAX_CI_NAME, MAX_PATH, MAX_QUERY, MAX_REF, MAX_REPO_SELECTOR, MAX_SCAN_CAP, MAX_SHA, nsName } from "../limits";
 import { fail, ok, type ToolCtx } from "./docs";
 import { tagRelease } from "../github/releases";
 import { siteCheck } from "../site-check";
@@ -39,6 +33,7 @@ import { repoGuards } from "./repo-guards";
 import { HeadMovedError } from "../github/refs";
 import { reverifyPr } from "../outcome-prs";
 import { logEvent } from "@dustinedwards/site-runtime/log";
+import { chatApprovalRefusal, MAX_APPROVAL_LINK, recordChatApproval } from "../chat-approval";
 
 // The pull request's canonical URL, for a managePr result that did not carry one.
 // The merge response names the repo and the caller named the number, which is all a
@@ -66,20 +61,6 @@ function headMovedRefusal(number: number) {
     throw err;
   };
 }
-
-// The two arguments write_repo_file and delete_repo_file share.
-const allowWorkflowWrite = z
-  .boolean()
-  .optional()
-  .describe("Opt in to writing under .github/workflows/, which is refused without it. Needs the can_write_workflows flag; audit-logged.");
-const prOnBranch = z
-  .number()
-  .int()
-  .positive()
-  .optional()
-  .describe(
-    "The number of branch's open pull request, required when branch has one; the commit then lands on it. Refused if it is not that branch's open pull request."
-  );
 
 export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   const { env } = ctx;
@@ -160,112 +141,31 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   );
 
   ctx.ops.define(
-    "write_repo_file",
-    {
-      description:
-        "Write a file to a namespace's GitHub repo. mode 'pr' (default) commits to a new branch, or to branch if given, and opens a PR; mode 'direct' commits straight to the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number. REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed. mode 'direct' needs the can_direct_write flag, allow_workflow_write the can_write_workflows flag, a protected path can_touch_protected and a money path money_paths. Needs the write grant.",
-      inputSchema: {
-        namespace: nsName,
-        path: bounded(MAX_PATH),
-        content: bounded(MAX_BODY),
-        message: bounded(MAX_COMMIT_MESSAGE),
-        mode: z.enum(["pr", "direct"]).optional(),
-        branch: bounded(MAX_REF).optional(),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
-        allow_workflow_write: allowWorkflowWrite,
-        pr: prOnBranch,
-      },
-    },
-    ({ namespace, path, content, message, mode, branch, repo, allow_workflow_write, pr }) =>
-      guardedWrite(
-        "write_repo_file",
-        namespace,
-        path,
-        () => writeRepoFile(env, namespace, path, content, message, mode ?? "pr", branch, repo, allow_workflow_write, pr),
-        { path, mode: mode ?? "pr", allow_workflow_write, repo }
-      )
-  );
-
-  ctx.ops.define(
-    "create_branch",
-    {
-      description: "Create a branch in a namespace's GitHub repo. Branches off the default branch unless 'from' is given. Needs the write grant.",
-      inputSchema: { namespace: nsName, branch: bounded(MAX_REF), from: bounded(MAX_REF).optional(), repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
-    },
-    ({ namespace, branch, from, repo }) =>
-      guardedWrite("create_branch", namespace, null, () => createBranch(env, namespace, branch, from, repo), { repo })
-  );
-
-  ctx.ops.define(
-    "open_pr",
-    {
-      description: "Open a pull request in a namespace's GitHub repo. Base defaults to the repo's default branch. Needs the write grant.",
-      inputSchema: {
-        namespace: nsName,
-        title: bounded(MAX_PR_TITLE),
-        head: bounded(MAX_REF),
-        base: bounded(MAX_REF).optional(),
-        body: bounded(MAX_PR_BODY).optional(),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
-      },
-    },
-    ({ namespace, title, head, base, body, repo }) =>
-      guardedWrite("open_pr", namespace, null, () => openPr(env, namespace, title, head, base, body, repo), { repo })
-  );
-
-  ctx.ops.define(
-    "delete_repo_file",
-    {
-      description:
-        "Delete a file from a namespace's GitHub repo. mode 'pr' (default) commits the deletion to a new branch, or to branch if given, and opens a PR; mode 'direct' deletes on the default branch. Mode 'pr' REFUSES branch set to the default branch, and a branch that already has an open PR unless pr names that PR's number. The file must exist. REFUSES any path under .github/workflows/ unless allow_workflow_write: true is passed. mode 'direct' needs the can_direct_write flag, allow_workflow_write the can_write_workflows flag, a protected path can_touch_protected and a money path money_paths. Needs the write grant.",
-      inputSchema: {
-        namespace: nsName,
-        path: bounded(MAX_PATH),
-        message: bounded(MAX_COMMIT_MESSAGE),
-        mode: z.enum(["pr", "direct"]).optional(),
-        branch: bounded(MAX_REF).optional(),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
-        allow_workflow_write: allowWorkflowWrite,
-        pr: prOnBranch,
-      },
-    },
-    ({ namespace, path, message, mode, branch, repo, allow_workflow_write, pr }) =>
-      guardedWrite(
-        "delete_repo_file",
-        namespace,
-        path,
-        () => deleteRepoFile(env, namespace, path, message, mode ?? "pr", branch, repo, allow_workflow_write, pr),
-        { path, mode: mode ?? "pr", allow_workflow_write, repo }
-      )
-  );
-
-  ctx.ops.define(
     "manage_pr",
     {
       description:
-        "Merge, close or comment on an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash') and needs the can_merge flag; with `sha`, it merges only if the head is still that commit and is otherwise refused with nothing merged. action 'close' closes it and needs the can_merge flag. action 'comment' posts `comment` and changes nothing else; it needs the can_comment_pr flag. Merge and close delete the head branch and return head_branch and head_branch_deleted, plus head_branch_note when the delete was declined: the default branch and a fork's branch are never deleted, and a failed delete does not fail the merge or close. A merge can trigger a deploy workflow. Needs the write grant.",
+        "Merge or close an open pull request in a namespace's repo. action 'merge' uses merge_method (default 'squash') and needs the can_merge flag; with `sha`, it merges only if the head is still that commit and is otherwise refused with nothing merged. action 'close' closes it and needs the can_merge flag. Merge and close delete the head branch and return head_branch and head_branch_deleted, plus head_branch_note when the delete was declined: the default branch and a fork's branch are never deleted, and a failed delete does not fail the merge or close. A merge can trigger a deploy workflow. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         number: z.number().int().positive(),
-        action: z.enum(["merge", "close", "comment"]),
+        action: z.enum(["merge", "close"]),
         merge_method: z.enum(["merge", "squash", "rebase"]).optional(),
-        comment: bounded(MAX_PR_COMMENT).optional().describe("For action 'comment': the comment body. Required for that action and refused for the others."),
         sha: bounded(MAX_SHA)
           .optional()
           .describe("For action 'merge': the full head sha you reviewed; the merge is refused if the head moved. Refused for the other actions."),
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+        approved_in: bounded(MAX_APPROVAL_LINK)
+          .optional()
+          .describe(
+            "For action 'merge', admin only: the https://claude.ai/ link to the message where Dustin approved this merge. Needs sha. After the merge, Capsid records the approval (src/chat-approval.ts). Refused for the other actions."
+          ),
       },
     },
-    ({ namespace, number, action, merge_method, comment, sha, repo }) => {
-      // comment belongs to exactly one action, and is refused rather than ignored in
-      // both directions: a comment silently dropped from a merge call is a review
-      // nobody posted, and a comment on a merge is a caller who believes something
-      // else is about to happen. Checked before guardedWrite, not inside it: guardedWrite files whatever fn
-      // returns as a landed result. Refused here, the call is an error and writes no
-      // audit row.
-      if (action === "comment" && !comment) return fail("manage_pr action 'comment' needs a comment body.");
-      if (action !== "comment" && comment !== undefined) {
-        return fail(`manage_pr action '${action}' takes no comment; only action 'comment' posts one.`);
+    ({ namespace, number, action, merge_method, sha, repo, approved_in }) => {
+      if (approved_in !== undefined) {
+        if (action !== "merge") return fail(`manage_pr action '${action}' takes no approved_in; only a merge records an approval.`);
+        const refusal = chatApprovalRefusal(approved_in, sha, ctx.agent.admin === true);
+        if (refusal) return fail(refusal);
       }
       return guardedWrite(
         "manage_pr",
@@ -273,12 +173,17 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
         null,
         async () => {
           refuseShaOffMerge(action, sha);
-          const result = await managePr(env, namespace, number, action, merge_method ?? "squash", repo, comment, sha).catch(headMovedRefusal(number));
+          const result = await managePr(env, namespace, number, action, merge_method ?? "squash", repo, sha).catch(headMovedRefusal(number));
           // A merge makes the outcome rows naming this pull request stale, so they are
           // re-read from GitHub now rather than at the daily sweep. It never fails the
           // merge, which already happened: reporting it as failed because a
           // bookkeeping update did not land would misreport the merge, and the sweep
           // picks the row up either way.
+          if (action === "merge" && approved_in !== undefined && sha !== undefined) {
+            const merged = result as { repo: string; sha?: string };
+            const approval = await recordChatApproval(env, ctx.actor, { namespace, repo: merged.repo, number, headSha: sha, mergeSha: merged.sha ?? null, link: approved_in }, new Date());
+            Object.assign(result, { approval });
+          }
           if (action === "merge") {
             try {
               const url = (result as { url?: string }).url ?? prUrlFor(result as { repo?: string }, number);
@@ -334,8 +239,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
   );
 
   // capsid_inspect_repo actions refs and history are reads and stay open to ro: keys.
-  // capsid_close_pr action delete_branch and capsid_run_ci need the write grant: one destroys refs, the other spends CI minutes
-  // and can start a deploy. These four are a ruled exception to the tool surface
+  // capsid_close_pr action delete_branch needs the write grant: it destroys refs. These
+  // three are a ruled exception to the tool surface
   // rule (CLAUDE.md).
 
   ctx.ops.define(
@@ -400,37 +305,6 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       if (branch === undefined) return Promise.resolve(fail("delete_branch needs a branch, or merged:true to prune the merged ones."));
       return guardedWrite("delete_branch", namespace, null, () => deleteBranch(env, namespace, branch, { force }, repo), { force, repo });
     }
-  );
-
-  ctx.ops.define(
-    "ci_dispatch",
-    {
-      description: `Start a workflow, or rerun one's failed jobs. Pass workflow (the file name, e.g. ci.yml) and ref to trigger a workflow_dispatch; it polls for up to ${CI_DISPATCH_POLL_MS / 1000}s and returns the new run's run_id, or run_id null with a note when no run appeared. Pass run_id alone to rerun that run's failed jobs. REFUSES: a workflow with no workflow_dispatch trigger, and workflow together with run_id. Needs the write grant and the can_dispatch flag; audit-logged. Spends CI minutes and can start a deploy.`,
-      inputSchema: {
-        namespace: nsName,
-        workflow: bounded(MAX_PATH).optional().describe("Workflow file name, e.g. ci.yml. Requires ref."),
-        ref: bounded(MAX_REF).optional().describe("The branch or sha to run the workflow on. Requires workflow."),
-        run_id: z.number().int().positive().optional().describe("Rerun this run's failed jobs. Not combinable with workflow."),
-        inputs: z
-          .record(bounded(MAX_REF), bounded(MAX_REF))
-          .refine((map) => Object.keys(map).length <= CI_DISPATCH_MAX_INPUTS, {
-            message: `at most ${CI_DISPATCH_MAX_INPUTS} workflow inputs: GitHub's own workflow_dispatch ceiling is ${CI_DISPATCH_MAX_INPUTS}, so a larger map can never be valid`,
-          })
-          .optional()
-          .describe("workflow_dispatch inputs, as a flat string map."),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
-      },
-    },
-    ({ namespace, workflow, ref, run_id, inputs, repo }) =>
-      guardedWrite(
-        "ci_dispatch",
-        namespace,
-        null,
-        () => ciDispatch(env, namespace, { workflow, ref, run_id, inputs }, repo),
-        // The workflow file name is the path this dispatch runs, so a dispatch of a
-        // workflow under a protected or money path is checked as one.
-        { path: workflow, repo }
-      )
   );
 
   ctx.ops.define(

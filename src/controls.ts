@@ -69,12 +69,6 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Change how Capsid Portal watches the package ${params.name ?? ""}. The watcher reads the new row on its next pass.`;
     case "package_remove":
       return `Remove the package ${params.name ?? ""} from the Portal. The watcher stops reading it; its weekly rows are kept.`;
-    case "canon_approve":
-      return `Approve canon proposal ${params.id ?? ""}. The document is written as proposed, with the current version snapshotted first, and only if it is still the body the proposal was written against.`;
-    case "canon_reject":
-      return `Reject canon proposal ${params.id ?? ""}. The document is not touched, and the proposer reads your reason.`;
-    case "canon_approve_all":
-      return "Decide every pending canon proposal at once. On each document the newest proposal is approved, written as the single Approve writes it, unless its document moved since it was written; older proposals on the same document, and outdated ones, are rejected with a reason the proposer reads.";
     case "site_repair":
       return `Run ${params.tool ?? ""} on ${ns} through its operator API. It re-derives one of the site's stores from its source and reports whether it converged. Capsid calls only the site's allowlisted repairs; it never merges and never mints.`;
     case "sign_policy_change":
@@ -111,11 +105,6 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   package_add: ["name", "repo", "formerly"],
   package_edit: ["name", "revision", "repo", "formerly"],
   package_remove: ["name", "revision"],
-  canon_approve: ["id"],
-  canon_reject: ["id", "reason"],
-  // The plan the preview read is bound into the token beside these (Plan.bind), so a
-  // caller cannot send one.
-  canon_approve_all: ["reason"],
   site_repair: ["namespace", "tool"],
   sign_policy_change: ["change", "unit", "confirm", "reason"],
   // The hash its preview read is bound into the token (Plan.bind), so a caller cannot send one.

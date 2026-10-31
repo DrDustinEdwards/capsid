@@ -1,18 +1,15 @@
 import { adminAgentForEmail } from "./agents";
 import { revokeAgent } from "./agents-admin";
-import { approveProposal, rejectProposal, readSweep } from "./canon";
 import {
   type ActionParams,
   type Surface,
   AUTOMERGE_RESUME_REASON,
-  CANON_REJECT_REASON,
   UNIT_RESUME_REASON,
   SWITCHES,
   auditPrefix,
   clickAuditAction,
   revisionOf,
   shippedEvidence,
-  sweepOrder,
   switchReasonRefusal,
 } from "./controls-base";
 import type { Env } from "./env";
@@ -331,75 +328,6 @@ export async function performAction(
               ? `Changed ${result.pkg.name}: ${describePackage(result.pkg)}.`
               : `Removed ${result.pkg.name} from the packages.`;
         await auditClick(env, actor, source, surface, action, null, params);
-        break;
-      }
-      case "canon_approve":
-      case "canon_reject": {
-        // Checked again here, as the site controls are: the token binds the params, and
-        // the proposal or its document can move between the preview and this click.
-        const id = revisionOf(params.id);
-        if (id === null) return { ok: false, refusal: `${action} needs the proposal id, a positive integer.` };
-        const reason = required(params, "reason");
-        if (action === "canon_reject" && !reason) return { ok: false, refusal: CANON_REJECT_REASON };
-        const result = action === "canon_approve" ? await approveProposal(env.DB, actor, now, id) : await rejectProposal(env.DB, actor, now, id, reason as string);
-        if (!result.ok) return { ok: false, refusal: result.refusal };
-        committed = true;
-        summary =
-          action === "canon_approve"
-            ? `Approved proposal ${id}: ${result.row.namespace}/${result.row.path} is written as ${result.row.proposer} proposed.`
-            : `Rejected proposal ${id} for ${result.row.namespace}/${result.row.path}.`;
-        await auditClick(env, actor, source, surface, action, result.row.namespace, { id, ...(reason ? { reason } : {}), path: result.row.path });
-        break;
-      }
-      case "canon_approve_all": {
-        // The token binds the plan its preview read. The queue is read again and the plan
-        // must read the same, so a proposal that arrived, was decided or went stale since
-        // is never swept in: the perform is refused and the preview shows the queue as it is.
-        const bound = params.plan;
-        if (!bound) return { ok: false, refusal: "canon_approve_all carries the plan its preview read, and this confirmation has none. Nothing changed. Preview again." };
-        const sweep = await readSweep(env.DB);
-        if (!sweep.ok) return { ok: false, refusal: `${sweep.refusal} The pending canon proposals changed since the preview. Nothing changed.` };
-        if (sweep.key !== bound) {
-          return { ok: false, refusal: `the pending canon proposals changed since the preview (it planned ${bound}; they now plan ${sweep.key}). Nothing changed. Preview again.` };
-        }
-        const reason = required(params, "reason");
-        const done: Array<{ id: number; outcome: string; target: string }> = [];
-        const failed: Array<{ id: number; outcome: string; target: string; refusal: string }> = [];
-        for (const item of sweepOrder(sweep.items)) {
-          const { id } = item.proposal;
-          const target = `${item.proposal.namespace}/${item.proposal.path}`;
-          // One failure does not stop the rest: each is its own decision, guarded on its
-          // own state, and a failure is reported with its refusal.
-          try {
-            const result = item.reason === null ? await approveProposal(env.DB, actor, now, id) : await rejectProposal(env.DB, actor, now, id, item.reason);
-            if (result.ok) done.push({ id, outcome: item.outcome, target });
-            else failed.push({ id, outcome: item.outcome, target, refusal: result.refusal });
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            logEvent("CANON_APPROVE_ALL_ITEM_FAILED", { message, id, outcome: item.outcome }, { level: "error" });
-            failed.push({ id, outcome: item.outcome, target, refusal: message });
-          }
-        }
-        const failures = failed.map((f) => `${f.id} (${f.target}, to ${f.outcome === "approve" ? "approve" : "reject"}): ${f.refusal}`);
-        if (!done.length) return { ok: false, refusal: `canon_approve_all decided nothing. ${failures.join(" ")}` };
-        committed = true;
-        const approved = done.filter((d) => d.outcome === "approve");
-        const rejected = done.filter((d) => d.outcome !== "approve");
-        summary = [
-          `Decided ${done.length} of ${sweep.items.length} canon proposal(s).`,
-          approved.length ? `Approved ${approved.map((d) => `${d.id} (${d.target})`).join(", ")}.` : "",
-          rejected.length ? `Rejected ${rejected.map((d) => `${d.id} (${d.target}, ${d.outcome})`).join(", ")}.` : "",
-          failed.length ? `Failed ${failed.length}: ${failures.join(" ")}` : "",
-        ]
-          .filter(Boolean)
-          .join(" ");
-        await auditClick(env, actor, source, surface, action, null, {
-          plan: bound,
-          ...(reason ? { reason } : {}),
-          approved: approved.map((d) => d.id),
-          rejected: rejected.map((d) => d.id),
-          failed: failed.map((f) => ({ id: f.id, refusal: f.refusal })),
-        });
         break;
       }
       case "site_repair": {

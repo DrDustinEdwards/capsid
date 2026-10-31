@@ -12,7 +12,8 @@
 //     hashed files by that absolute path (dashboard/vite.config.ts base), on both hosts.
 // Nothing else is reachable on the Portal host: /mcp, /health and the /ops routes are on
 // mcp.dustinedwards.info (src/mcp-host.ts), and on this host they are Portal paths behind
-// the gate.
+// the gate. The one exception is /admin/access-drift, the drift check's hashed admin list,
+// answered in src/index.ts before this rewrite.
 
 // The same values as portal-auth's PORTAL_PATH and PORTAL_PREFIX, stated here rather than
 // imported, because portal-auth imports this module.

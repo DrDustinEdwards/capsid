@@ -117,7 +117,7 @@ test("'all seven' is flagged when it is about headers", () => {
   ], "capsid");
   assert.equal(claims.length, 1);
   assert.equal(claims[0].noun, "security headers");
-  assert.match(claims[0].authoritative, /^9 enforced$/);
+  assert.match(claims[0].authoritative, /^11 enforced$/);
 });
 
 test("'all seven' about anything else is NOT flagged", () => {
@@ -136,7 +136,7 @@ test("'all seven' about anything else is NOT flagged", () => {
 test("the scan never returns a rewritten body, only a flag", () => {
   // Flag, never auto-correct: a "corrected" or "replacement" field would be a program
   // editing canon on its own judgment.
-  const claims = scanCountClaims([{ path: "core.md", type: "core", body: "19 tools" }], "capsid");
+  const claims = scanCountClaims([{ path: "core.md", type: "core", body: "16 tools" }], "capsid");
   // Exactly one claim, or the loop below passes without checking anything.
   assert.equal(claims.length, 1, `expected one claim for a stale tool count: ${JSON.stringify(claims)}`);
   for (const c of claims) {
@@ -181,7 +181,7 @@ test("a decisions log is EXEMPT outright: it is history by construction", () => 
 test("every claim is checked in a document that is not an append-only log", () => {
   // The exemption is keyed on type `decision` and must not leak to core or concept
   // docs, which state current fact throughout.
-  const doc = { path: "core.md", type: "core", body: "It had 19 tools then, and 19 tools now." };
+  const doc = { path: "core.md", type: "core", body: "It had 16 tools then, and 16 tools now." };
   assert.equal(scanCountClaims([doc], "capsid").length, 2);
 });
 
@@ -231,7 +231,7 @@ test("a subset count is not a total", () => {
     assert.deepEqual(scanCountClaims([{ path: "x.md", type: "concept", body: phrase }], "capsid"), [], `subset not exempted: ${phrase}`);
   }
   // An unqualified total in the same document still fires.
-  assert.equal(scanCountClaims([{ path: "x.md", type: "concept", body: "The server exposes 19 tools." }], "capsid").length, 1);
+  assert.equal(scanCountClaims([{ path: "x.md", type: "concept", body: "The server exposes 16 tools." }], "capsid").length, 1);
 });
 
 test("N of M: M is checked as the total, N is exempt", () => {

@@ -34,7 +34,7 @@ test("a driver carries no flags, and only the seat may merge", () => {
   assert.ok(seat, "the seat is gone");
   assert.deepEqual(seat.namespaces, ["*"]);
   assert.deepEqual(seat.flags, { can_merge: true });
-  // can_direct_write is off even for the seat. The whole key set is pinned, so
+  // can_touch_protected is off even for the seat. The whole key set is pinned, so
   // anything granted later shows up as a new key rather than passing on a nullish
   // default.
   assert.deepEqual(Object.keys(seat.flags ?? {}), ["can_merge"]);
