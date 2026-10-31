@@ -8,7 +8,8 @@ name: Explorer
 # the fixtures: typecheck, the build tests and the browser spec. On master, daily and by hand,
 # the deploy job builds from the live documents and deploys only when the build differs from
 # what capsid.dustinedwards.info serves (build.json's content hash): a new day's numbers or new
-# explorer code. A day the public build did not run deploys nothing.
+# explorer code. A day the public build did not run deploys nothing. The deploy is devkit's shared
+# worker-deploy: live gate on /health, rollback on a refusal.
 
 on:
   pull_request:
@@ -85,9 +86,12 @@ jobs:
   # Turned on by the repository variable EXPLORER_DEPLOY=on, which Dustin sets once his two
   # account steps are done (ruling answer 13: the deploy token as the EXPLORER_CLOUDFLARE_API_TOKEN
   # secret, and capsid.dustinedwards.info). That is a switch, not a guard on the secrets: with it
-  # on, a missing or wrong token fails this job loudly, as ci.yml's deploy does.
-  deploy:
-    name: explorer deploy
+  # on, a missing or wrong token fails the deploy loudly, as ci.yml's deploy does.
+  #
+  # This job builds from the live documents and says whether the build differs from what is live;
+  # the deploy below ships it only then.
+  compare:
+    name: explorer compare
     needs: checks
     if: >-
       always() && (needs.checks.result == 'success' || (github.event_name == 'schedule' && needs.checks.result == 'skipped'))
@@ -95,6 +99,8 @@ jobs:
       && vars.EXPLORER_DEPLOY == 'on'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      deploy: ${{ steps.compare.outputs.deploy }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -131,36 +137,64 @@ jobs:
           else
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           fi
-          echo "content=$built" >> "$GITHUB_OUTPUT"
 
-      # The config is generated, never committed (CLAUDE.md, public repo rule).
-      - name: Deploy
-        if: steps.compare.outputs.deploy == 'true'
+  # devkit's shared deploy (worker-deploy.yml), as on the sites: it builds again from the live
+  # documents, writes the generated config (never committed: CLAUDE.md, public repo rule) where
+  # wrangler finds it, deploys with DEPLOY_SHA set to this commit, waits for /health
+  # (explorer/worker.mjs) to report it, checks the home page answers, and rolls the deploy back if
+  # it does not. It runs in explorer/, so the generated wrangler.json there is the config.
+  deploy:
+    name: explorer deploy
+    needs: compare
+    if: always() && needs.compare.result == 'success' && needs.compare.outputs.deploy == 'true'
+    concurrency:
+      group: explorer-deploy
+      cancel-in-progress: false
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@fbf3824ab08f76af5befd7471677778e8b132c9b # v0.20.18
+    with:
+      worker-name: capsid
+      health-url: https://capsid.dustinedwards.info/health
+      verify-command: >-
+        code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://capsid.dustinedwards.info/ || true);
+        echo "home page answered $code";
+        if [ "$code" = 200 ]; then exit 0; elif [ "$code" = 000 ]; then exit 3; else exit 1; fi
+      working-directory: explorer
+      install: cd .. && npm ci && npm ci --prefix explorer
+      pre-deploy: >-
+        cd .. && npm --prefix explorer run build &&
+        node explorer/wrangler-config.mjs explorer/dist > explorer/wrangler.json
+      sha-var: DEPLOY_SHA
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.EXPLORER_CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  # Tell IndexNow the pages changed (explorer/indexnow.mjs, Prelum's submitIndexNow), once the
+  # live gate passes. A refused or failed ping is a warning, never a failure: the engines then
+  # crawl on their own.
+  indexnow:
+    name: explorer indexnow
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            explorer/package-lock.json
+
+      - name: Install dependencies
         run: |
-          set -euo pipefail
-          node explorer/wrangler-config.mjs explorer/dist > "$RUNNER_TEMP/explorer.wrangler.json"
-          npx wrangler deploy --config "$RUNNER_TEMP/explorer.wrangler.json"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.EXPLORER_CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          npm ci
+          npm ci --prefix explorer
 
-      # Deployed is what the domain serves, not what wrangler said: poll until the live
-      # build.json carries this build's hash.
-      - name: Verify the live build
-        if: steps.compare.outputs.deploy == 'true'
-        run: |
-          set -euo pipefail
-          want='${{ steps.compare.outputs.content }}'
-          for i in $(seq 1 40); do
-            live=$(curl -fsS --max-time 10 -H 'cache-control: no-cache' "https://capsid.dustinedwards.info/build.json?v=$want" | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).content' 2>/dev/null || echo none)
-            if [ "$live" = "$want" ]; then echo "live: $live"; exit 0; fi
-            sleep 3
-          done
-          echo "::error::capsid.dustinedwards.info still serves $live, not $want" >&2
-          exit 1
-
-      # Tell IndexNow the pages changed (explorer/indexnow.mjs, Prelum's submitIndexNow). A refused
-      # or failed ping is a warning, never a failure: the engines then crawl on their own.
+      # indexnow.mjs reads dist/sitemap.xml: the live one is what was just deployed.
       - name: Tell IndexNow
-        if: steps.compare.outputs.deploy == 'true'
-        run: npm --prefix explorer run indexnow
+        run: |
+          mkdir -p explorer/dist
+          curl -fsS --max-time 20 https://capsid.dustinedwards.info/sitemap.xml -o explorer/dist/sitemap.xml
+          npm --prefix explorer run indexnow
