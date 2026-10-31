@@ -32,10 +32,6 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // set a site's key as a secret on its Worker and on Carrel. Apart from CF_OPS_TOKEN
   // because it writes. Unset, capsid_admin_set_site_key mints nothing and says why.
   CF_SECRETS_TOKEN?: string;
-  // The Access sync's write token (src/access-sync.ts): Access: Groups Write, Access: Users
-  // Read and Zero Trust: Seats Write on this account only. Capsid is its only holder
-  // (Dustin, 2026-10-09). Unset, POST /ops/access-sync answers 503 and calls nothing.
-  CF_ACCESS_SYNC_TOKEN?: string;
   // Google Search Console's read (src/search-console.ts): a service account's whole JSON
   // key, the account added as a Full user on each site's property. Unset,
   // capsid_inspect_repo action search reads nothing and says why.
@@ -94,7 +90,7 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
 // What the GitHub modules (src/github/) are handed: everything except the credentials
 // that mint backup read access, the Cloudflare read token (it can read Worker code), the
 // Access sync's write token, the key that signs phone alerts and Desk's crawl token.
-export type RepoEnv = Omit<Env, "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "CF_ACCESS_SYNC_TOKEN" | "VAPID_PRIVATE_KEY" | "DESK_CRAWL_CLIENT_ID" | "DESK_CRAWL_CLIENT_SECRET">;
+export type RepoEnv = Omit<Env, "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "VAPID_PRIVATE_KEY" | "DESK_CRAWL_CLIENT_ID" | "DESK_CRAWL_CLIENT_SECRET">;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move
 // to Access carry { id, login, name } from GitHub instead, fail the per-request email

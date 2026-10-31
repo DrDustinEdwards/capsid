@@ -83,8 +83,6 @@ const jobResult: Shape = {
   routing_note: str.optional(),
   models: obj.optional(),
   versions: rows.optional(),
-  session: obj.optional(),
-  routine: obj.optional(),
 };
 
 const agentResult: Shape = { ok: bool, action: str, agent: obj.optional(), agents: rows.optional(), key: str.optional(), note: str.optional(), scopes: obj.optional() };

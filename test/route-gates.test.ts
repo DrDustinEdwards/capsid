@@ -8,7 +8,6 @@ import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
 import { PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "../src/portal-auth.ts";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
 import { OPS_HOOKS_PATH } from "../src/ops-hooks.ts";
-import { ACCESS_SYNC_PATH } from "../src/access-sync.ts";
 import {
   PORTAL_ACTIVITY_PATH,
   PORTAL_API_PREFIX,
@@ -117,7 +116,6 @@ test("a path in neither table is refused to everyone but the admin", async () =>
 // every route
 
 const PATH_CONSTANTS: Record<string, string> = {
-  ACCESS_SYNC_PATH,
   REPORT_PATH,
   VERIFY_LIVE_CLIENT_PATH,
   BACKUP_CREDENTIAL_PATH,

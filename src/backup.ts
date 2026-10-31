@@ -152,8 +152,8 @@ export const TABLES = [
   // What became of each deploy whose live gate ran (migrations/0039_deploy_outcomes.sql),
   // the evidence the promotion and demotion proposals read. Nothing prunes it.
   "deploy_outcomes",
-  // The Access group pinned for each app's members page (migrations/0040_access_sync_groups.sql):
-  // configuration the seat writes by hand. Nothing prunes it.
+  // The Access group pins of the retired Access sync (migrations/0040_access_sync_groups.sql;
+  // the endpoint was removed 2026-10-31, Dustin). Empty; kept until a migration drops it.
   "access_sync_groups",
   // The methods paper's paired comparison (migrations/0047_bench.sql): the registered
   // tasks and every run's outcome, the data its primary outcome is computed from.

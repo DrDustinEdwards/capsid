@@ -29,7 +29,7 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);
 }
 
-export const JOB_ACTIONS = ["post", "list", "claim", "complete", "record", "fail", "block", "resume", "supersede", "release", "begin", "fire", "routine", "edit", "park", "unpark"] as const;
+export const JOB_ACTIONS = ["post", "list", "claim", "complete", "record", "fail", "block", "resume", "supersede", "release", "begin", "edit", "park", "unpark"] as const;
 
 export const JOBS_ROWS_MAX = 100;
 

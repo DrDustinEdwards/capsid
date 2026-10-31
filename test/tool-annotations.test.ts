@@ -224,12 +224,11 @@ const NOT_NETWORK: Record<string, string> = {
 // stale entry fails.
 const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence: Array<{ file: string; pattern: RegExp }> }> = {
   jobs: {
-    reason: "complete and fail check their evidence against GitHub, and fire posts to Anthropic's routine endpoint",
-    via: /\b(?:completeAsCaller|fireRoutine)\(/,
+    reason: "complete and fail check their evidence against GitHub",
+    via: /\bcompleteAsCaller\(/,
     evidence: [
       { file: "jobs-holder.ts", pattern: /\bverifyEvidence\(/ },
       { file: "job-outcomes.ts", pattern: /\bghFetch\(/ },
-      { file: "routine-fire.ts", pattern: /\bpostFire\(/ },
     ],
   },
   whats_next: {

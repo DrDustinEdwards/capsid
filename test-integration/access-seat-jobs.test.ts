@@ -124,12 +124,4 @@ describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
     expect(result.ok, result.refusal).toBe(true);
     expect((await row(id))?.status).toBe("failed");
   });
-
-  it("fire: the seat passes the seat check, and is refused only because the namespace has no routine", async () => {
-    const id = await driverJob();
-    const result = await jobsTool(SEAT, { action: "fire", id });
-    expect(result.ok).toBe(false);
-    expect(result.refusal).toMatch(/routine_missing/);
-    expect(result.refusal).not.toMatch(/cannot fire a routine|not a caller identity/);
-  });
 });

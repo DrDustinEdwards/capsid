@@ -8,9 +8,7 @@
     "explorer:cspReport": "the explorer is an assets-only Worker with no code; its CSP reports to Capsid's own /csp-report, which uses receiveCspReport"
   },
   "copies": {
-    "src/access-sync.ts": "normalizeEmail here also validates and returns null for a non-address, so one bad member refuses the whole sync; site-runtime's only lowercases",
-    "src/github/client.ts": "readKey here names a KV cache key for a GitHub read, not a frontmatter field",
-    "src/routine-fire.ts": "fireRoutine here is capsid_work_jobs' fire action (seat check, job row, session record); it is not the plain routine POST"
+    "src/github/client.ts": "readKey here names a KV cache key for a GitHub read, not a frontmatter field"
   },
   "libraries": {
     "jose": "search-console.ts signs the Google service account's JWT and shadow.ts verifies GitHub Actions OIDC tokens; site-runtime's ./access and ./access-login verify only Cloudflare Access tokens"

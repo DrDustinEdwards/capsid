@@ -163,7 +163,6 @@ Agents and operators (`/ops/`):
 - `POST /ops/hooks` Claude Code HTTP hook events, requires a driver key as `Authorization: Bearer <key>`; keeps a summary of each session, never a prompt, a response or a tool's input or output beyond its name, an edited file's path and a Bash command's first word and exit code (docs/hooks.md)
 - `GET /ops/inbox` what needs Dustin, per app: blocked jobs and questions, pull requests auto-merge declined, failing CI, a site that is down. Read by an app's server with a bearer key; a key scoped to one namespace sees that app only, the admin sees every app, and the response carries no CORS headers (docs/portal.md)
 - `POST /ops/inbox/report` what an app reports about itself to the inbox (Carrel's drafts waiting), with its own key and the write grant on its namespace; replaced whole, expires after 6 hours, one per minute per key (docs/portal.md)
-- `POST /ops/access-sync` an app's members page makes its Cloudflare Access group hold exactly its current members, with the app's own key and the write grant on its namespace. The group is the one the seat pinned for that namespace in `access_sync_groups`, its name checked before every write; removed people's Zero Trust seats are freed, only for people the group held before the write; every call is audited. Capsid holds the only write token, `CF_ACCESS_SYNC_TOKEN` (docs/portal.md)
 - `POST /ops/backup` runs a backup on demand, requires the admin (a write-grant operator key; a minted agent gets 403), returns a JSON summary
 
 Backups and the paired comparison (signed, no bearer):
