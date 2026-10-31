@@ -1,4 +1,4 @@
-import { ACCESS_JWT_HEADER, ACCESS_LOGOUT_PATH, ADMIN_IDLE_SECONDS, ADMIN_SEEN_COOKIE, accessIssuer, adminIdle } from "@dustinedwards/site-runtime/access";
+import { ACCESS_LOGOUT_PATH, ADMIN_IDLE_SECONDS, ADMIN_SEEN_COOKIE, accessIssuer, adminIdle } from "@dustinedwards/site-runtime/access";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, startAccessLogin } from "./access-login";
 import { cookieName, getCookie, hmacHex, isAdminEmail } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
@@ -161,22 +161,19 @@ export async function logPortalSignOut(email: string): Promise<void> {
 
 /**
  * site-runtime's adminIdle around the Portal's routes, as the sites use withAdminIdle
- * around /admin. adminIdle times an Access session by its token's `sub` and `iat`
- * (read, not verified: verifying is the gate's job). The Portal's session is the Access
- * sign-in it verified at its callback, so it hands adminIdle that sign-in in the token's
- * place: `iat` the sign-in time and `sub` a server-keyed digest of the email and that
- * time, so the last-request cookie cannot be made without COOKIE_ENCRYPTION_KEY. With
- * no session it goes straight to `handle`, whose gate starts the sign-in.
+ * around /admin. The Portal's sign-in is not an Access token on the request, so it
+ * passes adminIdle its own session: `id` a server-keyed digest of the email and the
+ * sign-in time, so the last-request cookie cannot be made without
+ * COOKIE_ENCRYPTION_KEY, and `signedInAt` that time. The app's polling fetches send
+ * X-Background (BACKGROUND_HEADER), which adminIdle checks but does not count as a
+ * request, so an open tab left alone goes idle. With no session it goes straight to
+ * `handle`, whose gate starts the sign-in.
  */
 export async function withPortalIdle(request: Request, env: Env, handle: () => Promise<Response>, now: Date = new Date()): Promise<Response> {
   const session = await verifiedSession(request, env);
   if (!session) return handle();
-  const iat = Math.floor(session.at / 1000);
-  const sub = await hmacHex(env.COOKIE_ENCRYPTION_KEY, `portal-idle.${session.email}.${session.at}`);
-  const timed = new Headers({ [ACCESS_JWT_HEADER]: `portal.${base64url(JSON.stringify({ sub, iat }))}.portal` });
-  const cookies = request.headers.get("Cookie");
-  if (cookies) timed.set("Cookie", cookies);
-  const gate = await adminIdle(new Request(request.url, { headers: timed }), { now: now.getTime() });
+  const id = await hmacHex(env.COOKIE_ENCRYPTION_KEY, `portal-idle.${session.email}.${session.at}`);
+  const gate = await adminIdle(request, { session: { id, signedInAt: session.at }, now: now.getTime() });
   if (gate.idle) {
     await endPortalSessions(env, session.email, now);
     logEvent(OWASP_EVENTS.sessionExpired, { message: "Portal session ended after an idle hour", app: "portal", reason: "idle", email_key: await emailKey(session.email) });

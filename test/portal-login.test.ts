@@ -347,12 +347,18 @@ test("PLANT: an hour with no request sends the browser to Access's logout and en
   const second = await withPortalIdle(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen}` } }), e, handle, at(80));
   assert.equal(second.status, 200);
   assert.equal(handled.length, 2);
+  const seen2 = setCookies(second).find((c) => c.startsWith("__Host-admin-seen="))?.split(";")[0];
 
-  // 150 minutes in with no request since 30: idle.
-  const idle = await withPortalIdle(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen}` } }), e, handle, at(150));
+  // The page's own poll (X-Background) is served but is not a request by the admin.
+  const poll = await withPortalIdle(new Request(`${ORIGIN}/portal/api/ops`, { headers: { Cookie: `${session}; ${seen2}`, "X-Background": "1" } }), e, handle, at(120));
+  assert.equal(poll.status, 200);
+  assert.ok(!setCookies(poll).some((c) => c.startsWith("__Host-admin-seen=")), "a background poll kept the session active");
+
+  // 150 minutes in, 70 after the last request by the admin (the poll at 120 does not count): idle.
+  const idle = await withPortalIdle(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen2}` } }), e, handle, at(150));
   assert.equal(idle.status, 302);
   assert.equal(idle.headers.get("Location"), "https://sample.cloudflareaccess.com/cdn-cgi/access/logout");
-  assert.equal(handled.length, 2, "an idle request reached the Portal");
+  assert.equal(handled.length, 3, "an idle request reached the Portal");
   assert.ok(setCookies(idle).some((c) => /^__Secure-capsid_portal=;.*Max-Age=0/.test(c)));
   assert.equal(await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: session } }), e, at(151)), null, "the idle session's cookie still verifies");
 });

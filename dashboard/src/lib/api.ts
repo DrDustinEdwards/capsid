@@ -99,8 +99,15 @@ export function useAnswer<T>(
   };
 }
 
+// The feed is read only by the page itself (on load, the minute poll and a return to
+// the tab), never by a click, so it is marked background: the Worker's idle hour
+// (withPortalIdle) checks it but does not count it, and an open tab left alone signs
+// out. The name is site-runtime ./access's BACKGROUND_HEADER; the app does not bundle
+// the server package for one string.
+const BACKGROUND = { "X-Background": "1" } as const;
+
 async function readFeed(): Promise<OpsFeed> {
-  const res = await fetch(FEED_URL, { credentials: "same-origin", redirect: "manual", cache: "no-store", headers: { accept: "application/json" } });
+  const res = await fetch(FEED_URL, { credentials: "same-origin", redirect: "manual", cache: "no-store", headers: { accept: "application/json", ...BACKGROUND } });
   if (sessionEnded(res)) throw new SignedOut("signed out");
   if (!res.ok) throw new Error(`The feed answered ${res.status}`);
   return asFeed(res);
