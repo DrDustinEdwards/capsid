@@ -10,13 +10,10 @@
 // Two hard requirements. Violating either makes this gate pass against a fully broken
 // server:
 //
-//   1. NEVER THE APPROVED FAST PATH. handleAuthorizeGet short-circuits for a client id
-//      already in the capsid_approved cookie and 302s straight out of the GET, never
-//      rendering a form. This script sends no capsid_approved cookie, and gate 3
-//      asserts the consent FORM renders. A 302 at gate 3 means the fast path was hit
-//      and the run is VOID. The probe client is a fixed metadata document
-//      (scripts/cimd-probe-lib.mjs), never a registered one; the fast path is
-//      keyed on the cookie, not on the client being new.
+//   1. A FORM, NEVER A REDIRECT. site-runtime's loginHandler renders consent on every
+//      GET /authorize, and gate 3 asserts the consent FORM renders. A 302 at gate 3
+//      means something skipped consent and the run is VOID. The probe client is a fixed
+//      metadata document (scripts/cimd-probe-lib.mjs), never a registered one.
 //
 //   2. POLL, NEVER SINGLE-FETCH, on header assertions. The first post-deploy read can
 //      return the previous version's headers.
@@ -294,14 +291,13 @@ async function gateConsentForm(clientId) {
     return null;
   }
   const html = resp.text;
-  const hasForm = /<form[^>]+method=["']post["'][^>]*action=["']\/authorize["']/i.test(html);
-  const csrf = html.match(/name=["']csrf["'][^>]*value=["']([^"']+)["']/i)?.[1];
-  const req = html.match(/name=["']req["'][^>]*value=["']([^"']+)["']/i)?.[1];
-  const cookie = resp.headers.get("set-cookie") ?? "";
-  const csrfCookie = cookie.match(/capsid_csrf=([^;]+)/)?.[1];
-  const passed = resp.status === 200 && hasForm && Boolean(csrf) && Boolean(req) && Boolean(csrfCookie);
-  record("3 consent form renders", passed, `status=${resp.status} form=${hasForm} csrf_field=${Boolean(csrf)} req_field=${Boolean(req)} csrf_cookie=${Boolean(csrfCookie)}`);
-  return passed ? { csrf, req, csrfCookie } : null;
+  const hasForm = /<form[^>]+method=["']post["']/i.test(html);
+  const handle = html.match(/name=["']handle["'][^>]*value=["']([^"']+)["']/i)?.[1];
+  // The provider binds the handle to this browser with a cookie; gate 5 sends it back.
+  const cookies = resp.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+  const passed = resp.status === 200 && hasForm && Boolean(handle) && Boolean(cookies);
+  record("3 consent form renders", passed, `status=${resp.status} form=${hasForm} handle_field=${Boolean(handle)} consent_cookie=${Boolean(cookies)}`);
+  return passed ? { handle, cookies } : null;
 }
 
 // Gate 4: the consent CSP cannot block the form's redirect chain. Polls, because
@@ -439,17 +435,21 @@ async function gateSecurityHeaders(clientId) {
 // (scripts/access-redirect-lib.mjs says exactly what is checked). This is where the run
 // stops. It never follows the 302 and never touches Access.
 async function gateAccessRedirect(clientId, form) {
-  const body = new URLSearchParams({ csrf: form.csrf, req: form.req });
+  // Read only: the probe asks for no write grant, so the box stays unticked.
+  const body = new URLSearchParams({ handle: form.handle, decision: "approve" });
   let resp;
   try {
-    // Safe to retry: the csrf check compares the field with the cookie and consumes
-    // nothing (src/routes.ts), so a repeat POST is judged the same way as the first.
-    resp = await request(`${ORIGIN}/authorize`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: `capsid_csrf=${form.csrfCookie}` },
-      body: body.toString(),
-      redirect: "manual",
-    });
+    // Once only: the consent handle works once, so a retried POST would be refused.
+    resp = await request(
+      `${ORIGIN}/authorize`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: form.cookies },
+        body: body.toString(),
+        redirect: "manual",
+      },
+      1,
+    );
   } catch (err) {
     record("5 approve redirects to Access", COULD_NOT_RUN, noAnswer(err).message);
     return;

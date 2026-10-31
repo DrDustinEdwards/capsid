@@ -12,7 +12,8 @@
 //   2025-11-25  initialize, notifications/initialized, tools/list, tools/call capsid_read_doc
 //   2026-07-28  server/discover, tools/list, tools/call capsid_read_doc, each with the _meta envelope
 //
-// When src/legacy-era.ts is deleted, 2025-11-25 leaves ERAS in the same pull request.
+// When src/mcp-handler.ts stops passing isLegacyRequest to routeMcpEra, 2025-11-25 leaves ERAS
+// in the same pull request.
 
 export const ERAS = ["2025-11-25", "2026-07-28"];
 

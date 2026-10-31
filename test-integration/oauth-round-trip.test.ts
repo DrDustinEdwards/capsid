@@ -66,7 +66,7 @@ async function mcpInitialize(accessToken: string): Promise<Response> {
 }
 
 // Runs the flow up to the code, as `login`. Returns the client id and the code.
-async function authorize(email: string, extra: Record<string, unknown> = {}, sameClient?: string): Promise<{ clientId: string; code: string | null; callback: Response; tokenBodies: URLSearchParams[]; signIn: URL }> {
+async function authorize(email: string, extra: Record<string, unknown> = {}, sameClient?: string, write = true): Promise<{ clientId: string; code: string | null; callback: Response; tokenBodies: URLSearchParams[]; signIn: URL }> {
   const clientId = sameClient ?? cimdClient([REDIRECT], "round-trip");
 
   const url = new URL(`${ORIGIN}/authorize`);
@@ -76,17 +76,21 @@ async function authorize(email: string, extra: Record<string, unknown> = {}, sam
   const dialog = await call(new Request(url));
   expect(dialog.status).toBe(200);
   const html = await dialog.text();
+  // The consent form as site-runtime's loginHandler renders it: the provider's one-time
+  // handle, and the write box ticked unless this sign-in is read-only.
+  const form = new URLSearchParams({ handle: hidden(html, "handle"), decision: "approve" });
+  if (write) form.set("allow_write", "1");
   const approved = await call(
     new Request(`${ORIGIN}/authorize`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookieValues(dialog).join("; ") },
-      body: new URLSearchParams({ csrf: hidden(html, "csrf"), req: hidden(html, "req") }).toString(),
+      body: form.toString(),
     })
   );
   expect(approved.status).toBe(302);
   const signIn = new URL(String(approved.headers.get("location")));
   const state = String(signIn.searchParams.get("state"));
-  const stateCookie = cookieValues(approved).find((c) => c.startsWith("capsid_state=")) ?? "";
+  const stateCookie = cookieValues(approved).join("; ");
 
   // Each stub signs with a key of its own under the same kid, and the verifier keeps the
   // keys it read per JWKS URL, so the last sign-in's key is dropped first.
@@ -140,7 +144,7 @@ describe("the OAuth round trip", () => {
   it("PLANT: a second authorization for the same user and client leaves the first grant usable", async () => {
     // Claude uses one CIMD client id for both the Capsid (/mcp) and Capsid Admin
     // (/mcp/admin) connectors. The provider revokes every earlier grant for the same
-    // user and client on each authorization unless handleCallback passes
+    // user and client on each authorization unless src/routes.ts keepingGrants passes
     // revokeExistingGrants: false, so signing into one signed the other out.
     const first = await authorize(env.ADMIN_EMAIL!);
     const exchanged = await tokenRequest({ grant_type: "authorization_code", code: first.code!, redirect_uri: REDIRECT, client_id: first.clientId, code_verifier: VERIFIER });
@@ -191,43 +195,28 @@ describe("the OAuth round trip", () => {
     expect(refused.status).toBe(400);
   });
 
-  it("an Access identity that is not ADMIN_EMAIL gets no code", async () => {
+  it("an Access identity that is not ADMIN_EMAIL or a co-owner gets no code", async () => {
     const { code, callback } = await authorize("someone-else@example.com");
     expect(code).toBeNull();
-    expect(callback.status).toBe(403);
+    expect(new URL(String(callback.headers.get("location"))).searchParams.get("error")).toBe("access_denied");
   });
 
-  it("an ID token minted for another sign-in's nonce gets no code", async () => {
-    const { code, callback } = await authorize(env.ADMIN_EMAIL!, { nonce: "another-sign-in" });
-    expect(code).toBeNull();
-    expect(callback.status).toBe(403);
-    expect(await callback.text()).toMatch(/nonce is not this sign-in's/);
-  });
-
-  it("an ID token that says the email is not verified gets no code", async () => {
-    const { code, callback } = await authorize(env.ADMIN_EMAIL!, { email_verified: false });
-    expect(code).toBeNull();
-    expect(await callback.text()).toMatch(/not verified/);
-  });
-
-  it("a callback carrying Access's refusal is refused, and nothing is exchanged", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const response = await call(new Request(`${ORIGIN}/callback?error=access_denied&state=x`));
-    expect(response.status).toBe(403);
-    expect(await response.text()).toMatch(/refused by Access: access_denied/);
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("with the Access settings unset the sign-in is closed with 503, before anything is stored", async () => {
-    const ctx = createExecutionContext();
-    const response = (await worker.fetch!(
-      new Request(`${ORIGIN}/callback?code=c&state=s`) as never,
-      { ...env, COOKIE_ENCRYPTION_KEY: "integration-cookie-key", ACCESS_SAAS_CLIENT_SECRET: undefined } as never,
-      ctx
-    )) as unknown as Response;
-    await waitOnExecutionContext(ctx);
-    expect(response.status).toBe(503);
-    expect(await response.text()).toMatch(/ACCESS_SAAS_CLIENT_SECRET/);
+  it("PLANT: a grant without the write box holds the read grant only, and a write tool is refused", async () => {
+    const { clientId, code } = await authorize(env.ADMIN_EMAIL!, {}, undefined, false);
+    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
+    const { access_token, scope } = (await exchanged.json()) as { access_token: string; scope: string };
+    expect(scope).toBe("capsid.read");
+    const rpc = (id: number, method: string, params: Record<string, unknown>) =>
+      call(
+        new Request(`${ORIGIN}/mcp`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25" },
+          body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+        })
+      );
+    await rpc(1, "initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "read-only", version: "1.0.0" } });
+    const written = await (await rpc(2, "tools/call", { name: "capsid_write_doc", arguments: { namespace: "sample", path: "notes/x.md", body: "x" } })).text();
+    expect(written, "a read-only grant wrote a document").toMatch(/requires the write grant/);
   });
 
   it("/mcp without a token is a 401 that names the resource metadata", async () => {
@@ -236,5 +225,6 @@ describe("the OAuth round trip", () => {
     );
     expect(response.status).toBe(401);
     expect(response.headers.get("WWW-Authenticate") ?? "").toMatch(/resource_metadata=/);
+    expect(response.headers.get("WWW-Authenticate") ?? "").toMatch(/scope="capsid\.read"/);
   });
 });

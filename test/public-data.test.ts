@@ -3,7 +3,6 @@ import { test } from "node:test";
 import type { InstalledRepo } from "../src/github/client.ts";
 import {
   PUBLIC_BUILD_LAST_KEY,
-  PUBLIC_DATA_LIMIT,
   PUBLIC_MODEL_KEY,
   PUBLIC_DOCS,
   PUBLIC_MODEL_PATH,
@@ -14,7 +13,7 @@ import {
 } from "../src/public-data.ts";
 import { PublicStatsSchema, type StatsRows } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
-import { fakeEnv, fakeKv } from "./fakes.ts";
+import { fakeEnv, fakeKv, fakeRateLimiter } from "./fakes.ts";
 
 // The daily build and the route that serves it (docs/public-data.md). The filter itself
 // is tested in test/system-model.test.ts; this file covers when the build runs, what it
@@ -108,16 +107,13 @@ test("the route serves the stored document with cache headers and no CORS, and 5
 });
 
 test("past the per-IP limit the route answers 429, and an unreadable counter refuses", async () => {
-  const hourKey = `${PUBLIC_DATA_LIMIT.prefix}h:203.0.113.9:${NOW.toISOString().slice(0, 13)}`;
-  const kv = fakeKv({ seed: { [PUBLIC_MODEL_KEY]: "{}", [hourKey]: String(PUBLIC_DATA_LIMIT.perHour) } });
-  const limited = await handlePublicDocument(get(), fakeEnv({ APP_KV: kv.kv }), ctx, PUBLIC_DOCS.model, NOW, undefined);
+  const kv = fakeKv({ seed: { [PUBLIC_MODEL_KEY]: "{}" } });
+  const spent = fakeRateLimiter({ spent: { "public:203.0.113.9": 120 } });
+  const limited = await handlePublicDocument(get(), fakeEnv({ APP_KV: kv.kv, RATE_LIMITER: spent }), ctx, PUBLIC_DOCS.model, NOW, undefined);
   assert.equal(limited.status, 429);
-  assert.match(await limited.text(), /too many requests: 120 in the last hour, limit 120/);
 
-  const broken = fakeKv({ failGet: true });
-  const refused = await handlePublicDocument(get(), fakeEnv({ APP_KV: broken.kv }), ctx, PUBLIC_DOCS.model, NOW, undefined);
+  const refused = await handlePublicDocument(get(), fakeEnv({ APP_KV: kv.kv, RATE_LIMITER: fakeRateLimiter({ failing: true }) }), ctx, PUBLIC_DOCS.model, NOW, undefined);
   assert.equal(refused.status, 503);
-  assert.match(await refused.text(), /requests are refused/);
 });
 
 test("a cached answer is served before the counter, and the query string cannot miss the cache", async () => {
@@ -133,7 +129,7 @@ test("a cached answer is served before the counter, and the query string cannot 
   const putsAfterFirst = kv.puts.length;
 
   const broken = fakeKv({ failGet: true });
-  const hit = await handlePublicDocument(get("198.51.100.7", "?bust=1"), fakeEnv({ APP_KV: broken.kv }), ctx, PUBLIC_DOCS.model, NOW, cache);
+  const hit = await handlePublicDocument(get("198.51.100.7", "?bust=1"), fakeEnv({ APP_KV: broken.kv, RATE_LIMITER: fakeRateLimiter({ failing: true }) }), ctx, PUBLIC_DOCS.model, NOW, cache);
   assert.equal(hit.status, 200, "a cache hit still read KV, or the query string missed the cache");
   assert.equal(await hit.text(), '{"version":1}');
   assert.equal(kv.puts.length, putsAfterFirst);

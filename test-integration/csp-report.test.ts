@@ -1,6 +1,8 @@
 import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import worker, { BACKUP_CRON } from "../src/index";
-import { checkRate, CSP_REPORT_LIMIT } from "../src/rate-limit";
+import { CSP_REPORT_RULES } from "../src/routes";
+import { rateLimiter } from "../src/http";
+import { limit } from "@dustinedwards/site-runtime/rate-limit";
 import { REPORT_PREFIX } from "../src/security-headers";
 import { MAX_REPORT_BYTES } from "@dustinedwards/site-runtime/csp-report";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -94,11 +96,11 @@ describe("/csp-report bounds the body in bytes, before buffering it", () => {
 describe("/csp-report is rate limited before it reads anything", () => {
   it("a limited caller gets 204, and its report is neither logged nor stored", async () => {
     const ip = "203.0.113.77";
-    let verdict = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
-    for (let i = 0; i < CSP_REPORT_LIMIT.perHour + 1 && verdict.allowed; i++) {
-      verdict = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
-    }
-    expect(verdict.allowed, "the limiter never refused, so this test proves nothing").toBe(false);
+    // The sink's own key for this address (site-runtime's ipKey), spent to its hourly limit.
+    const spend = () => limit(rateLimiter(env), `csp-report:${ip}`, CSP_REPORT_RULES, { onUnavailable: "refuse" });
+    let verdict = await spend();
+    for (let i = 0; i < CSP_REPORT_RULES[0].limit + 1 && verdict.status === "ok"; i++) verdict = await spend();
+    expect(verdict.status, "the limiter never refused, so this test proves nothing").toBe("limited");
     const before = await stored();
 
     const valid = await postReport(report("a limited caller"), ip);

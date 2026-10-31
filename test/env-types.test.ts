@@ -23,6 +23,8 @@ function exampleBindings(): Map<string, string> {
   for (const [key, type] of Object.entries(TYPES)) {
     for (const entry of (config[key] ?? []) as Array<{ binding: string }>) found.set(entry.binding, type);
   }
+  const objects = (config.durable_objects ?? {}) as { bindings?: Array<{ name: string }> };
+  for (const entry of objects.bindings ?? []) found.set(entry.name, "DurableObjectNamespace");
   for (const name of Object.keys((config.vars ?? {}) as object)) found.set(name, "var");
   return found;
 }
@@ -32,9 +34,9 @@ function generatedBindings(): Map<string, string> {
   const body = /interface __BaseEnv_Env \{([\s\S]*?)\n\}/.exec(text)?.[1] ?? "";
   const found = new Map<string, string>();
   for (const line of body.split("\n")) {
-    const m = /^\s*(\w+): (.+);$/.exec(line);
+    const m = /^\s*(\w+): (.+?)(?: \/\*.*\*\/)?;$/.exec(line);
     if (!m) continue;
-    found.set(m[1], Object.values(TYPES).includes(m[2] as never) ? m[2] : "var");
+    found.set(m[1], [...Object.values(TYPES), "DurableObjectNamespace"].includes(m[2]) ? m[2] : "var");
   }
   return found;
 }

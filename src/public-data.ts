@@ -1,7 +1,8 @@
 import type { Env } from "./env";
 import rawModel from "../system/model.json" with { type: "json" };
 import { listInstalledRepos, type InstalledRepo } from "./github/client";
-import { callerIp, checkRate, rateLimitedResponse, type RateLimitPolicy } from "./rate-limit";
+import { ipKey, limit, limitedResponse } from "@dustinedwards/site-runtime/rate-limit";
+import { rateLimiter } from "./http";
 import { parseSystemModel, toPublic, type SystemModel } from "./system-model";
 import { readStatsRows, summarize, type StatsRows } from "./public-stats";
 import { buildPublicCode, readCodeMap } from "./public-code";
@@ -31,13 +32,10 @@ const CACHE_SECONDS = 3600;
 // Fail closed: an unreadable counter refuses rather than serve without a limit. The
 // edge cache answers most requests before the counter is read at all. One budget for
 // both routes.
-export const PUBLIC_DATA_LIMIT: RateLimitPolicy = {
-  prefix: "public:rate:",
-  perHour: 120,
-  perDay: 1000,
-  label: "PUBLIC_DATA",
-  onUnavailable: "refuse",
-};
+const PUBLIC_DATA_RULES = [
+  { limit: 120, windowSeconds: 3600 },
+  { limit: 1000, windowSeconds: 86_400 },
+];
 
 /** The model the Worker was built with. A model that fails its schema fails the
  *  build step loudly, every day, rather than publish a partial map. */
@@ -142,8 +140,8 @@ export async function handlePublicDocument(
   const hit = await cache?.match(key);
   if (hit) return hit;
 
-  const verdict = await checkRate(env.APP_KV, callerIp(request), now, PUBLIC_DATA_LIMIT);
-  if (!verdict.allowed) return rateLimitedResponse(verdict, "requests");
+  const verdict = await limit(rateLimiter(env), ipKey("public", request).key, PUBLIC_DATA_RULES, { onUnavailable: "refuse" });
+  if (verdict.status !== "ok") return limitedResponse(verdict);
 
   const stored = await env.APP_KV.get(doc.key);
   if (!stored) return json(JSON.stringify({ error: "not computed yet" }), 503, "no-store");

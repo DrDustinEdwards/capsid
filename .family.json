@@ -9,7 +9,6 @@
   },
   "copies": {
     "src/access-sync.ts": "normalizeEmail here also validates and returns null for a non-address, so one bad member refuses the whole sync; site-runtime's only lowercases",
-    "src/dcr.ts": "allowedRedirects here admits only the Google and ChatGPT per-connector callback shapes and logs any other; site-runtime's admits any https callback",
     "src/github/client.ts": "readKey here names a KV cache key for a GitHub read, not a frontmatter field",
     "src/read-capped.ts": "readCapped here keeps the text read before the cap and says it was truncated (site-runtime's returns null), and imports nothing so the explorer build can load it",
     "src/routine-fire.ts": "fireRoutine here is capsid_work_jobs' fire action (seat check, job row, session record); it is not the plain routine POST"

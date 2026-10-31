@@ -56,8 +56,8 @@ export function healthy(req: IncomingMessage, res: ServerResponse) {
     return res.end();
   }
   if (url.pathname === "/authorize" && url.searchParams.get("client_id")) {
-    res.writeHead(200, { ...HTML, "set-cookie": "capsid_csrf=c1; Path=/; HttpOnly" });
-    return res.end(`<form method="post" action="/authorize"><input name="csrf" value="c1"><input name="req" value="r1"></form>`);
+    res.writeHead(200, { ...HTML, "set-cookie": "__Host-consent=c1; Path=/; HttpOnly" });
+    return res.end(`<form method="post"><input type="hidden" name="handle" value="h1"></form>`);
   }
   if (url.pathname.startsWith("/.well-known/")) return json(200, {});
   // The Portal's own host, played under /portal-host (PORTAL_ORIGIN below): with no

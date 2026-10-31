@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
 import { logEvent } from "@dustinedwards/site-runtime/log";
+import { appendAudit, correlationId, loggedArgs, loggedResult, recordAudit, type AuditEnv } from "@dustinedwards/site-runtime/audit-log";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
 import { protectedHits } from "./protected-paths";
 import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
@@ -181,7 +182,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/authorize": "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
   "/callback": "the OAuth callback, which validates state before issuing anything",
   "/register":
-    "tightened Dynamic Client Registration for Grok and Gemini (src/dcr.ts): rate limited per caller and failing closed, a 16KB body cap, every redirect URI matched exactly against the allowlist; it writes a client record and grants nothing, since the client still meets the consent page and the Access sign-in",
+    "tightened Dynamic Client Registration for Grok and Gemini (site-runtime registrationLimited and registrationRefusal, src/index.ts): rate limited per address (5 an hour) and overall (30 a day), failing closed, every redirect URI matched exactly against the allowlist; it writes a client record and grants nothing, since the client still meets the consent page and the Access sign-in",
   "/portal/callback": "Capsid Portal's Access for SaaS callback, which validates state before issuing a session",
   "/portal/api/ops": "the Portal's feed, gated by portalGate: the administrator's Access session, and a 403 for any bearer",
   "/portal/api/ops/refresh":
@@ -603,7 +604,15 @@ function actionOf(tool: string, config: RegisteredConfig, args: Record<string, u
 // stays a literal call on the server object, which test/invariants.test.ts,
 // test/tool-annotations.test.ts and test/counts.test.ts parse by that spelling. This
 // module must never spell that call itself, or those scanners would count it.
-export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, stepUpKv?: KVNamespace): void {
+// Where the registrar logs every call (site-runtime's ToolCallLog): the Durable Object, the
+// server's serverInfo, and the OAuth client of an admin session.
+export interface CallLog {
+  env: Partial<AuditEnv>;
+  server: { name: string; version: string };
+  clientId?: string;
+}
+
+export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, stepUpKv?: KVNamespace, log?: CallLog): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
     const shape = declaredShape(config);
@@ -611,14 +620,13 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
     const namespaceActions = config?.namespaceActions;
     const takesNamespace = (action: string | undefined): boolean =>
       namespaceActions && action !== undefined ? namespaceActions.includes(action) : declared;
-    const guarded: ToolHandler = (...callArgs: unknown[]) => {
-      const args = (callArgs[0] ?? {}) as Record<string, unknown>;
+    // Why this call may not run, or null.
+    const refusalFor = async (args: Record<string, unknown>, action: string | undefined): Promise<string | null> => {
       const namespace = typeof args.namespace === "string" ? args.namespace : undefined;
       // Only a full owner/name can be compared to the axis here; the repo tools
       // resolve a label and check the result (scopedRepo in src/tools/repo.ts).
       const selector = typeof args.repo === "string" ? args.repo : undefined;
       const repo = selector?.includes("/") ? selector : undefined;
-      const action = actionOf(name, config, args);
       const refusal = checkScope(agent, {
         tool: name,
         namespace,
@@ -638,35 +646,67 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
         // handler, where the namespace is known, so the registrar names no grant.
         ...needFor(requiredForAction(name, action)),
       });
-      if (refusal) return deny(refusal);
+      if (refusal) return refusal;
       // A run key's call has already passed benchRunRefusal, which binds it to its one
       // job in bench, so an omitted namespace asks for nothing wider.
       if (takesNamespace(action) && namespace === undefined && !agent.benchRun) {
         const missing = namespaceRefusal(agent, name);
-        if (missing) return deny(missing);
+        if (missing) return missing;
       }
       // Observation only (src/admin-client-audit.ts): after every refusal above, before
       // the handler, and only for the admin and a requirement that is not a plain read.
       // "action" tools (capsid_work_jobs, capsid_lint_namespace) are included, so a
       // capsid_work_jobs action list is recorded too: more
       // than a write, never less.
-      const run = (): unknown => {
-        const result = handler(...callArgs);
-        // A step-up action that succeeded resets the idle clock (STEP_UP). A refused or
-        // failed one does not: it proves nothing about the person being there.
-        const signedInAt = agent.signedInAt;
-        if (!stepUpKv || signedInAt === undefined || signedInAt === null || !needsStepUp(name, action)) return result;
-        return Promise.resolve(result).then(async (value) => {
-          if (toolSucceeded(value)) await recordStepUp(stepUpKv, agent, signedInAt, Date.now());
-          return value;
-        });
-      };
       if (observe && agent.admin && requiredForAction(name, action) !== "read") {
-        return observe({ tool: name, action, namespace }, server.server.getClientVersion()?.name ?? null).then((refusal) =>
-          refusal ? deny(refusal) : run()
-        );
+        return observe({ tool: name, action, namespace }, server.server.getClientVersion()?.name ?? null);
       }
-      return run();
+      return null;
+    };
+    const run = async (callArgs: unknown[], action: string | undefined): Promise<unknown> => {
+      const result = await handler(...callArgs);
+      // A step-up action that succeeded resets the idle clock (STEP_UP). A refused or
+      // failed one does not: it proves nothing about the person being there.
+      const signedInAt = agent.signedInAt;
+      if (stepUpKv && signedInAt !== undefined && signedInAt !== null && needsStepUp(name, action) && toolSucceeded(result)) {
+        await recordStepUp(stepUpKv, agent, signedInAt, Date.now());
+      }
+      return result;
+    };
+    // Every call is logged when the server keeps the log (site-runtime's ToolCallLog), whoever
+    // makes it and whatever it does: one `refused` row, or `started` before the handler and
+    // `finished` after it. A call whose `started` row cannot be written does not run, so no
+    // tool runs unlogged. audit_log stays the record of what a write changed (the Portal
+    // reads it); this is the record of every call.
+    const guarded: ToolHandler = async (...callArgs: unknown[]) => {
+      const args = (callArgs[0] ?? {}) as Record<string, unknown>;
+      const action = actionOf(name, config, args);
+      const meta = (callArgs[1] as { mcpReq?: { _meta?: { traceparent?: unknown } } } | undefined)?.mcpReq?._meta;
+      const row = log && {
+        callId: crypto.randomUUID(),
+        caller: agent.actor,
+        tool: name,
+        args: await loggedArgs(args),
+        server: log.server,
+        clientId: log.clientId,
+        correlationId: correlationId(meta),
+      };
+      const refusal = await refusalFor(args, action);
+      if (refusal) {
+        const out = deny(refusal);
+        if (log && row) await recordAudit(log.env, { ...row, phase: "refused", result: loggedResult(out) });
+        return out;
+      }
+      if (log && row) {
+        try {
+          await appendAudit(log.env, { ...row, phase: "started" });
+        } catch (cause) {
+          return deny(`refused: the tool-call log could not be written (${cause instanceof Error ? cause.message : String(cause)}), and no tool runs unlogged. Nothing was done.`);
+        }
+      }
+      const result = await run(callArgs, action);
+      if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: loggedResult(result as { isError?: boolean; content: Array<{ text: string }> }) });
+      return result;
     };
     const { namespaceActions: _namespaceActions, ...served } = config ?? {};
     return original(name, served, guarded);

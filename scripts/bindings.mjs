@@ -37,7 +37,8 @@ export const ACCESS_SAAS = {
 // TWO KV NAMESPACES, each pinned and asserted independently.
 //
 // APP_KV holds ONLY the Worker's own state: the gh:install, gh:token and gh:get caches,
-// the backup lease, and the dcr:rate counters. OAUTH_KV holds the provider's
+// and the backup lease. Rate limits live in the RATE_LIMITER Durable Object, except
+// site-runtime registrationLimited's counters, which it keeps in OAUTH_KV. OAUTH_KV holds the provider's
 // client/grant/token keys plus capsid:oauth-state.
 //
 // Resolution elsewhere is by EXACT TITLE and refuses ambiguity: the account also
@@ -67,7 +68,7 @@ export const GITHUB_APP_CLIENT_ID = "Iv23lik2O8SPPksxbc6O";
 //   wrangler kv key get "client:<id>" --namespace-id <OAUTH_KV> --remote --text > canary.json
 //   wrangler kv key put "client:<id>" --namespace-id <OAUTH_KV> --remote --path canary.json
 //
-// /register is back as tightened DCR (src/dcr.ts), but it admits only the Grok, Gemini
+// /register is back as tightened DCR (site-runtime registrationRefusal), but it admits only the Grok, Gemini
 // and ChatGPT connector callbacks, so the canary cannot be minted again that way. If it
 // is lost, restore the record from a backup of OAUTH_KV or a saved canary.json with the
 // second command above.

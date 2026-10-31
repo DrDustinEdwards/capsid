@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z, type ZodType } from "zod";
 import { hintsFor } from "../tool-annotations";
-import type { OperationResult, Operations, Shape } from "./operations";
+import { RESULT_SCHEMA, type OperationResult, type Operations, type Shape } from "./operations";
 
 // The served surface (capsid/research/design-mcp-servers.md section 3). Capsid serves 14 whole-job tools
 // on /mcp and /ops/mcp, and Capsid Admin 8 on its own route for the administrator
@@ -112,6 +112,7 @@ function compositeConfig(ops: Operations, spec: CompositeSpec) {
     title: spec.title,
     description: describe(ops, spec),
     inputSchema: z.object(mergedShape(ops, spec)).passthrough(),
+    outputSchema: RESULT_SCHEMA,
     annotations: hintsFor(spec.name),
     namespaceActions,
   };
@@ -139,7 +140,7 @@ function compositeHandler(ops: Operations, spec: CompositeSpec) {
 // A tool that is one operation, served under its own schema.
 function singleConfig(ops: Operations, name: string, title: string, op: string, summary?: string) {
   const config = ops.config(op);
-  return { title, description: summary ? `${summary}\n\n${config.description}` : config.description, inputSchema: config.inputSchema, annotations: hintsFor(name) };
+  return { title, description: summary ? `${summary}\n\n${config.description}` : config.description, inputSchema: config.inputSchema, outputSchema: RESULT_SCHEMA, annotations: hintsFor(name) };
 }
 
 function singleHandler(ops: Operations, name: string, op: string) {

@@ -2,10 +2,10 @@ import type { Agent } from "./agents";
 import { resolveAgent } from "./agents";
 import type { Env } from "./env";
 import { readBoundedText } from "./signed-requests";
-import { checkRate, type RateLimitPolicy } from "./rate-limit";
+import { limit } from "@dustinedwards/site-runtime/rate-limit";
 import { checkScope } from "./scope";
 import { auditStatement } from "./store-guards";
-import { textResponse } from "./http";
+import { rateLimiter, textResponse } from "./http";
 
 // THE CLOUDFLARE ACCESS SYNC (job_d0fabaadecb1; design docs/design/design-identity-roles.md,
 // "The Cloudflare sync"; Dustin's rulings of 2026-10-09, people and roles, points 1 and 2).
@@ -65,13 +65,10 @@ export const ACCESS_SYNC_PERMISSION = {
 
 // A busy members page adds a handful of people at once, and each change posts the whole
 // list. Fail closed: this path writes to Cloudflare.
-const ACCESS_SYNC_LIMIT: RateLimitPolicy = {
-  prefix: "access-sync:rate:",
-  perHour: 120,
-  perDay: 500,
-  label: "ACCESS_SYNC",
-  onUnavailable: "refuse",
-};
+const ACCESS_SYNC_RULES = [
+  { limit: 120, windowSeconds: 3600 },
+  { limit: 500, windowSeconds: 86_400 },
+];
 
 export type Checked<T> = { ok: true; value: T } | { ok: false; refusal: string };
 
@@ -369,11 +366,10 @@ export async function handleAccessSync(request: Request, env: Env, deps: SyncDep
   if (refusal) return textResponse(refusal, 403);
   const parsed = parseSyncBody(body);
   if (!parsed.ok) return textResponse(parsed.refusal, 400);
-  const rate = await checkRate(env.APP_KV, caller.agent.actor, deps.now, ACCESS_SYNC_LIMIT);
-  if (!rate.allowed) {
-    return rate.window === "unavailable"
-      ? textResponse(`the sync rate limit could not be read, so the sync is refused: ${rate.detail}`, 503, { "Retry-After": "60" })
-      : textResponse(`at most ${rate.limit} syncs per ${rate.window} per key; try again later`, 429, { "Retry-After": rate.window === "hour" ? "3600" : "86400" });
+  const rate = await limit(rateLimiter(env), `access-sync:${caller.agent.actor}`, ACCESS_SYNC_RULES, { onUnavailable: "refuse" });
+  if (rate.status === "unavailable") return textResponse(`the sync rate limit could not be read, so the sync is refused: ${rate.detail ?? "no counter"}`, 503, { "Retry-After": "60" });
+  if (rate.status === "limited") {
+    return textResponse(`at most ${rate.limit} syncs per ${rate.window === 3600 ? "hour" : "day"} per key; try again later`, 429, { "Retry-After": String(rate.retryAfterSeconds) });
   }
   const pinned = await deps.pinned(env.DB, namespace);
   if (!pinned) return textResponse(`no Access group is pinned for ${namespace}; the seat adds its row to access_sync_groups`, 409);
