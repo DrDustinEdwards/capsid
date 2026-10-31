@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { addSite, editSite, readSiteConfig, removeSite, sitesFrom, validateSite, type SiteInput } from "../src/ops-sites";
 
 // The Portal's site configuration against a real D1 with every migration applied
-// (migrations/0022_ops_sites.sql, 0051's health routes and 0052's further hosts): the seed, the schema's own
+// (migrations/0022_ops_sites.sql, 0051's health routes, 0052's and 0056's further hosts): the seed, the schema's own
 // checks, and the three guarded writes with their audit rows.
 
 const ACTOR = "access:admin@example.com";
@@ -46,6 +46,10 @@ const SEEDED = [
   site("foxhound-admin-mcp", "Foxhound Admin MCP", "https://admin-mcp.foxhoundapp.com", "/health"),
   site("dustinedwards-admin-mcp", "dustinedwards.info Admin MCP", "https://admin-mcp.dustinedwards.info", "/health"),
   site("foxing-admin-mcp", "Foxing Admin MCP", "https://admin-mcp.foxing.app", "/health"),
+  // migrations/0056_ops_sites_unwatched.sql: the explorer, Desk and txasm.org.
+  site("capsid-explorer", "Capsid explorer", "https://capsid.dustinedwards.info", null),
+  site("carrel-desk", "Desk", "https://desk.dustinedwards.info", "/health"),
+  site("txasm-org", "txasm.org", "https://txasm.org", null),
 ].sort((a, b) => a.namespace.localeCompare(b.namespace));
 
 async function auditRows(): Promise<Array<{ actor: string; action: string; namespace: string; params: string }>> {
@@ -58,14 +62,14 @@ function input(over: Partial<SiteInput> = {}): SiteInput {
 }
 
 describe("the seed", () => {
-  it("is the list the code held before the move with 0051's health routes and 0052's hosts: sixteen sites and one namespace with none", async () => {
+  it("is the list the code held before the move with 0051's health routes and 0052 and 0056 hosts: nineteen sites and one namespace with none", async () => {
     const rows = await readSiteConfig(env.DB);
     expect(rows.map(({ revision: _r, updated_at: _u, operator: _o, operator_problem: _p, ...rest }) => rest)).toEqual(SEEDED);
     // migrations/0035 opts dustinedwards alone into Capsid calling its operator API.
     expect(rows.filter((r) => r.operator).map((r) => [r.namespace, r.operator?.auth_var])).toEqual([["dustinedwards", "DUSTINEDWARDS_OPERATOR_TOKEN"]]);
     expect(rows.every((r) => r.operator_problem === null)).toBe(true);
     expect(rows.filter((r) => r.revision !== 1).map((r) => r.namespace)).toEqual(["bsw", "capsid", "carrel", "dustinedwards", "foxhound", "foxing", "julieedwards", "txasm"]);
-    expect(sitesFrom(rows)).toHaveLength(16);
+    expect(sitesFrom(rows)).toHaveLength(19);
   });
 
   // scanner-rule: a seeded script is named only where the host proves it
