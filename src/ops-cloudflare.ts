@@ -248,6 +248,9 @@ function errorsQuery(scripts: string[]): string {
 }`;
 }
 
+// The name Cloudflare gives invocations it does not attribute to a script.
+const UNATTRIBUTED_SCRIPT = "__unknown__";
+
 /** ONE GraphQL Analytics query for every script, hourly, over errorWindow. A script
  *  with no row in an hour had no invocations then, which is a real zero from a query
  *  that succeeded. A query that failed throws, and the caller records no data with the
@@ -293,6 +296,11 @@ async function readErrors(
     if (typeof script !== "string" || typeof hourRaw !== "string" || typeof requests !== "number" || typeof errors !== "number" || typeof cpuUs !== "number") {
       throw new Error("the analytics query returned a row without scriptName, datetimeHour, requests, errors and cpuTimeUs");
     }
+    // Cloudflare answered a row named "__unknown__" for 2026-10-31 15:00 although the filter
+    // names only our scripts; failing on it left every site's error and CPU checks blind for
+    // hours. It is no script this pass asked for, so it is skipped by that exact name; any
+    // other stray name still fails the read below.
+    if (script === UNATTRIBUTED_SCRIPT) continue;
     const at = Date.parse(hourRaw);
     const i = Number.isNaN(at) ? undefined : index.get(new Date(at).toISOString());
     const buckets = out.get(script);
