@@ -45,7 +45,7 @@ export type TaskId =
 // timeout_ms (area 8, C3) is given to the three a cron key starts: past it, runTask records
 // the run as threw ("timed out after N ms") and the invocation fails, so a hung run shows
 // in the ledger and on /health rather than holding the trigger silently. The work itself
-// cannot be cancelled and may still finish. The tick gets four minutes, inside the five to
+// cannot be canceled and may still finish. The tick gets four minutes, inside the five to
 // the next one; the backup and the skills refresh fourteen, inside a cron invocation's
 // fifteen-minute wall limit.
 export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number | null; timeout_ms?: number }> = [
