@@ -8,7 +8,7 @@ import { markJobFailed, readJob } from "./jobs-transition";
 import { CLEARED_SUMMARY, d1FindingMemory, onSighting, type FindingMemory, type FindingRow } from "./watcher-findings";
 import { type SiteMapDrift } from "./ops-sites";
 import { weekStatement } from "./ops-packages";
-import type { PackageSnapshot, SiteCloudflare } from "./ops-types/sites";
+import type { ExpirySnapshot, PackageSnapshot, SiteCloudflare } from "./ops-types/sites";
 import { archiveRevokedAgents } from "./agents-archive";
 import {
   buildSnapshot,
@@ -163,6 +163,8 @@ export interface Observed {
   // Each configured package as this pass read it; [] with none configured, absent when
   // the configuration could not be read (the snapshot then keeps the last pass's).
   packages?: PackageSnapshot[];
+  // The TLS and domain expiry dates this pass read; a part that failed is null.
+  expiry?: ExpirySnapshot;
 }
 
 export interface Gathered {
@@ -375,6 +377,7 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
       probes: o.probes,
       cloudflare: o.cloudflare,
       packages: o.packages,
+      expiry: o.expiry,
     })
   );
   // The week's GitHub numbers, once per package per ISO week (ops_package_weeks). A

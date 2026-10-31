@@ -56,6 +56,7 @@
     "0052_ops_sites_hosts.sql": "7ac864bde28e21f7a56f9f7a8edfcb2636730f643eb40f07e35e4fa852c6a85f",
     "0053_page_404_daily.sql": "5369e41e6382faf6b99728fe983b28d89b3b9a8ea9fddcce8797c7092da3fbfd",
     "0054_ops_uptime_daily.sql": "138d1a9416e6a9aae03ba0d9db85e4a9223eb6ded0e43b17dd1337a4270c69ba",
-    "0055_portal_session_ends.sql": "446aa1a3fe6e510ae8887f09017c806d7957f81bf2ca4d09c1c8533bc79708d0"
+    "0055_portal_session_ends.sql": "446aa1a3fe6e510ae8887f09017c806d7957f81bf2ca4d09c1c8533bc79708d0",
+    "0056_ops_sites_unwatched.sql": "55bfa2fa63971a24cce9ef71430be30bc09d4d5169758ba230fbc2bd4e7d71ef"
   }
 }

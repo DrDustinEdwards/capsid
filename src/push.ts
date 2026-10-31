@@ -12,6 +12,7 @@ import { digestProblem, digestState } from "./digest";
 import { pulseAlerts, readPulse } from "./site-pulse";
 import { readSnapshot } from "./ops-snapshot";
 import { readStoredTls, tlsAlerts } from "./tls-expiry";
+import { domainAlerts } from "./domain-expiry";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
 import { jsonResponse as json, textResponse as text } from "./http";
 import { HOUR_MS, DAY_MS } from "./time";
@@ -31,7 +32,8 @@ import { HOUR_MS, DAY_MS } from "./time";
 //      (src/site-pulse.ts); a site the watcher found erroring on over 1 percent of its
 //      requests, thrown or returned 5xx, once a UTC day (src/watcher-detect.ts
 //      siteErrorFindings);
-//   8. a TLS certificate within 14 days of expiry, and again within 3 (src/tls-expiry.ts).
+//   8. a TLS certificate within 21 days of expiry, and again within 3 (src/tls-expiry.ts),
+//      and a domain registration within 30 days, and again within 7 (src/domain-expiry.ts).
 // Everything else waits for the digest. With no key or no device on, the same alerts go
 // by email (emailFallback below).
 //
@@ -68,7 +70,7 @@ const DEPLOYS_URL = portalPath("/health?tab=deploys");
 const AUTO_MERGE_URL = portalPath("/prs#auto-merge");
 const SITES_URL = portalPath("/health?tab=sites");
 
-type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr" | "site" | "tls";
+type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr" | "site" | "tls" | "domain";
 
 interface Urgent {
   key: string;
@@ -198,9 +200,11 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
     out.push({ key: `site-errors:${namespace}:${day}`, kind: "site", namespace, title: `${name} is returning errors`, body: `Over 1 percent of requests in the last complete hour threw or answered 5xx (watcher pass ${snapshot?.pass_at}).`, url: SITES_URL });
   }
 
-  // 8. A TLS certificate 14 or 3 days from expiry (src/tls-expiry.ts), from the watcher's
-  // last read. One that cannot be read alerts nothing.
+  // 8. A TLS certificate 21 or 3 days from expiry (src/tls-expiry.ts), from the watcher's
+  // last read, and a domain registration 30 or 7 days out, from the last snapshot. One
+  // that cannot be read alerts nothing.
   for (const a of tlsAlerts(await readStoredTls(env).catch(() => null), now)) out.push({ ...a, kind: "tls", namespace: "capsid", url: SITES_URL });
+  for (const a of domainAlerts(snapshot?.expiry?.domains, now)) out.push({ ...a, kind: "domain", namespace: "capsid", url: SITES_URL });
   return out;
 }
 

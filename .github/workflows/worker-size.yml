@@ -21,6 +21,6 @@ concurrency:
 
 jobs:
   worker-size:
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-size.yml@fbf3824ab08f76af5befd7471677778e8b132c9b # v0.20.18
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-size.yml@db347b70932b52b427b120ee1419d4614d5e4c29 # v0.20.20
     with:
       prepare: node scripts/dry-run-config.mjs

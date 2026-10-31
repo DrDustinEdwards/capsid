@@ -286,6 +286,26 @@ test("an analytics query that fails is no data with its reason, never zeros, and
   assert.match(state.state === "ok" ? String(state.errors_reason) : "", /unknown field datetimeHour/);
 });
 
+// L6, live 2026-10-31: Cloudflare answered the scriptName_in query with a row named
+// "__unknown__" (no Worker) inside the window, and the whole read failed on every site.
+test("a row Cloudflare names __unknown__ is set aside and every site keeps its buckets; another unasked script still fails the read", async () => {
+  const answer = (extra: [string, string, number, number]) =>
+    cloudflare({
+      [`GET ${API}/workers/scripts/sample-dev/deployments`]: deployments([]),
+      [`POST ${CF_GRAPHQL}`]: graph([["sample-dev", LAST_HOUR, 40, 2], extra]),
+    });
+  const cf = answer(["__unknown__", LAST_HOUR, 7, 7]);
+  const { value: read } = await quietly(() => readCloudflare(CREDS, [WORKERS_DEV], cf.impl, NOW));
+  assert.equal(read.ran, true);
+  const state = read.bySite["sample-dev"];
+  assert.ok(state.state === "ok");
+  assert.equal(state.errors_reason, null);
+  assert.deepEqual(state.errors24?.at(-1), { hour: "2026-09-28T11:00:00.000Z", requests: 40, errors: 2, cpu_ms: 0 });
+
+  const { value: other } = await quietly(() => readCloudflare(CREDS, [WORKERS_DEV], answer(["someone-else", LAST_HOUR, 1, 0]).impl, NOW));
+  assert.equal(other.ran, false);
+});
+
 // The findings
 
 const probe = (namespace: string, state: SiteProbe["state"]): SiteProbe => ({

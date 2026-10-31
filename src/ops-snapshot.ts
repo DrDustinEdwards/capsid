@@ -3,7 +3,7 @@ import type { HealthReport } from "./health";
 import { healthOf, parseHealth } from "./health-format";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { healthUrl, type OpsSite } from "./ops-sites";
-import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
+import type { CiObservation, ExpirySnapshot, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS } from "./time";
 
@@ -142,7 +142,7 @@ const is2xx = (status: number | null): boolean => status !== null && status >= 2
  *  fails, so a broken health route on a site that is up reads as degraded, not down. The
  *  body is read whatever the code (src/health-format.ts): fail is read as a failed route,
  *  and warn, `ok: false` or a backup warning under a 2xx is degraded, with the reason. */
-export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, selfHealth: HealthReport | null): Promise<SiteProbe> {
+export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, selfHealth: HealthReport | null, opts: { home?: boolean } = {}): Promise<SiteProbe> {
   const base = {
     namespace: site.namespace,
     name: site.name,
@@ -161,13 +161,20 @@ export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, 
     const root = await reach(fetchImpl, site.origin + "/", false);
     return { ...base, state: is2xx(root.status) ? "liveness" : "down", http_status: root.status, latency_ms: root.latency_ms, sha: null, error: root.error };
   }
-  const health = await reach(fetchImpl, healthUrl(site.origin, site.healthPath), true);
+  // The home page is read on every pass, beside the health route (U1, round 2): a health
+  // route can pass while the page visitors load fails. An API-only host answers 404 at its
+  // root, so only no answer or a 5xx counts against it. A caller that reads a page itself
+  // (src/site-check.ts) passes home: false, and the root is then read only on a failure.
+  const home = opts.home !== false;
+  const healthRead = reach(fetchImpl, healthUrl(site.origin, site.healthPath), true);
+  const [health, early] = await Promise.all([healthRead, home ? reach(fetchImpl, site.origin + "/", false) : Promise.resolve(null)]);
   const read = parseHealth(health.body);
   if (is2xx(health.status) && read.status !== "down") {
-    const degraded = read.status === "degraded";
-    return { ...base, state: degraded ? "degraded" : "ok", http_status: health.status, latency_ms: health.latency_ms, sha: read.sha, error: degraded ? (read.problem ?? "the health route reports degraded") : null };
+    const homeFails = early !== null && (early.status === null || early.status >= 500);
+    const problems = [read.status === "degraded" ? (read.problem ?? "the health route reports degraded") : null, homeFails ? `home page ${early.error ?? `answered ${early.status}`}` : null].filter(Boolean);
+    return { ...base, state: problems.length ? "degraded" : "ok", http_status: health.status, latency_ms: health.latency_ms, sha: read.sha, error: problems.length ? problems.join("; ") : null };
   }
-  const root = await reach(fetchImpl, site.origin + "/", false);
+  const root = early ?? (await reach(fetchImpl, site.origin + "/", false));
   const why = health.error ?? `health route answered ${health.status}${read.status === "down" ? " fail" : ""}${read.problem ? ` (${read.problem})` : ""}`;
   return is2xx(root.status)
     ? { ...base, state: "degraded", http_status: health.status, latency_ms: root.latency_ms, sha: null, error: why }
@@ -193,6 +200,9 @@ export interface SnapshotInput {
   // This pass's packages; undefined when they could not be read, and then the last
   // pass's are kept rather than shown as gone.
   packages?: PackageSnapshot[];
+  // This pass's expiry dates; a part that could not be read is null, and then the last
+  // pass's part is kept.
+  expiry?: ExpirySnapshot;
 }
 
 /** The snapshot for this pass, carrying each site's ring forward from `prev`. A site
@@ -232,6 +242,9 @@ export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): O
     site_map: input.site_map,
     sites,
     ...(input.packages ? { packages: input.packages } : prev?.packages ? { packages: prev.packages } : {}),
+    ...(input.expiry || prev?.expiry
+      ? { expiry: { tls: input.expiry?.tls ?? prev?.expiry?.tls ?? null, domains: input.expiry?.domains ?? prev?.expiry?.domains ?? null } }
+      : {}),
   };
 }
 

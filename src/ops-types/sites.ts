@@ -145,6 +145,17 @@ export interface OpsSnapshot {
   // snapshot written before the panel existed still parses; absent or empty with no
   // package configured.
   packages?: PackageSnapshot[];
+  // The certificate and registration dates the expiry alerts rest on (U5): absent
+  // before this existed, and kept from the last pass when a read failed.
+  expiry?: ExpirySnapshot;
+}
+
+// What the watcher last read of each date that ends a site: the edge certificate per
+// Cloudflare-hosted host (src/tls-expiry.ts) and the registration per domain
+// (src/domain-expiry.ts). failed names what could not be read, with why.
+export interface ExpirySnapshot {
+  tls: { read_at: string; hosts: Array<{ host: string; expires: string }>; failed: Array<{ host: string; error: string }> } | null;
+  domains: { read_at: string; domains: Array<{ domain: string; expires: string }>; failed: Array<{ domain: string; error: string }> } | null;
 }
 
 // One row of the Portal's package configuration (ops_packages, migrations/0028).
@@ -181,6 +192,18 @@ export interface PackageSnapshot {
   dependents: PackagePart<{ version: string; direct: number; indirect: number; total: number }>;
   // The GitHub App's read of the repository.
   github: PackagePart<{ repo: string; stars: number; open_issues: number; open_prs: number; open_prs_capped: boolean; latest_release: { tag: string; published_at: string | null } | null }>;
+}
+
+// GET /portal/api/not-found: Capsid's own missing pages over the last `days` UTC days, from
+// page_404_daily (migrations/0053) through site-runtime's notFoundReport, most hits first,
+// each with the hosts that linked to it ("" is no referrer). Probes are counted apart. Null
+// rows with an error when the table could not be read.
+export interface PortalNotFound {
+  days: number;
+  generated: string;
+  pages: Array<{ path: string; hits: number; referrers: Array<{ host: string; hits: number }> }> | null;
+  probes: number | null;
+  error: string | null;
 }
 
 // GET /portal/api/packages/history?name=: the daily download history of one configured

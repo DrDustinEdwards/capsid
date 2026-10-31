@@ -36,7 +36,7 @@ export async function siteCheck(env: Env, namespace: string, args: SiteCheckArgs
     throw new Error(`${namespace} has no site configured (ops_sites), so there is nothing to check. The admin adds one with capsid_admin_run_controls control site_add.`);
   }
 
-  const health = await probeSite(site, fetchImpl, now, site.self ? await healthReport(env) : null);
+  const health = await probeSite(site, fetchImpl, now, site.self ? await healthReport(env) : null, { home: false });
 
   const read = await readPage(fetchImpl, site.origin, page);
   // Graded against the site's registry entry, as the watcher grades it (src/live-checks.ts).

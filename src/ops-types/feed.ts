@@ -372,11 +372,18 @@ export interface OpsTask {
 
 // Each site's uptime over the last 90 UTC days, from the five-minute pulse's daily counts
 // (ops_uptime_daily, migrations/0054), against the 99.9% target. `below` is how many of
-// those days fell under the target.
+// those days fell under the target. `months` is the same counts by UTC month, oldest
+// first, for the Portal's uptime strip by month.
+export interface OpsUptimeCounts {
+  probes: number;
+  up: number;
+  days: number;
+  below: number;
+}
 export interface OpsUptime {
   target: number;
   days: number;
-  sites: Array<{ namespace: string; probes: number; up: number; days: number; below: number }>;
+  sites: Array<{ namespace: string; months: Array<{ month: string } & OpsUptimeCounts> } & OpsUptimeCounts>;
 }
 
 export interface OpsFeed {

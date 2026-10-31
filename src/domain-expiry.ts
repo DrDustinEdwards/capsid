@@ -100,6 +100,23 @@ export function expiryFindings(expiries: ReadonlyArray<{ domain: string; expires
   return out;
 }
 
+/** The pushes the last read stands behind (U5): each domain once at 30 days out and once at
+ *  7, keyed by the date, so a renewal that moves it clears the alert and a new near date
+ *  alerts again. The findings above stay; this is the phone line beside them. */
+export function domainAlerts(read: { read_at: string; domains: ReadonlyArray<{ domain: string; expires: string }> } | null | undefined, now: Date): Array<{ key: string; title: string; body: string }> {
+  const out: Array<{ key: string; title: string; body: string }> = [];
+  for (const { domain, expires } of read?.domains ?? []) {
+    const days = Math.floor((Date.parse(expires) - now.getTime()) / DAY_MS);
+    if (days > EARLY_DAYS) continue;
+    out.push({
+      key: `domain-${days <= LATE_DAYS ? "7d" : "30d"}:${domain}:${expires}`,
+      title: days < 0 ? `${domain}'s registration has expired` : `${domain}'s registration expires in ${days} days`,
+      body: `RDAP says it expires at ${expires} (read ${read?.read_at}). Renew it, or confirm auto-renew has run.`,
+    });
+  }
+  return out;
+}
+
 type Cached = { expires: string; read_at: string };
 
 async function fetchJson(fetchImpl: typeof fetch, url: string): Promise<unknown> {
