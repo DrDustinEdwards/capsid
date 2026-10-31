@@ -73,6 +73,15 @@ describe("tightened dynamic client registration", () => {
     expect(await clients()).toBe(before);
   });
 
+  it("a refused registration spends none of the limit, so the live gate's probe cannot use it up", async () => {
+    // Five an hour per address: six refusals from one address all answer 400, never 429
+    // (run 41245505021 rolled a deploy back when the gate's probes had spent the day's 30).
+    for (let i = 0; i < 6; i++) {
+      const response = await register(["https://client.example.com/callback"], "capsid.test", "198.51.100.30");
+      expect(response.status, `refusal ${i + 1}`).toBe(400);
+    }
+  });
+
   it("the old address registers nothing", async () => {
     const before = await clients();
     const response = await register([GROK], "capsid.dustin-edwards.workers.dev");
