@@ -200,6 +200,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/convergence": "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_run_improve action status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
+  "/portal/api/completeness": "the Portal's Completeness view: devkit's daily scoreboard (board.json on its scoreboard branch), read through the GitHub App and cached for ten minutes, gated by portalGate",
   "/portal/api/shared-code": "the Portal's Shared code view: each configured shared package's tags and the pins in the configured sites' repos, read through the GitHub App and cached for an hour, gated by portalGate",
   "/portal/api/library": "the Portal's read-only Library: the knowledge store's shelves, a search and one document with its edges, through the readers behind capsid_find_docs and capsid_read_doc, gated by portalGate",
   "/portal/api/trends": "the Portal's trends for its charts: minutes, the queue, merges and rollbacks from D1, backup slots from R2, default-branch CI from GitHub (cached an hour), read-only, gated by portalGate",

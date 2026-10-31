@@ -1,8 +1,8 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
-import { parseHealth } from "./health-format";
+import { healthOf, parseHealth } from "./health-format";
 import { readCapped } from "./read-capped";
-import type { OpsSite } from "./ops-sites";
+import { healthUrl, type OpsSite } from "./ops-sites";
 import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS } from "./time";
@@ -27,7 +27,8 @@ const PROBE_TIMEOUT_MS = 5000;
 export const MAX_HEALTH_BYTES = 65_536;
 
 // The shapes live in src/ops-types/, the contract the dashboard app reads.
-// ok: the health route answered 2xx. degraded: it did not, but the root did.
+// ok: the health route answered 2xx and its body admits no problem. degraded: it did not,
+// but the root did, or its body reports warn, `ok: false` or a backup warning.
 // liveness: the site has no health route and its root answered 2xx, which proves it is
 // up and nothing more. down: nothing answered 2xx.
 export type { CiObservation, MirrorObservation, OpsSnapshot, SiteProbe, SiteSnapshot } from "./ops-types/sites";
@@ -118,7 +119,7 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
     const res = await fetchImpl(url, {
       method: "GET",
       redirect: "follow",
-      headers: { "User-Agent": "capsid-watcher (ops probe)" },
+      headers: { "User-Agent": "capsid-watcher (ops probe)", Accept: "application/health+json, application/json" },
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     const latency_ms = Date.now() - started;
@@ -139,7 +140,9 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
 const is2xx = (status: number | null): boolean => status !== null && status >= 200 && status < 300;
 
 /** One site. The health route when it has one, and the root as well when that route
- *  fails, so a broken health route on a site that is up reads as degraded, not down. */
+ *  fails, so a broken health route on a site that is up reads as degraded, not down. The
+ *  body is read whatever the code (src/health-format.ts): fail is read as a failed route,
+ *  and warn, `ok: false` or a backup warning under a 2xx is degraded, with the reason. */
 export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, selfHealth: HealthReport | null): Promise<SiteProbe> {
   const base = {
     namespace: site.namespace,
@@ -151,19 +154,22 @@ export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, 
   };
   if (site.self) {
     if (!selfHealth) return { ...base, state: "down", http_status: null, latency_ms: null, sha: null, error: "healthReport could not be read this pass" };
-    const ok = selfHealth.status === "ok";
-    return { ...base, state: ok ? "ok" : "degraded", http_status: ok ? 200 : 503, latency_ms: null, sha: selfHealth.sha === "unknown" ? null : selfHealth.sha, error: null };
+    const read = healthOf(selfHealth);
+    const ok = read.status === "ok";
+    return { ...base, state: ok ? "ok" : "degraded", http_status: selfHealth.status === "ok" ? 200 : 503, latency_ms: null, sha: selfHealth.sha === "unknown" ? null : selfHealth.sha, error: read.problem };
   }
   if (site.healthPath === null) {
     const root = await reach(fetchImpl, site.origin + "/", false);
     return { ...base, state: is2xx(root.status) ? "liveness" : "down", http_status: root.status, latency_ms: root.latency_ms, sha: null, error: root.error };
   }
-  const health = await reach(fetchImpl, site.origin + site.healthPath, true);
-  if (is2xx(health.status)) {
-    return { ...base, state: "ok", http_status: health.status, latency_ms: health.latency_ms, sha: parseHealth(health.body).sha, error: null };
+  const health = await reach(fetchImpl, healthUrl(site.origin, site.healthPath), true);
+  const read = parseHealth(health.body);
+  if (is2xx(health.status) && read.status !== "down") {
+    const degraded = read.status === "degraded";
+    return { ...base, state: degraded ? "degraded" : "ok", http_status: health.status, latency_ms: health.latency_ms, sha: read.sha, error: degraded ? (read.problem ?? "the health route reports degraded") : null };
   }
   const root = await reach(fetchImpl, site.origin + "/", false);
-  const why = health.error ?? `health route answered ${health.status}`;
+  const why = health.error ?? `health route answered ${health.status}${read.status === "down" ? " fail" : ""}${read.problem ? ` (${read.problem})` : ""}`;
   return is2xx(root.status)
     ? { ...base, state: "degraded", http_status: health.status, latency_ms: root.latency_ms, sha: null, error: why }
     : { ...base, state: "down", http_status: root.status ?? health.status, latency_ms: null, sha: null, error: `${why}; root ${root.error ?? `answered ${root.status}`}` };

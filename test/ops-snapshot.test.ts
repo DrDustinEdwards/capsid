@@ -120,6 +120,23 @@ test("a site where nothing answers 2xx is down, with both reasons", async () => 
   assert.match(String(p.error), /answered 404; root answered 522/);
 });
 
+test("a 2xx health body that admits a problem is degraded and names it; a fail body is a failed route", async () => {
+  const warn = fetchFor({ "https://sample.example.com/health": { status: 200, body: JSON.stringify({ ok: true, backup: { warning: "last backup 38h ago" } }) } });
+  const degraded = await probeSite(site({}), warn.impl, NOW, null);
+  assert.equal(degraded.state, "degraded");
+  assert.equal(degraded.error, "backup: last backup 38h ago");
+  const body = JSON.stringify({ status: "fail", ok: false, checks: [{ name: "db", status: "fail" }] });
+  const down = await probeSite(site({}), fetchFor({ "https://sample.example.com/health": { status: 503, body }, "https://sample.example.com/": 503 }).impl, NOW, null);
+  assert.equal(down.state, "down");
+  assert.match(String(down.error), /answered 503 fail \(db\); root answered 503/);
+});
+
+test("a health path on another host is read there, and the root fallback stays on the origin", async () => {
+  const f = fetchFor({ "https://health.example.com/health": 404, "https://sample.example.com/": 200 });
+  assert.equal((await probeSite(site({ healthPath: "https://health.example.com/health" }), f.impl, NOW, null)).state, "degraded");
+  assert.deepEqual(f.asked, ["https://health.example.com/health", "https://sample.example.com/"]);
+});
+
 test("a site with no health route is liveness at best", async () => {
   assert.equal((await probeSite(site({ healthPath: null }), fetchFor({ "https://sample.example.com/": 200 }).impl, NOW, null)).state, "liveness");
   assert.equal((await probeSite(site({ healthPath: null }), fetchFor({ "https://sample.example.com/": 503 }).impl, NOW, null)).state, "down");
@@ -133,6 +150,7 @@ test("Capsid itself is read in-process, never fetched", async () => {
   const self = site({ self: true });
   assert.equal((await probeSite(self, f.impl, NOW, HEALTH)).state, "ok");
   assert.equal((await probeSite(self, f.impl, NOW, { ...HEALTH, status: "degraded" })).state, "degraded");
+  assert.equal((await probeSite(self, f.impl, NOW, { ...HEALTH, backup: { last_ok: null, age_hours: 38, warning: "over 26h" } })).error, "backup: over 26h");
   assert.equal((await probeSite(self, f.impl, NOW, null)).state, "down");
   assert.deepEqual(f.asked, []);
 });

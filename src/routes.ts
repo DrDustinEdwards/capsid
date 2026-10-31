@@ -55,7 +55,7 @@ import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "./portal-conve
 import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "./push";
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "./portal-library";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "./portal-trends";
-import { handlePortalPackageHistory, handlePortalSharedCode, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
+import { handlePortalCompleteness, handlePortalPackageHistory, handlePortalSharedCode, PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { rateLimiter, textResponse } from "./http";
 
@@ -321,6 +321,7 @@ export const defaultHandler = {
     if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET") return handlePortalConvergence(request, env);
     if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
     if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET") return handlePortalSharedCode(request, env);
+    if (url.pathname === PORTAL_COMPLETENESS_PATH && request.method === "GET") return handlePortalCompleteness(request, env);
     if (url.pathname === PORTAL_LIBRARY_PATH && request.method === "GET") return handlePortalLibrary(request, env);
     if (url.pathname === PORTAL_TRENDS_PATH && request.method === "GET") return handlePortalTrends(request, env);
     if (url.pathname === PORTAL_PUSH_PATH && request.method === "GET") return handlePortalPushGet(request, env);

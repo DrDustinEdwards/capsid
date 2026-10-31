@@ -22,7 +22,7 @@ import { PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
-import { PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
+import { PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
 import { PORTAL_PUSH_PATH } from "../src/push.ts";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
@@ -145,6 +145,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_CONVERGENCE_PATH,
   PORTAL_PACKAGE_HISTORY_PATH,
   PORTAL_SHARED_CODE_PATH,
+  PORTAL_COMPLETENESS_PATH,
   PORTAL_LIBRARY_PATH,
   PORTAL_TRENDS_PATH,
   PORTAL_PUSH_PATH,

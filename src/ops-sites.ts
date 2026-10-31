@@ -182,16 +182,26 @@ export function originFrom(raw: string): { ok: true; origin: string } | { ok: fa
 }
 
 /** The refusal for a health path, or null. Starts with /, unreserved characters only,
- *  no empty or dot segment. */
+ *  no empty or dot segment. Or an https URL whose host passes as an origin's would and
+ *  whose path passes the same rules, for a site that serves its health on another host. */
 export function healthPathRefusal(path: string): string | null {
+  const absolute = /^https:\/\/([^/?#@:]+)(\/.*)$/.exec(path);
+  if (absolute) return hostnameRefusal(absolute[1]!) ?? healthPathRefusal(absolute[2]!);
   if (!HEALTH_PATH_SHAPE.test(path)) {
-    return `the health path '${path}' must start with / and use only letters, digits and - . _ ~ /, at most 200 characters, with no query or fragment.`;
+    return `the health path '${path}' must start with / (or be https://host/path) and use only letters, digits and - . _ ~ /, at most 200 characters, with no query or fragment.`;
   }
   const segments = path.split("/").slice(1);
   if (segments.some((s, i) => (s === "" && i < segments.length - 1) || s === "." || s === "..")) {
     return `the health path '${path}' has an empty, '.' or '..' segment.`;
   }
   return null;
+}
+
+/** The URL a health path names: the path on the site's origin, or the https URL itself
+ *  where the site serves its health on another host (Carrel's public one is on its MCP
+ *  host; its app is behind Access). */
+export function healthUrl(origin: string, healthPath: string): string {
+  return healthPath.startsWith("https://") ? healthPath : origin + healthPath;
 }
 
 /** A Portal edit's params, checked and normalized. Blank fields arrive absent. */
@@ -243,7 +253,7 @@ export function validateSite(p: Record<string, string | undefined>): Validated {
 /** One line for a preview: what the row is. */
 export function describeSite(site: Pick<SiteInput, "origin" | "health_path" | "platform" | "script" | "name">): string {
   if (site.origin === null) return `"${site.name}", serves no site (not probed)`;
-  const probe = site.health_path ? `${site.origin}${site.health_path}` : `${site.origin}/ (no health route, so the root)`;
+  const probe = site.health_path ? healthUrl(site.origin, site.health_path) : `${site.origin}/ (no health route, so the root)`;
   return `"${site.name}", probed at ${probe}, on ${site.platform}${site.script ? `, Worker script ${site.script}` : ""}`;
 }
 

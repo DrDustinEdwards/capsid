@@ -115,7 +115,7 @@ function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
               Site
             </a>
             {s.health_path && (
-              <a className="btn" href={`${s.origin}${s.health_path}`} target="_blank" rel="noopener noreferrer">
+              <a className="btn" href={s.health_path.startsWith("https://") ? s.health_path : `${s.origin}${s.health_path}`} target="_blank" rel="noopener noreferrer">
                 Health route
               </a>
             )}
