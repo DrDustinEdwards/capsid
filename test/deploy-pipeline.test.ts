@@ -10,15 +10,14 @@ import { test } from "node:test";
 const ROOT = join(import.meta.dirname, "..");
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-test("the deploy job refuses to ship against an unapplied migration", () => {
+test("the deploy job applies the migrations that only add, before the deploy", () => {
   const ci = read(".github/workflows/ci.yml");
-  assert.match(ci, /wrangler d1 migrations list capsid --remote/, "the migration-drift guard is gone");
-  assert.match(ci, /No migrations to apply/, "the guard no longer keys on wrangler's confirmation string");
-  // The guard must sit in the deploy job before the deploy step, or it shipped
-  // first and guarded nothing.
-  const listAt = ci.indexOf("migrations list capsid");
+  // devkit-migrations --apply (devkit, tested there) applies additive migrations and refuses the rest. It must sit in
+  // the deploy job before the deploy step, or the Worker shipped against a database without its tables.
+  const applyAt = ci.indexOf("npx devkit-migrations migrations --apply capsid");
   const deployAt = ci.indexOf("npm run deploy");
-  assert.ok(listAt > 0 && deployAt > 0 && listAt < deployAt, "the migration check runs after the deploy");
+  assert.ok(applyAt > 0, "the deploy no longer applies its migrations");
+  assert.ok(deployAt > 0 && applyAt < deployAt, "the migrations are applied after the deploy");
 });
 
 test("the scheduled live gate asserts the live sha equals master head", () => {
