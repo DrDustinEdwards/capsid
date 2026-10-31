@@ -39,6 +39,7 @@ import { repoGuards } from "./repo-guards";
 import { HeadMovedError } from "../github/refs";
 import { reverifyPr } from "../outcome-prs";
 import { logEvent } from "@dustinedwards/site-runtime/log";
+import { chatApprovalRefusal, MAX_APPROVAL_LINK, recordChatApproval } from "../chat-approval";
 
 // The pull request's canonical URL, for a managePr result that did not carry one.
 // The merge response names the repo and the caller named the number, which is all a
@@ -254,9 +255,14 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
           .optional()
           .describe("For action 'merge': the full head sha you reviewed; the merge is refused if the head moved. Refused for the other actions."),
         repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+        approved_in: bounded(MAX_APPROVAL_LINK)
+          .optional()
+          .describe(
+            "For action 'merge', admin only: the https://claude.ai/ link to the message where Dustin approved this merge. Needs sha. After the merge, Capsid records the approval (src/chat-approval.ts). Refused for the other actions."
+          ),
       },
     },
-    ({ namespace, number, action, merge_method, comment, sha, repo }) => {
+    ({ namespace, number, action, merge_method, comment, sha, repo, approved_in }) => {
       // comment belongs to exactly one action, and is refused rather than ignored in
       // both directions: a comment silently dropped from a merge call is a review
       // nobody posted, and a comment on a merge is a caller who believes something
@@ -266,6 +272,11 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       if (action === "comment" && !comment) return fail("manage_pr action 'comment' needs a comment body.");
       if (action !== "comment" && comment !== undefined) {
         return fail(`manage_pr action '${action}' takes no comment; only action 'comment' posts one.`);
+      }
+      if (approved_in !== undefined) {
+        if (action !== "merge") return fail(`manage_pr action '${action}' takes no approved_in; only a merge records an approval.`);
+        const refusal = chatApprovalRefusal(approved_in, sha, ctx.agent.admin === true);
+        if (refusal) return fail(refusal);
       }
       return guardedWrite(
         "manage_pr",
@@ -279,6 +290,11 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
           // merge, which already happened: reporting it as failed because a
           // bookkeeping update did not land would misreport the merge, and the sweep
           // picks the row up either way.
+          if (action === "merge" && approved_in !== undefined && sha !== undefined) {
+            const merged = result as { repo: string; sha?: string };
+            const approval = await recordChatApproval(env, ctx.actor, { namespace, repo: merged.repo, number, headSha: sha, mergeSha: merged.sha ?? null, link: approved_in }, new Date());
+            Object.assign(result, { approval });
+          }
           if (action === "merge") {
             try {
               const url = (result as { url?: string }).url ?? prUrlFor(result as { repo?: string }, number);

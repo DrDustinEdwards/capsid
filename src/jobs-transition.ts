@@ -76,12 +76,6 @@ export interface JobResult {
   // edit, and list for one named id to a caller holding write: the versions earlier
   // edits replaced, newest first (src/jobs-edit.ts, migrations/0033).
   versions?: JobVersion[];
-  // fire: the session the routine started (src/routine-fire.ts). Either field is null
-  // when Anthropic's answer did not carry it in the expected shape.
-  session?: { id: string | null; url: string | null };
-  // routine: a namespace's routine as Capsid holds it. The token is never returned, only
-  // the secret's name and whether it is set.
-  routine?: { namespace: string; routine_id: string | null; token_secret: string; token_set: boolean };
 }
 
 export function refuse(action: string, refusal: string): JobResult {

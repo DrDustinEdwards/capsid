@@ -8,7 +8,6 @@ import { JOB_KINDS } from "../model-routing";
 import { CORRECTION_CAP, JOB_ACTIONS, JOB_STATUSES, isJobStatus } from "../jobs-schema";
 import { SCOPE_FLAGS } from "../agents-schema";
 import { beginJob, blockJob, claimJob, completeAsCaller, recordAsCaller, editJob, failAsCaller, jobVersions, listJobs, parkJob, postJob, releaseJob, resumeJob, supersedeJob, unparkJob, type JobResult } from "../jobs";
-import { fireRoutine, setRoutine } from "../routine-fire";
 import { parseEvidence } from "../job-outcomes";
 import { claimSchema } from "../job-claims";
 import { staleJobs } from "../stale-jobs";
@@ -67,12 +66,10 @@ supersede: end a job replaced before work began; needs reason. Any writer on a q
 release: the seat returns a job another credential holds to the queue; needs reason.
 edit: the seat changes title, body, priority or gate_required of a queued or blocked job; the old version is kept.
 park / unpark: the seat sets a queued job aside with a one-line reason, or returns it to queued. A parked job is never claimed or planned and holds no title slot.
-routine: read a namespace's routine, or with routine_url set or clear ("off") its fire URL. Seat only.
-fire: the seat starts a cloud session for one queued, verified job through its namespace's routine (token in ROUTINE_<NS>_TOKEN) and marks it started. Refusals name their cause (already started or fired, no routine or token, Anthropic's answer).
 block and complete act only on a job this caller holds, except as stated above.`,
       inputSchema: {
-        action: z.enum(JOB_ACTIONS).describe("post | list | claim | complete | record | fail | block | resume | supersede | release | begin | fire | routine | edit | park | unpark."),
-        namespace: nsName.optional().describe('For post, the namespace the work belongs to. For list and claim, the namespace to filter or pick from. For routine, the namespace whose routine is read or set.'),
+        action: z.enum(JOB_ACTIONS).describe("post | list | claim | complete | record | fail | block | resume | supersede | release | begin | edit | park | unpark."),
+        namespace: nsName.optional().describe('For post, the namespace the work belongs to. For list and claim, the namespace to filter or pick from.'),
         title: bounded(MAX_TITLE).optional().describe('For post and edit: the title. One open job per (namespace, title).'),
         body: bounded(MAX_BODY).optional().describe('For post and edit: the full prompt the driver executes. Signed on the way in.'),
         priority: z.number().int().optional().describe('For post and edit: higher runs first. Defaults to 0 at post.'),
@@ -115,7 +112,7 @@ block and complete act only on a job this caller holds, except as stated above.`
             "For list: true returns the stale view, the blocked and claimed jobs that look stuck, each with rule (unchanged | resumed-not-completed | prs-settled | steps-seen) and a one-line reason. Read-only and costs no GitHub reads. Refused with view, status or id, and on any other action."
           ),
         since: bounded(40).optional().describe('For list with view "digest": the ISO time to report from. Defaults to the last 24 hours.'),
-        id: bounded(MAX_JOB_ID).optional().describe('The job id: optional for claim, required for complete, fail, block, resume, supersede, release, begin, fire, edit, park and unpark. For list, narrows to that job, with its body for a caller holding write.'),
+        id: bounded(MAX_JOB_ID).optional().describe('The job id: optional for claim, required for complete, fail, block, resume, supersede, release, begin, edit, park and unpark. For list, narrows to that job, with its body for a caller holding write.'),
         result_summary: bounded(MAX_TITLE).optional().describe('For complete: what happened, in one sentence.'),
         result_ref: resultRef.optional().describe('For complete: where the work landed, a document key or a PR URL.'),
         reason: bounded(MAX_TITLE).optional().describe('For fail and block: why. For resume: what was approved, in one line; recorded in the audit row and returned as resume_note. For supersede: why the job was replaced or withdrawn. For park: one line saying when the job comes back. For release: why the holder is not coming back.'),
@@ -128,9 +125,6 @@ block and complete act only on a job this caller holds, except as stated above.`
           .optional()
           .describe("For supersede: the id of the replacing job, which must exist, be in the same namespace and not be this job. Omit it for a withdrawal."),
         command: bounded(MAX_TITLE).optional().describe('For block: the exact command the human must run.'),
-        routine_url: bounded(256)
-          .optional()
-          .describe('For routine: the namespace\'s fire URL, https://api.anthropic.com/v1/claude_code/routines/trig_.../fire, or "off" to clear it. Omit it to read the routine.'),
         question: z
           .boolean()
           .optional()
@@ -306,13 +300,6 @@ block and complete act only on a job this caller holds, except as stated above.`
                 raw: { claim: args.claim, reason: args.reason },
               })
             );
-          }
-          case "fire": {
-            if (!args.id) return fail("fire needs the job id.");
-            return reply(await fireRoutine(env, agent, now, args.id));
-          }
-          case "routine": {
-            return reply(await setRoutine(env, agent, args.namespace, args.routine_url));
           }
           case "begin": {
             if (!args.id) return fail("begin needs the job id.");

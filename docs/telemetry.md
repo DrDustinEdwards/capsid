@@ -70,6 +70,10 @@ The row is written once. Claude Code exports on an interval (60 seconds by defau
 usage from the last interval before `complete` can arrive after it; it stays in
 `session_usage` and is not added to the row.
 
+## Turning it on for cloud sessions
+
+Cloud sessions (the Claude project's threads) read the same five variables from their cloud environment: Project settings, the Cloud environment menu, the gear beside the environment, Environment variables. No key goes there: the environment's network secret already adds the cloud-driver key to every request for `mcp.dustinedwards.info`, `/ops/otlp` included (checked 2026-10-31: an empty export answers 200, not 401). A new session picks the variables up. Usage is kept per session under `agent:cloud-driver`; a session that holds no claimed job is bound to none.
+
 ## Turning it on for Dustin's machine
 
 Project and local settings cannot set the exporter (Claude Code 2.1.282 and later):

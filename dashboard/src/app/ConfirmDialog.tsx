@@ -15,7 +15,7 @@ import { DESTRUCTIVE, NEEDS_REASON, ONE_WAY, TAKES_NOTE, TYPED_CONFIRM, performL
 
 // The actions whose Details start open: a rule change's or a policy's added and removed
 // lines are what the person is deciding.
-const OPEN_DETAILS: ReadonlySet<string> = new Set(["canon_approve", "canon_approve_all", "canon_reject", "sign_policy_from_repo"]);
+const OPEN_DETAILS: ReadonlySet<string> = new Set(["sign_policy_from_repo"]);
 
 // The one confirm dialog every control opens, on Capsomer's dialog. It collects a reason
 // where the action needs one, previews (which writes nothing), shows what will change and

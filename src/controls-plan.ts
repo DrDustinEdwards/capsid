@@ -1,16 +1,13 @@
 import { adminAgentForEmail } from "./agents";
 import { archivedAgentByName } from "./agents-archive";
 import { agentActor } from "./agents-schema";
-import { type SweepItem, checkProposal, lineChanges, readSweep } from "./canon";
 import {
   type Surface,
   AUTOMERGE_RESUME_REASON,
-  CANON_REJECT_REASON,
   UNIT_RESUME_REASON,
   clickAuditAction,
   revisionOf,
   shippedEvidence,
-  sweepOrder,
   switchReasonRefusal,
 } from "./controls-base";
 import type { Env } from "./env";
@@ -36,7 +33,7 @@ import { limitRefusalFor } from "./site-repair";
 // nothing, and returns what will change and the audit rows it will write.
 
 // bind: params the plan itself adds to the token, beside the caller's, so the perform
-// carries out what this preview read (canon_approve_all binds its plan this way).
+// carries out what this preview read (sign_policy_from_repo binds its source sha this way).
 export type Plan = { ok: true; changes: string[]; audit: string[]; bind?: Record<string, string> } | { ok: false; refusal: string };
 
 const SITE_FIELDS = ["name", "origin", "health_path", "platform", "script"] as const;
@@ -46,33 +43,6 @@ function shown(value: string | null): string {
 }
 
 const refused = (refusal: string): Plan => ({ ok: false, refusal });
-
-// How many added and removed lines a canon_approve preview lists before it says how many
-// more there are. The whole body is in the proposal row.
-const CANON_PREVIEW_LINES = 40;
-function sweepChanges(items: readonly SweepItem[], reason: string | undefined, click: string): string[] {
-  const approvals = items.filter((i) => i.outcome === "approve");
-  const superseded = items.filter((i) => i.outcome === "superseded").length;
-  const outdated = items.filter((i) => i.outcome === "outdated").length;
-  const flagged = approvals.filter((i) => i.proposal.directive_lines.length);
-  const line = (i: SweepItem) => {
-    const p = i.proposal;
-    const target = `${p.namespace}/${p.path}`;
-    if (i.reason !== null) return `reject proposal ${p.id} (${target}, from ${p.proposer}): pending -> rejected, with the reason "${i.reason}". ${target} is not touched.`;
-    return `approve proposal ${p.id} (${target}, from ${p.proposer}): ${p.creates ? `${target} is created` : `${target} is overwritten, the current version snapshotted first`}; ${p.added} line(s) added, ${p.removed} removed.`;
-  };
-  return [
-    `${items.length} pending canon proposal(s): ${approvals.length} approved, ${items.length - approvals.length} rejected (${superseded} superseded, ${outdated} outdated). Rejections run first, then approvals, each its own decision; one that fails does not stop the rest.`,
-    ...(flagged.length
-      ? [
-          `${flagged.length} approval(s) add lines that read as instructions addressed to agents. Read them before approving:`,
-          ...flagged.flatMap((i) => i.proposal.directive_lines.map((l) => `instruction (proposal ${i.proposal.id}, ${i.proposal.namespace}/${i.proposal.path}): ${l}`)),
-        ]
-      : ["No approval adds a line that reads as an instruction addressed to agents."]),
-    ...sweepOrder(items).map(line),
-    ...(reason ? [`Your reason "${reason}" is recorded in the ${click} audit row.`] : []),
-  ];
-}
 
 function rosterRefusal(action: "reset_breaker", namespace: string | undefined): string | null {
   if (!namespace) return `${action} needs a namespace.`;
@@ -436,58 +406,6 @@ export async function planAction(env: Env, email: string, action: PortalAction, 
           `The site re-derives that store from its source and reports a read-back verdict; the result is shown when it returns, up to five minutes. One task_runs row (site-repair) records it.`,
         ],
         audit: [`site-repair by ${actor}`, click],
-      };
-    }
-    case "canon_approve":
-    case "canon_reject": {
-      const id = revisionOf(p.id);
-      if (id === null) return refused(`${action} needs the proposal id, a positive integer.`);
-      if (action === "canon_reject" && !p.reason) return refused(CANON_REJECT_REASON);
-      const checked = await checkProposal(env.DB, id, action === "canon_approve");
-      if (!checked.ok) return refused(checked.refusal);
-      const { row, current, directive } = checked;
-      const target = `${row.namespace}/${row.path}`;
-      if (action === "canon_reject") {
-        return {
-          ok: true,
-          changes: [`canon proposal ${id} (${target}, from ${row.proposer} at ${row.created_at}): pending -> rejected, with the reason "${p.reason}". ${target} is not touched.`],
-          audit: [`canon-rejected by ${actor}`, click],
-        };
-      }
-      const { added, removed } = lineChanges(current, row.body);
-      const shownLines = (label: string, lines: string[]) => [
-        ...lines.slice(0, CANON_PREVIEW_LINES).map((l) => `${label}: ${l}`),
-        ...(lines.length > CANON_PREVIEW_LINES ? [`${label}: and ${lines.length - CANON_PREVIEW_LINES} more line(s), in the proposal row`] : []),
-      ];
-      return {
-        ok: true,
-        changes: [
-          current === null
-            ? `${target} does not exist; it is created as ${row.proposer} proposed at ${row.created_at} (${row.mode}).`
-            : `${target} is overwritten as ${row.proposer} proposed at ${row.created_at} (${row.mode}). The current version is snapshotted first, so it can be restored.`,
-          `${added.length} line(s) added, ${removed.length} removed.`,
-          ...(directive.length
-            ? [`${directive.length} added line(s) read as instructions addressed to agents. Read them before approving:`, ...directive.map((l) => `instruction: ${l}`)]
-            : ["No added line reads as an instruction addressed to agents."]),
-          ...shownLines("added", added),
-          ...shownLines("removed", removed),
-          ...(row.title !== null || row.type !== null || row.tags !== null || row.status !== null
-            ? [`metadata set by the proposal: ${[["title", row.title], ["type", row.type], ["tags", row.tags], ["status", row.status]].filter(([, v]) => v !== null).map(([k, v]) => `${k} "${v}"`).join(", ")}.`]
-            : []),
-        ],
-        audit: [`write by ${actor}`, click],
-      };
-    }
-    case "canon_approve_all": {
-      const sweep = await readSweep(env.DB);
-      if (!sweep.ok) return refused(sweep.refusal);
-      const approves = sweep.items.some((i) => i.outcome === "approve");
-      const rejects = sweep.items.some((i) => i.outcome !== "approve");
-      return {
-        ok: true,
-        changes: sweepChanges(sweep.items, p.reason, clickAuditAction(action, p, surface)),
-        audit: [...(rejects ? [`canon-rejected by ${actor}`] : []), ...(approves ? [`write by ${actor}`] : []), click],
-        bind: { plan: sweep.key },
       };
     }
     case "revoke_agent": {

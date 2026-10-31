@@ -61,7 +61,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "canon_approve_all", "site_repair", "sign_policy_from_repo"];
+const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "site_repair", "sign_policy_from_repo"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["overnight"];
@@ -121,8 +121,6 @@ interface MockState {
   // The package configuration as it stands.
   packages: OpsPackageConfig[];
   activity: PortalActivityRow[];
-  // Canon proposals approved or rejected since the mock started.
-  canonDecided: Set<number>;
   // Repairs run since the mock started, newest first (GET /portal/api/convergence).
   repairs: Array<{ namespace: string; tool: string; at: string }>;
   // Pull requests closed from the Portal since the mock started, as "<repo>#<number>".
@@ -490,7 +488,6 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   for (const a of out.live.agents) if (st.revoked.has(a.name)) a.revoked_at = st.revoked.get(a.name) ?? null;
   out.live.sites = st.sites.map((s) => ({ ...s }));
   out.live.packages = st.packages.map((p) => ({ ...p }));
-  out.live.canon_proposals = out.live.canon_proposals.filter((c) => !st.canonDecided.has(c.id));
   out.live.awaiting_seat = out.live.awaiting_seat.filter((a) => !st.closedPrs.has(`${a.repo}#${a.number}`));
   out.refresh_allowed_at = nextRefresh > mockNow() ? new Date(nextRefresh).toISOString() : null;
   return out;
@@ -802,64 +799,6 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         done: `Removed ${name}.`,
         changes: [`ops_packages: remove ${name}. Its weekly rows stay.`],
         apply: (st) => void (st.packages = st.packages.filter((p) => p.name !== name)),
-      };
-    }
-    case "canon_approve":
-    case "canon_reject": {
-      const id = revisionOf(params.id);
-      const proposal = f.live.canon_proposals.find((c) => c.id === id);
-      if (id === null || !proposal) throw new Refusal(400, `no pending canon proposal ${params.id ?? ""}.`);
-      const target = `${proposal.namespace}/${proposal.path}`;
-      if (action === "canon_reject") {
-        if (!(params.reason ?? "").trim()) throw new Refusal(400, "canon_reject needs a reason: the proposer reads it, and a rejection with no reason is one nobody can act on.");
-        return {
-          summary: `Reject canon proposal ${id}.`,
-          done: `Rejected proposal ${id} for ${target}.`,
-          changes: [`canon proposal ${id} (${target}): pending -> rejected. ${target} is not touched.`],
-          apply: (st) => void st.canonDecided.add(id),
-        };
-      }
-      if (proposal.stale) throw new Refusal(400, `${target} changed since proposal ${id} was written. Reject it, and the proposer writes it again.`);
-      return {
-        summary: `Approve canon proposal ${id}.`,
-        done: `Approved proposal ${id}: ${target} is written as ${proposal.proposer} proposed.`,
-        changes: [
-          `${target} is overwritten as ${proposal.proposer} proposed. The current version is snapshotted first.`,
-          `${proposal.added} line(s) added, ${proposal.removed} removed.`,
-          ...proposal.directive_lines.map((l) => `instruction: ${l}`),
-          "added: The sample service answers on port 8080.",
-        ],
-        apply: (st) => void st.canonDecided.add(id),
-      };
-    }
-    case "canon_approve_all": {
-      // The Worker's plan (src/canon.ts, planSweep): the newest proposal on each document
-      // is approved unless stale; older ones are superseded, a stale newest one outdated.
-      const list = [...f.live.canon_proposals].sort((a, b) => a.id - b.id);
-      if (!list.length) throw new Refusal(400, "no pending canon proposals.");
-      const key = (c: (typeof list)[number]) => `${c.namespace}/${c.path}`;
-      const newest = new Map<string, number>();
-      for (const c of list) newest.set(key(c), Math.max(newest.get(key(c)) ?? 0, c.id));
-      const plan = list.map((c) => {
-        const top = newest.get(key(c)) ?? c.id;
-        const reason = c.id !== top ? `superseded by proposal ${top} on the same document` : c.stale ? `outdated: ${key(c)} changed after this proposal was written; write it again against the current body` : null;
-        return { c, reason };
-      });
-      const approvals = plan.filter((p) => p.reason === null);
-      const rejections = plan.filter((p) => p.reason !== null);
-      const flagged = approvals.filter((p) => p.c.directive_lines.length);
-      return {
-        summary: "Decide every pending canon proposal at once.",
-        done: `Decided ${plan.length} of ${plan.length} canon proposal(s). Approved ${approvals.map((p) => `${p.c.id} (${key(p.c)})`).join(", ")}. Rejected ${rejections.map((p) => `${p.c.id} (${key(p.c)})`).join(", ")}.`,
-        changes: [
-          `${plan.length} pending canon proposal(s): ${approvals.length} approved, ${rejections.length} rejected. Rejections run first, then approvals, each its own decision; one that fails does not stop the rest.`,
-          ...(flagged.length
-            ? [`${flagged.length} approval(s) add lines that read as instructions addressed to agents. Read them before approving:`, ...flagged.flatMap((p) => p.c.directive_lines.map((l) => `instruction (proposal ${p.c.id}, ${key(p.c)}): ${l}`))]
-            : ["No approval adds a line that reads as an instruction addressed to agents."]),
-          ...rejections.map((p) => `reject proposal ${p.c.id} (${key(p.c)}, from ${p.c.proposer}): pending -> rejected, with the reason "${p.reason}". ${key(p.c)} is not touched.`),
-          ...approvals.map((p) => `approve proposal ${p.c.id} (${key(p.c)}, from ${p.c.proposer}): ${key(p.c)} is overwritten, the current version snapshotted first; ${p.c.added} line(s) added, ${p.c.removed} removed.`),
-        ],
-        apply: (st) => void plan.forEach((p) => st.canonDecided.add(p.c.id)),
       };
     }
     case "site_repair": {
@@ -1320,7 +1259,7 @@ function isoOrNull(value: string | null): string | null {
 
 export function mockOpsApi(): Plugin {
   let nextRefresh = 0;
-  const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], closedPrs: new Set(), tokens: new Map() };
+  const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), repairs: [], closedPrs: new Set(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();

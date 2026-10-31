@@ -241,7 +241,7 @@ const CLOSE_PR: CompositeSpec = {
   summary:
     "The changes that end or publish work: merge or close a pull request, delete a branch, tag a commit, or publish a release from a CHANGELOG section. Needs the write grant; merge, close, tag, release and a forced branch delete also need the can_merge flag, because each can trigger a deploy or destroy the only copy of a branch.",
   actions: {
-    merge: { op: "manage_pr", inject: { action: "merge" }, fields: ["namespace", "number", "merge_method", "sha", "repo"], summary: "Merge a pull request." },
+    merge: { op: "manage_pr", inject: { action: "merge" }, fields: ["namespace", "number", "merge_method", "sha", "repo", "approved_in"], summary: "Merge a pull request." },
     close: { op: "manage_pr", inject: { action: "close" }, fields: ["namespace", "number", "repo"], summary: "Close a pull request and delete its head branch." },
     delete_branch: { op: "delete_branch", summary: "Delete a branch." },
     tag: { op: "tag_release", inject: { publish_release: false }, summary: "Tag a commit." },

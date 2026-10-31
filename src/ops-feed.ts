@@ -25,7 +25,6 @@ import { openQuietFindings } from "./watcher-digest";
 import { DEFAULT_CADENCE_MINUTES, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { pendingProposals } from "./canon";
 import { textResponse } from "./http";
 import { MINUTE_MS, DAY_MS } from "./time";
 
@@ -48,7 +47,6 @@ import { MINUTE_MS, DAY_MS } from "./time";
 //     1  ops_sites: the site configuration, every row
 //     1  ops_packages: the package configuration, every row
 //     1  agent_sessions: live sessions from the hook receiver, at most 50
-//     1  canon_proposals: the pending proposals joined to their documents, at most 50
 //     9  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
 //     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
@@ -371,7 +369,7 @@ async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
 }
 
 async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, canonProposals, inbox, findings, mergePolicy] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, inbox, findings, mergePolicy] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -381,7 +379,6 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     liveSessions(env.DB, now),
     readPackageConfig(env.DB),
     overnightState(env),
-    pendingProposals(env.DB),
     gatherInbox(env, now, null),
     openQuietFindings(env.DB),
     liveMergePolicy(env),
@@ -400,7 +397,6 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     sites,
     packages,
     store: { size_bytes: jobRead.sizeBytes, cap_bytes: D1_CAP_BYTES },
-    canon_proposals: canonProposals,
     inbox,
     findings,
   };

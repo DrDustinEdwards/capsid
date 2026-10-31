@@ -85,7 +85,7 @@ An agent's scopes have five axes: `namespaces`, `repos`, `tools`, `grants` (read
 
 A job consists of a title and a body; the body is the complete prompt an agent executes. Bodies are signed when posted, and a claim verifies the signature first, so a body altered outside the queue's own `edit` action is rejected. The lifecycle is `post`, `claim`, then `complete`, `fail`, `block` or `resume`. A job that reaches an operation requiring a person (a push, a deploy, a secret, a live migration or a merge) is blocked with the exact command to run. Capsid assigns each job a kind and a recommended model and effort (`src/model-routing.ts`).
 
-Capsid can start a Claude Code cloud session for a queued job by firing a saved Claude Code routine ([docs/routines.md](docs/routines.md)). When an agent completes a job, it names the pull request that carries the work. Capsid then reads that pull request from GitHub and stores the verified state beside the agent's claim, so the two can be compared ([docs/work-queue.md](docs/work-queue.md)).
+When an agent completes a job, it names the pull request that carries the work. Capsid then reads that pull request from GitHub and stores the verified state beside the agent's claim, so the two can be compared ([docs/work-queue.md](docs/work-queue.md)).
 
 ### GitHub integration and merge policy
 
@@ -233,7 +233,6 @@ The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#12-checks
 **Jobs and agents**
 
 - [docs/work-queue.md](docs/work-queue.md): the job lifecycle, signing and recorded evidence.
-- [docs/routines.md](docs/routines.md): starting cloud sessions through routines.
 - [docs/autonomy.md](docs/autonomy.md): automatic merging and pre-approved gates.
 - [docs/overnight.md](docs/overnight.md): the overnight plan and morning digest.
 - [docs/bench.md](docs/bench.md): the paired comparison run in capsid-bench.
