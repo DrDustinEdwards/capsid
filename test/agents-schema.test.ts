@@ -82,7 +82,7 @@ test("an unrecognized grant, flag or list entry is dropped rather than carried",
 });
 
 test("serialize and parse round-trip without widening", () => {
-  const scopes = defaultScopes(["capsid", "foxing"]);
+  const scopes = defaultScopes(["capsid", "sample"]);
   scopes.flags.can_merge = true;
   const back = parseScopes(serializeScopes(scopes));
   assert.deepEqual(back, scopes);
@@ -91,7 +91,7 @@ test("serialize and parse round-trip without widening", () => {
 test("allowsScope is the one list comparison, and '*' is the only wildcard", () => {
   assert.equal(allowsScope("*", "anything"), true);
   assert.equal(allowsScope(["capsid"], "capsid"), true);
-  assert.equal(allowsScope(["capsid"], "foxing"), false);
+  assert.equal(allowsScope(["capsid"], "sample"), false);
   assert.equal(allowsScope([], "capsid"), false, "an empty list allows nothing, which is what makes the fail-closed parse work");
   assert.equal(allowsScope(["*"], "capsid"), false, "a list containing the string '*' is a list of one odd name, not a wildcard");
 });

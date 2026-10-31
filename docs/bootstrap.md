@@ -175,12 +175,12 @@ The response carries the key once. Nothing stores it: the table holds its
 sha256, and a lost key is replaced by revoking that agent and minting another.
 
 One agent per project and per machine. The name says both, so an audit row
-reads as a sentence: `capsid-driver-laptop`, `foxing-driver-desktop`. Revoking a
-compromised laptop does not stop the desktop working. `agent:foxing-driver-laptop`
+reads as a sentence: `capsid-driver-laptop`, `sample-driver-desktop`. Revoking a
+compromised laptop does not stop the desktop working. `agent:sample-driver-laptop`
 in the audit log needs no lookup to understand.
 
 An agent from a second client on the same project is a role named `<namespace>-<client>`,
-minted with `--role`: `dustinedwards-grok` is Grok Build's driver for dustinedwards. Each
+minted with `--role`: `sample-grok` is Grok Build's driver for sample. Each
 client's MCP config must not load another client's servers. Grok Build loads `~/.claude.json`
 and a project's `.mcp.json` unless `[compat.claude] mcps = false` is set in `~/.grok/config.toml`
 (docs.x.ai/build/features/mcp-servers); without it Grok would act as `agent:dustinedwards-driver`.
@@ -316,7 +316,7 @@ leaves a live credential in the table with nothing on disk able to present it.
 ```
 CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts                       # dry run, all six
 CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --apply
-CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --namespace foxing --apply
+CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --namespace sample --apply
 ```
 
 `--namespace` mints one project without touching the rest, which is what to run

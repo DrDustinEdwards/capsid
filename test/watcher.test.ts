@@ -204,12 +204,12 @@ test("an OPEN queue breaker is a finding the status check owns, and a closed one
   const report = (open: boolean) =>
     statusFindings(
       {
-        namespaces: [{ namespace: "foxing", breaker: { namespace: "foxing", open, failed: open ? 3 : 2, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
+        namespaces: [{ namespace: "sample", breaker: { namespace: "sample", open, failed: open ? 3 : 2, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
       } as never
     );
   const found = report(true);
-  assert.deepEqual(found.map((f) => f.fingerprint), ["breaker-open-foxing"]);
-  assert.equal(owningCheck("breaker-open-foxing"), "status");
+  assert.deepEqual(found.map((f) => f.fingerprint), ["breaker-open-sample"]);
+  assert.equal(owningCheck("breaker-open-sample"), "status");
   assert.match(found[0].body, /3, threshold 3/);
   assert.deepEqual(report(false), []);
 });
@@ -277,7 +277,7 @@ test("A CLEARED FINDING CLOSES ITS JOB, and a finding still being found does not
 test("A FAILED READ DOES NOT CLEAR THE JOBS ITS CHECK OWNS", async () => {
   // The status and roster CI reads failed this pass, so their findings are
   // absent. That says nothing about whether the problems went away.
-  const open = new Map([["ci-red-abc1234", "job_1"], ["breaker-open-foxing", "job_2"], ["backup-stale", "job_3"]]);
+  const open = new Map([["ci-red-abc1234", "job_1"], ["breaker-open-sample", "job_2"], ["backup-stale", "job_3"]]);
   const cleared: string[] = [];
   const result = await runPass(
     {
@@ -303,7 +303,7 @@ test("every fingerprint the checks produce has an owning check", () => {
     ...ciFindings("germomics", [{ head_sha: "feedface99", status: "completed", conclusion: "failure", created_at: hoursAgo(9) }], NOW),
     ...statusFindings(
       {
-        namespaces: [{ namespace: "foxing", breaker: { namespace: "foxing", open: true, failed: 3, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
+        namespaces: [{ namespace: "sample", breaker: { namespace: "sample", open: true, failed: 3, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
       } as never
     ),
     ...mirrorFindings("capsid", null, [], NOW),
