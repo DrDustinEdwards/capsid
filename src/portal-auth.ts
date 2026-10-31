@@ -1,5 +1,5 @@
 import { clearStateCookie, completeAccessLogin, type LoginFlow, startAccessLogin } from "./access-login";
-import { getCookie, hmacHex, isAdminEmail } from "./auth";
+import { cookieName, getCookie, hmacHex, isAdminEmail } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
 import { isPortalHost, isSameOriginPath, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
@@ -69,16 +69,16 @@ export async function portalSessionCookie(user: PortalUser, secret: string, now:
   };
   const encoded = base64url(JSON.stringify(payload));
   const sig = await hmacHex(secret, encoded);
-  return `${PORTAL_SESSION_COOKIE}=${sig}.${encoded}; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`;
+  return `${cookieName(PORTAL_SESSION_COOKIE, cookiePath)}=${sig}.${encoded}; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`;
 }
 
 /** The Set-Cookie values that sign this browser out: the session and CSRF cookies,
- *  same name, path and attributes, Max-Age=0. */
+ *  same name, path and attributes, Max-Age=0, under the prefixed name and the bare one
+ *  they had before (for one release, with getCookie's fallback). */
 export function portalSignOutCookies(cookiePath: string = PORTAL_PATH): string[] {
-  return [
-    `${PORTAL_SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=0`,
-    `${PORTAL_CSRF_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=0`,
-  ];
+  return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].flatMap((name) =>
+    [cookieName(name, cookiePath), name].map((n) => `${n}=; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=0`),
+  );
 }
 
 // The session's user, or null for anything that does not verify. The admin check

@@ -991,8 +991,46 @@ export async function withFetch(
 
 // The Env stub, `as never` at the boundary: the real Env has a dozen bindings and a
 // test that needs two should not have to fake ten.
+// site-runtime's two Durable Objects (src/index.ts), on by default so a handler under test
+// meets the limiter and the tool-call log it meets in production. A part names its own to
+// override them.
 export function fakeEnv(parts: Record<string, unknown>): never {
-  return parts as never;
+  return { RATE_LIMITER: fakeRateLimiter(), TOOL_CALL_LOG: fakeToolCallLog(), ...parts } as never;
+}
+
+// The RateLimiter's stub, counting each key against its first rule. `spent` starts keys at a
+// count; `failing` throws on every call, as an unreachable object does.
+export function fakeRateLimiter(options: { spent?: Record<string, number>; failing?: boolean } = {}) {
+  const used = new Map(Object.entries(options.spent ?? {}));
+  return {
+    idFromName: (name: string) => name,
+    get: (key: string) => ({
+      hit: async (rules: Array<{ limit: number; windowSeconds: number }>) => {
+        if (options.failing) throw new Error("the rate limiter is unreachable");
+        const [rule] = rules;
+        const count = used.get(key) ?? 0;
+        if (count >= rule.limit) return { ok: false, used: count, limit: rule.limit, retryAfterSeconds: rule.windowSeconds, window: rule.windowSeconds };
+        used.set(key, count + 1);
+        return { ok: true, used: count + 1, limit: rule.limit, retryAfterSeconds: 0, window: rule.windowSeconds };
+      },
+    }),
+  };
+}
+
+// The ToolCallLog's stub: every appended row, in order. `failing` answers 500, so no row lands.
+export function fakeToolCallLog(options: { failing?: boolean } = {}) {
+  const rows: Array<Record<string, unknown>> = [];
+  return {
+    rows,
+    idFromName: (name: string) => name,
+    get: () => ({
+      fetch: async (_url: string, init: RequestInit) => {
+        if (options.failing) return new Response(null, { status: 500 });
+        rows.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return new Response(null, { status: 204 });
+      },
+    }),
+  };
 }
 
 // The agent record

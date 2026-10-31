@@ -275,7 +275,7 @@ test("the feed and the refresh mint the Portal CSRF cookie when the request has 
     const set = res.headers.get("Set-Cookie") ?? "";
     const { csrf } = (await res.json()) as { csrf: string };
     assert.match(csrf, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    assert.ok(set.startsWith(`${PORTAL_CSRF_COOKIE}=${csrf};`), `${path} did not set the body's csrf as the cookie: ${set}`);
+    assert.ok(set.startsWith(`__Secure-${PORTAL_CSRF_COOKIE}=${csrf};`), `${path} did not set the body's csrf as the cookie: ${set}`);
     for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/portal", "Max-Age=43200"]) {
       assert.ok(set.includes(attribute), `the cookie lacks ${attribute}: ${set}`);
     }
@@ -293,7 +293,7 @@ test("a malformed Portal CSRF cookie is replaced, not echoed", async () => {
   const res = await handleOpsFeed(await signedWithCsrf(OPS_FEED_PATH, "not-a-token"), env(), NOW, { feed });
   const { csrf } = (await res.json()) as { csrf: string };
   assert.notEqual(csrf, "not-a-token");
-  assert.ok((res.headers.get("Set-Cookie") ?? "").startsWith(`${PORTAL_CSRF_COOKIE}=${csrf};`));
+  assert.ok((res.headers.get("Set-Cookie") ?? "").startsWith(`__Secure-${PORTAL_CSRF_COOKIE}=${csrf};`));
 });
 
 test("the feed and the refresh refuse a bearer with 403 and send an anonymous reader to sign in", async () => {

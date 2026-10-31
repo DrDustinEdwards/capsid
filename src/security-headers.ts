@@ -1,29 +1,17 @@
 import { buildPolicy, reportingEndpoints } from "@dustinedwards/site-runtime/csp";
 import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
+import { capsidMcp, capsidPortal } from "@dustinedwards/site-runtime/sites";
 import { MCP_HOST } from "./mcp-host";
+import { PORTAL_HOST } from "./portal-host";
 
-export type SurfaceClass = "html" | "json" | "other";
-
-// THE ENFORCED HEADERS COME FROM THE PACKAGE (CLAUDE.md is silent; conventions and
-// capsid/research/centralize-build-jobs.md, D6.3). @dustinedwards/security-headers holds OWASP's
-// defaults, so none is typed here. Capsid keeps what the package cannot express, and names it:
-//   - Cross-Origin-Opener-Policy-Report-Only: COOP ships on trial, never enforced, pending a
-//     demonstrated case and a ruling, so the package's enforced COOP is removed below.
-//   - The report-only CSP on non-HTML and the consent dialog's enforced CSP (CONSENT_DIALOG_HEADERS,
-//     set by routes.ts). Neither is a page policy: both leave form-action out (below), which
-//     buildContentSecurityPolicy always writes, so they go through the package's plain buildPolicy.
-// No preload on HSTS: that is a vendor-list submission and effectively irreversible.
-export const CAPSID_STANDARD_HEADERS: Readonly<Record<string, string>> = buildSecurityHeaders({
-  overrides: {
-    "Cross-Origin-Opener-Policy": {
-      value: null,
-      reason: "COOP is on trial as Report-Only (COOP_REPORT_ONLY) pending a demonstrated case and a ruling",
-    },
-  },
-});
-
-export const HSTS = CAPSID_STANDARD_HEADERS["Strict-Transport-Security"];
-export const PERMISSIONS_POLICY = CAPSID_STANDARD_HEADERS["Permissions-Policy"];
+// THE HEADERS COME FROM THE PACKAGE: each host's set is its entry in site-runtime's registry (./sites), the same
+// entry the live check (site-runtime-security) grades against, so none is typed here. The Portal host sends the
+// standard exactly, COOP same-origin included: its sign-in is a full-page redirect to Access. The MCP host sends no
+// COOP: its one page is the /authorize consent dialog, which MCP clients open in a popup and wait on through
+// window.opener, and same-origin would sever that. No preload on HSTS: that is a vendor-list submission and
+// effectively irreversible.
+const MCP_SET = buildSecurityHeaders({ site: capsidMcp });
+const PORTAL_SET = buildSecurityHeaders({ site: capsidPortal });
 
 export const REPORT_PATH = "/csp-report";
 // The sink by its full address on the MCP host, which Access does not cover. The Portal's host
@@ -35,15 +23,14 @@ const REPORTING_ENDPOINTS = reportingEndpoints("csp", REPORT_URL);
 // (backup.ts) reaps what is left.
 export const REPORT_PREFIX = "reports/csp/";
 
-// Report-Only, never enforced. form-action is deliberately absent.
-export const CSP_REPORT_ONLY_NON_HTML = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]);
-
-export const COOP_REPORT_ONLY = "same-origin";
+// The policy on every response that names none of its own (the Portal page and the consent dialog do): nothing
+// loads, nothing may frame it, no <base>. A JSON or text answer needs none of that, and an HTML page left without a
+// policy gets the strictest one rather than none. form-action is deliberately absent, as below.
+const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]);
 
 // The OAuth consent dialog's own headers (src/routes.ts, renderApprovalDialog), less
-// its per-request Set-Cookie. Kept here so node can import them: routes.ts cannot load
-// under node --test, and test/counts.test.ts derives the enforced header count from
-// this object.
+// its per-request Set-Cookie; withSecurityHeaders adds the shared set. Kept here so node
+// can import them: routes.ts cannot load under node --test.
 //
 // The dialog has an inline <style> and posts a form back to /authorize. No scripts or
 // images, so everything else is locked down.
@@ -60,10 +47,7 @@ export const COOP_REPORT_ONLY = "same-origin";
 // because a remembered approval (removed since) 302'd out of the GET and never submitted a form.
 export const CONSENT_DIALOG_HEADERS: Readonly<Record<string, string>> = {
   "Content-Type": "text/html;charset=utf-8",
-  "Content-Security-Policy": buildPolicy(["default-src 'none'", "style-src 'unsafe-inline'", "base-uri 'none'", "frame-ancestors 'none'"]),
-  "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "no-referrer",
-  "X-Frame-Options": "DENY",
+  "Content-Security-Policy": buildPolicy(["default-src 'none'", "style-src 'unsafe-inline'", "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]),
 };
 
 // No Origin passes, same-origin passes, claude.ai passes. Everything else is refused.
@@ -77,37 +61,14 @@ export function mcpOriginProblem(request: Request): string | null {
   return `forbidden: Origin ${origin} is not allowed on /mcp. This endpoint accepts same-origin requests, https://claude.ai, and clients that send no Origin header.`;
 }
 
-export function classifySurface(contentType: string | null): SurfaceClass {
-  if (!contentType) return "other";
-  const ct = contentType.toLowerCase();
-  if (ct.includes("text/html")) return "html";
-  // Covers application/json and the +json suffix family (problem+json,
-  // reports+json), which is what the provider and the MCP handler emit.
-  if (ct.includes("json")) return "json";
-  return "other";
+/** The set a response on `host` leaves with, where it has not set the header itself. */
+export function securityHeadersFor(host: string): Record<string, string> {
+  // no-store is applied by withCacheDefault, not here: /health is exempt and must stay cacheable.
+  return { ...(host === PORTAL_HOST ? PORTAL_SET : MCP_SET), "Reporting-Endpoints": REPORTING_ENDPOINTS, "Content-Security-Policy": DEFAULT_CSP };
 }
 
-export function securityHeadersFor(surface: SurfaceClass): Record<string, string> {
-  const base: Record<string, string> = {
-    ...CAPSID_STANDARD_HEADERS,
-    "Reporting-Endpoints": REPORTING_ENDPOINTS,
-  };
-
-  if (surface === "html") {
-    return { ...base, "Cross-Origin-Opener-Policy-Report-Only": COOP_REPORT_ONLY };
-  }
-
-  // no-store is already applied by withCacheDefault; repeating it here would
-  // break /health, which is exempt and must stay cacheable.
-  return {
-    ...base,
-    "Content-Security-Policy-Report-Only": CSP_REPORT_ONLY_NON_HTML,
-  };
-}
-
-export function withSecurityHeaders(response: Response): Response {
-  const surface = classifySurface(response.headers.get("Content-Type"));
-  const wanted = securityHeadersFor(surface);
+export function withSecurityHeaders(response: Response, host: string = MCP_HOST): Response {
+  const wanted = securityHeadersFor(host);
 
   const absent = Object.entries(wanted).filter(([k]) => !response.headers.has(k));
   if (absent.length === 0) return response;

@@ -32,10 +32,14 @@ const siteData = (AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: 
 
 /** The week each bar of a weekly series ends on, labeled as the numbers page does. @param {any} stats */
 export function weekLabels(stats) {
-  const end = new Date(Date.parse(`${stats.as_of}T00:00:00Z`) - 86_400_000);
-  return stats.jobs.completed_by_week.map((/** @type {number} */ _c, /** @type {number} */ i, /** @type {number[]} */ all) =>
-    new Date(end.getTime() - (all.length - 1 - i) * 7 * 86_400_000).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" })
-  );
+  return weekEnds(stats).map((d) => d.toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }));
+}
+
+/** The last day of each of those weeks, oldest first: the x of the line and area charts, which read dates.
+ * @param {any} stats @returns {Date[]} */
+export function weekEnds(stats) {
+  const end = Date.parse(`${stats.as_of}T00:00:00Z`) - 86_400_000;
+  return stats.jobs.completed_by_week.map((/** @type {number} */ _c, /** @type {number} */ i, /** @type {number[]} */ all) => new Date(end - (all.length - 1 - i) * 7 * 86_400_000));
 }
 
 /**
@@ -240,7 +244,7 @@ ${more("doc-search", "How search works")}
 <h3 class="kb-head">Start a session <span>The same notes</span></h3>
 <p class="kb-actions"><button type="button" class="cap-btn" data-variant="primary" data-start>Start a session</button><button type="button" class="cap-btn" data-write disabled>Write a note</button></p>
 <ol class="kb-brief">${BRIEF.map(([name, path, kb]) => `<li data-brief><span class="kb-doc"><span class="kb-title">${name}</span><code>${path}</code></span><span class="kb-size">${kb} KB</span></li>`).join("")}<li data-brief data-mine hidden><span class="kb-doc"><span class="kb-title">Your note from last session</span><code>sample/sessions/2026-10-25.md</code></span><span class="kb-size">1 KB</span></li></ol>
-<p class="kb-budget"><progress max="40" value="${total}" data-budget>${total} of 40 KB</progress><span data-budget-words>${total} KB of the 40 KB limit. Nothing cut.</span></p>
+<div class="kb-budget"><div class="cap-meter" data-cap="meter" data-size="sm"><span class="cap-meter-label" id="kb-budget-label">The session's brief</span><span class="cap-meter-value" data-budget-words>${total} KB of the 40 KB limit. Nothing cut.</span><span class="cap-meter-bar" role="meter" aria-labelledby="kb-budget-label" aria-valuemin="0" aria-valuemax="40" aria-valuenow="${total}" aria-valuetext="${total} KB of the 40 KB limit" data-budget><span class="cap-meter-fill"></span></span></div></div>
 <p class="kb-said" role="status" data-session-said>One call gives a new session the project's notes.</p>
 ${more("session-start", "How a session starts")}
 </div>
@@ -334,6 +338,7 @@ export function homePage(model, stats, tools, codeIndex) {
   const body = [hero(stats), knowledge(model, stats), board(tools), tour(model, stats), holds(model, stats, tools, codeIndex)].join("\n");
   return layout({
     title: "Capsid: shared memory and a fact-check for AI coding agents",
+    fullTitle: true,
     description: DESCRIPTION,
     path: "/",
     body,

@@ -1,7 +1,7 @@
 // Client ID Metadata Documents, as the provider fetches them. A client's id is the https
 // URL of its metadata document, and the provider fetches that URL when the client
 // appears at /authorize and /token. (/register takes only the allowlisted Grok, Gemini
-// and ChatGPT callbacks, src/index.ts, so test clients come from here.)
+// and ChatGPT callbacks, so test clients come from here.)
 //
 // The documents are served by a wrapper around globalThis.fetch installed when this
 // module loads, not by a vi spy, because the flows restore their spies halfway
@@ -26,12 +26,17 @@ export function cimdClient(redirects: string[], name = "integration-client"): st
   return url;
 }
 
-// The document for a URL this module published, a 404 for any other client URL, or null
+// Takes a client's document down, so its id no longer resolves.
+export function withdrawCimdClient(url: string): void {
+  documents.delete(url);
+}
+
+// The document for a URL this module published, or a 404 for one it withdrew, or null
 // for any URL that is not a client document.
 export function cimdResponse(url: string): Response | null {
   if (!url.startsWith("https://client.example.com/oauth/")) return null;
   const doc = documents.get(url);
-  // no-store, so the provider's cache never answers from an earlier test's fetch.
+  // no-store, so the provider's cache cannot keep a withdrawn document alive.
   if (!doc) return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
   return Response.json(doc, { headers: { "Cache-Control": "no-store" } });
 }

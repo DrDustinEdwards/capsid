@@ -712,13 +712,13 @@ describe("the job actions against real D1", () => {
 describe("the site actions against real D1", () => {
   it("a site edit previewed, then edited elsewhere, is refused at perform and the row keeps the other edit", async () => {
     const row = await siteRow("foxing");
-    const params = { namespace: "foxing", revision: String(row?.revision), name: "Foxing", origin: "https://foxing.app", health_path: "/health", platform: "cloudflare" };
+    const params = { namespace: "foxing", revision: String(row?.revision), name: "Foxing", origin: "https://foxing.app", health_path: "/api/health", platform: "cloudflare" };
     const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_edit", params } })).json()) as PortalPreview;
     await env.DB.prepare("UPDATE ops_sites SET name = 'Foxing (renamed)', revision = revision + 1 WHERE namespace = 'foxing'").run();
     const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/changed since the preview/);
-    expect(await siteRow("foxing")).toMatchObject({ name: "Foxing (renamed)", health_path: null });
+    expect(await siteRow("foxing")).toMatchObject({ name: "Foxing (renamed)", health_path: "/health" });
     expect((await auditRows()).some((r) => r.action === "portal-site_edit"), "a refused edit wrote a click row").toBe(false);
   });
 

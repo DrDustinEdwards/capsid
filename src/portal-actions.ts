@@ -4,6 +4,8 @@ import { performControl, previewControl } from "./controls";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
 import { type PortalUser, portalDisplay, portalGate, portalSignOutCookies, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
+import { LOGOUT_HEADERS } from "@dustinedwards/site-runtime/headers";
+import { refuseCrossSite } from "@dustinedwards/site-runtime/origin";
 import type { Env } from "./env";
 import { capsidStatus } from "./status";
 import { readBoundedText } from "./signed-requests";
@@ -59,15 +61,10 @@ export async function gateActionRequest(request: Request, env: Env, now: Date): 
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate;
 
-  // A browser names where a request came from. Absent (an older browser, or curl with
-  // the cookies) is let through to the CSRF check; any other site is refused here.
-  const site = request.headers.get("Sec-Fetch-Site");
-  if (site !== null && site !== "same-origin") {
-    return {
-      ok: false,
-      response: textResponse(`forbidden: this request came from ${site}, not from Capsid Portal itself (Sec-Fetch-Site: ${site}). Nothing was read or changed.`, 403),
-    };
-  }
+  // A browser names where a request came from (Sec-Fetch-Site, else Origin); another site is refused here.
+  // Neither header (an older browser, or curl with the cookies) is let through to the CSRF check.
+  const crossSite = refuseCrossSite(request);
+  if (crossSite) return { ok: false, response: crossSite };
 
   const bounded = await readBoundedText(request, BODY_MAX_BYTES);
   if (!bounded.ok) return { ok: false, response: new Response(null, { status: 413, headers: { "Cache-Control": "no-store" } }) };
@@ -181,7 +178,8 @@ export async function handlePortalActivity(request: Request, env: Env, now: Date
 export async function handlePortalSignOut(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
   if (!gated.ok) return gated.response;
-  const headers = new Headers({ "Cache-Control": "no-store" });
+  // Clear-Site-Data too, so the browser drops what the Portal left behind (OSHP's logout headers).
+  const headers = new Headers({ "Cache-Control": "no-store", ...LOGOUT_HEADERS });
   for (const cookie of portalSignOutCookies(portalCookiePath(new URL(request.url)))) headers.append("Set-Cookie", cookie);
   return new Response(null, { status: 204, headers });
 }

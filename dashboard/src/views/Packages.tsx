@@ -4,9 +4,13 @@ import { fetchPackageHistory, useAnswer } from "../lib/api";
 import { ago, fmtN, ms } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "../types";
+import { ChartFrame } from "capsomer/react/chart-frame";
+import "capsomer/chart-frame.css";
 import { Panel } from "capsomer/react/panel";
+import { areaChart } from "enarratio/lite/area";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { hasPackages } from "../lib/derive";
+import { Completeness } from "./Completeness";
 import { SharedCode } from "./SharedCode";
 import { NoSnapshot, PageHead } from "./shared";
 
@@ -21,42 +25,25 @@ function Part({ part, children }: { part: { state: "ok" } | { state: "none" | "e
 }
 
 
-// Daily downloads as an area, the former name's days in the muted tone. Built here, in
-// the view's own chunk, rather than in the shared charts, which ship with the overview.
+// Daily downloads as an area, one series per name the package has had. Built here, in the
+// view's own chunk, rather than in the shared charts, which ship with the overview.
 function DownloadsChart({ data }: { data: PortalPackageHistory }) {
-  const W = 720;
-  const H = 150;
-  const B = 18;
-  const firstDay = data.days[0];
-  const lastDay = data.days[data.days.length - 1];
-  if (!firstDay || !lastDay) return <p className="faint">npm has counted no downloads for this package yet.</p>;
-  const first = ms(`${firstDay.day}T00:00:00Z`);
-  const last = ms(`${lastDay.day}T00:00:00Z`);
-  const span = Math.max(1, last - first);
-  const max = Math.max(1, ...data.days.map((d) => d.downloads));
-  const x = (day: string) => ((ms(`${day}T00:00:00Z`) - first) / span) * (W - 2) + 1;
-  const y = (n: number) => H - B - (n / max) * (H - B - 6);
+  if (!data.days.length) return <ChartFrame noData={{ title: `Daily downloads of ${data.name}`, reason: "npm has counted no downloads for this package yet." }} />;
   const total = data.days.reduce((a, d) => a + d.downloads, 0);
-  const label = `Daily downloads of ${data.name}${data.formerly ? ` and its former name ${data.formerly}` : ""}, ${data.first_day} to ${data.last_day}: ${fmtN(total)} in all, at most ${fmtN(max)} in a day.`;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} className="chart">
-      <line x1="0" x2={W} y1={H - B} y2={H - B} stroke="var(--line)" />
-      {data.days.map((d) => (
-        <line key={`${d.name}-${d.day}`} x1={x(d.day)} x2={x(d.day)} y1={H - B} y2={y(d.downloads)} stroke={d.name === data.name ? "var(--accent)" : "var(--dim)"} strokeWidth="2">
-          <title>{`${d.day}: ${fmtN(d.downloads)} (${d.name})`}</title>
-        </line>
-      ))}
-      <text x="2" y={H - 4} fontSize="11" fontFamily="var(--ui)" fill="var(--muted)">
-        {data.first_day}
-      </text>
-      <text x={W - 2} y={H - 4} textAnchor="end" fontSize="11" fontFamily="var(--ui)" fill="var(--muted)">
-        {data.last_day}
-      </text>
-      <text x="2" y="12" fontSize="11" fontFamily="var(--ui)" fill="var(--muted)">
-        {`max ${fmtN(max)} a day`}
-      </text>
-    </svg>
-  );
+  const max = Math.max(...data.days.map((d) => d.downloads));
+  const opts = {
+    data: data.days,
+    x: "day",
+    y: "downloads",
+    series: "name",
+    xLabel: null,
+    yLabel: "Downloads a day",
+    height: 200,
+    title: `Daily downloads of ${data.name}`,
+    alt: `Daily downloads of ${data.name}${data.formerly ? ` and its former name ${data.formerly}` : ""}, ${data.first_day} to ${data.last_day}: ${fmtN(total)} in all, at most ${fmtN(max)} in a day.`,
+    source: { name: "npm downloads API", href: `https://www.npmjs.com/package/${encodeURIComponent(data.name)}` },
+  } as const;
+  return <ChartFrame draw={(width) => areaChart({ ...opts, width })} />;
 }
 
 function HistoryPanel({ name }: { name: string }) {
@@ -223,10 +210,11 @@ function PackagePanel({ cfg, snap }: { cfg: OpsPackageConfig; snap: PackageSnaps
 
 // One page for one kind of thing (the UX audit's m1): Published, the npm packages configured
 // in Settings (only while one is), and Shared, the git-pinned packages the apps share (what
-// was the Shared code page). The tab is in the address (?tab=shared); /shared lands there.
+// was the Shared code page), and Completeness, devkit's scoreboard of every area of that shared code
+// on every live site. The tab is in the address (?tab=shared); /shared lands there.
 export function Packages() {
   const { feed } = useApp();
-  const tabs = [...(hasPackages(feed) ? [{ id: "published", label: "Published" }] : []), { id: "shared", label: "Shared" }];
+  const tabs = [...(hasPackages(feed) ? [{ id: "published", label: "Published" }] : []), { id: "shared", label: "Shared" }, { id: "complete", label: "Completeness" }];
   const asked = useTabParam();
   const tab = tabs.some((t) => t.id === asked) ? asked! : tabs[0]!.id;
   return (
@@ -234,7 +222,7 @@ export function Packages() {
       <PageHead title="Packages" />
       <PageTabs label="Packages" path="/packages" tabs={tabs} current={tab} />
       <div className="embedded" id={tab}>
-        {tab === "shared" ? <SharedCode /> : <Published />}
+        {tab === "shared" ? <SharedCode /> : tab === "complete" ? <Completeness /> : <Published />}
       </div>
     </div>
   );

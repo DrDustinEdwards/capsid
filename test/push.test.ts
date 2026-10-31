@@ -8,12 +8,14 @@ import { PORTAL_CSRF_HEADER } from "../src/portal-actions.ts";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH, pushTick, type PushPayload } from "../src/push.ts";
 import type { PortalPush } from "../src/ops-types/views.ts";
+import type { SiteProbe } from "../src/ops-types/sites.ts";
+import { nextPulse, SITE_PULSE_KEY, type PulseSite } from "../src/site-pulse.ts";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 import { applyWrite, selectRows, type Row, type TableSpec } from "./fake-sql.ts";
 import { fakeKv } from "./fakes.ts";
 
 // Phone alerts (docs/design/design-merge-pipeline.md section 5, PR 7; DECIDE 5 and 6 of
-// 2026-10-09): exactly five triggers, each sent once, never with an Approve button, never
+// 2026-10-09): exactly seven triggers, each sent once, never with an Approve button, never
 // with a title. The encryption itself is in test/web-push.test.ts.
 
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -120,7 +122,7 @@ async function decrypt(body: Uint8Array): Promise<string> {
   return new TextDecoder().decode(padded.slice(0, padded.lastIndexOf(2)));
 }
 
-// The six triggers
+// The seven triggers
 
 test("a typed pull request alerts only after 2 hours waiting, counted from the first tick that saw it", async () => {
   const w = world({ awaiting: [typed(7)] });
@@ -200,6 +202,31 @@ test("a job at the correction cap alerts; a question alerts only past 4 hours on
 });
 
 // Each sent once, never a button
+
+test("a site alerts when down on two probes in a row and when back, once each, and degraded once a day", async () => {
+  const w = world();
+  const s = service();
+  const at = (min: number) => new Date(NOW.getTime() + min * 60_000);
+  const probe = (state: SiteProbe["state"], error: string | null = null): SiteProbe => ({
+    namespace: "sample", name: "Sample", origin: "https://sample.example.com", health_path: "/health", platform: "cloudflare",
+    state, http_status: null, latency_ms: null, sha: null, error, checked_at: NOW.toISOString(),
+  });
+  let pulse: PulseSite | undefined;
+  const step = async (min: number, p: SiteProbe) => {
+    pulse = nextPulse(pulse, p, at(min));
+    await w.kv.kv.put(SITE_PULSE_KEY, JSON.stringify({ sample: pulse }));
+    return (await pushTick(w.env, at(min), s.fetcher)).sent;
+  };
+  assert.deepEqual(await step(0, probe("down", "root answered 522")), [], "one down probe is not an outage");
+  assert.deepEqual(await step(5, probe("down", "root answered 522")), [`site-down:sample:${at(5).toISOString()}`]);
+  assert.deepEqual(await step(10, probe("down", "root answered 522")), []);
+  assert.deepEqual(await step(15, probe("ok")), [`site-up:sample:${at(5).toISOString()}`]);
+  assert.deepEqual(await step(20, probe("degraded", "backup: 38h old")), ["site-degraded:sample:2026-10-11"]);
+  assert.deepEqual(await step(25, probe("degraded", "backup: 38h old")), []);
+  assert.deepEqual(await step(24 * 60, probe("degraded", "backup: 38h old")), ["site-degraded:sample:2026-10-12"]);
+  assert.match(s.got[0]!.body, /522/);
+  assert.equal(s.got.at(-1)!.body, "backup: 38h old");
+});
 
 test("an item is sent once, and the next tick sends nothing new", async () => {
   const w = world({ deploys: [{ repo: "owner/capsid", namespace: "capsid", run_id: 1, head_sha: "a".repeat(40), outcome: "rolled_back", recorded_at: sqlTime(-H) }] });

@@ -4,6 +4,8 @@ import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import { runSiteRepair, type RepairOutcome } from "./site-repair";
 import { tokenSet, type FetchLike } from "./site-operator";
 import { DAY_MS } from "./time";
+import { failingCheckNames } from "./health-format";
+import { healthUrl } from "./ops-sites";
 
 // THE WATCHER'S SITE REPAIRS (job_09e5f6cbf782), so a site's own watchdog Worker can be
 // retired later. On each watcher pass, for every site that opted in (ops_sites.operator):
@@ -64,14 +66,10 @@ async function readHealth(fetchImpl: FetchLike, url: string): Promise<Reading> {
 
 const healthy = (r: Reading) => r.status === 200 && (r.body as { ok?: unknown } | null)?.ok === true;
 
-/** The failing checks' names. ok === false, not !ok, so a check missing the field is not
- *  counted as failing (the site's own failingCheckNames). */
+/** The failing checks' names, read as the watcher reads every health body
+ *  (src/health-format.ts), each cut to one line. */
 export function failingChecks(body: unknown): string[] {
-  const checks = (body as { checks?: unknown } | null)?.checks;
-  if (!Array.isArray(checks)) return [];
-  return checks
-    .filter((c) => c && typeof c === "object" && (c as { ok?: unknown }).ok === false && typeof (c as { name?: unknown }).name === "string")
-    .map((c) => clip((c as { name: string }).name));
+  return failingCheckNames((body as { checks?: unknown } | null)?.checks).map(clip);
 }
 
 /** What to do about a failing health reading: the repairs, in the configuration's order,
@@ -111,14 +109,15 @@ async function watchSite(env: Env, site: OpsSiteConfig & { origin: string; opera
   }
 
   if (!site.health_path) return { finding: null, read: true, lines, weekly };
-  const reading = await readHealth(fetchImpl, site.origin + site.health_path);
+  const url = healthUrl(site.origin, site.health_path);
+  const reading = await readHealth(fetchImpl, url);
   // A reading that never happened names no drift: the site-down probe covers an
   // unreachable site, and this check does not count as run, so nothing is cleared.
   if (reading.status === 0) return { finding: null, read: false, lines: [...lines, `${site.namespace}: health not read (${reading.error})`], weekly };
   if (healthy(reading)) return { finding: null, read: true, lines, weekly };
 
   const failing = failingChecks(reading.body);
-  const evidence = [`health: ${site.origin}${site.health_path} answered ${reading.status}; failing: ${failing.join(", ") || "(none named)"}`];
+  const evidence = [`health: ${url} answered ${reading.status}; failing: ${failing.join(", ") || "(none named)"}`];
   const plan = repairPlan(failing, operator);
   if ("none" in plan) {
     evidence.push(plan.none);
@@ -133,7 +132,7 @@ async function watchSite(env: Env, site: OpsSiteConfig & { origin: string; opera
       lines.push(`${site.namespace}: ${line}`);
       if (!outcome.ran || !outcome.call.ok || outcome.call.converged === false) missed = true;
     }
-    const recheck = await readHealth(fetchImpl, site.origin + site.health_path);
+    const recheck = await readHealth(fetchImpl, url);
     if (!missed && healthy(recheck)) return { finding: null, read: true, lines, weekly };
     evidence.push(
       recheck.status === 0

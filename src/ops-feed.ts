@@ -1,6 +1,6 @@
 import { gatherInbox } from "./inbox";
 import { adminAgentForEmail } from "./agents";
-import { getCookie } from "./auth";
+import { cookieName, getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
 import { loadMergePolicy } from "./auto-merge-policy";
 import { readSafetyReport } from "./merge-safety";
@@ -82,9 +82,10 @@ export function portalCsrf(request: Request): { value: string; setCookie: string
   const presented = getCookie(request, PORTAL_CSRF_COOKIE);
   if (presented !== null && CSRF_SHAPE.test(presented)) return { value: presented, setCookie: null };
   const value = crypto.randomUUID();
+  const path = portalCookiePath(new URL(request.url));
   return {
     value,
-    setCookie: `${PORTAL_CSRF_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=${portalCookiePath(new URL(request.url))}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`,
+    setCookie: `${cookieName(PORTAL_CSRF_COOKIE, path)}=${value}; HttpOnly; Secure; SameSite=Lax; Path=${path}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`,
   };
 }
 

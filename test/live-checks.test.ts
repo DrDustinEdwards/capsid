@@ -287,7 +287,7 @@ test("PLANT: a missing header, a report-only policy and no policy at all each fi
 
 test("the headers rule counts a page read, and a page it cannot read is unread, not clean", async () => {
   const body = "- site sample headers /";
-  const ok = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => new Response(page(""), { headers: { "content-type": "text/html", ...Object.fromEntries(goodHeaders()) } }) }), NOW);
+  const ok = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => new Response(page(""), { headers: { "content-type": "text/html; charset=utf-8", ...Object.fromEntries(goodHeaders()) } }) }), NOW);
   assert.deepEqual(ok.findings, []);
   assert.deepEqual(ok.summary, { pages_expected: 1, pages_read: 1, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 });
   const bare = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => html(page("")) }), NOW);

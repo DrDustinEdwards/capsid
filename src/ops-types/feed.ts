@@ -185,6 +185,43 @@ export interface SharedCodeView {
   packages: SharedCodePackage[];
 }
 
+// The completeness scoreboard (src/completeness.ts): devkit's daily board, every area of the
+// shared code against the package and every live site, filled only from live checks and
+// verifiers' verdicts.
+export type CompletenessStatus = "complete" | "partial" | "missing" | "n/a";
+
+export interface CompletenessCell {
+  status: CompletenessStatus;
+  reason: string;
+  evidence: string[];
+  // Daily runs in a row its checks passed; null for the package, which has no live check.
+  clean_days: number | null;
+  // The first errors of a failing check, with the proof URL first in each detail.
+  errors: Array<{ check: string; detail: string }>;
+}
+
+export interface CompletenessArea {
+  id: number;
+  name: string;
+  builder: string;
+  verifier: string | null;
+  // The merged pull requests labeled for the area, or why they could not be counted.
+  lines: { prs: number; added: number; removed: number } | { error: string } | null;
+  cells: Record<string, CompletenessCell>;
+}
+
+export interface CompletenessView {
+  read: string;
+  // The newest run on the board, or null when it could not be read (error says why).
+  as_of: string | null;
+  error: string | null;
+  finished: boolean;
+  // True while the lines count public repositories only.
+  public_token: boolean;
+  sites: Array<{ id: string; name: string; origin: string }>;
+  areas: CompletenessArea[];
+}
+
 // What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, capsid_run_improve action
 // status's needs_dustin, and the Portal's Needs you page all carry this one shape.
 export type InboxSeverity = "needs-you" | "failing" | "none";

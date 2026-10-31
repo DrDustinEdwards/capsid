@@ -33,13 +33,16 @@ on:
 permissions:
   contents: read
 
-# Rapid pushes supersede each other: a newer run on the same ref cancels the older one,
-# so two push deploys cannot interleave. Keyed on the event name too, because the
-# six-hourly schedule run shares refs/heads/master with push runs and must never cancel
-# a deploy mid-flight, nor be canceled by one.
+# One run per ref at a time, so two push deploys cannot interleave. On a pull request a
+# newer push cancels the older run. On master a run in progress finishes and GitHub keeps
+# only the newest waiting run behind it, so a burst of merges ends in a deploy of its
+# newest commit: canceling in progress let seven merges in 90 minutes each cancel the
+# deploy before it, and none shipped (2026-10-31). Keyed on the event name too, because
+# the six-hourly schedule run shares refs/heads/master with push runs and must never
+# cancel a deploy mid-flight, nor be canceled by one.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # THIRD PARTY ACTIONS ARE PINNED BY COMMIT SHA, not by tag: a tag is a moving pointer
 # its owner can repoint, and these actions run beside the deploy job's secrets. The
@@ -229,10 +232,13 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # No npm ci on purpose: scripts/verify-live.mjs imports nothing outside the Node
-      # standard library and runs on global fetch. Keeping it dependency-free is what
-      # lets the live gate run even if install is broken. The rollback step installs
-      # from the lockfile itself, only when it is about to roll back.
+      # scripts/verify-live.mjs grades headers with site-runtime's checkSecurityHeaders,
+      # so the gate installs from the lockfile, with no install scripts. Without it the
+      # import failed with exit 1 and rolled back good deploys (2026-10-31). A failed
+      # install fails this step before verify:live records an exit code, so it never
+      # rolls anything back.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       # EXPECT_SHA is this run's commit when deploy succeeded, and master head on a
       # schedule run. Empty otherwise: the ternary below is the behavior.

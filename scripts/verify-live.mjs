@@ -10,14 +10,15 @@
 // Two hard requirements. Violating either makes this gate pass against a fully broken
 // server:
 //
-//   1. THE FORM, NOT A REDIRECT. Every authorization renders the consent form (no
-//      approval is remembered), and gate 3 asserts it does. A 302 at gate 3 means the
-//      dialog was skipped and the run is VOID. The probe client is a fixed metadata
-//      document (scripts/cimd-probe-lib.mjs), never a registered one.
+//   1. A FORM, NEVER A REDIRECT. site-runtime's loginHandler renders consent on every
+//      GET /authorize, and gate 3 asserts the consent FORM renders. A 302 at gate 3
+//      means something skipped consent and the run is VOID. The probe client is a fixed
+//      metadata document (scripts/cimd-probe-lib.mjs), never a registered one.
 //
 //   2. POLL, NEVER SINGLE-FETCH, on header assertions. The first post-deploy read can
 //      return the previous version's headers.
 
+import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/check";
 import { CANARY_CLIENT, OAUTH_KV } from "./bindings.mjs";
 import { accessRedirectProblem } from "./access-redirect-lib.mjs";
 import { canaryReport, checkCanary } from "./canary-lib.mjs";
@@ -291,14 +292,13 @@ async function gateConsentForm(clientId) {
     return null;
   }
   const html = resp.text;
-  const hasForm = /<form[^>]+method=["']post["'][^>]*action=["']\/authorize["']/i.test(html);
-  const csrf = html.match(/name=["']csrf["'][^>]*value=["']([^"']+)["']/i)?.[1];
-  const req = html.match(/name=["']req["'][^>]*value=["']([^"']+)["']/i)?.[1];
-  const cookie = resp.headers.get("set-cookie") ?? "";
-  const csrfCookie = cookie.match(/capsid_csrf=([^;]+)/)?.[1];
-  const passed = resp.status === 200 && hasForm && Boolean(csrf) && Boolean(req) && Boolean(csrfCookie);
-  record("3 consent form renders", passed, `status=${resp.status} form=${hasForm} csrf_field=${Boolean(csrf)} req_field=${Boolean(req)} csrf_cookie=${Boolean(csrfCookie)}`);
-  return passed ? { csrf, req, csrfCookie } : null;
+  const hasForm = /<form[^>]+method=["']post["']/i.test(html);
+  const handle = html.match(/name=["']handle["'][^>]*value=["']([^"']+)["']/i)?.[1];
+  // The provider binds the handle to this browser with a cookie; gate 5 sends it back.
+  const cookies = resp.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+  const passed = resp.status === 200 && hasForm && Boolean(handle) && Boolean(cookies);
+  record("3 consent form renders", passed, `status=${resp.status} form=${hasForm} handle_field=${Boolean(handle)} consent_cookie=${Boolean(cookies)}`);
+  return passed ? { handle, cookies } : null;
 }
 
 // Gate 4: the consent CSP cannot block the form's redirect chain. Polls, because
@@ -329,10 +329,10 @@ async function gateCsp(clientId) {
   record("4 consent CSP permits the chain", passed, passed ? `polls=${attempt} csp=${csp ?? "(none)"}` : `polls=${attempt} form-action present after ${POLL_ATTEMPTS} polls: ${csp}`);
 }
 
-// Gate 6: security headers, asserted per route class rather than per path.
+// Gate 6: security headers, graded by site-runtime's shared check against the MCP host's
+// registry entry (site-runtime ./sites), the same grading as the site-runtime-security bin.
 //
-// test/headers.test.ts proves the header function is right; only a live request proves
-// every response reaches it. workers-oauth-provider generates /token and both .well-known
+// Only a live request proves every response reaches the header layer. workers-oauth-provider generates /token and both .well-known
 // documents itself, outside src/, which is why those are listed.
 //
 // Two more checks ride the same loop:
@@ -395,25 +395,9 @@ async function gateSecurityHeaders(clientId) {
       if (status && resp.status !== status) problems.push(`${label}: status ${resp.status}, expected ${status}`);
       if (noStore && !/no-store/i.test(h("cache-control") ?? "")) problems.push(`${label}: cache-control ${h("cache-control") ?? "(none)"}, expected no-store`);
 
-      // Every class, no exception.
-      if (!h("strict-transport-security")) problems.push(`${label}: no HSTS`);
-      if (!h("x-content-type-options")) problems.push(`${label}: no nosniff`);
-
-      const isHtml = (h("content-type") ?? "").toLowerCase().includes("text/html");
-      if (cls === "html" && !isHtml) problems.push(`${label}: expected html, got ${h("content-type")}`);
-
-      if (isHtml) {
-        if (!h("referrer-policy")) problems.push(`${label}: no Referrer-Policy`);
-        if (!h("x-frame-options")) problems.push(`${label}: no X-Frame-Options`);
-        if (!h("permissions-policy")) problems.push(`${label}: no Permissions-Policy`);
-        // The enforced CSP the consent dialog sets for itself must survive the
-        // header layer untouched.
-        if (!h("content-security-policy")) problems.push(`${label}: lost its enforced CSP`);
-        // On trial, not enforced.
-        if (!h("cross-origin-opener-policy-report-only")) problems.push(`${label}: no COOP-Report-Only`);
-      } else {
-        if (!h("content-security-policy-report-only")) problems.push(`${label}: no CSP-Report-Only`);
-      }
+      // Every class, no exception: the set and an enforced policy.
+      for (const r of failures(checkSecurityHeaders(resp.headers, { site: "capsid-mcp" }))) problems.push(`${label}: ${r.name}: ${r.detail}`);
+      if (cls === "html" && !(h("content-type") ?? "").toLowerCase().includes("text/html")) problems.push(`${label}: expected html, got ${h("content-type")}`);
     }
     if (!lost && problems.length === 0) break;
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
@@ -436,17 +420,21 @@ async function gateSecurityHeaders(clientId) {
 // (scripts/access-redirect-lib.mjs says exactly what is checked). This is where the run
 // stops. It never follows the 302 and never touches Access.
 async function gateAccessRedirect(clientId, form) {
-  const body = new URLSearchParams({ csrf: form.csrf, req: form.req });
+  // Read only: the probe asks for no write grant, so the box stays unticked.
+  const body = new URLSearchParams({ handle: form.handle, decision: "approve" });
   let resp;
   try {
-    // Safe to retry: the csrf check compares the field with the cookie and consumes
-    // nothing (src/routes.ts), so a repeat POST is judged the same way as the first.
-    resp = await request(`${ORIGIN}/authorize`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: `capsid_csrf=${form.csrfCookie}` },
-      body: body.toString(),
-      redirect: "manual",
-    });
+    // Once only: the consent handle works once, so a retried POST would be refused.
+    resp = await request(
+      `${ORIGIN}/authorize`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: form.cookies },
+        body: body.toString(),
+        redirect: "manual",
+      },
+      1,
+    );
   } catch (err) {
     record("5 approve redirects to Access", COULD_NOT_RUN, noAnswer(err).message);
     return;

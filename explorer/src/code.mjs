@@ -207,7 +207,7 @@ ${[...folders].map(([folder, mods]) => `<div class="code-folder" id="${folderId(
   const body = `${pageHead([["/", "Overview"], ["/code/", "Code"], [systemPath(s.id), s.name]], "Code", `The code of ${escapeHtml(s.name)}`)}
 <p class="lead">Each module by folder, with two scores. CRAP shows its riskiest function: it rises when code is complex and its tests cover little of it. Over ${CRAP_CRIT} is critical, and over ${CRAP_WATCH} is worth a look. The mutation score is the share of planted bugs its tests catch. Under ${SCORE_WATCH}% is critical, and under ${SCORE_OK}% is worth a look. Each module links to its source on GitHub.</p>
 ${sections.join("\n")}`;
-  return layout({ title: `The code of ${s.name}, Capsid`, description: `${s.name}'s modules, import cycles and riskiest functions.`, path: codePath(s.id), body, asOf });
+  return layout({ title: `The code of ${s.name}`, description: `${s.name}'s modules, import cycles and riskiest functions.`, path: codePath(s.id), body, asOf });
 }
 
 /**
@@ -280,7 +280,7 @@ export function codeIndexPage(model, bySystem, totals, asOf) {
   const head = pageHead([["/", "Overview"]], "Code", "The code, measured", totals
     ? `${totals.lines.toLocaleString("en-US")} lines in ${totals.modules.toLocaleString("en-US")} modules and ${totals.functions.toLocaleString("en-US")} functions across ${totals.repos} public repos, measured after each push. Two scores flag risky code. CRAP rises when a function is complex and its tests cover little of it; over ${CRAP_CRIT} is critical. The mutation score is the share of planted bugs the tests catch; under ${SCORE_WATCH}% is critical.`
     : "No code maps have been published yet.");
-  if (!totals) return layout({ title: "Code, Capsid", description: "The public repos' code, measured.", path: "/code/", body: head, asOf });
+  if (!totals) return layout({ title: "Code", description: "The public repos' code, measured.", path: "/code/", body: head, asOf });
   const repoRows = repos
     .map((r) => {
       const fns = functionsOf(r.map);
@@ -320,5 +320,5 @@ ${weak.length ? `<section aria-labelledby="weak-title"><h2 id="weak-title">The w
 ${scroller("weak", `<table class="cap-table code-table" data-sortable><caption>By mutation score, lowest first</caption><thead><tr><th scope="col">Module</th><th scope="col">Repo</th><th scope="col">Functions</th><th scope="col">Mutation</th></tr></thead><tbody>${weak
     .map((x) => `<tr><th scope="row"><a href="${blobUrl(x.r.map, x.m.path)}">${escapeHtml(x.m.path)}</a></th><td>${escapeHtml(x.r.repo.split("/")[1])}</td><td>${x.m.functions.length}</td><td data-sort="${x.score}">${scoreStatus(x.score, "")}</td></tr>`)
     .join("")}</tbody></table>`, "The weakest-tested modules")}</section>` : ""}`;
-  return layout({ title: "Code, Capsid", description: `${totals.modules} modules across ${totals.repos} public repos, scored for risk and for how well their tests catch bugs.`, path: "/code/", body, asOf });
+  return layout({ title: "Code", description: `${totals.modules} modules across ${totals.repos} public repos, scored for risk and for how well their tests catch bugs.`, path: "/code/", body, asOf });
 }
