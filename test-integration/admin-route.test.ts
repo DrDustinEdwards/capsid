@@ -212,13 +212,13 @@ async function adminToken(): Promise<string> {
     new Request(`${ORIGIN}/authorize`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookieValues(dialog).join("; ") },
-      body: new URLSearchParams({ csrf: hidden(html, "csrf"), req: hidden(html, "req") }).toString(),
+      body: new URLSearchParams({ handle: hidden(html, "handle"), decision: "approve", allow_write: "1" }).toString(),
     })
   );
   expect(approved.status).toBe(302);
   const signIn = new URL(String(approved.headers.get("location")));
   const state = String(signIn.searchParams.get("state"));
-  const stateCookie = cookieValues(approved).find((c) => /^(__Host-|__Secure-)capsid_state=/.test(c)) ?? "";
+  const stateCookie = cookieValues(approved).join("; ");
   // Each stub signs with a key of its own under the same kid, and the verifier keeps the
   // keys it read per JWKS URL, so the last sign-in's key is dropped first.
   forgetKeys();

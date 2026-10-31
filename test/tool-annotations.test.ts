@@ -229,7 +229,7 @@ const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence
     evidence: [
       { file: "jobs-holder.ts", pattern: /\bverifyEvidence\(/ },
       { file: "job-outcomes.ts", pattern: /\bghFetch\(/ },
-      { file: "routine-fire.ts", pattern: /\bfetch\(url\b/ },
+      { file: "routine-fire.ts", pattern: /\bpostFire\(/ },
     ],
   },
   whats_next: {

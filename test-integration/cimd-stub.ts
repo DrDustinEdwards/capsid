@@ -1,7 +1,7 @@
 // Client ID Metadata Documents, as the provider fetches them. A client's id is the https
 // URL of its metadata document, and the provider fetches that URL when the client
 // appears at /authorize and /token. (/register takes only the allowlisted Grok, Gemini
-// and ChatGPT callbacks, src/dcr.ts, so test clients come from here.)
+// and ChatGPT callbacks, so test clients come from here.)
 //
 // The documents are served by a wrapper around globalThis.fetch installed when this
 // module loads, not by a vi spy, because the flows restore their spies halfway

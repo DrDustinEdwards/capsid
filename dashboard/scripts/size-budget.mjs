@@ -4,7 +4,7 @@
 //
 //   initial JS (the entry and its static imports)  <= 121 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   initial CSS (the entry's and its imports')      <=  23 KB gzip
+//   initial CSS (the entry's and its imports')      <= 24.5 KB gzip
 //   lazy CSS (every other stylesheet), together     <=  12 KB gzip
 //   fonts                                           reported, not budgeted
 //

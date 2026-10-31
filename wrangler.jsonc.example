@@ -114,6 +114,20 @@
       "bucket_name": "YOUR_R2_BUCKET"
     }
   ],
+  // TWO DURABLE OBJECTS from @dustinedwards/site-runtime, exported by src/index.ts.
+  //   RATE_LIMITER   the family's exact limiter (site-runtime/rate-limit): /mcp and
+  //                  /ops/mcp per caller, the CSP report sink, the public documents and
+  //                  the Access sync. Each fails closed when it cannot count.
+  //   TOOL_CALL_LOG  the append-only, hash-chained log of every tool call (site-runtime
+  //                  /audit-log): refused, started, finished, and each MCP sign-in.
+  // Both are SQLite-backed, so their classes are created by the migration below.
+  "durable_objects": {
+    "bindings": [
+      { "name": "RATE_LIMITER", "class_name": "RateLimiter" },
+      { "name": "TOOL_CALL_LOG", "class_name": "ToolCallLog" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter", "ToolCallLog"] }],
   // THE MEANING INDEX. Cloudflare AI Search, namespace-scoped, so the Worker creates
   // its own instance (capsid-docs, built-in storage) on first use and needs no id here.
   // src/doc-index.ts feeds it from D1 on the tick; D1 stays the source of truth

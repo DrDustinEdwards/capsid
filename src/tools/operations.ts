@@ -37,6 +37,21 @@ interface Operation {
   handler: OperationHandler;
 }
 
+// The structured copy of a successful result (MCP structuredContent), which the output schema
+// (./outputs) promises on every result that is not an error. A non-JSON answer is { text }.
+function withStructure(result: OperationResult): OperationResult {
+  if (result.isError === true || result.structuredContent !== undefined) return result;
+  const text = result.content.map((c) => c.text).join("\n");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = undefined;
+  }
+  const structured = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : { text };
+  return { ...result, structuredContent: structured };
+}
+
 export class Operations {
   private readonly table = new Map<string, Operation>();
 
@@ -70,7 +85,7 @@ export class Operations {
       const issues = parsed.error.issues.map((i) => `${i.path.join(".") || "(arguments)"}: ${i.message}`).join("; ");
       return { content: [{ type: "text", text: `invalid arguments for ${label}: ${issues}` }], isError: true };
     }
-    return op.handler(parsed.data);
+    return withStructure(await op.handler(parsed.data));
   }
 
   private get(name: string): Operation {
