@@ -14,7 +14,7 @@ JSON. The family's format is site-runtime's `/health` (the IETF health-check dra
 | `db`, `backup`, `time` | optional; `backup` is `{ last_ok, age_hours, warning? }` |
 | `checks` | `[{ name, status, detail? }]` |
 
-The watcher also reads the bodies sites sent before it: no `status`, only `ok`, `backup.warning` and `checks` whose entries carry `ok`, and Capsid's own, whose `status` is `"ok"`, `"degraded"` or `"down"`. Either JSON content type is read. Nothing secret goes in the body: no token, no binding id, no row content.
+The watcher also reads the bodies sites sent before it: no `status`, only `ok`, `backup.warning` and `checks` whose entries carry `ok`, and Capsid's own before 2026-10-31, whose `status` is `"ok"`, `"degraded"` or `"down"` (Capsid's /health is the family shape since). Either JSON content type is read. Nothing secret goes in the body: no token, no binding id, no row content.
 
 ## The response
 

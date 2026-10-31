@@ -18,7 +18,7 @@ const EMAIL = "admin@example.com";
 const TOKEN = "integration-operator-token-0000000000000";
 const NOW = new Date("2026-10-10T12:00:00.000Z");
 const later = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000);
-const HEALTH = "https://dustinedwards.info/api/health";
+const HEALTH = "https://dustinedwards.info/health";
 const OPERATOR = "https://dustinedwards.info/api/operator";
 
 type Mail = { to: string; from: string; subject: string; text?: string };

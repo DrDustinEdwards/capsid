@@ -219,3 +219,39 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
     ...notFoundRows(rows, limit),
   };
 }
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * Returned 5xx at the edge per site host, over the most recent complete hour (L6, 2026-10-31):
+ * Workers analytics count only invocations that threw, so a Worker that catches its error and
+ * answers 500 or 503 was invisible to the error-rate finding. Read from the same SQL API record
+ * as the 404 report, sampled, so the counts are estimates. A host with no row had none. Keyed
+ * by namespace; a site whose origin is a workers.dev host is not in the record and is left out.
+ */
+export async function readServerErrors(
+  env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
+  sites: ReadonlyArray<{ namespace: string; origin: string }>,
+  fetchImpl: FetchLike,
+  now: Date
+): Promise<Record<string, number>> {
+  const creds = cloudflareCredentials(env);
+  if (!creds.ok) throw new Error(creds.reason);
+  const end = new Date(Math.floor(now.getTime() / HOUR_MS) * HOUR_MS);
+  const start = new Date(end.getTime() - HOUR_MS);
+  const rows = await sql(
+    fetchImpl,
+    creds.token,
+    creds.account,
+    `SELECT clientRequestHttpHost AS host, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND timestamp < $end AND edgeResponseStatus >= 500 GROUP BY clientRequestHttpHost LIMIT ${QUERY_ROWS}`,
+    { start: start.toISOString(), end: end.toISOString() }
+  );
+  const byHost = new Map(rows.map((r) => [typeof r.host === "string" ? r.host.toLowerCase() : "", count(r.hits)]));
+  const out: Record<string, number> = {};
+  for (const site of sites) {
+    const host = new URL(site.origin).hostname.toLowerCase();
+    if (host.endsWith(".workers.dev")) continue;
+    out[site.namespace] = byHost.get(host) ?? 0;
+  }
+  return out;
+}
