@@ -23,11 +23,11 @@ const LIVE_JOB_SUFFIX = ` / ${LIVE_JOB}`;
 // The repos the deploy watcher reads: each by its namespace, and by its repo label where the
 // repo is not the namespace's primary. `key` names the fingerprint, so two repos of one
 // namespace never share a finding. carrel's live gate runs in devkit's reusable
-// worker-deploy.yml; carrel is not on APP_ROSTER (src/roster.ts). Julie, txasm and bsw
-// deploy through worker-deploy too (area 8, D7). Capsomer (Workers Builds) and Prelum's
-// specimen (specimen.yml) run no live gate yet, so they are read and record nothing until
-// they move onto worker-deploy. Prelum has no namespace of its own: it is the
-// dustinedwards namespace's "prelum" repo.
+// worker-deploy.yml; carrel is not on APP_ROSTER (src/roster.ts). Julie, txasm, bsw and the
+// static sites (Capsomer, Prelum's specimen, Carrel's public page, the capsid explorer) deploy
+// through worker-deploy too. Prelum has no namespace of its own: it is the dustinedwards
+// namespace's "prelum" repo. A run with two live gates (carrel's app and public site) records
+// the one that did not pass, else the first.
 export interface DeployRepo {
   key: string;
   namespace: string;
@@ -151,7 +151,8 @@ export async function readDeployOutcomes(env: Env, namespace: string, selector?:
     if (!row) {
       const jobsResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?per_page=100`);
       if (!jobsResp.ok) throw new Error(`the jobs of run ${run.id} returned ${jobsResp.status}`);
-      const job = (((await jobsResp.json()) as { jobs?: Job[] }).jobs ?? []).find((j) => isLiveGateJob(j.name));
+      const gates = (((await jobsResp.json()) as { jobs?: Job[] }).jobs ?? []).filter((j) => isLiveGateJob(j.name));
+      const job = gates.find((j) => j.conclusion !== "success" && j.conclusion !== "skipped") ?? gates[0];
       let annotations: string[] = [];
       if (job && job.conclusion !== "success" && job.conclusion !== "skipped") {
         const notes = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/check-runs/${job.id}/annotations?per_page=100`);
