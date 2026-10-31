@@ -170,6 +170,12 @@ function crawlerRows(raw: Array<Record<string, unknown>>) {
   return [...by.values()].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || b.hits - a.hits);
 }
 
+// Visitors' requests only (Cloudflare's "filter end users", requestSource = eyeball). The record also holds the
+// zone's own subrequests: a Workers cache lookup that misses and an Early Hints lookup with nothing cached are each
+// logged as a 504 (developers.cloudflare.com/workers/runtime-apis/cache, "Errors"). Every site renders through the
+// Workers cache and sends Early Hints, so those misses read as thousands of 504s nobody was served (2026-10-31).
+const END_USERS = "requestSource = 'eyeball'";
+
 export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs, fetchImpl: FetchLike = fetch, now: Date = new Date()) {
   const report: TrafficReport = args.report ?? "not_found";
   const days = args.days ?? 7;
@@ -209,7 +215,7 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
       fetchImpl,
       creds.token,
       creds.account,
-      `SELECT clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND edgeResponseStatus >= 500 GROUP BY clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
+      `SELECT clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND ${END_USERS} AND edgeResponseStatus >= 500 GROUP BY clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
       { start, host }
     );
     return {
@@ -217,7 +223,7 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
       origin: site.origin,
       report,
       since: start,
-      note: "Every 5xx the edge answered, by path and status. Sampled, so hits are estimates; paths are what visitors sent.",
+      note: "Every 5xx the edge answered a visitor, by path and status. Sampled, so hits are estimates; paths are what visitors sent. A 501 is a site saying it does not offer that Carrel API, which Carrel's conformance check asks for on purpose.",
       failures: raw.slice(0, limit).map((r) => ({ path: typeof r.path === "string" ? r.path : "", status: Number(r.status), hits: count(r.hits) })),
       truncated: raw.length > limit,
     };
@@ -251,7 +257,8 @@ const TOP_5XX = 5;
  * as the 404 report, sampled, so the counts are estimates. A host with no row had none. Keyed
  * by namespace; a site whose origin is a workers.dev host is not in the record and is left out.
  * Grouped by path and status too: the first findings (2026-10-31) said only "79 answers were
- * 5xx", and nobody could tell which page without a dashboard.
+ * 5xx", and nobody could tell which page without a dashboard. A 501 is left out: it is a site's contract
+ * answer for a Carrel API it does not offer, and Carrel's conformance check asks for one every run.
  */
 export async function readServerErrors(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
@@ -267,7 +274,7 @@ export async function readServerErrors(
     fetchImpl,
     creds.token,
     creds.account,
-    `SELECT clientRequestHttpHost AS host, clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND timestamp < $end AND edgeResponseStatus >= 500 GROUP BY clientRequestHttpHost, clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
+    `SELECT clientRequestHttpHost AS host, clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND timestamp < $end AND ${END_USERS} AND edgeResponseStatus >= 500 AND edgeResponseStatus != 501 GROUP BY clientRequestHttpHost, clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
     { start: start.toISOString(), end: end.toISOString() }
   );
   const byHost = new Map<string, ServerErrors>();
