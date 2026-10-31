@@ -6,7 +6,7 @@
 // sink (src/security-headers.ts, REPORT_PATH). Enarratio's charts and Capsomer's map use no style
 // attributes, so none are allowed; the browser spec fails on any violation.
 import { buildContentSecurityPolicy, reportingEndpoints } from "@dustinedwards/site-runtime/csp";
-import { headersFile, STANDARD_SECURITY_HEADERS } from "@dustinedwards/site-runtime/headers";
+import { buildSecurityHeaders, headersFile } from "@dustinedwards/site-runtime/headers";
 import { TDM_RESERVATION_HEADERS } from "@drdustinedwards/site-helpers/robots";
 
 export const REPORT_URI = "https://mcp.dustinedwards.info/csp-report";
@@ -18,10 +18,12 @@ export const REPORT_URI = "https://mcp.dustinedwards.info/csp-report";
 export function explorerSecurityHeaders() {
   // Cloudflare's edge injects its Web Analytics beacon into every page of the proxied host, so the
   // policy names it, or every page logs a blocked script.
-  const csp = buildContentSecurityPolicy({ reportUri: REPORT_URI, reportTo: "csp", cloudflareWebAnalytics: true });
+  // Nothing unlisted: a kind the policy does not name (media, frames, workers, a manifest) is refused.
+  const csp = buildContentSecurityPolicy({ reportUri: REPORT_URI, reportTo: "csp", cloudflareWebAnalytics: true, denyUnlisted: true });
   // The data changes once a day and the assets with each build, which renames nothing, so an
   // hour at the edge and in the browser is the most a reader can be behind.
-  return { ...STANDARD_SECURITY_HEADERS, ...TDM_RESERVATION_HEADERS, "Cache-Control": "public, max-age=3600", "Reporting-Endpoints": reportingEndpoints("csp", new URL(REPORT_URI)), [csp.name]: csp.value };
+  // COEP credentialless: the pages embed no frame and load nothing from another origin but the beacon, which needs no cookie.
+  return { ...buildSecurityHeaders({ coep: { value: "credentialless" } }), ...TDM_RESERVATION_HEADERS, "Cache-Control": "public, max-age=3600", "Reporting-Endpoints": reportingEndpoints("csp", new URL(REPORT_URI)), [csp.name]: csp.value };
 }
 
 /** The text of _headers. */
