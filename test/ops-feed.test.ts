@@ -276,7 +276,7 @@ test("the feed and the refresh mint the Portal CSRF cookie when the request has 
     const { csrf } = (await res.json()) as { csrf: string };
     assert.match(csrf, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     assert.ok(set.startsWith(`__Secure-${PORTAL_CSRF_COOKIE}=${csrf};`), `${path} did not set the body's csrf as the cookie: ${set}`);
-    for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/portal", "Max-Age=28800"]) {
+    for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/portal", "Max-Age=86400"]) {
       assert.ok(set.includes(attribute), `the cookie lacks ${attribute}: ${set}`);
     }
   }

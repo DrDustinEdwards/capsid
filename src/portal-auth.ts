@@ -19,10 +19,9 @@ const decodeBase64url = (text: string): string => new TextDecoder().decode(fromB
 //
 // The cookie is a signed assertion (HMAC over a base64url payload with the email, the
 // sign-in time and an expiry), not a session record. Three things end it:
-// - Eight hours after the sign-in (PORTAL_SESSION_TTL_SECONDS), the Portal sends the
-//   browser back through Access, which asks for a sign-in once its own session (24
-//   hours) is over. Access for SaaS does not tell the Portal when that session began,
-//   so the Portal keeps its own well under it.
+// - 24 hours after the sign-in (PORTAL_SESSION_TTL_SECONDS), the Portal sends the
+//   browser back through Access. 24 hours via Access plus the idle hour below are the
+//   approved admin durations (Dustin, 2026-10-31, NIST SP 800-63B-4).
 // - An hour with no request: site-runtime's adminIdle times the session, as it times
 //   the sites' Access sessions (withPortalIdle below). Past it the Portal session is
 //   ended and the browser is sent to Access's logout, which ends the Access session too,
@@ -47,7 +46,7 @@ const PORTAL_SESSION_COOKIE = "capsid_portal";
 // then left alone, never rotated per poll, so a preview and its perform carry one
 // value (src/ops-feed.ts).
 export const PORTAL_CSRF_COOKIE = "capsid_portal_csrf";
-export const PORTAL_SESSION_TTL_SECONDS = 8 * 60 * 60;
+export const PORTAL_SESSION_TTL_SECONDS = 24 * 60 * 60;
 // The browser keeps the cookie an idle hour past its expiry, so a request after the
 // expiry is still timed: an idle one ends the Access session rather than passing a
 // silent sign-in.
