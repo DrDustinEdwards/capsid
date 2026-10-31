@@ -9,7 +9,8 @@ import { JOB, PROBE, cfNoData, cfOk, siteKey } from "../lib/derive";
 import { ago, hostOf, ms, shortId, utc } from "../lib/format";
 import { NoData, Pill, St } from "../ui/icons";
 import { When } from "../ui/When";
-import { UptimeFoot, UptimeTicks } from "../ui/charts";
+import { UptimeFoot } from "../ui/charts";
+import { UptimeTicks } from "../ui/uptime-ticks";
 import { agentState, nsList } from "../lib/derive";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
 

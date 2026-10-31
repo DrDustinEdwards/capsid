@@ -17,8 +17,8 @@ test("the fake Worker passes every gate, so the cases below measure the drops al
 
 test("a connection reset on the first try of every request is retried and the run passes", async () => {
   // One reset per request. Without the retry the first reset would exit 1, and exit 1
-  // rolls back.
-  const { code, out } = await run(healthy, (_req, nth) => nth === 1);
+  // rolls back. The consent POST is single-shot (its handle works once), so it is spared.
+  const { code, out } = await run(healthy, (req, nth) => nth === 1 && !(req.method === "POST" && req.url === "/authorize"));
   assert.equal(code, 0, out);
   assert.doesNotMatch(out, /FAIL|NORUN/);
 });
@@ -86,8 +86,8 @@ test("gate 6 refuses a consent page without no-store (was gate 4b)", async () =>
   const { code, out } = await run(
     breaking((req, res) => {
       if (req.method !== "GET" || !req.url?.startsWith("/authorize?")) return false;
-      res.writeHead(200, { ...HTML, "cache-control": "public, max-age=60", "set-cookie": "capsid_csrf=c1; Path=/" });
-      res.end(`<form method="post" action="/authorize"><input name="csrf" value="c1"><input name="req" value="r1"></form>`);
+      res.writeHead(200, { ...HTML, "cache-control": "public, max-age=60", "set-cookie": "__Host-consent=c1; Path=/" });
+      res.end(`<form method="post"><input type="hidden" name="handle" value="h1"></form>`);
       return true;
     }),
     () => false

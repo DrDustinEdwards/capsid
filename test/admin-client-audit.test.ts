@@ -13,7 +13,8 @@ import {
   type AdminWriteObserver,
 } from "../src/admin-client-audit.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { guardRegistrations } from "../src/scope.ts";
+import { guardRegistrations, type CallLog } from "../src/scope.ts";
+import { fakeToolCallLog } from "./fakes.ts";
 
 // job_e1973c5bcb69, DECIDE 2: record the client behind every admin call that is not a
 // plain read, for 30 days, and never refuse on what the client says.
@@ -49,9 +50,9 @@ const minted: Agent = { ...admin, id: "agent_1", name: "capsid-driver", kind: "d
 
 // The real registrar, with tools named like the real ones (the registrar reads the name):
 // capsid_read_doc is a read, capsid_write_doc needs the write grant.
-async function connect(agent: Agent, observe: AdminWriteObserver | undefined, ran: string[]) {
+async function connect(agent: Agent, observe: AdminWriteObserver | undefined, ran: string[], log?: CallLog) {
   const server = new McpServer({ name: "capsid", version: "1.0.0" });
-  guardRegistrations(server, agent, observe);
+  guardRegistrations(server, agent, observe, undefined, log);
   for (const name of ["capsid_read_doc", "capsid_write_doc"]) {
     server.registerTool(name, { inputSchema: { namespace: z.string() } }, async () => {
       ran.push(name);
@@ -208,7 +209,41 @@ test("an initialize whose row cannot be written is logged and does not throw, so
 test("src/index.ts builds the admin server with the observer, and buildServer hands it to the registrar", () => {
   const index = readFileSync(join(import.meta.dirname, "..", "src", "index.ts"), "utf8");
   assert.match(index, /recordAdminInitialize\(env\.DB, admin\.actor, request\)/);
-  assert.match(index, /buildServer\(env, admin, "", observe\)/);
+  assert.match(index, /buildServer\(env, admin, "", observe, clientId\)/);
   const server = readFileSync(join(import.meta.dirname, "..", "src", "server.ts"), "utf8");
-  assert.match(server, /guardRegistrations\(server, agent, observeAdminWrite, env\.APP_KV\)/);
+  assert.match(server, /guardRegistrations\(server, agent, observeAdminWrite, env\.APP_KV, /);
+});
+
+// The registrar's tool-call log (site-runtime's ToolCallLog): every call, whoever makes it.
+
+test("PLANT: every call is logged, refused or started and finished, and one whose started row cannot be written does not run", async () => {
+  const server = { name: "capsid", version: "1.0.0" };
+  const log = fakeToolCallLog();
+  const ran: string[] = [];
+  const reader = { ...minted, scopes: { ...minted.scopes, grants: ["read" as const] } };
+  const logged = await connect(reader, undefined, ran, { env: { TOOL_CALL_LOG: log as never }, server, clientId: "https://client.example.com/meta.json" });
+  try {
+    assert.notEqual((await logged.call("capsid_read_doc")).isError, true);
+    assert.equal((await logged.call("capsid_write_doc")).isError, true);
+  } finally {
+    await logged.close();
+  }
+  assert.deepEqual(ran, ["capsid_read_doc"]);
+  assert.deepEqual(log.rows.map((r) => [r.phase, r.tool, r.caller]), [
+    ["started", "capsid_read_doc", "agent:capsid-driver"],
+    ["finished", "capsid_read_doc", "agent:capsid-driver"],
+    ["refused", "capsid_write_doc", "agent:capsid-driver"],
+  ]);
+  assert.equal(log.rows[0].callId, log.rows[1].callId);
+  assert.equal(log.rows[0].clientId, "https://client.example.com/meta.json");
+
+  const unwritable = await connect(admin, undefined, ran, { env: { TOOL_CALL_LOG: fakeToolCallLog({ failing: true }) as never }, server });
+  try {
+    const result = await unwritable.call("capsid_read_doc");
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /no tool runs unlogged/);
+  } finally {
+    await unwritable.close();
+  }
+  assert.deepEqual(ran, ["capsid_read_doc"], "a call ran though its started row was not written");
 });

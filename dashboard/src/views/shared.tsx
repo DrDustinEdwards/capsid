@@ -7,7 +7,8 @@ import { useApp } from "../app/ctx";
 import { JOB, PROBE, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
 import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
-import { Spark, Timeline, TimelineLegend, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
+import { Spark, Timeline, TimelineLegend, UptimeFoot, errorTotals } from "../ui/charts";
+import { UptimeTicks } from "../ui/uptime-ticks";
 import { useWidth } from "../ui/useWidth";
 
 // The risky controls, set apart from the safe ones (the UX audit's M9): a red-edged area

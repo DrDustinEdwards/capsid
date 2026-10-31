@@ -1,10 +1,6 @@
 import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, handlePublicDocument } from "./public-data";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResult } from "./shadow";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
-import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
-import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
-import { cookieName, getCookie, hmacHex } from "./auth";
-import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { resolveAgent } from "./agents";
 import { backupHttpStatus, runBackup } from "./backup";
 import { checkScope, routeRefusal } from "./scope";
@@ -14,10 +10,12 @@ import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRe
 import { readSiteConfig } from "./ops-sites";
 import { CONSENT_DIALOG_HEADERS, REPORT_PATH, securityHeadersFor } from "./security-headers";
 import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";
-import { callerIp, checkRate, CSP_REPORT_LIMIT } from "./rate-limit";
-import type { Env, Props } from "./env";
-import { buildAdminServer, buildServer } from "./server";
-import { ADMIN_OPS_MCP_ROUTE, serveMcp } from "./mcp-handler";
+import { ipKey, limit } from "@dustinedwards/site-runtime/rate-limit";
+import type { Env } from "./env";
+import { buildAdminServer, buildServer, SERVER_INFO } from "./server";
+import { ADMIN_OPS_MCP_ROUTE, mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
+import { isAdminEmail } from "./auth";
+import { loginHandler } from "@dustinedwards/site-runtime/mcp-login";
 import {
   BACKUP_CREDENTIAL_PATH,
   claimJti,
@@ -28,7 +26,6 @@ import {
   verifyBackupCredentialRequest,
 } from "./signed-requests";
 import { handleHealth } from "./health";
-import { escapeHtml } from "@dustinedwards/site-runtime/html";
 import { handlePortalApp } from "./portal-app";
 import { PORTAL_HOST } from "./portal-host";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
@@ -59,194 +56,40 @@ import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "./p
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "./portal-library";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "./portal-trends";
 import { handlePortalCompleteness, handlePortalPackageHistory, handlePortalSharedCode, PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
-import { clearStateCookie, completeAccessLogin, type LoginFlow, STATE_TTL_SECONDS, startAccessLogin } from "./access-login";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { textResponse } from "./http";
-import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+import { rateLimiter, textResponse } from "./http";
 
-const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
+// The MCP authorization flow (rule 13): site-runtime's consent page, the Access for SaaS
+// round trip and the /callback, behind the OAuth provider. Capsid passes what is its own:
+// who is admitted (ADMIN_EMAIL and every CO_OWNER_EMAILS entry, src/auth.ts), and the
+// sign-in time its admin server's step-up reads (src/scope.ts STEP_UP), which joins the
+// grant's props. Every grant reads; the write box adds capsid.write.
+const login = loginHandler<Env>({
+  name: "Capsid",
+  scopes: SCOPES,
+  about:
+    "<p>Capsid serves the portfolio's knowledge base and reaches its GitHub repos. It will always be able to read. " +
+    "Writing documents, changing repos, working jobs and Capsid Admin's controls need the box below.</p>",
+  admit: async (env, user) => ((await isAdminEmail(env, user.email)) ? { signed_in_at: Date.now() } : false),
+  admits: {
+    consent: "Only Capsid's administrator and its co-owners are accepted.",
+    refusal: "This account is not an administrator of Capsid (ADMIN_EMAIL or CO_OWNER_EMAILS).",
+  },
+  audit: { name: SERVER_INFO.name, version: SERVER_INFO.version },
+  // Claude identifies both connectors, Capsid on /mcp and Capsid Admin on /mcp/admin, with
+  // one client id (its CIMD document), so revoking earlier grants on each authorization
+  // signed one out when the other signed in. Each grant still expires on its own.
+  revokeExistingGrants: false,
+});
 
-const APPROVAL_COOKIE = "capsid_approved";
-const CSRF_COOKIE = "capsid_csrf";
-
-// The MCP authorization flow's sign-in, through Cloudflare Access for SaaS
-// (src/access-login.ts). The state stored against the token is the JSON AuthRequest.
-const MCP_LOGIN: LoginFlow = {
-  callbackPath: "/callback",
-  stateCookie: "capsid_state",
-  cookiePath: "/callback",
-  kvPrefix: "capsid:oauth-state:",
-  restartHint: "Restart from your MCP client.",
-};
-
-// The approval cookie carries entries from src/approval.ts: a client id bound to a
-// digest of its redirect set, signed with COOKIE_ENCRYPTION_KEY, kept 30 days.
-// Cookies cap near 4KB; an entry is about 36 bytes of JSON, and the 30 day expiry
-// bounds the growth.
-async function approvedClients(request: Request, secret: string): Promise<string[]> {
-  const raw = getCookie(request, APPROVAL_COOKIE);
-  if (!raw) return [];
-  const dot = raw.indexOf(".");
-  if (dot === -1) return [];
-  const sig = raw.slice(0, dot);
-  const payload = raw.slice(dot + 1);
-  if (!await safeEqual(sig, await hmacHex(secret, payload))) return [];
-  try {
-    const parsed = JSON.parse(decodeBase64url(payload));
-    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-async function approvalCookie(tags: string[], secret: string): Promise<string> {
-  const payload = base64url(JSON.stringify(tags));
-  const sig = await hmacHex(secret, payload);
-  return `${APPROVAL_COOKIE}=${sig}.${payload}; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=${APPROVAL_MAX_AGE_SECONDS}`;
-}
-
-function renderApprovalDialog(oauthReq: AuthRequest, clientName: string, csrf: string, registeredUris: string[] | undefined): Response {
-  const name = escapeHtml(clientName);
-  const redirect = escapeHtml(oauthReq.redirectUri);
-  const req = base64url(JSON.stringify(oauthReq));
-  // Every registered redirect URI is shown, not just the requested one. A client's
-  // metadata document may name several and the approval covers only the requested
-  // one, so listing the rest is what shows the admin that a client with a familiar
-  // name also carries an attacker's redirect.
-  const others = (registeredUris ?? []).filter((u) => u !== oauthReq.redirectUri);
-  const othersHtml = others.length
-    ? `<p>This client also has these registered redirect URIs (not covered by this approval):</p><ul>${others
-        .map((u) => `<li><code>${escapeHtml(u)}</code></li>`)
-        .join("")}</ul>`
-    : "";
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Authorize ${name}</title>
-<style>
-body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1rem; color: #1a1a1a; }
-.card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; }
-code { background: #f4f4f4; padding: 0.1rem 0.3rem; border-radius: 4px; word-break: break-all; }
-button { background: #1a7f37; color: #fff; border: 0; border-radius: 6px; padding: 0.6rem 1.4rem; font-size: 1rem; cursor: pointer; }
-</style>
-</head>
-<body>
-<div class="card">
-<h1>Capsid access request</h1>
-<p><strong>${name}</strong> is asking to connect to this MCP server.</p>
-<p>Requested redirect URI: <code>${redirect}</code></p>
-${othersHtml}
-<p>Approving will send you to GitHub to sign in. Only the configured admin account is admitted.</p>
-<form method="post" action="/authorize">
-<input type="hidden" name="csrf" value="${csrf}">
-<input type="hidden" name="req" value="${req}">
-<button type="submit">Approve and continue to GitHub</button>
-</form>
-</div>
-</body>
-</html>`;
-  return new Response(html, {
-    status: 200,
-    headers: {
-      // The static headers, and why form-action is absent from the CSP: see
-      // CONSENT_DIALOG_HEADERS in ./security-headers.
-      ...CONSENT_DIALOG_HEADERS,
-      "Set-Cookie": `${cookieName(CSRF_COOKIE, "/authorize")}=${csrf}; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=${STATE_TTL_SECONDS}`,
-    },
-  });
-}
-
-async function startSignIn(
-  request: Request,
-  env: Env,
-  oauthReq: AuthRequest,
-  extraCookies: string[] = []
-): Promise<Response> {
-  return startAccessLogin(request, env, MCP_LOGIN, JSON.stringify(oauthReq), extraCookies);
-}
-
-async function handleAuthorizeGet(request: Request, env: Env): Promise<Response> {
-  let oauthReq: AuthRequest;
-  try {
-    oauthReq = await env.OAUTH_PROVIDER.parseAuthRequest(request);
-  } catch (err) {
-    return textResponse(`invalid authorization request: ${err instanceof Error ? err.message : String(err)}`, 400);
-  }
-  if (!oauthReq.clientId) return textResponse("invalid authorization request: missing client_id", 400);
-  // The lookup runs before the cookie check: the approval is bound to this client's
-  // redirect set, and reading the client is the only way to check it. A client id
-  // that no longer resolves cannot ride an old cookie past the dialog.
-  const client = await env.OAUTH_PROVIDER.lookupClient(oauthReq.clientId);
-  if (!client) return textResponse("unknown client", 400);
-  const approved = await approvedClients(request, env.COOKIE_ENCRYPTION_KEY);
-  if (approved.includes(await approvalTag(oauthReq.clientId, oauthReq.redirectUri))) {
-    return startSignIn(request, env, oauthReq);
-  }
-  return renderApprovalDialog(oauthReq, client.clientName ?? oauthReq.clientId, crypto.randomUUID(), client.redirectUris);
-}
-
-// The consent form's body cap. `req` is a base64url AuthRequest and `csrf` a uuid, so
-// a real submission is well under a kilobyte; 64KB leaves headroom and still refuses
-// a body that is trying to be something else.
-const AUTHORIZE_FORM_MAX_BYTES = 65_536;
-
-async function handleAuthorizePost(request: Request, env: Env): Promise<Response> {
-  // Bounded at the stream, before the parse. request.formData() buffers and parses
-  // the whole body before any check here runs, on a path reachable without
-  // credentials: the CSRF cookie is checked after the parse, and a caller can fetch
-  // the form to obtain one.
-  const bounded = await readBoundedText(request, AUTHORIZE_FORM_MAX_BYTES);
-  if (!bounded.ok) return new Response(null, { status: 413 });
-  // URLSearchParams, not formData(): the dialog is a plain `<form method="post">` with
-  // no enctype, so the browser sends urlencoded, and so does the live gate.
-  const form = new URLSearchParams(bounded.text);
-  const csrf = form.get("csrf");
-  const req = form.get("req");
-  if (typeof csrf !== "string" || typeof req !== "string") return textResponse("bad request", 400);
-  const csrfCookie = getCookie(request, CSRF_COOKIE);
-  if (!csrfCookie || !await safeEqual(csrfCookie, csrf)) return textResponse("csrf validation failed: restart the flow", 403);
-  let oauthReq: AuthRequest;
-  try {
-    oauthReq = JSON.parse(decodeBase64url(req)) as AuthRequest;
-  } catch {
-    return textResponse("bad request", 400);
-  }
-  const client = oauthReq.clientId ? await env.OAUTH_PROVIDER.lookupClient(oauthReq.clientId) : null;
-  if (!client) return textResponse("unknown client", 400);
-  const approved = await approvedClients(request, env.COOKIE_ENCRYPTION_KEY);
-  const tag = await approvalTag(oauthReq.clientId, oauthReq.redirectUri);
-  if (!approved.includes(tag)) approved.push(tag);
-  const cookies = [
-    await approvalCookie(approved, env.COOKIE_ENCRYPTION_KEY),
-    `${cookieName(CSRF_COOKIE, "/authorize")}=; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=0`,
-  ];
-  return startSignIn(request, env, oauthReq, cookies);
-}
-
-async function handleCallback(request: Request, env: Env): Promise<Response> {
-  const login = await completeAccessLogin(request, env, MCP_LOGIN, (stored) => JSON.parse(stored) as AuthRequest);
-  if (!login.ok) return login.response;
-  const { email, state: oauthReq } = login;
-
-  const props: Props = { email, signed_in_at: Date.now() };
-  const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
-    request: oauthReq,
-    userId: email,
-    metadata: { email },
-    scope: oauthReq.scope,
-    props,
-    // Claude identifies both connectors, Capsid on /mcp and Capsid Admin on /mcp/admin,
-    // with one client id (its CIMD document). The provider's default revokes every
-    // earlier grant for the same user and client on each authorization, so signing into
-    // one connector signed the other out. Each grant still expires on its own.
-    revokeExistingGrants: false,
-  });
-
-  const headers = new Headers({ Location: redirectTo });
-  headers.append("Set-Cookie", clearStateCookie(MCP_LOGIN));
-  return new Response(null, { status: 302, headers });
+// The consent page leaves with Capsid's own headers (CONSENT_DIALOG_HEADERS, and why its
+// CSP has no form-action), which the header layer in src/index.ts leaves as they are.
+async function handleLogin(request: Request, env: Env): Promise<Response> {
+  const response = await login.fetch(request, env);
+  if (!(response.headers.get("Content-Type") ?? "").includes("text/html")) return response;
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(CONSENT_DIALOG_HEADERS)) headers.set(name, value);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -260,6 +103,8 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
   }
+  const limited = await mcpRateLimited(env, resolved.agent.actor);
+  if (limited) return limited;
   // last_seen is not part of authorizing, so a slow or failing write rides on
   // waitUntil rather than slowing the tool call.
   ctx.waitUntil(resolved.touch());
@@ -281,6 +126,8 @@ async function handleOperatorAdminMcp(request: Request, env: Env, ctx: Execution
   if (!resolved.agent.admin) {
     return new Response(`forbidden: ${resolved.agent.actor} is not the admin. Capsid Admin serves the administrator alone.`, { status: 403 });
   }
+  const limited = await mcpRateLimited(env, resolved.agent.actor);
+  if (limited) return limited;
   ctx.waitUntil(resolved.touch());
   return serveMcp(request, env, ctx, ADMIN_OPS_MCP_ROUTE, () => buildAdminServer(env, resolved.agent));
 }
@@ -353,6 +200,14 @@ async function handleInboxReport(request: Request, env: Env): Promise<Response> 
   return Response.json({ ok: true, namespace, items: parsed.value.items.length, expires_in_seconds: REPORT_TTL_SECONDS }, { headers: { "Cache-Control": "no-store" } });
 }
 
+// Fail closed: /csp-report is unauthenticated and every accepted report writes log lines, so
+// failing open would let anyone fill the logs during an outage. A dropped report costs one
+// browser diagnostic, and the browser still gets its 204.
+export const CSP_REPORT_RULES = [
+  { limit: 300, windowSeconds: 3600 },
+  { limit: 1000, windowSeconds: 86_400 },
+];
+
 // The family's one receiver (@dustinedwards/site-runtime/csp-report): a POST always
 // gets 204, the body is read to 16 KB and no further, at most ten violations are
 // logged one line each with every URL cut to origin and path, and nothing is stored.
@@ -364,13 +219,12 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
     allowOrigin: `https://${PORTAL_HOST}`,
     headers: securityHeadersFor(new URL(request.url).hostname),
     allow: async (r) => {
-      const ip = callerIp(r);
-      const rate = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);
-      // The unavailable refusal has already logged itself.
-      if (!rate.allowed && rate.window !== "unavailable") {
-        logEvent("CSP_REPORT_RATE_LIMITED", { message: `CSP_REPORT_RATE_LIMITED ${ip} hit the ${rate.window} limit (${rate.count} of ${rate.limit})` }, { level: "error" });
+      const { key } = ipKey("csp-report", r);
+      const verdict = await limit(rateLimiter(env), key, CSP_REPORT_RULES, { onUnavailable: "refuse" });
+      if (verdict.status === "limited") {
+        logEvent("CSP_REPORT_RATE_LIMITED", { message: `CSP_REPORT_RATE_LIMITED ${key} hit the ${verdict.window}s limit (${verdict.used} of ${verdict.limit})` }, { level: "error" });
       }
-      return rate.allowed;
+      return verdict.status === "ok";
     },
   });
 }
@@ -446,9 +300,8 @@ export const defaultHandler = {
     if (url.pathname === BENCH_SCORE_PATH && request.method === "POST") return handleBenchScore(request, env);
     if (url.pathname === SHADOW_JOB_PATH && request.method === "GET") return handleShadowJob(request, env);
     if (url.pathname === SHADOW_RESULT_PATH && request.method === "POST") return handleShadowResult(request, env);
-    if (url.pathname === "/authorize" && request.method === "GET") return handleAuthorizeGet(request, env);
-    if (url.pathname === "/authorize" && request.method === "POST") return handleAuthorizePost(request, env);
-    if (url.pathname === "/callback") return handleCallback(request, env);
+    if (url.pathname === "/authorize") return handleLogin(request, env);
+    if (url.pathname === "/callback") return handleLogin(request, env);
     // Capsid Portal. The callback and every /portal/api/ route are matched before the
     // app's catch-all, and an unknown /portal/api/ path is a 404, never the app's page.
     // Nothing answers under /console: the Portal moved without redirects
