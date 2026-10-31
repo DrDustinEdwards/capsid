@@ -18,17 +18,14 @@ export type AgentGrant = (typeof AGENT_GRANTS)[number];
 // alone is not enough for any of them. The reasons are FLAG_REASON in src/scope.ts.
 export const SCOPE_FLAGS = [
   "can_merge",
-  "can_direct_write",
-  "can_dispatch",
-  "can_write_workflows",
   "can_touch_protected",
-  "money_paths",
-  // Commenting goes through capsid_open_pr action comment, a write tool, so a reviewer holds the write
-  // grant; without a flag of its own that grant would also let it merge and close.
-  // This flag makes "may comment on this PR" smaller than "may decide this PR".
-  "can_comment_pr",
 ] as const;
 export type ScopeFlag = (typeof SCOPE_FLAGS)[number];
+
+// Flags that gated only tools since removed (capsid_change_repo, capsid_open_pr and
+// capsid_run_ci, Dustin, 2026-10-31). Stored agent rows and queued jobs may still name
+// them, so every reader skips them rather than refusing the row.
+export const RETIRED_FLAGS: readonly string[] = ["can_direct_write", "can_dispatch", "can_write_workflows", "money_paths", "can_comment_pr"];
 
 // A list of names, or "*" for every name. "*" inside a list is not a wildcard, so a
 // typo in a mint command cannot grant everything.
@@ -105,7 +102,8 @@ export function parseScopes(json: string | null | undefined): AgentScopes {
     : [];
   const flags = noFlags();
   // Only the flags this system has, and only the boolean true, so a hand-written
-  // scopes blob cannot add an axis the enforcement point does not know.
+  // scopes blob cannot add an axis the enforcement point does not know. Any other key
+  // (a RETIRED_FLAGS entry on an older row) is ignored, so the row still loads.
   const rawFlags = typeof record.flags === "object" && record.flags !== null ? (record.flags as Record<string, unknown>) : {};
   for (const flag of SCOPE_FLAGS) flags[flag] = rawFlags[flag] === true;
   return {
@@ -146,8 +144,8 @@ export function allowsToolAction(list: ScopeList, tool: string, action: string |
   const qualified = list.some((entry) => entry.startsWith(prefix));
   if (!qualified) return true;
   // An unknown action on a narrowed tool is refused, not read as the whole tool:
-  // otherwise a reviewer minted ["capsid_open_pr", "capsid_open_pr.comment"] could open a pull
-  // request through a call path that names no action.
+  // otherwise an agent minted ["capsid_work_jobs", "capsid_work_jobs.list"] could change
+  // the queue through a call path that names no action.
   //
   // It stays opt-in: a list with no qualified sibling for this tool is untouched.
   // Opting in means the call path has to say what it is doing, and a path that cannot

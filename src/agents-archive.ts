@@ -5,11 +5,10 @@ import { auditStatement } from "./store-guards";
 // history). migrations/0038_agents_archive.sql says what moves and why.
 //
 // Every row that records what an agent did carries the actor string agent:<name>
-// itself, so moving the agents row breaks no join a reader of history needs. Three
+// itself, so moving the agents row breaks no join a reader of history needs. Two
 // things still need the old row, and read it from here: the name stays reserved
-// (mintAgent), the key's digest is still refused rather than tried as an operator key
-// (resolveAgent), and a reviewer's past verdict is judged on the scopes it held
-// (src/review.ts). Archived means revoked to every other reader.
+// (mintAgent), and the key's digest is still refused rather than tried as an operator
+// key (resolveAgent). Archived means revoked to every other reader.
 
 // A revoked agent moves this long after revocation, so a revocation made by mistake can
 // still be read in place for a week.

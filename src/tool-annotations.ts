@@ -32,11 +32,10 @@ interface Reach {
 const reach = (r: Reach) => ({ idempotentHint: r.idempotent ?? false, openWorldHint: r.openWorld ?? true });
 
 const read = (r: Reach = {}): ToolHints => ({ readOnlyHint: true, destructiveHint: false, ...reach(r) });
-const additive = (r: Reach = {}): ToolHints => ({ readOnlyHint: false, destructiveHint: false, ...reach(r) });
 const destructive = (r: Reach = {}): ToolHints => ({ readOnlyHint: false, destructiveHint: true, ...reach(r) });
 
 export const TOOL_HINTS: Record<string, ToolHints> = {
-  // ---- Capsid (14)
+  // ---- Capsid (11)
   capsid_start_session: read({ idempotent: true, openWorld: false }),
   capsid_find_docs: read({ idempotent: true, openWorld: false }),
   capsid_read_doc: read({ idempotent: true, openWorld: false }),
@@ -52,17 +51,10 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   capsid_read_repo: read({ idempotent: true, openWorld: true }),
   // The live site check fetches the site; the rest read GitHub.
   capsid_inspect_repo: read({ idempotent: true, openWorld: true }),
-  // Every file write is a new commit, or a new pull request in pr mode.
-  capsid_change_repo: destructive({ idempotent: false, openWorld: true }),
-  // A comment posts a new comment on every call, and a repeat open after a close
-  // opens another pull request. Nothing existing is overwritten.
-  capsid_open_pr: additive({ idempotent: false, openWorld: true }),
   // merge and close end a pull request, delete removes a branch, and a release
   // publishes; a repeat release or tag is refused by GitHub, but a repeat close of a
   // reopened pull request is not a no-op.
   capsid_close_pr: destructive({ idempotent: false, openWorld: true }),
-  // Every call starts a new workflow run.
-  capsid_run_ci: additive({ idempotent: false, openWorld: true }),
   // complete, fail and block overwrite result_summary and move a job out of claimed;
   // post and record create a job each call; evidence is checked against GitHub.
   capsid_work_jobs: destructive({ idempotent: false, openWorld: true }),

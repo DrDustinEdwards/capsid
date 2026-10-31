@@ -6,7 +6,6 @@ import {
   parseReposList,
   readRepoFile,
   repoTokenOk,
-  writeRepoFile,
 } from "../src/github.ts";
 import { repoPathProblem } from "../src/limits.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
@@ -95,18 +94,6 @@ test("read_repo_file refuses a traversal path and makes no escaping request", as
       }
     }
   );
-});
-
-test("write_repo_file refuses a traversal path and makes no escaping request", async () => {
-  await withFetch({}, async (calls) => {
-    await assert.rejects(
-      () => writeRepoFile(makeEnv(ONE_REPO), "ns", "../../other-repo/contents/x", "body", "msg", "direct"),
-      /path segment|escapes \/repos/
-    );
-    for (const c of calls) {
-      assert.ok(!c.path.includes("/other-repo/"), `unexpected escaping request to ${c.path}`);
-    }
-  });
 });
 
 test("delete_branch refuses a traversal branch and makes no escaping request", async () => {

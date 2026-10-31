@@ -17,15 +17,9 @@ export const MAX_GLOB = 512;
 export const MAX_REF = 255;
 export const MAX_REPO_SELECTOR = 256;
 export const MAX_SHA = 128;
-export const MAX_COMMIT_MESSAGE = 4096;
-export const MAX_PR_TITLE = 512;
-export const MAX_PR_BODY = 65_536;
 // A CI job or step name, or its numeric id, as capsid_inspect_repo action ci takes them. GitHub does not
 // document a ceiling; a name longer than this is not one a workflow file holds.
 export const MAX_CI_NAME = 512;
-// A review comment. Smaller than a PR body on purpose: a verdict plus its reasons is
-// a paragraph, and GitHub's own comment ceiling is 65_536 either way.
-export const MAX_PR_COMMENT = 16_384;
 // The seat's note on a capsid_work_jobs resume: rulings and a plan, longer than `reason` allows.
 // Not MAX_BODY: the note is stored in an audit row and rendered into the job's mirror
 // document beside the signed prompt, which can already be MAX_BODY on its own.
@@ -45,7 +39,6 @@ export const D1_BATCH_STATEMENTS = 100;
 // Four statements per path plus an audit row: 20 paths is 81, under D1's
 // 100-statement batch ceiling.
 export const LINT_CONSUMED_MAX = 20;
-export const CI_DISPATCH_MAX_INPUTS = 10;
 export const HISTORY_ROWS = 100;
 export const MAX_SCAN_CAP = 200;
 export const DEFAULT_SCAN_RESULTS = 20;

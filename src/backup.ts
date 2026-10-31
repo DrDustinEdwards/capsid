@@ -136,9 +136,9 @@ export const TABLES = [
   // Each job's earlier versions, kept by capsid_work_jobs action "edit" (migrations/0033_job_versions.sql).
   // Nothing prunes it, and the job's row holds only the newest version.
   "job_versions",
-  // Drivers' proposed changes to canon documents, pending or decided
-  // (migrations/0034_canon_proposals.sql). Nothing prunes it: a decided row is the
-  // record of who proposed and who approved a canon change.
+  // Drivers' proposed changes to canon documents (migrations/0034_canon_proposals.sql),
+  // from the review queue retired 2026-10-31 (src/canon.ts). Kept, with its decided
+  // rows, until a migration drops it.
   "canon_proposals",
   // The shared packages the Shared code view follows (migrations/0036_shared_packages.sql):
   // configuration, seeded by its migration, so a restore empties it before importing.
@@ -152,8 +152,8 @@ export const TABLES = [
   // What became of each deploy whose live gate ran (migrations/0039_deploy_outcomes.sql),
   // the evidence the promotion and demotion proposals read. Nothing prunes it.
   "deploy_outcomes",
-  // The Access group pinned for each app's members page (migrations/0040_access_sync_groups.sql):
-  // configuration the seat writes by hand. Nothing prunes it.
+  // The Access group pins of the retired Access sync (migrations/0040_access_sync_groups.sql;
+  // the endpoint was removed 2026-10-31, Dustin). Empty; kept until a migration drops it.
   "access_sync_groups",
   // The methods paper's paired comparison (migrations/0047_bench.sql): the registered
   // tasks and every run's outcome, the data its primary outcome is computed from.

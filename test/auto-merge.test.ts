@@ -91,6 +91,18 @@ test("body_names_job: a PR body with no job id never merges", () => {
   assert.equal(verdict.merge === false && verdict.failed, "body_names_job");
 });
 
+// Version 10 (Dustin, 2026-10-31): work comes from project threads, so a promoted unit
+// stands in for the job trace. Without one, a job-less PR still waits for a person.
+test("PLANT: v10: a job-less PR merges only in a promoted unit, and every other check still applies", () => {
+  const unit = { unit: "capsid / docs" };
+  const earned = evaluatePolicy(greenPr({ body: "from a project thread", jobId: null, jobStatus: null, jobPrUrls: [] }), ALLOWED_AUTHORS, unit);
+  assert.equal(earned.merge, true, earned.merge ? "" : earned.why);
+  const red = evaluatePolicy(greenPr({ body: "from a project thread", jobId: null, jobStatus: null, jobPrUrls: [], ciConclusion: "failure" }), ALLOWED_AUTHORS, unit);
+  assert.equal(red.merge === false && red.failed, "ci_green");
+  const unearned = evaluatePolicy(greenPr({ body: "from a project thread", jobId: null, jobStatus: null, jobPrUrls: [] }), ALLOWED_AUTHORS, null);
+  assert.equal(unearned.merge === false && unearned.failed, "body_names_job");
+});
+
 // Version 7 (job_e68de044f8a4): the pull request is the claim. A cloud session signs in as
 // the admin login and completes a job without claiming it, so the job's holder is that
 // login, not a minted driver. author_is_driver is gone; every other check still judges.
@@ -869,8 +881,8 @@ test("the shipped policy document names exactly the checks the code enforces", (
   assert.deepEqual(parsed.policy.namespaces, ["dustinedwards", "carrel", "capsomer", "capsid"]);
   assert.deepEqual(parsed.policy.allowedPaths, namespacedAllowedPaths());
   // Version 7 drops author_is_driver and adds the size cap (job_e68de044f8a4); version 8 is
-  // version 7 as amended on 2026-10-19; version 9 is version 8 in American spelling.
-  assert.equal(parsed.policy.version, "9");
+  // version 7 as amended on 2026-10-19; version 9 is version 8 in American spelling; version 10 lets a promoted unit stand in for the job.
+  assert.equal(parsed.policy.version, "10");
   // The cap is a number in the code; the document states the same one in its check.
   const capLine = shipped.split("\n").find((l) => l.startsWith("- `size_within_cap`"));
   assert.match(capLine ?? "", new RegExp(`at most ${AUTO_MERGE_SIZE_CAP.toLocaleString("en-US")} lines`));

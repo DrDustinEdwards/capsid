@@ -60,8 +60,8 @@ export const AGENTS: Agent[] = [
 
 // ---- named roles ----------------------------------------------------------------
 //
-// A role is asked for by name, not selected by namespace, and three of the four are
-// scoped to every namespace, so folding them into AGENTS would make
+// A role is asked for by name, not selected by namespace, and some are scoped to
+// every namespace, so folding them into AGENTS would make
 // `--namespace dustinedwards` mint a credential holding can_merge.
 //
 // A role is ONE capability: each entry holds at most one blast-radius flag, and
@@ -74,19 +74,6 @@ export const ROLES: Role[] = [
     repos: ["*"],
     grants: ["read"],
     what: "reads every namespace and every repo, writes nothing anywhere. Intended for an outside model doing a cold audit.",
-  },
-  {
-    name: "reviewer",
-    kind: "session",
-    namespaces: ["*"],
-    repos: ["*"],
-    grants: ["read", "write"],
-    // A comment goes through capsid_open_pr, a write tool. The tools axis narrows it to
-    // the comment action and the only flag is can_comment_pr, so opening a pull request
-    // is refused, and merge and close are a different tool.
-    tools: ["capsid_open_pr", "capsid_open_pr.comment"],
-    flags: { can_comment_pr: true },
-    what: "reads everything and may post a comment on a pull request. It cannot merge, close, or write a file.",
   },
   {
     name: "watcher",
@@ -133,7 +120,7 @@ export const ROLES: Role[] = [
     grants: ["read", "write"],
     // No flags and no repos: the repos axis is derived from the live namespace mapping
     // in main(), as for any driver.
-    what: "Grok Build's driver for dustinedwards: claims jobs and opens pull requests there, the same scopes as dustinedwards-driver, and never merges.",
+    what: "Grok Build's driver for dustinedwards: claims and works jobs there, the same scopes as dustinedwards-driver, and never merges.",
   },
 ];
 

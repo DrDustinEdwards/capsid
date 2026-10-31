@@ -5,7 +5,6 @@ import {
   REPO_BATCH_MAX_FILES,
   REPO_FILE_BUDGET,
   REPO_HISTORY_MAX_LIMIT,
-  ciDispatch,
   ciStatus,
   deleteBranch,
   readRepoFiles,
@@ -294,115 +293,6 @@ test("delete_branch REFUSES a branch that does not exist rather than reporting s
     },
     async () => {
       await assert.rejects(() => deleteBranch(makeEnv(), "ns", "gone"), /does not exist/);
-    }
-  );
-});
-
-// ci_dispatch
-
-test("ci_dispatch REFUSES a workflow with no workflow_dispatch trigger, and says so", async () => {
-  await withFetch(
-    {
-      "GET /repos/o/r": REPO_META,
-      "GET /repos/o/r/actions/runs": { body: { workflow_runs: [] } },
-      "POST /repos/o/r/actions/workflows/ci.yml/dispatches": {
-        status: 422,
-        text: JSON.stringify({ message: "Workflow does not have 'workflow_dispatch' trigger" }),
-      },
-    },
-    async () => {
-      await assert.rejects(
-        () => ciDispatch(makeEnv(), "ns", { workflow: "ci.yml", ref: "main" }),
-        /has no workflow_dispatch trigger/
-      );
-    }
-  );
-});
-
-test("ci_dispatch REFUSES workflow and run_id together", async () => {
-  await withFetch({ "GET /repos/o/r": REPO_META }, async () => {
-    await assert.rejects(() => ciDispatch(makeEnv(), "ns", { workflow: "ci.yml", run_id: 5 }), /not both/);
-  });
-});
-
-test("ci_dispatch requires both workflow and ref to start a run", async () => {
-  await withFetch({ "GET /repos/o/r": REPO_META }, async () => {
-    await assert.rejects(() => ciDispatch(makeEnv(), "ns", { workflow: "ci.yml" }), /both required/);
-    await assert.rejects(() => ciDispatch(makeEnv(), "ns", { ref: "main" }), /both required/);
-  });
-});
-
-test("ci_dispatch reruns a run's failed jobs when given run_id alone", async () => {
-  await withFetch(
-    {
-      "GET /repos/o/r": REPO_META,
-      "POST /repos/o/r/actions/runs/42/rerun-failed-jobs": { status: 201, text: "" },
-    },
-    async () => {
-      const out = (await ciDispatch(makeEnv(), "ns", { run_id: 42 })) as { mode: string; run_id: number; rerun_requested: boolean };
-      assert.equal(out.mode, "rerun");
-      assert.equal(out.run_id, 42);
-      assert.equal(out.rerun_requested, true);
-    }
-  );
-});
-
-test("ci_dispatch REPORTS the poll timeout instead of claiming a run id", async () => {
-  // The dispatch endpoint answers 204 with no body. If no new run appears, the
-  // honest answer is run_id null plus a note, not a guess at which run was ours.
-  await withFetch(
-    {
-      "GET /repos/o/r": REPO_META,
-      // Same run id before and after, so nothing "new" ever appears.
-      "GET /repos/o/r/actions/runs": { body: { workflow_runs: [{ id: 1, head_sha: "a", name: "CI", status: "completed", conclusion: "success", created_at: "x", updated_at: "y", html_url: "u" }] } },
-      "POST /repos/o/r/actions/workflows/ci.yml/dispatches": { status: 204, text: "" },
-    },
-    async () => {
-      const started = Date.now();
-      const out = (await ciDispatch(makeEnv(), "ns", { workflow: "ci.yml", ref: "main" }, undefined, {
-        timeoutMs: 300,
-        intervalMs: 100,
-      })) as {
-        dispatched: boolean;
-        run_id: number | null;
-        note?: string;
-        polls: number;
-      };
-      assert.equal(out.dispatched, true, "the dispatch itself should still be reported as accepted");
-      assert.equal(out.run_id, null, "a run id was invented when none appeared");
-      assert.match(out.note ?? "", /no new run appeared/);
-      assert.ok(out.polls > 0, "it did not poll at all");
-      // It must actually wait rather than returning instantly.
-      assert.ok(Date.now() - started >= 100, "the poll loop did not wait");
-    }
-  );
-});
-
-test("ci_dispatch returns the run id of the run that appeared", async () => {
-  let call = 0;
-  await withFetch(
-    {
-      "GET /repos/o/r": REPO_META,
-      "GET /repos/o/r/actions/runs": (_body: unknown) => {
-        call += 1;
-        const runs =
-          call === 1
-            ? [{ id: 1, head_sha: "a", name: "CI", status: "completed", conclusion: "success", created_at: "x", updated_at: "y", html_url: "u1" }]
-            : [
-                { id: 2, head_sha: "b", name: "CI", status: "in_progress", conclusion: null, created_at: "x", updated_at: "y", html_url: "u2" },
-                { id: 1, head_sha: "a", name: "CI", status: "completed", conclusion: "success", created_at: "x", updated_at: "y", html_url: "u1" },
-              ];
-        return { body: { workflow_runs: runs } };
-      },
-      "POST /repos/o/r/actions/workflows/ci.yml/dispatches": { status: 204, text: "" },
-    },
-    async () => {
-      const out = (await ciDispatch(makeEnv(), "ns", { workflow: "ci.yml", ref: "main" }, undefined, {
-        timeoutMs: 2_000,
-        intervalMs: 50,
-      })) as { run_id: number | null; status?: string };
-      assert.equal(out.run_id, 2, "it did not identify the newly appeared run");
-      assert.equal(out.status, "in_progress");
     }
   );
 });

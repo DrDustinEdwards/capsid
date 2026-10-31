@@ -56,7 +56,7 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
     "status",
     {
       description:
-        "Capsid's state per namespace: a jobs block (queued, claimed and blocked counts, jobs finished today, and each blocked job with the command it is waiting on), the queue's breaker, the latest lint report, the pull requests auto-merge declined, the daily maintenance list and what needs Dustin. Also the signed policies' versions, the overnight switch, the auto-merge safety meter, canon_paths (the canon documents a driver's write turns into a proposal for the seat to approve) and, for the admin, canon_proposals, the proposals waiting, and agents: every minted agent with its kind, namespaces, grants, the flags it holds, when it was last seen and whether it is revoked. Never returns a key or a stored verifier. Read-only.",
+        "Capsid's state per namespace: a jobs block (queued, claimed and blocked counts, jobs finished today, and each blocked job with the command it is waiting on), the queue's breaker, the latest lint report, the pull requests auto-merge declined, the daily maintenance list and what needs Dustin. Also the signed policies' versions, the overnight switch, the auto-merge safety meter, canon_paths (the canon documents a key scoped to some namespaces may not change) and, for the admin, agents: every minted agent with its kind, namespaces, grants, the flags it holds, when it was last seen and whether it is revoked. Never returns a key or a stored verifier. Read-only.",
       inputSchema: {
         namespace: nsName.optional().describe("Limit to one namespace. Omit for every app namespace."),
       },

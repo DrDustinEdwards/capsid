@@ -75,11 +75,8 @@ const DESTRUCTIVE = [
 const matches = (body: string, res: RegExp[]) => res.some((re) => re.test(body));
 
 // Tool actions that run an operation the scan reads as destructive, and are not, with
-// the reason. The operation is shared with an action that is: manage_pr merges and
-// closes under capsid_close_pr, and only comments under capsid_open_pr.
-const NOT_DESTRUCTIVE: Record<string, string> = {
-  "capsid_open_pr.comment": "manage_pr with action comment posts a comment and changes nothing else",
-};
+// the reason. None today.
+const NOT_DESTRUCTIVE: Record<string, string> = {};
 
 // A tool is destructive iff some action of it runs a destructive operation.
 const destructiveTool = (tool: string) => isWriteGated(tool) && toolOps(tool, { except: NOT_DESTRUCTIVE }).some((b) => matches(b.body, DESTRUCTIVE));
@@ -224,12 +221,11 @@ const NOT_NETWORK: Record<string, string> = {
 // stale entry fails.
 const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence: Array<{ file: string; pattern: RegExp }> }> = {
   jobs: {
-    reason: "complete and fail check their evidence against GitHub, and fire posts to Anthropic's routine endpoint",
-    via: /\b(?:completeAsCaller|fireRoutine)\(/,
+    reason: "complete and fail check their evidence against GitHub",
+    via: /\bcompleteAsCaller\(/,
     evidence: [
       { file: "jobs-holder.ts", pattern: /\bverifyEvidence\(/ },
       { file: "job-outcomes.ts", pattern: /\bghFetch\(/ },
-      { file: "routine-fire.ts", pattern: /\bpostFire\(/ },
     ],
   },
   whats_next: {
@@ -314,7 +310,7 @@ test("PLANT: openWorldHint is served true exactly for the tools that reach GitHu
   const blocks = [...BLOCKS.values()];
   const direct = blocks.filter(callsOutsideDirectly).map((b) => b.name);
   // Vacuity: the repo operations and lint call GitHub directly.
-  assert.ok(direct.length >= 14, `the direct scan found only ${direct.length} open-world operations; it is broken`);
+  assert.ok(direct.length >= 10, `the direct scan found only ${direct.length} open-world operations; it is broken`);
   const openOps = new Set([...direct, ...Object.keys(OPEN_WORLD_THROUGH)]);
   const expected = new Set(SERVED.filter((s) => openOps.has(s.op)).map((s) => s.tool));
   const understated = [...served].filter(([name, h]) => expected.has(name) && h?.openWorldHint !== true).map(([n]) => n);
@@ -358,10 +354,7 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
   capsid_write_doc: { idempotent: false, reason: "append adds again, every overwrite snapshots a new version, and each restore snapshots the live body first" },
   capsid_delete_doc: { idempotent: true, reason: "a repeat finds nothing to delete and is refused" },
   capsid_lint_namespace: { idempotent: false, reason: "a second report the same day snapshots the first" },
-  capsid_change_repo: { idempotent: false, reason: "every file write is a new commit, or a new pull request in pr mode" },
-  capsid_open_pr: { idempotent: false, reason: "a comment posts a new comment on every call, and after a close a repeat open opens another" },
   capsid_close_pr: { idempotent: false, reason: "a merge or close of a reopened pull request is not a no-op" },
-  capsid_run_ci: { idempotent: false, reason: "every call starts a new workflow run" },
   capsid_work_jobs: { idempotent: false, reason: "post creates a job on every call" },
   capsid_admin_manage_namespaces: { idempotent: false, reason: "register creates one on every call it is not refused" },
   capsid_admin_manage_agents: { idempotent: false, reason: "mint issues a new credential on every call" },
@@ -401,7 +394,7 @@ test("PLANT: every write-gated tool has an idempotence entry with a reason, and 
 test("PLANT: no tool that creates something new on every call is served as idempotent", async () => {
   const served = await servedAnnotations();
   const creators = TOOLS.filter((tool) => toolOps(tool).some((b) => matches(b.body, NEW_EACH_CALL) || insertsFresh(b.body)));
-  assert.ok(creators.length >= 6, `the scan found only ${creators.length} tools that create on every call; it is broken`);
+  assert.ok(creators.length >= 4, `the scan found only ${creators.length} tools that create on every call; it is broken`);
   const overstated = creators.filter((name) => served.get(name)?.idempotentHint !== false);
   assert.deepEqual(overstated, [], `these tools create something on every call and claim to be idempotent: ${overstated.join(", ")}`);
 });

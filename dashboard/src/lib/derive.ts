@@ -269,21 +269,6 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       open: agent ? "view:incidents" : "view:needs#waiting",
     });
   }
-  // Drivers' canon writes waiting for approval (src/canon.ts). A proposal whose added
-  // lines read as instructions to agents is a warning like the rest: it is never
-  // rejected automatically, so a person reads it.
-  if (live.canon_proposals.length) {
-    const flagged = live.canon_proposals.filter((c) => c.directive_lines.length).length;
-    const n = live.canon_proposals.length;
-    out.push({
-      sev: "warn",
-      kind: "Canon",
-      title: `${n} canon ${n === 1 ? "proposal awaits" : "proposals await"} your approval`,
-      sub: `${[...new Set(live.canon_proposals.map((c) => `${c.namespace}/${c.path}`))].join(", ")}${flagged ? ` · ${flagged} with lines that read as instructions to agents` : ""}`,
-      at: Math.max(...live.canon_proposals.map((c) => ms(c.created_at))),
-      open: "view:needs#waiting",
-    });
-  }
   for (const a of live.awaiting_seat) {
     out.push({ sev: "warn", kind: "PR", title: `${a.repo} #${a.number} awaits the seat`, sub: `${a.failed}: ${a.why}`, at: ms(a.at), open: "view:prs", group: { key: "pr-seat", facet: a.repo } });
   }
@@ -413,11 +398,11 @@ function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
   return out.sort(worstFirst);
 }
 
-// What waits on a person's decision: blocked jobs, rule changes (canon proposals), pull
+// What waits on a person's decision: blocked jobs, pull
 // requests waiting for you and stopped queues. Needs you lists each of these with its
 // buttons, so its Problems list, and Health's, leave them out (UX audit m2: one count, in
 // one place).
-export const WAITING_KINDS: ReadonlySet<string> = new Set(["Queue", "Canon", "PR", "Breaker"]);
+export const WAITING_KINDS: ReadonlySet<string> = new Set(["Queue", "PR", "Breaker"]);
 
 export function attentionGroups(feed: OpsFeed, now: number, skip?: ReadonlySet<string>): AttentionGroups {
   const items = attentionItems(feed, now).filter((a) => !skip?.has(a.kind));

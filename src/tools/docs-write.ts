@@ -12,7 +12,7 @@ import { bounded, MAX_BODY, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_LINKS_JSON, MAX_SH
 import { assembleBody } from "../write-modes";
 import { policyWriteRefusal } from "../signed-docs";
 import { concurrentEditWarning } from "../server";
-import { canonGuarded, proposeCanon } from "../canon";
+import { canonGuarded, canonRefusal } from "../canon";
 import { ruleDocWriteRefusal } from "../rule-docs";
 import { ok, fail, type ToolCtx, requireConfirmation } from "./docs";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
@@ -94,7 +94,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
     "write",
     {
       description:
-        "Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: 'replace' (default, full body, needs title and body), 'append' (body is added to the end; no title or confirmation needed), 'patch' (needs find and replace_with; find must occur EXACTLY ONCE or the write is refused), or 'meta' (change type, tags, status or title and leave the body byte-identical). Every response carries sha256 and bytes of the resulting body. Optional if_match: the sha256 of the body you believe is stored; when it does not match, the write is REFUSED and the error carries the current sha256. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of outgoing edges [{\"type\":\"references\",\"to_path\":\"conventions.md\",\"to_ns\":\"capsid\"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace) that replaces this document's outgoing edges; omit it to keep them, pass [] to clear them. CANON: a write to capsid/conventions*.md, any namespace's core.md, or decisions.md and its archived volumes, by a caller that is not the seat or the admin, is NOT applied: it is stored as a proposal for the seat or Dustin to approve and returns action 'pending_review' with the proposal id (links are refused on such a write). Needs the write grant.",
+        "Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: 'replace' (default, full body, needs title and body), 'append' (body is added to the end; no title or confirmation needed), 'patch' (needs find and replace_with; find must occur EXACTLY ONCE or the write is refused), or 'meta' (change type, tags, status or title and leave the body byte-identical). Every response carries sha256 and bytes of the resulting body. Optional if_match: the sha256 of the body you believe is stored; when it does not match, the write is REFUSED and the error carries the current sha256. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of outgoing edges [{\"type\":\"references\",\"to_path\":\"conventions.md\",\"to_ns\":\"capsid\"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace) that replaces this document's outgoing edges; omit it to keep them, pass [] to clear them. CANON: a write to capsid/conventions*.md, any namespace's core.md, or decisions.md and its archived volumes is REFUSED for a key scoped to some namespaces; the admin, the seat and a portfolio-wide key write it like any document. Needs the write grant.",
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -204,44 +204,13 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
 
       // A rule document (src/rule-docs.ts) may not be made worse: over its cap and
       // larger than before, or naming a tool the Worker does not serve. Checked before
-      // the canon branch, so a proposal that could never be applied is refused too.
+      // the canon check.
       const ruleRefusal = ruleDocWriteRefusal(namespace, path, prior?.body ?? null, body as string);
       if (ruleRefusal) return fail(ruleRefusal);
 
-      // Canon write-protection (src/canon.ts). A driver's write to a canon document is
-      // stored as a proposal for the seat or Dustin to approve, never applied here. It
-      // needs no overwrite confirmation, because it overwrites nothing. links are not
-      // carried by a proposal, so a canon write that sets them is refused rather than
-      // having them dropped without a word.
-      if (canonGuarded(ctx.agent, namespace, path)) {
-        if (parsedLinks) {
-          return fail(`${namespace}/${path} is canon, so this write becomes a proposal, and a proposal carries no links. Nothing was written. Write it again without links.`);
-        }
-        const proposed = await proposeCanon(db, actor, new Date(), {
-          namespace,
-          path,
-          title: title ?? null,
-          body: body as string,
-          type: type ?? null,
-          tags: tags ?? null,
-          status: status ?? null,
-          mode: writeMode,
-          priorBody: prior?.body ?? null,
-          priorExists: Boolean(prior),
-        });
-        return ok({
-          namespace,
-          path,
-          action: "pending_review",
-          proposal: proposed.id,
-          base_sha256: proposed.base_sha,
-          directive_lines: proposed.directive_lines,
-          note:
-            `${namespace}/${path} is canon (src/canon.ts). Nothing was written to it: proposal ${proposed.id} waits for the seat or Dustin to approve it in Capsid Portal. ` +
-            `It is applied only if the document is still the one you read; if it changes first, the proposal is rejected and you write it again.` +
-            (proposed.directive_lines.length ? ` ${proposed.directive_lines.length} added line(s) read as instructions to agents and are highlighted for the reviewer.` : ""),
-        });
-      }
+      // Canon write-protection (src/canon.ts): a key scoped to some namespaces may not
+      // change canon.
+      if (canonGuarded(ctx.agent, namespace, path)) return fail(canonRefusal("write", namespace, path));
 
       // append and meta are exempt from confirmation. Confirmation exists to stop an
       // accidental clobber of existing text, and an append destroys none: the prior

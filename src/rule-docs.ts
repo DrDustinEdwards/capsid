@@ -51,7 +51,7 @@ const SERVED: ReadonlyMap<string, ReadonlySet<string> | null> = (() => {
 })();
 
 // Every action some served tool takes. An old tool name that is still an action somewhere
-// (create_branch, delete_branch) is not stale when it stands alone.
+// (delete_branch) is not stale when it stands alone.
 const SERVED_ACTIONS: ReadonlySet<string> = new Set([...SERVED.values()].flatMap((a) => (a ? [...a] : [])));
 
 // Old names with an underscore are not words, so outside backticks they still name the old

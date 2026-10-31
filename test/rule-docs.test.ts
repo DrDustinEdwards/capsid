@@ -63,7 +63,7 @@ test("PLANT: each stale tool reference is found, and served names are not", () =
   const clean = [
     "Use `capsid_admin_manage_namespaces` action `register`.",
     "Call `capsid_work_jobs` action `post`, then `capsid_find_docs`.",
-    "`capsid_change_repo` (actions `write_file` and `create_branch`)",
+    "`capsid_inspect_repo` (actions `refs` and `history`)",
     "the `write` grant, the `jobs` table, `jobs.claimed_by`",
     "`capsid_close_pr` action `delete_branch`",
     "the capsid-driver agent and capsid/decisions.md",

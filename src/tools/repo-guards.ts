@@ -47,9 +47,9 @@ export function repoGuards(ctx: ToolCtx) {
     fn: () => Promise<Record<string, unknown>>,
     // What the call is actually asking to do, which is what decides the flags. The
     // registrar has already checked the tool, the grant, the namespace and the repo
-    // selector by now; a wrapper could not have checked these, because `mode:
-    // "direct"` needs can_direct_write and `mode: "pr"` does not.
-    intent: { path?: string; mode?: string; action?: string; allow_workflow_write?: boolean; force?: boolean; repo?: string; surface?: { tool: string; action?: string } } = {}
+    // selector by now; a wrapper could not have checked these, because a forced branch
+    // delete needs can_merge and a plain one does not.
+    intent: { action?: string; force?: boolean; repo?: string; surface?: { tool: string; action?: string } } = {}
   ) => {
     // Every repo mutation passes through here, so the flag check is here and not in
     // each tool. test/scope-coverage.test.ts derives that no repo write tool reaches
@@ -64,8 +64,8 @@ export function repoGuards(ctx: ToolCtx) {
     }
     // `action` is the operation (the audit row's action); the check names the served
     // tool and action that run it (src/tools/surface.ts surfaceOf), which is what the
-    // tools axis narrows on. Without the action a reviewer minted
-    // ["capsid_open_pr", "capsid_open_pr.comment"] could open a pull request. The
+    // tools axis narrows on. Without the action an agent minted
+    // ["capsid_close_pr", "capsid_close_pr.delete_branch"] could merge. The
     // registrar checks it too; this is the one place every repo mutation passes through.
     const served = intent.surface ?? surfaceOf(action, intent.action);
     const refusal = ctx.scope({
@@ -74,7 +74,7 @@ export function repoGuards(ctx: ToolCtx) {
       repo: resolvedRepo,
       action: served.action,
       grant: "write",
-      flags: repoWriteFlags(served.tool, served.action, { ...intent, path: intent.path ?? path ?? undefined }),
+      flags: repoWriteFlags(served.tool, served.action, intent),
     });
     if (refusal) return fail(refusal);
     let result: Record<string, unknown>;
