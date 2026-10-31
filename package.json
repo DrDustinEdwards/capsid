@@ -47,7 +47,7 @@
     "@cloudflare/workers-oauth-provider": "1.2.4",
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.23.0",
     "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.7.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.49.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.53.0",
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.32.0",
     "jose": "6.2.14",

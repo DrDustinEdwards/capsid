@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { assetPath, DASHBOARD_CSP, handlePortalApp, HASHED_ASSET_CACHE, isNavigation } from "../src/portal-app.ts";
-import { CONSENT_DIALOG_HEADERS, withSecurityHeaders } from "../src/security-headers.ts";
+import { consentDialogHeaders, withSecurityHeaders } from "../src/security-headers.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // Capsid Portal's files behind the Portal gate (src/portal-app.ts), with a fake
@@ -121,7 +121,7 @@ test("the app's paths map onto the assets directory, and navigations are told fr
   assert.equal(isNavigation(new Request("https://x.example", { headers: { Accept: "application/json", "Sec-Fetch-Mode": "cors" } })), false);
 });
 
-test("the Portal's CSP did not loosen the consent dialog's, and allows nothing inline", () => {
-  assert.doesNotMatch(CONSENT_DIALOG_HEADERS["Content-Security-Policy"], /script-src|connect-src/);
+test("the Portal's CSP did not loosen the consent dialog's, and allows nothing inline", async () => {
+  assert.doesNotMatch((await consentDialogHeaders())["Content-Security-Policy"], /script-src|connect-src|unsafe-inline/);
   assert.doesNotMatch(DASHBOARD_CSP, /unsafe-inline|unsafe-eval|\*/);
 });

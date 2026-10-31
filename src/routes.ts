@@ -8,7 +8,7 @@ import { gatherInbox, restrictInbox } from "./inbox";
 import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
 import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
 import { readSiteConfig } from "./ops-sites";
-import { CONSENT_DIALOG_HEADERS, REPORT_PATH, securityHeadersFor } from "./security-headers";
+import { consentDialogHeaders, REPORT_PATH, securityHeadersFor } from "./security-headers";
 import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";
 import { ipKey, limit } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
@@ -82,13 +82,13 @@ const login = loginHandler<Env>({
   revokeExistingGrants: false,
 });
 
-// The consent page leaves with Capsid's own headers (CONSENT_DIALOG_HEADERS, and why its
+// The consent page leaves with Capsid's own headers (consentDialogHeaders, and why its
 // CSP has no form-action), which the header layer in src/index.ts leaves as they are.
 async function handleLogin(request: Request, env: Env): Promise<Response> {
   const response = await login.fetch(request, env);
   if (!(response.headers.get("Content-Type") ?? "").includes("text/html")) return response;
   const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(CONSENT_DIALOG_HEADERS)) headers.set(name, value);
+  for (const [name, value] of Object.entries(await consentDialogHeaders())) headers.set(name, value);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 

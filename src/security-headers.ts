@@ -1,4 +1,5 @@
-import { buildPolicy, reportingEndpoints } from "@dustinedwards/site-runtime/csp";
+import { buildPolicy, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
+import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
 import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 import { capsidMcp, capsidPortal } from "@dustinedwards/site-runtime/sites";
 import { MCP_HOST } from "./mcp-host";
@@ -32,8 +33,9 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 // its per-request Set-Cookie; withSecurityHeaders adds the shared set. Kept here so node
 // can import them: routes.ts cannot load under node --test.
 //
-// The dialog has an inline <style> and posts a form back to /authorize. No scripts or
-// images, so everything else is locked down.
+// The dialog has one inline <style>, site-runtime's CONSENT_STYLE, trusted by its hash
+// (no 'unsafe-inline'), and posts a form back to /authorize. No scripts or images, so
+// everything else is locked down.
 //
 // form-action is deliberately absent. Approving submits this form into a redirect
 // chain: POST /authorize, 302 to the Access sign-in, back to /callback, 302 out to the
@@ -45,10 +47,14 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 //
 // `form-action 'self'` shipped in 423bbd6 and broke hop two for 26 days, undetected
 // because a remembered approval (removed since) 302'd out of the GET and never submitted a form.
-export const CONSENT_DIALOG_HEADERS: Readonly<Record<string, string>> = {
-  "Content-Type": "text/html;charset=utf-8",
-  "Content-Security-Policy": buildPolicy(["default-src 'none'", "style-src 'unsafe-inline'", "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]),
-};
+let consentHeaders: Promise<Readonly<Record<string, string>>> | undefined;
+export function consentDialogHeaders(): Promise<Readonly<Record<string, string>>> {
+  consentHeaders ??= scriptHash(CONSENT_STYLE).then((hash) => ({
+    "Content-Type": "text/html;charset=utf-8",
+    "Content-Security-Policy": buildPolicy(["default-src 'none'", `style-src '${hash}'`, "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]),
+  }));
+  return consentHeaders;
+}
 
 // No Origin passes, same-origin passes, claude.ai passes. Everything else is refused.
 const MCP_BROWSER_ORIGINS = new Set(["https://claude.ai"]);

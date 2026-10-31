@@ -262,8 +262,8 @@ test("a page that was not read yields no finding about the beacon: not read is n
 // the security headers
 
 const headersRule: Extract<LiveRule, { path: string }> = { namespace: "sample", kind: "headers", path: "/" };
-const GOOD_CSP = "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; report-uri /csp-report";
-const goodHeaders = (): Headers => new Headers({ ...STANDARD_SECURITY_HEADERS, "content-security-policy": GOOD_CSP });
+const GOOD_CSP = "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; report-uri /csp-report; report-to csp";
+const goodHeaders = (): Headers => new Headers({ ...STANDARD_SECURITY_HEADERS, "content-security-policy": GOOD_CSP, "reporting-endpoints": `csp="https://sample.example.com/csp-report"` });
 const withHeaders = (headers: Headers): Parameters<typeof pageFindings>[2] => ({ status: 200, headers, html: page(""), problem: null, gated: false });
 
 test("a page that carries every standard header and an enforced policy is clean under the headers rule", () => {
