@@ -144,7 +144,7 @@ describe("the OAuth round trip", () => {
   it("PLANT: a second authorization for the same user and client leaves the first grant usable", async () => {
     // Claude uses one CIMD client id for both the Capsid (/mcp) and Capsid Admin
     // (/mcp/admin) connectors. The provider revokes every earlier grant for the same
-    // user and client on each authorization unless src/routes.ts keepingGrants passes
+    // user and client on each authorization unless src/routes.ts passes loginHandler
     // revokeExistingGrants: false, so signing into one signed the other out.
     const first = await authorize(env.ADMIN_EMAIL!);
     const exchanged = await tokenRequest({ grant_type: "authorization_code", code: first.code!, redirect_uri: REDIRECT, client_id: first.clientId, code_verifier: VERIFIER });

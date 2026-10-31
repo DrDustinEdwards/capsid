@@ -37,13 +37,8 @@ interface Operation {
   handler: OperationHandler;
 }
 
-// Every served tool's outputSchema. A result is one JSON object whose fields depend on the
-// action, so the schema names only that; the text content still carries the same JSON for a
-// client that reads text alone.
-export const RESULT_SCHEMA = z.looseObject({}).describe("The tool's answer as a JSON object, the same one its text content carries. A non-JSON answer is { text }.");
-
 // The structured copy of a successful result (MCP structuredContent), which the output schema
-// promises on every result that is not an error.
+// (./outputs) promises on every result that is not an error. A non-JSON answer is { text }.
 function withStructure(result: OperationResult): OperationResult {
   if (result.isError === true || result.structuredContent !== undefined) return result;
   const text = result.content.map((c) => c.text).join("\n");

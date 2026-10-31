@@ -76,42 +76,16 @@ const login = loginHandler<Env>({
     refusal: "This account is not an administrator of Capsid (ADMIN_EMAIL or CO_OWNER_EMAILS).",
   },
   audit: { name: SERVER_INFO.name, version: SERVER_INFO.version },
+  // Claude identifies both connectors, Capsid on /mcp and Capsid Admin on /mcp/admin, with
+  // one client id (its CIMD document), so revoking earlier grants on each authorization
+  // signed one out when the other signed in. Each grant still expires on its own.
+  revokeExistingGrants: false,
 });
-
-// Claude identifies both connectors, Capsid on /mcp and Capsid Admin on /mcp/admin, with
-// one client id (its CIMD document) and one redirect URI. The provider's default revokes
-// every earlier grant for the same user, client and resource on each authorization, so
-// signing into one connector signed the other out. Each grant still expires on its own.
-function keepingGrants(env: Env): Env {
-  const helpers = env.OAUTH_PROVIDER;
-  const kept = new Proxy(helpers, {
-    get(target, key) {
-      if (key === "completeAuthorization") {
-        return (options: Parameters<typeof helpers.completeAuthorization>[0]) => target.completeAuthorization({ ...options, revokeExistingGrants: false });
-      }
-      const value = Reflect.get(target, key);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-  return { ...env, OAUTH_PROVIDER: kept };
-}
 
 // The consent page leaves with Capsid's own headers (CONSENT_DIALOG_HEADERS, and why its
 // CSP has no form-action), which the header layer in src/index.ts leaves as they are.
-// The consent POST is reachable without credentials, so its body is bounded and its
-// type checked before loginHandler's request.formData() buffers and parses it.
-const AUTHORIZE_FORM_MAX_BYTES = 65_536;
-
 async function handleLogin(request: Request, env: Env): Promise<Response> {
-  if (request.method === "POST") {
-    if (!(request.headers.get("Content-Type") ?? "").startsWith("application/x-www-form-urlencoded")) {
-      return textResponse("the consent form is posted as application/x-www-form-urlencoded", 415);
-    }
-    const bounded = await readBoundedText(request, AUTHORIZE_FORM_MAX_BYTES);
-    if (!bounded.ok) return textResponse(`request too large: exceeds ${AUTHORIZE_FORM_MAX_BYTES} bytes`, 413);
-    request = new Request(request, { body: bounded.text });
-  }
-  const response = await login.fetch(request, keepingGrants(env));
+  const response = await login.fetch(request, env);
   if (!(response.headers.get("Content-Type") ?? "").includes("text/html")) return response;
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(CONSENT_DIALOG_HEADERS)) headers.set(name, value);

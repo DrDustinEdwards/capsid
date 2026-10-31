@@ -65,9 +65,10 @@ const isComment = (line: string) => line.startsWith("//") || line.startsWith("*"
 // scanner-rule: quality audit 1.1, every tool argument is bounded
 test("every tool argument is bounded: no bare z.string() anywhere in src/", () => {
   // The whole directory, because a tool schema can be declared in any module.
-  // Excluded: comments, and the two primitives in limits.ts the rule is built from.
+  // Excluded: comments, the two primitives in limits.ts the rule is built from, and the
+  // output schemas, which describe answers, not arguments.
   const offenders = sourceFiles()
-    .filter((f) => f.name !== "limits.ts")
+    .filter((f) => f.name !== "limits.ts" && f.name !== "tools/outputs.ts")
     .flatMap((f) =>
       f.text
         .split("\n")
