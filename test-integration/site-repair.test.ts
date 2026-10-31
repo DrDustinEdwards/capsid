@@ -127,6 +127,21 @@ describe("the watcher's site repairs", () => {
     expect(report.lines.join(" ")).toMatch(/was not mailed: no send_email binding/);
   });
 
+  it("reads a site with no operator API too, and a sign-in spike alert under ok: true opens the incident and mails", async () => {
+    const { env: e, mails } = siteEnv();
+    const plain = (await config()).map((c) => ({ ...c, operator: null }));
+    const calls: string[] = [];
+    const spike = async (url: string) => {
+      calls.push(url);
+      return Response.json({ status: "warn", ok: true, alerts: ["auth-spike"], checks: [{ name: "db", status: "pass" }, { name: "auth-spike", status: "warn", alert: true }] });
+    };
+    const report = await watchSites(e, plain, "agent:watcher", spike, NOW);
+    expect(calls).toEqual([HEALTH]);
+    expect(report.findings.map((f) => [f.fingerprint, f.headline])).toEqual([["site-health-dustinedwards", "dustinedwards.info raised an alert: auth-spike"]]);
+    expect(report.findings[0].evidence.join(" ")).toMatch(/failing: auth-spike/);
+    expect(mails.map((m) => m.subject)).toEqual(["dustinedwards.info raised an alert: auth-spike"]);
+  });
+
   it("with the token unset, calls nothing and says so in the incident", async () => {
     const { env: e } = siteEnv({ DUSTINEDWARDS_OPERATOR_TOKEN: undefined });
     await env.APP_KV.put("site-weekly:dustinedwards:refresh_citations", NOW.toISOString());
