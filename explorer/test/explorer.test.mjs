@@ -11,6 +11,7 @@ import { build } from "../build.mjs";
 import { codePage, codePath } from "../src/code.mjs";
 import { numbersHtml } from "../src/numbers.mjs";
 import { servedTools } from "../src/surface.mjs";
+import { PAGE_PRELOADS } from "../worker.mjs";
 import { SITE, allPages, containersPath, escapeHtml, flowPath, percent, stepPath, stepWords, systemPath } from "../src/pages.mjs";
 
 const fixtures = new URL("../fixtures/", import.meta.url).pathname;
@@ -180,13 +181,16 @@ test("no page carries an inline script, an inline style or a time of day", () =>
   }
 });
 
-test("every link inside the explorer reaches a page or an asset it built", () => {
+test("every link inside the explorer reaches a page or an asset it built, and the Worker preloads what the home page links first", () => {
   const targets = new Set(files.map((f) => `/${f}`.replace(/index\.html$/, "")));
   for (const { file, text } of html) {
     for (const [, href] of text.matchAll(/(?:href|src)="(\/[^"#]*)"/g)) {
       assert.ok(targets.has(href ?? ""), `${file} links to ${href}, which the build did not write`);
     }
   }
+  const home = readFileSync(join(out, "index.html"), "utf8");
+  const linked = [...home.matchAll(/<link rel="(?:stylesheet|preload)" href="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(PAGE_PRELOADS.links.map((link) => link.href).sort(), linked.sort());
 });
 
 test("a rate with too few cases is said so, and has no picture", () => {
