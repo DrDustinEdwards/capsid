@@ -1,6 +1,9 @@
+import { ACCESS_JWT_HEADER, ACCESS_LOGOUT_PATH, ADMIN_IDLE_SECONDS, ADMIN_SEEN_COOKIE, accessIssuer, adminIdle } from "@dustinedwards/site-runtime/access";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, startAccessLogin } from "./access-login";
 import { cookieName, getCookie, hmacHex, isAdminEmail } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
+import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
+import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 import type { Env } from "./env";
 import { isPortalHost, isSameOriginPath, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
@@ -14,11 +17,20 @@ const decodeBase64url = (text: string): string => new TextDecoder().decode(fromB
 // cookie and KV prefix, and turns the verified email into a signed cookie. It does not
 // go through the MCP provider, whose flow ends at a client redirect_uri.
 //
-// The cookie is a signed assertion (HMAC over a base64url payload with the email and
-// an expiry), not a session record. It cannot be revoked before it expires, so the
-// TTL is twelve hours and the admin check (ADMIN_EMAIL or CO_OWNER_EMAILS) runs again on every request.
-// Sign out expires it in this browser; a copy taken elsewhere stays valid until it
-// expires, which is the cost of a stateless cookie.
+// The cookie is a signed assertion (HMAC over a base64url payload with the email, the
+// sign-in time and an expiry), not a session record. Three things end it:
+// - Eight hours after the sign-in (PORTAL_SESSION_TTL_SECONDS), the Portal sends the
+//   browser back through Access, which asks for a sign-in once its own session (24
+//   hours) is over. Access for SaaS does not tell the Portal when that session began,
+//   so the Portal keeps its own well under it.
+// - An hour with no request: site-runtime's adminIdle times the session, as it times
+//   the sites' Access sessions (withPortalIdle below). Past it the Portal session is
+//   ended and the browser is sent to Access's logout, which ends the Access session too,
+//   so the next visit asks for a sign-in instead of passing straight through.
+// - Sign out and the idle end write the time to OAUTH_KV (portal:ended:<email>), and a
+//   cookie from a sign-in before it is refused, so a copy taken elsewhere ends too
+//   (within KV's propagation, about a minute).
+// The admin check (ADMIN_EMAIL or CO_OWNER_EMAILS) runs again on every request.
 //
 // Every cookie here is host-only (no Domain attribute, ever) and scoped by portalCookiePath
 // (src/portal-host.ts): Path=/ on portal.dustinedwards.info, a host that serves nothing
@@ -35,7 +47,12 @@ const PORTAL_SESSION_COOKIE = "capsid_portal";
 // then left alone, never rotated per poll, so a preview and its perform carry one
 // value (src/ops-feed.ts).
 export const PORTAL_CSRF_COOKIE = "capsid_portal_csrf";
-export const PORTAL_SESSION_TTL_SECONDS = 12 * 60 * 60;
+export const PORTAL_SESSION_TTL_SECONDS = 8 * 60 * 60;
+// The browser keeps the cookie an idle hour past its expiry, so a request after the
+// expiry is still timed: an idle one ends the Access session rather than passing a
+// silent sign-in.
+const PORTAL_COOKIE_MAX_AGE = PORTAL_SESSION_TTL_SECONDS + ADMIN_IDLE_SECONDS;
+const ENDED_PREFIX = "portal:ended:";
 
 // The Portal's half of the Access login. The state stored against the token is the
 // Portal path to return to. The callback and the state cookie follow the host: on
@@ -58,6 +75,8 @@ export interface PortalUser {
 }
 
 interface SessionPayload extends PortalUser {
+  // The sign-in time, epoch milliseconds.
+  at: number;
   exp: number;
 }
 
@@ -65,11 +84,12 @@ export async function portalSessionCookie(user: PortalUser, secret: string, now:
   const payload: SessionPayload = {
     email: user.email,
     ...(user.name ? { name: user.name } : {}),
+    at: now.getTime(),
     exp: Math.floor(now.getTime() / 1000) + PORTAL_SESSION_TTL_SECONDS,
   };
   const encoded = base64url(JSON.stringify(payload));
   const sig = await hmacHex(secret, encoded);
-  return `${cookieName(PORTAL_SESSION_COOKIE, cookiePath)}=${sig}.${encoded}; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`;
+  return `${cookieName(PORTAL_SESSION_COOKIE, cookiePath)}=${sig}.${encoded}; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=${PORTAL_COOKIE_MAX_AGE}`;
 }
 
 /** The Set-Cookie values that sign this browser out: the session and CSRF cookies,
@@ -81,9 +101,21 @@ export function portalSignOutCookies(cookiePath: string = PORTAL_PATH): string[]
   );
 }
 
-// The session's user, or null for anything that does not verify. The admin check
-// means changing ADMIN_EMAIL or CO_OWNER_EMAILS invalidates every outstanding Portal cookie.
-export async function readPortalSession(request: Request, env: Env, now: Date): Promise<PortalUser | null> {
+// The verified payload, expired or not, or null: a bad signature or shape, an email no
+// longer admitted (so changing ADMIN_EMAIL or CO_OWNER_EMAILS invalidates every
+// outstanding Portal cookie), or a sign-in before the person's last sign-out or idle
+// end. Read once per request: withPortalIdle and portalGate share it.
+const verified = new WeakMap<Request, Promise<SessionPayload | null>>();
+function verifiedSession(request: Request, env: Env): Promise<SessionPayload | null> {
+  let found = verified.get(request);
+  if (!found) {
+    found = verifySession(request, env);
+    verified.set(request, found);
+  }
+  return found;
+}
+
+async function verifySession(request: Request, env: Env): Promise<SessionPayload | null> {
   const raw = getCookie(request, PORTAL_SESSION_COOKIE);
   if (!raw) return null;
   const dot = raw.indexOf(".");
@@ -97,10 +129,70 @@ export async function readPortalSession(request: Request, env: Env, now: Date): 
   } catch {
     return null;
   }
-  if (typeof payload?.email !== "string" || typeof payload.exp !== "number") return null;
-  if (payload.exp * 1000 <= now.getTime()) return null;
+  // A cookie from before the sign-in time was kept carries no `at` and signs in once more.
+  if (typeof payload?.email !== "string" || typeof payload.exp !== "number" || typeof payload.at !== "number") return null;
   if (!await isAdminEmail(env, payload.email)) return null;
+  const ended = Number(await env.OAUTH_KV.get(`${ENDED_PREFIX}${payload.email}`));
+  if (ended && payload.at <= ended) return null;
+  return payload;
+}
+
+// The session's user, or null for anything that does not verify or has expired.
+export async function readPortalSession(request: Request, env: Env, now: Date): Promise<PortalUser | null> {
+  const payload = await verifiedSession(request, env);
+  if (!payload || payload.exp * 1000 <= now.getTime()) return null;
   return typeof payload.name === "string" && payload.name ? { email: payload.email, name: payload.name } : { email: payload.email };
+}
+
+/** Ends every Portal session of this person signed in up to `now`, in any browser. */
+export async function endPortalSessions(env: Env, email: string, now: Date): Promise<void> {
+  await env.OAUTH_KV.put(`${ENDED_PREFIX}${email}`, String(now.getTime()), { expirationTtl: PORTAL_COOKIE_MAX_AGE });
+}
+
+// The auth event log names a person by a digest of the address, never the address
+// (site-runtime ./log, "The auth event log").
+async function emailKey(email: string): Promise<string> {
+  return `email:${await sha256Hex(email.trim().toLowerCase())}`;
+}
+
+/** The auth event line for a Portal sign-out (POST /portal/api/sign-out). */
+export async function logPortalSignOut(email: string): Promise<void> {
+  logEvent(OWASP_EVENTS.signOut, { message: "Portal sign-out", app: "portal", email_key: await emailKey(email) });
+}
+
+/**
+ * site-runtime's adminIdle around the Portal's routes, as the sites use withAdminIdle
+ * around /admin. adminIdle times an Access session by its token's `sub` and `iat`
+ * (read, not verified: verifying is the gate's job). The Portal's session is the Access
+ * sign-in it verified at its callback, so it hands adminIdle that sign-in in the token's
+ * place: `iat` the sign-in time and `sub` a server-keyed digest of the email and that
+ * time, so the last-request cookie cannot be made without COOKIE_ENCRYPTION_KEY. With
+ * no session it goes straight to `handle`, whose gate starts the sign-in.
+ */
+export async function withPortalIdle(request: Request, env: Env, handle: () => Promise<Response>, now: Date = new Date()): Promise<Response> {
+  const session = await verifiedSession(request, env);
+  if (!session) return handle();
+  const iat = Math.floor(session.at / 1000);
+  const sub = await hmacHex(env.COOKIE_ENCRYPTION_KEY, `portal-idle.${session.email}.${session.at}`);
+  const timed = new Headers({ [ACCESS_JWT_HEADER]: `portal.${base64url(JSON.stringify({ sub, iat }))}.portal` });
+  const cookies = request.headers.get("Cookie");
+  if (cookies) timed.set("Cookie", cookies);
+  const gate = await adminIdle(new Request(request.url, { headers: timed }), { now: now.getTime() });
+  if (gate.idle) {
+    await endPortalSessions(env, session.email, now);
+    logEvent(OWASP_EVENTS.sessionExpired, { message: "Portal session ended after an idle hour", app: "portal", reason: "idle", email_key: await emailKey(session.email) });
+    const issuer = accessIssuer(env.ACCESS_TEAM_DOMAIN);
+    const url = new URL(request.url);
+    const headers = new Headers({ "Cache-Control": "no-store", Location: issuer ? `${issuer}${ACCESS_LOGOUT_PATH}` : publicPortalPath(url, PORTAL_PREFIX) });
+    for (const cookie of portalSignOutCookies(portalCookiePath(url))) headers.append("Set-Cookie", cookie);
+    headers.append("Set-Cookie", `${ADMIN_SEEN_COOKIE}=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax`);
+    return new Response(null, { status: 302, headers });
+  }
+  const response = await handle();
+  if (!gate.cookie) return response;
+  const out = new Response(response.body, response);
+  out.headers.append("Set-Cookie", gate.cookie);
+  return out;
 }
 
 /** What the top bar shows for the signed-in person: the name from their Access identity,
@@ -129,8 +221,12 @@ export async function handlePortalCallback(request: Request, env: Env, now: Date
   const url = new URL(request.url);
   const flow = portalLogin(url);
   const login = await completeAccessLogin(request, env, flow, (stored) => stored, now);
-  if (!login.ok) return login.response;
+  if (!login.ok) {
+    logEvent(OWASP_EVENTS.signInFailure, { message: `Portal sign-in refused: ${login.code}`, app: "portal", via: "access", code: login.code }, { level: "warn" });
+    return login.response;
+  }
   const { email, name, state: returnTo } = login;
+  logEvent(OWASP_EVENTS.signInSuccess, { message: "Portal sign-in", app: "portal", via: "access", email_key: await emailKey(email) });
 
   // A relative Portal path only, checked rather than trusted from KV, so a bad write
   // cannot become an open redirect.
@@ -155,6 +251,7 @@ export type PortalGate = { ok: true; user: PortalUser } | { ok: false; response:
  *  header, the Access sign-in with no session, else the administrator. */
 export async function portalGate(request: Request, env: Env, now: Date, returnTo: string): Promise<PortalGate> {
   if (request.headers.get("Authorization")) {
+    logEvent(OWASP_EVENTS.authorizationFailure, { message: "Portal refused a bearer token", app: "portal", reason: "bearer" }, { level: "warn" });
     return {
       ok: false,
       response: new Response(BEARER_REFUSAL, { status: 403, headers: { "Content-Type": "text/plain;charset=utf-8" } }),

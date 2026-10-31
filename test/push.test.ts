@@ -84,6 +84,7 @@ function world(opts: { awaiting?: object[]; jobs?: Row[]; deploys?: Row[]; devic
   const env = {
     DB: d1,
     APP_KV: kv.kv,
+    OAUTH_KV: fakeKv().kv,
     ADMIN_EMAIL: "admin@example.com",
     VAPID_PRIVATE_KEY: opts.key === false ? undefined : JSON.stringify(VAPID.jwk),
     COOKIE_ENCRYPTION_KEY: SECRET,

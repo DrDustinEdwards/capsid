@@ -904,7 +904,7 @@ async function signOut(opts: Opts = {}): Promise<Request> {
   return post(PORTAL_SIGN_OUT_PATH, {}, opts);
 }
 
-test("sign out expires the session and CSRF cookies at Path=/portal, and writes nothing", async () => {
+test("sign out expires the session and CSRF cookies at Path=/portal, and ends a copy of the session on the server (D4)", async () => {
   const w = world();
   const res = await handlePortalSignOut(await signOut(), w.env, NOW);
   assert.equal(res.status, 204);
@@ -918,6 +918,9 @@ test("sign out expires the session and CSRF cookies at Path=/portal, and writes 
     assert.match(c, /HttpOnly; Secure; SameSite=Lax/);
   }
   wroteNothing(w, "sign out");
+  // The same session cookie, sent again from anywhere, is a sign-in redirect now.
+  const again = await handlePortalSignOut(await signOut(), w.env, NOW);
+  assert.equal(again.status, 302, "a copy of the signed-out session was still admitted");
 });
 
 for (const [label, opts] of [
