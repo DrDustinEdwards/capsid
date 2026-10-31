@@ -1,0 +1,26 @@
+name: access-drift
+
+# The daily Access drift check (devkit's access-drift.yml, area 3 I2): who the Access for SaaS application Capsid lets
+# in, against ADMIN_EMAIL and CO_OWNER_EMAILS, read hashed from the Portal's /admin/access-drift (src/index.ts).
+# It fails until ACCESS_READ_TOKEN, CLOUDFLARE_ACCOUNT_ID, ACCESS_CLIENT_ID and ACCESS_CLIENT_SECRET are set, by design.
+
+on:
+  schedule:
+    - cron: "37 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    uses: DrDustinEdwards/devkit/.github/workflows/access-drift.yml@005509b56d9830b785f17ba496f4a3c223fc392c # v0.20.19
+    with:
+      app: Capsid
+      admins-url: https://portal.dustinedwards.info/admin/access-drift
+      site-runtime-ref: v0.59.0
+    secrets:
+      ACCESS_READ_TOKEN: ${{ secrets.ACCESS_READ_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ACCESS_CLIENT_ID: ${{ secrets.ACCESS_CLIENT_ID }}
+      ACCESS_CLIENT_SECRET: ${{ secrets.ACCESS_CLIENT_SECRET }}

@@ -5,12 +5,18 @@
 // Scripts and styles from this origin and nothing inline, so an injected tag in anything the
 // feed carries cannot run; nothing unlisted (denyUnlisted). The consent dialog's CSP is separate.
 // Violations go to the sink on the MCP host (REPORT_URL), the group Reporting-Endpoints names.
-import { buildContentSecurityPolicy } from "@dustinedwards/site-runtime/csp";
+// Trusted Types is staged (the Portal's registry entry): DASHBOARD_CSP_REPORT_ONLY is the same
+// policy with require-trusted-types-for added, sent Report-Only beside it until the reports name
+// every sink React reaches.
+import { buildContentSecurityPolicy, buildStagedPolicy, CSP_REPORT_GROUP, type SitePolicy } from "@dustinedwards/site-runtime/csp";
 import { REPORT_URL } from "./security-headers";
 
-export const DASHBOARD_CSP = buildContentSecurityPolicy({
+const POLICY: SitePolicy = {
   sources: { img: ["data:"] },
   denyUnlisted: true,
   reportUri: REPORT_URL,
-  reportTo: "csp",
-}).value;
+  reportTo: CSP_REPORT_GROUP,
+};
+
+export const DASHBOARD_CSP = buildContentSecurityPolicy(POLICY).value;
+export const DASHBOARD_CSP_REPORT_ONLY = buildStagedPolicy(POLICY, { trustedTypes: true }).value;
