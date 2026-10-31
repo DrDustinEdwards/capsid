@@ -251,7 +251,9 @@ export default {
         runTask(
           env,
           "tick",
-          () => runTick(env, new Date()),
+          // The tick's signed-in crawl asks serve() for the Portal's pages in-process (src/signed-in-crawl.ts), past the
+          // request log and the 404 count, so a crawl is never recorded as a visit.
+          () => runTick(env, new Date(), (request) => serve(request, env, ctx)),
           (): TaskResult => ({ outcome: "ok", reason: "the tick's steps ran; each records its own run" }),
           { tag: "TICK_THREW", rethrow: true }
         )

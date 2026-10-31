@@ -10,6 +10,7 @@ import { publicBuildTick } from "./public-data";
 import { docIndexTick } from "./doc-index";
 import { pushTick } from "./push";
 import { sitePulseTick } from "./site-pulse";
+import { type Fetch, signedInCrawlTick } from "./signed-in-crawl";
 import { digestTick } from "./digest";
 import { unitsTick } from "./merge-units";
 import { mergeSafetyTick } from "./merge-safety";
@@ -19,7 +20,7 @@ import { logEvent } from "@dustinedwards/site-runtime/log";
 // (src/task-runs.ts): runTask records a run, and records and logs a throw without
 // rethrowing it, so one step's throw does not stop the rest of the tick. A step that was
 // not due returns null from its judge and records nothing.
-export async function runTick(env: Env, now: Date): Promise<void> {
+export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> {
   // Auto-merge. The policy document decides whether it does anything; it ships
   // disabled, and a disabled policy is not a run. A policy that cannot be read or is
   // refused is.
@@ -188,6 +189,18 @@ export async function runTick(env: Env, now: Date): Promise<void> {
     },
     { tag: "SITE_PULSE_THREW:", rethrow: false }
   );
+
+  // The signed-in crawl (src/signed-in-crawl.ts): hourly, the Portal through this Worker's own handler (`self`) and
+  // Desk with its Access service token, published for devkit's scoreboard. Recorded only when it ran.
+  if (self) {
+    await runTask(
+      env,
+      "signed-in-crawl",
+      () => signedInCrawlTick(env, now, self),
+      (report): TaskResult => (report ? { outcome: "ok", reason: report.note } : null),
+      { tag: "SIGNED_IN_CRAWL_THREW:", rethrow: false }
+    );
+  }
 
   // Phone alerts (src/push.ts): after the auto-merge step and the watcher, so a typed
   // pull request or a rollback they just recorded is seen this tick. It spends no model

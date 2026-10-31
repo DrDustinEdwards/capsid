@@ -33,6 +33,7 @@ import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH } from "../src/bench.ts";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH } from "../src/shadow.ts";
 import { PUBLIC_CODE_PATH, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH } from "../src/public-data.ts";
+import { SIGNED_IN_REPORT_PATH } from "../src/signed-in-crawl.ts";
 import {
   ROUTE_GRANTS,
   UNGATED_ROUTES,
@@ -155,6 +156,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_PREFIX,
   PUBLIC_MODEL_PATH,
   PUBLIC_STATS_PATH,
+  SIGNED_IN_REPORT_PATH,
   PUBLIC_CODE_PATH,
   ADMIN_OPS_MCP_ROUTE,
 };

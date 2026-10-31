@@ -50,3 +50,10 @@ The `headers` rule runs `checkSecurityHeaders` from `@dustinedwards/security-hea
 ## Each pass logs what it read
 
 A JSON log line with `event` `WATCHER_LIVE` and a `message` of `WATCHER_LIVE pages <read>/<expected> shas <read>/<expected> analytics <read>/<expected> findings <n>`. No findings over zero pages read is not a clean bill: the count is the other half of the check.
+
+## The signed-in crawl
+
+devkit's scoreboard grades Capsid Portal and Carrel Desk from outside, and a crawl with no session sees only the sign-in redirect. So once an hour the tick runs `src/signed-in-crawl.ts`. It grades the pages behind the sign-in with site-runtime's checker, against the registry entry each app declared (`capsid-portal`, `carrel-desk`). It stores the report in KV and serves it at `https://mcp.dustinedwards.info/reports/signed-in-security.json`. devkit reads it there as the reported check `signed-in-security` (devkit `live/areas.json`). The report holds findings only: no page body, cookie or token.
+
+- **Portal.** The Portal is this Worker, and its session is Capsid's own cookie, so an Access service token can't pass it. The crawl calls this Worker's fetch handler in-process, with a Portal session minted for `ADMIN_EMAIL`. That session lasts for one request and never leaves the isolate. The crawl sends GETs of the page, its first script and `/api/namespaces`. It also sends R4's two probes: a `text/plain` and a form body to each JSON action, which must answer 415 (`requireJson`, run before the body, the CSRF pair or the session's rights are read).
+- **Desk.** The crawl fetches Desk over the network with an Access service token, using the `DESK_CRAWL_CLIENT_ID` and `DESK_CRAWL_CLIENT_SECRET` secrets and GET only. The token passes Access only where Desk's Access application has a Service Auth rule for it. Desk's own door must also admit the token: today it admits a person's email only, so it refuses the token with 403. Without the secrets, or behind a refusal, Desk's result is `error`, never a pass.

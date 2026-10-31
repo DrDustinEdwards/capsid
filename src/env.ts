@@ -83,14 +83,18 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // a P-256 private key as a JWK, put by scripts/vapid-keys.mjs. Unset, no alert is sent
   // and the Portal's Settings says why.
   VAPID_PRIVATE_KEY?: string;
+  // The signed-in crawl's Access service token for Carrel Desk (src/signed-in-crawl.ts): the token's Client ID and
+  // Client Secret, admitted by a Service Auth rule on Desk's Access application. Unset, Desk's result is "error".
+  DESK_CRAWL_CLIENT_ID?: string;
+  DESK_CRAWL_CLIENT_SECRET?: string;
   ALERT_EMAIL?: string;
   ALERT_FROM?: string;
 }
 
 // What the GitHub modules (src/github/) are handed: everything except the credentials
 // that mint backup read access, the Cloudflare read token (it can read Worker code), the
-// Access sync's write token and the key that signs phone alerts.
-export type RepoEnv = Omit<Env, "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "CF_ACCESS_SYNC_TOKEN" | "VAPID_PRIVATE_KEY">;
+// Access sync's write token, the key that signs phone alerts and Desk's crawl token.
+export type RepoEnv = Omit<Env, "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "CF_ACCESS_SYNC_TOKEN" | "VAPID_PRIVATE_KEY" | "DESK_CRAWL_CLIENT_ID" | "DESK_CRAWL_CLIENT_SECRET">;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move
 // to Access carry { id, login, name } from GitHub instead, fail the per-request email

@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { OpsTask, OpsTaskRun, OpsTaskRunOutcome } from "./ops-types/feed";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { MINUTE_MS, DAY_MS } from "./time";
+import { MINUTE_MS, HOUR_MS, DAY_MS } from "./time";
 
 // The run ledger (migrations/0029_task_runs.sql). Every scheduled task goes through runTask,
 // which writes one task_runs row per run: start, finish, outcome and a one-line
@@ -29,7 +29,8 @@ export type TaskId =
   | "merge-safety"
   | "doc-index"
   | "supersede"
-  | "site-pulse";
+  | "site-pulse"
+  | "signed-in-crawl";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -82,6 +83,8 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   // The five-minute site pulse (src/site-pulse.ts), on the tick; recorded only when a site
   // was called down or came back.
   { id: "site-pulse", label: "Site pulse", period_ms: null },
+  // The signed-in crawl of the Portal and Desk (src/signed-in-crawl.ts), hourly on the tick.
+  { id: "signed-in-crawl", label: "Signed-in header crawl", period_ms: 2 * HOUR_MS },
 ];
 
 const STALE_PERIODS = 2;

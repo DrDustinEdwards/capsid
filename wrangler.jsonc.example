@@ -83,6 +83,9 @@
   //   wrangler secret put BING_WEBMASTER_API_KEY       (capsid_inspect_repo action bing:
   //                                                     Bing Webmaster Tools' API key,
   //                                                     docs/bing-webmaster.md)
+  //   wrangler secret put DESK_CRAWL_CLIENT_ID         (the signed-in crawl's Access service
+  //   wrangler secret put DESK_CRAWL_CLIENT_SECRET     token for Carrel Desk, src/signed-in-crawl.ts,
+  //                                                     docs/live-checks.md)
   "vars": {
     "GITHUB_APP_CLIENT_ID": "YOUR_GITHUB_APP_CLIENT_ID"
   },
