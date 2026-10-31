@@ -32,7 +32,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.11",
     "@cloudflare/workers-types": "5.20261029.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.2",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.3",
     "@modelcontextprotocol/client": "2.4.0",
     "@types/node": "24.19.2",
     "jscpd": "5.4.2",
