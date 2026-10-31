@@ -517,7 +517,7 @@ test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_sit
       // A static import, a bare side-effect import, or a dynamic import().
       .filter((f) => new RegExp(`(\\bfrom\\s*|\\bimport\\s*\\(?\\s*)["'](\\.\\.?\\/)+${module}(\\.ts)?["']`).test(f.text))
       .map((f) => f.name);
-  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "site-key.ts", "site-traffic.ts", "watcher-gather.ts", "workers-builds.ts"]);
+  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "site-key.ts", "site-traffic.ts", "tls-expiry.ts", "watcher-gather.ts", "workers-builds.ts"]);
   // The config reads (capsid_admin_read_ops's Access and Email Routing actions) run per
   // call of an admin-only MCP tool and nowhere else: not from a Portal route, whose
   // every page load would then call Cloudflare.
@@ -529,6 +529,8 @@ test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_sit
   // The 404 report (capsid_inspect_repo traffic) reads per call of that MCP tool, and the
   // watcher reads the returned 5xx once a pass (readServerErrors).
   assert.deepEqual(importersOf("site-traffic"), ["tools/repo.ts", "watcher-gather.ts"]);
+  // The certificate read (readTlsExpiry) runs in the watcher pass; push only reads what it stored in KV.
+  assert.deepEqual(importersOf("tls-expiry"), ["push.ts", "watcher-gather.ts"]);
 });
 
 // The live checks' Web Analytics read (GET /accounts/{id}/rum/site_info/list).

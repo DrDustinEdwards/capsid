@@ -370,9 +370,20 @@ export interface OpsTask {
   recent: OpsTaskRun[];
 }
 
+// Each site's uptime over the last 90 UTC days, from the five-minute pulse's daily counts
+// (ops_uptime_daily, migrations/0054), against the 99.9% target. `below` is how many of
+// those days fell under the target.
+export interface OpsUptime {
+  target: number;
+  days: number;
+  sites: Array<{ namespace: string; probes: number; up: number; days: number; below: number }>;
+}
+
 export interface OpsFeed {
   // Null until the watcher has written its first pass.
   snapshot: OpsSnapshot | null;
+  // Null when the daily counts could not be read; absent from a feed before them.
+  uptime?: OpsUptime | null;
   live: OpsLive;
   // The run ledger, or why it could not be read.
   scheduled: { tasks: OpsTask[]; error: null } | { tasks: null; error: string };

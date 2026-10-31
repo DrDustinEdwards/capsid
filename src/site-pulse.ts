@@ -4,6 +4,7 @@ import { probeSite } from "./ops-snapshot";
 import { readSiteConfig, sitesFrom } from "./ops-sites";
 import type { SiteProbe } from "./ops-types/sites";
 import { DAY_MS } from "./time";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 
 // THE FIVE-MINUTE PULSE (area 8, 2026-10-30). The watcher probes the sites half-hourly
 // for the Portal's rings and findings, and until this nothing told Dustin when a site went
@@ -97,6 +98,16 @@ export function pulseAlerts(state: PulseState, now: Date): SiteAlert[] {
   return out;
 }
 
+/** One probe counted against its site's UTC day in ops_uptime_daily (migrations/0054). */
+function uptimeCount(db: D1Database, namespace: string, day: string, up: boolean): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO ops_uptime_daily (namespace, day, probes, up) VALUES (?1, ?2, 1, ?3)
+       ON CONFLICT (namespace, day) DO UPDATE SET probes = probes + 1, up = up + excluded.up`
+    )
+    .bind(namespace, day, up ? 1 : 0);
+}
+
 export async function readPulse(env: Pick<Env, "APP_KV">): Promise<PulseState> {
   const raw = await env.APP_KV.get(SITE_PULSE_KEY);
   return raw ? (JSON.parse(raw) as PulseState) : {};
@@ -111,11 +122,22 @@ export async function sitePulseTick(env: Env, now: Date, fetchImpl: typeof fetch
   const self = sites.some((s) => s.self) ? await healthReport(env).catch(() => null) : null;
   const next: PulseState = {};
   const changed: string[] = [];
+  const counts: D1PreparedStatement[] = [];
+  const day = now.toISOString().slice(0, 10);
   for (const site of sites) {
-    const pulse = nextPulse(prev[site.namespace], await probeSite(site, fetchImpl, now, self), now);
+    const probe = await probeSite(site, fetchImpl, now, self);
+    counts.push(uptimeCount(env.DB, site.namespace, day, probe.state !== "down"));
+    const pulse = nextPulse(prev[site.namespace], probe, now);
     next[site.namespace] = pulse;
     const was = prev[site.namespace]?.down_since ?? null;
     if (pulse.down_since !== was) changed.push(`${site.namespace} ${pulse.down_since ? "down" : "back up"}`);
+  }
+  // The daily uptime rows (area 8, U4). A failed write is logged and never stops the pulse,
+  // whose alerts matter more than one tick's count.
+  try {
+    await env.DB.batch(counts);
+  } catch (err) {
+    logEvent("SITE_PULSE_UPTIME_UNWRITTEN", { message: `SITE_PULSE_UPTIME_UNWRITTEN ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }
   const written = JSON.stringify(next);
   if (written !== JSON.stringify(prev)) await env.APP_KV.put(SITE_PULSE_KEY, written);

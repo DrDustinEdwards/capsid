@@ -361,7 +361,9 @@ async function gateSecurityHeaders(clientId) {
   });
   const surfaces = [
     ["/health", "json", { url: `${ORIGIN}/health` }],
-    ["/authorize consent", "html", { url: consent, init: { redirect: "manual" }, noStore: true }],
+    // inlineStyles: the consent dialog's policy (CONSENT_DIALOG_HEADERS) allows inline CSS on purpose, and its
+    // default-src 'none' runs no script, so site-runtime's C11 is told rather than failed. Every other surface is held to it.
+    ["/authorize consent", "html", { url: consent, init: { redirect: "manual" }, noStore: true, inlineStyles: true }],
     ["/authorize bad req", "other", { url: `${ORIGIN}/authorize`, init: { redirect: "manual" } }],
     ["/callback no code", "other", { url: `${ORIGIN}/callback`, init: { redirect: "manual" } }],
     [".well-known/as", "json", { url: `${ORIGIN}/.well-known/oauth-authorization-server`, noStore: true }],
@@ -389,7 +391,7 @@ async function gateSecurityHeaders(clientId) {
   for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
     problems = [];
     lost = null;
-    for (const [label, cls, { url, init, noStore, status }] of surfaces) {
+    for (const [label, cls, { url, init, noStore, status, inlineStyles }] of surfaces) {
       let resp;
       try {
         resp = await request(url, { ...(init ?? {}), headers: { "Cache-Control": "no-cache", ...((init ?? {}).headers ?? {}) } });
@@ -403,7 +405,7 @@ async function gateSecurityHeaders(clientId) {
       if (noStore && !/no-store/i.test(h("cache-control") ?? "")) problems.push(`${label}: cache-control ${h("cache-control") ?? "(none)"}, expected no-store`);
 
       // Every class, no exception: the set and an enforced policy.
-      for (const r of failures(checkSecurityHeaders(resp.headers, { site: "capsid-mcp" }))) problems.push(`${label}: ${r.name}: ${r.detail}`);
+      for (const r of failures(checkSecurityHeaders(resp.headers, { site: "capsid-mcp", ...(inlineStyles ? { inlineStyles } : {}) }))) problems.push(`${label}: ${r.name}: ${r.detail}`);
       if (cls === "html" && !(h("content-type") ?? "").toLowerCase().includes("text/html")) problems.push(`${label}: expected html, got ${h("content-type")}`);
     }
     if (!lost && problems.length === 0) break;

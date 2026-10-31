@@ -27,6 +27,8 @@
     "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src",
     "lint:dead-exports": "node --import ./test/resolve-ts.mjs --test test/lint/dead-exports.lint.ts",
     "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",
+    "check:console": "devkit-console",
+    "check:migrations": "devkit-migrations migrations --min 54",
     "report:bloat": "devkit-no-bloat"
   },
   "devDependencies": {
@@ -46,8 +48,8 @@
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.24.0",
-    "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.7.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.49.0",
+    "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.8.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.54.0",
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.32.0",
     "jose": "6.2.14",

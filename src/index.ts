@@ -17,7 +17,8 @@ import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
 import { portalHostRequest } from "./portal-host";
 import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
+import { countNotFound } from "@dustinedwards/site-runtime/not-found";
 import { securityTxtResponse } from "@dustinedwards/site-runtime/security-txt";
 
 const SECURITY_TXT_PATH = "/.well-known/security.txt";
@@ -144,40 +145,54 @@ function providerFor(env: Env, resource: string, registration: boolean): OAuthPr
   return provider;
 }
 
+async function serve(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  // portal.dustinedwards.info serves the Portal and nothing else (src/portal-host.ts):
+  // /x there is /portal/x here, and an old /portal address redirects to the root. It
+  // runs FIRST, before the OAuth provider, because the provider answers its own routes
+  // (/mcp, /token, /authorize, /register, its metadata) without reaching the routes
+  // handler. Behind the provider, /mcp on the Portal host was the MCP endpoint, and
+  // live gate 7 rolled #218's deploy back (run 36863432268).
+  const { hostname, pathname: asked } = new URL(original.url);
+  const secured = (response: Response, path: string) => withSecurityHeaders(withCacheDefault(response, path), hostname);
+  // security.txt on both hosts, before the Portal's sign-in and the MCP host's path list.
+  if (asked === SECURITY_TXT_PATH) return secured(securityTxtResponse({ origin: `https://${hostname}`, contact: "security@dustinedwards.info", expires: SECURITY_TXT_EXPIRES }), asked);
+  const host = portalHostRequest(original);
+  if ("redirect" in host) return secured(host.redirect, asked);
+  const request = host.request;
+  // The MCP host serves the machine surface only, and the old address's /portal is
+  // retired (src/mcp-host.ts). Also before the provider, for the same reason.
+  const pathname = new URL(request.url).pathname;
+  const refused = hostRefusal(request);
+  if (refused) return secured(refused, pathname);
+  // Before the token check, so a page on another origin learns nothing from a 401 (DNS
+  // rebinding): a missing Origin, this origin and claude.ai pass.
+  if (pathname === "/mcp" || pathname === ADMIN_MCP_ROUTE) {
+    const foreign = mcpOriginRefusal(request, ["https://claude.ai"]);
+    if (foreign) return secured(foreign, pathname);
+  }
+  const legacy = new URL(request.url).hostname === LEGACY_HOST;
+  if (!legacy && pathname === "/register" && request.method === "POST") {
+    const limited = await registrationLimited(request, env.OAUTH_KV);
+    if (limited) return secured(limited, pathname);
+  }
+  const response = await providerFor(env, legacy ? LEGACY_MCP_URL : MCP_URL, !legacy).fetch(request, env, ctx);
+  return secured(response, pathname);
+}
+
+// Every request writes one `request` line (site-runtime withRequestLog: cf-ray, method, path
+// without the query, status, ms and the deployed sha; area 8, L3), and a 404 to a GET is
+// counted per path, referring host and UTC day in page_404_daily (site-runtime
+// countNotFound, migrations/0053; area 8, N1), written in waitUntil so it never holds the
+// answer. The backup prunes the counts at 90 days (src/backup.ts).
 export default {
-  async fetch(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // portal.dustinedwards.info serves the Portal and nothing else (src/portal-host.ts):
-    // /x there is /portal/x here, and an old /portal address redirects to the root. It
-    // runs FIRST, before the OAuth provider, because the provider answers its own routes
-    // (/mcp, /token, /authorize, /register, its metadata) without reaching the routes
-    // handler. Behind the provider, /mcp on the Portal host was the MCP endpoint, and
-    // live gate 7 rolled #218's deploy back (run 36863432268).
-    const { hostname, pathname: asked } = new URL(original.url);
-    const secured = (response: Response, path: string) => withSecurityHeaders(withCacheDefault(response, path), hostname);
-    // security.txt on both hosts, before the Portal's sign-in and the MCP host's path list.
-    if (asked === SECURITY_TXT_PATH) return secured(securityTxtResponse({ origin: `https://${hostname}`, contact: "security@dustinedwards.info", expires: SECURITY_TXT_EXPIRES }), asked);
-    const host = portalHostRequest(original);
-    if ("redirect" in host) return secured(host.redirect, asked);
-    const request = host.request;
-    // The MCP host serves the machine surface only, and the old address's /portal is
-    // retired (src/mcp-host.ts). Also before the provider, for the same reason.
-    const pathname = new URL(request.url).pathname;
-    const refused = hostRefusal(request);
-    if (refused) return secured(refused, pathname);
-    // Before the token check, so a page on another origin learns nothing from a 401 (DNS
-    // rebinding): a missing Origin, this origin and claude.ai pass.
-    if (pathname === "/mcp" || pathname === ADMIN_MCP_ROUTE) {
-      const foreign = mcpOriginRefusal(request, ["https://claude.ai"]);
-      if (foreign) return secured(foreign, pathname);
-    }
-    const legacy = new URL(request.url).hostname === LEGACY_HOST;
-    if (!legacy && pathname === "/register" && request.method === "POST") {
-      const limited = await registrationLimited(request, env.OAUTH_KV);
-      if (limited) return secured(limited, pathname);
-    }
-    const response = await providerFor(env, legacy ? LEGACY_MCP_URL : MCP_URL, !legacy).fetch(request, env, ctx);
-    return secured(response, pathname);
-  },
+  fetch: withRequestLog(
+    async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
+      const response = await serve(request, env, ctx);
+      countNotFound(env.DB, request, response, ctx);
+      return response;
+    },
+    { sha: (env: Env) => env.BUILD_SHA }
+  ),
   // Dispatch on controller.cron, not the clock: 09:00 UTC matches all three
   // expressions and Cloudflare delivers once per expression. Each branch is its own
   // task so a throwing tick cannot stop the backup. runTask (src/task-runs.ts) records every run in the
@@ -185,6 +200,12 @@ export default {
   // invocation shows as failed.
   scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     const cron = controller.cron;
+    // Every key wrangler.jsonc.example registers has a branch below. A key with none (a
+    // trigger added in the dashboard, or one renamed here and not there) would run nothing
+    // silently, so it is logged as an error (area 8, C2).
+    if (cron !== BACKUP_CRON && cron !== TICK_CRON && cron !== SKILLS_REFRESH_CRON) {
+      logEvent("CRON_KEY_UNKNOWN", { message: `CRON_KEY_UNKNOWN ${cron} has no task here; nothing ran` }, { level: "error" });
+    }
 
     if (cron === BACKUP_CRON) {
       ctx.waitUntil(
