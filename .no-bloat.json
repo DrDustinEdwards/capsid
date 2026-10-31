@@ -12,7 +12,7 @@
     }
   ],
   "baseline": {
-    "measured_at": "bf68613",
+    "measured_at": "d5e5f0e",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "Unused files": 1,
@@ -21,6 +21,15 @@
     "jscpd": {
       "clones": 18,
       "percentage": 0.26
+    },
+    "tests": {
+      "files": 286,
+      "cases": 2999
+    },
+    "comments": {
+      "lines": 16733,
+      "code": 99034,
+      "percentage": 14.45
     }
   }
 }
