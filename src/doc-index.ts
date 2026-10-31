@@ -30,6 +30,11 @@ const LIST_PAGE = 50;
 export const CURSOR_KEY = "doc-index:cursor:v2";
 const READY_KEY = "doc-index:instance";
 const RECONCILED_KEY = "doc-index:reconciled";
+// The AI Gateway id the instance was last pointed at (routeThroughGateway).
+const GATEWAY_KEY = "doc-index:gateway";
+// A hybrid query that has not answered by then falls back to keyword search (checklist
+// area 11, C2): AI Search's search() takes no timeout or signal of its own.
+const SEARCH_TIMEOUT_MS = 8_000;
 
 // Five fields, AI Search's limit per instance. A filter reads the first 64 bytes of a
 // string, and namespace names are far shorter.
@@ -119,6 +124,31 @@ async function ensureInstance(env: Env, ns: AiSearchNamespace): Promise<AiSearch
   }
   await env.APP_KV.put(READY_KEY, "ready");
   return instance;
+}
+
+// The reranker and the embedding model run inside AI Search, so a search call has no
+// gateway of its own to name: the instance names it (`ai_gateway_id`), and every model
+// call it makes then goes through that gateway's logs, rate limits and spend limits
+// (area 11, C13 and G1). AI_GATEWAY_ID is a dashboard var (kept by keep_vars); unset, the
+// instance is left as it is. A refusal is logged and retried on the next tick.
+async function routeThroughGateway(env: Env, instance: AiSearchInstance): Promise<void> {
+  const id = env.AI_GATEWAY_ID?.trim();
+  if (!id || (await env.APP_KV.get(GATEWAY_KEY)) === id) return;
+  try {
+    await instance.update({ ai_gateway_id: id });
+    await env.APP_KV.put(GATEWAY_KEY, id);
+    logEvent("DOC_INDEX_GATEWAY_SET", { message: `DOC_INDEX_GATEWAY_SET ${INDEX_INSTANCE} through gateway ${id}` });
+  } catch (err) {
+    logEvent("DOC_INDEX_GATEWAY_FAILED", { message: `DOC_INDEX_GATEWAY_FAILED ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+  }
+}
+
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: number | null = null;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms) as unknown as number;
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
 }
 
 async function readCursor(env: Env): Promise<Cursor> {
@@ -216,6 +246,7 @@ export async function docIndexTick(env: Env, now: Date): Promise<IndexReport> {
   const ns = env.AI_SEARCH;
   if (!ns) return idle("AI_SEARCH is not bound");
   const instance = await ensureInstance(env, ns);
+  await routeThroughGateway(env, instance);
   const { tried, sent, failed, refusal } = await sendChanged(env, instance);
   const today = now.toISOString().slice(0, 10);
   let deleted = 0;
@@ -293,7 +324,7 @@ export async function hybridSearch(
   if (!filter.includeRetired) filters.status = { $nin: RETIRED };
   let chunks: AiSearchSearchResponse["chunks"];
   try {
-    ({ chunks } = await ns.get(INDEX_INSTANCE).search({
+    ({ chunks } = await withTimeout(ns.get(INDEX_INSTANCE).search({
       query,
       ai_search_options: {
         retrieval: {
@@ -309,11 +340,13 @@ export async function hybridSearch(
         // reorders, it never drops a candidate the fusion found.
         reranking: { enabled: true, model: RERANK_MODEL, match_threshold: 0 },
       },
-    }));
+    }), SEARCH_TIMEOUT_MS));
   } catch (err) {
+    // The upstream error goes to the log only; the caller is told what happened, never
+    // the raw text of another service's answer (area 11, C12).
     const message = err instanceof Error ? err.message : String(err);
     logEvent("DOC_INDEX_SEARCH_FAILED", { message: `DOC_INDEX_SEARCH_FAILED ${message}` }, { level: "warn" });
-    return `the search index refused the query: ${message}`;
+    return "the search index did not answer";
   }
 
   // Best chunk first, so a document's first chunk sets its rank and its snippet; every
