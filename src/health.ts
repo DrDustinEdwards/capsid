@@ -3,7 +3,7 @@ import type { HealthSnapshot } from "./ops-types/sites";
 import { probeFts } from "./store-probe";
 import { aiSearchUsage } from "./doc-index";
 import { HOUR_MS } from "./time";
-import { healthResponse, kvCheck, r2Check, type HealthCheck } from "@dustinedwards/site-runtime/health";
+import { durableObjectCheck, healthResponse, kvCheck, r2Check, type HealthCheck } from "@dustinedwards/site-runtime/health";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
 import { DEFAULT_CADENCE_MINUTES } from "./watcher";
 
@@ -157,6 +157,12 @@ export async function handleHealth(env: Env): Promise<Response> {
   if (env.MEDIA) checks.push({ ...r2Check("media", env.MEDIA), level: "warn" });
   if (env.APP_KV) checks.push({ ...kvCheck("app_kv", env.APP_KV), level: "warn" });
   if (env.OAUTH_KV) checks.push({ ...kvCheck("oauth_kv", env.OAUTH_KV), level: "warn" });
+  // The two Durable Objects (area 8, H5), warn: a bound namespace mints an id, and no
+  // object is woken. Without RATE_LIMITER the limited routes refuse, and without
+  // TOOL_CALL_LOG a tool call goes unlogged; the store still answers, so neither is a 503.
+  // Left out: AI_SEARCH, because every read of it is a billed query and the hybrid search
+  // falls back to FTS5 without it; ASSETS, because the Portal's files are the deploy's own.
+  checks.push(durableObjectCheck("rate_limiter", env.RATE_LIMITER), durableObjectCheck("tool_call_log", env.TOOL_CALL_LOG));
   const response = await healthResponse({
     ping: async () => {
       try {

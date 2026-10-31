@@ -116,6 +116,16 @@ jobs:
       - name: Lint dead exports and doc drift
         run: npm run lint
 
+      # THE RATCHETS (devkit): no raw console.* call in src/ (the baseline in .console.json
+      # is 0; server code logs through logEvent), and no applied migration edited, renamed or
+      # deleted, nor a later one that drops or renames without a `-- contract:` line
+      # (migrations/manifest.json; a new migration adds its hash with
+      # `npx devkit-migrations migrations --write`).
+      - name: Console and migration ratchets
+        run: |
+          npm run check:console
+          npm run check:migrations
+
       - name: Tests
         run: npm test
 

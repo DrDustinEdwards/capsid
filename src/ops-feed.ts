@@ -16,7 +16,8 @@ import { readSiteConfig } from "./ops-sites";
 import { readPackageConfig } from "./ops-packages";
 import { readSnapshot } from "./ops-snapshot";
 import { INCIDENT_FAILURES, NEEDS_INPUT_INCIDENT_MS } from "./ops-hooks";
-import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSession } from "./ops-types/feed";
+import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSession, OpsUptime } from "./ops-types/feed";
+import { DAILY_RETENTION_DAYS } from "./backup";
 import { overnightState } from "./overnight";
 import { auditStatement } from "./store-guards";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
@@ -40,7 +41,7 @@ import { MINUTE_MS, DAY_MS } from "./time";
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 13 statements plus one per TASKS entry (9 today, so 22):
+//   D1, 14 statements plus one per TASKS entry (9 today, so 23):
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     3  agentSummaries: the inventory, then loadRecordRows' two grouped reads
 //     1  job_outcome_prs in the last 7 days
@@ -51,6 +52,7 @@ import { MINUTE_MS, DAY_MS } from "./time";
 //     9  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
 //     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
+//     1  ops_uptime_daily: each site's last 90 days, grouped (siteUptime below)
 //     3  gatherInbox (src/inbox.ts): the blocked jobs, the applied migrations (a block
 //        on a migration already applied is settled) and the site configuration again,
 //        so Needs you counts exactly what GET /ops/inbox answers with
@@ -69,7 +71,29 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
 // D1 statements: one per task, and 14 more, one of them the signed policy's read (liveMergePolicy).
-export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 } as const;
+export const OPS_FEED_READS = { d1: 15 + TASKS.length, kv: 10 } as const;
+
+// The uptime target the Portal shows each site against (area 8, U4).
+const UPTIME_TARGET = 0.999;
+
+/** Each site's probes and up probes over the retention window, and the days under the
+ *  target. Null, logged, when the table cannot be read (before migrations/0054). */
+async function siteUptime(env: Env, now: Date): Promise<OpsUptime | null> {
+  const since = new Date(now.getTime() - (DAILY_RETENTION_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT namespace, SUM(probes) AS probes, SUM(up) AS up, COUNT(*) AS days,
+              SUM(CASE WHEN up * 1000 < probes * 999 THEN 1 ELSE 0 END) AS below
+       FROM ops_uptime_daily WHERE day >= ?1 GROUP BY namespace ORDER BY namespace`
+    )
+      .bind(since)
+      .all<OpsUptime["sites"][number]>();
+    return { target: UPTIME_TARGET, days: DAILY_RETENTION_DAYS, sites: results ?? [] };
+  } catch (err) {
+    logEvent("OPS_FEED_UPTIME_UNREADABLE", { message: `OPS_FEED_UPTIME_UNREADABLE ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    return null;
+  }
+}
 
 // The Portal's double-submit CSRF cookie (OpsFeed.csrf), named in src/portal-auth.ts.
 // Minted when absent or malformed and then left alone, never rotated per poll, so a
@@ -399,9 +423,10 @@ async function scheduled(env: Env): Promise<{ read: Awaited<ReturnType<typeof re
 }
 
 export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
-  const [snapshot, live, last, runs] = await Promise.all([readSnapshot(env), opsLive(env, now), env.APP_KV.get(OPS_REFRESH_KEY), scheduled(env)]);
+  const [snapshot, live, last, runs, uptime] = await Promise.all([readSnapshot(env), opsLive(env, now), env.APP_KV.get(OPS_REFRESH_KEY), scheduled(env), siteUptime(env, now)]);
   return {
     snapshot,
+    uptime,
     live,
     scheduled:
       "error" in runs

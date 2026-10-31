@@ -21,7 +21,6 @@ import { COMPLETE_MARKER, latestDump, type R2Like } from "@dustinedwards/d1-dump
 export interface Site {
   name: string;
   bucket: string;
-  noSearch?: boolean;
 }
 export interface DrillRun {
   code: number;
@@ -30,16 +29,13 @@ export interface DrillRun {
 
 // dustinedwards and foxing join this list as their backup jobs land
 // (job_e40ec706c10a, job_d087b66eef22). txasm's bucket is txasm-books (binding BOOKS).
-// noSearch marks a site with no FTS5 table: d1-dump's `search` check fails for it with
-// "no FTS5 table held a word to search for", which is not a restore problem, so the line
-// reports PASS (search n/a) when that is the only failing check. Any other failure, or a
-// search failure for any other reason, is still a FAIL. Remove the flag when the site
-// gains an FTS5 table.
+// A site with no FTS5 table (txasm) passes d1-dump's own `search` check since d1-dump 0.8
+// ("no FTS5 tables in this database"), so the drill needs no flag for it.
 export const SITES: Site[] = [
   { name: "foxhound", bucket: "foxhound-backups" },
   { name: "carrel", bucket: "carrel-backups" },
   { name: "germomics", bucket: "germomics-backups" },
-  { name: "txasm", bucket: "txasm-books", noSearch: true },
+  { name: "txasm", bucket: "txasm-books" },
 ];
 
 // The drill's own freshness threshold (d1-dump DEFAULT_STALE_HOURS). Checked here against
@@ -68,15 +64,6 @@ export function firstFailure(output: string): string {
   return (failed ?? lines.find((l) => !l.startsWith("backend:")) ?? "the drill printed nothing").replace(/^FAIL /, "").slice(0, 200);
 }
 
-/**
- * True when the drill's only failing check is `search` for want of an FTS5 table. A drill
- * that failed with no named check (a crash, a timeout) is not excused.
- */
-export function onlySearchUnavailable(output: string): boolean {
-  const failed = output.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("FAIL "));
-  return failed.length > 0 && failed.every((l) => /^FAIL search:.*no FTS5 table/.test(l));
-}
-
 async function listAll(bucket: R2Like, prefix: string): Promise<string[]> {
   const keys: string[] = [];
   let cursor: string | undefined;
@@ -98,8 +85,7 @@ export async function drillSite(
   {
     now = new Date(),
     runDrill = runDrillCli,
-    noSearch = false,
-  }: { now?: Date; runDrill?: (dir: string, prefix: string) => DrillRun | Promise<DrillRun>; noSearch?: boolean } = {}
+  }: { now?: Date; runDrill?: (dir: string, prefix: string) => DrillRun | Promise<DrillRun> } = {}
 ): Promise<{ line: string; ok: boolean }> {
   const dir = mkdtempSync(join(tmpdir(), `drill-${site}-`));
   let head = site;
@@ -126,7 +112,6 @@ export async function drillSite(
     if (age > MAX_AGE_HOURS) return { line: `${stats} FAIL (dump: the newest complete run is over ${MAX_AGE_HOURS}h old)`, ok: false };
     const { code, output } = await runDrill(dir, latest.prefix);
     if (code === 0) return { line: `${stats} PASS`, ok: true };
-    if (noSearch && onlySearchUnavailable(output)) return { line: `${stats} PASS (search n/a: no FTS5 table)`, ok: true };
     return { line: `${stats} FAIL (${firstFailure(output)})`, ok: false };
   } catch (err) {
     return { line: `${head} FAIL (${(err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 200)})`, ok: false };
@@ -194,7 +179,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       continue;
     }
     try {
-      const { line, ok } = await drillSite(site.name, opened.bucket, { noSearch: site.noSearch === true });
+      const { line, ok } = await drillSite(site.name, opened.bucket);
       console.log(line);
       if (!ok) failed = true;
     } finally {

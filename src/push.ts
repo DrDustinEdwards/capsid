@@ -8,16 +8,17 @@ import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalPush } from "./ops-types/views";
 import { readPaused } from "./merge-safety";
 import { auditStatement } from "./store-guards";
-import { digestState } from "./digest";
+import { digestProblem, digestState } from "./digest";
 import { pulseAlerts, readPulse } from "./site-pulse";
 import { readSnapshot } from "./ops-snapshot";
+import { readStoredTls, tlsAlerts } from "./tls-expiry";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
 import { jsonResponse as json, textResponse as text } from "./http";
 import { HOUR_MS, DAY_MS } from "./time";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
 // and 6 of 2026-10-09). Web Push to the devices the administrator turned on in the
-// Portal's Settings, for exactly seven things:
+// Portal's Settings, for exactly eight things:
 //   1. a `typed` pull request (a money path) waiting more than 2 hours;
 //   2. a rollback (deploy_outcomes: rolled_back or rollback_failed);
 //   3. a job at the correction cap (blocked with the retry-cap reason);
@@ -29,13 +30,15 @@ import { HOUR_MS, DAY_MS } from "./time";
 //      route reports degraded, once a UTC day per failing check, naming why
 //      (src/site-pulse.ts); a site the watcher found erroring on over 1 percent of its
 //      requests, thrown or returned 5xx, once a UTC day (src/watcher-detect.ts
-//      siteErrorFindings).
-// Everything else waits for the digest.
+//      siteErrorFindings);
+//   8. a TLS certificate within 14 days of expiry, and again within 3 (src/tls-expiry.ts).
+// Everything else waits for the digest. With no key or no device on, the same alerts go
+// by email (emailFallback below).
 //
 // No alert carries an Approve button. The button was for `approve`-class pull requests,
 // and no trigger carries one: a typed PR is approved only by typing its number (design
 // section 8), a visual PR is approved after looking at its preview in the Portal, and the
-// other five are not pull requests. So there is no
+// other six are not pull requests. So there is no
 // /ops/approve route: a tap opens the Portal, where every answer is given. An alert names
 // the repo, the pull request or job id and the class, never a title.
 //
@@ -65,7 +68,7 @@ const DEPLOYS_URL = portalPath("/health?tab=deploys");
 const AUTO_MERGE_URL = portalPath("/prs#auto-merge");
 const SITES_URL = portalPath("/health?tab=sites");
 
-type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr" | "site";
+type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr" | "site" | "tls";
 
 interface Urgent {
   key: string;
@@ -194,6 +197,10 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
     const name = snapshot?.sites.find((s) => s.namespace === namespace)?.name ?? namespace;
     out.push({ key: `site-errors:${namespace}:${day}`, kind: "site", namespace, title: `${name} is returning errors`, body: `Over 1 percent of requests in the last complete hour threw or answered 5xx (watcher pass ${snapshot?.pass_at}).`, url: SITES_URL });
   }
+
+  // 8. A TLS certificate 14 or 3 days from expiry (src/tls-expiry.ts), from the watcher's
+  // last read. One that cannot be read alerts nothing.
+  for (const a of tlsAlerts(await readStoredTls(env).catch(() => null), now)) out.push({ ...a, kind: "tls", namespace: "capsid", url: SITES_URL });
   return out;
 }
 
@@ -207,20 +214,26 @@ export interface PushReport {
   sent: string[];
 }
 
+/** What is urgent and not yet sent, the first MAX_PER_TICK of it due now, and the sent record to update. */
+async function dueAlerts(env: Env, now: Date) {
+  const state = await readState(env);
+  const before = JSON.stringify(state);
+  const urgent = (await gatherUrgent(env, now, state.typed_seen)).filter((u) => !state.sent[u.key]);
+  return { state, before, urgent, due: urgent.slice(0, MAX_PER_TICK) };
+}
+
 /** One pass: what is urgent and not yet sent goes to every active device. */
 export async function pushTick(env: Env, now: Date, fetcher: typeof fetch = fetch): Promise<PushReport> {
   const vapid = readVapidKey(env.VAPID_PRIVATE_KEY);
-  if (typeof vapid === "string") return { ran: false, note: vapid, sent: [] };
+  // No key means no device can be on, so the alerts take the email fallback.
+  if (typeof vapid === "string") return emailFallback(env, now, vapid);
   const devices = await env.DB.prepare(`SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE status = 'active' ORDER BY id LIMIT ?1`)
     .bind(MAX_DEVICES)
     .all<DeviceRow>();
   const live = devices.results ?? [];
-  if (live.length === 0) return { ran: false, note: "no device has phone alerts on", sent: [] };
+  if (live.length === 0) return emailFallback(env, now, "no device has phone alerts on");
 
-  const state = await readState(env);
-  const before = JSON.stringify(state);
-  const urgent = (await gatherUrgent(env, now, state.typed_seen)).filter((u) => !state.sent[u.key]);
-  const due = urgent.slice(0, MAX_PER_TICK);
+  const { state, before, urgent, due } = await dueAlerts(env, now);
   const subject = env.ADMIN_EMAIL ? `mailto:${env.ADMIN_EMAIL}` : `https://${PORTAL_HOST}`;
   const at = now.toISOString();
   const sent: string[] = [];
@@ -263,6 +276,48 @@ export async function pushTick(env: Env, now: Date, fetcher: typeof fetch = fetc
     note: `sent ${sent.length} alert(s): ${sent.join(", ") || "none"}${failed ? `; ${failed} reached no device and will be tried again` : ""}${later ? `; ${later} more next tick` : ""}${gone.size ? `; ${gone.size} device(s) gone` : ""}`,
     sent,
   };
+}
+
+/**
+ * THE EMAIL FALLBACK (area 8, U2). With no device subscribed an alert reached nobody, so
+ * the same urgent items go by email instead, through the path the daily digest already uses
+ * (src/digest.ts): the send_email binding EMAIL, from ALERT_FROM to ALERT_EMAIL, and only
+ * once Email Routing is on (digestProblem). One mail per tick holds the items due, at most
+ * MAX_PER_TICK; each is marked sent in the same record as a push, so it goes out once
+ * whichever way it went. A refused mail marks nothing and is tried on the next tick. With
+ * the email path off as well, the note says both are off, and the Portal shows it. `why`
+ * (no key, or no device on) is carried into every note.
+ */
+async function emailFallback(env: Env, now: Date, why: string): Promise<PushReport> {
+  const off = digestProblem(env);
+  if (off) return { ran: false, note: `${why}, and the email fallback is off: ${off}`, sent: [] };
+  const { state, before, urgent, due } = await dueAlerts(env, now);
+  const at = now.toISOString();
+  let note = `nothing urgent (${why})`;
+  const sent: string[] = [];
+  if (due.length > 0) {
+    const subject = due.length === 1 ? `Capsid: ${due[0]!.title}` : `Capsid: ${due.length} alerts`;
+    const text = [
+      `${why}, so these came by email (turn a device on in the Portal's Settings).`,
+      "",
+      ...due.flatMap((u) => [`${u.title}`, u.body, u.url, ""]),
+      ...(urgent.length > due.length ? [`${urgent.length - due.length} more on the next tick.`] : []),
+    ].join("\n");
+    try {
+      await env.EMAIL!.send({ from: env.ALERT_FROM!, to: env.ALERT_EMAIL!, subject, text });
+      for (const u of due) {
+        state.sent[u.key] = at;
+        sent.push(u.key);
+      }
+      await env.DB.batch(due.map((u) => auditStatement(env.DB, "capsid:push", "push-emailed", u.namespace, null, { kind: u.kind, key: u.key })));
+      note = `emailed ${sent.length} alert(s) (${why}): ${sent.join(", ")}`;
+    } catch (err) {
+      note = `${why}, and Cloudflare refused the fallback mail: ${(err instanceof Error ? err.message : String(err)).slice(0, 200)}; tried again next tick`;
+    }
+  }
+  for (const [k, v] of Object.entries(state.sent)) if (now.getTime() - Date.parse(v) > SENT_TTL_MS) delete state.sent[k];
+  if (JSON.stringify(state) !== before) await env.APP_KV.put(STATE_KEY, JSON.stringify(state));
+  return { ran: due.length > 0, note, sent };
 }
 
 // ---------------------------------------------------------------------------

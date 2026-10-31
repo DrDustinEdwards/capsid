@@ -19,7 +19,9 @@
   // and the traffic is a five-minute cron tick plus operator tool calls, so a tenth
   // keeps the volume small while a slow or failing tick is still likely to show up
   // within an hour. Raise it to 1 while chasing a specific fault.
-  "observability": { "enabled": true, "traces": { "enabled": true, "head_sampling_rate": 0.1 } },
+  // Logs are stated too (area 8, L1): every log line kept, head_sampling_rate 1, since
+  // the volume is the same tick and tool calls and a dropped error line is not recoverable.
+  "observability": { "enabled": true, "head_sampling_rate": 1, "traces": { "enabled": true, "head_sampling_rate": 0.1 } },
   // THE RUNAWAY GUARD (Cloudflare platform arc 2026-09-06, resized 2026-09-07).
   // Budget alerts are informational and cannot stop a Worker, so the
   // per-invocation CPU ceiling is the one platform-enforced hard stop.

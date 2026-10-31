@@ -79,9 +79,9 @@ test("wrangler.jsonc.example and bindings.mjs agree on limits.cpu_ms", () => {
 test("wrangler.jsonc.example turns on logs and samples traces at a rate between 0 and 1", () => {
   const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
   const block = /^\s*"observability":.*$/m.exec(example)?.[0] ?? "";
-  assert.match(block, /"enabled":\s*true,\s*"traces"/, "observability logs are not enabled in wrangler.jsonc.example");
+  assert.match(block, /"observability":\s*\{\s*"enabled":\s*true,\s*"head_sampling_rate":\s*1,/, "observability logs are not enabled, every request kept, in wrangler.jsonc.example");
   assert.match(block, /"traces":\s*\{\s*"enabled":\s*true/, "observability traces are not enabled");
-  const rate = /"head_sampling_rate":\s*([0-9.]+)/.exec(block);
+  const rate = /"traces":\s*\{[^}]*"head_sampling_rate":\s*([0-9.]+)/.exec(block);
   assert.ok(rate, "traces carry no head_sampling_rate, so every invocation would be traced");
   assert.ok(Number(rate[1]) > 0 && Number(rate[1]) <= 1, `head_sampling_rate ${rate[1]} is outside (0, 1]`);
 });
