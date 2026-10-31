@@ -81,11 +81,15 @@ test("ai_crawlers names each crawler by Prelum's lists, the longest name first, 
 });
 
 test("server_errors lists 5xx by path and status, and fits capsid_inspect_repo's served output schema", async () => {
-  const impl = async () => Response.json({ data: [{ path: "/feed", status: 503, hits: 9 }, { path: "/", status: 500, hits: 2 }] });
+  const impl = async (_url: string, init?: RequestInit) =>
+    String(init?.body).includes("toStartOfHour")
+      ? Response.json({ data: [{ hour: "2026-10-31 14:00:00", status: 503, hits: 11 }] })
+      : Response.json({ data: [{ path: "/feed", status: 503, hits: 9 }, { path: "/", status: 500, hits: 2 }] });
   const env = fakeEnv({ DB: siteDb(), CF_OPS_TOKEN: "fake-token", CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef" });
   const r = await siteTraffic(env, "sample", { report: "server_errors", days: 1 }, impl, NOW);
   assert.ok("failures" in r);
   assert.deepEqual(r.failures, [{ path: "/feed", status: 503, hits: 9 }, { path: "/", status: 500, hits: 2 }]);
+  assert.deepEqual(r.hours, [{ hour: "2026-10-31 14:00:00", status: 503, hits: 11 }]);
   // REPLAY (2026-10-31): the rows were first named `errors`, which site_audit serves as a number,
   // so the SDK refused every server_errors answer as invalid structured content.
   const { COMPOSITES } = await import("../src/tools/surface.ts");
