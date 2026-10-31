@@ -31,7 +31,7 @@ const ABOUT = {
   icons: [{ src: "https://capsid.dustinedwards.info/assets/icon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
 };
 export const SERVER_INFO = { name: "capsid", title: "Capsid", ...ABOUT };
-const ADMIN_SERVER_INFO = { name: "capsid-admin", title: "Capsid Admin", ...ABOUT };
+export const ADMIN_SERVER_INFO = { name: "capsid-admin", title: "Capsid Admin", ...ABOUT };
 
 // What the model is told once per connection, before any tool description.
 const INSTRUCTIONS = {

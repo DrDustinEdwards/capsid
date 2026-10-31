@@ -154,6 +154,31 @@ jobs:
       - name: Browser tests
         run: npm run test:browser
 
+  # THE MCP CONFORMANCE GATE (devkit-conformance, read from .conformance.json; area 11,
+  # P2 to P7 and P10): the official suite against the real protocol layer
+  # (test/conformance/entry.ts) and the real door with its OAuth provider (src/index.ts)
+  # under wrangler dev, each scenario held to its recorded count, then the 401 challenge,
+  # CIMD and the /register allowlist. Its own job, beside checks, so it adds no
+  # wall-clock time; not on the schedule, for the reason checks is not.
+  conformance:
+    name: conformance
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: MCP conformance
+        run: npm run check:conformance
+
   # Ordered after checks: a failing typecheck or test never reaches production. No
   # continue-on-error, and deliberately no `if: secrets.X != ''` guard. A job that skips
   # when its credentials are missing makes "deployed" and "could not deploy"

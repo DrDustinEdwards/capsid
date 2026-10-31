@@ -1,0 +1,30 @@
+// The dev config for `npm run check:conformance`. NEVER DEPLOYED: no routes, no account,
+// and local-only D1, KV and R2 with placeholder ids. The entry is passed positionally by
+// devkit-conformance (.conformance.json): test/conformance/entry.ts for the protocol, and
+// src/index.ts, the real door with its OAuth provider, for the authorization server. No
+// Access for SaaS settings are set, which only shuts /authorize; the metadata, the 401
+// and /register are served anyway.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "capsid-conformance",
+  "main": "../../src/index.ts",
+  "compatibility_date": "2026-09-06",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "vars": { "GITHUB_APP_CLIENT_ID": "conformance" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "capsid-conformance", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "../../migrations" }
+  ],
+  "kv_namespaces": [
+    { "binding": "APP_KV", "id": "00000000000000000000000000000001" },
+    { "binding": "OAUTH_KV", "id": "00000000000000000000000000000002" }
+  ],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "capsid-conformance" }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "RATE_LIMITER", "class_name": "RateLimiter" },
+      { "name": "TOOL_CALL_LOG", "class_name": "ToolCallLog" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter", "ToolCallLog"] }]
+}
