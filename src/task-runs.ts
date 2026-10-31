@@ -83,7 +83,7 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   // The five-minute site pulse (src/site-pulse.ts), on the tick; recorded only when a site
   // was called down or came back.
   { id: "site-pulse", label: "Site pulse", period_ms: null },
-  // The signed-in crawl of the Portal and Desk (src/signed-in-crawl.ts), hourly on the tick.
+  // The signed-in crawl of the Portal (src/signed-in-crawl.ts), hourly on the tick.
   { id: "signed-in-crawl", label: "Signed-in header crawl", period_ms: 2 * HOUR_MS },
 ];
 

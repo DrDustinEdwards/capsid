@@ -190,8 +190,8 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "SITE_PULSE_THREW:", rethrow: false }
   );
 
-  // The signed-in crawl (src/signed-in-crawl.ts): hourly, the Portal through this Worker's own handler (`self`) and
-  // Desk with its Access service token, published for devkit's scoreboard. Recorded only when it ran.
+  // The signed-in crawl (src/signed-in-crawl.ts): hourly, the Portal through this Worker's own handler (`self`),
+  // published for devkit's scoreboard. Recorded only when it ran.
   if (self) {
     await runTask(
       env,
