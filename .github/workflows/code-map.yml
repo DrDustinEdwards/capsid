@@ -24,7 +24,7 @@ jobs:
     concurrency:
       group: code-map
       cancel-in-progress: false
-    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@1664a50ccc3b02a5100d490a650343db0e8b8530 # v0.20.4
+    uses: DrDustinEdwards/devkit/.github/workflows/code-map.yml@956dc10b8a0fbf3128df41c7c21c9441392fabda # v0.20.5
     with:
       # The unit suite as npm test runs it, with Node's own coverage written as lcov.
       coverage-command: mkdir -p coverage && node --import ./test/resolve-ts.mjs --test --experimental-test-coverage --test-coverage-include='src/**' --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --test-reporter=dot --test-reporter-destination=stdout "test/*.test.ts"
