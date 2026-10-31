@@ -9,6 +9,7 @@ import { maintenanceTick } from "./maintenance";
 import { publicBuildTick } from "./public-data";
 import { docIndexTick } from "./doc-index";
 import { pushTick } from "./push";
+import { sitePulseTick } from "./site-pulse";
 import { digestTick } from "./digest";
 import { unitsTick } from "./merge-units";
 import { mergeSafetyTick } from "./merge-safety";
@@ -171,6 +172,21 @@ export async function runTick(env: Env, now: Date): Promise<void> {
       return { outcome: "ok", reason: line };
     },
     { tag: "OUTCOME_SWEEP_THREW:", rethrow: false }
+  );
+
+  // The site pulse (src/site-pulse.ts): every site's health route, every tick, so a site
+  // down on two probes in a row reaches the push step below ten minutes after it fell.
+  // Recorded only when a site was called down or came back.
+  await runTask(
+    env,
+    "site-pulse",
+    () => sitePulseTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      logEvent("SITE_PULSE", { message: `SITE_PULSE ${report.note}` }, { level: "error" });
+      return { outcome: "ok", reason: report.note };
+    },
+    { tag: "SITE_PULSE_THREW:", rethrow: false }
   );
 
   // Phone alerts (src/push.ts): after the auto-merge step and the watcher, so a typed

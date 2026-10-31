@@ -1,0 +1,11 @@
+/* The Completeness tab (Completeness.tsx), loaded with it rather than with the shell. */
+.done-verdict { margin: 0 0 16px; }
+.done-grid th[scope="row"] { position: sticky; left: 0; z-index: 1; background: var(--raised); white-space: nowrap; font-weight: 500; text-transform: none; letter-spacing: 0; font-size: var(--fs-detail); color: var(--text); }
+.done-grid thead th { white-space: normal; min-width: 64px; vertical-align: bottom; line-height: 1.2; }
+.done-grid td { text-align: center; padding: 0 6px; }
+.done-mark .st { gap: 0; }
+@media (max-width: 820px) { .done-grid th[scope="row"] { white-space: normal; min-width: 120px; max-width: 140px; line-height: 1.25; padding: 6px 8px; } .done-grid thead th { min-width: 44px; padding: 7px 4px; font-size: 10px; } .done-grid td { padding: 0 2px; } }
+.done-open { list-style: none; margin: 0; padding: 8px 16px; display: grid; gap: 8px; }
+.done-open > li { overflow-wrap: anywhere; }
+.done-errors { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 2px; font-size: var(--fs-detail); }
+.done-complete { margin: 0; padding: 8px 16px; border-top: 1px solid var(--line); }

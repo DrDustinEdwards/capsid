@@ -224,7 +224,7 @@ test("the lease is released even when the run throws", async () => {
       throw new Error("r2 exploded");
     },
   } as unknown as R2Bucket;
-  await assert.rejects(() => runBackup(env), /r2 exploded/);
+  await assert.rejects(() => runBackup(env, 0), /r2 exploded/);
   // Both halves, or this passes by reading nothing: a run that never took a lease
   // also leaves no lease behind.
   assert.equal(kv.puts.length, 1, "the run never took a lease");
@@ -524,6 +524,20 @@ test("a failed part aborts the multipart upload and fails the run", async () => 
   await assert.rejects(() => runBackup(env), /part refused/);
   assert.equal(r2.multipart.at(-1)?.aborted, true, "the failed upload was left open");
   assert.equal(kv.puts.some((p) => p.key === "backup:last-ok"), false, "a failed run stamped itself as fresh");
+});
+
+test("a put R2 refuses once is tried again, and the run still completes", async () => {
+  // The 2026-10-27 and 2026-10-30 runs threw on one refused put and left the backup 38 hours old.
+  const { env, r2, kv } = makeEnv({ documents: DOCS }, MIRROR);
+  const put = r2.bucket.put.bind(r2.bucket);
+  let refused = 0;
+  (r2.bucket as unknown as { put: typeof put }).put = (async (...args: Parameters<typeof put>) => {
+    if (refused++ === 0) throw new Error("put: We encountered an internal error. Please try again. (10001)");
+    return put(...args);
+  }) as typeof put;
+  const result = await runBackup(env, 0);
+  assert.equal(result.ran && result.prune_refused, null);
+  assert.equal(kv.puts.some((p) => p.key === BACKUP_LAST_OK_KEY), true, "the run did not stamp itself as fresh");
 });
 
 test("the dump carries the KV pins, by allowlist and never by prefix sweep", async () => {

@@ -11,6 +11,10 @@ export type {
   PortalClaimsJob,
 } from "../../src/ops-types/claims";
 export type {
+  CompletenessArea,
+  CompletenessCell,
+  CompletenessStatus,
+  CompletenessView,
   SharedCodeApp,
   SharedCodePackage,
   SharedCodeView,

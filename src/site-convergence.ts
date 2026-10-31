@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { readSiteConfig } from "./ops-sites";
+import { healthUrl, readSiteConfig } from "./ops-sites";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import type { ConvergenceCheck, ConvergenceSite } from "./ops-types/views";
 import { REPAIR_AUDIT_ACTION } from "./site-repair";
@@ -91,7 +91,7 @@ async function readSiteConvergence(env: Env, site: OpsSiteConfig, fetchImpl: Fet
       )
     : { ok: false as const, fields: [], error: `the Capsid Worker secret ${operator.auth_var} is not set, so the operator API was not called.` };
 
-  const h = site.health_path ? await readHealth(fetchImpl, site.origin + site.health_path) : null;
+  const h = site.health_path ? await readHealth(fetchImpl, healthUrl(site.origin, site.health_path)) : null;
   const health = !h
     ? { ok: false, http_status: null, checks: [], error: "the site has no health route configured" }
     : { ok: h.status === 200 && (h.body as { ok?: unknown } | null)?.ok === true, http_status: h.status || null, checks: healthChecks(h.body, operator), error: h.error };
