@@ -339,8 +339,8 @@ const EVERY_ACTION = [
   ["package_edit", { name: "sample-pkg", revision: "1", repo: "example-org/sample-pkg", formerly: "sample-old" }],
   ["package_remove", { name: "sample-pkg", revision: "1" }],
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
-  ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "10" }],
-  ["sign_policy_from_repo", { confirm: "10" }],
+  ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "11" }],
+  ["sign_policy_from_repo", { confirm: "11" }],
   ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
   ["automerge_resume", { namespace: "capsid", reason: "both rollbacks are answered" }],
 ] as const;
