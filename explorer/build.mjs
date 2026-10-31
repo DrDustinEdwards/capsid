@@ -22,6 +22,7 @@ import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
+import { buildSync } from "esbuild";
 import { stylesheet } from "enarratio";
 import { capsomerMoreTheme, capsomerTheme } from "capsomer/enarratio-theme";
 
@@ -158,18 +159,25 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   writeFileSync(join(assets, "enarratio.css"), stylesheet(capsomerTheme, { highContrast: capsomerMoreTheme }));
   copyFileSync(join(here, "src", "explorer.css"), join(assets, "explorer.css"));
   writeFileSync(join(out, CIRCLES_URL), JSON.stringify(circlesOf(model)));
-  copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(assets, "tabs.js"));
-  // The system map's and the header's modules, each folder whole (its React wrapper aside),
-  // because they import their siblings by "./" and each other by "../name/" (the map takes
-  // email's escapeHtml). The map's circles are drawn here, not in the browser.
+  // The page's one module, bundled: src/explorer.js imports tabs, Enarratio's enhance and the
+  // system map's and the header's modules by the paths they are staged at here, each folder whole
+  // (its React wrapper aside), because they import their siblings by "./" and each other by
+  // "../name/" (the map takes email's escapeHtml). The map's circles are drawn here, not in the
+  // browser. One file, so the script tag's integrity covers all of it: sixteen modulepreloads
+  // carrying the imports' integrity cost the home page 0.7 s of Lighthouse LCP.
+  const stage = join(out, ".bundle");
+  mkdirSync(stage, { recursive: true });
+  copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(stage, "tabs.js"));
   for (const name of ["system-map", "email", "site-header", "theme-switch", "dialog", "popover", "tooltip", "shell", "meter"]) {
     const dir = join(capsomer, "dist", "components", name);
-    mkdirSync(join(assets, "capsomer", name), { recursive: true });
-    for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js") && !f.startsWith("system-map-circles"))) copyFileSync(join(dir, file), join(assets, "capsomer", name, file));
+    mkdirSync(join(stage, "capsomer", name), { recursive: true });
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js") && !f.startsWith("system-map-circles"))) copyFileSync(join(dir, file), join(stage, "capsomer", name, file));
   }
+  copyFileSync(require.resolve("enarratio/enhance"), join(stage, "enhance.js"));
+  copyFileSync(join(here, "src", "explorer.js"), join(stage, "explorer.js"));
+  buildSync({ entryPoints: [join(stage, "explorer.js")], outfile: join(assets, "explorer.js"), bundle: true, format: "esm", minify: true, logLevel: "warning" });
+  rmSync(stage, { recursive: true });
   copyFileSync(join(here, "src", "theme.js"), join(assets, "theme.js"));
-  copyFileSync(require.resolve("enarratio/enhance"), join(assets, "enhance.js"));
-  copyFileSync(join(here, "src", "explorer.js"), join(assets, "explorer.js"));
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
   // The family icon set (Prelum's prelum-icons) at the root, where iconLinks() and the manifest point.
   cpSync(join(here, "src", "icons"), out, { recursive: true });
