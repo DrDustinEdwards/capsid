@@ -100,7 +100,10 @@ assertId("D1 capsid", d1.uuid ?? d1.id, EXPECTED.d1.id);
 const kvList = parseJsonArray(wrangler(["kv", "namespace", "list"]), "KV");
 const appKv = resolveUnique(kvList, `KV namespace titled "${EXPECTED.appKv.name}"`, (n) => n.title === EXPECTED.appKv.name);
 assertId(`KV ${EXPECTED.appKv.name} (APP_KV)`, appKv.id, EXPECTED.appKv.id);
-const oauthKv = resolveUnique(kvList, `KV namespace titled "${EXPECTED.oauthKv.name}"`, (n) => n.title === EXPECTED.oauthKv.name);
+// Either title while the namespace is renamed in place (same id) from "capsid-oauth" to
+// the <worker>-oauth rule's "capsid-mcp-oauth"; a later change drops the old title.
+const OAUTH_KV_TITLES = [EXPECTED.oauthKv.name, "capsid-oauth"];
+const oauthKv = resolveUnique(kvList, `KV namespace titled "${OAUTH_KV_TITLES.join('" or "')}"`, (n) => OAUTH_KV_TITLES.includes(n.title));
 assertId(`KV ${EXPECTED.oauthKv.name} (OAUTH_KV)`, oauthKv.id, EXPECTED.oauthKv.id);
 // The split is the point: if these two ever resolve to the same id again, the Worker's
 // caches are back in the provider's keyspace and nothing else would say so.

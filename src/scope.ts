@@ -4,6 +4,7 @@ import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { appendAudit, correlationId, loggedArgs, loggedResult, recordAudit, type AuditEnv } from "@dustinedwards/site-runtime/audit-log";
+import { authorizeCall, mcpScopes, toolScopeChallenge, type McpCaller } from "@dustinedwards/site-runtime/mcp-server";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
 import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
 import { MINUTE_MS, HOUR_MS } from "./time";
@@ -116,6 +117,43 @@ export function requiredForAction(tool: string, action: string | undefined): Too
   if (!spec) return requiredGrant(tool);
   if (action === undefined) return spec.default;
   return Object.hasOwn(spec.actions, action) ? spec.actions[action] : spec.default;
+}
+
+// The OAuth scopes of the admin login (src/routes.ts consent page): every grant reads, and
+// writes only when the box was ticked. An agent key's grants map onto the same two.
+export const SCOPES = mcpScopes("capsid");
+
+// For an "action" tool, the actions that only read; every other action writes. The
+// handlers split the same way where the namespace is known (src/tools/jobs.ts list,
+// src/tools/lint.ts gather).
+const READ_ACTIONS: Record<string, readonly string[]> = {
+  capsid_work_jobs: ["list"],
+  capsid_lint_namespace: ["gather"],
+};
+
+/** The scope a call needs, from TOOL_GRANTS (never from readOnlyHint): read for a read or
+ *  admin_read tool and for a read action, write for everything else. */
+function declaredScope(tool: string, action: string | undefined): string {
+  const requirement = requiredForAction(tool, action);
+  if (requirement === "read" || requirement === "admin_read") return SCOPES.read;
+  if (requirement === "action" && action !== undefined && READ_ACTIONS[tool]?.includes(action)) return SCOPES.read;
+  return SCOPES.write;
+}
+
+// The family's grant gate (site-runtime authorizeCall; area 11, S3 and A13) on every tool
+// call, deciding on declaredScope against the scopes the caller's grants map to. The
+// caller is one Capsid's own door already resolved (the OAuth login or a key), so it is
+// passed as a `person` and only the scopes decide. A refusal is worded by checkScope, which
+// names the tool axis first and tells a key holder to ask for a wider key rather than to
+// reconnect. An "action" tool (jobs, lint) is left to its handler, which checks the same
+// split after its arguments, as it always has; its OAuth step-up still comes first.
+function sharedGrantRefusal(agent: Agent, tool: string, action: string | undefined): string | null {
+  if (requiredForAction(tool, action) === "action") return null;
+  const scope = declaredScope(tool, action);
+  const caller: McpCaller = { kind: "person", email: agent.actor, scopes: agent.scopes.grants.map((g) => SCOPES[g]) };
+  if (authorizeCall({}, caller, scope, { site: "Capsid", scopes: SCOPES }) === null) return null;
+  const grant: AgentGrant = scope === SCOPES.read ? "read" : "write";
+  return checkScope(agent, { tool, action, grant }) ?? `unauthorized: '${tool}' requires the ${grant} grant.`;
 }
 
 // A requirement as the part of a ScopeNeed it decides. The registrar and every route
@@ -499,6 +537,7 @@ interface RegisteredConfig {
 }
 
 type ToolHandler = (...args: unknown[]) => unknown;
+type ScopeChallengeHandler = (context: { request: { params?: Record<string, unknown> }; authInfo?: { scopes: string[]; clientId?: string; extra?: Record<string, unknown> } }) => ReturnType<ReturnType<typeof toolScopeChallenge>>;
 
 // Whether a handler's result is a success. An error result is not, and neither is a
 // domain refusal, which the tools return as an ordinary result whose JSON says ok:false
@@ -612,6 +651,8 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       namespaceActions && action !== undefined ? namespaceActions.includes(action) : declared;
     // Why this call may not run, or null.
     const refusalFor = async (args: Record<string, unknown>, action: string | undefined): Promise<string | null> => {
+      const shared = sharedGrantRefusal(agent, name, action);
+      if (shared) return shared;
       const namespace = typeof args.namespace === "string" ? args.namespace : undefined;
       // Only a full owner/name can be compared to the axis here; the repo tools
       // resolve a label and check the result (scopedRepo in src/tools/repo.ts).
@@ -698,8 +739,16 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: loggedResult(result as { isError?: boolean; content: Array<{ text: string }> }) });
       return result;
     };
+    // An OAuth token without the scope the call needs is answered 403 insufficient_scope
+    // before the handler runs, naming every scope it needs, so the client can step up
+    // instead of the person reconnecting by hand (area 11, A3). A key carries no token and
+    // gets the refusal above in words. A grant from before the scopes existed carries none
+    // and reads, as src/index.ts treats it.
+    const challenge = log && toolScopeChallenge(log.env, { site: "Capsid", scopes: SCOPES, ...log.server }, { name, scope: (args: Record<string, unknown>) => declaredScope(name, actionOf(name, config, args)) });
+    const scopeChallenge: ScopeChallengeHandler | undefined =
+      challenge && ((context) => challenge({ ...context, authInfo: context.authInfo && { ...context.authInfo, scopes: context.authInfo.scopes.length > 0 ? context.authInfo.scopes : [SCOPES.read] } }));
     const { namespaceActions: _namespaceActions, ...served } = config ?? {};
-    return original(name, served, guarded);
+    return original(name, scopeChallenge ? { ...served, scopeChallenge } : served, guarded);
   };
   (server as unknown as { registerTool: unknown }).registerTool = patched;
 }

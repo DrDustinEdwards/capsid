@@ -235,6 +235,8 @@ test("ONE analytics query covers every script: 24 hourly buckets, oldest first, 
       ["sample-web", LAST_HOUR, 200, 3, 2_500_400],
       ["sample-dev", "2026-09-27T12:00:00Z", 10, 1],
       ["sample-dev", "2026-09-27T12:00:00Z", 5, 0],
+      // REPLAY (2026-10-31 15:00): Cloudflare's unattributed row blinded every site's checks.
+      ["__unknown__", LAST_HOUR, 7, 0],
     ]),
   });
   const read = await readCloudflare(CREDS, [WORKERS_DEV, CUSTOM], cf.impl, NOW);
@@ -348,9 +350,12 @@ test("the error rate fires above 1 percent of at least 100 requests in the last 
   assert.deepEqual(fires({ ...hourly(100, 50), errors24: null, errors_reason: "query failed" }), [], "no data was judged");
   assert.deepEqual(fires({ state: "no-token", reason: "CF_OPS_TOKEN is not set" }), []);
   // REPLAY (L6, 2026-10-31): a Worker that caught its error and answered 503 threw nothing, so it was never counted.
-  const withEdge = (cf: SiteCloudflare, served5xx: number) => siteErrorFindings(sites, { sample: cf }, { sample: served5xx }).map((f) => f.fingerprint);
+  const withEdge = (cf: SiteCloudflare, served5xx: number) => siteErrorFindings(sites, { sample: cf }, { sample: { count: served5xx, top: [] } }).map((f) => f.fingerprint);
   assert.deepEqual(withEdge(hourly(100, 0), 2), ["site-errors-sample"]);
   assert.deepEqual(withEdge(hourly(100, 1), 1), [], "a thrown invocation is also a 5xx at the edge, so it is not counted twice");
+  // REPLAY (2026-10-31): four findings said "79 answers were 5xx" and nothing about where.
+  const named = siteErrorFindings(sites, { sample: hourly(100, 0) }, { sample: { count: 3, top: [{ path: "/feed", status: 503, hits: 3 }] } });
+  assert.match(JSON.stringify(named[0]), /503 \/feed \(3\)/);
 });
 
 test("the CPU finding fires above a million CPU ms in the last complete hour, and only there", () => {

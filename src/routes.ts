@@ -13,7 +13,7 @@ import { consentDialogHeaders, REPORT_PATH, securityHeadersFor } from "./securit
 import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";
 import { ipKey, limit } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
-import { buildAdminServer, buildServer, SERVER_INFO } from "./server";
+import { ADMIN_SERVER_INFO, buildAdminServer, buildServer, SERVER_INFO } from "./server";
 import { ADMIN_OPS_MCP_ROUTE, mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
 import { isAdminEmail } from "./auth";
 import { loginHandler } from "@dustinedwards/site-runtime/mcp-login";
@@ -103,7 +103,7 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
   }
-  const limited = await mcpRateLimited(env, resolved.agent.actor);
+  const limited = await mcpRateLimited(env, resolved.agent.actor, SERVER_INFO);
   if (limited) return limited;
   // last_seen is not part of authorizing, so a slow or failing write rides on
   // waitUntil rather than slowing the tool call.
@@ -126,7 +126,7 @@ async function handleOperatorAdminMcp(request: Request, env: Env, ctx: Execution
   if (!resolved.agent.admin) {
     return new Response(`forbidden: ${resolved.agent.actor} is not the admin. Capsid Admin serves the administrator alone.`, { status: 403 });
   }
-  const limited = await mcpRateLimited(env, resolved.agent.actor);
+  const limited = await mcpRateLimited(env, resolved.agent.actor, ADMIN_SERVER_INFO);
   if (limited) return limited;
   ctx.waitUntil(resolved.touch());
   return serveMcp(request, env, ctx, ADMIN_OPS_MCP_ROUTE, () => buildAdminServer(env, resolved.agent));

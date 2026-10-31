@@ -291,6 +291,7 @@ const OUTPUTS: Record<string, Shape> = {
   site_traffic: mergeOutputs([
     { ...traffic, page_views_measured: num, unit: str, vitals: obj },
     { ...traffic, note: str, crawlers: rows, truncated: bool },
+    { ...traffic, note: str, failures: rows, truncated: bool },
     { ...traffic, note: str, paths: rows, total_paths: num, truncated: bool, probes: num },
   ]),
   site_audit: {

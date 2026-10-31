@@ -8,9 +8,9 @@ import { supersedePass } from "./supersede";
 import { defaultHandler } from "./routes";
 import { withSecurityHeaders } from "./security-headers";
 import type { Env, Props } from "./env";
-import { buildAdminServer, buildServer } from "./server";
+import { ADMIN_SERVER_INFO, buildAdminServer, buildServer, SERVER_INFO } from "./server";
 import { ADMIN_MCP_ROUTE, mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
-import { mcpOriginRefusal } from "@dustinedwards/site-runtime/mcp-server";
+import { audienceRefusal, mcpOriginRefusal } from "@dustinedwards/site-runtime/mcp-server";
 import { DCR_CALLBACKS, registrationLimited, registrationRefusal } from "@dustinedwards/site-runtime/mcp-login";
 import { runTick } from "./tick";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
@@ -39,11 +39,18 @@ export const SKILLS_REFRESH_CRON = "30 9 * * *";
 
 // What the OAuth provider hands its API handler: the grant's props, and what it verified
 // about the token, its scopes among them.
-type ApiContext = ExecutionContext & { props?: Props; auth?: { scope?: string[]; clientId?: string } };
+type ApiContext = ExecutionContext & { props?: Props; auth?: { scope?: string[]; clientId?: string; audience?: string } };
 
 const apiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const { props, auth } = ctx as ApiContext;
+    const url = new URL(request.url);
+    // The token must have been issued for this host's resource (RFC 8707), re-checked with
+    // the family's shared check against the resource this host serves, not only the one the
+    // provider was built with (area 11, A5). Capsid Admin on /mcp/admin takes the /mcp token.
+    const wrongAudience = audienceRefusal(auth, url.hostname === LEGACY_HOST ? LEGACY_MCP_URL : MCP_URL, [SCOPES.read]);
+    if (wrongAudience) return wrongAudience;
+    const adminRoute = url.pathname === ADMIN_MCP_ROUTE;
     // Checked on every request, not only at sign-in (src/auth.ts adminGrantEmail).
     const email = await adminGrantEmail(env, props);
     if (!email) {
@@ -51,7 +58,7 @@ const apiHandler = {
         status: 403,
       });
     }
-    const limited = await mcpRateLimited(env, `access:${email}`);
+    const limited = await mcpRateLimited(env, `access:${email}`, adminRoute ? ADMIN_SERVER_INFO : SERVER_INFO);
     if (limited) return limited;
     // The admin agent holds every scope the token does: every namespace, tool and flag,
     // and the write grant only when the consent page's box was ticked (capsid.write). A
@@ -63,7 +70,6 @@ const apiHandler = {
     const clientId = auth?.clientId;
     // Only Capsid Admin serves step-up actions, so only its route reads the clock. A KV
     // failure leaves it undefined, which falls back to the sign-in time alone (src/scope.ts STEP_UP).
-    const adminRoute = new URL(request.url).pathname === ADMIN_MCP_ROUTE;
     if (adminRoute && signedInAt !== null) admin.lastStepUpAt = await readLastStepUp(env.APP_KV, admin.actor, signedInAt);
     // Observation only, for 30 days (src/admin-client-audit.ts): which client the admin
     // acts through. It never refuses on what the client says.
@@ -176,7 +182,21 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
     if (limited) return secured(limited, pathname);
   }
   const response = await providerFor(env, legacy ? LEGACY_MCP_URL : MCP_URL, !legacy).fetch(request, env, ctx);
-  return secured(response, pathname);
+  return secured(pathname.startsWith(PRM_PATH) ? await withEveryScope(response) : response, pathname);
+}
+
+// The protected resource metadata lists every scope the resource takes (area 11, A1), read
+// and write. The provider publishes its requiredScopes there, which are also the 401's
+// scope=, the least a client asks for first; that stays the read scope alone, so a client
+// that follows the challenge meets the consent page with the write box unticked.
+const PRM_PATH = "/.well-known/oauth-protected-resource";
+
+async function withEveryScope(response: Response): Promise<Response> {
+  if (!response.ok || !response.headers.get("Content-Type")?.includes("application/json")) return response;
+  const metadata = (await response.json()) as Record<string, unknown>;
+  const headers = new Headers(response.headers);
+  headers.delete("Content-Length");
+  return Response.json({ ...metadata, scopes_supported: SCOPES.all }, { status: response.status, headers });
 }
 
 // Every request writes one `request` line (site-runtime withRequestLog: cf-ray, method, path
