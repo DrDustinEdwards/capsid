@@ -1,10 +1,11 @@
 import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/check";
+import { siteForOrigin } from "@dustinedwards/site-runtime/sites";
 import type { Env } from "./env";
 import { ghFetch, getDefaultBranch, getRefSha, resolveRepo } from "./github/client";
 import type { OpsSite } from "./ops-sites";
 import type { SiteProbe } from "./ops-types/sites";
 import type { WebAnalyticsSite } from "./ops-types/views";
-import { readCapped } from "./read-capped";
+import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
 
 // THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5, ruled
@@ -256,9 +257,9 @@ export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin"
   const where = slug(rule.path);
   const out: LiveFinding[] = [];
   if (rule.kind === "headers") {
-    // The package's own check, so the oracle (OWASP's defaults and its test vectors) lives
-    // in one place and the watcher holds no second copy.
-    const results = checkSecurityHeaders(page.headers);
+    // The package's own check, graded against what the site declared in the registry (site-runtime ./sites), so a
+    // declared deviation is not a finding and the watcher holds no second copy of either.
+    const results = checkSecurityHeaders(page.headers, { site: siteForOrigin(site.origin) });
     if (results.length === 0) throw new Error("checkSecurityHeaders returned no results, so a pass would mean nothing was checked");
     const failed = failures(results);
     if (failed.length > 0) {
@@ -402,8 +403,8 @@ export async function readPage(fetchImpl: FetchLike, origin: string, path: strin
     await res.body?.cancel();
     return unread(res.status, `content-type is ${type || "absent"}, not HTML`);
   }
-  const { text, truncated } = await readCapped(res, MAX_PAGE_BYTES);
-  if (truncated) return unread(res.status, `page is larger than ${MAX_PAGE_BYTES} bytes, so a beacon count over it would be a guess`);
+  const text = await readCapped(res, MAX_PAGE_BYTES);
+  if (text === null) return unread(res.status, `page is larger than ${MAX_PAGE_BYTES} bytes, so a beacon count over it would be a guess`);
   return { status: res.status, headers: res.headers, html: text, problem: null, gated: false };
 }
 

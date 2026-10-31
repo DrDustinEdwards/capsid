@@ -13,7 +13,7 @@ import { serveMcp } from "../src/mcp-handler.ts";
 import { CAPSID_TOOLS } from "../src/tools/surface.ts";
 import { buildServer } from "../src/server.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
-import { breaking, type Handler, healthy, run } from "./verify-live-stub.ts";
+import { breaking, type Handler, healthy, NON_HTML, run } from "./verify-live-stub.ts";
 
 // Live gate 8 (scripts/mcp-probe-lib.mjs, job_bb06c9be24c4): a real MCP call after every
 // deploy. The script is run against the stub Worker of ./verify-live-stub.ts with its
@@ -54,7 +54,7 @@ function bridge(serve: Serve): Handler {
     req.on("end", () => {
       void (async () => {
         if (req.headers.authorization !== `Bearer ${KEY}`) {
-          res.writeHead(401, { "content-type": "text/plain", "strict-transport-security": "max-age=1", "x-content-type-options": "nosniff", "content-security-policy-report-only": "default-src 'none'" });
+          res.writeHead(401, { ...NON_HTML, "content-type": "text/plain; charset=utf-8" });
           res.end("unauthorized: valid operator key or agent key required");
           return;
         }

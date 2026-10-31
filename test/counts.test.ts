@@ -6,6 +6,7 @@ import { AUTHORITATIVE, scanCountClaims } from "../src/counts.ts";
 
 const CAPSID = AUTHORITATIVE.capsid;
 import { CONSENT_DIALOG_HEADERS, securityHeadersFor } from "../src/security-headers.ts";
+import { MCP_HOST } from "../src/mcp-host.ts";
 // Fixtures derive the tool count rather than spelling it, so a surface change does
 // not break tests that check something else.
 const TOOLS = String(CAPSID.tools);
@@ -35,37 +36,14 @@ test("live gate count matches the distinct gates in verify-live.mjs", () => {
   );
 });
 
-// The HTML surface's enforced headers come from two places, and the count is the
-// union of both: src/security-headers.ts emits most of them, and the consent dialog in
-// src/routes.ts sets its own enforced CSP, which withSecurityHeaders preserves. An
-// enforced header added to either file moves the number.
-const NOT_SECURITY_HEADERS = new Set(["Content-Type", "Set-Cookie", "Location", "Reporting-Endpoints"]);
-const isEnforcedSecurityHeader = (name: string) =>
-  !NOT_SECURITY_HEADERS.has(name) && !/-Report-Only$/i.test(name);
+// The consent page's enforced headers: its own (src/routes.ts spreads CONSENT_DIALOG_HEADERS into its Response) and
+// what the header layer adds on the MCP host. An enforced header added to either moves the number.
+const NOT_SECURITY_HEADERS = new Set(["Content-Type", "Reporting-Endpoints"]);
 
-// The header names the consent dialog sets on its own Response. CONSENT_DIALOG_HEADERS
-// is the object routes.ts spreads into that Response, so it is read directly rather
-// than parsed out of routes.ts; the per-request Set-Cookie is not a security header.
-const consentDialogHeaders = (): string[] => Object.keys(CONSENT_DIALOG_HEADERS);
-
-test("header counts match what the header layer and the consent dialog actually emit", () => {
-  const html = securityHeadersFor("html");
-  const fromLayer = Object.keys(html).filter(isEnforcedSecurityHeader);
-  const fromConsent = consentDialogHeaders().filter(isEnforcedSecurityHeader);
-  const enforced = new Set([...fromLayer, ...fromConsent]);
-  assert.equal(
-    enforced.size,
-    CAPSID.htmlEnforcedHeaders,
-    `the HTML surface enforces ${enforced.size} headers (${[...enforced].sort().join(", ")}): ` +
-      `${fromLayer.length} from src/security-headers.ts and ${fromConsent.length} from the consent dialog, ` +
-      `but counts.ts says ${CAPSID.htmlEnforcedHeaders}`
-  );
-  // The consent CSP is the one the layer does not emit, and why this count needs two sources.
-  assert.ok(fromConsent.includes("Content-Security-Policy"), "the consent dialog no longer sets its own enforced CSP");
-  assert.equal(fromLayer.includes("Content-Security-Policy"), false, "the header layer now enforces a CSP on HTML too; this derivation still holds but the ruling that kept them separate does not");
-
-  const reportOnly = Object.keys(html).filter((k) => /-Report-Only$/i.test(k));
-  assert.equal(reportOnly.length, CAPSID.htmlReportOnlyHeaders);
+test("the header count matches what the header layer and the consent dialog emit", () => {
+  const names = [...Object.keys(securityHeadersFor(MCP_HOST)), ...Object.keys(CONSENT_DIALOG_HEADERS)];
+  const enforced = new Set(names.filter((name) => !NOT_SECURITY_HEADERS.has(name) && !/-Report-Only$/i.test(name)));
+  assert.equal(enforced.size, CAPSID.htmlEnforcedHeaders, `the consent page enforces ${enforced.size} headers (${[...enforced].sort().join(", ")}), but counts.ts says ${CAPSID.htmlEnforcedHeaders}`);
 });
 
 test("scan flags a stale tool count in a standing doc", () => {
@@ -139,7 +117,7 @@ test("'all seven' is flagged when it is about headers", () => {
   ], "capsid");
   assert.equal(claims.length, 1);
   assert.equal(claims[0].noun, "security headers");
-  assert.match(claims[0].authoritative, /9 enforced plus 1 Report-Only/);
+  assert.match(claims[0].authoritative, /^9 enforced$/);
 });
 
 test("'all seven' about anything else is NOT flagged", () => {

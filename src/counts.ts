@@ -8,7 +8,6 @@ export interface AuthoritativeCounts {
   tools: number;
   liveGates: number;
   htmlEnforcedHeaders: number;
-  htmlReportOnlyHeaders: number;
 }
 
 export const AUTHORITATIVE: Record<string, AuthoritativeCounts> = {
@@ -16,7 +15,6 @@ export const AUTHORITATIVE: Record<string, AuthoritativeCounts> = {
     tools: Object.keys(TOOL_GRANTS).length,
     liveGates: 10,
     htmlEnforcedHeaders: 9,
-    htmlReportOnlyHeaders: 1,
   },
 };
 
@@ -153,8 +151,8 @@ export function scanCountClaims(docs: ScannableDoc[], namespace: string): CountC
         "security headers",
         m,
         "all seven",
-        `${authoritative.htmlEnforcedHeaders} enforced plus ${authoritative.htmlReportOnlyHeaders} Report-Only`,
-        "COOP ships Report-Only pending a demonstrated case and a ruling, so 'all seven enforced' overstates what is live"
+        `${authoritative.htmlEnforcedHeaders} enforced`,
+        "the consent page sends no COOP (MCP clients sign in through a popup), so 'all seven' miscounts what is live"
       );
     }
 

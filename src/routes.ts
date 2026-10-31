@@ -3,7 +3,7 @@ import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResul
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { APPROVAL_MAX_AGE_SECONDS, approvalTag } from "./approval";
-import { getCookie, hmacHex } from "./auth";
+import { cookieName, getCookie, hmacHex } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { resolveAgent } from "./agents";
 import { backupHttpStatus, runBackup } from "./backup";
@@ -153,7 +153,7 @@ ${othersHtml}
       // The static headers, and why form-action is absent from the CSP: see
       // CONSENT_DIALOG_HEADERS in ./security-headers.
       ...CONSENT_DIALOG_HEADERS,
-      "Set-Cookie": `${CSRF_COOKIE}=${csrf}; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=${STATE_TTL_SECONDS}`,
+      "Set-Cookie": `${cookieName(CSRF_COOKIE, "/authorize")}=${csrf}; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=${STATE_TTL_SECONDS}`,
     },
   });
 }
@@ -220,7 +220,7 @@ async function handleAuthorizePost(request: Request, env: Env): Promise<Response
   if (!approved.includes(tag)) approved.push(tag);
   const cookies = [
     await approvalCookie(approved, env.COOKIE_ENCRYPTION_KEY),
-    `${CSRF_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=0`,
+    `${cookieName(CSRF_COOKIE, "/authorize")}=; HttpOnly; Secure; SameSite=Lax; Path=/authorize; Max-Age=0`,
   ];
   return startSignIn(request, env, oauthReq, cookies);
 }
@@ -362,7 +362,7 @@ async function handleInboxReport(request: Request, env: Env): Promise<Response> 
 async function handleCspReport(request: Request, env: Env): Promise<Response> {
   return receiveCspReport(request, {
     allowOrigin: `https://${PORTAL_HOST}`,
-    headers: securityHeadersFor("other"),
+    headers: securityHeadersFor(new URL(request.url).hostname),
     allow: async (r) => {
       const ip = callerIp(r);
       const rate = await checkRate(env.APP_KV, ip, new Date(), CSP_REPORT_LIMIT);

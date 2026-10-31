@@ -27,7 +27,10 @@ function env() {
 async function started(e: ReturnType<typeof env>["env"]) {
   const response = await startAccessLogin(new Request(`${ORIGIN}/authorize`), e, FLOW, "stored");
   const state = new URL(String(response.headers.get("location"))).searchParams.get("state") ?? "";
-  const cookie = (response.headers.get("set-cookie") ?? "").split(";")[0].slice(`${FLOW.stateCookie}=`.length);
+  const pair = (response.headers.get("set-cookie") ?? "").split(";")[0];
+  // Path=/ earns the __Host- prefix (src/auth.ts cookieName).
+  assert.ok(pair.startsWith(`__Host-${FLOW.stateCookie}=`), pair);
+  const cookie = pair.slice(pair.indexOf("=") + 1);
   return { state, cookie };
 }
 

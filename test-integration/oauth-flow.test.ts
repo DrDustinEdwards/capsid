@@ -111,7 +111,7 @@ describe("callback", () => {
     const approved = await approve(id, HTTPS_REDIRECT);
     const location = new URL(String(approved.headers.get("location")));
     const state = String(location.searchParams.get("state"));
-    const cookie = cookieValues(approved).find((c) => c.startsWith("capsid_state=")) ?? "";
+    const cookie = cookieValues(approved).find((c) => /^(__Host-|__Secure-)capsid_state=/.test(c)) ?? "";
     expect(cookie, "the flow set no state cookie").not.toBe("");
     return { state, cookie };
   }
