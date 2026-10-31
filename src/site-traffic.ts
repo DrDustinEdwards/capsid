@@ -218,7 +218,7 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
       report,
       since: start,
       note: "Every 5xx the edge answered, by path and status. Sampled, so hits are estimates; paths are what visitors sent.",
-      errors: raw.slice(0, limit).map((r) => ({ path: typeof r.path === "string" ? r.path : "", status: Number(r.status), hits: count(r.hits) })),
+      failures: raw.slice(0, limit).map((r) => ({ path: typeof r.path === "string" ? r.path : "", status: Number(r.status), hits: count(r.hits) })),
       truncated: raw.length > limit,
     };
   }
