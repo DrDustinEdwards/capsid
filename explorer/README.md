@@ -2,7 +2,7 @@
 
 capsid.dustinedwards.info: the family of systems Dustin Edwards runs, how they connect, what Capsid is made of, and Capsid's daily numbers. Ruling: capsid/rulings/system-explorer-2026-10-10.md. Design: capsid/research/design-system-explorer.md, section 4.
 
-Every page is prerendered from Capsid's two public documents (docs/public-data.md) by a daily build, so no reader's browser ever calls Capsid (answer 4). It is served by static assets on a Worker of its own, `capsid`, whose script only sends the 404 page (`worker.mjs`) (the site takes the product name; the MCP server is `capsid-mcp`), deployed from this folder (answer 8). The map is Capsomer's `system-map`; the charts are Enarratio's.
+Every page is prerendered from Capsid's two public documents (docs/public-data.md) by a daily build, so no reader's browser ever calls Capsid (answer 4). It is served by static assets on a Worker of its own, `capsid`, whose script is site-runtime's `staticSite` (`worker.mjs`): it runs first for every page, leaving `/assets/` and `/fonts/` to the asset server, and adds the prefetch rules, the Speculation-Rules, Server-Timing and preload Link headers, and the private 404 page (the site takes the product name; the MCP server is `capsid-mcp`), deployed from this folder (answer 8). The map is Capsomer's `system-map`; the charts are Enarratio's.
 
 ## Pages
 

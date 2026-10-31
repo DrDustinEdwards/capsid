@@ -10,6 +10,7 @@ import { gzipSync } from "node:zlib";
 import { build } from "../build.mjs";
 import { codePage, codePath } from "../src/code.mjs";
 import { numbersHtml } from "../src/numbers.mjs";
+import { PAGE_PRELOADS } from "../src/security-headers.mjs";
 import { servedTools } from "../src/surface.mjs";
 import { SITE, allPages, containersPath, escapeHtml, flowPath, percent, stepPath, stepWords, systemPath } from "../src/pages.mjs";
 
@@ -205,6 +206,12 @@ test("the headers send the shared policy with scripts and styles from the explor
   assert.doesNotMatch(headers, /unsafe-inline|unsafe-eval/);
   assert.match(headers, /report-uri https:\/\/mcp\.dustinedwards\.info\/csp-report/);
   assert.match(headers, /X-Frame-Options: deny/);
+});
+
+test("the Worker's preload header names exactly what the home page links first", () => {
+  const home = readFileSync(join(out, "index.html"), "utf8");
+  const linked = [...home.matchAll(/<link rel="(?:stylesheet|preload)" href="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(PAGE_PRELOADS.links.map((link) => link.href).sort(), linked.sort());
 });
 
 test("the map's script is under 25 KB gzip and all the explorer's script under 105 KB", () => {
