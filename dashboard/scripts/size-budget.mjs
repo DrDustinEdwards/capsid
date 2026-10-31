@@ -4,7 +4,7 @@
 //
 //   initial JS (the entry and its static imports)  <= 121 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   initial CSS (the entry's and its imports')      <= 24.5 KB gzip
+//   initial CSS (the entry's and its imports')      <= 27.5 KB gzip
 //   lazy CSS (every other stylesheet), together     <=  12 KB gzip
 //   fonts                                           reported, not budgeted
 //
@@ -55,13 +55,17 @@
 // 0.4's base.css doubles to 4.2 KB gzip (textures, forced colors, print, the figure's own head and
 // "Show data"), and Capsomer 0.53's map grows with it. Master was 22.8 KB; this build is 24.0 KB,
 // with the chart frame's, uptime strip's and meter's own stylesheets loading with their chunks.
+// Initial CSS raised on 2026-10-31 from 24.5 KB to 27.5 KB (area 10, wave 2): capsomer/enarratio.css
+// is now the whole chart stylesheet (Enarratio 0.5's base.css with the token mapping, gridlines,
+// each series' ink and the color pairs), in place of enarratio/base.css, and Capsomer 0.56 adds the
+// series-ink and figures tokens. Master was 24.0 KB; this build is 27.0 KB (27,677 B).
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 121 * KB, lazyChunk: 40 * KB, css: 24.5 * KB, lazyCss: 12 * KB };
+const BUDGET = { initialJs: 121 * KB, lazyChunk: 40 * KB, css: 27.5 * KB, lazyCss: 12 * KB };
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const manifestPath = join(dist, ".vite", "manifest.json");
