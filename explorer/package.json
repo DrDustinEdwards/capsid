@@ -11,7 +11,7 @@
     "indexnow": "node indexnow.mjs"
   },
   "dependencies": {
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.22.1",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.23.0",
     "capsomer": "github:DrDustinEdwards/capsomer#v0.54.0",
     "enarratio": "0.4.0"
   },
