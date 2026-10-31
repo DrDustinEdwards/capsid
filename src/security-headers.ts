@@ -56,17 +56,6 @@ export function consentDialogHeaders(): Promise<Readonly<Record<string, string>>
   return consentHeaders;
 }
 
-// No Origin passes, same-origin passes, claude.ai passes. Everything else is refused.
-const MCP_BROWSER_ORIGINS = new Set(["https://claude.ai"]);
-
-export function mcpOriginProblem(request: Request): string | null {
-  const origin = request.headers.get("Origin");
-  if (!origin) return null;
-  if (origin === new URL(request.url).origin) return null;
-  if (MCP_BROWSER_ORIGINS.has(origin)) return null;
-  return `forbidden: Origin ${origin} is not allowed on /mcp. This endpoint accepts same-origin requests, https://claude.ai, and clients that send no Origin header.`;
-}
-
 /** The set a response on `host` leaves with, where it has not set the header itself. */
 export function securityHeadersFor(host: string): Record<string, string> {
   // no-store is applied by withCacheDefault, not here: /health is exempt and must stay cacheable.
