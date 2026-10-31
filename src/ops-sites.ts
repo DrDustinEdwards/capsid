@@ -121,6 +121,12 @@ function owningNamespace(key: string, registered: readonly string[]): string | n
   return owners[0] ?? null;
 }
 
+/** A row that is a further host of a registered namespace, not the namespace's own row. */
+export function isFurtherHost(key: string, registered: readonly string[]): boolean {
+  const owner = owningNamespace(key, registered);
+  return owner !== null && owner !== key;
+}
+
 // unmapped: registered, but in no row. unknown: in a row, but neither registered nor a
 // further host of a registered namespace.
 export function siteMapDrift(registered: readonly string[], config: readonly OpsSiteConfig[]): SiteMapDrift {
