@@ -110,13 +110,24 @@ export function sitesFrom(config: readonly OpsSiteConfig[]): OpsSite[] {
   return out;
 }
 
-// unmapped: registered, but in no row. unknown: in a row, but not registered.
+/** The registered namespace a row belongs to: its own key, or, for a further host of a
+ *  namespace (a row keyed `<namespace>-<host>`, such as capsid-portal or
+ *  foxhound-admin-mcp, migrations/0052), the longest registered namespace it starts with.
+ *  Null when it is neither. A further host is probed and alerted like any site; it is not
+ *  a namespace, so it has no repository of its own. */
+function owningNamespace(key: string, registered: readonly string[]): string | null {
+  if (registered.includes(key)) return key;
+  const owners = registered.filter((ns) => key.startsWith(ns + "-")).sort((a, b) => b.length - a.length);
+  return owners[0] ?? null;
+}
+
+// unmapped: registered, but in no row. unknown: in a row, but neither registered nor a
+// further host of a registered namespace.
 export function siteMapDrift(registered: readonly string[], config: readonly OpsSiteConfig[]): SiteMapDrift {
   const covered = new Set(config.map((c) => c.namespace));
-  const known = new Set(registered);
   return {
     unmapped: registered.filter((ns) => !covered.has(ns)).sort(),
-    unknown: [...covered].filter((ns) => !known.has(ns)).sort(),
+    unknown: [...covered].filter((ns) => owningNamespace(ns, registered) === null).sort(),
   };
 }
 

@@ -97,6 +97,13 @@ function record(gate, passed, detail) {
 // deployed against a stale wrangler.jsonc still answers /health, and the other gates
 // never touch D1. /health's FTS probe is a MATCH pinned to one document, because
 // COUNT(*) and integrity-check both pass on an emptied external-content index.
+// /health is site-runtime's family shape: pass or warn is up (a warn is a stale backup or a
+// quiet task, which gate 1c and the Portal report), fail is a 503. "ok" is the shape before
+// 2026-10-31, which a rollback to an older version still serves.
+function isUp(status) {
+  return status === "pass" || status === "warn" || status === "ok";
+}
+
 async function gateHealth() {
   const expected = process.env.EXPECT_SHA;
   let data = null;
@@ -117,7 +124,7 @@ async function gateHealth() {
     // Keep polling through every not-yet-converged state, including a response that is
     // not JSON: immediately after a deploy the previous version may still be serving.
     const storeOk = data?.store?.d1 === "ok" && data?.store?.fts === "ok";
-    const converged = resp.status === 200 && data?.status === "ok" && (!expected || data.sha === expected) && storeOk;
+    const converged = resp.status === 200 && isUp(data?.status) && (!expected || data.sha === expected) && storeOk;
     if (converged) break;
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
   }
@@ -126,7 +133,7 @@ async function gateHealth() {
     record("1 health + provenance", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
     return;
   }
-  const live = data?.status === "ok";
+  const live = isUp(data?.status);
   const shaOk = !expected || data?.sha === expected;
   const d1 = data?.store?.d1 ?? "(absent)";
   const fts = data?.store?.fts ?? "(absent)";

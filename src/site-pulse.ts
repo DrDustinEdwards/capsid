@@ -14,7 +14,9 @@ import { DAY_MS } from "./time";
 //   down       on the second down probe in a row, once per outage;
 //   back up    when a site called down answers again, once, kept a day so a tick with
 //              no device does not lose it;
-//   degraded   once per UTC day while the health route admits a problem, naming it.
+//   degraded   once per UTC day per failing check while the health route admits a
+//              problem, so a check that starts failing later the same day (a cron, the
+//              backup) still pushes after an earlier warning on that site has.
 
 export const SITE_PULSE_KEY = "site-pulse:state";
 const DOWN_AFTER = 2;
@@ -67,6 +69,14 @@ export function nextPulse(prev: PulseSite | undefined, probe: SiteProbe, now: Da
   };
 }
 
+/** The failing checks a degraded reason names: health-format joins them with "; ", and a
+ *  part such as "backup: last successful backup was 38h ago" is keyed by its name only, so
+ *  an age that grows each probe is still one check. */
+function degradedChecks(reason: string): string[] {
+  const names = reason.split("; ").map((part) => part.split(":")[0]!.trim().slice(0, 60)).filter(Boolean);
+  return names.length ? [...new Set(names)] : ["health"];
+}
+
 /** The alerts the pulse stands behind now. A key names its outage or its day, so the
  *  sent record in src/push.ts turns these into once per outage and once a day. */
 export function pulseAlerts(state: PulseState, now: Date): SiteAlert[] {
@@ -76,7 +86,9 @@ export function pulseAlerts(state: PulseState, now: Date): SiteAlert[] {
     if (s.down_since) {
       out.push({ key: `site-down:${namespace}:${s.down_since}`, namespace, title: `${s.name} is down`, body: `Down on ${DOWN_AFTER} probes in a row since ${s.down_since}: ${s.down_reason ?? "no answer"}.` });
     } else if (s.degraded) {
-      out.push({ key: `site-degraded:${namespace}:${day}`, namespace, title: `${s.name} is degraded`, body: s.degraded });
+      for (const check of degradedChecks(s.degraded)) {
+        out.push({ key: `site-degraded:${namespace}:${check}:${day}`, namespace, title: `${s.name} is degraded: ${check}`, body: s.degraded });
+      }
     }
     if (s.recovered) {
       out.push({ key: `site-up:${namespace}:${s.recovered.down_since}`, namespace, title: `${s.name} is back up`, body: `Down from ${s.recovered.down_since}, answering again at ${s.recovered.at}.` });
