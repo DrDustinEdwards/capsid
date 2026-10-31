@@ -229,10 +229,13 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # No npm ci on purpose: scripts/verify-live.mjs imports nothing outside the Node
-      # standard library and runs on global fetch. Keeping it dependency-free is what
-      # lets the live gate run even if install is broken. The rollback step installs
-      # from the lockfile itself, only when it is about to roll back.
+      # scripts/verify-live.mjs grades headers with site-runtime's checkSecurityHeaders,
+      # so the gate installs from the lockfile, with no install scripts. Without it the
+      # import failed with exit 1 and rolled back good deploys (2026-10-31). A failed
+      # install fails this step before verify:live records an exit code, so it never
+      # rolls anything back.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       # EXPECT_SHA is this run's commit when deploy succeeded, and master head on a
       # schedule run. Empty otherwise: the ternary below is the behavior.
