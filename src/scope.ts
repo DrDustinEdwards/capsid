@@ -189,7 +189,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/public/code/v1.json":
     "the public code maps (src/public-code.ts): each public system's repos' code-map.json from their code-map branch, parsed field by field, a private system's repos never read; it serves only what the daily build stored, never GitHub; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
   "/reports/signed-in-security.json":
-    "the signed-in crawl's report (src/signed-in-crawl.ts): findings about the Portal's and Desk's headers, for devkit's scoreboard; it serves only what the hourly crawl stored in KV, never a page, cookie or token; GET only",
+    "the signed-in crawl's report (src/signed-in-crawl.ts): findings about the Portal's signed-in headers, for devkit's scoreboard; it serves only what the hourly crawl stored in KV, never a page, cookie or token; GET only",
   "/oauth/clients/verify-live.json": "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
   "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
   "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
