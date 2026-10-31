@@ -347,6 +347,10 @@ test("the error rate fires above 1 percent of at least 100 requests in the last 
   assert.deepEqual(fires(hourly(100, 0, { requests: 1000, errors: 900 })), [], "an earlier hour fired");
   assert.deepEqual(fires({ ...hourly(100, 50), errors24: null, errors_reason: "query failed" }), [], "no data was judged");
   assert.deepEqual(fires({ state: "no-token", reason: "CF_OPS_TOKEN is not set" }), []);
+  // REPLAY (L6, 2026-10-31): a Worker that caught its error and answered 503 threw nothing, so it was never counted.
+  const withEdge = (cf: SiteCloudflare, served5xx: number) => siteErrorFindings(sites, { sample: cf }, { sample: served5xx }).map((f) => f.fingerprint);
+  assert.deepEqual(withEdge(hourly(100, 0), 2), ["site-errors-sample"]);
+  assert.deepEqual(withEdge(hourly(100, 1), 1), [], "a thrown invocation is also a 5xx at the edge, so it is not counted twice");
 });
 
 test("the CPU finding fires above a million CPU ms in the last complete hour, and only there", () => {
@@ -522,8 +526,9 @@ test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_sit
   // site key's secret write (capsid_admin_set_site_key), both from the admin tool module.
   assert.deepEqual(importersOf("workers-builds"), ["tools/admin.ts"]);
   assert.deepEqual(importersOf("site-key"), ["tools/admin.ts"]);
-  // The 404 report (capsid_inspect_repo traffic) reads per call of that MCP tool only.
-  assert.deepEqual(importersOf("site-traffic"), ["tools/repo.ts"]);
+  // The 404 report (capsid_inspect_repo traffic) reads per call of that MCP tool, and the
+  // watcher reads the returned 5xx once a pass (readServerErrors).
+  assert.deepEqual(importersOf("site-traffic"), ["tools/repo.ts", "watcher-gather.ts"]);
 });
 
 // The live checks' Web Analytics read (GET /accounts/{id}/rum/site_info/list).

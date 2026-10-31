@@ -57,7 +57,7 @@ function google(sites: Array<{ siteUrl: string; permissionLevel: string }>) {
     if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "ya29.fake", expires_in: 3600 });
     if (url === "https://www.googleapis.com/webmasters/v3/sites") return Response.json({ siteEntry: sites });
     if (url.endsWith("/searchAnalytics/query")) {
-      return Response.json({ rows: [{ keys: ["phage lysis", "https://www.sample.example.com/a"], clicks: 3, impressions: 120, ctr: 0.025, position: 7.4321 }] });
+      return Response.json({ rows: [{ keys: ["release notes", "https://www.sample.example.com/a"], clicks: 3, impressions: 120, ctr: 0.025, position: 7.4321 }] });
     }
     throw new Error(`unrouted ${method} ${url}`);
   };
@@ -106,7 +106,7 @@ test("performance signs in with a read-only assertion, picks the namespace's pro
 
   assert.equal(r.property, "sc-domain:sample.example.com");
   assert.ok("rows" in r);
-  assert.deepEqual(r.rows, [{ query: "phage lysis", page: "https://www.sample.example.com/a", clicks: 3, impressions: 120, ctr: 0.025, position: 7.4 }]);
+  assert.deepEqual(r.rows, [{ query: "release notes", page: "https://www.sample.example.com/a", clicks: 3, impressions: 120, ctr: 0.025, position: 7.4 }]);
   assert.ok(!JSON.stringify(r).includes("ya29.fake"), "the access token reached the result");
 });
 

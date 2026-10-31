@@ -7,6 +7,7 @@ import { healthReport } from "./health";
 import { readLiveConfig, liveChecks, defaultBranchHead } from "./live-checks";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { checkManualSteps, liveStepReaders } from "./manual-steps";
+import { readServerErrors } from "./site-traffic";
 import { cloudflareCredentials, readWebAnalyticsSites, readCloudflare, readSecretNames, readAccessAppNames } from "./ops-cloudflare";
 import { readPackageConfig, readPackage, npmVersions } from "./ops-packages";
 import { readSiteConfig, type OpsSite, sitesFrom, siteMapDrift } from "./ops-sites";
@@ -249,7 +250,9 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     if (cf) {
       observed.cloudflare = cf.bySite;
       if (cf.ran) ran.add("cloudflare");
-      out.push(...siteErrorFindings(sites, cf.bySite), ...siteCpuFindings(sites, cf.bySite));
+      // Returned 5xx, read apart so a failed edge read leaves the thrown count standing.
+      const serverErrors = cf.ran ? await attempt("cloudflare 5xx", () => readServerErrors(env, sites, fetchImpl, now)) : null;
+      out.push(...siteErrorFindings(sites, cf.bySite, serverErrors), ...siteCpuFindings(sites, cf.bySite));
     } else {
       observed.cloudflare = Object.fromEntries(
         sites.map((s) => [s.namespace, { state: "error", reason: "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)" } as const])

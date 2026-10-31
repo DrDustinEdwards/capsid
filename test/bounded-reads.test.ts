@@ -73,7 +73,7 @@ test("a namespace-scoped list is not truncated by another namespace's documents"
   // MAX_ROWS is set above the largest real namespace so scoped reads are not cut.
   // If the filter were dropped, these 30 rows would arrive with 600 others and truncate.
   const { client, close } = await connect({
-    documents: [...docs(600, "recova"), ...docs(30, "capsid")],
+    documents: [...docs(600, "sample"), ...docs(30, "capsid")],
   });
   const out = parse(await call(client, "capsid_find_docs", { action: "list", namespace: "capsid" }));
   await close();

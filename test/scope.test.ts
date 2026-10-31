@@ -28,13 +28,13 @@ test("a caller inside every axis is not refused", () => {
   const agent = scopedAgent();
   assert.equal(checkScope(agent, { tool: "capsid_write_doc", action: "write", namespace: "capsid", grant: "write" }), null);
   assert.equal(checkScope(agent, { tool: "capsid_read_doc", action: "read", namespace: "capsid", grant: "read" }), null);
-  assert.equal(checkScope(adminAgentForEmail("admin@example.com"), { tool: "capsid_close_pr", action: "merge", namespace: "foxhound", grant: "write", flags: SCOPE_FLAGS }), null);
+  assert.equal(checkScope(adminAgentForEmail("admin@example.com"), { tool: "capsid_close_pr", action: "merge", namespace: "sample", grant: "write", flags: SCOPE_FLAGS }), null);
 });
 
 test("the refusal names the axis that failed, and names the scope the caller actually has", () => {
   const agent = scopedAgent();
-  const namespace = checkScope(agent, { tool: "capsid_write_doc", namespace: "foxing", grant: "write" });
-  assert.match(String(namespace), /not scoped to the 'foxing' namespace/);
+  const namespace = checkScope(agent, { tool: "capsid_write_doc", namespace: "sample", grant: "write" });
+  assert.match(String(namespace), /not scoped to the 'sample' namespace/);
   assert.match(String(namespace), /namespace scope is capsid/, "a refusal that does not say what the scope IS costs a round trip");
 
   const readOnly = scopedAgent((s) => {

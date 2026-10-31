@@ -10,6 +10,7 @@ import { readPaused } from "./merge-safety";
 import { auditStatement } from "./store-guards";
 import { digestState } from "./digest";
 import { pulseAlerts, readPulse } from "./site-pulse";
+import { readSnapshot } from "./ops-snapshot";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
 import { jsonResponse as json, textResponse as text } from "./http";
 import { HOUR_MS, DAY_MS } from "./time";
@@ -25,7 +26,10 @@ import { HOUR_MS, DAY_MS } from "./time";
 //   6. a pull request labeled visual waiting for Dustin to look at it (src/visual-pr.ts),
 //      once per head, so a new push asks again (job_0368576da167);
 //   7. a site down on two probes in a row, and its return, once each; a site whose health
-//      route reports degraded, once a UTC day, naming why (src/site-pulse.ts).
+//      route reports degraded, once a UTC day per failing check, naming why
+//      (src/site-pulse.ts); a site the watcher found erroring on over 1 percent of its
+//      requests, thrown or returned 5xx, once a UTC day (src/watcher-detect.ts
+//      siteErrorFindings).
 // Everything else waits for the digest.
 //
 // No alert carries an Approve button. The button was for `approve`-class pull requests,
@@ -179,6 +183,17 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
 
   // 7. Sites, from the five-minute pulse.
   for (const a of pulseAlerts(await readPulse(env), now)) out.push({ ...a, kind: "site", url: SITES_URL });
+
+  // 7, the error rate: the watcher's site-errors findings from its last pass. A snapshot
+  // that cannot be read alerts nothing; the Portal shows that it could not be read.
+  const snapshot = await readSnapshot(env).catch(() => null);
+  const day = now.toISOString().slice(0, 10);
+  for (const fingerprint of snapshot?.checks.flatMap((c) => c.findings) ?? []) {
+    if (!fingerprint.startsWith("site-errors-")) continue;
+    const namespace = fingerprint.slice("site-errors-".length);
+    const name = snapshot?.sites.find((s) => s.namespace === namespace)?.name ?? namespace;
+    out.push({ key: `site-errors:${namespace}:${day}`, kind: "site", namespace, title: `${name} is returning errors`, body: `Over 1 percent of requests in the last complete hour threw or answered 5xx (watcher pass ${snapshot?.pass_at}).`, url: SITES_URL });
+  }
   return out;
 }
 

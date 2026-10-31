@@ -38,7 +38,8 @@ export function healthChecks(body: unknown, operator: SiteOperator): Convergence
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
     out.push({
       name,
-      ok: row.ok === true,
+      // The family shape says `status`; the older bodies say `ok`.
+      ok: row.ok === true || row.status === "pass",
       detail: said ? clip(said) : null,
       expected: num(row.expected),
       present: num(row.present),

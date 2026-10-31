@@ -198,13 +198,13 @@ test("PLANT: a driver cannot reach a namespace it was not minted for", async () 
   await withFetch({}, async (calls) => {
     const result = await callAs(driver("capsid"), "capsid_change_repo", {
       action: "write_file",
-      namespace: "foxing",
+      namespace: "sample",
       path: "src/thing.ts",
       content: "x",
       message: "m",
     });
     assert.equal(result.isError, true);
-    assert.match(result.content[0].text, /not scoped to the 'foxing' namespace/);
+    assert.match(result.content[0].text, /not scoped to the 'sample' namespace/);
     assert.equal(calls.length, 0, "the refused call still reached GitHub");
   });
 });

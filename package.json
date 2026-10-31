@@ -32,7 +32,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.11",
     "@cloudflare/workers-types": "5.20261029.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.9",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.14",
     "@modelcontextprotocol/client": "2.4.0",
     "@types/node": "24.19.2",
     "jscpd": "5.4.2",
@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.23.0",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.24.0",
     "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.7.0",
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.50.1",
     "@modelcontextprotocol/server": "2.4.0",
