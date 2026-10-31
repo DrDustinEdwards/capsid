@@ -1,5 +1,5 @@
 {
-  "raw_kib": 1862,
-  "gzip_kib": 538,
+  "raw_kib": 1872,
+  "gzip_kib": 540,
   "args": ["--config", "wrangler.dryrun.jsonc"]
 }

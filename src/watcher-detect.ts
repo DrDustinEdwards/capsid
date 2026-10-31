@@ -455,20 +455,30 @@ export const ERROR_RATE_THRESHOLD = 0.01;
 export const ERROR_RATE_MIN_REQUESTS = 100;
 
 /** A site whose Worker errored on more than ERROR_RATE_THRESHOLD of its requests in
- *  the most recent complete hour, the last of its hourly buckets. A site with no
- *  analytics this pass is not judged. */
-export function siteErrorFindings(sites: ReadonlyArray<{ namespace: string; name: string }>, cloudflare: Record<string, SiteCloudflare>): Finding[] {
+ *  the most recent complete hour, the last of its hourly buckets. An error is an
+ *  invocation that threw or a returned 5xx (`serverErrors`, the edge's count for that
+ *  hour, src/site-traffic.ts readServerErrors). A thrown invocation is answered with a
+ *  5xx at the edge too, so the edge count already holds it: the larger of the two is
+ *  used, never their sum, and the thrown count stands alone when the edge read failed.
+ *  A site with no analytics this pass is not judged. */
+export function siteErrorFindings(
+  sites: ReadonlyArray<{ namespace: string; name: string }>,
+  cloudflare: Record<string, SiteCloudflare>,
+  serverErrors: Record<string, number> | null = null
+): Finding[] {
   const out: Finding[] = [];
   for (const site of sites) {
     const cf = cloudflare[site.namespace];
     if (cf?.state !== "ok" || !cf.errors24 || cf.errors24.length === 0) continue;
     const hour = cf.errors24[cf.errors24.length - 1];
-    if (hour.requests < ERROR_RATE_MIN_REQUESTS || hour.errors / hour.requests <= ERROR_RATE_THRESHOLD) continue;
+    const returned = serverErrors?.[site.namespace];
+    const errors = Math.max(hour.errors, returned ?? 0);
+    if (hour.requests < ERROR_RATE_MIN_REQUESTS || errors / hour.requests <= ERROR_RATE_THRESHOLD) continue;
     out.push(
       finding(site.namespace, `site-errors-${site.namespace}`, `${site.name} errored on more than ${ERROR_RATE_THRESHOLD * 100} percent of requests`, [
         `script: ${cf.script}`,
-        `hour from ${hour.hour}: ${hour.errors} errors of ${hour.requests} requests (${((hour.errors / hour.requests) * 100).toFixed(1)} percent)`,
-        "Cloudflare counts an invocation that threw, exceeded its resources or hit an internal error.",
+        `hour from ${hour.hour}: ${errors} errors of ${hour.requests} requests (${((errors / hour.requests) * 100).toFixed(1)} percent)`,
+        `${hour.errors} invocations threw, exceeded their resources or hit an internal error; ${returned === undefined ? "returned 5xx not read this pass" : `${returned} answers were 5xx at the edge (sampled, an estimate)`}.`,
       ])
     );
   }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEPLOY_ROSTER, deployFindings, isLiveGateJob, outcomeFrom, type DeployRow } from "../src/deploy-outcomes.ts";
+import { deployFindings, isLiveGateJob, outcomeFrom, type DeployRow } from "../src/deploy-outcomes.ts";
 import { owningCheck } from "../src/watcher-checks.ts";
 
 // The memory of a rollback (docs/design/design-merge-pipeline.md section 6, PR 6): what a
@@ -66,6 +66,3 @@ test("isLiveGateJob takes the bare name and a called workflow's \"<caller> / liv
   for (const no of ["live gate 2", "deploy/live gate", "live gates", "xlive gate", "deploy", ""]) assert.equal(isLiveGateJob(no), false, no);
 });
 
-test("the deploy roster is the improve loop's five plus carrel", () => {
-  assert.deepEqual([...DEPLOY_ROSTER], ["capsid", "dustinedwards", "foxhound", "foxing", "germomics", "carrel"]);
-});

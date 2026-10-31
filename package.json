@@ -27,12 +27,14 @@
     "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src",
     "lint:dead-exports": "node --import ./test/resolve-ts.mjs --test test/lint/dead-exports.lint.ts",
     "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",
+    "check:console": "devkit-console",
+    "check:migrations": "devkit-migrations migrations --min 54",
     "report:bloat": "devkit-no-bloat"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.11",
     "@cloudflare/workers-types": "5.20261029.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.9",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.16",
     "@modelcontextprotocol/client": "2.4.0",
     "@types/node": "24.19.2",
     "jscpd": "5.4.2",
@@ -45,9 +47,9 @@
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.23.0",
-    "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.7.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.53.0",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.24.0",
+    "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.9.0",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.57.1",
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.32.0",
     "jose": "6.2.14",

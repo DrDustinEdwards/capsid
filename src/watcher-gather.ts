@@ -1,12 +1,14 @@
 import { readActionHours, readToolHours, anomalyFindings, toolRateFindings } from "./anomaly";
 import { DEPLOY_ROSTER, readDeployOutcomes, deployFindings } from "./deploy-outcomes";
 import { registrableDomain, readExpiries, expiryFindings } from "./domain-expiry";
+import { readTlsExpiry, TLS_EXPIRY_KEY } from "./tls-expiry";
 import type { Env } from "./env";
 import { defaultBranchSha, ciStatus, listRepoTree } from "./github";
 import { healthReport } from "./health";
 import { readLiveConfig, liveChecks, defaultBranchHead } from "./live-checks";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { checkManualSteps, liveStepReaders } from "./manual-steps";
+import { readServerErrors } from "./site-traffic";
 import { cloudflareCredentials, readWebAnalyticsSites, readCloudflare, readSecretNames, readAccessAppNames } from "./ops-cloudflare";
 import { readPackageConfig, readPackage, npmVersions } from "./ops-packages";
 import { readSiteConfig, type OpsSite, sitesFrom, siteMapDrift } from "./ops-sites";
@@ -130,12 +132,12 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // pipeline's PR 6): recorded in deploy_outcomes, and a rollback is a finding. The check
   // counts as run only when every repo was read, so a failed read never clears one.
   let deploysRead = 0;
-  for (const namespace of DEPLOY_ROSTER) {
+  for (const { key, namespace, selector } of DEPLOY_ROSTER) {
     // Wrapped, since a repo with no deploy yet reads as null and a failed read does too.
-    const read = await attempt(`deploys ${namespace}`, async () => ({ newest: await readDeployOutcomes(env, namespace) }));
+    const read = await attempt(`deploys ${key}`, async () => ({ newest: await readDeployOutcomes(env, namespace, selector) }));
     if (!read) continue;
     deploysRead++;
-    if (read.newest) out.push(...deployFindings(namespace, read.newest));
+    if (read.newest) out.push(...deployFindings(namespace, read.newest, key));
   }
   if (deploysRead === DEPLOY_ROSTER.length) ran.add("deploys");
 
@@ -249,7 +251,9 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     if (cf) {
       observed.cloudflare = cf.bySite;
       if (cf.ran) ran.add("cloudflare");
-      out.push(...siteErrorFindings(sites, cf.bySite), ...siteCpuFindings(sites, cf.bySite));
+      // Returned 5xx, read apart so a failed edge read leaves the thrown count standing.
+      const serverErrors = cf.ran ? await attempt("cloudflare 5xx", () => readServerErrors(env, sites, fetchImpl, now)) : null;
+      out.push(...siteErrorFindings(sites, cf.bySite, serverErrors), ...siteCpuFindings(sites, cf.bySite));
     } else {
       observed.cloudflare = Object.fromEntries(
         sites.map((s) => [s.namespace, { state: "error", reason: "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)" } as const])
@@ -306,6 +310,16 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
       out.push(...expiryFindings(read.expiries, now));
       if (read.failed.length === 0) ran.add("domains");
       for (const f of read.failed) logEvent("WATCHER_DOMAIN_UNREAD", { message: `${f.domain}: ${f.error}` }, { level: "warn" });
+    }
+    // Each Cloudflare-hosted site's TLS certificate (src/tls-expiry.ts): kept in KV for the
+    // push, which alerts at 14 and 3 days. No finding. A host that could not be read keeps
+    // its last stored date, so a failed read never drops an expiry the push still needs.
+    const tls = await attempt("tls", () => readTlsExpiry(env, config, fetchImpl, now));
+    if (tls) {
+      const stored = ((await env.APP_KV.get(TLS_EXPIRY_KEY, "json")) as typeof tls | null)?.hosts ?? [];
+      const kept = stored.filter((h) => tls.failed.some((f) => f.host === h.host));
+      await env.APP_KV.put(TLS_EXPIRY_KEY, JSON.stringify({ ...tls, hosts: [...tls.hosts, ...kept] }));
+      for (const f of tls.failed) logEvent("WATCHER_TLS_UNREAD", { message: `${f.host}: ${f.error}` }, { level: "warn" });
     }
   }
 

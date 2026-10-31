@@ -167,7 +167,7 @@ async function handleInbox(request: Request, env: Env): Promise<Response> {
   }
   const everything = await gatherInbox(env, new Date(), null);
   const readable = (namespace: string) => checkScope(caller.agent, { tool: "capsid_run_improve", action: "status", namespace, grant: "read" }) === null;
-  return Response.json(restrictInbox(everything, readable), { headers: { "Cache-Control": "private, max-age=30", "X-Content-Type-Options": "nosniff" } });
+  return Response.json(restrictInbox(everything, readable), { headers: { "Cache-Control": "private, max-age=30" } });
 }
 
 // What an app reports about itself to the inbox (src/inbox-report.ts): the app's own

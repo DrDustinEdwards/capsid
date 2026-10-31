@@ -150,7 +150,7 @@ describe("improve_status carries the same answer per namespace", () => {
 // What an app reports about itself (src/inbox-report.ts; Dustin's answers 2026-10-10),
 // posted with the app's own key and read back through GET /ops/inbox and improve_status.
 describe("POST /ops/inbox/report", () => {
-  const CAPSID_ORIGIN = "https://capsid.dustin-edwards.workers.dev";
+  const CAPSID_ORIGIN = "https://mcp.dustinedwards.info";
   const report = (bearer: string | null, body: unknown) =>
     SELF.fetch(`${ORIGIN}/ops/inbox/report`, {
       method: "POST",

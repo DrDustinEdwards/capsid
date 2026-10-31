@@ -204,7 +204,7 @@ test("a job at the correction cap alerts; a question alerts only past 4 hours on
 
 // Each sent once, never a button
 
-test("a site alerts when down on two probes in a row and when back, once each, and degraded once a day", async () => {
+test("a site alerts when down on two probes in a row and when back, once each, and degraded once a day per failing check", async () => {
   const w = world();
   const s = service();
   const at = (min: number) => new Date(NOW.getTime() + min * 60_000);
@@ -222,11 +222,13 @@ test("a site alerts when down on two probes in a row and when back, once each, a
   assert.deepEqual(await step(5, probe("down", "root answered 522")), [`site-down:sample:${at(5).toISOString()}`]);
   assert.deepEqual(await step(10, probe("down", "root answered 522")), []);
   assert.deepEqual(await step(15, probe("ok")), [`site-up:sample:${at(5).toISOString()}`]);
-  assert.deepEqual(await step(20, probe("degraded", "backup: 38h old")), ["site-degraded:sample:2026-10-11"]);
-  assert.deepEqual(await step(25, probe("degraded", "backup: 38h old")), []);
-  assert.deepEqual(await step(24 * 60, probe("degraded", "backup: 38h old")), ["site-degraded:sample:2026-10-12"]);
+  assert.deepEqual(await step(20, probe("degraded", "backup: 38h old")), ["site-degraded:sample:backup:2026-10-11"]);
+  assert.deepEqual(await step(25, probe("degraded", "backup: 39h old")), [], "a growing age is the same check");
+  // REPLAY (U3, 2026-10-31): keyed by site, a cron that failed later the same day never pushed.
+  assert.deepEqual(await step(30, probe("degraded", "cron; backup: 39h old")), ["site-degraded:sample:cron:2026-10-11"]);
+  assert.deepEqual(await step(24 * 60, probe("degraded", "backup: 62h old")), ["site-degraded:sample:backup:2026-10-12"]);
   assert.match(s.got[0]!.body, /522/);
-  assert.equal(s.got.at(-1)!.body, "backup: 38h old");
+  assert.equal(s.got.at(-1)!.body, "backup: 62h old");
 });
 
 test("an item is sent once, and the next tick sends nothing new", async () => {
@@ -294,6 +296,19 @@ test("no key, or no device, sends nothing and is not a run", async () => {
   assert.equal(lonely.ran, false);
   assert.match(lonely.note, /no device/);
   assert.equal(s.got.length, 0);
+});
+
+test("with no device on, the urgent alert goes by email once, and the next tick does not mail it again", async () => {
+  const w = world({ devices: [], deploys: [{ repo: "owner/capsid", namespace: "capsid", run_id: 1, head_sha: "a".repeat(40), outcome: "rolled_back", recorded_at: sqlTime(-H) }] });
+  const mails: Array<{ to: string; subject: string; text: string }> = [];
+  Object.assign(w.env as object, { EMAIL: { send: async (m: { to: string; subject: string; text: string }) => void mails.push(m) }, ALERT_EMAIL: "admin@example.com", ALERT_FROM: "capsid@example.com", EMAIL_ROUTING: "on" });
+  const first = await pushTick(w.env, NOW, service().fetcher);
+  assert.equal(first.sent.length, 1, first.note);
+  assert.equal(mails.length, 1);
+  assert.match(mails[0]!.text, /no device has phone alerts on/);
+  const again = await pushTick(w.env, NOW, service().fetcher);
+  assert.equal(again.sent.length, 0);
+  assert.equal(mails.length, 1, "a mailed alert was mailed again");
 });
 
 // The Portal's route

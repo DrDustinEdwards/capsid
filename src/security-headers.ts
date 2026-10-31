@@ -1,6 +1,6 @@
 import { buildPolicy, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
-import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
 import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
+import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
 import { capsidMcp, capsidPortal } from "@dustinedwards/site-runtime/sites";
 import { MCP_HOST } from "./mcp-host";
 import { PORTAL_HOST } from "./portal-host";
@@ -33,8 +33,8 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 // its per-request Set-Cookie; withSecurityHeaders adds the shared set. Kept here so node
 // can import them: routes.ts cannot load under node --test.
 //
-// The dialog has one inline <style>, site-runtime's CONSENT_STYLE, trusted by its hash
-// (no 'unsafe-inline'), and posts a form back to /authorize. No scripts or images, so
+// The dialog is site-runtime's (./mcp-login): one inline <style>, CONSENT_STYLE, trusted
+// by its hash, and a form that posts back to /authorize. No scripts or images, so
 // everything else is locked down.
 //
 // form-action is deliberately absent. Approving submits this form into a redirect
@@ -46,7 +46,7 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 // and claude.ai alongside 'self' was rejected: it holds until the next client appears.
 //
 // `form-action 'self'` shipped in 423bbd6 and broke hop two for 26 days, undetected
-// because a remembered approval (removed since) 302'd out of the GET and never submitted a form.
+// because the approvedClients fast path 302s out of the GET and never submits a form.
 let consentHeaders: Promise<Readonly<Record<string, string>>> | undefined;
 export function consentDialogHeaders(): Promise<Readonly<Record<string, string>>> {
   consentHeaders ??= scriptHash(CONSENT_STYLE).then((hash) => ({
@@ -54,17 +54,6 @@ export function consentDialogHeaders(): Promise<Readonly<Record<string, string>>
     "Content-Security-Policy": buildPolicy(["default-src 'none'", `style-src '${hash}'`, "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]),
   }));
   return consentHeaders;
-}
-
-// No Origin passes, same-origin passes, claude.ai passes. Everything else is refused.
-const MCP_BROWSER_ORIGINS = new Set(["https://claude.ai"]);
-
-export function mcpOriginProblem(request: Request): string | null {
-  const origin = request.headers.get("Origin");
-  if (!origin) return null;
-  if (origin === new URL(request.url).origin) return null;
-  if (MCP_BROWSER_ORIGINS.has(origin)) return null;
-  return `forbidden: Origin ${origin} is not allowed on /mcp. This endpoint accepts same-origin requests, https://claude.ai, and clients that send no Origin header.`;
 }
 
 /** The set a response on `host` leaves with, where it has not set the header itself. */

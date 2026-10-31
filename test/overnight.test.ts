@@ -132,10 +132,10 @@ test("PLANT: setOvernight refuses a bad value or a missing reason and writes not
 // the policy document
 
 test("parseOvernightPolicy reads heavy, budget-minutes and estimate lines and ignores prose", () => {
-  const parsed = parseOvernightPolicy(["# Overnight", "A paragraph about heavy suites.", "- heavy capsid", "- heavy foxing", "- budget-minutes 420", "- estimate capsid 45", "- an ordinary bullet"].join("\n"));
+  const parsed = parseOvernightPolicy(["# Overnight", "A paragraph about heavy suites.", "- heavy capsid", "- heavy sample", "- budget-minutes 420", "- estimate capsid 45", "- an ordinary bullet"].join("\n"));
   assert.ok("policy" in parsed);
   assert.equal(parsed.policy.budget_minutes, 420);
-  assert.deepEqual([...(parsed.policy.heavy as Set<string>)].sort(), ["capsid", "foxing"]);
+  assert.deepEqual([...(parsed.policy.heavy as Set<string>)].sort(), ["capsid", "sample"]);
   assert.equal(parsed.policy.estimates.get("capsid"), 45);
 });
 

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { addSite, editSite, readSiteConfig, removeSite, sitesFrom, validateSite, type SiteInput } from "../src/ops-sites";
 
 // The Portal's site configuration against a real D1 with every migration applied
-// (migrations/0022_ops_sites.sql, and 0051's health routes): the seed, the schema's own
+// (migrations/0022_ops_sites.sql, 0051's health routes and 0052's further hosts): the seed, the schema's own
 // checks, and the three guarded writes with their audit rows.
 
 const ACTOR = "access:admin@example.com";
@@ -31,10 +31,21 @@ const HEALTH_ROUTES: Record<string, Partial<(typeof BEFORE_THE_MOVE)[number]>> =
   foxing: { health_path: "/health" },
   julieedwards: { health_path: "/health", platform: "cloudflare" },
   txasm: { origin: "https://txasm.dustin-edwards.workers.dev", health_path: "/health", script: "txasm" },
+  // migrations/0052_ops_sites_hosts.sql: dustinedwards on its family route, Capsid on its live host.
+  dustinedwards: { health_path: "/health" },
+  capsid: { origin: "https://mcp.dustinedwards.info", self_probe: false },
 };
+const site = (namespace: string, name: string, origin: string, health_path: string | null) => ({ namespace, name, origin, health_path, platform: "cloudflare", script: null, self_probe: false });
 const SEEDED = [
   ...BEFORE_THE_MOVE.map((row) => ({ ...row, ...HEALTH_ROUTES[row.namespace] })),
   { namespace: "carrel", name: "Carrel", origin: "https://carrel.dustinedwards.info", health_path: "https://carrel-mcp.dustinedwards.info/health", platform: "cloudflare", script: null, self_probe: false },
+  site("capsomer", "Capsomer", "https://capsomer.dustinedwards.info", null),
+  site("enarratio", "Enarratio", "https://enarratio.dustinedwards.info", null),
+  site("dustinedwards-prelum", "Prelum", "https://prelum.dustinedwards.info", null),
+  site("capsid-portal", "Capsid Portal", "https://portal.dustinedwards.info", null),
+  site("foxhound-admin-mcp", "Foxhound Admin MCP", "https://admin-mcp.foxhoundapp.com", "/health"),
+  site("dustinedwards-admin-mcp", "dustinedwards.info Admin MCP", "https://admin-mcp.dustinedwards.info", "/health"),
+  site("foxing-admin-mcp", "Foxing Admin MCP", "https://admin-mcp.foxing.app", "/health"),
 ].sort((a, b) => a.namespace.localeCompare(b.namespace));
 
 async function auditRows(): Promise<Array<{ actor: string; action: string; namespace: string; params: string }>> {
@@ -47,27 +58,28 @@ function input(over: Partial<SiteInput> = {}): SiteInput {
 }
 
 describe("the seed", () => {
-  it("is the list the code held before the move with 0051's health routes: nine sites and one namespace with none", async () => {
+  it("is the list the code held before the move with 0051's health routes and 0052's hosts: sixteen sites and one namespace with none", async () => {
     const rows = await readSiteConfig(env.DB);
     expect(rows.map(({ revision: _r, updated_at: _u, operator: _o, operator_problem: _p, ...rest }) => rest)).toEqual(SEEDED);
     // migrations/0035 opts dustinedwards alone into Capsid calling its operator API.
     expect(rows.filter((r) => r.operator).map((r) => [r.namespace, r.operator?.auth_var])).toEqual([["dustinedwards", "DUSTINEDWARDS_OPERATOR_TOKEN"]]);
     expect(rows.every((r) => r.operator_problem === null)).toBe(true);
-    expect(rows.filter((r) => r.revision !== 1).map((r) => r.namespace)).toEqual(["bsw", "carrel", "foxhound", "foxing", "julieedwards", "txasm"]);
-    expect(sitesFrom(rows)).toHaveLength(9);
+    expect(rows.filter((r) => r.revision !== 1).map((r) => r.namespace)).toEqual(["bsw", "capsid", "carrel", "dustinedwards", "foxhound", "foxing", "julieedwards", "txasm"]);
+    expect(sitesFrom(rows)).toHaveLength(16);
   });
 
   // scanner-rule: a seeded script is named only where the host proves it
-  it("names a script only where the host proves it, a workers.dev host's first label, and self-probes Capsid alone", async () => {
+  it("names a script only where the host proves it, a workers.dev host's first label or Capsid's own Worker, and self-probes nothing", async () => {
     const sites = sitesFrom(await readSiteConfig(env.DB));
     const named = sites.filter((s) => s.script !== undefined);
     expect(named.map((s) => s.script).sort()).toEqual(["bsw", "capsid", "txasm"]);
     for (const s of sites) {
       const host = new URL(s.origin).hostname;
       if (host.endsWith(".workers.dev")) expect(s.script, `${s.namespace} is on workers.dev and does not name its script`).toBe(host.split(".")[0]);
-      else expect(s.script, `${s.namespace} names a script its host does not prove`).toBeUndefined();
+      else if (s.namespace !== "capsid") expect(s.script, `${s.namespace} names a script its host does not prove`).toBeUndefined();
     }
-    expect(sites.filter((s) => s.self).map((s) => s.namespace)).toEqual(["capsid"]);
+    // 0052 moved Capsid to its live host and off the in-process probe, so it is read from the network like every site.
+    expect(sites.filter((s) => s.self).map((s) => s.namespace)).toEqual([]);
   });
 
   it("passes the Portal's own validation, so every seeded row can be edited as it stands", async () => {
@@ -150,6 +162,8 @@ describe("the writes", () => {
   });
 
   it("an edit that moves Capsid's origin clears its self-probe; one that keeps it does not", async () => {
+    // The seed no longer self-probes (0052), so the flag is set here to test what an edit does to it.
+    await env.DB.prepare("UPDATE ops_sites SET self_probe = 1 WHERE namespace = 'capsid'").run();
     const [capsid] = (await readSiteConfig(env.DB)).filter((r) => r.namespace === "capsid");
     const keep = await editSite(env.DB, ACTOR, { namespace: "capsid", name: "Capsid", origin: capsid.origin, health_path: "/health", platform: "cloudflare", script: "capsid" }, capsid.revision);
     expect(keep.ok && keep.site.self_probe).toBe(true);

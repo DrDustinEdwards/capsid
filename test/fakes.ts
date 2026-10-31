@@ -7,7 +7,7 @@
 //
 // improve_jti, the one improve table left, is the live replay cache (loopTableExec below).
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
-import { TABLES as BACKUP_TABLES } from "../src/backup.ts";
+import { EXCLUDED as BACKUP_EXCLUDED, TABLES as BACKUP_TABLES } from "../src/backup.ts";
 import { OPEN_JOB_STATUSES, type JobStatus } from "../src/jobs-schema.ts";
 import { REOPEN_QUIET_MS, appendEvidence, type FindingMemory, type FindingRow, type JobEnd } from "../src/watcher-findings.ts";
 import { applyWrite, evalCond, selectRows, sqliteNow, type Row, type TableSpec, type WriteResult } from "./fake-sql.ts";
@@ -648,11 +648,11 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     }
     // What @dustinedwards/d1-dump reads to find the tables: every table the
     // migrations create, documents_fts with its shadow tables, and wrangler's
-    // d1_migrations ledger, as a deployed database holds them.
+    // excluded tables (the d1_migrations ledger among them), as a deployed database holds them.
     if (/^SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid$/i.test(flat.trim())) {
       const table = (name: string) => ({ type: "table", name, tbl_name: name, sql: `CREATE TABLE ${name} (id INTEGER PRIMARY KEY)` });
       return [
-        table("d1_migrations"),
+        ...BACKUP_EXCLUDED.map(table),
         ...BACKUP_TABLES.map(table),
         ...(opts.extraTables ?? []).map(table),
         {

@@ -116,6 +116,16 @@ jobs:
       - name: Lint dead exports and doc drift
         run: npm run lint
 
+      # THE RATCHETS (devkit): no raw console.* call in src/ (the baseline in .console.json
+      # is 0; server code logs through logEvent), and no applied migration edited, renamed or
+      # deleted, nor a later one that drops or renames without a `-- contract:` line
+      # (migrations/manifest.json; a new migration adds its hash with
+      # `npx devkit-migrations migrations --write`).
+      - name: Console and migration ratchets
+        run: |
+          npm run check:console
+          npm run check:migrations
+
       - name: Tests
         run: npm test
 
@@ -186,21 +196,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      # Refuse to ship code against a database missing a migration. Migrations are
-      # applied by hand (README), so a commit that adds migrations/000N and pushes would
-      # otherwise deploy a Worker whose SQL assumes a table the live D1 lacks. wrangler
-      # prints "No migrations to apply!" when the remote is current and exits 0 either
-      # way, so the confirmation string is the signal. Fails closed: an unreadable or
-      # unexpected output is a missing confirmation and stops the deploy.
-      - name: Assert all migrations are applied
-        run: |
-          set -euo pipefail
-          OUT=$(npx wrangler d1 migrations list capsid --remote 2>&1)
-          echo "$OUT"
-          if ! echo "$OUT" | grep -q "No migrations to apply"; then
-            echo "::error::the live database is missing migrations; apply them with 'wrangler d1 migrations apply capsid --remote' before this deploy" >&2
-            exit 1
-          fi
+      # The deploy applies its own migrations, so none is a hand-run step before a merge. devkit-migrations --apply
+      # applies pending migrations that only add, after reading the D1 Time Travel bookmark (the restore command goes to
+      # the log and the step summary: a rollback never undoes a migration), and refuses one that drops, renames, deletes
+      # rows or says `-- contract:`, with the hand-run command. An unreadable list or bookmark, a failed apply, or a
+      # database still behind afterwards fails here, before the deploy.
+      - name: Apply the pending migrations that only add
+        run: npx devkit-migrations migrations --apply capsid
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

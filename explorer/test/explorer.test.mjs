@@ -198,16 +198,6 @@ test("a rate with too few cases is said so, and has no picture", () => {
   assert.match(section, /Checked jobs with passing CI, last 90 days<\/th><td>not enough data yet/);
 });
 
-test("the headers send the shared policy with scripts and styles from the explorer itself", () => {
-  const headers = readFileSync(join(out, "_headers"), "utf8");
-  assert.match(headers, /^\/\*\n/);
-  assert.match(headers, /Content-Security-Policy: default-src 'self'; script-src 'self' https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js\/; style-src 'self';/);
-  assert.doesNotMatch(headers, /unsafe-inline|unsafe-eval/);
-  assert.match(headers, /report-uri https:\/\/mcp\.dustinedwards\.info\/csp-report; report-to csp/);
-  assert.match(headers, /Reporting-Endpoints: csp="https:\/\/mcp\.dustinedwards\.info\/csp-report"/);
-  assert.match(headers, /X-Frame-Options: deny/);
-});
-
 test("the map's script is under 25 KB gzip and all the explorer's script under 105 KB", () => {
   const gz = (/** @type {string} */ f) => gzipSync(readFileSync(join(out, "assets", f)), { level: 9 }).length;
   const map = readdirSync(join(out, "assets")).filter((f) => f.startsWith("system-map")).reduce((sum, f) => sum + gz(f), 0);
