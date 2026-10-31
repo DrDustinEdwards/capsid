@@ -17,7 +17,7 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 //
 //   /ops/mcp/admin  a key. 401 with none, 403 for any key that is not the admin's, and
 //                   both before a server is built. The admin key lists the 8 admin tools.
-//   /ops/mcp        Capsid's 14 and no capsid_admin_ tool, even for the admin key.
+//   /ops/mcp        Capsid's 11 and no capsid_admin_ tool, even for the admin key.
 //   /mcp/admin      the administrator's OAuth session, which lists the 8 admin tools.
 //
 // The calls are the ones .claude/rules/deploy.md names: initialize,
@@ -172,10 +172,10 @@ describe(`${ADMIN_OPS_MCP_ROUTE}, for a key`, () => {
 });
 
 describe("/ops/mcp serves Capsid and no Capsid Admin tool", () => {
-  it("PLANT: lists exactly Capsid's 14 to the admin key, and no capsid_admin_ tool", async () => {
+  it("PLANT: lists exactly Capsid's 11 to the admin key, and no capsid_admin_ tool", async () => {
     const { server, tools } = await listTools("/ops/mcp", env.TEST_OPERATOR_KEYS.write);
     expect(server).toBe("capsid");
-    expect(tools).toHaveLength(14);
+    expect(tools).toHaveLength(11);
     expect(sorted(tools)).toEqual(sorted(CAPSID_TOOLS));
     expect(tools.filter((t) => t.startsWith("capsid_admin_"))).toEqual([]);
   });
@@ -250,7 +250,7 @@ async function adminToken(): Promise<string> {
 }
 
 describe(`${ADMIN_MCP_ROUTE}, for the administrator's OAuth session`, () => {
-  it("the admin's token reaches /mcp/admin and lists exactly the 8 Capsid Admin tools; on /mcp it lists Capsid's 14", async () => {
+  it("the admin's token reaches /mcp/admin and lists exactly the 8 Capsid Admin tools; on /mcp it lists Capsid's 11", async () => {
     const token = await adminToken();
     const admin = await listTools(ADMIN_MCP_ROUTE, token);
     expect(admin.server).toBe("capsid-admin");
@@ -259,7 +259,7 @@ describe(`${ADMIN_MCP_ROUTE}, for the administrator's OAuth session`, () => {
 
     const capsid = await listTools("/mcp", token);
     expect(capsid.server).toBe("capsid");
-    expect(capsid.tools).toHaveLength(14);
+    expect(capsid.tools).toHaveLength(11);
     expect(sorted(capsid.tools)).toEqual(sorted(CAPSID_TOOLS));
     expect(capsid.tools.filter((t) => t.startsWith("capsid_admin_"))).toEqual([]);
   });
