@@ -194,6 +194,35 @@ async function deleteInChunks(bucket: R2Bucket, keys: string[]): Promise<number>
   return keys.length;
 }
 
+// R2 now and then refuses a put with "We encountered an internal error. Please try
+// again. (10001)", and one refused put threw the whole run away: the 2026-10-27 and
+// 2026-10-30 runs died on it, leaving the backup 38 hours old. Every put here writes a
+// string under a fixed key, so trying it again is safe.
+const PUT_ATTEMPTS = 3;
+const PUT_RETRY_MS = 1000;
+
+/** The bucket with its put tried up to PUT_ATTEMPTS times, waiting longer each time. */
+function retryingPuts(bucket: R2Bucket, waitMs: number): R2Bucket {
+  const put = async (...args: Parameters<R2Bucket["put"]>) => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await bucket.put(...args);
+      } catch (err) {
+        if (attempt >= PUT_ATTEMPTS) throw err;
+        logEvent("BACKUP_PUT_RETRY", { message: `BACKUP_PUT_RETRY ${args[0]} attempt ${attempt}: ${err instanceof Error ? err.message : String(err)}` });
+        await new Promise((resolve) => setTimeout(resolve, waitMs * attempt));
+      }
+    }
+  };
+  return new Proxy(bucket, {
+    get(target, prop) {
+      if (prop === "put") return put;
+      const value = Reflect.get(target, prop) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 async function listAllKeys(bucket: R2Bucket, prefix: string): Promise<string[]> {
   const keys: string[] = [];
   let cursor: string | undefined;
@@ -205,7 +234,7 @@ async function listAllKeys(bucket: R2Bucket, prefix: string): Promise<string[]> 
   return keys;
 }
 
-export async function runBackup(env: Env): Promise<BackupResult> {
+export async function runBackup(env: Env, putRetryMs = PUT_RETRY_MS): Promise<BackupResult> {
   const held = await env.APP_KV.get(LEASE_KEY);
   if (held !== null) {
     logEvent("BACKUP_LEASE_HELD", { message: `BACKUP_LEASE_HELD another run holds ${LEASE_KEY} (started ${held}); this run pruned nothing` }, { level: "error" });
@@ -215,7 +244,7 @@ export async function runBackup(env: Env): Promise<BackupResult> {
   const lease = `${now} ${crypto.randomUUID()}`;
   await env.APP_KV.put(LEASE_KEY, lease, { expirationTtl: LEASE_TTL_SECONDS });
   try {
-    return await exportAndPrune(env, now, lease);
+    return await exportAndPrune({ ...env, MEDIA: retryingPuts(env.MEDIA, putRetryMs) }, now, lease);
   } finally {
     // Release on success or throw, and only this run's own lease: if the TTL lapsed
     // and another run took the key, deleting it would let a third run start.

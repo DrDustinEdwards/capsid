@@ -9,26 +9,29 @@ import type { PortalPush } from "./ops-types/views";
 import { readPaused } from "./merge-safety";
 import { auditStatement } from "./store-guards";
 import { digestState } from "./digest";
+import { pulseAlerts, readPulse } from "./site-pulse";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
 import { jsonResponse as json, textResponse as text } from "./http";
 import { HOUR_MS, DAY_MS } from "./time";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
 // and 6 of 2026-10-09). Web Push to the devices the administrator turned on in the
-// Portal's Settings, for exactly six things:
+// Portal's Settings, for exactly seven things:
 //   1. a `typed` pull request (a money path) waiting more than 2 hours;
 //   2. a rollback (deploy_outcomes: rolled_back or rollback_failed);
 //   3. a job at the correction cap (blocked with the retry-cap reason);
 //   4. a question over 4 hours old on a job with priority 70 or more;
 //   5. auto-merge paused for a namespace by the safety shutoff (src/merge-safety.ts);
 //   6. a pull request labeled visual waiting for Dustin to look at it (src/visual-pr.ts),
-//      once per head, so a new push asks again (job_0368576da167).
+//      once per head, so a new push asks again (job_0368576da167);
+//   7. a site down on two probes in a row, and its return, once each; a site whose health
+//      route reports degraded, once a UTC day, naming why (src/site-pulse.ts).
 // Everything else waits for the digest.
 //
 // No alert carries an Approve button. The button was for `approve`-class pull requests,
 // and no trigger carries one: a typed PR is approved only by typing its number (design
 // section 8), a visual PR is approved after looking at its preview in the Portal, and the
-// other four are not pull requests. So there is no
+// other five are not pull requests. So there is no
 // /ops/approve route: a tap opens the Portal, where every answer is given. An alert names
 // the repo, the pull request or job id and the class, never a title.
 //
@@ -56,8 +59,9 @@ const prUrl = (repo: string, number: number) => portalPath(`/prs#pr-${repo.toLow
 const jobUrl = (id: string) => portalPath(`/queue/job/${encodeURIComponent(id)}`);
 const DEPLOYS_URL = portalPath("/health?tab=deploys");
 const AUTO_MERGE_URL = portalPath("/prs#auto-merge");
+const SITES_URL = portalPath("/health?tab=sites");
 
-type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr";
+type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr" | "site";
 
 interface Urgent {
   key: string;
@@ -91,7 +95,7 @@ async function readState(env: Env): Promise<PushState> {
 
 const hours = (ms: number) => `${Math.floor(ms / HOUR_MS)}h`;
 
-/** The six triggers, from what the tick, the watcher and the queue already keep. Reads
+/** The seven triggers, from what the tick, the watcher and the queue already keep. Reads
  *  only; `typedSeen` is updated in place with the typed PRs seen now. */
 async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, string>): Promise<Urgent[]> {
   const out: Urgent[] = [];
@@ -172,6 +176,9 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
   } catch {
     // See above.
   }
+
+  // 7. Sites, from the five-minute pulse.
+  for (const a of pulseAlerts(await readPulse(env), now)) out.push({ ...a, kind: "site", url: SITES_URL });
   return out;
 }
 
