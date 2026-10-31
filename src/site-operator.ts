@@ -124,7 +124,11 @@ export interface OperatorCall {
   error: string | null;
 }
 
-const CALL_TIMEOUT_MS = MINUTE_MS;
+// A repair re-derives a whole store, and dustinedwards.info's sync_ask uploads its Ask corpus
+// (about 540 items) one at a time: it ran past the old one-minute limit on every watcher call
+// from 2026-10-18, while the site's own watchdog, which waits, converged it. Five minutes fits
+// that work and stays well inside a cron invocation's fifteen minutes of wall time.
+const CALL_TIMEOUT_MS = 5 * MINUTE_MS;
 const ERROR_MAX = 300;
 
 /** One allowlisted call: POST {tool, args: {}} to the site's operator route with the

@@ -13,7 +13,8 @@ import { noFlags } from "./agents-schema";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 const DOCS = "https://platform.claude.com/docs/en";
-const OVERVIEW = `${DOCS}/about-claude/models/overview.md`;
+// The overview moved here in October 2026; the old about-claude/models path answers a 307 to it.
+const OVERVIEW = `${DOCS}/models/overview.md`;
 const guideUrl = (slug: string) => `${DOCS}/build-with-claude/prompt-engineering/prompting-claude-${slug}.md`;
 
 export const SKILLS_NAMESPACE = "claude-skills";
@@ -30,10 +31,19 @@ export const DEFAULT_DAY_UTC = 1;
 const MODEL_ID = /\bclaude-(fable|mythos|opus|sonnet|haiku)-\d[a-z0-9-]*/g;
 const DATED_SUFFIX = /-\d{8}$/;
 
+// Since October 2026 the comparison table links each current model's own page in a
+// "Model page" row; the rest of the overview also links retired models, so only that
+// row is read.
+const MODEL_PAGE_ROW = /^\|\s*Model page\s*\|.*$/gm;
+const MODEL_PAGE_LINK = /\/models\/((?:fable|mythos|opus|sonnet|haiku)-\d[a-z0-9-]*)\/overview\b/g;
+
 export function discoverModels(overview: string): string[] {
-  const ids = new Set<string>();
-  for (const m of overview.matchAll(MODEL_ID)) ids.add(m[0]);
-  return [...new Set([...ids].map((id) => id.replace(/^claude-/, "").replace(DATED_SUFFIX, "")))].sort();
+  const slugs = new Set<string>();
+  for (const m of overview.matchAll(MODEL_ID)) slugs.add(m[0].replace(/^claude-/, "").replace(DATED_SUFFIX, ""));
+  for (const row of overview.matchAll(MODEL_PAGE_ROW)) {
+    for (const m of row[0].matchAll(MODEL_PAGE_LINK)) slugs.add(m[1].replace(DATED_SUFFIX, ""));
+  }
+  return [...slugs].sort();
 }
 
 export interface Schedule {
