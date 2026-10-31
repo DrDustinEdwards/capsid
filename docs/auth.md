@@ -136,7 +136,7 @@ The minted roles each hold at most one blast-radius flag, and `test/roles.test.t
 - The legacy operator key, on any deployment where `OPERATOR_KEY_HASH` is still set: a plain entry has the admin grant. This deployment deleted it on 2026-09-12.
 - Client-side tool caching. MCP clients cache the tool list at connect time; claude.ai's handling of the cache hints is unknown. A deploy is verified by calling the Worker directly.
 - Tool annotations such as `readOnlyHint` are hints to the client and enforce nothing.
-- Portal sign-out ends the person's Portal sessions on the server (`portal:ended:<email>` in `OAUTH_KV`), a copied cookie included. The Access session is Cloudflare's; the idle end sends the browser to Access's logout as well.
+- Portal sign-out ends that Portal session on the server (its session id in D1 `portal_session_ends`), a copied cookie included; the person's other sessions go on. The Access session is Cloudflare's; the idle end sends the browser to Access's logout as well.
 - Hooks and telemetry from a session are reported by that session. A session that sends no key records nothing.
 
 ## Audits

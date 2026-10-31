@@ -4,7 +4,7 @@ import { forgetKeys, type Jwk } from "@dustinedwards/site-runtime/access-login";
 import { handlePortalCallback, portalSessionCookie, portalSignOutCookies, readPortalSession, startPortalLogin, withPortalIdle } from "../src/portal-auth.ts";
 import { portalCsrf } from "../src/ops-feed.ts";
 import { PORTAL_HOST } from "../src/portal-host.ts";
-import { fakeKv } from "./fakes.ts";
+import { fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 // Capsid Portal's callback through the shared Access for SaaS login (src/access-login.ts),
 // design PR 3 of capsid/research/design-capsid-access-login.md. The MCP callback is
@@ -47,6 +47,7 @@ afterEach(() => {
 function env(overrides: Record<string, unknown> = {}) {
   return {
     OAUTH_KV: fakeKv().kv,
+    DB: withPortalSessionEnds().db,
     COOKIE_ENCRYPTION_KEY: SECRET,
     ADMIN_EMAIL: "admin@example.com",
     ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",

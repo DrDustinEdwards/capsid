@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { assetPath, DASHBOARD_CSP, handlePortalApp, HASHED_ASSET_CACHE, isNavigation } from "../src/portal-app.ts";
 import { withSecurityHeaders } from "../src/security-headers.ts";
-import { fakeEnv, fakeKv } from "./fakes.ts";
+import { fakeEnv, fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 // Capsid Portal's files behind the Portal gate (src/portal-app.ts), with a fake
 // ASSETS binding that records what it was asked for. The same routes run through the
@@ -36,6 +36,7 @@ function fakeAssets() {
 function env(assets: unknown = fakeAssets().assets) {
   return fakeEnv({
     ASSETS: assets,
+    DB: withPortalSessionEnds().db,
     APP_KV: fakeKv().kv,
     OAUTH_KV: fakeKv().kv,
     COOKIE_ENCRYPTION_KEY: SECRET,
