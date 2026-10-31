@@ -14,6 +14,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { parseArgs } from "node:util";
 
+import { webManifest } from "@drdustinedwards/site-helpers/icons";
 import { llmsDocument } from "@drdustinedwards/site-helpers/llms";
 import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
@@ -167,9 +168,9 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   copyFileSync(require.resolve("enarratio/enhance"), join(assets, "enhance.js"));
   copyFileSync(join(here, "src", "explorer.js"), join(assets, "explorer.js"));
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
-  // The family icon set at the root, drawn by Prelum's prelum-icons, with site.webmanifest from its webManifest. The
-  // explorer stays on Prelum 0.20 until it can take Enarratio 0.4, so the files are written once, not imported.
+  // The family icon set (Prelum's prelum-icons) at the root, where iconLinks() and the manifest point.
   cpSync(join(here, "src", "icons"), out, { recursive: true });
+  writeFileSync(join(out, "site.webmanifest"), JSON.stringify(webManifest({ name: "Capsid", themeColor: "#01585c", backgroundColor: "#01585c", lang: "en" })));
   copyFileSync(join(here, "src", "og-card.png"), join(assets, "og-card.png"));
   // The family's faces (capsomer/fonts.css, inlined above), served from here because the policy
   // allows fonts from 'self' only: Capsomer's fonts/ beside assets/, where its "../fonts/" points.
