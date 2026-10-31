@@ -8,7 +8,7 @@ import { ACCESS_SAAS } from "../scripts/bindings.mjs";
 // @ts-expect-error as above
 import { PROBE_REDIRECT } from "../scripts/cimd-probe-lib.mjs";
 import { MCP_HOST } from "../src/mcp-host.ts";
-import { CONSENT_DIALOG_HEADERS, securityHeadersFor } from "../src/security-headers.ts";
+import { consentDialogHeaders, securityHeadersFor } from "../src/security-headers.ts";
 
 // A local server that plays a healthy Worker for scripts/verify-live.mjs, and the runner
 // that points the real script at it. Shared by test/verify-live-no-answer.test.ts and
@@ -21,7 +21,7 @@ export const SHA = "4df127439ed3aa19aef8e350ab6311957b8f8611";
 // override one, so gate 6's shared check grades the stub as it grades the Worker.
 const lower = (set: Record<string, string>) => Object.fromEntries(Object.entries(set).map(([k, v]) => [k.toLowerCase(), v]));
 export const NON_HTML: Record<string, string> = { ...lower(securityHeadersFor(MCP_HOST)), "cache-control": "no-store" };
-export const HTML: Record<string, string> = { ...NON_HTML, ...lower(CONSENT_DIALOG_HEADERS) };
+export const HTML: Record<string, string> = { ...NON_HTML, ...lower(await consentDialogHeaders()) };
 
 // A Worker that passes every gate.
 export function healthy(req: IncomingMessage, res: ServerResponse) {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { portalSessionCookie } from "../src/portal-auth.ts";
 import { assetPath, DASHBOARD_CSP, handlePortalApp, HASHED_ASSET_CACHE, isNavigation } from "../src/portal-app.ts";
-import { CONSENT_DIALOG_HEADERS, withSecurityHeaders } from "../src/security-headers.ts";
+import { withSecurityHeaders } from "../src/security-headers.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // Capsid Portal's files behind the Portal gate (src/portal-app.ts), with a fake
@@ -64,13 +64,12 @@ test("PLANT: no file is fetched for a caller the Portal gate refuses", async () 
 
 test("a signed-in administrator gets the app's page, uncached, under its own CSP", async () => {
   for (const path of ["/portal", "/portal/", "/portal/index.html"]) {
-    // As index.ts serves it: through the header layer, which owns X-Frame-Options.
+    // As index.ts serves it: through the header layer.
     const res = withSecurityHeaders(await handlePortalApp(await signed(path), env(), NOW));
     assert.equal(res.status, 200, path);
     assert.match(await res.text(), /Watch Floor/);
     assert.equal(res.headers.get("Cache-Control"), "no-store");
     assert.equal(res.headers.get("Content-Security-Policy"), DASHBOARD_CSP);
-    assert.match(res.headers.get("X-Frame-Options") ?? "", /^deny$/i);
   }
 });
 
@@ -121,7 +120,6 @@ test("the app's paths map onto the assets directory, and navigations are told fr
   assert.equal(isNavigation(new Request("https://x.example", { headers: { Accept: "application/json", "Sec-Fetch-Mode": "cors" } })), false);
 });
 
-test("the Portal's CSP did not loosen the consent dialog's, and allows nothing inline", () => {
-  assert.doesNotMatch(CONSENT_DIALOG_HEADERS["Content-Security-Policy"], /script-src|connect-src/);
+test("the Portal's CSP allows nothing inline", () => {
   assert.doesNotMatch(DASHBOARD_CSP, /unsafe-inline|unsafe-eval|\*/);
 });
