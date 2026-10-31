@@ -433,7 +433,7 @@ export async function planAction(env: Env, email: string, action: PortalAction, 
         ok: true,
         changes: [
           `POST ${row.origin}${row.operator.path} with tool ${p.tool}, authorized by the Capsid Worker secret ${row.operator.auth_var} (the token is never shown or recorded).`,
-          `The site re-derives that store from its source and reports a read-back verdict; the result is shown when it returns, up to a minute. One task_runs row (site-repair) records it.`,
+          `The site re-derives that store from its source and reports a read-back verdict; the result is shown when it returns, up to five minutes. One task_runs row (site-repair) records it.`,
         ],
         audit: [`site-repair by ${actor}`, click],
       };

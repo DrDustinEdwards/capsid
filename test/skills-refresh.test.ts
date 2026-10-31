@@ -20,12 +20,34 @@ function fakeKv(store: Record<string, string>): KVNamespace {
 }
 const throwingKv = { get: async () => { throw new Error("KV is down"); } } as unknown as KVNamespace;
 
-const OVERVIEW = "| Claude Fable 5.1 | `claude-fable-5-1` |\n| Claude Haiku 4.5 | `claude-haiku-4-5-20251001` |";
+// The overview's shape since October 2026 (models/overview.md): frontmatter, MDX chips,
+// a comparison table with a "Model page" row of links and the IDs further down, and
+// links to retired models' pages elsewhere. Model names are neutral placeholders.
+const OVERVIEW = [
+  "---",
+  "title: Models overview",
+  "url: https://platform.claude.com/docs/en/models/overview",
+  "---",
+  "",
+  '<HomeQuickChip icon="Signpost" href="https://platform.claude.com/docs/en/about-claude/models/choosing-a-model">',
+  "  Choosing a model",
+  "</HomeQuickChip>",
+  "",
+  "| Feature | Claude Fable 9.1 | Claude Haiku 9.5 |",
+  "| :------ | :--------------- | :--------------- |",
+  "| Model page | [Claude Fable 9.1](https://platform.claude.com/docs/en/models/fable-9-1/overview) | [Claude Haiku 9.5](https://platform.claude.com/docs/en/models/haiku-9-5/overview) |",
+  "| Claude API ID | `claude-fable-9-1` | `claude-haiku-9-5-20990101` |",
+  "| Amazon Bedrock ID | `anthropic.claude-fable-9-1` | `anthropic.claude-haiku-9-5` |",
+  "",
+  "Older models: [Claude Opus 8](https://platform.claude.com/docs/en/models/opus-8/overview).",
+].join("\n");
 
-test("discovers models and collapses dated snapshots", () => {
-  const slugs = discoverModels(OVERVIEW);
-  assert.deepEqual(slugs, ["fable-5-1", "haiku-4-5"]);
-  assert.ok(slugs.length > 0, "parsed zero models means the matcher broke");
+test("discovers the current models from the overview and collapses dated snapshots", () => {
+  assert.deepEqual(discoverModels(OVERVIEW), ["fable-9-1", "haiku-9-5"]);
+  // The "Model page" row alone still finds them, so a table that drops the ID rows
+  // does not read as zero models; a retired model linked elsewhere is not one.
+  const linksOnly = OVERVIEW.split("\n").filter((line) => !line.includes("`")).join("\n");
+  assert.deepEqual(discoverModels(linksOnly), ["fable-9-1", "haiku-9-5"]);
 });
 
 // The MODEL_ID regex from DrDustinEdwards/claude-skills scripts/model-guides.mjs,
