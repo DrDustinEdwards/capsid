@@ -20,5 +20,5 @@ permissions:
 
 jobs:
   ai-author:
-    uses: DrDustinEdwards/devkit/.github/workflows/ai-author.yml@65782d2c45431055672a315f0d126b62d0dd3aff # v0.20.14
+    uses: DrDustinEdwards/devkit/.github/workflows/ai-author.yml@d092a363254153c49f57d2dd38a1c60fa0c9bdca # v0.20.16
 
