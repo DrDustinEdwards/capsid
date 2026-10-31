@@ -1,0 +1,23 @@
+name: dependencies
+
+# The caller a repository keeps. Replace the sha with the devkit commit that holds the reviewed dependencies.yml, and keep it
+# a full sha: scripts/check-callers.mjs fails on anything else. The daily run is what finds an advisory published after a
+# merge. Exceptions go in osv-scanner.toml at the repository root, each with its reason.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependencies-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  dependencies:
+    uses: DrDustinEdwards/devkit/.github/workflows/dependencies.yml@956dc10b8a0fbf3128df41c7c21c9441392fabda # v0.20.5
