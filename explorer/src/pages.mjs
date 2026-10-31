@@ -12,7 +12,7 @@ import { patchSvg } from "capsomer/behavior/manual";
 import { familyFooterHtml } from "capsomer/behavior/family-footer";
 import { letterheadHtml } from "capsomer/behavior/site-header";
 import { escapeHtml } from "@dustinedwards/site-runtime/html";
-import { headHtml, headTags } from "@drdustinedwards/site-helpers/head";
+import { defineHead, headHtml } from "@drdustinedwards/site-helpers/head";
 import { jsonLd } from "@drdustinedwards/site-helpers/schema";
 
 import { codeBySystem, codeHome, codeIndexPage, codePages, codePath, codeSummary, codeTotals, riskiest } from "./code.mjs";
@@ -65,6 +65,10 @@ export const NAV = [
   ["/code/", "Code"],
 ];
 
+const NAMES = Object.fromEntries(NAV);
+/** The pages that list a kind of thing, written as CollectionPage. */
+const LISTS = ["/systems/", "/flows/", "/tools/", "/code/"];
+
 /** The section a path belongs to, for the bar's aria-current. @param {string} path */
 function sectionOf(path) {
   if (path === "/") return "/";
@@ -79,27 +83,33 @@ function sectionOf(path) {
  * teal under an amber sun. Drawn by og-card.mjs.
  */
 export const CARD = { url: "/assets/og-card.png", width: 1200, height: 630, alt: "A travel poster: Visit Capsid. AI agents say it's done. Capsid checks." };
+const head = defineHead({ origin: ORIGIN, siteName: "Capsid", image: CARD, suffix: ", Capsid", locale: "en_US" });
 
 /**
  * The page around a body: one stylesheet set, the theme script and one module script, no inline
  * script or style, so the policy in _headers needs no hash (src/security-headers.mjs); JSON-LD is
  * data, not script, so the policy does not apply to it. The head's tags are Prelum's, with the
- * production origin, so the 404 says noindex and claims no canonical. A wide page's sections set
- * their own width, for the front page's full-bleed parts; any other page is one column.
- * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean, data?: Record<string, unknown>[] }} page
+ * production origin, so the 404 says noindex and claims no canonical. `title` is the page's own, before
+ * ", Capsid"; `parent` is the page between its section and it in its breadcrumb trail. A wide page's
+ * sections set their own width, for the front page's full-bleed parts; any other page is one column.
+ * @param {{ title: string, description: string, path: string, body: string, asOf: string, wide?: boolean, data?: Record<string, unknown>[], fullTitle?: boolean, parent?: [string, string] }} page
  */
-export function layout({ title, description, path, body, asOf, wide = false, data = [] }) {
+export function layout({ title, description, path, body, asOf, wide = false, data = [], fullTitle, parent }) {
   const here = sectionOf(path);
   const missing = path === "/404";
-  const tags = headTags({ origin: ORIGIN, path, title, description, image: CARD, siteName: "Capsid", locale: "en_US", noindex: missing });
-  const head = headHtml([...tags.filter((tag) => !(missing && "tagName" in tag && tag.rel === "canonical")), ...data.map(jsonLd)]);
+  // Every page is served at its slash, so the canonical and the trail keep it (Prelum's own trail drops it).
+  const section = here && here !== "/" && here !== path ? [[here, NAMES[here]]] : [];
+  const trail = [["/", NAMES["/"]], ...section, ...(parent ? [parent] : []), [path, title]].map(([href, name]) => ({ name, path: href }));
+  const pageType = LISTS.includes(path) ? "CollectionPage" : undefined;
+  const tags = head({ path, title, fullTitle, description, noindex: missing, keepTrailingSlash: true, breadcrumbs: path === "/" ? false : trail, pageType });
+  const headMarkup = headHtml([...tags.filter((tag) => !(missing && "tagName" in tag && tag.rel === "canonical")), ...data.map(jsonLd)]);
   return `<!doctype html>
 <html lang="en" data-cap-site="capsid" data-family="teal">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-${head}
+${headMarkup}
 <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
 <link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/capsomer.css">
@@ -387,7 +397,7 @@ ${groups.size ? `<div class="links-grid"><dl class="links">${[...groups].map(([v
 ${flowLinks(model, id)}
 ${maps.length ? riskiest(id, maps) : ""}`;
   return layout({
-    title: `${s.name}, Capsid`,
+    title: s.name,
     description: s.description ?? (s.private ? `${s.name} is private.` : s.name),
     path: systemPath(id),
     body,
@@ -424,7 +434,7 @@ ${outside.length ? `<section aria-labelledby="outside-title"><h2 id="outside-tit
 ${wires.length ? `<ul class="wires">${wires.map((/** @type {any} */ r) => `<li>${escapeHtml(byId.get(r.from).name)} <span class="verb">${escapeHtml(VERB[/** @type {keyof typeof VERB} */ (r.kind)]?.[0] ?? r.kind)}</span> ${escapeHtml(byId.get(r.to).name)}</li>`).join("")}</ul>` : "<p>None drawn.</p>"}
 </section>
 ${flowLinks(model, id)}`;
-  return layout({ title: `Inside ${s.name}, Capsid`, description: `The parts of ${s.name} and how they connect.`, path: containersPath(id), body, asOf });
+  return layout({ title: `Inside ${s.name}`, description: `The parts of ${s.name} and how they connect.`, path: containersPath(id), parent: [systemPath(id), s.name], body, asOf });
 }
 
 /** The page of every system: the capsid drawing, and a table to sort and filter. @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf */
@@ -459,7 +469,7 @@ ${scroller("systems-table", `<table class="cap-table" data-sortable><caption>Eve
 <tbody>${rows}</tbody></table>`, "Every system")}
 <p class="hint" data-filter-empty hidden>No system matches that.</p>
 </section>`;
-  return layout({ title: "Systems, Capsid", description: `The ${model.systems.length} systems this Capsid server runs and how they connect.`, path: "/systems/", body, asOf });
+  return layout({ title: "Systems", description: `The ${model.systems.length} systems this Capsid server runs and how they connect.`, path: "/systems/", body, asOf });
 }
 
 /**
@@ -571,7 +581,7 @@ export function flowPage(model, f, asOf) {
 ${stage ? `<div class="flow-stage" data-ui>${stage}</div>` : ""}
 <section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${bands(f)}</section>
 <p><a class="cap-btn" data-variant="primary" href="${stepPath(f.id, 1)}">Step through it, one page a step</a></p>`;
-  return layout({ title: `${f.name}, Capsid`, description: f.description ?? f.name, path: flowPath(f.id), body, asOf });
+  return layout({ title: f.name, description: f.description ?? f.name, path: flowPath(f.id), body, asOf });
 }
 
 /**
@@ -622,7 +632,7 @@ ${bands(f, true)}
 <p><a class="cap-btn" data-variant="primary" href="${flowPath(f.id)}">Watch it run</a></p></li>`;
     })
     .join("")}</ul>`;
-  return layout({ title: "Flows, Capsid", description: "Each process Capsid runs, shown step by step on the parts it uses.", path: "/flows/", body, asOf });
+  return layout({ title: "Flows", description: "Each process Capsid runs, shown step by step on the parts it uses.", path: "/flows/", body, asOf });
 }
 
 /**
@@ -683,7 +693,8 @@ ${drawn ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id=
 </div>
 <section aria-labelledby="steps-title"><h2 id="steps-title">Every step</h2>${stepList(f, n)}</section>`;
   return layout({
-    title: `${f.name}, step ${n} of ${total}, Capsid`,
+    title: `${f.name}, step ${n} of ${total}`,
+    parent: [flowPath(f.id), f.name],
     description: st.text,
     path: stepPath(f.id, n),
     body,
@@ -694,7 +705,7 @@ ${drawn ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id=
 /** @param {string} asOf */
 export function notFoundPage(asOf) {
   return layout({
-    title: "Not found, Capsid",
+    title: "Not found",
     description: "No page here.",
     path: "/404",
     body: `<h1>Nothing here</h1><p class="lead">No page lives at this address. Try <a href="/systems/">the systems</a> or <a href="/search/">search</a>.</p>`,
