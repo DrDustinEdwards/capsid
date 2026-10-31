@@ -29,13 +29,15 @@
     "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",
     "check:console": "devkit-console",
     "check:migrations": "devkit-migrations migrations --min 54",
-    "report:bloat": "devkit-no-bloat"
+    "report:bloat": "devkit-no-bloat",
+    "check:conformance": "devkit-conformance"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.11",
     "@cloudflare/workers-types": "5.20261029.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.18",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.22",
     "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/conformance": "0.2.0-alpha.11",
     "@types/node": "24.19.2",
     "jscpd": "5.4.2",
     "knip": "6.42.1",

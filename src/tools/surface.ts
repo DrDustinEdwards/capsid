@@ -209,7 +209,7 @@ const INSPECT_REPO: CompositeSpec = {
     site: { op: "site_check", summary: "The live site." },
     search: { op: "search_console", summary: "The site's Google Search Console data." },
     bing: { op: "bing_webmaster", summary: "The site's Bing Webmaster Tools data." },
-    traffic: { op: "site_traffic", summary: "404s, web vitals and AI crawlers." },
+    traffic: { op: "site_traffic", summary: "404s, 5xx, vitals, AI crawlers." },
     audit: { op: "site_audit", summary: "An SEO crawl of the site." },
   },
 };

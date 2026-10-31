@@ -27,6 +27,10 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // with Account Analytics Read and Workers Scripts Read, and the account it reads.
   // Unset, the deploy and error columns show no data and say why.
   CF_OPS_TOKEN?: string;
+  // The AI Gateway the meaning index's model calls (embeddings, the reranker) go through,
+  // by id: a dashboard var, set on the AI Search instance by the tick (src/doc-index.ts).
+  // Unset, the instance keeps whatever gateway it has.
+  AI_GATEWAY_ID?: string;
   CF_ACCOUNT_ID?: string;
   // Capsid Admin's capsid_admin_set_site_key (src/site-key.ts): a token with Workers Scripts Edit, to
   // set a site's key as a secret on its Worker and on Carrel. Apart from CF_OPS_TOKEN
