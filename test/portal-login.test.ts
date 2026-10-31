@@ -102,7 +102,7 @@ test("the start sets the Portal state cookie on Path=/portal and sends Access th
   assert.ok(location.searchParams.get("nonce"));
   const cookies = setCookies(res);
   assert.equal(cookies.length, 1);
-  assert.match(cookies[0], /^capsid_portal_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/portal; Max-Age=600$/);
+  assert.match(cookies[0], /^__Secure-capsid_portal_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/portal; Max-Age=600$/);
 });
 
 test("the admin completes the login: session cookie carries the email, state cookie cleared, state consumed", async () => {
@@ -116,8 +116,8 @@ test("the admin completes the login: session cookie carries the email, state coo
   assert.ok(bodies[0]?.get("code_verifier"), "the exchange sent no PKCE verifier");
   const cookies = setCookies(res);
   assert.equal(cookies.length, 2);
-  assert.match(cookies[0], /^capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; HttpOnly; Secure; SameSite=Lax; Path=\/portal; Max-Age=43200$/);
-  assert.equal(cookies[1], "capsid_portal_state=; HttpOnly; Secure; SameSite=Lax; Path=/portal; Max-Age=0");
+  assert.match(cookies[0], /^__Secure-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; HttpOnly; Secure; SameSite=Lax; Path=\/portal; Max-Age=43200$/);
+  assert.equal(cookies[1], "__Secure-capsid_portal_state=; HttpOnly; Secure; SameSite=Lax; Path=/portal; Max-Age=0");
   const session = await readPortalSession(
     new Request(`${ORIGIN}/portal/`, { headers: { Cookie: cookies[0].split(";")[0] } }),
     e,
@@ -244,7 +244,7 @@ test("on the Portal host the login sends Access /callback, scopes its cookies to
   const start = await startPortalLogin(new Request(`${PORTAL_ORIGIN}/portal/jobs`), e, "/portal/jobs");
   const location = String(start.headers.get("Location"));
   assert.equal(new URL(location).searchParams.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`);
-  assert.match(setCookies(start)[0], /^capsid_portal_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=600$/);
+  assert.match(setCookies(start)[0], /^__Host-capsid_portal_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=600$/);
   const state = String(new URL(location).searchParams.get("state"));
   const bodies = stubAccess(location);
   const res = await handlePortalCallback(
@@ -256,8 +256,8 @@ test("on the Portal host the login sends Access /callback, scopes its cookies to
   assert.equal(res.headers.get("Location"), "/jobs");
   assert.equal(bodies[0]?.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`, "the exchange must name the same callback the start sent");
   const cookies = setCookies(res);
-  assert.match(cookies[0], /^capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=43200$/);
-  assert.equal(cookies[1], "capsid_portal_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
+  assert.match(cookies[0], /^__Host-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=43200$/);
+  assert.equal(cookies[1], "__Host-capsid_portal_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
 });
 
 // PLANT: host-only cookies. The Portal's cookies must never carry a Domain attribute, on
@@ -288,9 +288,10 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
       assert.ok(attributes.includes(`Path=${path}`), `${origin} set a cookie outside ${path}: ${cookie}`);
     }
   }
-  // Two hosts, each: the state cookie, the session and the cleared state, two sign-out
-  // cookies and the CSRF cookie. A count, so a cookie that stops being collected fails.
-  assert.equal(seen.length, 12);
+  // Two hosts, each: the state cookie, the session and the cleared state, four sign-out
+  // cookies (two names, each prefixed and under its old name) and the CSRF cookie. A count,
+  // so a cookie that stops being collected fails.
+  assert.equal(seen.length, 16);
 });
 
 test("a co-owner completes the login: the cookie carries her email and verifies on a later request", async () => {

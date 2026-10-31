@@ -44,6 +44,6 @@ export function searchPage(asOf) {
 </form>
 <p class="hint" role="status" data-search-count>Search needs JavaScript. Without it, browse <a href="/systems/">the systems</a>, <a href="/tools/">the tools</a> or <a href="/code/">the code</a>.</p>
 <ol class="search-results" data-search-results></ol>`;
-  return layout({ title: "Search, Capsid", description: "Search every system, part, step, tool and repo in the Capsid explorer.", path: "/search/", body, asOf });
+  return layout({ title: "Search", description: "Search every system, part, step, tool and repo in the Capsid explorer.", path: "/search/", body, asOf });
 }
 

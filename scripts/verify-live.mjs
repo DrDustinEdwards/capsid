@@ -18,6 +18,7 @@
 //   2. POLL, NEVER SINGLE-FETCH, on header assertions. The first post-deploy read can
 //      return the previous version's headers.
 
+import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/check";
 import { CANARY_CLIENT, OAUTH_KV } from "./bindings.mjs";
 import { accessRedirectProblem } from "./access-redirect-lib.mjs";
 import { canaryReport, checkCanary } from "./canary-lib.mjs";
@@ -328,10 +329,10 @@ async function gateCsp(clientId) {
   record("4 consent CSP permits the chain", passed, passed ? `polls=${attempt} csp=${csp ?? "(none)"}` : `polls=${attempt} form-action present after ${POLL_ATTEMPTS} polls: ${csp}`);
 }
 
-// Gate 6: security headers, asserted per route class rather than per path.
+// Gate 6: security headers, graded by site-runtime's shared check against the MCP host's
+// registry entry (site-runtime ./sites), the same grading as the site-runtime-security bin.
 //
-// test/headers.test.ts proves the header function is right; only a live request proves
-// every response reaches it. workers-oauth-provider generates /token and both .well-known
+// Only a live request proves every response reaches the header layer. workers-oauth-provider generates /token and both .well-known
 // documents itself, outside src/, which is why those are listed.
 //
 // Two more checks ride the same loop:
@@ -394,25 +395,9 @@ async function gateSecurityHeaders(clientId) {
       if (status && resp.status !== status) problems.push(`${label}: status ${resp.status}, expected ${status}`);
       if (noStore && !/no-store/i.test(h("cache-control") ?? "")) problems.push(`${label}: cache-control ${h("cache-control") ?? "(none)"}, expected no-store`);
 
-      // Every class, no exception.
-      if (!h("strict-transport-security")) problems.push(`${label}: no HSTS`);
-      if (!h("x-content-type-options")) problems.push(`${label}: no nosniff`);
-
-      const isHtml = (h("content-type") ?? "").toLowerCase().includes("text/html");
-      if (cls === "html" && !isHtml) problems.push(`${label}: expected html, got ${h("content-type")}`);
-
-      if (isHtml) {
-        if (!h("referrer-policy")) problems.push(`${label}: no Referrer-Policy`);
-        if (!h("x-frame-options")) problems.push(`${label}: no X-Frame-Options`);
-        if (!h("permissions-policy")) problems.push(`${label}: no Permissions-Policy`);
-        // The enforced CSP the consent dialog sets for itself must survive the
-        // header layer untouched.
-        if (!h("content-security-policy")) problems.push(`${label}: lost its enforced CSP`);
-        // On trial, not enforced.
-        if (!h("cross-origin-opener-policy-report-only")) problems.push(`${label}: no COOP-Report-Only`);
-      } else {
-        if (!h("content-security-policy-report-only")) problems.push(`${label}: no CSP-Report-Only`);
-      }
+      // Every class, no exception: the set and an enforced policy.
+      for (const r of failures(checkSecurityHeaders(resp.headers, { site: "capsid-mcp" }))) problems.push(`${label}: ${r.name}: ${r.detail}`);
+      if (cls === "html" && !(h("content-type") ?? "").toLowerCase().includes("text/html")) problems.push(`${label}: expected html, got ${h("content-type")}`);
     }
     if (!lost && problems.length === 0) break;
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);

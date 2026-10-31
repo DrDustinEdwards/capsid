@@ -1,7 +1,7 @@
 import { accessSaas, authorizationUrl, finishSignIn, newSignIn, type KeySource } from "@dustinedwards/site-runtime/access-login";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
-import { getCookie, isAdminEmail } from "./auth";
+import { cookieName, getCookie, isAdminEmail } from "./auth";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
 // identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27) for
@@ -29,7 +29,7 @@ export interface LoginFlow {
 }
 
 export function clearStateCookie(flow: LoginFlow): string {
-  return `${flow.stateCookie}=; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=0`;
+  return `${cookieName(flow.stateCookie, flow.cookiePath)}=; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=0`;
 }
 
 const UNCONFIGURED = "the sign-in is not configured (ACCESS_TEAM_DOMAIN, ACCESS_SAAS_CLIENT_ID, ACCESS_SAAS_CLIENT_SECRET), so it is closed";
@@ -76,7 +76,7 @@ export async function startAccessLogin(
   const target = await authorizationUrl(saas, { redirectUri: `${new URL(request.url).origin}${flow.callbackPath}`, state: stateToken, verifier: signIn.verifier, nonce: signIn.nonce });
   const headers = new Headers({ Location: target });
   // The state cookie carries the binding, which neither the URL nor the stored state holds.
-  headers.append("Set-Cookie", `${flow.stateCookie}=${binding}; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=${STATE_TTL_SECONDS}`);
+  headers.append("Set-Cookie", `${cookieName(flow.stateCookie, flow.cookiePath)}=${binding}; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=${STATE_TTL_SECONDS}`);
   for (const cookie of extraCookies) headers.append("Set-Cookie", cookie);
   return new Response(null, { status: 302, headers });
 }

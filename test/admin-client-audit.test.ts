@@ -189,7 +189,9 @@ test("a tools/call, a GET, a malformed body, an oversize body and the closed win
   assert.equal(await recordAdminInitialize(db, admin.actor, post(call), () => BEFORE), false);
   assert.equal(await recordAdminInitialize(db, admin.actor, new Request("https://mcp.example.com/mcp"), () => BEFORE), false);
   assert.equal(await recordAdminInitialize(db, admin.actor, post("not json"), () => BEFORE), false);
-  assert.equal(await recordAdminInitialize(db, admin.actor, post(INIT, { "content-length": "99999" }), () => BEFORE), false);
+  // Over the 16 KB ceiling on the wire, whatever Content-Length says: the body is counted as it is read.
+  const oversize = JSON.stringify({ ...JSON.parse(INIT), padding: "x".repeat(16_384) });
+  assert.equal(await recordAdminInitialize(db, admin.actor, post(oversize, { "content-length": "100" }), () => BEFORE), false);
   assert.equal(await recordAdminInitialize(db, admin.actor, post(INIT), () => AFTER), false);
   assert.equal(rows.length, 0);
 });

@@ -1,4 +1,5 @@
 import { auditStatement } from "./store-guards";
+import { readCapped } from "@dustinedwards/site-runtime/body";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 
 // job_e1973c5bcb69, DECIDE 2: for 30 days, record which client the admin acts through,
@@ -84,11 +85,12 @@ export async function recordAdminInitialize(
   now: () => number = Date.now
 ): Promise<boolean> {
   if (now() >= ADMIN_CLIENT_AUDIT_UNTIL_MS || request.method !== "POST") return false;
-  const length = Number(request.headers.get("content-length"));
-  if (!Number.isFinite(length) || length <= 0 || length > MAX_INITIALIZE_BODY) return false;
   let body: unknown;
   try {
-    body = JSON.parse(await request.clone().text());
+    // Read to the ceiling as it arrives: a declared Content-Length can be absent or understated.
+    const text = await readCapped(request.clone(), MAX_INITIALIZE_BODY);
+    if (!text) return false;
+    body = JSON.parse(text);
   } catch {
     return false;
   }

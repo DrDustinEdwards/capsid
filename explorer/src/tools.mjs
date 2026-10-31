@@ -82,7 +82,7 @@ ${servers
   )
   .join("\n")}
 <p class="hint" data-filter-empty hidden>No tool matches that.</p>`;
-  return layout({ title: "Tools, Capsid", description: `The ${tools.length} MCP tools Capsid serves, with their actions and arguments.`, path: "/tools/", body, asOf });
+  return layout({ title: "Tools", description: `The ${tools.length} MCP tools Capsid serves, with their actions and arguments.`, path: "/tools/", body, asOf });
 }
 
 /**
@@ -146,7 +146,7 @@ export function toolPage(t, tools, asOf) {
 ${actions}
 <section aria-labelledby="args-title"><h2 id="args-title">Arguments</h2>${params}</section>
 <nav class="pager cap-signs" aria-label="Other tools">${near.map((n) => `<a class="cap-sign" href="${toolPath(n.name)}" rel="${tools.indexOf(n) < i ? "prev" : "next"}">${tools.indexOf(n) < i ? "Previous" : "Next"}: <code>${escapeHtml(n.name).replaceAll("_", "_<wbr>")}</code></a>`).join("")}</nav>`;
-  return layout({ title: `${t.name}, Capsid tools`, description: `${t.title}: ${t.description.split("\n\n")[0]}`, path: toolPath(t.name), body, asOf });
+  return layout({ title: t.name, description: `${t.title}: ${t.description.split("\n\n")[0]}`, path: toolPath(t.name), body, asOf });
 }
 
 /** Every tools page. @param {any[]} tools @param {string} asOf @returns {Array<[string, string]>} */

@@ -18,6 +18,11 @@ import { runTask, type TaskResult } from "./task-runs";
 import { portalHostRequest } from "./portal-host";
 import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
 import { logEvent } from "@dustinedwards/site-runtime/log";
+import { securityTxtResponse } from "@dustinedwards/site-runtime/security-txt";
+
+const SECURITY_TXT_PATH = "/.well-known/security.txt";
+// Under a year out (RFC 9116); the family check reminds a month ahead.
+const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 
 // The Durable Objects wrangler.jsonc binds (RATE_LIMITER, TOOL_CALL_LOG), from site-runtime.
 export { RateLimiter } from "@dustinedwards/site-runtime/rate-limit/durable-object";
@@ -147,27 +152,31 @@ export default {
     // (/mcp, /token, /authorize, /register, its metadata) without reaching the routes
     // handler. Behind the provider, /mcp on the Portal host was the MCP endpoint, and
     // live gate 7 rolled #218's deploy back (run 36863432268).
+    const { hostname, pathname: asked } = new URL(original.url);
+    const secured = (response: Response, path: string) => withSecurityHeaders(withCacheDefault(response, path), hostname);
+    // security.txt on both hosts, before the Portal's sign-in and the MCP host's path list.
+    if (asked === SECURITY_TXT_PATH) return secured(securityTxtResponse({ origin: `https://${hostname}`, contact: "security@dustinedwards.info", expires: SECURITY_TXT_EXPIRES }), asked);
     const host = portalHostRequest(original);
-    if ("redirect" in host) return withSecurityHeaders(host.redirect);
+    if ("redirect" in host) return secured(host.redirect, asked);
     const request = host.request;
     // The MCP host serves the machine surface only, and the old address's /portal is
     // retired (src/mcp-host.ts). Also before the provider, for the same reason.
-    const refused = hostRefusal(request);
-    if (refused) return withSecurityHeaders(withCacheDefault(refused, new URL(request.url).pathname));
     const pathname = new URL(request.url).pathname;
+    const refused = hostRefusal(request);
+    if (refused) return secured(refused, pathname);
     // Before the token check, so a page on another origin learns nothing from a 401 (DNS
     // rebinding): a missing Origin, this origin and claude.ai pass.
     if (pathname === "/mcp" || pathname === ADMIN_MCP_ROUTE) {
       const foreign = mcpOriginRefusal(request, ["https://claude.ai"]);
-      if (foreign) return withSecurityHeaders(withCacheDefault(foreign, pathname));
+      if (foreign) return secured(foreign, pathname);
     }
     const legacy = new URL(request.url).hostname === LEGACY_HOST;
     if (!legacy && pathname === "/register" && request.method === "POST") {
       const limited = await registrationLimited(request, env.OAUTH_KV);
-      if (limited) return withSecurityHeaders(withCacheDefault(limited, pathname));
+      if (limited) return secured(limited, pathname);
     }
     const response = await providerFor(env, legacy ? LEGACY_MCP_URL : MCP_URL, !legacy).fetch(request, env, ctx);
-    return withSecurityHeaders(withCacheDefault(response, pathname));
+    return secured(response, pathname);
   },
   // Dispatch on controller.cron, not the clock: 09:00 UTC matches all three
   // expressions and Cloudflare delivers once per expression. Each branch is its own

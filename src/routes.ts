@@ -217,7 +217,7 @@ export const CSP_REPORT_RULES = [
 async function handleCspReport(request: Request, env: Env): Promise<Response> {
   return receiveCspReport(request, {
     allowOrigin: `https://${PORTAL_HOST}`,
-    headers: securityHeadersFor("other"),
+    headers: securityHeadersFor(new URL(request.url).hostname),
     allow: async (r) => {
       const { key } = ipKey("csp-report", r);
       const verdict = await limit(rateLimiter(env), key, CSP_REPORT_RULES, { onUnavailable: "refuse" });

@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { ACCESS_SAAS } from "../scripts/bindings.mjs";
 // @ts-expect-error as above
 import { PROBE_REDIRECT } from "../scripts/cimd-probe-lib.mjs";
+import { MCP_HOST } from "../src/mcp-host.ts";
+import { CONSENT_DIALOG_HEADERS, securityHeadersFor } from "../src/security-headers.ts";
 
 // A local server that plays a healthy Worker for scripts/verify-live.mjs, and the runner
 // that points the real script at it. Shared by test/verify-live-no-answer.test.ts and
@@ -15,27 +17,17 @@ import { PROBE_REDIRECT } from "../scripts/cimd-probe-lib.mjs";
 export const SCRIPT = join(import.meta.dirname, "..", "scripts", "verify-live.mjs");
 export const SHA = "4df127439ed3aa19aef8e350ab6311957b8f8611";
 
-const BASE: Record<string, string> = {
-  "strict-transport-security": "max-age=31536000",
-  "x-content-type-options": "nosniff",
-  "cache-control": "no-store",
-};
-export const NON_HTML = { ...BASE, "content-security-policy-report-only": "default-src 'none'" };
-export const HTML = {
-  ...BASE,
-  "content-type": "text/html; charset=utf-8",
-  "referrer-policy": "no-referrer",
-  "x-frame-options": "DENY",
-  "permissions-policy": "camera=()",
-  "content-security-policy": "default-src 'self'",
-  "cross-origin-opener-policy-report-only": "same-origin",
-};
+// The headers the real layer sends on the MCP host (src/security-headers.ts), lowercased so a spread can
+// override one, so gate 6's shared check grades the stub as it grades the Worker.
+const lower = (set: Record<string, string>) => Object.fromEntries(Object.entries(set).map(([k, v]) => [k.toLowerCase(), v]));
+export const NON_HTML: Record<string, string> = { ...lower(securityHeadersFor(MCP_HOST)), "cache-control": "no-store" };
+export const HTML: Record<string, string> = { ...NON_HTML, ...lower(CONSENT_DIALOG_HEADERS) };
 
 // A Worker that passes every gate.
 export function healthy(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url ?? "/", "http://x");
   const json = (status: number, body: unknown) => {
-    res.writeHead(status, { ...NON_HTML, "content-type": "application/json" });
+    res.writeHead(status, { ...NON_HTML, "content-type": "application/json; charset=utf-8" });
     res.end(JSON.stringify(body));
   };
   if (url.pathname === "/health") return json(200, { status: "ok", sha: SHA, dirty: false, store: { d1: "ok", fts: "ok" } });
@@ -56,7 +48,7 @@ export function healthy(req: IncomingMessage, res: ServerResponse) {
     return res.end();
   }
   if (url.pathname === "/authorize" && url.searchParams.get("client_id")) {
-    res.writeHead(200, { ...HTML, "set-cookie": "__Host-consent=c1; Path=/; HttpOnly" });
+    res.writeHead(200, { ...HTML, "set-cookie": "__Host-oauth-consent-0123456789abcdef=c1; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600" });
     return res.end(`<form method="post"><input type="hidden" name="handle" value="h1"></form>`);
   }
   if (url.pathname.startsWith("/.well-known/")) return json(200, {});

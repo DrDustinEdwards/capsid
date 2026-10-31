@@ -110,19 +110,6 @@ test("gate 6 refuses a report sink that does not answer 204 (was gate 7)", async
   assert.match(out, /FAIL {2}6 security headers per class\n.*\/csp-report: status 500, expected 204/);
 });
 
-test("an enforced COOP or a non-html CSP no longer fails gate 6: those arms pinned a policy choice", async () => {
-  const { code, out } = await run(
-    breaking((req, res) => {
-      if (req.url !== "/nope") return false;
-      res.writeHead(404, { ...NON_HTML, "content-security-policy": "default-src 'none'", "cross-origin-opener-policy": "same-origin" });
-      res.end();
-      return true;
-    }),
-    () => false
-  );
-  assert.equal(code, 0, out);
-});
-
 // Gate 2 with tightened DCR: the script wiring, beside the decisions in
 // test/cimd-probe.test.ts.
 test("gate 2 refuses a Worker that registers an unlisted redirect", async () => {

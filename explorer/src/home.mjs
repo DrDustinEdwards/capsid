@@ -334,6 +334,7 @@ export function homePage(model, stats, tools, codeIndex) {
   const body = [hero(stats), knowledge(model, stats), board(tools), tour(model, stats), holds(model, stats, tools, codeIndex)].join("\n");
   return layout({
     title: "Capsid: shared memory and a fact-check for AI coding agents",
+    fullTitle: true,
     description: DESCRIPTION,
     path: "/",
     body,
