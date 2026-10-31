@@ -19,7 +19,7 @@ const SIGNED_IN_REPORT_KEY = "reports:signed-in-security";
 // Hourly; devkit reads it once a day and refuses one older than 180 minutes.
 const REFRESH_MS = HOUR_MS;
 
-export const PORTAL_ORIGIN = "https://portal.dustinedwards.info";
+const PORTAL_ORIGIN = "https://portal.dustinedwards.info";
 
 export type Fetch = (request: Request) => Promise<Response>;
 
