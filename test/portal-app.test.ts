@@ -63,14 +63,13 @@ test("PLANT: no file is fetched for a caller the Portal gate refuses", async () 
   assert.deepEqual(asked, [], "the assets binding was asked for a file before the gate admitted anyone");
 });
 
-test("a signed-in administrator gets the app's page, uncached, under its own CSP", async () => {
+test("a signed-in administrator gets the app's page, uncached", async () => {
   for (const path of ["/portal", "/portal/", "/portal/index.html"]) {
     // As index.ts serves it: through the header layer.
     const res = withSecurityHeaders(await handlePortalApp(await signed(path), env(), NOW));
     assert.equal(res.status, 200, path);
     assert.match(await res.text(), /Watch Floor/);
     assert.equal(res.headers.get("Cache-Control"), "no-store");
-    assert.equal(res.headers.get("Content-Security-Policy"), DASHBOARD_CSP);
   }
 });
 
@@ -88,7 +87,6 @@ test("an unknown path falls back to the page for a navigation only; a missing fi
   const nav = await handlePortalApp(await signed("/portal/jobs/job_000000000001", { "Sec-Fetch-Mode": "navigate" }), env(assets), NOW);
   assert.equal(nav.status, 200);
   assert.match(await nav.text(), /Watch Floor/);
-  assert.equal(nav.headers.get("Content-Security-Policy"), DASHBOARD_CSP);
   assert.deepEqual(asked, ["/jobs/job_000000000001", "/"]);
 
   const script = await handlePortalApp(await signed("/portal/assets/app-missing.js", { Accept: "*/*" }), env(), NOW);

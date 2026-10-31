@@ -1,6 +1,6 @@
 import { ACCESS_LOGOUT_PATH, ADMIN_IDLE_SECONDS, ADMIN_SEEN_COOKIE, accessIssuer, adminIdle } from "@dustinedwards/site-runtime/access";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, startAccessLogin } from "./access-login";
-import { cookieName, getCookie, hmacHex, isAdminEmail } from "./auth";
+import { capsidCookie, getCookie, hmacHex, isAdminEmail } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
@@ -92,16 +92,17 @@ export async function portalSessionCookie(user: PortalUser, secret: string, now:
   };
   const encoded = base64url(JSON.stringify(payload));
   const sig = await hmacHex(secret, encoded);
-  return `${cookieName(PORTAL_SESSION_COOKIE, cookiePath)}=${sig}.${encoded}; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=${PORTAL_COOKIE_MAX_AGE}`;
+  return capsidCookie(PORTAL_SESSION_COOKIE, `${sig}.${encoded}`, cookiePath, PORTAL_COOKIE_MAX_AGE);
 }
 
 /** The Set-Cookie values that sign this browser out: the session and CSRF cookies,
  *  same name, path and attributes, Max-Age=0, under the prefixed name and the bare one
  *  they had before (for one release, with getCookie's fallback). */
 export function portalSignOutCookies(cookiePath: string = PORTAL_PATH): string[] {
-  return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].flatMap((name) =>
-    [cookieName(name, cookiePath), name].map((n) => `${n}=; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=0`),
-  );
+  return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].flatMap((name) => [
+    capsidCookie(name, "", cookiePath, 0),
+    `${name}=; Path=${cookiePath}; Secure; HttpOnly; SameSite=Lax; Max-Age=0`,
+  ]);
 }
 
 // The verified payload, expired or not, or null: a bad signature or shape, an email no

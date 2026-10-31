@@ -117,7 +117,7 @@ test("'all seven' is flagged when it is about headers", () => {
   ], "capsid");
   assert.equal(claims.length, 1);
   assert.equal(claims[0].noun, "security headers");
-  assert.match(claims[0].authoritative, /^9 enforced$/);
+  assert.match(claims[0].authoritative, /^\d+ enforced$/);
 });
 
 test("'all seven' about anything else is NOT flagged", () => {

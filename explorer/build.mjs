@@ -8,10 +8,12 @@
 // Capsid's own schemas before anything is written, so the explorer can only publish what the
 // privacy filter's output shape allows (the third line, design section 2). The tests build from
 // explorer/fixtures, which are invented.
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { webManifest } from "@drdustinedwards/site-helpers/icons";
@@ -19,13 +21,14 @@ import { llmsDocument } from "@drdustinedwards/site-helpers/llms";
 import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
+import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
+import { buildSync } from "esbuild";
 import { stylesheet } from "enarratio";
 import { capsomerMoreTheme, capsomerTheme } from "capsomer/enarratio-theme";
 
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
-import { explorerHeadersFile } from "./src/security-headers.mjs";
 import { CIRCLES_URL, INDEXNOW_KEY, ORIGIN, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
 
 /** When security.txt lapses (RFC 9116 asks for under a year); renew it before then. */
@@ -156,18 +159,25 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   writeFileSync(join(assets, "enarratio.css"), stylesheet(capsomerTheme, { highContrast: capsomerMoreTheme }));
   copyFileSync(join(here, "src", "explorer.css"), join(assets, "explorer.css"));
   writeFileSync(join(out, CIRCLES_URL), JSON.stringify(circlesOf(model)));
-  copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(assets, "tabs.js"));
-  // The system map's and the header's modules, each folder whole (its React wrapper aside),
-  // because they import their siblings by "./" and each other by "../name/" (the map takes
-  // email's escapeHtml). The map's circles are drawn here, not in the browser.
+  // The page's one module, bundled: src/explorer.js imports tabs, Enarratio's enhance and the
+  // system map's and the header's modules by the paths they are staged at here, each folder whole
+  // (its React wrapper aside), because they import their siblings by "./" and each other by
+  // "../name/" (the map takes email's escapeHtml). The map's circles are drawn here, not in the
+  // browser. One file, so the script tag's integrity covers all of it: sixteen modulepreloads
+  // carrying the imports' integrity cost the home page 0.7 s of Lighthouse LCP.
+  const stage = join(out, ".bundle");
+  mkdirSync(stage, { recursive: true });
+  copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(stage, "tabs.js"));
   for (const name of ["system-map", "email", "site-header", "theme-switch", "dialog", "popover", "tooltip", "shell", "meter"]) {
     const dir = join(capsomer, "dist", "components", name);
-    mkdirSync(join(assets, "capsomer", name), { recursive: true });
-    for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js") && !f.startsWith("system-map-circles"))) copyFileSync(join(dir, file), join(assets, "capsomer", name, file));
+    mkdirSync(join(stage, "capsomer", name), { recursive: true });
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js") && !f.startsWith("system-map-circles"))) copyFileSync(join(dir, file), join(stage, "capsomer", name, file));
   }
+  copyFileSync(require.resolve("enarratio/enhance"), join(stage, "enhance.js"));
+  copyFileSync(join(here, "src", "explorer.js"), join(stage, "explorer.js"));
+  buildSync({ entryPoints: [join(stage, "explorer.js")], outfile: join(assets, "explorer.js"), bundle: true, format: "esm", minify: true, logLevel: "warning" });
+  rmSync(stage, { recursive: true });
   copyFileSync(join(here, "src", "theme.js"), join(assets, "theme.js"));
-  copyFileSync(require.resolve("enarratio/enhance"), join(assets, "enhance.js"));
-  copyFileSync(join(here, "src", "explorer.js"), join(assets, "explorer.js"));
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
   // The family icon set (Prelum's prelum-icons) at the root, where iconLinks() and the manifest point.
   cpSync(join(here, "src", "icons"), out, { recursive: true });
@@ -176,7 +186,10 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // The family's faces (capsomer/fonts.css, inlined above), served from here because the policy
   // allows fonts from 'self' only: Capsomer's fonts/ beside assets/, where its "../fonts/" points.
   cpSync(join(capsomer, "fonts"), join(out, "fonts"), { recursive: true });
-  writeFileSync(join(out, "_headers"), explorerHeadersFile());
+  // _headers from the explorer's entry in site-runtime's registry (capsid), by its one bin: the shared set, the page
+  // policy reporting to Capsid's /csp-report, and Prelum's training reservation (the TDMRep header ai.txt names).
+  const headersBin = join(dirname(fileURLToPath(import.meta.resolve("@dustinedwards/site-runtime/sites"))), "bin", "site-runtime-headers.mjs");
+  execFileSync(process.execPath, [headersBin, "--site", "capsid", "--out", join(out, "_headers"), "--header", "tdm-reservation: 1"]);
   // For search engines and language models, from Prelum: every page in a sitemap, robots.txt (the
   // family bot policy; Cloudflare puts its own lines first), ai.txt (citation welcome, training
   // reserved, as the tdm-reservation header in _headers says) and llms.txt (https://llmstxt.org),
@@ -193,6 +206,8 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the
   // explorer's own files changed. Written last, so the hash cannot cover itself.
+  // A sha384 integrity and crossorigin on every page's two script tags, for Integrity-Policy (site-runtime ./sri).
+  await writeIntegrity(out);
   const content = contentHash(out);
   writeFileSync(join(out, "build.json"), `${JSON.stringify({ model_as_of: model.as_of, stats_as_of: stats.as_of, code_as_of: code?.as_of ?? null, systems: model.systems.length, content }, null, 2)}\n`);
   return { pages: pages.length, out, content };
