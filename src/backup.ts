@@ -170,6 +170,9 @@ export const TABLES = [
   // uptime (migrations/0054_ops_uptime_daily.sql), both pruned below at 90 days.
   "page_404_daily",
   "ops_uptime_daily",
+  // The Portal sessions signed out or ended idle (migrations/0055_portal_session_ends.sql),
+  // pruned below once their cookie could no longer be sent.
+  "portal_session_ends",
 ] as const;
 
 interface BackupSummary {
@@ -416,13 +419,14 @@ async function pruneD1(env: Env): Promise<{ versions: number; audit: number }> {
 // documents cannot trust content derived from it. The JSON dumps are kept: an export
 // deletes nothing, and an empty dump is the evidence of the day the store looked empty.
 // The 404 counts (site-runtime pruneNotFound) and the daily uptime rows, kept 90 days
-// (area 8, N7 and U4). After the export, like pruneD1, so the rows leaving D1 are in
+// (area 8, N7 and U4), and the ended Portal sessions whose cookies have expired. After the export, like pruneD1, so the rows leaving D1 are in
 // today's dump. A failure is logged and never fails the run: the dump is already marked.
 export const DAILY_RETENTION_DAYS = 90;
 async function pruneDaily(env: Env, now: Date): Promise<void> {
   try {
     await pruneNotFound(env.DB, { days: DAILY_RETENTION_DAYS, now });
     await env.DB.prepare("DELETE FROM ops_uptime_daily WHERE day < ?1").bind(cutoffDay(now, DAILY_RETENTION_DAYS - 1)).run();
+    await env.DB.prepare("DELETE FROM portal_session_ends WHERE expires_at < ?1").bind(now.getTime()).run();
   } catch (err) {
     logEvent("BACKUP_DAILY_PRUNE_FAILED", { message: `BACKUP_DAILY_PRUNE_FAILED ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
   }

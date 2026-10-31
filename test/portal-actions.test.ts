@@ -27,7 +27,7 @@ import { handlePortalTrends, PORTAL_TRENDS_PATH } from "../src/portal-trends.ts"
 import { handlePortalDigest, handlePortalPlan, PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
-import { fakeD1, fakeKv, type FakeD1, type FakeKv } from "./fakes.ts";
+import { fakeD1, fakeKv, type FakeD1, type FakeKv, withPortalSessionEnds } from "./fakes.ts";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick.ts";
 import { AUTO_MERGE_POLICY_PATH } from "../src/auto-merge-policy.ts";
 import { SUSPENDED_KEY } from "../src/merge-units.ts";
@@ -242,7 +242,7 @@ function world(opts: { adminEmail?: string; coOwners?: string } = {}): { d1: Fak
     },
   });
   const env = {
-    DB: withSites(d1.db, SITE_ROWS),
+    DB: withPortalSessionEnds(withSites(d1.db, SITE_ROWS)).db,
     APP_KV: kv.kv,
     OAUTH_KV: fakeKv().kv,
     COOKIE_ENCRYPTION_KEY: SECRET,
@@ -904,9 +904,11 @@ async function signOut(opts: Opts = {}): Promise<Request> {
   return post(PORTAL_SIGN_OUT_PATH, {}, opts);
 }
 
-test("sign out expires the session and CSRF cookies at Path=/portal, and writes nothing", async () => {
+test("sign out expires the session and CSRF cookies at Path=/portal, and ends a copy of that session, not the others, on the server (D4)", async () => {
   const w = world();
-  const res = await handlePortalSignOut(await signOut(), w.env, NOW);
+  const request = await signOut();
+  const copy = request.clone();
+  const res = await handlePortalSignOut(request, w.env, NOW);
   assert.equal(res.status, 204);
   const cookies = setCookies(res);
   // Each under its __Secure- name and, for one release, the bare name it had before (src/auth.ts cookieName).
@@ -918,6 +920,12 @@ test("sign out expires the session and CSRF cookies at Path=/portal, and writes 
     assert.match(c, /HttpOnly; Secure; SameSite=Lax/);
   }
   wroteNothing(w, "sign out");
+  // The same session cookie, sent again from anywhere, is a sign-in redirect now.
+  const again = await handlePortalSignOut(copy, w.env, NOW);
+  assert.equal(again.status, 302, "a copy of the signed-out session was still admitted");
+  // A session from another sign-in of the same person goes on.
+  const other = await handlePortalSignOut(await signOut(), w.env, NOW);
+  assert.equal(other.status, 204, "signing out one session ended another");
 });
 
 for (const [label, opts] of [

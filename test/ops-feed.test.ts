@@ -20,7 +20,7 @@ import {
 } from "../src/ops-feed.ts";
 import { OPS_SNAPSHOT_KEY } from "../src/ops-snapshot.ts";
 import { openWatcherFingerprints, watcherTick, WATCHER_ACTOR, WATCHER_LAST_KEY, type Gathered } from "../src/watcher.ts";
-import { agentRecord, fakeEnv, fakeKv } from "./fakes.ts";
+import { agentRecord, fakeEnv, fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 // The Watch Floor feed and its Refresh (src/ops-feed.ts). The live reads are driven
 // against real D1 in test-integration/ops-feed.test.ts, which also counts them; these
@@ -161,7 +161,7 @@ test("refresh_allowed_at is two minutes after the last on-demand pass, and null 
 function env(kv = fakeKv(), db: unknown = recordingDb().db) {
   return fakeEnv({
     APP_KV: kv.kv,
-    DB: db,
+    DB: withPortalSessionEnds(db).db,
     COOKIE_ENCRYPTION_KEY: SECRET,
     ADMIN_EMAIL: "admin@example.com",
     ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
@@ -276,7 +276,7 @@ test("the feed and the refresh mint the Portal CSRF cookie when the request has 
     const { csrf } = (await res.json()) as { csrf: string };
     assert.match(csrf, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     assert.ok(set.startsWith(`__Secure-${PORTAL_CSRF_COOKIE}=${csrf};`), `${path} did not set the body's csrf as the cookie: ${set}`);
-    for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/portal", "Max-Age=43200"]) {
+    for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/portal", "Max-Age=86400"]) {
       assert.ok(set.includes(attribute), `the cookie lacks ${attribute}: ${set}`);
     }
   }

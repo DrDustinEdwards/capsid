@@ -998,6 +998,45 @@ export function fakeEnv(parts: Record<string, unknown>): never {
   return { RATE_LIMITER: fakeRateLimiter(), TOOL_CALL_LOG: fakeToolCallLog(), ...parts } as never;
 }
 
+// The Portal's ended sessions (migrations/0055_portal_session_ends.sql) in front of a test's
+// D1 stub: the gate's read and sign-out's write land in `ended`, every other statement goes
+// to `db`. With no `db`, any other statement throws.
+export function withPortalSessionEnds(db?: unknown): { db: D1Database; ended: Map<string, number> } {
+  const ended = new Map<string, number>();
+  const ends = (sql: string) => {
+    const statement = {
+      params: [] as unknown[],
+      bind(...params: unknown[]) {
+        statement.params = params;
+        return statement;
+      },
+      async first() {
+        if (!/^SELECT 1 AS ended FROM portal_session_ends WHERE sid = \?1$/.test(sql)) throw new Error(`fake: unmodelled portal_session_ends read: ${sql}`);
+        return ended.has(String(statement.params[0])) ? { ended: 1 } : null;
+      },
+      async run() {
+        if (!/^INSERT OR IGNORE INTO portal_session_ends \(sid, ended_at, expires_at\)/.test(sql)) throw new Error(`fake: unmodelled portal_session_ends write: ${sql}`);
+        const [sid, at] = statement.params as [string, number];
+        if (!ended.has(sid)) ended.set(sid, at);
+        return { results: [], meta: { changes: 1 } };
+      },
+    };
+    return statement;
+  };
+  const inner = (db ?? {}) as D1Database;
+  const proxy = new Proxy(inner, {
+    get(target, prop, receiver) {
+      if (prop !== "prepare") return Reflect.get(target, prop, receiver);
+      return (sql: string) => {
+        if (/portal_session_ends/.test(sql)) return ends(sql.replace(/\s+/g, " ").trim());
+        if (!db) throw new Error(`fake: no D1 behind the Portal session ends for: ${sql}`);
+        return target.prepare(sql);
+      };
+    },
+  });
+  return { db: proxy, ended };
+}
+
 // The RateLimiter's stub, counting each key against its first rule. `spent` starts keys at a
 // count; `failing` throws on every call, as an unreachable object does.
 export function fakeRateLimiter(options: { spent?: Record<string, number>; failing?: boolean } = {}) {

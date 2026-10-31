@@ -2,7 +2,7 @@ import { getCookie } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { performControl, previewControl } from "./controls";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
-import { type PortalUser, portalDisplay, portalGate, portalSignOutCookies, sourceAddress } from "./portal-auth";
+import { endPortalSession, logPortalSignOut, type PortalUser, portalDisplay, portalGate, portalSessionId, portalSignOutCookies, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import { LOGOUT_HEADERS } from "@dustinedwards/site-runtime/headers";
 import { refuseCrossSite } from "@dustinedwards/site-runtime/origin";
@@ -170,14 +170,18 @@ export async function handlePortalActivity(request: Request, env: Env, now: Date
   return jsonResponse(body);
 }
 
-/** POST /portal/api/sign-out, body {}: expire the session and CSRF cookies in this
- *  browser. The same checks as an action (the session, Sec-Fetch-Site, the body cap,
- *  the CSRF pair), so a cross-site page cannot sign the administrator out. It ends the
- *  Portal session only: the Access session at the team domain is Cloudflare's, so the
- *  next visit to /portal may sign in again without a prompt. */
+/** POST /portal/api/sign-out, body {}: end this Portal session on the server
+ *  (endPortalSession, so a copied cookie ends too, and other sessions do not) and expire the session and CSRF
+ *  cookies in this browser. The same checks as an action (the session, Sec-Fetch-Site,
+ *  the body cap, the CSRF pair), so a cross-site page cannot sign the administrator out.
+ *  The Access session at the team domain is Cloudflare's, so the next visit to /portal
+ *  may sign in again without a prompt. */
 export async function handlePortalSignOut(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
   if (!gated.ok) return gated.response;
+  const sid = await portalSessionId(request, env);
+  if (sid) await endPortalSession(env, sid, now);
+  await logPortalSignOut(gated.user.email);
   // Clear-Site-Data too, so the browser drops what the Portal left behind (OSHP's logout headers).
   const headers = new Headers({ "Cache-Control": "no-store", ...LOGOUT_HEADERS });
   for (const cookie of portalSignOutCookies(portalCookiePath(new URL(request.url)))) headers.append("Set-Cookie", cookie);

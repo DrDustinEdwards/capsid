@@ -12,7 +12,7 @@ import type { SiteProbe } from "../src/ops-types/sites.ts";
 import { nextPulse, SITE_PULSE_KEY, type PulseSite } from "../src/site-pulse.ts";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 import { applyWrite, selectRows, type Row, type TableSpec } from "./fake-sql.ts";
-import { fakeKv } from "./fakes.ts";
+import { fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 // Phone alerts (docs/design/design-merge-pipeline.md section 5, PR 7; DECIDE 5 and 6 of
 // 2026-10-09): exactly seven triggers, each sent once, never with an Approve button, never
@@ -82,7 +82,7 @@ function world(opts: { awaiting?: object[]; jobs?: Row[]; deploys?: Row[]; devic
   if (opts.state) seed["push:state"] = JSON.stringify(opts.state);
   const kv = fakeKv({ seed });
   const env = {
-    DB: d1,
+    DB: withPortalSessionEnds(d1).db,
     APP_KV: kv.kv,
     ADMIN_EMAIL: "admin@example.com",
     VAPID_PRIVATE_KEY: opts.key === false ? undefined : JSON.stringify(VAPID.jwk),
