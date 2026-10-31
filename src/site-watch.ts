@@ -8,16 +8,19 @@ import { failingCheckNames } from "./health-format";
 import { healthUrl } from "./ops-sites";
 
 // THE WATCHER'S SITE REPAIRS (job_09e5f6cbf782), so a site's own watchdog Worker can be
-// retired later. On each watcher pass, for every site that opted in (ops_sites.operator):
-//   1. Read its health route. Healthy: nothing to do.
-//   2. Unhealthy: the failing checks' names. Repair only when EVERY failing check maps to
-//      an allowlisted repair (the site's own rule, app/lib/health/repair.mjs): an unmapped
-//      failure may share a cause with the rest, so nothing is repaired and it is reported.
+// retired later. On each watcher pass, for every site with a health route (ops_sites.health_path):
+//   1. Read its health route. Healthy (200, ok, and no alert named in `alerts`): nothing to do.
+//   2. Unhealthy: the failing checks' names, alert checks included. A site with no operator
+//      API is reported as it is. One that opted in (ops_sites.operator) is repaired only when
+//      EVERY failing check maps to an allowlisted repair (the site's own rule,
+//      app/lib/health/repair.mjs): an unmapped failure may share a cause with the rest, so
+//      nothing is repaired and it is reported. An alert (site-runtime's `alert: true`, such as
+//      auth-spike) maps to no repair, so it is always reported.
 //   3. Each repair through runSiteRepair (src/site-repair.ts): allowlisted, rate-limited,
 //      audit-logged and one task_runs row each. Then the health is read again.
 //   4. Still unhealthy, or a repair failed: one finding, site-health-<namespace>, which the
 //      Portal shows under Incidents and which clears when a pass finds the site healthy.
-//   5. Its weekly tools (refresh_citations) once every WEEK_MS.
+//   5. Its weekly tools (refresh_citations) once every WEEK_MS, where it opted in.
 // A red-to-green or green-to-red change mails Dustin once, where the seat has bound a
 // send_email binding; the finding opens either way.
 //
@@ -64,12 +67,19 @@ async function readHealth(fetchImpl: FetchLike, url: string): Promise<Reading> {
   }
 }
 
-const healthy = (r: Reading) => r.status === 200 && (r.body as { ok?: unknown } | null)?.ok === true;
+/** The checks a site-runtime health body names in `alerts` (0.59.0): a failure someone
+ *  should hear of now, though the check is only a warning and `ok` stays true. */
+function alertChecks(body: unknown): string[] {
+  const alerts = (body as { alerts?: unknown } | null)?.alerts;
+  return Array.isArray(alerts) ? alerts.filter((a): a is string => typeof a === "string" && a !== "").map(clip) : [];
+}
+
+const healthy = (r: Reading) => r.status === 200 && (r.body as { ok?: unknown } | null)?.ok === true && alertChecks(r.body).length === 0;
 
 /** The failing checks' names, read as the watcher reads every health body
- *  (src/health-format.ts), each cut to one line. */
+ *  (src/health-format.ts), each cut to one line, and every alert the body names. */
 export function failingChecks(body: unknown): string[] {
-  return failingCheckNames((body as { checks?: unknown } | null)?.checks).map(clip);
+  return [...new Set([...failingCheckNames((body as { checks?: unknown } | null)?.checks).map(clip), ...alertChecks(body)])];
 }
 
 /** What to do about a failing health reading: the repairs, in the configuration's order,
@@ -85,27 +95,28 @@ export function repairPlan(failing: string[], operator: SiteOperator): { tools: 
 const repairLine = (tool: string, o: RepairOutcome) => (o.ran ? o.line : `${tool} was not run: ${o.refusal}`);
 
 /** One site, one pass. */
-async function watchSite(env: Env, site: OpsSiteConfig & { origin: string; operator: SiteOperator }, actor: string, fetchImpl: FetchLike, now: Date): Promise<{ finding: SiteFinding | null; read: boolean; lines: string[]; weekly: SiteFinding[] }> {
+async function watchSite(env: Env, site: OpsSiteConfig & { origin: string }, actor: string, fetchImpl: FetchLike, now: Date): Promise<{ finding: SiteFinding | null; read: boolean; lines: string[]; weekly: SiteFinding[] }> {
   const lines: string[] = [];
   const weekly: SiteFinding[] = [];
-  const operator = site.operator;
-  const target = { origin: site.origin, operator };
-  const secretSet = tokenSet(env, operator);
+  const target = site.operator ? { origin: site.origin, operator: site.operator } : null;
+  const secretSet = target ? tokenSet(env, target.operator) : false;
 
   // The weekly tools first and on their own: a weekly run is not a repair and does not
   // wait for drift.
-  for (const tool of operator.weekly) {
-    const key = `${WEEKLY_PREFIX}${site.namespace}:${tool}`;
-    const last = await env.APP_KV.get(key);
-    if (last && now.getTime() - Date.parse(last) < WEEK_MS) continue;
-    if (!secretSet) {
-      weekly.push({ fingerprint: `site-weekly-${site.namespace}-${tool}`, namespace: site.namespace, headline: `${site.name}'s weekly ${tool} cannot run`, evidence: [`the Capsid Worker secret ${operator.auth_var} is not set, so nothing was called.`] });
-      continue;
+  if (target) {
+    for (const tool of target.operator.weekly) {
+      const key = `${WEEKLY_PREFIX}${site.namespace}:${tool}`;
+      const last = await env.APP_KV.get(key);
+      if (last && now.getTime() - Date.parse(last) < WEEK_MS) continue;
+      if (!secretSet) {
+        weekly.push({ fingerprint: `site-weekly-${site.namespace}-${tool}`, namespace: site.namespace, headline: `${site.name}'s weekly ${tool} cannot run`, evidence: [`the Capsid Worker secret ${target.operator.auth_var} is not set, so nothing was called.`] });
+        continue;
+      }
+      const outcome = await runSiteRepair(env, { namespace: site.namespace, tool, actor, auto: true, via: "watcher weekly" }, now, fetchImpl, target);
+      lines.push(`${site.namespace}: ${repairLine(tool, outcome)}`);
+      if (outcome.ran && outcome.call.ok) await env.APP_KV.put(key, now.toISOString(), { expirationTtl: 30 * 86_400 });
+      else if (outcome.ran) weekly.push({ fingerprint: `site-weekly-${site.namespace}-${tool}`, namespace: site.namespace, headline: `${site.name}'s weekly ${tool} failed`, evidence: [outcome.line] });
     }
-    const outcome = await runSiteRepair(env, { namespace: site.namespace, tool, actor, auto: true, via: "watcher weekly" }, now, fetchImpl, target);
-    lines.push(`${site.namespace}: ${repairLine(tool, outcome)}`);
-    if (outcome.ran && outcome.call.ok) await env.APP_KV.put(key, now.toISOString(), { expirationTtl: 30 * 86_400 });
-    else if (outcome.ran) weekly.push({ fingerprint: `site-weekly-${site.namespace}-${tool}`, namespace: site.namespace, headline: `${site.name}'s weekly ${tool} failed`, evidence: [outcome.line] });
   }
 
   if (!site.health_path) return { finding: null, read: true, lines, weekly };
@@ -117,12 +128,16 @@ async function watchSite(env: Env, site: OpsSiteConfig & { origin: string; opera
   if (healthy(reading)) return { finding: null, read: true, lines, weekly };
 
   const failing = failingChecks(reading.body);
+  const alerts = alertChecks(reading.body);
   const evidence = [`health: ${url} answered ${reading.status}; failing: ${failing.join(", ") || "(none named)"}`];
-  const plan = repairPlan(failing, operator);
-  if ("none" in plan) {
+  if (alerts.length > 0) evidence.push(`alert: ${alerts.join(", ")} (site-runtime marks ${alerts.length === 1 ? "this check" : "these checks"} for a person to hear of now)`);
+  const plan = target ? repairPlan(failing, target.operator) : null;
+  if (!target || !plan) {
+    evidence.push("the site has no operator API in Capsid (ops_sites.operator), so nothing was repaired");
+  } else if ("none" in plan) {
     evidence.push(plan.none);
   } else if (!secretSet) {
-    evidence.push(`the mapped repairs (${plan.tools.join(", ")}) were not run: the Capsid Worker secret ${operator.auth_var} is not set.`);
+    evidence.push(`the mapped repairs (${plan.tools.join(", ")}) were not run: the Capsid Worker secret ${target.operator.auth_var} is not set.`);
   } else {
     let missed = false;
     for (const tool of plan.tools) {
@@ -141,21 +156,27 @@ async function watchSite(env: Env, site: OpsSiteConfig & { origin: string; opera
     );
   }
   return {
-    finding: { fingerprint: `site-health-${site.namespace}`, namespace: site.namespace, headline: `${site.name} is unhealthy and self-repair did not settle it`, evidence },
+    finding: { fingerprint: `site-health-${site.namespace}`, namespace: site.namespace, headline: headline(site.name, alerts, target !== null), evidence },
     read: true,
     lines,
     weekly,
   };
 }
 
-/** Every opted-in site, one pass, then the red and green mail. */
+/** The finding's headline, which is also the mail's subject: an alert first, by name. */
+function headline(name: string, alerts: string[], repairable: boolean): string {
+  if (alerts.length > 0) return `${name} raised an alert: ${alerts.join(", ")}`;
+  return repairable ? `${name} is unhealthy and self-repair did not settle it` : `${name} is unhealthy`;
+}
+
+/** Every site with a health route or an operator API, one pass, then the red and green mail. */
 export async function watchSites(env: Env, config: readonly OpsSiteConfig[], actor: string, fetchImpl: FetchLike, now: Date): Promise<SiteWatchReport> {
   const findings: SiteFinding[] = [];
   const lines: string[] = [];
   let complete = true;
   for (const site of config) {
-    if (!site.origin || !site.operator) continue;
-    const r = await watchSite(env, site as OpsSiteConfig & { origin: string; operator: SiteOperator }, actor, fetchImpl, now);
+    if (!site.origin || (!site.operator && !site.health_path)) continue;
+    const r = await watchSite(env, site as OpsSiteConfig & { origin: string }, actor, fetchImpl, now);
     findings.push(...r.weekly);
     lines.push(...r.lines);
     if (!r.read) {
@@ -187,7 +208,7 @@ async function mailOnChange(env: Env, namespace: string, name: string, finding: 
   const red = finding !== null;
   // No state yet and healthy: nothing changed that anyone needs to hear about.
   if ((before?.red ?? false) === red) return [];
-  const subject = red ? `${name} is unhealthy and self-repair did not settle it` : `${name} recovered`;
+  const subject = finding ? finding.headline : `${name} recovered`;
   const text = red
     ? [`Changed to unhealthy at ${now.toISOString()}. You will not be mailed again until it recovers.`, "", ...(finding?.evidence ?? []), "", "The finding is open in Capsid Portal, Incidents."].join("\n")
     : [`Healthy again at ${now.toISOString()}${before ? `, after being unhealthy since ${before.since}` : ""}.`].join("\n");

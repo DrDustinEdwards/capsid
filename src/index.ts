@@ -1,5 +1,5 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
-import { adminGrantEmail } from "./auth";
+import { adminEmailList, adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
 import { readLastStepUp } from "./scope";
 import { adminWriteObserver, recordAdminInitialize } from "./admin-client-audit";
@@ -15,11 +15,12 @@ import { DCR_CALLBACKS, registrationLimited, registrationRefusal } from "@dustin
 import { runTick } from "./tick";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
-import { portalHostRequest } from "./portal-host";
+import { isPortalHost, portalHostRequest } from "./portal-host";
 import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
 import { logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
 import { countNotFound } from "@dustinedwards/site-runtime/not-found";
 import { securityTxtResponse } from "@dustinedwards/site-runtime/security-txt";
+import { ADMIN_LIST_PATH, adminListResponse } from "@dustinedwards/site-runtime/access-drift";
 
 const SECURITY_TXT_PATH = "/.well-known/security.txt";
 // Under a year out (RFC 9116); the family check reminds a month ahead.
@@ -162,6 +163,16 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   const secured = (response: Response, path: string) => withSecurityHeaders(withCacheDefault(response, path), hostname);
   // security.txt on both hosts, before the Portal's sign-in and the MCP host's path list.
   if (asked === SECURITY_TXT_PATH) return secured(securityTxtResponse({ origin: `https://${hostname}`, contact: "security@dustinedwards.info", expires: SECURITY_TXT_EXPIRES }), asked);
+  // The admin list, hashed with a fresh salt, for the daily Access drift check
+  // (.github/workflows/access-drift.yml). The Portal signs people in through Access for
+  // SaaS, so no Access application stands in front of it: this one path on the Portal host
+  // has its own self-hosted application, Service Auth only, whose tag is ACCESS_DRIFT_AUD.
+  // adminListResponse answers only a GET carrying that application's verified Access token
+  // from a service token, and 404 to everything else, so it runs before the Portal's sign-in.
+  if (asked === ADMIN_LIST_PATH && isPortalHost(new URL(original.url))) {
+    const list = await adminListResponse(original, { ACCESS_TEAM_DOMAIN: env.ACCESS_TEAM_DOMAIN, ACCESS_AUD: env.ACCESS_DRIFT_AUD }, { admins: adminEmailList(env) });
+    return secured(list, asked);
+  }
   const host = portalHostRequest(original);
   if ("redirect" in host) return secured(host.redirect, asked);
   const request = host.request;

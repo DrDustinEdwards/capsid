@@ -1,4 +1,4 @@
-import { CSP_REPORT_GROUP, buildPolicy, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
+import { buildPolicy, CSP_REPORT_GROUP, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
 import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
 import { capsidMcp, capsidPortal } from "@dustinedwards/site-runtime/sites";
@@ -25,9 +25,9 @@ const REPORTING_ENDPOINTS = reportingEndpoints(CSP_REPORT_GROUP, REPORT_URL);
 export const REPORT_PREFIX = "reports/csp/";
 
 // The policy on every response that names none of its own (the Portal page and the consent dialog do): nothing
-// loads, nothing may frame it, no <base>, and no string reaches a script sink (Trusted Types; nothing here runs
-// script, the door's promise in the registry). A JSON or text answer needs none of that, and an HTML page left without
-// a policy gets the strictest one rather than none. form-action is deliberately absent, as below.
+// loads, nothing may frame it, no <base>, and no string reaches a script sink (Trusted Types: these pages run no
+// script, as the registry's door entry declares). A JSON or text answer needs none of that, and an HTML page left
+// without a policy gets the strictest one rather than none. form-action is deliberately absent, as below.
 const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", `report-uri ${REPORT_URL}`, `report-to ${CSP_REPORT_GROUP}`]);
 
 // The OAuth consent dialog's own headers (src/routes.ts, renderApprovalDialog), less
@@ -36,7 +36,7 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 //
 // The dialog is site-runtime's (./mcp-login): one inline <style>, CONSENT_STYLE, trusted
 // by its hash, and a form that posts back to /authorize. No scripts or images, so
-// everything else is locked down, Trusted Types included.
+// everything else is locked down.
 //
 // form-action is deliberately absent. Approving submits this form into a redirect
 // chain: POST /authorize, 302 to the Access sign-in, back to /callback, 302 out to the
@@ -52,15 +52,7 @@ let consentHeaders: Promise<Readonly<Record<string, string>>> | undefined;
 export function consentDialogHeaders(): Promise<Readonly<Record<string, string>>> {
   consentHeaders ??= scriptHash(CONSENT_STYLE).then((hash) => ({
     "Content-Type": "text/html;charset=utf-8",
-    "Content-Security-Policy": buildPolicy([
-      "default-src 'none'",
-      `style-src '${hash}'`,
-      "base-uri 'none'",
-      "frame-ancestors 'none'",
-      "require-trusted-types-for 'script'",
-      `report-uri ${REPORT_URL}`,
-      `report-to ${CSP_REPORT_GROUP}`,
-    ]),
+    "Content-Security-Policy": buildPolicy(["default-src 'none'", `style-src '${hash}'`, "base-uri 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", `report-uri ${REPORT_URL}`, `report-to ${CSP_REPORT_GROUP}`]),
   }));
   return consentHeaders;
 }
