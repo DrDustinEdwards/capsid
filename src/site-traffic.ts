@@ -218,13 +218,22 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
       `SELECT clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND ${END_USERS} AND edgeResponseStatus >= 500 GROUP BY clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
       { start, host }
     );
+    // When, too: a burst in one hour beside a deploy reads differently from a trickle all day (2026-10-31).
+    const byHour = await sql(
+      fetchImpl,
+      creds.token,
+      creds.account,
+      `SELECT toStartOfHour(timestamp) AS hour, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND ${END_USERS} AND edgeResponseStatus >= 500 GROUP BY hour, edgeResponseStatus ORDER BY hour LIMIT ${QUERY_ROWS}`,
+      { start, host }
+    );
     return {
       namespace,
       origin: site.origin,
       report,
       since: start,
-      note: "Every 5xx the edge answered a visitor, by path and status. Sampled, so hits are estimates; paths are what visitors sent. A 501 is a site saying it does not offer that Carrel API, which Carrel's conformance check asks for on purpose.",
+      note: "Every 5xx the edge answered a visitor, by path and status, and by hour (UTC). Sampled, so hits are estimates; paths are what visitors sent. A 501 is a site saying it does not offer that Carrel API, which Carrel's conformance check asks for on purpose.",
       failures: raw.slice(0, limit).map((r) => ({ path: typeof r.path === "string" ? r.path : "", status: Number(r.status), hits: count(r.hits) })),
+      hours: byHour.map((r) => ({ hour: String(r.hour), status: Number(r.status), hits: count(r.hits) })),
       truncated: raw.length > limit,
     };
   }
