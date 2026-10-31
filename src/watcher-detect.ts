@@ -1,5 +1,5 @@
 import { type HealthReport, BACKUP_STALE_HOURS } from "./health";
-import type { SiteCloudflare } from "./ops-types/sites";
+import type { ServerErrors, SiteCloudflare } from "./ops-types/sites";
 import type { OpsSnapshot, SiteProbe } from "./ops-snapshot";
 import type { SiteMapDrift } from "./ops-sites";
 import type { LiveFinding } from "./live-checks";
@@ -464,14 +464,15 @@ export const ERROR_RATE_MIN_REQUESTS = 100;
 export function siteErrorFindings(
   sites: ReadonlyArray<{ namespace: string; name: string }>,
   cloudflare: Record<string, SiteCloudflare>,
-  serverErrors: Record<string, number> | null = null
+  serverErrors: Record<string, ServerErrors> | null = null
 ): Finding[] {
   const out: Finding[] = [];
   for (const site of sites) {
     const cf = cloudflare[site.namespace];
     if (cf?.state !== "ok" || !cf.errors24 || cf.errors24.length === 0) continue;
     const hour = cf.errors24[cf.errors24.length - 1];
-    const returned = serverErrors?.[site.namespace];
+    const served = serverErrors?.[site.namespace];
+    const returned = served?.count;
     const errors = Math.max(hour.errors, returned ?? 0);
     if (hour.requests < ERROR_RATE_MIN_REQUESTS || errors / hour.requests <= ERROR_RATE_THRESHOLD) continue;
     out.push(
@@ -479,6 +480,7 @@ export function siteErrorFindings(
         `script: ${cf.script}`,
         `hour from ${hour.hour}: ${errors} errors of ${hour.requests} requests (${((errors / hour.requests) * 100).toFixed(1)} percent)`,
         `${hour.errors} invocations threw, exceeded their resources or hit an internal error; ${returned === undefined ? "returned 5xx not read this pass" : `${returned} answers were 5xx at the edge (sampled, an estimate)`}.`,
+        ...(served?.top.length ? [`busiest 5xx: ${served.top.map((t) => `${t.status} ${t.path} (${t.hits})`).join(", ")}`] : []),
       ])
     );
   }
