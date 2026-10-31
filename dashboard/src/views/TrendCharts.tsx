@@ -1,16 +1,17 @@
-import { heatStrip, heatStripTable, timeline, timelineTable, type TimelineEvent } from "enarratio";
+import { heatStrip, timeline, type TimelineEvent } from "enarratio";
 import { areaChart } from "enarratio/lite/area";
 import { barChart } from "enarratio/lite/bar";
 import { lineChart } from "enarratio/lite/line";
+import { ChartFrame } from "capsomer/react/chart-frame";
+import "capsomer/chart-frame.css";
 import { Panel } from "capsomer/react/panel";
+import type { ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, useAnswer } from "../lib/api";
-import { cfNoData, cfOk } from "../lib/derive";
-import { DAY, HOUR, MIN, fmtN, ms, pct, shortId, utc } from "../lib/format";
+import { cfNoData, cfOk, ringOf, slotStart } from "../lib/derive";
+import { DAY, HOUR, MIN, SLOT_MS, fmtN, ms, pct, shortId, utc } from "../lib/format";
 import { useTrends } from "../lib/trends";
 import type { ClaimsAgreement, ClaimsGroup, ClaimsWaitRow, PortalPlan, PortalTrends, SiteSnapshot, TrendCiRepo } from "../types";
-import { EnarChart } from "../ui/Enar";
-import { EnarFigure } from "../ui/EnarFigure";
 import { errorTotals } from "../ui/charts";
 import { St } from "../ui/icons";
 
@@ -22,14 +23,23 @@ import { St } from "../ui/icons";
 // queue), 5 (claims against verified), 6 (cost), 7 (merges) and 9 (errors and deploys) are
 // Enarratio's bar, line and area charts from enarratio/lite, which drop Observable Plot and
 // fit the chunk budget. This module loads with the page that shows a chart, never in the
-// initial bundle. Each chart carries its table companion (a lite chart brings its own).
-
-const TABLE = { dataTable: "details" } as const;
+// initial bundle. Each is Enarratio's whole figure (title, finding, notes, source, "Show data")
+// in Capsomer's chart frame, which redraws it to its width.
 
 // A later read that failed keeps the last answer on screen; this says so, so the failure is
 // not hidden behind numbers that are no longer current.
 function Stale({ error }: { error: string | null }) {
   return error ? <p className="faint">Not refreshed: {error}</p> : null;
+}
+
+// A chart that is a panel of its own: the panel's surface and address, with the chart's title
+// and source in Enarratio's figure rather than a second header.
+function ChartPanel({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <section className="cap-panel" id={id}>
+      <div className="cap-panel-body body">{children}</div>
+    </section>
+  );
 }
 
 // ---- 1. Minutes of Dustin per week ------------------------------------------------------
@@ -71,31 +81,13 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
     yLabel: "Minutes",
     formatValue: (v: number) => `${v} min`,
     height: 56 + 4 * 30,
+    title: "How much of your time does Capsid take?",
+    subtitle: `${now.minutes} min this week, ${change.text}`,
     alt: `Your time on Capsid per week, ${weeks[0]!.start} to ${now.start}: ${now.minutes} minutes this week, ${change.text}.`,
-    dataTable: "details",
+    caption: `An estimate from what you did in Capsid: each stretch of actions with no gap over 5 minutes counts from its first action to its last, plus a minute. Reading the Portal without acting is not counted.${minutes.truncated ? " Cut at the read's row limit, so the figure is low." : ""}`,
+    source: { name: "Capsid audit log, your actions" },
   } as const;
-  return (
-    <div className="minutes-chart" data-chart="minutes">
-      <div className="t1">
-        <span className="l">How much of your time does Capsid take?</span>
-      </div>
-      <div className="minutes-now">
-        <span className="v">
-          {now.minutes} <small>min this week</small>
-        </span>
-        <span className={`minutes-change${change.dir ? ` ${change.dir}` : ""}`}>
-          {change.dir === "up" ? "\u25B2 " : change.dir === "down" ? "\u25BC " : ""}
-          {change.text}
-        </span>
-      </div>
-      <EnarFigure draw={(width) => lineChart({ ...opts, width })}>
-        <p className="d">
-          An estimate from what you did in Capsid: each stretch of actions with no gap over 5 minutes counts from its first action to its last, plus a minute. Reading the Portal without acting is not counted.
-          {minutes.truncated ? " Cut at the read's row limit, so the figure is low." : ""}
-        </p>
-      </EnarFigure>
-    </div>
-  );
+  return <ChartFrame className="minutes-chart" draw={(width) => lineChart({ ...opts, width })} />;
 }
 
 // ---- 2. Where does waiting go? ----------------------------------------------------------
@@ -167,21 +159,12 @@ export function WaitingChart() {
     yLabel: "Waiting that ended (hours)",
     formatValue: hours,
     height: 56 + shown * 30,
+    title: "Where does waiting go?",
     alt: `Waiting that ended in the last 14 days, by what the job waited for and who answered: ${hours(allHours)} in all, ${hours(top)} of it at ${rows[0]!.gate.toLowerCase()}.`,
-    dataTable: "details",
+    caption: `Total time between a job stopping at a gate and the gate being answered, last 14 days${classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.${load.data.truncated.includes("waits") ? " Cut at the read's row limit, so the figure is low." : ""}`,
+    source: { name: "Claims aggregate, gate waits" },
   } as const;
-  return (
-    <div className="wait-chart" data-chart="waiting">
-      <div className="t1">
-        <span className="l">Where does waiting go?</span>
-      </div>
-      <EnarFigure draw={(width) => barChart({ ...opts, width })}>
-        <p className="d">
-          Total time between a job stopping at a gate and the gate being answered, last 14 days{classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.{load.data.truncated.includes("waits") ? " Cut at the read's row limit, so the figure is low." : ""}
-        </p>
-      </EnarFigure>
-    </div>
-  );
+  return <ChartFrame className="wait-chart" draw={(width) => barChart({ ...opts, width })} />;
 }
 
 // ---- 3. Is the queue growing or draining? -------------------------------------------------
@@ -207,20 +190,16 @@ export function QueueChart() {
     xLabel: null,
     yLabel: "Open jobs",
     height: 200,
+    title: "Is the queue growing or draining?",
     alt: `Jobs open at each day's end, ${first.day} to ${last.day}: ${last.open} now, ${net === 0 ? "unchanged" : net > 0 ? `up ${net}` : `down ${-net}`} over the window. ${posted} posted, ${ended} ended.`,
-    dataTable: "details",
+    caption: `${posted} posted and ${ended} ended in 14 days, so the queue ${net === 0 ? "held" : net > 0 ? "grew" : "drained"} by ${Math.abs(net)}. Open means queued, claimed, blocked or parked.`,
+    source: { name: "D1 jobs, 14 days" },
   } as const;
   return (
-    <Panel flush title="Is the queue growing or draining?" src="D1 jobs, 14 days" id="queue-trend">
-      <div className="body" data-chart="queue">
-        <Stale error={error} />
-        <EnarFigure draw={(width) => areaChart({ ...opts, width })}>
-          <p className="d">
-            {posted} posted and {ended} ended in 14 days, so the queue {net === 0 ? "held" : net > 0 ? "grew" : "drained"} by {Math.abs(net)}. Open means queued, claimed, blocked or parked.
-          </p>
-        </EnarFigure>
-      </div>
-    </Panel>
+    <ChartPanel id="queue-trend">
+      <Stale error={error} />
+      <ChartFrame draw={(width) => areaChart({ ...opts, width })} />
+    </ChartPanel>
   );
 }
 
@@ -257,15 +236,14 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     // Capped, so the drawing is not scaled down to unreadable text; Enarratio's frame scrolls past it.
     width: Math.min(900, Math.max(560, 150 * agents)),
     height: 260,
+    title: "Does each agent's claim match what was verified?",
     alt: `Claims against what the Worker verified, for ${agents} ${agents === 1 ? "agent" : "agents"}: ${sum("agree")} agree, ${sum("disagree")} disagree, ${sum("unclaimed")} unclaimed, ${sum("unchecked")} unchecked.`,
-    dataTable: "details",
+    source: { name: "Every check, summed per agent" },
   } as const;
   return (
-    <Panel flush title="Does each agent's claim match what was verified?" src="every check, summed per agent" id="claim-agreement">
-      <div className="body" data-chart="agreement">
-        <EnarFigure className="agree-chart" draw={(width) => barChart({ ...opts, width })} />
-      </div>
-    </Panel>
+    <ChartPanel id="claim-agreement">
+      <ChartFrame className="agree-chart" chart={barChart(opts)} />
+    </ChartPanel>
   );
 }
 
@@ -287,18 +265,16 @@ export function CostChart() {
     yLabel: "Model spend (USD)",
     formatValue: (v: number) => `$${v.toFixed(2)}`,
     height: 240,
+    title: "What does the work cost?",
     alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, $${now.usd.toFixed(2)} this week`}. Weeks with no recorded cost are gaps.`,
-    dataTable: "details",
+    caption: "A week with no job outcome carrying a cost is a gap, not a free week.",
+    source: { name: "Job outcomes, telemetry cost, an estimate" },
   } as const;
   return (
-    <Panel flush title="What does the work cost?" src="job outcomes, telemetry cost, an estimate" id="cost-trend">
-      <div className="body" data-chart="cost">
-        <Stale error={error} />
-        <EnarFigure draw={(width) => lineChart({ ...opts, width })}>
-          <p className="d">A week with no job outcome carrying a cost is a gap, not a free week.</p>
-        </EnarFigure>
-      </div>
-    </Panel>
+    <ChartPanel id="cost-trend">
+      <Stale error={error} />
+      <ChartFrame draw={(width) => lineChart({ ...opts, width })} />
+    </ChartPanel>
   );
 }
 
@@ -329,25 +305,19 @@ export function MergesChart() {
     xLabel: `ISO week, ${weeks[0]!.week.slice(0, 4)} on`,
     yLabel: "Pull requests",
     height: 240,
+    title: "How much merges with no human, and is that rising?",
+    subtitle: merged ? `${Math.round((total("auto") / merged) * 100)}% of the ${merged} merged in ${weeks.length} weeks went through on the policy alone.` : `Nothing merged in ${weeks.length} weeks.`,
     alt: `Pull requests merged or closed per week for ${weeks.length} weeks: ${total("auto")} merged by policy with no human, ${total("approved")} on an approval, ${total("seat")} by you, ${total("closed")} closed unmerged. ${rollbacks.length} ${rollbacks.length === 1 ? "rollback" : "rollbacks"}.`,
-    dataTable: "details",
+    caption: rollbacks.length
+      ? `Rollbacks: ${rollbacks.map((r) => `${r.at.slice(0, 10)} ${r.repo}${r.pr === null ? "" : ` #${r.pr}`}${r.outcome === "rollback_failed" ? " (rollback failed)" : ""}`).join("; ")}.`
+      : "No deploy was rolled back in this window.",
+    source: { name: "Audit log, weekly" },
   } as const;
   return (
-    <Panel flush title="How much merges with no human, and is that rising?" src="audit log, weekly" id="merge-trend">
-      <div className="body" data-chart="merges">
-        <Stale error={error} />
-        <EnarFigure className="merge-chart" draw={(width) => barChart({ ...opts, width })}>
-          <p className="d">
-            {merged ? `${Math.round((total("auto") / merged) * 100)}% of the ${merged} merged in ${weeks.length} weeks went through on the policy alone.` : `Nothing merged in ${weeks.length} weeks.`}
-          </p>
-          <p className="d" data-rollbacks="">
-            {rollbacks.length
-              ? `Rollbacks: ${rollbacks.map((r) => `${r.at.slice(0, 10)} ${r.repo}${r.pr === null ? "" : ` #${r.pr}`}${r.outcome === "rollback_failed" ? " (rollback failed)" : ""}`).join("; ")}.`
-              : "No deploy was rolled back in this window."}
-          </p>
-        </EnarFigure>
-      </div>
-    </Panel>
+    <ChartPanel id="merge-trend">
+      <Stale error={error} />
+      <ChartFrame className="merge-chart" draw={(width) => barChart({ ...opts, width })} />
+    </ChartPanel>
   );
 }
 
@@ -359,10 +329,11 @@ export function MergesChart() {
 export function ErrorRate({ site }: { site: SiteSnapshot }) {
   const cf = cfOk(site);
   const why = cfNoData(site.cloudflare);
-  if (!cf) return <div className="callout">No data: {why}</div>;
-  if (!cf.errors24) return <div className="callout">No data: {cf.errors_reason ?? "the analytics read failed"}</div>;
+  const title = "Requests and error rate, 24 hours";
+  if (!cf) return <ChartFrame noData={{ title, reason: why ?? "" }} />;
+  if (!cf.errors24) return <ChartFrame noData={{ title, reason: cf.errors_reason ?? "the analytics read failed" }} />;
   const e = cf.errors24;
-  if (!e.length) return <div className="callout">No data: the analytics read returned no hours</div>;
+  if (!e.length) return <ChartFrame noData={{ title, reason: "the analytics read returned no hours" }} />;
   const rates = e.map((x) => (x.requests ? (x.errors / x.requests) * 100 : 0));
   const peak = Math.max(...rates);
   const t0 = ms(e[0]!.hour);
@@ -379,17 +350,65 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     references: [{ y: 1, label: "Alert at 1%" }],
     markers: inWindow.map((d) => ({ x: new Date(ms(d.created_on)).toISOString(), label: `Deploy ${shortId(d.version_id ?? d.id)}` })),
     height: 220,
+    title,
+    subtitle: `${fmtN(tot.req)} requests and ${fmtN(tot.err)} errors (${pct(tot.rate)})`,
     alt: `Error rate for ${site.name} over the last 24 hours: peak ${peak.toFixed(2)}% in an hour, ${pct(tot.rate)} overall, ${inWindow.length} ${inWindow.length === 1 ? "deploy" : "deploys"} in the window.`,
-    dataTable: "details",
+    caption: inWindow.length ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.` : "No deploy in the window.",
+    source: { name: "Cloudflare Workers analytics, hourly" },
   } as const;
-  return (
-    <EnarFigure className="error-rate" draw={(width) => lineChart({ ...opts, width })}>
-      <p className="d" data-deploys="">
-        {fmtN(tot.req)} requests and {fmtN(tot.err)} errors ({pct(tot.rate)}).{" "}
-        {inWindow.length ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.` : "No deploy in the window."}
-      </p>
-    </EnarFigure>
-  );
+  return <ChartFrame className="error-rate" draw={(width) => lineChart({ ...opts, width })} />;
+}
+
+// ---- 9b. Deploys and downtime, one lane per site ------------------------------------------
+
+/** Health's Deploys tab: each deploy a point, each run of failed probes or of missing watcher
+ *  passes a span, one lane per site. Enarratio gives way to a plain list where the room is
+ *  narrow, so a phone reads the events instead of scrolling a drawing. */
+export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: number }) {
+  const { now } = useApp();
+  const t0 = now - days * DAY;
+  const events: TimelineEvent[] = [];
+  const lanes = sites.map((s) => s.name);
+  let deploys = 0;
+  let downSlots = 0;
+  const noData: string[] = [];
+  for (const s of sites) {
+    const ring = ringOf(s);
+    // Consecutive slots of one kind make one span.
+    for (let k = 0; k < ring.length; ) {
+      const c = ring[k];
+      let end = k + 1;
+      while (end < ring.length && ring[end] === c) end++;
+      const from = Math.max(t0, slotStart(s, k));
+      const to = slotStart(s, end - 1) + SLOT_MS;
+      if (c !== "1" && to > t0) {
+        if (c === "0") downSlots += end - k;
+        events.push({ lane: s.name, label: c === "0" ? `Probe failed, ${end - k} half-hour ${end - k === 1 ? "slot" : "slots"}` : "No watcher pass", status: c === "0" ? "error" : "unknown", from, to });
+      }
+      k = end;
+    }
+    const why = cfNoData(s.cloudflare);
+    if (why) noData.push(`${s.name}: ${why}`);
+    for (const d of cfOk(s)?.deploys ?? []) {
+      const t = ms(d.created_on);
+      if (t < t0 || t > now) continue;
+      deploys++;
+      events.push({ lane: s.name, label: `Deploy ${shortId(d.version_id ?? d.id)}${d.triggered_by ? `, ${d.triggered_by}` : ""}${d.message ? `: ${d.message}` : ""}`, status: "ok", at: t });
+    }
+  }
+  const notes = [...(days > 7 ? ["The probe ring holds 7 days; older downtime is not shown."] : []), ...(noData.length ? [`Deploys not read for ${noData.join("; ")}.`] : [])];
+  const opts = {
+    events,
+    lanes,
+    start: t0,
+    end: now,
+    title: "Deploys and downtime",
+    label: `Deploys and downtime across ${sites.length} sites, last ${days} days`,
+    alt: `Deploys and downtime across ${sites.length} sites, last ${days} days: ${deploys} deploys, ${downSlots} half-hour probe failures.`,
+    notes,
+    source: { name: "Cloudflare deployments and the watcher's probes" },
+  };
+  return <ChartFrame className="deploy-timeline" draw={(width) => timeline({ ...opts, width })} />;
 }
 
 // ---- 4. Tonight -------------------------------------------------------------------------
@@ -425,9 +444,11 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
     lanes: plan.lanes.filter((l) => l.jobs.length).map((l) => l.repo),
     start,
     end,
+    title: "Tonight's plan",
     label: `Tonight's plan, ${events.length} ${events.length === 1 ? "job" : "jobs"} by repo, as if it started when the plan was read (UTC)`,
+    source: { name: "The overnight planner's estimates" },
   };
-  return <EnarChart className="tonight-chart" draw={(width) => ({ svg: timeline({ ...opts, width }), table: timelineTable(opts, TABLE).markup })} />;
+  return <ChartFrame className="tonight-chart" draw={(width) => timeline({ ...opts, width })} />;
 }
 
 // ---- 10. Backup retention slots ---------------------------------------------------------
@@ -458,19 +479,14 @@ export function BackupSlots() {
               values: slots.map((s) => (s.filled ? 0 : 1)),
               min: 0,
               max: 1,
+              title: name,
+              subtitle: `${kept} of ${slots.length} kept`,
               label: `${name} backups, the last ${span}`,
               height: 20,
               cellLabels: slots.map((s) => s.key),
               formatValue: missing,
             };
-            return (
-              <div className="slot-row" key={name} data-slots={name.toLowerCase()}>
-                <div className="slot-head">
-                  <b>{name}</b> <span className="faint num">{kept} of {slots.length} kept</span>
-                </div>
-                <EnarChart className="ci-strip" draw={(width) => ({ svg: heatStrip({ ...opts, width }), table: heatStripTable(opts, TABLE).markup })} />
-              </div>
-            );
+            return <ChartFrame key={name} className="ci-strip" inline draw={(width) => heatStrip({ ...opts, width })} />;
           })
         )}
       </div>
@@ -505,24 +521,29 @@ export function CiHistory() {
           <>
             {ci.repos.map((r) => {
               const streak = redStreak(r);
+              // A branch with no verdict in the window has nothing to draw; its line says so.
+              if (!r.days.some((d) => d.state !== "none")) {
+                return (
+                  <div className="slot-row slot-head" key={r.namespace} data-ci={r.namespace}>
+                    <b>{r.namespace}</b> <St kind="nodata">no run in 14 days</St>
+                  </div>
+                );
+              }
               const opts = {
                 values: ciValues(r),
                 min: 0,
                 max: 1,
+                title: r.namespace,
+                subtitle: streak ? `red for ${streak === r.days.length ? "at least " : ""}${streak} ${streak === 1 ? "day" : "days"}` : "green",
                 label: `${r.namespace} default branch, red or green by day`,
+                notes: r.truncated ? "Over 100 runs; early days may be missing some." : undefined,
                 height: 20,
                 cellLabels: r.days.map((d) => d.day),
                 formatValue: (v: number) => (v >= 1 ? "red" : "green"),
               };
               return (
                 <div className="slot-row" key={r.namespace} data-ci={r.namespace}>
-                  <div className="slot-head">
-                    <b>{r.namespace}</b>{" "}
-                    {streak ? <St kind="crit">{`red for ${streak === r.days.length ? "at least " : ""}${streak} ${streak === 1 ? "day" : "days"}`}</St> : r.days.some((d) => d.state !== "none") ? <St kind="ok">green</St> : <St kind="nodata">no run in 14 days</St>}
-                    {r.truncated && <span className="faint"> (over 100 runs; early days may be missing some)</span>}
-                  </div>
-                  {/* A branch with no verdict in the window has nothing to draw; its line says so. */}
-                  {r.days.some((d) => d.state !== "none") && <EnarChart className="ci-strip" draw={(width) => ({ svg: heatStrip({ ...opts, width }), table: heatStripTable(opts, TABLE).markup })} />}
+                  <ChartFrame className="ci-strip" inline draw={(width) => heatStrip({ ...opts, width })} />
                 </div>
               );
             })}

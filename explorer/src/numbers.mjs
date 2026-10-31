@@ -1,17 +1,22 @@
 // The numbers page: every public number Capsid computes (docs/public-data.md), each as a sentence,
 // a picture and the table behind it, with the weekly trends where the document carries them.
-// Enarratio draws the charts on the server; its enhance step (src/explorer.js) adds tooltips and
-// keyboard reading. No chart takes a color of its own, which would need a style attribute the
-// policy refuses. Pure.
+// Enarratio draws each whole figure on the server (title, finding, caption, source, "Show data"),
+// in Capsomer's chart frame; its enhance step (src/explorer.js) adds tooltips and keyboard
+// reading. No chart takes a color of its own, which would need a style attribute the policy
+// refuses. Pure.
+import { frameHtml } from "capsomer/behavior/chart-frame";
 import { progressRing } from "enarratio";
 import { areaChart, barChart, lineChart } from "enarratio/lite";
 
-import { weekLabels } from "./home.mjs";
+import { weekEnds, weekLabels } from "./home.mjs";
 import { escapeHtml, layout, minutes, pageHead, percent, readingBox, scroller } from "./pages.mjs";
 
-/** A ring, its heading and its sentence: Enarratio's ring is a primitive, so the figure is ours. */
-const ring = (/** @type {string} */ id, /** @type {string} */ title, /** @type {number} */ rate, /** @type {string} */ sentence) =>
-  `<figure class="ring" aria-labelledby="${id}-title"><h3 id="${id}-title">${escapeHtml(title)}</h3>${progressRing({ value: rate, max: 1, size: 112, alt: sentence })}<figcaption>${escapeHtml(sentence)}</figcaption></figure>`;
+/** Where every number on the page comes from: the public stats document (docs/public-data.md). */
+const source = { name: "Capsid's public stats", href: "https://mcp.dustinedwards.info/public/stats/v1.json" };
+
+/** A rate as a ring: its title, the sentence that says it, and the table behind it. */
+const ring = (/** @type {string} */ id, /** @type {string} */ title, /** @type {number} */ rate, /** @type {string} */ sentence, /** @type {string} */ caption) =>
+  frameHtml(progressRing({ id, value: rate, max: 1, size: 112, title, label: title, alt: sentence, caption, source }));
 
 /**
  * The daily numbers: each a sentence, a picture and the table behind it (design section 4).
@@ -23,6 +28,7 @@ export function numbersHtml(stats) {
   const v = stats.verification;
   const g = stats.gates;
   const weeks = weekLabels(stats);
+  const ends = weekEnds(stats).map((d) => d.toISOString().slice(0, 10));
   // The bars name each week by its day, with its month at the first, the newest and wherever the
   // month changes, so eight labels fit under eight bars.
   const days = weeks.map((/** @type {string} */ w, /** @type {number} */ i) => (i && i < weeks.length - 1 && w.split(" ")[1] === weeks[i - 1].split(" ")[1] ? w.split(" ")[0] : w));
@@ -43,6 +49,9 @@ export function numbersHtml(stats) {
         layout: "stacked",
         title: "Jobs finished per week",
         xLabel: "week ending",
+        yLabel: "jobs",
+        caption: "A job counts in the week it finished, completed or failed.",
+        source,
         width,
         alt: `Jobs finished in each of the last eight whole weeks, oldest first. Completed: ${j.completed_by_week.join(", ")}. Failed: ${j.failed_by_week.join(", ")}.`,
       })
@@ -53,17 +62,23 @@ export function numbersHtml(stats) {
         y: "jobs",
         title: "Jobs completed per week",
         xLabel: "week ending",
+        yLabel: "jobs",
+        caption: "A job counts in the week it completed.",
+        source,
         width,
         alt: `Jobs completed in each of the last eight whole weeks, oldest first: ${j.completed_by_week.join(", ")}; ${total} in all.`,
       });
   const waitsChart = g.waits_by_week
     ? areaChart({
         id: "waits-per-week",
-        data: weeks.map((/** @type {string} */ week, /** @type {number} */ i) => ({ week, waits: g.waits_by_week[i] })),
+        data: ends.map((week, i) => ({ week, waits: g.waits_by_week[i] })),
         x: "week",
         y: "waits",
         title: "Approval waits per week",
         xLabel: "week ending",
+        yLabel: "waits",
+        caption: "A wait counts in the week a person or the signed policy ended it.",
+        source,
         width,
         alt: `Approval waits that ended in each of the last eight whole weeks, oldest first: ${g.waits_by_week.join(", ")}.`,
       })
@@ -73,12 +88,14 @@ export function numbersHtml(stats) {
     measuredWeeks >= 2
       ? lineChart({
           id: "agreement-per-week",
-          data: weeks.map((/** @type {string} */ week, /** @type {number} */ i) => ({ week, agreement: v.agreement_by_week[i] === null ? null : Math.round(v.agreement_by_week[i] * 1000) / 10 })),
+          data: ends.map((week, i) => ({ week, agreement: v.agreement_by_week[i] === null ? null : Math.round(v.agreement_by_week[i] * 1000) / 10 })),
           x: "week",
           y: "agreement",
           title: "Claims matching GitHub, per week",
           xLabel: "week ending",
           yLabel: "percent",
+          caption: "A week with too few checked claims to say is a gap.",
+          source,
           points: true,
           width,
           formatValue: (/** @type {number} */ n) => `${n}%`,
@@ -86,13 +103,13 @@ export function numbersHtml(stats) {
         })
       : "";
   const rings = [];
-  if (v.agreement_rate_90d !== null) rings.push(ring("agreement", "Claims matching", v.agreement_rate_90d, `In the last 90 days, ${percent(v.agreement_rate_90d)} of ${v.evaluations_90d.toLocaleString("en-US")} checked claims matched what GitHub shows.`));
-  if (v.pr_merge_rate_90d !== null) rings.push(ring("merged", "Pull requests merged", v.pr_merge_rate_90d, `GitHub shows that ${percent(v.pr_merge_rate_90d)} of the pull requests agents opened were merged.`));
-  if (v.ci_green_rate_90d !== null) rings.push(ring("green", "CI passing", v.ci_green_rate_90d, `${percent(v.ci_green_rate_90d)} of the jobs whose CI the Worker checked had passing CI on their latest commit.`));
+  if (v.agreement_rate_90d !== null) rings.push(ring("agreement", "Claims matching", v.agreement_rate_90d, `In the last 90 days, ${percent(v.agreement_rate_90d)} of ${v.evaluations_90d.toLocaleString("en-US")} checked claims matched what GitHub shows.`, "Checked claims, last 90 days; only the fields the Worker checked count."));
+  if (v.pr_merge_rate_90d !== null) rings.push(ring("merged", "Pull requests merged", v.pr_merge_rate_90d, `GitHub shows that ${percent(v.pr_merge_rate_90d)} of the pull requests agents opened were merged.`, "Agents' pull requests, last 90 days."));
+  if (v.ci_green_rate_90d !== null) rings.push(ring("green", "CI passing", v.ci_green_rate_90d, `${percent(v.ci_green_rate_90d)} of the jobs whose CI the Worker checked had passing CI on their latest commit.`, "Jobs whose CI the Worker checked, last 90 days."));
   const gateRings = [];
-  if (g.share_ended_by_policy_30d !== null) gateRings.push(ring("policy", "Ended by policy", g.share_ended_by_policy_30d, `The signed auto-merge policy, not a person, ended ${percent(g.share_ended_by_policy_30d)} of the approval waits in the last 30 days.`));
+  if (g.share_ended_by_policy_30d !== null) gateRings.push(ring("policy", "Ended by policy", g.share_ended_by_policy_30d, `The signed auto-merge policy, not a person, ended ${percent(g.share_ended_by_policy_30d)} of the approval waits in the last 30 days.`, "Approval waits that ended, last 30 days."));
   const siteRings = [];
-  if (stats.sites.uptime_7d !== null) siteRings.push(ring("uptime", "Uptime, last 7 days", stats.sites.uptime_7d, `The ${stats.sites.watched} watched sites were up in ${percent(stats.sites.uptime_7d)} of ${stats.sites.slots_measured_7d} measured half-hours over the last 7 days.`));
+  if (stats.sites.uptime_7d !== null) siteRings.push(ring("uptime", "Uptime, last 7 days", stats.sites.uptime_7d, `The ${stats.sites.watched} watched sites were up in ${percent(stats.sites.uptime_7d)} of ${stats.sites.slots_measured_7d} measured half-hours over the last 7 days.`, "Measured half-hours only; a slot the watcher could not measure is left out."));
   const rows = [
     ["Jobs completed, last 7 days", j.completed_7d],
     ["Jobs completed, last 30 days", j.completed_30d],
@@ -118,13 +135,13 @@ export function numbersHtml(stats) {
 <dl class="cap-form-boxes readings-row" data-variant="tones">${readingBox(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${readingBox(percent(v.agreement_rate_90d), "claims matching GitHub", "#verification")}${readingBox(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${readingBox(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
 <section class="numbers-part" id="jobs" aria-labelledby="jobs-title"><h2 id="jobs-title">Jobs</h2>
 <p class="measure">In the last 30 days, ${j.completed_30d} jobs finished and ${j.failed_30d} failed. ${j.open} are open today, and ${j.blocked} of those are waiting on a person. The median job took ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
-<div class="charts">${jobsChart}</div></section>
+<div class="charts">${frameHtml(jobsChart)}</div></section>
 <section class="numbers-part" id="verification" aria-labelledby="verification-title"><h2 id="verification-title">Claims checked against GitHub</h2>
 <p class="measure">When a job finishes, the Worker reads its pull requests, commits and CI from GitHub and saves each claim next to what GitHub says. A rate counts only the fields the Worker checked.</p>
-<div class="charts">${agreementChart}${rings.join("")}</div></section>
+<div class="charts">${agreementChart && frameHtml(agreementChart)}${rings.join("")}</div></section>
 <section class="numbers-part" id="gates" aria-labelledby="gates-title"><h2 id="gates-title">Approval gates</h2>
 <p class="measure">Before a push, a deploy, a secret or a merge, the agent stops. The job waits with the exact command until a person or the signed policy answers. ${g.waits_30d} waits ended in the last 30 days, and half ended within ${minutes(g.median_wait_minutes_30d)}.</p>
-<div class="charts">${waitsChart}${gateRings.join("")}</div></section>
+<div class="charts">${waitsChart && frameHtml(waitsChart)}${gateRings.join("")}</div></section>
 <section class="numbers-part" id="sites" aria-labelledby="sites-title"><h2 id="sites-title">Sites</h2>
 <p class="measure">Every five minutes, the watcher checks each registered site and keeps a ring of half-hour slots for it. When it can't measure a slot, it leaves the slot out instead of counting it as up.</p>
 <div class="charts">${siteRings.join("")}</div></section>

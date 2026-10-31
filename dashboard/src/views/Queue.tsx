@@ -1,4 +1,4 @@
-import { ChartSlot } from "../ui/Enar";
+import { ChartSlot } from "../ui/ChartSlot";
 import { lazy } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
