@@ -84,7 +84,7 @@ test("the expected model for each kind, and the default for a kind no rule names
 test("PLANT: a routine job that is risky is upgraded to opus, whatever its kind", () => {
   const routine = routeJob(job("Update the changelog", { kind: "docs" }));
   assert.equal(routine.model, "sonnet");
-  assert.equal(routeJob(job("Update the changelog", { kind: "docs", required_flags: ["money_paths"] })).model, "opus");
+  assert.equal(routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_touch_protected"] })).model, "opus");
   assert.equal(routeJob(job("Update the changelog", { kind: "docs", gate_required: true })).model, "opus");
   assert.equal(routeJob(job("Update the changelog", { kind: "docs", namespace: "foxhound" })).model, "opus");
   const upgraded = routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_merge"] }));
@@ -310,7 +310,7 @@ test("worthReviewer reaches past riskOf only through the guard sources", () => {
 test("riskFromJob: only blast-radius flags, a gate, or a payments namespace make a job high", () => {
   assert.equal(riskFromJob({ namespace: "capsid" }).level, "routine");
   assert.equal(riskFromJob({ namespace: "capsid", required_flags: ["can_comment_pr"] }).level, "routine");
-  assert.equal(riskFromJob({ namespace: "capsid", required_flags: ["can_write_workflows"] }).level, "high");
+  assert.equal(riskFromJob({ namespace: "capsid", required_flags: ["can_touch_protected"] }).level, "high");
   assert.equal(riskFromJob({ namespace: "foxhound" }).level, "high");
 });
 

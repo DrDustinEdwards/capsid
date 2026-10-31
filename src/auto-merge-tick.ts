@@ -571,7 +571,7 @@ async function judgeOnePr(
   // the new head.
   let result: unknown;
   try {
-    result = await managePr(env, namespace, pr.number, "merge", "merge", undefined, undefined, facts.headSha);
+    result = await managePr(env, namespace, pr.number, "merge", "merge", undefined, facts.headSha);
   } catch (err) {
     if (!(err instanceof HeadMovedError)) throw err;
     const moved = {

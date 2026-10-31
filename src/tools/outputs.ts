@@ -53,17 +53,6 @@ const listed = { documents: rows, count: num, limit: num, truncated: bool, note:
 
 // guardedWrite (./repo-guards) adds audit_warning to any repo write whose audit row failed.
 const written = (shape: Shape): Shape => ({ ...shape, audit_warning: str.optional() });
-const fileWrite = written({
-  repo: str,
-  mode: str,
-  branch: str,
-  path: str,
-  commitSha: str,
-  allow_workflow_write: bool.optional(),
-  fileSha: str.optional(),
-  pr: nullable(z.looseObject({ number: num, url: str })).optional(),
-  pr_error: str.optional(),
-});
 
 const jobResult: Shape = {
   ok: bool,
@@ -214,15 +203,10 @@ const OUTPUTS: Record<string, Shape> = {
     unreadable_sample: strs.optional(),
     items: rows,
   },
-  write_repo_file: fileWrite,
-  delete_repo_file: fileWrite,
-  create_branch: written({ repo: str, branch: str, from: str, sha: str }),
-  open_pr: written({ repo: str, number: num, url: str, head: str, base: str }),
   manage_pr: written({
     repo: str,
     number: num,
     action: str,
-    comment_id: num.optional(),
     url: str.optional(),
     merged: bool.optional(),
     sha: str.optional(),
@@ -274,12 +258,6 @@ const OUTPUTS: Record<string, Shape> = {
       remaining: num,
     }),
   ]),
-  ci_dispatch: written(
-    mergeOutputs([
-      { repo: str, mode: str, run_id: num, rerun_requested: bool },
-      { repo: str, mode: str, workflow: str, ref: str, dispatched: bool, run_id: nullable(num), polls: num, status: str.optional(), url: str.optional(), note: str.optional() },
-    ])
-  ),
   tag_release: written({ repo: str, tag: str, sha: str, release: nullable(z.looseObject({ id: num, url: str, notes_chars: num })) }),
   site_check: { namespace: str, origin: str, checked_at: str, health: obj, page: obj, probe: obj },
   search_console: mergeOutputs([

@@ -28,7 +28,7 @@ interface ActionSpec {
   // follows it.
   summary: string;
   // The operation arguments this action takes, where it takes fewer than the operation
-  // declares (close_pr's merge takes none of manage_pr's comment). The rest are neither
+  // declares (close_pr's close takes none of manage_pr's merge_method). The rest are neither
   // exposed for this action nor accepted: one sent is refused.
   fields?: readonly string[];
 }
@@ -148,7 +148,7 @@ function singleHandler(ops: Operations, name: string, op: string) {
   return (args: Record<string, unknown>): Promise<OperationResult> => ops.run(op, args ?? {}, name);
 }
 
-// ---- Capsid (14) -------------------------------------------------------------------
+// ---- Capsid (11) -------------------------------------------------------------------
 
 const FIND_DOCS: CompositeSpec = {
   name: "capsid_find_docs",
@@ -211,27 +211,6 @@ const INSPECT_REPO: CompositeSpec = {
     bing: { op: "bing_webmaster", summary: "The site's Bing Webmaster Tools data." },
     traffic: { op: "site_traffic", summary: "404s, web vitals and AI crawlers." },
     audit: { op: "site_audit", summary: "An SEO crawl of the site." },
-  },
-};
-
-const CHANGE_REPO: CompositeSpec = {
-  name: "capsid_change_repo",
-  title: "Change a repo",
-  summary: "Change a namespace's GitHub repo: write or delete a file (on a branch, as a pull request, or directly where the caller may), or create a branch. Every change goes through guardedWrite and its flags. Needs the write grant; a direct write needs the can_direct_write flag, a workflow file the can_write_workflows flag, and a protected or money path its flag.",
-  actions: {
-    write_file: { op: "write_repo_file", summary: "Write a file." },
-    delete_file: { op: "delete_repo_file", summary: "Delete a file." },
-    create_branch: { op: "create_branch", summary: "Create a branch." },
-  },
-};
-
-const OPEN_PR: CompositeSpec = {
-  name: "capsid_open_pr",
-  title: "Open or comment on a pull request",
-  summary: "Open a pull request, or comment on one. Needs the write grant; a comment also needs the can_comment_pr flag.",
-  actions: {
-    open: { op: "open_pr", summary: "Open a pull request." },
-    comment: { op: "manage_pr", inject: { action: "comment" }, fields: ["namespace", "number", "comment", "repo"], summary: "Comment on a pull request." },
   },
 };
 
@@ -307,7 +286,6 @@ export const SINGLE_TOOLS: Record<string, { op: string; title: string }> = {
   capsid_start_session: { op: "brief", title: "Start a session" },
   capsid_delete_doc: { op: "delete", title: "Delete a document" },
   capsid_lint_namespace: { op: "lint", title: "Lint a namespace" },
-  capsid_run_ci: { op: "ci_dispatch", title: "Run CI" },
   capsid_work_jobs: { op: "jobs", title: "Work the job queue" },
   capsid_admin_whats_next: { op: "whats_next", title: "What needs me" },
   capsid_admin_manage_agents: { op: "agents", title: "Manage agents" },
@@ -316,12 +294,12 @@ export const SINGLE_TOOLS: Record<string, { op: string; title: string }> = {
   capsid_admin_set_site_key: { op: "set_site_key", title: "Set a site key" },
 };
 
-export const COMPOSITES: readonly CompositeSpec[] = [FIND_DOCS, READ_DOC, WRITE_DOC, READ_REPO, INSPECT_REPO, CHANGE_REPO, OPEN_PR, CLOSE_PR, RUN_IMPROVE, MANAGE_NAMESPACES, READ_OPS, CONTROL_IMPROVE];
+export const COMPOSITES: readonly CompositeSpec[] = [FIND_DOCS, READ_DOC, WRITE_DOC, READ_REPO, INSPECT_REPO, CLOSE_PR, RUN_IMPROVE, MANAGE_NAMESPACES, READ_OPS, CONTROL_IMPROVE];
 
 // The served tool and action an operation runs under, for a check made inside a handler
 // (the repo guards, the document override, lint, the CI log tail). `opAction` is the
 // operation's own action argument where an action of the tool fixes it (manage_pr's
-// merge, close or comment). The one inverse of the tables above, so a handler cannot
+// merge or close). The one inverse of the tables above, so a handler cannot
 // name a tool the surface does not serve.
 export function surfaceOf(op: string, opAction?: string, toolAction?: string): { tool: string; action?: string } {
   for (const [tool, single] of Object.entries(SINGLE_TOOLS)) if (single.op === op) return opAction === undefined ? { tool } : { tool, action: opAction };
@@ -349,10 +327,7 @@ export const CAPSID_TOOLS = [
   "capsid_lint_namespace",
   "capsid_read_repo",
   "capsid_inspect_repo",
-  "capsid_change_repo",
-  "capsid_open_pr",
   "capsid_close_pr",
-  "capsid_run_ci",
   "capsid_work_jobs",
   "capsid_run_improve",
 ] as const;
@@ -377,10 +352,7 @@ export function registerCapsidTools(server: McpServer, ops: Operations): void {
   server.registerTool("capsid_lint_namespace", singleConfig(ops, "capsid_lint_namespace", "Lint a namespace", "lint"), singleHandler(ops, "capsid_lint_namespace", "lint"));
   server.registerTool("capsid_read_repo", compositeConfig(ops, READ_REPO), compositeHandler(ops, READ_REPO));
   server.registerTool("capsid_inspect_repo", compositeConfig(ops, INSPECT_REPO), compositeHandler(ops, INSPECT_REPO));
-  server.registerTool("capsid_change_repo", compositeConfig(ops, CHANGE_REPO), compositeHandler(ops, CHANGE_REPO));
-  server.registerTool("capsid_open_pr", compositeConfig(ops, OPEN_PR), compositeHandler(ops, OPEN_PR));
   server.registerTool("capsid_close_pr", compositeConfig(ops, CLOSE_PR), compositeHandler(ops, CLOSE_PR));
-  server.registerTool("capsid_run_ci", singleConfig(ops, "capsid_run_ci", "Run CI", "ci_dispatch", "Start a workflow run, or rerun a run's failed jobs. Needs the write grant and the can_dispatch flag."), singleHandler(ops, "capsid_run_ci", "ci_dispatch"));
   server.registerTool("capsid_work_jobs", singleConfig(ops, "capsid_work_jobs", "Work the job queue", "jobs"), singleHandler(ops, "capsid_work_jobs", "jobs"));
   server.registerTool("capsid_run_improve", compositeConfig(ops, RUN_IMPROVE), compositeHandler(ops, RUN_IMPROVE));
 }

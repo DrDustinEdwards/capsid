@@ -380,11 +380,6 @@ Ruled 2026-09-12. Roles are few and separated, and a role is one capability rath
 than a bundle. `scripts/mint-agents.ts` holds them and a test fails the build if any
 role names a second blast-radius flag. A role that accumulates flags is still a driver.
 
-A reviewer never writes code. Commenting on a pull request goes through
-`capsid_open_pr` action `comment`, which is a write tool, so the reviewer needs the write grant. `can_comment_pr`
-is what stops that grant also being merge and close (`capsid_close_pr`). It is the smallest write this
-Worker makes, kept separate from the largest.
-
 The tools axis can name an action. `capsid_work_jobs` is one tool with a read action and
 several write ones, and "may post a job" and "may claim, complete and resume one" are different
 authorities the tool name cannot separate. So an entry may be qualified, `capsid_work_jobs.post`,
@@ -426,47 +421,9 @@ legitimately.
 
 ## The review gate
 
-`jobs.review_required` (migrations/0017) says a job's work needs a second reader before
-it reaches the seat. A gate on the row, checked by the Worker. The alternative is a
-driver remembering to wait, which is the party being reviewed deciding whether it is
-reviewed.
-
-A review is a comment whose body starts with `REVIEW:` and ends with `APPROVE`,
-`CHANGES` or `BLOCK`. An `APPROVE` must also quote the pull request's head sha it
-reviewed, full or as a prefix of at least 7 hex characters, for example
-`REVIEW: checked abc1234, the scope check is right. APPROVE`. It is not a GitHub review approval: the reviewer agent holds
-`can_comment_pr` and nothing else, so a comment is the only mark it can leave.
-
-The envelope is strict at both ends and `src/review.ts` states why. A comment that opens
-with `REVIEW:` and trails off is a reviewer who did not finish, and inventing a verdict
-there is the one thing this parser must never do. A comment ending in `APPROVE` without
-the prefix is ordinary prose that happens to end in a word.
-
-The newest review wins, ordered by timestamp rather than by the order GitHub
-returned, because a reviewer that said `CHANGES`, watched the driver fix it and then
-said `APPROVE` has changed its mind.
-
-| verdict | what happens |
-| --- | --- |
-| none yet | the job stays claimed |
-| `APPROVE` | the hand-off proceeds exactly as it would with no reviewer |
-| `CHANGES` | back to the driver, and it spends a correction from the budget above |
-| `BLOCK` | blocked for the seat, with the objection as the reason |
-
-Both `complete` and `block` consult it. A gate on one of them is not a gate: the driver
-would use the other and the bypass would look like ordinary use. A job with no
-`review_required`, or one whose `result_ref` is not a pull request, proceeds untouched.
-An unreadable GitHub holds the job rather than waving it through, since an unreadable
-comment list is not evidence that anybody read the code.
-
-The gate is bound to the job's own pull request and head. The first pull request it
-reads is recorded in the claimed job's `result_ref`, and a later call naming a
-different one is refused. The URL's repo is resolved through the namespace mapping,
-and a repo the namespace does not map is refused without reading it. An `APPROVE`
-counts only when the sha it quotes is the pull request's head at the time the gate
-reads it, so a push after the approval needs a fresh review. The sha is used rather
-than the head commit's committer date because whoever commits sets that date. A
-`CHANGES` or `BLOCK` needs no sha and counts whichever head it was written against.
+Removed 2026-10-31 with `capsid_open_pr`, whose `comment` action was the only way a
+verdict could be posted. `jobs.review_required` (migrations/0017) stays as a column:
+new jobs store 0, and no transition reads it.
 
 ## Skill records
 

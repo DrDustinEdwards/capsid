@@ -5,7 +5,6 @@ import type { AdminWriteObserver } from "./admin-client-audit";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { appendAudit, correlationId, loggedArgs, loggedResult, recordAudit, type AuditEnv } from "@dustinedwards/site-runtime/audit-log";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
-import { protectedHits } from "./protected-paths";
 import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
 import { MINUTE_MS, HOUR_MS } from "./time";
 
@@ -26,7 +25,7 @@ import { MINUTE_MS, HOUR_MS } from "./time";
 //     knowable from the tool and its arguments: the tool allowlist, the grant, the
 //     namespace and the repo selector.
 //   - The handler, for the flags, which depend on what the call asks to do.
-//     `mode: "direct"` needs can_direct_write and `mode: "pr"` does not, and no
+//     A forced branch delete needs can_merge and a plain one does not, and no
 //     wrapper can know that before reading the arguments.
 
 // What each tool requires, stated once. The registrar enforces this table and
@@ -50,7 +49,7 @@ import { MINUTE_MS, HOUR_MS } from "./time";
 // decides a grant for itself.
 export type ToolRequirement = "read" | "write" | "action" | "admin" | "admin_read";
 
-// Capsid (14) and Capsid Admin (8): src/tools/surface.ts.
+// Capsid (11) and Capsid Admin (8): src/tools/surface.ts.
 export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_start_session: "read",
   capsid_find_docs: "read",
@@ -63,10 +62,7 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_read_repo: "read",
   // The CI log tail beyond the summary needs write, checked by the handler.
   capsid_inspect_repo: "read",
-  capsid_change_repo: "write",
-  capsid_open_pr: "write",
   capsid_close_pr: "write",
-  capsid_run_ci: "write",
   // list reads; every other action changes the queue.
   capsid_work_jobs: "action",
   // Capsid's status (src/status.ts). The name is the improve loop's, kept when the loop
@@ -261,12 +257,7 @@ export const JOBS_TOOL = "capsid_work_jobs";
 // Why a flag is needed, so a refusal tells the caller what to ask for.
 const FLAG_REASON: Record<ScopeFlag, string> = {
   can_merge: "merging a pull request can trigger a deploy on a repo that deploys on push",
-  can_direct_write: "a direct-mode commit lands on the default branch with no review",
-  can_dispatch: "dispatching a workflow spends CI minutes and runs code with that repo's secrets in scope",
-  can_write_workflows: "a workflow is what MEASURES the code, and a caller that can edit its own measurements has none",
-  can_touch_protected: "a protected path is tests, CI, lint or compiler config, a lockfile, a manifest, the agent steering layer, or a migration",
-  money_paths: "the path names a billing or payment surface",
-  can_comment_pr: "commenting on a pull request writes to a repo, and a reviewer that may comment must not thereby be able to merge or close",
+  can_touch_protected: "an autonomy policy document decides what this Worker may do without a human, so writing one is a ruling",
 };
 
 // Order is deliberate: tool, grant, admin, namespace, repo, flags. A caller that
@@ -529,8 +520,8 @@ function toolSucceeded(result: unknown): boolean {
 // modes separate a read (gather) from two writes. The registrar needs this to populate
 // need.action, and a per-tool answer scattered across the handlers leaves the
 // qualifier unwired. A tool absent here cannot be narrowed below the tool name. `mode` on
-// capsid_write_doc and capsid_change_repo is not an action: it already decides a flag
-// (can_direct_write) or a write shape, and one setting should not have two authorities.
+// capsid_write_doc is not an action: it already decides a write shape, and one setting
+// should not have two authorities.
 const ACTION_ARG: Record<string, string> = {
   capsid_find_docs: "action",
   capsid_read_doc: "action",
@@ -538,8 +529,6 @@ const ACTION_ARG: Record<string, string> = {
   capsid_lint_namespace: "mode",
   capsid_read_repo: "action",
   capsid_inspect_repo: "action",
-  capsid_change_repo: "action",
-  capsid_open_pr: "action",
   capsid_close_pr: "action",
   capsid_work_jobs: "action",
   capsid_run_improve: "action",
@@ -728,14 +717,8 @@ export function isMoneyPath(path: string): boolean {
 
 // Every flag a repo mutation needs, derived from the call, in one function so the
 // repo write tools cannot each decide a different answer.
-export function repoWriteFlags(
-  tool: string,
-  action: string | undefined,
-  args: { path?: string; mode?: string; allow_workflow_write?: boolean; force?: boolean }
-): ScopeFlag[] {
+export function repoWriteFlags(tool: string, action: string | undefined, args: { force?: boolean }): ScopeFlag[] {
   const flags: ScopeFlag[] = [];
-  if (args.mode === "direct") flags.push("can_direct_write");
-  if (args.allow_workflow_write === true) flags.push("can_write_workflows");
   // close deletes the head branch, so a plain write grant could destroy the only copy
   // of a branch somebody else pushed. That is the same blast radius as merge, so it
   // needs can_merge too. Not deleting on close would leave stale branches behind. A tag
@@ -744,13 +727,5 @@ export function repoWriteFlags(
   // A forced branch delete too: force lifts the open-PR refusal, so it could delete
   // another agent's open PR head. A delete without force needs no flag.
   if (tool === "capsid_close_pr" && action === "delete_branch" && args.force === true) flags.push("can_merge");
-  // Separate from can_merge so the reviewer role can comment without merging.
-  if (tool === "capsid_open_pr" && action === "comment") flags.push("can_comment_pr");
-  if (tool === "capsid_run_ci") flags.push("can_dispatch");
-  // The protected list (src/protected-paths.ts). Those paths are what measure a repo:
-  // its tests, CI, lint and compiler config, lockfiles and manifests, agent steering
-  // layer and migrations. A scoped caller may touch them holding this flag.
-  if (args.path && protectedHits([args.path]).length > 0) flags.push("can_touch_protected");
-  if (args.path && isMoneyPath(args.path)) flags.push("money_paths");
   return flags;
 }

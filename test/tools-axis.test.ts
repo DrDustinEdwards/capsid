@@ -29,7 +29,7 @@ async function listedTools() {
 }
 
 // The tools axis, driven through the path a real caller uses. A qualifier such as
-// `capsid_open_pr.comment` only applies if the call path passes the action to the scope
+// `capsid_close_pr.delete_branch` only applies if the call path passes the action to the scope
 // check. test/roles.test.ts calls allowsToolAction with the action already set, so
 // every plant here goes through a real MCP client against a real server.
 
@@ -66,18 +66,11 @@ async function callAs(
   return result;
 }
 
-// GitHub routes for a pr-mode write of src/thing.ts to `full`, so an innocent-direction
-// call can be asserted to SUCCEED. With no routes the call fails on GitHub's side, and
-// a check that only looks for the absence of one refusal passes on that failure.
-function prWriteRoutes(full: string) {
-  return {
-    [`GET /repos/${full}`]: { body: { default_branch: "main" } },
-    [`GET /repos/${full}/git/ref/heads/main`]: { body: { object: { sha: "head-sha" } } },
-    [`POST /repos/${full}/git/refs`]: { status: 201, body: {} },
-    [`GET /repos/${full}/contents/src/thing.ts`]: { status: 404, body: { message: "Not Found" } },
-    [`PUT /repos/${full}/contents/src/thing.ts`]: { body: { commit: { sha: "commit-sha" }, content: { sha: "file-sha" } } },
-    [`POST /repos/${full}/pulls`]: { status: 201, body: { number: 9, html_url: "https://pr" } },
-  };
+// GitHub routes for closing pull request 7 on `full`, so an innocent-direction call can
+// be asserted to SUCCEED. With no routes the call fails on GitHub's side, and a check
+// that only looks for the absence of one refusal passes on that failure.
+function closeRoutes(full: string) {
+  return { [`PATCH /repos/${full}/pulls/7`]: { body: { number: 7, state: "closed", html_url: "https://pr" } } };
 }
 
 function succeeded(result: ToolResult): Record<string, unknown> {
@@ -86,70 +79,51 @@ function succeeded(result: ToolResult): Record<string, unknown> {
   return JSON.parse(text) as Record<string, unknown>;
 }
 
-// The reviewer as scripts/mint-agents.ts mints it: write grant, can_comment_pr and
-// nothing else, and a tools axis narrowed to capsid_open_pr's comment action.
-function reviewer(): Agent {
+// An agent narrowed to one action of one tool: the write grant, no flag, and a tools
+// axis of capsid_close_pr's delete_branch alone.
+function brancher(): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
-  scopes.tools = ["capsid_open_pr", "capsid_open_pr.comment"];
-  scopes.flags.can_comment_pr = true;
-  return { id: "agent_reviewer01", name: "reviewer", kind: "session", actor: "agent:reviewer", scopes, admin: false, row: null };
+  scopes.tools = ["capsid_close_pr", "capsid_close_pr.delete_branch"];
+  return { id: "agent_brancher01", name: "brancher", kind: "session", actor: "agent:brancher", scopes, admin: false, row: null };
 }
 
-// the reviewer cannot open, close or merge
+// the narrowed agent cannot close or merge
 
-test("PLANT: a reviewer scoped to capsid_open_pr.comment is REFUSED the same tool's action open", async () => {
-  // The narrowing within one tool: the reviewer holds capsid_open_pr, but only its
-  // comment action. Opening a pull request needs no flag, so the axis is all that
-  // stands in the way here.
+test("PLANT: an agent scoped to capsid_close_pr.delete_branch is REFUSED the same tool's action close", async () => {
+  // The narrowing within one tool. close also carries can_merge; this asserts the axis
+  // refusal because checkScope names the tool before it names a missing flag.
   await withFetch({}, async (calls) => {
-    const result = await callAs(reviewer(), "capsid_open_pr", { namespace: "capsid", action: "open", head: "feature", title: "t" });
-    assert.equal(result.isError, true, "a reviewer opened a pull request");
-    assert.match(result.content[0].text, /not scoped to the 'capsid_open_pr\.open' tool/, result.content[0].text);
-    assert.equal(calls.length, 0, "the open reached GitHub before refusing, so the refusal describes something that already happened");
-  });
-});
-
-test("PLANT: a reviewer scoped to capsid_open_pr.comment is REFUSED capsid_close_pr action close", async () => {
-  // Closing deletes the head branch. close also carries can_merge; this asserts the
-  // axis refusal because checkScope names the tool before it names a missing flag.
-  await withFetch({}, async (calls) => {
-    const result = await callAs(reviewer(), "capsid_close_pr", { namespace: "capsid", number: 7, action: "close" });
-    assert.equal(result.isError, true, "a reviewer closed a pull request");
+    const result = await callAs(brancher(), "capsid_close_pr", { namespace: "capsid", number: 7, action: "close" });
+    assert.equal(result.isError, true, "a delete_branch-only agent closed a pull request");
     assert.match(result.content[0].text, /not scoped to the 'capsid_close_pr\.close' tool/, result.content[0].text);
     assert.equal(calls.length, 0, "the close reached GitHub before refusing, so the refusal describes something that already happened");
   });
 });
 
-test("PLANT: the same reviewer is REFUSED action merge, for the axis and not only for the flag", async () => {
-  // can_merge also stops this; the flag and the axis are different guards, and this
-  // asserts the axis.
+test("PLANT: the same agent is REFUSED action merge, for the axis and not only for the flag", async () => {
   await withFetch({}, async (calls) => {
-    const result = await callAs(reviewer(), "capsid_close_pr", { namespace: "capsid", number: 7, action: "merge" });
+    const result = await callAs(brancher(), "capsid_close_pr", { namespace: "capsid", number: 7, action: "merge" });
     assert.equal(result.isError, true);
     assert.match(result.content[0].text, /not scoped to the 'capsid_close_pr\.merge' tool/, result.content[0].text);
     assert.equal(calls.length, 0);
   });
 });
 
-test("THE INNOCENT DIRECTION: the reviewer IS allowed action comment", async () => {
-  // Without this, a capsid_open_pr broken for everybody passes the plants above.
-  const routes = { "POST /repos/o/r/issues/7/comments": { status: 201, body: { id: 55, html_url: "https://comment" } } };
-  await withFetch(routes, async (calls) => {
-    const result = await callAs(reviewer(), "capsid_open_pr", { namespace: "capsid", number: 7, action: "comment", comment: "REVIEW: fine. APPROVE" });
+test("THE INNOCENT DIRECTION: the agent IS allowed action delete_branch", async () => {
+  // Without this, a capsid_close_pr broken for everybody passes the plants above.
+  await withFetch({}, async (calls) => {
+    const result = await callAs(brancher(), "capsid_close_pr", { namespace: "capsid", action: "delete_branch", branch: "feature/mine" });
     const text = result.content[0]?.text ?? "";
-    assert.doesNotMatch(text, /unauthorized:/, `the reviewer was refused its own action: ${text}`);
-    const out = succeeded(result);
-    assert.equal(out.action, "comment");
-    assert.equal(out.comment_id, 55);
-    assert.equal(calls.filter((c) => c.method === "POST" && c.path === "/repos/o/r/issues/7/comments").length, 1);
+    assert.doesNotMatch(text, /unauthorized:/, `the agent was refused its own action: ${text}`);
+    assert.ok(calls.length > 0, "the call never reached GitHub, so this asserts nothing about the axis");
   });
 });
 
 test("A BARE TOOL NAME STILL MEANS THE WHOLE TOOL, so no agent minted before the qualifier changed", async () => {
   // Narrowing is opted into. An agent whose list names capsid_close_pr and no qualified
   // sibling keeps every action.
-  const caller = reviewer();
+  const caller = brancher();
   caller.scopes.tools = ["capsid_close_pr"];
   caller.scopes.flags.can_merge = true;
   const routes = { "PATCH /repos/o/r/pulls/7": { body: { number: 7, state: "closed", html_url: "https://pr" } } };
@@ -168,7 +142,7 @@ test("A BARE TOOL NAME STILL MEANS THE WHOLE TOOL, so no agent minted before the
 
 test("PLANT: an agent scoped to capsid_lint_namespace.gather is REFUSED mode finalize", async () => {
   // capsid_lint_namespace spells its action `mode`: gather is a read and finalize archives documents.
-  const caller = reviewer();
+  const caller = brancher();
   caller.scopes.tools = ["capsid_lint_namespace", "capsid_lint_namespace.gather"];
   const result = await callAs(caller, "capsid_lint_namespace", { namespace: "capsid", mode: "finalize" });
   assert.equal(result.isError, true, "a gather-only caller ran finalize");
@@ -176,7 +150,7 @@ test("PLANT: an agent scoped to capsid_lint_namespace.gather is REFUSED mode fin
 });
 
 test("THE INNOCENT DIRECTION: the same caller IS allowed mode gather", async () => {
-  const caller = reviewer();
+  const caller = brancher();
   caller.scopes.tools = ["capsid_lint_namespace", "capsid_lint_namespace.gather"];
   const d1 = fakeD1({ documents: [{ namespace: "capsid", path: "core.md", title: "core", body: "the core", type: "core" }] });
   const result = await callAs(caller, "capsid_lint_namespace", { namespace: "capsid", mode: "gather" }, REPOS, fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }));
@@ -190,14 +164,14 @@ test("THE INNOCENT DIRECTION: the same caller IS allowed mode gather", async () 
 
 test("AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, rather than read as the whole tool", () => {
   // Fail closed: a call path that forgets to pass the action is refused.
-  assert.equal(allowsToolAction(["capsid_open_pr", "capsid_open_pr.comment"], "capsid_open_pr", undefined), false);
-  assert.equal(allowsToolAction(["capsid_open_pr", "capsid_open_pr.comment"], "capsid_open_pr", "comment"), true);
-  assert.equal(allowsToolAction(["capsid_open_pr", "capsid_open_pr.comment"], "capsid_open_pr", "open"), false);
+  assert.equal(allowsToolAction(["capsid_close_pr", "capsid_close_pr.delete_branch"], "capsid_close_pr", undefined), false);
+  assert.equal(allowsToolAction(["capsid_close_pr", "capsid_close_pr.delete_branch"], "capsid_close_pr", "delete_branch"), true);
+  assert.equal(allowsToolAction(["capsid_close_pr", "capsid_close_pr.delete_branch"], "capsid_close_pr", "merge"), false);
   // Unqualified is untouched in both directions.
-  assert.equal(allowsToolAction(["capsid_close_pr"], "capsid_close_pr", undefined), true);
-  assert.equal(allowsToolAction(["capsid_close_pr"], "capsid_close_pr", "close"), true);
+  assert.equal(allowsToolAction(["capsid_inspect_repo"], "capsid_inspect_repo", undefined), true);
+  assert.equal(allowsToolAction(["capsid_inspect_repo"], "capsid_inspect_repo", "ci"), true);
   // The narrowing reaches only the tool it names.
-  assert.equal(allowsToolAction(["capsid_open_pr", "capsid_open_pr.comment", "capsid_lint_namespace"], "capsid_lint_namespace", "finalize"), true);
+  assert.equal(allowsToolAction(["capsid_close_pr", "capsid_close_pr.delete_branch", "capsid_lint_namespace"], "capsid_lint_namespace", "finalize"), true);
 });
 
 // a new action tool cannot be added without wiring its action
@@ -205,9 +179,9 @@ test("AN UNKNOWN ACTION ON A NARROWED TOOL IS REFUSED, rather than read as the w
 test("DERIVED: every tool that declares an action-shaped argument is in ACTION_ARG", async () => {
   // A tool with an `action` or `mode` enum missing from the enforcement point's table
   // could not be narrowed. The exclusions are reviewed, and there are none: `mode` on
-  // capsid_write_doc and capsid_change_repo already decides a flag (can_direct_write) or
-  // how a body is edited rather than what authority the call needs, and both tools are
-  // narrowed by their `action` instead, which the second assertion holds them to.
+  // capsid_write_doc decides how a body is edited rather than what authority the call
+  // needs, and the tool is narrowed by its `action` instead, which the second assertion
+  // holds it to.
   const REVIEWED_EXCLUSIONS = new Set<string>();
   // Read from the schemas the server serves, which is what a caller sees, rather than
   // from the registration source.
@@ -239,14 +213,12 @@ test("every tool named in ACTION_ARG serves an argument by that name", async () 
     "capsid_run_improve",
     "capsid_work_jobs",
     "capsid_lint_namespace",
-    "capsid_open_pr",
     "capsid_close_pr",
     "capsid_find_docs",
     "capsid_read_doc",
     "capsid_write_doc",
     "capsid_read_repo",
     "capsid_inspect_repo",
-    "capsid_change_repo",
   ];
   const tools = await listedTools();
   // Every served tool ACTION_ARG names is in the list, so an entry added later is checked too.
@@ -270,14 +242,14 @@ test("PLANT: a driver scoped to one repo is refused a write to the namespace pri
   // The axis must be checked against the resolved repo, not the `repo` argument, which
   // is a selector and usually absent. Otherwise a remap of the mapping redirects a
   // narrowed driver.
-  const caller = reviewer();
+  const caller = brancher();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
   await withFetch({}, async (calls) => {
     const result = await callAs(
       caller,
-      "capsid_change_repo",
-      { namespace: "capsid", action: "write_file", path: "src/thing.ts", content: "x", message: "m" },
+      "capsid_close_pr",
+      { namespace: "capsid", action: "delete_branch", branch: "feature/x" },
       [{ repo: "DrDustinEdwards/somewhere-else", label: "primary" }]
     );
     assert.equal(result.isError, true, "a driver wrote to a repo outside its axis by omitting the selector");
@@ -288,7 +260,7 @@ test("PLANT: a driver scoped to one repo is refused a write to the namespace pri
 
 test("PLANT: the same driver is refused a READ of a repo outside its axis", async () => {
   // Reads resolve the same mapping.
-  const caller = reviewer();
+  const caller = brancher();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
   const result = await callAs(caller, "capsid_read_repo", { namespace: "capsid", action: "tree" }, [{ repo: "DrDustinEdwards/somewhere-else", label: "primary" }]);
@@ -298,44 +270,44 @@ test("PLANT: the same driver is refused a READ of a repo outside its axis", asyn
 
 test("THE LABEL 'primary' IS A SELECTOR, NOT A SCOPE VALUE, so passing it is not refused", async () => {
   // Comparing the argument to the axis would refuse the legitimate label.
-  const caller = reviewer();
+  const caller = brancher();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
-  await withFetch(prWriteRoutes("DrDustinEdwards/capsid"), async () => {
+  caller.scopes.flags.can_merge = true;
+  await withFetch(closeRoutes("DrDustinEdwards/capsid"), async () => {
     const result = await callAs(
       caller,
-      "capsid_change_repo",
-      { namespace: "capsid", action: "write_file", path: "src/thing.ts", content: "x", message: "m", repo: "primary" },
+      "capsid_close_pr",
+      { namespace: "capsid", action: "close", number: 7, repo: "primary" },
       [{ repo: "DrDustinEdwards/capsid", label: "primary" }]
     );
     const text = result.content[0]?.text ?? "";
     assert.doesNotMatch(text, /not scoped to the 'primary' repo/, `a legitimate label was compared to the axis: ${text}`);
     assert.doesNotMatch(text, /unauthorized:/, `the driver was refused its own repo: ${text}`);
-    const out = succeeded(result) as { pr?: { number?: number } };
-    assert.equal(out.pr?.number, 9, "the write did not open its pull request");
+    assert.equal(succeeded(result).state, "closed", "the close did not land");
   });
 });
 
 test("THE INNOCENT DIRECTION: the driver IS allowed the repo its axis names, with no selector", async () => {
-  const caller = reviewer();
+  const caller = brancher();
   caller.scopes.tools = "*";
   caller.scopes.repos = ["DrDustinEdwards/capsid"];
-  await withFetch(prWriteRoutes("DrDustinEdwards/capsid"), async () => {
+  caller.scopes.flags.can_merge = true;
+  await withFetch(closeRoutes("DrDustinEdwards/capsid"), async () => {
     const result = await callAs(
       caller,
-      "capsid_change_repo",
-      { namespace: "capsid", action: "write_file", path: "src/thing.ts", content: "x", message: "m" },
+      "capsid_close_pr",
+      { namespace: "capsid", action: "close", number: 7 },
       [{ repo: "DrDustinEdwards/capsid", label: "primary" }]
     );
     const text = result.content[0]?.text ?? "";
     assert.doesNotMatch(text, /unauthorized:/, `the driver was refused the repo it is scoped to: ${text}`);
-    const out = succeeded(result) as { pr?: { number?: number } };
-    assert.equal(out.pr?.number, 9, "the write did not open its pull request");
+    assert.equal(succeeded(result).state, "closed", "the close did not land");
   });
 });
 
 test("AN AGENT WITH repos '*' IS UNTOUCHED, which is every agent minted before the axis was wired", async () => {
-  const caller = reviewer();
+  const caller = brancher();
   caller.scopes.tools = "*";
   const routes = {
     "GET /repos/DrDustinEdwards/anything/contents/": { body: [{ name: "README.md", path: "README.md", type: "file", size: 3 }] },

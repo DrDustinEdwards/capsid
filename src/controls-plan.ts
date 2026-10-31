@@ -175,7 +175,6 @@ export async function planAction(env: Env, email: string, action: PortalAction, 
           shipped.prs.length
             ? `The outcome verifies ${shipped.prs.length} pull request${shipped.prs.length === 1 ? "" : "s"} against GitHub: ${shipped.prs.join(", ")}${shipped.more ? ` (${shipped.more} more named, left out)` : ""}.`
             : "The job names no pull request, so the outcome verifies nothing.",
-          ...(job.review_required ? ["The job needs a review: the close is refused, and nothing written, unless the newest review on its pull request approves the head."] : []),
         ],
         audit: [`job-admin-complete by ${actor}`, click],
       };

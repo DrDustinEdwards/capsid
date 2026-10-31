@@ -17,7 +17,7 @@ import { callerIsSeat } from "./jobs-transition";
 // sessions were held there too, so he had the queue deleted (thread "Measure how much
 // Claude uses Capsid"). The table and its rows stay, in backups, until a migration drops it.
 
-export interface CanonRule {
+interface CanonRule {
   // "*" is every namespace.
   namespace: string;
   pattern: RegExp;

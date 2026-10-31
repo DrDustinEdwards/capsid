@@ -1,4 +1,4 @@
-import { SCOPE_FLAGS, type ScopeFlag } from "./agents-schema";
+import { RETIRED_FLAGS, SCOPE_FLAGS, type ScopeFlag } from "./agents-schema";
 import type { Agent } from "./agents";
 import { checkScope, JOBS_TOOL } from "./scope";
 import { toHex } from "@dustinedwards/site-runtime/encoding";
@@ -165,12 +165,15 @@ export function parseRequiredScopes(json: string | null | undefined): ParsedRequ
   const flags = parsed.value.flags;
   if (flags === undefined) return { ok: true, value: { flags: [] } };
   if (!Array.isArray(flags)) return { ok: false, problem: "required_scopes.flags is not an array" };
-  const unknown = flags.filter((f) => !(SCOPE_FLAGS as readonly unknown[]).includes(f));
+  // A retired flag gated a tool that no longer exists, so a job that named one requires
+  // nothing by it.
+  const current = flags.filter((f) => !RETIRED_FLAGS.includes(f));
+  const unknown = current.filter((f) => !(SCOPE_FLAGS as readonly unknown[]).includes(f));
   if (unknown.length) {
     const names = unknown.map((f) => JSON.stringify(f)).join(", ");
     return { ok: false, problem: `required_scopes.flags names ${names}, which ${unknown.length === 1 ? "is not a flag" : "are not flags"}` };
   }
-  return { ok: true, value: { flags: flags as ScopeFlag[] } };
+  return { ok: true, value: { flags: current as ScopeFlag[] } };
 }
 
 /** The problem with a job's stored requirements, or null when both read cleanly. */

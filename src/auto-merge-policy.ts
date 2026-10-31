@@ -75,8 +75,7 @@ export const overSizeCap = (facts: Pick<PrFacts, "changedLines">): boolean => fa
 export const sizeCapReason = (facts: Pick<PrFacts, "changedLines">): string =>
   `over the size cap: ${facts.changedLines} changed lines, more than ${AUTO_MERGE_SIZE_CAP}`;
 
-// The paths auto-merge refuses, separate from PROTECTED_PATH_PATTERNS (what needs the
-// can_touch_protected flag, src/protected-paths.ts). Tests, src/, docs, CLAUDE.md and .claude/ merge on green; these do
+// The paths auto-merge refuses. Tests, src/, docs, CLAUDE.md and .claude/ merge on green; these do
 // not, because each changes what judges a change or what ships beside it. Matched
 // case-insensitively against the repo-relative path; the document lists each source.
 export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> = [

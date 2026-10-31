@@ -34,7 +34,7 @@ approval.
 | `size_within_cap` | the PR changes at most 1,000 lines (additions plus deletions); a larger one is merge class `approve`, "over the size cap" |
 | `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, at least one reported, and the CI run on that sha ran the typecheck step (all four configs), the lint step, the unit suite and the integration suite to success |
 
-Tests, `src/`, docs, `CLAUDE.md` and `.claude/` pass the refused-path check since policy version 2 (2026-09-17); in capsid, version 6 then holds all but docs and dashboard CSS for the seat. `PROTECTED_PATH_PATTERNS` (`src/protected-paths.ts`), once the improve loop's list and now the paths a repo write needs `can_touch_protected` for, no longer decides what auto-merges.
+Tests, `src/`, docs, `CLAUDE.md` and `.claude/` pass the refused-path check since policy version 2 (2026-09-17); in capsid, version 6 then holds all but docs and dashboard CSS for the seat. The protected path list (`src/protected-paths.ts`) never decided what auto-merges; it went with `capsid_change_repo` on 2026-10-31.
 
 The document names the checks, the refused paths, the allowed paths and the required CI steps, and the code
 enforces them. A document that disagrees with the code on any of the four is refused at load time. A test asserts the two agree in

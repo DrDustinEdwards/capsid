@@ -63,14 +63,6 @@ async function outcomeCount() {
   return (await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes").first<{ n: number }>())?.n ?? 0;
 }
 
-// The gate counts a review comment only when an audit row shows Capsid posted it for a
-// reviewer (src/review.ts reviewerCommentIds); a human actor counts.
-async function postedForReviewer(commentId: number) {
-  await env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('access:reviewer@example.com', 'manage_pr', ?1, NULL, ?2)")
-    .bind(NS, JSON.stringify({ repo: "example/sample", number: 3, action: "comment", comment_id: commentId }))
-    .run();
-}
-
 async function post(title: string, over: Record<string, unknown> = {}) {
   const posted = await postJob(jobsEnv(), SEAT, NOW, { namespace: NS, title, body: "do the thing", gate_required: true, ...over } as Parameters<typeof postJob>[3]);
   return posted.job!.id;
@@ -223,45 +215,6 @@ describe("the seat completes a blocked job it does not hold", () => {
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/cannot complete .* outside|not in|scope|namespace/i);
     expect((await job(id))?.status).toBe("blocked");
-  });
-
-  it("a review_required job is not completed around its review: no APPROVE, no completion, and nothing is written", async () => {
-    stubGitHub((url) => (url.includes("/pulls/3/") || url.includes("/issues/3/comments") ? Response.json([]) : null));
-    const id = await blocked("needs a review", { review_required: true });
-    const refused = await completeAsCaller(jobsEnv(), SEAT, LATER, id, { result_summary: "x", result_ref: PR });
-    expect(refused.ok).toBe(false);
-    expect(refused.refusal).toMatch(/review/i);
-    expect((await job(id))?.status).toBe("blocked");
-    expect(await outcomeCount()).toBe(0);
-  });
-
-  it("a reviewer's CHANGES is answered, not escaped: the seat's close is refused and writes nothing", async () => {
-    const comments = [{ id: 1, user: { login: "reviewer" }, body: "REVIEW: the scope check is wrong. CHANGES", created_at: "2026-10-06T11:00:00Z" }];
-    stubGitHub((url) => (url.includes("/issues/3/comments") ? Response.json(comments) : null));
-    await postedForReviewer(1);
-    const id = await blocked("changes requested", { review_required: true });
-    const before = await job(id);
-    const refused = await completeAsCaller(jobsEnv(), SEAT, LATER, id, { result_summary: "x", result_ref: PR });
-    expect(refused.ok).toBe(false);
-    expect(refused.refusal).toMatch(/cannot be completed around its review: review by reviewer: CHANGES/);
-    const after = await job(id);
-    expect(after?.status).toBe("blocked");
-    expect(after?.corrections_count).toBe(before?.corrections_count);
-    expect(after?.updated_at).toBe(before?.updated_at);
-    expect(await outcomeCount()).toBe(0);
-    // A refused close is not a touch: only the driver's own gate is on the log.
-    expect((await touches(id)).map((t) => t.kind)).toEqual(["gate"]);
-  });
-
-  it("an APPROVE on the pull request's head lets the seat complete, and the driver is still credited", async () => {
-    const comments = [{ id: 2, user: { login: "reviewer" }, body: `REVIEW: right at ${SHA.slice(0, 7)}. APPROVE`, created_at: "2026-10-06T11:00:00Z" }];
-    stubGitHub((url) => (url.includes("/issues/3/comments") ? Response.json(comments) : null));
-    await postedForReviewer(2);
-    const id = await blocked("approved", { review_required: true });
-    const done = await completeAsCaller(jobsEnv(), SEAT, LATER, id, { result_summary: "merged", result_ref: PR });
-    expect(done.ok, done.refusal).toBe(true);
-    expect((await outcome(id))?.agent).toBe(DRIVER_ACTOR);
-    expect((await job(id))?.claimed_by).toBe(DRIVER_ACTOR);
   });
 
   it("the holder completing its own claimed job is unchanged", async () => {

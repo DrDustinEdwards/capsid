@@ -40,14 +40,14 @@ import { MINUTE_MS, DAY_MS } from "./time";
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 14 statements plus one per TASKS entry (9 today, so 23):
+//   D1, 14 statements plus one per TASKS entry (18 today, so 32):
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     3  agentSummaries: the inventory, then loadRecordRows' two grouped reads
 //     1  job_outcome_prs in the last 7 days
 //     1  ops_sites: the site configuration, every row
 //     1  ops_packages: the package configuration, every row
 //     1  agent_sessions: live sessions from the hook receiver, at most 50
-//     9  task_runs: each scheduled task's newest runs, one keyed read per task in
+//    18  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
 //     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
 //     1  ops_uptime_daily: each site's last 90 days, grouped (siteUptime below)
@@ -69,7 +69,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
 // D1 statements: one per task, and 14 more, one of them the signed policy's read (liveMergePolicy).
-export const OPS_FEED_READS = { d1: 15 + TASKS.length, kv: 10 } as const;
+export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 } as const;
 
 // The uptime target the Portal shows each site against (area 8, U4).
 const UPTIME_TARGET = 0.999;

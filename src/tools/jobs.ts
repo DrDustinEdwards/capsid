@@ -74,12 +74,6 @@ block and complete act only on a job this caller holds, except as stated above.`
         body: bounded(MAX_BODY).optional().describe('For post and edit: the full prompt the driver executes. Signed on the way in.'),
         priority: z.number().int().optional().describe('For post and edit: higher runs first. Defaults to 0 at post.'),
         gate_required: z.boolean().optional().describe('For post and edit: the work needs a human confirmation (a push, a deploy, a secret).'),
-        review_required: z
-          .boolean()
-          .optional()
-          .describe(
-            "For post: complete and block on a job carrying a pull request are refused until a PR comment starts 'REVIEW:' and ends APPROVE, CHANGES or BLOCK; the newest counts. APPROVE must quote the current head sha (at least 7 hex characters). CHANGES sends the job back and spends a correction; BLOCK blocks it with the objection as the reason."
-          ),
         required_flags: z
           .array(z.enum(SCOPE_FLAGS))
           .optional()
@@ -252,7 +246,6 @@ block and complete act only on a job this caller holds, except as stated above.`
                 gate_required: args.gate_required,
                 required_scopes: args.required_flags ? { flags: args.required_flags } : undefined,
                 min_record: args.min_record,
-                review_required: args.review_required,
                 kind: args.kind,
               }), args.body, facts.warnings)
             );

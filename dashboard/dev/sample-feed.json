@@ -1678,9 +1678,7 @@
         "name": "reviewer",
         "kind": "session",
         "namespaces": "*",
-        "flags": [
-          "can_comment_pr"
-        ],
+        "flags": [],
         "last_seen": "2026-09-24T07:12:00.000Z",
         "revoked_at": null,
         "archived_at": null,
