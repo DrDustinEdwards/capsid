@@ -1,20 +1,16 @@
-// The explorer's Worker, which answers only paths with no file (wrangler-config.mjs sets
-// not_found_handling "none", so the asset server answers every file itself, with _headers). It
-// sends dist/404.html with the explorer's security set and charset=utf-8: no _headers rule can name
-// a path with no file, so the asset server's own 404 page went out as a bare text/html.
-import { applyHeaderSet } from "@dustinedwards/site-runtime/headers";
-import { explorerSecurityHeaders } from "./src/security-headers.mjs";
+// The explorer's Worker: site-runtime's staticSite, the one front door the family's static sites
+// share. wrangler-config.mjs runs it first for every page and leaves /assets/* and /fonts/* to the
+// asset server, with _headers. Every page gets the Speculation-Rules header and the explorer's own
+// prefetch rules at /speculation-rules.json (in place of Cloudflare's generic ones), Server-Timing,
+// and the preload Link header (Early Hints); a path with no file gets dist/404.html with status
+// 404 and private, no-store, and so does a page asked for with a cookie. Pages end in a slash
+// (/s/x/), which the asset server's auto-trailing-slash keeps, so there is no canonical redirect.
+// Reports go to Capsid's /csp-report (src/security-headers.mjs), so the explorer receives none.
+import { staticSite } from "@dustinedwards/site-runtime/static-site";
+import { explorerSecurityHeaders, PAGE_PRELOADS } from "./src/security-headers.mjs";
 
-const SET = explorerSecurityHeaders();
+// The set without its Cache-Control: _headers gives each file its own, and the Worker's own
+// responses (the prefetch rules) keep theirs.
+const { "Cache-Control": _cache, ...SET } = explorerSecurityHeaders();
 
-export default {
-  /** @param {Request} request @param {{ ASSETS: { fetch(request: Request): Promise<Response> } }} env */
-  async fetch(request, env) {
-    if (request.method !== "GET" && request.method !== "HEAD") return env.ASSETS.fetch(request);
-    // dist/404.html, served at /404 by html_handling.
-    const page = await env.ASSETS.fetch(new Request(new URL("/404", request.url)));
-    const notFound = new Response(request.method === "HEAD" ? null : page.body, { status: 404, headers: page.headers });
-    applyHeaderSet(notFound.headers, SET);
-    return notFound;
-  },
-};
+export default staticSite({ headers: SET, preload: PAGE_PRELOADS.header, reportPath: null, canonical: false });
