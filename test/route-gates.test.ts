@@ -8,7 +8,6 @@ import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
 import { PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "../src/portal-auth.ts";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
 import { OPS_HOOKS_PATH } from "../src/ops-hooks.ts";
-import { ACCESS_SYNC_PATH } from "../src/access-sync.ts";
 import {
   PORTAL_ACTIVITY_PATH,
   PORTAL_API_PREFIX,
@@ -33,6 +32,7 @@ import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH } from "../src/bench.ts";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH } from "../src/shadow.ts";
 import { PUBLIC_CODE_PATH, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH } from "../src/public-data.ts";
+import { SIGNED_IN_REPORT_PATH } from "../src/signed-in-crawl.ts";
 import {
   ROUTE_GRANTS,
   UNGATED_ROUTES,
@@ -116,7 +116,6 @@ test("a path in neither table is refused to everyone but the admin", async () =>
 // every route
 
 const PATH_CONSTANTS: Record<string, string> = {
-  ACCESS_SYNC_PATH,
   REPORT_PATH,
   VERIFY_LIVE_CLIENT_PATH,
   BACKUP_CREDENTIAL_PATH,
@@ -155,6 +154,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_PREFIX,
   PUBLIC_MODEL_PATH,
   PUBLIC_STATS_PATH,
+  SIGNED_IN_REPORT_PATH,
   PUBLIC_CODE_PATH,
   ADMIN_OPS_MCP_ROUTE,
 };

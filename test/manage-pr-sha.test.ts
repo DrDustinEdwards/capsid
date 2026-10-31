@@ -77,3 +77,40 @@ test("a sha on an action other than merge is refused, before any GitHub write", 
     assert.ok(!calls.some((c) => c.method !== "GET"), "a write reached GitHub");
   });
 });
+
+// A chat approval (src/chat-approval.ts): Dustin's "yes" in a Claude chat, linked by
+// approved_in, is written to pr_approvals after the merge, so the approval record and the
+// merge units see it.
+test("capsid_close_pr merge with approved_in records the chat approval after the merge, and needs sha", async () => {
+  const batches: string[][] = [];
+  const recording = { ...db(), batch: async (stmts: Array<{ sql?: string }>) => (batches.push(stmts.map((s) => s.sql ?? "")), []) };
+  const prepare = recording.prepare;
+  recording.prepare = (sql: string) => Object.assign(prepare(sql), { sql });
+  const call = async (args: Record<string, unknown>) => {
+    const server = buildServer(fakeEnv({ DB: recording, APP_KV: fakeKv({ seedToken: true }).kv }), adminAgentForEmail("admin@example.com"));
+    const client = new Client({ name: "chat-approval", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const result = (await client.callTool({ name: "capsid_close_pr", arguments: { namespace: "capsid", number: 7, ...args } })) as { isError?: boolean; content: Array<{ text: string }> };
+    await client.close();
+    return result;
+  };
+  const link = "https://claude.ai/code/project/chan_sample?thread=cmsg_sample";
+  await withFetch(
+    {
+      ...PR_ROUTES,
+      "PUT /repos/owner/repo/pulls/7/merge": { body: { merged: true, sha: "f".repeat(40) } },
+      "GET /repos/owner/repo/pulls/7/files": { body: [{ filename: "docs/readme.md", status: "modified", additions: 1, deletions: 0 }] },
+    },
+    async (calls) => {
+      const noSha = await call({ action: "merge", approved_in: link });
+      assert.equal(noSha.isError, true, noSha.content[0]?.text);
+      assert.ok(!calls.some((c) => c.method === "PUT"), "a merge ran without the approved sha");
+
+      const result = await call({ action: "merge", sha: SHA, approved_in: link });
+      assert.notEqual(result.isError, true, result.content[0]?.text);
+      assert.deepEqual(JSON.parse(result.content[0].text).approval, { recorded: true, path_class: "docs" });
+      assert.ok(batches.some((b) => b.some((sql) => /INSERT INTO pr_approvals/.test(sql) && /'chat', 'merged'/.test(sql))), "no chat approval row was written");
+    }
+  );
+});

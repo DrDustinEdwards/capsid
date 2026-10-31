@@ -83,16 +83,13 @@ nobody has checked.
 | permission | level | what needs it | evidence |
 | --- | --- | --- | --- |
 | Metadata | Read | resolving the default branch, every other call | implied by every working call |
-| Contents | Read and write | reading files and trees, committing, branches, deleting files | exercised continuously since 2026-07-06 |
-| Pull requests | Read and write | opening, merging and closing pull requests | exercised continuously |
-| Actions | Read and write | reading workflow runs and logs; dispatching a workflow and re-running failed jobs | read confirmed 2026-08-16; dispatch is what `capsid_run_ci` uses |
-| Workflows | Write | committing under `.github/workflows/` | confirmed by probe 2026-09-07: a pull request authoring a workflow file succeeded, and was closed immediately |
+| Contents | Read and write | reading files and trees; tagging and publishing releases | exercised continuously since 2026-07-06 |
+| Pull requests | Read and write | merging and closing pull requests | exercised continuously |
+| Actions | Read and write | reading workflow runs and logs | read confirmed 2026-08-16; write was for `capsid_run_ci`, removed 2026-10-31, and can be lowered to read |
+| Workflows | Write | nothing since 2026-10-31 | was for committing under `.github/workflows/` through `capsid_change_repo`; can be removed |
 
-The App can author workflows in
-every mapped repository, so a write-grant operator key can commit CI that runs
-with those repositories' secrets. The tools therefore refuse any path under
-`.github/workflows/` unless an explicit opt-in flag is passed, and passing it is
-audit-logged.
+Since `capsid_change_repo` was removed, no tool commits to a repository, so the App's
+Workflows permission and Actions write are unused and can be dropped.
 
 The granted permission set was not read back from the API. Each row is
 evidence from a call that worked. On a fresh setup, grant the list above and
@@ -175,12 +172,12 @@ The response carries the key once. Nothing stores it: the table holds its
 sha256, and a lost key is replaced by revoking that agent and minting another.
 
 One agent per project and per machine. The name says both, so an audit row
-reads as a sentence: `capsid-driver-laptop`, `foxing-driver-desktop`. Revoking a
-compromised laptop does not stop the desktop working. `agent:foxing-driver-laptop`
+reads as a sentence: `capsid-driver-laptop`, `sample-driver-desktop`. Revoking a
+compromised laptop does not stop the desktop working. `agent:sample-driver-laptop`
 in the audit log needs no lookup to understand.
 
 An agent from a second client on the same project is a role named `<namespace>-<client>`,
-minted with `--role`: `dustinedwards-grok` is Grok Build's driver for dustinedwards. Each
+minted with `--role`: `sample-grok` is Grok Build's driver for sample. Each
 client's MCP config must not load another client's servers. Grok Build loads `~/.claude.json`
 and a project's `.mcp.json` unless `[compat.claude] mcps = false` is set in `~/.grok/config.toml`
 (docs.x.ai/build/features/mcp-servers); without it Grok would act as `agent:dustinedwards-driver`.
@@ -217,11 +214,7 @@ it to what the work actually needs and no further:
 | `repos` | its namespace's mapped repos | all of them |
 | `grants` | read, write | read, write |
 | `can_merge` | no | yes |
-| `can_direct_write` | no | no |
-| `can_write_workflows` | no, except claude-skills-driver | no |
-| `can_dispatch` | no | no |
 | `can_touch_protected` | no, except capsid-driver and claude-skills-driver | no |
-| `money_paths` | no | no |
 
 **`repos` is derived, not typed.** The script reads the namespace mapping from the
 live `capsid_find_docs` action `namespaces` and sets the axis from it, so a driver reaches its own repos
@@ -233,19 +226,13 @@ by different calls and neither is editable by the credential they bind.
 
 **The two exceptions are named rather than left as a general no**, because a table
 that says no while the inventory says yes teaches a reader to distrust the table.
-The seat granted them on 2026-09-11, each for a stated reason: in both repos the
-protected paths are the subject of the driver's jobs rather than something near
-them, since tests, CI and `scripts/` are what that work edits, and in claude-skills
-a skill's workflow is part of the artifact being shipped. Every other driver holds
-none. `capsid_run_improve` action `status` and Capsid Portal list what each agent actually holds, so the
+The seat granted them on 2026-09-11. Every other driver holds none. `capsid_run_improve` action `status` and Capsid Portal list what each agent actually holds, so the
 inventory settles it and this table describes the rule.
 
-A driver opens pull requests and never merges them. A driver's pull request is
+A driver opens pull requests with its own GitHub access and never merges them. A driver's pull request is
 merged either by the seat or by the Worker under the signed auto-merge policy
 (`docs/policy/auto-merge.md`); the gates policy cannot approve a merge. Giving a
-driver `can_merge` would bypass both. `can_direct_write` is off even for the seat: a
-direct commit to a default branch on a repo that deploys on push is a deploy, and a
-deploy is a gate.
+driver `can_merge` would bypass both.
 
 Widen one later with `capsid_admin_manage_agents(action: "update_scopes", ...)`, which names the axes it
 changes and leaves the rest. Revoke with `capsid_admin_manage_agents(action: "revoke", name: ...)`: the
@@ -316,7 +303,7 @@ leaves a live credential in the table with nothing on disk able to present it.
 ```
 CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts                       # dry run, all six
 CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --apply
-CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --namespace foxing --apply
+CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --namespace sample --apply
 ```
 
 `--namespace` mints one project without touching the rest, which is what to run
@@ -340,11 +327,9 @@ capsid_admin_manage_agents(action: "mint", name: "seat",                 kind: "
 ```
 
 Five drivers, one per namespace, each with write on its own namespace and no
-flags: no merge, no direct write, no workflow write. One seat across every
-namespace that may merge, and may not commit directly to a default branch.
+flags: no merge. One seat across every namespace that may merge.
 
-Nothing else is granted. `can_dispatch`, `can_touch_protected` and `money_paths`
-stay off for all six until something concrete needs one, at which point
+Nothing else is granted. `can_touch_protected` stays off for all six until something concrete needs one, at which point
 `update_scopes` grants it and the audit row records who widened what, and from what.
 
 ### Jobs can say what they need
@@ -384,7 +369,7 @@ The sections above explain each part. This is the order to do them in. The host 
    - Then set the secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL` and `COOKIE_ENCRYPTION_KEY` (section 3).
 7. Create the GitHub App (section 4), install it on the repositories you want reachable, note its Client ID, generate a private key (`.pem`), put the Client ID in `wrangler.jsonc` vars as `GITHUB_APP_CLIENT_ID` and set `GITHUB_APP_PRIVATE_KEY`. Only the private key mints installation tokens; the App client secret is not needed. The installation id is not configured: it resolves from GitHub per owner and repo and is cached for a day, because one pinned id cannot be correct for two owners.
 8. `IMPROVE_SCORE_SECRET`, the root the job-signing, policy-signing and backup credential keys are derived from. Without it the work queue refuses to post a job and no signed policy loads.
-9. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"); `CF_ACCESS_SYNC_TOKEN` (`POST /ops/access-sync`); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the backup mirror.
+9. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"); `ACCESS_DRIFT_AUD` (the drift check's admin list, docs/auth.md, "Access drift check"); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the backup mirror.
 10. Type check and deploy with `npm run check` and `npm run deploy`. Deploy builds the Portal first and stops if the build or its size budget fails.
 11. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://capsid.<your-subdomain>.workers.dev/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity and any `CO_OWNER_EMAILS` identity get in (docs/auth.md). To test the flow first, run `npx @modelcontextprotocol/inspector`, set the transport to Streamable HTTP, set the URL to the same address, open the Auth tab and run Quick OAuth Flow.
 

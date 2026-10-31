@@ -68,7 +68,7 @@ export function requireBodyUnchanged(
     .bind(namespace, path, expectedBody);
 }
 
-export function requireMissing(db: D1Database, namespace: string, path: string): D1PreparedStatement {
+function requireMissing(db: D1Database, namespace: string, path: string): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO document_versions (document_id, namespace, path)

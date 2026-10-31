@@ -1,7 +1,7 @@
 import { accessSaas, authorizationUrl, finishSignIn, newSignIn, type KeySource } from "@dustinedwards/site-runtime/access-login";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
-import { cookieName, getCookie, isAdminEmail } from "./auth";
+import { capsidCookie, getCookie, isAdminEmail } from "./auth";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
 // identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27) for
@@ -29,7 +29,7 @@ export interface LoginFlow {
 }
 
 export function clearStateCookie(flow: LoginFlow): string {
-  return `${cookieName(flow.stateCookie, flow.cookiePath)}=; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=0`;
+  return capsidCookie(flow.stateCookie, "", flow.cookiePath, 0);
 }
 
 const UNCONFIGURED = "the sign-in is not configured (ACCESS_TEAM_DOMAIN, ACCESS_SAAS_CLIENT_ID, ACCESS_SAAS_CLIENT_SECRET), so it is closed";
@@ -76,12 +76,13 @@ export async function startAccessLogin(
   const target = await authorizationUrl(saas, { redirectUri: `${new URL(request.url).origin}${flow.callbackPath}`, state: stateToken, verifier: signIn.verifier, nonce: signIn.nonce });
   const headers = new Headers({ Location: target });
   // The state cookie carries the binding, which neither the URL nor the stored state holds.
-  headers.append("Set-Cookie", `${cookieName(flow.stateCookie, flow.cookiePath)}=${binding}; HttpOnly; Secure; SameSite=Lax; Path=${flow.cookiePath}; Max-Age=${STATE_TTL_SECONDS}`);
+  headers.append("Set-Cookie", capsidCookie(flow.stateCookie, binding, flow.cookiePath, STATE_TTL_SECONDS));
   for (const cookie of extraCookies) headers.append("Set-Cookie", cookie);
   return new Response(null, { status: 302, headers });
 }
 
-export type AccessLoginResult<T> = { ok: true; email: string; name?: string; state: T } | { ok: false; response: Response };
+// `code` names the refusal for the auth event log (src/portal-auth.ts), never shown.
+export type AccessLoginResult<T> = { ok: true; email: string; name?: string; state: T } | { ok: false; code: string; response: Response };
 
 // Verifies the callback's state against the cookie and KV, exchanges the code with
 // PKCE, verifies the ID token and runs the admin check. `parse` turns the caller's
@@ -95,23 +96,23 @@ export async function completeAccessLogin<T>(
   now: Date = new Date(),
   keys?: KeySource
 ): Promise<AccessLoginResult<T>> {
-  const fail = (message: string, status: number): AccessLoginResult<T> => ({ ok: false, response: refusal(message, status) });
+  const fail = (message: string, status: number, code: string): AccessLoginResult<T> => ({ ok: false, code, response: refusal(message, status) });
   const saas = accessSaas(env);
-  if (!saas) return fail(UNCONFIGURED, 503);
+  if (!saas) return fail(UNCONFIGURED, 503, "NOT_CONFIGURED");
   const url = new URL(request.url);
   // Access reports a refused sign-in as error=... on the callback.
   const upstreamError = url.searchParams.get("error");
-  if (upstreamError) return fail(`the sign-in was refused by Access: ${upstreamError.slice(0, 80)}. ${flow.restartHint}`, 403);
+  if (upstreamError) return fail(`the sign-in was refused by Access: ${upstreamError.slice(0, 80)}. ${flow.restartHint}`, 403, "ACCESS_REFUSED");
   const code = url.searchParams.get("code");
   const stateToken = url.searchParams.get("state");
-  if (!code || !stateToken) return fail("missing code or state", 400);
+  if (!code || !stateToken) return fail("missing code or state", 400, "MISSING_CODE_OR_STATE");
 
   const notThisBrowser = `state validation failed: this browser did not start the flow. ${flow.restartHint}`;
   const stateCookie = getCookie(request, flow.stateCookie);
-  if (!stateCookie) return fail(notThisBrowser, 403);
+  if (!stateCookie) return fail(notThisBrowser, 403, "STATE_NOT_THIS_BROWSER");
   const stateKey = `${flow.kvPrefix}${stateToken}`;
   const raw = await env.OAUTH_KV.get(stateKey);
-  if (!raw) return fail(`state expired or already used. ${flow.restartHint}`, 403);
+  if (!raw) return fail(`state expired or already used. ${flow.restartHint}`, 403, "STATE_EXPIRED");
   let signIn: StoredSignIn;
   try {
     signIn = JSON.parse(raw) as StoredSignIn;
@@ -120,17 +121,17 @@ export async function completeAccessLogin<T>(
     }
   } catch {
     await env.OAUTH_KV.delete(stateKey);
-    return fail(`stored authorization state is unreadable. ${flow.restartHint}`, 403);
+    return fail(`stored authorization state is unreadable. ${flow.restartHint}`, 403, "STATE_UNREADABLE");
   }
   // A cookie that does not match leaves the state in place, so a stranger holding the
   // callback URL cannot spend the browser's sign-in.
-  if (!await safeEqual(await sha256Hex(stateCookie), signIn.binding)) return fail(notThisBrowser, 403);
+  if (!await safeEqual(await sha256Hex(stateCookie), signIn.binding)) return fail(notThisBrowser, 403, "STATE_NOT_THIS_BROWSER");
   let state: T;
   try {
     state = parse(signIn.stored);
   } catch {
     await env.OAUTH_KV.delete(stateKey);
-    return fail(`stored authorization state is unreadable. ${flow.restartHint}`, 403);
+    return fail(`stored authorization state is unreadable. ${flow.restartHint}`, 403, "STATE_UNREADABLE");
   }
 
   // The state is consumed once the exchange is attempted, except when Access did not
@@ -138,13 +139,13 @@ export async function completeAccessLogin<T>(
   // Access, which honors a code once. The exchange gives up after 15 seconds (Grok audit
   // 2026-10-21, CA-10, now in site-runtime).
   const verdict = await finishSignIn(saas, { code, redirectUri: `${url.origin}${flow.callbackPath}`, verifier: signIn.verifier, nonce: signIn.nonce, now: now.getTime() }, keys);
-  if (!verdict.ok && verdict.reason === "token-exchange-unanswered") return fail("the Access token exchange did not answer in time", 502);
-  if (!verdict.ok && verdict.reason.startsWith("token-exchange-")) return fail(`the Access token exchange failed (${verdict.reason.slice("token-exchange-".length)})`, 502);
-  if (!verdict.ok && verdict.reason === "no-id-token") return fail("the Access token exchange returned no ID token", 502);
+  if (!verdict.ok && verdict.reason === "token-exchange-unanswered") return fail("the Access token exchange did not answer in time", 502, "TOKEN_EXCHANGE_UNANSWERED");
+  if (!verdict.ok && verdict.reason.startsWith("token-exchange-")) return fail(`the Access token exchange failed (${verdict.reason.slice("token-exchange-".length)})`, 502, "TOKEN_EXCHANGE_FAILED");
+  if (!verdict.ok && verdict.reason === "no-id-token") return fail("the Access token exchange returned no ID token", 502, "NO_ID_TOKEN");
   await env.OAUTH_KV.delete(stateKey);
-  if (!verdict.ok) return fail(`the sign-in could not be verified: ${REFUSALS[verdict.reason] ?? verdict.reason}. ${flow.restartHint}`, 403);
+  if (!verdict.ok) return fail(`the sign-in could not be verified: ${REFUSALS[verdict.reason] ?? verdict.reason}. ${flow.restartHint}`, 403, verdict.reason.toUpperCase().replaceAll("-", "_"));
   if (!await isAdminEmail(env, verdict.email)) {
-    return fail("access denied: this email is not an administrator of capsid (ADMIN_EMAIL or CO_OWNER_EMAILS)", 403);
+    return fail("access denied: this email is not an administrator of capsid (ADMIN_EMAIL or CO_OWNER_EMAILS)", 403, "NOT_ADMIN");
   }
   return verdict.name ? { ok: true, email: verdict.email, name: verdict.name, state } : { ok: true, email: verdict.email, state };
 }

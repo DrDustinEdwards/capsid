@@ -3,22 +3,22 @@ import { describe, expect, it } from "vitest";
 
 // /health AGAINST A REAL D1. The endpoint probes the store as well as reporting
 // provenance: a SELECT 1 plus an FTS MATCH pinned to capsid/conventions.md, and it
-// answers 503 `degraded` if either fails. Bindings resolve by name at deploy time,
+// answers 503 `fail` (site-runtime's healthResponse) if either fails. Bindings resolve by name at deploy time,
 // so a Worker pointed at nothing starts fine while every read tool errors; this
 // endpoint makes that visible.
 
 describe("/health", () => {
-  it("is degraded on an empty store, because the FTS probe finds nothing to match", async () => {
+  it("fails on an empty store, because the FTS probe finds nothing to match", async () => {
     const response = await SELF.fetch("https://capsid.test/health");
     const body = (await response.json()) as { status: string; checks?: Record<string, unknown> };
     // The migrations ran, so D1 answers; the pinned document does not exist yet, so
     // the FTS half fails. A store that answers SELECT 1 and holds nothing is the
     // "bound to the wrong database" case.
     expect(response.status).toBe(503);
-    expect(body.status).toBe("degraded");
+    expect(body.status).toBe("fail");
   });
 
-  it("is ok once the pinned document exists and the FTS index has it", async () => {
+  it("is up once the pinned document exists and the FTS index has it", async () => {
     // Written through raw SQL rather than the write tool, so this tests the triggers:
     // documents_fts is external-content, and the index only has this row
     // if migrations/0001_init.sql wired its AFTER INSERT trigger correctly.
@@ -34,8 +34,9 @@ describe("/health", () => {
 
     const response = await SELF.fetch("https://capsid.test/health");
     const body = (await response.json()) as { status: string; sha?: string };
+    // Up, with warnings: no backup and no task run is recorded in a fresh store.
     expect(response.status).toBe(200);
-    expect(body.status).toBe("ok");
+    expect(body.status).toBe("warn");
     expect(body.sha).toBe("integration");
   });
 

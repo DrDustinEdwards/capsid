@@ -1,3 +1,4 @@
+import { handleSignedInReport, SIGNED_IN_REPORT_PATH } from "./signed-in-crawl";
 import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, handlePublicDocument } from "./public-data";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResult } from "./shadow";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
@@ -8,11 +9,11 @@ import { gatherInbox, restrictInbox } from "./inbox";
 import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
 import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
 import { readSiteConfig } from "./ops-sites";
-import { CONSENT_DIALOG_HEADERS, REPORT_PATH, securityHeadersFor } from "./security-headers";
+import { consentDialogHeaders, REPORT_PATH, securityHeadersFor } from "./security-headers";
 import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";
 import { ipKey, limit } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
-import { buildAdminServer, buildServer, SERVER_INFO } from "./server";
+import { ADMIN_SERVER_INFO, buildAdminServer, buildServer, SERVER_INFO } from "./server";
 import { ADMIN_OPS_MCP_ROUTE, mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
 import { isAdminEmail } from "./auth";
 import { loginHandler } from "@dustinedwards/site-runtime/mcp-login";
@@ -31,7 +32,6 @@ import { PORTAL_HOST } from "./portal-host";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH, handleOtlpLogs, handleOtlpMetrics } from "./ops-otlp";
 import { OPS_HOOKS_PATH, handleOpsHooks } from "./ops-hooks";
-import { ACCESS_SYNC_PATH, handleAccessSync } from "./access-sync";
 import {
   handlePortalActivity,
   handlePortalApiNotFound,
@@ -46,7 +46,7 @@ import {
   PORTAL_PREVIEW_PATH,
   PORTAL_SIGN_OUT_PATH,
 } from "./portal-actions";
-import { handlePortalCallback, PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "./portal-auth";
+import { handlePortalCallback, PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX, withPortalIdle } from "./portal-auth";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
 import { handlePortalStale, PORTAL_STALE_PATH } from "./portal-stale";
 import { handlePortalDigest, handlePortalPlan, PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "./portal-overnight";
@@ -82,13 +82,13 @@ const login = loginHandler<Env>({
   revokeExistingGrants: false,
 });
 
-// The consent page leaves with Capsid's own headers (CONSENT_DIALOG_HEADERS, and why its
+// The consent page leaves with Capsid's own headers (consentDialogHeaders, and why its
 // CSP has no form-action), which the header layer in src/index.ts leaves as they are.
 async function handleLogin(request: Request, env: Env): Promise<Response> {
   const response = await login.fetch(request, env);
   if (!(response.headers.get("Content-Type") ?? "").includes("text/html")) return response;
   const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(CONSENT_DIALOG_HEADERS)) headers.set(name, value);
+  for (const [name, value] of Object.entries(await consentDialogHeaders())) headers.set(name, value);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
@@ -103,7 +103,7 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
   }
-  const limited = await mcpRateLimited(env, resolved.agent.actor);
+  const limited = await mcpRateLimited(env, resolved.agent.actor, SERVER_INFO);
   if (limited) return limited;
   // last_seen is not part of authorizing, so a slow or failing write rides on
   // waitUntil rather than slowing the tool call.
@@ -126,7 +126,7 @@ async function handleOperatorAdminMcp(request: Request, env: Env, ctx: Execution
   if (!resolved.agent.admin) {
     return new Response(`forbidden: ${resolved.agent.actor} is not the admin. Capsid Admin serves the administrator alone.`, { status: 403 });
   }
-  const limited = await mcpRateLimited(env, resolved.agent.actor);
+  const limited = await mcpRateLimited(env, resolved.agent.actor, ADMIN_SERVER_INFO);
   if (limited) return limited;
   ctx.waitUntil(resolved.touch());
   return serveMcp(request, env, ctx, ADMIN_OPS_MCP_ROUTE, () => buildAdminServer(env, resolved.agent));
@@ -167,7 +167,7 @@ async function handleInbox(request: Request, env: Env): Promise<Response> {
   }
   const everything = await gatherInbox(env, new Date(), null);
   const readable = (namespace: string) => checkScope(caller.agent, { tool: "capsid_run_improve", action: "status", namespace, grant: "read" }) === null;
-  return Response.json(restrictInbox(everything, readable), { headers: { "Cache-Control": "private, max-age=30", "X-Content-Type-Options": "nosniff" } });
+  return Response.json(restrictInbox(everything, readable), { headers: { "Cache-Control": "private, max-age=30" } });
 }
 
 // What an app reports about itself to the inbox (src/inbox-report.ts): the app's own
@@ -278,6 +278,7 @@ export const defaultHandler = {
     const request = original;
     const url = new URL(request.url);
     if (url.pathname === "/health") return handleHealth(env);
+    if (url.pathname === SIGNED_IN_REPORT_PATH && request.method === "GET") return handleSignedInReport(env);
     if (url.pathname === PUBLIC_MODEL_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.model);
     if (url.pathname === PUBLIC_STATS_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.stats);
     if (url.pathname === PUBLIC_CODE_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.code);
@@ -288,7 +289,6 @@ export const defaultHandler = {
     if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
     if (url.pathname === "/ops/inbox" && request.method === "GET") return handleInbox(request, env);
     if (url.pathname === "/ops/inbox/report" && request.method === "POST") return handleInboxReport(request, env);
-    if (url.pathname === ACCESS_SYNC_PATH && request.method === "POST") return handleAccessSync(request, env);
     if (url.pathname === OPS_HOOKS_PATH && request.method === "POST") return handleOpsHooks(request, env, ctx);
     if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);
     if (url.pathname === OTLP_LOGS_PATH && request.method === "POST") return handleOtlpLogs(request, env);
@@ -307,30 +307,37 @@ export const defaultHandler = {
     // Nothing answers under /console: the Portal moved without redirects
     // (capsid/research/design-portal-unify.md), so an old address reaches the 404 below.
     if (url.pathname === PORTAL_CALLBACK_PATH) return handlePortalCallback(request, env, new Date());
-    if (url.pathname === OPS_FEED_PATH && request.method === "GET") return handleOpsFeed(request, env);
-    if (url.pathname === OPS_REFRESH_PATH && request.method === "POST") return handleOpsRefresh(request, env);
-    if (url.pathname === PORTAL_PREVIEW_PATH && request.method === "POST") return handlePortalPreview(request, env);
-    if (url.pathname === PORTAL_PERFORM_PATH && request.method === "POST") return handlePortalPerform(request, env);
-    if (url.pathname === PORTAL_NAMESPACES_PATH && request.method === "GET") return handlePortalNamespaces(request, env);
-    if (url.pathname === PORTAL_ACTIVITY_PATH && request.method === "GET") return handlePortalActivity(request, env);
-    if (url.pathname === PORTAL_CLAIMS_PATH && request.method === "GET") return handlePortalClaims(request, env);
-    if (url.pathname === PORTAL_STALE_PATH && request.method === "GET") return handlePortalStale(request, env);
-    if (url.pathname === PORTAL_PLAN_PATH && request.method === "GET") return handlePortalPlan(request, env);
-    if (url.pathname === PORTAL_DIGEST_PATH && request.method === "GET") return handlePortalDigest(request, env);
-    if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET") return handlePortalMaintenance(request, env);
-    if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET") return handlePortalConvergence(request, env);
-    if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
-    if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET") return handlePortalSharedCode(request, env);
-    if (url.pathname === PORTAL_COMPLETENESS_PATH && request.method === "GET") return handlePortalCompleteness(request, env);
-    if (url.pathname === PORTAL_LIBRARY_PATH && request.method === "GET") return handlePortalLibrary(request, env);
-    if (url.pathname === PORTAL_TRENDS_PATH && request.method === "GET") return handlePortalTrends(request, env);
-    if (url.pathname === PORTAL_PUSH_PATH && request.method === "GET") return handlePortalPushGet(request, env);
-    if (url.pathname === PORTAL_PUSH_PATH && request.method === "POST") return handlePortalPushPost(request, env);
-    if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST") return handlePortalSignOut(request, env);
-    if (url.pathname.startsWith(PORTAL_API_PREFIX)) return handlePortalApiNotFound(request, env);
-    // The app and everything under it, every method: the handler gates first.
-    if (url.pathname === PORTAL_PATH || url.pathname.startsWith(PORTAL_PREFIX)) return handlePortalApp(request, env);
+    // Every other Portal route goes through the shared idle hour (withPortalIdle, src/portal-auth.ts).
+    if (url.pathname === PORTAL_PATH || url.pathname.startsWith(PORTAL_PREFIX)) return withPortalIdle(request, env, () => portalRoute(request, env, url));
 
     return new Response("not found", { status: 404 });
   },
 };
+
+// The Portal's routes behind its callback: every /portal/api/ route is matched before
+// the app's catch-all, and an unknown /portal/api/ path is a 404, never the app's page.
+function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
+  if (url.pathname === OPS_FEED_PATH && request.method === "GET") return handleOpsFeed(request, env);
+  if (url.pathname === OPS_REFRESH_PATH && request.method === "POST") return handleOpsRefresh(request, env);
+  if (url.pathname === PORTAL_PREVIEW_PATH && request.method === "POST") return handlePortalPreview(request, env);
+  if (url.pathname === PORTAL_PERFORM_PATH && request.method === "POST") return handlePortalPerform(request, env);
+  if (url.pathname === PORTAL_NAMESPACES_PATH && request.method === "GET") return handlePortalNamespaces(request, env);
+  if (url.pathname === PORTAL_ACTIVITY_PATH && request.method === "GET") return handlePortalActivity(request, env);
+  if (url.pathname === PORTAL_CLAIMS_PATH && request.method === "GET") return handlePortalClaims(request, env);
+  if (url.pathname === PORTAL_STALE_PATH && request.method === "GET") return handlePortalStale(request, env);
+  if (url.pathname === PORTAL_PLAN_PATH && request.method === "GET") return handlePortalPlan(request, env);
+  if (url.pathname === PORTAL_DIGEST_PATH && request.method === "GET") return handlePortalDigest(request, env);
+  if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET") return handlePortalMaintenance(request, env);
+  if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET") return handlePortalConvergence(request, env);
+  if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
+  if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET") return handlePortalSharedCode(request, env);
+  if (url.pathname === PORTAL_COMPLETENESS_PATH && request.method === "GET") return handlePortalCompleteness(request, env);
+  if (url.pathname === PORTAL_LIBRARY_PATH && request.method === "GET") return handlePortalLibrary(request, env);
+  if (url.pathname === PORTAL_TRENDS_PATH && request.method === "GET") return handlePortalTrends(request, env);
+  if (url.pathname === PORTAL_PUSH_PATH && request.method === "GET") return handlePortalPushGet(request, env);
+  if (url.pathname === PORTAL_PUSH_PATH && request.method === "POST") return handlePortalPushPost(request, env);
+  if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST") return handlePortalSignOut(request, env);
+  if (url.pathname.startsWith(PORTAL_API_PREFIX)) return handlePortalApiNotFound(request, env);
+  // The app and everything under it, every method: the handler gates first.
+  return handlePortalApp(request, env);
+}

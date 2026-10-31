@@ -28,13 +28,13 @@ test("a caller inside every axis is not refused", () => {
   const agent = scopedAgent();
   assert.equal(checkScope(agent, { tool: "capsid_write_doc", action: "write", namespace: "capsid", grant: "write" }), null);
   assert.equal(checkScope(agent, { tool: "capsid_read_doc", action: "read", namespace: "capsid", grant: "read" }), null);
-  assert.equal(checkScope(adminAgentForEmail("admin@example.com"), { tool: "capsid_close_pr", action: "merge", namespace: "foxhound", grant: "write", flags: SCOPE_FLAGS }), null);
+  assert.equal(checkScope(adminAgentForEmail("admin@example.com"), { tool: "capsid_close_pr", action: "merge", namespace: "sample", grant: "write", flags: SCOPE_FLAGS }), null);
 });
 
 test("the refusal names the axis that failed, and names the scope the caller actually has", () => {
   const agent = scopedAgent();
-  const namespace = checkScope(agent, { tool: "capsid_write_doc", namespace: "foxing", grant: "write" });
-  assert.match(String(namespace), /not scoped to the 'foxing' namespace/);
+  const namespace = checkScope(agent, { tool: "capsid_write_doc", namespace: "sample", grant: "write" });
+  assert.match(String(namespace), /not scoped to the 'sample' namespace/);
   assert.match(String(namespace), /namespace scope is capsid/, "a refusal that does not say what the scope IS costs a round trip");
 
   const readOnly = scopedAgent((s) => {
@@ -56,7 +56,7 @@ test("the refusal names the axis that failed, and names the scope the caller act
 test("a missing flag is refused by name, and the refusal says why the flag exists", () => {
   const agent = scopedAgent();
   for (const flag of SCOPE_FLAGS) {
-    const refusal = checkScope(agent, { tool: "capsid_change_repo", action: "write_file", namespace: "capsid", grant: "write", flags: [flag] });
+    const refusal = checkScope(agent, { tool: "capsid_close_pr", action: "merge", namespace: "capsid", grant: "write", flags: [flag] });
     assert.match(String(refusal), new RegExp(`needs the ${flag} flag`), `${flag} was not refused by name`);
     assert.match(String(refusal), /because /, `the ${flag} refusal does not say why the flag exists`);
   }
@@ -99,9 +99,7 @@ test("requiredGrant fails closed for a tool nobody has classified", () => {
   assert.equal(requiredGrant("toString"), "write");
 });
 
-test("repoWriteFlags derives the flags from the CALL, not from the tool name", () => {
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "src/x.ts", mode: "pr" }), []);
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "src/x.ts", mode: "direct" }), ["can_direct_write"]);
+test("repoWriteFlags derives the flags from the CALL, not from the tool name alone", () => {
   assert.deepEqual(repoWriteFlags("capsid_close_pr", "merge", {}), ["can_merge"]);
   // close carries can_merge too: closing deletes the head branch, as merging does.
   assert.deepEqual(repoWriteFlags("capsid_close_pr", "close", {}), ["can_merge"]);
@@ -111,18 +109,6 @@ test("repoWriteFlags derives the flags from the CALL, not from the tool name", (
   // A branch delete needs can_merge only when forced past an open pull request.
   assert.deepEqual(repoWriteFlags("capsid_close_pr", "delete_branch", {}), []);
   assert.deepEqual(repoWriteFlags("capsid_close_pr", "delete_branch", { force: true }), ["can_merge"]);
-  // A comment needs can_comment_pr and not can_merge; opening a pull request needs neither.
-  assert.deepEqual(repoWriteFlags("capsid_open_pr", "comment", {}), ["can_comment_pr"]);
-  assert.deepEqual(repoWriteFlags("capsid_open_pr", "open", {}), []);
-  assert.deepEqual(repoWriteFlags("capsid_run_ci", undefined, { path: "improve-score.yml" }), ["can_dispatch"]);
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: ".github/workflows/ci.yml", mode: "pr", allow_workflow_write: true }), [
-    "can_write_workflows",
-    "can_touch_protected",
-  ]);
-  // The protected list is the improve loop's, not a second copy.
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "package.json", mode: "pr" }), ["can_touch_protected"]);
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "test/thing.test.ts", mode: "pr" }), ["can_touch_protected"]);
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "app/billing/charge.ts", mode: "pr" }), ["money_paths"]);
 });
 
 test("a money path is matched by name, and an innocent path is not", () => {

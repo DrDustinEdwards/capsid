@@ -23,19 +23,23 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // co-owner cannot change ADMIN_EMAIL or this list: both are set only in Cloudflare.
   // Optional; unset or empty means no co-owners. Ignored while ADMIN_EMAIL is unset.
   CO_OWNER_EMAILS?: string;
+  // The Audience tag of the self-hosted Access application that covers only
+  // portal.dustinedwards.info/admin/access-drift, Service Auth only, for the drift check's
+  // service token (src/index.ts). Unset, that path is 404 to everyone.
+  ACCESS_DRIFT_AUD?: string;
   // The Watch Floor's Cloudflare read (src/ops-cloudflare.ts): a read-only API token
   // with Account Analytics Read and Workers Scripts Read, and the account it reads.
   // Unset, the deploy and error columns show no data and say why.
   CF_OPS_TOKEN?: string;
+  // The AI Gateway the meaning index's model calls (embeddings, the reranker) go through,
+  // by id: a dashboard var, set on the AI Search instance by the tick (src/doc-index.ts).
+  // Unset, the instance keeps whatever gateway it has.
+  AI_GATEWAY_ID?: string;
   CF_ACCOUNT_ID?: string;
   // Capsid Admin's capsid_admin_set_site_key (src/site-key.ts): a token with Workers Scripts Edit, to
   // set a site's key as a secret on its Worker and on Carrel. Apart from CF_OPS_TOKEN
   // because it writes. Unset, capsid_admin_set_site_key mints nothing and says why.
   CF_SECRETS_TOKEN?: string;
-  // The Access sync's write token (src/access-sync.ts): Access: Groups Write, Access: Users
-  // Read and Zero Trust: Seats Write on this account only. Capsid is its only holder
-  // (Dustin, 2026-10-09). Unset, POST /ops/access-sync answers 503 and calls nothing.
-  CF_ACCESS_SYNC_TOKEN?: string;
   // Google Search Console's read (src/search-console.ts): a service account's whole JSON
   // key, the account added as a Full user on each site's property. Unset,
   // capsid_inspect_repo action search reads nothing and says why.
@@ -83,14 +87,18 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // a P-256 private key as a JWK, put by scripts/vapid-keys.mjs. Unset, no alert is sent
   // and the Portal's Settings says why.
   VAPID_PRIVATE_KEY?: string;
+  // The signed-in crawl's Access service token for Carrel Desk (src/signed-in-crawl.ts): the token's Client ID and
+  // Client Secret, admitted by a Service Auth rule on Desk's Access application. Unset, Desk's result is "error".
+  DESK_CRAWL_CLIENT_ID?: string;
+  DESK_CRAWL_CLIENT_SECRET?: string;
   ALERT_EMAIL?: string;
   ALERT_FROM?: string;
 }
 
 // What the GitHub modules (src/github/) are handed: everything except the credentials
 // that mint backup read access, the Cloudflare read token (it can read Worker code), the
-// Access sync's write token and the key that signs phone alerts.
-export type RepoEnv = Omit<Env, "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "CF_ACCESS_SYNC_TOKEN" | "VAPID_PRIVATE_KEY">;
+// Access sync's write token, the key that signs phone alerts and Desk's crawl token.
+export type RepoEnv = Omit<Env, "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "VAPID_PRIVATE_KEY" | "DESK_CRAWL_CLIENT_ID" | "DESK_CRAWL_CLIENT_SECRET">;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move
 // to Access carry { id, login, name } from GitHub instead, fail the per-request email

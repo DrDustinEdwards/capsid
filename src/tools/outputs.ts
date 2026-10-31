@@ -53,17 +53,6 @@ const listed = { documents: rows, count: num, limit: num, truncated: bool, note:
 
 // guardedWrite (./repo-guards) adds audit_warning to any repo write whose audit row failed.
 const written = (shape: Shape): Shape => ({ ...shape, audit_warning: str.optional() });
-const fileWrite = written({
-  repo: str,
-  mode: str,
-  branch: str,
-  path: str,
-  commitSha: str,
-  allow_workflow_write: bool.optional(),
-  fileSha: str.optional(),
-  pr: nullable(z.looseObject({ number: num, url: str })).optional(),
-  pr_error: str.optional(),
-});
 
 const jobResult: Shape = {
   ok: bool,
@@ -83,8 +72,6 @@ const jobResult: Shape = {
   routing_note: str.optional(),
   models: obj.optional(),
   versions: rows.optional(),
-  session: obj.optional(),
-  routine: obj.optional(),
 };
 
 const agentResult: Shape = { ok: bool, action: str, agent: obj.optional(), agents: rows.optional(), key: str.optional(), note: str.optional(), scopes: obj.optional() };
@@ -130,7 +117,6 @@ const OUTPUTS: Record<string, Shape> = {
   ]),
   backlinks: { namespace: str, path: str, outgoing: rows, incoming: rows },
   write: mergeOutputs([
-    { namespace: str, path: str, action: str, proposal: num, base_sha256: nullable(str), directive_lines: strs, note: str },
     {
       namespace: str,
       path: str,
@@ -217,15 +203,10 @@ const OUTPUTS: Record<string, Shape> = {
     unreadable_sample: strs.optional(),
     items: rows,
   },
-  write_repo_file: fileWrite,
-  delete_repo_file: fileWrite,
-  create_branch: written({ repo: str, branch: str, from: str, sha: str }),
-  open_pr: written({ repo: str, number: num, url: str, head: str, base: str }),
   manage_pr: written({
     repo: str,
     number: num,
     action: str,
-    comment_id: num.optional(),
     url: str.optional(),
     merged: bool.optional(),
     sha: str.optional(),
@@ -277,12 +258,6 @@ const OUTPUTS: Record<string, Shape> = {
       remaining: num,
     }),
   ]),
-  ci_dispatch: written(
-    mergeOutputs([
-      { repo: str, mode: str, run_id: num, rerun_requested: bool },
-      { repo: str, mode: str, workflow: str, ref: str, dispatched: bool, run_id: nullable(num), polls: num, status: str.optional(), url: str.optional(), note: str.optional() },
-    ])
-  ),
   tag_release: written({ repo: str, tag: str, sha: str, release: nullable(z.looseObject({ id: num, url: str, notes_chars: num })) }),
   site_check: { namespace: str, origin: str, checked_at: str, health: obj, page: obj, probe: obj },
   search_console: mergeOutputs([
@@ -316,6 +291,7 @@ const OUTPUTS: Record<string, Shape> = {
   site_traffic: mergeOutputs([
     { ...traffic, page_views_measured: num, unit: str, vitals: obj },
     { ...traffic, note: str, crawlers: rows, truncated: bool },
+    { ...traffic, note: str, failures: rows, truncated: bool },
     { ...traffic, note: str, paths: rows, total_paths: num, truncated: bool, probes: num },
   ]),
   site_audit: {
@@ -350,7 +326,7 @@ const OUTPUTS: Record<string, Shape> = {
     { ok: bool, action: str, models: obj },
     { generated: str, since: str, for_namespace: nullable(str), finished: rows, blocked: rows, pull_requests_ready: rows, pull_requests_merged: num, totals: obj, truncated: strs },
   ]),
-  status: { canon_paths: rows, canon_proposals: rows.optional(), policies: obj, overnight: obj, merge_safety: nullable(obj), agents: rows.optional(), namespaces: rows },
+  status: { canon_paths: rows, policies: obj, overnight: obj, merge_safety: nullable(obj), agents: rows.optional(), namespaces: rows },
   admin_control: mergeOutputs([
     { ok: z.literal(true), action: str, namespace: str, path: str, signature: str, sha256: str, bytes: num, resigned: bool },
     { action: str, mode: str, decision: nullable(obj) },

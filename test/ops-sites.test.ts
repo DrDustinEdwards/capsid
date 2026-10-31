@@ -177,6 +177,10 @@ test("the site map is compared with the registered namespaces both ways, a no-si
   assert.equal(f.fingerprint, "site-map-drift-add-carrel-drop-txasm");
   assert.match(f.body, /carrel: registered, but has no row in the Portal's site configuration/);
   assert.match(f.body, /txasm: in the Portal's site configuration, but not a registered namespace/);
+
+  // A further host of a registered namespace (migrations/0052) is not drift; a stray key still is.
+  const hosts = [...config, row("capsid-portal"), row("txasmx")];
+  assert.deepEqual(siteMapDrift(registered, hosts), { unmapped: [], unknown: ["txasmx"] });
 });
 
 test("with nothing configured, every registered namespace is unmapped", () => {

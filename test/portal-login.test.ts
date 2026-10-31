@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { forgetKeys, type Jwk } from "@dustinedwards/site-runtime/access-login";
-import { handlePortalCallback, portalSignOutCookies, readPortalSession, startPortalLogin } from "../src/portal-auth.ts";
+import { handlePortalCallback, portalSessionCookie, portalSignOutCookies, readPortalSession, startPortalLogin, withPortalIdle } from "../src/portal-auth.ts";
 import { portalCsrf } from "../src/ops-feed.ts";
 import { PORTAL_HOST } from "../src/portal-host.ts";
-import { fakeKv } from "./fakes.ts";
+import { fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 // Capsid Portal's callback through the shared Access for SaaS login (src/access-login.ts),
 // design PR 3 of capsid/research/design-capsid-access-login.md. The MCP callback is
@@ -47,6 +47,7 @@ afterEach(() => {
 function env(overrides: Record<string, unknown> = {}) {
   return {
     OAUTH_KV: fakeKv().kv,
+    DB: withPortalSessionEnds().db,
     COOKIE_ENCRYPTION_KEY: SECRET,
     ADMIN_EMAIL: "admin@example.com",
     ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
@@ -102,7 +103,7 @@ test("the start sets the Portal state cookie on Path=/portal and sends Access th
   assert.ok(location.searchParams.get("nonce"));
   const cookies = setCookies(res);
   assert.equal(cookies.length, 1);
-  assert.match(cookies[0], /^__Secure-capsid_portal_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/portal; Max-Age=600$/);
+  assert.match(cookies[0], /^__Secure-capsid_portal_state=[0-9a-f]{64}; Path=\/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/);
 });
 
 test("the admin completes the login: session cookie carries the email, state cookie cleared, state consumed", async () => {
@@ -116,8 +117,8 @@ test("the admin completes the login: session cookie carries the email, state coo
   assert.ok(bodies[0]?.get("code_verifier"), "the exchange sent no PKCE verifier");
   const cookies = setCookies(res);
   assert.equal(cookies.length, 2);
-  assert.match(cookies[0], /^__Secure-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; HttpOnly; Secure; SameSite=Lax; Path=\/portal; Max-Age=43200$/);
-  assert.equal(cookies[1], "__Secure-capsid_portal_state=; HttpOnly; Secure; SameSite=Lax; Path=/portal; Max-Age=0");
+  assert.match(cookies[0], /^__Secure-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; Path=\/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=90000$/);
+  assert.equal(cookies[1], "__Secure-capsid_portal_state=; Path=/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=0");
   const session = await readPortalSession(
     new Request(`${ORIGIN}/portal/`, { headers: { Cookie: cookies[0].split(";")[0] } }),
     e,
@@ -244,7 +245,7 @@ test("on the Portal host the login sends Access /callback, scopes its cookies to
   const start = await startPortalLogin(new Request(`${PORTAL_ORIGIN}/portal/jobs`), e, "/portal/jobs");
   const location = String(start.headers.get("Location"));
   assert.equal(new URL(location).searchParams.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`);
-  assert.match(setCookies(start)[0], /^__Host-capsid_portal_state=[0-9a-f]{64}; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=600$/);
+  assert.match(setCookies(start)[0], /^__Host-capsid_portal_state=[0-9a-f]{64}; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/);
   const state = String(new URL(location).searchParams.get("state"));
   const bodies = stubAccess(location);
   const res = await handlePortalCallback(
@@ -256,8 +257,8 @@ test("on the Portal host the login sends Access /callback, scopes its cookies to
   assert.equal(res.headers.get("Location"), "/jobs");
   assert.equal(bodies[0]?.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`, "the exchange must name the same callback the start sent");
   const cookies = setCookies(res);
-  assert.match(cookies[0], /^__Host-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=43200$/);
-  assert.equal(cookies[1], "__Host-capsid_portal_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
+  assert.match(cookies[0], /^__Host-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=90000$/);
+  assert.equal(cookies[1], "__Host-capsid_portal_state=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0");
 });
 
 // PLANT: host-only cookies. The Portal's cookies must never carry a Domain attribute, on
@@ -325,4 +326,40 @@ test("a co-owner's email in another case, or with CO_OWNER_EMAILS unset, is refu
     assert.match(await res.text(), /not an administrator of capsid/);
     assert.equal(res.headers.get("Set-Cookie"), null);
   }
+});
+
+// G4: an hour with no request ends the Portal session and the Access session, through
+// site-runtime's adminIdle (withPortalIdle). The timing itself is tested in site-runtime.
+test("PLANT: an hour with no request sends the browser to Access's logout and ends the session; an active one is let through", async () => {
+  const e = env();
+  const signedIn = new Date("2026-09-28T12:00:00.000Z");
+  const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, signedIn)).split(";")[0];
+  const at = (minutes: number) => new Date(signedIn.getTime() + minutes * 60_000);
+  const handled: string[] = [];
+  const handle = async () => (handled.push("served"), new Response("ok"));
+
+  // A request 30 minutes in is served and records itself.
+  const first = await withPortalIdle(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: session } }), e, handle, at(30));
+  assert.equal(first.status, 200);
+  const seen = setCookies(first).find((c) => c.startsWith("__Host-admin-seen="))?.split(";")[0];
+  assert.ok(seen, "an active request did not record itself");
+
+  // 80 minutes in, 50 after the last request: still active.
+  const second = await withPortalIdle(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen}` } }), e, handle, at(80));
+  assert.equal(second.status, 200);
+  assert.equal(handled.length, 2);
+  const seen2 = setCookies(second).find((c) => c.startsWith("__Host-admin-seen="))?.split(";")[0];
+
+  // The page's own poll (X-Background) is served but is not a request by the admin.
+  const poll = await withPortalIdle(new Request(`${ORIGIN}/portal/api/ops`, { headers: { Cookie: `${session}; ${seen2}`, "X-Background": "1" } }), e, handle, at(120));
+  assert.equal(poll.status, 200);
+  assert.ok(!setCookies(poll).some((c) => c.startsWith("__Host-admin-seen=")), "a background poll kept the session active");
+
+  // 150 minutes in, 70 after the last request by the admin (the poll at 120 does not count): idle.
+  const idle = await withPortalIdle(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen2}` } }), e, handle, at(150));
+  assert.equal(idle.status, 302);
+  assert.equal(idle.headers.get("Location"), "https://sample.cloudflareaccess.com/cdn-cgi/access/logout");
+  assert.equal(handled.length, 3, "an idle request reached the Portal");
+  assert.ok(setCookies(idle).some((c) => /^__Secure-capsid_portal=;.*Max-Age=0/.test(c)));
+  assert.equal(await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: session } }), e, at(151)), null, "the idle session's cookie still verifies");
 });

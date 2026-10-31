@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { OpsTask, OpsTaskRun, OpsTaskRunOutcome } from "./ops-types/feed";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { MINUTE_MS, DAY_MS } from "./time";
+import { MINUTE_MS, HOUR_MS, DAY_MS } from "./time";
 
 // The run ledger (migrations/0029_task_runs.sql). Every scheduled task goes through runTask,
 // which writes one task_runs row per run: start, finish, outcome and a one-line
@@ -29,7 +29,8 @@ export type TaskId =
   | "merge-safety"
   | "doc-index"
   | "supersede"
-  | "site-pulse";
+  | "site-pulse"
+  | "signed-in-crawl";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -41,11 +42,18 @@ export type TaskId =
 //   skills-refresh 30 9 * * *, doing its work on one UTC day a week
 //   watcher        on the tick, every cadence_min minutes (src/watcher.ts); its
 //                  period is read from the watcher's own snapshot
-export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number | null }> = [
-  { id: "tick", label: "Five-minute tick", period_ms: 5 * MINUTE_MS },
+//
+// timeout_ms (area 8, C3) is given to the three a cron key starts: past it, runTask records
+// the run as threw ("timed out after N ms") and the invocation fails, so a hung run shows
+// in the ledger and on /health rather than holding the trigger silently. The work itself
+// cannot be canceled and may still finish. The tick gets four minutes, inside the five to
+// the next one; the backup and the skills refresh fourteen, inside a cron invocation's
+// fifteen-minute wall limit.
+export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number | null; timeout_ms?: number }> = [
+  { id: "tick", label: "Five-minute tick", period_ms: 5 * MINUTE_MS, timeout_ms: 4 * MINUTE_MS },
   { id: "watcher", label: "Watcher pass", period_ms: null },
-  { id: "backup", label: "Backup", period_ms: DAY_MS },
-  { id: "skills-refresh", label: "Skills refresh", period_ms: 7 * DAY_MS },
+  { id: "backup", label: "Backup", period_ms: DAY_MS, timeout_ms: 14 * MINUTE_MS },
+  { id: "skills-refresh", label: "Skills refresh", period_ms: 7 * DAY_MS, timeout_ms: 14 * MINUTE_MS },
   { id: "auto-merge", label: "Auto-merge step", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
   { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },
@@ -75,6 +83,8 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   // The five-minute site pulse (src/site-pulse.ts), on the tick; recorded only when a site
   // was called down or came back.
   { id: "site-pulse", label: "Site pulse", period_ms: null },
+  // The signed-in crawl of the Portal and Desk (src/signed-in-crawl.ts), hourly on the tick.
+  { id: "signed-in-crawl", label: "Signed-in header crawl", period_ms: 2 * HOUR_MS },
 ];
 
 const STALE_PERIODS = 2;
@@ -138,9 +148,10 @@ export async function runTask<T>(
   opts: { tag: string; rethrow: boolean }
 ): Promise<T | null> {
   const started = new Date();
+  const timeoutMs = TASKS.find((t) => t.id === task)?.timeout_ms;
   let value: T;
   try {
-    value = await body();
+    value = timeoutMs === undefined ? await body() : await withTimeout(body(), timeoutMs);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logEvent(opts.tag, {
@@ -153,6 +164,17 @@ export async function runTask<T>(
   const result = judge(value);
   if (result) await record(env, task, started, result.outcome, result.reason);
   return value;
+}
+
+/** The body's answer, or a rejection once `ms` pass first. The timer is cleared either way. */
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([work, late]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
 }
 
 interface TaskRunRow {

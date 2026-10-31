@@ -5,18 +5,11 @@ Capsid reaches mapped repositories through a dedicated GitHub App. The Worker mi
 A namespace can map to several repos, each with a label (for example `primary` and `legacy`). Every repo tool takes an optional `repo` parameter, a label or a mapped `owner/name`, defaulting to `primary`. An unmapped repo is rejected, so the namespace mapping is the authorization boundary.
 
 - **Read**: `capsid_read_repo` (actions `tree`, `files` and `search`) and `capsid_inspect_repo` (actions `refs`, `history`, `ci`, `site`, `search` and `bing`: `site` is a live check of the namespace's site, docs/portal.md, `search` its Google Search Console data, docs/search-console.md, and `bing` its Bing Webmaster Tools data, docs/bing-webmaster.md)
-- **Write**: `capsid_change_repo` (actions `write_file`, `delete_file` and `create_branch`), `capsid_open_pr` (actions `open` and `comment`), `capsid_close_pr` (actions `merge`, `close`, `delete_branch`, `tag` and `release`) and `capsid_run_ci`
+- **Write**: `capsid_close_pr` (actions `merge`, `close`, `delete_branch`, `tag` and `release`)
 
-`capsid_change_repo` action `write_file` defaults to `mode: "pr"` (commit to a new branch, open a pull request). `mode: "direct"` commits to the default branch and needs `can_direct_write`. No credential may be granted `can_direct_write`: every change reaches the default branch by pull request (conventions 9). `capsid_change_repo` action `delete_file` takes the same modes.
+Capsid does not write files, create branches, open or comment on pull requests, or start workflows. `capsid_change_repo`, `capsid_open_pr` and `capsid_run_ci` did, for agents without their own GitHub access; Dustin removed them on 2026-10-31, after cloud sessions moved to GitHub directly. An agent pushes its branch and opens its pull request with its own credentials.
 
-In `mode: "pr"` a caller may name the work branch with `branch`. Two cases are refused before anything is committed:
-
-- `branch` is the repo's default branch. The commit would land there without a pull request; that is what `mode: "direct"` is for.
-- `branch` already has an open pull request and the call does not pass `pr` with that pull request's number. The refusal names the pull request. With `pr` set to it, the commit lands on that branch and no second pull request is opened; the result reports the existing one with `existing: true`. A `pr` that is not the branch's open pull request is refused, and so is `pr` in `mode: "direct"` or without `branch`.
-
-The open-pull-request check is one uncached GitHub call. If it fails, the write is refused rather than treated as "no open pull request".
-
-`capsid_close_pr` action `merge` (squash by default) or `close` ends a pull request, and deletes the head branch when it is safe. Both actions need `can_merge`, because both delete that branch. A comment is `capsid_open_pr` action `comment`, which needs `can_comment_pr` and not `can_merge`. `capsid_close_pr` action `delete_branch` refuses a branch with an open pull request; `force: true` lifts that refusal and so needs `can_merge` too. `capsid_close_pr` action `delete_branch` with `merged: true` (in place of `branch`) prunes the branches whose latest pull request merged and whose tip is the commit it merged from, so work pushed after a merge is kept: it previews by default and deletes only with `confirm: true`, at most 40 a call, and it never lifts a refusal.
+`capsid_close_pr` action `merge` (squash by default) or `close` ends a pull request, and deletes the head branch when it is safe. Both actions need `can_merge`, because both delete that branch. `capsid_close_pr` action `delete_branch` refuses a branch with an open pull request; `force: true` lifts that refusal and so needs `can_merge` too. `capsid_close_pr` action `delete_branch` with `merged: true` (in place of `branch`) prunes the branches whose latest pull request merged and whose tip is the commit it merged from, so work pushed after a merge is kept: it previews by default and deletes only with `confirm: true`, at most 40 a call, and it never lifts a refusal.
 
 `capsid_close_pr` action `tag` tags a commit (`sha`, or the head of `ref`, or the default branch's head) with a version such as `v1.4.0`; action `release` also publishes its GitHub release, whose notes are the section of the repo's CHANGELOG that names the tag, read at the tagged commit (`changelog` names another file than `CHANGELOG.md`). A release whose CHANGELOG has no section for the tag is refused before anything is tagged, and a tag that exists is refused. Both need `can_merge`, because a tag or a release can start a deploy as a merge can (`src/github/releases.ts`).
 
@@ -46,4 +39,4 @@ Every write to GitHub goes through `guardedWrite` (`src/tools/repo-guards.ts`); 
 
 ## The repository's name
 
-The repository was renamed from `capsid-mcp` to `DrDustinEdwards/capsid` on 2026-09-12; the code names itself by that name in `SELF_REPO` (`src/github/contents.ts`).
+The repository was renamed from `capsid-mcp` to `DrDustinEdwards/capsid` on 2026-09-12.

@@ -79,17 +79,17 @@ Every overwrite or delete stores the previous body in `document_versions` and wr
 
 ### Authorization
 
-An agent's scopes have five axes: `namespaces`, `repos`, `tools`, `grants` (read, or read and write) and `flags`. Flags control operations with a wide effect, such as merging (`can_merge`), committing directly to a default branch (`can_direct_write`), dispatching workflows (`can_dispatch`) and writing protected paths (`can_touch_protected`). A new agent receives read access to its named namespaces and no flags. Scopes that fail to parse resolve to no access. The required grant for each tool is declared in `TOOL_GRANTS` (`src/scope.ts`), and a tool absent from that table requires the write grant. See [docs/auth.md](docs/auth.md).
+An agent's scopes have five axes: `namespaces`, `repos`, `tools`, `grants` (read, or read and write) and `flags`. Two flags control operations with a wide effect: merging, closing, tagging or releasing (`can_merge`), and writing autonomy policy documents (`can_touch_protected`). A new agent receives read access to its named namespaces and no flags. Scopes that fail to parse resolve to no access. The required grant for each tool is declared in `TOOL_GRANTS` (`src/scope.ts`), and a tool absent from that table requires the write grant. See [docs/auth.md](docs/auth.md).
 
 ### Work queue
 
 A job consists of a title and a body; the body is the complete prompt an agent executes. Bodies are signed when posted, and a claim verifies the signature first, so a body altered outside the queue's own `edit` action is rejected. The lifecycle is `post`, `claim`, then `complete`, `fail`, `block` or `resume`. A job that reaches an operation requiring a person (a push, a deploy, a secret, a live migration or a merge) is blocked with the exact command to run. Capsid assigns each job a kind and a recommended model and effort (`src/model-routing.ts`).
 
-Capsid can start a Claude Code cloud session for a queued job by firing a saved Claude Code routine ([docs/routines.md](docs/routines.md)). When an agent completes a job, it names the pull request that carries the work. Capsid then reads that pull request from GitHub and stores the verified state beside the agent's claim, so the two can be compared ([docs/work-queue.md](docs/work-queue.md)).
+When an agent completes a job, it names the pull request that carries the work. Capsid then reads that pull request from GitHub and stores the verified state beside the agent's claim, so the two can be compared ([docs/work-queue.md](docs/work-queue.md)).
 
 ### GitHub integration and merge policy
 
-Repository tools resolve the target repository from the namespace mapping and check the resolved repository against the caller's `repos` axis ([docs/repo-access.md](docs/repo-access.md)). Agents open pull requests; merging requires the `can_merge` flag.
+Repository tools resolve the target repository from the namespace mapping and check the resolved repository against the caller's `repos` axis ([docs/repo-access.md](docs/repo-access.md)). Capsid reads repositories and ends or publishes work: merging, closing, tagging and releasing require the `can_merge` flag. Agents push branches and open pull requests with their own GitHub access.
 
 Automatic merging is governed by a policy document that must be signed by the administrator before it has any effect; an unsigned policy, or one edited after signing, authorizes nothing. When enabled, the tick merges only pull requests that pass every check in the policy. Certain paths, including migrations, workflows, lockfiles and authentication code, are always refused automatic merging ([docs/autonomy.md](docs/autonomy.md)). Both automatic merging and the overnight run ([docs/overnight.md](docs/overnight.md)) are disabled in a new installation.
 
@@ -123,9 +123,9 @@ D1 Time Travel provides 30-day point-in-time recovery. In addition, the daily ba
 
 ## MCP tools
 
-Capsid serves 22 tools over two MCP servers. The count is derived from `TOOL_GRANTS` by `src/counts.ts`, and the registrations are in `src/tools/surface.ts`. Most tools take an `action` argument that selects one operation.
+Capsid serves 19 tools over two MCP servers. The count is derived from `TOOL_GRANTS` by `src/counts.ts`, and the registrations are in `src/tools/surface.ts`. Most tools take an `action` argument that selects one operation.
 
-**Capsid** (`/mcp`, `/ops/mcp`): 14 tools for project work.
+**Capsid** (`/mcp`, `/ops/mcp`): 11 tools for project work.
 
 | Tool | Grant | Function |
 | --- | --- | --- |
@@ -137,10 +137,7 @@ Capsid serves 22 tools over two MCP servers. The count is derived from `TOOL_GRA
 | `capsid_lint_namespace` | per action | Gather, finalize and report on a namespace's documents ([docs/consolidation.md](docs/consolidation.md)). |
 | `capsid_read_repo` | read | List directories, read files and search code in a mapped repository. |
 | `capsid_inspect_repo` | read | Branches, tags, pull requests, history, CI runs, live site checks and search-console data. |
-| `capsid_change_repo` | write | Write or delete a file, or create a branch. |
-| `capsid_open_pr` | write | Open a pull request or comment on one. |
 | `capsid_close_pr` | write | Merge or close a pull request, delete a branch, tag a commit or publish a release. |
-| `capsid_run_ci` | write | Dispatch a workflow or rerun failed jobs. |
 | `capsid_work_jobs` | per action | The work queue lifecycle. |
 | `capsid_run_improve` | read | Capsid status per namespace: queue, breaker, maintenance and items awaiting the owner. The name is retained from a removed feature. |
 
@@ -233,7 +230,6 @@ The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#12-checks
 **Jobs and agents**
 
 - [docs/work-queue.md](docs/work-queue.md): the job lifecycle, signing and recorded evidence.
-- [docs/routines.md](docs/routines.md): starting cloud sessions through routines.
 - [docs/autonomy.md](docs/autonomy.md): automatic merging and pre-approved gates.
 - [docs/overnight.md](docs/overnight.md): the overnight plan and morning digest.
 - [docs/bench.md](docs/bench.md): the paired comparison run in capsid-bench.

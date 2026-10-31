@@ -70,13 +70,13 @@ test("pickBingSite takes the exact origin, else the same host, and skips unverif
 
 test("sumStats sums each query's weekly buckets inside the window and weights position by impressions", () => {
   const rows = [
-    { Query: "phage", Date: day("2026-09-21"), Clicks: 2, Impressions: 10, AvgImpressionPosition: 4 },
-    { Query: "phage", Date: day("2026-09-28"), Clicks: 1, Impressions: 30, AvgImpressionPosition: 8 },
-    { Query: "phage", Date: day("2026-08-01"), Clicks: 50, Impressions: 500, AvgImpressionPosition: 1 },
+    { Query: "getting started", Date: day("2026-09-21"), Clicks: 2, Impressions: 10, AvgImpressionPosition: 4 },
+    { Query: "getting started", Date: day("2026-09-28"), Clicks: 1, Impressions: 30, AvgImpressionPosition: 8 },
+    { Query: "getting started", Date: day("2026-08-01"), Clicks: 50, Impressions: 500, AvgImpressionPosition: 1 },
     { Query: "lysis", Date: day("2026-09-28"), Clicks: 0, Impressions: 5, AvgImpressionPosition: -1 },
   ];
   assert.deepEqual(sumStats(rows, "2026-09-18", "2026-10-15", "query", 1), {
-    rows: [{ query: "phage", clicks: 3, impressions: 40, position: 7 }],
+    rows: [{ query: "getting started", clicks: 3, impressions: 40, position: 7 }],
     total_rows: 2,
     truncated: true,
   });
@@ -85,14 +85,14 @@ test("sumStats sums each query's weekly buckets inside the window and weights po
 test("queries call only Get methods for the namespace's site, and the key never reaches the result", async () => {
   const api = bingApi({
     GetUserSites: [{ Url: "https://sample.example.com/", IsVerified: true }],
-    GetQueryStats: [{ Query: "phage", Date: day("2026-10-05"), Clicks: 4, Impressions: 40, AvgImpressionPosition: 6 }],
+    GetQueryStats: [{ Query: "getting started", Date: day("2026-10-05"), Clicks: 4, Impressions: 40, AvgImpressionPosition: 6 }],
   });
   const env = fakeEnv({ DB: siteDb(), BING_WEBMASTER_API_KEY: KEY });
   const r = await bingWebmaster(env, "sample", {}, api.impl, NOW);
   assert.deepEqual(api.calls.map((u) => u.pathname.split("/").pop()), ["GetUserSites", "GetQueryStats"]);
   assert.equal(api.calls[1].searchParams.get("siteUrl"), "https://sample.example.com/");
   assert.ok("rows" in r);
-  assert.deepEqual(r.rows, [{ query: "phage", clicks: 4, impressions: 40, position: 6 }]);
+  assert.deepEqual(r.rows, [{ query: "getting started", clicks: 4, impressions: 40, position: 6 }]);
   assert.ok(!JSON.stringify(r).includes(KEY), "the API key reached the result");
 });
 

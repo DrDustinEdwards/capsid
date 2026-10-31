@@ -20,9 +20,23 @@ import type { Finding } from "./watcher-detect";
 
 const LIVE_JOB = "live gate";
 const LIVE_JOB_SUFFIX = ` / ${LIVE_JOB}`;
-// The namespaces the deploy watcher reads. carrel's live gate runs in devkit's reusable
-// worker-deploy.yml; carrel is not on APP_ROSTER (src/roster.ts).
-export const DEPLOY_ROSTER = [...APP_ROSTER, "carrel"] as const;
+// The repos the deploy watcher reads: each by its namespace, and by its repo label where the
+// repo is not the namespace's primary. `key` names the fingerprint, so two repos of one
+// namespace never share a finding. carrel's live gate runs in devkit's reusable
+// worker-deploy.yml; carrel is not on APP_ROSTER (src/roster.ts). Julie, txasm, bsw and the
+// static sites (Capsomer, Prelum's specimen, Carrel's public page, the capsid explorer) deploy
+// through worker-deploy too. Prelum has no namespace of its own: it is the dustinedwards
+// namespace's "prelum" repo. A run with two live gates (carrel's app and public site) records
+// the one that did not pass, else the first.
+export interface DeployRepo {
+  key: string;
+  namespace: string;
+  selector?: string;
+}
+export const DEPLOY_ROSTER: readonly DeployRepo[] = [
+  ...[...APP_ROSTER, "carrel", "julieedwards", "txasm", "bsw", "capsomer"].map((namespace) => ({ key: namespace, namespace })),
+  { key: "prelum", namespace: "dustinedwards", selector: "prelum" },
+];
 
 /** A live gate job: "live gate", or a called workflow's "<caller job> / live gate". */
 export function isLiveGateJob(name: string): boolean {
@@ -103,22 +117,22 @@ const mk = (namespace: string, fingerprint: string, headline: string, evidence: 
 /** The finding a deploy row raises: a rollback, or one that did not take effect. A verified
  *  deploy, a declined rollback and an unverified gate raise none here (a red CI run is the
  *  ci check's finding). */
-export function deployFindings(namespace: string, row: DeployRow): Finding[] {
+export function deployFindings(namespace: string, row: DeployRow, key: string = namespace): Finding[] {
   const sha = row.head_sha.slice(0, 7);
   const evidence = [`run: ${row.run_url ?? row.run_id}`, `commit: ${row.head_sha}${row.pr ? ` (#${row.pr})` : ""}`, row.detail];
   if (row.outcome === "rolled_back") {
-    return [mk(namespace, `deploy-rolled-back-${namespace}`, `${namespace} deploy ${sha} was rolled back`, [...evidence, `production went from ${row.rollback_from} back to ${row.rollback_to}`])];
+    return [mk(namespace, `deploy-rolled-back-${key}`, `${key} deploy ${sha} was rolled back`, [...evidence, `production went from ${row.rollback_from} back to ${row.rollback_to}`])];
   }
   if (row.outcome === "rollback_failed") {
-    return [mk(namespace, `deploy-rollback-failed-${namespace}`, `${namespace} deploy ${sha} was refused and its rollback did not take effect`, [...evidence, `production may still serve ${row.rollback_to ?? "the refused deploy"}`])];
+    return [mk(namespace, `deploy-rollback-failed-${key}`, `${key} deploy ${sha} was refused and its rollback did not take effect`, [...evidence, `production may still serve ${row.rollback_to ?? "the refused deploy"}`])];
   }
   return [];
 }
 
 /** Reads one repo's newest completed push runs on its default branch, records each new one
  *  whose live gate ran, and returns the newest recorded deploy (or null when none ran). */
-export async function readDeployOutcomes(env: Env, namespace: string): Promise<DeployRow | null> {
-  const { owner, repo, full } = await resolveRepo(env, namespace);
+export async function readDeployOutcomes(env: Env, namespace: string, selector?: string): Promise<DeployRow | null> {
+  const { owner, repo, full } = await resolveRepo(env, namespace, selector);
   const branch = await getDefaultBranch(env, owner, repo);
   const listed = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs?branch=${encodeURIComponent(branch)}&event=push&status=completed&per_page=${RUNS_READ}`);
   if (!listed.ok) throw new Error(`the run list returned ${listed.status}`);
@@ -137,7 +151,8 @@ export async function readDeployOutcomes(env: Env, namespace: string): Promise<D
     if (!row) {
       const jobsResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?per_page=100`);
       if (!jobsResp.ok) throw new Error(`the jobs of run ${run.id} returned ${jobsResp.status}`);
-      const job = (((await jobsResp.json()) as { jobs?: Job[] }).jobs ?? []).find((j) => isLiveGateJob(j.name));
+      const gates = (((await jobsResp.json()) as { jobs?: Job[] }).jobs ?? []).filter((j) => isLiveGateJob(j.name));
+      const job = gates.find((j) => j.conclusion !== "success" && j.conclusion !== "skipped") ?? gates[0];
       let annotations: string[] = [];
       if (job && job.conclusion !== "success" && job.conclusion !== "skipped") {
         const notes = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/check-runs/${job.id}/annotations?per_page=100`);

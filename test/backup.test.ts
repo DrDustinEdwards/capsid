@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { backupHttpStatus, runBackup, TABLES } from "../src/backup.ts";
+import { DatabaseSync } from "node:sqlite";
+import { credentialProblems } from "@dustinedwards/d1-dump";
+import { backupHttpStatus, CREDENTIAL_ALLOW, EXCLUDED, runBackup, TABLES } from "../src/backup.ts";
 import { BACKUP_LAST_OK_KEY } from "../src/health.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, type FakeD1Options } from "./fakes.ts";
 
@@ -41,8 +43,22 @@ test("the migrations parse to a non-empty table list", () => {
 });
 
 test("every table the migrations create is backed up", () => {
-  const missing = tablesInMigrations().filter((t) => !TABLES.includes(t as (typeof TABLES)[number]));
+  // Every one, or excluded by name (push_subscriptions holds device keys, src/backup.ts).
+  const covered = new Set<string>([...TABLES, ...EXCLUDED]);
+  const missing = tablesInMigrations().filter((t) => !covered.has(t));
   assert.deepEqual(missing, [], `migrations create tables that src/backup.ts does not export: ${missing.join(", ")}`);
+});
+
+// The nightly run refuses a dump with a credential-looking column (d1-dump `credentials`),
+// so a new column named for a token would leave every night incomplete. Read off the real
+// schema: every migration applied in order, as D1 would.
+test("the migrated schema passes the credential-column check with CREDENTIAL_ALLOW", () => {
+  const db = new DatabaseSync(":memory:");
+  const dir = join(import.meta.dirname, "..", "migrations");
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) db.exec(readFileSync(join(dir, file), "utf8"));
+  const schema = db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL").all() as Array<{ type: "table"; name: string; tbl_name: string; sql: string }>;
+  const tables = schema.filter((t) => !(EXCLUDED as readonly string[]).includes(t.name)).map((t) => ({ name: t.name, rows: 1, key: `${t.name}.json` }));
+  assert.deepEqual(credentialProblems({ tables }, schema, { allow: CREDENTIAL_ALLOW }), []);
 });
 
 test("every backed-up table exists in the migrations", () => {

@@ -32,8 +32,8 @@ test("a job requiring a flag refuses a driver without it, by name", () => {
 });
 
 test("a job in a namespace the driver is not scoped to is refused at the claim", () => {
-  const refusal = missingForJob(driver(), "foxing", null);
-  assert.match(String(refusal), /not scoped to the 'foxing' namespace/);
+  const refusal = missingForJob(driver(), "sample", null);
+  assert.match(String(refusal), /not scoped to the 'sample' namespace/);
 });
 
 test("a read-only agent cannot claim, even a job that requires nothing", () => {
@@ -45,8 +45,8 @@ test("a read-only agent cannot claim, even a job that requires nothing", () => {
 
 test("the legacy key and the admin can still claim anything, which is what keeps the queue working today", () => {
   const everything = serializeRequiredScopes({ flags: [...SCOPE_FLAGS] });
-  assert.equal(missingForJob(legacyAgent("write", "opkey:0123456789ab"), "foxhound", everything), null);
-  assert.equal(missingForJob(adminAgentForEmail("admin@example.com"), "foxhound", everything), null);
+  assert.equal(missingForJob(legacyAgent("write", "opkey:0123456789ab"), "sample", everything), null);
+  assert.equal(missingForJob(adminAgentForEmail("admin@example.com"), "sample", everything), null);
 });
 
 test("a required_scopes blob that cannot be read is CORRUPT, and refuses rather than demanding nothing", () => {

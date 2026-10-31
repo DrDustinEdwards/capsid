@@ -4,69 +4,16 @@ import {
   cachedGet,
   encodePath,
   getDefaultBranch,
-  getRefSha,
   ghFetch,
   invalidateRepoReads,
   resolveRepo,
 } from "./client";
 
-// The create-a-work-branch step, shared by write_repo_file and delete_repo_file in
-// pr mode. create_branch does not use it: as an explicit tool it must fail when the
-// branch already exists, and this tolerates that case.
-export async function ensureBranch(env: Env, owner: string, repo: string, branch: string, fromSha: string): Promise<void> {
-  const created = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/refs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: fromSha }),
-  });
-  // 422 means the branch already exists, which is fine when a caller passed one.
-  if (!created.ok && created.status !== 422) {
-    throw new Error(`branch create failed (${created.status}): ${await created.text()}`);
-  }
-}
-
-export async function createBranch(env: Env, namespace: string, branch: string, from?: string, repoSelector?: string) {
-  assertRepoArg("branch", branch);
-  if (from) assertRepoArg("from", from);
-  const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
-  const base = from || (await getDefaultBranch(env, owner, repo));
-  const sha = await getRefSha(env, owner, repo, base);
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/refs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha }),
-  });
-  if (!resp.ok) throw new Error(`create_branch failed (${resp.status}): ${await resp.text()}`);
-  return { repo: `${owner}/${repo}`, branch, from: base, sha };
-}
-
-export async function openPr(
-  env: Env,
-  namespace: string,
-  title: string,
-  head: string,
-  base?: string,
-  body?: string,
-  repoSelector?: string
-) {
-  const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
-  const baseBranch = base || (await getDefaultBranch(env, owner, repo));
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, head, base: baseBranch, body: body ?? "" }),
-  });
-  if (!resp.ok) throw new Error(`open_pr failed (${resp.status}): ${await resp.text()}`);
-  const data = (await resp.json()) as { number: number; html_url: string };
-  return { repo: `${owner}/${repo}`, number: data.number, url: data.html_url, head, base: baseBranch };
-}
-
 // Merge or close an open pull request. Merging can trigger CI deploys in repos with
 // deploy workflows, so callers gate by blast radius.
 //
-// The head branch is deleted when a PR closes or merges, because write_repo_file's
-// default PR mode creates a branch per write and nothing else cleans them up. Two
-// refusals:
+// The head branch is deleted when a PR closes or merges, because nothing else cleans
+// up a merged work branch. Two refusals:
 //   1. Never the default branch. A PR whose head is the default branch is a
 //      cross-fork PR or a misconfiguration.
 //   2. Never fails the PR action. The merge or close already succeeded, and failing
@@ -132,29 +79,14 @@ export async function managePr(
   env: Env,
   namespace: string,
   number: number,
-  action: "merge" | "close" | "comment",
+  action: "merge" | "close",
   mergeMethod: "merge" | "squash" | "rebase" = "squash",
   repoSelector?: string,
-  comment?: string,
   // For a merge: the head sha the caller judged. Sent as `sha`, so GitHub merges only
   // that commit and refuses with 409 if the head moved.
   expectedSha?: string
 ) {
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
-  // A comment leaves the pull request open and changes no branch, so it is handled
-  // first: it must never reach the head-branch cleanup below, which exists because
-  // merge and close end a pull request.
-  if (action === "comment") {
-    if (!comment) throw new Error("comment needs a body; a comment action with nothing to say is a call that did nothing.");
-    const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/issues/${number}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: comment }),
-    });
-    if (!resp.ok) throw new Error(`comment failed (${resp.status}): ${await resp.text()}`);
-    const data = (await resp.json()) as { id: number; html_url: string };
-    return { repo: `${owner}/${repo}`, number, action: "comment", comment_id: data.id, url: data.html_url };
-  }
   if (action === "merge") {
     const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}/merge`, {
       method: "PUT",

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { AUTHORITATIVE, scanCountClaims } from "../src/counts.ts";
 
 const CAPSID = AUTHORITATIVE.capsid;
-import { CONSENT_DIALOG_HEADERS, securityHeadersFor } from "../src/security-headers.ts";
+import { consentDialogHeaders, securityHeadersFor } from "../src/security-headers.ts";
 import { MCP_HOST } from "../src/mcp-host.ts";
 // Fixtures derive the tool count rather than spelling it, so a surface change does
 // not break tests that check something else.
@@ -36,12 +36,12 @@ test("live gate count matches the distinct gates in verify-live.mjs", () => {
   );
 });
 
-// The consent page's enforced headers: its own (src/routes.ts spreads CONSENT_DIALOG_HEADERS into its Response) and
+// The consent page's enforced headers: its own (src/routes.ts spreads consentDialogHeaders() into its Response) and
 // what the header layer adds on the MCP host. An enforced header added to either moves the number.
 const NOT_SECURITY_HEADERS = new Set(["Content-Type", "Reporting-Endpoints"]);
 
-test("the header count matches what the header layer and the consent dialog emit", () => {
-  const names = [...Object.keys(securityHeadersFor(MCP_HOST)), ...Object.keys(CONSENT_DIALOG_HEADERS)];
+test("the header count matches what the header layer and the consent dialog emit", async () => {
+  const names = [...Object.keys(securityHeadersFor(MCP_HOST)), ...Object.keys(await consentDialogHeaders())];
   const enforced = new Set(names.filter((name) => !NOT_SECURITY_HEADERS.has(name) && !/-Report-Only$/i.test(name)));
   assert.equal(enforced.size, CAPSID.htmlEnforcedHeaders, `the consent page enforces ${enforced.size} headers (${[...enforced].sort().join(", ")}), but counts.ts says ${CAPSID.htmlEnforcedHeaders}`);
 });
@@ -117,7 +117,7 @@ test("'all seven' is flagged when it is about headers", () => {
   ], "capsid");
   assert.equal(claims.length, 1);
   assert.equal(claims[0].noun, "security headers");
-  assert.match(claims[0].authoritative, /^9 enforced$/);
+  assert.match(claims[0].authoritative, /^11 enforced$/);
 });
 
 test("'all seven' about anything else is NOT flagged", () => {
@@ -136,7 +136,7 @@ test("'all seven' about anything else is NOT flagged", () => {
 test("the scan never returns a rewritten body, only a flag", () => {
   // Flag, never auto-correct: a "corrected" or "replacement" field would be a program
   // editing canon on its own judgment.
-  const claims = scanCountClaims([{ path: "core.md", type: "core", body: "19 tools" }], "capsid");
+  const claims = scanCountClaims([{ path: "core.md", type: "core", body: "16 tools" }], "capsid");
   // Exactly one claim, or the loop below passes without checking anything.
   assert.equal(claims.length, 1, `expected one claim for a stale tool count: ${JSON.stringify(claims)}`);
   for (const c of claims) {
@@ -181,7 +181,7 @@ test("a decisions log is EXEMPT outright: it is history by construction", () => 
 test("every claim is checked in a document that is not an append-only log", () => {
   // The exemption is keyed on type `decision` and must not leak to core or concept
   // docs, which state current fact throughout.
-  const doc = { path: "core.md", type: "core", body: "It had 19 tools then, and 19 tools now." };
+  const doc = { path: "core.md", type: "core", body: "It had 16 tools then, and 16 tools now." };
   assert.equal(scanCountClaims([doc], "capsid").length, 2);
 });
 
@@ -231,7 +231,7 @@ test("a subset count is not a total", () => {
     assert.deepEqual(scanCountClaims([{ path: "x.md", type: "concept", body: phrase }], "capsid"), [], `subset not exempted: ${phrase}`);
   }
   // An unqualified total in the same document still fires.
-  assert.equal(scanCountClaims([{ path: "x.md", type: "concept", body: "The server exposes 19 tools." }], "capsid").length, 1);
+  assert.equal(scanCountClaims([{ path: "x.md", type: "concept", body: "The server exposes 16 tools." }], "capsid").length, 1);
 });
 
 test("N of M: M is checked as the total, N is exempt", () => {

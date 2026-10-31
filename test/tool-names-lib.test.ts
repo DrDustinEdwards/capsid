@@ -24,6 +24,9 @@ const RETIRED = new Set([
   "capsid_admin_control_improve.budget",
   "capsid_admin_control_improve.register_skill",
 ]);
+// Whole tools removed after the migration ran (Dustin, 2026-10-31), kept in its map for
+// the same reason.
+const RETIRED_TOOLS = new Set(["capsid_change_repo", "capsid_open_pr", "capsid_run_ci"]);
 
 test("every mapping target is a served tool and action, so no migrated entry names nothing", () => {
   const targets: Array<[string, string | null]> = [
@@ -33,6 +36,7 @@ test("every mapping target is a served tool and action, so no migrated entry nam
   ];
   assert.ok(targets.length >= 40, `only ${targets.length} targets`);
   for (const [tool, action] of targets) {
+    if (RETIRED_TOOLS.has(tool)) continue;
     assert.ok(served.has(tool), `${tool} is not served`);
     if (action === null || RETIRED.has(`${tool}.${action}`)) continue;
     const actions = served.get(tool);

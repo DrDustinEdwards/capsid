@@ -1,5 +1,6 @@
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
+import { hostCookie } from "@dustinedwards/site-runtime/headers";
 
 // HMAC-SHA256, hex. The one definition.
 export async function hmacHex(secret: string, payload: string): Promise<string> {
@@ -16,8 +17,16 @@ export async function hmacHex(secret: string, payload: string): Promise<string> 
 
 // A cookie's name with the prefix its scope earns. Every Capsid cookie is Secure with no Domain, so one scoped to the
 // whole host (Path=/) is __Host-, which no sibling subdomain can set or shadow, and one scoped to a path is __Secure-.
-export function cookieName(name: string, path: string): string {
+function cookieName(name: string, path: string): string {
   return `${path === "/" ? "__Host-" : "__Secure-"}${name}`;
+}
+
+// A Capsid cookie's Set-Cookie, HttpOnly and SameSite=Lax: site-runtime's hostCookie for one scoped to the whole host,
+// and the same attributes under __Secure- for one scoped to a path (the Portal under /portal on the MCP host), which
+// hostCookie, being Path=/ only, cannot write. `maxAge: 0` with an empty value ends it.
+export function capsidCookie(name: string, value: string, path: string, maxAge: number): string {
+  if (path === "/") return hostCookie(name, value, { maxAge });
+  return `${cookieName(name, path)}=${value}; Path=${path}; Secure; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
 // Cookie lookup, once, for the consent flow and the Portal session: the prefixed name first, then the bare name the
@@ -81,15 +90,21 @@ type AdminEnv = { ADMIN_EMAIL?: string; CO_OWNER_EMAILS?: string };
 // co-owner included, so losing the primary owner's secret closes both logins. Both
 // secrets are set only in Cloudflare: nothing inside Capsid can change who is admin.
 export async function isAdminEmail(env: AdminEnv, email: string): Promise<boolean> {
-  const admin = (env.ADMIN_EMAIL ?? "").trim();
-  if (!admin) return false;
   const candidate = email.trim();
   let admitted = false;
-  for (const raw of [admin, ...(env.CO_OWNER_EMAILS ?? "").split(",")]) {
-    const entry = raw.trim();
-    if (entry && (await safeEqual(candidate, entry))) admitted = true;
+  for (const entry of adminEmailList(env)) {
+    if (await safeEqual(candidate, entry)) admitted = true;
   }
   return admitted;
+}
+
+// The admins as a list: ADMIN_EMAIL and every CO_OWNER_EMAILS entry, trimmed, empty
+// entries skipped, and nobody while ADMIN_EMAIL is unset. isAdminEmail checks against it,
+// and the Access drift check reads it hashed (src/index.ts, ADMIN_LIST_PATH).
+export function adminEmailList(env: AdminEnv): string[] {
+  const admin = (env.ADMIN_EMAIL ?? "").trim();
+  if (!admin) return [];
+  return [admin, ...(env.CO_OWNER_EMAILS ?? "").split(",")].map((raw) => raw.trim()).filter(Boolean);
 }
 
 // A grant's props on /mcp, checked on every request: only a grant whose email Access

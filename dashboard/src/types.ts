@@ -22,7 +22,6 @@ export type {
   InboxItem,
   OpsAgent,
   OpsAwaitingSeat,
-  OpsCanonProposal,
   OpsFeed,
   OpsJob,
   OpsSession,

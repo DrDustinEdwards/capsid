@@ -75,8 +75,7 @@ export const overSizeCap = (facts: Pick<PrFacts, "changedLines">): boolean => fa
 export const sizeCapReason = (facts: Pick<PrFacts, "changedLines">): string =>
   `over the size cap: ${facts.changedLines} changed lines, more than ${AUTO_MERGE_SIZE_CAP}`;
 
-// The paths auto-merge refuses, separate from PROTECTED_PATH_PATTERNS (what needs the
-// can_touch_protected flag, src/protected-paths.ts). Tests, src/, docs, CLAUDE.md and .claude/ merge on green; these do
+// The paths auto-merge refuses. Tests, src/, docs, CLAUDE.md and .claude/ merge on green; these do
 // not, because each changes what judges a change or what ships beside it. Matched
 // case-insensitively against the repo-relative path; the document lists each source.
 export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> = [
@@ -579,8 +578,13 @@ export function evaluatePolicy(
   }
   passed.push("head_in_base_repo");
 
-  if (!facts.jobId) {
-    return no("body_names_job", "the PR body names no job id, so there is no request this change can be traced back to.");
+  // Version 10 (Dustin, 2026-10-31): work comes from project threads, not the job queue,
+  // so most pull requests name no job. One whose unit has earned unattended merging (a
+  // promoted unit, from his recorded approvals) stands in for the job trace: the three
+  // job checks pass on the unit, and every other check still applies.
+  const earned = !facts.jobId && promoted !== null;
+  if (!facts.jobId && !earned) {
+    return no("body_names_job", "the PR body names no job id, and its unit has not earned unattended merging, so a person approves it.");
   }
   passed.push("body_names_job");
 
@@ -594,21 +598,25 @@ export function evaluatePolicy(
   }
   passed.push("pr_author_allowed");
 
-  if (!facts.jobStatus || !HANDED_ON_STATUSES.includes(facts.jobStatus)) {
-    return no("job_handed_on", `${facts.jobId} is ${facts.jobStatus ?? "in no status"}, not blocked or done, so it has not handed a PR on.`);
-  }
-  passed.push("job_handed_on");
+  if (earned) {
+    passed.push("job_handed_on", "pr_recorded_for_job");
+  } else {
+    if (!facts.jobStatus || !HANDED_ON_STATUSES.includes(facts.jobStatus)) {
+      return no("job_handed_on", `${facts.jobId} is ${facts.jobStatus ?? "in no status"}, not blocked or done, so it has not handed a PR on.`);
+    }
+    passed.push("job_handed_on");
 
-  // The PR itself must be recorded against the job, or anyone could name a finished
-  // job in a PR body.
-  const url = `https://github.com/${facts.repo}/pull/${facts.number}`.toLowerCase();
-  if (!facts.jobPrUrls.some((recorded) => normalizedPrUrls(recorded).includes(url))) {
-    return no(
-      "pr_recorded_for_job",
-      `${facts.jobId}'s holder never recorded this PR against it (neither its result_ref nor its outcome PRs name ${url}), so it is not shown to be that job's work.`
-    );
+    // The PR itself must be recorded against the job, or anyone could name a finished
+    // job in a PR body.
+    const url = `https://github.com/${facts.repo}/pull/${facts.number}`.toLowerCase();
+    if (!facts.jobPrUrls.some((recorded) => normalizedPrUrls(recorded).includes(url))) {
+      return no(
+        "pr_recorded_for_job",
+        `${facts.jobId}'s holder never recorded this PR against it (neither its result_ref nor its outcome PRs name ${url}), so it is not shown to be that job's work.`
+      );
+    }
+    passed.push("pr_recorded_for_job");
   }
-  passed.push("pr_recorded_for_job");
 
   if (facts.baseRef !== facts.defaultBranch) {
     return no("base_is_default_branch", `the PR targets '${facts.baseRef}', not the default branch '${facts.defaultBranch}'.`);

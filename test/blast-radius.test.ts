@@ -57,24 +57,6 @@ async function callAs(caller: Agent, tool: string, args: Record<string, unknown>
 // call need it, and the flag it needs.
 const PLANTS: Array<{ flag: ScopeFlag; tool: string; args: Record<string, unknown>; what: string }> = [
   {
-    flag: "can_direct_write",
-    tool: "capsid_change_repo",
-    args: { action: "write_file", namespace: "capsid", path: "src/thing.ts", content: "x", message: "m", mode: "direct" },
-    what: "a direct-mode commit, which lands on the default branch with no review",
-  },
-  {
-    flag: "can_direct_write",
-    tool: "capsid_change_repo",
-    args: { action: "delete_file", namespace: "capsid", path: "src/thing.ts", message: "m", mode: "direct" },
-    what: "a direct-mode delete, same branch and same absence of review",
-  },
-  {
-    flag: "can_write_workflows",
-    tool: "capsid_change_repo",
-    args: { action: "write_file", namespace: "capsid", path: ".github/workflows/ci.yml", content: "x", message: "m", allow_workflow_write: true },
-    what: "a workflow write, which edits what MEASURES the code",
-  },
-  {
     flag: "can_merge",
     tool: "capsid_close_pr",
     args: { action: "merge", namespace: "capsid", number: 7 },
@@ -103,38 +85,7 @@ const PLANTS: Array<{ flag: ScopeFlag; tool: string; args: Record<string, unknow
     tool: "capsid_close_pr",
     args: { action: "delete_branch", namespace: "capsid", branch: "feature/other-agent", force: true },
     what: "a forced branch delete, which lifts the open-PR refusal and so can delete another agent's PR head",
-  },
-  {
-    flag: "can_comment_pr",
-    tool: "capsid_open_pr",
-    args: { action: "comment", namespace: "capsid", number: 7, comment: "REVIEW: looks fine. APPROVE" },
-    what: "a comment on a pull request, which is the one write a reviewer makes and is not a merge",
-  },
-  {
-    flag: "can_dispatch",
-    tool: "capsid_run_ci",
-    args: { namespace: "capsid", workflow: "verify.yml", ref: "master" },
-    what: "a workflow dispatch, which spends CI minutes and runs code with the repo's secrets in scope",
-  },
-  {
-    flag: "can_touch_protected",
-    tool: "capsid_change_repo",
-    args: { action: "write_file", namespace: "capsid", path: "package.json", content: "{}", message: "m" },
-    what: "a write to a protected path, which is what the improve loop may never touch at all",
-  },
-  {
-    flag: "can_touch_protected",
-    tool: "capsid_change_repo",
-    args: { action: "write_file", namespace: "capsid", path: "test/thing.test.ts", content: "x", message: "m" },
-    what: "a write to a test, which is the measurement rather than the code",
-  },
-  {
-    flag: "money_paths",
-    tool: "capsid_change_repo",
-    args: { action: "write_file", namespace: "foxhound", path: "app/billing/charge.server.ts", content: "x", message: "m" },
-    what: "a write to a billing path in foxhound, which is where a mistake costs real money",
-  },
-];
+  },];
 
 for (const plant of PLANTS) {
   test(`PLANT: without ${plant.flag}, a driver is refused ${plant.what}`, async () => {
@@ -164,23 +115,6 @@ for (const plant of PLANTS) {
   });
 }
 
-test("PLANT: a driver IS allowed the pull-request path, which is the whole point of scoping it this way", async () => {
-  // The shape docs/bootstrap.md prescribes has to work. A pr-mode write needs no flag.
-  await withFetch({}, async (calls) => {
-    const result = await callAs(driver(), "capsid_change_repo", {
-      action: "write_file",
-      namespace: "capsid",
-      path: "src/thing.ts",
-      content: "x",
-      message: "m",
-      mode: "pr",
-    });
-    const text = result.content[0]?.text ?? "";
-    assert.doesNotMatch(text, /unauthorized:/, `a pr-mode write was refused for a driver: ${text}`);
-    assert.ok(calls.length > 0, "the call never reached GitHub, so this asserts nothing about the guard");
-  });
-});
-
 test("PLANT: a driver IS allowed a branch delete without force, which still refuses an open PR's head", async () => {
   // The unforced delete keeps its own open-PR refusal in src/github/refs.ts, so it
   // needs no flag. Holding it to can_merge would take branch cleanup away from every
@@ -196,15 +130,9 @@ test("PLANT: a driver IS allowed a branch delete without force, which still refu
 
 test("PLANT: a driver cannot reach a namespace it was not minted for", async () => {
   await withFetch({}, async (calls) => {
-    const result = await callAs(driver("capsid"), "capsid_change_repo", {
-      action: "write_file",
-      namespace: "foxing",
-      path: "src/thing.ts",
-      content: "x",
-      message: "m",
-    });
+    const result = await callAs(driver("capsid"), "capsid_close_pr", { action: "delete_branch", namespace: "sample", branch: "feature/x" });
     assert.equal(result.isError, true);
-    assert.match(result.content[0].text, /not scoped to the 'foxing' namespace/);
+    assert.match(result.content[0].text, /not scoped to the 'sample' namespace/);
     assert.equal(calls.length, 0, "the refused call still reached GitHub");
   });
 });
@@ -265,7 +193,7 @@ test("DERIVED: every write tool is on the enforcement point's path", () => {
     .map((b) => b.name);
   assert.deepEqual(uncovered, [], `these write tools are not covered by checkScope: ${uncovered.join(", ")}`);
   // Vacuity: the walk found a real surface, and the operations it dispatches to.
-  assert.ok(toolBlocks().length >= 20, "the tool walk collapsed");
+  assert.ok(toolBlocks().length >= 17, "the tool walk collapsed");
   assert.ok(ops.size >= 30, "the operation walk collapsed");
 });
 
@@ -376,11 +304,11 @@ test("DERIVED: every repo mutation goes through the one wrapper that computes th
   const helpers = githubMutationHelpers(files);
   // Vacuity and drift: the derivation finds every helper the repo tools are known to
   // call. A helper missing here means the derivation stopped seeing it.
-  for (const known of ["writeRepoFile", "deleteRepoFile", "createBranch", "openPr", "managePr", "deleteBranch", "pruneMergedBranches", "ciDispatch", "tagRelease"]) {
+  for (const known of ["managePr", "deleteBranch", "pruneMergedBranches", "tagRelease"]) {
     assert.ok(helpers.includes(known), `the derivation did not find ${known} as a mutation helper; it found ${helpers.join(", ")}`);
   }
   const repo = codeOnly(sourceFile("tools/repo.ts"));
-  for (const known of ["writeRepoFile(", "managePr(", "ciDispatch("]) {
+  for (const known of ["managePr(", "deleteBranch(", "tagRelease("]) {
     assert.ok(repo.includes(known), `the scan found no call to ${known} in tools/repo.ts; it is reading nothing`);
   }
   assert.deepEqual(
@@ -407,7 +335,7 @@ test("every flag is required by some path, so none of them is decoration", () =>
   const produced = new Set<ScopeFlag>();
   for (const plant of PLANTS) {
     const action = typeof plant.args.action === "string" ? plant.args.action : undefined;
-    for (const flag of repoWriteFlags(plant.tool, action, plant.args as { path?: string; mode?: string; allow_workflow_write?: boolean; force?: boolean })) {
+    for (const flag of repoWriteFlags(plant.tool, action, plant.args as { force?: boolean })) {
       produced.add(flag);
     }
   }

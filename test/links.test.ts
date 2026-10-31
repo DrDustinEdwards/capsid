@@ -9,8 +9,8 @@ test("parseLinks accepts an edge and defaults to_ns to the source namespace", ()
 });
 
 test("parseLinks keeps an explicit to_ns", () => {
-  const result = parseLinks('[{"type":"governs","to_path":"core.md","to_ns":"recova"}]', "capsid");
-  assert.deepEqual(result, { edges: [{ type: "governs", to_ns: "recova", to_path: "core.md" }] });
+  const result = parseLinks('[{"type":"governs","to_path":"core.md","to_ns":"sample"}]', "capsid");
+  assert.deepEqual(result, { edges: [{ type: "governs", to_ns: "sample", to_path: "core.md" }] });
 });
 
 test("parseLinks treats an empty array as clear", () => {

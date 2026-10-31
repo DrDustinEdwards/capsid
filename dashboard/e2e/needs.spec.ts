@@ -46,7 +46,7 @@ const dialog = (page: Page) => page.locator("dialog.confirm");
 test("PLANT: the home is Needs you, the list comes first by kind, and the charts are folded at the foot", async ({ page }) => {
   await page.goto("./");
   await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
-  await expect(waiting(page).locator(".wgroup h3")).toHaveText([/^Pull requests 2/, /^Questions and blocked jobs 3/, /^Rule changes 4/, /^Paused after repeated failures 1/, /^Also waiting 2/]);
+  await expect(waiting(page).locator(".wgroup h3")).toHaveText([/^Pull requests 2/, /^Questions and blocked jobs 3/, /^Paused after repeated failures 1/, /^Also waiting 2/]);
   // The list is above Problems and Trends, and nothing above it waits on a chart.
   const order = await page.evaluate(() => ["#waiting", "#attention", "#trends"].map((s) => document.querySelector(s)!.getBoundingClientRect().top));
   expect(order[0]).toBeLessThan(order[1]!);
@@ -160,43 +160,6 @@ test("Resume on a blocked job row previews resume_job; More about this job opens
   await expect(page.locator("dialog.drawer[open]")).toBeVisible();
 });
 
-test("PLANT: a rule change's Review previews canon_approve and Reject canon_reject; Approve all is canon_approve_all", async ({ page }) => {
-  const sent = previews(page);
-  await visit(page, "needs");
-  const rules = group(page, "w-rules");
-  await rules.locator('[data-canon="8"]').getByRole("button", { name: /^Review / }).click();
-  await expect(dialog(page).getByRole("button", { name: "Approve and write" })).toBeVisible();
-  await dialog(page).getByRole("button", { name: "Cancel" }).click();
-  await rules.locator('[data-canon="6"]').getByRole("button", { name: /^Reject / }).click();
-  await dialog(page).getByRole("textbox", { name: "Reason", exact: true }).fill("outdated");
-  await dialog(page).getByRole("button", { name: "Preview" }).click();
-  await expect(dialog(page).getByRole("button", { name: "Reject proposal" })).toBeVisible();
-  await dialog(page).getByRole("button", { name: "Cancel" }).click();
-  // An out-of-date change can only be rejected.
-  await expect(rules.locator('[data-canon="6"]').getByRole("button", { name: /^Review / })).toHaveCount(0);
-  await rules.getByRole("button", { name: "Approve all" }).click();
-  await expect(dialog(page).getByRole("button", { name: "Approve all" })).toBeVisible();
-  await dialog(page).getByRole("button", { name: "Cancel" }).click();
-  expect(sent.map((s) => [s.action, s.params.id ?? ""])).toEqual([
-    ["canon_approve", "8"],
-    ["canon_reject", "6"],
-    ["canon_approve_all", ""],
-  ]);
-});
-
-test("ticked rule changes are approved together, each its own canon_approve", async ({ page }) => {
-  const sent = previews(page);
-  await visit(page, "needs");
-  const rules = group(page, "w-rules");
-  await rules.getByRole("checkbox", { name: "Select the change to sample-b/decisions.md" }).check();
-  await rules.getByRole("checkbox", { name: "Select the change to sample/core.md" }).first().check();
-  await rules.getByRole("button", { name: "Approve 2 selected" }).click();
-  await expect(dialog(page).locator("[data-batch-item]")).toHaveCount(2);
-  await expect(dialog(page).getByRole("button", { name: "Approve and write 2" })).toBeVisible();
-  expect(sent.map((s) => s.action)).toEqual(["canon_approve", "canon_approve"]);
-  await dialog(page).getByRole("button", { name: "Cancel" }).click();
-});
-
 test("PLANT: a stopped queue is here with Reset, which previews reset_breaker for its namespace", async ({ page }) => {
   const sent = previews(page);
   await visit(page, "needs");
@@ -224,7 +187,6 @@ test("on a phone each row's buttons are full width and at least 44 px tall, and 
 test("with nothing waiting it says so, and every app is named as quiet", async ({ page }) => {
   await reshape(page, (f) => {
     f.live.inbox = { ...f.live.inbox, count: 0, severity: "none", apps: f.live.inbox.apps.map((a) => ({ ...a, count: 0, severity: "none", items: [] })) };
-    f.live.canon_proposals = [];
   });
   await page.route("**/portal/api/namespaces", async (route) => {
     const res = await route.fetch();

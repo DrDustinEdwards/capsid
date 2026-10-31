@@ -10,8 +10,8 @@ import { gzipSync } from "node:zlib";
 import { build } from "../build.mjs";
 import { codePage, codePath } from "../src/code.mjs";
 import { numbersHtml } from "../src/numbers.mjs";
-import { PAGE_PRELOADS } from "../src/security-headers.mjs";
 import { servedTools } from "../src/surface.mjs";
+import { PAGE_PRELOADS } from "../worker.mjs";
 import { SITE, allPages, containersPath, escapeHtml, flowPath, percent, stepPath, stepWords, systemPath } from "../src/pages.mjs";
 
 const fixtures = new URL("../fixtures/", import.meta.url).pathname;
@@ -197,15 +197,6 @@ test("a rate with too few cases is said so, and has no picture", () => {
   const section = numbersHtml(thin);
   assert.doesNotMatch(section, /id="agreement-title"|id="uptime-title"/);
   assert.match(section, /Checked jobs with passing CI, last 90 days<\/th><td>not enough data yet/);
-});
-
-test("the headers send the shared policy with scripts and styles from the explorer itself", () => {
-  const headers = readFileSync(join(out, "_headers"), "utf8");
-  assert.match(headers, /^\/\*\n/);
-  assert.match(headers, /Content-Security-Policy: default-src 'self'; script-src 'self' https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js\/; style-src 'self';/);
-  assert.doesNotMatch(headers, /unsafe-inline|unsafe-eval/);
-  assert.match(headers, /report-uri https:\/\/mcp\.dustinedwards\.info\/csp-report/);
-  assert.match(headers, /X-Frame-Options: deny/);
 });
 
 test("the Worker's preload header names exactly what the home page links first", () => {

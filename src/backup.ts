@@ -1,9 +1,10 @@
-import { dumpDatabase, pruneDumps, writeCompleteMarker, type DumpResult } from "@dustinedwards/d1-dump";
+import { BackupIncomplete, runCheckedBackup, type DumpResult } from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./security-headers";
 import { probeFts } from "./store-probe";
 import { logEvent } from "@dustinedwards/site-runtime/log";
+import { pruneNotFound } from "@dustinedwards/site-runtime/not-found";
 import { DAY_MS } from "./time";
 
 const JSON_PREFIX = "backups/json/";
@@ -42,8 +43,12 @@ function cutoffDay(now: Date, days: number): string {
   return new Date(now.getTime() - days * DAY_MS).toISOString().slice(0, 10);
 }
 
-// The dump itself is @dustinedwards/d1-dump, the package every site installs, so
-// Capsid and the sites run one implementation.
+// The dump itself is @dustinedwards/d1-dump's runCheckedBackup, the nightly job every
+// site runs, so Capsid and the sites run one implementation: dump without the marker,
+// the standard checks (not empty, documents present, nothing excluded in the dump), the
+// credential-column check, Capsid's own checks below, then the marker and the
+// graduated prune. What stays here is Capsid's own: the lease, the KV sidecar, the
+// tables-mismatch and preflight checks, the markdown mirror and the history prunes.
 //
 // Tables paged rather than read whole. Reading every table in one batch holds the
 // whole database in the isolate, and once version bodies grew past what the isolate
@@ -62,7 +67,29 @@ const PAGED = {
 // wrangler's migration ledger. A restore builds the schema from migrations/, which
 // writes its own. The weekly drill builds its scratch database from _schema.json, and a
 // run whose dumped tables differ from TABLES is refused as tables-mismatch.
-const EXCLUDED = ["d1_migrations"];
+//
+// push_subscriptions (migrations/0041) is left out too (area 8, B8): each row is a
+// device's push endpoint with its p256dh and auth keys, a credential that lets whoever
+// holds it send to that device, and a dump leaves the account. _schema.json still
+// carries its CREATE, so a restore has the table empty and each device subscribes again
+// from the Portal.
+export const EXCLUDED = ["d1_migrations", "push_subscriptions"] as const;
+
+// The credential-column check (d1-dump `credentials`): these columns match its pattern
+// by name and hold counts, not tokens.
+export const CREDENTIAL_ALLOW: Record<string, string> = {
+  "job_outcomes.tokens_input": "a model token count",
+  "job_outcomes.tokens_output": "a model token count",
+  "job_outcomes.tokens_cache_read": "a model token count",
+  "job_outcomes.tokens_cache_creation": "a model token count",
+  "bench_runs.input_tokens": "a model token count",
+  "bench_runs.output_tokens": "a model token count",
+  "bench_runs.cache_read_tokens": "a model token count",
+  "bench_runs.cache_creation_tokens": "a model token count",
+  // Not a column: words in a comment inside session_usage's CREATE (migrations/0025), which
+  // d1-dump's columnNames splits on its commas without stripping comments first.
+  "session_usage.claude_code.token.usage": "a metric name in a schema comment, not a column",
+};
 
 // Every real table in the schema. test/backup.test.ts derives this list from
 // migrations/ and fails in both directions. Excluded: documents_fts and its
@@ -109,9 +136,9 @@ export const TABLES = [
   // Each job's earlier versions, kept by capsid_work_jobs action "edit" (migrations/0033_job_versions.sql).
   // Nothing prunes it, and the job's row holds only the newest version.
   "job_versions",
-  // Drivers' proposed changes to canon documents, pending or decided
-  // (migrations/0034_canon_proposals.sql). Nothing prunes it: a decided row is the
-  // record of who proposed and who approved a canon change.
+  // Drivers' proposed changes to canon documents (migrations/0034_canon_proposals.sql),
+  // from the review queue retired 2026-10-31 (src/canon.ts). Kept, with its decided
+  // rows, until a migration drops it.
   "canon_proposals",
   // The shared packages the Shared code view follows (migrations/0036_shared_packages.sql):
   // configuration, seeded by its migration, so a restore empties it before importing.
@@ -125,11 +152,9 @@ export const TABLES = [
   // What became of each deploy whose live gate ran (migrations/0039_deploy_outcomes.sql),
   // the evidence the promotion and demotion proposals read. Nothing prunes it.
   "deploy_outcomes",
-  // The Access group pinned for each app's members page (migrations/0040_access_sync_groups.sql):
-  // configuration the seat writes by hand. Nothing prunes it.
+  // The Access group pins of the retired Access sync (migrations/0040_access_sync_groups.sql;
+  // the endpoint was removed 2026-10-31, Dustin). Empty; kept until a migration drops it.
   "access_sync_groups",
-  // The devices that get a phone alert (migrations/0041_push_subscriptions.sql).
-  "push_subscriptions",
   // The methods paper's paired comparison (migrations/0047_bench.sql): the registered
   // tasks and every run's outcome, the data its primary outcome is computed from.
   // Insert-only and close-once by trigger; nothing prunes them.
@@ -141,6 +166,13 @@ export const TABLES = [
   "bench_draw",
   // The replay cache, pruned below: a jti matters only inside the signature window.
   "improve_jti",
+  // Capsid's own 404 counts (migrations/0053_page_404_daily.sql) and each site's daily
+  // uptime (migrations/0054_ops_uptime_daily.sql), both pruned below at 90 days.
+  "page_404_daily",
+  "ops_uptime_daily",
+  // The Portal sessions signed out or ended idle (migrations/0055_portal_session_ends.sql),
+  // pruned below once their cookie could no longer be sent.
+  "portal_session_ends",
 ] as const;
 
 interface BackupSummary {
@@ -282,47 +314,25 @@ async function readKvPins(env: Env): Promise<Record<string, KvPin>> {
 
 type DocRow = { namespace: string; path: string; body: string | null };
 
-// Writes one JSON object per table, _schema.json and the KV sidecar under one run
-// prefix, WITHOUT the completion marker, which exportAndPrune writes only once the
-// preflight passes. Returns the documents rows as dumped, which the preflight and the
-// markdown mirror both read, and any difference between the tables dumped and TABLES.
-//
-// The package reads every unpaged table in one D1 batch, which is one transaction, so
-// every table describes the same instant and exported_at describes it. The restore
-// invariants script (scripts/dump-invariants.ts) checks for the signature a torn read
-// leaves.
-//
-// The sidecar, underscore-prefixed so it cannot collide with a table name, holds the
-// KV pins, which are not in D1.
-async function exportDump(env: Env, now: string): Promise<{ dump: DumpResult; docs: DocRow[]; tablesMismatch: string | null }> {
-  const dump = await dumpDatabase(env.DB, env.MEDIA, {
-    prefix: JSON_PREFIX,
-    now: new Date(now),
-    paged: PAGED,
-    exclude: EXCLUDED,
-    sidecars: {
-      kv: { keys: await readKvPins(env) },
-    },
-    markComplete: false,
-  });
-
-  // Read back rather than kept from the snapshot: the package drops each table once it
-  // is written. A documents object that cannot be read fails the run.
+// The documents rows as dumped, which the preflight and the markdown mirror both read.
+// Read back rather than kept from the snapshot: the package drops each table once it is
+// written. A documents object that cannot be read fails the run.
+async function dumpedDocs(env: Env, dump: DumpResult): Promise<DocRow[]> {
   const docsKey = dump.tables.find((t) => t.name === "documents")?.key;
   const docsObject = docsKey ? await env.MEDIA.get(docsKey) : null;
   if (!docsObject) throw new Error(`BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
-  const docs = (JSON.parse(await docsObject.text()) as { rows: DocRow[] }).rows;
+  return (JSON.parse(await docsObject.text()) as { rows: DocRow[] }).rows;
+}
 
-  // The package dumps what sqlite_master holds; TABLES is what the migrations create
-  // (test/backup.test.ts). A difference means the live schema is not the one the
-  // restore procedure knows, so the run is refused rather than marked complete.
+// The package dumps what sqlite_master holds; TABLES is what the migrations create
+// (test/backup.test.ts). A difference means the live schema is not the one the
+// restore procedure knows, so the run is refused rather than marked complete.
+function tablesMismatch(dump: DumpResult): string | null {
   const dumped = new Set(dump.tables.map((t) => t.name));
   const listed = new Set<string>(TABLES);
   const missing = TABLES.filter((t) => !dumped.has(t));
   const extra = [...dumped].filter((t) => !listed.has(t));
-  const tablesMismatch =
-    missing.length || extra.length ? `tables-mismatch: missing ${missing.join(",") || "none"}; unlisted ${extra.join(",") || "none"}` : null;
-  return { dump, docs, tablesMismatch };
+  return missing.length || extra.length ? `tables-mismatch: missing ${missing.join(",") || "none"}; unlisted ${extra.join(",") || "none"}` : null;
 }
 
 // The preflight, run before anything destructive. The dangerous case is a SELECT that
@@ -359,21 +369,19 @@ async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
   return staleMarkdown.length;
 }
 
-// Deletes JSON dump runs outside the graduated retention (14 daily, 8 weekly and 6
-// monthly copies, capsid/rulings/shared-homes-2026-10-06.md), which is d1-dump's default
-// policy and is pruneDumps's job, and CSP reports past retention (the sink stopped
-// storing them on 2026-10-20; this reaps the last of them). pruneDumps counts runs
-// and not objects, deletes a run whole, never prunes the newest complete run, and
-// deletes nothing while no complete run exists.
-async function pruneR2(env: Env, now: string): Promise<{ kept: number; pruned: number; locked: number; reports: number }> {
-  const dumps = await pruneDumps(env.MEDIA, { prefix: JSON_PREFIX, now: new Date(now) });
-
+// Deletes CSP reports past retention (the sink stopped storing them on 2026-10-20; this
+// reaps the last of them). The JSON dump runs outside the graduated retention (14 daily,
+// 8 weekly and 6 monthly copies, capsid/rulings/shared-homes-2026-10-06.md) are pruned by
+// runCheckedBackup with d1-dump's default policy: it counts runs and not objects,
+// deletes a run whole, never prunes the newest complete run, and deletes nothing while
+// no complete run exists.
+async function pruneReports(env: Env, now: string): Promise<number> {
   const reportCutoff = cutoffDay(new Date(now), REPORT_RETENTION_DAYS);
   const staleReports = (await listAllKeys(env.MEDIA, REPORT_PREFIX)).filter((key) =>
     isOlderThan(key, REPORT_PREFIX, reportCutoff)
   );
   if (staleReports.length > 0) await deleteInChunks(env.MEDIA, staleReports);
-  return { kept: dumps.kept, pruned: dumps.pruned, locked: dumps.locked, reports: staleReports.length };
+  return staleReports.length;
 }
 
 // Prunes history after the export, so the rows leaving D1 are in today's dump.
@@ -398,25 +406,75 @@ async function pruneD1(env: Env): Promise<{ versions: number; audit: number }> {
   return { versions: pruned[0]?.results?.[0]?.n ?? 0, audit: pruned[2]?.results?.[0]?.n ?? 0 };
 }
 
+// The run. runCheckedBackup writes one JSON object per table, _schema.json and the KV
+// sidecar (underscore-prefixed so it cannot collide with a table name, holding the KV
+// pins, which are not in D1) under one run prefix, then runs its checks and Capsid's.
+// The package reads every unpaged table in one D1 batch, which is one transaction, so
+// every table describes the same instant and exported_at describes it; the restore
+// invariants script (scripts/dump-invariants.ts) checks for the signature a torn read
+// leaves.
+//
+// Any failed check refuses everything destructive as a unit: the marker, the markdown
+// write, the R2 prunes and the D1 deletes. A run that cannot trust its read of
+// documents cannot trust content derived from it. The JSON dumps are kept: an export
+// deletes nothing, and an empty dump is the evidence of the day the store looked empty.
+// The 404 counts (site-runtime pruneNotFound) and the daily uptime rows, kept 90 days
+// (area 8, N7 and U4), and the ended Portal sessions whose cookies have expired. After the export, like pruneD1, so the rows leaving D1 are in
+// today's dump. A failure is logged and never fails the run: the dump is already marked.
+export const DAILY_RETENTION_DAYS = 90;
+async function pruneDaily(env: Env, now: Date): Promise<void> {
+  try {
+    await pruneNotFound(env.DB, { days: DAILY_RETENTION_DAYS, now });
+    await env.DB.prepare("DELETE FROM ops_uptime_daily WHERE day < ?1").bind(cutoffDay(now, DAILY_RETENTION_DAYS - 1)).run();
+    await env.DB.prepare("DELETE FROM portal_session_ends WHERE expires_at < ?1").bind(now.getTime()).run();
+  } catch (err) {
+    logEvent("BACKUP_DAILY_PRUNE_FAILED", { message: `BACKUP_DAILY_PRUNE_FAILED ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+  }
+}
+
 async function exportAndPrune(env: Env, now: string, lease: string): Promise<BackupSummary> {
-  const { dump, docs, tablesMismatch } = await exportDump(env, now);
+  let docs: DocRow[] = [];
+  let fts = "not-run";
+  // Capsid's own reason, named so a log search finds it; the package's problems are
+  // the reason only when Capsid's checks found none.
+  let ownReason: string | null = null;
+
+  let dump: DumpResult;
+  let pruned = { kept: 0, pruned: 0, locked: 0 };
+  let pruneRefused: string | null = null;
+  try {
+    const result = await runCheckedBackup(env.DB, env.MEDIA, {
+      prefix: JSON_PREFIX,
+      now: new Date(now),
+      paged: PAGED,
+      exclude: [...EXCLUDED],
+      sidecars: { kv: { keys: await readKvPins(env) } },
+      required: ["documents"],
+      credentials: { allow: CREDENTIAL_ALLOW },
+      check: async (d) => {
+        docs = await dumpedDocs(env, d);
+        const checked = await preflight(env, docs);
+        fts = checked.fts;
+        ownReason = tablesMismatch(d) ?? checked.pruneRefused;
+        // The lease is get-then-put, so a run that started alongside this one may hold it
+        // now. Re-read before anything destructive: a run that lost it prunes nothing.
+        if (ownReason === null) {
+          const holder = await env.APP_KV.get(LEASE_KEY);
+          if (holder !== lease) ownReason = `lease-lost: ${LEASE_KEY} is now ${holder}`;
+        }
+        return ownReason === null ? [] : [ownReason];
+      },
+    });
+    dump = result.dump;
+    pruned = result.pruned;
+  } catch (err) {
+    if (!(err instanceof BackupIncomplete)) throw err;
+    dump = err.dump;
+    pruneRefused = ownReason ?? err.problems.join("; ");
+  }
   const jsonPrefix = dump.prefix;
   const jsonKeys = dump.keys;
 
-  // A failed preflight refuses everything past this point as a unit: the marker, the
-  // markdown write, the R2 prunes and the D1 deletes. A run that cannot trust its read
-  // of documents cannot trust content derived from it. The JSON dumps above are kept:
-  // an export deletes nothing, and an empty dump is the evidence of the day the store
-  // looked empty.
-  const checked = await preflight(env, docs);
-  const fts = checked.fts;
-  let pruneRefused = tablesMismatch ?? checked.pruneRefused;
-  // The lease is get-then-put, so a run that started alongside this one may hold it
-  // now. Re-read before anything destructive: a run that lost it prunes nothing.
-  if (pruneRefused === null) {
-    const holder = await env.APP_KV.get(LEASE_KEY);
-    if (holder !== lease) pruneRefused = `lease-lost: ${LEASE_KEY} is now ${holder}`;
-  }
   if (pruneRefused !== null) {
     logEvent("BACKUP_PREFLIGHT_REFUSED", {
       message:
@@ -441,15 +499,12 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
     };
   }
 
-  // The completion marker, written after every object and only once the preflight
-  // passed, so a run that threw or was refused carries none. Only a marked run counts
-  // toward the retention floor. It lists the objects it vouches for, and the call adds
-  // its own key to jsonKeys.
-  await writeCompleteMarker(env.MEDIA, dump);
-
+  // The package wrote the completion marker (it lists the objects it vouches for, and
+  // adds its own key to jsonKeys) and pruned the dumps outside the graduated retention.
   const markdownPruned = await mirrorMarkdown(env, docs);
-  const dumps = await pruneR2(env, now);
+  const reports = await pruneReports(env, now);
   const history = await pruneD1(env);
+  await pruneDaily(env, new Date(now));
 
   // Stamp the last clean success, read by /health. A refused run returned above.
   await env.APP_KV.put(BACKUP_LAST_OK_KEY, now);
@@ -461,10 +516,10 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
     documents: docs.length,
     markdown_written: docs.length,
     markdown_pruned: markdownPruned,
-    json_backups_kept: dumps.kept,
-    json_backups_pruned: dumps.pruned,
-    json_backups_locked: dumps.locked,
-    reports_pruned: dumps.reports,
+    json_backups_kept: pruned.kept,
+    json_backups_pruned: pruned.pruned,
+    json_backups_locked: pruned.locked,
+    reports_pruned: reports,
     versions_pruned: history.versions,
     audit_pruned: history.audit,
     prune_refused: null,

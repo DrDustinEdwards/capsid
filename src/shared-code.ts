@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { readRepoFile, repoBlobPaths } from "./github/contents";
 import { readNpm, type FetchLike } from "./ops-packages";
-import { readSiteConfig } from "./ops-sites";
+import { readSiteConfig, isFurtherHost } from "./ops-sites";
 import type { PackageSnapshot } from "./ops-types/sites";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types/feed";
 import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
@@ -361,7 +361,10 @@ export async function readSharedCode(env: Env, now: Date, fresh = false, fetchIm
     return { generated: now.toISOString(), configured: false, error: /no such table/i.test(why) ? "shared_packages does not exist yet: migrations/0036_shared_packages.sql is the seat's to apply" : why, apps_read: 0, apps_failed: [], packages: [] };
   }
   if (config.length === 0) return { generated: now.toISOString(), configured: false, error: null, apps_read: 0, apps_failed: [], packages: [] };
-  const sites = await readSiteConfig(env.DB);
+  // A further host's row (capsid-portal, foxhound-admin-mcp) is not a namespace and has no
+  // repository to read, so only registered namespaces' rows are apps here.
+  const registered = ((await env.DB.prepare("SELECT namespace FROM namespaces").all<{ namespace: string }>()).results ?? []).map((r) => r.namespace);
+  const sites = (await readSiteConfig(env.DB)).filter((s) => !isFurtherHost(s.namespace, registered));
   const apps: AppRead[] = [];
   for (const s of sites) apps.push(await readApp(env, s.namespace, s.name));
   const tags = new Map<string, string[] | string>();

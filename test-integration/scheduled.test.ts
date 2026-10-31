@@ -29,6 +29,20 @@ async function fire(cron: string) {
   await waitOnExecutionContext(ctx);
 }
 
+// The tick with outbound fetch refused at once. Its watcher reads and the site pulse
+// probe every live site over the network, which took the tick from about 17 s to past
+// this suite's 30 s timeout on a slow runner (run 41222921780); a refused read is what a
+// test without credentials meets anyway, and each step records it. The tick's own
+// handler (the signed-in crawl's Portal pages) is in-process and unaffected.
+async function fireTickOffline() {
+  const offline = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in the integration suite"));
+  try {
+    await fire(TICK_CRON);
+  } finally {
+    offline.mockRestore();
+  }
+}
+
 describe("the three cron expressions", () => {
   // The ledger assertions below count rows, so each test starts from an empty ledger.
   beforeEach(async () => {
@@ -63,7 +77,7 @@ describe("the three cron expressions", () => {
   });
 
   it("the tick runs against real bindings and records its run", async () => {
-    await fire(TICK_CRON);
+    await fireTickOffline();
     expect(await ledger("tick")).toEqual([{ outcome: "ok", reason: "the tick's steps ran; each records its own run" }]);
   });
 
@@ -132,7 +146,7 @@ describe("the three cron expressions", () => {
       logged.mockRestore();
     }
 
-    await fire(TICK_CRON);
+    await fireTickOffline();
     expect((await ledger("tick")).map((r) => r.outcome)).toEqual(["ok"]);
   });
 });

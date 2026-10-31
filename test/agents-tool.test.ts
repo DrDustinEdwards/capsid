@@ -208,14 +208,14 @@ test("revoking or re-scoping an agent that is not there is a refusal, not a sile
 
 test("update_scopes replaces the scopes and records both sides in the audit row", async () => {
   const { d1, call, close } = await connect(adminAgentForEmail("admin@example.com"), [await liveRow()]);
-  const result = await call({ action: "update_scopes", name: "capsid-driver", grants: ["read", "write"], flags: { can_direct_write: true } });
+  const result = await call({ action: "update_scopes", name: "capsid-driver", grants: ["read", "write"], flags: { can_touch_protected: true } });
   await close();
   assert.notEqual(result.isError, true, result.content[0].text);
   const body = parse(result);
   assert.equal(body.ok, true, refusalOf(result));
   const scopes = body.scopes as { grants: string[]; flags: Record<string, boolean> };
   assert.deepEqual(scopes.grants, ["read", "write"]);
-  assert.equal(scopes.flags.can_direct_write, true);
+  assert.equal(scopes.flags.can_touch_protected, true);
   assert.equal(scopes.flags.can_merge, false, "an unnamed flag must not be turned on by a call that did not name it");
   const audit = statements(d1).find((r) => /INSERT INTO audit_log/i.test(r.sql));
   assert.ok(audit, "update_scopes was not audit-logged");

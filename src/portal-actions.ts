@@ -2,10 +2,11 @@ import { getCookie } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { performControl, previewControl } from "./controls";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
-import { type PortalUser, portalDisplay, portalGate, portalSignOutCookies, sourceAddress } from "./portal-auth";
+import { endPortalSession, logPortalSignOut, type PortalUser, portalDisplay, portalGate, portalSessionId, portalSignOutCookies, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import { LOGOUT_HEADERS } from "@dustinedwards/site-runtime/headers";
 import { refuseCrossSite } from "@dustinedwards/site-runtime/origin";
+import { requireJson } from "@dustinedwards/site-runtime/body";
 import type { Env } from "./env";
 import { capsidStatus } from "./status";
 import { readBoundedText } from "./signed-requests";
@@ -55,7 +56,7 @@ const BODY_MAX_BYTES = 65_536;
 
 type Gated = { ok: true; email: string; user: PortalUser; csrf: string; body: Record<string, unknown> } | { ok: false; response: Response };
 
-/** The checks both POSTs run, in order: the session, the fetch metadata, the body cap,
+/** The checks both POSTs run, in order: the session, the fetch metadata, the content type, the body cap,
  *  the CSRF pair, then the JSON. Nothing here reads or writes state. */
 export async function gateActionRequest(request: Request, env: Env, now: Date): Promise<Gated> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
@@ -65,6 +66,10 @@ export async function gateActionRequest(request: Request, env: Env, now: Date): 
   // Neither header (an older browser, or curl with the cookies) is let through to the CSRF check.
   const crossSite = refuseCrossSite(request);
   if (crossSite) return { ok: false, response: crossSite };
+  // R4: a text/plain or form body is refused before it is read, so no cross-site form or no-cors fetch reaches an
+  // action as a simple request (site-runtime ./body requireJson; the signed-in crawl probes it).
+  const notJson = requireJson(request);
+  if (notJson) return { ok: false, response: notJson };
 
   const bounded = await readBoundedText(request, BODY_MAX_BYTES);
   if (!bounded.ok) return { ok: false, response: new Response(null, { status: 413, headers: { "Cache-Control": "no-store" } }) };
@@ -170,14 +175,18 @@ export async function handlePortalActivity(request: Request, env: Env, now: Date
   return jsonResponse(body);
 }
 
-/** POST /portal/api/sign-out, body {}: expire the session and CSRF cookies in this
- *  browser. The same checks as an action (the session, Sec-Fetch-Site, the body cap,
- *  the CSRF pair), so a cross-site page cannot sign the administrator out. It ends the
- *  Portal session only: the Access session at the team domain is Cloudflare's, so the
- *  next visit to /portal may sign in again without a prompt. */
+/** POST /portal/api/sign-out, body {}: end this Portal session on the server
+ *  (endPortalSession, so a copied cookie ends too, and other sessions do not) and expire the session and CSRF
+ *  cookies in this browser. The same checks as an action (the session, Sec-Fetch-Site,
+ *  the body cap, the CSRF pair), so a cross-site page cannot sign the administrator out.
+ *  The Access session at the team domain is Cloudflare's, so the next visit to /portal
+ *  may sign in again without a prompt. */
 export async function handlePortalSignOut(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
   if (!gated.ok) return gated.response;
+  const sid = await portalSessionId(request, env);
+  if (sid) await endPortalSession(env, sid, now);
+  await logPortalSignOut(gated.user.email);
   // Clear-Site-Data too, so the browser drops what the Portal left behind (OSHP's logout headers).
   const headers = new Headers({ "Cache-Control": "no-store", ...LOGOUT_HEADERS });
   for (const cookie of portalSignOutCookies(portalCookiePath(new URL(request.url)))) headers.append("Set-Cookie", cookie);

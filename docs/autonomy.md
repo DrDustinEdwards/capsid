@@ -34,7 +34,7 @@ approval.
 | `size_within_cap` | the PR changes at most 1,000 lines (additions plus deletions); a larger one is merge class `approve`, "over the size cap" |
 | `ci_green` | every check run on the head sha completed and concluded success, skipped or neutral, at least one reported, and the CI run on that sha ran the typecheck step (all four configs), the lint step, the unit suite and the integration suite to success |
 
-Tests, `src/`, docs, `CLAUDE.md` and `.claude/` pass the refused-path check since policy version 2 (2026-09-17); in capsid, version 6 then holds all but docs and dashboard CSS for the seat. `PROTECTED_PATH_PATTERNS` (`src/protected-paths.ts`), once the improve loop's list and now the paths a repo write needs `can_touch_protected` for, no longer decides what auto-merges.
+Tests, `src/`, docs, `CLAUDE.md` and `.claude/` pass the refused-path check since policy version 2 (2026-09-17); in capsid, version 6 then holds all but docs and dashboard CSS for the seat. The protected path list (`src/protected-paths.ts`) never decided what auto-merges; it went with `capsid_change_repo` on 2026-10-31.
 
 The document names the checks, the refused paths, the allowed paths and the required CI steps, and the code
 enforces them. A document that disagrees with the code on any of the four is refused at load time. A test asserts the two agree in
@@ -79,7 +79,7 @@ after the key is deleted), the load records whatever signed body is stored at th
 moment. The key is not in the backup's KV pins: after a D1 restore to an older policy,
 the loaders refuse it until the seat signs it again.
 
-**Sessions start in the cloud** (docs/routines.md): a routine fires a session for a queued job, the job is marked started, and the session completes it by naming its pull request. The overnight switch and the plan and digest views are in docs/overnight.md.
+**Sessions start by hand**: routine firing was removed on 2026-10-31 (Dustin; project threads do the work). A session that takes a job marks it started with `begin` and completes it by naming its pull request. The overnight switch and the plan and digest views are in docs/overnight.md.
 
 **Merge classes, report-only** (`src/merge-class.ts`; docs/design/design-merge-pipeline.md section 2, the design's PR 2, ruled 2026-10-09). The tick gives every PR it judges one class with its reasons: `auto` (passes the signed policy), `approve` (stopped only by a rule a person may waive), `typed` (any money path, decided before anything else), `seat` (a migration, a workflow, a fork head, a base other than the default branch, or a file list that could not be read) or `wait` (CI not finished, or a draft). Its path class is its riskiest file's: docs, dashboard-css, tests, dashboard-code, deps-own, src-routine, deps-other, src-worth, workflow, migration, money (a manifest or lockfile counts as deps-other until the diff is read). The class, path class and reasons ride on the awaiting-seat set and in the inbox item's title. The approval record reads them, and the executor merges what was approved (both below). A PR whose body names no job is not read, so it has no class. Tests: test/merge-class.test.ts, and the tick's in test/auto-merge.test.ts.
 

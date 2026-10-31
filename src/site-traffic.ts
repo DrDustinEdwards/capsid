@@ -3,6 +3,7 @@ import type { FetchLike } from "./live-checks";
 import { CF_API, CF_GRAPHQL, cfGetAll, cloudflareCredentials } from "./ops-cloudflare";
 import { AI_SEARCH_BOTS, AI_TRAINING_BOTS, DENIED_BOTS, SEARCH_ENGINE_BOTS } from "@drdustinedwards/site-helpers/robots";
 import { reportSite } from "./site-reports";
+import type { ServerErrors } from "./ops-types/sites";
 
 // What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic
 // (the SEO plan, "Beyond the module"). not_found: the paths that answered 404 over a
@@ -23,7 +24,7 @@ const SQL_API = `${CF_API}/analytics/sql`;
 const TIMEOUT_MS = 15_000;
 const DAY_MS = 86_400_000;
 
-export const TRAFFIC_REPORTS = ["not_found", "web_vitals", "ai_crawlers"] as const;
+export const TRAFFIC_REPORTS = ["not_found", "server_errors", "web_vitals", "ai_crawlers"] as const;
 export const MAX_TRAFFIC_DAYS = 30;
 export const MAX_TRAFFIC_ROWS = 200;
 type TrafficReport = (typeof TRAFFIC_REPORTS)[number];
@@ -203,6 +204,24 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
       truncated: raw.length >= QUERY_ROWS,
     };
   }
+  if (report === "server_errors") {
+    const raw = await sql(
+      fetchImpl,
+      creds.token,
+      creds.account,
+      `SELECT clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND edgeResponseStatus >= 500 GROUP BY clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
+      { start, host }
+    );
+    return {
+      namespace,
+      origin: site.origin,
+      report,
+      since: start,
+      note: "Every 5xx the edge answered, by path and status. Sampled, so hits are estimates; paths are what visitors sent.",
+      failures: raw.slice(0, limit).map((r) => ({ path: typeof r.path === "string" ? r.path : "", status: Number(r.status), hits: count(r.hits) })),
+      truncated: raw.length > limit,
+    };
+  }
   const rows = await sql(
     fetchImpl,
     creds.token,
@@ -218,4 +237,53 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
     note: "Cloudflare samples this record, so hits are estimates. probe marks a path scanners try on every site.",
     ...notFoundRows(rows, limit),
   };
+}
+
+const HOUR_MS = 3_600_000;
+
+// How many path and status pairs a finding names.
+const TOP_5XX = 5;
+
+/**
+ * Returned 5xx at the edge per site host, over the most recent complete hour (L6, 2026-10-31):
+ * Workers analytics count only invocations that threw, so a Worker that catches its error and
+ * answers 500 or 503 was invisible to the error-rate finding. Read from the same SQL API record
+ * as the 404 report, sampled, so the counts are estimates. A host with no row had none. Keyed
+ * by namespace; a site whose origin is a workers.dev host is not in the record and is left out.
+ * Grouped by path and status too: the first findings (2026-10-31) said only "79 answers were
+ * 5xx", and nobody could tell which page without a dashboard.
+ */
+export async function readServerErrors(
+  env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
+  sites: ReadonlyArray<{ namespace: string; origin: string }>,
+  fetchImpl: FetchLike,
+  now: Date
+): Promise<Record<string, ServerErrors>> {
+  const creds = cloudflareCredentials(env);
+  if (!creds.ok) throw new Error(creds.reason);
+  const end = new Date(Math.floor(now.getTime() / HOUR_MS) * HOUR_MS);
+  const start = new Date(end.getTime() - HOUR_MS);
+  const rows = await sql(
+    fetchImpl,
+    creds.token,
+    creds.account,
+    `SELECT clientRequestHttpHost AS host, clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND timestamp < $end AND edgeResponseStatus >= 500 GROUP BY clientRequestHttpHost, clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
+    { start: start.toISOString(), end: end.toISOString() }
+  );
+  const byHost = new Map<string, ServerErrors>();
+  for (const r of rows) {
+    const host = typeof r.host === "string" ? r.host.toLowerCase() : "";
+    const e = byHost.get(host) ?? { count: 0, top: [] };
+    const hits = count(r.hits);
+    e.count += hits;
+    if (e.top.length < TOP_5XX) e.top.push({ path: typeof r.path === "string" ? r.path : "", status: Number(r.status), hits });
+    byHost.set(host, e);
+  }
+  const out: Record<string, ServerErrors> = {};
+  for (const site of sites) {
+    const host = new URL(site.origin).hostname.toLowerCase();
+    if (host.endsWith(".workers.dev")) continue;
+    out[site.namespace] = byHost.get(host) ?? { count: 0, top: [] };
+  }
+  return out;
 }
