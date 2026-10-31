@@ -160,6 +160,35 @@ function seedPackages(): OpsPackageConfig[] {
 
 // A made-up daily history for a configured package: the former name from 2025-06-01
 // to 2026-06-30, then the current name, a few downloads a day with a weekly rhythm.
+// The Completeness view's answer (src/completeness.ts), in sample names: one area verified
+// complete on every site but one that is still in its clean days, one failing a check, one
+// with checks passing and no verifier, and the rest without a live check yet.
+function completeness() {
+  const sites = ["a", "b", "c", "d"].map((x) => ({ id: `sample-${x}`, name: `Sample ${x.toUpperCase()}`, origin: `https://${x}.example.com` }));
+  const names = ["Search, sharing and AI answers", "Security headers and CSP", "Sign-in and access", "Writing and rendering", "Editing contract", "Images and media", "Speed and caching", "Running and recovery", "Accessibility and components", "Charts", "AI and MCP", "Checks and tooling"];
+  const cell = (status: string, reason: string, extra: Record<string, unknown> = {}) => ({ status, reason, evidence: [], clean_days: null, errors: [], ...extra });
+  const areas = names.map((name, i) => {
+    const id = i + 1;
+    const cells: Record<string, unknown> = { package: cell("missing", "no verifier has checked the package") };
+    for (const s of sites) cells[s.id] = cell("missing", "no live check yet");
+    if (id === 1) {
+      cells.package = cell("complete", "Verify search, 2026-07-01", { evidence: ["https://example.com/pr/1"] });
+      for (const s of sites) cells[s.id] = cell("complete", "Verify search, 2026-07-01", { evidence: ["https://example.com/run/1"], clean_days: 9 });
+      cells["sample-d"] = cell("partial", "failed on 2026-07-03, after Verify search signed; needs a fresh verifier", { clean_days: 2 });
+    }
+    if (id === 2) {
+      for (const s of sites) cells[s.id] = cell("partial", "checks pass; no verifier yet", { clean_days: 4 });
+      cells["sample-b"] = cell("missing", "header-check: 2 errors", { errors: [{ check: "csp-missing", detail: "https://b.example.com/ sends no Content-Security-Policy" }, { check: "hsts-short", detail: "https://b.example.com/ max-age is 300 seconds" }] });
+    }
+    if (id === 11) {
+      for (const s of sites) cells[s.id] = cell("n/a", "no check for a site");
+    }
+    const lines = id <= 2 ? { prs: id * 3, added: 420 * id, removed: 910 * id } : { prs: 0, added: 0, removed: 0 };
+    return { id, name, builder: `Build ${name.toLowerCase()}`, verifier: id === 1 ? "Verify search" : null, lines, cells };
+  });
+  return { read: new Date(mockNow() - 5 * 60_000).toISOString(), as_of: new Date(mockNow() - 6 * 3600_000).toISOString(), error: null, finished: false, public_token: true, sites, areas };
+}
+
 // The Shared code view's answer (src/shared-code.ts), in sample names: one app two
 // releases behind, one current through the repo's old name, a renovate preset, and a
 // local copy still in one app; one package on npm at its tagged version, and a private
@@ -1355,7 +1384,7 @@ export function mockOpsApi(): Plugin {
   const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/completeness", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1431,6 +1460,10 @@ export function mockOpsApi(): Plugin {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           const out = mockLibrary(url);
           return send(res, out.status, out.body);
+        }
+        if (path === "/portal/api/completeness") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, completeness());
         }
         if (path === "/portal/api/shared-code") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
