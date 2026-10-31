@@ -18,7 +18,11 @@ async function watch(page, expect404 = false) {
   // The policy's report-uri is production's sink; nothing from a test run belongs there.
   await page.route("https://mcp.dustinedwards.info/**", (route) => route.abort());
   await page.addInitScript(() => {
-    document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP: ${e.violatedDirective} ${e.blockedURI}`));
+    // Enforced violations only: the staged Report-Only policy (Trusted Types, from the registry)
+    // reports Capsomer's DOM sinks by design, and those reports are what it is staged to collect.
+    document.addEventListener("securitypolicyviolation", (e) => {
+      if (e.disposition === "enforce") console.error(`CSP: ${e.violatedDirective} ${e.blockedURI}`);
+    });
   });
   page.on("console", (m) => {
     if (m.type() === "error" && !(expect404 && /404 \(Not Found\)/.test(m.text()) && m.location().url.endsWith("/nope"))) problems.push(m.text());

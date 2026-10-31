@@ -92,7 +92,7 @@ const ICON_LINKS = iconLinks()
 
 /**
  * The page around a body: one stylesheet set, the theme script and one module script, no inline
- * script or style, so the policy in _headers needs no hash (src/security-headers.mjs); JSON-LD is
+ * script or style, so the policy in _headers needs no hash (the registry entry, site-runtime-headers); JSON-LD is
  * data, not script, so the policy does not apply to it. The head's tags are Prelum's, with the
  * production origin, so the 404 says noindex and claims no canonical. `title` is the page's own, before
  * ", Capsid"; `parent` is the page between its section and it in its breadcrumb trail. A wide page's
