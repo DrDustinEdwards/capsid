@@ -85,6 +85,12 @@ function sectionOf(path) {
 export const CARD = { url: "/assets/og-card.png", width: 1200, height: 630, alt: "A travel poster: Visit Capsid. AI agents say it's done. Capsid checks." };
 const head = defineHead({ origin: ORIGIN, siteName: "Capsid", image: CARD, suffix: ", Capsid", locale: "en_US" });
 
+/** Prelum's iconLinks() as tags, for the files in src/icons (build.mjs). */
+const ICON_LINKS = `<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">`;
+
 /**
  * The page around a body: one stylesheet set, the theme script and one module script, no inline
  * script or style, so the policy in _headers needs no hash (src/security-headers.mjs); JSON-LD is
@@ -110,7 +116,7 @@ export function layout({ title, description, path, body, asOf, wide = false, dat
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 ${headMarkup}
-<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+${ICON_LINKS}
 <link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/capsomer.css">
 <link rel="stylesheet" href="/assets/enarratio.css">
@@ -139,7 +145,7 @@ function header(here, path) {
   const current = NAV.find(([href]) => href === here || href === path)?.[1];
   return letterheadHtml({
     name: "Capsid",
-    mark: '<img src="/assets/icon.svg" alt="" width="32" height="32">',
+    mark: '<img src="/icon.svg" alt="" width="32" height="32">',
     links: NAV.map(([href, label]) => [href, href === "/" ? "Home" : label]),
     current: current === "Overview" ? "Home" : current,
     search: { action: "/search/", label: "Search Capsid" },

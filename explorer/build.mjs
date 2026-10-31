@@ -167,7 +167,9 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   copyFileSync(require.resolve("enarratio/enhance"), join(assets, "enhance.js"));
   copyFileSync(join(here, "src", "explorer.js"), join(assets, "explorer.js"));
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
-  copyFileSync(join(here, "src", "icon.svg"), join(assets, "icon.svg"));
+  // The family icon set at the root, drawn by Prelum's prelum-icons, with site.webmanifest from its webManifest. The
+  // explorer stays on Prelum 0.20 until it can take Enarratio 0.4, so the files are written once, not imported.
+  cpSync(join(here, "src", "icons"), out, { recursive: true });
   copyFileSync(join(here, "src", "og-card.png"), join(assets, "og-card.png"));
   // The family's faces (capsomer/fonts.css, inlined above), served from here because the policy
   // allows fonts from 'self' only: Capsomer's fonts/ beside assets/, where its "../fonts/" points.
