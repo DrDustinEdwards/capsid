@@ -57,7 +57,7 @@ test("the set differs from the package's standard by exactly one header, derived
 
 test("every class passes the package's own check against the set Capsid declared, reading every header in it", () => {
   for (const cls of ["html", "json", "other"] as const) {
-    const results = checkSecurityHeaders(new Headers(withSecurityHeaders(new Response("x", { headers: { "Content-Type": cls === "html" ? "text/html" : cls === "json" ? "application/json" : "text/plain" } })).headers), {
+    const results = checkSecurityHeaders(new Headers(withSecurityHeaders(new Response("x", { headers: { "Content-Type": cls === "html" ? "text/html; charset=utf-8" : cls === "json" ? "application/json" : "text/plain; charset=utf-8" } })).headers), {
       standard: CAPSID_STANDARD_HEADERS,
       csp: false,
     });
