@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { SELF_REPO, ciDispatch, deleteBranch, deleteRepoFile, writeRepoFile } from "../src/github.ts";
-import { mcpOriginProblem } from "../src/security-headers.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
@@ -163,23 +162,3 @@ test("prompts/list passes titles through a character allowlist", async () => {
   assert.ok(!/[\u0000-\u001f\u007f]/.test(description), "a control character from a stored title reached the client");
   assert.match(description, /Brief/, "the legible part of the title must survive the filter");
 });
-
-// Origin allowlist on /mcp
-
-test("a cross-origin browser request to /mcp is refused; same-origin, claude.ai and origin-less clients pass", () => {
-  const at = (origin: string | null) =>
-    mcpOriginProblem(
-      new Request("https://capsid.dustin-edwards.workers.dev/mcp", {
-        method: "POST",
-        headers: origin === null ? {} : { Origin: origin },
-      })
-    );
-  assert.equal(at(null), null, "a non-browser client sends no Origin and must pass");
-  assert.equal(at("https://capsid.dustin-edwards.workers.dev"), null, "same-origin must pass");
-  assert.equal(at("https://claude.ai"), null, "the one first-party browser client must pass");
-  assert.match(String(at("https://evil.example")), /Origin/, "a foreign Origin was admitted to /mcp");
-  assert.match(String(at("null")), /Origin/, "an opaque 'null' Origin was admitted to /mcp");
-});
-
-// The wiring into the fetch handler is driven through the whole Worker in
-// test-integration/oauth.test.ts.

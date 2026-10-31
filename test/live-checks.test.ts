@@ -9,13 +9,8 @@ import {
   MAX_ANALYTICS_RULES,
   MAX_SHA_RULES,
   beaconCount,
-  BEACON_INJECTED_URL,
-  beaconSrc,
-  cspAllowsBeaconReport,
-  cspAllowsBeaconScript,
   liveChecks,
   pageFindings,
-  parseCsp,
   parseLiveConfig,
   readPage,
   shaFinding,
@@ -135,83 +130,6 @@ test("beaconCount does not count other scripts, a mention in text, or a lookalik
   assert.equal(beaconCount(page(`<script>var u = "https://static.cloudflareinsights.com/beacon.min.js";</script>`)), 0);
 });
 
-// the CSP
-
-const csp = (header: string) => parseCsp(header);
-
-test("parseCsp: directives per policy, the first occurrence wins, several policies on one header", () => {
-  const [one] = csp("default-src 'self'; script-src a.example; script-src b.example");
-  assert.deepEqual(one.get("script-src"), ["a.example"]);
-  assert.equal(csp("default-src 'self', script-src 'none'").length, 2);
-  assert.deepEqual(csp(""), []);
-});
-
-test("script: the host, a wildcard, https:, * and an absent directive allow the beacon; default-src is the fallback", () => {
-  for (const header of [
-    "script-src 'self' https://static.cloudflareinsights.com",
-    "script-src static.cloudflareinsights.com",
-    "script-src https://*.cloudflareinsights.com",
-    "script-src https:",
-    "script-src *",
-    "default-src 'self' https://static.cloudflareinsights.com",
-    "img-src 'self'",
-    "script-src https://static.cloudflareinsights.com/",
-    "script-src https://static.cloudflareinsights.com:443/beacon.min.js/",
-    "script-src https://static.cloudflareinsights.com/beacon.min.js/",
-  ]) {
-    assert.deepEqual(cspAllowsBeaconScript(csp(header)), { ok: true, why: null }, header);
-  }
-});
-
-test("PLANT: a CSP that blocks the beacon script is reported, whichever way it blocks", () => {
-  for (const header of [
-    "script-src 'self'",
-    "default-src 'self'",
-    "script-src 'none'",
-    "script-src",
-    "script-src 'nonce-abc' 'strict-dynamic' https://static.cloudflareinsights.com",
-    "script-src https://cloudflareinsights.com",
-    "script-src https://evil-static.cloudflareinsights.com",
-    "script-src 'self' https://static.cloudflareinsights.com, script-src 'self'",
-    "script-src https://static.cloudflareinsights.com/other.js",
-    "default-src 'self' https://static.cloudflareinsights.com; script-src 'self' https://static.cloudflareinsights.com/beacon.min.js",
-    "script-src https://static.cloudflareinsights.com/beacon/",
-    "script-src https://static.cloudflareinsights.com:8443",
-    "script-src wss://static.cloudflareinsights.com",
-  ]) {
-    const verdict = cspAllowsBeaconScript(csp(header));
-    assert.equal(verdict.ok, false, `allowed: ${header}`);
-    assert.ok(verdict.why);
-  }
-});
-
-test("report: 'self' is enough on Cloudflare, never on another host, and the apex is not matched by a wildcard", () => {
-  assert.equal(cspAllowsBeaconReport(csp("connect-src 'self'"), "cloudflare").ok, true);
-  assert.equal(cspAllowsBeaconReport(csp("connect-src 'self'"), "vercel").ok, false);
-  assert.equal(cspAllowsBeaconReport(csp("connect-src https://cloudflareinsights.com"), "vercel").ok, true);
-  assert.equal(cspAllowsBeaconReport(csp("connect-src https://*.cloudflareinsights.com"), "vercel").ok, false);
-  assert.equal(cspAllowsBeaconReport(csp("default-src 'self'"), "cloudflare").ok, true, "default-src is the fallback");
-  assert.equal(cspAllowsBeaconReport(csp("connect-src 'none'"), "cloudflare").ok, false);
-  assert.equal(cspAllowsBeaconReport(csp("script-src 'self'"), "vercel").ok, true, "no connect-src and no default-src allows it");
-});
-
-test("the edge injects the beacon from a versioned path; a page's own tag is judged by its src", () => {
-  const fileOnly = csp("script-src https://static.cloudflareinsights.com/beacon.min.js");
-  assert.equal(beaconSrc(page("")), BEACON_INJECTED_URL);
-  assert.equal(cspAllowsBeaconScript(fileOnly, beaconSrc(page(""))).ok, false, "the bare file does not cover the injected path");
-  assert.equal(beaconSrc(page(BEACON)), "https://static.cloudflareinsights.com/beacon.min.js");
-  assert.equal(cspAllowsBeaconScript(fileOnly, beaconSrc(page(BEACON))).ok, true, "a page's own tag names the bare file");
-  assert.equal(beaconSrc(page(`<script src="//static.cloudflareinsights.com/beacon.min.js"></script>`)), "https://static.cloudflareinsights.com/beacon.min.js");
-});
-
-test("PLANT: a source's path counts, so a host listed with another path does not let the beacon report", () => {
-  assert.equal(cspAllowsBeaconReport(csp("connect-src https://cloudflareinsights.com/cdn-cgi/"), "vercel").ok, true);
-  assert.equal(cspAllowsBeaconReport(csp("connect-src https://cloudflareinsights.com/cdn-cgi/rum"), "vercel").ok, true);
-  const blocked = cspAllowsBeaconReport(csp("connect-src https://cloudflareinsights.com/api"), "vercel");
-  assert.equal(blocked.ok, false);
-  assert.match(blocked.why ?? "", /cdn-cgi\/rum/);
-});
-
 // findings from one page
 
 const read = (html: string, csp?: string): Parameters<typeof pageFindings>[2] => ({
@@ -226,7 +144,7 @@ const noBeaconRule: Extract<LiveRule, { path: string }> = { namespace: "sample",
 const prints = (findings: Array<{ fingerprint: string }>) => findings.map((f) => f.fingerprint);
 
 test("a public page with one beacon and a CSP that allows it is clean", () => {
-  const ok = "script-src 'self' https://static.cloudflareinsights.com; connect-src 'self'";
+  const ok = "script-src 'self' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/; connect-src 'self'";
   assert.deepEqual(pageFindings(SITE, beaconRule, read(page(BEACON), ok)), []);
   assert.deepEqual(pageFindings(SITE, beaconRule, read(page(BEACON))), [], "no CSP at all blocks nothing");
 });
@@ -236,16 +154,15 @@ test("a beacon rule no longer counts beacons: a Worker cannot see the one the ed
   assert.deepEqual(pageFindings(SITE, beaconRule, read(page(BEACON + BEACON))), []);
 });
 
-test("PLANT: a blocked script and a blocked report each file their own finding", () => {
-  assert.deepEqual(prints(pageFindings(SITE, beaconRule, read(page(BEACON), "script-src 'self'; connect-src 'self'"))), ["live-csp-script-sample-root"]);
-  assert.deepEqual(
-    prints(pageFindings(SITE, beaconRule, read(page(BEACON), "script-src https://static.cloudflareinsights.com; connect-src 'none'"))),
-    ["live-csp-report-sample-root"]
-  );
-  assert.deepEqual(prints(pageFindings(SITE, beaconRule, read(page(""), "default-src 'none'"))), [
-    "live-csp-script-sample-root",
-    "live-csp-report-sample-root",
-  ]);
+test("PLANT: a CSP that blocks the beacon's script or its report is a finding", () => {
+  for (const policy of [
+    "script-src 'self'; connect-src 'self'",
+    "script-src https://static.cloudflareinsights.com/beacon.min.js; connect-src 'self'",
+    "script-src https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/; connect-src 'none'",
+    "default-src 'none'",
+  ]) {
+    assert.deepEqual(prints(pageFindings(SITE, beaconRule, read(page(BEACON), policy))), ["live-csp-beacon-sample-root"], policy);
+  }
 });
 
 test("a page that must carry no beacon is clean without one and a finding with one; its CSP is not judged", () => {
@@ -264,7 +181,7 @@ test("a page that was not read yields no finding about the beacon: not read is n
 const headersRule: Extract<LiveRule, { path: string }> = { namespace: "sample", kind: "headers", path: "/" };
 const GOOD_CSP = "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; report-uri /csp-report; report-to csp";
 const goodHeaders = (): Headers =>
-  new Headers({ ...STANDARD_SECURITY_HEADERS, "content-security-policy": GOOD_CSP, "reporting-endpoints": `csp="https://sample.example.com/csp-report"` });
+  new Headers({ ...STANDARD_SECURITY_HEADERS, "content-security-policy": GOOD_CSP, "reporting-endpoints": 'csp="https://sample.example.com/csp-report"' });
 const withHeaders = (headers: Headers): Parameters<typeof pageFindings>[2] => ({ status: 200, headers, html: page(""), problem: null, gated: false });
 
 test("a page that carries every standard header and an enforced policy is clean under the headers rule", () => {
@@ -499,7 +416,7 @@ test("PLANT: two rules for one unknown site, or one page named twice, file one f
   const unknown = await liveChecks({ body: "- site elsewhere beacon /\n- site elsewhere nobeacon /account" }, [SITE], [probe()], deps({}), NOW);
   assert.deepEqual(prints(unknown.findings), ["live-config-unknown-site-elsewhere"]);
   const twice = await liveChecks({ body: "- site sample beacon /\n- site sample beacon /" }, [SITE], [probe()], deps({ "/": () => html(page(BEACON), { headers: { "content-type": "text/html", "content-security-policy": "script-src 'self'; connect-src 'self'" } }) }), NOW);
-  assert.deepEqual(prints(twice.findings), ["live-csp-script-sample-root"]);
+  assert.deepEqual(prints(twice.findings), ["live-csp-beacon-sample-root"]);
   assert.equal(twice.summary.pages_read, 2, "both rules were read; only their finding is one");
 });
 
@@ -507,7 +424,7 @@ test("PLANT: two rules for one unknown site, or one page named twice, file one f
 
 test("the live checks are a watcher check, and every live-* fingerprint belongs to it", () => {
   assert.ok((WATCHER_CHECKS as readonly string[]).includes("live checks"));
-  for (const fingerprint of ["live-analytics-off-a", "live-headers-a-root", "live-csp-script-a-root", "live-sha-drift-a-1234567", "live-config-invalid", "live-page-unread-a-root"]) {
+  for (const fingerprint of ["live-analytics-off-a", "live-headers-a-root", "live-csp-beacon-a-root", "live-sha-drift-a-1234567", "live-config-invalid", "live-page-unread-a-root"]) {
     assert.equal(owningCheck(fingerprint), "live checks", fingerprint);
   }
 });
@@ -559,13 +476,13 @@ test("through gatherFindings: a document in the store makes the check run and it
     "/account": () => html(page(BEACON)),
   });
   const fps = gathered.findings.map((f) => f.fingerprint);
-  assert.ok(fps.includes("live-csp-script-sample-root"), fps.join(", "));
+  assert.ok(fps.includes("live-csp-beacon-sample-root"), fps.join(", "));
   assert.ok(fps.includes("live-beacon-present-sample-account"), fps.join(", "));
   assert.ok(gathered.ran.has("live checks"));
   assert.ok(requested.includes("https://sample.example.com/account"));
   assert.ok(log.some((l) => JSON.parse(l).message === "WATCHER_LIVE pages 2/2 shas 0/0 analytics 0/0 findings 2"), log.join(" | "));
-  const finding = gathered.findings.find((f) => f.fingerprint === "live-csp-script-sample-root");
-  assert.match(finding?.title ?? "", /^Watcher: .*\[live-csp-script-sample-root\]$/);
+  const finding = gathered.findings.find((f) => f.fingerprint === "live-csp-beacon-sample-root");
+  assert.match(finding?.title ?? "", /^Watcher: .*\[live-csp-beacon-sample-root\]$/);
 });
 
 test("PLANT: with no live-checks document the pass fetches no page and the check does not run", async () => {

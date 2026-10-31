@@ -1,5 +1,5 @@
 import { isoDay } from "@drdustinedwards/site-helpers/xml";
-import { importPKCS8, SignJWT } from "jose";
+import { base64url, fromBase64 } from "@dustinedwards/site-runtime/encoding";
 import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
 import { pageOnSite, reportSite } from "./site-reports";
@@ -91,13 +91,12 @@ async function accessToken(key: ServiceAccountKey, fetchImpl: FetchLike, now: Da
   const nowMs = now.getTime();
   if (cachedToken && cachedToken.email === key.client_email && cachedToken.expiresAt - MINUTE_MS > nowMs) return cachedToken.token;
   const iat = Math.floor(nowMs / 1000);
-  const assertion = await new SignJWT({ scope: SCOPE })
-    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-    .setIssuer(key.client_email)
-    .setAudience(TOKEN_URL)
-    .setIssuedAt(iat)
-    .setExpirationTime(iat + 3600)
-    .sign(await importPKCS8(key.private_key, "RS256"));
+  // The RS256 assertion, signed with WebCrypto: a PKCS#8 PEM is base64 between its armor lines.
+  const der = fromBase64(key.private_key.replace(/-----[A-Z ]+-----/g, ""));
+  const signer = await crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const part = (value: object) => base64url(JSON.stringify(value));
+  const unsigned = `${part({ alg: "RS256", typ: "JWT" })}.${part({ scope: SCOPE, iss: key.client_email, aud: TOKEN_URL, iat, exp: iat + 3600 })}`;
+  const assertion = `${unsigned}.${base64url(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", signer, new TextEncoder().encode(unsigned)))}`;
   const resp = await fetchImpl(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

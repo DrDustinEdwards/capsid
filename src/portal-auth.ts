@@ -4,6 +4,7 @@ import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
 import { isPortalHost, isSameOriginPath, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
+import { isolationVerdict, originRefusal } from "@dustinedwards/site-runtime/origin";
 
 const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
@@ -160,6 +161,9 @@ export async function portalGate(request: Request, env: Env, now: Date, returnTo
       response: new Response(BEARER_REFUSAL, { status: 403, headers: { "Content-Type": "text/plain;charset=utf-8" } }),
     };
   }
+  // Resource isolation (site-runtime isolationVerdict, R2): another site may link to a Portal page (a top-level GET
+  // navigation) and nothing more, so no page elsewhere loads a signed-in response as an image, script, frame or fetch.
+  if (!isolationVerdict(request).ok) return { ok: false, response: originRefusal() };
   const user = await readPortalSession(request, env, now);
   if (!user) return { ok: false, response: await startPortalLogin(request, env, returnTo) };
   return { ok: true, user };

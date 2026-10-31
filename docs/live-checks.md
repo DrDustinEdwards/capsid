@@ -6,8 +6,7 @@ The watcher's fourth kind of read: what the deployed sites actually serve. Dusti
 
 | Rule | A finding when | Fingerprint |
 | --- | --- | --- |
-| `beacon <path>` | a CSP header on that page does not let `static.cloudflareinsights.com` load as a script | `live-csp-script-<site>-<path>` |
-| `beacon <path>` | a CSP header on that page does not let the beacon report (`'self'` on a site proxied through Cloudflare, `cloudflareinsights.com` on any other) | `live-csp-report-<site>-<path>` |
+| `beacon <path>` | a CSP header on that page does not let the beacon load from its script path prefix or report to the site itself (site-runtime's C15) | `live-csp-beacon-<site>-<path>` |
 | `analytics` | the site's host has no Web Analytics site in the account, or its automatic setup (`auto_install`) is off, or its ruleset is switched off | `live-analytics-missing-<site>`, `live-analytics-off-<site>` |
 | `analytics` | Cloudflare could not be read (no token, a 403 for the missing permission) | `live-analytics-unread-<site>` |
 | `nobeacon <path>` | the page carries a beacon (private and signed-in pages stay out of analytics) | `live-beacon-present-<site>-<path>` |
@@ -19,7 +18,7 @@ A page that cannot be read is not clean and not dirty: `live-page-unread-<site>-
 
 The beacon is no longer counted. Cloudflare injects it at the edge for browser traffic, and a Worker's own request does not receive the injected copy: on the first supervised pass (2026-10-04) the count read 0 on germomics and foxhound where a browser-style fetch read exactly one on each. So a `beacon` rule now checks only the CSP, and the `analytics` rule checks the thing that makes Cloudflare inject it: the zone's Web Analytics automatic setup, read with `GET /accounts/{id}/rum/site_info/list` (developers.cloudflare.com/api/resources/rum/subresources/site_info/methods/list/). That read needs **Account / Account Settings / Read** on `CF_OPS_TOKEN` (docs/portal.md, "The Cloudflare token"); without it the rule files `live-analytics-unread-<site>`, never a pass. The list is read once per pass however many sites have the rule, and the site token in it is never kept.
 
-The CSP rules follow Cloudflare's own list (developers.cloudflare.com/web-analytics/faq): `script-src` must allow `static.cloudflareinsights.com`, `connect-src` must allow the report endpoint. A directive a policy omits falls back to `default-src`, and a policy with neither blocks nothing. A `script-src` with `'strict-dynamic'` ignores host sources and the beacon script carries no nonce, so it is a finding. Only enforced policies are judged; a `Content-Security-Policy-Report-Only` header is not.
+The CSP rule is site-runtime's check (`checkSecurityHeaders`, item C15), graded as if the site declared `cloudflareWebAnalytics`: `script-src` must list the beacon's path prefix, which the edge injects from (`/beacon.min.js/v...`), and `connect-src` (or `default-src`) must include `'self'`, where a Cloudflare-proxied site's beacon reports. A site not proxied through Cloudflare is not covered. Only enforced policies are judged; a `Content-Security-Policy-Report-Only` header is not.
 
 The `headers` rule runs `checkSecurityHeaders` from `@dustinedwards/security-headers` (a git dependency, pinned by tag) on the page's response headers. The OWASP defaults and the test vectors live in that package alone: the watcher imports them, so a refresh of OWASP's data in the package changes this check with no second copy to keep in step. One finding per page lists up to 12 failed checks. A site that deliberately differs on a header is judged against the standard until the rule takes an override; add one when the first such site needs it.
 
