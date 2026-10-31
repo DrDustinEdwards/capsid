@@ -36,7 +36,7 @@ permissions:
 # One run per ref at a time, so two push deploys cannot interleave. On a pull request a
 # newer push cancels the older run. On master a run in progress finishes and GitHub keeps
 # only the newest waiting run behind it, so a burst of merges ends in a deploy of its
-# newest commit: cancelling in progress let seven merges in 90 minutes each cancel the
+# newest commit: canceling in progress let seven merges in 90 minutes each cancel the
 # deploy before it, and none shipped (2026-10-31). Keyed on the event name too, because
 # the six-hourly schedule run shares refs/heads/master with push runs and must never
 # cancel a deploy mid-flight, nor be canceled by one.
