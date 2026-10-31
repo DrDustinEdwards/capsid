@@ -2,16 +2,13 @@ import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloud
 import worker, { BACKUP_CRON } from "../src/index";
 import { checkRate, CSP_REPORT_LIMIT } from "../src/rate-limit";
 import { REPORT_PREFIX } from "../src/security-headers";
-import { MAX_REPORT_BYTES } from "@dustinedwards/site-runtime/csp-report";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// /csp-report against the real runtime: site-runtime's shared receiver, behind
-// Capsid's limiter. Every POST is answered 204 (an error status makes browsers send
-// the report again), a body over the cap is never parsed, nothing is stored, and the
-// logged line carries no query string.
+// /csp-report against the real runtime: site-runtime's shared receiver (its body cap and methods are tested
+// there), wired here behind Capsid's limiter and with CORS for the Portal. Every POST is answered 204, nothing is
+// stored, and the logged line carries no query string.
 
 const ORIGIN = "https://capsid.test";
-const CAP = MAX_REPORT_BYTES;
 
 function report(padding: string, page = `${ORIGIN}/probe`) {
   return JSON.stringify({
@@ -57,37 +54,6 @@ describe("/csp-report logs a violation and stores nothing", () => {
     expect(line.page).toBe(`${ORIGIN}/probe`);
     expect(line.blocked).toBe("https://example.com/probe");
     expect(lines[0]).not.toContain("sample-secret");
-  });
-});
-
-describe("/csp-report bounds the body in bytes, before buffering it", () => {
-  it("a body over the cap is answered 204 and never parsed", async () => {
-    const body = report("x".repeat(CAP));
-    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(CAP);
-    const resp = await postReport(body);
-    expect(resp.status).toBe(204);
-    expect(violations()).toHaveLength(0);
-  });
-
-  it("counts BYTES, not UTF-16 code units: a multi-byte body over the cap is not parsed", async () => {
-    // Each of these is one code unit and three bytes: 24,000 bytes on the wire, over
-    // the cap, while String#length reads 8,000.
-    const body = report("あ".repeat(8_000));
-    expect(body.length).toBeLessThan(CAP);
-    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(CAP);
-    const resp = await postReport(body);
-    expect(resp.status).toBe(204);
-    expect(violations()).toHaveLength(0);
-  });
-
-  it("still logs a multi-byte body that is genuinely under the cap", async () => {
-    // A cap that dropped all multi-byte input would pass the test above for the
-    // wrong reason.
-    const body = report("あ".repeat(200));
-    expect(new TextEncoder().encode(body).byteLength).toBeLessThan(CAP);
-    const resp = await postReport(body);
-    expect(resp.status).toBe(204);
-    expect(violations()).toHaveLength(1);
   });
 });
 
@@ -138,13 +104,7 @@ describe("a report the sink stored before 2026-10-20 is reaped by the backup cro
   });
 });
 
-describe("/csp-report answers every method the shared receiver's way", () => {
-  it("a GET is 405 naming POST and OPTIONS, as on the other sites", async () => {
-    const resp = await SELF.fetch(`${ORIGIN}/csp-report`);
-    expect(resp.status).toBe(405);
-    expect(resp.headers.get("Allow")).toBe("POST, OPTIONS");
-  });
-
+describe("/csp-report answers the Portal's preflight", () => {
   it("the Portal's preflight is allowed, and no other origin's is", async () => {
     const preflight = (origin: string) =>
       SELF.fetch(`${ORIGIN}/csp-report`, {

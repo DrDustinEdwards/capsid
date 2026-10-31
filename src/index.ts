@@ -17,6 +17,11 @@ import { runTask, type TaskResult } from "./task-runs";
 import { portalHostRequest } from "./portal-host";
 import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
 import { logEvent } from "@dustinedwards/site-runtime/log";
+import { securityTxtResponse } from "@dustinedwards/site-runtime/security-txt";
+
+const SECURITY_TXT_PATH = "/.well-known/security.txt";
+// Under a year out (RFC 9116); the family check reminds a month ahead.
+const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 
 // Spelled once. wrangler.jsonc declares them; test/crons.test.ts derives one list
 // from the other and fails in both directions.
@@ -105,29 +110,31 @@ export default {
     // (/mcp, /token, /authorize, /register, its metadata) without reaching the routes
     // handler. Behind the provider, /mcp on the Portal host was the MCP endpoint, and
     // live gate 7 rolled #218's deploy back (run 36863432268).
+    const { hostname, pathname: asked } = new URL(original.url);
+    const secured = (response: Response, path: string) => withSecurityHeaders(withCacheDefault(response, path), hostname);
+    // security.txt on both hosts, before the Portal's sign-in and the MCP host's path list.
+    if (asked === SECURITY_TXT_PATH) return secured(securityTxtResponse({ origin: `https://${hostname}`, contact: "security@dustinedwards.info", expires: SECURITY_TXT_EXPIRES }), asked);
     const host = portalHostRequest(original);
-    if ("redirect" in host) return withSecurityHeaders(host.redirect);
+    if ("redirect" in host) return secured(host.redirect, asked);
     const request = host.request;
     // The MCP host serves the machine surface only, and the old address's /portal is
     // retired (src/mcp-host.ts). Also before the provider, for the same reason.
-    const refused = hostRefusal(request);
-    if (refused) return withSecurityHeaders(withCacheDefault(refused, new URL(request.url).pathname));
     const pathname = new URL(request.url).pathname;
+    const refused = hostRefusal(request);
+    if (refused) return secured(refused, pathname);
     if (pathname === "/mcp" || pathname === ADMIN_MCP_ROUTE) {
       const originProblem = mcpOriginProblem(request);
-      if (originProblem) {
-        return withSecurityHeaders(withCacheDefault(new Response(originProblem, { status: 403 }), pathname));
-      }
+      if (originProblem) return secured(new Response(originProblem, { status: 403 }), pathname);
     }
     const legacy = new URL(request.url).hostname === LEGACY_HOST;
     let forwarded = request;
     if (!legacy && pathname === REGISTER_PATH && request.method === "POST") {
       const gate = await gateRegistration(request, env, new Date());
-      if ("refuse" in gate) return withSecurityHeaders(withCacheDefault(gate.refuse, pathname));
+      if ("refuse" in gate) return secured(gate.refuse, pathname);
       forwarded = gate.forward;
     }
     const response = await (legacy ? legacyProvider : provider).fetch(forwarded, env, ctx);
-    return withSecurityHeaders(withCacheDefault(response, pathname));
+    return secured(response, pathname);
   },
   // Dispatch on controller.cron, not the clock: 09:00 UTC matches all three
   // expressions and Cloudflare delivers once per expression. Each branch is its own

@@ -819,8 +819,8 @@ test("an action that happened but whose click row failed returns 200 with the wa
 
 // Fetch metadata, the body cap, the JSON
 
-test("PLANT: Sec-Fetch-Site cross-site and same-site are refused on both POSTs; same-origin and absent pass", async () => {
-  for (const site of ["cross-site", "same-site", "none"]) {
+test("PLANT: Sec-Fetch-Site cross-site and same-site are refused on both POSTs; same-origin, none and absent pass", async () => {
+  for (const site of ["cross-site", "same-site"]) {
     const w = world();
     const res = await handlePortalPreview(await preview({ action: "overnight", params: { value: "api", reason: "first supervised night" } }, { site }), w.env, NOW);
     assert.equal(res.status, 403, `preview served Sec-Fetch-Site: ${site}`);
@@ -829,7 +829,8 @@ test("PLANT: Sec-Fetch-Site cross-site and same-site are refused on both POSTs; 
     assert.equal(performed.status, 403, `perform served Sec-Fetch-Site: ${site}`);
     wroteNothing(w, `Sec-Fetch-Site: ${site}`);
   }
-  for (const site of ["same-origin", null]) {
+  // "none" is a request the user started (site-runtime refuseCrossSite), which no other site can forge.
+  for (const site of ["same-origin", "none", null]) {
     const w = world();
     const res = await handlePortalPreview(await preview({ action: "overnight", params: { value: "api", reason: "first supervised night" } }, { site }), w.env, NOW);
     assert.equal(res.status, 200, `preview refused Sec-Fetch-Site: ${site}`);
@@ -908,9 +909,9 @@ test("sign out expires the session and CSRF cookies at Path=/portal, and writes 
   const res = await handlePortalSignOut(await signOut(), w.env, NOW);
   assert.equal(res.status, 204);
   const cookies = setCookies(res);
-  assert.equal(cookies.length, 2, `expected the session and CSRF cookies, got: ${cookies.join(" | ")}`);
+  // Each under its __Secure- name and, for one release, the bare name it had before (src/auth.ts cookieName).
   const names = cookies.map((c) => c.split("=")[0]).sort();
-  assert.deepEqual(names, ["capsid_portal", PORTAL_CSRF_COOKIE]);
+  assert.deepEqual(names, ["__Secure-capsid_portal", `__Secure-${PORTAL_CSRF_COOKIE}`, "capsid_portal", PORTAL_CSRF_COOKIE].sort(), cookies.join(" | "));
   for (const c of cookies) {
     assert.match(c, /; Max-Age=0(;|$)/, `${c} does not expire the cookie`);
     assert.match(c, /; Path=\/portal(;|$)/, `${c} is not scoped to the Portal, so it would not clear the cookie the login set`);

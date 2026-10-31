@@ -14,16 +14,25 @@ export async function hmacHex(secret: string, payload: string): Promise<string> 
   return toHex(sig);
 }
 
-// Cookie lookup, once, for the consent flow and the Portal session.
+// A cookie's name with the prefix its scope earns. Every Capsid cookie is Secure with no Domain, so one scoped to the
+// whole host (Path=/) is __Host-, which no sibling subdomain can set or shadow, and one scoped to a path is __Secure-.
+export function cookieName(name: string, path: string): string {
+  return `${path === "/" ? "__Host-" : "__Secure-"}${name}`;
+}
+
+// Cookie lookup, once, for the consent flow and the Portal session: the prefixed name first, then the bare name the
+// cookies had before the prefixes, read for one release so live sessions survive. REMOVAL: the release after.
 export function getCookie(request: Request, name: string): string | null {
   const header = request.headers.get("Cookie");
   if (!header) return null;
+  const jar = new Map<string, string>();
   for (const part of header.split(";")) {
     const eq = part.indexOf("=");
     if (eq === -1) continue;
-    if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
+    const key = part.slice(0, eq).trim();
+    if (!jar.has(key)) jar.set(key, part.slice(eq + 1).trim());
   }
-  return null;
+  return jar.get(`__Host-${name}`) ?? jar.get(`__Secure-${name}`) ?? jar.get(name) ?? null;
 }
 
 // OPERATOR_KEY_HASH: comma-separated sha256 hex. Plain = write, "ro:" = read.

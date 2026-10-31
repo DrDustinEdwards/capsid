@@ -1,4 +1,5 @@
 import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/check";
+import { siteForOrigin } from "@dustinedwards/site-runtime/sites";
 import type { Env } from "./env";
 import { healthReport } from "./health";
 import { readPage, type FetchLike } from "./live-checks";
@@ -38,7 +39,8 @@ export async function siteCheck(env: Env, namespace: string, args: SiteCheckArgs
   const health = await probeSite(site, fetchImpl, now, site.self ? await healthReport(env) : null);
 
   const read = await readPage(fetchImpl, site.origin, page);
-  const headers = read.headers ? checkSecurityHeaders(read.headers) : [];
+  // Graded against the site's registry entry, as the watcher grades it (src/live-checks.ts).
+  const headers = read.headers ? checkSecurityHeaders(read.headers, { site: siteForOrigin(site.origin) }) : [];
   const pageResult = {
     path: page,
     status: read.status,

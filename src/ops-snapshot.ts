@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { HealthReport } from "./health";
 import { healthOf, parseHealth } from "./health-format";
-import { readCapped } from "./read-capped";
+import { readCapped } from "@dustinedwards/site-runtime/body";
 import { healthUrl, type OpsSite } from "./ops-sites";
 import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 import { logEvent } from "@dustinedwards/site-runtime/log";
@@ -127,9 +127,8 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
       await res.body?.cancel();
       return { status: res.status, latency_ms, body: null, error: null };
     }
-    const { text, truncated } = await readCapped(res, MAX_HEALTH_BYTES);
-    // Past the cap the body is not read as health, so no sha is taken from part of it.
-    return { status: res.status, latency_ms, body: truncated ? null : text, error: null };
+    // Past the cap the body is not read as health (null), so no sha is taken from part of it.
+    return { status: res.status, latency_ms, body: await readCapped(res, MAX_HEALTH_BYTES), error: null };
   } catch (err) {
     // A probe that got no answer is a result (the site is down from here), recorded
     // with its reason, not an error in the watcher.
