@@ -4,7 +4,7 @@
 //
 //   initial JS (the entry and its static imports)  <= 121 KB gzip
 //   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   initial CSS (the entry's and its imports')      <= 27.5 KB gzip
+//   initial CSS (the entry's and its imports')      <= 28 KB gzip
 //   lazy CSS (every other stylesheet), together     <=  12 KB gzip
 //   fonts                                           reported, not budgeted
 //
@@ -59,13 +59,16 @@
 // is now the whole chart stylesheet (Enarratio 0.5's base.css with the token mapping, gridlines,
 // each series' ink and the color pairs), in place of enarratio/base.css, and Capsomer 0.56 adds the
 // series-ink and figures tokens. Master was 24.0 KB; this build is 27.0 KB (27,677 B).
+// Raised on 2026-11-01 to 28 KB (area 10): Enarratio 0.7.0's stylesheet adds the legend swatches that
+// match each series' mark and the forced-colors symbols (B57), and Capsomer 0.63 carries them. This build
+// is 27.7 KB gzip.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 121 * KB, lazyChunk: 40 * KB, css: 27.5 * KB, lazyCss: 12 * KB };
+const BUDGET = { initialJs: 121 * KB, lazyChunk: 40 * KB, css: 28 * KB, lazyCss: 12 * KB };
 
 const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const manifestPath = join(dist, ".vite", "manifest.json");
