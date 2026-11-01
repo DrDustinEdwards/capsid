@@ -1,6 +1,7 @@
 import { buildPolicy, CSP_REPORT_GROUP, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
 import { applyHeaderSet, buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
+import { OWNER_STYLE } from "@dustinedwards/site-runtime/owner-page";
 import { capsidMcp, capsidPortal } from "@dustinedwards/site-runtime/sites";
 import { MCP_HOST } from "./mcp-host";
 import { PORTAL_HOST } from "./portal-host";
@@ -35,8 +36,9 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 // can import them: routes.ts cannot load under node --test.
 //
 // The dialog is site-runtime's (./mcp-login): one inline <style>, CONSENT_STYLE, trusted
-// by its hash, and a form that posts back to /authorize. No scripts or images, so
-// everything else is locked down.
+// by its hash, and a form that posts back to /authorize. The owner page (/owner,
+// ./owner-page) leaves with the same headers; its one style, OWNER_STYLE, is trusted by
+// hash too. No scripts or images, so everything else is locked down.
 //
 // form-action is deliberately absent. Approving submits this form into a redirect
 // chain: POST /authorize, 302 to the Access sign-in, back to /callback, 302 out to the
@@ -50,9 +52,9 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 // because the approvedClients fast path 302s out of the GET and never submits a form.
 let consentHeaders: Promise<Readonly<Record<string, string>>> | undefined;
 export function consentDialogHeaders(): Promise<Readonly<Record<string, string>>> {
-  consentHeaders ??= scriptHash(CONSENT_STYLE).then((hash) => ({
+  consentHeaders ??= Promise.all([scriptHash(CONSENT_STYLE), scriptHash(OWNER_STYLE)]).then(([consent, owner]) => ({
     "Content-Type": "text/html;charset=utf-8",
-    "Content-Security-Policy": buildPolicy(["default-src 'none'", `style-src '${hash}'`, "base-uri 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", `report-uri ${REPORT_URL}`, `report-to ${CSP_REPORT_GROUP}`]),
+    "Content-Security-Policy": buildPolicy(["default-src 'none'", `style-src '${consent}' '${owner}'`, "base-uri 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", `report-uri ${REPORT_URL}`, `report-to ${CSP_REPORT_GROUP}`]),
   }));
   return consentHeaders;
 }

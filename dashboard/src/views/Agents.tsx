@@ -16,17 +16,18 @@ const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })
 // Chart 6, weekly model spend, sits under the roster.
 const CostChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.CostChart })));
 
-type Tab = "roster" | "archive" | "claims";
+type Tab = "roster" | "archive" | "claims" | "access";
 
 const TABS = [
   { id: "roster", label: "Agents" },
   { id: "archive", label: "Archive" },
   { id: "claims", label: "Checks" },
+  { id: "access", label: "AI access" },
 ] as const;
 
 export function Agents() {
   const asked = useTabParam();
-  const tab: Tab = asked === "claims" || asked === "archive" ? asked : "roster";
+  const tab: Tab = asked === "claims" || asked === "archive" || asked === "access" ? asked : "roster";
   return (
     <div className="page">
       <PageHead title="Agents" />
@@ -37,6 +38,8 @@ export function Agents() {
         </Suspense>
       ) : tab === "archive" ? (
         <Archive />
+      ) : tab === "access" ? (
+        <Access />
       ) : (
         <Roster />
       )}
@@ -101,6 +104,50 @@ function Archive() {
             </table>
           </div>
         )}
+      </Panel>
+    </div>
+  );
+}
+
+// Each MCP server's owner page (site-runtime ./owner-page, area 11 A15 and L9): the grants
+// you gave AI clients there, each with Revoke, its agent keys and its tool-call log. The
+// grants and the log live in each server's own Worker, and each server admits its own
+// administrators, so each page is on its server, behind its own sign-in.
+const OWNER_PAGES = [
+  { name: "Capsid", url: "https://mcp.dustinedwards.info/owner" },
+  { name: "Carrel", url: "https://carrel-mcp.dustinedwards.info/owner" },
+  { name: "Dustin Edwards Admin", url: "https://admin-mcp.dustinedwards.info/owner" },
+  { name: "Foxing Admin", url: "https://admin-mcp.foxing.app/owner" },
+  { name: "Foxhound Admin", url: "https://admin-mcp.foxhoundapp.com/owner" },
+] as const;
+
+function Access() {
+  return (
+    <div className="embedded">
+      <Panel flush title="AI access" src="each MCP server's owner page">
+        <div className="body faint">Grants you gave AI clients, with Revoke, and every tool call. Each opens on its server after a sign-in.</div>
+        <div className="scroll-x">
+          <table className="list">
+            <thead>
+              <tr>
+                <th>Server</th>
+                <th>Grants and tool calls</th>
+              </tr>
+            </thead>
+            <tbody>
+              {OWNER_PAGES.map((p) => (
+                <tr key={p.name}>
+                  <td>
+                    <b>{p.name}</b>
+                  </td>
+                  <td>
+                    <a href={p.url}>{p.url.replace("https://", "")}</a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Panel>
     </div>
   );
