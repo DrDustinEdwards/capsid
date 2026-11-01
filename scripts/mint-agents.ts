@@ -114,6 +114,20 @@ export const ROLES: Role[] = [
     what: "the live gate's probe: reads capsid documents with capsid_read_doc after each deploy, and nothing else.",
   },
   {
+    name: "live-check",
+    kind: "cron",
+    namespaces: ["capsid"],
+    // devkit's daily AI and MCP check (site-runtime-ai-audit, area 11): tools/list, the
+    // conformance server scenarios and a rate-limit burst through /ops/mcp. The same
+    // shape as live-probe, so a leaked key reads capsid documents and nothing else, and a
+    // key of its own, so the burst's minute of 429s never lands on a deploy's live gate.
+    // Its key is devkit's MCP_TEST_GRANT_MCP_DUSTINEDWARDS_INFO repo secret.
+    repos: [],
+    grants: ["read"],
+    tools: ["capsid_read_doc"],
+    what: "the daily AI and MCP check: lists the tools and reads capsid documents through /ops/mcp, and nothing else.",
+  },
+  {
     name: "dustinedwards-grok",
     kind: "driver",
     namespaces: ["dustinedwards"],

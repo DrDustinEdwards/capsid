@@ -43,6 +43,7 @@ Roles are few and separated. Each one is a single capability, not a bundle. `scr
 | `seat` | every namespace | every namespace | `can_merge` |
 | `site-seat` | `dustinedwards` | `dustinedwards` | `can_merge` |
 | `live-probe` | `capsid`, through the `capsid_read_doc` tool only | nothing at all | none |
+| `live-check` | `capsid`, through the `capsid_read_doc` tool only; devkit's daily AI and MCP check, its key the `MCP_TEST_GRANT_MCP_DUSTINEDWARDS_INFO` secret there | nothing at all | none |
 
 **A project driver holds no blast-radius flag by default, and two of them hold one.** Granted by the seat on 2026-09-11: `capsid-driver` and `claude-skills-driver` hold `can_touch_protected`. Every other driver holds none, and `capsid_run_improve` action `status` and Capsid Portal list the flags each one actually has, so the inventory is the answer rather than this paragraph. Widening one is `capsid_admin_manage_agents` action `update_scopes`, which is admin only and audit-logged with the scopes before and after.
 
