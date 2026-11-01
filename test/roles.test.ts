@@ -149,13 +149,15 @@ test("the site seat is one namespace and one repo, and merges nothing else", () 
   }
 });
 
-test("the live probe reads capsid with the read tool and holds nothing else", () => {
-  const probe = byName("live-probe");
-  assert.deepEqual(probe.namespaces, ["capsid"]);
-  assert.deepEqual(probe.grants, ["read"], "the live gate's key is a CI secret, so it must not write");
-  assert.deepEqual(probe.tools, ["capsid_read_doc"]);
-  assert.deepEqual(probe.repos, [], "the probe reads documents, never a repo");
-  assert.equal(probe.flags, undefined);
+test("the live probe and the daily live check read capsid with the read tool and hold nothing else", () => {
+  for (const name of ["live-probe", "live-check"]) {
+    const probe = byName(name);
+    assert.deepEqual(probe.namespaces, ["capsid"], name);
+    assert.deepEqual(probe.grants, ["read"], `${name}'s key is a CI secret, so it must not write`);
+    assert.deepEqual(probe.tools, ["capsid_read_doc"], name);
+    assert.deepEqual(probe.repos, [], `${name} reads documents, never a repo`);
+    assert.equal(probe.flags, undefined, name);
+  }
 });
 
 test("DERIVED: every role names only flags this system has", () => {
