@@ -46,7 +46,7 @@ test("a gate that failed with no rollback is unverified, and a skipped or missin
   assert.equal(outcomeFrom(undefined, []), null);
 });
 
-const row = (outcome: DeployRow["outcome"]): DeployRow => ({ outcome, rollback_from: A, rollback_to: B, detail: "d", run_id: 9, head_sha: A, pr: 312, run_url: "https://github.com/o/r/actions/runs/9", run_at: "2026-10-10T00:00:00Z" });
+const row = (outcome: DeployRow["outcome"]): DeployRow => ({ outcome, rollback_from: A, rollback_to: B, detail: "d", run_id: 9, head_sha: A, pr: 312, run_url: "https://github.com/o/r/actions/runs/9", run_at: "2026-10-10T00:00:00Z", restore_seconds: null });
 
 test("a rollback and a failed rollback are findings the deploys check owns; the rest raise none", () => {
   const [rolled] = deployFindings("capsid", row("rolled_back"));
