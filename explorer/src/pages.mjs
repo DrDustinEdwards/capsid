@@ -715,8 +715,9 @@ ${drawn ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id=
 const STATEMENT_PATH = "/accessibility/";
 
 /**
- * The accessibility statement (devkit-a11y S6): Prelum's, with this site's facts and the open findings of devkit-a11y's
- * run of 2026-11-01.
+ * The accessibility statement (devkit-a11y S6): Prelum's, with this site's facts. devkit-a11y's run of 2026-11-01 found
+ * 320 px sideways scroll (fixed by Capsomer 0.62.0) and a map tile whose focus it could not see (the tile's edge does
+ * thicken, on the polygon inside the group it measured), so no limitation of its own is open.
  * @param {string} asOf
  */
 export function accessibilityPage(asOf) {
@@ -726,10 +727,6 @@ export function accessibilityPage(asOf) {
     date: "2026-11-01",
     capsomer: true,
     links: "marked",
-    limitations: [
-      "At 320 pixels wide, the system maps on a system's page and on a flow's page are wider than the screen, so the page scrolls sideways.",
-      "On the systems page, one tile of the system map shows no visible focus when it is reached with the keyboard.",
-    ],
   });
   return layout({
     title: statement.title,
