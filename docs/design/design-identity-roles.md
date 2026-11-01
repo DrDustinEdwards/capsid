@@ -40,8 +40,8 @@ Read for PR #304 (carrel `2295d38`, dustinedwards-info `d3aefbe`, site-runtime `
 
 ## How a person signs in
 
-1. They open the app's staff area (for the lab, `https://dustinedwards.info/lab`). Cloudflare Access stops them.
-2. The app's Access policy allows one Access group, that app's allow list (for the lab, `lab-people`). Only emails
+1. They open the app's staff area (for the lab, `https://dustinedwards.info/lab-bench`). Cloudflare Access stops them.
+2. The app's Access policy allows one Access group, that app's allow list (for the lab, `lab-members`). Only emails
    on it get a code: "By design, blocked users will not receive an email" (Cloudflare, One-time PIN).
 3. They type their email, then type the code from the email (valid 10 minutes). The email also carries a link,
    but people type the code: email scanners sometimes open the link first and use the code up (Cloudflare,
@@ -189,9 +189,9 @@ The lab goes first and proves the whole path; the other apps follow one at a tim
    a second factor on admin applications; the sync token with the three permissions, stored with its holder.
 5. **The token holder** (Capsid, if DECIDE 1 is accepted): the sync endpoint, each app's key scoped to its own
    group.
-6. **dustinedwards-info:** `members` and `member_audit`, the `/lab` gate, `PRIMARY_OWNER_EMAIL`, the lab's titles,
-   `/lab/members`, the daily expiry job. Plants: an admin token refused at `/lab` and a lab token refused at
-   `/admin`; a removed or expired member refused; a worker 404 at `/lab/members`.
+6. **dustinedwards-info:** `members` and `member_audit`, the `/lab-bench` gate, `PRIMARY_OWNER_EMAIL`, the lab's titles,
+   `/lab-bench/members`, the daily expiry job. Plants: an admin token refused at `/lab-bench` and a lab token refused at
+   `/admin`; a removed or expired member refused; a worker 404 at `/lab-bench/members`.
 7. **dustinedwards-info and Carrel:** adopt `./access` for their admin checks, no behavior change.
 8. **txasm, then Foxing, then Foxing Edu:** each defines its titles and adopts the page, one PR per app.
 9. **Carrel:** `/people` on `people-roles` when it suits.
@@ -202,16 +202,16 @@ Kept free so later work slots in without renames. None of the later functions is
 
 | Name | For | Why this name |
 | --- | --- | --- |
-| `/lab`, `/lab/members` | Lab staff area, members page (built first) | Held free by the KB design. |
-| `/lab/inventory`, `/lab/runs` | KB lot, location and run screens | The KB plan's nouns. |
-| `/lab/studies` | Research lab function | Carrel already uses "projects". |
-| `/lab/ai` | Virtual or AI lab | Same gate, short. |
-| `/lab/instruments`, `/lab/stop` | Instruments and robots; a stop control | A fixed address for an emergency. |
+| `/lab-bench`, `/lab-bench/members` | Lab staff area, members page (built first) | Held free by the KB design. |
+| `/lab-bench/inventory`, `/lab-bench/runs` | KB lot, location and run screens | The KB plan's nouns. |
+| `/lab-bench/studies` | Research lab function | Carrel already uses "projects". |
+| `/lab-bench/ai` | Virtual or AI lab | Same gate, short. |
+| `/lab-bench/instruments`, `/lab-bench/stop` | Instruments and robots; a stop control | A fixed address for an emergency. |
 | `lab.dustinedwards.info` | Fallback host if two Access apps on one host conflict | Same word as the path. |
 | `lab-mcp.dustinedwards.info` | AI door for lab agents | Follows `carrel-mcp`. |
 | Access app `dustinedwards-lab-login` | The lab sign-in | Follows `germomics-login`. |
-| Access policy `dustinedwards-lab-members` | Allows `lab-people` | Site, then who. |
-| Access group `lab-people` | The lab allow list, owned by the sync | One group per app. |
+| Access policy `dustinedwards-lab-members` | Allows `lab-members` | Site, then who. |
+| Access group `lab-members` | The lab allow list, owned by the sync | One group per app. |
 | Access groups `txasm-people`, `foxing-staff`, `foxing-edu-staff` | The other allow lists | Same pattern; checked against existing names at adoption. |
 | Access policy `dustinedwards-lab-service` | Service tokens for instruments and CI | Service tokens take no seat. |
 | Var `PRIMARY_OWNER_EMAIL` | The Primary Owner, per app | Says what it is. |
@@ -253,8 +253,8 @@ Still open:
    application.
 5. **Term dates.** The Owner enters each app's semester or term end dates yearly, and reviews open three weeks
    before. **Recommend yes.**
-6. **Where lab managers edit protocols** (open since PR #304). The KB editor in `/lab` with draft-only saves and
-   publishing in `/admin/kb`, or Carrel with its procedure handler kept. **Recommend the KB editor in `/lab`**, per
+6. **Where lab managers edit protocols** (open since PR #304). The KB editor in `/lab-bench` with draft-only saves and
+   publishing in `/admin/kb`, or Carrel with its procedure handler kept. **Recommend the KB editor in `/lab-bench`**, per
    the 2026-10-07 ruling that procedures are structured, not writing.
 
 ## Answered (Dustin, 2026-10-09)
@@ -264,4 +264,4 @@ Still open:
 3. An account-wide session of one month; admin apps keep shorter sessions of their own.
 4. Dustin's admin second factor is an authenticator app (no hardware security key).
 5. Yes: an Owner enters each app's term end dates once a year, and reviews open three weeks before.
-6. Lab managers edit protocols in `/lab` with the KB form editor, draft-only saves that Dustin approves, not in Carrel.
+6. Lab managers edit protocols in `/lab-bench` with the KB form editor, draft-only saves that Dustin approves, not in Carrel.
