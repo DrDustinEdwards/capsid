@@ -277,7 +277,7 @@ ${scroller("risk", `<table class="cap-table code-table"><caption>The five functi
  */
 export function codeIndexPage(model, bySystem, totals, asOf) {
   const repos = reposOf(model, bySystem);
-  const head = pageHead([["/", "Overview"]], "Code", "The code, measured", totals
+  const head = pageHead([], "Code", "The code, measured", totals
     ? `${totals.lines.toLocaleString("en-US")} lines in ${totals.modules.toLocaleString("en-US")} modules and ${totals.functions.toLocaleString("en-US")} functions across ${totals.repos} public repos, measured after each push. Two scores flag risky code. CRAP rises when a function is complex and its tests cover little of it; over ${CRAP_CRIT} is critical. The mutation score is the share of planted bugs the tests catch; under ${SCORE_WATCH}% is critical.`
     : "No code maps have been published yet.");
   if (!totals) return layout({ title: "Code", description: "The public repos' code, measured.", path: "/code/", body: head, asOf });
