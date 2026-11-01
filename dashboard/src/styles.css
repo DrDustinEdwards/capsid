@@ -213,14 +213,11 @@ details[open] > summary .chev { transform: rotate(45deg); }
 .fleet tbody tr:hover { background: var(--raised); }
 .fleet .site b { font-weight: 700; display: block; }
 .fleet .site span { font-size: var(--fs-detail); color: var(--muted); white-space: nowrap; }
-/* Enarratio's charts read Capsomer's map (capsomer/tokens.css), so both themes follow. Two
-   charts whose colors mean a status take the status tokens: the agreement bars, and ci-strip,
-   which turns the heat strip's two ends into green and red. */
-.agree-chart { --enarratio-series-1: var(--ok); --enarratio-series-2: var(--crit); --enarratio-series-3: var(--nodata); --enarratio-series-4: var(--warn); }
+/* Charts are themed by capsomer/enarratio.css alone (main.tsx); a chart whose colors mean a
+   status passes them as Enarratio's colors option (views/TrendCharts.tsx). */
 /* Two charts side by side, each half the row, stacked when the row is narrow. */
 .chart-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 0 32px; align-items: start; }
 .wait-chart, .minutes-chart { margin: 0 0 16px; }
-.ci-strip { --enarratio-sequential-1: var(--ok); --enarratio-sequential-5: var(--crit); }
 .slot-head { font-size: var(--fs-detail); margin-bottom: 4px; overflow-wrap: anywhere; }
 .upct { font-size: var(--fs-label); color: var(--muted); display: flex; justify-content: space-between; margin-top: 3px; }
 
@@ -342,7 +339,6 @@ dialog { color: var(--text); }
 .mt4 { margin-top: 4px; }
 .mt8 { margin-top: 8px; }
 .w30 { width: 30%; }
-.w50 { width: 50%; }
 .small { font-size: var(--fs-detail); margin: 6px 0 0; }
 .note { margin: 0; font-size: var(--fs-detail); }
 /* The padded block inside a flush Capsomer Panel, beside a table or feed that runs to its edges. */
@@ -356,8 +352,6 @@ dialog { color: var(--text); }
 .nodata-cell .src { white-space: normal; max-width: 22ch; }
 .th-note { display: block; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--dim); }
 .chip.flag { height: 20px; font-size: var(--fs-label); margin-right: 4px; }
-.stack { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--sunken); }
-.stack i.b { background: var(--warn); } .stack i.r { background: var(--info); } .stack i.q { background: var(--line-strong); }
 .meter i.warn { background: var(--warn); } .meter i.crit { background: var(--crit); }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); font-weight: 600; }

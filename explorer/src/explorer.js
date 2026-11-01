@@ -5,7 +5,8 @@
 // and sorting, and search.
 import { controller } from "./capsomer/system-map/system-map.js";
 import { enhance as enhanceTabs } from "./tabs.js";
-import { enhance as enhanceCharts } from "./enhance.js";
+// Every chart in Capsomer's frame: drawn again at its column's width where the server wrote a spec, and enhanced.
+import "capsomer/behavior/chart-enhance";
 import { enhance as enhanceHeader } from "./capsomer/site-header/site-header.js";
 import { enhance as enhanceTheme, toggleTheme } from "./capsomer/theme-switch/theme-switch.js";
 import { enhance as enhanceMeters } from "./capsomer/meter/meter.js";
@@ -189,7 +190,6 @@ function flowPage(map, root, host) {
 }
 
 enhanceTabs();
-enhanceCharts(document, { tooltips: true, filter: true, brush: false, entrance: !reduced.matches });
 
 // The front page's panel: each breaker switches a grant, and every circuit lights by the rule
 // the build drew it with (src/home.mjs, reaches), which is src/scope.ts's needFor.
