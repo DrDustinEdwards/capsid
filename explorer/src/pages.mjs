@@ -119,8 +119,7 @@ ${headMarkup}
 ${ICON_LINKS}
 <link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/capsomer.css">
-<link rel="stylesheet" href="/assets/enarratio.css">
-<link rel="stylesheet" href="/assets/explorer.css">
+${body.includes('class="enarratio') ? '<link rel="stylesheet" href="/assets/enarratio.css">\n' : ""}<link rel="stylesheet" href="/assets/explorer.css">
 <script src="/assets/theme.js"></script>
 <script type="module" src="/assets/explorer.js"></script>
 </head>
