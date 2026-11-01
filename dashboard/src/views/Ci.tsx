@@ -21,6 +21,7 @@ function prLabel(url: string): string {
 const CiHistory = lazy(() => import("./TrendCharts").then((m) => ({ default: m.CiHistory })));
 // Chart 7, merges per week by who acted, loads the same way for Pull requests.
 const MergesChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.MergesChart })));
+const DeploysTable = lazy(() => import("./TrendCharts").then((m) => ({ default: m.DeploysTable })));
 
 // CI's default-branch table, a section of Health (design-portal-evaluation.md section 2).
 export function DefaultBranches() {
@@ -218,6 +219,9 @@ export function PullRequests() {
       </Panel>
       <ChartSlot>
         <MergesChart />
+      </ChartSlot>
+      <ChartSlot>
+        <DeploysTable />
       </ChartSlot>
     </div>
   );

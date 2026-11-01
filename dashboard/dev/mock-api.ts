@@ -359,6 +359,12 @@ function mockTrends(weeks: number): PortalTrends {
       weeks: weekRows.map((w, i) => ({ week: w.week, start: w.start, auto: 4 + i, approved: 3, seat: Math.max(0, 6 - i), closed: 1 })),
       rollbacks: [{ at: new Date(now - 3 * DAYMS).toISOString(), repo: "example-org/sample", pr: 12, outcome: "rolled_back" as const }],
     },
+    deploys: {
+      repos: [
+        { repo: "example-org/sample", deploys: 17, per_week: 2.1, shipped: 15, refused: 1, rolled_back: 1, unverified: 1, change_failure_rate: 0.063, restore_median_seconds: 94 },
+        { repo: "example-org/sample-site", deploys: 9, per_week: 1.1, shipped: 9, refused: 0, rolled_back: 0, unverified: 0, change_failure_rate: 0, restore_median_seconds: null },
+      ],
+    },
     // Weekly model spend: one week with no costed outcome (a gap, not a zero).
     cost: { weeks: weekRows.map((w, i) => ({ week: w.week, start: w.start, usd: i === 1 && weeks > 3 ? null : 6 + ((i * 7) % 9) * 1.5, jobs: i === 1 && weeks > 3 ? 0 : 3 + (i % 4) })) },
     backups: {
