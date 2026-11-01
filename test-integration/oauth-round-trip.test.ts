@@ -201,7 +201,7 @@ describe("the OAuth round trip", () => {
     expect(new URL(String(callback.headers.get("location"))).searchParams.get("error")).toBe("access_denied");
   });
 
-  it("PLANT: a grant without the write box holds the read grant only, and a write tool is answered 403 insufficient_scope (step-up)", async () => {
+  it("PLANT: a grant without the write box holds the read grant only: a write tool is not served, and a write action is answered 403 insufficient_scope (step-up)", async () => {
     const { clientId, code } = await authorize(env.ADMIN_EMAIL!, {}, undefined, false);
     const exchanged = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
     const { access_token, scope } = (await exchanged.json()) as { access_token: string; scope: string };
@@ -215,9 +215,13 @@ describe("the OAuth round trip", () => {
         })
       );
     await rpc(1, "initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "read-only", version: "1.0.0" } });
+    // T7: a write-only tool is not served to a read grant, so a call to it is an unknown tool and never runs.
     const written = await rpc(2, "tools/call", { name: "capsid_write_doc", arguments: { namespace: "sample", path: "notes/x.md", body: "x" } });
-    expect(written.status, "a read-only grant reached the write tool").toBe(403);
-    const challenge = written.headers.get("WWW-Authenticate") ?? "";
+    expect(await written.text(), "a read-only grant reached the write tool").toMatch(/capsid_write_doc not found/);
+    // A served tool's write action still steps up.
+    const posted = await rpc(3, "tools/call", { name: "capsid_work_jobs", arguments: { action: "post", namespace: "sample", title: "x", body: "x" } });
+    expect(posted.status, "a read-only grant reached a write action").toBe(403);
+    const challenge = posted.headers.get("WWW-Authenticate") ?? "";
     expect(challenge).toMatch(/error="insufficient_scope"/);
     expect(challenge).toMatch(/scope="capsid\.read capsid\.write"/);
     expect(challenge).toMatch(/resource_metadata=/);
