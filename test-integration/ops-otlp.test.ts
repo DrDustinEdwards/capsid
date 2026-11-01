@@ -1,4 +1,5 @@
 import { env, SELF } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
@@ -80,10 +81,7 @@ async function outcome(id: string) {
 }
 
 beforeEach(async () => {
-  for (const table of ["session_usage", "agent_sessions", "job_outcomes", "jobs", "agents", "audit_log", "job_outcome_prs"]) {
-    await env.DB.prepare(`DELETE FROM ${table}`).run();
-  }
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('sample', ?1)")
     .bind(JSON.stringify([{ repo: "example/sample", label: "primary" }]))
     .run();

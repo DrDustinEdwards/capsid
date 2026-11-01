@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import { autoResumeJob, MERGE_RESUME_ACTOR } from "../src/jobs-seat";
@@ -54,8 +55,7 @@ async function touches(id: string) {
 }
 
 beforeEach(async () => {
-  for (const table of ["jobs", "audit_log", "job_outcomes", "job_touches", "agents"]) await env.DB.prepare(`DELETE FROM ${table}`).run().catch(() => undefined);
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
     .run();

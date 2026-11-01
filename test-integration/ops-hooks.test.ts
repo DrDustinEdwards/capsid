@@ -1,4 +1,5 @@
 import { env, SELF } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
@@ -44,12 +45,7 @@ function job(id: string, status: string, claimedBy: string | null) {
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM agents"),
-    env.DB.prepare("DELETE FROM jobs"),
-    env.DB.prepare("DELETE FROM agent_sessions"),
-    env.DB.prepare("DELETE FROM session_events"),
-  ]);
+  await resetCapsidDb();
   await env.DB.batch([
     await agentRow("agent_hook00000001", "sample-driver", "driver", DRIVER_KEY, ["read", "write"]),
     await agentRow("agent_hook00000002", "sample-ro-driver", "driver", RO_DRIVER_KEY, ["read"]),

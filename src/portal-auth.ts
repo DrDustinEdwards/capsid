@@ -3,7 +3,7 @@ import { clearStateCookie, completeAccessLogin, type LoginFlow, startAccessLogin
 import { capsidCookie, getCookie, hmacHex, isAdminEmail } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
-import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { emailKey } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
 import { isPortalHost, isSameOriginPath, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
@@ -160,15 +160,9 @@ export async function portalSessionId(request: Request, env: Env): Promise<strin
   return (await verifiedSession(request, env))?.sid ?? null;
 }
 
-// The auth event log names a person by a digest of the address, never the address
-// (site-runtime ./log, "The auth event log").
-async function emailKey(email: string): Promise<string> {
-  return `email:${await sha256Hex(email.trim().toLowerCase())}`;
-}
-
 /** The auth event line for a Portal sign-out (POST /portal/api/sign-out). */
 export async function logPortalSignOut(email: string): Promise<void> {
-  logEvent(OWASP_EVENTS.signOut, { message: "Portal sign-out", app: "portal", email_key: await emailKey(email) });
+  logEvent(OWASP_EVENTS.signOut, { message: "Portal sign-out", app: "portal", email_key: await emailKey("email", email) });
 }
 
 /**
@@ -188,7 +182,7 @@ export async function withPortalIdle(request: Request, env: Env, handle: () => P
   const gate = await adminIdle(request, { session: { id, signedInAt: session.at }, now: now.getTime() });
   if (gate.idle) {
     await endPortalSession(env, session.sid, now);
-    logEvent(OWASP_EVENTS.sessionExpired, { message: "Portal session ended after an idle hour", app: "portal", reason: "idle", email_key: await emailKey(session.email) });
+    logEvent(OWASP_EVENTS.sessionExpired, { message: "Portal session ended after an idle hour", app: "portal", reason: "idle", email_key: await emailKey("email", session.email) });
     const issuer = accessIssuer(env.ACCESS_TEAM_DOMAIN);
     const url = new URL(request.url);
     const headers = new Headers({ "Cache-Control": "no-store", Location: issuer ? `${issuer}${ACCESS_LOGOUT_PATH}` : publicPortalPath(url, PORTAL_PREFIX) });
@@ -234,7 +228,7 @@ export async function handlePortalCallback(request: Request, env: Env, now: Date
     return login.response;
   }
   const { email, name, state: returnTo } = login;
-  logEvent(OWASP_EVENTS.signInSuccess, { message: "Portal sign-in", app: "portal", via: "access", email_key: await emailKey(email) });
+  logEvent(OWASP_EVENTS.signInSuccess, { message: "Portal sign-in", app: "portal", via: "access", email_key: await emailKey("email", email) });
 
   // A relative Portal path only, checked rather than trusted from KV, so a bad write
   // cannot become an open redirect.
