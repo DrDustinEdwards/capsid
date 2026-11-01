@@ -20,13 +20,15 @@ test("the deploy job applies the migrations that only add, before the deploy", (
   assert.ok(deployAt > 0 && applyAt < deployAt, "the migrations are applied after the deploy");
 });
 
-test("the scheduled live gate asserts the live sha equals master head", () => {
+test("the scheduled live gate asserts the live sha equals master head, after any push deploy in flight", () => {
   const ci = read(".github/workflows/ci.yml");
-  // EXPECT_SHA is set on a schedule run too, so the scheduled gate catches drift
-  // between master and the deployed sha.
+  // EXPECT_SHA is set on a schedule run too, so the scheduled gate catches drift between master and the deployed
+  // sha. It is the head read after the wait step, or the gate races a push run still deploying (2026-11-01).
   const expectLine = ci.split("\n").find((l) => l.includes("EXPECT_SHA:")) ?? "";
-  assert.match(expectLine, /github\.event_name == 'schedule'/, "the scheduled run no longer asserts the deployed sha");
-  assert.match(expectLine, /github\.sha/);
+  assert.match(expectLine, /github\.event_name == 'schedule' && steps\.head\.outputs\.sha/, "the scheduled run no longer asserts the deployed sha");
+  assert.match(expectLine, /needs\.deploy\.result == 'success' && github\.sha/);
+  const waitAt = ci.indexOf("name: Wait for a push deploy still running");
+  assert.ok(waitAt > 0 && waitAt < ci.indexOf("name: verify:live"), "the schedule run no longer waits for a push deploy in flight");
 });
 
 // scanner-rule: conventions-verification, enumerate every site. src/index.ts cannot load under node --test
