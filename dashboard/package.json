@@ -20,7 +20,7 @@
   "dependencies": {
     "@tanstack/react-query": "5.104.5",
     "capsomer": "github:DrDustinEdwards/capsomer#v0.60.0",
-    "enarratio": "0.6.0",
+    "enarratio": "0.6.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "wouter": "3.13.0"
