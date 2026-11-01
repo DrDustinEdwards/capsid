@@ -9,6 +9,10 @@
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- The manifest is behind the Portal's sign-in like every file here, and a manifest is fetched without cookies
+         unless the link says use-credentials (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/manifest). -->
+    <link rel="manifest" href="/site.webmanifest" crossorigin="use-credentials" />
+    <meta name="theme-color" content="#01585c" />
   </head>
   <body>
     <div id="root"></div>

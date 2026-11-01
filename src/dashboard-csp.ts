@@ -16,6 +16,8 @@ const POLICY: SitePolicy = {
   denyUnlisted: true,
   reportUri: REPORT_URL,
   reportTo: CSP_REPORT_GROUP,
+  // default-src 'none' refuses the web manifest unless it is named: the Portal's install and phone alerts need it.
+  extraDirectives: ["manifest-src 'self'"],
 };
 
 export const DASHBOARD_CSP = buildContentSecurityPolicy(POLICY).value;
