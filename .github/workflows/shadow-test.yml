@@ -15,9 +15,7 @@ on:
     branches: [master, main]
     types: [opened, synchronize, reopened]
 
-permissions:
-  contents: read
-  id-token: write
+permissions: {}
 
 concurrency:
   group: shadow-test-${{ github.ref }}
@@ -25,6 +23,9 @@ concurrency:
 
 jobs:
   shadow-test:
+    permissions:
+      contents: read
+      id-token: write
     name: shadow-test
     if: github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, 'job_')
     runs-on: ubuntu-latest
