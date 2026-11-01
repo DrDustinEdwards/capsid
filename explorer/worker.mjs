@@ -13,12 +13,11 @@ import { capsid } from "@dustinedwards/site-runtime/sites";
 import { staticSite } from "@dustinedwards/site-runtime/static-site";
 
 /**
- * What every page blocks on or paints first: the three stylesheets and the Schibsted Grotesk face
- * every page links (src/pages.mjs). The names are not hashed; the test holds them to the pages' links.
+ * What every page blocks on or paints first: the two stylesheets and the Schibsted Grotesk face
+ * every page links (src/pages.mjs; enarratio.css only on a page with a chart, so it is not preloaded). The names are not hashed; the test holds them to the pages' links.
  */
 export const PAGE_PRELOADS = preloads([
   { href: "/assets/capsomer.css", as: "style" },
-  { href: "/assets/enarratio.css", as: "style" },
   { href: "/assets/explorer.css", as: "style" },
   { href: "/fonts/schibsted-grotesk-latin-wght-normal.woff2", as: "font", type: "font/woff2" },
 ]);
