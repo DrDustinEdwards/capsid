@@ -82,7 +82,7 @@ ${servers
   )
   .join("\n")}
 <p class="hint" data-filter-empty hidden>No tool matches that.</p>`;
-  return layout({ title: "Tools", description: `The ${tools.length} MCP tools Capsid serves, with their actions and arguments.`, path: "/tools/", body, asOf });
+  return layout({ title: "Tools", description: `The ${tools.length} MCP tools Capsid and Capsid Admin serve, each with its actions, its arguments and who may call it.`, path: "/tools/", body, asOf });
 }
 
 /**

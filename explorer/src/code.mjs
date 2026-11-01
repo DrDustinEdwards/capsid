@@ -207,7 +207,7 @@ ${[...folders].map(([folder, mods]) => `<div class="code-folder" id="${folderId(
   const body = `${pageHead([["/", "Overview"], ["/code/", "Code"], [systemPath(s.id), s.name]], "Code", `The code of ${escapeHtml(s.name)}`)}
 <p class="lead">Each module by folder, with two scores. CRAP shows its riskiest function: it rises when code is complex and its tests cover little of it. Over ${CRAP_CRIT} is critical, and over ${CRAP_WATCH} is worth a look. The mutation score is the share of planted bugs its tests catch. Under ${SCORE_WATCH}% is critical, and under ${SCORE_OK}% is worth a look. Each module links to its source on GitHub.</p>
 ${sections.join("\n")}`;
-  return layout({ title: `The code of ${s.name}`, description: `${s.name}'s modules, import cycles and riskiest functions.`, path: codePath(s.id), body, asOf });
+  return layout({ title: `The code of ${s.name}`, description: `${s.name}'s ${codeSummary(maps)}: each module's riskiest function, its mutation score and the import cycles.`, path: codePath(s.id), body, asOf });
 }
 
 /**
