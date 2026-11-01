@@ -4,7 +4,7 @@ import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types/views";
+import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendDeployRepo, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types/views";
 import { MINUTE_MS, DAY_MS } from "./time";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
@@ -200,6 +200,55 @@ async function readMerges(db: D1Database, mondays: string[]): Promise<{ weeks: T
   return { weeks: [...weeks.values()], rollbacks: rollbacks.results.map((r) => ({ at: r.run_at, repo: r.repo, pr: r.pr, outcome: r.outcome })) };
 }
 
+type DeployOutcomeName = "verified" | "rolled_back" | "rollback_failed" | "rollback_skipped" | "unverified";
+
+/** DORA's deploy measures per repository (checklist F4) from its deploy_outcomes rows in the
+ *  window: deploy frequency (gated deploys per week), change failure rate (deploys the live
+ *  gate refused, over every deploy whose gate decided) and median time to restore (over the
+ *  rolled-back deploys that recorded one). A gate that could not run ("unverified") is
+ *  counted apart: it neither shipped nor failed as far as anyone knows. */
+function deployStats(rows: ReadonlyArray<{ repo: string; outcome: DeployOutcomeName; restore_seconds: number | null }>, weeks: number): TrendDeployRepo[] {
+  const by = new Map<string, { shipped: number; refused: number; rolled_back: number; unverified: number; restores: number[] }>();
+  for (const r of rows) {
+    const t = by.get(r.repo) ?? { shipped: 0, refused: 0, rolled_back: 0, unverified: 0, restores: [] };
+    by.set(r.repo, t);
+    if (r.outcome === "verified") t.shipped++;
+    else if (r.outcome === "unverified") t.unverified++;
+    else {
+      t.refused++;
+      if (r.outcome === "rolled_back") t.rolled_back++;
+      if (r.outcome === "rolled_back" && r.restore_seconds !== null) t.restores.push(r.restore_seconds);
+    }
+  }
+  return [...by.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([repo, t]) => {
+      const decided = t.shipped + t.refused;
+      const sorted = [...t.restores].sort((a, b) => a - b);
+      const mid = sorted.length >> 1;
+      const median = sorted.length === 0 ? null : sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+      return {
+        repo,
+        deploys: decided + t.unverified,
+        per_week: Math.round(((decided + t.unverified) / weeks) * 10) / 10,
+        shipped: t.shipped,
+        refused: t.refused,
+        rolled_back: t.rolled_back,
+        unverified: t.unverified,
+        change_failure_rate: decided ? Math.round((t.refused / decided) * 1000) / 1000 : null,
+        restore_median_seconds: median,
+      };
+    });
+}
+
+async function readDeploys(db: D1Database, mondays: string[]): Promise<TrendDeployRepo[]> {
+  const rows = await db
+    .prepare("SELECT repo, outcome, restore_seconds FROM deploy_outcomes WHERE run_at >= ?1")
+    .bind(mondays[0])
+    .all<{ repo: string; outcome: DeployOutcomeName; restore_seconds: number | null }>();
+  return deployStats(rows.results, mondays.length);
+}
+
 /** Model spend per week from outcome rows summed by day (cost_usd, rows that carried one).
  *  A week with no costed outcome is null, never 0: no telemetry is not a free week. */
 export function costWeeks(rows: Array<{ day: string; usd: number; n: number }>, mondays: string[]): TrendCostWeek[] {
@@ -334,10 +383,11 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
 /** Every series, for `weeks` weeks of the weekly ones. */
 export async function readTrends(env: Env, now: Date, weeks: number): Promise<PortalTrends> {
   const mondays = weekStarts(now, weeks);
-  const [minutes, queue, merges, cost, backups, ci] = await Promise.all([
+  const [minutes, queue, merges, deploys, cost, backups, ci] = await Promise.all([
     readMinutes(env.DB, mondays),
     readQueue(env.DB, lastDays(now, TRENDS_QUEUE_DAYS)),
     readMerges(env.DB, mondays),
+    readDeploys(env.DB, mondays),
     readCost(env.DB, mondays),
     readBackups(env, now),
     readCi(env, now),
@@ -352,6 +402,7 @@ export async function readTrends(env: Env, now: Date, weeks: number): Promise<Po
     },
     queue,
     merges,
+    deploys: { repos: deploys },
     cost: { weeks: cost },
     backups,
     ci,

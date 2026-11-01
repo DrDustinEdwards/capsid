@@ -363,6 +363,61 @@ export function MergesChart() {
   );
 }
 
+// ---- 8. How often do deploys ship, fail and recover? ---------------------------------------
+
+/** Restore time in words: seconds under two minutes, else whole minutes. */
+const restoreWords = (s: number | null) => (s === null ? "-" : s < 120 ? `${s} s` : `${Math.round(s / 60)} min`);
+
+/** DORA's deploy measures per repository (checklist F4): deploy frequency, change failure
+ *  rate and median time to restore, from each deploy's live gate. */
+export function DeploysTable() {
+  const { data, error, loading } = useTrends();
+  if (loading && !data) return null;
+  if (!data) return <p className="faint">Deploys could not be read: {error}</p>;
+  const repos = data.deploys.repos;
+  return (
+    <Panel flush title={`Deploys, ${data.weeks} weeks`} src="deploy_outcomes, each deploy's live gate" id="deploy-measures">
+      <Stale error={error} />
+      <div className="scroll-x">
+        <table className="list">
+          <thead>
+            <tr>
+              <th>Repository</th>
+              <th>Per week</th>
+              <th>Shipped</th>
+              <th>Refused</th>
+              <th>Change failure rate</th>
+              <th>Median time to restore</th>
+            </tr>
+          </thead>
+          <tbody>
+            {repos.map((r) => (
+              <tr key={r.repo}>
+                <td>{r.repo.split("/")[1]}</td>
+                <td>{r.per_week}</td>
+                <td>{r.shipped}</td>
+                <td>
+                  {r.refused}
+                  {r.unverified ? <span className="faint"> ({r.unverified} could not be checked)</span> : null}
+                </td>
+                <td>{pct(r.change_failure_rate, 0)}</td>
+                <td>{restoreWords(r.restore_median_seconds)}</td>
+              </tr>
+            ))}
+            {repos.length === 0 && (
+              <tr>
+                <td colSpan={6} className="faint">
+                  No deploy went through a live gate in this window.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
 // ---- 9. Did a deploy cause errors? --------------------------------------------------------------
 
 /** The site drawer's chart: the error rate for each of the last 24 hours, a line at the 1%
