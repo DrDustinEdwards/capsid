@@ -302,6 +302,8 @@ export const defaultHandler = {
     if (url.pathname === SHADOW_RESULT_PATH && request.method === "POST") return handleShadowResult(request, env);
     if (url.pathname === "/authorize") return handleLogin(request, env);
     if (url.pathname === "/callback") return handleLogin(request, env);
+    // The owner page: the same sign-in and admission as consent (site-runtime ./owner-page).
+    if (url.pathname === "/owner" || url.pathname.startsWith("/owner/")) return handleLogin(request, env);
     // Capsid Portal. The callback and every /portal/api/ route are matched before the
     // app's catch-all, and an unknown /portal/api/ path is a 404, never the app's page.
     // Nothing answers under /console: the Portal moved without redirects

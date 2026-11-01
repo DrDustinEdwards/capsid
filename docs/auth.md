@@ -154,6 +154,7 @@ MCP and sign-in:
 - `POST /mcp` and `POST /mcp/admin` MCP over Streamable HTTP, requires an OAuth access token (the admin and any co-owner only)
 - `POST /ops/mcp` and `POST /ops/mcp/admin` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`; the admin route takes the admin identity only
 - `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
+- `GET /owner`, `POST /owner/revoke`, `POST /owner/sign-out` the owner page (site-runtime's `./owner-page`, mounted by `loginHandler`): the same Access sign-in and admission as consent, through the same `/callback`; it lists the signed-in person's grants with Revoke, the agent keys and the tool-call log, newest first
 - `POST /token` token exchange (served by the library)
 - `POST /register` tightened dynamic client registration for Grok and Gemini, MCP host only, rate limited, grants nothing (`src/index.ts`, above). Claude and ChatGPT use a Client ID Metadata Document instead
 - `GET /.well-known/oauth-authorization-server` and `GET /.well-known/oauth-protected-resource` discovery metadata (served by the library)
