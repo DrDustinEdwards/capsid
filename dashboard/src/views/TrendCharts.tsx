@@ -378,8 +378,8 @@ export function DeploysTable() {
   return (
     <Panel flush title={`Deploys, ${data.weeks} weeks`} src="deploy_outcomes, each deploy's live gate" id="deploy-measures">
       <Stale error={error} />
-      <div className="scroll-x">
-        <table className="list">
+      <div className="scroll-x reflow">
+        <table className="list cards-below-1100">
           <thead>
             <tr>
               <th>Repository</th>
@@ -394,14 +394,14 @@ export function DeploysTable() {
             {repos.map((r) => (
               <tr key={r.repo}>
                 <td>{r.repo.split("/")[1]}</td>
-                <td>{r.per_week}</td>
-                <td>{r.shipped}</td>
-                <td>
+                <td data-label="Per week">{r.per_week}</td>
+                <td data-label="Shipped">{r.shipped}</td>
+                <td data-label="Refused">
                   {r.refused}
                   {r.unverified ? <span className="faint"> ({r.unverified} could not be checked)</span> : null}
                 </td>
-                <td>{pct(r.change_failure_rate, 0)}</td>
-                <td>{restoreWords(r.restore_median_seconds)}</td>
+                <td data-label="Change failure rate">{pct(r.change_failure_rate, 0)}</td>
+                <td data-label="Median time to restore">{restoreWords(r.restore_median_seconds)}</td>
               </tr>
             ))}
             {repos.length === 0 && (
