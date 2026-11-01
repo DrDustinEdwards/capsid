@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bearerToken, operatorIdentity } from "../src/auth.ts";
+import { operatorIdentity } from "../src/auth.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 async function grantOf(request: Request, env: { OPERATOR_KEY_HASH?: string }) {
@@ -96,14 +96,3 @@ test("a rejected key yields no grant and no fingerprint", async () => {
   assert.deepEqual(bad, { grant: null, fingerprint: null });
 });
 
-test("bearerToken: the scheme in any case, one token, nothing else", () => {
-  const with_ = (value: string | null) =>
-    bearerToken(new Request("https://example.com/", { headers: value === null ? {} : { Authorization: value } }));
-  assert.equal(with_("Bearer abc"), "abc");
-  assert.equal(with_("bearer abc"), "abc", "RFC 9110: the scheme is case-insensitive");
-  assert.equal(with_("BEARER  abc "), "abc");
-  assert.equal(with_("Bearer "), null);
-  assert.equal(with_("Bearer a b"), null, "a token has no space in it");
-  assert.equal(with_("Basic abc"), null);
-  assert.equal(with_(null), null);
-});

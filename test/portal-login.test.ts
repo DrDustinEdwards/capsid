@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { forgetKeys, type Jwk } from "@dustinedwards/site-runtime/access-login";
+import { stubAccess } from "@dustinedwards/devkit/access";
+import { forgetKeys } from "@dustinedwards/site-runtime/access-login";
 import { handlePortalCallback, portalSessionCookie, portalSignOutCookies, readPortalSession, startPortalLogin, withPortalIdle } from "../src/portal-auth.ts";
 import { portalCsrf } from "../src/ops-feed.ts";
 import { PORTAL_HOST } from "../src/portal-host.ts";
@@ -17,24 +18,6 @@ const ORIGIN = "https://capsid.example";
 const SECRET = "portal-login-test-cookie-secret";
 const ISSUER = "https://sample.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client";
 const realFetch = globalThis.fetch;
-
-const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const b64json = (value: unknown) => b64url(new TextEncoder().encode(JSON.stringify(value)));
-
-const pair = (await crypto.subtle.generateKey(
-  { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
-  true,
-  ["sign", "verify"]
-)) as CryptoKeyPair;
-const publicJwk = { ...((await crypto.subtle.exportKey("jwk", pair.publicKey)) as Jwk), kid: "portal-kid" };
-
-async function idToken(claims: Record<string, unknown>): Promise<string> {
-  const head = b64json({ alg: "RS256", kid: "portal-kid", typ: "JWT" });
-  const now = Math.floor(Date.now() / 1000);
-  const body = b64json({ iss: ISSUER, aud: "sample-client", iat: now, exp: now + 300, ...claims });
-  const sig = new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", pair.privateKey, new TextEncoder().encode(`${head}.${body}`)));
-  return `${head}.${body}.${b64url(sig)}`;
-}
 
 beforeEach(() => {
   forgetKeys();
@@ -57,22 +40,12 @@ function env(overrides: Record<string, unknown> = {}) {
   } as never;
 }
 
-// Stubs Access for one sign-in: the token endpoint answers with an ID token carrying
-// the nonce the flow sent (or `claims` over it), the JWKS endpoint with the key.
-// Returns the token requests' bodies.
-function stubAccess(authorizationUrl: string, claims: Record<string, unknown> = {}): URLSearchParams[] {
-  const nonce = new URL(authorizationUrl).searchParams.get("nonce");
-  const bodies: URLSearchParams[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    if (url === `${ISSUER}/token`) {
-      bodies.push(new URLSearchParams(String(init?.body)));
-      return Response.json({ id_token: await idToken({ email: "admin@example.com", nonce, ...claims }) });
-    }
-    if (url === `${ISSUER}/jwks`) return Response.json({ keys: [publicJwk] });
-    throw new Error(`unexpected fetch ${url}`);
-  }) as typeof fetch;
-  return bodies;
+// Stubs Access for one sign-in (devkit ./access): the token endpoint answers with an ID
+// token carrying the nonce the flow sent (or `claims` over it), the JWKS endpoint with
+// the key. Returns the token requests' bodies.
+async function stubPortalAccess(authorizationUrl: string, claims: Record<string, unknown> = {}): Promise<URLSearchParams[]> {
+  const access = await stubAccess({ issuer: ISSUER, audience: "sample-client", email: "admin@example.com", authorizationUrl, claims });
+  return access.tokenRequests;
 }
 
 async function started(e: never, returnTo = "/portal/jobs"): Promise<{ state: string; cookie: string; location: string }> {
@@ -109,7 +82,7 @@ test("the start sets the Portal state cookie on Path=/portal and sends Access th
 test("the admin completes the login: session cookie carries the email, state cookie cleared, state consumed", async () => {
   const e = env();
   const { state, cookie, location } = await started(e);
-  const bodies = stubAccess(location);
+  const bodies = await stubPortalAccess(location);
   const res = await handlePortalCallback(callback(state, cookie), e, new Date());
   assert.equal(res.status, 302);
   assert.equal(res.headers.get("Location"), "/portal/jobs");
@@ -137,7 +110,7 @@ test("PLANT: a stored return path that would leave the origin lands on the Porta
     const location = String(res0.headers.get("Location"));
     const state = String(new URL(location).searchParams.get("state"));
     const cookie = (res0.headers.get("Set-Cookie") ?? "").split(";")[0];
-    stubAccess(location);
+    await stubPortalAccess(location);
     const res = await handlePortalCallback(new Request(`${origin}/portal/callback?code=c&state=${state}`, { headers: { Cookie: cookie } }), e, new Date());
     assert.equal(res.status, 302);
     const target = String(res.headers.get("Location"));
@@ -153,7 +126,7 @@ test("the name in the ID token rides the session cookie, and a token with no nam
   ] as const) {
     const e = env();
     const { state, cookie, location } = await started(e);
-    stubAccess(location, claims);
+    await stubPortalAccess(location, claims);
     const res = await handlePortalCallback(callback(state, cookie), e, new Date());
     const session = await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }), e, new Date());
     assert.deepEqual(session, expected);
@@ -197,7 +170,7 @@ for (const [name, claims, overrides, pattern] of [
   test(`${name} is refused and gets no session`, async () => {
     const e = env(overrides);
     const { state, cookie, location } = await started(e);
-    stubAccess(location, claims);
+    await stubPortalAccess(location, claims);
     const res = await handlePortalCallback(callback(state, cookie), e, new Date());
     assert.equal(res.status, 403);
     assert.match(await res.text(), pattern);
@@ -227,7 +200,7 @@ for (const stored of ["/portalx", "/console", "https://example.com/portal/", "//
   test(`a stored return path of ${stored} lands on /portal/`, async () => {
     const e = env();
     const { state, cookie, location } = await started(e, stored);
-    stubAccess(location);
+    await stubPortalAccess(location);
     const res = await handlePortalCallback(callback(state, cookie), e, new Date());
     assert.equal(res.status, 302);
     assert.equal(res.headers.get("Location"), "/portal/");
@@ -247,7 +220,7 @@ test("on the Portal host the login sends Access /callback, scopes its cookies to
   assert.equal(new URL(location).searchParams.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`);
   assert.match(setCookies(start)[0], /^__Host-capsid_portal_state=[0-9a-f]{64}; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/);
   const state = String(new URL(location).searchParams.get("state"));
-  const bodies = stubAccess(location);
+  const bodies = await stubPortalAccess(location);
   const res = await handlePortalCallback(
     new Request(`${PORTAL_ORIGIN}/portal/callback?code=c&state=${state}`, { headers: { Cookie: setCookies(start)[0].split(";")[0] } }),
     e,
@@ -272,7 +245,7 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
     const e = env();
     const start = await startPortalLogin(new Request(`${origin}/portal/`), e, "/portal/");
     const location = String(start.headers.get("Location"));
-    stubAccess(location);
+    await stubPortalAccess(location);
     const state = String(new URL(location).searchParams.get("state"));
     const done = await handlePortalCallback(
       new Request(`${origin}/portal/callback?code=c&state=${state}`, { headers: { Cookie: setCookies(start)[0].split(";")[0] } }),
@@ -298,7 +271,7 @@ test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to 
 test("a co-owner completes the login: the cookie carries her email and verifies on a later request", async () => {
   const e = env({ CO_OWNER_EMAILS: " other@example.com , co@example.com " });
   const { state, cookie, location } = await started(e);
-  stubAccess(location, { email: "co@example.com" });
+  await stubPortalAccess(location, { email: "co@example.com" });
   const res = await handlePortalCallback(callback(state, cookie), e, new Date());
   assert.equal(res.status, 302);
   const session = await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }), e, new Date());
@@ -320,7 +293,7 @@ test("a co-owner's email in another case, or with CO_OWNER_EMAILS unset, is refu
   ] as const) {
     const e = env(overrides);
     const { state, cookie, location } = await started(e);
-    stubAccess(location, claims);
+    await stubPortalAccess(location, claims);
     const res = await handlePortalCallback(callback(state, cookie), e, new Date());
     assert.equal(res.status, 403);
     assert.match(await res.text(), /not an administrator of capsid/);

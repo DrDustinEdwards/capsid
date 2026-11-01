@@ -378,6 +378,7 @@ export function systemPage(model, id, asOf, maps = [], home = undefined) {
   const parts = model.containers.filter((/** @type {any} */ c) => c.system === id);
   const own = ownParts(parts);
   const repos = !s.private && !s.hide_repo_link ? (s.repos ?? []) : [];
+  const connections = [...groups.values()].reduce((n, g) => n + g.length, 0);
   const facts = [
     ["Ring", RING_NAMES[/** @type {keyof typeof RING_NAMES} */ (s.ring)]],
     ["Kind", s.family],
@@ -385,7 +386,7 @@ export function systemPage(model, id, asOf, maps = [], home = undefined) {
     ...(repos.length ? [["Source", repos.map((/** @type {string} */ r) => `<a href="${escapeHtml(r)}">${escapeHtml(r.replace(/^https:\/\/github\.com\//, "")).replace("/", "/<wbr>")}</a>`).join("<br>")]] : []),
     ["Visibility", s.private ? "Private" : "Public"],
     ...(own.length ? [["Parts", `<a href="${containersPath(id)}">${own.length}</a>`]] : []),
-    ["Connections", String([...groups.values()].reduce((n, g) => n + g.length, 0))],
+    ["Connections", String(connections)],
     ...(maps.length ? [["Code", `<a href="${codePath(id)}">${escapeHtml(codeSummary(maps))}</a>`]] : home ? [["Code", `<a href="${codePath(home.id)}">Measured with ${escapeHtml(home.name)}, which shares its repo</a>`]] : []),
     ["Write-up", `<a href="${sitePath(id)}">${escapeHtml(s.name)} on dustinedwards.info</a>`],
   ];
@@ -404,7 +405,7 @@ ${flowLinks(model, id)}
 ${maps.length ? riskiest(id, maps) : ""}`;
   return layout({
     title: s.name,
-    description: s.description ?? (s.private ? `${s.name} is private.` : s.name),
+    description: `${s.description ?? (s.private ? `${s.name} is private.` : s.name)} ${own.length ? `Its ${own.length} parts and ${connections} connections` : `Its ${connections} connections`}${maps.length ? ", and its code scored for risk" : ""}, on Capsid's map of the network.`,
     path: systemPath(id),
     body,
     asOf,
@@ -428,7 +429,9 @@ export function containersPage(model, id, asOf) {
   const byId = new Map(parts.map((/** @type {any} */ c) => [c.id, c]));
   const wires = model.relationships.filter((/** @type {any} */ r) => byId.has(r.from) && byId.has(r.to));
   const map = familyMap(model, { id: "family", label: `Inside ${s.name}`, headingLevel: 3, openLabel: "Its page" }, undefined, id);
-  const body = `${pageHead([["/", "Overview"], ["/systems/", "Systems"], [systemPath(id), s.name]], "Inside", `Inside ${escapeHtml(s.name)}`, `Its ${own.length} parts, what each runs on, and how they connect${outside.length ? `, plus ${outside.length === 1 ? "the one outside system" : `the ${outside.length} outside systems`} it works with` : ""}.`)}
+  // The lead and the description say the same, so a search result reads as the page does.
+  const inside = `${own.length === 1 ? "its one part, what it runs on, and how it connects" : `its ${own.length} parts, what each runs on, and how they connect`}${outside.length ? `, plus ${outside.length === 1 ? "the one outside system" : `the ${outside.length} outside systems`} it works with` : ""}`;
+  const body = `${pageHead([["/", "Overview"], ["/systems/", "Systems"], [systemPath(id), s.name]], "Inside", `Inside ${escapeHtml(s.name)}`, `${inside[0].toUpperCase()}${inside.slice(1)}.`)}
 <section class="step-drawing" aria-labelledby="drawing-title"><h2 id="drawing-title" class="cap-sr-only">The drawing</h2><div class="map-host">${map}</div></section>
 ${scroller("parts", `<table class="cap-table"><caption>The parts of ${escapeHtml(s.name)}</caption>
 <thead><tr><th scope="col">Part</th><th scope="col">Kind</th><th scope="col">Runs on</th><th scope="col">What it does</th></tr></thead>
@@ -440,7 +443,7 @@ ${outside.length ? `<section aria-labelledby="outside-title"><h2 id="outside-tit
 ${wires.length ? `<ul class="wires">${wires.map((/** @type {any} */ r) => `<li>${escapeHtml(byId.get(r.from).name)} <span class="verb">${escapeHtml(VERB[/** @type {keyof typeof VERB} */ (r.kind)]?.[0] ?? r.kind)}</span> ${escapeHtml(byId.get(r.to).name)}</li>`).join("")}</ul>` : "<p>None drawn.</p>"}
 </section>
 ${flowLinks(model, id)}`;
-  return layout({ title: `Inside ${s.name}`, description: `The parts of ${s.name} and how they connect.`, path: containersPath(id), parent: [systemPath(id), s.name], body, asOf });
+  return layout({ title: `Inside ${s.name}`, description: `Inside ${s.name}: ${inside}, on Capsid's map of the network.`, path: containersPath(id), parent: [systemPath(id), s.name], body, asOf });
 }
 
 /** The page of every system: the capsid drawing, and a table to sort and filter. @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf */
@@ -475,7 +478,7 @@ ${scroller("systems-table", `<table class="cap-table" data-sortable><caption>Eve
 <tbody>${rows}</tbody></table>`, "Every system")}
 <p class="hint" data-filter-empty hidden>No system matches that.</p>
 </section>`;
-  return layout({ title: "Systems", description: `The ${model.systems.length} systems this Capsid server runs and how they connect.`, path: "/systems/", body, asOf });
+  return layout({ title: "Systems", description: `The ${model.systems.length} systems this Capsid server runs and how they connect, with Capsid in the middle.`, path: "/systems/", body, asOf });
 }
 
 /**
@@ -638,7 +641,7 @@ ${bands(f, true)}
 <p><a class="cap-btn" data-variant="primary" href="${flowPath(f.id)}">Watch it run</a></p></li>`;
     })
     .join("")}</ul>`;
-  return layout({ title: "Flows", description: "Each process Capsid runs, shown step by step on the parts it uses.", path: "/flows/", body, asOf });
+  return layout({ title: "Flows", description: `The ${flows.length} processes Capsid runs, each shown step by step on the parts of Capsid it uses.`, path: "/flows/", body, asOf });
 }
 
 /**
@@ -701,7 +704,8 @@ ${drawn ? `<section class="step-drawing" aria-labelledby="drawing-title"><h2 id=
   return layout({
     title: `${f.name}, step ${n} of ${total}`,
     parent: [flowPath(f.id), f.name],
-    description: st.text,
+    // A step's own sentence can be short for a search result; its place in the flow says the rest.
+    description: `${st.text} Step ${n} of ${total} of ${f.name}.`,
     path: stepPath(f.id, n),
     body,
     asOf,

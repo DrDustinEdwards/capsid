@@ -1,4 +1,5 @@
-import { bearerToken, operatorIdentity } from "./auth";
+import { bearerToken } from "@dustinedwards/site-runtime/agent-keys";
+import { operatorIdentity } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import {
   AGENT_GRANTS,
@@ -155,7 +156,7 @@ export async function resolveAgent(
   env: { DB: D1Database; OPERATOR_KEY_HASH?: string },
   now: Date = new Date()
 ): Promise<ResolvedAgent | null> {
-  const token = bearerToken(request);
+  const token = bearerToken(request.headers.get("Authorization"));
   if (!token) return null;
   const hash = await sha256Hex(token);
   const row = await liveAgentByHash(env.DB, hash);

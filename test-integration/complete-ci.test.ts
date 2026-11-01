@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { claimJob, completeJob, failAsCaller, postJob } from "../src/jobs";
 import { breakerState } from "../src/job-breaker";
@@ -24,9 +25,7 @@ type File = string | { filename: string; status: string };
 const github = new Map<number, { checks: Check[]; files: File[] }>();
 
 beforeEach(async () => {
-  for (const table of ["job_outcomes", "jobs", "audit_log", "job_outcome_prs", "job_claims"]) {
-    await env.DB.prepare(`DELETE FROM ${table}`).run().catch(() => undefined);
-  }
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }])).run();
   await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
   github.clear();

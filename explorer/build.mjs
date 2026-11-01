@@ -22,6 +22,7 @@ import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
+import { themeScript } from "capsomer/theme-server";
 import { buildSync } from "esbuild";
 
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
@@ -112,8 +113,44 @@ const llmsTxt = (systems, tools) =>
     ],
   });
 
-/** @param {{ model?: string, stats?: string, code?: string, out?: string }} [options] */
-export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stats: statsSource = `${LIVE}/stats/v1.json`, code: codeSource = modelSource === `${LIVE}/model/v1.json` ? `${LIVE}/code/v1.json` : undefined, out = join(here, "dist") } = {}) {
+/**
+ * When each page last changed, for the sitemap's lastmod: a page whose text (the build date aside) is the same as in the
+ * live build keeps the live build's date, a changed or new one gets today's, and a page with no record has none, since no
+ * lastmod is better than a wrong one (https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap).
+ * The record rides in build.json, so it carries from one deploy to the next.
+ * @param {Array<[string, string]>} pages @param {string} asOf @param {Record<string, { hash: string, lastmod: string | null }> | undefined} previous
+ * @param {string} today
+ */
+export function pageDates(pages, asOf, previous, today) {
+  /** @type {Record<string, { hash: string, lastmod: string | null }>} */
+  const dates = {};
+  for (const [path, html] of pages) {
+    const hash = createHash("sha256").update(html.replaceAll(asOf, "")).digest("hex");
+    const before = previous?.[path];
+    dates[path] = { hash, lastmod: before ? (before.hash === hash ? before.lastmod : today) : previous ? today : null };
+  }
+  return dates;
+}
+
+/** The live build's page record, or undefined when there is none yet or it cannot be read. @param {string | undefined} source */
+async function readPrevious(source) {
+  if (!source) return undefined;
+  try {
+    let record;
+    if (/^https:\/\//.test(source)) {
+      const response = await fetch(source, { headers: { accept: "application/json" } });
+      if (!response.ok) return undefined;
+      record = await response.json();
+    } else record = JSON.parse(readFileSync(source, "utf8"));
+    const pages = record?.pages;
+    return pages && typeof pages === "object" ? pages : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** @param {{ model?: string, stats?: string, code?: string, out?: string, previous?: string, today?: string }} [options] */
+export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stats: statsSource = `${LIVE}/stats/v1.json`, code: codeSource = modelSource === `${LIVE}/model/v1.json` ? `${LIVE}/code/v1.json` : undefined, out = join(here, "dist"), previous: previousSource = modelSource === `${LIVE}/model/v1.json` ? `${ORIGIN}/build.json` : undefined, today = new Date().toISOString().slice(0, 10) } = {}) {
   const model = PublicModelSchema.parse(await read(modelSource));
   const stats = PublicStatsSchema.parse(await read(statsSource));
   const code = await readCode(codeSource);
@@ -179,7 +216,11 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   copyFileSync(join(here, "src", "explorer.js"), join(stage, "explorer.js"));
   buildSync({ entryPoints: [join(stage, "explorer.js")], outfile: join(assets, "explorer.js"), bundle: true, nodePaths: [join(here, "node_modules")], format: "esm", minify: true, logLevel: "warning" });
   rmSync(stage, { recursive: true });
-  copyFileSync(join(here, "src", "theme.js"), join(assets, "theme.js"));
+  // The remembered theme, set before the first paint so the page never flashes the other one: Capsomer's themeScript
+  // (cap-theme in localStorage; with nothing remembered the system's setting applies). A file, not an inline script,
+  // so the policy needs no hash. It also marks the page as scripted before the first paint, so what script adds (the
+  // panel's breakers) is laid out from the start and moves nothing when the module runs.
+  writeFileSync(join(assets, "theme.js"), `document.documentElement.classList.add("js");\n${themeScript()}\n`);
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
   // The family icon set (Prelum's prelum-icons) at the root, where iconLinks() and the manifest point.
   cpSync(join(here, "src", "icons"), out, { recursive: true });
@@ -197,7 +238,8 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // reserved, as the tdm-reservation header in _headers says) and llms.txt (https://llmstxt.org),
   // a short guide.
   const listed = pages.map(([path]) => path).filter((path) => path !== "/404" && path !== "/search/");
-  writeFileSync(join(out, "sitemap.xml"), sitemapDocument(listed.map((path) => ({ loc: ORIGIN + path }))));
+  const dates = pageDates(pages, stats.as_of, await readPrevious(previousSource), today);
+  writeFileSync(join(out, "sitemap.xml"), sitemapDocument(listed.map((path) => ({ loc: ORIGIN + path, lastmod: dates[path]?.lastmod }))));
   writeFileSync(join(out, "robots.txt"), robotsDocument({ origin: ORIGIN, notes: [`AI usage policy: ${ORIGIN}/ai.txt`, `LLM guide: ${ORIGIN}/llms.txt`] }));
   writeFileSync(join(out, "ai.txt"), aiTxt({ origin: ORIGIN, name: "Capsid", contact: "contact@dustinedwards.info" }));
   writeFileSync(join(out, "llms.txt"), llmsTxt(model.systems.length, tools.length));
@@ -211,12 +253,12 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // A sha384 integrity and crossorigin on every page's two script tags, for Integrity-Policy (site-runtime ./sri).
   await writeIntegrity(out);
   const content = contentHash(out);
-  writeFileSync(join(out, "build.json"), `${JSON.stringify({ model_as_of: model.as_of, stats_as_of: stats.as_of, code_as_of: code?.as_of ?? null, systems: model.systems.length, content }, null, 2)}\n`);
+  writeFileSync(join(out, "build.json"), `${JSON.stringify({ model_as_of: model.as_of, stats_as_of: stats.as_of, code_as_of: code?.as_of ?? null, systems: model.systems.length, content, pages: dates }, null, 2)}\n`);
   return { pages: pages.length, out, content };
 }
 
 if (process.argv[1] === import.meta.filename) {
-  const { values } = parseArgs({ options: { model: { type: "string" }, stats: { type: "string" }, code: { type: "string" }, out: { type: "string" } } });
+  const { values } = parseArgs({ options: { model: { type: "string" }, stats: { type: "string" }, code: { type: "string" }, out: { type: "string" }, previous: { type: "string" }, today: { type: "string" } } });
   const result = await build(/** @type {any} */ (values));
   console.log(`explorer: built ${result.pages} pages into ${result.out}`);
 }

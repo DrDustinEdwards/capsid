@@ -1,4 +1,5 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { legacyAgent } from "../src/agents";
@@ -133,10 +134,7 @@ async function auditRows(): Promise<Array<{ id: number; actor: string; action: s
 const KEYS = [OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...APP_ROSTER.map(breakerResetKey)];
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM jobs").run();
-  await env.DB.prepare("DELETE FROM audit_log").run();
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
-  await env.DB.prepare("DELETE FROM agents").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
     .run();
@@ -145,7 +143,6 @@ beforeEach(async () => {
     .bind("sample", JSON.stringify([{ repo: "example/sample", label: "primary" }]))
     .run();
   await env.DB.prepare("DELETE FROM ops_sites WHERE namespace = 'sample'").run();
-  await env.DB.prepare("DELETE FROM ops_packages").run();
   for (const key of KEYS) await env.APP_KV.delete(key);
 });
 

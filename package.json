@@ -35,7 +35,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.11",
     "@cloudflare/workers-types": "5.20261029.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.22",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.20.23",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/conformance": "0.2.0-alpha.11",
     "@types/node": "24.19.2",
@@ -49,9 +49,9 @@
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.27.1",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.31.2",
     "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.9.0",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.68.3",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.71.0",
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.32.0",
     "jose": "6.2.14",
