@@ -41,7 +41,6 @@ body {
    family footer keep Capsomer's colors, which sit in a layer an unlayered rule would beat. */
 :where(main, .foot) :where(a:not(.cap-btn, .cap-sign, .cap-leader-index-link, .cap-family-footer a)) {
   color: var(--accent-text);
-  text-underline-offset: 0.18em;
 }
 .cap-btn[data-variant="primary"] {
   font-weight: 600;
@@ -111,9 +110,8 @@ h3 {
   color: var(--ground);
   text-decoration: none;
 }
-.crumbs a:hover,
-.crumbs a:focus-visible {
-  text-decoration: underline;
+.crumbs a:hover {
+  background: color-mix(in srgb, var(--ground) 18%, transparent);
 }
 /* The page you are on, lit as a lamp: Capsid sets --primary-fg to the lamp's ink for its pale lamp, which
    does not hold on the strip's deep teal, so the lit page takes the lamp's own pair. */
@@ -1114,7 +1112,6 @@ html:not(.js) .chapter h3::before {
 }
 .tool-card > a:hover .tool-card-title {
   color: var(--accent-text);
-  text-decoration: underline;
 }
 @media (max-width: 52rem) {
   .tool-card {
@@ -1257,7 +1254,6 @@ html:not(.js) .chapter h3::before {
 }
 .flow-card h2 a:hover {
   color: var(--accent-text);
-  text-decoration: underline;
 }
 
 /* Search. */
