@@ -131,6 +131,12 @@ test("PLANT: a task whose newest run threw or was refused is failing, whatever c
   assert.equal(f["skills-refresh"], null, "a skip is shown, not flagged");
 });
 
+test("PLANT: a failure of a task without a period ages out after a day; a periodic one stands until its next run", () => {
+  assert.equal(flags({ "doc-index": [run(23 * 60, "refused")] })["doc-index"], "failing");
+  assert.equal(flags({ "doc-index": [run(25 * 60, "refused")] })["doc-index"], null);
+  assert.equal(flags({ "skills-refresh": [run(6 * 24 * 60, "threw")] })["skills-refresh"], "failing");
+});
+
 test("PLANT: a periodic task is quiet after twice its period and not before", () => {
   assert.equal(flags({ tick: [run(9)] }).tick, null);
   assert.equal(flags({ tick: [run(11)] }).tick, "quiet");

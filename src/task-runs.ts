@@ -92,6 +92,17 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
 ];
 
 const STALE_PERIODS = 2;
+// How long the newest failure of a task without a period counts as current. Such a task
+// records a run only when it acts, so no later "ok" row may ever come to clear a failure:
+// doc-index stays silent while nothing changes, site-repair while no site drifts. Read
+// as current forever, one transient refusal (an AI Search timeout, a slow operator call)
+// held /health at warn for days after the cause was fixed. Best practice for event
+// alerts is a window the event ages out of (Prometheus increase(errors[window]) > 0; the
+// SRE workbook's "reset time": an alert that keeps firing after recovery gets ignored).
+// A day is the longest retry among these tasks (doc-index's daily reconcile, the daily
+// digest; site-repair retries every 30 minutes, up to AUTO_PER_DAY times), so a fault that
+// persists fails again, and is flagged again, before its last failure ages out.
+const EVENT_FAILURE_WINDOW_MS = DAY_MS;
 // Rows older than this are pruned, PRUNE_BATCH at a time on each write.
 export const RUN_RETENTION_DAYS = 14;
 const PRUNE_BATCH = 50;
@@ -210,7 +221,9 @@ export async function readTaskRuns(db: D1Database): Promise<Map<TaskId, OpsTaskR
 }
 
 /** Each task with its newest runs and its flag, decided at `now`.
- *  - `failing`: the newest run threw or was refused.
+ *  - `failing`: the newest run threw or was refused; for a task without a period, only
+ *    while that run is inside EVENT_FAILURE_WINDOW_MS. A periodic task's next run is its
+ *    retry, so its failure stands until that run.
  *  - `quiet`: a periodic task whose newest run is more than STALE_PERIODS periods old.
  *  - `never`: no run in the ledger. A notice, not a fault: after the migration every
  *    task starts here, and the daily ones stay here until their hour. */
@@ -221,7 +234,9 @@ export function taskStates(runs: Map<TaskId, OpsTaskRun[]>, now: Date, watcherCa
     const period = t.id === "watcher" ? watcherCadenceMin * MINUTE_MS : t.period_ms;
     let flag: OpsTask["flag"] = null;
     if (last === null) flag = "never";
-    else if (last.outcome === "threw" || last.outcome === "refused") flag = "failing";
+    else if (last.outcome === "threw" || last.outcome === "refused") {
+      if (t.period_ms !== null || now.getTime() - Date.parse(last.finished_at) <= EVENT_FAILURE_WINDOW_MS) flag = "failing";
+    }
     else if (period !== null && now.getTime() - Date.parse(last.finished_at) > STALE_PERIODS * period) flag = "quiet";
     return { id: t.id, label: t.label, period_ms: period, flag, recent };
   });
