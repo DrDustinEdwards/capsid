@@ -44,8 +44,11 @@ const MCP_HOST_PATHS = new Set([
   "/public/code/v1.json",
   "/oauth/clients/verify-live.json",
   "/reports/signed-in-security.json",
+  // site-runtime's owner page (./owner-page, area 11 A15 and L9): your grants with Revoke, and the
+  // tool-call log. Its POSTs are under /owner/.
+  "/owner",
 ]);
-const MCP_HOST_PREFIXES = ["/mcp/", "/ops/", "/.well-known/oauth-"];
+const MCP_HOST_PREFIXES = ["/mcp/", "/ops/", "/.well-known/oauth-", "/owner/"];
 
 export function servedOnMcpHost(pathname: string): boolean {
   return MCP_HOST_PATHS.has(pathname) || MCP_HOST_PREFIXES.some((p) => pathname.startsWith(p));

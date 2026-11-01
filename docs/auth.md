@@ -43,6 +43,7 @@ Roles are few and separated. Each one is a single capability, not a bundle. `scr
 | `seat` | every namespace | every namespace | `can_merge` |
 | `site-seat` | `dustinedwards` | `dustinedwards` | `can_merge` |
 | `live-probe` | `capsid`, through the `capsid_read_doc` tool only | nothing at all | none |
+| `live-check` | `capsid`, through the `capsid_read_doc` tool only; devkit's daily AI and MCP check, its key the `MCP_TEST_GRANT_MCP_DUSTINEDWARDS_INFO` secret there | nothing at all | none |
 
 **A project driver holds no blast-radius flag by default, and two of them hold one.** Granted by the seat on 2026-09-11: `capsid-driver` and `claude-skills-driver` hold `can_touch_protected`. Every other driver holds none, and `capsid_run_improve` action `status` and Capsid Portal list the flags each one actually has, so the inventory is the answer rather than this paragraph. Widening one is `capsid_admin_manage_agents` action `update_scopes`, which is admin only and audit-logged with the scopes before and after.
 
@@ -155,6 +156,7 @@ MCP and sign-in:
 - `POST /mcp` and `POST /mcp/admin` MCP over Streamable HTTP, requires an OAuth access token (the admin and any co-owner only)
 - `POST /ops/mcp` and `POST /ops/mcp/admin` MCP over Streamable HTTP for agents and cron, requires an agent or operator key as `Authorization: Bearer <key>`; the admin route takes the admin identity only
 - `GET /authorize`, `POST /authorize`, `GET /callback` the MCP sign-in, through Cloudflare Access for SaaS
+- `GET /owner`, `POST /owner/revoke`, `POST /owner/sign-out` the owner page (site-runtime's `./owner-page`, mounted by `loginHandler`): the same Access sign-in and admission as consent, through the same `/callback`; it lists the signed-in person's grants with Revoke, the agent keys and the tool-call log, newest first
 - `POST /token` token exchange (served by the library)
 - `POST /register` tightened dynamic client registration for Grok and Gemini, MCP host only, rate limited, grants nothing (`src/index.ts`, above). Claude and ChatGPT use a Client ID Metadata Document instead
 - `GET /.well-known/oauth-authorization-server` and `GET /.well-known/oauth-protected-resource` discovery metadata (served by the library)

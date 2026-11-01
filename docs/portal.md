@@ -40,7 +40,7 @@ Browser tests: dashboard/e2e/needs.spec.ts.
 The pages, grouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE 2 and 8, ruled 2026-10-09; the Portal UX audit's sitemap, 2026-10). The words are the audit's; the internal ids (`queue`, `claims`, `namespace`) stay in the code and the addresses:
 - **Now:** Needs you (above) and Health;
 - **Work:** Pull requests and Jobs (`/portal/queue`);
-- **Records:** Activity, Agents (its Agents, Archive and Checks tabs), Packages (its Published tab, while a package is configured, and its Shared tab) and Library;
+- **Records:** Activity, Agents (its Agents, Archive, Checks and AI access tabs; AI access links each MCP server's owner page, where your grants to AI clients can be revoked and its tool-call log read), Packages (its Published tab, while a package is configured, and its Shared tab) and Library;
 - **Settings**, the menu's last entry, with a gear. It is also under the avatar.
 
 Every menu entry has an icon, so the collapsed menu has no blank button. On a phone the tab bar is Needs you, Health and Pull requests, and the header's menu button lists every page. Every risky control (Mark failed, Remove, Revoke) sits alone in a red "Danger" area, never beside a safe one. The job drawer has one primary action for the job's state, the other safe ones under "More actions". The confirm dialog says what the action does in a sentence; the rows it changes and the audit rows it writes are behind "Details" (open from the start for a rule change, whose lines are the decision). On a phone no text is under 13 px.
