@@ -1,8 +1,9 @@
 // The numbers page: every public number Capsid computes (docs/public-data.md), each as a sentence,
 // a picture and the table behind it, with the weekly trends where the document carries them.
 // Enarratio draws each whole figure on the server (title, finding, caption, source, "Show data"),
-// in Capsomer's chart frame; its enhance step (src/explorer.js) adds tooltips and keyboard
-// reading. No chart takes a color of its own, which would need a style attribute the policy
+// in Capsomer's chart frame; Capsomer's chart-enhance (src/explorer.js) draws the bar, line and
+// area charts again at their column's width from the spec frameHtml writes beside each, so a phone
+// keeps 12 px text, and adds tooltips and keyboard reading. No chart takes a color of its own, which would need a style attribute the policy
 // refuses. Pure.
 import { frameHtml } from "capsomer/behavior/chart-frame";
 import { progressRing } from "enarratio";
@@ -33,11 +34,17 @@ export function numbersHtml(stats) {
   // month changes, so eight labels fit under eight bars.
   const days = weeks.map((/** @type {string} */ w, /** @type {number} */ i) => (i && i < weeks.length - 1 && w.split(" ")[1] === weeks[i - 1].split(" ")[1] ? w.split(" ")[0] : w));
   const total = j.completed_by_week.reduce((/** @type {number} */ a, /** @type {number} */ b) => a + b, 0);
-  // Under Enarratio's 480 the drawing scales to a phone's width instead of scrolling inside a
-  // frame no keyboard can reach (axe, scrollable-region-focusable, on the phone project).
+  // Under Enarratio's 480 the server's drawing scales to a phone's width instead of scrolling
+  // inside a frame no keyboard can reach (axe, scrollable-region-focusable, on the phone project),
+  // and chart-enhance draws it again at the column's width.
   const width = 440;
+  /** A chart and the redraw spec beside it: the same options, less the functions JSON drops. */
+  const drawn = (/** @type {"bar" | "line" | "area"} */ chart, /** @type {any} */ options) => {
+    const draw = { bar: barChart, line: lineChart, area: areaChart }[chart];
+    return frameHtml(draw(options), { redraw: { chart, options: JSON.parse(JSON.stringify(options)) } });
+  };
   const jobsChart = j.failed_by_week
-    ? barChart({
+    ? drawn("bar", {
         id: "jobs-per-week",
         data: days.flatMap((/** @type {string} */ week, /** @type {number} */ i) => [
           { week, outcome: "Completed", jobs: j.completed_by_week[i] },
@@ -55,7 +62,7 @@ export function numbersHtml(stats) {
         width,
         alt: `Jobs finished in each of the last eight whole weeks, oldest first. Completed: ${j.completed_by_week.join(", ")}. Failed: ${j.failed_by_week.join(", ")}.`,
       })
-    : barChart({
+    : drawn("bar", {
         id: "jobs-per-week",
         data: days.map((/** @type {string} */ week, /** @type {number} */ i) => ({ week, jobs: j.completed_by_week[i] })),
         x: "week",
@@ -69,7 +76,7 @@ export function numbersHtml(stats) {
         alt: `Jobs completed in each of the last eight whole weeks, oldest first: ${j.completed_by_week.join(", ")}; ${total} in all.`,
       });
   const waitsChart = g.waits_by_week
-    ? areaChart({
+    ? drawn("area", {
         id: "waits-per-week",
         data: ends.map((week, i) => ({ week, waits: g.waits_by_week[i] })),
         x: "week",
@@ -86,7 +93,7 @@ export function numbersHtml(stats) {
   const measuredWeeks = (v.agreement_by_week ?? []).filter((/** @type {number | null} */ x) => x !== null).length;
   const agreementChart =
     measuredWeeks >= 2
-      ? lineChart({
+      ? drawn("line", {
           id: "agreement-per-week",
           data: ends.map((week, i) => ({ week, agreement: v.agreement_by_week[i] === null ? null : Math.round(v.agreement_by_week[i] * 1000) / 10 })),
           x: "week",
@@ -135,13 +142,13 @@ export function numbersHtml(stats) {
 <dl class="cap-form-boxes readings-row" data-variant="tones">${readingBox(String(j.completed_30d), "jobs completed, 30 days", "#jobs")}${readingBox(percent(v.agreement_rate_90d), "claims matching GitHub", "#verification")}${readingBox(minutes(g.median_wait_minutes_30d), "median approval wait", "#gates")}${readingBox(percent(stats.sites.uptime_7d), "uptime, 7 days", "#sites")}</dl>
 <section class="numbers-part" id="jobs" aria-labelledby="jobs-title"><h2 id="jobs-title">Jobs</h2>
 <p class="measure">In the last 30 days, ${j.completed_30d} jobs finished and ${j.failed_30d} failed. ${j.open} are open today, and ${j.blocked} of those are waiting on a person. The median job took ${minutes(j.median_duration_minutes_30d)} from first claim to done.</p>
-<div class="charts">${frameHtml(jobsChart)}</div></section>
+<div class="charts">${jobsChart}</div></section>
 <section class="numbers-part" id="verification" aria-labelledby="verification-title"><h2 id="verification-title">Claims checked against GitHub</h2>
 <p class="measure">When a job finishes, the Worker reads its pull requests, commits and CI from GitHub and saves each claim next to what GitHub says. A rate counts only the fields the Worker checked.</p>
-<div class="charts">${agreementChart && frameHtml(agreementChart)}${rings.join("")}</div></section>
+<div class="charts">${agreementChart}${rings.join("")}</div></section>
 <section class="numbers-part" id="gates" aria-labelledby="gates-title"><h2 id="gates-title">Approval gates</h2>
 <p class="measure">Before a push, a deploy, a secret or a merge, the agent stops. The job waits with the exact command until a person or the signed policy answers. ${g.waits_30d} waits ended in the last 30 days, and half ended within ${minutes(g.median_wait_minutes_30d)}.</p>
-<div class="charts">${waitsChart && frameHtml(waitsChart)}${gateRings.join("")}</div></section>
+<div class="charts">${waitsChart}${gateRings.join("")}</div></section>
 <section class="numbers-part" id="sites" aria-labelledby="sites-title"><h2 id="sites-title">Sites</h2>
 <p class="measure">Every five minutes, the watcher checks each registered site and keeps a ring of half-hour slots for it. When it can't measure a slot, it leaves the slot out instead of counting it as up.</p>
 <div class="charts">${siteRings.join("")}</div></section>
