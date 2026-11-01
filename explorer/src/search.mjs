@@ -37,7 +37,7 @@ export function searchIndex(model, bySystem, flows, tools) {
 
 /** @param {string} asOf */
 export function searchPage(asOf) {
-  const body = `${pageHead([["/", "Overview"]], "Search", "Search", "Find any system, part, step, tool or repo on this site. Press / on any page to search.")}
+  const body = `${pageHead([], "Search", "Search", "Find any system, part, step, tool or repo on this site. Press / on any page to search.")}
 <form class="search-form" action="/search/" method="get" role="search">
 <label class="cap-sr-only" for="q">Search the explorer</label>
 <input class="cap-input search-input" id="q" name="q" type="search" placeholder="Try “backup”, “merge” or “session”" autocomplete="off" data-search>
