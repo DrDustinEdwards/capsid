@@ -29,6 +29,7 @@ const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 // The Durable Objects wrangler.jsonc binds (RATE_LIMITER, TOOL_CALL_LOG), from site-runtime.
 export { RateLimiter } from "@dustinedwards/site-runtime/rate-limit/durable-object";
 export { ToolCallLog } from "@dustinedwards/site-runtime/audit-log";
+import { exportAuditLog } from "@dustinedwards/site-runtime/audit-log";
 
 // Spelled once. wrangler.jsonc declares them; test/crons.test.ts derives one list
 // from the other and fails in both directions.
@@ -276,6 +277,18 @@ export default {
             };
           },
           { tag: "BACKUP_CRON_THREW", rethrow: true }
+        )
+      );
+      // The tool-call log's daily copy to AUDIT_BUCKET and the 90-day prune of copied rows
+      // (area 11, L6-L7). Its own task, so a failed write cannot stop the backup; it throws,
+      // so the run is recorded threw, and /health's tool-call-log check warns after two days.
+      ctx.waitUntil(
+        runTask(
+          env,
+          "tool-call-log-export",
+          () => exportAuditLog(env, env.AUDIT_BUCKET),
+          (done): TaskResult => ({ outcome: "ok", reason: `copied ${done.exported} rows in ${done.objects.length} objects; pruned ${done.pruned}` }),
+          { tag: "TOOL_CALL_LOG_EXPORT_THREW", rethrow: true }
         )
       );
       // Its own task, so a throw here cannot stop the backup (design-hybrid-search 3.4).

@@ -4,6 +4,7 @@ import { readSiteRow } from "./ops-sites";
 import { auditStatement } from "./store-guards";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { base64url } from "@dustinedwards/site-runtime/encoding";
+import { callSignal } from "./call-signal";
 
 // SET A SITE KEY (create a site key and set it on both sides, never shown), served as
 // capsid_admin_set_site_key. The site key is the site API's key
@@ -45,7 +46,7 @@ async function putSecret(fetchImpl: FetchLike, token: string, account: string, s
       method: "PUT",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "capsid (set site key)" },
       body: JSON.stringify({ name, text: value, type: "secret_text" }),
-      signal: AbortSignal.timeout(CF_TIMEOUT_MS),
+      signal: callSignal(CF_TIMEOUT_MS),
     });
   } catch (err) {
     return { ok: false, error: `no answer from Cloudflare: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}` };

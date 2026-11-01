@@ -30,7 +30,8 @@ export type TaskId =
   | "doc-index"
   | "supersede"
   | "site-pulse"
-  | "signed-in-crawl";
+  | "signed-in-crawl"
+  | "tool-call-log-export";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -85,6 +86,9 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   { id: "site-pulse", label: "Site pulse", period_ms: null },
   // The signed-in crawl of the Portal (src/signed-in-crawl.ts), hourly on the tick.
   { id: "signed-in-crawl", label: "Signed-in header crawl", period_ms: 2 * HOUR_MS },
+  // The daily copy of the tool-call log to AUDIT_BUCKET (site-runtime exportAuditLog; area
+  // 11, L6-L7), with the backup.
+  { id: "tool-call-log-export", label: "Tool-call log export", period_ms: DAY_MS },
 ];
 
 const STALE_PERIODS = 2;

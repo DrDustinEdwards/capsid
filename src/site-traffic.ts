@@ -4,6 +4,7 @@ import { CF_API, CF_GRAPHQL, cfGetAll, cloudflareCredentials } from "./ops-cloud
 import { AI_SEARCH_BOTS, AI_TRAINING_BOTS, DENIED_BOTS, SEARCH_ENGINE_BOTS } from "@drdustinedwards/site-helpers/robots";
 import { reportSite } from "./site-reports";
 import type { ServerErrors } from "./ops-types/sites";
+import { callSignal } from "./call-signal";
 
 // What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic
 // (the SEO plan, "Beyond the module"). not_found: the paths that answered 404 over a
@@ -52,7 +53,7 @@ async function sql(fetchImpl: FetchLike, token: string, account: string, query: 
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "capsid (site traffic)" },
     body: JSON.stringify({ query, params, scope: { accountTag: account } }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: callSignal(TIMEOUT_MS),
   });
   const text = await resp.text();
   let body: { data?: unknown; errors?: Array<{ message?: string }>; message?: string; error?: string } | null = null;
@@ -112,7 +113,7 @@ async function webVitals(fetchImpl: FetchLike, token: string, account: string, h
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "capsid (site traffic)" },
     body: JSON.stringify({ query, variables: { account, siteTag, start, end } }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: callSignal(TIMEOUT_MS),
   });
   const text = await resp.text();
   let body: { data?: { viewer?: { accounts?: Array<{ rumWebVitalsEventsAdaptiveGroups?: Array<{ count?: number; quantiles?: Record<string, number> }> }> } }; errors?: Array<{ message?: string }> } | null = null;

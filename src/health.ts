@@ -4,6 +4,7 @@ import { probeFts } from "./store-probe";
 import { aiSearchUsage } from "./doc-index";
 import { HOUR_MS } from "./time";
 import { durableObjectCheck, healthResponse, kvCheck, r2Check, type HealthCheck } from "@dustinedwards/site-runtime/health";
+import { auditLogCheck } from "@dustinedwards/site-runtime/audit-log";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
 import { DEFAULT_CADENCE_MINUTES } from "./watcher";
 
@@ -163,6 +164,9 @@ export async function handleHealth(env: Env): Promise<Response> {
   // Left out: AI_SEARCH, because every read of it is a billed query and the hybrid search
   // falls back to FTS5 without it; ASSETS, because the Portal's files are the deploy's own.
   checks.push(durableObjectCheck("rate_limiter", env.RATE_LIMITER), durableObjectCheck("tool_call_log", env.TOOL_CALL_LOG));
+  // What is in the log (area 11, L8), warn: a call started and never finished, a spike in
+  // calls, or rows not copied to AUDIT_BUCKET for two days.
+  if (env.TOOL_CALL_LOG) checks.push(auditLogCheck(env));
   const response = await healthResponse({
     ping: async () => {
       try {

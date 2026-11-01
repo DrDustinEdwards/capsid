@@ -6,6 +6,7 @@ import { tokenSet, type FetchLike } from "./site-operator";
 import { DAY_MS } from "./time";
 import { failingCheckNames } from "./health-format";
 import { healthUrl } from "./ops-sites";
+import { callSignal } from "./call-signal";
 
 // THE WATCHER'S SITE REPAIRS (job_09e5f6cbf782), so a site's own watchdog Worker can be
 // retired later. On each watcher pass, for every site with a health route (ops_sites.health_path):
@@ -60,7 +61,7 @@ const clip = (s: string) => (s.length > TEXT_MAX ? `${s.slice(0, TEXT_MAX - 1)}â
 
 async function readHealth(fetchImpl: FetchLike, url: string): Promise<Reading> {
   try {
-    const res = await fetchImpl(url, { headers: { "user-agent": "capsid-watcher", "cache-control": "no-cache" }, redirect: "manual", signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
+    const res = await fetchImpl(url, { headers: { "user-agent": "capsid-watcher", "cache-control": "no-cache" }, redirect: "manual", signal: callSignal(HEALTH_TIMEOUT_MS) });
     return { status: res.status, body: await res.json().catch(() => null), error: null };
   } catch (err) {
     return { status: 0, body: null, error: clip(err instanceof Error ? err.message : String(err)) };

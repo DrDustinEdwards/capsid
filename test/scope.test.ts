@@ -6,7 +6,7 @@ import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
 import { AUTHORITATIVE } from "../src/counts.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface.ts";
-import { TOOL_GRANTS, TOOL_ACTION_GRANTS, actionArgFor, checkScope, isMoneyPath, repoWriteFlags, requiredForAction, requiredGrant } from "../src/scope.ts";
+import { TOOL_GRANTS, TOOL_ACTION_GRANTS, actionArgFor, checkScope, isMoneyPath, repoWriteFlags, requiredForAction, requiredGrant, toolListed } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // One enforcement point, and the refusal names what is missing.
@@ -244,7 +244,11 @@ async function sweep(caller: Agent, surface: Surface, calls: (tools: ServedTool[
         await withFetch({}, async (fetches) => {
           const before = prepared;
           const kvBefore = kvReads;
-          const result = (await client.callTool({ name: tool, arguments: args })) as { isError?: boolean; content: Array<{ text?: string }> };
+          // A tool the caller's grant can never call is not served to it (src/scope.ts
+          // toolListed), so the protocol refuses the call; that refusal is recorded as the result.
+          const result = (await client
+            .callTool({ name: tool, arguments: args })
+            .catch((error: unknown) => ({ isError: true, content: [{ text: `protocol: ${error instanceof Error ? error.message : String(error)}` }] }))) as { isError?: boolean; content: Array<{ text?: string }> };
           const text = result.content[0]?.text ?? "";
           results.set(label, { text, isError: result.isError === true, prepared: prepared - before, fetched: fetches.length, kvReads: kvReads - kvBefore });
           const parse = /^invalid arguments for [^:]+: (.*)$/s.exec(text);
@@ -348,10 +352,22 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
   const writeTools = new Set<string>();
   const readTools = new Set<string>();
   for (const surface of Object.keys(SURFACES) as Surface[]) {
-    const { served, results } = await sweep(readOnlyCaller(surface), surface, (tools) =>
-      tools.flatMap((tool) => actionsOf(tool).map((action) => ({ tool: tool.name, args: argsFor(tool, action) })))
-    );
-    assertServedAll(surface, served);
+    const caller = readOnlyCaller(surface);
+    const unserved = SURFACES[surface].tools.filter((tool) => !toolListed(caller, tool));
+    const { served, results } = await sweep(caller, surface, (tools) => [
+      ...tools.flatMap((tool) => actionsOf(tool).map((action) => ({ tool: tool.name, args: argsFor(tool, action) }))),
+      ...unserved.map((tool) => ({ tool, args: {} as Record<string, unknown> })),
+    ]);
+    // A read grant is served every tool but those that need write in whole (area 11, T7).
+    assert.deepEqual(served.map((t) => t.name).sort(), SURFACES[surface].tools.filter((tool) => !unserved.includes(tool)).sort());
+    for (const tool of unserved) {
+      const result = results.get(tool);
+      assert.ok(result, `${tool} was not called`);
+      writes += 1;
+      writeTools.add(tool);
+      assert.match(result.text, /not found/i, `${tool} answered a read-only caller: ${result.text}`);
+      assert.equal(result.prepared + result.fetched + result.kvReads, 0, `${tool} reached a store or the network before refusing`);
+    }
     for (const tool of served) {
       for (const action of actionsOf(tool)) {
         const label = action === undefined ? tool.name : `${tool.name}.${action}`;
