@@ -47,7 +47,7 @@ export function assetPath(pathname: string): string {
   return inner === "/index.html" ? "/" : inner;
 }
 
-function fetchAsset(assets: Fetcher, path: string, method: string): Promise<Response> {
+export function fetchAsset(assets: Fetcher, path: string, method: string): Promise<Response> {
   // The hostname is not meaningful to the binding; only the pathname is matched.
   return assets.fetch(new Request(new URL(path, "https://assets.invalid"), { method }));
 }

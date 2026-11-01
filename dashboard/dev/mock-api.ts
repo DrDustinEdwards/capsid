@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { DASHBOARD_CSP } from "../../src/dashboard-csp.ts";
+import { shiftTimes } from "../src/lib/demo.ts";
 import type {
   ClaimsGroup,
   OpsFeed,
@@ -55,8 +56,6 @@ import type {
 } from "../src/types.ts";
 
 const FIXTURE = fileURLToPath(new URL("./sample-feed.json", import.meta.url));
-const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
-const SLOT_MS = 30 * 60_000;
 const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
@@ -94,18 +93,7 @@ function mockNow(): number {
   return PINNED_NOW ?? Date.now();
 }
 
-function shift(value: unknown, delta: number): unknown {
-  if (typeof value === "string" && ISO.test(value)) return new Date(Date.parse(value) + delta).toISOString();
-  if (Array.isArray(value)) return value.map((v) => shift(v, delta));
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) {
-      out[k] = k === "ring_slot" && typeof v === "number" ? v + Math.round(delta / SLOT_MS) : shift(v, delta);
-    }
-    return out;
-  }
-  return value;
-}
+const shift = shiftTimes;
 
 // What the controls changed since the dev server started.
 interface MockState {

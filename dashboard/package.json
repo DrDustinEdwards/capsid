@@ -7,7 +7,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "build": "npm run check && vite build",
+    "build": "npm run check && vite build && npm run build:demo",
+    "build:demo": "vite build --mode demo && node scripts/demo-api.mjs",
     "check": "node scripts/fixture-check.mjs && tsc --noEmit -p .",
     "size": "node scripts/size-budget.mjs",
     "preview": "vite preview",

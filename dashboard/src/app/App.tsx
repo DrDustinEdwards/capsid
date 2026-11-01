@@ -1,6 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
+import { Banner } from "capsomer/react/banner";
+import "capsomer/banner.css";
+import { DEMO } from "../lib/base";
 import { Link, useLocation, useSearch } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
 import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
@@ -570,8 +573,8 @@ export function App() {
       }}
       status={
         <>
-          {import.meta.env.DEV && (
-            <span className="sample" title="npm run dev serves dev/sample-feed.json: every number here is fake">
+          {(import.meta.env.DEV || DEMO) && (
+            <span className="sample" title="Sample data (dev/sample-feed.json): every number here is fake">
               SAMPLE DATA
             </span>
           )}
@@ -590,6 +593,12 @@ export function App() {
       renderLink={(p) => (/^https?:/.test(p.href) ? <a {...p} /> : <Link {...p} />)}
       mainProps={{ ref: mainRef, onClick: onRowActivate, onKeyDown: onRowActivate }}
     >
+      {DEMO && (
+        // The chart demo (lib/demo.ts): the same words as every network demo's notice.
+        <Banner tone="info" title="Demo with sample data">
+          This is how the page looks for a signed-in owner. The numbers are made up, and nothing here belongs to a real account.
+        </Banner>
+      )}
       {content}
     </AdminShell>
   );

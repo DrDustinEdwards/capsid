@@ -25,12 +25,14 @@ import "capsomer/tabs.css";
 import "capsomer/enarratio.css";
 import "./styles.css";
 import { applySavedTheme } from "./lib/prefs";
-import { BASE } from "./lib/base";
+import { BASE, DEMO } from "./lib/base";
+import { installDemoFetch } from "./lib/demo";
 import { queryClient } from "./lib/api";
 import { App } from "./app/App";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 
 applySavedTheme();
+if (DEMO) installDemoFetch();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Watch Floor: index.html has no #root");
