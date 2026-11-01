@@ -203,6 +203,46 @@ export function QueueChart() {
   );
 }
 
+// ---- 3b. Where is the work waiting? ------------------------------------------------------------
+
+const JOB_STATES = ["Blocked", "Running", "Queued"] as const;
+
+export interface ProjectCounts {
+  project: string;
+  blocked: number;
+  running: number;
+  queued: number;
+}
+
+/** Jobs' "By project" panel: each project's blocked, running and queued jobs as one stacked
+ *  bar, the counts in the figure's table. Status colors through Capsomer's color pairs. */
+export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
+  if (!counts.length) return null;
+  const sum = (k: "blocked" | "running" | "queued") => counts.reduce((a, c) => a + c[k], 0);
+  const rows = counts.flatMap((c) => [
+    { project: c.project, state: "Blocked", jobs: c.blocked },
+    { project: c.project, state: "Running", jobs: c.running },
+    { project: c.project, state: "Queued", jobs: c.queued },
+  ]);
+  const opts = {
+    data: rows,
+    x: "project",
+    y: "jobs",
+    series: "state",
+    seriesDomain: JOB_STATES,
+    layout: "stacked",
+    orientation: "horizontal",
+    colors: { Blocked: "var(--warn)", Running: "var(--info)", Queued: "var(--nodata)" },
+    xLabel: null,
+    yLabel: "Jobs",
+    height: 64 + 36 * counts.length,
+    title: "Where is the work waiting?",
+    alt: `Live jobs per project, ${counts.length} ${counts.length === 1 ? "project" : "projects"}: ${sum("blocked")} blocked, ${sum("running")} running, ${sum("queued")} queued.`,
+    source: { name: "D1 jobs, the live window" },
+  } as const;
+  return <ChartFrame draw={(width) => barChart({ ...opts, width })} />;
+}
+
 // ---- 5. Does each agent's claim match what was verified? -----------------------------------
 
 const AGREEMENTS: readonly ClaimsAgreement[] = ["agree", "disagree", "unclaimed", "unchecked"];
@@ -230,6 +270,8 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     y: "checks",
     series: "agreement",
     seriesDomain: AGREEMENTS,
+    // A color that means a status takes the status token (capsomer/enarratio.css themes the pair).
+    colors: { agree: "var(--ok)", disagree: "var(--crit)", unclaimed: "var(--nodata)", unchecked: "var(--warn)" },
     layout: "grouped",
     xLabel: null,
     yLabel: "Checks",
@@ -242,7 +284,7 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
   } as const;
   return (
     <ChartPanel id="claim-agreement">
-      <ChartFrame className="agree-chart" chart={barChart(opts)} />
+      <ChartFrame chart={barChart(opts)} />
     </ChartPanel>
   );
 }
@@ -453,8 +495,9 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
 
 // ---- 10. Backup retention slots ---------------------------------------------------------
 
-// Drawn as a heat strip with the CI history's two ends, green kept and red missing, at full
-// height: as an uptime strip a missing slot was a third-height tick that read as an underline.
+// Drawn as a heat strip on the family ramp (capsomer/enarratio.css), a missing slot at its
+// strong end, at full height: as an uptime strip a missing slot was a third-height tick that
+// read as an underline. The subtitle and each cell's hover text say kept or missing.
 const missing = (v: number): string => (v >= 1 ? "missing" : "kept");
 
 export function BackupSlots() {
@@ -486,7 +529,7 @@ export function BackupSlots() {
               cellLabels: slots.map((s) => s.key),
               formatValue: missing,
             };
-            return <ChartFrame key={name} className="ci-strip" inline draw={(width) => heatStrip({ ...opts, width })} />;
+            return <ChartFrame key={name} inline draw={(width) => heatStrip({ ...opts, width })} />;
           })
         )}
       </div>
@@ -496,8 +539,8 @@ export function BackupSlots() {
 
 // ---- 11. Default branches by day --------------------------------------------------------
 
-// Green 0, red 1, no run yet as no value: a heat strip's two ends, so red reads as the
-// strong end and a day with no verdict is drawn as missing, never as green.
+// Green 0, red 1, no run yet as no value: a heat strip's two ends on the family ramp, so red
+// reads as the strong end and a day with no verdict is drawn as missing, never as green.
 function ciValues(r: TrendCiRepo): (number | null)[] {
   return r.days.map((d) => (d.state === "none" ? null : d.state === "red" ? 1 : 0));
 }
@@ -543,7 +586,7 @@ export function CiHistory() {
               };
               return (
                 <div className="slot-row" key={r.namespace} data-ci={r.namespace}>
-                  <ChartFrame className="ci-strip" inline draw={(width) => heatStrip({ ...opts, width })} />
+                  <ChartFrame inline draw={(width) => heatStrip({ ...opts, width })} />
                 </div>
               );
             })}

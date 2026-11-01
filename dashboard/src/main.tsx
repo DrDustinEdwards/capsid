@@ -20,7 +20,9 @@ import "capsomer/site-header.css";
 import "capsomer/admin-shell.css";
 import "capsomer/theme-switch.css";
 import "capsomer/tabs.css";
-import "enarratio/base.css";
+// The whole chart stylesheet: Enarratio's base, the token mapping, gridlines, series inks and
+// the color pairs (capsomer CHANGELOG 0.56.0).
+import "capsomer/enarratio.css";
 import "./styles.css";
 import { applySavedTheme } from "./lib/prefs";
 import { BASE } from "./lib/base";

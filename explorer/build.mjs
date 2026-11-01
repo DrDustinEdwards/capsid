@@ -23,8 +23,6 @@ import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
 import { buildSync } from "esbuild";
-import { stylesheet } from "enarratio";
-import { capsomerMoreTheme, capsomerTheme } from "capsomer/enarratio-theme";
 
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
@@ -68,7 +66,8 @@ function contentHash(/** @type {string} */ dir) {
 function inlineCss(file) {
   const text = readFileSync(file, "utf8");
   return text.replace(/@import\s+"([^"]+)"(?:\s+layer\(([^)]+)\))?\s*;/g, (_m, /** @type {string} */ rel, /** @type {string | undefined} */ layer) => {
-    const inner = inlineCss(join(dirname(file), rel));
+    // A bare specifier ("enarratio/base.css", which capsomer/enarratio.css imports) resolves as a bundler would.
+    const inner = inlineCss(/^[./]/.test(rel) ? join(dirname(file), rel) : require.resolve(rel));
     return layer ? `@layer ${layer} {\n${inner}\n}` : inner;
   });
 }
@@ -156,10 +155,12 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
     .map((rel) => inlineCss(join(capsomer, rel)))
     .join("\n");
   writeFileSync(join(assets, "capsomer.css"), css);
-  writeFileSync(join(assets, "enarratio.css"), stylesheet(capsomerTheme, { highContrast: capsomerMoreTheme }));
+  // The whole chart stylesheet, as every site loads it: Enarratio's base rules on Capsomer's tokens, gridlines, series inks
+  // and color pairs (capsomer/enarratio.css; the teal family and prefers-contrast come from the tokens).
+  writeFileSync(join(assets, "enarratio.css"), inlineCss(join(capsomer, "css", "enarratio.css")));
   copyFileSync(join(here, "src", "explorer.css"), join(assets, "explorer.css"));
   writeFileSync(join(out, CIRCLES_URL), JSON.stringify(circlesOf(model)));
-  // The page's one module, bundled: src/explorer.js imports tabs, Enarratio's enhance and the
+  // The page's one module, bundled: src/explorer.js imports tabs, Capsomer's chart-enhance and the
   // system map's and the header's modules by the paths they are staged at here, each folder whole
   // (its React wrapper aside), because they import their siblings by "./" and each other by
   // "../name/" (the map takes email's escapeHtml). The map's circles are drawn here, not in the
@@ -173,9 +174,8 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
     mkdirSync(join(stage, "capsomer", name), { recursive: true });
     for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js") && !f.startsWith("system-map-circles"))) copyFileSync(join(dir, file), join(stage, "capsomer", name, file));
   }
-  copyFileSync(require.resolve("enarratio/enhance"), join(stage, "enhance.js"));
   copyFileSync(join(here, "src", "explorer.js"), join(stage, "explorer.js"));
-  buildSync({ entryPoints: [join(stage, "explorer.js")], outfile: join(assets, "explorer.js"), bundle: true, format: "esm", minify: true, logLevel: "warning" });
+  buildSync({ entryPoints: [join(stage, "explorer.js")], outfile: join(assets, "explorer.js"), bundle: true, nodePaths: [join(here, "node_modules")], format: "esm", minify: true, logLevel: "warning" });
   rmSync(stage, { recursive: true });
   copyFileSync(join(here, "src", "theme.js"), join(assets, "theme.js"));
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));

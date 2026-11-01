@@ -16,6 +16,8 @@ import { Tonight } from "./Overnight";
 // Chart 3, whether the queue is growing or draining, from GET /portal/api/trends. Lazy, so
 // Enarratio's area chart stays out of the initial bundle.
 const QueueChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.QueueChart })));
+// The "By project" panel's stacked bars, from the same module.
+const ProjectChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.ProjectChart })));
 
 // Claude Code sessions reporting through their hooks (POST /ops/hooks, docs/hooks.md):
 // the job each is bound to, the key, its last event, whether it waits on a person, and
@@ -170,33 +172,16 @@ export function Queue() {
           )}
         </Panel>
         <Panel flush title="By project" id="by-namespace" section="By project">
-          <div className="scroll-x">
-            <table className="list">
-              <tbody>
-                {nss.map((ns) => {
-                  const js = all.filter((j) => j.namespace === ns);
-                  const b = js.filter((j) => j.status === "blocked").length;
-                  const r = js.filter((j) => j.status === "claimed").length;
-                  const qd = js.filter((j) => j.status === "queued").length;
-                  const tot = Math.max(1, b + r + qd);
-                  return (
-                    <tr key={ns}>
-                      <td className="mono">{ns}</td>
-                      <td className="w50">
-                        <div className="stack" role="img" aria-label={`${ns}: ${b} blocked, ${r} running, ${qd} queued`}>
-                          <i className="b" style={{ width: `${(b / tot) * 100}%` }} />
-                          <i className="r" style={{ width: `${(r / tot) * 100}%` }} />
-                          <i className="q" style={{ width: `${(qd / tot) * 100}%` }} />
-                        </div>
-                      </td>
-                      <td className="num">{b} blocked</td>
-                      <td className="num">{r} running</td>
-                      <td className="num">{qd} queued</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="body">
+          <ChartSlot>
+            <ProjectChart
+              counts={nss.map((project) => {
+                const js = all.filter((j) => j.namespace === project);
+                const n = (status: OpsJob["status"]) => js.filter((j) => j.status === status).length;
+                return { project, blocked: n("blocked"), running: n("claimed"), queued: n("queued") };
+              })}
+            />
+          </ChartSlot>
           </div>
         </Panel>
         <Tonight />
