@@ -172,6 +172,8 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
     "css/tokens.css",
     "tokens/family-teal.css",
     "css/base.css",
+    // The link system's kinds after the base, as components/link/link.md asks.
+    "components/link/link.css",
     "components/button/button.css",
     "components/table/table.css",
     "components/status/status.css",

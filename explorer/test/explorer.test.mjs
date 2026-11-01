@@ -44,6 +44,7 @@ test("every system has a page, a public one with parts has its parts page, every
   const pages = files.filter((f) => f.endsWith(".html")).sort();
   const expected = [
     "404.html",
+    "accessibility/index.html",
     "index.html",
     ...["systems", "flows", "numbers", "code", "search", "tools"].map((p) => `${p}/index.html`),
     ...servedTools().map((t) => `tools/${t.name}/index.html`),
