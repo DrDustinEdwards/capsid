@@ -105,13 +105,14 @@ h3 {
 .crumbs {
   margin-block-start: var(--space-6);
 }
-/* The page's link colors are unlayered and would beat the strip's light type (capsomer/manual.css .cap-direction). */
+/* The page's link colors are unlayered and would beat the strip's light type (capsomer/manual.css .cap-direction),
+   so this repeats it: --on-sign, which stays light on the sign in both themes (--ground is dark in dark mode). */
 .crumbs a {
-  color: var(--ground);
+  color: var(--on-sign);
   text-decoration: none;
 }
 .crumbs a:hover {
-  background: color-mix(in srgb, var(--ground) 18%, transparent);
+  background: color-mix(in srgb, var(--on-sign) 18%, transparent);
 }
 /* The page you are on, lit as a lamp: Capsid sets --primary-fg to the lamp's ink for its pale lamp, which
    does not hold on the strip's deep teal, so the lit page takes the lamp's own pair. */
