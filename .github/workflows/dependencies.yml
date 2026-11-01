@@ -1,0 +1,40 @@
+name: dependencies
+
+# The caller a repository keeps. Replace the sha with the devkit commit that holds the reviewed dependencies.yml, and keep it
+# a full sha: scripts/check-callers.mjs fails on anything else. The daily run is what finds an advisory published after a
+# merge. Exceptions go in osv-scanner.toml at the repository root, each with its reason.
+
+# A pull request or push runs it only when a manifest or lockfile changes; the daily run finds a new advisory.
+on:
+  pull_request:
+    paths:
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/pnpm-lock.yaml"
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+      - "osv-scanner.toml"
+      - ".github/workflows/dependencies.yml"
+  push:
+    branches: [master]
+    paths:
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/pnpm-lock.yaml"
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+      - "osv-scanner.toml"
+      - ".github/workflows/dependencies.yml"
+  schedule:
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependencies-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  dependencies:
+    uses: DrDustinEdwards/devkit/.github/workflows/dependencies.yml@8390c62de180aa316f12d141a0cc42d00a714f74 # v0.20.23

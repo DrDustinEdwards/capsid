@@ -22,6 +22,7 @@ import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
 import { writeIntegrity } from "@dustinedwards/site-runtime/sri";
+import { themeScript } from "capsomer/theme-server";
 import { buildSync } from "esbuild";
 
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
@@ -213,7 +214,11 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   copyFileSync(join(here, "src", "explorer.js"), join(stage, "explorer.js"));
   buildSync({ entryPoints: [join(stage, "explorer.js")], outfile: join(assets, "explorer.js"), bundle: true, nodePaths: [join(here, "node_modules")], format: "esm", minify: true, logLevel: "warning" });
   rmSync(stage, { recursive: true });
-  copyFileSync(join(here, "src", "theme.js"), join(assets, "theme.js"));
+  // The remembered theme, set before the first paint so the page never flashes the other one: Capsomer's themeScript
+  // (cap-theme in localStorage; with nothing remembered the system's setting applies). A file, not an inline script,
+  // so the policy needs no hash. It also marks the page as scripted before the first paint, so what script adds (the
+  // panel's breakers) is laid out from the start and moves nothing when the module runs.
+  writeFileSync(join(assets, "theme.js"), `document.documentElement.classList.add("js");\n${themeScript()}\n`);
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
   // The family icon set (Prelum's prelum-icons) at the root, where iconLinks() and the manifest point.
   cpSync(join(here, "src", "icons"), out, { recursive: true });

@@ -1,4 +1,5 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { postJob } from "../src/jobs";
 import { gatherMaintenance, maintenanceTick, readMaintenance, MAINTENANCE_LAST_KEY } from "../src/maintenance";
@@ -74,10 +75,7 @@ async function post(title: string, body = "do the thing"): Promise<string> {
 }
 
 beforeEach(async () => {
-  for (const table of ["jobs", "audit_log", "job_outcomes", "job_outcome_prs", "job_touches"]) {
-    await env.DB.prepare(`DELETE FROM ${table}`).run().catch(() => undefined);
-  }
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("sample", JSON.stringify([{ repo: "example-org/sample", label: "primary" }]))
     .run();

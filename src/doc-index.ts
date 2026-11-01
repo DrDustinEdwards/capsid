@@ -143,14 +143,6 @@ async function routeThroughGateway(env: Env, instance: AiSearchInstance): Promis
   }
 }
 
-function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
-  let timer: number | null = null;
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms) as unknown as number;
-  });
-  return Promise.race([work, late]).finally(() => clearTimeout(timer));
-}
-
 async function readCursor(env: Env): Promise<Cursor> {
   const raw = await env.APP_KV.get(CURSOR_KEY);
   if (!raw) return { updated_at: "", id: 0 };
@@ -323,8 +315,14 @@ export async function hybridSearch(
   if (filter.type) filters.type = { $eq: filter.type };
   if (!filter.includeRetired) filters.status = { $nin: RETIRED };
   let chunks: AiSearchSearchResponse["chunks"];
+  // AI Search's binding takes no signal, so the search and its reranker are raced against
+  // a deadline (C2, C13).
+  let timer: number | null = null;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer within ${SEARCH_TIMEOUT_MS} ms`)), SEARCH_TIMEOUT_MS) as unknown as number;
+  });
   try {
-    ({ chunks } = await withTimeout(ns.get(INDEX_INSTANCE).search({
+    const search = ns.get(INDEX_INSTANCE).search({
       query,
       ai_search_options: {
         retrieval: {
@@ -340,13 +338,16 @@ export async function hybridSearch(
         // reorders, it never drops a candidate the fusion found.
         reranking: { enabled: true, model: RERANK_MODEL, match_threshold: 0 },
       },
-    }), SEARCH_TIMEOUT_MS));
+    });
+    ({ chunks } = await Promise.race([search, late]));
   } catch (err) {
     // The upstream error goes to the log only; the caller is told what happened, never
     // the raw text of another service's answer (area 11, C12).
     const message = err instanceof Error ? err.message : String(err);
     logEvent("DOC_INDEX_SEARCH_FAILED", { message: `DOC_INDEX_SEARCH_FAILED ${message}` }, { level: "warn" });
     return "the search index did not answer";
+  } finally {
+    clearTimeout(timer);
   }
 
   // Best chunk first, so a document's first chunk sets its rank and its snippet; every

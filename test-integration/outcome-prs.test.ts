@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { dueForReverify, outcomePrStatements, reverifyPr, reverifyStatements, reverifySweep, unverifiableStatements } from "../src/outcome-prs";
 
@@ -16,9 +17,7 @@ const NOW = new Date("2026-09-10T12:00:00.000Z");
 const PR = (n: number) => `https://github.com/o/r/pull/${n}`;
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM job_outcome_prs").run();
-  await env.DB.prepare("DELETE FROM job_outcomes").run();
-  await env.DB.prepare("DELETE FROM jobs").run();
+  await resetCapsidDb();
 });
 
 async function outcome(jobId: string, over: { recorded_at?: string; prs_merged?: number | null; result_kind?: string } = {}) {

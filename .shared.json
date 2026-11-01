@@ -1,0 +1,33 @@
+{
+  "apps": {
+    ".": "private",
+    "explorer": "static"
+  },
+  "waive": {
+    "health": "/health (src/health.ts) reports provenance, schema, FTS, bindings and backup freshness, and the deploy's live gate reads it; healthResponse's ping-and-backup shape would drop what the gate checks",
+    "explorer:cspReport": "the explorer is an assets-only Worker with no code; its CSP reports to Capsid's own /csp-report, which uses receiveCspReport"
+  },
+  "copies": {
+    "src/github/client.ts": "readKey here names a KV cache key for a GitHub read, not a frontmatter field",
+    "test/portal-actions.test.ts": "its GitHub fake answers GET /pulls/41 (the head sha approve_pr pins), a route devkit's stubGitHub does not have",
+    "test/repo-tools.test.ts": "manage_pr's cases need the pull request routes (GET and PATCH /pulls/5, PUT /pulls/5/merge, POST /pulls, DELETE of a ref), which devkit's stubGitHub does not have",
+    "test-integration/gate-policy-resume.test.ts": "its GitHub fake answers GET /pulls/40 for the job's head sha, a route devkit's stubGitHub does not have",
+    "test-integration/portal-actions.test.ts": "its GitHub fake answers GET and PATCH /pulls/41, GET /repos/:repo and a branch DELETE, routes devkit's stubGitHub does not have",
+    "test-integration/shadow-routes.test.ts": "the key pair and key set stand in for GitHub Actions' OIDC issuer (src/shadow.ts verifies shadow-test.yml's token), not Access: devkit's stubAccess signs Access's token and claims"
+  },
+  "libraries": {
+    "jose": "search-console.ts signs the Google service account's JWT and shadow.ts verifies GitHub Actions OIDC tokens; site-runtime's ./access and ./access-login verify only Cloudflare Access tokens"
+  },
+  "spelling": {
+    "contracts": [
+      "[\"']cancelled[\"']",
+      "cancelled\\(\\)",
+      "ended cancelled"
+    ],
+    "skip": [
+      "docs/policy/gates.md",
+      "migrations/**",
+      "test/adversarial/corpus/**"
+    ]
+  }
+}

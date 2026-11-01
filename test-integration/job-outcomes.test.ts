@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, failJob, postJob, resumeJob } from "../src/jobs";
 import { capsidStatus } from "../src/status";
@@ -95,12 +96,7 @@ async function seedAgent(name: string) {
 }
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM job_outcomes").run();
-  await env.DB.prepare("DELETE FROM jobs").run();
-  await env.DB.prepare("DELETE FROM audit_log").run();
-  await env.DB.prepare("DELETE FROM agents").run();
-  await env.DB.prepare("DELETE FROM job_outcome_prs").run();
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   // jobs post requires a registered namespace.
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
 });
