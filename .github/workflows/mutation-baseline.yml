@@ -72,6 +72,8 @@ jobs:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -224,6 +226,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -351,6 +355,7 @@ jobs:
       - name: Push the results to a branch
         env:
           BRANCH: results/mutation-${{ github.run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -361,7 +366,9 @@ jobs:
           cp "$RUNNER_TEMP"/results/mutation.json "$RUNNER_TEMP"/results/summary.json "$RUNNER_TEMP"/results/kill-matrix.csv "$RUNNER_TEMP"/results/per-test.csv .
           git add mutation.json summary.json kill-matrix.csv per-test.csv
           git commit -q -m "Mutation results for workflow run $GITHUB_RUN_ID"
-          git push --force origin "HEAD:refs/heads/$BRANCH"
+          # The checkout keeps no token (zizmor artipacked), so the push carries it for this one command, as devkit's code-map does.
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $auth" push --force "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$BRANCH"
           line=$(node -e 'const s=require("./summary.json");console.log("results branch '"$BRANCH"': "+s.mutants+" mutants in "+s.source_files+" files, score "+s.score+"%, complete "+s.complete)')
           echo "$line"
           echo "$line" >> "$GITHUB_STEP_SUMMARY"
