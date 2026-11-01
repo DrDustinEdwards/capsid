@@ -17,10 +17,13 @@
 
 export const ERAS = ["2025-11-25", "2026-07-28"];
 
-// What tools/list must return on /mcp: Capsid's tools, not Capsid Admin's.
-// test/live-gate-mcp.test.ts holds it to CAPSID_TOOLS in src/tools/surface.ts, so a
-// change to the served surface changes this in the same commit.
-export const EXPECTED_TOOLS = 11;
+// What tools/list must return on /mcp to the live-probe agent, which holds the read grant:
+// Capsid's tools a read grant can call, not Capsid Admin's and not the write tools, which
+// are not listed for a read grant (src/scope.ts toolListed; area 11, T7). So the gate
+// catches a deploy that lost a read tool; one that lost a write tool shows in the tests.
+// test/live-gate-mcp.test.ts holds it to CAPSID_TOOLS and TOOL_GRANTS, so a change to the
+// served surface changes this in the same commit.
+export const EXPECTED_TOOLS = 8;
 
 // The tool the probe reads with.
 export const READ_TOOL = "capsid_read_doc";

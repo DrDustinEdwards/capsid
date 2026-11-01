@@ -7,6 +7,7 @@ import type { SiteProbe } from "./ops-types/sites";
 import type { WebAnalyticsSite } from "./ops-types/views";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
+import { callSignal } from "./call-signal";
 
 // THE WATCHER'S LIVE CHECKS (capsid/research/design-automation-for-speed.md, D5, ruled
 // by Dustin 2026-10-04). Four things Dustin checked by hand with PowerShell after a
@@ -255,7 +256,7 @@ export async function readPage(fetchImpl: FetchLike, origin: string, path: strin
       method: "GET",
       redirect: "follow",
       headers: { "User-Agent": "capsid-watcher (live checks)", Accept: "text/html" },
-      signal: AbortSignal.timeout(PAGE_TIMEOUT_MS),
+      signal: callSignal(PAGE_TIMEOUT_MS),
     });
   } catch (err) {
     return unread(null, `no answer: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`);

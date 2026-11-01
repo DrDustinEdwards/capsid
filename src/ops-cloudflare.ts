@@ -4,6 +4,7 @@ import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types/sites";
 import type { WebAnalyticsSite } from "./ops-types/views";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
+import { callSignal } from "./call-signal";
 
 // The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
 // (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never
@@ -85,7 +86,7 @@ async function cfEnvelope(fetchImpl: FetchLike, token: string, url: string, what
   const res = await fetchImpl(url, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}`, "User-Agent": "capsid-watcher (ops read)" },
-    signal: AbortSignal.timeout(CF_TIMEOUT_MS),
+    signal: callSignal(CF_TIMEOUT_MS),
   });
   const body = parseJson(await res.text(), `${what} answered ${res.status} with a body that is not JSON`) as CfEnvelope | null;
   if (!res.ok || body?.success !== true) {
@@ -270,7 +271,7 @@ async function readErrors(
       query: errorsQuery(scripts),
       variables: { accountTag: account, datetimeStart: start.toISOString(), datetimeEnd: end.toISOString() },
     }),
-    signal: AbortSignal.timeout(CF_TIMEOUT_MS),
+    signal: callSignal(CF_TIMEOUT_MS),
   });
   const body = parseJson(await res.text(), `the analytics query answered ${res.status} with a body that is not JSON`) as {
     data?: unknown;

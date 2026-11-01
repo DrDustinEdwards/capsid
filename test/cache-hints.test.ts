@@ -7,8 +7,8 @@ import { adminAgentForEmail } from "../src/agents.ts";
 import { CAPSID_TOOLS } from "../src/tools/surface.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
-// The tool list is cached as "public" (src/server.ts, site-runtime's mcpCacheHints, which
-// is tested there): every caller must be served the same list, in registration order.
+// The tool list is cached private (src/server.ts, site-runtime's mcpCacheHints, which is
+// tested there): each caller is served the tools its grant can call, in registration order.
 
 async function connect(server: McpServer) {
   const client = new Client({ name: "cache-hints", version: "1.0.0" });
@@ -46,16 +46,18 @@ test("PLANT: the tool list is served in registration order", async () => {
   }
 });
 
-test("PLANT: the tool list is identical across two builds for two different callers", async () => {
-  // "public" is a claim that every caller gets the same list. A read-only operator
-  // key and the admin are the two ends of the scope range.
+test("PLANT: a read grant is served only the tools it can call, so the list is private", async () => {
+  // The list depends on the grant (src/scope.ts toolListed; area 11, T7): a read-only
+  // operator key sees no write tool, the admin sees every tool. So tools/list is cached
+  // private, never shared between callers.
   const env = fakeEnv({ APP_KV: fakeKv({}).kv });
   const admin = await connect(buildServer(env, adminAgentForEmail("admin@example.com")));
   const readOnly = await connect(buildServer(env, "read", "test:cache-hints"));
   try {
-    const a = (await admin.listTools()) as unknown;
-    const b = (await readOnly.listTools()) as unknown;
-    assert.equal(JSON.stringify(a), JSON.stringify(b), "two callers were served different tool lists, so the list cannot be public");
+    const all = (await admin.listTools()).tools.map((t) => t.name);
+    const read = (await readOnly.listTools()).tools.map((t) => t.name);
+    assert.deepEqual(all, [...CAPSID_TOOLS]);
+    assert.deepEqual(read, CAPSID_TOOLS.filter((t) => !["capsid_write_doc", "capsid_delete_doc", "capsid_close_pr"].includes(t)));
   } finally {
     await admin.close();
     await readOnly.close();

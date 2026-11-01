@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
 import { pageOnSite, reportSite } from "./site-reports";
 import { dateWindow } from "./search-console";
+import { callSignal } from "./call-signal";
 
 // Bing Webmaster Tools for a namespace's site, served as capsid_inspect_repo action bing
 // (Dustin, 2026-10-18, beside Search Console). Bing's index also feeds ChatGPT search and
@@ -66,7 +67,7 @@ function bingTime(value: unknown): string | null {
 async function bing(fetchImpl: FetchLike, key: string, method: GetMethod, params: Record<string, string> = {}): Promise<unknown> {
   if (!GET_METHODS.includes(method)) throw new Error(`refused: ${String(method)} is not a read`);
   const qs = new URLSearchParams({ ...params, apikey: key });
-  const resp = await fetchImpl(`${API}/${method}?${qs.toString()}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const resp = await fetchImpl(`${API}/${method}?${qs.toString()}`, { headers: { Accept: "application/json" }, signal: callSignal(TIMEOUT_MS) });
   const parsed = (await resp.json().catch(() => null)) as { d?: unknown; Message?: string; ErrorCode?: number } | null;
   if (!resp.ok || typeof parsed?.ErrorCode === "number") {
     const why = (parsed?.Message ?? "").slice(0, 300) || `status ${resp.status}`;

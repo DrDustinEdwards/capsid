@@ -12,6 +12,7 @@ import type { Agent } from "../src/agents.ts";
 import { serveMcp } from "../src/mcp-handler.ts";
 import { CAPSID_TOOLS } from "../src/tools/surface.ts";
 import { buildServer } from "../src/server.ts";
+import { toolListed } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { breaking, type Handler, healthy, NON_HTML, run } from "./verify-live-stub.ts";
 
@@ -71,8 +72,9 @@ function bridge(serve: Serve): Handler {
 
 const withKey = { CAPSID_LIVE_PROBE_KEY: KEY };
 
-test("EXPECTED_TOOLS is Capsid's served tool count, from CAPSID_TOOLS", () => {
-  assert.equal(EXPECTED_TOOLS, CAPSID_TOOLS.length, "scripts/mcp-probe-lib.mjs EXPECTED_TOOLS drifted from the served surface");
+test("EXPECTED_TOOLS is the count of Capsid's served tools a read grant can call, from CAPSID_TOOLS", () => {
+  const readable = CAPSID_TOOLS.filter((tool) => toolListed(probeAgent(), tool));
+  assert.equal(EXPECTED_TOOLS, readable.length, "scripts/mcp-probe-lib.mjs EXPECTED_TOOLS drifted from the served surface");
 });
 
 test("an event-stream answer is read off its data line", () => {

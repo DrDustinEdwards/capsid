@@ -4,10 +4,11 @@ import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { appendAudit, correlationId, loggedArgs, loggedResult, recordAudit, type AuditEnv } from "@dustinedwards/site-runtime/audit-log";
-import { authorizeCall, mcpScopes, toolScopeChallenge, type McpCaller } from "@dustinedwards/site-runtime/mcp-server";
+import { authorizeCall, mcpScopes, outsideResult, toolScopeChallenge, type McpCaller } from "@dustinedwards/site-runtime/mcp-server";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
 import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
 import { MINUTE_MS, HOUR_MS } from "./time";
+import { withCallSignal } from "./call-signal";
 
 // The one enforcement point. Every tool call, and every repo mutation inside one, is
 // checked here and nowhere else.
@@ -641,9 +642,47 @@ export interface CallLog {
   clientId?: string;
 }
 
-export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, stepUpKv?: KVNamespace, log?: CallLog): void {
+// The tools whose answers carry text written outside Capsid, and its label: a repository's
+// files, code search hits, pull request titles and bodies, review comments and CI logs, all
+// written by whoever can push or comment (area 11, S2). Their successful results go through
+// site-runtime's outsideResult: the shared notice, then the answer inside <data> delimiters,
+// and the notice beside the answer in structuredContent. Documents are not listed: a
+// document's provenance (last_actor) travels with it, and the server's instructions name
+// documents as data.
+const OUTSIDE_TOOLS: Record<string, string> = {
+  capsid_read_repo: "repo",
+  capsid_inspect_repo: "repo",
+};
+
+/** A successful result of a tool in OUTSIDE_TOOLS, marked as outside data; anything else as it is. */
+function markOutside(tool: string, result: unknown): unknown {
+  const label = Object.hasOwn(OUTSIDE_TOOLS, tool) ? OUTSIDE_TOOLS[tool] : undefined;
+  const r = result as { isError?: boolean; content?: Array<{ text?: unknown }>; structuredContent?: unknown } | null;
+  if (!label || !r || r.isError === true || !Array.isArray(r.content)) return result;
+  const structured = r.structuredContent;
+  if (structured && typeof structured === "object" && !Array.isArray(structured)) return outsideResult(label, structured as Record<string, unknown>);
+  return outsideResult(label, r.content.map((c) => (typeof c.text === "string" ? c.text : "")).join("\n"));
+}
+
+/** An MCP icon, as serverInfo and tools/list carry it (area 11, T9). */
+export type ToolIcon = { src: string; mimeType?: string; sizes?: string[] };
+
+// Whether this caller's grant could ever call the tool, whatever the arguments: the grant
+// TOOL_GRANTS names (area 11, T7). A tool its grant never could is not registered for it, so
+// tools/list shows a read grant no write tool, as site-runtime's toolsForGrant does on the
+// other servers, and a call to one is an unknown tool. An "action" tool is listed for every
+// grant: one of its actions needs only read. The admin identity (Capsid Admin's route admits
+// only the admin, src/mcp-handler.ts), the tools axis, an action, a namespace, a repo and the
+// flags stay call-time checks in refusalFor, each refused by name.
+export function toolListed(agent: Agent, tool: string): boolean {
+  const { grant } = needFor(requiredGrant(tool));
+  return grant === undefined || agent.scopes.grants.includes(grant);
+}
+
+export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, stepUpKv?: KVNamespace, log?: CallLog, icons?: readonly ToolIcon[]): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
+    if (!toolListed(agent, name)) return undefined;
     const shape = declaredShape(config);
     const declared = Boolean(shape && Object.hasOwn(shape, "namespace"));
     const namespaceActions = config?.namespaceActions;
@@ -694,8 +733,10 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       }
       return null;
     };
-    const run = async (callArgs: unknown[], action: string | undefined): Promise<unknown> => {
-      const result = await handler(...callArgs);
+    const run = async (callArgs: unknown[], action: string | undefined, signal: AbortSignal | undefined): Promise<unknown> => {
+      // The request's abort signal reaches every outbound request the handler makes
+      // (src/call-signal.ts; area 11, P11).
+      const result = markOutside(name, await withCallSignal(signal, () => handler(...callArgs)));
       // A step-up action that succeeded resets the idle clock (STEP_UP). A refused or
       // failed one does not: it proves nothing about the person being there.
       const signedInAt = agent.signedInAt;
@@ -712,7 +753,9 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
     const guarded: ToolHandler = async (...callArgs: unknown[]) => {
       const args = (callArgs[0] ?? {}) as Record<string, unknown>;
       const action = actionOf(name, config, args);
-      const meta = (callArgs[1] as { mcpReq?: { _meta?: { traceparent?: unknown } } } | undefined)?.mcpReq?._meta;
+      const mcpReq = (callArgs[1] as { mcpReq?: { _meta?: { traceparent?: unknown }; signal?: AbortSignal } } | undefined)?.mcpReq;
+      const meta = mcpReq?._meta;
+      const signal = mcpReq?.signal;
       const row = log && {
         callId: crypto.randomUUID(),
         caller: agent.actor,
@@ -735,8 +778,24 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
           return deny(`refused: the tool-call log could not be written (${cause instanceof Error ? cause.message : String(cause)}), and no tool runs unlogged. Nothing was done.`);
         }
       }
-      const result = await run(callArgs, action);
-      if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: loggedResult(result as { isError?: boolean; content: Array<{ text: string }> }) });
+      // A client that left before the handler ran gets nothing run; one that leaves during it
+      // is logged canceled (site-runtime's invokeTool does the same).
+      if (signal?.aborted) {
+        const out = deny("canceled: the client closed the call before the tool ran. Nothing was done.");
+        if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: { ...loggedResult(out), canceled: true } });
+        return out;
+      }
+      const canceled = () => (signal?.aborted ? { canceled: true } : {});
+      let result: unknown;
+      try {
+        result = await run(callArgs, action, signal);
+      } catch (error) {
+        // A handler that throws still ends its call in the log, so no `started` row is left
+        // without its `finished` (the log's /health check counts those).
+        if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: { isError: true, text: `threw: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1000), ...canceled() } });
+        throw error;
+      }
+      if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: { ...loggedResult(result as { isError?: boolean; content: Array<{ text: string }> }), ...canceled() } });
       return result;
     };
     // An OAuth token without the scope the call needs is answered 403 insufficient_scope
@@ -747,7 +806,9 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
     const challenge = log && toolScopeChallenge(log.env, { site: "Capsid", scopes: SCOPES, ...log.server }, { name, scope: (args: Record<string, unknown>) => declaredScope(name, actionOf(name, config, args)) });
     const scopeChallenge: ScopeChallengeHandler | undefined =
       challenge && ((context) => challenge({ ...context, authInfo: context.authInfo && { ...context.authInfo, scopes: context.authInfo.scopes.length > 0 ? context.authInfo.scopes : [SCOPES.read] } }));
-    const { namespaceActions: _namespaceActions, ...served } = config ?? {};
+    const { namespaceActions: _namespaceActions, ...declaredConfig } = config ?? {};
+    // Each tool carries the server's icon unless it names its own (area 11, T9).
+    const served = icons && !(declaredConfig as { icons?: unknown }).icons ? { ...declaredConfig, icons } : declaredConfig;
     return original(name, scopeChallenge ? { ...served, scopeChallenge } : served, guarded);
   };
   (server as unknown as { registerTool: unknown }).registerTool = patched;

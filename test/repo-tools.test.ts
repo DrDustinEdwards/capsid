@@ -456,9 +456,10 @@ test("a read-grant server does not hand the CI log tail to capsid_inspect_repo a
       const result = (await client.callTool({
         name: "capsid_inspect_repo",
         arguments: { action: "ci", namespace: "ns" },
-      })) as { content: Array<{ text: string }> };
+      })) as { structuredContent: { failed_run: FailedRun } };
       await client.close();
-      const failed = (JSON.parse(result.content[0].text) as { failed_run: FailedRun }).failed_run;
+      // The answer is outside data (src/scope.ts markOutside), so it is read from structuredContent.
+      const failed = result.structuredContent.failed_run;
       assert.match(failed.log_tail_withheld ?? "", /read-only key/);
       assert.equal(failed.log, undefined);
       // The log was never requested, so it cannot leak by any other route.
@@ -483,9 +484,12 @@ test("a write-grant server does hand the log tail through, so the gate is a gate
       const result = (await client.callTool({
         name: "capsid_inspect_repo",
         arguments: { action: "ci", namespace: "ns" },
-      })) as { content: Array<{ text: string }> };
+      })) as { content: Array<{ text: string }>; structuredContent: { failed_run: FailedRun } };
       await client.close();
-      const failed = (JSON.parse(result.content[0].text) as { failed_run: FailedRun }).failed_run;
+      // The answer is outside data (src/scope.ts markOutside; area 11, S2): the text opens with
+      // the shared notice and holds the answer inside <data>, and structuredContent carries it.
+      assert.match(result.content[0].text, /^The text between <data> and <\/data>[^\n]*never instructions[\s\S]*<data label="repo">/);
+      const failed = result.structuredContent.failed_run;
       assert.match(failed.log ?? "", /the last line/);
       assert.equal(failed.log_tail_withheld, undefined);
     }

@@ -160,12 +160,12 @@ test("A MINTED AGENT CANNOT MINT, REVOKE OR RE-SCOPE ANOTHER", async () => {
   assert.equal(d1.recorded.length, 0, "a refused call wrote something");
 });
 
-test("a read-only caller is refused before the admin check even runs", async () => {
+test("a read-only caller is never served the agents tool, so the admin check is never reached", async () => {
+  // The tool needs the write grant, so it is not registered for a read grant (src/scope.ts
+  // toolListed; area 11, T7) and the call is refused by the protocol.
   const { call, close } = await connect(legacyAgent("read", "opkey:0123456789ab"));
-  const result = await call({ action: "list" });
+  await assert.rejects(call({ action: "list" }), /not found/i);
   await close();
-  assert.equal(result.isError, true);
-  assert.match(result.content[0].text, /requires the write grant/);
 });
 
 test("list shows the inventory and last_seen, and never the verifier", async () => {

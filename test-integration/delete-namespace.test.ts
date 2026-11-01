@@ -216,12 +216,13 @@ describe("capsid_admin_manage_namespaces is admin only", () => {
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
 
-  it("a read-only caller is refused the write grant", async () => {
+  it("a read-only caller is never served the tool", async () => {
+    // It needs the write grant in whole, so it is not registered for a read grant (src/scope.ts
+    // toolListed; area 11, T7) and the protocol refuses the call.
     const ns = fresh();
     await register(ns);
-    const result = await callAs(legacyAgent("read", "opkey:readonly0000"), { namespace: ns, action: "delete_preview" });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toMatch(/requires the write grant/);
+    await expect(callAs(legacyAgent("read", "opkey:readonly0000"), { namespace: ns, action: "delete_preview" })).rejects.toThrow(/not found/i);
+    expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
 });
 

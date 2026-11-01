@@ -114,6 +114,14 @@
     {
       "binding": "MEDIA",
       "bucket_name": "YOUR_R2_BUCKET"
+    },
+    // The tool-call log's copies (area 11, L6-L7), and nothing else: the daily 09:00 run
+    // copies new TOOL_CALL_LOG rows here as tool-calls/<first>-<last>.json, then the log
+    // drops copied rows older than 90 days. A lock rule on tool-calls/ keeps a copy from
+    // being changed or removed. Its own bucket, so MEDIA's prune never reaches it.
+    {
+      "binding": "AUDIT_BUCKET",
+      "bucket_name": "capsid-mcp-tool-calls"
     }
   ],
   // TWO DURABLE OBJECTS from @dustinedwards/site-runtime, exported by src/index.ts.

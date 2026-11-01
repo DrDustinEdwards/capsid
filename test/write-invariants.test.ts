@@ -201,11 +201,14 @@ test("PLANT: capsid_delete_doc copies title and body to document_versions before
 test("a read-only key cannot reach any mutating tool, and writes nothing", async () => {
   for (const { label, tool, args } of MUTATORS) {
     const { client, recorded, close } = await connect("read");
-    const result = (await client.callTool({ name: tool, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+    // A tool that needs write in whole is not served to a read grant (src/scope.ts toolListed), so
+    // the protocol refuses it; an action tool is served and refuses the write action by name.
+    const result = (await client
+      .callTool({ name: tool, arguments: args })
+      .catch((error: unknown) => ({ isError: true, content: [{ text: error instanceof Error ? error.message : String(error) }] }))) as { isError?: boolean; content: Array<{ text: string }> };
     await close();
     assert.equal(result.isError, true, `${label} did not refuse a read-only key`);
-    // The refusal names the missing scope (src/scope.ts).
-    assert.match(result.content[0].text, /requires the write grant/);
+    assert.match(result.content[0].text, /requires the write grant|not found/);
     // The refusal has to come BEFORE any statement, not after the work is done.
     assert.deepEqual(recorded, [], `${label} wrote ${recorded.length} statement(s) while refusing a read-only key`);
   }

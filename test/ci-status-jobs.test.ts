@@ -236,7 +236,8 @@ async function callCiStatus(grants: Array<"read" | "write">, args: Record<string
   await client.connect(clientTransport);
   try {
     const result = await client.callTool({ name: "capsid_inspect_repo", arguments: { action: "ci", namespace: "ns", ...args } });
-    return JSON.parse((result.content as Array<{ text: string }>)[0].text) as Out;
+    // The answer is outside data (src/scope.ts markOutside), so it is read from structuredContent.
+    return result.structuredContent as Out;
   } finally {
     await client.close();
   }

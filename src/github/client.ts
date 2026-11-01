@@ -10,6 +10,7 @@ import { repoPathProblem } from "../limits";
 import type { RepoEnv as Env } from "../env";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { base64url } from "@dustinedwards/site-runtime/encoding";
+import { callSignal } from "../call-signal";
 
 const GH = "https://api.github.com";
 const GH_HEADERS: Record<string, string> = {
@@ -76,7 +77,7 @@ async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Res
   return fetch(`${GH}${path}`, {
     ...init,
     headers: { ...GH_HEADERS, ...(init?.headers as Record<string, string>), Authorization: `Bearer ${jwt}` },
-    signal: init?.signal ?? AbortSignal.timeout(GH_TIMEOUT_MS),
+    signal: init?.signal ?? callSignal(GH_TIMEOUT_MS),
   });
 }
 
@@ -163,7 +164,7 @@ export async function listInstalledRepos(env: Env): Promise<{ repos: InstalledRe
       if (page > LIST_MAX_PAGES) throw new Error(`installation ${id} lists more than ${LIST_MAX_PAGES * LIST_PER_PAGE} repos`);
       const resp = await fetch(`${GH}/installation/repositories?per_page=${LIST_PER_PAGE}&page=${page}`, {
         headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(GH_TIMEOUT_MS),
+        signal: callSignal(GH_TIMEOUT_MS),
       });
       if (!resp.ok) throw new Error(`could not list the repos of installation ${id} (${resp.status})`);
       const body = (await resp.json()) as {
@@ -211,7 +212,7 @@ export async function ghFetch(env: Env, owner: string, repo: string, path: strin
     fetch(url, {
       ...init,
       headers: { ...GH_HEADERS, ...(init?.headers as Record<string, string>), Authorization: `Bearer ${token}` },
-      signal: init?.signal ?? AbortSignal.timeout(GH_TIMEOUT_MS),
+      signal: init?.signal ?? callSignal(GH_TIMEOUT_MS),
     });
   let resp = await call(await getInstallationToken(env, owner, repo));
   if (resp.status === 401) {
