@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
+import { DEMO } from "../lib/base";
 import { Link, useLocation, useSearch } from "wouter";
 import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
 import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
@@ -32,6 +33,8 @@ const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
 // carries neither (the size budget, after Capsomer 0.9.0's header joined the entry).
 const Drawer = lazy(() => import("./Drawer").then((m) => ({ default: m.Drawer })));
 const CommandPalette = lazy(() => import("./CommandMenu").then((m) => ({ default: m.CommandPalette })));
+// Only the chart demo's build has it (lib/base.ts, DEMO).
+const DemoNotice = import.meta.env.MODE === "demo" ? lazy(() => import("./DemoNotice").then((m) => ({ default: m.DemoNotice }))) : null;
 // Loaded on the first control a person opens.
 const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
 // Capsomer's "?" sheet, which lists every shortcut registered below. Loaded the first time it
@@ -570,8 +573,8 @@ export function App() {
       }}
       status={
         <>
-          {import.meta.env.DEV && (
-            <span className="sample" title="npm run dev serves dev/sample-feed.json: every number here is fake">
+          {(import.meta.env.DEV || DEMO) && (
+            <span className="sample" title="Sample data (dev/sample-feed.json): every number here is fake">
               SAMPLE DATA
             </span>
           )}
@@ -590,6 +593,11 @@ export function App() {
       renderLink={(p) => (/^https?:/.test(p.href) ? <a {...p} /> : <Link {...p} />)}
       mainProps={{ ref: mainRef, onClick: onRowActivate, onKeyDown: onRowActivate }}
     >
+      {DemoNotice && (
+        <Suspense fallback={null}>
+          <DemoNotice />
+        </Suspense>
+      )}
       {content}
     </AdminShell>
   );
