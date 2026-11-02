@@ -1,4 +1,4 @@
-import { BackupIncomplete, runCheckedBackup, type DumpResult } from "@dustinedwards/d1-dump";
+import { BackupIncomplete, DEFAULT_RETENTION, runCheckedBackup, type DumpResult } from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./security-headers";
@@ -11,7 +11,14 @@ const JSON_PREFIX = "backups/json/";
 const MARKDOWN_PREFIX = "backups/markdown/";
 const PUT_CONCURRENCY = 20;
 
-// KV lease is best-effort (no CAS). Export before prune. Dump retention is d1-dump's graduated policy.
+// Dump retention (Dustin, 2026-11-02, a trim of the shared default): the newest complete run
+// of each of the last 14 days, 4 ISO weeks and 3 calendar months, about 17 runs. `daily`
+// stays at d1-dump's 14 on purpose: the 13-day bucket lock (docs/backups.md, "Why 13 days")
+// refuses a delete of any run younger than 13 days, so a shorter daily window would only
+// turn into locked refusals each night.
+export const DUMP_RETENTION = { daily: DEFAULT_RETENTION.daily, weekly: 4, monthly: 3 };
+
+// KV lease is best-effort (no CAS). Export before prune. Dump retention is d1-dump's graduated policy with Capsid's DUMP_RETENTION.
 // Two runs can both read the key empty and both take it, so the run re-reads the lease
 // after its export and refuses every destructive step unless the lease is still its own.
 //
@@ -371,7 +378,7 @@ async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
 
 // Deletes CSP reports past retention (the sink stopped storing them on 2026-10-20; this
 // reaps the last of them). The JSON dump runs outside the graduated retention (14 daily,
-// 8 weekly and 6 monthly copies, capsid/rulings/shared-homes-2026-10-06.md) are pruned by
+// 4 weekly and 3 monthly copies, DUMP_RETENTION above) are pruned by
 // runCheckedBackup with d1-dump's default policy: it counts runs and not objects,
 // deletes a run whole, never prunes the newest complete run, and deletes nothing while
 // no complete run exists.
@@ -446,6 +453,7 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
     const result = await runCheckedBackup(env.DB, env.MEDIA, {
       prefix: JSON_PREFIX,
       now: new Date(now),
+      retention: { policy: DUMP_RETENTION },
       paged: PAGED,
       exclude: [...EXCLUDED],
       sidecars: { kv: { keys: await readKvPins(env) } },
