@@ -605,12 +605,12 @@ function survivingRuns(r2: { objects: Map<string, string> }, ids: string[]): str
 
 const day = (month: number, d: number) => `2020-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}T00-00-00-000Z`;
 
-// The policy itself (14 daily, 8 weekly, 6 monthly, the newest complete run never pruned,
+// The policy itself (14 daily, 4 weekly, 3 monthly, the newest complete run never pruned,
 // nothing pruned while no run is complete) is tested in d1-dump, where pruneDumps lives.
 // This holds the wiring: the dump prefix is the one pruned, a run goes whole, the counts
 // come back in the result, and an old run is pruned whatever its shape (a marker-less
 // run no longer counts as complete just because it is older than the first marked one).
-test("dump retention is d1-dump's graduated policy over the backups/json prefix, deleting runs whole", async () => {
+test("dump retention is d1-dump's graduated policy (DUMP_RETENTION) over the backups/json prefix, deleting runs whole", async () => {
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().replace(/[:.]/g, "-");
   const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().replace(/[:.]/g, "-");
   const seed: Record<string, string> = { ...MIRROR };

@@ -93,13 +93,13 @@ test("PLANT: a green run of one workflow does not hide another workflow that is 
 test("PLANT: a backup slot is filled only by a complete run inside it", () => {
   const slots = backupSlots(["2026-10-11T03-10-00-000Z", "2026-10-09T03-10-00-000Z", "2026-08-01T03-10-00-000Z"], NOW);
   assert.equal(slots.daily.length, 14);
-  assert.equal(slots.weekly.length, 8);
-  assert.equal(slots.monthly.length, 6);
+  assert.equal(slots.weekly.length, 4);
+  assert.equal(slots.monthly.length, 3);
   const filled = (list: Array<{ key: string; filled: boolean }>) => list.filter((s) => s.filled).map((s) => s.key);
   assert.deepEqual(filled(slots.daily), ["2026-10-09", "2026-10-11"]);
   assert.deepEqual(filled(slots.weekly), ["2026-10-05"]);
   assert.deepEqual(filled(slots.monthly), ["2026-08", "2026-10"]);
-  assert.equal(slots.monthly[0]!.key, "2026-05");
+  assert.equal(slots.monthly[0]!.key, "2026-08");
 });
 
 test("PLANT: a week's cost sums its costed outcomes, and a week with none is null, not zero", () => {

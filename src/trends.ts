@@ -1,4 +1,5 @@
-import { COMPLETE_MARKER, DEFAULT_RETENTION } from "@dustinedwards/d1-dump";
+import { COMPLETE_MARKER } from "@dustinedwards/d1-dump";
+import { DUMP_RETENTION } from "./backup";
 import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
@@ -17,7 +18,7 @@ import { MINUTE_MS, DAY_MS } from "./time";
 //   merges     visual 7: per week, merged by the policy, by an approval, by the seat, closed;
 //              and each rollback as an event
 //   cost       visual 6: per week, model spend of the jobs that ended, against the cap in the feed
-//   backups    visual 10: the retention slots, 14 daily, 8 weekly, 6 monthly, filled or not
+//   backups    visual 10: the retention slots, 14 daily, 4 weekly, 3 monthly, filled or not
 //   ci         visual 11: per roster repo and day, the default branch green, red or not run
 //
 // Visuals 2 and 5 (waits, claim agreement) come from GET /portal/api/claims, which already
@@ -273,13 +274,13 @@ async function readCost(db: D1Database, mondays: string[]): Promise<TrendCostWee
   return costWeeks(rows.results, mondays);
 }
 
-/** The retention slots d1-dump keeps (14 daily, 8 weekly, 6 monthly), each filled when a
+/** The retention slots d1-dump keeps (14 daily, 4 weekly, 3 monthly), each filled when a
  *  complete run falls in it. Run ids begin with their ISO day. */
 export function backupSlots(completeRunIds: string[], now: Date): NonNullable<PortalTrends["backups"]["slots"]> {
   const days = new Set(completeRunIds.map((id) => id.slice(0, 10)));
   const weeks = new Set([...days].map(mondayOf));
   const months = new Set([...days].map((d) => d.slice(0, 7)));
-  const { daily: nDaily, weekly: nWeekly, monthly: nMonthly } = DEFAULT_RETENTION;
+  const { daily: nDaily, weekly: nWeekly, monthly: nMonthly } = DUMP_RETENTION;
   const daily: TrendBackupSlot[] = lastDays(now, nDaily).map((key) => ({ key, filled: days.has(key) }));
   const weekly: TrendBackupSlot[] = weekStarts(now, nWeekly).map((key) => ({ key, filled: weeks.has(key) }));
   const y = now.getUTCFullYear();
