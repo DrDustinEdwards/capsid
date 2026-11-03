@@ -597,7 +597,7 @@ function seedRun(seed: Record<string, string>, id: string, shape: "marked" | "le
   if (shape === "marked") seed[`backups/json/${id}/_complete.json`] = "{}";
 }
 
-function survivingRuns(r2: { objects: Map<string, string> }, ids: string[]): string[] {
+function survivingRuns(r2: { objects: Map<string, string | Uint8Array> }, ids: string[]): string[] {
   return ids.filter((id) => [...r2.objects.keys()].some((k) => k.startsWith(`backups/json/${id}/`)));
 }
 
