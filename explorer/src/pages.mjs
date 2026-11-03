@@ -463,7 +463,7 @@ export function systemsPage(model, bySystem, asOf) {
     .join("");
   const chips = [["all", "All"], ["core", "Runs everything"], ["shared", "Shared parts"], ["used", "What people use"], ["private", "Private"]];
   const privates = model.systems.filter((/** @type {any} */ s) => s.private).length;
-  const body = `${pageHead([["/", "Overview"]], "Systems", "The family of systems", `The ${model.systems.length} systems this Capsid server runs and how they connect, with Capsid in the middle. Pick a system to see its connections, or open its page.${privates ? ` ${privates} are private.` : ""}`)}
+  const body = `${pageHead([], "Systems", "The family of systems", `The ${model.systems.length} systems this Capsid server runs and how they connect, with Capsid in the middle. Pick a system to see its connections, or open its page.${privates ? ` ${privates} are private.` : ""}`)}
 <section aria-labelledby="family-title">${map}</section>
 <section aria-labelledby="table-title"><h2 id="table-title">Every system</h2>
 <div class="filter-bar" data-filter="systems" hidden>
@@ -628,7 +628,7 @@ export function flowStage(model, flows, shown, id, play = true) {
 export function flowsIndexPage(model, asOf) {
   const flows = flowsOf(model);
   const names = new Map(model.systems.map((/** @type {any} */ s) => [s.id, s.name]));
-  const body = `${pageHead([["/", "Overview"]], "Flows", "What runs, step by step", `${flows.length} processes Capsid runs, each shown step by step on the parts it uses. Open one to watch it run.`)}
+  const body = `${pageHead([], "Flows", "What runs, step by step", `${flows.length} processes Capsid runs, each shown step by step on the parts it uses. Open one to watch it run.`)}
 <ul class="flow-cards">${flows
     .map((f, i) => {
       const systems = [...new Set(f.steps.flatMap((st) => st.touches.map((p) => p.system)))];

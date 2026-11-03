@@ -169,7 +169,7 @@ ${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td
 
 /** @param {any} stats */
 export function numbersPage(stats) {
-  const body = `${pageHead([["/", "Overview"]], "Numbers", "The daily numbers", `What this Capsid server recorded up to ${escapeHtml(stats.as_of)}: jobs, claims checked against GitHub, approval waits and uptime.`)}
+  const body = `${pageHead([], "Numbers", "The daily numbers", `What this Capsid server recorded up to ${escapeHtml(stats.as_of)}: jobs, claims checked against GitHub, approval waits and uptime.`)}
 ${numbersHtml(stats)}`;
   return layout({ title: "Numbers", description: "Capsid's daily numbers: jobs, verified claims, approval waits and uptime.", path: "/numbers/", body, asOf: stats.as_of });
 }
