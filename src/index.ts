@@ -18,7 +18,7 @@ import { runTask, type TaskResult } from "./task-runs";
 import { isPortalHost, portalHostRequest } from "./portal-host";
 import { handlePortalDemo, isDemoRequest } from "./portal-demo";
 import { portalAsset } from "./portal-app";
-import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
+import { hostRefusal, MCP_URL } from "./mcp-host";
 import { logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
 import { countNotFound } from "@dustinedwards/site-runtime/not-found";
 import { securityTxtResponse } from "@dustinedwards/site-runtime/security-txt";
@@ -52,7 +52,7 @@ const apiHandler = {
     // The token must have been issued for this host's resource (RFC 8707), re-checked with
     // the family's shared check against the resource this host serves, not only the one the
     // provider was built with (area 11, A5). Capsid Admin on /mcp/admin takes the /mcp token.
-    const wrongAudience = audienceRefusal(auth, url.hostname === LEGACY_HOST ? LEGACY_MCP_URL : MCP_URL, [SCOPES.read]);
+    const wrongAudience = audienceRefusal(auth, MCP_URL, [SCOPES.read]);
     if (wrongAudience) return wrongAudience;
     const adminRoute = url.pathname === ADMIN_MCP_ROUTE;
     // Checked on every request, not only at sign-in (src/auth.ts adminGrantEmail).
@@ -102,13 +102,10 @@ function withCacheDefault(response: Response, pathname: string): Response {
 
 // The RFC 8707 resource is per host. workers-oauth-provider binds every access token to
 // ONE configured resource and refuses a token whose audience origin is not the host the
-// request arrived on (token_audience_unbound, audience_mismatch), so one provider cannot
-// serve /mcp on two hosts. The MCP endpoint lives at MCP_URL; the old address keeps its
-// own provider only for the hours of the same-day cut (job_2f9671f89e89), so the
-// claude.ai connector, authorized there, works until it is switched. Both share OAUTH_KV.
-// The step that turns workers.dev off removes the legacy one.
+// request arrived on (token_audience_unbound, audience_mismatch). The MCP endpoint lives
+// at MCP_URL, and the provider serves that resource only.
 //
-// Each is built once per registration allowlist, which is the env's: a changed
+// It is built once per registration allowlist, which is the env's: a changed
 // DCR_REDIRECT_URIS gets a new provider, never a stale one.
 const providers = new Map<string, OAuthProvider<Env>>();
 
@@ -129,12 +126,11 @@ async function registrationWouldBeRefused(request: Request, env: Env): Promise<b
   }
 }
 
-function providerFor(env: Env, resource: string, registration: boolean): OAuthProvider<Env> {
+function providerFor(env: Env): OAuthProvider<Env> {
   // The callbacks every user shares (Grok, ChatGPT, Gemini) and the per-connector ones the
   // seat lists in DCR_REDIRECT_URIS, each matched exactly.
   const allowed = dcrAllowlist(env);
-  const key = `${resource} ${registration} ${allowed}`;
-  let provider = providers.get(key);
+  let provider = providers.get(allowed);
   if (provider) return provider;
   provider = new OAuthProvider<Env>({
     apiRoute: "/mcp",
@@ -146,29 +142,24 @@ function providerFor(env: Env, resource: string, registration: boolean): OAuthPr
     // resource metadata's scopes_supported); write is added on the consent page.
     scopesSupported: SCOPES.all,
     requiredScopes: [SCOPES.read],
-    resourceMetadata: { resource, resource_name: "Capsid" },
+    resourceMetadata: { resource: MCP_URL, resource_name: "Capsid" },
     // CIMD first (capsid/mcp-wrapper-standard.md, amendment 2026-09-27): a client's id is
     // the URL of its metadata document. The provider advertises CIMD only while the
     // global_fetch_strictly_public compatibility flag is set (wrangler.jsonc.example).
     clientIdMetadataDocumentEnabled: true,
-    // Tightened DCR for Grok and Gemini, on the MCP host only (rule 13): exact redirect
-    // URIs only, rate limited before the provider sees it (default export below), and a
-    // registration grants nothing, since the consent page and Access still decide. Remove
-    // when both sign in by CIMD, at the latest when the specification removes DCR. The old
-    // address keeps none; it is going.
-    ...(registration
-      ? {
-          clientRegistrationEndpoint: "/register",
-          clientRegistrationCallback: ({ clientMetadata }: { clientMetadata: Record<string, unknown> }) => {
-            const why = registrationRefusal(allowed, clientMetadata);
-            if (!why) return undefined;
-            logEvent("DCR_REDIRECT_REFUSED", { message: `DCR_REDIRECT_REFUSED ${why}` }, { level: "error" });
-            return { code: "invalid_redirect_uri", description: why };
-          },
-        }
-      : {}),
+    // Tightened DCR for Grok and Gemini (rule 13): exact redirect URIs only, rate limited
+    // before the provider sees it (default export below), and a registration grants
+    // nothing, since the consent page and Access still decide. Remove when both sign in by
+    // CIMD, at the latest when the specification removes DCR.
+    clientRegistrationEndpoint: "/register",
+    clientRegistrationCallback: ({ clientMetadata }: { clientMetadata: Record<string, unknown> }) => {
+      const why = registrationRefusal(allowed, clientMetadata);
+      if (!why) return undefined;
+      logEvent("DCR_REDIRECT_REFUSED", { message: `DCR_REDIRECT_REFUSED ${why}` }, { level: "error" });
+      return { code: "invalid_redirect_uri", description: why };
+    },
   });
-  providers.set(key, provider);
+  providers.set(allowed, provider);
   return provider;
 }
 
@@ -202,8 +193,8 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   const host = portalHostRequest(original);
   if ("redirect" in host) return secured(host.redirect, asked);
   const request = host.request;
-  // The MCP host serves the machine surface only, and the old address's /portal is
-  // retired (src/mcp-host.ts). Also before the provider, for the same reason.
+  // The MCP host serves the machine surface only (src/mcp-host.ts). Also before the
+  // provider, for the same reason.
   const pathname = new URL(request.url).pathname;
   const refused = hostRefusal(request);
   if (refused) return secured(refused, pathname);
@@ -213,12 +204,11 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
     const foreign = mcpOriginRefusal(request, ["https://claude.ai"]);
     if (foreign) return secured(foreign, pathname);
   }
-  const legacy = new URL(request.url).hostname === LEGACY_HOST;
-  if (!legacy && pathname === "/register" && request.method === "POST" && !(await registrationWouldBeRefused(request, env))) {
+  if (pathname === "/register" && request.method === "POST" && !(await registrationWouldBeRefused(request, env))) {
     const limited = await registrationLimited(request, env.OAUTH_KV);
     if (limited) return secured(limited, pathname);
   }
-  const response = await providerFor(env, legacy ? LEGACY_MCP_URL : MCP_URL, !legacy).fetch(request, env, ctx);
+  const response = await providerFor(env).fetch(request, env, ctx);
   return secured(pathname.startsWith(PRM_PATH) ? await withEveryScope(response) : response, pathname);
 }
 

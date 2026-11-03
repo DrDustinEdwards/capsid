@@ -21,10 +21,9 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// The live host, and the retired workers.dev one in case the connector still carries
-// it (PR #227 moved the endpoint). `/mcp` must end the URL or be followed by a
-// character that cannot continue a path segment, so /ops/mcp never matches.
-export const ADMIN_URL = /https:\/\/(?:mcp\.dustinedwards\.info|capsid\.dustin-edwards\.workers\.dev)\/mcp(?![A-Za-z0-9_./-])/;
+// The live host. `/mcp` must end the URL or be followed by a character that cannot
+// continue a path segment, so /ops/mcp never matches.
+export const ADMIN_URL = /https:\/\/mcp\.dustinedwards\.info\/mcp(?![A-Za-z0-9_./-])/;
 
 // `claude mcp list` prints one `name: target - status` line per server.
 const SERVER_LINE = /^(.+?): (.+?) - \S/;

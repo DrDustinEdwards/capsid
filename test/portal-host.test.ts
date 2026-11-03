@@ -8,7 +8,7 @@ import { isSameOriginPath, PORTAL_HOST, portalBase, portalCookiePath, portalHost
 // old /portal address redirects to the root, and the hashed files keep their path.
 
 const PORTAL = `https://${PORTAL_HOST}`;
-const WORKERS = "https://capsid.dustin-edwards.workers.dev";
+const OTHER = "https://capsid.test";
 
 function routed(url: string, init?: RequestInit): string | { redirect: string; status: number } {
   const r = portalHostRequest(new Request(url, init));
@@ -16,9 +16,9 @@ function routed(url: string, init?: RequestInit): string | { redirect: string; s
   return new URL(r.request.url).pathname + new URL(r.request.url).search;
 }
 
-test("workers.dev requests pass through untouched, the Portal's and everything else's", () => {
+test("requests on another host pass through untouched, the Portal's and everything else's", () => {
   for (const path of ["/portal/", "/portal/queue", "/portal/api/ops", "/mcp", "/health", "/callback"]) {
-    assert.equal(routed(`${WORKERS}${path}`), path);
+    assert.equal(routed(`${OTHER}${path}`), path);
   }
 });
 
@@ -54,7 +54,7 @@ test("PLANT: on the Portal host, a /portal path that would leave the origin is r
 
 test("the base, the cookie path and the public path follow the host", () => {
   const p = new URL(`${PORTAL}/portal/`);
-  const w = new URL(`${WORKERS}/portal/`);
+  const w = new URL(`${OTHER}/portal/`);
   assert.equal(portalBase(p), "");
   assert.equal(portalBase(w), "/portal");
   assert.equal(portalCookiePath(p), "/");

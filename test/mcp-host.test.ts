@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hostRefusal, LEGACY_HOST, MCP_HOST, servedOnMcpHost } from "../src/mcp-host.ts";
+import { hostRefusal, MCP_HOST, servedOnMcpHost } from "../src/mcp-host.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
 import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope.ts";
 
-// The host rules (src/mcp-host.ts) without the Worker: what the MCP host serves, and the
-// old address's retired /portal. test-integration/mcp-host.test.ts runs them through the
-// whole Worker.
+// The host rules (src/mcp-host.ts) without the Worker: what the MCP host serves.
+// test-integration/mcp-host.test.ts runs them through the whole Worker.
 
 const at = (host: string, path: string) => hostRefusal(new Request(`https://${host}${path}`));
 
@@ -38,11 +37,6 @@ test("PLANT: the MCP host serves every declared route outside the Portal", () =>
 test("PLANT: the MCP host serves the probe document at the Worker's path", () => {
   assert.equal(servedOnMcpHost(VERIFY_LIVE_CLIENT_PATH), true);
   assert.equal(at(MCP_HOST, VERIFY_LIVE_CLIENT_PATH), null);
-});
-
-test("PLANT: the old address's /portal is the plain 404, and its machine routes still go on", () => {
-  for (const path of ["/portal", "/portal/", "/portal/queue", "/portal/callback"]) assert.equal(at(LEGACY_HOST, path)?.status, 404, path);
-  for (const path of ["/mcp", "/ops/mcp", "/health", "/portalx"]) assert.equal(at(LEGACY_HOST, path), null, path);
 });
 
 test("any other host is untouched (the Portal host, the test hosts)", () => {

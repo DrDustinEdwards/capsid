@@ -24,14 +24,6 @@ test("the admin connector is flagged and the driver's own /ops/mcp is not, with 
   assert.deepEqual(admin_servers, ["claude.ai Capsid"]);
 });
 
-test("the retired workers.dev connector URL is flagged too, and its /ops/mcp is not", () => {
-  const old = [
-    "claude.ai Capsid: https://capsid.dustin-edwards.workers.dev/mcp - ✔ Connected",
-    "capsid: https://capsid.dustin-edwards.workers.dev/ops/mcp (HTTP) - ✔ Connected",
-  ].join("\n");
-  assert.deepEqual(classify(old), { servers_seen: 2, admin_servers: ["claude.ai Capsid"] });
-});
-
 test("the pattern ends at /mcp: a longer path and another host are not the admin connector", () => {
   assert.ok(ADMIN_URL.test("https://mcp.dustinedwards.info/mcp"));
   assert.ok(ADMIN_URL.test("x: https://mcp.dustinedwards.info/mcp - ok"));

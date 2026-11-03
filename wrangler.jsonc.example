@@ -2,6 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "capsid-mcp",
   "main": "src/index.ts",
+  // Off: the Worker answers only on its Custom Domains (src/mcp-host.ts, src/portal-host.ts).
+  // The workers.dev address served the MCP endpoint until the move to mcp.dustinedwards.info.
+  "workers_dev": false,
   // Bumped 2026-06-01 -> 2026-09-06 (platform arc). nodejs_compat is enabled by
   // default for dates >= 2026-08-04, so the explicit flag below is now redundant;
   // it stays because an explicit flag survives a future date rollback and costs
@@ -129,8 +132,8 @@
   ],
   // TWO DURABLE OBJECTS from @dustinedwards/site-runtime, exported by src/index.ts.
   //   RATE_LIMITER   the family's exact limiter (site-runtime/rate-limit): /mcp and
-  //                  /ops/mcp per caller, the CSP report sink, the public documents and
-  //                  the Access sync. Each fails closed when it cannot count.
+  //                  /ops/mcp per caller, the CSP report sink and the public documents.
+  //                  Each fails closed when it cannot count.
   //   TOOL_CALL_LOG  the append-only, hash-chained log of every tool call (site-runtime
   //                  /audit-log): refused, started, finished, and each MCP sign-in.
   // Both are SQLite-backed, so their classes are created by the migration below.
