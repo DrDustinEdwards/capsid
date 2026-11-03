@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib";
 // The one set of fakes (KV, R2, D1, fetch, Env) every test uses. KV list() answers
 // in one page; no test drives a second page.
 //
@@ -100,8 +101,15 @@ export function fakeKv(opts: FakeKvOptions = {}): FakeKv {
 
 // R2
 
+/** The JSON a dump table holds, read the way d1-dump writes it: gzip when the key ends in .gz. */
+export function dumpJson(r2: { objects: Map<string, string | Uint8Array> }, key: string): any {
+  const value = r2.objects.get(key);
+  if (value === undefined) throw new Error(`no object ${key}`);
+  return JSON.parse(typeof value === "string" ? value : gunzipSync(value).toString("utf8"));
+}
+
 export interface FakeR2 {
-  objects: Map<string, string>;
+  objects: Map<string, string | Uint8Array>;
   // One entry per delete call, holding the keys that call removed: the backup
   // tests ask both how many calls and which keys.
   deleted: string[][];
@@ -112,18 +120,23 @@ export interface FakeR2 {
 }
 
 export function fakeR2(seed: Record<string, string> = {}): FakeR2 {
-  const objects = new Map<string, string>(Object.entries(seed));
+  const objects = new Map<string, string | Uint8Array>(Object.entries(seed));
   const deleted: string[][] = [];
   const multipart: FakeR2["multipart"] = [];
   const bucket = {
-    put: async (key: string, value: string) => {
+    put: async (key: string, value: string | Uint8Array) => {
       objects.set(key, value);
       return {};
     },
     get: async (key: string) => {
       const value = objects.get(key);
       if (value === undefined) return null;
-      return { key, text: async () => value };
+      const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+      return {
+        key,
+        text: async () => (typeof value === "string" ? value : new TextDecoder().decode(value)),
+        arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      };
     },
     list: async ({ prefix }: { prefix?: string }) => {
       const all = [...objects.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort();
@@ -161,7 +174,8 @@ export function fakeR2(seed: Record<string, string> = {}): FakeR2 {
             all.set(uploaded.get(n) as Uint8Array, at);
             at += (uploaded.get(n) as Uint8Array).length;
           }
-          objects.set(key, new TextDecoder().decode(all));
+          // Bytes, not text: a gzip table is not valid UTF-8.
+          objects.set(key, key.endsWith(".gz") ? all : new TextDecoder().decode(all));
           return {};
         },
         abort: async () => {

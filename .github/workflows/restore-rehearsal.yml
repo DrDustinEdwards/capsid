@@ -118,7 +118,7 @@ jobs:
             exit 1
           fi
           echo "newest run: ${NEWEST}"
-          # Laid out as the keys are (dump/backups/json/<run>/<table>.json), which is the
+          # Laid out as the keys are (dump/backups/json/<run>/<table>.json.gz), which is the
           # shape d1-dump's drill reads from a directory.
           mkdir -p "dump/${RUN_PREFIX}"
           aws s3 sync "s3://${DUMP_BUCKET}/${RUN_PREFIX}" "dump/${RUN_PREFIX}" --endpoint-url "${DUMP_ENDPOINT}"
