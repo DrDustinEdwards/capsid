@@ -9,6 +9,7 @@ import "capsomer/chart-frame.css";
 import { Panel } from "capsomer/react/panel";
 import { areaChart } from "enarratio/lite/area";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
+import { DEMO } from "../lib/base";
 import { hasPackages } from "../lib/derive";
 import { Completeness } from "./Completeness";
 import { SharedCode } from "./SharedCode";
@@ -47,8 +48,10 @@ function DownloadsChart({ data }: { data: PortalPackageHistory }) {
 }
 
 function HistoryPanel({ name }: { name: string }) {
-  // Read when asked for: the history is a large read the panel does not need.
-  const [asked, setAsked] = useState(false);
+  // Read when asked for: the history is a large read the panel does not need. The chart demo reads
+  // it at once (sample data, captured at build time), so its download chart is on the page for a
+  // visitor and the live chart check (devkit live/areas.json, area 10), not behind a button.
+  const [asked, setAsked] = useState(DEMO);
   const h = useAnswer(["packages", "history", name], () => fetchPackageHistory(name), { enabled: asked });
   if (!h.data && !h.error) {
     return (

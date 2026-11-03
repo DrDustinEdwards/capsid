@@ -3,14 +3,14 @@
 // with the mock's clock pinned to DEMO_CAPTURED. The demo moves every time to now as it reads them.
 // Runs after `vite build --mode demo` (npm run build:demo); it starts `vite preview` on a free port,
 // reads each route, and stops it.
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { preview } from "vite";
-import { DEMO_CAPTURED } from "../src/lib/demo.ts";
+import { DEMO_CAPTURED, demoFileName } from "../src/lib/demo.ts";
 
-// The routes the app reads with a plain GET. packages/history needs a package name, and is left out:
-// the demo's package drawer says it could not read the history.
+// The routes the app reads with a plain GET. packages/history needs a package name, so each configured
+// package's history is read on its own, into packages/history/<name>.json (src/lib/demo.ts reads it).
 const ROUTES = ["ops", "namespaces", "activity", "claims", "stale", "plan", "digest", "maintenance", "convergence", "shared-code", "completeness", "library", "trends", "push"];
 
 process.env.WF_MOCK_NOW = DEMO_CAPTURED;
@@ -26,7 +26,15 @@ try {
     if (!res.ok) throw new Error(`the mock answered ${res.status} for ${route}`);
     writeFileSync(join(out, `${route}.json`), JSON.stringify(await res.json()));
   }
-  console.log(`demo-api: ${ROUTES.length} answers in dist/demos/api/`);
+  const ops = JSON.parse(readFileSync(join(out, "ops.json"), "utf8"));
+  const names = (ops.live?.packages ?? []).map((/** @type {{ name: string }} */ p) => p.name);
+  mkdirSync(join(out, "packages", "history"), { recursive: true });
+  for (const name of names) {
+    const res = await fetch(`${origin}/portal/api/packages/history?${new URLSearchParams({ name })}`);
+    if (!res.ok) throw new Error(`the mock answered ${res.status} for the history of ${name}`);
+    writeFileSync(join(out, "packages", "history", `${demoFileName(name)}.json`), JSON.stringify(await res.json()));
+  }
+  console.log(`demo-api: ${ROUTES.length} answers and ${names.length} package histories in dist/demos/api/`);
 } finally {
   await server.close();
 }
