@@ -36,9 +36,22 @@ function isFile(path: string): boolean {
   return /\.[a-z0-9]+$/i.test(path) && !path.endsWith(".data");
 }
 
-export function fetchAsset(assets: Fetcher, path: string, method: string): Promise<Response> {
+function fetchAsset(assets: Fetcher, path: string, method: string): Promise<Response> {
   // The hostname is not meaningful to the binding; only the pathname is matched.
   return assets.fetch(new Request(new URL(path, "https://assets.invalid"), { method }));
+}
+
+/** A build file answered to a visitor, with `set` on its headers. A redirect from the assets
+ *  router is not followed or forwarded: a file has one address, so it is a 404. */
+export async function serveFile(assets: Fetcher, path: string, method: string, set: Record<string, string>): Promise<Response> {
+  const response = await fetchAsset(assets, path, method);
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
+    return text("not found", 404);
+  }
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(set)) headers.set(name, value);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 /** The response a page leaves with: never cached, and its policy carrying the page's nonce. */
@@ -58,15 +71,9 @@ export async function portalAsset(request: Request, env: Env): Promise<Response 
   if (!isPortalHost(url) || !url.pathname.startsWith(HASHED_ASSET_PREFIX)) return null;
   if (request.method !== "GET" && request.method !== "HEAD") return text("method not allowed: the Portal's files are read with GET.", 405, { Allow: "GET, HEAD" });
   if (!env.ASSETS) return text("not found", 404);
-  const response = await fetchAsset(env.ASSETS, url.pathname, request.method);
-  // The assets router never sends a visitor elsewhere from here.
-  if (response.status >= 300 && response.status < 400) {
-    await response.body?.cancel();
-    return text("not found", 404);
-  }
-  const headers = new Headers(response.headers);
-  headers.set("Cache-Control", response.ok ? HASHED_ASSET_CACHE : "no-store");
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  const response = await serveFile(env.ASSETS, url.pathname, request.method, {});
+  response.headers.set("Cache-Control", response.ok ? HASHED_ASSET_CACHE : "no-store");
+  return response;
 }
 
 /** One of the Portal's API routes (/portal/api/<path>), answered in this Worker. */
@@ -81,15 +88,7 @@ export async function handlePortalApp(request: Request, env: Env, api: PortalApi
 
   const inner = url.pathname.slice(PORTAL_PATH.length) || "/";
   if (isFile(inner)) {
-    const response = await fetchAsset(env.ASSETS, inner, request.method);
-    const headers = new Headers(response.headers);
-    headers.set("Cache-Control", "no-store");
-    // A redirect from the assets router is not followed or forwarded: a file has one address.
-    if (response.status >= 300 && response.status < 400) {
-      await response.body?.cancel();
-      return text("not found", 404);
-    }
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    return serveFile(env.ASSETS, inner, request.method, { "Cache-Control": "no-store" });
   }
 
   // The page, named as the browser on the Portal host names it (/health), with the visitor's

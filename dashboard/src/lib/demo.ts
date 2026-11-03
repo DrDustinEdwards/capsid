@@ -52,11 +52,21 @@ export function installDemoFetch(): void {
     if (request.method !== "GET") {
       return new Response("This is a demo with sample data: nothing is saved or changed.", { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
-    const pkg = url.pathname === `${prefix}packages/history` ? url.searchParams.get("name") : null;
-    const file = pkg ? `${url.pathname}/${demoFileName(pkg)}` : url.pathname;
-    const res = await real(`${file}.json`, { credentials: "omit" });
-    if (!res.ok) return res;
-    const moved = shiftTimes(await res.json(), Date.now() - Date.parse(DEMO_CAPTURED), true);
-    return new Response(JSON.stringify(moved), { status: 200, headers: { "Content-Type": "application/json" } });
+    return movedToNow(await real(demoFile(url.pathname.slice(prefix.length - 1) + url.search), { credentials: "omit" }));
   };
+}
+
+/** The captured file a demo read answers from: "/x?..." is /demos/api/x.json (the query is not
+ *  kept), and a package's history (/packages/history?name=<package>) its own file. */
+export function demoFile(path: string): string {
+  const url = new URL(path, "https://demo.invalid");
+  const pkg = url.pathname === "/packages/history" ? url.searchParams.get("name") : null;
+  return `${DEMO_BASE}/api${url.pathname}${pkg ? `/${demoFileName(pkg)}` : ""}.json`;
+}
+
+/** A captured answer with every time moved to now. */
+export async function movedToNow(res: Response): Promise<Response> {
+  if (!res.ok) return res;
+  const moved = shiftTimes(await res.json(), Date.now() - Date.parse(DEMO_CAPTURED), true);
+  return new Response(JSON.stringify(moved), { status: 200, headers: { "Content-Type": "application/json" } });
 }

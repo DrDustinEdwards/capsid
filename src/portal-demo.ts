@@ -2,7 +2,7 @@ import { renderDemoPage } from "capsid-portal-pages";
 import { dashboardCsp } from "./dashboard-csp";
 import type { Env } from "./env";
 import { textResponse as text } from "./http";
-import { fetchAsset, pageHeaders } from "./portal-app";
+import { pageHeaders, serveFile } from "./portal-app";
 import { isPortalHost } from "./portal-host";
 
 // The Portal's chart demo (devkit live/areas.json, area 10): the same pages, rendered here at /demos/
@@ -35,19 +35,11 @@ export async function handlePortalDemo(request: Request, env: Env, render = rend
 
   // A captured answer is a file; every other address is a page.
   if (pathname.startsWith(`${DEMO_PREFIX}api/`)) {
-    const response = await fetchAsset(assets, pathname, request.method);
-    if (response.status >= 300 && response.status < 400) {
-      await response.body?.cancel();
-      return text("not found", 404);
-    }
-    const headers = new Headers(response.headers);
-    headers.set("X-Robots-Tag", "noindex");
-    headers.set("Cache-Control", "no-store");
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    return serveFile(assets, pathname, request.method, { "X-Robots-Tag": "noindex", "Cache-Control": "no-store" });
   }
 
   const csp = dashboardCsp();
-  const page = await render(request, (path) => fetchAsset(assets, path, "GET"), csp.nonce);
+  const page = await render(request, (path) => serveFile(assets, path, "GET", {}), csp.nonce);
   const out = pageHeaders(page, csp);
   out.headers.set("X-Robots-Tag", "noindex");
   return out;
