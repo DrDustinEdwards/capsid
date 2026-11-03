@@ -1,9 +1,11 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { Kind } from "../lib/derive";
 
-function S({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+// No style attribute: the Portal's CSP refuses inline styles in the server's HTML (a status
+// icon lost its color on /demos/health, 2026-11-03). A tone is a class (styles.css, .tone-*).
+function S({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style={style}>
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" className={className}>
       {children}
     </svg>
   );
@@ -107,8 +109,8 @@ export function InboxMark({ kind, tone, children }: { kind: string; tone: Kind; 
   );
 }
 
-export function Icon({ kind, style }: { kind: Kind; style?: CSSProperties }) {
-  return <S style={style}>{SHAPES[kind]}</S>;
+export function Icon({ kind, tone }: { kind: Kind; tone?: boolean }) {
+  return <S className={tone ? `tone-${kind}` : undefined}>{SHAPES[kind]}</S>;
 }
 
 // Status text: shape, word and color together, never color alone.

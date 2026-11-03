@@ -26,22 +26,58 @@ function Part({ part, children }: { part: { state: "ok" } | { state: "none" | "e
 }
 
 
-// Daily downloads as an area, one series per name the package has had. Built here, in the
-// view's own chunk, rather than in the shared charts, which ship with the overview.
+// Downloads as an area, one series per name the package has had. Built here, in the view's own
+// chunk, rather than in the shared charts, which ship with the overview. Over WEEKLY_AFTER days
+// the days are summed by week (from Monday, UTC): a point a day for a year and a half
+// was 194 kB of drawing, over the charts' 100 kB budget (live chart check, 2026-11-03).
+const WEEKLY_AFTER = 120;
+
+/** The Monday (UTC) that starts a day's week, as YYYY-MM-DD. */
+function weekOf(day: string): string {
+  const t = Date.parse(`${day}T00:00:00Z`);
+  const back = (new Date(t).getUTCDay() + 6) % 7;
+  return new Date(t - back * 86_400_000).toISOString().slice(0, 10);
+}
+
+const plusDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+/** The days (in order) summed by week and name, keeping only the weeks inside the history: a week
+ *  npm has not finished counting, or one cut at the history's start, would read as a fall. */
+function byWeek(days: PortalPackageHistory["days"]): PortalPackageHistory["days"] {
+  const start = days[0]!.day;
+  const end = days[days.length - 1]!.day;
+  const sums = new Map<string, PortalPackageHistory["days"][number]>();
+  for (const d of days) {
+    const day = weekOf(d.day);
+    if (day < start || plusDays(day, 6) > end) continue;
+    const key = `${day} ${d.name}`;
+    const row = sums.get(key);
+    if (row) row.downloads += d.downloads;
+    else sums.set(key, { day, downloads: d.downloads, name: d.name });
+  }
+  return [...sums.values()];
+}
+
 function DownloadsChart({ data }: { data: PortalPackageHistory }) {
   if (!data.days.length) return <ChartFrame noData={{ title: `Daily downloads of ${data.name}`, reason: "npm has counted no downloads for this package yet." }} />;
-  const total = data.days.reduce((a, d) => a + d.downloads, 0);
-  const max = Math.max(...data.days.map((d) => d.downloads));
+  const weekly = Date.parse(data.days[data.days.length - 1]!.day) - Date.parse(data.days[0]!.day) > WEEKLY_AFTER * 86_400_000;
+  const rows = weekly ? byWeek(data.days) : data.days;
+  const total = rows.reduce((a, d) => a + d.downloads, 0);
+  const first = rows[0]!.day;
+  const last = weekly ? plusDays(rows[rows.length - 1]!.day, 6) : rows[rows.length - 1]!.day;
+  const max = Math.max(...rows.map((d) => d.downloads));
+  const per = weekly ? "week" : "day";
   const opts = {
-    data: data.days,
+    data: rows,
     x: "day",
     y: "downloads",
     series: "name",
     xLabel: null,
-    yLabel: "Downloads a day",
+    yLabel: `Downloads a ${per}`,
     height: 200,
-    title: `Daily downloads of ${data.name}`,
-    alt: `Daily downloads of ${data.name}${data.formerly ? ` and its former name ${data.formerly}` : ""}, ${data.first_day} to ${data.last_day}: ${fmtN(total)} in all, at most ${fmtN(max)} in a day.`,
+    title: `${weekly ? "Weekly" : "Daily"} downloads of ${data.name}`,
+    alt: `${weekly ? "Weekly" : "Daily"} downloads of ${data.name}${data.formerly ? ` and its former name ${data.formerly}` : ""}, ${first} to ${last}: ${fmtN(total)} in all, at most ${fmtN(max)} in a ${per}.`,
+    ...(weekly ? { caption: "Each point is a week's downloads, Monday to Sunday (UTC), at the Monday it starts; a week not yet over is left out." } : {}),
     source: { name: "npm downloads API", href: `https://www.npmjs.com/package/${encodeURIComponent(data.name)}` },
   } as const;
   return <ChartFrame draw={(width) => areaChart({ ...opts, width })} />;
