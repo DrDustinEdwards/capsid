@@ -39,6 +39,7 @@ const MCP_HOST_PATHS = new Set([
   "/bench/score",
   "/shadow/job",
   "/shadow/result",
+  "/review/run",
   "/public/model/v1.json",
   "/public/stats/v1.json",
   "/public/code/v1.json",

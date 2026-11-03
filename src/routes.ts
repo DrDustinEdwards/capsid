@@ -1,6 +1,7 @@
 import { handleSignedInReport, SIGNED_IN_REPORT_PATH } from "./signed-in-crawl";
 import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, handlePublicDocument } from "./public-data";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResult } from "./shadow";
+import { REVIEW_RUN_PATH, handleReviewRun } from "./review";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
 import { resolveAgent } from "./agents";
 import { backupHttpStatus, runBackup } from "./backup";
@@ -300,6 +301,7 @@ export const defaultHandler = {
     if (url.pathname === BENCH_SCORE_PATH && request.method === "POST") return handleBenchScore(request, env);
     if (url.pathname === SHADOW_JOB_PATH && request.method === "GET") return handleShadowJob(request, env);
     if (url.pathname === SHADOW_RESULT_PATH && request.method === "POST") return handleShadowResult(request, env);
+    if (url.pathname === REVIEW_RUN_PATH && request.method === "POST") return handleReviewRun(request, env);
     if (url.pathname === "/authorize") return handleLogin(request, env);
     if (url.pathname === "/callback") return handleLogin(request, env);
     // The owner page: the same sign-in and admission as consent (site-runtime ./owner-page).
