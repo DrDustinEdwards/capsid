@@ -58,6 +58,9 @@ const MAX_FINDINGS = 5;
 // The model's deadline. A reasoning model on a large diff can take minutes; the workflow
 // waits up to ten, and a run that runs out is recorded as an error and asked again next push.
 const MODEL_TIMEOUT_MS = 6 * 60_000;
+// At the default (high) effort the model spent all 16,000 tokens second-guessing a two-line
+// workflow change and never answered (capsid #745, 2026-11-03). Low still reasons, and answers.
+const REASONING = "low";
 
 const VERDICTS = ["APPROVE", "CHANGES", "BLOCK"] as const;
 export type Verdict = (typeof VERDICTS)[number];
@@ -217,7 +220,7 @@ const SYSTEM = [
 function prompt(pull: Pull, rules: string, job: { id: string; text: string } | null, diff: string): string {
   return [
     `The pull request's title and description:\n${untrusted("pull-request", `${pull.title}\n\n${pull.body}`.slice(0, MAX_CONTEXT_CHARS))}`,
-    job ? `The job it names, ${job.id}:\n${untrusted("job", job.text)}` : "It names no job.",
+    job ? `The job it names, ${job.id}:\n${untrusted("job", job.text)}` : "The description names no Capsid job, so judge the change against the description and the rules alone.",
     rules ? `The repository's rules (CLAUDE.md at the base):\n${untrusted("rules", rules)}` : "The repository has no CLAUDE.md.",
     `The diff:\n${untrusted("diff", diff)}`,
   ].join("\n\n");
@@ -271,6 +274,11 @@ export function toolArguments(answer: unknown): unknown {
   } catch {
     return null;
   }
+}
+
+/** Whether the model stopped at max_tokens, which leaves no tool call to read. */
+function ranOut(answer: unknown): boolean {
+  return (answer as { choices?: Array<{ finish_reason?: string }> } | null)?.choices?.[0]?.finish_reason === "length";
 }
 
 /** The model's answer, held to the shape the check shows: a known verdict, at most five
@@ -329,13 +337,13 @@ export async function handleReviewRun(request: Request, env: Env): Promise<Respo
         const [rules, job] = await Promise.all([readRules(env, who, pull.base), readNamedJob(env, who, pull.body)]);
         const answer = await env.AI.run(
           REVIEW_MODEL,
-          { messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt(pull, rules, job, diffText(files)) }], tools: [REPORT_TOOL], tool_choice: "required", max_tokens: 16_000 },
+          { messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt(pull, rules, job, diffText(files)) }], tools: [REPORT_TOOL], tool_choice: "required", reasoning_effort: REASONING, max_tokens: 16_000 },
           { gateway: { id: REVIEW_GATEWAY, metadata: { app: "capsid-reviewer", repo: full } }, signal: AbortSignal.timeout(MODEL_TIMEOUT_MS) }
         );
         const parsed = parseVerdict(toolArguments(answer), new Set(files.map((f) => f.filename)));
         result = parsed
           ? { status: "reviewed", ...parsed, model: REVIEW_MODEL, head_sha: pull.head }
-          : { status: "error", error: "the model's answer was not a verdict", head_sha: pull.head };
+          : { status: "error", error: ranOut(answer) ? "the model ran out of room before it answered" : "the model's answer was not a verdict", head_sha: pull.head };
         const usage = (answer as { usage?: unknown } | null)?.usage;
         extra = { job_id: job?.id ?? null, why: scope.reasons, usage: usage ?? null };
       }
