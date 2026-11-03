@@ -118,11 +118,9 @@ export type ToolGrant = "write" | "read";
 export interface ToolCtx {
   env: Env;
   db: D1Database;
-  // The principal recorded on every audit_log row: "github:<login>" for an OAuth
-  // session, "opkey:<fingerprint>" for an operator key, "agent:<name>" for a minted
-  // agent (src/agents.ts). The fingerprint is a 12-char prefix of the key's sha256,
-  // because OPERATOR_KEY_HASH is the verifier and a full hash in audit_log would copy
-  // it into the database. Older rows keep a literal 'operator' value.
+  // The principal recorded on every audit_log row: "access:<email>" for an OAuth
+  // session, "agent:<name>" for a minted agent (src/agents.ts). Older rows keep
+  // "github:<login>", "opkey:<fingerprint>" (a retired operator key) or 'operator'.
   actor: string;
   // The caller, resolved once per request (src/agents.ts). `actor` is a projection of
   // it; the scope checks read this.

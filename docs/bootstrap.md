@@ -44,29 +44,10 @@ npx wrangler secret put ACCESS_SAAS_CLIENT_SECRET
 npx wrangler secret put ADMIN_EMAIL              # the primary owner's email, admitted by both logins, exactly
 npx wrangler secret put CO_OWNER_EMAILS          # optional: co-owners, comma separated, admitted like ADMIN_EMAIL (docs/auth.md, "Co-owner")
 npx wrangler secret put COOKIE_ENCRYPTION_KEY    # openssl rand -hex 32; signs the login state and the Portal cookie and confirm tokens
-npx wrangler secret put OPERATOR_KEY_HASH        # see below
 npx wrangler secret put IMPROVE_SCORE_SECRET     # root of the job, policy and backup credential HMAC keys
 ```
 
 Never commit one, and never read, display or log the contents of an env file.
-
-### Operator keys
-
-`OPERATOR_KEY_HASH` is a comma-separated list of sha256 hashes. The keys
-themselves exist nowhere on the server.
-
-- A plain entry, `<sha256 of the key>`, grants write.
-- An entry written as `ro:<sha256 of the key>` is read-only.
-
-The prefix is on the entry, not on the key. The server hashes whatever key was
-presented and compares it against each entry with the prefix stripped, so the tier
-is a property of what the operator wrote down rather than of what the caller sends.
-A read-only key is denied every mutating tool, and one read tool is partially
-gated: CI status returns run metadata but withholds the failing job's log tail,
-because a build log carries whatever the workflow echoed.
-
-Revoke by removing a hash. Add one by appending. There is a helper for minting a
-read-only key: see Minting a read-only key below.
 
 ## 4. The GitHub App
 
@@ -135,49 +116,33 @@ at connect time, so a tool deployed mid-session is invisible until the connector
 reconnects. Verify a fresh deploy by calling the Worker directly rather than by
 waiting.
 
-## 7. Minting a read-only key
+## 7. Minting an agent, one per project and per machine
 
-`capsid_admin_control_improve` has an action for it (on Capsid Admin, with a recent sign-in from an OAuth session), so the derivation and the hashing are not done
-by hand:
+An agent is a caller: its own key, its own scopes, its own audit identity, its own
+revocation. Every key Capsid accepts is an agent's.
 
-```
-capsid_admin_control_improve(action: "mint_operator_key")
-```
-
-It returns the key once, prints the hash, and prints the exact command to
-append that hash to `OPERATOR_KEY_HASH`. It does not set the
-secret itself. The manual step is the gate.
-
-The response is not stored anywhere and the key is not recoverable. Lose it and
-mint another; remove the old hash.
-
-## 8. Minting an agent, one per project and per machine
-
-An operator key is a tier. An agent is a caller: its own key, its own scopes,
-its own audit identity, its own revocation. `OPERATOR_KEY_HASH` still works and
-keeps every authority it has today. Agents replace it, one credential at
-a time. The old key is removed when nothing needs it any more.
-
-Mint one as the admin with Capsid Admin's `capsid_admin_manage_agents` (an OAuth
-session on `/mcp/admin`, which needs a recent sign-in (within 2 hours, sliding, and at most 12 hours old), or the admin's
-key on `/ops/mcp/admin`). A minted agent cannot mint another. An agent that can
-widen itself has no scope.
+Mint one as the admin with Capsid Admin's `capsid_admin_manage_agents`, from an OAuth
+session on `/mcp/admin`, which needs a recent sign-in (within 2 hours, sliding, and at
+most 12 hours old). That session is the only admin: no key is, so a minted agent cannot
+mint another. An agent that can widen itself has no scope.
 
 ```
 capsid_admin_manage_agents(action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"],
        grants: ["read", "write"])
 ```
 
-The response carries the key once. Nothing stores it: the table holds its
-sha256, and a lost key is replaced by revoking that agent and minting another.
+The response carries the key once, so it lands in that chat's transcript: save it to
+the key file below at once and mint from a session you are not sharing. Nothing
+stores it: the table holds its sha256, and a lost key is replaced by revoking that
+agent and minting another.
 
 One agent per project and per machine. The name says both, so an audit row
 reads as a sentence: `capsid-driver-laptop`, `sample-driver-desktop`. Revoking a
 compromised laptop does not stop the desktop working. `agent:sample-driver-laptop`
 in the audit log needs no lookup to understand.
 
-An agent from a second client on the same project is a role named `<namespace>-<client>`,
-minted with `--role`: `sample-grok` is Grok Build's driver for sample. Each
+An agent from a second client on the same project is a role named `<namespace>-<client>`
+(`ROLES` in `scripts/roles.ts`): `sample-grok` is Grok Build's driver for sample. Each
 client's MCP config must not load another client's servers. Grok Build loads `~/.claude.json`
 and a project's `.mcp.json` unless `[compat.claude] mcps = false` is set in `~/.grok/config.toml`
 (docs.x.ai/build/features/mcp-servers); without it Grok would act as `agent:dustinedwards-driver`.
@@ -191,7 +156,7 @@ The driver reads its own key from a file, one per agent:
 ```
 
 One line, the key, nothing else. `chmod 600` it. It is never committed, never
-pasted into a chat, and never read back by anything but the driver, which sends it
+pasted into another chat, and never read back by anything but the driver, which sends it
 as the bearer token:
 
 ```
@@ -216,8 +181,8 @@ it to what the work actually needs and no further:
 | `can_merge` | no | yes |
 | `can_touch_protected` | no, except capsid-driver and claude-skills-driver | no |
 
-**`repos` is derived, not typed.** The script reads the namespace mapping from the
-live `capsid_find_docs` action `namespaces` and sets the axis from it, so a driver reaches its own repos
+**`repos` is derived, not typed.** A mint that names no repos reads the live
+namespace mapping and sets the axis from it, so a driver reaches its own repos
 and nothing else. It refuses to mint a driver for a namespace that maps to no repos
 rather than falling back to the `*` wildcard, because a wildcard can never refuse
 and a mint is the wrong place to discover that. Mapping a namespace is admin-only
@@ -239,83 +204,9 @@ changes and leaves the rest. Revoke with `capsid_admin_manage_agents(action: "re
 row stays, so the audit rows that agent wrote still resolve to what it was allowed
 to do, and its key stops working immediately.
 
-### The migration path, one credential at a time
+### The first agents
 
-`OPERATOR_KEY_HASH` keeps working and keeps every authority it has today. It stops
-working when its hash is removed from the secret, and not before, so nothing has to
-be cut over in one sitting. The order that works:
-
-1. Mint the six agents below, as the admin. Each returns its key once; write each
-   into `~/.capsid/agent-<name>.key` on the machine that will use it.
-2. Point one driver at its key and let it work a job. `capsid_run_improve` action `status` shows
-   `last_seen` moving, which is how to know the agent is the credential in use and
-   not the operator key underneath it.
-3. When every machine has an agent and `last_seen` proves it, remove the operator
-   hash: `npx wrangler secret put OPERATOR_KEY_HASH` with the remaining entries, or
-   `npx wrangler secret delete OPERATOR_KEY_HASH` when none remain.
-
-**On this deployment step 3 is done, and the steps above still describe a fresh
-setup.** `OPERATOR_KEY_HASH` was deleted 2026-09-12 after a check found no consumer
-of it in any repo, workflow or machine config. Nothing above is wrong for a stranger
-standing this up, who sets the secret at section 3 and has it throughout; what
-changes once it is gone is how you mint, and that is the next section.
-
-### Minting once no operator key exists
-
-`scripts/mint-agents.ts` authenticates only with `CAPSID_OPERATOR_KEY` as a bearer
-on `/ops/mcp` and `/ops/mcp/admin` (where it mints) and exits 2 without it, so with the secret deleted the script cannot
-run at all. The OAuth admin session on `/mcp/admin` is then the only admin, and
-`capsid_admin_manage_agents` action `mint` works there, but it returns the key in its response, which puts a live
-credential in a chat transcript or a client log. That is the thing the script exists
-to avoid: it writes the key straight to `~/.capsid/agent-<name>.key` at mode 0600
-and reports only a 12-hex fingerprint.
-
-So the path is a temporary re-add, and the secret is the shortest-lived part of it:
-
-```
-node -e "const b=require('crypto').randomBytes(32).toString('hex');console.log('capsid_'+b)"   # keep this, do not paste it anywhere
-node -e "console.log(require('crypto').createHash('sha256').update(process.argv[1]).digest('hex'))" <the key>
-npx wrangler secret put OPERATOR_KEY_HASH        # paste the HASH, not the key
-CAPSID_OPERATOR_KEY=<the key> node scripts/mint-agents.ts --namespace <ns> --apply
-npx wrangler secret delete OPERATOR_KEY_HASH
-```
-
-**`capsid_admin_control_improve` action `mint_operator_key` is not a shortcut for this.** It issues a
-`ro:` entry, and a read-only key is not admin (`admin` is `grant === "write"` in
-`src/agents.ts`), so a key minted that way cannot mint an agent. It exists for the
-read-only tier and nothing else.
-
-**What it would take to mint over OAuth instead**, stated rather than built: the
-`capsid_admin_manage_agents` tool would need a mode that writes the key somewhere other than its
-response, and there is nowhere good. Capsid Portal is admin-gated and would be the
-natural home, but it never mints by ruling, and a browser download is not mode 0600
-on the machine that needs it. A device-code flow in `scripts/mint-agents.ts` that
-obtained an admin token the way any OAuth client does would keep the key on the
-machine and off the wire, and that is the shape worth costing if the re-add becomes
-frequent. It is one ruling and a day of work, not a small change.
-
-There is a script for it, and it is the path that keeps a key out of a terminal:
-`scripts/mint-agents.ts` sends each mint and writes the key straight into
-`~/.capsid/agent-<name>.key` at mode 0600, reporting a 12-hex fingerprint and never
-the key itself. It refuses to overwrite an existing file, because a second mint
-leaves a live credential in the table with nothing on disk able to present it.
-
-```
-CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts                       # dry run, all six
-CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --apply
-CAPSID_OPERATOR_KEY=<write-grant key> node scripts/mint-agents.ts --namespace sample --apply
-```
-
-`--namespace` mints one project without touching the rest, which is what to run
-once the first six are live: a project joins the roster later, or one key is lost
-and needs replacing, and re-minting the set is not available then. An
-unknown namespace is refused and the refusal lists the known ones, because
-"minted 0 agents" and "minted the one you meant" are the same output to anybody
-not counting. `test/mint-agents.test.ts` derives the driver list from
-`APP_ROSTER` in `src/roster.ts`, so a sixth roster project fails the suite rather than
-quietly having no driver agent and no key file.
-
-The six, as calls:
+A fresh install mints these six, each with its key saved on the machine that uses it:
 
 ```
 capsid_admin_manage_agents(action: "mint", name: "capsid-driver",        kind: "driver", namespaces: ["capsid"],        grants: ["read", "write"])
@@ -339,16 +230,16 @@ the work needs. The claim refuses a driver that does not hold those flags and
 leaves the job queued for one that does, so the mismatch surfaces at the claim
 rather than after a driver has already taken it.
 
-## 9. Names kept from the removed improve loop
+## 8. Names kept from the removed improve loop
 
 `capsid_run_improve` serves only action `status`, a read-grant read of Capsid's state,
-and `capsid_admin_control_improve` holds the admin's switches (`mint_operator_key`,
-`sign_policy`, `breaker_reset` and `overnight`). `IMPROVE_SCORE_SECRET` is the root the
+and `capsid_admin_control_improve` holds the admin's switches (`sign_policy`,
+`breaker_reset` and `overnight`). `IMPROVE_SCORE_SECRET` is the root the
 job, policy and backup credential keys are derived from.
 
-## 10. A fresh install, step by step
+## 9. A fresh install, step by step
 
-The sections above explain each part. This is the order to do them in. The host names in `src/mcp-host.ts` (`MCP_HOST`) and `src/portal-host.ts` (`PORTAL_HOST`) are this deployment's own; the examples below use a workers.dev address.
+The sections above explain each part. This is the order to do them in. The host names in `src/mcp-host.ts` (`MCP_HOST`) and `src/portal-host.ts` (`PORTAL_HOST`) are this deployment's own; set them to yours, each a Custom Domain on the Worker. `wrangler.jsonc.example` turns the workers.dev address off.
 
 1. Install dependencies with `npm install`.
 2. Create your own Cloudflare resources:
@@ -362,16 +253,15 @@ The sections above explain each part. This is the order to do them in. The host 
 
 3. Copy `wrangler.jsonc.example` to `wrangler.jsonc` and fill in the ids from step 2. **`APP_KV` and `OAUTH_KV` must be different namespace ids.** The real `wrangler.jsonc` is gitignored. Never commit it.
 4. Apply the migrations (idempotent, `IF NOT EXISTS` everywhere) with `npx wrangler d1 migrations apply capsid --remote`.
-5. Generate an operator key and store its sha256 hash with `npx wrangler secret put OPERATOR_KEY_HASH`. Keep the raw key safe; headless clients send it as the bearer token on `/ops/mcp`. The value is one or more comma-separated lowercase hex sha256 hashes. Prefix an entry with `ro:` to make that key read-only, for example `<full-key-hash>,ro:<agent-key-hash>`. Never store a raw key in the repo. Once agents are minted (section 8), remove the operator hash. Minting another agent after that needs the hash set again for the length of one command, because `scripts/mint-agents.ts` authenticates with `CAPSID_OPERATOR_KEY` and nothing else (see "Minting once no operator key exists").
-6. Create a Cloudflare Access for SaaS application for the logins, in the Zero Trust dashboard: Access, Applications, Add an application, SaaS, OIDC.
-   - Redirect URLs, all spelled exactly: `https://capsid.<your-subdomain>.workers.dev/callback` for the MCP flow, `https://capsid.<your-subdomain>.workers.dev/portal/callback` for Capsid Portal, and `https://<your Portal host>/callback` if the Portal has its own host.
+5. Create a Cloudflare Access for SaaS application for the logins, in the Zero Trust dashboard: Access, Applications, Add an application, SaaS, OIDC.
+   - Redirect URLs, both spelled exactly: `https://<your MCP host>/callback` for the MCP flow and `https://<your Portal host>/callback` for Capsid Portal.
    - Scopes openid, email and profile, PKCE on, and a policy that allows your email only (and any co-owner's).
    - Then set the secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_SAAS_CLIENT_ID`, `ACCESS_SAAS_CLIENT_SECRET`, `ADMIN_EMAIL` and `COOKIE_ENCRYPTION_KEY` (section 3).
-7. Create the GitHub App (section 4), install it on the repositories you want reachable, note its Client ID, generate a private key (`.pem`), put the Client ID in `wrangler.jsonc` vars as `GITHUB_APP_CLIENT_ID` and set `GITHUB_APP_PRIVATE_KEY`. Only the private key mints installation tokens; the App client secret is not needed. The installation id is not configured: it resolves from GitHub per owner and repo and is cached for a day, because one pinned id cannot be correct for two owners.
-8. `IMPROVE_SCORE_SECRET`, the root the job-signing, policy-signing and backup credential keys are derived from. Without it the work queue refuses to post a job and no signed policy loads.
-9. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"); `ACCESS_DRIFT_AUD` (the drift check's admin list, docs/auth.md, "Access drift check"); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the backup mirror.
-10. Type check and deploy with `npm run check` and `npm run deploy`. Deploy builds the Portal first and stops if the build or its size budget fails.
-11. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://capsid.<your-subdomain>.workers.dev/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity and any `CO_OWNER_EMAILS` identity get in (docs/auth.md). To test the flow first, run `npx @modelcontextprotocol/inspector`, set the transport to Streamable HTTP, set the URL to the same address, open the Auth tab and run Quick OAuth Flow.
+6. Create the GitHub App (section 4), install it on the repositories you want reachable, note its Client ID, generate a private key (`.pem`), put the Client ID in `wrangler.jsonc` vars as `GITHUB_APP_CLIENT_ID` and set `GITHUB_APP_PRIVATE_KEY`. Only the private key mints installation tokens; the App client secret is not needed. The installation id is not configured: it resolves from GitHub per owner and repo and is cached for a day, because one pinned id cannot be correct for two owners.
+7. `IMPROVE_SCORE_SECRET`, the root the job-signing, policy-signing and backup credential keys are derived from. Without it the work queue refuses to post a job and no signed policy loads.
+8. Optional secrets and vars, each inert until set: `CO_OWNER_EMAILS` (docs/auth.md, "Co-owner"); `CF_OPS_TOKEN` and `CF_ACCOUNT_ID` (the Portal's Cloudflare read, and Workers Builds with Workers CI Read); `CF_SECRETS_TOKEN` (Workers Scripts Edit, for `capsid_admin_set_site_key`; docs/portal.md, "Site keys"); `ACCESS_DRIFT_AUD` (the drift check's admin list, docs/auth.md, "Access drift check"); `VAPID_PRIVATE_KEY` (phone alerts, docs/portal.md); `DCR_REDIRECT_URIS` (docs/auth.md); and the `R2_*` credential-minting secrets for the backup mirror.
+9. Type check and deploy with `npm run check` and `npm run deploy`. Deploy builds the Portal first and stops if the build or its size budget fails.
+10. Connect claude.ai: Settings, Connectors, Add custom connector, URL `https://<your MCP host>/mcp`. The connector registers itself and walks you through the Cloudflare Access sign-in. Only the `ADMIN_EMAIL` identity and any `CO_OWNER_EMAILS` identity get in (docs/auth.md). Add Capsid Admin the same way at `https://<your MCP host>/mcp/admin`, then mint the first agents (section 7). To test the flow first, run `npx @modelcontextprotocol/inspector`, set the transport to Streamable HTTP, set the URL to the same address, open the Auth tab and run Quick OAuth Flow.
 
 MCP clients cache the tool list at connect time. After deploying new tools, reconnect the connector or start a new chat to see them.
 
@@ -380,9 +270,9 @@ Optional parts stay hidden or inert until configured:
 - With no row in `ops_sites` that has an origin, nothing is probed and Health shows no Sites section.
 - Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured.
 - The telemetry receiver (`/ops/otlp/v1/*`, docs/telemetry.md) and the hook receiver (`/ops/hooks`, docs/hooks.md) are live but store nothing until a Claude Code session is configured to send to them with a key.
-- Auto-merge is off by default (section 11).
+- Auto-merge is off by default (section 10).
 
-## 11. Switches
+## 10. Switches
 
 One switch, off by default.
 
@@ -390,6 +280,6 @@ One switch, off by default.
 
 Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16.
 
-## 12. Checks before a push
+## 11. Checks before a push
 
 Run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.

@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { claimJob, failAsCaller, postJob } from "../src/jobs";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey, breakerState, resetBreaker } from "../src/job-breaker";
 
@@ -11,7 +11,7 @@ import { BREAKER_THRESHOLD_KEY, breakerResetKey, breakerState, resetBreaker } fr
 // audit_log.at is the database's own clock, so these run on the real time.
 
 const SECRET = "test-root-secret";
-const POSTER = legacyAgent("write", "github:DrDustinEdwards");
+const POSTER = grantAgent("write", "github:DrDustinEdwards");
 
 function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];

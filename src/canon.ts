@@ -12,10 +12,7 @@ import { callerIsSeat } from "./jobs-transition";
 // (a site driver, a cron) is refused, so a site's agent cannot rewrite the rules it is
 // told to trust. Every write is still snapshotted and audit-logged like any other.
 //
-// Until 2026-10-31 a refused caller's write became a proposal waiting for approval
-// (canon_proposals, migrations/0034). Nobody approved them any more, and Dustin's own
-// sessions were held there too, so he had the queue deleted (thread "Measure how much
-// Claude uses Capsid"). The table and its rows stay, in backups, until a migration drops it.
+// A refused write is refused outright; nothing queues it for approval.
 
 interface CanonRule {
   // "*" is every namespace.

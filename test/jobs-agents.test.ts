@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SCOPE_FLAGS, defaultScopes } from "../src/agents-schema.ts";
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
 import { missingForJob, parseRequiredScopes, serializeRequiredScopes } from "../src/jobs-schema.ts";
 
 // The queue asks what a driver can do before handing it the work: a job's required
@@ -45,7 +45,7 @@ test("a read-only agent cannot claim, even a job that requires nothing", () => {
 
 test("the legacy key and the admin can still claim anything, which is what keeps the queue working today", () => {
   const everything = serializeRequiredScopes({ flags: [...SCOPE_FLAGS] });
-  assert.equal(missingForJob(legacyAgent("write", "opkey:0123456789ab"), "sample", everything), null);
+  assert.equal(missingForJob(grantAgent("write", "opkey:0123456789ab"), "sample", everything), null);
   assert.equal(missingForJob(adminAgentForEmail("admin@example.com"), "sample", everything), null);
 });
 

@@ -11,7 +11,7 @@ import { ACCESS_SAAS } from "../scripts/bindings.mjs";
 // for SaaS app. The URL shape below is the one production answered after #185 deployed
 // (actions run 36360666932), with this test's own state, nonce and challenge.
 
-const ORIGIN = "https://capsid.dustin-edwards.workers.dev";
+const ORIGIN = "https://mcp.dustinedwards.info";
 
 function signIn(overrides: Record<string, string | null> = {}, base = `${ACCESS_SAAS.teamDomain}/cdn-cgi/access/sso/oidc/${ACCESS_SAAS.clientId}/authorization`): string {
   const url = new URL(base);

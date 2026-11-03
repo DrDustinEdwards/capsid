@@ -7,7 +7,6 @@
 admin-client-audit.test.ts
 blast-radius.test.ts
 deploy-pipeline.test.ts
-improve-cron.test.ts
 invariants.test.ts
 mutation-guard-coverage.test.ts
 route-gates.test.ts

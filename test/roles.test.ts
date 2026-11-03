@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ROLES, roleMintCommand, selectAgents } from "../scripts/mint-agents.ts";
+import { ROLES } from "../scripts/roles.ts";
 import { SCOPE_FLAGS, allowsToolAction, defaultScopes, parseScopes, serializeScopes } from "../src/agents-schema.ts";
 import { type Agent } from "../src/agents.ts";
 import { checkScope } from "../src/scope.ts";
@@ -176,31 +176,4 @@ test("DERIVED: no role is a driver in disguise", () => {
     const flags = Object.keys(role.flags ?? {});
     assert.ok(flags.length <= 1, `${role.name} holds ${flags.length} flags; a role is one capability, not a bundle`);
   }
-});
-
-test("each role prints a mint command the script itself can parse", () => {
-  for (const role of ROLES) {
-    const command = roleMintCommand(role);
-    assert.match(command, /node scripts\/mint-agents\.ts --role /);
-    assert.match(command, new RegExp(`--role ${role.name}\\b`));
-    assert.match(command, /--apply/);
-    assert.ok(!command.includes("CAPSID_OPERATOR_KEY=<"), "a command with a placeholder key is one nobody can paste");
-    assert.match(command, /^CAPSID_OPERATOR_KEY=\$CAPSID_OPERATOR_KEY /);
-  }
-});
-
-test("--role selects exactly one agent, and an unknown role is refused rather than matching nothing", () => {
-  assert.deepEqual(
-    selectAgents(undefined, undefined, "auditor").map((a) => a.name),
-    ["auditor"]
-  );
-  assert.throws(() => selectAgents(undefined, undefined, "nope"), /no role named 'nope'/);
-});
-
-test("a role is NOT reachable through --namespace, so the two selectors cannot collide", () => {
-  // site-seat is scoped to dustinedwards. If --namespace dustinedwards picked it up,
-  // a routine driver mint would quietly mint a credential holding can_merge.
-  const picked = selectAgents("dustinedwards").map((a) => a.name);
-  assert.deepEqual(picked, ["dustinedwards-driver"]);
-  assert.ok(!picked.includes("site-seat"), "a namespace mint must never reach a role that holds can_merge");
 });

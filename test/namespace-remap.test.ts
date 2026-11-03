@@ -6,7 +6,6 @@ import { checkScope } from "../src/scope.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { allowsScope, defaultScopes, noFlags, type AgentScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
-import { parseNamespaceRepos, reposForNamespace } from "../scripts/mint-agents.ts";
 
 // The namespace-remap escalation, closed in both directions. A namespace-scoped
 // driver with the write grant must not be able to call capsid_admin_manage_namespaces
@@ -183,37 +182,3 @@ test("a list containing the literal star is NOT a wildcard on the read path", ()
 });
 
 // the mint script derives the axis rather than copying the mapping
-
-const NAMESPACES_RESPONSE = JSON.stringify([
-  { namespace: "capsid", repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]) },
-  {
-    namespace: "foxhound",
-    repos: JSON.stringify([
-      { repo: "DrDustinEdwards/foxhound", label: "primary" },
-      { repo: "DrDustinEdwards/recova", label: "legacy" },
-    ]),
-  },
-  { namespace: "orphan", repos: JSON.stringify([]) },
-]);
-
-test("the repos axis is parsed out of the real namespaces response shape", () => {
-  const map = parseNamespaceRepos(NAMESPACES_RESPONSE);
-  assert.deepEqual(reposForNamespace(map, "capsid"), ["DrDustinEdwards/capsid"]);
-  // Every mapped repo, not just the primary: a foxhound driver works the legacy
-  // repos too, and an axis that named only the primary would refuse its own work.
-  assert.deepEqual(reposForNamespace(map, "foxhound"), ["DrDustinEdwards/foxhound", "DrDustinEdwards/recova"]);
-});
-
-test("a namespace that maps to nothing REFUSES rather than minting wide", () => {
-  const map = parseNamespaceRepos(NAMESPACES_RESPONSE);
-  assert.throws(() => reposForNamespace(map, "orphan"), /maps to no repos/);
-  assert.throws(() => reposForNamespace(map, "never-registered"), /maps to no repos/);
-});
-
-test("vacuity: a response that parses to nothing is an error, not an empty mapping", () => {
-  // Without this, a shape change would make every driver mint with no repos and
-  // every repo call refuse, which reads as a scope bug rather than a parse bug.
-  assert.throws(() => parseNamespaceRepos("[]"), /returned no namespaces/);
-  assert.throws(() => parseNamespaceRepos("not json"), /did not answer with JSON/);
-  assert.throws(() => parseNamespaceRepos('{"namespace":"capsid"}'), /not an array/);
-});

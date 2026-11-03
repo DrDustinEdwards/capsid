@@ -3,14 +3,14 @@ import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, jobsSummary, listJobs, postJob, resumeJob } from "../src/jobs";
 import { latestResumeNote } from "../src/jobs-mirror";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 
 // Signed resume notes and block commands (job_9e602b31888f item 4, OWASP ASI07), against
 // a real D1: the tampering these guard against is a changed row, so only real rows show it.
 
 const SECRET = "test-root-secret";
-const ADMIN = legacyAgent("write", "github:DrDustinEdwards");
+const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-09-26T06:00:00.000Z");
 const LATER = new Date("2026-09-26T07:00:00.000Z");
 

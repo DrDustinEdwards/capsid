@@ -286,7 +286,7 @@ const UNITS_HEADING = /^##\s+Auto units\s*$/i;
 
 // The path classes a unit may promote: every class src/merge-class.ts holds except
 // money (typed forever, design section 8), migration and workflow (each a step outside a
-// merge, class seat). test/auto-merge-units.test.ts holds this to merge-class's list.
+// merge, class seat). test/policy-change.test.ts holds this to merge-class's list.
 export const PROMOTABLE_PATH_CLASSES: readonly string[] = ["docs", "dashboard-css", "tests", "dashboard-code", "deps-own", "src-routine", "deps-other", "src-worth"];
 // The heading a required step is filed under: `## Required CI, <namespace>`. A step
 // written before any such heading is a refusal rather than a step belonging to

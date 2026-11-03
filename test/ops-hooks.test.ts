@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
 import { defaultScopes, serializeScopes, type AgentKind, type AgentRow } from "../src/agents-schema.ts";
 import { opsSessionFrom, type SessionFeedRow } from "../src/ops-feed.ts";
 import {
@@ -230,7 +230,7 @@ async function recordingEnv() {
       return statements.map((_, i) => ({ success: true, meta: {}, results: i === 0 ? [{ session_id: SESSION }] : [] }));
     },
   };
-  return { env: fakeEnv({ DB: db, OPERATOR_KEY_HASH: "" }), writes };
+  return { env: fakeEnv({ DB: db }), writes };
 }
 
 function post(body: unknown): Request {
@@ -342,11 +342,11 @@ test("a driver, a runner and the admin may post hooks; a read-only key, a cron o
   assert.equal(sessionCallerRefusal(rowAgent("driver", ["read", "write"])), null);
   assert.equal(sessionCallerRefusal(rowAgent("session", ["read", "write"])), null);
   assert.equal(sessionCallerRefusal(adminAgentForEmail("admin@example.com")), null);
-  assert.equal(sessionCallerRefusal(legacyAgent("write", "opkey:abc")), null);
+  assert.equal(sessionCallerRefusal(grantAgent("write", "opkey:abc")), null);
   assert.match(sessionCallerRefusal(rowAgent("driver", ["read"])) ?? "", /requires the write grant/);
   assert.match(sessionCallerRefusal(rowAgent("cron", ["read", "write"])) ?? "", /is not a driver\./);
   assert.match(sessionCallerRefusal(rowAgent("seat", ["read", "write"])) ?? "", /is not a driver\./);
-  assert.match(sessionCallerRefusal(legacyAgent("read", "opkey:def")) ?? "", /is not a driver\./);
+  assert.match(sessionCallerRefusal(grantAgent("read", "opkey:def")) ?? "", /is not a driver\./);
 });
 
 // ---- the feed's incidents ------------------------------------------------------------
