@@ -205,7 +205,7 @@ export function outsideJobNamespace(agent: Agent, namespace: string): string | n
 
 // job_<12 hex>, random rather than sequential so an id quoted in chat cannot be used
 // to address a job by arithmetic. The PRIMARY KEY refuses a collision.
-// Hex through bytesToHex (src/encoding.ts).
+// Hex through toHex (@dustinedwards/site-runtime/encoding).
 export function mintJobId(): string {
   return `job_${toHex(crypto.getRandomValues(new Uint8Array(6)))}`;
 }

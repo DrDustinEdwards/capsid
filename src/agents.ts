@@ -1,5 +1,4 @@
 import { bearerToken } from "@dustinedwards/site-runtime/agent-keys";
-import { operatorIdentity } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import {
   AGENT_GRANTS,
@@ -21,37 +20,32 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // driver a credential that works a job without also being able to merge a pull
 // request into a repo that deploys on push.
 //
-// Four kinds of caller resolve here, and the order matters:
+// Three kinds of caller resolve here:
 //
-//   1. A minted agent (a row in `agents`), with exactly its row's scopes. Checked
-//      first, so a key that is also an OPERATOR_KEY_HASH entry gets the narrower
-//      authority.
-//   2. A legacy operator key: a plain entry is write with every flag, an `ro:` entry
-//      is read with none. This lets the table exist without breaking the credential
-//      used to mint the first agent. It stops working when its hash is removed.
-//   3. A bench run key (src/bench-run-key.ts): one treatment run of the paired
+//   1. A minted agent (a row in `agents`), with exactly its row's scopes.
+//   2. A bench run key (src/bench-run-key.ts): one treatment run of the paired
 //      comparison, bound to its one job while the run is open.
-//   4. The OAuth admin session, resolved in src/index.ts: the synthetic agent
+//   3. The OAuth admin session, resolved in src/index.ts: the synthetic agent
 //      "admin", holding every scope.
 
 export interface Agent {
   // The agents.id for a minted agent. For a synthetic one, its actor string, so a
   // caller identity is always addressable by a single value.
   id: string;
-  // The audit NAME. "admin" for an OAuth session, "opkey" for a legacy key, and the
-  // row's unique name for a minted agent.
+  // The audit NAME. "admin" for an OAuth session, and the row's unique name for a
+  // minted agent.
   name: string;
   kind: AgentKind;
   // What lands in audit_log.actor and jobs.claimed_by. `agent:<name>` for a minted
-  // agent; `opkey:<fingerprint>` for a legacy operator key; the admin as
+  // agent; the admin as
   // `access:<email>` on the MCP login (Cloudflare Access, since 2026-09-27) or
   // `github:<login>` on rows the old console wrote before it moved to Access. Those are more specific than a
   // synthetic name, and every audit query already reads them.
   actor: string;
   scopes: AgentScopes;
   // May this caller mint, revoke and re-scope other agents? True only for the OAuth
-  // admin and a legacy write key, so a minted agent can never mint a wider one than
-  // itself. Not a flag, because update_scopes can set flags.
+  // admin, so a minted agent can never mint a wider one than itself. Not a flag,
+  // because update_scopes can set flags.
   admin: boolean;
   // A row-backed agent, as opposed to a synthetic one. What last_seen is written for.
   row: AgentRow | null;
@@ -102,10 +96,11 @@ export function adminAgentForEmail(email: string, signedInAt?: number | null): A
   };
 }
 
-// A legacy grant and actor expressed as an Agent, so checkScope is the only
-// enforcement path: the fallback path and every test build a caller the same way,
-// and there is no second code path where scopes do not apply.
-export function legacyAgent(grant: AgentGrant, actor: string): Agent {
+// A grant and an actor expressed as an unrestricted Agent (write is the admin, read
+// reads everything), so checkScope is the only enforcement path: buildServer's string
+// caller and every test build a caller the same way, and there is no second code path
+// where scopes do not apply.
+export function grantAgent(grant: AgentGrant, actor: string): Agent {
   return {
     id: actor,
     name: actor.includes(":") ? actor.slice(0, actor.indexOf(":")) : actor,
@@ -148,12 +143,9 @@ async function liveAgentByHash(db: D1Database, hash: string): Promise<AgentRow |
   return await safeEqual(row.key_hash, hash) ? row : null;
 }
 
-// A revoked agent does not fall through to OPERATOR_KEY_HASH: a key minted as an
-// agent is not an operator key, and falling through would make revocation depend on
-// the key never having matched anything else.
 export async function resolveAgent(
   request: Request,
-  env: { DB: D1Database; OPERATOR_KEY_HASH?: string },
+  env: { DB: D1Database },
   now: Date = new Date()
 ): Promise<ResolvedAgent | null> {
   const token = bearerToken(request.headers.get("Authorization"));
@@ -166,17 +158,7 @@ export async function resolveAgent(
   }
   const run = await runKeyAgent(env.DB, hash, now);
   if (run) return { agent: run, touch: async () => {} };
-  // A revoked key is refused whether its row is still in agents or has moved to the
-  // archive (src/agents-archive.ts): an archived key is a revoked key.
-  const revoked = await env.DB.prepare(
-    "SELECT id FROM agents WHERE key_hash = ?1 UNION ALL SELECT id FROM agents_archive WHERE key_hash = ?1"
-  )
-    .bind(hash)
-    .first<{ id: string }>();
-  if (revoked) return null;
-  const { grant, fingerprint } = await operatorIdentity(request, env);
-  if (!grant || !fingerprint) return null;
-  return { agent: legacyAgent(grant, `opkey:${fingerprint}`), touch: async () => {} };
+  return null;
 }
 
 // Best effort: last_seen is how an unused credential is noticed, not how a request

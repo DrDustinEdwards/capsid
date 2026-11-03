@@ -41,7 +41,7 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
     async (args) => {
       const now = new Date();
       // The token binds an email, and a chat caller has one only when it is the administrator
-      // signed in through Access (agent:access:<email>). An operator key or a minted agent
+      // signed in through Access (agent:access:<email>). A minted agent
       // has none and cannot hold a control, whatever its grant.
       if (!ctx.actor.startsWith(ACCESS_PREFIX) || ctx.actor.length === ACCESS_PREFIX.length) {
         return fail(`controls needs the administrator signed in through Access; ${ctx.actor} is not.`);

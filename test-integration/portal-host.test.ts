@@ -64,7 +64,7 @@ describe("the Portal host through the whole Worker", () => {
     }
   });
 
-  it("workers.dev is untouched: /mcp there is still the MCP endpoint", async () => {
+  it("another host is untouched: /mcp there is still the MCP endpoint", async () => {
     const response = await SELF.fetch("https://capsid.test/mcp", { method: "POST", redirect: "manual" });
     expect(response.status).toBe(401);
   });

@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 
 // THE SEAT'S QUEUE ACTIONS AS access:<email>, through the real capsid_work_jobs tool,
@@ -16,7 +16,7 @@ const SECRET = "test-root-secret";
 const ADMIN_EMAIL = "admin@example.com";
 const SEAT_ACTOR = `access:${ADMIN_EMAIL}`;
 const SEAT = adminAgentForEmail(ADMIN_EMAIL);
-const DRIVER = legacyAgent("write", "agent:access-seat-driver");
+const DRIVER = grantAgent("write", "agent:access-seat-driver");
 const NOW = new Date("2026-09-28T01:00:00.000Z");
 
 function jobsEnv() {

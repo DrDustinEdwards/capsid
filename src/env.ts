@@ -9,7 +9,6 @@ import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 // here so tests and the deploy check can hold other values.
 export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   OAUTH_PROVIDER: OAuthHelpers;
-  OPERATOR_KEY_HASH: string;
   COOKIE_ENCRYPTION_KEY: string;
   // The MCP and Portal logins' upstream: Cloudflare Access for SaaS (OIDC),
   // src/access-login.ts. Unset, the sign-in is closed; ADMIN_EMAIL unset admits nobody,
@@ -92,8 +91,8 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
 }
 
 // What the GitHub modules (src/github/) are handed: everything except the credentials
-// that mint backup read access, the Cloudflare read token (it can read Worker code), the
-// Access sync's write token and the key that signs phone alerts.
+// that mint backup read access, the Cloudflare read token (it can read Worker code) and
+// the key that signs phone alerts.
 export type RepoEnv = Omit<Env, "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "VAPID_PRIVATE_KEY">;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move

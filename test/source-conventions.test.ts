@@ -17,7 +17,7 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 test("every secret compare goes through safeEqual, in every file", () => {
   // The specific compares, still where they belong.
   const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
-  assert.ok(auth.includes("await safeEqual(readonly ? entry.slice(3) : entry, hash)"));
+  assert.ok(auth.includes("await safeEqual(candidate, entry)"));
   const accessLogin = sourceFiles().find((f) => f.name === "access-login.ts")!.text;
   assert.match(accessLogin, /await safeEqual\(await sha256Hex\(stateCookie\), signIn\.binding\)/);
 
@@ -47,7 +47,7 @@ test("every safeEqual, isAdminEmail and adminGrantEmail call is awaited, in ever
       .flatMap((l) => [...l.text.matchAll(/(\bawait\s+\(?)?\b(safeEqual|isAdminEmail|adminGrantEmail)\(/g)].map((m) => ({ ...l, awaited: Boolean(m[1]) })))
       .filter((c) => !/^export async function /.test(c.text))
   );
-  assert.ok(calls.length >= 17, `found only ${calls.length} calls`);
+  assert.ok(calls.length >= 16, `found only ${calls.length} calls`);
   assert.deepEqual(calls.filter((c) => !c.awaited).map((c) => `src/${c.file}:${c.line} ${c.text}`), []);
 });
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
 import { AUTHORITATIVE } from "../src/counts.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface.ts";
@@ -86,7 +86,7 @@ test("a caller with no scopes at all is refused everything, which is what the fa
 });
 
 test("the legacy caller passes every check, which is the one thing this migration must not break", () => {
-  const legacy = legacyAgent("write", "opkey:0123456789ab");
+  const legacy = grantAgent("write", "opkey:0123456789ab");
   for (const tool of Object.keys(TOOL_GRANTS)) {
     assert.equal(checkScope(legacy, { tool, namespace: "foxhound", repo: "legacy", grant: "write", flags: SCOPE_FLAGS }), null, `the legacy key was refused ${tool}`);
   }
@@ -337,7 +337,7 @@ function isReadCall(tool: string, action: string | undefined): boolean {
 // admin identity holding only the read grant: a non-admin is refused there as not the
 // admin before any grant question arises, which would prove nothing about the grant.
 function readOnlyCaller(surface: Surface): Agent {
-  const reader = legacyAgent("read", "opkey:readonly0000");
+  const reader = grantAgent("read", "opkey:readonly0000");
   return surface === "admin" ? { ...reader, admin: true } : reader;
 }
 

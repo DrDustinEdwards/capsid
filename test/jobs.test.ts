@@ -8,7 +8,7 @@ import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { sourceFile } from "./source-files.ts";
 import { claimJob, completeJob, failJob, postJob, resumeJob, supersedeJob } from "../src/jobs.ts";
-import { legacyAgent, type Agent } from "../src/agents.ts";
+import { grantAgent, type Agent } from "../src/agents.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { MAX_RESUME_NOTE, MAX_TITLE } from "../src/limits.ts";
@@ -63,7 +63,7 @@ test("the partial index and OPEN_JOB_STATUSES name the same statuses", () => {
 test("supersede refuses a missing reason and a swallowed tag before it reads anything", async () => {
   // fakeEnv with no DB, so a refusal that reached the database would throw rather
   // than pass quietly.
-  const agent = legacyAgent("write", "github:DrDustinEdwards");
+  const agent = grantAgent("write", "github:DrDustinEdwards");
   const now = new Date("2026-09-24T12:00:00.000Z");
   const blank = await supersedeJob(fakeEnv({}), agent, now, "job_abc123abc123", { reason: "  " });
   assert.equal(blank.ok, false);
@@ -211,7 +211,7 @@ test("ordinary prose is not refused, including prose ABOUT the pattern", () => {
 // the database. fakeEnv has no DB, so a handler that stopped refusing would throw on
 // the missing binding rather than pass quietly.
 test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothing", async () => {
-  const agent = legacyAgent("write", "agent:capsid-driver");
+  const agent = grantAgent("write", "agent:capsid-driver");
   const now = new Date("2026-09-11T22:00:00.000Z");
 
   const completed = await completeJob(fakeEnv({}), agent, now, "job_abc123abc123", {
@@ -332,7 +332,7 @@ test("PLANT: a claim whose bad-signature job moved first writes no mirror and no
     { ...MOVED_JOB, status: "queued", claimed_by: null },
     { ...MOVED_JOB, status: "claimed", claimed_by: "agent:other-driver" }
   );
-  const out = await claimJob(fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }), legacyAgent("write", "agent:capsid-driver"), new Date("2026-09-25T09:00:00Z"), {
+  const out = await claimJob(fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }), grantAgent("write", "agent:capsid-driver"), new Date("2026-09-25T09:00:00Z"), {
     id: "job_abc123abc123",
   });
   assertGuardedFailBatch(attempted);
@@ -379,7 +379,7 @@ test("PLANT: post into a namespace that is not registered is refused and writes 
   // does not exist, which write refuses for the same document path.
   const d1 = fakeD1({});
   const env = fakeEnv({ DB: d1.db, IMPROVE_SCORE_SECRET: "test-secret" });
-  const agent = legacyAgent("write", "agent:capsid-driver");
+  const agent = grantAgent("write", "agent:capsid-driver");
   const refused = await postJob(env, agent, new Date("2026-09-25T09:00:00Z"), { namespace: "nosuchns", title: "a job", body: "do it" });
   assert.equal(refused.ok, false, "a job was posted into an unregistered namespace");
   assert.match(refused.refusal ?? "", /unknown namespace 'nosuchns'/);

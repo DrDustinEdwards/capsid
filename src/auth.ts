@@ -1,6 +1,5 @@
-import { bearerToken } from "@dustinedwards/site-runtime/agent-keys";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
-import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
+import { toHex } from "@dustinedwards/site-runtime/encoding";
 import { hostCookie } from "@dustinedwards/site-runtime/headers";
 
 // HMAC-SHA256, hex. The one definition.
@@ -43,34 +42,6 @@ export function getCookie(request: Request, name: string): string | null {
     if (!jar.has(key)) jar.set(key, part.slice(eq + 1).trim());
   }
   return jar.get(`__Host-${name}`) ?? jar.get(`__Secure-${name}`) ?? jar.get(name) ?? null;
-}
-
-// OPERATOR_KEY_HASH: comma-separated sha256 hex. Plain = write, "ro:" = read.
-// Revoke by removing a hash. A single unprefixed hash still parses as write.
-type OperatorGrant = "write" | "read" | null;
-
-// Fingerprint is 12 hex of the presented key's sha256, not the stored verifier.
-export interface OperatorIdentity {
-  grant: OperatorGrant;
-  fingerprint: string | null;
-}
-
-export async function operatorIdentity(
-  request: Request,
-  env: { OPERATOR_KEY_HASH?: string }
-): Promise<OperatorIdentity> {
-  const token = bearerToken(request.headers.get("Authorization"));
-  if (!token || !env.OPERATOR_KEY_HASH) return { grant: null, fingerprint: null };
-  const hash = await sha256Hex(token);
-  for (const raw of env.OPERATOR_KEY_HASH.split(",")) {
-    const entry = raw.trim().toLowerCase();
-    if (!entry) continue;
-    const readonly = entry.startsWith("ro:");
-    if (await safeEqual(readonly ? entry.slice(3) : entry, hash)) {
-      return { grant: readonly ? "read" : "write", fingerprint: hash.slice(0, 12) };
-    }
-  }
-  return { grant: null, fingerprint: null };
 }
 
 type AdminEnv = { ADMIN_EMAIL?: string; CO_OWNER_EMAILS?: string };

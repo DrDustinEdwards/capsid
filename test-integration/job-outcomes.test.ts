@@ -5,7 +5,7 @@ import { blockJob, claimJob, completeJob, failJob, postJob, resumeJob } from "..
 import { capsidStatus } from "../src/status";
 import { reverifyStatements } from "../src/outcome-prs";
 import { outcomeStatement } from "../src/job-outcomes";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { buildServer } from "../src/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
@@ -16,7 +16,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 const SECRET = "test-root-secret";
 const SEAT = "github:DrDustinEdwards";
 const DRIVER_ACTOR = "agent:driver-aaaa";
-const DRIVER = legacyAgent("write", DRIVER_ACTOR);
+const DRIVER = grantAgent("write", DRIVER_ACTOR);
 
 function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
@@ -26,7 +26,7 @@ const at = (iso: string) => new Date(iso);
 const NOW = at("2026-09-10T12:00:00.000Z");
 
 async function post(over: Record<string, unknown> = {}) {
-  return postJob(jobsEnv(), legacyAgent("write", SEAT), NOW, {
+  return postJob(jobsEnv(), grantAgent("write", SEAT), NOW, {
     namespace: "capsid",
     title: "a job",
     body: "do the thing",
@@ -288,7 +288,7 @@ describe("job outcomes", () => {
     // Resume with take hands a caller a claim exactly as a claim does, so a driver
     // that could not have claimed the job must not acquire it by resuming it.
     const OTHER_ACTOR = "agent:driver-dddd";
-    const OTHER = legacyAgent("write", OTHER_ACTOR);
+    const OTHER = grantAgent("write", OTHER_ACTOR);
     await plantOutcome("job_history0001", 2, 2, FULLY_VERIFIED);
     const posted = await post({ title: "needs a record to take over", min_record: { prs_merged: 2 }, gate_required: true });
     const id = posted.job!.id;

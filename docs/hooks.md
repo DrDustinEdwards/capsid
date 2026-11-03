@@ -27,7 +27,7 @@ Hook events are kept 30 days. Each call prunes a bounded batch of older rows.
 
 ## Who may post
 
-The request carries the session's own key as `Authorization: Bearer <key>`. Capsid resolves it the way `/ops/mcp` does. A missing, unknown or revoked key gets 401. A key that resolves but is not a driver or the admin gets 403, and so does any key without the write grant. The events bind to a job:
+The request carries the session's own key as `Authorization: Bearer <key>`. Capsid resolves it the way `/ops/mcp` does. A missing, unknown or revoked key gets 401. A key that resolves but is not a driver gets 403, and so does any key without the write grant. The events bind to a job:
 
 - a driver key: the one job it holds claimed, or no job when it holds none or more than one
 

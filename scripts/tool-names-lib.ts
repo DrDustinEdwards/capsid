@@ -1,11 +1,9 @@
-// The MCP 4 regroup's data migration, as pure functions (capsid/rulings/mcp-2026-10-10.md:
-// "No legacy names: the same PR rewrites every queued job body, skill and canon doc naming
-// an old tool, and migrates agent credentials' tools lists and grants"). The script that
-// applies them is scripts/migrate-tool-names.ts; test/tool-names-lib.test.ts drives these.
+// The MCP 4 regroup's name mapping (capsid/rulings/mcp-2026-10-10.md), kept for the rule
+// docs lint: src/rule-docs.ts reads it to flag an old tool name still in a document.
 //
 // THE MAPPING. Every tool the old surface served maps to a new tool and, where the new
-// tool takes one, an action. src/tools/surface.ts is the source of truth for the new side,
-// and the test holds this table to it.
+// tool takes one, an action. test/tool-names-lib.test.ts holds the table to
+// src/tools/surface.ts.
 
 /** Old tools that became one action of a new tool. [new tool, action or null]. */
 export const SIMPLE: Record<string, [string, string | null]> = {
@@ -82,7 +80,6 @@ export const SPLIT: Record<string, Record<string, [string, string]>> = {
     pause: ["capsid_admin_control_improve", "pause"],
     unpause: ["capsid_admin_control_improve", "unpause"],
     budget: ["capsid_admin_control_improve", "budget"],
-    mint_operator_key: ["capsid_admin_control_improve", "mint_operator_key"],
     sign_policy: ["capsid_admin_control_improve", "sign_policy"],
     register_skill: ["capsid_admin_control_improve", "register_skill"],
     breaker_reset: ["capsid_admin_control_improve", "breaker_reset"],
@@ -96,124 +93,6 @@ const SPLIT_DEFAULT: Record<string, string> = { improve_run: "run" };
 
 /** Every old tool name. */
 export const OLD_TOOLS: string[] = [...Object.keys(SIMPLE), ...Object.keys(RENAMED), ...Object.keys(SPLIT)];
-
-// Each new tool's actions that some old tool served. A new tool whose every such action is
-// granted is granted whole, so it also gains the actions this regroup added (site, tag,
-// release, builds, build_logs): the same reading as a bare tool name, which has always
-// meant the whole tool.
-export const OLD_ACTIONS_OF: Record<string, Set<string>> = (() => {
-  const out: Record<string, Set<string>> = {};
-  const add = (tool: string, action: string | null) => {
-    out[tool] ??= new Set();
-    if (action !== null) out[tool].add(action);
-  };
-  for (const [tool, action] of Object.values(SIMPLE)) add(tool, action);
-  for (const actions of Object.values(SPLIT)) for (const [tool, action] of Object.values(actions)) add(tool, action);
-  for (const tool of Object.values(RENAMED)) add(tool, null);
-  return out;
-})();
-
-/**
- * What one old tools-axis entry grants on the new surface: [new tool, action] pairs, where
- * action "*" is the whole tool.
- * `entry`: an old entry, "tool" or "tool.action"
- * `list`: the whole old list, for the narrowing rule
- * Returns null when the entry names no old tool
- */
-export function grantsOf(entry: string, list: readonly string[]): Array<[string, string]> | null {
-  const dot = entry.indexOf(".");
-  const tool = dot < 0 ? entry : entry.slice(0, dot);
-  const action = dot < 0 ? undefined : entry.slice(dot + 1);
-  if (Object.hasOwn(SIMPLE, tool)) {
-    if (action !== undefined) return [];
-    const [next, nextAction] = SIMPLE[tool];
-    return [[next, nextAction ?? "*"]];
-  }
-  if (Object.hasOwn(RENAMED, tool)) {
-    const next = RENAMED[tool];
-    if (action !== undefined) return list.includes(tool) ? [[next, action]] : [];
-    // A bare name with a qualified sibling is narrowed to the siblings (allowsToolAction).
-    return list.some((e) => e.startsWith(`${tool}.`)) ? [] : [[next, "*"]];
-  }
-  if (Object.hasOwn(SPLIT, tool)) {
-    const actions = SPLIT[tool];
-    if (action !== undefined) {
-      if (!list.includes(tool) || !Object.hasOwn(actions, action)) return [];
-      const [next, nextAction] = actions[action];
-      return [[next, nextAction]];
-    }
-    if (list.some((e) => e.startsWith(`${tool}.`))) return [];
-    return Object.values(actions).map(([next, nextAction]) => [next, nextAction]);
-  }
-  return null;
-}
-
-/**
- * The new tools axis an old one grants. "*" stays "*". An entry that names no old tool (a
- * new name already, or anything else) is kept as written.
- */
-export function newToolsAxis(list: "*" | readonly string[]): "*" | string[] {
-  if (list === "*") return "*";
-  const granted: Map<string, Set<string>> = new Map();
-  const kept = [];
-  for (const entry of list) {
-    const pairs = grantsOf(entry, list);
-    if (pairs === null) {
-      kept.push(entry);
-      continue;
-    }
-    for (const [tool, action] of pairs) {
-      if (!granted.has(tool)) granted.set(tool, new Set());
-      (granted.get(tool) as Set<string>).add(action);
-    }
-  }
-  const out = [];
-  for (const [tool, actions] of granted) {
-    const known = OLD_ACTIONS_OF[tool] ?? new Set();
-    const whole = actions.has("*") || (known.size > 0 && [...known].every((a) => actions.has(a)));
-    out.push(tool);
-    if (!whole) for (const action of [...actions].sort()) out.push(`${tool}.${action}`);
-  }
-  // An entry already in the new form (a re-run) is not doubled.
-  for (const entry of kept) if (!out.includes(entry)) out.push(entry);
-  return out;
-}
-
-/** True for an entry that names an old tool, bare or qualified. */
-export function isOldEntry(entry: string): boolean {
-  const dot = entry.indexOf(".");
-  return OLD_TOOLS.includes(dot < 0 ? entry : entry.slice(0, dot));
-}
-
-/**
- * Phase "add": the old entries kept beside the new ones, so the agent works on the old
- * Worker before the deploy, on the new one after it, and on the old one again after a
- * rollback. An old name on the new Worker names no tool and grants nothing.
- */
-export function addedToolsAxis(list: "*" | readonly string[]): "*" | string[] {
-  if (list === "*") return "*";
-  const next = newToolsAxis(list);
-  if (next === "*") return "*";
-  const out = [...list];
-  for (const entry of next) if (!out.includes(entry)) out.push(entry);
-  return out;
-}
-
-/**
- * Phase "prune": the old entries removed. Refuses a list that has no new entry for an old
- * one, which means the add phase never ran for it: pruning would leave it with nothing.
- */
-export function prunedToolsAxis(list: "*" | readonly string[]): "*" | string[] {
-  if (list === "*") return "*";
-  const old = list.filter(isOldEntry);
-  const rest = list.filter((e) => !isOldEntry(e));
-  const wanted = newToolsAxis(old);
-  const missing = wanted === "*" ? [] : wanted.filter((e) => !rest.includes(e));
-  if (missing.length > 0) {
-    throw new Error(`the add phase has not run for this list: it lacks ${missing.join(", ")}. Run --phase add first.`);
-  }
-  return rest;
-}
 
 // ---- prose ------------------------------------------------------------------------
 
@@ -269,7 +148,7 @@ const SPAN = new RegExp(
   "`(" + NAMES + ")(?:\\.([a-z_]+))?((?:\\([^`]*\\))?)(?:\\s+action\\s+\"?([a-z_]+)\"?)?`" + "(?:\\s+action\\s+(?:`([a-z_]+)`|\"([a-z_]+)\"))?",
   "g"
 );
-// name( outside backticks: not a method (.name(), a path (mint-agents(), or a longer word.
+// name( outside backticks: not a method (.name(), a path (deploy-check(), or a longer word.
 const CALL = new RegExp("(^|[^\\w.`$/-])(" + NAMES + ")\\(", "g");
 // A file name is not a qualified tool (`agents.ts`).
 const FILE_EXTENSION = /^(ts|js|mjs|cjs|md|json|sql|yml|yaml|toml|txt|html|css)$/;
@@ -368,16 +247,4 @@ export function rewriteProse(text: string): {
     }
   }
   return { text: lines.join("\n"), changes, fenced, unmapped, ambiguous };
-}
-
-// ---- job bodies -------------------------------------------------------------------
-
-// A stored job body carries the signature as frontmatter (src/improve-task.ts
-// signTaskBody). The edit re-signs the text it is given, so the signature is taken off
-// first; rewriting it in place would leave a signature over other text.
-const SIGNED = /^---\ncapsid-task-signature: [0-9a-f]+\n---\n/;
-
-/** The signed text of a stored job body. */
-export function unsignedBody(stored: string): string {
-  return stored.replace(SIGNED, "");
 }

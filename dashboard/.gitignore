@@ -7,3 +7,5 @@ dev/generated/
 # Written by the browser tests (npm run e2e).
 test-results/
 playwright-report/
+# Written by tsc -b; never committed.
+*.tsbuildinfo

@@ -10,15 +10,9 @@
 #   cloudflare-platform   scripts/bindings.mjs
 #   counts                scripts/verify-live.mjs (the live gate count)
 #   deploy-pipeline       scripts/deploy.mjs
-#   improve-derive-key    scripts/improve-derive-key.mjs
-#   improve-report        scripts/improve-report.mjs
 #   integration-layer     scripts/bindings.mjs
-#   workflow-policy       scripts/improve-report.mjs
 canary.test.ts
 cloudflare-platform.test.ts
 counts.test.ts
 deploy-pipeline.test.ts
-improve-derive-key.test.ts
-improve-report.test.ts
 integration-layer.test.ts
-workflow-policy.test.ts

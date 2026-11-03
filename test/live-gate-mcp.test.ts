@@ -6,7 +6,7 @@ import { createMcpHandler } from "agents/mcp/server";
 // @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
 // runs in the live CI job with no npm ci and no build step.
 import { EXPECTED_TOOLS, eraSteps, probeMcp, rpcMessage, stepProblem } from "../scripts/mcp-probe-lib.mjs";
-import { ROLES } from "../scripts/mint-agents.ts";
+import { ROLES } from "../scripts/roles.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 import { serveMcp } from "../src/mcp-handler.ts";
@@ -24,10 +24,10 @@ import { breaking, type Handler, healthy, NON_HTML, run } from "./verify-live-st
 
 const KEY = "live-probe-test-key";
 
-// The live-probe role, as an agent: its scopes from scripts/mint-agents.ts, not restated.
+// The live-probe role, as an agent: its scopes from scripts/roles.ts, not restated.
 function probeAgent(): Agent {
   const role = ROLES.find((r) => r.name === "live-probe");
-  assert.ok(role, "no live-probe role in scripts/mint-agents.ts");
+  assert.ok(role, "no live-probe role in scripts/roles.ts");
   const scopes = defaultScopes(role.namespaces);
   type Scopes = Agent["scopes"];
   scopes.grants = role.grants as Scopes["grants"];

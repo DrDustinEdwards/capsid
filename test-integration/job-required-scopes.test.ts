@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 
 // required_scopes at the claim and the resume, on the real path. test/jobs-agents.test.ts
@@ -36,7 +36,7 @@ function mintedSeat(namespace = "capsid"): Agent {
   return { id: "agent_0123456789ab", name, kind: "driver", actor: `agent:${name}`, scopes, admin: false, row: null };
 }
 
-const SEAT_AGENT = legacyAgent("write", SEAT);
+const SEAT_AGENT = grantAgent("write", SEAT);
 
 // No cast on purpose: a cast would let a misspelled field (the tool's required_flags
 // instead of the function's required_scopes) typecheck and post a job with no

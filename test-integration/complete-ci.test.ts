@@ -3,15 +3,15 @@ import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { claimJob, completeJob, failAsCaller, postJob } from "../src/jobs";
 import { breakerState } from "../src/job-breaker";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { readJob } from "../src/jobs-transition";
 
 // The CI gate on complete (src/complete-ci.ts) against real D1, with GitHub as a fetch stub.
 
 const NS = "sample";
 const PR = (n: number) => `https://github.com/example/sample/pull/${n}`;
-const DRIVER = legacyAgent("write", "agent:driver-aaaa");
-const SEAT = legacyAgent("write", "access:seat@example.com");
+const DRIVER = grantAgent("write", "agent:driver-aaaa");
+const SEAT = grantAgent("write", "access:seat@example.com");
 const NOW = new Date("2026-10-23T12:00:00.000Z");
 
 function jobsEnv() {

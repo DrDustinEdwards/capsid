@@ -35,7 +35,7 @@ const decodeBase64url = (text: string): string => new TextDecoder().decode(fromB
 //
 // Every cookie here is host-only (no Domain attribute, ever) and scoped by portalCookiePath
 // (src/portal-host.ts): Path=/ on portal.dustinedwards.info, a host that serves nothing
-// but the Portal, and Path=/portal on workers.dev, so /mcp and /ops there never see it. The Portal was at /console until PR B
+// but the Portal, and Path=/portal on any other host, so /mcp and /ops there never see it. The Portal was at /console until PR B
 // of capsid/research/design-portal-unify.md. A Path=/console cookie from then is never
 // sent here, so a browser signed in there signs in once more.
 
@@ -240,12 +240,12 @@ export async function handlePortalCallback(request: Request, env: Env, now: Date
   return new Response(null, { status: 302, headers });
 }
 
-// A bearer token is refused, not redirected. An agent or operator key presented to
+// A bearer token is refused, not redirected. An agent key presented to
 // the Portal is a caller that cannot follow a login redirect: a 302 would send a
 // machine to the Access sign-in and look, from its side, like the Portal being down.
 // The refusal names what was presented and what the page admits instead.
 const BEARER_REFUSAL =
-  "forbidden: Capsid Portal admits the administrator's Access session only. An operator key or an agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_run_improve action status and capsid_work_jobs there. Open the Portal in a browser to sign in as the administrator.";
+  "forbidden: Capsid Portal admits the administrator's Access session only. An agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_run_improve action status and capsid_work_jobs there. Open the Portal in a browser to sign in as the administrator.";
 
 export type PortalGate = { ok: true; user: PortalUser } | { ok: false; response: Response };
 

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import type { Env } from "../src/env";
 import { NAMESPACE_DELETE_MAX_DOCUMENTS, planFingerprint, readDeletePlan } from "../src/namespace-delete";
@@ -221,7 +221,7 @@ describe("capsid_admin_manage_namespaces is admin only", () => {
     // toolListed; area 11, T7) and the protocol refuses the call.
     const ns = fresh();
     await register(ns);
-    await expect(callAs(legacyAgent("read", "opkey:readonly0000"), { namespace: ns, action: "delete_preview" })).rejects.toThrow(/not found/i);
+    await expect(callAs(grantAgent("read", "opkey:readonly0000"), { namespace: ns, action: "delete_preview" })).rejects.toThrow(/not found/i);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
 });
@@ -370,9 +370,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     await env.DB.prepare("INSERT INTO ops_sites (namespace, name, origin, platform) VALUES (?1, 'Sample', 'https://sample.example.com', 'cloudflare')")
       .bind(ns)
       .run();
-    await env.DB.prepare("INSERT INTO access_sync_groups (namespace, group_id, group_name, pinned_by) VALUES (?1, ?2, 'sample-people', 'access:admin@example.com')")
-      .bind(ns, `group-${ns}`)
-      .run();
 
     const p = await preview(ns, { cascade: true });
     expect(p.verdict, p.refusals.join(" ")).toBe("allowed");
@@ -397,7 +394,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'", ns)).toBe(0);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(0);
     expect(await n("SELECT COUNT(*) AS n FROM ops_sites WHERE namespace = ?1", ns)).toBe(0);
-    expect(await n("SELECT COUNT(*) AS n FROM access_sync_groups WHERE namespace = ?1", ns)).toBe(0);
     expect(
       await n(
         "SELECT COUNT(*) AS n FROM document_links WHERE (from_ns = ?1 AND from_path IN ('core.md', 'notes/a.md')) OR (to_ns = ?1 AND to_path IN ('core.md', 'notes/a.md'))",
@@ -434,7 +430,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
       plan: { counts: Record<string, number>; cascade: boolean; documents_deleted: string[] };
       edges_removed: Array<Record<string, string>>;
       ops_site: Record<string, unknown> | null;
-      access_sync_group: Record<string, unknown> | null;
       namespace_row: Record<string, unknown> | null;
     };
     expect(params.plan.cascade).toBe(true);
@@ -444,7 +439,6 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     expect(params.edges_removed).toContainEqual({ from_ns: other, from_path: "x.md", type: "references", to_ns: ns, to_path: "core.md" });
     expect(params.ops_site?.origin).toBe("https://sample.example.com");
     expect(params.ops_site?.revision).toBe(1);
-    expect(params.access_sync_group?.group_name).toBe("sample-people");
     expect(params.namespace_row?.namespace).toBe(ns);
 
     // The archive stays readable under the deleted name.

@@ -15,9 +15,9 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // handleOperatorAdminMcp and src/index.ts apiHandler. The unit tests prove what each
 // server registers; this proves which server each route builds for which caller.
 //
-//   /ops/mcp/admin  a key. 401 with none, 403 for any key that is not the admin's, and
-//                   both before a server is built. The admin key lists the 8 admin tools.
-//   /ops/mcp        Capsid's 11 and no capsid_admin_ tool, even for the admin key.
+//   /ops/mcp/admin  a key. 401 with none, 403 for any key (no minted key is the admin),
+//                   both before a server is built.
+//   /ops/mcp        Capsid's 11 and no capsid_admin_ tool.
 //   /mcp/admin      the administrator's OAuth session, which lists the 8 admin tools.
 //
 // The calls are the ones .claude/rules/deploy.md names: initialize,
@@ -120,7 +120,7 @@ describe(`${ADMIN_OPS_MCP_ROUTE}, for a key`, () => {
     for (const method of ["initialize", "tools/list"]) {
       const answer = await rpc(ADMIN_OPS_MCP_ROUTE, null, method, method === "initialize" ? { protocolVersion: ERA, capabilities: {}, clientInfo: { name: "admin-route", version: "1.0.0" } } : {});
       expect(answer.status, answer.text).toBe(401);
-      expect(answer.text).toMatch(/an admin operator key is required/);
+      expect(answer.text).toMatch(/an admin key is required/);
       // The route's own refusal, not a server's: no JSON-RPC answer came back.
       expect(answer.message, "a JSON-RPC answer came back, so a server was built").toBeNull();
     }
@@ -147,41 +147,19 @@ describe(`${ADMIN_OPS_MCP_ROUTE}, for a key`, () => {
     const capsid = await listTools("/ops/mcp", DRIVER_KEY);
     expect(capsid.tools.length).toBeGreaterThan(0);
   });
-
-  it("PLANT: answers 403 to the read-only operator key, which is not the admin", async () => {
-    const answer = await rpc(ADMIN_OPS_MCP_ROUTE, env.TEST_OPERATOR_KEYS.read, "tools/list", {});
-    expect(answer.status, answer.text).toBe(403);
-    expect(answer.message).toBeNull();
-  });
-
-  it("lists exactly the 8 Capsid Admin tools to the admin key", async () => {
-    const { server, tools } = await listTools(ADMIN_OPS_MCP_ROUTE, env.TEST_OPERATOR_KEYS.write);
-    expect(server).toBe("capsid-admin");
-    expect(tools).toHaveLength(8);
-    expect(sorted(tools)).toEqual(sorted(CAPSID_ADMIN_TOOLS));
-    for (const name of tools) expect(name.startsWith("capsid_admin_"), name).toBe(true);
-  });
-
-  it("serves an admin tool's call to the admin key", async () => {
-    const answer = await callTool(ADMIN_OPS_MCP_ROUTE, env.TEST_OPERATOR_KEYS.write, "capsid_admin_read_claims", { namespace: "sample" });
-    expect(answer.status, answer.text.slice(0, 300)).toBe(200);
-    expect(answer.message?.error, answer.text.slice(0, 300)).toBeUndefined();
-    const result = answer.message?.result as { isError?: boolean; content: Array<{ text: string }> };
-    expect(result.isError, result.content[0]?.text).not.toBe(true);
-  });
 });
 
 describe("/ops/mcp serves Capsid and no Capsid Admin tool", () => {
-  it("PLANT: lists exactly Capsid's 11 to the admin key, and no capsid_admin_ tool", async () => {
-    const { server, tools } = await listTools("/ops/mcp", env.TEST_OPERATOR_KEYS.write);
+  it("PLANT: lists exactly Capsid's 11 to a key, and no capsid_admin_ tool", async () => {
+    const { server, tools } = await listTools("/ops/mcp", DRIVER_KEY);
     expect(server).toBe("capsid");
     expect(tools).toHaveLength(11);
     expect(sorted(tools)).toEqual(sorted(CAPSID_TOOLS));
     expect(tools.filter((t) => t.startsWith("capsid_admin_"))).toEqual([]);
   });
 
-  it("PLANT: an admin tool called on /ops/mcp, even by the admin key, does not run", async () => {
-    const answer = await callTool("/ops/mcp", env.TEST_OPERATOR_KEYS.write, "capsid_admin_read_claims", { namespace: "sample" });
+  it("PLANT: an admin tool called on /ops/mcp does not run", async () => {
+    const answer = await callTool("/ops/mcp", DRIVER_KEY, "capsid_admin_read_claims", { namespace: "sample" });
     const result = answer.message?.result as { isError?: boolean; content?: Array<{ text: string }> } | undefined;
     const refused = answer.message?.error !== undefined || result?.isError === true;
     expect(refused, `capsid_admin_read_claims ran on /ops/mcp: ${answer.text.slice(0, 300)}`).toBe(true);

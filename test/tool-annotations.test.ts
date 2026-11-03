@@ -359,7 +359,7 @@ const WRITE_IDEMPOTENCE: Record<string, { idempotent: boolean; reason: string }>
   capsid_admin_manage_namespaces: { idempotent: false, reason: "register creates one on every call it is not refused" },
   capsid_admin_manage_agents: { idempotent: false, reason: "mint issues a new credential on every call" },
   capsid_admin_run_controls: { idempotent: false, reason: "a perform spends its single-use token, so a repeat of the same call is refused rather than repeated" },
-  capsid_admin_control_improve: { idempotent: false, reason: "mint_operator_key issues a new key on every call" },
+  capsid_admin_control_improve: { idempotent: false, reason: "sign_policy snapshots and audit-logs the policy on every call" },
   capsid_admin_set_site_key: { idempotent: false, reason: "every call mints a different key" },
 };
 
