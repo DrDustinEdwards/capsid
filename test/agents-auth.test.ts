@@ -2,16 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schema.ts";
-import { adminAgentForEmail, legacyAgent, resolveAgent } from "../src/agents.ts";
+import { adminAgentForEmail, grantAgent, resolveAgent } from "../src/agents.ts";
 import { fakeD1, fakeEnv } from "./fakes.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // A bearer resolves to a caller, not to a tier, so the audit log can say whose
-// credential did a write. Two properties hold:
-//
-//   1. A minted agent is resolved first and carries exactly the scopes its row says.
-//   2. An operator key still works, with its current authority, until it is revoked
-//      by hand.
+// credential did a write: a minted agent carries exactly the scopes its row says.
 
 const KEY = "capsid_agent_" + "a".repeat(64);
 
@@ -35,7 +31,7 @@ async function envWithAgent(overrides: Record<string, unknown> = {}, rowOverride
       },
     ],
   });
-  return { d1, env: fakeEnv({ DB: d1.db, OPERATOR_KEY_HASH: await sha256Hex("legacy-write-key"), ...overrides }) };
+  return { d1, env: fakeEnv({ DB: d1.db, ...overrides }) };
 }
 
 const bearer = (key: string) => new Request("https://capsid.example/ops/mcp", { headers: { Authorization: `Bearer ${key}` } });
@@ -53,42 +49,9 @@ test("a minted key resolves to its agent row, with that row's scopes and audit i
   for (const flag of SCOPE_FLAGS) assert.equal(resolved.agent.scopes.flags[flag], false);
 });
 
-test("the agent row is looked up before OPERATOR_KEY_HASH is consulted", async () => {
-  // Both would resolve. The row has to win, or a key that is both an agent and an
-  // operator entry would keep the operator key's full authority.
-  const { env } = await envWithAgent({ OPERATOR_KEY_HASH: await sha256Hex(KEY) });
-  const resolved = await resolveAgent(bearer(KEY), env);
-  assert.ok(resolved);
-  assert.equal(resolved.agent.name, "capsid-driver");
-  assert.equal(resolved.agent.admin, false);
-});
-
-test("a revoked agent does not resolve, and does not fall through to the operator tier", async () => {
+test("a revoked agent does not resolve", async () => {
   const { env } = await envWithAgent({}, { revoked_at: "2026-09-11 01:00:00" });
   assert.equal(await resolveAgent(bearer(KEY), env), null);
-});
-
-test("an unknown bearer still falls back to OPERATOR_KEY_HASH, with the authority it has today", async () => {
-  const { env } = await envWithAgent();
-  const resolved = await resolveAgent(bearer("legacy-write-key"), env);
-  assert.ok(resolved, "the legacy operator key stopped working, which is the one thing this migration must not do");
-  assert.equal(resolved.agent.kind, "session");
-  assert.deepEqual(resolved.agent.scopes.grants, ["read", "write"]);
-  assert.equal(resolved.agent.scopes.namespaces, "*");
-  for (const flag of SCOPE_FLAGS) {
-    assert.equal(resolved.agent.scopes.flags[flag], true, `the legacy key must keep ${flag} until it is revoked by hand`);
-  }
-  assert.equal(resolved.agent.admin, true, "the legacy write key is what mints the first agents");
-  assert.match(resolved.agent.actor, /^opkey:[0-9a-f]{12}$/, "the legacy key keeps its fingerprint actor");
-});
-
-test("a read-only operator key resolves to a read grant and no flags", async () => {
-  const { env } = await envWithAgent({ OPERATOR_KEY_HASH: `ro:${await sha256Hex("legacy-read-key")}` });
-  const resolved = await resolveAgent(bearer("legacy-read-key"), env);
-  assert.ok(resolved);
-  assert.deepEqual(resolved.agent.scopes.grants, ["read"]);
-  assert.equal(resolved.agent.admin, false, "a read-only key cannot mint");
-  for (const flag of SCOPE_FLAGS) assert.equal(resolved.agent.scopes.flags[flag], false);
 });
 
 test("no bearer, or a bearer nothing knows, resolves to nothing at all", async () => {
@@ -120,10 +83,10 @@ test("resolving touches last_seen, and does it off the answer rather than inside
 });
 
 test("the legacy grant vocabulary still builds a caller, which is what keeps the tests and the fallback honest", () => {
-  const write = legacyAgent("write", "test:guard");
+  const write = grantAgent("write", "test:guard");
   assert.deepEqual(write.scopes.grants, ["read", "write"]);
   assert.equal(write.actor, "test:guard");
-  const read = legacyAgent("read", "test:ro");
+  const read = grantAgent("read", "test:ro");
   assert.deepEqual(read.scopes.grants, ["read"]);
   for (const flag of SCOPE_FLAGS) assert.equal(read.scopes.flags[flag], false);
 });

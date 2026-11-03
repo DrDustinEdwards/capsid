@@ -182,18 +182,19 @@ export function agentActor(name: string): string {
 // The driver bootstrap instruction. capsid_admin_manage_namespaces action register returns the mint command
 // rather than minting, so no credential crosses the tool boundary.
 // test/register-namespace-mint.test.ts asserts the script it names can parse it.
-export function driverAgentName(namespace: string): string {
+function driverAgentName(namespace: string): string {
   return `${namespace}-driver`;
 }
 
-export function driverKeyPath(namespace: string): string {
+function driverKeyPath(namespace: string): string {
   return `~/.capsid/agent-${driverAgentName(namespace)}.key`;
 }
 
 export function driverMintInstruction(namespace: string): string {
   return (
-    `Mint its driver agent as the admin: node scripts/mint-agents.ts --namespace ${namespace} --apply. ` +
-    `The key is returned once and lands in ${driverKeyPath(namespace)} at mode 0600. ` +
+    `Mint its driver agent as the admin: capsid_admin_manage_agents action mint with name ${driverAgentName(namespace)}, kind driver, ` +
+    `namespaces ["${namespace}"] and grants read and write; its repos come from this mapping. ` +
+    `The key is returned once: save it to ${driverKeyPath(namespace)} at mode 0600. ` +
     // Cannot import TOOL_GRANTS (src/scope.ts imports this module), so
     // test/audit-2026-09-16.test.ts holds the sentence and the table together.
     `capsid_admin_manage_namespaces action register does not mint it: minting is admin only, and capsid_admin_manage_namespaces action register is itself admin only.`

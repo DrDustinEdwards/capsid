@@ -104,7 +104,6 @@ Canon is what every agent is told to trust: `capsid/conventions.md` and `capsid/
 
 - **Only the admin, the seat (`can_merge`) and a portfolio-wide key (namespaces `*`, the key Dustin's cloud sessions use) change canon.** For them a canon write, restore, move or delete is an ordinary one: snapshotted and audit-logged.
 - **A key scoped to some namespaces (a site driver, a cron) is refused** every write, restore, move and delete of canon, and a move onto a canon path, with nothing changed.
-- Until 2026-10-31 such a key's write became a proposal in `canon_proposals` (migration 0034) for the admin to approve. Nobody approved them any more and Dustin's own sessions were held there too, so he had the queue deleted. The table and its decided rows stay, in backups, until a migration drops it.
 
 ## Rule documents are held to their cap and to served tool names
 
@@ -143,12 +142,12 @@ document delete. Despite its name, it covers only the signed policy documents.
 What the batch deletes: every live document (every path outside `archive/`), each
 snapshotted to `document_versions` first and then removed by the same path helper a
 document delete uses, which takes every edge touching it too; the `ops_sites` row;
-the `access_sync_groups` pin; the `namespaces` row. An edge that was already dangling (its end in the namespace
+the `namespaces` row. An edge that was already dangling (its end in the namespace
 names no document) touches nothing deleted and stays. One audit row, action
 `namespace-delete`, holds the counts, the deleted paths, the removed edges, and
-the `ops_sites`, `access_sync_groups` and `namespaces` rows whole.
+the `ops_sites` and `namespaces` rows whole.
 
-The whole delete is one D1 batch, and D1 caps a batch at 100 statements: six fixed
+The whole delete is one D1 batch, and D1 caps a batch at 100 statements: five fixed
 ones plus two per document. So a namespace with more than 47 live documents is
 refused at preview and at perform, never half deleted. Delete or move documents
 with the `capsid_delete_doc` tool first, or ask the seat to rule a set-based helper.
@@ -377,7 +376,7 @@ number a human can read on the page.
 ## Roles, and what each one cannot do
 
 Ruled 2026-09-12. Roles are few and separated, and a role is one capability rather
-than a bundle. `scripts/mint-agents.ts` holds them and a test fails the build if any
+than a bundle. `scripts/roles.ts` holds them and a test fails the build if any
 role names a second blast-radius flag. A role that accumulates flags is still a driver.
 
 The tools axis can name an action. `capsid_work_jobs` is one tool with a read action and

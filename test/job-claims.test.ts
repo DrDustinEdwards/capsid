@@ -13,7 +13,7 @@ import {
 } from "../src/job-claims.ts";
 import { verifyEvidence, type GitHubFacts } from "../src/job-outcomes.ts";
 import { blockJob, completeJob, failJob } from "../src/jobs.ts";
-import { legacyAgent } from "../src/agents.ts";
+import { grantAgent } from "../src/agents.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 
 // Claims apart from verified outcomes (migrations/0023, src/job-claims.ts): what node
@@ -318,7 +318,7 @@ test("verifyEvidence with nothing to read exposes NULL facts, never 0 or false",
 test("PLANT: complete, fail and block refuse a bad claim and write nothing", async () => {
   // fakeEnv has no DB, so a handler that reached the database would throw on the
   // missing binding rather than pass quietly.
-  const agent = legacyAgent("write", "agent:sample-driver");
+  const agent = grantAgent("write", "agent:sample-driver");
   const id = "job_abc123abc123";
   const completed = await completeJob(fakeEnv({}), agent, NOW, id, { result_summary: "landed", claim: "{not json" });
   assert.equal(completed.ok, false, "complete accepted an unparseable claim");

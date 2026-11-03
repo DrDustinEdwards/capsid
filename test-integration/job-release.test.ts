@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { adminFailJob, claimJob, failAsCaller, postJob, releaseJob } from "../src/jobs";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 
 // The seat stepping in on a claimed job whose holder is gone: release it to the queue,
@@ -10,7 +10,7 @@ import { defaultScopes } from "../src/agents-schema";
 // the seat read, and every assertion reads the rows back.
 
 const SECRET = "test-root-secret";
-const POSTER = legacyAgent("write", "github:DrDustinEdwards");
+const POSTER = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-09-26T06:00:00.000Z");
 const LATER = new Date("2026-09-26T07:00:00.000Z");
 

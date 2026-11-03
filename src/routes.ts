@@ -95,11 +95,10 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 
 async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   // The bearer is resolved to a caller once, here, and every tool in this request is
-  // checked against it. A minted agent carries the scopes its row says; a legacy
-  // operator key resolves to the unrestricted caller until it is revoked by hand.
+  // checked against it. A minted agent carries the scopes its row says.
   const resolved = await resolveAgent(request, env);
   if (!resolved) {
-    return new Response("unauthorized: valid operator key or agent key required", {
+    return new Response("unauthorized: a valid agent key is required", {
       status: 401,
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
@@ -112,14 +111,13 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
   return serveMcp(request, env, ctx, "/ops/mcp", () => buildServer(env, resolved.agent));
 }
 
-// Capsid Admin for a key (src/mcp-handler.ts ADMIN_OPS_MCP_ROUTE): the seat's scripts
-// (scripts/mint-agents.ts) reach the administrator tools with its operator key. Only
-// the admin identity is served; any other key is refused here, before a server is
-// built, and every tool on it is admin only in the registrar as well.
+// Capsid Admin for a key (src/mcp-handler.ts ADMIN_OPS_MCP_ROUTE). Only the admin
+// identity is served, and no minted key is the admin: any key is refused here, before a
+// server is built, and every tool on it is admin only in the registrar as well.
 async function handleOperatorAdminMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const resolved = await resolveAgent(request, env);
   if (!resolved) {
-    return new Response("unauthorized: an admin operator key is required", {
+    return new Response("unauthorized: an admin key is required", {
       status: 401,
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
@@ -137,7 +135,7 @@ async function handleBackup(request: Request, env: Env): Promise<Response> {
   // No credential, or one that resolves to nobody: 401, so a client knows to send one.
   const caller = await resolveAgent(request, env);
   if (!caller) {
-    return new Response("unauthorized: admin operator key required", {
+    return new Response("unauthorized: an admin key is required", {
       status: 401,
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
@@ -161,7 +159,7 @@ async function handleBackup(request: Request, env: Env): Promise<Response> {
 async function handleInbox(request: Request, env: Env): Promise<Response> {
   const caller = await resolveAgent(request, env);
   if (!caller) {
-    return new Response("unauthorized: an agent key or the operator key is required", {
+    return new Response("unauthorized: an agent key is required", {
       status: 401,
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });

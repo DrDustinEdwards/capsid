@@ -78,9 +78,8 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // spent, so a repeat is refused rather than repeated. Closing a pull request calls
   // GitHub, and a site repair calls the site's operator API.
   capsid_admin_run_controls: destructive({ idempotent: false, openWorld: true }),
-  // sign_policy overwrites a policy document (snapshotted), breaker_reset and overnight
-  // overwrite their switches, and mint_operator_key issues a key each call. Only this
-  // Worker's own stores.
+  // sign_policy overwrites a policy document (snapshotted and audit-logged each call), and
+  // breaker_reset and overnight overwrite their switches. Only this Worker's own stores.
   capsid_admin_control_improve: destructive({ idempotent: false, openWorld: false }),
   // Replaces a site's key on the site Worker and on Carrel through the Cloudflare API.
   capsid_admin_set_site_key: destructive({ idempotent: false, openWorld: true }),

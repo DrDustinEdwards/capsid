@@ -166,14 +166,14 @@ describe("the OAuth round trip", () => {
 
   it("PLANT: a token issued for this server is refused by another resource (RFC 8707 audience)", async () => {
     // Rule 12 of capsid/rulings/mcp-2026-10-10.md: reject any token not issued for this
-    // server. The old address is a second resource on the same Worker and the same
-    // OAUTH_KV, so the token is found there and refused only for its audience.
+    // server. Another host on the same Worker reaches the same OAUTH_KV, so the token is
+    // found there and refused only for its audience.
     const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
     const exchanged = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
     const { access_token } = (await exchanged.json()) as { access_token: string };
     expect((await mcpInitialize(access_token)).status, "the token does not open its own resource, so the refusal below proves nothing").toBe(200);
     const elsewhere = await call(
-      new Request("https://capsid.dustin-edwards.workers.dev/mcp", {
+      new Request("https://elsewhere.example.com/mcp", {
         method: "POST",
         headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "audience", version: "1.0.0" } } }),

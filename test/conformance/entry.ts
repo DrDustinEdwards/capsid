@@ -8,7 +8,7 @@
 // an empty local D1, so a write is refused and a read answers empty. The door is certified
 // separately: the auth half runs src/index.ts itself.
 
-import { legacyAgent } from "../../src/agents";
+import { grantAgent } from "../../src/agents";
 import type { Env } from "../../src/env";
 import { serveMcp } from "../../src/mcp-handler";
 import { buildServer } from "../../src/server";
@@ -18,6 +18,6 @@ export { ToolCallLog } from "@dustinedwards/site-runtime/audit-log";
 
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, legacyAgent("read", "conformance")));
+    return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, grantAgent("read", "conformance")));
   },
 } satisfies ExportedHandler<Env>;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { legacyAgent, type Agent } from "../src/agents.ts";
+import { grantAgent, type Agent } from "../src/agents.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import {
   OTLP_MAX_BYTES,
@@ -309,8 +309,8 @@ test("a session keeps the job it was first bound to; the capsid.job_id attribute
 
 test("only a driver, a runner key or the admin, holding write, may report on a session", () => {
   assert.equal(sessionCallerRefusal(driverAgent()), null);
-  assert.equal(sessionCallerRefusal(legacyAgent("write", "opkey:sample")), null, "the admin is refused");
-  assert.ok(sessionCallerRefusal(legacyAgent("read", "opkey:sample-ro")), "a read-only operator key is admitted");
+  assert.equal(sessionCallerRefusal(grantAgent("write", "opkey:sample")), null, "the admin is refused");
+  assert.ok(sessionCallerRefusal(grantAgent("read", "opkey:sample-ro")), "a read-only operator key is admitted");
   const readOnlyDriver = driverAgent();
   readOnlyDriver.scopes.grants = ["read"];
   assert.match(sessionCallerRefusal(readOnlyDriver) ?? "", /write grant/);

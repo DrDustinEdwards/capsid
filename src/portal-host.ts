@@ -4,10 +4,8 @@
 //
 // The Portal's routes are written once, under /portal (src/routes.ts). On the Portal host a
 // request for /x is handled as /portal/x, so every route, the gate and every check apply
-// unchanged; the workers.dev /portal keeps answering as before until the new address is
-// verified live, and is then retired by a follow-up PR. On the Portal host a browser asking
-// for /portal/... is sent to the same path at the root (308), so an old link lands on the new
-// address. The build's hashed files (/assets/...) are answered before this rewrite
+// unchanged. On the Portal host a browser asking for /portal/... is sent to the same path
+// at the root (308), so an old link lands on the new address. The build's hashed files (/assets/...) are answered before this rewrite
 // (src/portal-app.ts portalAsset).
 // Nothing else is reachable on the Portal host: /mcp, /health and the /ops routes are on
 // mcp.dustinedwards.info (src/mcp-host.ts), and on this host they are Portal paths behind

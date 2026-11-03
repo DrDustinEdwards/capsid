@@ -57,8 +57,6 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // the two tables.
 
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
-const LEGACY_WRITE_KEY = "legacy-write-key";
-const LEGACY_READ_KEY = "legacy-read-key";
 const ROUTES = readFileSync(join(import.meta.dirname, "..", "src", "routes.ts"), "utf8");
 
 async function resolveWith(bearer: string) {
@@ -79,8 +77,7 @@ async function resolveWith(bearer: string) {
       },
     ],
   });
-  const hashes = `${await sha256Hex(LEGACY_WRITE_KEY)},ro:${await sha256Hex(LEGACY_READ_KEY)}`;
-  const env = fakeEnv({ DB: d1.db, OPERATOR_KEY_HASH: hashes });
+  const env = fakeEnv({ DB: d1.db });
   const req = new Request("https://capsid.example/ops/backup", {
     method: "POST",
     headers: { Authorization: `Bearer ${bearer}` },
@@ -91,17 +88,6 @@ async function resolveWith(bearer: string) {
 }
 
 // /ops/backup
-
-test("/ops/backup admits the legacy write-grant operator key, which is the admin", async () => {
-  const agent = await resolveWith(LEGACY_WRITE_KEY);
-  assert.equal(agent.admin, true, "the legacy write key stopped resolving to the admin, so docs/backups.md is wrong");
-  assert.equal(routeRefusal("/ops/backup", agent), null);
-});
-
-test("/ops/backup refuses the legacy read-only operator key", async () => {
-  const agent = await resolveWith(LEGACY_READ_KEY);
-  assert.ok(routeRefusal("/ops/backup", agent));
-});
 
 test("/ops/backup admits the OAuth admin", () => {
   assert.equal(routeRefusal("/ops/backup", adminAgentForEmail("admin@example.com")), null);
@@ -227,7 +213,7 @@ test("capsid_run_improve serves status only, as a read, and the admin's switches
   // (src/job-breaker.ts) are among them.
   assert.deepEqual(
     [...admin].sort(),
-    ["breaker_reset", "mint_operator_key", "overnight", "sign_policy"],
+    ["breaker_reset", "overnight", "sign_policy"],
     "capsid_admin_control_improve's action list changed"
   );
   for (const action of admin) assert.equal(requiredForAction("capsid_admin_control_improve", action), "admin", `capsid_admin_control_improve.${action}`);

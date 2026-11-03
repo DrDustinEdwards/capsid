@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeAsCaller, completeJob, postJob, resumeJob } from "../src/jobs";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 
 // The seat completing a blocked job it does not hold (job_85b8ac3e0c7e), the way it can
 // already fail one. The job stays held by the driver that did the work, so the outcome
@@ -14,17 +14,17 @@ const NS = "sample";
 const PR = "https://github.com/example/sample/pull/3";
 const SHA = "a".repeat(40);
 const DRIVER_ACTOR = "agent:driver-aaaa";
-const DRIVER = legacyAgent("write", DRIVER_ACTOR);
-// legacyAgent("write") is the admin, so a driver that is not the seat is built from it
+const DRIVER = grantAgent("write", DRIVER_ACTOR);
+// grantAgent("write") is the admin, so a driver that is not the seat is built from it
 // with the admin identity and the merge flag taken away.
 function driverOnly(actor: string) {
-  const base = legacyAgent("write", actor);
+  const base = grantAgent("write", actor);
   return { ...base, admin: false, scopes: { ...base.scopes, flags: { ...base.scopes.flags, can_merge: false } } };
 }
 const OTHER = driverOnly("agent:driver-bbbb");
 const HOLDER_B = driverOnly("agent:driver-cccc");
 const SEAT_ACTOR = "access:seat@example.com";
-const SEAT = legacyAgent("write", SEAT_ACTOR);
+const SEAT = grantAgent("write", SEAT_ACTOR);
 const NOW = new Date("2026-10-06T12:00:00.000Z");
 const LATER = new Date("2026-10-06T13:00:00.000Z");
 const VERIFIED = { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: true };

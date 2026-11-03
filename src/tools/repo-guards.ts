@@ -52,7 +52,7 @@ export function repoGuards(ctx: ToolCtx) {
     intent: { action?: string; force?: boolean; repo?: string; surface?: { tool: string; action?: string } } = {}
   ) => {
     // Every repo mutation passes through here, so the flag check is here and not in
-    // each tool. test/scope-coverage.test.ts derives that no repo write tool reaches
+    // each tool. test/blast-radius.test.ts derives that no repo write tool reaches
     // GitHub any other way.
     // Resolved first, so the repos axis is asked about the repo this write reaches.
     // A namespace that cannot be resolved fails here, before anything is written.

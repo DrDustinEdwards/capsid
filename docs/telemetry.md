@@ -32,8 +32,8 @@ below are set; the receiver is live either way and stores nothing it is not sent
 
 The bearer is resolved like every other key (`resolveAgent`). No key, or one that
 resolves to nobody, is 401 with `WWW-Authenticate: Bearer realm="capsid-hooks"`.
-Accepted: a minted driver or the admin key, holding the write grant
-(checked through `checkScope`). A read-only key or any other kind is 403.
+Accepted: a minted driver holding the write grant (checked through `checkScope`).
+A read-only key or any other kind is 403.
 
 The hook receiver (`/ops/hooks`, docs/hooks.md) uses the same caller check.
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { adminAgentForEmail, legacyAgent } from "../src/agents.ts";
+import { adminAgentForEmail, grantAgent } from "../src/agents.ts";
 import { editJob } from "../src/jobs-edit.ts";
 import { missingPartsWarning, placeholderRefusal } from "../src/job-body-check.ts";
 import { fakeEnv } from "./fakes.ts";
@@ -66,7 +66,7 @@ test("edit refuses a placeholder, but only after the caller is known to be the s
   const seat = await editJob(env, adminAgentForEmail("admin@example.com"), now, "job_x", { body: "GOAL: do <ID>" });
   assert.equal(seat.ok, false);
   assert.match(seat.refusal ?? "", /placeholder, <ID>/);
-  const driver = await editJob(env, legacyAgent("read", "agent:driver"), now, "job_x", { body: "GOAL: do <ID>" });
+  const driver = await editJob(env, grantAgent("read", "agent:driver"), now, "job_x", { body: "GOAL: do <ID>" });
   assert.match(driver.refusal ?? "", /cannot edit a job/);
   const title = await editJob(env, adminAgentForEmail("admin@example.com"), now, "job_x", { title: "Fix TBD" });
   assert.match(title.refusal ?? "", /title has an unfilled placeholder, TBD/);

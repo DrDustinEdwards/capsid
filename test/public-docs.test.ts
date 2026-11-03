@@ -18,7 +18,7 @@ const docFiles = () => {
 };
 
 test("PLANT: no public doc carries a secret, a key or a real credential", () => {
-  // A hash is included because OPERATOR_KEY_HASH is the verifier.
+  // A hash is included because a stored sha256 is a key's verifier.
   const forbidden: Array<[RegExp, string]> = [
     [/sk-ant-[A-Za-z0-9_-]{10,}/, "an Anthropic key"],
     [/ghp_[A-Za-z0-9]{20,}/, "a GitHub token"],

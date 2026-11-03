@@ -5,7 +5,7 @@ import { blockJob, claimJob, postJob } from "../src/jobs";
 import { autoResumeJob, MERGE_RESUME_ACTOR } from "../src/jobs-seat";
 import { mergeResumeTick } from "../src/merge-resume";
 import { readJob } from "../src/jobs-transition";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 
 // The stale-jobs step (capsid/decisions.md, 2026-10-03, D1 to D3): a blocked job whose
@@ -15,7 +15,7 @@ import { defaultScopes } from "../src/agents-schema";
 // the read produces.
 
 const SECRET = "test-root-secret";
-const ADMIN = legacyAgent("write", "github:DrDustinEdwards");
+const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-10-08T06:00:00.000Z");
 const LATER = new Date("2026-10-08T07:00:00.000Z");
 const NOTE = "PR #9 merged at abc1234; confirm the deploy and complete with your claim";

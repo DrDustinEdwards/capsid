@@ -70,7 +70,7 @@ test("a merge and a mint are not controls, and the tool says so", async () => {
   const { env } = world();
   const { call, close } = await connect(env, admin());
   try {
-    for (const control of ["merge", "manage_pr", "mint", "mint_operator_key"]) {
+    for (const control of ["merge", "manage_pr", "mint"]) {
       const res = await call({ action: "preview", control });
       assert.equal(res.isError, true, `${control} was previewed`);
     }
