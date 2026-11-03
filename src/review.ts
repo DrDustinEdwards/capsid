@@ -1,4 +1,4 @@
-import { remoteKeys, verifyJwt, type KeySource } from "@dustinedwards/site-runtime/access-login";
+import { verifyJwt } from "@dustinedwards/site-runtime/access-login";
 import { untrusted, UNTRUSTED_DATA_RULE } from "@dustinedwards/site-runtime/anthropic";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { Env } from "./env";
@@ -7,6 +7,7 @@ import { textResponse } from "./http";
 import { readJob } from "./jobs-transition";
 import { pathClassOf, type PathClass } from "./merge-class";
 import { worthReviewer, type ChangedFile } from "./model-routing";
+import { issuerKeys, ISSUER } from "./shadow";
 import { splitSignedTask } from "./signed-docs";
 import { auditStatement } from "./store-guards";
 
@@ -41,7 +42,6 @@ export const REVIEW_RUN_PATH = "/review/run";
 const REVIEW_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
 const REVIEW_GATEWAY = "default";
 const REVIEW_ACTION = "pr-review";
-const ISSUER = "https://token.actions.githubusercontent.com";
 const REVIEW_AUDIENCE = "capsid-review";
 // The one workflow allowed to ask, at any ref of devkit, in any repository Dustin owns.
 const REVIEW_WORKFLOW = "drdustinedwards/devkit/.github/workflows/review.yml@";
@@ -71,7 +71,7 @@ export interface Finding {
   note: string;
 }
 
-export type ReviewResult =
+type ReviewResult =
   | { status: "reviewed"; verdict: Verdict; summary: string; findings: Finding[]; model: string; head_sha: string }
   | { status: "skipped"; reasons: string[]; head_sha: string }
   | { status: "error"; error: string; head_sha: string };
@@ -89,19 +89,6 @@ export function reviewScope(files: readonly ChangedFile[]): { review: boolean; r
   if (reviewed.length === 0) return { review: false, reasons: ["only documents, images, tests, lockfiles or manifests changed"] };
   const worth = worthReviewer(files);
   return { review: true, reasons: worth.level === "worth" ? worth.reasons : [`${reviewed.length} changed file(s) hold code or configuration`] };
-}
-
-// The key set's address comes from the issuer's discovery document, as OIDC defines, and
-// must be on the issuer's own host (the same as src/shadow.ts).
-let keys: KeySource | null = null;
-async function issuerKeys(): Promise<KeySource> {
-  if (keys) return keys;
-  const resp = await fetch(`${ISSUER}/.well-known/openid-configuration`);
-  if (!resp.ok) throw new Error(`the issuer's discovery document answered ${resp.status}`);
-  const uri = new URL(String(((await resp.json()) as { jwks_uri?: unknown }).jwks_uri));
-  if (uri.origin !== ISSUER) throw new Error("the issuer's key set is on another host");
-  keys = remoteKeys(uri.href);
-  return keys;
 }
 
 export interface ReviewCaller {
