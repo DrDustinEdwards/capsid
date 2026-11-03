@@ -80,7 +80,7 @@ function DownloadsChart({ data }: { data: PortalPackageHistory }) {
     ...(weekly ? { caption: "Each point is a week's downloads, Monday to Sunday (UTC), at the Monday it starts; a week not yet over is left out." } : {}),
     source: { name: "npm downloads API", href: `https://www.npmjs.com/package/${encodeURIComponent(data.name)}` },
   } as const;
-  return <ChartFrame draw={(width) => areaChart({ ...opts, width })} />;
+  return <ChartFrame draw={(width, fit) => areaChart({ ...opts, width, ...fit })} />;
 }
 
 function HistoryPanel({ name }: { name: string }) {
