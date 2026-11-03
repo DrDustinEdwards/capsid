@@ -190,7 +190,7 @@ The complete list, including signed backup and benchmark routes, is in [docs/aut
 
 ## Installation
 
-An installation requires a Cloudflare account and a GitHub App. The procedure is given in full in [docs/bootstrap.md](docs/bootstrap.md), section 10. In outline:
+An installation requires a Cloudflare account and a GitHub App. The procedure is given in full in [docs/bootstrap.md](docs/bootstrap.md), section 9. In outline:
 
 1. Install dependencies with `npm install`. Node.js 26.11.1 or later is required.
 2. Create a D1 database, two KV namespaces and an R2 bucket with Wrangler.
@@ -215,7 +215,7 @@ An installation requires a Cloudflare account and a GitHub App. The procedure is
 | `npm --prefix dashboard run dev` | Serve the Portal locally against sample data. |
 | `EXPECT_SHA=<sha> npm run verify:live` | Verify the deployed Worker. |
 
-The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#12-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
+The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#11-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
 
 ## Documentation
 

@@ -304,7 +304,7 @@ async function forge(claims: Record<string, unknown>): Promise<string> {
 // The absences
 
 test("PLANT: a merge or a mint is refused at preview and at perform, even fully signed, and writes nothing", async () => {
-  for (const action of ["merge", "manage_pr", "mint", "mint_operator_key", "mint_agent"]) {
+  for (const action of ["merge", "manage_pr", "mint", "mint_agent"]) {
     assert.ok(!(PORTAL_ACTIONS as readonly string[]).includes(action), `PORTAL_ACTIONS includes ${action}`);
     const w = world();
     const res = await handlePortalPreview(await preview({ action, params: {} }), w.env, NOW);

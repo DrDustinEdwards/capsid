@@ -248,8 +248,7 @@ export interface FakeD1Options {
   // Tables sqlite_master lists beyond the ones the migrations create, for the backup's
   // check that the live schema matches TABLES.
   extraTables?: string[];
-  // The scoped credentials (migrations/0008). Absent by default, so a test
-  // resolves through the OPERATOR_KEY_HASH fallback.
+  // The scoped credentials (migrations/0008). Absent by default.
   agents?: Array<Record<string, unknown>>;
   // Queue rows, for the readers that look a job up rather than transition it.
   // The queue's own transitions are driven against real SQLite in test-integration.

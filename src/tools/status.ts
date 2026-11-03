@@ -3,7 +3,6 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { bounded, MAX_DOC_STATUS, nsName } from "../limits";
 import { capsidStatus } from "../status";
-import { mintOperatorKey } from "../operator-key";
 import { signPolicyDocument } from "../policy-sign";
 import { resetBreaker } from "../job-breaker";
 import { fail, ok, type ToolCtx } from "./docs";
@@ -18,9 +17,9 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
     "admin_control",
     {
       description:
-        `The administrator's switches. action "mint_operator_key" returns a new read-only (ro:) operator key once, stores it nowhere, and returns the wrangler command that adds its hash to OPERATOR_KEY_HASH; it does not set the secret. action "breaker_reset" closes the queue's circuit breaker for namespace, so jobs its drivers failed before now stop counting toward the threshold (default 3 holder fails in 24 hours), and with threshold sets that threshold for every namespace; audit-logged and read back. action "overnight" sets the overnight run's switch (value "off" | "api" | "subscription", and a reason, both required): off unless set, with a "Runs on" choice of API key or subscription; choosing subscription records Dustin's decision, its date and its reasoning with the switch; audit-logged and read back. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies; the prior body is snapshotted and the signing is audit-logged. Admin only.`,
+        `The administrator's switches. action "breaker_reset" closes the queue's circuit breaker for namespace, so jobs its drivers failed before now stop counting toward the threshold (default 3 holder fails in 24 hours), and with threshold sets that threshold for every namespace; audit-logged and read back. action "overnight" sets the overnight run's switch (value "off" | "api" | "subscription", and a reason, both required): off unless set, with a "Runs on" choice of API key or subscription; choosing subscription records Dustin's decision, its date and its reasoning with the switch; audit-logged and read back. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies; the prior body is snapshotted and the signing is audit-logged. Admin only.`,
       inputSchema: {
-        action: z.enum(["mint_operator_key", "sign_policy", "breaker_reset", "overnight"]),
+        action: z.enum(["sign_policy", "breaker_reset", "overnight"]),
         namespace: nsName.optional().describe('For "breaker_reset", the namespace. For "sign_policy", "capsid".'),
         value: z.enum(["off", "subscription", "api"]).optional().describe('For action "overnight": "off", "api" or "subscription".'),
         threshold: z.number().int().min(1).max(50).optional().describe('For action "breaker_reset": the number of holder fails in 24 hours that opens the breaker of any namespace.'),
@@ -40,12 +39,9 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
           return signed.ok ? ok(signed) : fail(signed.error);
         }
         if (action === "overnight") return ok(await setOvernight(env, ctx.actor, new Date(), { value, reason }));
-        if (action === "breaker_reset") {
-          if (!namespace || namespace === "all") return fail("breaker_reset needs one namespace.");
-          const reset = await resetBreaker(env, ctx.actor, new Date(), { namespace, threshold });
-          return reset.ok ? ok(reset) : fail(reset.error);
-        }
-        return ok(await mintOperatorKey(env, ctx.actor));
+        if (!namespace || namespace === "all") return fail("breaker_reset needs one namespace.");
+        const reset = await resetBreaker(env, ctx.actor, new Date(), { namespace, threshold });
+        return reset.ok ? ok(reset) : fail(reset.error);
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }

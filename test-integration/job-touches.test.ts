@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { adminFailJob, blockJob, claimJob, postJob, releaseJob, resumeJob, supersedeJob } from "../src/jobs";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
 import { signTaskBody } from "../src/signed-docs";
@@ -17,7 +17,7 @@ import { signTaskBody } from "../src/signed-docs";
 
 const SECRET = "test-root-secret";
 // The admin's Access login: a person, and the seat by its flags.
-const ADMIN = legacyAgent("write", "access:admin@example.com");
+const ADMIN = grantAgent("write", "access:admin@example.com");
 
 function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];

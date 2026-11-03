@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, commandFromSummary, completeJob, postJob } from "../src/jobs";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { OTHER_PRS_READ } from "../src/job-overlaps";
 
 // Overlap warnings (Track A D1) against real D1, with GitHub as a fetch stub: block and
@@ -12,8 +12,8 @@ import { OTHER_PRS_READ } from "../src/job-overlaps";
 const SECRET = "test-root-secret";
 const NS = "sample";
 const PR = (n: number) => `https://github.com/example/sample/pull/${n}`;
-const DRIVER = legacyAgent("write", "agent:driver-aaaa");
-const SEAT = legacyAgent("write", "access:seat@example.com");
+const DRIVER = grantAgent("write", "agent:driver-aaaa");
+const SEAT = grantAgent("write", "access:seat@example.com");
 const NOW = new Date("2026-10-07T12:00:00.000Z");
 
 function jobsEnv() {

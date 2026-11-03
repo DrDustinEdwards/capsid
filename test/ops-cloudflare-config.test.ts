@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
 import { CF_MAX_PAGES } from "../src/ops-cloudflare.ts";
 import { CF_PERMISSION, readCloudflareConfig } from "../src/ops-cloudflare-config.ts";
 import { buildAdminServer } from "../src/server.ts";
@@ -380,7 +380,7 @@ test("END TO END: the admin reads Access apps through the tool, with no secret i
 });
 
 test("END TO END: a driver with the write grant is refused as admin only, before Cloudflare is called", async () => {
-  const driver: Agent = { ...legacyAgent("write", "agent:sample-driver"), admin: false };
+  const driver: Agent = { ...grantAgent("write", "agent:sample-driver"), admin: false };
   await withFetch({}, async (calls) => {
     const result = await callTool(driver, { action: "access_apps" });
     assert.equal(result.isError, true);

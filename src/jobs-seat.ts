@@ -522,7 +522,7 @@ export async function supersedeJob(
 // instead, and it runs every check a claim runs.
 //
 // Unless that credential cannot take it back. A credential that is not a minted agent
-// (the admin identity every chat tab connects as, or a legacy operator key) names no
+// (the admin identity every chat tab connects as) names no
 // particular session, so a claim given to it is worked by nobody. The same holds for a
 // runner whose session ended and a revoked agent. The job then goes back to the queue
 // with its approval, and whichever session claims it next gets the resume note. The job's flags
@@ -552,8 +552,8 @@ export interface ResumeOptions {
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 
 // A minted agent's actor is `agent:<name>`: one credential, one driver. The admin
-// identity (`access:<email>`, or `github:<login>` from the old console) and a legacy
-// operator key (`opkey:<fingerprint>`) are shared by whatever sessions connect with them.
+// identity (`access:<email>`, or `github:<login>` from the old console) and a retired
+// operator key (`opkey:<fingerprint>`, on older rows) are shared by whatever sessions connect with them.
 const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
 
 /** Where a resume sends a blocked job: back to `holder` (toQueue null), or to the queue

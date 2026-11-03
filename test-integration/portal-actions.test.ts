@@ -2,7 +2,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import { capsidStatus } from "../src/status";
@@ -37,7 +37,7 @@ const SECRET = "integration-portal-cookie-key";
 const CSRF = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 const NOW = new Date();
 const ACTOR = "access:admin@example.com";
-const DRIVER = legacyAgent("write", "agent:capsid-driver");
+const DRIVER = grantAgent("write", "agent:capsid-driver");
 
 // The operator token migrations/0035 names for dustinedwards: set, so site_repair may call.
 const OPERATOR_TOKEN = "integration-operator-token-0000000000000";
@@ -97,7 +97,7 @@ async function jobsEnv() {
 }
 
 async function postedJob(title: string): Promise<string> {
-  const posted = await postJob(await jobsEnv(), legacyAgent("write", "github:DrDustinEdwards"), NOW, { namespace: "capsid", title, body: "do the thing", gate_required: true });
+  const posted = await postJob(await jobsEnv(), grantAgent("write", "github:DrDustinEdwards"), NOW, { namespace: "capsid", title, body: "do the thing", gate_required: true });
   expect(posted.ok, posted.refusal).toBe(true);
   return posted.job!.id;
 }
@@ -573,7 +573,7 @@ describe("the automation switches against real D1 and KV", () => {
 
 describe("the job actions against real D1", () => {
   it("resume: the preview says the queue, and why, when the job was blocked by a shared identity, and the perform sends it there", async () => {
-    const id = await blockedJob("blocked by a shared identity", legacyAgent("write", "access:someone@example.com"));
+    const id = await blockedJob("blocked by a shared identity", grantAgent("write", "access:someone@example.com"));
     const previewed = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } });
     const preview = (await previewed.json()) as PortalPreview;
     expect(preview.changes[0]).toMatch(/blocked -> queued/);

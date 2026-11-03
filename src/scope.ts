@@ -91,9 +91,9 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // token). A control revokes an agent, resumes a job or edits a site, so a caller
   // that could use one could widen itself.
   capsid_admin_run_controls: "admin",
-  // mint_operator_key issues a credential, sign_policy decides whether this Worker may
-  // merge without a human, breaker_reset reopens a namespace's queue and overnight
-  // starts unattended sessions. None of those is a driver's work.
+  // sign_policy decides whether this Worker may merge without a human, breaker_reset
+  // reopens a namespace's queue and overnight starts unattended sessions. None of those
+  // is a driver's work.
   capsid_admin_control_improve: "admin",
   // Mints a site key and sets it on the site Worker and on Carrel.
   capsid_admin_set_site_key: "admin",
@@ -411,9 +411,8 @@ export function portfolioOnly(agent: Agent, namespace: string | undefined): bool
 // allows an AAL3 session no more than 12 hours overall), so only a new sign-in extends
 // past it.
 //
-// Only an OAuth session carries a sign-in time (Agent.signedInAt). A key holder (the
-// seat's operator key at its terminal) has no session to refresh and is not stepped up;
-// its key is the credential.
+// Only an OAuth session carries a sign-in time (Agent.signedInAt). A key holder has no
+// session to refresh and is not stepped up; its key is the credential.
 const STEP_UP_IDLE_MS = 2 * HOUR_MS;
 const STEP_UP_MAX_MS = 12 * HOUR_MS;
 
@@ -499,7 +498,7 @@ const ADMIN_REASON: Record<string, string> = {
   capsid_admin_run_controls:
     "It runs the administrator's controls (revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
   capsid_admin_control_improve:
-    "It holds the administrator's switches: mint_operator_key issues a credential, sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_run_improve.",
+    "It holds the administrator's switches: sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_run_improve.",
   capsid_admin_set_site_key: "It mints a site's operator key and sets it as a secret on the site's Worker and on Carrel, so a caller that could use it could hand itself a site's key.",
   "/ops/backup": "It backs up and prunes every namespace in the store, which is wider than any one namespace's scope.",
 };

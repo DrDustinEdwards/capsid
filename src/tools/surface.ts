@@ -270,14 +270,14 @@ const READ_OPS: CompositeSpec = {
   },
 };
 
-const ADMIN_CONTROL_ACTIONS = ["mint_operator_key", "sign_policy", "breaker_reset", "overnight"] as const;
+const ADMIN_CONTROL_ACTIONS = ["sign_policy", "breaker_reset", "overnight"] as const;
 
 // Named for the improve loop it once controlled; kept for the same reason as
 // capsid_run_improve.
 const CONTROL_IMPROVE: CompositeSpec = {
   name: "capsid_admin_control_improve",
   title: "Administrator switches",
-  summary: "The administrator's switches: operator keys, the signed policies, the job breaker and the overnight run. Admin only, and every action needs a recent sign-in from a signed-in session.",
+  summary: "The administrator's switches: the signed policies, the job breaker and the overnight run. Admin only, and every action needs a recent sign-in from a signed-in session.",
   actions: Object.fromEntries(ADMIN_CONTROL_ACTIONS.map((a) => [a, { op: "admin_control", inject: { action: a }, summary: "" }])),
 };
 

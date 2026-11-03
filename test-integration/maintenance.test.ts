@@ -3,7 +3,7 @@ import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { postJob } from "../src/jobs";
 import { gatherMaintenance, maintenanceTick, readMaintenance, MAINTENANCE_LAST_KEY } from "../src/maintenance";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import type { PrReaders } from "../src/maintenance-prs";
 import { PRUNE_AUDIT_ACTION, PRUNE_SWITCH_KEY, type BranchReaders } from "../src/maintenance-branches";
 import type { DeployReaders } from "../src/maintenance-deploys";
@@ -21,7 +21,7 @@ import { gatherRuleDocItems, RULE_DOC_CAP_BYTES } from "../src/rule-docs";
 // one at a time beside a clean job each must leave alone.
 
 const SECRET = "test-root-secret";
-const ADMIN = legacyAgent("write", "github:DrDustinEdwards");
+const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 const PR = "https://github.com/example-org/sample/pull/7";
 // The pull request rules read GitHub; here every repo has no open pull request, so the job

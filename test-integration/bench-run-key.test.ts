@@ -4,7 +4,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { BENCH_CLOSE_REASON, BENCH_ENABLED_KEY } from "../src/bench";
 import { breakerState } from "../src/job-breaker";
 import { runJobTitle } from "../src/bench-run-key";
-import { legacyAgent, resolveAgent, type Agent } from "../src/agents";
+import { grantAgent, resolveAgent, type Agent } from "../src/agents";
 import { postJob } from "../src/jobs";
 import { buildServer } from "../src/server";
 
@@ -33,7 +33,7 @@ async function post(path: string, body: Record<string, unknown>) {
   });
 }
 
-const POSTER = legacyAgent("write", "github:sample");
+const POSTER = grantAgent("write", "github:sample");
 const jobsEnv = () => env as unknown as Parameters<typeof postJob>[0];
 
 let n = 0;
