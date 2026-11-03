@@ -1,0 +1,9 @@
+{
+  // Knip for the dashboard. Its Vite, React Router and Playwright plugins find the routes, the entries
+  // and the tests; this names only what they cannot see. src/worker.ts is the module the capsid Worker
+  // imports (vite.worker.config.ts bundles it). The React Router plugin lists @react-router/node and
+  // isbot for the default server entry, which src/entry.server.tsx replaces.
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/worker.ts"],
+  "ignoreDependencies": ["@react-router/node", "isbot"]
+}

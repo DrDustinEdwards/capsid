@@ -6,6 +6,7 @@
     "lib": ["es2022", "dom", "dom.iterable"],
     "jsx": "react-jsx",
     "types": ["node", "vite/client"],
+    "rootDirs": [".", "./.react-router/types"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
@@ -19,5 +20,5 @@
     "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "dev", "e2e", "screenshots", "vite.config.ts", "playwright.config.ts", "playwright.shots.config.ts"]
+  "include": ["src", "dev", "e2e", "screenshots", ".react-router/types/**/*", "vite.config.ts", "vite.worker.config.ts", "react-router.config.ts", "playwright.config.ts", "playwright.shots.config.ts"]
 }

@@ -58,6 +58,9 @@ const TEST_OPERATOR_KEYS = { write: "integration-legacy-write-key", read: "integ
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
 export default defineConfig({
+  // The Portal's pages are the dashboard's build (src/portal-pages.d.ts); this layer tests the
+  // Worker around them with the tests' stand-in.
+  resolve: { alias: { "capsid-portal-pages": path.join(import.meta.dirname, "test", "fixtures", "portal-pages.ts") } },
   plugins: [
     cloudflareTest({
       main: "./src/index.ts",

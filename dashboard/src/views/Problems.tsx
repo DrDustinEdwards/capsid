@@ -1,6 +1,6 @@
 import { Empty } from "capsomer/react/empty";
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link } from "../lib/router";
 import { useApp, isView, placePath } from "../app/ctx";
 import { attentionGroups, WAITING_KINDS, PROBLEM_ROWS, type AttentionRow } from "../lib/derive";
 import { ago } from "../lib/format";

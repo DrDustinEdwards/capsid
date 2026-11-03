@@ -10,8 +10,13 @@
 // explicit extensions.
 import { registerHooks } from "node:module";
 
+// The Portal's pages are the dashboard's build (src/portal-pages.d.ts), which a test does not
+// build: the tests' stand-in answers for it.
+const PORTAL_PAGES = new URL("./fixtures/portal-pages.ts", import.meta.url).href;
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "capsid-portal-pages") return nextResolve(PORTAL_PAGES, context);
     const relative = specifier.startsWith("./") || specifier.startsWith("../");
     if (relative && !/\.[cm]?[jt]s$|\.json$/.test(specifier)) {
       try {

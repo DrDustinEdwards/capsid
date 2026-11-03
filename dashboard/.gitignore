@@ -1,5 +1,7 @@
 node_modules/
-dist/
+build/
+# React Router's route types (react-router typegen).
+.react-router/
 # Written by scripts/fixture-check.mjs on every `npm run check`.
 dev/generated/
 # Written by the browser tests (npm run e2e).

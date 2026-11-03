@@ -57,16 +57,19 @@
   //                  src/skills-refresh.ts decides whether today is the
   //                  configured day, so the day is a KV edit not a redeploy.
   "triggers": { "crons": ["0 9 * * *", "*/5 * * * *", "30 9 * * *"] },
-  // CAPSID PORTAL (dashboard/, built to dashboard/dist by scripts/deploy.mjs).
+  // CAPSID PORTAL (dashboard/, built by scripts/deploy.mjs): server-rendered pages and their files.
+  // The pages are dashboard/build/worker/portal.js, bundled into this Worker under the name
+  // src/portal-pages.d.ts declares (the alias below); the files are dashboard/build/client.
   // run_worker_first is REQUIRED, not a preference: with it off, the platform's
   // navigation handling could answer a browser's /authorize or /portal/callback with
-  // index.html and break both logins. Every request reaches the Worker, which serves an
-  // asset only under /portal/ and only after the Portal gate. not_found_handling
-  // is "none" because the Worker does the single-page fallback itself, after the gate.
-  // scripts/dry-run-config.mjs removes this block (between the two markers) for
-  // `npm run types`, which builds no dashboard.
+  // a file and break both logins. Every request reaches the Worker, which serves the hashed
+  // files on the Portal host and everything else only after the Portal gate.
+  // not_found_handling is "none" because every page is the Worker's own render.
+  // scripts/dry-run-config.mjs removes the assets block (between the two markers) for
+  // `npm run types`; the alias stays, so the dry run measures the pages with the Worker.
+  "alias": { "capsid-portal-pages": "./dashboard/build/worker/portal.js" },
   // ASSETS-BEGIN
-  "assets": { "directory": "./dashboard/dist", "binding": "ASSETS", "run_worker_first": true, "not_found_handling": "none" },
+  "assets": { "directory": "./dashboard/build/client", "binding": "ASSETS", "run_worker_first": true, "not_found_handling": "none" },
   // ASSETS-END
   // Non-secret vars. The GitHub App client id is public; the App private key is set
   // with `wrangler secret put` and never committed. The installation id is not

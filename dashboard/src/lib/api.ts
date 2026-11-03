@@ -1,10 +1,10 @@
-import { QueryCache, QueryClient, keepPreviousData, useQuery } from "@tanstack/react-query";
+import { QueryCache, QueryClient, keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { BASE } from "./base";
 import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView } from "../types";
 
-// Every URL under the Portal's base on this host (lib/base.ts): /portal/api/... on
-// workers.dev, /api/... on portal.dustinedwards.info.
+// Every URL under the Portal's base on this page (lib/base.ts): /api/... on
+// portal.dustinedwards.info, /demos/api/... on the chart demo.
 const FEED_URL = `${BASE}/api/ops`;
 const REFRESH_URL = `${BASE}/api/ops/refresh`;
 const PREVIEW_URL = `${BASE}/api/actions/preview`;
@@ -58,19 +58,25 @@ function useSignedOut(): boolean {
   return useSyncExternalStore(
     (w) => (watchers.add(w), () => void watchers.delete(w)),
     () => ended,
+    // The server renders a page only for a signed-in session.
+    () => false,
   );
 }
 
 // No retries: a failed read says why at once and the next feed or Read again tries anew.
 // Reads go again only when asked (a key, a feed or a button), never on focus, except
-// the feed itself.
-export const queryClient = new QueryClient({
-  queryCache: new QueryCache({ onError: (e) => e instanceof SignedOut && setSignedOut(true) }),
-  defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } },
-});
+// the feed itself. One client per page load in the browser and one per request on the
+// server (root.tsx, server/prefetch.ts), so no request shares a cache with another
+// (TanStack Query, Advanced Server Rendering).
+export function createQueryClient(): QueryClient {
+  return new QueryClient({
+    queryCache: new QueryCache({ onError: (e) => e instanceof SignedOut && setSignedOut(true) }),
+    defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } },
+  });
+}
 
 // A route's Answer as a query: its value, or a throw that carries the server's text.
-async function ask<T>(read: () => Promise<Answer<T>>): Promise<T> {
+export async function ask<T>(read: () => Promise<Answer<T>>): Promise<T> {
   const r = await read();
   if (r.kind === "ok") return r.value;
   if (r.kind === "signed-out") throw new SignedOut("signed out");
@@ -113,7 +119,7 @@ async function readFeed(): Promise<OpsFeed> {
   return asFeed(res);
 }
 
-const FEED_KEY = ["ops"];
+export const FEED_KEY = ["ops"];
 
 // Reads under this key follow the feed: each new feed reads the shown ones again once
 // they are stale (at once for most; a read kept longer says so with its staleTime).
@@ -122,6 +128,7 @@ export const LIVE = "live";
 // Polls GET /portal/api/ops every 60 s after the last answer while the tab is visible,
 // pauses while it is hidden, and reads again when the tab comes back after 5 s or more.
 export function useOpsFeed() {
+  const queryClient = useQueryClient();
   const q = useQuery({ queryKey: FEED_KEY, queryFn: readFeed, refetchInterval: POLL_MS, staleTime: 5000, refetchOnWindowFocus: true });
   const signedOut = useSignedOut();
   const generated = q.data?.live.generated;
@@ -131,8 +138,8 @@ export function useOpsFeed() {
   useEffect(() => {
     if (generated)
       void queryClient.refetchQueries({ queryKey: [LIVE], type: "active", stale: true }, { cancelRefetch: false });
-  }, [generated]);
-  const accept = useCallback((feed: OpsFeed) => queryClient.setQueryData(FEED_KEY, feed), []);
+  }, [generated, queryClient]);
+  const accept = useCallback((feed: OpsFeed) => queryClient.setQueryData(FEED_KEY, feed), [queryClient]);
   const signOut = useCallback(() => setSignedOut(true), []);
   return {
     feed: q.data ?? null,
@@ -196,7 +203,7 @@ async function refusalText(res: Response): Promise<string> {
   return text || `The server answered ${res.status} with no text`;
 }
 
-async function answer<T>(res: Response, forbidden: boolean): Promise<Answer<T>> {
+export async function answer<T>(res: Response, forbidden: boolean): Promise<Answer<T>> {
   if (sessionEnded(res, forbidden)) return { kind: "signed-out" };
   if (res.status === 410) return { kind: "expired", message: await refusalText(res) };
   if (!res.ok) return { kind: "refused", status: res.status, message: await refusalText(res) };

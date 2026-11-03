@@ -48,15 +48,17 @@ describe("the Portal host through the whole Worker", () => {
   });
 
   it("PLANT: the chart demo answers at /demos/ with no sign-in, and only there", async () => {
-    // Its page (an app route falls back to it), its files and its captured sample data, noindex.
+    // Its pages, rendered from the captured sample data, and that data, noindex.
     for (const [path, accept] of [["/demos/", "text/html"], ["/demos/health", "text/html"], ["/demos/api/ops.json", "*/*"]] as const) {
       const response = await SELF.fetch(`${PORTAL}${path}`, { headers: { Accept: accept }, redirect: "manual" });
       expect(response.status, `${path} answered ${response.status}`).toBe(200);
       expect(response.headers.get("X-Robots-Tag")).toBe("noindex");
     }
-    // Nothing is written there, and the Portal's own page and files stay behind the gate.
+    const page = await (await SELF.fetch(`${PORTAL}/demos/health`)).text();
+    expect(page, "the demo page read the captured feed").toContain('data-read="200"');
+    // Nothing is written there, and the Portal's own pages and files stay behind the gate.
     expect((await anonymous("/demos/", "POST")).status).toBe(405);
-    for (const path of ["/", "/assets/app-abc123.js", "/api/ops"]) {
+    for (const path of ["/", "/site.webmanifest", "/api/ops"]) {
       const response = await anonymous(path);
       expect(response.status, `${path} answered ${response.status}`).toBe(302);
     }

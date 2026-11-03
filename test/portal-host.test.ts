@@ -52,10 +52,6 @@ test("PLANT: on the Portal host, a /portal path that would leave the origin is r
   assert.equal(isSameOriginPath("queue"), false);
 });
 
-test("on the Portal host, the hashed files keep their /portal/assets/ path", () => {
-  assert.equal(routed(`${PORTAL}/portal/assets/index-abc123.js`), "/portal/assets/index-abc123.js");
-});
-
 test("the base, the cookie path and the public path follow the host", () => {
   const p = new URL(`${PORTAL}/portal/`);
   const w = new URL(`${WORKERS}/portal/`);
