@@ -259,6 +259,8 @@ export function agreementRows(groups: ClaimsGroup[]): Array<{ agent: string; agr
   return [...per].filter(([, c]) => AGREEMENTS.some((a) => c[a] > 0)).flatMap(([agent, c]) => AGREEMENTS.map((agreement) => ({ agent, agreement, checks: c[agreement] })));
 }
 
+const NARROW = 560;
+
 export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
   const rows = agreementRows(groups);
   if (!rows.length) return null;
@@ -275,16 +277,21 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     layout: "grouped",
     xLabel: null,
     yLabel: "Checks",
-    // Capped, so the drawing is not scaled down to unreadable text; Enarratio's frame scrolls past it.
-    width: Math.min(900, Math.max(560, 150 * agents)),
-    height: 260,
     title: "Does each agent's claim match what was verified?",
     alt: `Claims against what the Worker verified, for ${agents} ${agents === 1 ? "agent" : "agents"}: ${sum("agree")} agree, ${sum("disagree")} disagree, ${sum("unclaimed")} unclaimed, ${sum("unchecked")} unchecked.`,
     source: { name: "Every check, summed per agent" },
   } as const;
   return (
     <ChartPanel id="claim-agreement">
-      <ChartFrame chart={barChart(opts)} />
+      {/* Columns where they fit, at most 900 px wide; under NARROW px, bars across, one band per
+          agent, so a phone reads it without scrolling sideways (live chart check C12, 2026-11-03). */}
+      <ChartFrame
+        draw={(width) =>
+          width < NARROW
+            ? barChart({ ...opts, width, orientation: "horizontal", height: 56 + agents * AGREEMENTS.length * 16 })
+            : barChart({ ...opts, width: Math.min(900, width), height: 260 })
+        }
+      />
     </ChartPanel>
   );
 }
