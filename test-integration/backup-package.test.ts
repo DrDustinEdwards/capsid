@@ -27,7 +27,7 @@ describe("the nightly dump on a migrated D1", () => {
     expect(result.prune_refused, "the live schema is not the one TABLES lists").toBeNull();
 
     const files = result.json_keys.map((k) => k.slice(result.json_prefix.length));
-    expect(files.filter((f) => !f.startsWith("_")).sort()).toEqual(TABLES.map((t) => `${t}.json`).sort());
+    expect(files.filter((f) => !f.startsWith("_")).sort()).toEqual(TABLES.map((t) => `${t}.json.gz`).sort());
     expect(files.filter((f) => f.startsWith("_")).sort()).toEqual(["_complete.json", "_kv.json", "_schema.json"]);
     expect(files.at(-1)).toBe("_complete.json");
 

@@ -55,7 +55,7 @@ function said(para) {
 export function toolsPage(tools, asOf) {
   const servers = ["Capsid", "Capsid Admin"];
   const chips = [["all", "All"], ["reads", "Reads only"], ["changes", "Can change"], ["admin", "Admin only"], ["outside", "Reaches outside"]];
-  const body = `${pageHead([["/", "Overview"]], "Tools", "Every tool Capsid serves", `${tools.length} tools over MCP, ${tools.filter((t) => t.server === "Capsid").length} on Capsid for project work and ${tools.filter((t) => t.server === "Capsid Admin").length} on Capsid Admin for the admin only. Each entry comes straight from the server's code: the access it needs, what it can change, its actions and its arguments.`)}
+  const body = `${pageHead([], "Tools", "Every tool Capsid serves", `${tools.length} tools over MCP, ${tools.filter((t) => t.server === "Capsid").length} on Capsid for project work and ${tools.filter((t) => t.server === "Capsid Admin").length} on Capsid Admin for the admin only. Each entry comes straight from the server's code: the access it needs, what it can change, its actions and its arguments.`)}
 <div class="filter-bar" data-filter="tools" hidden>
 <label class="cap-sr-only" for="tool-q">Filter the tools</label>
 <input class="cap-input" id="tool-q" type="search" placeholder="Filter by name, action or argument" autocomplete="off" data-filter-q>
