@@ -18,6 +18,7 @@ export type {
   SharedCodeApp,
   SharedCodePackage,
   SharedCodeView,
+  ResourcesDoc,
   InboxApp,
   InboxItem,
   OpsAgent,

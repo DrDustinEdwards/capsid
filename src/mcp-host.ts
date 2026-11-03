@@ -37,6 +37,7 @@ const MCP_HOST_PATHS = new Set([
   "/public/model/v1.json",
   "/public/stats/v1.json",
   "/public/code/v1.json",
+  "/public/versions/v1.json",
   "/oauth/clients/verify-live.json",
   "/reports/signed-in-security.json",
   // site-runtime's owner page (./owner-page, area 11 A15 and L9): your grants with Revoke, and the

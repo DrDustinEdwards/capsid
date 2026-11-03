@@ -13,6 +13,7 @@ import { useDemo } from "../lib/router";
 import { hasPackages } from "../lib/derive";
 import { Completeness } from "./Completeness";
 import { SharedCode } from "./SharedCode";
+import { Workers } from "./Workers";
 import { NoSnapshot, PageHead } from "./shared";
 
 // The optional Packages panel (capsid/decisions.md, 2026-09-29): one panel per package
@@ -250,11 +251,12 @@ function PackagePanel({ cfg, snap }: { cfg: OpsPackageConfig; snap: PackageSnaps
 
 // One page for one kind of thing (the UX audit's m1): Published, the npm packages configured
 // in Settings (only while one is), and Shared, the git-pinned packages the apps share (what
-// was the Shared code page), and Completeness, devkit's scoreboard of every area of that shared code
-// on every live site. The tab is in the address (?tab=shared); /shared lands there.
+// was the Shared code page), Completeness, devkit's scoreboard of every area of that shared code
+// on every live site, and Workers, each Worker's secret names and stores (the secrets and data
+// model). The tab is in the address (?tab=shared); /shared lands there.
 export function Packages() {
   const { feed } = useApp();
-  const tabs = [...(hasPackages(feed) ? [{ id: "published", label: "Published" }] : []), { id: "shared", label: "Shared" }, { id: "complete", label: "Completeness" }];
+  const tabs = [...(hasPackages(feed) ? [{ id: "published", label: "Published" }] : []), { id: "shared", label: "Shared" }, { id: "complete", label: "Completeness" }, { id: "workers", label: "Workers" }];
   const asked = useTabParam();
   const tab = tabs.some((t) => t.id === asked) ? asked! : tabs[0]!.id;
   return (
@@ -262,7 +264,7 @@ export function Packages() {
       <PageHead title="Packages" />
       <PageTabs label="Packages" path="/packages" tabs={tabs} current={tab} />
       <div className="embedded" id={tab}>
-        {tab === "shared" ? <SharedCode /> : tab === "complete" ? <Completeness /> : <Published />}
+        {tab === "shared" ? <SharedCode /> : tab === "complete" ? <Completeness /> : tab === "workers" ? <Workers /> : <Published />}
       </div>
     </div>
   );

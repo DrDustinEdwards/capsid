@@ -15,6 +15,7 @@ import { Operations } from "../../src/tools/operations.ts";
 import { defineOpsSnapshotOperations } from "../../src/tools/ops.ts";
 import { defineRepoOperations } from "../../src/tools/repo.ts";
 import { defineStatusOperations } from "../../src/tools/status.ts";
+import { defineSystemOperations } from "../../src/tools/system.ts";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS, COMPOSITES, registerCapsidAdminTools, registerCapsidTools } from "../../src/tools/surface.ts";
 import { TOOL_GRANTS } from "../../src/scope.ts";
 
@@ -58,7 +59,7 @@ export function servedTools() {
   const registered = [];
   const server = /** @type {any} */ (new Proxy({}, { get: (_t, key) => (key === "registerTool" ? (/** @type {string} */ name, /** @type {any} */ config) => registered.push({ name, config }) : () => undefined) }));
   const ctx = /** @type {any} */ ({ env: {}, db: {}, actor: "", agent: {}, scope: () => null, lastActor: async () => null, ops });
-  for (const define of [defineDocOperations, defineLintOperations, defineRepoOperations, defineStatusOperations, defineJobOperations, defineAgentOperations, defineClaimsOperations, defineOpsSnapshotOperations, defineCloudflareOperations, defineControlOperations, defineAdminOperations]) define(server, ctx);
+  for (const define of [defineDocOperations, defineLintOperations, defineRepoOperations, defineStatusOperations, defineSystemOperations, defineJobOperations, defineAgentOperations, defineClaimsOperations, defineOpsSnapshotOperations, defineCloudflareOperations, defineControlOperations, defineAdminOperations]) define(server, ctx);
   registerCapsidTools(server, ops);
   registerCapsidAdminTools(server, ops);
   const composites = new Map(COMPOSITES.map((c) => [c.name, c]));

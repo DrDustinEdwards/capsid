@@ -82,10 +82,16 @@ export async function cfGet(fetchImpl: FetchLike, token: string, url: string, wh
   return (await cfEnvelope(fetchImpl, token, url, what)).result;
 }
 
-async function cfEnvelope(fetchImpl: FetchLike, token: string, url: string, what: string): Promise<CfEnvelope> {
+/** A POST that only reads (a D1 query of sqlite_master), through the same envelope. */
+export async function cfPostRead(fetchImpl: FetchLike, token: string, url: string, what: string, body: unknown): Promise<unknown> {
+  return (await cfEnvelope(fetchImpl, token, url, what, body)).result;
+}
+
+async function cfEnvelope(fetchImpl: FetchLike, token: string, url: string, what: string, post?: unknown): Promise<CfEnvelope> {
   const res = await fetchImpl(url, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}`, "User-Agent": "capsid-watcher (ops read)" },
+    method: post === undefined ? "GET" : "POST",
+    headers: { Authorization: `Bearer ${token}`, "User-Agent": "capsid-watcher (ops read)", ...(post === undefined ? {} : { "Content-Type": "application/json" }) },
+    ...(post === undefined ? {} : { body: JSON.stringify(post) }),
     signal: callSignal(CF_TIMEOUT_MS),
   });
   const body = parseJson(await res.text(), `${what} answered ${res.status} with a body that is not JSON`) as CfEnvelope | null;

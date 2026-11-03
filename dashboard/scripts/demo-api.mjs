@@ -11,7 +11,7 @@ import { DEMO_CAPTURED, demoFileName } from "../src/lib/demo.ts";
 
 // The routes the app reads with a plain GET. packages/history needs a package name, so each configured
 // package's history is read on its own, into packages/history/<name>.json (src/lib/demo.ts reads it).
-const ROUTES = ["ops", "namespaces", "activity", "claims", "stale", "plan", "digest", "maintenance", "convergence", "shared-code", "completeness", "library", "trends", "push"];
+const ROUTES = ["ops", "namespaces", "activity", "claims", "stale", "plan", "digest", "maintenance", "convergence", "shared-code", "completeness", "resources", "library", "trends", "push"];
 
 // Before the mock loads: it reads the pinned clock as it starts.
 process.env.WF_MOCK_NOW = DEMO_CAPTURED;

@@ -95,7 +95,7 @@ function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, d
       break;
     }
     case "packages":
-      out.push({ key: ["shared-code"], path: "/shared-code" }, { key: ["completeness"], path: "/completeness" });
+      out.push({ key: ["shared-code"], path: "/shared-code" }, { key: ["completeness"], path: "/completeness" }, { key: ["resources"], path: "/resources" });
       // The demo draws each package's download chart at once (views/Packages.tsx).
       if (demo) for (const pkg of feed?.live.packages ?? []) out.push({ key: ["packages", "history", pkg.name], path: `/packages/history${qs({ name: pkg.name })}` });
       break;

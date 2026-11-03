@@ -16,6 +16,8 @@ import { bounded } from "./limits";
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
+// A Worker script name as Cloudflare allows it.
+const SCRIPT = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 
 const Id = bounded(64).regex(ID, "an id is lowercase kebab-case");
 const Text = bounded(280).trim().min(1);
@@ -41,6 +43,9 @@ const System = z.strictObject({
   // Answer 15: a public system shown without a link to its repo.
   hide_repo_link: z.boolean().optional(),
   aliases: z.array(Id).optional(),
+  // The Cloudflare Worker scripts the system runs, for the secrets and data model
+  // (src/system-resources.ts). Never published: toPublic does not copy it.
+  workers: z.array(bounded(63).regex(SCRIPT)).max(10).optional(),
 });
 
 const Container = z.strictObject({
@@ -88,7 +93,8 @@ export const SystemModelSchema = z
     relationships: z.array(Relationship),
     flows: z.array(Flow).optional(),
     // Repos Dustin keeps off the map: the drift check skips them, and nothing publishes them.
-    left_off: z.array(z.strictObject({ repo: bounded(200).regex(REPO), why: bounded(200) })).optional(),
+    // `workers` names the Workers that go with a repo left off, so the drift check skips them too.
+    left_off: z.array(z.strictObject({ repo: bounded(200).regex(REPO), why: bounded(200), workers: z.array(bounded(63).regex(SCRIPT)).max(10).optional() })).optional(),
   })
   .superRefine((m, ctx) => {
     const ids = new Map<string, string>();
@@ -102,6 +108,14 @@ export const SystemModelSchema = z
       for (const a of s.aliases ?? []) claim(a, `alias of ${s.id}`);
     }
     for (const c of m.containers) claim(c.id, "container");
+    const scripts = new Map<string, string>();
+    for (const owner of [...m.systems.map((x) => ({ id: x.id, workers: x.workers })), ...(m.left_off ?? []).map((l) => ({ id: `left_off ${l.repo}`, workers: l.workers }))]) {
+      for (const w of owner.workers ?? []) {
+        const prior = scripts.get(w);
+        if (prior) ctx.addIssue({ code: "custom", message: `the Worker ${w} is listed by ${prior} and ${owner.id}` });
+        scripts.set(w, owner.id);
+      }
+    }
     const systems = new Set(m.systems.map((s) => s.id));
     const endpoints = new Set([...systems, ...m.containers.map((c) => c.id)]);
     for (const c of m.containers) {

@@ -1,5 +1,5 @@
 import { handleSignedInReport, SIGNED_IN_REPORT_PATH } from "./signed-in-crawl";
-import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, handlePublicDocument } from "./public-data";
+import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, PUBLIC_VERSIONS_PATH, handlePublicDocument } from "./public-data";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResult } from "./shadow";
 import { REVIEW_RUN_PATH, handleReviewRun } from "./review";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
@@ -56,7 +56,7 @@ import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "./portal-conve
 import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "./push";
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "./portal-library";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "./portal-trends";
-import { handlePortalCompleteness, handlePortalPackageHistory, handlePortalSharedCode, PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
+import { handlePortalCompleteness, handlePortalPackageHistory, handlePortalResources, handlePortalSharedCode, PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_RESOURCES_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { rateLimiter, textResponse } from "./http";
 
@@ -281,6 +281,7 @@ export const defaultHandler = {
     if (url.pathname === PUBLIC_MODEL_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.model);
     if (url.pathname === PUBLIC_STATS_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.stats);
     if (url.pathname === PUBLIC_CODE_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.code);
+    if (url.pathname === PUBLIC_VERSIONS_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.versions);
     if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET") return handleClientDocument(request);
     if (url.pathname === REPORT_PATH) return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
@@ -334,6 +335,7 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
   if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET") return handlePortalSharedCode(request, env);
   if (url.pathname === PORTAL_COMPLETENESS_PATH && request.method === "GET") return handlePortalCompleteness(request, env);
+  if (url.pathname === PORTAL_RESOURCES_PATH && request.method === "GET") return handlePortalResources(request, env);
   if (url.pathname === PORTAL_LIBRARY_PATH && request.method === "GET") return handlePortalLibrary(request, env);
   if (url.pathname === PORTAL_TRENDS_PATH && request.method === "GET") return handlePortalTrends(request, env);
   if (url.pathname === PORTAL_PUSH_PATH && request.method === "GET") return handlePortalPushGet(request, env);

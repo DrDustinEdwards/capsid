@@ -522,7 +522,10 @@ test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_sit
       // A static import, a bare side-effect import, or a dynamic import().
       .filter((f) => new RegExp(`(\\bfrom\\s*|\\bimport\\s*\\(?\\s*)["'](\\.\\.?\\/)+${module}(\\.ts)?["']`).test(f.text))
       .map((f) => f.name);
-  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "site-key.ts", "site-traffic.ts", "tls-expiry.ts", "watcher-gather.ts", "workers-builds.ts"]);
+  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "site-key.ts", "site-traffic.ts", "system-resources.ts", "tls-expiry.ts", "watcher-gather.ts", "workers-builds.ts"]);
+  // The secrets and data model reads Cloudflare in the nightly build only; the Portal and
+  // the admin tool read what it stored (src/system-facts-store.ts).
+  assert.deepEqual(importersOf("system-resources"), ["system-facts.ts"]);
   // The config reads (capsid_admin_read_ops's Access and Email Routing actions) run per
   // call of an admin-only MCP tool and nowhere else: not from a Portal route, whose
   // every page load would then call Cloudflare.

@@ -21,7 +21,7 @@ import { PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
-import { PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
+import { PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_RESOURCES_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
 import { PORTAL_PUSH_PATH } from "../src/push.ts";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
@@ -32,7 +32,7 @@ import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH } from "../src/bench.ts";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH } from "../src/shadow.ts";
 import { REVIEW_RUN_PATH } from "../src/review.ts";
-import { PUBLIC_CODE_PATH, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH } from "../src/public-data.ts";
+import { PUBLIC_CODE_PATH, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, PUBLIC_VERSIONS_PATH } from "../src/public-data.ts";
 import { SIGNED_IN_REPORT_PATH } from "../src/signed-in-crawl.ts";
 import {
   ROUTE_GRANTS,
@@ -132,6 +132,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_CONVERGENCE_PATH,
   PORTAL_PACKAGE_HISTORY_PATH,
   PORTAL_SHARED_CODE_PATH,
+  PORTAL_RESOURCES_PATH,
   PORTAL_COMPLETENESS_PATH,
   PORTAL_LIBRARY_PATH,
   PORTAL_TRENDS_PATH,
@@ -144,6 +145,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PUBLIC_STATS_PATH,
   SIGNED_IN_REPORT_PATH,
   PUBLIC_CODE_PATH,
+  PUBLIC_VERSIONS_PATH,
   ADMIN_OPS_MCP_ROUTE,
 };
 
@@ -201,12 +203,14 @@ async function servedActions(build: typeof buildServer, name: string): Promise<s
   return served?.enum ?? [];
 }
 
-test("capsid_run_improve serves status only, as a read, and the admin's switches are admin", async () => {
+test("capsid_run_improve serves status and the versions model, as reads, and the admin's switches are admin", async () => {
   // The actions come from the schemas the servers serve, so an action added to either
   // tool without a decision here fails.
   const driver = await servedActions(buildServer, "capsid_run_improve");
-  assert.deepEqual(driver, ["status"], "capsid_run_improve's action list changed; decide its requirement here and in TOOL_ACTION_GRANTS");
+  assert.deepEqual(driver, ["status", "versions"], "capsid_run_improve's action list changed; decide its requirement here and in TOOL_ACTION_GRANTS");
   assert.equal(requiredForAction("capsid_run_improve", "status"), "read");
+  // The versions model is the public document (/public/versions/v1.json), so a read.
+  assert.equal(requiredForAction("capsid_run_improve", "versions"), "read");
 
   const admin = await servedActions(buildAdminServer, "capsid_admin_control_improve");
   // The overnight run's switch (src/overnight.ts) and the queue's circuit breaker

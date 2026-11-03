@@ -233,9 +233,10 @@ const CLOSE_PR: CompositeSpec = {
 const RUN_IMPROVE: CompositeSpec = {
   name: "capsid_run_improve",
   title: "Read Capsid's status",
-  summary: "Capsid's state as a driver reads it: per namespace the job queue, the breaker, the maintenance list and what needs Dustin, plus the signed policies and canon paths. Needs the read grant. (The improve loop this tool was named for has been removed.)",
+  summary: "Capsid's state as a driver reads it: per namespace the job queue, the breaker, the maintenance list and what needs Dustin, plus the signed policies and canon paths; and the versions model, which package versions every system installs. Needs the read grant. (The improve loop this tool was named for has been removed.)",
   actions: {
     status: { op: "status", fields: ["namespace"], summary: "Capsid's status." },
+    versions: { op: "system_versions", summary: "Which network package versions each system installs." },
   },
   defaultAction: "status",
 };
@@ -258,7 +259,7 @@ export const MANAGE_NAMESPACES: CompositeSpec = {
 const READ_OPS: CompositeSpec = {
   name: "capsid_admin_read_ops",
   title: "Read operations state",
-  summary: "Operations state across every namespace: the watcher's last pass, Cloudflare Access and Email Routing, and Cloudflare Workers Builds status and logs. Read-only, and admin only.",
+  summary: "Operations state across every namespace: the watcher's last pass, Cloudflare Access and Email Routing, Cloudflare Workers Builds status and logs, and the secrets and data model (each Worker's secret names, databases, tables and stores, and who uses them). Read-only, and admin only.",
   actions: {
     snapshot: { op: "ops_snapshot", summary: "The watcher's last pass." },
     access_apps: { op: "cloudflare_config", inject: { action: "access_apps" }, summary: "Access applications." },
@@ -267,6 +268,7 @@ const READ_OPS: CompositeSpec = {
     email_addresses: { op: "cloudflare_config", inject: { action: "email_addresses" }, summary: "Email Routing destination addresses." },
     builds: { op: "workers_builds", summary: "Workers Builds." },
     build_logs: { op: "workers_build_logs", summary: "One build's log." },
+    resources: { op: "system_resources", summary: "Each Worker's secret names, databases and stores, and who uses them." },
   },
 };
 
