@@ -1,3 +1,4 @@
+import { readDumpJson } from "@dustinedwards/d1-dump";
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { BACKUP_CRON, SKILLS_REFRESH_CRON, TICK_CRON } from "../src/index";
@@ -64,8 +65,8 @@ describe("the three cron expressions", () => {
     // partial success, so the assertion is on the table this fixture put a row in.
     const documentsDump = listed.objects.find((o: { key: string }) => o.key.includes("documents"));
     expect(documentsDump, `no documents dump among ${listed.objects.map((o: { key: string }) => o.key).join(", ")}`).toBeTruthy();
-    const dumped = await env.MEDIA.get(documentsDump!.key);
-    expect(await dumped!.text()).toContain("cron-fixture.md");
+    const dumped = await readDumpJson<unknown>(env.MEDIA, documentsDump!.key, (k) => `no object ${k}`);
+    expect(JSON.stringify(dumped)).toContain("cron-fixture.md");
 
     // One row. Where the backup credential is not configured (CI, and a local run), the
     // dump lands and the prune refuses, and the row says so rather than "ok".

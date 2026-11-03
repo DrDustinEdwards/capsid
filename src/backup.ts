@@ -1,4 +1,4 @@
-import { BackupIncomplete, DEFAULT_RETENTION, runCheckedBackup, type DumpResult } from "@dustinedwards/d1-dump";
+import { BackupIncomplete, DEFAULT_RETENTION, readDumpJson, runCheckedBackup, type DumpResult } from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./security-headers";
@@ -326,9 +326,9 @@ type DocRow = { namespace: string; path: string; body: string | null };
 // written. A documents object that cannot be read fails the run.
 async function dumpedDocs(env: Env, dump: DumpResult): Promise<DocRow[]> {
   const docsKey = dump.tables.find((t) => t.name === "documents")?.key;
-  const docsObject = docsKey ? await env.MEDIA.get(docsKey) : null;
-  if (!docsObject) throw new Error(`BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
-  return (JSON.parse(await docsObject.text()) as { rows: DocRow[] }).rows;
+  if (!docsKey) throw new Error(`BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
+  const read = await readDumpJson<{ rows: DocRow[] }>(env.MEDIA, docsKey, () => `BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
+  return read.rows;
 }
 
 // The package dumps what sqlite_master holds; TABLES is what the migrations create
@@ -454,6 +454,7 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
       prefix: JSON_PREFIX,
       now: new Date(now),
       retention: { policy: DUMP_RETENTION },
+      compress: true,
       paged: PAGED,
       exclude: [...EXCLUDED],
       sidecars: { kv: { keys: await readKvPins(env) } },
