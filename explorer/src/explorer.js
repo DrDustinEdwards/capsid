@@ -1,5 +1,4 @@
-// The explorer's one script. Every page is complete without it: the maps are named pictures with
-// their lists open, every step is a page, every tool and module has an address, and the tables
+// The explorer's one script. Every page is complete without it: the maps are cards and lists, every step is a page, every tool and module has an address, and the tables
 // are plain tables. This makes them move: Capsomer's system map (copied from capsomer at build),
 // its tabs, Enarratio's chart tooltips, the flow players, the front page's panel and tour, the filters
 // and sorting, and search.
@@ -22,20 +21,9 @@ enhanceTheme();
 
 for (const root of document.querySelectorAll("[data-cap='system-map']")) {
   if (root.hasAttribute("data-cap-ready")) continue;
-  root.setAttribute("data-cap-ready", "");
   const host = root.closest(".map-host");
-  if (host?.dataset.flow) {
-    // The page arrives drawn at its step (src/pages.mjs, markStep). Capsomer starts from the
-    // shell and goes inside itself, so the drawn state goes first; in one task, so nothing moves.
-    root.removeAttribute("data-entered");
-    for (const el of root.querySelectorAll("[data-on], [data-lit], [data-at]")) {
-      el.removeAttribute("data-on");
-      el.removeAttribute("data-lit");
-      el.removeAttribute("data-at");
-    }
-  }
-  // A page drawn zoomed into a system (src/pages.mjs, familyMap) is zoomed again by Capsomer, with no movement.
-  const map = controller(root, root.dataset.openLabel ?? "Open");
+  // A flow's page arrives with its step lit (src/pages.mjs, flowMap), which Capsomer starts from.
+  const map = controller(root);
   if (host?.dataset.flow) {
     if (host.hasAttribute("data-player")) player(map, root, host);
     else flowPage(map, root, host);

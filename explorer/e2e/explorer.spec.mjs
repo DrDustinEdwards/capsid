@@ -31,23 +31,6 @@ async function watch(page, expect404 = false) {
   return problems;
 }
 
-/**
- * Counts each animation started on the map's token: a finished one leaves getAnimations(), so
- * the count is what says the token travelled.
- * @param {import("@playwright/test").Page} page
- */
-async function countTokenMoves(page) {
-  await page.addInitScript(() => {
-    const w = /** @type {any} */ (window);
-    w.tokenMoves = 0;
-    const animate = Element.prototype.animate;
-    Element.prototype.animate = function (...args) {
-      if (this.classList.contains("cap-system-map-token")) w.tokenMoves++;
-      return animate.apply(this, args);
-    };
-  });
-}
-
 eachTheme((theme) => {
   for (const path of PAGES) {
     test(`accessibility: ${path} has no axe violation and no policy violation`, async ({ page }) => {
@@ -62,37 +45,19 @@ eachTheme((theme) => {
     });
   }
 
-  test("keyboard: the map is one tab stop, and Enter on the core zooms into its circle", async ({ page }) => {
+  test("keyboard: focusing a system lights what it uses and what uses it, and Enter opens it", async ({ page }) => {
     const problems = await watch(page);
     await page.goto("/systems/");
     const map = page.locator(".cap-system-map");
     await expect(map).toHaveAttribute("data-cap-ready", "");
-    await expect(map.locator(".cap-system-map-tile[tabindex='0']")).toHaveCount(1);
-    await map.locator(".cap-system-map-views button:not([hidden])").last().focus();
-    await page.keyboard.press("Tab");
-    expect(await page.evaluate(() => /** @type {HTMLElement} */ (document.activeElement).dataset.id)).toBe("hub");
+    await map.getByRole("link", { name: "Kit", exact: true }).focus();
+    await expect(map).toHaveAttribute("data-lit", "kit");
+    await expect(map.locator(".cap-system-map-card[data-id='hub']")).toHaveAttribute("data-tie", /.+/);
     await page.keyboard.press("Enter");
-    await expect(map).toHaveAttribute("data-zoom", "hub");
-    await expect(map.locator("svg[data-system='hub'][data-shown]")).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(map).not.toHaveAttribute("data-zoom");
-    expect(await page.evaluate(() => /** @type {HTMLElement} */ (document.activeElement).dataset.id)).toBe("hub");
+    await expect(page).toHaveURL(/\/s\/kit\/$/);
+    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-system", "kit");
+    await expect(page.locator("[data-column='used-by'] .cap-system-map-tie[data-id='hub']")).toBeVisible();
     expect(problems).toEqual([]);
-  });
-
-  test("behavior: a system's page and its parts page open zoomed into its circle", async ({ page }) => {
-    await watch(page);
-    await page.goto("/s/kit/");
-    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-zoom", "kit");
-    await expect(page.locator(".cap-system-map-tile[data-id='kit']")).toHaveAttribute("aria-pressed", "true");
-    // A system on the rim zooms there.
-    await page.locator(".cap-system-map-rim[data-goto='hub']").first().click();
-    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-zoom", "hub");
-    await page.goto("/s/hub/containers/");
-    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-zoom", "hub");
-    // Entered on load without taking the reader there: the page opens at its top, focus unmoved.
-    expect(await page.evaluate(() => scrollY)).toBe(0);
-    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
   });
 
   test("behavior: nothing is wider than a phone's screen", async ({ page }) => {
@@ -102,9 +67,8 @@ eachTheme((theme) => {
     }
   });
 
-  test("flow: number keys and Next step the flow in place, the address follows, and a token travels the line", async ({ page }) => {
+  test("flow: number keys and Next step the flow in place, the address follows, and the step's parts light", async ({ page }) => {
     const problems = await watch(page);
-    await countTokenMoves(page);
     await page.goto("/flows/sample-round/1/");
     const map = page.locator(".cap-system-map");
     await expect(map).toHaveAttribute("data-flow", "sample-round");
@@ -117,7 +81,7 @@ eachTheme((theme) => {
     await expect(page).toHaveURL(/\/flows\/sample-round\/3\/$/);
     await expect(page.locator("#step-title")).toHaveText("Step 3 of 3");
     await expect(map).toHaveAttribute("data-step", "3");
-    await expect(page.locator(".cap-system-map-wire[data-on]")).toHaveAttribute("data-from", "hub-tick");
+    await expect(map.locator(".cap-system-map-part[data-id='hub-tick']")).toHaveAttribute("data-lit", "");
     await expect(page.locator(".flow-touches li[data-part]")).toHaveCount(2);
     await expect(page.locator(".flow-nav a[rel='next']")).toHaveCount(0);
 
@@ -126,8 +90,6 @@ eachTheme((theme) => {
     await expect(page.locator("#step-title")).toHaveText("Step 2 of 3");
     // Focus stays on Back, now step 2's own Back.
     expect(await page.evaluate(() => document.activeElement?.getAttribute("rel"))).toBe("prev");
-    // The token moved for the load, for 3 and for Back: one animation each.
-    expect(await page.evaluate(() => /** @type {any} */ (window).tokenMoves)).toBe(3);
 
     await page.goBack();
     await expect(page.locator("#step-title")).toHaveText("Step 3 of 3");
@@ -145,17 +107,14 @@ eachTheme((theme) => {
   test("flow: under reduced motion a step jumps, with no animation running", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const problems = await watch(page);
-    await countTokenMoves(page);
     await page.goto("/flows/sample-round/1/");
     await expect(page.locator(".cap-system-map")).toHaveAttribute("data-step", "1");
     await page.keyboard.press("2");
     await expect(page.locator("#step-title")).toHaveText("Step 2 of 3");
-    await expect(page.locator(".cap-system-map-token")).toBeVisible();
     expect(await page.evaluate(timedAnimations)).toBe(0);
     await page.locator(".flow-nav a[rel='next']").click();
     await expect(page.locator("#step-title")).toHaveText("Step 3 of 3");
     expect(await page.evaluate(timedAnimations)).toBe(0);
-    expect(await page.evaluate(() => /** @type {any} */ (window).tokenMoves)).toBe(0);
     expect(problems).toEqual([]);
   });
 
@@ -163,12 +122,12 @@ eachTheme((theme) => {
     const context = await browser.newContext({ javaScriptEnabled: false, colorScheme: theme });
     const page = await context.newPage();
     await page.goto("/flows/sample-round/1/");
-    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-entered", "");
-    await expect(page.locator(".cap-system-map-wire[data-on]")).toHaveCount(1);
+    await expect(page.locator(".cap-system-map")).toHaveAttribute("data-step", "1");
+    await expect(page.locator(".cap-system-map-part[data-lit]").first()).toBeVisible();
     await page.locator(".flow-nav a[rel='next']").click();
     await expect(page).toHaveURL(/\/flows\/sample-round\/2\/$/);
     await expect(page.locator("#step-title")).toHaveText("Step 2 of 3");
-    await expect(page.locator(".cap-system-map-box[data-at]")).toHaveAttribute("data-id", "hub-db");
+    await expect(page.locator(".cap-system-map-part[data-at]")).toHaveAttribute("data-id", "hub-db");
     await context.close();
   });
 });

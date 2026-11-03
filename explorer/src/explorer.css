@@ -76,16 +76,27 @@ h2:not(.cap-family-footer-heading) {
   font: 650 clamp(1.75rem, 3vw, 2.75rem) / 1 var(--face);
   letter-spacing: -0.03em;
 }
-/* The plain map's group names are labels, as Capsomer sets them; the page's h2 above outranked
-   them and the long ones ran into the next column. */
-.cap-system-map-group-name {
-  margin: 0 0 var(--space-3);
-  font: 600 var(--fs-label) var(--ui);
-  letter-spacing: 0.08em;
-}
 h3 {
   font-size: 1.1875rem;
   font-weight: 600;
+}
+/* The system map's headings are labels and card names, as Capsomer sets them; this page's own
+   heading rules are unlayered and would otherwise outrank them. */
+.cap-system-map :is(.cap-system-map-group-name, .cap-system-map-column-name, .cap-system-map-place-name) {
+  margin: 0 0 var(--space-3);
+  font: 600 0.75rem / 1.3 var(--ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cap-system-map :is(.cap-system-map-card-name, .cap-system-map-flow-name) {
+  margin: 0;
+  font: 600 var(--fs-lead) / 1.3 var(--ui);
+  letter-spacing: 0;
+}
+.cap-system-map .cap-system-map-part-name {
+  margin: 0;
+  font: 600 var(--fs-body) / 1.3 var(--ui);
+  letter-spacing: 0;
 }
 .lead {
   max-width: 54ch;
@@ -878,14 +889,6 @@ html:not(.js) .chapter h3::before {
   min-block-size: calc(100vh - var(--header-h));
   min-width: 0;
 }
-/* The words tell each step, so the drawing keeps only itself: no views, no step box. */
-.tour-map .cap-system-map-views,
-.tour-map .cap-system-map-detail {
-  display: none;
-}
-.tour-map .cap-system-map-stage {
-  max-width: min(40rem, calc(100vh - var(--header-h) - 8rem));
-}
 @media (max-width: 64rem) {
   /* On a narrow screen the opening comes first, then the drawing pins to the top and the
      chapters pass under it. */
@@ -910,8 +913,15 @@ html:not(.js) .chapter h3::before {
   .tour-map .cap-system-map-head {
     display: none;
   }
-  .tour-map .cap-system-map-stage {
-    max-width: min(100%, 34vh);
+  /* Pinned above the chapters, the drawing keeps one height and shows only the parts the step
+     lights, so it stays small and nothing below it moves as the steps change. */
+  .tour-map {
+    block-size: 34vh;
+    overflow: hidden;
+  }
+  .tour-map .cap-system-map-part:not([data-lit]),
+  .tour-map .cap-system-map-place:not(:has([data-lit])) {
+    display: none;
   }
   .tour-steps {
     order: 3;
@@ -921,19 +931,8 @@ html:not(.js) .chapter h3::before {
   }
 }
 
-/* The tour's map shows its drawing and its step line; its own list lives on the flow pages. */
-.tour-map .cap-system-map-list,
-.tour-map details,
-.flow-stage .cap-system-map-list,
-.flow-stage details {
-  display: none;
-}
 .flow-stage {
   margin-block: var(--space-6);
-}
-/* A step page has its own Back and Next above the drawing; the map's copies would be a second set. */
-.flow-step ~ section .cap-system-map-detail-actions {
-  display: none;
 }
 .cap-tabs-panel {
   padding-block-start: var(--space-5);
@@ -1358,28 +1357,9 @@ th[aria-sort="ascending"] .sort::after {
   outline: 2px solid var(--ring);
 }
 
-/* The map's view buttons need its script, so Capsomer ships them hidden and shows them once it
-   runs. Shown late, they pushed the drawing down on a phone (Lighthouse CLS 0.17 on the front
-   page, e2e/lighthouse.spec.mjs), so their room is kept from the first paint, empty until then.
-   In Capsomer's reset layer, whose `[hidden] { display: none !important }` only a rule of the same
-   layer and more weight can answer. */
-@layer cap.reset {
-  .cap-system-map-views[hidden] {
-    display: inline-flex !important;
-    visibility: hidden;
-  }
-}
 
-/* Zoomed in, Back to all systems joins the view buttons; on a phone the three no longer fit beside
-   the title, so there the buttons have their own row from the start and the drawing stays put. */
-@media (max-width: 40rem) {
-  .cap-system-map-views {
-    flex-basis: 100%;
-  }
-}
-
-/* A flow's step page. The page lists every step itself, with links, so the map's own list of
-   the same steps is not shown twice; the script still reads it to play the flow. */
+/* A flow's pages list every step themselves, with links, so the map's own list of the same steps
+   is not shown twice; the script still steps it through the map's controller. */
 .flow-map .cap-system-map-flows {
   display: none;
 }
@@ -1407,11 +1387,6 @@ th[aria-sort="ascending"] .sort::after {
   margin-block: var(--space-2) var(--space-3);
   font: 600 clamp(1.75rem, 3vw, 2.5rem) / 1.1 var(--prose);
   letter-spacing: -0.02em;
-}
-/* The step page tells the step itself, so the map's own card and list of it are not shown twice. */
-.step-drawing .cap-system-map-detail,
-.step-drawing details {
-  display: none;
 }
 /* On a wide screen the step reads beside its drawing, so stepping never sends the eye down the
    page to see what moved. The card and the drawing's buttons start on one line. */
