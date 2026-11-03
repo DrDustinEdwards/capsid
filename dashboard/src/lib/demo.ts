@@ -33,8 +33,14 @@ export function shiftTimes(value: unknown, delta: number, days = false): unknown
   return value;
 }
 
+/** A package name as a captured file's name: a scoped name's @ and / would be read as a path. */
+export function demoFileName(name: string): string {
+  return name.replace(/[^a-z0-9._-]/gi, "_");
+}
+
 /** The demo's reads, answered from the captured files: GET /demos/api/<name>?... reads
- *  /demos/api/<name>.json (the query is not kept), moved to now. Anything else under /demos/api/
+ *  /demos/api/<name>.json (the query is not kept), moved to now; a package's history
+ *  (?name=<package>) reads /demos/api/packages/history/<package>.json. Anything else under /demos/api/
  *  is refused in the browser with 409 and plain text, which the app shows as the server's words. */
 export function installDemoFetch(): void {
   const prefix = `${DEMO_BASE}/api/`;
@@ -46,7 +52,9 @@ export function installDemoFetch(): void {
     if (request.method !== "GET") {
       return new Response("This is a demo with sample data: nothing is saved or changed.", { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
-    const res = await real(`${url.pathname}.json`, { credentials: "omit" });
+    const pkg = url.pathname === `${prefix}packages/history` ? url.searchParams.get("name") : null;
+    const file = pkg ? `${url.pathname}/${demoFileName(pkg)}` : url.pathname;
+    const res = await real(`${file}.json`, { credentials: "omit" });
     if (!res.ok) return res;
     const moved = shiftTimes(await res.json(), Date.now() - Date.parse(DEMO_CAPTURED), true);
     return new Response(JSON.stringify(moved), { status: 200, headers: { "Content-Type": "application/json" } });
