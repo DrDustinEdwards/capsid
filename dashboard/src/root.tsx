@@ -15,6 +15,7 @@ import "capsomer/site-capsid-portal.css";
 import "capsomer/status.css";
 import "capsomer/panel.css";
 import "capsomer/empty.css";
+import "capsomer/skeleton.css";
 import "capsomer/dialog.css";
 import "capsomer/popover.css";
 import "capsomer/site-header.css";

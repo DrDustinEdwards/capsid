@@ -129,16 +129,22 @@ export function Tonight() {
 const LAST_LOOKED_PREF = "wf-last-looked";
 const DAY = 86_400_000;
 
+/** The digest's default window: the 24 hours before `now`. */
+export function digestSince(now: number): string {
+  return new Date(now - DAY).toISOString();
+}
+
 export function SinceLastLooked() {
   const { now } = useApp();
-  // Read once, when the page opens, then moved to now: the next visit reports from here.
-  const [since] = useState(() => {
+  // The server renders the last 24 hours (server/prefetch.ts reads the same digest); this
+  // browser's own last look is read after hydration, once, and the next visit reports from now.
+  const [since, setSince] = useState(() => digestSince(now));
+  useEffect(() => {
     const saved = readPref(LAST_LOOKED_PREF);
     const at = saved ? Date.parse(saved) : NaN;
-    return Number.isNaN(at) ? new Date(now - DAY).toISOString() : new Date(at).toISOString();
-  });
-  // Once per visit: the clock ticking on is not a new look.
-  useEffect(() => writePref(LAST_LOOKED_PREF, new Date(now).toISOString()), []);
+    if (!Number.isNaN(at)) setSince(new Date(at).toISOString());
+    writePref(LAST_LOOKED_PREF, new Date(now).toISOString());
+  }, []);
   const load = useAnswer<PortalDigest>([LIVE, "digest", since], () => fetchDigest(since));
   const d = load.data;
   const merged = d?.pull_requests_merged ?? 0;

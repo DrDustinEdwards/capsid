@@ -42,7 +42,13 @@ export async function measure(page: Page, root = "main"): Promise<Overflow> {
     for (const d of closed) d.open = true;
     return closed.length;
   }, root);
-  if (opened) await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  // A chart redraws to its width after the fold opens (a resize observer, then a render), so
+  // the measure waits for that, up to two seconds; a chart that never fits is still reported.
+  if (opened) {
+    await page
+      .waitForFunction((sel) => [...(document.querySelector(sel)?.querySelectorAll<HTMLElement>("details[open] .enarratio-frame") ?? [])].every((f) => f.scrollWidth <= f.clientWidth + 1), root, { timeout: 2000 })
+      .catch(() => {});
+  }
   return page.evaluate((sel) => {
     const de = document.documentElement;
     const r = document.querySelector<HTMLElement>(sel);

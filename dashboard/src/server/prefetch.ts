@@ -5,6 +5,7 @@ import { DAY } from "../lib/format";
 import { pageBase } from "../lib/router";
 import type { OpsFeed } from "../types";
 import type { ViewId } from "../app/ctx";
+import { digestSince } from "../views/Overnight";
 import { FILTER_KEYS, PUSH_KEY, parseDocParam } from "../lib/keys";
 
 // The server's half of TanStack Query's server rendering (Advanced Server Rendering guide): a
@@ -66,6 +67,7 @@ function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, d
   switch (view) {
     case "needs":
       out.push(namespaces, trends, { key: ["claims", "waits"], path: `/claims${qs({ since: new Date(generated - 14 * DAY).toISOString() })}` });
+      out.push({ key: [LIVE, "digest", digestSince(generated)], path: `/digest${qs({ since: digestSince(generated) })}` });
       break;
     case "health":
       out.push(trends, { key: ["convergence"], path: "/convergence" }, { key: ["maintenance"], path: "/maintenance" });
@@ -121,26 +123,37 @@ async function readInto(client: QueryClient, server: PortalServer, spec: Spec): 
   });
 }
 
+// The feed, read once per page: the shell renders it, and a view's reads are timed from it, as
+// the view times them in the browser (the first render's now is the feed's read time).
+const feeds = new WeakMap<object, Promise<OpsFeed | null>>();
+function feedOf(context: Readonly<RouterContextProvider>, request: Request): Promise<OpsFeed | null> {
+  let feed = feeds.get(context);
+  if (!feed) {
+    feed = (async () => {
+      const client = new QueryClient();
+      await readInto(client, serverFor(context, request), { key: FEED_KEY, path: "/ops" });
+      return (client.getQueryData(FEED_KEY) as OpsFeed | undefined) ?? null;
+    })();
+    feeds.set(context, feed);
+  }
+  return feed;
+}
+
 /** The feed, for the shell: the letterhead, the menu's counts and every view read it. */
 export async function prefetchFeed(context: Readonly<RouterContextProvider>, request: Request): Promise<DehydratedState> {
   const client = new QueryClient();
-  await readInto(client, serverFor(context, request), { key: FEED_KEY, path: "/ops" });
+  const feed = await feedOf(context, request);
+  if (feed) client.setQueryData(FEED_KEY, feed);
   return dehydrate(client);
 }
 
-/** A view's own reads. The feed is read again here only for the demo's package list, from
- *  the captured sample files. */
+/** A view's own reads, for the address it was opened at. */
 export async function prefetchView(context: Readonly<RouterContextProvider>, request: Request, view: ViewId, drawer: { type: string; id: string } | null = null): Promise<DehydratedState> {
   const server = serverFor(context, request);
   const url = new URL(request.url);
   const client = new QueryClient();
   const demo = pageBase(url.pathname) !== "";
-  let feed: OpsFeed | null = null;
-  if (view === "packages" && demo) {
-    await readInto(client, server, { key: FEED_KEY, path: "/ops" });
-    feed = (client.getQueryData(FEED_KEY) as OpsFeed | undefined) ?? null;
-    client.removeQueries({ queryKey: FEED_KEY });
-  }
+  const feed = await feedOf(context, request);
   await Promise.all(specsFor(view, url, feed, demo, drawer).map((s) => readInto(client, server, s)));
   return dehydrate(client);
 }

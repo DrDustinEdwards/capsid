@@ -71,7 +71,10 @@ function useSignedOut(): boolean {
 export function createQueryClient(): QueryClient {
   return new QueryClient({
     queryCache: new QueryCache({ onError: (e) => e instanceof SignedOut && setSignedOut(true) }),
-    defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } },
+    // staleTime above 0, as TanStack Query's SSR guide says: a read the server made for this page
+    // is fresh on hydration, so the page shows it and does not read it again at once. The feed's
+    // minute poll, Read again and every action's invalidation read again whatever the age.
+    defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false, staleTime: 60_000 } },
   });
 }
 
@@ -93,9 +96,9 @@ type Read<T> = Load<T> & { reread: () => void };
 export function useAnswer<T>(
   key: readonly unknown[],
   read: () => Promise<Answer<T>>,
-  { keep = true, staleTime = 0, enabled = true }: { keep?: boolean; staleTime?: number; enabled?: boolean } = {},
+  { keep = true, staleTime, enabled = true }: { keep?: boolean; staleTime?: number; enabled?: boolean } = {},
 ): Read<T> {
-  const q = useQuery({ queryKey: key, queryFn: () => ask(read), placeholderData: keep ? keepPreviousData : undefined, staleTime, enabled });
+  const q = useQuery({ queryKey: key, queryFn: () => ask(read), placeholderData: keep ? keepPreviousData : undefined, enabled, ...(staleTime === undefined ? {} : { staleTime }) });
   const { refetch } = q;
   return {
     data: q.data ?? null,
