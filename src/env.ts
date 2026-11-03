@@ -48,8 +48,8 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // Tools' Settings, API access. Bing gives it no narrower scope, so the module calls only
   // Get methods. Unset, capsid_inspect_repo action bing reads nothing and says why.
   BING_WEBMASTER_API_KEY?: string;
-  // The dashboard app's built files (dashboard/dist), served under /portal/ only
-  // after the Portal's gate. Absent where no assets are configured.
+  // The dashboard's built browser files (dashboard/build/client): the hashed /assets/* public on
+  // the Portal host, everything else after the Portal's gate. Absent where no assets are configured.
   ASSETS?: Fetcher;
   // GitHub App. No pinned installation id: resolved per owner and repo.
   GITHUB_APP_CLIENT_ID: string;

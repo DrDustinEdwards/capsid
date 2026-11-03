@@ -22,7 +22,7 @@ const ProjectChart = lazy(() => import("./TrendCharts").then((m) => ({ default: 
 // Claude Code sessions reporting through their hooks (POST /ops/hooks, docs/hooks.md):
 // the job each is bound to, the key, its last event, whether it waits on a person, and
 // its last failure.
-export function LiveSessions() {
+function LiveSessions() {
   const { feed, now } = useApp();
   const list = feed.live.sessions;
   if (!list.length) return <Empty kind="all-clear" title="No live sessions in the last 24 hours." />;
@@ -79,7 +79,7 @@ function useStale(): { load: StaleLoad; reread: () => void } {
 
 // The panel. A row opens the job's drawer, which holds the controls (Resume, Close as
 // shipped and the rest); nothing here changes a job.
-export function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
+function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
   const { now } = useApp();
   // The Queue's namespace chips narrow these rows too.
   const [ns] = useNsFilter();

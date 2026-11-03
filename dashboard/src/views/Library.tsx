@@ -1,7 +1,8 @@
+import { parseDocParam } from "../lib/keys";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
-import { Link, useLocation, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "../lib/router";
 import { routePath, useApp } from "../app/ctx";
 import { fetchLibrary, useAnswer } from "../lib/api";
 import { ago, ms } from "../lib/format";
@@ -31,12 +32,6 @@ function docParam(ns: string, path: string): string {
 
 /** A ?doc= value back to its namespace and path; null when it names neither. A namespace
  *  holds no slash, so the first one divides them. */
-function parseDocParam(value: string | null): { ns: string; path: string } | null {
-  if (!value) return null;
-  const i = value.indexOf("/");
-  if (i <= 0 || i === value.length - 1) return null;
-  return { ns: value.slice(0, i), path: value.slice(i + 1) };
-}
 
 function docHref(ns: string, path: string): string {
   return `${routePath("library")}?${new URLSearchParams({ doc: docParam(ns, path) }).toString()}`;

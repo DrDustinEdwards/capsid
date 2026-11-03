@@ -1,40 +1,23 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
-import { DEMO } from "../lib/base";
-import { Link, useLocation, useSearch } from "wouter";
+import { Outlet } from "react-router";
+import { Link, useDemo, useLocation, useSearch } from "../lib/router";
 import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
 import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
 import { RAIL_PREF, THEME_PREF, readPref, toggleTheme, useSingleKeys, writePref } from "../lib/prefs";
 import { register, setSheetOpener } from "capsomer/behavior/shortcuts";
 import { NavIcon } from "../ui/icons";
-import { AppCtx, MOVED, VIEWS, parseRoute, placePath, routePath, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
+import { AppCtx, VIEWS, parseRoute, placePath, routePath, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
+import { DemoNotice } from "./DemoNotice";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
-
-// Every view loads on first visit. Needs you, the home, is asked for as this module loads,
-// so its chunk arrives beside the first feed read rather than after it (the feed is what
-// the page waits for), and the entry stays inside its size budget.
-const needsChunk = import("../views/NeedsYou");
-const VIEW_COMPONENTS: Record<ViewId, ComponentType> = {
-  needs: lazy(() => needsChunk.then((m) => ({ default: m.NeedsYou }))),
-  queue: lazy(() => import("../views/Queue").then((m) => ({ default: m.Queue }))),
-  prs: lazy(() => import("../views/Ci").then((m) => ({ default: m.PullRequests }))),
-  health: lazy(() => import("../views/Health").then((m) => ({ default: m.Health }))),
-  activity: lazy(() => import("../views/Activity").then((m) => ({ default: m.Activity }))),
-  agents: lazy(() => import("../views/Agents").then((m) => ({ default: m.Agents }))),
-  packages: lazy(() => import("../views/Packages").then((m) => ({ default: m.Packages }))),
-  library: lazy(() => import("../views/Library").then((m) => ({ default: m.Library }))),
-  settings: lazy(() => import("../views/Settings").then((m) => ({ default: m.Settings }))),
-};
 
 // Loaded the first time a panel opens or Ctrl K is pressed, then kept, so the initial bundle
 // carries neither (the size budget, after Capsomer 0.9.0's header joined the entry).
 const Drawer = lazy(() => import("./Drawer").then((m) => ({ default: m.Drawer })));
 const CommandPalette = lazy(() => import("./CommandMenu").then((m) => ({ default: m.CommandPalette })));
-// Only the chart demo's build has it (lib/base.ts, DEMO).
-const DemoNotice = import.meta.env.MODE === "demo" ? lazy(() => import("./DemoNotice").then((m) => ({ default: m.DemoNotice }))) : null;
 // Loaded on the first control a person opens.
 const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
 // Capsomer's "?" sheet, which lists every shortcut registered below. Loaded the first time it
@@ -84,9 +67,13 @@ const BADGE_NOTE: Partial<Record<ViewId, string>> = {
   health: "critical",
 };
 
+// 0 until the page has hydrated: the first render, on the server and in the browser alike,
+// measures every time from the feed's own read time (portalNow), so both say the same words
+// and React keeps the server's HTML. The clock starts once the page is live.
 function useTick(ms: number): number {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(0);
   useEffect(() => {
+    setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), ms);
     return () => clearInterval(t);
   }, [ms]);
@@ -118,6 +105,7 @@ function Freshness({ feed, nextPollAt, skew }: { feed: OpsFeed | null; nextPollA
 
 export function App() {
   const { feed, error, signedOut, nextPollAt, accept, signOut } = useOpsFeed();
+  const demo = useDemo();
   const [location, navigate] = useLocation();
   // A view's own filters live in its query string (?ns=, say); opening and closing a
   // drawer over the view keeps them.
@@ -125,17 +113,6 @@ export function App() {
   const qs = search ? `?${search}` : "";
   const views = VIEWS;
   const route = parseRoute(location);
-  const parsed = route;
-  // A retired view's address (a bookmark, say) is replaced by the page, tab and section
-  // that hold its content now (MOVED in ctx.ts).
-  const old = location.split("/").filter(Boolean)[0];
-  const moved = old !== undefined && Object.hasOwn(MOVED, old) ? old : null;
-  useEffect(() => {
-    if (!moved) return;
-    if (parsed.drawer) return navigate(routePath(parsed.view, parsed.drawer) + qs, { replace: true });
-    const [page, anchor] = placePath(moved).split("#");
-    navigate(`${page}${search ? `${page!.includes("?") ? "&" : "?"}${search}` : ""}${anchor ? `#${anchor}` : ""}`, { replace: true });
-  }, [moved, parsed.view, parsed.drawer, qs, search, navigate]);
   // A page opened with a section's anchor scrolls to it once the section is drawn: the
   // sections load after the page does.
   useEffect(() => {
@@ -170,7 +147,10 @@ export function App() {
   const singleKeys = useSingleKeys();
   const [messages, setMessages] = useState<Message[]>([]);
   const nextMessage = useRef(1);
-  const [railCollapsed, setRailCollapsed] = useState(() => readPref(RAIL_PREF) === "collapsed");
+  // Read after the first paint: the server renders the menu open, and the browser's saved choice
+  // then closes it, so the HTML and the first render agree.
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  useEffect(() => setRailCollapsed(readPref(RAIL_PREF) === "collapsed"), []);
   const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -489,7 +469,6 @@ export function App() {
   const tabEntries = tabs.map((id) => ({ ...entryFor(id), icon: <NavIcon id={id} size={20} /> }));
 
   const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy, say, confirm, performed, signOut } : null;
-  const View = VIEW_COMPONENTS[route.view];
 
   let content: ReactNode;
   if (signedOut) {
@@ -539,7 +518,7 @@ export function App() {
             </div>
           }
         >
-          <View />
+          <Outlet />
         </Suspense>
       </>
     );
@@ -573,7 +552,7 @@ export function App() {
       }}
       status={
         <>
-          {(import.meta.env.DEV || DEMO) && (
+          {(import.meta.env.DEV || demo) && (
             <span className="sample" title="Sample data (dev/sample-feed.json): every number here is fake">
               SAMPLE DATA
             </span>
@@ -589,15 +568,11 @@ export function App() {
       collapsed={railCollapsed}
       onCollapsedChange={setRail}
       // Another app's address (the strip, the logo) is another origin: a plain anchor, since
-      // wouter would put the Portal's base in front of it.
+      // the Portal's Link would put the demo's base in front of it.
       renderLink={(p) => (/^https?:/.test(p.href) ? <a {...p} /> : <Link {...p} />)}
       mainProps={{ ref: mainRef, onClick: onRowActivate, onKeyDown: onRowActivate }}
     >
-      {DemoNotice && (
-        <Suspense fallback={null}>
-          <DemoNotice />
-        </Suspense>
-      )}
+      {demo && <DemoNotice />}
       {content}
     </AdminShell>
   );

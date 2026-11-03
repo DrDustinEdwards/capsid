@@ -17,6 +17,7 @@ import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
 import { isPortalHost, portalHostRequest } from "./portal-host";
 import { handlePortalDemo, isDemoRequest } from "./portal-demo";
+import { portalAsset } from "./portal-app";
 import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
 import { logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
 import { countNotFound } from "@dustinedwards/site-runtime/not-found";
@@ -195,6 +196,9 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   // The Portal's chart demo (src/portal-demo.ts): sample data, no sign-in, nothing written. Before the
   // Portal host's rewrite and its gate, which every other path on that host goes through.
   if (isDemoRequest(new URL(original.url))) return secured(await handlePortalDemo(original, env), asked);
+  // The Portal's hashed build files, which the demo's pages load too (src/portal-app.ts).
+  const asset = await portalAsset(original, env);
+  if (asset) return secured(asset, asked);
   const host = portalHostRequest(original);
   if ("redirect" in host) return secured(host.redirect, asked);
   const request = host.request;

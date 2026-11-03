@@ -146,7 +146,7 @@ jobs:
         run: npm run build:dashboard
 
       # The app in a real browser (dashboard/e2e, Playwright): the build above under
-      # vite preview, the dev mock, and the Worker's page CSP. A Preview click that did
+      # dev/serve.ts (the pages rendered as the Worker renders them), the dev mock, and the Worker's page CSP. A Preview click that did
       # nothing live, and pages that scrolled sideways, passed every other step here.
       # Only Chromium is installed; its version is pinned by @playwright/test in
       # dashboard/package-lock.json.

@@ -11,6 +11,8 @@
   "compatibility_date": "2026-09-06",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": false,
+  // The Portal's pages are the tests' stand-in (test/fixtures/portal-pages.ts), so no dashboard build is needed.
+  "alias": { "capsid-portal-pages": "./test/fixtures/portal-pages.ts" },
   "vars": { "GITHUB_APP_CLIENT_ID": "conformance" },
   "d1_databases": [
     { "binding": "DB", "database_name": "capsid-conformance", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "../../migrations" }

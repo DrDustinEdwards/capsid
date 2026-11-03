@@ -429,26 +429,22 @@ function WeeklyDigest() {
 // ---- Trends ---------------------------------------------------------------------------
 
 // The two charts, folded away at the foot (UX audit B3): the list comes first and never
-// moves. Opened, the body keeps room for the charts while they load (styles.css, .trends).
+// moves. They are drawn on the server inside the fold, so opening it shows them at once, with
+// scripts or without.
 function Trends() {
-  const [open, setOpen] = useState(false);
   return (
-    <details className="trends" id="trends" onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details className="trends" id="trends">
       <summary>
         <span className="chev" aria-hidden="true" />
         Trends <span className="faint">your time per week, and where waiting goes</span>
       </summary>
       <div className="trends-body chart-row">
-        {open && (
-          <>
-            <ChartSlot>
-              <MinutesTile />
-            </ChartSlot>
-            <ChartSlot>
-              <WaitingChart />
-            </ChartSlot>
-          </>
-        )}
+        <ChartSlot>
+          <MinutesTile />
+        </ChartSlot>
+        <ChartSlot>
+          <WaitingChart />
+        </ChartSlot>
       </div>
     </details>
   );
