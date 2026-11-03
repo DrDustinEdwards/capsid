@@ -176,15 +176,6 @@
       "repos": ["DrDustinEdwards/enarratio"]
     },
     {
-      "id": "writing",
-      "name": "Writing",
-      "short": "Books",
-      "family": "writing",
-      "ring": "used",
-      "description": "Dustin's books: scenes, outlines and story bibles, which Carrel reads and commits through its own GitHub App.",
-      "repos": ["DrDustinEdwards/writing"]
-    },
-    {
       "id": "skills",
       "name": "Skills",
       "short": "Skills",
@@ -589,7 +580,7 @@
       "name": "GitHub",
       "kind": "external",
       "technology": "Repos, Actions, a GitHub App",
-      "description": "The writing repository Carrel commits book files to through its App, and CI, which deploys the Worker."
+      "description": "The GitHub App Carrel commits book files to Writings through, and CI, which deploys the Worker."
     },
     {
       "id": "carrel-google",
@@ -1265,10 +1256,10 @@
     },
     {
       "id": "writing-repo",
-      "system": "writing",
-      "name": "Books",
-      "kind": "package",
-      "technology": "Git repository",
+      "system": "carrel",
+      "name": "Writings",
+      "kind": "external",
+      "technology": "Private Git repository",
       "description": "One folder per book: chapters of scene files, outlines, characters, places and world rules, plus Dustin's own voice passages."
     },
     {
@@ -1448,7 +1439,6 @@
     { "from": "carrel", "to": "foxing", "kind": "publishes-to" },
     { "from": "capsid", "to": "txasm", "kind": "coordinates" },
     { "from": "capsid", "to": "julieedwards-info", "kind": "coordinates" },
-    { "from": "capsid", "to": "writing", "kind": "coordinates" },
     { "from": "capsid", "to": "capsid-bench", "kind": "coordinates" },
     { "from": "capsid", "to": "skills", "kind": "coordinates" },
     { "from": "capsid", "to": "devkit", "kind": "installs" },
@@ -1584,6 +1574,7 @@
     { "repo": "DrDustinEdwards/bsw", "why": "Kept off the map (Dustin, 2026-10-23)." },
     { "repo": "DrDustinEdwards/recova", "why": "Kept off the map (Dustin, 2026-10-23); Foxhound replaces it." },
     { "repo": "DrDustinEdwards/recova-mcp", "why": "Kept off the map (Dustin, 2026-10-23); goes with Recova." },
-    { "repo": "DrDustinEdwards/foxing-admin-mcp", "why": "Kept off the map (Dustin, 2026-10-23); replaced by Foxing Admin and to be deleted." }
+    { "repo": "DrDustinEdwards/foxing-admin-mcp", "why": "Kept off the map (Dustin, 2026-10-23); replaced by Foxing Admin and to be deleted." },
+    { "repo": "DrDustinEdwards/writing", "why": "Not a system of its own: Carrel's Writings part (Dustin, 2026-11-03)." }
   ]
 }
