@@ -207,12 +207,12 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // The page's one module, bundled: src/explorer.js imports tabs, Capsomer's chart-enhance and the
   // system map's and the header's modules by the paths they are staged at here, each folder whole
   // (its React wrapper aside), because they import their siblings by "./" and each other by
-  // "../name/" (the map takes email's escapeHtml). One file, so the script tag's integrity covers all of it: sixteen modulepreloads
+  // "../name/" (the map takes email's escapeHtml, and its two views are Capsomer's tabs). One file, so the script tag's integrity covers all of it: sixteen modulepreloads
   // carrying the imports' integrity cost the home page 0.7 s of Lighthouse LCP.
   const stage = join(out, ".bundle");
   mkdirSync(stage, { recursive: true });
   copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(stage, "tabs.js"));
-  for (const name of ["system-map", "email", "site-header", "theme-switch", "dialog", "popover", "tooltip", "shell", "meter"]) {
+  for (const name of ["system-map", "tabs", "email", "site-header", "theme-switch", "dialog", "popover", "tooltip", "shell", "meter"]) {
     const dir = join(capsomer, "dist", "components", name);
     mkdirSync(join(stage, "capsomer", name), { recursive: true });
     for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js"))) copyFileSync(join(dir, file), join(stage, "capsomer", name, file));

@@ -330,9 +330,9 @@ test("each step page names exactly the parts its step touches, and its drawing l
         const c = model.containers.find((/** @type {any} */ x) => x.id === id);
         assert.equal(href, `${containersPath(c.system)}#part-${id}`);
       }
-      const lit = [...page.matchAll(/<li class="cap-system-map-part" id="[^"]+" data-id="([^"]+)" data-place="[a-z]+" data-lit/g)].map((m) => m[1]).sort();
+      const lit = [...page.matchAll(/<li class="cap-system-map-part" id="[^"]+" data-id="([^"]+)" data-place="[a-z]+"[^>]* data-lit[ >]/g)].map((m) => m[1]).sort();
       assert.deepEqual(lit, want, `${f.id} step ${i + 1} lights the wrong parts`);
-      assert.match(page, new RegExp(`data-id="${st.toward}" data-place="[a-z]+" data-lit data-at>`));
+      assert.match(page, new RegExp(`data-id="${st.toward}" data-place="[a-z]+"[^>]* data-lit data-at>`));
       assert.match(page, new RegExp(`<figure class="cap-system-map" data-cap="system-map"[^>]* data-flow="${f.id}" data-step="${i + 1}">`));
     });
   }

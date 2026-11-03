@@ -24,7 +24,11 @@ const CLS_BUDGET = 0.05;
  */
 const INPUT_BUDGET_MS = 100;
 
-const card = (/** @type {string} */ id) => `.cap-system-map-card[data-id="${id}"]`;
+// The network opens on the hexagons, and a phone on the plain map (Capsomer's system map): a system is the one shown.
+const HEX = ".cap-system-map-hex:not([hidden])";
+const PLAIN = ".cap-system-map-network:not([hidden])";
+const system = (/** @type {string} */ id) => `${HEX} a.cap-system-map-cell[data-id="${id}"], ${PLAIN} .cap-system-map-card[data-id="${id}"]`;
+const LINKS = `${HEX} a.cap-system-map-cell, ${PLAIN} .cap-system-map-card-name a`;
 
 /** @param {import("@playwright/test").Page} page @param {string} [path] */
 async function open(page, path = "/systems/") {
@@ -51,13 +55,16 @@ function warn(text) {
   test.info().annotations.push({ type: "warning", description: text });
 }
 
-test("keyboard: every system in the model, and no other, is a card whose link Tab reaches, with script and without", async ({ page, browser }) => {
-  const linked = (/** @type {import("@playwright/test").Page} */ p) =>
-    p.$$eval(".cap-system-map-card[data-id]", (els) => els.filter((e) => e.querySelector(".cap-system-map-card-name a[href]")).map((e) => /** @type {HTMLElement} */ (e).dataset.id ?? "").sort());
+test("keyboard: every system in the model, and no other, is a hexagon and a card whose link Tab reaches, with script and without", async ({ page, browser }) => {
+  const linked = async (/** @type {import("@playwright/test").Page} */ p) => {
+    const cards = await p.$$eval(".cap-system-map-card[data-id]", (els) => els.filter((e) => e.querySelector(".cap-system-map-card-name a[href]")).map((e) => /** @type {HTMLElement} */ (e).dataset.id ?? "").sort());
+    const cells = await p.$$eval("a.cap-system-map-cell[data-id][href]", (els) => els.map((e) => /** @type {HTMLElement} */ (e).dataset.id ?? "").sort());
+    return { cards, cells };
+  };
   await open(page);
-  expect(await linked(page)).toEqual(IDS);
-  // Tab walks the cards' links in turn, each lighting its card.
-  await page.locator(".cap-system-map-card-name a").first().focus();
+  expect(await linked(page)).toEqual({ cards: IDS, cells: IDS });
+  // Tab walks the shown view's links in turn, each lighting its system.
+  await page.locator(LINKS).first().focus();
   /** @type {Set<string>} */
   const seen = new Set();
   for (let i = 0; i < IDS.length; i++) {
@@ -69,7 +76,7 @@ test("keyboard: every system in the model, and no other, is a card whose link Ta
   const context = await browser.newContext({ javaScriptEnabled: false });
   const plain = await context.newPage();
   await plain.goto("/systems/");
-  expect(await linked(plain)).toEqual(IDS);
+  expect(await linked(plain)).toEqual({ cards: IDS, cells: IDS });
   await context.close();
 });
 
@@ -90,17 +97,17 @@ test("layout shift: lighting each system moves nothing, and stepping a flow move
   const settle = () => page.waitForTimeout(400);
 
   await open(page);
-  // Pointing at a card is not input to CLS, so every shift it caused would count.
+  // Pointing at a system is not input to CLS, so every shift it caused would count.
   await observe(false);
-  const map = [".cap-system-map", ...IDS.map(card)];
+  const map = [".cap-system-map", ...IDS.map(system)];
   const before = await place(map);
-  for (const id of IDS) await page.hover(card(id));
+  for (const id of IDS) await page.hover(system(id));
   await settle();
   const moved = Math.max(...(await place(map)).map((y, i) => Math.abs(y - (before[i] ?? NaN))));
   const lighting = await shift();
   expect(lighting, `layout shift ${lighting}`).toBeGreaterThanOrEqual(0);
   expect(lighting, `layout shift ${lighting}`).toBeLessThan(CLS_BUDGET);
-  expect(moved, "a card moved while the network lit").toBe(0);
+  expect(moved, "a system moved while the network lit").toBe(0);
 
   await open(page, `/flows/${FLOW}/1/`);
   await observe();
@@ -133,7 +140,7 @@ test("INP proxy: under 4x CPU throttling lighting each system by focus is handle
   });
   await throttled(page, async () => {
     // Each key waits for the last one's transition, as a reader's does.
-    await page.locator(".cap-system-map-card-name a").first().focus();
+    await page.locator(LINKS).first().focus();
     for (let i = 0; i < IDS.length; i++) {
       await page.keyboard.press("Tab");
       await page.waitForTimeout(300);

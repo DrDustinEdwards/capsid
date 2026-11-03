@@ -368,12 +368,12 @@ ${flowLinks(model, id)}`;
   return layout({ title: `Inside ${s.name}`, description: `Inside ${s.name}: ${inside}, on Capsid's map of the network.`, path: containersPath(id), parent: [systemPath(id), s.name], body, asOf });
 }
 
-/** The page of every system: the network as cards, and a table to sort and filter. @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf */
+/** The page of every system: the network as hexagons (a plain map a tab away), and a table to sort and filter. @param {any} model @param {Map<string, any[]>} bySystem @param {string} asOf */
 export function systemsPage(model, bySystem, asOf) {
   const map = familyMap(model, {
     id: "family",
     label: "Every system, by what it is for",
-    caption: "What people use, by group, then the shared packages and Capsid at the core. Point at a system to light what it uses and what uses it, or open it.",
+    caption: "Capsid at the core, the shared packages around it, and what people use, by group, on the outside. Point at a system to light what it uses and what uses it, or open it.",
     headingLevel: 2,
   });
   const ties = tiesOf(mapData(model));
