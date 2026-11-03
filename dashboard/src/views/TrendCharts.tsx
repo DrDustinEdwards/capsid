@@ -87,7 +87,7 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
     caption: `An estimate from what you did in Capsid: each stretch of actions with no gap over 5 minutes counts from its first action to its last, plus a minute. Reading the Portal without acting is not counted.${minutes.truncated ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Capsid audit log, your actions" },
   } as const;
-  return <ChartFrame className="minutes-chart" draw={(width) => lineChart({ ...opts, width })} />;
+  return <ChartFrame className="minutes-chart" draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />;
 }
 
 // ---- 2. Where does waiting go? ----------------------------------------------------------
@@ -164,7 +164,7 @@ export function WaitingChart() {
     caption: `Total time between a job stopping at a gate and the gate being answered, last 14 days${classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.${load.data.truncated.includes("waits") ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Claims aggregate, gate waits" },
   } as const;
-  return <ChartFrame className="wait-chart" draw={(width) => barChart({ ...opts, width })} />;
+  return <ChartFrame className="wait-chart" draw={(width, fit) => barChart({ ...opts, width, ...fit })} />;
 }
 
 // ---- 3. Is the queue growing or draining? -------------------------------------------------
@@ -198,7 +198,7 @@ export function QueueChart() {
   return (
     <ChartPanel id="queue-trend">
       <Stale error={error} />
-      <ChartFrame draw={(width) => areaChart({ ...opts, width })} />
+      <ChartFrame draw={(width, fit) => areaChart({ ...opts, width, ...fit })} />
     </ChartPanel>
   );
 }
@@ -240,7 +240,7 @@ export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
     alt: `Live jobs per project, ${counts.length} ${counts.length === 1 ? "project" : "projects"}: ${sum("blocked")} blocked, ${sum("running")} running, ${sum("queued")} queued.`,
     source: { name: "D1 jobs, the live window" },
   } as const;
-  return <ChartFrame draw={(width) => barChart({ ...opts, width })} />;
+  return <ChartFrame draw={(width, fit) => barChart({ ...opts, width, ...fit })} />;
 }
 
 // ---- 5. Does each agent's claim match what was verified? -----------------------------------
@@ -322,7 +322,7 @@ export function CostChart() {
   return (
     <ChartPanel id="cost-trend">
       <Stale error={error} />
-      <ChartFrame draw={(width) => lineChart({ ...opts, width })} />
+      <ChartFrame draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />
     </ChartPanel>
   );
 }
@@ -365,7 +365,7 @@ export function MergesChart() {
   return (
     <ChartPanel id="merge-trend">
       <Stale error={error} />
-      <ChartFrame className="merge-chart" draw={(width) => barChart({ ...opts, width })} />
+      <ChartFrame className="merge-chart" draw={(width, fit) => barChart({ ...opts, width, ...fit })} />
     </ChartPanel>
   );
 }
@@ -460,7 +460,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     caption: inWindow.length ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.` : "No deploy in the window.",
     source: { name: "Cloudflare Workers analytics, hourly" },
   } as const;
-  return <ChartFrame className="error-rate" draw={(width) => lineChart({ ...opts, width })} />;
+  return <ChartFrame className="error-rate" draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />;
 }
 
 // ---- 9b. Deploys and downtime, one lane per site ------------------------------------------
