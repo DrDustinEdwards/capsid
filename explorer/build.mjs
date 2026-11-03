@@ -28,7 +28,7 @@ import { buildSync, transformSync } from "esbuild";
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
 import { PublicStatsSchema } from "../src/public-stats.ts";
 import { PublicModelSchema } from "../src/system-model.ts";
-import { CIRCLES_URL, INDEXNOW_KEY, ORIGIN, allPages, circlesOf, searchDocument } from "./src/pages.mjs";
+import { INDEXNOW_KEY, ORIGIN, allPages, searchDocument } from "./src/pages.mjs";
 
 /** When security.txt lapses (RFC 9116 asks for under a year); renew it before then. */
 const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
@@ -204,12 +204,10 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // draws a chart links it (src/pages.mjs).
   writeFileSync(join(assets, "enarratio.css"), minifyCss(inlineCss(join(capsomer, "css", "enarratio.css"))));
   writeFileSync(join(assets, "explorer.css"), minifyCss(readFileSync(join(here, "src", "explorer.css"), "utf8")));
-  writeFileSync(join(out, CIRCLES_URL), JSON.stringify(circlesOf(model)));
   // The page's one module, bundled: src/explorer.js imports tabs, Capsomer's chart-enhance and the
   // system map's and the header's modules by the paths they are staged at here, each folder whole
   // (its React wrapper aside), because they import their siblings by "./" and each other by
-  // "../name/" (the map takes email's escapeHtml). The map's circles are drawn here, not in the
-  // browser. One file, so the script tag's integrity covers all of it: sixteen modulepreloads
+  // "../name/" (the map takes email's escapeHtml). One file, so the script tag's integrity covers all of it: sixteen modulepreloads
   // carrying the imports' integrity cost the home page 0.7 s of Lighthouse LCP.
   const stage = join(out, ".bundle");
   mkdirSync(stage, { recursive: true });
@@ -217,7 +215,7 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   for (const name of ["system-map", "email", "site-header", "theme-switch", "dialog", "popover", "tooltip", "shell", "meter"]) {
     const dir = join(capsomer, "dist", "components", name);
     mkdirSync(join(stage, "capsomer", name), { recursive: true });
-    for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js") && !f.startsWith("system-map-circles"))) copyFileSync(join(dir, file), join(stage, "capsomer", name, file));
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js"))) copyFileSync(join(dir, file), join(stage, "capsomer", name, file));
   }
   copyFileSync(join(here, "src", "explorer.js"), join(stage, "explorer.js"));
   buildSync({ entryPoints: [join(stage, "explorer.js")], outfile: join(assets, "explorer.js"), bundle: true, nodePaths: [join(here, "node_modules")], format: "esm", minify: true, logLevel: "warning" });
