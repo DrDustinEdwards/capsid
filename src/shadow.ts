@@ -27,7 +27,7 @@ export const SHADOW_JOB_PATH = "/shadow/job";
 export const SHADOW_RESULT_PATH = "/shadow/result";
 const SHADOW_ACTION = "shadow-test";
 const NAMESPACE = "capsid";
-const ISSUER = "https://token.actions.githubusercontent.com";
+export const ISSUER = "https://token.actions.githubusercontent.com";
 const AUDIENCE = "capsid-shadow";
 const WORKFLOW = ".github/workflows/shadow-test.yml";
 const MAX_TEST_BYTES = 64 * 1024;
@@ -37,9 +37,9 @@ const RESULTS = ["failed", "passed", "error", "not-run"] as const;
 const testKey = (jobId: string) => `shadow:test:${jobId}`;
 
 // The key set's address comes from the issuer's discovery document, as OIDC defines,
-// and must be on the issuer's own host.
+// and must be on the issuer's own host. The reviewer (src/review.ts) checks its tokens with the same keys.
 let keys: KeySource | null = null;
-async function issuerKeys(): Promise<KeySource> {
+export async function issuerKeys(): Promise<KeySource> {
   if (keys) return keys;
   const resp = await fetch(`${ISSUER}/.well-known/openid-configuration`);
   if (!resp.ok) throw new Error(`the issuer's discovery document answered ${resp.status}`);

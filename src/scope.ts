@@ -203,6 +203,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/bench/repro": "signed with the capsid-bench HMAC key and replay-protected; writes the harness's reproduction receipt once for one running treatment run, which its run key's complete then requires",
   "/shadow/job": "a GitHub Actions OIDC token whose repository is the capsid namespace's primary repo and whose workflow is shadow-test.yml on a pull request; returns only the capsid job that pull request names",
   "/shadow/result": "the same OIDC token as /shadow/job; keeps the shadow test written for that pull request's job and records its base and head results",
+  "/review/run":
+    "a GitHub Actions OIDC token (audience capsid-review) whose owner id is Dustin's, whose job workflow is devkit's review.yml and whose event is a pull request; reviews only that pull request, read through the GitHub App, and records the verdict (src/review.ts)",
   "/bench/score": "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, takes every arm's claim from the report, and checks the treatment's job is its own, and closes that job in the same step",
   "/ops/inbox":
     "what needs Dustin, per app (src/inbox.ts): resolveAgent on the bearer (401 without one), then each app is kept only if checkScope admits the caller's read grant on that app's namespace, so a key scoped to one namespace sees that app alone and the admin or an all-namespace read key sees every app. GET only, no CORS headers (an app's server calls it, never a browser), nothing written",

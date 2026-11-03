@@ -150,5 +150,11 @@
       "binding": "AI_SEARCH",
       "namespace": "default"
     }
-  ]
+  ],
+  // THE AUTOMATIC PR REVIEWER (src/review.ts). Workers AI, each call routed through the
+  // account's `default` AI Gateway by the call itself, so the gateway's logs and spend limit
+  // apply. No id: the binding is the account's.
+  "ai": {
+    "binding": "AI"
+  }
 }

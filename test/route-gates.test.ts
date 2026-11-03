@@ -31,6 +31,7 @@ import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
 import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH } from "../src/bench.ts";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH } from "../src/shadow.ts";
+import { REVIEW_RUN_PATH } from "../src/review.ts";
 import { PUBLIC_CODE_PATH, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH } from "../src/public-data.ts";
 import { SIGNED_IN_REPORT_PATH } from "../src/signed-in-crawl.ts";
 import {
@@ -126,6 +127,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   BENCH_SCORE_PATH,
   SHADOW_JOB_PATH,
   SHADOW_RESULT_PATH,
+  REVIEW_RUN_PATH,
   PORTAL_CALLBACK_PATH,
   OTLP_METRICS_PATH,
   OTLP_LOGS_PATH,
