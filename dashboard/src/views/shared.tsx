@@ -341,7 +341,7 @@ export function IncidentFeed({ ns }: { ns?: string }) {
             tabIndex={it.ref ? 0 : undefined}
             title={it.ref ? undefined : `fingerprint ${it.fp}`}
           >
-            <Icon kind={kind} style={{ color: `var(--${kind})` }} />
+            <Icon kind={kind} tone />
             <div className="t">
               <b>{it.title}</b>
               <div className="sub">

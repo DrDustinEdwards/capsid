@@ -68,6 +68,7 @@ main { min-width: 0; position: relative; }
 .st.ok { color: var(--ok); } .st.warn { color: var(--warn); } .st.crit { color: var(--crit); }
 .st.nodata { color: var(--nodata); } .st.run { color: var(--info); } .st.queued { color: var(--muted); }
 .st.blocked { color: var(--warn); }
+.tone-ok { color: var(--ok); } .tone-warn { color: var(--warn); } .tone-crit { color: var(--crit); } .tone-nodata { color: var(--nodata); }
 /* A hold reason is a phrase, so it wraps in its own column rather than squeezing the rest. */
 .held .st { white-space: normal; align-items: flex-start; } .held .st svg { margin-top: 2px; }
 .prcards .wrow + .wrow { border-top: 1px solid var(--line); }
