@@ -343,5 +343,5 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST") return handlePortalSignOut(request, env);
   if (url.pathname.startsWith(PORTAL_API_PREFIX)) return handlePortalApiNotFound(request, env);
   // The app and everything under it, every method: the handler gates first.
-  return handlePortalApp(request, env);
+  return handlePortalApp(request, env, (inner) => portalRoute(inner, env, new URL(inner.url)));
 }

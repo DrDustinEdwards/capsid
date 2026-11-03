@@ -1,7 +1,7 @@
 {
   "path": ["src", "scripts", "dashboard/src", "dashboard/scripts"],
   "pattern": "**/*.{ts,tsx,mjs,css}",
-  "ignore": ["**/node_modules/**", "**/dist/**", "**/*.d.ts", "**/*.d.mts", "dashboard/dev/generated/**"],
+  "ignore": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.react-router/**", "**/*.d.ts", "**/*.d.mts", "dashboard/dev/generated/**"],
   "minTokens": 50,
   "reporters": ["consoleFull"],
   "silent": false,

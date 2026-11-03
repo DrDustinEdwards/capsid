@@ -1,10 +1,13 @@
-// Size budget for the built app. Run after `npm run build`. Fails closed: a missing
-// dist/, a missing or unreadable manifest, a manifest with no entry, or any file over
-// its budget exits non-zero.
+// Size budget for the built app. Run after `npm run build`. Fails closed: a missing build,
+// a manifest with no entry or no pages, or any file over its budget exits non-zero.
 //
-//   initial JS (the entry and its static imports)  <= 121 KB gzip
-//   each lazy chunk (reached by dynamic import)     <=  40 KB gzip
-//   initial CSS (the entry's and its imports')      <= 28 KB gzip
+// It reads React Router's own asset manifest (the server build's `assets`): a page loads the
+// entry, the route manifest and, for root, the shell and its view, each route's module, imports
+// and stylesheets. The heaviest page is the one budgeted.
+//
+//   initial JS (the heaviest page's)                <= 205 KB gzip
+//   each other chunk (loaded when a part opens)     <=  40 KB gzip
+//   initial CSS (the heaviest page's)               <= 38 KB gzip
 //   lazy CSS (every other stylesheet), together     <=  12 KB gzip
 //   fonts                                           reported, not budgeted
 //
@@ -62,104 +65,102 @@
 // Raised on 2026-11-01 to 28 KB (area 10): Enarratio 0.7.0's stylesheet adds the legend swatches that
 // match each series' mark and the forced-colors symbols (B57), and Capsomer 0.63 carries them. This build
 // is 27.7 KB gzip.
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+// 2026-11-03 (Dustin chose "Move to React Router": the Portal is built like the network's other
+// sites, every page rendered on the server). The reason is the chart audit (prelum-chart-audit, area
+// 10, B2): with scripts off the single-page build showed none of the demo's charts. The budget now counts a whole page, its view's code included, which
+// the single-page build loaded later as a chunk, and React Router's runtime (43 KB gzip) in place of
+// wouter. Every stylesheet the views use loads with the page, so a page with scripts off is styled.
+// The page's content no longer waits on any of it. Initial JS raised from 121 KB to 205 KB (this
+// build's heaviest page, Packages, is 197.6 KB) and initial CSS from 28 KB to 38 KB (36.4 KB).
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const KB = 1024;
-const BUDGET = { initialJs: 121 * KB, lazyChunk: 40 * KB, css: 28 * KB, lazyCss: 12 * KB };
+const BUDGET = { initialJs: 205 * KB, lazyChunk: 40 * KB, css: 38 * KB, lazyCss: 12 * KB };
 
-const dist = fileURLToPath(new URL("../dist/", import.meta.url));
-const manifestPath = join(dist, ".vite", "manifest.json");
+const client = fileURLToPath(new URL("../build/client/", import.meta.url));
+const server = fileURLToPath(new URL("../build/server/index.js", import.meta.url));
 
 function fail(msg) {
   console.error(`size-budget: FAIL: ${msg}`);
   process.exit(1);
 }
 
-if (!existsSync(dist)) fail(`no dist/ at ${dist}; run npm run build first`);
-if (!existsSync(manifestPath)) fail(`no manifest at ${manifestPath}; vite.config.ts must set build.manifest`);
+if (!existsSync(client) || !existsSync(server)) fail("no build/; run npm run build first");
 
-let manifest;
+let assets;
 try {
-  manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  ({ assets } = await import(pathToFileURL(server).href));
 } catch (e) {
-  fail(`manifest is unreadable: ${e instanceof Error ? e.message : String(e)}`);
+  fail(`the server build is unreadable: ${e instanceof Error ? e.message : String(e)}`);
 }
+if (!assets?.entry?.module) fail("the manifest names no entry");
 
-const entries = Object.entries(manifest).filter(([, c]) => c.isEntry);
-if (entries.length === 0) fail("the manifest names no entry chunk");
+// "/assets/x.css#" (a stylesheet React Router links with the route) is the file assets/x.css.
+const file = (url) => url.replace(/^\//, "").replace(/#$/, "");
 
 function sizeOf(rel) {
-  const p = join(dist, rel);
-  if (!existsSync(p)) fail(`the manifest names ${rel}, which is not in dist/`);
+  const p = join(client, rel);
+  if (!existsSync(p)) fail(`the manifest names ${rel}, which is not in build/client/`);
   const buf = readFileSync(p);
   return { raw: buf.length, gz: gzipSync(buf, { level: 9 }).length };
 }
 
-// Initial JS: every entry and everything it imports statically.
-// Their stylesheets are the initial CSS.
-const initial = new Set();
-const initialCss = new Set();
-const walk = (key) => {
-  const c = manifest[key];
-  if (!c) fail(`the manifest has no chunk ${key}`);
-  if (initial.has(c.file)) return;
-  initial.add(c.file);
-  for (const f of c.css ?? []) initialCss.add(f);
-  for (const k of c.imports ?? []) walk(k);
-};
-for (const [key] of entries) walk(key);
+// Every page: the root, the shell and one view (an index or a path with no children).
+const routes = Object.values(assets.routes);
+const chain = (route) => (route ? [...chain(assets.routes[route.parentId]), route] : []);
+const leaves = routes.filter((r) => r.parentId && !routes.some((c) => c.parentId === r.id));
+if (leaves.length === 0) fail("the manifest names no page");
 
-// Lazy chunks: JS reached only through a dynamic import.
-const lazy = new Set();
-for (const c of Object.values(manifest)) {
-  for (const k of c.dynamicImports ?? []) {
-    const f = manifest[k]?.file;
-    if (f && !initial.has(f)) lazy.add(f);
+const page = (leaf) => {
+  const js = new Set([file(assets.url), file(assets.entry.module), ...assets.entry.imports.map(file)]);
+  const css = new Set(assets.entry.css.map(file));
+  for (const r of chain(leaf)) {
+    for (const u of [r.module, ...(r.imports ?? []), r.clientLoaderModule].filter(Boolean)) js.add(file(u));
+    for (const u of r.css ?? []) css.add(file(u));
   }
-}
+  return { id: leaf.id, js, css };
+};
+const pages = leaves.map(page);
+const gz = (set) => [...set].reduce((n, f) => n + sizeOf(f).gz, 0);
+const heaviest = pages.reduce((a, b) => (gz(b.js) > gz(a.js) ? b : a));
+const heaviestCss = pages.reduce((a, b) => (gz(b.css) > gz(a.css) ? b : a));
+const anyPage = new Set(pages.flatMap((p) => [...p.js, ...p.css]));
 
-const assetsDir = join(dist, "assets");
-if (!existsSync(assetsDir)) fail("no dist/assets/");
+const assetsDir = join(client, "assets");
 const files = readdirSync(assetsDir).map((f) => `assets/${f}`);
-const css = files.filter((f) => f.endsWith(".css"));
 const fonts = files.filter((f) => /\.(woff2?|ttf|otf)$/.test(f));
-const jsInitial = [...initial].filter((f) => f.endsWith(".js"));
-const unaccounted = files.filter((f) => f.endsWith(".js") && !initial.has(f) && !lazy.has(f));
-if (jsInitial.length === 0) fail("no initial JS found through the manifest");
 
 const rows = [];
 const problems = [];
 const fmt = (n) => `${(n / KB).toFixed(1)} KB`;
 
-let initialGz = 0;
-for (const f of jsInitial) {
+for (const f of heaviest.js) {
   const s = sizeOf(f);
-  initialGz += s.gz;
   rows.push(["initial js", f, s.raw, s.gz, ""]);
 }
-rows.push(["initial js", "TOTAL", null, initialGz, `<= ${fmt(BUDGET.initialJs)}`]);
-if (initialGz > BUDGET.initialJs) problems.push(`initial JS is ${fmt(initialGz)} gzip, over ${fmt(BUDGET.initialJs)}`);
+const initialGz = gz(heaviest.js);
+rows.push(["initial js", `TOTAL (${heaviest.id})`, null, initialGz, `<= ${fmt(BUDGET.initialJs)}`]);
+if (initialGz > BUDGET.initialJs) problems.push(`initial JS of ${heaviest.id} is ${fmt(initialGz)} gzip, over ${fmt(BUDGET.initialJs)}`);
 
-for (const f of [...lazy, ...unaccounted]) {
+for (const f of files.filter((f) => f.endsWith(".js") && !heaviest.js.has(f))) {
   const s = sizeOf(f);
   rows.push(["lazy js", f, s.raw, s.gz, `<= ${fmt(BUDGET.lazyChunk)}`]);
-  if (s.gz > BUDGET.lazyChunk) problems.push(`lazy chunk ${f} is ${fmt(s.gz)} gzip, over ${fmt(BUDGET.lazyChunk)}`);
+  if (s.gz > BUDGET.lazyChunk) problems.push(`chunk ${f} is ${fmt(s.gz)} gzip, over ${fmt(BUDGET.lazyChunk)}`);
 }
 
-if (![...initialCss].some((f) => css.includes(f))) fail("no initial CSS found through the manifest");
-let cssGz = 0;
+const cssGz = gz(heaviestCss.css);
 let lazyCssGz = 0;
-for (const f of css) {
+for (const f of files.filter((f) => f.endsWith(".css"))) {
   const s = sizeOf(f);
-  const first = initialCss.has(f);
-  if (first) cssGz += s.gz;
-  else lazyCssGz += s.gz;
+  const first = heaviestCss.css.has(f);
+  if (!anyPage.has(f)) lazyCssGz += s.gz;
   rows.push([first ? "css" : "lazy css", f, s.raw, s.gz, ""]);
 }
-rows.push(["css", "TOTAL", null, cssGz, `<= ${fmt(BUDGET.css)}`]);
+if (cssGz === 0) fail("no initial CSS found through the manifest");
+rows.push(["css", `TOTAL (${heaviestCss.id})`, null, cssGz, `<= ${fmt(BUDGET.css)}`]);
 rows.push(["lazy css", "TOTAL", null, lazyCssGz, `<= ${fmt(BUDGET.lazyCss)}`]);
 if (cssGz > BUDGET.css) problems.push(`initial CSS is ${fmt(cssGz)} gzip, over ${fmt(BUDGET.css)}`);
 if (lazyCssGz > BUDGET.lazyCss) problems.push(`lazy CSS is ${fmt(lazyCssGz)} gzip, over ${fmt(BUDGET.lazyCss)}`);

@@ -12,7 +12,7 @@
     }
   ],
   "baseline": {
-    "measured_at": "01bee84",
+    "measured_at": "2d7ccd7",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "Unused files": 1,
@@ -24,13 +24,13 @@
       "percentage": 0.16
     },
     "tests": {
-      "files": 275,
-      "cases": 2755
+      "files": 276,
+      "cases": 2749
     },
     "comments": {
-      "lines": 16483,
-      "code": 94903,
-      "percentage": 14.8
+      "lines": 16598,
+      "code": 95187,
+      "percentage": 14.85
     }
   }
 }

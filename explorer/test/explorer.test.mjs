@@ -57,13 +57,13 @@ test("every system has a page, a public one with parts has its parts page, every
   assert.equal(built.pages, expected.length);
 });
 
-test("every system page links to the same system on dustinedwards.info, and the front page to every system", () => {
+test("every system page links to the same system on dustinedwards.info, and the front page to the systems", () => {
   for (const s of model.systems) {
     const page = readFileSync(join(out, "s", s.id, "index.html"), "utf8");
     assert.ok(page.includes(`href="${SITE}/systems/${s.id}"`), `${s.id} has no link to dustinedwards.info`);
   }
   const home = readFileSync(join(out, "index.html"), "utf8");
-  for (const s of model.systems) assert.ok(home.includes(`href="${systemPath(s.id)}"`), `the front page does not link ${s.id}`);
+  assert.ok(home.includes('href="/systems/"'), "the front page does not link the systems");
 });
 
 test("a private page says it is private and carries no repo link", () => {
@@ -224,14 +224,11 @@ test("build.json's hash is the same for the same input and changes with what a r
   assert.notEqual(changed.content, built.content);
 });
 
-test("every system's parts page opens zoomed into its circle, the same drawing as dustinedwards.info's", () => {
+test("every system's page shows it in the network: what uses it, its parts and what it uses", () => {
   const withParts = { ...model, containers: [...model.containers, { id: "kit-lib", system: "kit", name: "Kit library", kind: "package", technology: "npm" }] };
-  const page = allPages(withParts, stats).find(([path]) => path === containersPath("kit"))?.[1] ?? "";
-  assert.match(page, /<figure class="cap-system-map"[^>]* data-circles data-insides="\/assets\/circles.json" data-selected data-entered data-zoom="kit">/);
-  assert.match(page, /data-layer="inside" data-system="kit" data-shown[^>]*>.*Kit library/);
-  assert.equal(page.match(/data-layer="inside"/g)?.length, 1, "the page carries its own circle; the rest are fetched");
-  const circles = JSON.parse(readFileSync(join(out, "assets", "circles.json"), "utf8"));
-  assert.deepEqual(Object.keys(circles).sort(), model.systems.map((/** @type {any} */ s) => s.id).sort());
+  const page = allPages(withParts, stats).find(([path]) => path === systemPath("kit"))?.[1] ?? "";
+  assert.match(page, /<figure class="cap-system-map" data-cap="system-map" data-level="system" data-system="kit"/);
+  assert.match(page, /data-column="used-by".*data-column="inside".*Kit library.*data-column="uses"/s);
 });
 
 test("each week is labeled by its last whole day, the day before as_of for the newest", () => {
@@ -248,7 +245,7 @@ test("an external container is listed outside the system, never as one of its pa
   assert.doesNotMatch(table, /Agents/);
   assert.match(page, /<h2 id="outside-title"[^>]*>Outside it<\/h2>\s*<ul><li id="part-hub-agents"><strong>Agents<\/strong> \(Sample sessions\)/);
   assert.match(page, /Its 3 parts, .*, plus the one outside system it works with\./);
-  assert.match(readFileSync(join(out, "s", "hub", "index.html"), "utf8"), /its 3 parts and how they connect/);
+  assert.match(readFileSync(join(out, "s", "hub", "index.html"), "utf8"), /its 3 parts as a table, and every line between them/);
 });
 
 // Flows (design section 4, "Animated flows"). Read from the fixture's own steps, not through
@@ -333,12 +330,10 @@ test("each step page names exactly the parts its step touches, and its drawing l
         const c = model.containers.find((/** @type {any} */ x) => x.id === id);
         assert.equal(href, `${containersPath(c.system)}#part-${id}`);
       }
-      const on = [...page.matchAll(/<path class="cap-system-map-wire" data-from="([^"]+)" data-to="([^"]+)" data-on/g)].map((m) => `${m[1]} ${m[2]}`);
-      assert.deepEqual(on, [`${r.from} ${r.to}`], `${f.id} step ${i + 1} draws the wrong line`);
-      const lit = [...page.matchAll(/<g class="cap-system-map-box" data-id="([^"]+)" data-lit/g)].map((m) => m[1]).sort();
-      assert.deepEqual(lit, [...(st.lights ?? [])].sort(), `${f.id} step ${i + 1} lights the wrong parts`);
-      assert.match(page, new RegExp(`data-id="${st.toward}"(?: data-lit)? data-at`));
-      assert.match(page, /<figure class="cap-system-map" data-cap="system-map"[^>]* data-entered/);
+      const lit = [...page.matchAll(/<li class="cap-system-map-part" id="[^"]+" data-id="([^"]+)" data-place="[a-z]+" data-lit/g)].map((m) => m[1]).sort();
+      assert.deepEqual(lit, want, `${f.id} step ${i + 1} lights the wrong parts`);
+      assert.match(page, new RegExp(`data-id="${st.toward}" data-place="[a-z]+" data-lit data-at>`));
+      assert.match(page, new RegExp(`<figure class="cap-system-map" data-cap="system-map"[^>]* data-flow="${f.id}" data-step="${i + 1}">`));
     });
   }
 });

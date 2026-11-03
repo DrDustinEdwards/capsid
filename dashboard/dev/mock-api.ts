@@ -1,6 +1,6 @@
-// Dev and preview only: serves dev/sample-feed.json at /portal/api/ops so `npm run
-// dev`, and the browser tests under `vite preview`, run with fake data and no Worker.
-// Never part of the build (apply: "serve").
+// Dev and tests only: serves dev/sample-feed.json at /portal/api/ops so `npm run dev`, the
+// browser tests (dev/serve.ts) and the demo's capture (scripts/demo-api.mjs) run with fake data
+// and no Worker. Never part of the build.
 //
 // The fixture's timestamps are fixed; each response shifts every ISO timestamp and
 // ring_slot so live.generated is "now", which keeps the relative times readable.
@@ -24,7 +24,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
-import { DASHBOARD_CSP } from "../../src/dashboard-csp.ts";
 import { shiftTimes } from "../src/lib/demo.ts";
 import type {
   ClaimsGroup,
@@ -502,11 +501,10 @@ function refuse(res: ServerResponse, status: number, text: string): void {
 }
 
 class Refusal extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
+  readonly status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -1251,7 +1249,21 @@ function isoOrNull(value: string | null): string | null {
   return /^\d{4}-\d{2}-\d{2}(T|$)/.test(value) && !Number.isNaN(parsed) ? new Date(parsed).toISOString() : "bad";
 }
 
-export function mockOpsApi(): Plugin {
+// A browser test's "nothing waits" (cookie wf-mock=quiet): the feed's inbox empty and no
+// namespace paused. A cookie, not a route the test intercepts, since the page's first reads are
+// the server's (dev/serve.ts forwards the page's cookies to them).
+function quiet(req: IncomingMessage): boolean {
+  return /(?:^|;\s*)wf-mock=quiet(?:;|$)/.test(req.headers.cookie ?? "");
+}
+
+function quietFeed(f: OpsFeed): OpsFeed {
+  f.live.inbox = { ...f.live.inbox, count: 0, severity: "none", apps: f.live.inbox.apps.map((a) => ({ ...a, count: 0, severity: "none", items: [] })) };
+  return f;
+}
+
+/** The mock's routes as a Node request handler: /portal/api/... as the Worker routes them, and
+ *  /api/... as the browser on the Portal host asks for them. */
+export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => void {
   let nextRefresh = 0;
   const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), repairs: [], closedPrs: new Set(), tokens: new Map() };
   const csrf = () => fixture().csrf;
@@ -1314,22 +1326,26 @@ export function mockOpsApi(): Plugin {
     }
   }
 
-  const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
+  return (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
-        const path = url.pathname;
+        const path = url.pathname.startsWith("/api/") ? `/portal${url.pathname}` : url.pathname;
         const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/completeness", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
-          return send(res, 200, feed(nextRefresh, st));
+          return send(res, 200, quiet(req) ? quietFeed(feed(nextRefresh, st)) : feed(nextRefresh, st));
         }
         if (path === "/portal/api/actions/preview" || path === "/portal/api/actions/perform") {
           // An unexpected error goes to Vite's error handler, which answers 500 with it.
           action(req, res, path.endsWith("preview") ? "preview" : "perform").catch(next);
           return;
         }
-        if (path === "/portal/api/namespaces") return send(res, 200, namespaces(feed(nextRefresh, st), st));
+        if (path === "/portal/api/namespaces") {
+          const out = namespaces(feed(nextRefresh, st), st);
+          if (quiet(req)) for (const n of out.namespaces) n.breaker.open = false;
+          return send(res, 200, out);
+        }
         if (path === "/portal/api/stale") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, stale(feed(nextRefresh, st)));
@@ -1436,21 +1452,15 @@ export function mockOpsApi(): Plugin {
         if (process.env.WF_MOCK === "warn") res.setHeader("x-capsid-warning", "the pass ran, but the Portal audit row naming access:admin@example.com was not written: D1 is unavailable");
         return send(res, 200, feed(nextRefresh, st));
   };
+}
 
+/** Dev only: the mock in front of the dev server, so its pages read from it (server/prefetch.ts). */
+export function mockOpsApi(): Plugin {
+  const handle = mockHandler();
   return {
     name: "watch-floor-mock-ops",
     apply: "serve",
     configureServer(server) {
-      server.middlewares.use(handle);
-    },
-    // `vite preview` serves the production build: the browser tests (dashboard/e2e)
-    // run against it with the same mock, and with the Worker's own page CSP on every
-    // response, so a script or style the Worker's page would refuse fails the tests too.
-    configurePreviewServer(server) {
-      server.middlewares.use((_req: IncomingMessage, res: ServerResponse, next: () => void) => {
-        res.setHeader("Content-Security-Policy", DASHBOARD_CSP);
-        next();
-      });
       server.middlewares.use(handle);
     },
   };

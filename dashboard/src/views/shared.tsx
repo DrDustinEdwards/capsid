@@ -3,7 +3,7 @@ import { Meter } from "capsomer/react/meter";
 import "capsomer/meter.css";
 import { Panel } from "capsomer/react/panel";
 import { lazy, useCallback, useState, type ReactNode } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useLocation, useSearch } from "../lib/router";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
 import { JOB, PROBE, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";

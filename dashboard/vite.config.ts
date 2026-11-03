@@ -1,31 +1,22 @@
+import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { subresourceIntegrity } from "@dustinedwards/site-runtime/sri";
 import { mockOpsApi } from "./dev/mock-api.ts";
 
-// Served by the capsid Worker at /portal/. The Worker's CSP is
-// script-src 'self'; style-src 'self'; font-src 'self', so the build emits no inline
-// script or style and the fonts ship as files under assets/. Every script and modulepreload the
-// build writes carries its sha384 and crossorigin (site-runtime ./sri), for Integrity-Policy.
+// The Portal, server-rendered by React Router inside the capsid Worker (src/portal-render.ts
+// there; react-router.config.ts). The build writes build/client (the hashed files under
+// assets/, served from the Worker's assets) and build/server, which src/worker.ts wraps into the
+// one module the Worker bundles (npm run build:worker). The page's CSP carries a per-request
+// nonce on React Router's scripts and none for anything else, so the build emits no other inline
+// script or style, the fonts ship as files under assets/, and assetsInlineLimit: 0 keeps every
+// asset a file rather than a data: URL.
 //
-// Mode "demo" (npm run build:demo) builds the same app a second time into dist/demos/, served at
-// /demos/ on the Portal host with no sign-in and sample data only (src/lib/demo.ts).
-export default defineConfig(({ mode }) => ({
-  base: mode === "demo" ? "/demos/" : "/portal/",
-  plugins: [react(), mockOpsApi(), subresourceIntegrity()],
+// The dev server answers /portal/api from the mock (dev/mock-api.ts), and the pages' server
+// reads go there too (server/prefetch.ts).
+export default defineConfig({
+  plugins: [mockOpsApi(), reactRouter()],
   build: {
-    outDir: mode === "demo" ? "dist/demos" : "dist",
-    emptyOutDir: true,
-    manifest: true,
     target: "es2022",
     assetsInlineLimit: 0,
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        entryFileNames: "assets/[name]-[hash].js",
-        chunkFileNames: "assets/[name]-[hash].js",
-        assetFileNames: "assets/[name]-[hash][extname]",
-      },
-    },
   },
-}));
+});

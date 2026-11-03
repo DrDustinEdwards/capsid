@@ -38,7 +38,7 @@ Capsid is written in TypeScript and deployed as one Cloudflare Worker. It uses t
 | `OAUTH_KV` | KV | OAuth grants and client registrations. |
 | `MEDIA` | R2 | Daily database exports and the Markdown mirror of every document. |
 | `AI_SEARCH` | AI Search | A derived semantic index of the documents, used for hybrid search. D1 remains the source of record. |
-| `ASSETS` | Static assets | The built Capsid Portal (`dashboard/dist`). |
+| `ASSETS` | Static assets | The built Capsid Portal's browser files (`dashboard/build/client`). |
 
 ### Hosts
 

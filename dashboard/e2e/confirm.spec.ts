@@ -6,8 +6,8 @@ import { expect, test, type Page } from "@playwright/test";
 // is a switch now (e2e/switches.spec.ts), so these open "Mark failed" on a queued job,
 // the dialog that asks for a reason the same way.
 
-const PREVIEW_URL = "**/portal/api/actions/preview";
-const PERFORM_URL = "**/portal/api/actions/perform";
+const PREVIEW_URL = "**/api/actions/preview";
+const PERFORM_URL = "**/api/actions/perform";
 // A queued job no other spec reads.
 const JOB = "job_0cdf2803f0ba";
 

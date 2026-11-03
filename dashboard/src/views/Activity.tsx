@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
-import { useLocation, useSearch } from "wouter";
+import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
