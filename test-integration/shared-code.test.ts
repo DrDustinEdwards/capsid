@@ -2,14 +2,15 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
 import { portalSessionCookie } from "../src/portal-auth";
+import { bundledModel } from "../src/public-data";
 import { PORTAL_SHARED_CODE_PATH } from "../src/portal-packages";
 import { SHARED_CODE_CACHE_KEY } from "../src/shared-code";
 import type { SharedCodeView } from "../src/ops-types/feed";
 
 // The Shared code view's route through the Worker, against the D1 the migrations build:
-// the six seeded packages are read from configuration, and an app or a tag list that
-// cannot be read is said, never counted as up to date. No GitHub is reachable here, so
-// every read fails, which is the case this test is for.
+// the six seeded packages are read from configuration, every repo in the system model is
+// tried, and an app or a tag list that cannot be read is said, never counted as up to date.
+// No GitHub is reachable here, so every read fails, which is the case this test is for.
 
 const ORIGIN = "https://capsid.test";
 const SECRET = "integration-portal-cookie-key";
@@ -33,8 +34,9 @@ describe("GET /portal/api/shared-code", () => {
     const view = (await response.json()) as SharedCodeView;
     expect(view.configured).toBe(true);
     expect(view.packages.map((p) => p.name).sort()).toEqual(["Capsomer", "d1-dump", "devkit", "Prelum", "site-api", "site-runtime"].sort());
-    const sites = await env.DB.prepare("SELECT COUNT(*) AS n FROM ops_sites").first<{ n: number }>();
-    expect(view.apps_read + view.apps_failed.length, "every configured site was tried").toBe(sites!.n);
+    // The apps are every repo the system model lists, each read once.
+    const repos = new Set(bundledModel().systems.flatMap((s) => s.repos));
+    expect(view.apps_read + view.apps_failed.length, "every repo in the model was tried").toBe(repos.size);
     for (const pkg of view.packages) {
       expect(pkg.latest).toBeNull();
       expect(pkg.tags_error, `${pkg.name} has no tags and no reason`).toBeTruthy();

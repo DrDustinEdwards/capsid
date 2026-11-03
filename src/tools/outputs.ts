@@ -337,6 +337,11 @@ const OUTPUTS: Record<string, Shape> = {
   // Capsid Admin (./admin, ./agents, ./claims, ./cloudflare, ./controls, ./ops).
   whats_next: { as_of: str, questions: rows, blocked: rows, stale: rows, pull_requests: obj, checks: obj, not_checked: strs },
   workers_builds: { script: str, builds: rows },
+  system_versions: { as_of: str, packages: rows, systems: rows, unread: strs },
+  system_resources: mergeOutputs([
+    { version: num, read_at: str, workers: rows, databases: rows, kv_namespaces: rows, buckets: rows, problems: strs },
+    { read_at: str, worker: obj, databases: rows, kv_namespaces: rows, buckets: rows, problems: strs },
+  ]),
   workers_build_logs: { build_uuid: str, lines: strs, line_count: num, truncated: bool, note: str.optional() },
   set_site_key: { namespace: str, matched: bool, note: str, site: obj, carrel: obj },
   agents: mergeOutputs([agentResult, { ok: bool, action: str, archived: rows }]),

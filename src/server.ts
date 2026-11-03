@@ -14,6 +14,7 @@ import { defineJobOperations } from "./tools/jobs";
 import { defineAgentOperations } from "./tools/agents";
 import { defineClaimsOperations } from "./tools/claims";
 import { defineOpsSnapshotOperations } from "./tools/ops";
+import { defineSystemOperations } from "./tools/system";
 import { defineCloudflareOperations } from "./tools/cloudflare";
 import { defineControlOperations } from "./tools/controls";
 import { defineAdminOperations } from "./tools/admin";
@@ -132,6 +133,7 @@ function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminW
   defineAgentOperations(server, ctx);
   defineClaimsOperations(server, ctx);
   defineOpsSnapshotOperations(server, ctx);
+  defineSystemOperations(server, ctx);
   defineCloudflareOperations(server, ctx);
   defineControlOperations(server, ctx);
   defineAdminOperations(server, ctx);

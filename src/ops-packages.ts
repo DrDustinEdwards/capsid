@@ -214,6 +214,15 @@ export async function readNpm(fetchImpl: FetchLike, name: string): Promise<Packa
   };
 }
 
+/** Every version npm has published of `name`, for the versions model's "behind" count
+ *  (src/shared-code.ts). The same abbreviated document readNpm reads; throws with npm's
+ *  answer when it cannot be read. */
+export async function readNpmVersions(fetchImpl: FetchLike, name: string): Promise<string[]> {
+  const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`, "application/vnd.npm.install-v1+json");
+  if (!got.ok) throw new Error(got.status === 404 ? `npm has no package ${name}` : got.reason);
+  return Object.keys((got.json as { versions?: Record<string, unknown> }).versions ?? {});
+}
+
 async function readDownloads(fetchImpl: FetchLike, name: string): Promise<PackageSnapshot["downloads"]> {
   const point = async (period: string) => {
     const got = await getJson(fetchImpl, `https://api.npmjs.org/downloads/point/${period}/${name}`);

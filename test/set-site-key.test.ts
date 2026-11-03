@@ -303,7 +303,8 @@ test("THE INNOCENT DIRECTION: an admin signed in within the window sets the key 
 // names it writes are the site key's.
 test("no Capsid code can set ADMIN_EMAIL or CO_OWNER_EMAILS: the only secret write is the site key's, under fixed names", () => {
   const writers = sourceFiles()
-    .filter((f) => /secret_text/.test(f.text))
+    // A write sends the type in a body; the secrets and data model only reads the word back.
+    .filter((f) => /type:\s*"secret_text"/.test(f.text))
     .map((f) => f.name);
   assert.deepEqual(writers, ["site-key.ts"], "a second module writes a Worker secret");
   const siteKey = sourceFiles().find((f) => f.name === "site-key.ts")!.text;

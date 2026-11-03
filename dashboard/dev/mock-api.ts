@@ -174,6 +174,29 @@ function completeness() {
   return { read: new Date(mockNow() - 5 * 60_000).toISOString(), as_of: new Date(mockNow() - 6 * 3600_000).toISOString(), error: null, finished: false, public_token: true, sites, areas };
 }
 
+// The Workers tab's answer (src/system-resources.ts), in sample names: two Workers of one
+// system sharing a database, one Worker no system lists, and a bucket nothing binds.
+function resources() {
+  const read_at = new Date(mockNow() - 5 * 3600_000).toISOString();
+  const none = { durable_objects: [], queues: [], services: [], other: [] };
+  return {
+    version: 1,
+    read_at,
+    workers: [
+      { script: "sample-web", system: "sample", error: null, secrets: ["SAMPLE_API_KEY", "SESSION_SECRET"], vars: ["DEPLOY_SHA"], d1: [{ binding: "DB", database: "sample" }], kv: [{ binding: "APP_KV", namespace: "sample-app-kv" }], r2: [{ binding: "MEDIA", bucket: "sample-media" }], ...none, durable_objects: [{ binding: "RATE_LIMITER", class: "RateLimiter", script: null }] },
+      { script: "sample-admin", system: "sample", error: null, secrets: ["OPERATOR_TOKEN"], vars: [], d1: [{ binding: "DB", database: "sample" }], kv: [], r2: [], ...none, services: [{ binding: "SITE", service: "sample-web" }] },
+      { script: "sample-old", system: null, error: null, secrets: [], vars: ["DEPLOY_SHA"], d1: [], kv: [], r2: [], ...none },
+    ],
+    databases: [{ name: "sample", tables: ["posts", "posts_fts", "media", "cron_runs"], tables_error: null, used_by: [{ script: "sample-web", system: "sample", binding: "DB" }, { script: "sample-admin", system: "sample", binding: "DB" }] }],
+    kv_namespaces: [{ title: "sample-app-kv", used_by: [{ script: "sample-web", system: "sample", binding: "APP_KV" }] }],
+    buckets: [
+      { name: "sample-media", used_by: [{ script: "sample-web", system: "sample", binding: "MEDIA" }] },
+      { name: "sample-old-media", used_by: [] },
+    ],
+    problems: [],
+  };
+}
+
 // The Shared code view's answer (src/shared-code.ts), in sample names: one app two
 // releases behind, one current through the repo's old name, a renovate preset, and a
 // local copy still in one app; one package on npm at its tagged version, and a private
@@ -1329,7 +1352,7 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
   return (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname.startsWith("/api/") ? `/portal${url.pathname}` : url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/completeness", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1413,6 +1436,10 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
         if (path === "/portal/api/completeness") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, completeness());
+        }
+        if (path === "/portal/api/resources") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, resources());
         }
         if (path === "/portal/api/shared-code") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });

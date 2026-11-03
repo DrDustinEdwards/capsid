@@ -23,6 +23,7 @@ export type TaskId =
   | "maintenance"
   | "site-repair"
   | "public-build"
+  | "system-facts"
   | "push"
   | "digest"
   | "merge-units"
@@ -64,6 +65,8 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   { id: "site-repair", label: "Site repairs", period_ms: null },
   // The public system model (src/public-data.ts), built once a UTC day on the tick.
   { id: "public-build", label: "Public model build", period_ms: DAY_MS },
+  // The versions and secrets models (src/system-facts.ts), built once a UTC day on the tick.
+  { id: "system-facts", label: "Versions and secrets build", period_ms: DAY_MS },
   // Phone alerts (src/push.ts), on the tick; recorded only when an alert was due.
   { id: "push", label: "Phone alerts", period_ms: null },
   // The daily email digest (src/digest.ts), on the tick; off until Email Routing is on,

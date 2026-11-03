@@ -178,6 +178,7 @@ Public:
 - `GET /public/model/v1.json` no auth. The public system model the explorer and the dustinedwards.info map are built from: what the daily build stored after the privacy filter, never computed per request. Private systems are drawn whole but carry no repo link. Edge-cached, then limited per IP; no CORS (docs/public-data.md)
 - `GET /public/stats/v1.json` no auth. Counts, rates and medians across every namespace, agent and site, over whole UTC days, computed once a day by the same build: never a name, a title or a time of day; a rate over fewer than ten rows is null. Edge-cached, then limited per IP; no CORS (docs/public-data.md)
 - `GET /public/code/v1.json` no auth. The code maps of public systems' repos (modules, imports, cycles, per-function complexity, coverage and scores), read hourly by the same build from each repo's `code-map` branch; a private system's repos are never read. Edge-cached, the same per-IP limit; no CORS (docs/public-data.md)
+- `GET /public/versions/v1.json` no auth. The versions model: which network package version each system installs, read nightly from its lockfiles, and how far behind; a file path inside a repo only for a public system. Edge-cached, the same per-IP limit; no CORS (docs/public-data.md)
 - `POST /csp-report` no auth. Content-Security-Policy and COOP violation reports, received by site-runtime's shared `receiveCspReport`: always 204, the body read to 16 KB, at most ten violations logged with every URL cut to origin and path, nothing stored. Per-IP rate limited first; a limited caller, or one the limiter cannot count, has its report dropped
 
 Capsid Portal (admin Access session only; a request with any `Authorization` header is refused with 403; docs/portal.md, "Routes"):
@@ -185,6 +186,6 @@ Capsid Portal (admin Access session only; a request with any `Authorization` hea
 - `GET /portal/` the app, and `GET /portal/callback` its sign-in return
 - `GET /portal/api/ops` the feed, and `POST /portal/api/ops/refresh` an on-demand watcher pass (header `X-Capsid-Ops: refresh`, once per two minutes)
 - `POST /portal/api/actions/preview` and `POST /portal/api/actions/perform` the controls as a preview and a perform (header `X-Capsid-CSRF`)
-- `GET /portal/api/` reads: `namespaces`, `activity`, `claims`, `stale`, `plan`, `digest`, `maintenance`, `convergence`, `packages/history`, `shared-code`, `library`, `trends`
+- `GET /portal/api/` reads: `namespaces`, `activity`, `claims`, `stale`, `plan`, `digest`, `maintenance`, `convergence`, `packages/history`, `shared-code`, `resources`, `library`, `trends`
 - `GET` and `POST /portal/api/push` phone alerts, and `POST /portal/api/sign-out`
 - Any other path under `/portal/api/` is a JSON 404. Nothing answers under `/console`

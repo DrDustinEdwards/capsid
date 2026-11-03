@@ -173,6 +173,14 @@ details[open] > summary .chev { transform: rotate(45deg); }
 /* Shared code: the read line, each package's users, and its local copies. */
 .shared-read { margin: 12px 0 0; font-size: var(--fs-detail); }
 .shared-none { margin: 0; padding: 10px 16px; }
+table.brief.workers-bindings, table.brief.workers-stores { table-layout: fixed; }
+table.brief.workers-bindings col.c-label { width: 9rem; }
+table.brief.workers-bindings th { text-align: left; vertical-align: top; padding: 9px 12px; color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; }
+table.brief.workers-stores .c-kind { width: 4rem; }
+table.brief.workers-bindings td, table.brief.workers-stores td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; padding-top: 8px; padding-bottom: 8px; height: auto; }
+table.brief.workers-stores details { margin-top: 2px; }
+table.brief.workers-stores .st { white-space: normal; }
+@media (max-width: 820px) { table.brief.workers-bindings col.c-label { width: 6.5rem; } table.brief.workers-stores .c-used { width: 40%; } }
 .shared-local { list-style: none; margin: 0; padding: 8px 16px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
 @media (max-width: 820px) { .shared-users .c-where, .lib-table .c-where { display: none; } .shared-users td, .shared-users .st, .cap-panel-src, .cap-panel-src .st { white-space: normal; overflow-wrap: anywhere; } }
 

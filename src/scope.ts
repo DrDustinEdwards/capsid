@@ -84,7 +84,8 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // Claims apart from verified outcomes. It only reads; it spans every namespace and
   // every agent, and its export is the whole dataset.
   capsid_admin_read_claims: "admin_read",
-  // The watcher's last pass, Cloudflare Access and Email Routing, and Workers Builds.
+  // The watcher's last pass, Cloudflare Access and Email Routing, Workers Builds, and the
+  // secrets and data model (secret names, never values).
   // It only reads, and spans every namespace's sites, CI runs and Cloudflare state.
   capsid_admin_read_ops: "admin_read",
   // The administrator's controls (preview, then perform with a signed single-use
@@ -189,6 +190,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "the public aggregate numbers (src/public-stats.ts): counts, rates and medians over every namespace, agent and site, whole UTC days, null under ten rows, no string but a date and the sha /health shows; it serves only what the daily build stored, never D1; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
   "/public/code/v1.json":
     "the public code maps (src/public-code.ts): each public system's repos' code-map.json from their code-map branch, parsed field by field, a private system's repos never read; it serves only what the daily build stored, never GitHub; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
+  "/public/versions/v1.json":
+    "the public versions model (src/system-versions.ts): which version of each network package each system installs, read from the repos' lockfiles, a private system's without its file paths; it serves only what the nightly build stored, never GitHub; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
   "/reports/signed-in-security.json":
     "the signed-in crawl's report (src/signed-in-crawl.ts): findings about the Portal's signed-in headers, for devkit's scoreboard; it serves only what the hourly crawl stored in KV, never a page, cookie or token; GET only",
   "/oauth/clients/verify-live.json": "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
@@ -242,7 +245,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_run_improve action status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
   "/portal/api/completeness": "the Portal's Completeness view: devkit's daily scoreboard (board.json on its scoreboard branch), read through the GitHub App and cached for ten minutes, gated by portalGate",
-  "/portal/api/shared-code": "the Portal's Shared code view: each configured shared package's tags and the pins in the configured sites' repos, read through the GitHub App and cached for an hour, gated by portalGate",
+  "/portal/api/shared-code": "the Portal's Shared code view: each network package's releases and the pins in every model repo, read nightly through the GitHub App and kept in KV, gated by portalGate",
+  "/portal/api/resources": "the Portal's Workers tab: the secrets and data model (secret names, never values, and each Worker's stores), read nightly from Cloudflare and kept in KV, gated by portalGate",
   "/portal/api/library": "the Portal's read-only Library: the knowledge store's shelves, a search and one document with its edges, through the readers behind capsid_find_docs and capsid_read_doc, gated by portalGate",
   "/portal/api/trends": "the Portal's trends for its charts: minutes, the queue, merges and rollbacks from D1, backup slots from R2, default-branch CI from GitHub (cached an hour), read-only, gated by portalGate",
   "/portal/api/push":

@@ -138,9 +138,14 @@ export interface OpsSession {
 export interface SharedCodeApp {
   namespace: string;
   name: string;
-  // The manifest it was read from ("package.json", "dashboard/package.json") or "renovate".
+  // The system in system/model.json the repo belongs to, and the repo, for the versions
+  // model (src/system-versions.ts); null for an app read before the model named its repo.
+  system: string | null;
+  repo: string | null;
+  // The manifest it was read from ("package.json", "dashboard/package.json"), "renovate", or
+  // ".github/workflows" for the reusable workflows a repo calls.
   where: string;
-  // The tag the app pins, or the lockfile's version for a spec with no tag; null when
+  // The version the lockfile says is installed, else the tag the spec names; null when
   // neither says (a branch).
   pinned: string | null;
   // Release tags newer than the pin, or null when the pin is not a release.
@@ -152,6 +157,9 @@ export interface SharedCodeApp {
 export interface SharedCodePackage {
   name: string;
   repo: string;
+  // git: a GitHub dependency (shared_packages), latest from the repo's tags. npm: a
+  // published package (ops_packages, Enarratio), latest from npm's versions.
+  registry: "git" | "npm";
   latest: string | null;
   tags_error: string | null;
   // The version in the package repo's root package.json on its default branch; null when
@@ -181,7 +189,7 @@ export interface SharedCodeView {
   error: string | null;
   // How many apps were read, so "nobody is behind" is never "nothing was read".
   apps_read: number;
-  apps_failed: Array<{ namespace: string; error: string }>;
+  apps_failed: Array<{ namespace: string; system?: string | null; error: string }>;
   packages: SharedCodePackage[];
 }
 
@@ -380,4 +388,32 @@ export interface OpsFeed {
   csrf: string;
   // Who is signed in, for the top bar: from the session, never from configuration.
   user: { name: string; initials: string };
+}
+
+type ResourceUser = { script: string; system: string | null; binding: string };
+
+// The secrets and data model (src/system-resources.ts): names, never values. Private: the
+// Portal's Workers tab and capsid_admin_read_ops action resources read it.
+export interface ResourcesDoc {
+  version: 1;
+  read_at: string;
+  workers: Array<{
+    script: string;
+    system: string | null;
+    error: string | null;
+    secrets: string[];
+    vars: string[];
+    d1: Array<{ binding: string; database: string }>;
+    kv: Array<{ binding: string; namespace: string }>;
+    r2: Array<{ binding: string; bucket: string }>;
+    durable_objects: Array<{ binding: string; class: string; script: string | null }>;
+    queues: Array<{ binding: string; queue: string }>;
+    services: Array<{ binding: string; service: string }>;
+    other: Array<{ binding: string; kind: string }>;
+  }>;
+  databases: Array<{ name: string; tables: string[] | null; tables_error: string | null; used_by: ResourceUser[] }>;
+  kv_namespaces: Array<{ title: string; used_by: ResourceUser[] }>;
+  buckets: Array<{ name: string; used_by: ResourceUser[] }>;
+  // Parts that could not be read, each with the permission that would let it.
+  problems: string[];
 }

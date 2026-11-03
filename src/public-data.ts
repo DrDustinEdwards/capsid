@@ -23,6 +23,10 @@ export const PUBLIC_STATS_PATH = "/public/stats/v1.json";
 export const PUBLIC_STATS_KEY = "public:stats:v1";
 export const PUBLIC_CODE_PATH = "/public/code/v1.json";
 export const PUBLIC_CODE_KEY = "public:code:v1";
+// The versions model per system (src/system-versions.ts), built by the nightly system facts
+// build (src/system-facts.ts) and served here beside the model.
+export const PUBLIC_VERSIONS_PATH = "/public/versions/v1.json";
+export const PUBLIC_VERSIONS_KEY = "public:versions:v1";
 export const PUBLIC_BUILD_LAST_KEY = "public:model:last";
 const PUBLIC_CODE_LAST_KEY = "public:code:last";
 // A repo publishes a new code map after each push, so the code document is rebuilt hourly, not daily.
@@ -120,6 +124,7 @@ export const PUBLIC_DOCS = {
   model: { path: PUBLIC_MODEL_PATH, key: PUBLIC_MODEL_KEY },
   stats: { path: PUBLIC_STATS_PATH, key: PUBLIC_STATS_KEY },
   code: { path: PUBLIC_CODE_PATH, key: PUBLIC_CODE_KEY },
+  versions: { path: PUBLIC_VERSIONS_PATH, key: PUBLIC_VERSIONS_KEY },
 } as const;
 
 /**

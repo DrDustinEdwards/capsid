@@ -112,6 +112,7 @@ These read more when they open, and not on every poll:
 - **Packages** reads `GET /portal/api/packages/history` when a package's history is asked for (below).
 - **Packages**, in its Shared tab, reads `GET /portal/api/shared-code` when it opens (below).
 - **Packages**, in its Completeness tab, reads `GET /portal/api/completeness` when it opens (below).
+- **Packages**, in its Workers tab, reads `GET /portal/api/resources` when it opens: the secrets and data model the nightly build stored (docs/public-data.md, "The secrets and data model"), one panel per Worker with its system, secret and variable names and bindings, then every D1 database, KV namespace and R2 bucket with who uses it and a warning on any store no Worker binds. Names only. Before the first build it says so.
 - **Library** reads `GET /portal/api/library` when it opens, searches and opens a document (below).
 
 ## Scheduled tasks
@@ -175,7 +176,7 @@ Since Enarratio 0.4 and Capsomer 0.53 (2026-10-31), every chart is Enarratio's w
 
 How far the centralization has got (job_584b4e7f2824; ruling capsid/rulings/shared-homes-2026-10-06.md). One panel per shared package in configuration, the `shared_packages` table (`migrations/0036_shared_packages.sql`, seeded with Capsomer, site-api, d1-dump, Prelum, site-runtime and devkit, each with its repo's earlier names and the known local copies it replaces). Each panel shows the package's newest release tag, every app that pins it with the tag and how many releases behind it is ("Current", "2 releases behind", "Unpinned" for a branch or a bare preset), whether it is pinned through the repo's old name, and each known local copy as still there or removed. Its header line also gives the version in the package repo's own `package.json` on the default branch, marked "untagged" while no tag names it (the daily maintenance pass tags it, docs/work-queue.md), and, unless that `package.json` is private, npm's latest dist-tag from the registry's abbreviated document, so the panel says tagged, on npm, and behind.
 
-`src/shared-code.ts` reads it through the GitHub App the watcher uses. The apps are the configured sites' namespaces (ops_sites), each on its default branch: one recursive tree, every `package.json` outside `node_modules` (at most eight), the lockfile only for a git dependency with no tag, and the Renovate config for presets (devkit). Every shared package is a git dependency, so the tag is in the manifest. The tags come from each package repo's `/tags`, and the version from its root `package.json`. The answer is cached in KV for an hour (`portal:shared-code:v2`), and the page says how many apps it read and which it could not. With no table yet it says the migration is the seat's to apply; with no row it says none is configured. Nothing on the tab changes anything. The Published tab (npm statistics) is unchanged. Tests: test/shared-code.test.ts, test-integration/shared-code.test.ts, dashboard/e2e/shared.spec.ts.
+`src/shared-code.ts` reads it through the GitHub App the watcher uses. The apps are every repo the system model lists, each on its default branch: one recursive tree, every `package.json` outside `node_modules` (at most 16) with its nearest lockfile, every workflow's pinned `uses:`, and the Renovate config for presets (devkit). The pinned version is the lockfile's, else an exact spec or a git ref. The published packages the Published tab watches are matched too, as npm packages. The tags come from each git package repo's `/tags` (npm's version list for an npm one), and the version from its root `package.json`. The nightly `system-facts` build writes the answer to KV (`portal:shared-code:v3`, 36 hours) and the tab reads that, so the tab and the versions model (docs/public-data.md) are one read; the page says how many apps it read and which it could not. With no table yet it says the migration is the seat's to apply; with no row it says none is configured. Nothing on the tab changes anything. The Published tab (npm statistics) is unchanged. Tests: test/shared-code.test.ts, test-integration/shared-code.test.ts, dashboard/e2e/shared.spec.ts.
 
 ## Completeness (Packages, Completeness tab)
 
@@ -257,6 +258,13 @@ The admin-only `capsid_admin_read_ops` MCP tool's Cloudflare configuration actio
 - **Account / Email Routing Addresses / Read**, for `email_addresses`;
 - **Zone / Zone / Read**, to list the zones `email_rules` reads;
 - **Zone / Email Routing Rules / Read**, for `email_rules`.
+
+The nightly secrets and data model (docs/public-data.md, "The secrets and data model") needs three more, beside Workers Scripts Read for each Worker's settings and secret names:
+- **Account / D1 / Read**, for the database list and each database's tables (`sqlite_master`, read-only);
+- **Account / Workers KV Storage / Read**, for the namespace list;
+- **Account / Workers R2 Storage / Read**, for the bucket list.
+
+Until each is there, that part of the document says the read failed and the Workers tab shows it.
 
 A 403 from any of these names the permission that is missing. The tool copies named fields only, so an Access for SaaS client secret, a SCIM credential or an application's aud tag never reaches the caller. It runs once per tool call, never from a Portal page.
 
