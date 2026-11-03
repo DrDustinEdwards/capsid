@@ -41,14 +41,14 @@ test("the model is built once a UTC day and stores the filtered bundled model", 
   const env = fakeEnv({ APP_KV: kv.kv });
   const first = await publicBuildTick(env, NOW, githubSays(ALL));
   assert.equal(first.ran, true, first.note);
-  assert.match(first.note, /20 public and 3 private system\(s\)/);
+  assert.match(first.note, /20 public and 2 private system\(s\)/);
 
   const doc = PublicModelSchema.parse(JSON.parse(kv.store.get(PUBLIC_MODEL_KEY) ?? "null"));
   assert.equal(doc.as_of, "2026-10-11");
   // A private system is published whole, its parts included, without its repo link.
-  const writing = doc.systems.find((s) => s.id === "writing");
-  assert.ok(writing?.private && writing.description && !("repos" in writing));
-  assert.ok(doc.containers.some((c) => c.system === "writing"));
+  const backups = doc.systems.find((s) => s.id === "capsid-backups");
+  assert.ok(backups?.private && backups.description && !("repos" in backups));
+  assert.ok(doc.containers.some((c) => c.system === "capsid-backups"));
   // A repo the model leaves off is never named.
   assert.ok(!/recova|left_off/i.test(JSON.stringify(doc)));
   // Answer 15: Skills shows no repo link.
@@ -56,7 +56,7 @@ test("the model is built once a UTC day and stores the filtered bundled model", 
   assert.ok(skills && !skills.private && skills.repos === undefined);
   // The numbers are built in the same run, and carry the model's system counts.
   const stats = PublicStatsSchema.parse(JSON.parse(kv.store.get(PUBLIC_STATS_KEY) ?? "null"));
-  assert.deepEqual(stats.systems, { public: 20, private: 3 });
+  assert.deepEqual(stats.systems, { public: 20, private: 2 });
   assert.equal(stats.as_of, "2026-10-11");
 
   // Later that day only the code maps are rebuilt (test/public-code.test.ts).
