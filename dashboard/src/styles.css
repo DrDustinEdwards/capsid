@@ -313,7 +313,7 @@ table.list, table.fleet, table.brief { width: 100%; border-collapse: collapse; }
 .drawer[open]::backdrop { opacity: 1; }
 @starting-style { .drawer[open]::backdrop { opacity: 0; } }
 .drawer > header { display: flex; align-items: start; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
-.drawer > header h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; }
+.drawer > header h2 { margin: 0; font-size: 16px; font-weight: var(--weight-heading); letter-spacing: -0.01em; text-wrap: balance; }
 .drawer .dbody { overflow-y: auto; padding: 16px 18px 40px; display: grid; gap: 18px; }
 .kv { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 7px 14px; font-size: 13px; }
 .kv dt { color: var(--muted); }
@@ -386,7 +386,7 @@ main .sev-crit[data-row]:focus-visible { box-shadow: inset 3px 0 var(--crit), in
 .banner { margin: 16px 24px 0; border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
 .loading { padding: 40px 0; text-align: center; }
 .signedout { margin: 12vh auto 0; max-width: 460px; text-align: center; display: grid; gap: 12px; justify-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 28px 24px; }
-.signedout h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.025em; }
+.signedout h1 { margin: 0; font-size: 22px; font-weight: var(--weight-heading); letter-spacing: -0.01em; }
 .signedout p { margin: 0; color: var(--muted); }
 
 @media (max-width: 1180px) {

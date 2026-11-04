@@ -34,13 +34,13 @@ const cell = (x, y, r) => {
 const html = `<!doctype html><meta charset="utf-8"><style>
 ${faces}
 html, body { margin: 0; }
-.card { position: relative; width: 1200px; height: 630px; overflow: hidden; font-family: "Schibsted Grotesk", sans-serif; color: ${ink}; }
+.card { position: relative; width: 1200px; height: 630px; overflow: hidden; font-family: "Jost", sans-serif; color: ${ink}; }
 svg { position: absolute; inset: 0; }
 .words { position: absolute; left: 64px; top: 58px; }
-.visit { font-size: 24px; font-weight: 700; letter-spacing: 0.32em; }
-.name { font-size: 132px; font-weight: 800; line-height: 0.9; letter-spacing: -0.02em; }
-.line { margin-top: 18px; font-size: 30px; font-weight: 600; line-height: 1.25; }
-.site { position: absolute; left: 64px; bottom: 24px; color: ${sky}; font-size: 17px; font-weight: 700; letter-spacing: 0.22em; }
+.visit { font-size: 24px; font-weight: 600; letter-spacing: 0.32em; }
+.name { font-size: 132px; font-weight: 600; line-height: 0.9; letter-spacing: -0.01em; }
+.line { margin-top: 18px; font-size: 30px; font-weight: 400; line-height: 1.25; }
+.site { position: absolute; left: 64px; bottom: 24px; color: ${sky}; font-size: 17px; font-weight: 600; letter-spacing: 0.22em; }
 </style>
 <div class="card">
 <svg width="1200" height="630" viewBox="0 0 1200 630">
