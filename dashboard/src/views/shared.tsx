@@ -7,7 +7,7 @@ import { useCallback, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "../lib/router";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
-import { JOB, PROBE, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
+import { JOB, PROBE, jobBadge, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
 import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
@@ -293,7 +293,7 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                           : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
                   // A blocked job that asks something is marked as a question: it waits on
                   // an answer, not on a command (design-portal-evaluation.md, the question row).
-                  const k = j.status === "blocked" && j.question ? { kind: JOB.blocked.kind, label: "Question" } : JOB[j.status];
+                  const k = j.status === "blocked" && j.question ? { kind: JOB.blocked.kind, label: "Question" } : jobBadge(j, now);
                   return (
                     <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0} {...(j.question ? { "data-question": "" } : {})}>
                       <St kind={k.kind}>{k.label}</St>

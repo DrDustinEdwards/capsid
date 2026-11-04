@@ -316,7 +316,7 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
   if (!callerIsSeat(agent)) {
     return refuse(
       "release",
-      `${agent.actor} cannot release a job. Releasing a claim somebody else holds is the seat's act, and this caller holds neither the admin identity nor can_merge.`
+      `${agent.actor} cannot release a job. Releasing a claim is the seat's act, and this caller holds neither the admin identity nor can_merge.`
     );
   }
   if (!reason?.trim()) {
@@ -333,9 +333,6 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
       "release",
       `${id} is ${current.status}, not claimed. Release returns a claimed job to the queue; a blocked job is resumed, a queued one is already free, and a finished one is not reopened.`
     );
-  }
-  if (current.claimed_by === agent.actor) {
-    return refuse("release", `${id} is held by ${agent.actor} itself. A holder ends its own claim with fail or block.`);
   }
   const job: JobRow = { ...current, status: "queued", claimed_by: null, updated_at: now.toISOString() };
   const won = await guardedTransition(env, current, [

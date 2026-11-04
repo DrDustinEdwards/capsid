@@ -95,6 +95,14 @@ export const JOB: Record<OpsJob["status"], { kind: Kind; label: string }> = {
   parked: { kind: "nodata", label: "Parked" },
 };
 
+// A claim never expires, so a claimed job nobody has touched for the Worker's stale
+// window (src/stale-jobs.ts, 3 days) is shown as Stalled rather than Running.
+export const STALE_CLAIM_MS = 3 * DAY;
+export function jobBadge(j: OpsJob, now: number): { kind: Kind; label: string } {
+  if (j.status === "claimed" && now - ms(j.updated_at) > STALE_CLAIM_MS) return { kind: "warn", label: "Stalled" };
+  return JOB[j.status];
+}
+
 const OPEN_STATUSES: ReadonlyArray<OpsJob["status"]> = ["queued", "claimed", "blocked"];
 
 function isOpen(j: OpsJob): boolean {
