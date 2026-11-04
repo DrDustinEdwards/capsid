@@ -50,19 +50,19 @@ test("an FTS5 table's shadow tables are not the database's tables", () => {
   assert.deepEqual(userTables(rows), ["posts", "posts_fts", "posts_drafts"]);
 });
 
-test("PLANT: the drift lines name an unlisted Worker, a listed one that is gone, a store the model lacks or shows wrongly, and an unbound store", () => {
+test("PLANT: the drift lines name an unlisted Worker, a listed one that is gone, a store the model lacks or shows wrongly, and an unbound store, never a Preview's store", () => {
   const doc = resourcesDoc(
     MODEL,
     {
       workers: [
-        { script: "sample-web", bindings: [{ type: "d1", binding: "DB", id: "d1-other" }, { type: "r2", binding: "FILES", bucket: "sample-uploads" }] },
+        { script: "sample-web", bindings: [{ type: "d1", binding: "DB", id: "d1-other" }, { type: "r2", binding: "FILES", bucket: "sample-uploads" }], previews: [{ type: "r2", binding: "FILES", bucket: "sample-preview-files" }] },
         { script: "sample-b-web", bindings: [] },
         { script: "stray", bindings: [] },
         { script: "old-web", bindings: [] },
       ],
       d1: [{ id: "d1-other", name: "sample-other", tables: [] }, { id: "d1-unused", name: "sample-preview", tables: [] }],
       kv: [],
-      r2: ["sample-uploads", "sample-files"],
+      r2: ["sample-uploads", "sample-files", "sample-preview-files"],
     },
     NOW
   );
@@ -76,6 +76,8 @@ test("PLANT: the drift lines name an unlisted Worker, a listed one that is gone,
   has("The D1 database sample-preview is bound by no Worker");
   has("The R2 bucket sample-files is bound by no Worker");
   assert.ok(!lines.some((l) => l.includes("old-web")), "a Worker left off the map is not drift");
+  // A bucket only a Preview binds is in use, and is not a store the model must draw.
+  assert.ok(!lines.some((l) => l.includes("sample-preview-files")), "a Preview's bucket is not drift");
 });
 
 function view(users: SharedCodeView["packages"][number]["users"]): SharedCodeView {

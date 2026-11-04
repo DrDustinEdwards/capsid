@@ -34,6 +34,7 @@ function WorkerPanel({ w }: { w: Worker }) {
     ["Queues", pairs(w.queues.map((q) => ({ binding: q.binding, to: q.queue }))), w.queues.length],
     ["Services", pairs(w.services.map((s) => ({ binding: s.binding, to: s.service }))), w.services.length],
     ["Other", pairs(w.other.map((o) => ({ binding: o.binding, to: o.kind }))), w.other.length],
+    ["Previews", pairs(w.previews.map((p) => ({ binding: p.binding, to: p.store }))), w.previews.length],
   ];
   const shown = rows.filter(([label, , n]) => n > 0 || label === "Secrets");
   return (

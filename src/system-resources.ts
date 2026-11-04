@@ -24,8 +24,16 @@ import type { SystemModel } from "./system-model";
 // system/model.json; a Worker no system names is a drift line. The model's own D1 and R2
 // containers (technology "D1...", "R2") are compared with what each system's Workers bind.
 //
+// PREVIEWS. A Worker Preview (npx wrangler preview, a PR branch's build) inherits no
+// production binding and binds its own preview stores, so a preview-only database or bucket
+// shows in no Worker's settings. The newest few Previews of each Worker are read (GET
+// .../workers/workers/{script}/previews, then each one's newest deployment, whose env lists
+// its bindings the same way, values included) and their stores count as used, labelled
+// "(preview)" (developers.cloudflare.com/api/resources/workers/subresources/workers/).
+//
 // Permissions on CF_OPS_TOKEN (read-only; each missing one is named, and the rest still runs):
-//   Workers Scripts Read        GET /accounts/{id}/workers/scripts and .../settings (held already)
+//   Workers Scripts Read        GET /accounts/{id}/workers/scripts and .../settings, and each
+//                               Worker's Previews and their deployments (held already)
 //   D1 Read                     GET /accounts/{id}/d1/database, POST .../d1/database/{id}/query
 //                               (a SELECT on sqlite_master only)
 //   Workers KV Storage Read     GET /accounts/{id}/storage/kv/namespaces
@@ -42,6 +50,8 @@ const SCRIPT_NAME = /^[A-Za-z0-9_-]{1,63}$/;
 // The tables a person wrote: not SQLite's, not Cloudflare's, not an FTS5 index's shadows.
 const TABLES_SQL = "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%' ORDER BY name";
 const MAX_TABLES = 200;
+// The newest Previews read per Worker: each is one branch, and branches rarely bind differently.
+const PREVIEWS_PER_WORKER = 3;
 
 export type Binding =
   | { type: "secret"; binding: string }
@@ -100,7 +110,7 @@ export function bindingOf(raw: unknown): Binding | null {
 
 /** What was read from Cloudflare. A part that could not be read is its error text. */
 export interface ResourceFacts {
-  workers: Array<{ script: string; bindings: Binding[] | string }>;
+  workers: Array<{ script: string; bindings: Binding[] | string; previews?: Binding[] | string }>;
   d1: Array<{ id: string; name: string; tables: string[] | string }> | string;
   kv: Array<{ id: string; title: string }> | string;
   r2: string[] | string;
@@ -130,9 +140,33 @@ export function resourcesDoc(model: SystemModel, facts: ResourceFacts, now: Date
   const r2Users = new Map<string, User[]>();
   const add = (m: Map<string, User[]>, key: string, u: User) => m.set(key, [...(m.get(key) ?? []), u]);
 
-  const workers: ResourcesDoc["workers"] = facts.workers.map(({ script, bindings }) => {
+  const workers: ResourcesDoc["workers"] = facts.workers.map(({ script, bindings, previews }) => {
     const system = systemOf.get(script) ?? null;
-    const w: ResourcesDoc["workers"][number] = { script, system, error: null, secrets: [], vars: [], d1: [], kv: [], r2: [], durable_objects: [], queues: [], services: [], other: [] };
+    const w: ResourcesDoc["workers"][number] = { script, system, error: null, secrets: [], vars: [], d1: [], kv: [], r2: [], durable_objects: [], queues: [], services: [], other: [], previews: [] };
+    // A Preview's stores: who uses them, and the Worker's Previews row. Nothing else of a
+    // Preview is kept, and a store it shares with production is not listed twice.
+    if (typeof previews === "string") problems.push(`${script}'s Previews: ${previews}`);
+    else {
+      const seen = new Set<string>();
+      for (const b of previews ?? []) {
+        const u = { script, system, binding: `${b.binding} (preview)` };
+        let to: string | null = null;
+        if (b.type === "d1") {
+          to = d1Name.get(b.id) ?? `unnamed (${b.binding})`;
+          add(dbUsers, b.id, u);
+        } else if (b.type === "kv") {
+          to = kvTitle.get(b.id) ?? `unnamed (${b.binding})`;
+          add(kvUsers, b.id, u);
+        } else if (b.type === "r2") {
+          to = b.bucket;
+          add(r2Users, b.bucket, u);
+        }
+        if (to && !seen.has(`${b.binding} ${to}`)) {
+          seen.add(`${b.binding} ${to}`);
+          w.previews.push({ binding: b.binding, store: to });
+        }
+      }
+    }
     if (typeof bindings === "string") {
       w.error = bindings;
       return w;
@@ -261,6 +295,30 @@ export function userTables(rows: Array<{ name?: unknown; sql?: unknown }>): stri
   return names.filter((n) => !shadow(n)).slice(0, MAX_TABLES);
 }
 
+/** The store bindings of a Worker's newest Previews, each from its newest deployment. A
+ *  Worker with no Previews has none; a refused read is its reason. */
+async function readPreviewStores(fetchImpl: FetchLike, token: string, base: string, script: string): Promise<Binding[] | string> {
+  const at = `${base}/workers/workers/${encodeURIComponent(script)}/previews`;
+  try {
+    const list = await cfGet(fetchImpl, token, `${at}?per_page=${PREVIEWS_PER_WORKER}`, `the Previews of ${script}`);
+    const out: Binding[] = [];
+    for (const p of (Array.isArray(list) ? list : []).slice(0, PREVIEWS_PER_WORKER)) {
+      const id = str((p as { id?: unknown })?.id);
+      if (!id) continue;
+      const deps = await cfGet(fetchImpl, token, `${at}/${encodeURIComponent(id)}/deployments?per_page=1`, `the deployments of a Preview of ${script}`);
+      const env = (Array.isArray(deps) ? (deps[0] as { env?: unknown } | undefined) : undefined)?.env;
+      if (!env || typeof env !== "object") continue;
+      for (const [name, raw] of Object.entries(env as Record<string, unknown>)) {
+        const b = bindingOf(raw && typeof raw === "object" ? { name, type: (raw as { type?: unknown }).type, database_id: (raw as { database_id?: unknown }).database_id, id: (raw as { id?: unknown }).id, namespace_id: (raw as { namespace_id?: unknown }).namespace_id, bucket_name: (raw as { bucket_name?: unknown }).bucket_name } : null);
+        if (b && (b.type === "d1" || b.type === "kv" || b.type === "r2")) out.push(b);
+      }
+    }
+    return out;
+  } catch (err) {
+    return refused(`the Previews of ${script}`, PERMISSION.scripts)(err);
+  }
+}
+
 /** Everything the document needs, from Cloudflare. Throws only when the Worker list itself
  *  cannot be read; every other part fails alone, with the reason kept. */
 export async function readResourceFacts(env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">, fetchImpl: FetchLike = (u, i) => fetch(u, i)): Promise<ResourceFacts> {
@@ -280,7 +338,7 @@ export async function readResourceFacts(env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCO
       (r) => ((r as { bindings?: unknown })?.bindings && Array.isArray((r as { bindings: unknown[] }).bindings) ? (r as { bindings: unknown[] }).bindings.map(bindingOf).filter((b): b is Binding => b !== null) : []),
       refused(`the settings of ${script}`, PERMISSION.scripts)
     );
-    workers.push({ script, bindings });
+    workers.push({ script, bindings, previews: await readPreviewStores(fetchImpl, c.token, base, script) });
   }
 
   const d1 = await cfGetAll(fetchImpl, c.token, `${base}/d1/database`, "the D1 database list", 100).then(
