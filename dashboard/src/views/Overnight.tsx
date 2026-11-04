@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { trendChart } from "./charts";
+import { Suspense, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
@@ -17,7 +18,7 @@ import { St } from "../ui/icons";
 
 // Chart 4, Tonight as a timeline, loads with the Queue that shows it, not with the digest
 // strip Needs you takes from this file.
-const TonightTimeline = lazy(() => import("./TrendCharts").then((m) => ({ default: m.TonightTimeline })));
+const TonightTimeline = trendChart("TonightTimeline");
 
 
 function Failed({ what, error }: { what: string; error: string | null }) {

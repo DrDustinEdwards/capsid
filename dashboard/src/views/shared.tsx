@@ -1,8 +1,9 @@
+import { trendChart } from "./charts";
 import { Empty } from "capsomer/react/empty";
 import { Meter } from "capsomer/react/meter";
 import "capsomer/meter.css";
 import { Panel } from "capsomer/react/panel";
-import { lazy, useCallback, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "../lib/router";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
@@ -13,7 +14,7 @@ import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 import { ChartSlot } from "../ui/ChartSlot";
 
 // The deploys timeline loads with the tab that shows it, in the charts' lazy chunk.
-const DeployTimeline = lazy(() => import("./TrendCharts").then((m) => ({ default: m.DeployTimeline })));
+const DeployTimeline = trendChart("DeployTimeline");
 
 // The risky controls, set apart from the safe ones (the UX audit's M9): a red-edged area
 // under its own "Danger" label, after everything else, so a Remove or a Mark failed is never

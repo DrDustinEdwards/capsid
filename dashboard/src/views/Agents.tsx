@@ -1,3 +1,4 @@
+import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy } from "react";
 import { useApp } from "../app/ctx";
@@ -14,7 +15,7 @@ import { PageHead } from "./shared";
 // reloaded or shared.
 const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
 // Chart 6, weekly model spend, sits under the roster.
-const CostChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.CostChart })));
+const CostChart = trendChart("CostChart");
 
 type Tab = "roster" | "archive" | "claims" | "access";
 
