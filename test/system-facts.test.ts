@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseSystemModel } from "../src/system-model.ts";
 import { bindingOf, resourceDrift, resourcesDoc, userTables, type Binding } from "../src/system-resources.ts";
+import { readResources } from "../src/system-facts-store.ts";
 import { toPublicVersions, versionDrift } from "../src/system-versions.ts";
 import type { SharedCodeView } from "../src/ops-types/feed.ts";
 
@@ -95,4 +96,11 @@ test("PLANT: a repo on two versions is drift at once, a pin behind only after th
   assert.ok(later.items.some((i) => i.line.includes("example-org/sample-b pins Kit v0.4.0 in package.json, 1 release behind v0.5.0 for 3 days")));
   const doc = toPublicVersions(v, MODEL, new Map([["example-org/sample", false], ["example-org/sample-b", true]]), "2026-11-03");
   assert.deepEqual(doc.systems.map((s) => [s.system, s.pins.map((p) => p.where ?? null)]), [["sample", ["package.json", "apps/old/package.json"]], ["sample-b", [null]]]);
+});
+
+test("a stored resources doc from before `previews` still reads with an empty list (the Workers tab crashed on it)", async () => {
+  const old = { version: 1, read_at: "2026-11-03T06:00:00.000Z", workers: [{ script: "sample-web", system: "sample", error: null, secrets: [], vars: [], d1: [], kv: [], r2: [], durable_objects: [], queues: [], services: [], other: [] }], databases: [], kv_namespaces: [], buckets: [], problems: [] };
+  const env = { APP_KV: { get: async () => JSON.stringify(old) } } as unknown as Parameters<typeof readResources>[0];
+  const doc = await readResources(env);
+  assert.deepEqual(doc?.workers[0]?.previews, []);
 });
