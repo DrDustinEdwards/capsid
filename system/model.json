@@ -278,6 +278,14 @@
       "description": "Media and the daily backups."
     },
     {
+      "id": "capsid-tool-calls",
+      "system": "capsid",
+      "name": "capsid-mcp-tool-calls",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Copies of the tool-call log, kept a year under a lock rule after the log prunes them."
+    },
+    {
       "id": "capsid-kv",
       "system": "capsid",
       "name": "app KV",
@@ -532,6 +540,14 @@
       "kind": "database",
       "technology": "Durable Object with SQLite",
       "description": "The append-only log of every tool call, written before and after it runs. A call that cannot be logged does not run."
+    },
+    {
+      "id": "admin-mcp-tool-calls",
+      "system": "dustinedwards-mcp",
+      "name": "dustinedwards-admin-mcp-tool-calls",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Copies of the tool-call log, kept after the log prunes them."
     },
     {
       "id": "admin-mcp-github",
@@ -1289,6 +1305,7 @@
   "relationships": [
     { "from": "capsid-worker", "to": "capsid-db", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-media", "kind": "writes" },
+    { "from": "capsid-worker", "to": "capsid-tool-calls", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-kv", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-oauth-kv", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-portal", "kind": "serves" },
@@ -1337,6 +1354,7 @@
     { "from": "admin-mcp-worker", "to": "admin-mcp-probe-kv", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-rate-limit", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-tool-log", "kind": "writes" },
+    { "from": "admin-mcp-worker", "to": "admin-mcp-tool-calls", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "website-worker", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "website-worker", "kind": "reads" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-github", "kind": "reads" },
