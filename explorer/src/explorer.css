@@ -63,8 +63,8 @@ main.wide > .hero {
 h1 {
   max-width: 18ch;
   margin-block: var(--space-6) var(--space-4);
-  font: 500 clamp(2.5rem, 5.2vw, 4.75rem) / 0.95 var(--face);
-  letter-spacing: -0.035em;
+  font: var(--weight-title) clamp(2.5rem, 5.2vw, 4.75rem) / 0.95 var(--face);
+  letter-spacing: -0.02em;
 }
 h1 code {
   font-size: 0.72em;
@@ -73,12 +73,12 @@ h1 code {
 }
 h2:not(.cap-family-footer-heading) {
   margin-block: var(--space-8) var(--space-3);
-  font: 650 clamp(1.75rem, 3vw, 2.75rem) / 1 var(--face);
+  font: var(--weight-heading) clamp(1.75rem, 3vw, 2.75rem) / 1 var(--face);
   letter-spacing: -0.03em;
 }
 h3 {
   font-size: 1.1875rem;
-  font-weight: 600;
+  font-weight: var(--weight-heading);
 }
 /* The system map's headings are labels and card names, as Capsomer sets them; this page's own
    heading rules are unlayered and would otherwise outrank them. */
@@ -124,23 +124,6 @@ h3 {
 }
 .crumbs a:hover {
   background: color-mix(in srgb, var(--on-sign) 18%, transparent);
-}
-/* The page you are on, lit as a lamp: Capsid sets --primary-fg to the lamp's ink for its pale lamp, which
-   does not hold on the strip's deep teal, so the lit page takes the lamp's own pair. */
-.crumbs [aria-current] {
-  background: var(--lamp-on);
-  color: var(--on-lamp);
-}
-:root {
-  --on-lamp: #fff;
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-family]:not([data-theme="light"]) {
-    --on-lamp: var(--lamp-ink);
-  }
-}
-:root[data-family][data-theme="dark"] {
-  --on-lamp: var(--lamp-ink);
 }
 .arrow {
   font-weight: 600;
@@ -227,7 +210,7 @@ h3 {
   margin: 0;
   padding: var(--space-3) var(--space-4);
   border-block-end: 1px solid var(--text);
-  font: 700 1.125rem / 1.3 var(--face);
+  font: var(--weight-heading) 1.125rem / 1.3 var(--face);
   letter-spacing: 0;
 }
 .desk-title span {
@@ -464,7 +447,7 @@ html:not(.js) .desk-play {
   margin: 0;
   padding: var(--space-3) var(--space-4);
   border-block-end: 1px solid var(--text);
-  font: 700 1.125rem / 1.3 var(--face);
+  font: var(--weight-heading) 1.125rem / 1.3 var(--face);
 }
 .kb-head span {
   color: var(--muted);
@@ -856,7 +839,7 @@ html:not(.js) .chapter h3::before {
 }
 .chapter h3 {
   margin: 0 0 var(--space-3);
-  font: 700 clamp(1.25rem, 1.8vw, 1.625rem) / 1.2 var(--face);
+  font: var(--weight-heading) clamp(1.25rem, 1.8vw, 1.625rem) / 1.2 var(--face);
 }
 .chapter .chapter-n {
   margin-inline-start: 0.5em;
@@ -1577,7 +1560,7 @@ main h2[data-no] {
   padding-inline-start: 4.5rem;
   border-block-start: 1px solid var(--text);
   font-size: clamp(1.25rem, 1.8vw, 1.625rem);
-  font-weight: 700;
+  font-weight: var(--weight-heading);
   letter-spacing: -0.01em;
 }
 .tour-title[data-no] {
