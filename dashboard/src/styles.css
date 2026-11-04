@@ -60,7 +60,7 @@ main { min-width: 0; position: relative; }
 .page { padding: 16px 24px 48px; display: grid; gap: 14px; max-width: 1480px; }
 /* The heading alone: what a view is for is in the shortcut sheet (design D13). */
 .pagehead { display: flex; align-items: end; gap: 16px; flex-wrap: wrap; }
-.pagehead h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
+.pagehead h1 { margin: 0; font-size: 18px; font-weight: var(--weight-heading); letter-spacing: -0.02em; text-wrap: balance; }
 
 /* status vocabulary: shape + text + color */
 .st { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: var(--fs-detail); white-space: nowrap; }
@@ -93,7 +93,7 @@ main { min-width: 0; position: relative; }
    structure. One status glyph per row, and a red left edge on critical rows only. */
 .attention { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
 .attention > header { display: flex; align-items: center; gap: 12px; padding: 9px 16px; background: var(--raised); flex-wrap: wrap; }
-.attention h2 { margin: 0; font-size: 13px; font-weight: 600; }
+.attention h2 { margin: 0; font-size: 13px; font-weight: var(--weight-heading); }
 .att-row {
   display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: center; gap: 12px;
   padding: 6px 16px; cursor: pointer;
@@ -130,7 +130,7 @@ tr:has(.stretch) { position: relative; }
    own buttons. On a phone the buttons go full width under the row. */
 .wgroup + .wgroup { border-top: 1px solid var(--line); }
 .wgroup-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 10px 16px 2px; }
-.wgroup-head h3 { margin: 0; font-size: 13px; font-weight: 700; }
+.wgroup-head h3 { margin: 0; font-size: 13px; font-weight: var(--weight-heading); }
 .wgroup-head .num { font-weight: 400; }
 .wbatch { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-left: auto; }
 .wselect { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); min-height: 32px; cursor: pointer; }
@@ -354,7 +354,7 @@ dialog { color: var(--text); }
 .body { padding: 14px 16px; }
 .stack-gap { display: grid; gap: 12px; }
 .row-gap { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.conv-h { margin: 0; font-size: 13px; font-weight: 600; }
+.conv-h { margin: 0; font-size: 13px; font-weight: var(--weight-heading); }
 .src.hot, .mono.hot, .num.hot { color: var(--crit); }
 .spark, .fleet .cap-uptime-strip { display: block; }
 .nodata-cell { display: grid; gap: 2px; }
