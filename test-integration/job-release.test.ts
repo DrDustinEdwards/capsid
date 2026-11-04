@@ -95,10 +95,11 @@ describe("release", () => {
     expect((await row(id))?.claimed_by).toBe("agent:capsid-driver");
   });
 
-  it("the holder cannot release its own job, and only a claimed job is released", async () => {
+  it("the seat releases its own claim too, and only a claimed job is released", async () => {
     const seat = seatAgent();
     const own = await claimedJob(seat, "held by the seat");
-    expect((await releaseJob(jobsEnv(), seat, LATER, own, "x")).refusal).toMatch(/held by agent:seat itself/);
+    expect((await releaseJob(jobsEnv(), seat, LATER, own, "x")).ok).toBe(true);
+    expect((await row(own))?.status).toBe("queued");
 
     const posted = await postJob(jobsEnv(), POSTER, NOW, { namespace: "capsid", title: "still queued", body: "b" });
     const queued = await releaseJob(jobsEnv(), seat, LATER, posted.job!.id, "x");

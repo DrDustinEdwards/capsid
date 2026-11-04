@@ -131,7 +131,6 @@ export async function planAction(env: Env, email: string, action: PortalAction, 
         if (job.status !== "claimed") {
           return refused(`${job.id} is ${job.status}, not claimed. Release returns a claimed job to the queue; a blocked job is resumed, a queued one is already free, and a finished one is not reopened.`);
         }
-        if (job.claimed_by === actor) return refused(`${job.id} is held by ${actor} itself. A holder ends its own claim with fail or block.`);
         return {
           ok: true,
           changes: [
