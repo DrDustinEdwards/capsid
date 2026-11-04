@@ -410,6 +410,8 @@ export interface ResourcesDoc {
     queues: Array<{ binding: string; queue: string }>;
     services: Array<{ binding: string; service: string }>;
     other: Array<{ binding: string; kind: string }>;
+    // The stores this Worker's Previews bind (preview-only databases and buckets).
+    previews: Array<{ binding: string; store: string }>;
   }>;
   databases: Array<{ name: string; tables: string[] | null; tables_error: string | null; used_by: ResourceUser[] }>;
   kv_namespaces: Array<{ title: string; used_by: ResourceUser[] }>;
