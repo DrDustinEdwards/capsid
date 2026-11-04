@@ -42,13 +42,12 @@ import {
 } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";
-import { ADMIN_OPS_MCP_ROUTE } from "../src/mcp-handler.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Every route goes through the one enforcement point, or says why it does not. A
 // route that checks only the write grant lets a driver minted for one namespace act
-// across every namespace (for /ops/backup, a full backup and its prune).
+// across every namespace.
 //
 // The routes themselves are driven through the whole Worker in
 // test-integration/route-gates.test.ts. node --test cannot load src/routes.ts, so
@@ -78,7 +77,7 @@ async function resolveWith(bearer: string) {
     ],
   });
   const env = fakeEnv({ DB: d1.db });
-  const req = new Request("https://capsid.example/ops/backup", {
+  const req = new Request("https://capsid.example/ops/mcp", {
     method: "POST",
     headers: { Authorization: `Bearer ${bearer}` },
   });
@@ -86,12 +85,6 @@ async function resolveWith(bearer: string) {
   assert.ok(resolved, "the key did not resolve, so this test would prove nothing about the gate");
   return resolved.agent;
 }
-
-// /ops/backup
-
-test("/ops/backup admits the OAuth admin", () => {
-  assert.equal(routeRefusal("/ops/backup", adminAgentForEmail("admin@example.com")), null);
-});
 
 test("a path in neither table is refused to everyone but the admin", async () => {
   // routeRefusal fails closed: a route wired to it before its table entry exists is
@@ -146,7 +139,6 @@ const PATH_CONSTANTS: Record<string, string> = {
   SIGNED_IN_REPORT_PATH,
   PUBLIC_CODE_PATH,
   PUBLIC_VERSIONS_PATH,
-  ADMIN_OPS_MCP_ROUTE,
 };
 
 // One entry per dispatch line in defaultHandler: the path it matches and the

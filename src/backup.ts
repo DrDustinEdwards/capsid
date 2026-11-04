@@ -24,9 +24,8 @@ export const DUMP_RETENTION = { daily: DEFAULT_RETENTION.daily, weekly: 4, month
 //
 // The lease value carries a per-run token and a run releases only its own, so a run
 // that outlived its TTL cannot delete the lease of the run that started after it. The
-// TTL is an hour: above the 15-minute wall limit on a cron invocation, with room for
-// an /ops/backup run, which has no wall limit. A lease left by an isolate that died
-// mid-run then blocks backups for at most an hour of a daily schedule.
+// TTL is an hour: above the 15-minute wall limit on a cron invocation. A lease left by
+// an isolate that died mid-run then blocks backups for at most an hour of a daily schedule.
 const LEASE_KEY = "backup:lease";
 const LEASE_TTL_SECONDS = 3600;
 
@@ -203,14 +202,6 @@ interface BackupSkipped {
 }
 
 export type BackupResult = BackupSummary | BackupSkipped;
-
-// The HTTP status /ops/backup answers with, so "did nothing" is visible without the
-// body: 409 when another run holds the lease, 503 when the preflight refused the prune
-// (the dumps were written but nothing was marked, mirrored or pruned), 200 otherwise.
-export function backupHttpStatus(result: BackupResult): number {
-  if (!result.ran) return 409;
-  return result.prune_refused === null ? 200 : 503;
-}
 
 // R2's bulk delete takes at most 1000 keys per call and refuses the rest rather than
 // truncating, so an unbounded array throws after the dumps are written and before

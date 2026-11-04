@@ -370,7 +370,6 @@ async function gateSecurityHeaders(clientId) {
     [".well-known/prm", "json", { url: `${ORIGIN}/.well-known/oauth-protected-resource` }],
     ["/mcp 401", "any", { url: `${ORIGIN}/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
     ["/ops/mcp 401", "other", { url: `${ORIGIN}/ops/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
-    ["/ops/backup 401", "other", { url: `${ORIGIN}/ops/backup`, init: { method: "POST" } }],
     // The MCP host serves the machine surface only (src/mcp-host.ts): the Portal is not
     // here, on its own host (gate 7). A 302 here is the Portal answering on the wrong
     // host, and a 200 is the app served to anyone.

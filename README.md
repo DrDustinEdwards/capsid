@@ -141,7 +141,7 @@ Capsid serves 19 tools over two MCP servers. The count is derived from `TOOL_GRA
 | `capsid_work_jobs` | per action | The work queue lifecycle. |
 | `capsid_run_improve` | read | Capsid status per namespace: queue, breaker, maintenance and items awaiting the owner. The name is retained from a removed feature. |
 
-**Capsid Admin** (`/mcp/admin`, `/ops/mcp/admin`): 8 tools, available to the administrator identity only.
+**Capsid Admin** (`/mcp/admin`): 8 tools, available to the administrator identity only.
 
 | Tool | Grant | Function |
 | --- | --- | --- |
@@ -163,7 +163,7 @@ The router is `defaultHandler` in `src/routes.ts`. The principal routes are:
 | Route | Authentication | Purpose |
 | --- | --- | --- |
 | `POST /mcp`, `POST /mcp/admin` | OAuth | MCP over Streamable HTTP for the owner and co-owners. |
-| `POST /ops/mcp`, `POST /ops/mcp/admin` | Bearer key | MCP for agents and scheduled clients. |
+| `POST /ops/mcp` | Bearer key | MCP for agents and scheduled clients. |
 | `/authorize`, `/callback`, `/token`, `/register`, `/.well-known/*` | None | OAuth sign-in and discovery. |
 | `POST /ops/hooks`, `POST /ops/otlp/v1/*` | Bearer key | Claude Code hook events and telemetry. |
 | `GET /ops/inbox`, `POST /ops/inbox/report` | Bearer key | Items awaiting the owner, per application. |

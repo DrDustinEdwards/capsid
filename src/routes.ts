@@ -4,8 +4,7 @@ import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResul
 import { REVIEW_RUN_PATH, handleReviewRun } from "./review";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
 import { resolveAgent } from "./agents";
-import { backupHttpStatus, runBackup } from "./backup";
-import { checkScope, routeRefusal } from "./scope";
+import { checkScope } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
 import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
 import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
@@ -14,8 +13,8 @@ import { consentDialogHeaders, REPORT_PATH, securityHeadersFor } from "./securit
 import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";
 import { ipKey, limit } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
-import { ADMIN_SERVER_INFO, buildAdminServer, buildServer, SERVER_INFO } from "./server";
-import { ADMIN_OPS_MCP_ROUTE, mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
+import { buildServer, SERVER_INFO } from "./server";
+import { mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
 import { isAdminEmail } from "./auth";
 import { loginHandler } from "@dustinedwards/site-runtime/mcp-login";
 import {
@@ -109,45 +108,6 @@ async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionConte
   // waitUntil rather than slowing the tool call.
   ctx.waitUntil(resolved.touch());
   return serveMcp(request, env, ctx, "/ops/mcp", () => buildServer(env, resolved.agent));
-}
-
-// Capsid Admin for a key (src/mcp-handler.ts ADMIN_OPS_MCP_ROUTE). Only the admin
-// identity is served, and no minted key is the admin: any key is refused here, before a
-// server is built, and every tool on it is admin only in the registrar as well.
-async function handleOperatorAdminMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  const resolved = await resolveAgent(request, env);
-  if (!resolved) {
-    return new Response("unauthorized: an admin key is required", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
-    });
-  }
-  if (!resolved.agent.admin) {
-    return new Response(`forbidden: ${resolved.agent.actor} is not the admin. Capsid Admin serves the administrator alone.`, { status: 403 });
-  }
-  const limited = await mcpRateLimited(env, resolved.agent.actor, ADMIN_SERVER_INFO);
-  if (limited) return limited;
-  ctx.waitUntil(resolved.touch());
-  return serveMcp(request, env, ctx, ADMIN_OPS_MCP_ROUTE, () => buildAdminServer(env, resolved.agent));
-}
-
-async function handleBackup(request: Request, env: Env): Promise<Response> {
-  // No credential, or one that resolves to nobody: 401, so a client knows to send one.
-  const caller = await resolveAgent(request, env);
-  if (!caller) {
-    return new Response("unauthorized: an admin key is required", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
-    });
-  }
-  // A caller that resolved but may not run this: 403. A backup and its prune cover
-  // every namespace, so ROUTE_GRANTS in src/scope.ts requires the admin, through the
-  // same checkScope the tools use. The write grant alone is held by every
-  // namespace-scoped driver.
-  const refusal = routeRefusal("/ops/backup", caller.agent);
-  if (refusal) return new Response(refusal, { status: 403 });
-  const result = await runBackup(env);
-  return Response.json(result, { status: backupHttpStatus(result) });
 }
 
 // What needs Dustin, per app (src/inbox.ts), for the admin shell's app strip. It is read
@@ -285,8 +245,6 @@ export const defaultHandler = {
     if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET") return handleClientDocument(request);
     if (url.pathname === REPORT_PATH) return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
-    if (url.pathname === ADMIN_OPS_MCP_ROUTE) return handleOperatorAdminMcp(request, env, ctx);
-    if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
     if (url.pathname === "/ops/inbox" && request.method === "GET") return handleInbox(request, env);
     if (url.pathname === "/ops/inbox/report" && request.method === "POST") return handleInboxReport(request, env);
     if (url.pathname === OPS_HOOKS_PATH && request.method === "POST") return handleOpsHooks(request, env, ctx);
