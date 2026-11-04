@@ -5,7 +5,7 @@ import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, 
 // The network's faces, self-hosted (CSP font-src 'self'): one variable file each, every weight.
 import "capsomer/fonts.css";
 import monoFontUrl from "capsomer/fonts/martian-mono-latin-wght-normal.woff2?url";
-import uiFontUrl from "capsomer/fonts/schibsted-grotesk-latin-wght-normal.woff2?url";
+import uiFontUrl from "capsomer/fonts/inter-latin-opsz-normal.woff2?url";
 // Capsomer: its layer order and tokens first, then its element defaults (base.css, which carries
 // the utility classes), then its components (all in the cap.* layers, so the app's unlayered
 // styles win), then the app's styles. Every stylesheet a server-rendered part of a page needs is

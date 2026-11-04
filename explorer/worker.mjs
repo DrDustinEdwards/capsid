@@ -13,13 +13,13 @@ import { capsid } from "@dustinedwards/site-runtime/sites";
 import { staticSite } from "@dustinedwards/site-runtime/static-site";
 
 /**
- * What every page blocks on or paints first: the two stylesheets and the Schibsted Grotesk face
+ * What every page blocks on or paints first: the two stylesheets and the Inter face
  * every page links (src/pages.mjs; enarratio.css only on a page with a chart, so it is not preloaded). The names are not hashed; the test holds them to the pages' links.
  */
 export const PAGE_PRELOADS = preloads([
   { href: "/assets/capsomer.css", as: "style" },
   { href: "/assets/explorer.css", as: "style" },
-  { href: "/fonts/schibsted-grotesk-latin-wght-normal.woff2", as: "font", type: "font/woff2" },
+  { href: "/fonts/inter-latin-opsz-normal.woff2", as: "font", type: "font/woff2" },
 ]);
 
 export default staticSite({ site: capsid, headers: TDM_RESERVATION_HEADERS, preload: PAGE_PRELOADS.header, reportPath: null, canonical: false });
