@@ -4,6 +4,8 @@ import { StrictMode, useState, type ReactNode } from "react";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useLocation, useRouteLoaderData, type LoaderFunctionArgs } from "react-router";
 // The network's faces, self-hosted (CSP font-src 'self'): one variable file each, every weight.
 import "capsomer/fonts.css";
+import monoFontUrl from "capsomer/fonts/martian-mono-latin-wght-normal.woff2?url";
+import uiFontUrl from "capsomer/fonts/schibsted-grotesk-latin-wght-normal.woff2?url";
 // Capsomer: its layer order and tokens first, then its element defaults (base.css, which carries
 // the utility classes), then its components (all in the cap.* layers, so the app's unlayered
 // styles win), then the app's styles. Every stylesheet a server-rendered part of a page needs is
@@ -92,6 +94,13 @@ export default function Root() {
     </StrictMode>
   );
 }
+
+// Both faces preloaded: every page draws the UI face and the mono labels above the fold, and they load
+// with font-display: optional (Capsomer 0.68), so a face found late, once the stylesheet has arrived,
+// leaves the visit in its size-matched fallback. A preload starts both with the document. Same files as
+// fonts.css's url()s, so Vite emits one asset each; crossorigin, or the preload is fetched twice.
+export const links = () =>
+  [uiFontUrl, monoFontUrl].map((href) => ({ rel: "preload", href, as: "font", type: "font/woff2", crossOrigin: "anonymous" as const }));
 
 export function meta() {
   return [{ title: "Capsid Portal" }];
