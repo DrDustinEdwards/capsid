@@ -23,6 +23,6 @@
     "lighthouse": "13.5.0"
   },
   "allowScripts": {
-    "esbuild": true
+    "esbuild": false
   }
 }

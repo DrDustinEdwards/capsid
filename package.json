@@ -66,8 +66,8 @@
     }
   },
   "allowScripts": {
-    "esbuild": true,
-    "workerd": true,
-    "core-js-pure": false
+    "core-js-pure": false,
+    "esbuild": false,
+    "workerd": false
   }
 }
