@@ -28,7 +28,7 @@ import type { SystemModel } from "./system-model";
 // production binding and binds its own preview stores, so a preview-only database or bucket
 // shows in no Worker's settings. The newest few Previews of each Worker are read (GET
 // .../workers/workers/{script}/previews, then each one's newest deployment, whose env lists
-// its bindings the same way, values included) and their stores count as used, labelled
+// its bindings the same way, values included) and their stores count as used, labeled
 // "(preview)" (developers.cloudflare.com/api/resources/workers/subresources/workers/).
 //
 // Permissions on CF_OPS_TOKEN (read-only; each missing one is named, and the rest still runs):
