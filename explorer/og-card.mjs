@@ -13,7 +13,9 @@ const here = import.meta.dirname;
 const require = createRequire(import.meta.url);
 // The family's faces (capsomer/fonts.css), each file inlined, as the page is set from a string.
 const fonts = join(dirname(require.resolve("capsomer/package.json")), "fonts");
-const faces = readFileSync(require.resolve("capsomer/fonts.css"), "utf8").replace(/url\("\.\.\/fonts\/([^"]+)"\)/g, (_m, /** @type {string} */ file) => `url(data:font/woff2;base64,${readFileSync(join(fonts, file)).toString("base64")})`);
+const faces = readFileSync(require.resolve("capsomer/fonts.css"), "utf8").replace(/url\("\.\.\/fonts\/([^"]+)"\)/g, (_m, /** @type {string} */ file) => `url(data:font/woff2;base64,${readFileSync(join(fonts, file)).toString("base64")})`)
+  // The faces ship `font-display: optional`, which lets a fresh page draw the fallback; a card is a picture, so it waits.
+  .replaceAll("font-display: optional", "font-display: block");
 
 // Capsomer's teal ramp (light 2, 8, 9 and the ink) and its amber (dark 9).
 const sky = "#e6f2f2";
