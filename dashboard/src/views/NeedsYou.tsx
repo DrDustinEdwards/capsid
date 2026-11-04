@@ -1,3 +1,4 @@
+import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy, useId, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
@@ -37,8 +38,8 @@ const KIND: Record<string, { label: string; kind: Kind } | undefined> = {
 const SinceLastLooked = lazy(() => import("./Overnight").then((m) => ({ default: m.SinceLastLooked })));
 // The two charts load only when Trends is opened: their Enarratio code and their reads stay
 // off the first screen.
-const MinutesTile = lazy(() => import("./TrendCharts").then((m) => ({ default: m.MinutesTile })));
-const WaitingChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.WaitingChart })));
+const MinutesTile = trendChart("MinutesTile");
+const WaitingChart = trendChart("WaitingChart");
 
 export function NeedsYou() {
   const { feed } = useApp();

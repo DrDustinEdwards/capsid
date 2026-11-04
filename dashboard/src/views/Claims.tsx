@@ -1,5 +1,6 @@
+import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
@@ -13,7 +14,7 @@ import { byCheck, None, AgreementCounts, totals, counts, wait, JobDetail, AGREEM
 
 // Chart 5, claim against verified per agent, is Enarratio's grouped bar chart, in the same
 // lazy chunk as the Portal's other charts.
-const AgreementChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.AgreementChart })));
+const AgreementChart = trendChart("AgreementChart");
 
 type FilterKey = (typeof FILTER_KEYS)[number];
 type Filter = Record<FilterKey, string>;

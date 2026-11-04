@@ -1,5 +1,5 @@
+import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
-import { lazy } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchStale, useAnswer, type Load } from "../lib/api";
@@ -15,9 +15,9 @@ import { Tonight } from "./Overnight";
 
 // Chart 3, whether the queue is growing or draining, from GET /portal/api/trends. Lazy, so
 // Enarratio's area chart stays out of the initial bundle.
-const QueueChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.QueueChart })));
+const QueueChart = trendChart("QueueChart");
 // The "By project" panel's stacked bars, from the same module.
-const ProjectChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.ProjectChart })));
+const ProjectChart = trendChart("ProjectChart");
 
 // Claude Code sessions reporting through their hooks (POST /ops/hooks, docs/hooks.md):
 // the job each is bound to, the key, its last event, whether it waits on a person, and

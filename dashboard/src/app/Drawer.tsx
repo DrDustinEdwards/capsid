@@ -1,5 +1,6 @@
+import { trendChart } from "../views/charts";
 import { ChartSlot } from "../ui/ChartSlot";
-import { Fragment, lazy, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
 import type { SiteSnapshot } from "../types";
@@ -19,7 +20,7 @@ import { AgentControls, Head, JobBody } from "./DrawerJob";
 
 // Chart 9 (error rate with deploy markers) is an Enarratio line chart, loaded when a site's
 // drawer opens so it stays out of the initial bundle.
-const ErrorRate = lazy(() => import("../views/TrendCharts").then((m) => ({ default: m.ErrorRate })));
+const ErrorRate = trendChart("ErrorRate");
 
 type Ref = { type: DrawerType; id: string };
 
