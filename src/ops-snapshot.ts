@@ -6,6 +6,7 @@ import { healthUrl, type OpsSite } from "./ops-sites";
 import type { CiObservation, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS } from "./time";
+import { callSignal } from "./call-signal";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
 // Floor build). Until this, a pass kept only its timestamp: every check's outcome, the
@@ -120,7 +121,7 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
       method: "GET",
       redirect: "follow",
       headers: { "User-Agent": "capsid-watcher (ops probe)", Accept: "application/health+json, application/json" },
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      signal: callSignal(PROBE_TIMEOUT_MS),
     });
     const latency_ms = Date.now() - started;
     if (!withBody) {

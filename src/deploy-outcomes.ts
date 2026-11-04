@@ -23,13 +23,15 @@ const LIVE_JOB_SUFFIX = ` / ${LIVE_JOB}`;
 // The repos the deploy watcher reads: each by its namespace, and by its repo label where the
 // repo is not the namespace's primary. `key` names the fingerprint, so two repos of one
 // namespace never share a finding. carrel's live gate runs in devkit's reusable
-// worker-deploy.yml; carrel is not on APP_ROSTER (src/roster.ts). Julie, txasm and bsw
-// deploy through worker-deploy too (area 8, D7). Capsomer (Workers Builds) and Prelum's
-// specimen (specimen.yml) run no live gate yet, so they are read and record nothing until
-// they move onto worker-deploy. Prelum has no namespace of its own: it is the
-// dustinedwards namespace's "prelum" repo. dustinedwards.info deploys from its own Deploy workflow, started by CI's
-// completion (workflow_run) and on a schedule, never by a push, so its runs are read by `workflow`, of any event; its
-// "live gate" job is in that workflow (area 8, D7).
+// worker-deploy.yml; carrel is not on APP_ROSTER (src/roster.ts). Julie, txasm, bsw and the
+// static sites (Capsomer, Prelum's specimen, Carrel's public page, the capsid explorer) deploy
+// through worker-deploy too. Prelum has no namespace of its own: it is the dustinedwards
+// namespace's "prelum" repo. A run with two live gates (carrel's app and public site) records
+// the one that did not pass, else the first. Enarratio's gallery deploys through worker-deploy
+// too (checklist F4, 2026-11-01).
+// dustinedwards.info deploys from its own Deploy workflow, started by CI's completion (workflow_run)
+// and on a schedule, never by a push, so its runs are read by `workflow`, of any event; its "live gate"
+// job is in that workflow (area 8, D7).
 export interface DeployRepo {
   key: string;
   namespace: string;
@@ -38,7 +40,7 @@ export interface DeployRepo {
 }
 const OWN_DEPLOY_WORKFLOW: Readonly<Record<string, string>> = { dustinedwards: "deploy.yml" };
 export const DEPLOY_ROSTER: readonly DeployRepo[] = [
-  ...[...APP_ROSTER, "carrel", "julieedwards", "txasm", "bsw", "capsomer"].map((namespace) => ({
+  ...[...APP_ROSTER, "carrel", "julieedwards", "txasm", "bsw", "capsomer", "enarratio"].map((namespace) => ({
     key: namespace,
     namespace,
     ...(OWN_DEPLOY_WORKFLOW[namespace] ? { workflow: OWN_DEPLOY_WORKFLOW[namespace] } : {}),
@@ -60,7 +62,22 @@ interface Job {
   id: number;
   name: string;
   conclusion: string | null;
-  steps?: Array<{ name: string; conclusion: string | null }>;
+  completed_at?: string | null;
+  steps?: Array<{ name: string; conclusion: string | null; completed_at?: string | null }>;
+}
+
+/** Seconds production served the refused deploy: from the end of the gate's own deploy job
+ *  (the ship) to the end of the rollback step that put the last version back (DORA's time to
+ *  restore). Null when either time is missing. The deploy job is the gate's sibling: "deploy"
+ *  beside capsid's "live gate", "<caller job> / deploy" beside a called worker-deploy's
+ *  "<caller job> / live gate", so a run with two deploys (carrel's) pairs each with its own. */
+function restoreSeconds(jobs: readonly Job[], gate: Job): number | null {
+  const deployName = `${gate.name.slice(0, gate.name.length - LIVE_JOB.length)}deploy`;
+  const ship = jobs.find((j) => j.name === deployName)?.completed_at;
+  const back = (gate.steps ?? []).find((s) => ROLLBACK_STEP.test(s.name))?.completed_at;
+  if (!ship || !back) return null;
+  const seconds = Math.round((Date.parse(back) - Date.parse(ship)) / 1000);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
 }
 
 export interface OutcomeRead {
@@ -101,6 +118,7 @@ interface RunRow {
 
 export interface DeployRow extends OutcomeRead {
   run_id: number;
+  restore_seconds: number | null;
   head_sha: string;
   pr: number | null;
   run_url: string | null;
@@ -150,7 +168,7 @@ export async function readDeployOutcomes(env: Env, namespace: string, selector?:
   const runs = (((await listed.json()) as { workflow_runs?: RunRow[] }).workflow_runs ?? []).sort((a, b) => b.id - a.id);
   if (!runs.length) return null;
   const { results } = await env.DB.prepare(
-    `SELECT run_id, head_sha, pr, outcome, rollback_from, rollback_to, detail, run_url, run_at FROM deploy_outcomes
+    `SELECT run_id, head_sha, pr, outcome, rollback_from, rollback_to, detail, run_url, run_at, restore_seconds FROM deploy_outcomes
      WHERE repo = ?1 AND run_id IN (SELECT value FROM json_each(?2))`
   )
     .bind(full, JSON.stringify(runs.map((r) => r.id)))
@@ -162,7 +180,9 @@ export async function readDeployOutcomes(env: Env, namespace: string, selector?:
     if (!row) {
       const jobsResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?per_page=100`);
       if (!jobsResp.ok) throw new Error(`the jobs of run ${run.id} returned ${jobsResp.status}`);
-      const job = (((await jobsResp.json()) as { jobs?: Job[] }).jobs ?? []).find((j) => isLiveGateJob(j.name));
+      const jobs = ((await jobsResp.json()) as { jobs?: Job[] }).jobs ?? [];
+      const gates = jobs.filter((j) => isLiveGateJob(j.name));
+      const job = gates.find((j) => j.conclusion !== "success" && j.conclusion !== "skipped") ?? gates[0];
       let annotations: string[] = [];
       if (job && job.conclusion !== "success" && job.conclusion !== "skipped") {
         const notes = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/check-runs/${job.id}/annotations?per_page=100`);
@@ -174,12 +194,13 @@ export async function readDeployOutcomes(env: Env, namespace: string, selector?:
       // The pull request the commit came from, when GitHub knows one.
       const pulls = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/commits/${run.head_sha}/pulls`);
       const pr = pulls.ok ? ((((await pulls.json()) as Array<{ number?: number }>)[0]?.number as number | undefined) ?? null) : null;
-      row = { ...read, run_id: run.id, head_sha: run.head_sha, pr, run_url: run.html_url ?? null, run_at: run.created_at };
+      const restore = read.outcome === "rolled_back" && job ? restoreSeconds(jobs, job) : null;
+      row = { ...read, run_id: run.id, restore_seconds: restore, head_sha: run.head_sha, pr, run_url: run.html_url ?? null, run_at: run.created_at };
       await env.DB.prepare(
-        `INSERT OR IGNORE INTO deploy_outcomes (repo, namespace, run_id, head_sha, pr, outcome, rollback_from, rollback_to, detail, run_url, run_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+        `INSERT OR IGNORE INTO deploy_outcomes (repo, namespace, run_id, head_sha, pr, outcome, rollback_from, rollback_to, detail, run_url, run_at, restore_seconds)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
       )
-        .bind(full, namespace, row.run_id, row.head_sha, row.pr, row.outcome, row.rollback_from, row.rollback_to, row.detail, row.run_url, row.run_at)
+        .bind(full, namespace, row.run_id, row.head_sha, row.pr, row.outcome, row.rollback_from, row.rollback_to, row.detail, row.run_url, row.run_at, row.restore_seconds)
         .run();
     }
     newest ??= row;

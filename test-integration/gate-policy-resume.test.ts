@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
 import { signTaskBody } from "../src/signed-docs";
@@ -12,7 +12,7 @@ import { signTaskBody } from "../src/signed-docs";
 // in test/gate-policy.test.ts, where it is pure.
 
 const SECRET = "test-improve-secret";
-const SEAT_POSTER = legacyAgent("write", "github:DrDustinEdwards");
+const SEAT_POSTER = grantAgent("write", "github:DrDustinEdwards");
 const REPO = "DrDustinEdwards/capsid-mcp";
 
 const POLICY = [

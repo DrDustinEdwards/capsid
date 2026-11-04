@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { credentialProblems } from "@dustinedwards/d1-dump";
-import { backupHttpStatus, CREDENTIAL_ALLOW, EXCLUDED, runBackup, TABLES } from "../src/backup.ts";
+import { CREDENTIAL_ALLOW, EXCLUDED, runBackup, TABLES } from "../src/backup.ts";
 import { BACKUP_LAST_OK_KEY } from "../src/health.ts";
-import { fakeD1, fakeEnv, fakeKv, fakeR2, type FakeD1Options } from "./fakes.ts";
+import { dumpJson, fakeD1, fakeEnv, fakeKv, fakeR2, type FakeD1Options } from "./fakes.ts";
 
 // FTS5 derives documents_fts from documents and the sync triggers rebuild it on
 // import, so the virtual table and its shadow tables are never exported.
@@ -115,7 +115,7 @@ test("a healthy run dumps one object per table, keyed by TABLES", async () => {
   // Derived from TABLES in both directions. The underscore-prefixed sidecars are named
   // explicitly rather than matched by shape, so dropping one fails here too.
   const expected = [
-    ...TABLES.map((t) => `${result.json_prefix}${t}.json`),
+    ...TABLES.map((t) => `${result.json_prefix}${t}.json.gz`),
     `${result.json_prefix}_kv.json`,
     `${result.json_prefix}_schema.json`,
     `${result.json_prefix}_complete.json`,
@@ -123,7 +123,7 @@ test("a healthy run dumps one object per table, keyed by TABLES", async () => {
   assert.deepEqual([...result.json_keys].sort(), expected);
   assert.deepEqual([...r2.objects.keys()].filter((k) => k.startsWith(result.json_prefix)).sort(), expected);
   // Each object carries its own table's rows, not the whole database.
-  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}documents.json`) as string);
+  const dumped = dumpJson(r2, `${result.json_prefix}documents.json.gz`);
   assert.equal(dumped.table, "documents");
   assert.equal(dumped.rows.length, 2);
 });
@@ -163,19 +163,6 @@ test("an empty documents read refuses the prune, loudly, and deletes nothing", a
   assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a refused run was marked complete");
 });
 
-// /ops/backup answers with this status. A refused run still has ran: true, so a
-// status keyed on ran alone answered 200 to a curl whose prune did nothing.
-test("PLANT: a refused prune answers /ops/backup with a non-2xx status", async () => {
-  const refused = makeEnv({ documents: [] }, MIRROR);
-  const { result } = await captureErrors(() => runBackup(refused.env));
-  assert.equal(result.ran, true);
-  assert.equal(backupHttpStatus(result), 503);
-
-  const healthy = makeEnv({ documents: DOCS }, MIRROR);
-  assert.equal(backupHttpStatus(await runBackup(healthy.env)), 200);
-  assert.equal(backupHttpStatus({ ran: false, skipped: "lease-held" }), 409);
-});
-
 test("a failing FTS probe refuses the prune even when documents has rows", async () => {
   const { env, r2 } = makeEnv({ documents: DOCS, ftsHit: false }, MIRROR);
   const { result, logged } = await captureErrors(() => runBackup(env));
@@ -197,7 +184,7 @@ test("a live table TABLES does not list refuses the run, keeps the dumps, and ma
   if (!result.ran) return;
 
   assert.equal(result.prune_refused, "tables-mismatch: missing none; unlisted stray");
-  assert.ok(r2.objects.has(`${result.json_prefix}stray.json`), "the unlisted table was not dumped");
+  assert.ok(r2.objects.has(`${result.json_prefix}stray.json.gz`), "the unlisted table was not dumped");
   assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a mismatched run was marked complete");
   assert.deepEqual(r2.deleted, []);
   assert.equal(await kv.kv.get("backup:last-ok"), null);
@@ -388,7 +375,7 @@ test("every table read whole is read at ONE instant, however many writes land be
   if (!result.ran) return;
 
   const lastGeneration = (table: string): number => {
-    const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}${table}.json`) as string) as { rows: Array<Record<string, unknown>> };
+    const dumped = dumpJson(r2, `${result.json_prefix}${table}.json.gz`) as { rows: Array<Record<string, unknown>> };
     const gens = dumped.rows.flatMap((r) => Object.values(r).map((v) => String(v).match(/^gen-(\d+)/)?.[1]).filter((g) => g !== undefined)).map(Number);
     assert.ok(gens.length > 0, `${table} carries no writer row, so this compares nothing`);
     return Math.max(...gens);
@@ -416,11 +403,11 @@ test("audit_log is streamed in pages, every row once and in id order, in the sam
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  const key = `${result.json_prefix}audit_log.json`;
+  const key = `${result.json_prefix}audit_log.json.gz`;
   assert.ok(r2.multipart.some((m) => m.key === key), "audit_log was not written as a multipart upload");
-  const exportedAt = JSON.parse(r2.objects.get(`${result.json_prefix}documents.json`) as string).exported_at;
+  const exportedAt = dumpJson(r2, `${result.json_prefix}documents.json.gz`).exported_at;
   const sorted = [...audit].sort((a, b) => a.id - b.id);
-  assert.equal(r2.objects.get(key), JSON.stringify({ exported_at: exportedAt, table: "audit_log", rows: sorted }));
+  assert.deepEqual(dumpJson(r2, key), { exported_at: exportedAt, table: "audit_log", rows: sorted });
   const exportBatch = batches.find((b) => b.includes('SELECT * FROM "documents"'));
   assert.ok(exportBatch && !exportBatch.includes('SELECT * FROM "audit_log"'), "audit_log was read whole inside the batch");
 });
@@ -444,7 +431,7 @@ test("an audit row written after the snapshot batch is not in the dump", async (
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}audit_log.json`) as string);
+  const dumped = dumpJson(r2, `${result.json_prefix}audit_log.json.gz`);
   assert.deepEqual(dumped.rows.map((r: { id: number }) => r.id), [1, 2]);
 });
 
@@ -468,12 +455,10 @@ test("the streamed versions dump is byte-identical to the whole-object dump, acr
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  const key = `${result.json_prefix}document_versions.json`;
-  const exportedAt = JSON.parse(r2.objects.get(`${result.json_prefix}documents.json`) as string).exported_at;
-  assert.equal(r2.objects.get(key), JSON.stringify({ exported_at: exportedAt, table: "document_versions", rows: versions }));
-  const upload = r2.multipart.find((m) => m.key === key);
-  assert.ok(upload, "document_versions was not written as a multipart upload");
-  assert.equal(upload.parts.length, 3, `expected three parts, got ${upload.parts.join(",")}`);
+  const key = `${result.json_prefix}document_versions.json.gz`;
+  const exportedAt = dumpJson(r2, `${result.json_prefix}documents.json.gz`).exported_at;
+  assert.deepEqual(dumpJson(r2, key), { exported_at: exportedAt, table: "document_versions", rows: versions });
+  assert.ok(r2.multipart.some((m) => m.key === key), "document_versions was not written as a multipart upload");
 });
 
 test("the streamed versions dump pages past one page and keeps every row in id order", async () => {
@@ -485,7 +470,7 @@ test("the streamed versions dump pages past one page and keeps every row in id o
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}document_versions.json`) as string);
+  const dumped = dumpJson(r2, `${result.json_prefix}document_versions.json.gz`);
   assert.deepEqual(
     dumped.rows.map((r: { id: number }) => r.id),
     Array.from({ length: 250 }, (_, i) => i + 1)
@@ -497,7 +482,7 @@ test("an empty versions table still writes a valid dump", async () => {
   const result = await runBackup(env);
   assert.equal(result.ran, true);
   if (!result.ran) return;
-  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}document_versions.json`) as string);
+  const dumped = dumpJson(r2, `${result.json_prefix}document_versions.json.gz`);
   assert.equal(dumped.table, "document_versions");
   assert.deepEqual(dumped.rows, []);
 });
@@ -524,7 +509,7 @@ test("a version written after the snapshot batch is not in the dump", async () =
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}document_versions.json`) as string);
+  const dumped = dumpJson(r2, `${result.json_prefix}document_versions.json.gz`);
   assert.deepEqual(dumped.rows.map((r: { id: number }) => r.id), [1, 2]);
 });
 
@@ -587,7 +572,7 @@ test("an unreadable KV pin is recorded as unreadable, not as an unset null", asy
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  const dumped = JSON.parse(r2.objects.get(`${result.json_prefix}_kv.json`) as string) as { keys: Record<string, unknown> };
+  const dumped = dumpJson(r2, `${result.json_prefix}_kv.json`) as { keys: Record<string, unknown> };
   assert.deepEqual(dumped.keys["backup:last-ok"], { unreadable: "KV get timed out" });
 });
 
@@ -599,18 +584,18 @@ function seedRun(seed: Record<string, string>, id: string, shape: "marked" | "le
   if (shape === "marked") seed[`backups/json/${id}/_complete.json`] = "{}";
 }
 
-function survivingRuns(r2: { objects: Map<string, string> }, ids: string[]): string[] {
+function survivingRuns(r2: { objects: Map<string, string | Uint8Array> }, ids: string[]): string[] {
   return ids.filter((id) => [...r2.objects.keys()].some((k) => k.startsWith(`backups/json/${id}/`)));
 }
 
 const day = (month: number, d: number) => `2020-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}T00-00-00-000Z`;
 
-// The policy itself (14 daily, 8 weekly, 6 monthly, the newest complete run never pruned,
+// The policy itself (14 daily, 4 weekly, 3 monthly, the newest complete run never pruned,
 // nothing pruned while no run is complete) is tested in d1-dump, where pruneDumps lives.
 // This holds the wiring: the dump prefix is the one pruned, a run goes whole, the counts
 // come back in the result, and an old run is pruned whatever its shape (a marker-less
 // run no longer counts as complete just because it is older than the first marked one).
-test("dump retention is d1-dump's graduated policy over the backups/json prefix, deleting runs whole", async () => {
+test("dump retention is d1-dump's graduated policy (DUMP_RETENTION) over the backups/json prefix, deleting runs whole", async () => {
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().replace(/[:.]/g, "-");
   const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().replace(/[:.]/g, "-");
   const seed: Record<string, string> = { ...MIRROR };

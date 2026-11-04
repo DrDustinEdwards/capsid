@@ -32,8 +32,8 @@ below are set; the receiver is live either way and stores nothing it is not sent
 
 The bearer is resolved like every other key (`resolveAgent`). No key, or one that
 resolves to nobody, is 401 with `WWW-Authenticate: Bearer realm="capsid-hooks"`.
-Accepted: a minted driver or the admin key, holding the write grant
-(checked through `checkScope`). A read-only key or any other kind is 403.
+Accepted: a minted driver holding the write grant (checked through `checkScope`).
+A read-only key or any other kind is 403.
 
 The hook receiver (`/ops/hooks`, docs/hooks.md) uses the same caller check.
 
@@ -69,6 +69,10 @@ Claude Code exports no point for a counter that did not move.
 The row is written once. Claude Code exports on an interval (60 seconds by default), so
 usage from the last interval before `complete` can arrive after it; it stays in
 `session_usage` and is not added to the row.
+
+## Turning it on for cloud sessions
+
+Cloud sessions (the Claude project's threads) read the same five variables from their cloud environment: Project settings, the Cloud environment menu, the gear beside the environment, Environment variables. No key goes there: the environment's network secret already adds the cloud-driver key to every request for `mcp.dustinedwards.info`, `/ops/otlp` included (checked 2026-10-31: an empty export answers 200, not 401). A new session picks the variables up. Usage is kept per session under `agent:cloud-driver`; a session that holds no claimed job is bound to none.
 
 ## Turning it on for Dustin's machine
 

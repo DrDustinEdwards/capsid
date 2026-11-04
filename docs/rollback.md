@@ -19,7 +19,7 @@ Most rollbacks never need the command above: CI does it. Every push to `master` 
 - **Read back, not assumed.** After `wrangler rollback --name capsid-mcp`, the step polls `/health` up to 20 times, 3 seconds apart, until a readable sha other than this run's is live (`rollback-guard.mjs --after`). On success the summary carries `rollback_from=<sha> rollback_to=<sha>`; if the sha never moves it carries `rollback_did_not_take_effect` and the job fails, because production may still serve the refused deploy and a human decides.
 - **master is not changed.** The bad commit stays on `master`. Land a fix or revert it; the next push deploys again through the same gate.
 
-Capsid remembers each one. The watcher reads the live gate job (named "live gate", or "<caller job> / live gate" when the gate runs in a called workflow such as devkit's worker-deploy.yml) of each new push run, for the five app repos (`APP_ROSTER` in `src/roster.ts`) plus carrel, and records it in `deploy_outcomes` (`verified`, `rolled_back`, `rollback_failed`, `rollback_skipped` or `unverified`). A rollback, or one that did not take effect, opens a watcher finding. GitHub does not serve the step summary through its API, so the watcher reads the step's `::error::` annotations instead: their wording ("rolled back: was ...", "not rolling back", "the rollback did not take effect") is what `src/deploy-outcomes.ts` matches, and changing it here means changing it there (docs/autonomy.md, "Deploys").
+Capsid remembers each one. The watcher reads the live gate job (named "live gate", or "<caller job> / live gate" when the gate runs in a called workflow such as devkit's worker-deploy.yml) of each new push run, for every repo on `DEPLOY_ROSTER` (`src/deploy-outcomes.ts`: the five app repos plus carrel, julieedwards, txasm, bsw, capsomer, enarratio and prelum), and records it in `deploy_outcomes` (`verified`, `rolled_back`, `rollback_failed`, `rollback_skipped` or `unverified`), with a rollback's time to restore. The Portal's CI page turns the rows into DORA's measures per repo: deploys per week, change failure rate and median time to restore. A rollback, or one that did not take effect, opens a watcher finding. GitHub does not serve the step summary through its API, so the watcher reads the step's `::error::` annotations instead: their wording ("rolled back: was ...", "not rolling back", "the rollback did not take effect") is what `src/deploy-outcomes.ts` matches, and changing it here means changing it there (docs/autonomy.md, "Deploys").
 
 ## The MCP call (gate 8)
 
@@ -34,11 +34,7 @@ Every other gate stops before the MCP connection: OAuth metadata, `/register`, t
 
 **Seat steps, once.** Until both are done the gate skips, says so, and puts a warning on the run:
 
-1. Mint the probe agent (read grant on `capsid`, the `capsid_read_doc` tool only, no repos, no flags). The key goes to `~/.capsid/agent-live-probe.key` and is printed nowhere:
-
-   ```
-   CAPSID_OPERATOR_KEY=$CAPSID_OPERATOR_KEY node scripts/mint-agents.ts --role live-probe --apply
-   ```
+1. Mint the probe agent as the admin with `capsid_admin_manage_agents` action `mint`, using the `live-probe` row of `ROLES` in `scripts/roles.ts` (read grant on `capsid`, the `capsid_read_doc` tool only, no repos, no flags). Save the key it returns once to `~/.capsid/agent-live-probe.key`.
 
 2. Set it as the repo secret the live job reads, from the file, so it never reaches the terminal:
 

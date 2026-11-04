@@ -1,3 +1,4 @@
+import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy, useId, useState, type ReactNode } from "react";
 import { useApp } from "../app/ctx";
@@ -5,7 +6,7 @@ import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { hasSites, type Kind } from "../lib/derive";
 import { age, agentLabel, ago, ms } from "../lib/format";
 import { approveAllRequest, approveRequest, canApprove, closeRequest, prAnchor, seatFor } from "../lib/pr-actions";
-import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsCanonProposal, OpsJob, PortalNamespace } from "../types";
+import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } from "../types";
 import { InboxMark, St } from "../ui/icons";
 import { Empty } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
@@ -16,7 +17,7 @@ import { Problems } from "./Problems";
 // ruled 2026-10-09; the UX audit of 2026-10-19, B1, B3 and M3). It answers "what do I have to
 // decide" and lets each decision be made here: first everything waiting for you, by kind,
 // each row with its own buttons, the existing controls (approve_pr, pr_close, resume_job,
-// canon_approve, canon_reject, canon_approve_all, reset_breaker) through the one confirm
+// reset_breaker) through the one confirm
 // dialog. Then the problems, worst first, what happened since you last looked, and the
 // charts last, folded away.
 
@@ -37,8 +38,8 @@ const KIND: Record<string, { label: string; kind: Kind } | undefined> = {
 const SinceLastLooked = lazy(() => import("./Overnight").then((m) => ({ default: m.SinceLastLooked })));
 // The two charts load only when Trends is opened: their Enarratio code and their reads stay
 // off the first screen.
-const MinutesTile = lazy(() => import("./TrendCharts").then((m) => ({ default: m.MinutesTile })));
-const WaitingChart = lazy(() => import("./TrendCharts").then((m) => ({ default: m.WaitingChart })));
+const MinutesTile = trendChart("MinutesTile");
+const WaitingChart = trendChart("WaitingChart");
 
 export function NeedsYou() {
   const { feed } = useApp();
@@ -75,8 +76,7 @@ function Waiting() {
   const prs = all.filter((e) => e.item.kind === "pr");
   const jobs = all.filter((e) => e.item.kind === "question" || e.item.kind === "blocked-job");
   const other = all.filter((e) => !prs.includes(e) && !jobs.includes(e));
-  const canon = feed.live.canon_proposals;
-  const total = all.length + canon.length + stops.length;
+  const total = all.length + stops.length;
   const quiet = inbox.apps.filter((a) => a.count === 0);
   return (
     <Panel
@@ -98,7 +98,6 @@ function Waiting() {
         <>
           {prs.length > 0 && <PrGroup entries={prs} />}
           {jobs.length > 0 && <JobGroup entries={jobs} />}
-          {canon.length > 0 && <CanonGroup list={canon} />}
           {stops.length > 0 && <StopGroup list={stops} onReset={reread} />}
           {other.length > 0 && <OtherGroup entries={other} />}
         </>
@@ -331,84 +330,6 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
   );
 }
 
-// ---- rule changes (canon proposals)
-
-function CanonGroup({ list }: { list: OpsCanonProposal[] }) {
-  const { confirm } = useApp();
-  const fresh = list.filter((c) => !c.stale);
-  const keys = fresh.map((c) => String(c.id));
-  const ticks = useTicks(keys);
-  const chosen = fresh.filter((c) => ticks.has(String(c.id)));
-  return (
-    <Group
-      id="w-rules"
-      title="Rule changes"
-      count={list.length}
-      batch={
-        <div className="wbatch">
-          {fresh.length > 1 && <SelectAll label="Select all" keys={keys} ticks={ticks} />}
-          {chosen.length > 0 ? (
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() =>
-                confirm({
-                  action: "canon_approve",
-                  params: { id: String(chosen[0]!.id) },
-                  title: `Approve ${chosen.length} rule ${chosen.length === 1 ? "change" : "changes"}`,
-                  batch: chosen.map((c) => ({ action: "canon_approve", params: { id: String(c.id) }, label: `${c.namespace}/${c.path} (${c.id})` })),
-                  onDone: () => ticks.all(false),
-                })
-              }
-            >
-              Approve {chosen.length} selected
-            </button>
-          ) : (
-            // Every pending proposal in one decision (canon_approve_all): its preview lists each one's outcome.
-            <button type="button" className="btn" onClick={() => confirm({ action: "canon_approve_all", params: {}, title: "Decide every rule change" })}>
-              Approve all
-            </button>
-          )}
-        </div>
-      }
-    >
-      {list.map((c) => (
-        <CanonRow key={c.id} c={c} ticks={fresh.length > 1 ? ticks : null} />
-      ))}
-    </Group>
-  );
-}
-
-function CanonRow({ c, ticks }: { c: OpsCanonProposal; ticks: ReturnType<typeof useTicks> | null }) {
-  const { now, confirm } = useApp();
-  const target = `${c.namespace}/${c.path}`;
-  const flagged = c.directive_lines.length;
-  return (
-    <li className="wrow" data-row="" data-canon={c.id}>
-      {ticks && !c.stale ? <Tick label={`Select the change to ${target}`} on={ticks.has(String(c.id))} flip={() => ticks.flip(String(c.id))} /> : ticks ? <span className="wtick" /> : null}
-      <div className="wmain">
-        {c.stale ? <St kind="blocked">Out of date</St> : flagged ? <St kind="warn">Read closely</St> : null}
-        <b>{target}</b>
-        <Meta>
-          {agentLabel(c.proposer)} · {c.creates ? "a new document" : `${c.added} lines added, ${c.removed} removed`} · {ago(ms(c.created_at), now)}
-          {flagged ? ` · ${flagged} ${flagged === 1 ? "line reads" : "lines read"} as instructions to agents` : ""}
-          {c.stale ? " · the document changed since, so it can only be rejected" : ""}
-        </Meta>
-      </div>
-      <div className="wact">
-        {!c.stale && (
-          <button type="button" className="btn primary" aria-label={`Review the change to ${target}`} onClick={() => confirm({ action: "canon_approve", params: { id: String(c.id) }, title: `Approve the change to ${target}` })}>
-            Review
-          </button>
-        )}
-        <button type="button" className="btn" aria-label={`Reject the change to ${target}`} onClick={() => confirm({ action: "canon_reject", params: { id: String(c.id) }, title: `Reject the change to ${target}` })}>
-          Reject
-        </button>
-      </div>
-    </li>
-  );
-}
-
 // ---- stopped queues
 
 function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => void }) {
@@ -509,26 +430,22 @@ function WeeklyDigest() {
 // ---- Trends ---------------------------------------------------------------------------
 
 // The two charts, folded away at the foot (UX audit B3): the list comes first and never
-// moves. Opened, the body keeps room for the charts while they load (styles.css, .trends).
+// moves. They are drawn on the server inside the fold, so opening it shows them at once, with
+// scripts or without.
 function Trends() {
-  const [open, setOpen] = useState(false);
   return (
-    <details className="trends" id="trends" onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details className="trends" id="trends">
       <summary>
         <span className="chev" aria-hidden="true" />
         Trends <span className="faint">your time per week, and where waiting goes</span>
       </summary>
       <div className="trends-body chart-row">
-        {open && (
-          <>
-            <ChartSlot>
-              <MinutesTile />
-            </ChartSlot>
-            <ChartSlot>
-              <WaitingChart />
-            </ChartSlot>
-          </>
-        )}
+        <ChartSlot>
+          <MinutesTile />
+        </ChartSlot>
+        <ChartSlot>
+          <WaitingChart />
+        </ChartSlot>
       </div>
     </details>
   );

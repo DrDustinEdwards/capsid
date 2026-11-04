@@ -8,7 +8,6 @@ import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
 import { PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "../src/portal-auth.ts";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
 import { OPS_HOOKS_PATH } from "../src/ops-hooks.ts";
-import { ACCESS_SYNC_PATH } from "../src/access-sync.ts";
 import {
   PORTAL_ACTIVITY_PATH,
   PORTAL_API_PREFIX,
@@ -22,7 +21,7 @@ import { PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
-import { PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
+import { PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_RESOURCES_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
 import { PORTAL_PUSH_PATH } from "../src/push.ts";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
@@ -32,7 +31,8 @@ import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
 import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH } from "../src/bench.ts";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH } from "../src/shadow.ts";
-import { PUBLIC_CODE_PATH, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH } from "../src/public-data.ts";
+import { REVIEW_RUN_PATH } from "../src/review.ts";
+import { PUBLIC_CODE_PATH, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, PUBLIC_VERSIONS_PATH } from "../src/public-data.ts";
 import { SIGNED_IN_REPORT_PATH } from "../src/signed-in-crawl.ts";
 import {
   ROUTE_GRANTS,
@@ -42,13 +42,12 @@ import {
 } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";
-import { ADMIN_OPS_MCP_ROUTE } from "../src/mcp-handler.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Every route goes through the one enforcement point, or says why it does not. A
 // route that checks only the write grant lets a driver minted for one namespace act
-// across every namespace (for /ops/backup, a full backup and its prune).
+// across every namespace.
 //
 // The routes themselves are driven through the whole Worker in
 // test-integration/route-gates.test.ts. node --test cannot load src/routes.ts, so
@@ -57,8 +56,6 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // the two tables.
 
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
-const LEGACY_WRITE_KEY = "legacy-write-key";
-const LEGACY_READ_KEY = "legacy-read-key";
 const ROUTES = readFileSync(join(import.meta.dirname, "..", "src", "routes.ts"), "utf8");
 
 async function resolveWith(bearer: string) {
@@ -79,9 +76,8 @@ async function resolveWith(bearer: string) {
       },
     ],
   });
-  const hashes = `${await sha256Hex(LEGACY_WRITE_KEY)},ro:${await sha256Hex(LEGACY_READ_KEY)}`;
-  const env = fakeEnv({ DB: d1.db, OPERATOR_KEY_HASH: hashes });
-  const req = new Request("https://capsid.example/ops/backup", {
+  const env = fakeEnv({ DB: d1.db });
+  const req = new Request("https://capsid.example/ops/mcp", {
     method: "POST",
     headers: { Authorization: `Bearer ${bearer}` },
   });
@@ -89,23 +85,6 @@ async function resolveWith(bearer: string) {
   assert.ok(resolved, "the key did not resolve, so this test would prove nothing about the gate");
   return resolved.agent;
 }
-
-// /ops/backup
-
-test("/ops/backup admits the legacy write-grant operator key, which is the admin", async () => {
-  const agent = await resolveWith(LEGACY_WRITE_KEY);
-  assert.equal(agent.admin, true, "the legacy write key stopped resolving to the admin, so docs/backups.md is wrong");
-  assert.equal(routeRefusal("/ops/backup", agent), null);
-});
-
-test("/ops/backup refuses the legacy read-only operator key", async () => {
-  const agent = await resolveWith(LEGACY_READ_KEY);
-  assert.ok(routeRefusal("/ops/backup", agent));
-});
-
-test("/ops/backup admits the OAuth admin", () => {
-  assert.equal(routeRefusal("/ops/backup", adminAgentForEmail("admin@example.com")), null);
-});
 
 test("a path in neither table is refused to everyone but the admin", async () => {
   // routeRefusal fails closed: a route wired to it before its table entry exists is
@@ -117,7 +96,6 @@ test("a path in neither table is refused to everyone but the admin", async () =>
 // every route
 
 const PATH_CONSTANTS: Record<string, string> = {
-  ACCESS_SYNC_PATH,
   REPORT_PATH,
   VERIFY_LIVE_CLIENT_PATH,
   BACKUP_CREDENTIAL_PATH,
@@ -128,6 +106,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   BENCH_SCORE_PATH,
   SHADOW_JOB_PATH,
   SHADOW_RESULT_PATH,
+  REVIEW_RUN_PATH,
   PORTAL_CALLBACK_PATH,
   OTLP_METRICS_PATH,
   OTLP_LOGS_PATH,
@@ -146,6 +125,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_CONVERGENCE_PATH,
   PORTAL_PACKAGE_HISTORY_PATH,
   PORTAL_SHARED_CODE_PATH,
+  PORTAL_RESOURCES_PATH,
   PORTAL_COMPLETENESS_PATH,
   PORTAL_LIBRARY_PATH,
   PORTAL_TRENDS_PATH,
@@ -158,7 +138,7 @@ const PATH_CONSTANTS: Record<string, string> = {
   PUBLIC_STATS_PATH,
   SIGNED_IN_REPORT_PATH,
   PUBLIC_CODE_PATH,
-  ADMIN_OPS_MCP_ROUTE,
+  PUBLIC_VERSIONS_PATH,
 };
 
 // One entry per dispatch line in defaultHandler: the path it matches and the
@@ -215,19 +195,21 @@ async function servedActions(build: typeof buildServer, name: string): Promise<s
   return served?.enum ?? [];
 }
 
-test("capsid_run_improve serves status only, as a read, and the admin's switches are admin", async () => {
+test("capsid_run_improve serves status and the versions model, as reads, and the admin's switches are admin", async () => {
   // The actions come from the schemas the servers serve, so an action added to either
   // tool without a decision here fails.
   const driver = await servedActions(buildServer, "capsid_run_improve");
-  assert.deepEqual(driver, ["status"], "capsid_run_improve's action list changed; decide its requirement here and in TOOL_ACTION_GRANTS");
+  assert.deepEqual(driver, ["status", "versions"], "capsid_run_improve's action list changed; decide its requirement here and in TOOL_ACTION_GRANTS");
   assert.equal(requiredForAction("capsid_run_improve", "status"), "read");
+  // The versions model is the public document (/public/versions/v1.json), so a read.
+  assert.equal(requiredForAction("capsid_run_improve", "versions"), "read");
 
   const admin = await servedActions(buildAdminServer, "capsid_admin_control_improve");
   // The overnight run's switch (src/overnight.ts) and the queue's circuit breaker
   // (src/job-breaker.ts) are among them.
   assert.deepEqual(
     [...admin].sort(),
-    ["breaker_reset", "mint_operator_key", "overnight", "sign_policy"],
+    ["breaker_reset", "overnight", "sign_policy"],
     "capsid_admin_control_improve's action list changed"
   );
   for (const action of admin) assert.equal(requiredForAction("capsid_admin_control_improve", action), "admin", `capsid_admin_control_improve.${action}`);

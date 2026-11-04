@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { legacyAgent } from "../src/agents.ts";
+import { grantAgent } from "../src/agents.ts";
 import { claimJob, postJob } from "../src/jobs.ts";
 import { readModelLearning } from "../src/model-learning.ts";
 import {
@@ -84,7 +84,7 @@ test("the expected model for each kind, and the default for a kind no rule names
 test("PLANT: a routine job that is risky is upgraded to opus, whatever its kind", () => {
   const routine = routeJob(job("Update the changelog", { kind: "docs" }));
   assert.equal(routine.model, "sonnet");
-  assert.equal(routeJob(job("Update the changelog", { kind: "docs", required_flags: ["money_paths"] })).model, "opus");
+  assert.equal(routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_touch_protected"] })).model, "opus");
   assert.equal(routeJob(job("Update the changelog", { kind: "docs", gate_required: true })).model, "opus");
   assert.equal(routeJob(job("Update the changelog", { kind: "docs", namespace: "foxhound" })).model, "opus");
   const upgraded = routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_merge"] }));
@@ -310,7 +310,7 @@ test("worthReviewer reaches past riskOf only through the guard sources", () => {
 test("riskFromJob: only blast-radius flags, a gate, or a payments namespace make a job high", () => {
   assert.equal(riskFromJob({ namespace: "capsid" }).level, "routine");
   assert.equal(riskFromJob({ namespace: "capsid", required_flags: ["can_comment_pr"] }).level, "routine");
-  assert.equal(riskFromJob({ namespace: "capsid", required_flags: ["can_write_workflows"] }).level, "high");
+  assert.equal(riskFromJob({ namespace: "capsid", required_flags: ["can_touch_protected"] }).level, "high");
   assert.equal(riskFromJob({ namespace: "foxhound" }).level, "high");
 });
 
@@ -409,7 +409,7 @@ test("PLANT: a session's self-reported model never moves an outcome into another
 test("post assigns the kind and model at the Worker, and a given kind is validated", async () => {
   const d1 = fakeD1({});
   const env = fakeEnv({ DB: d1.db, IMPROVE_SCORE_SECRET: "test-secret" });
-  const agent = legacyAgent("write", DRIVER);
+  const agent = grantAgent("write", DRIVER);
   const now = new Date("2026-10-06T12:00:00Z");
   const posted = await postJob(env, agent, now, { namespace: "capsid", title: "Design: the thing", body: "think" });
   assert.equal(posted.ok, true, JSON.stringify(posted));
@@ -430,7 +430,7 @@ test("post assigns the kind and model at the Worker, and a given kind is validat
 test("claim returns the recommendation with how to follow it, and routes a job posted before routing existed", async () => {
   const d1 = fakeD1({});
   const env = fakeEnv({ DB: d1.db, IMPROVE_SCORE_SECRET: "test-secret" });
-  const agent = legacyAgent("write", DRIVER);
+  const agent = grantAgent("write", DRIVER);
   const now = new Date("2026-10-06T12:00:00Z");
   const posted = await postJob(env, agent, now, { namespace: "capsid", title: "Build D9: a thing", body: "do it" });
   assert.equal(posted.ok, true, JSON.stringify(posted));
@@ -455,7 +455,7 @@ test("claim returns the recommendation with how to follow it, and routes a job p
 test("post and claim place a job in the same arm, by its id", async (t) => {
   const d1 = fakeD1({});
   const env = fakeEnv({ DB: d1.db, IMPROVE_SCORE_SECRET: "test-secret" });
-  const agent = legacyAgent("write", DRIVER);
+  const agent = grantAgent("write", DRIVER);
   const now = new Date("2026-10-10T12:00:00Z");
   // mintJobId reads six random bytes; these mint the id in the arm.
   const hex = inArm.slice(4);

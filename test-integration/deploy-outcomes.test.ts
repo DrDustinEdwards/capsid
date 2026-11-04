@@ -5,7 +5,7 @@ import { readDeployOutcomes } from "../src/deploy-outcomes";
 
 // The deploy-outcome reader against a real D1 with migrations/0038 applied, and GitHub
 // answered here: a rolled-back run is recorded once with where production went, its pull
-// request found from the commit, and a second pass reads it from D1 instead of GitHub.
+// request found from the commit and its time to restore, and a second pass reads it from D1 instead of GitHub.
 
 const A = "a".repeat(40);
 const B = "b".repeat(40);
@@ -33,7 +33,13 @@ beforeEach(async () => {
       return Response.json({ workflow_runs: [{ id: 501, head_sha: A, created_at: "2026-10-10T10:00:00Z", html_url: "https://github.com/example/capsid/actions/runs/501" }] });
     }
     if (path === "/actions/runs/501/jobs?per_page=100") {
-      return Response.json({ jobs: [{ id: 77, name: gateName, conclusion: gateConclusion, steps: [{ name: "verify:live", conclusion: gateConclusion }, { name: "Roll back the deploy this run shipped", conclusion: gateConclusion === "success" ? "skipped" : "success" }] }] });
+      const deploy = gateName.replace(/live gate$/, "deploy");
+      return Response.json({
+        jobs: [
+          { id: 76, name: deploy, conclusion: "success", completed_at: "2026-10-10T10:03:00Z" },
+          { id: 77, name: gateName, conclusion: gateConclusion, steps: [{ name: "verify:live", conclusion: gateConclusion }, { name: "Roll back the deploy this run shipped", conclusion: gateConclusion === "success" ? "skipped" : "success", completed_at: "2026-10-10T10:05:30Z" }] },
+        ],
+      });
     }
     if (path === "/check-runs/77/annotations?per_page=100") return Response.json([{ message: `rolled back: was ${A} (this run's commit ${A}), now ${B}. master still points at the bad commit.` }]);
     if (path === `/commits/${A}/pulls`) return Response.json([{ number: 312 }]);
@@ -49,9 +55,10 @@ afterEach(async () => {
 describe("readDeployOutcomes", () => {
   it("records a rolled-back deploy once, with its pull request, and reads it from D1 on the next pass", async () => {
     const first = await readDeployOutcomes(env as unknown as Env, "capsid");
-    expect(first).toMatchObject({ outcome: "rolled_back", run_id: 501, head_sha: A, pr: 312, rollback_from: A, rollback_to: B });
-    const row = await env.DB.prepare("SELECT repo, namespace, run_id, outcome, pr FROM deploy_outcomes").first();
-    expect(row).toEqual({ repo: "example/capsid", namespace: "capsid", run_id: 501, outcome: "rolled_back", pr: 312 });
+    expect(first).toMatchObject({ outcome: "rolled_back", run_id: 501, head_sha: A, pr: 312, rollback_from: A, rollback_to: B, restore_seconds: 150 });
+    const row = await env.DB.prepare("SELECT repo, namespace, run_id, outcome, pr, restore_seconds FROM deploy_outcomes").first();
+    // Time to restore: the deploy job ended 10:03:00, the rollback step 10:05:30.
+    expect(row).toEqual({ repo: "example/capsid", namespace: "capsid", run_id: 501, outcome: "rolled_back", pr: 312, restore_seconds: 150 });
     calls.length = 0;
     const second = await readDeployOutcomes(env as unknown as Env, "capsid");
     expect(second).toMatchObject({ outcome: "rolled_back", run_id: 501 });

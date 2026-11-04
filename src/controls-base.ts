@@ -1,4 +1,3 @@
-import type { SweepItem } from "./canon";
 import type { JobRow } from "./jobs-schema";
 import type { PortalAction } from "./ops-types/portal";
 import { prUrlsFromJob } from "./outcome-prs";
@@ -25,9 +24,6 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "package_add",
   "package_edit",
   "package_remove",
-  "canon_approve",
-  "canon_reject",
-  "canon_approve_all",
   "site_repair",
   "sign_policy_change",
   "sign_policy_from_repo",
@@ -86,14 +82,6 @@ export function revisionOf(raw: string | undefined): number | null {
 
 export const UNIT_RESUME_REASON = "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";
 export const AUTOMERGE_RESUME_REASON = "automerge_resume needs a reason: why the rollbacks or reverts that paused the namespace are answered. It is recorded in the audit row.";
-export const CANON_REJECT_REASON = "canon_reject needs a reason: the proposer reads it, and a rejection with no reason is one nobody can act on.";
-
-// canon_approve_all's preview, one line per proposal in the order the perform runs them:
-// every rejection, then every approval, each by id.
-export function sweepOrder(items: readonly SweepItem[]): SweepItem[] {
-  return [...items.filter((i) => i.outcome !== "approve"), ...items.filter((i) => i.outcome === "approve")];
-}
-
 // close_shipped's complete (stale jobs D4, ruled 2026-10-09: the existing admin_complete
 // path, crediting the holder). The pull requests the job names, from result_ref and the
 // summary, become the evidence the outcome verifies, at most the 10 the capsid_work_jobs tool takes.

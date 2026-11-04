@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { gzipSync } from "node:zlib";
 import { checkDump } from "../scripts/dump-invariants.ts";
 
 // The checks the d1-dump restore drill cannot make (scripts/dump-invariants.ts). Each
@@ -54,6 +55,18 @@ function withDump(fn: (dir: string) => void): void {
 test("a good dump passes, and the summary says what was read", () => {
   withDump((dir) => {
     assert.deepEqual(checkDump(dir), { files: 6, tables: 3, rows: 2, documents: 2, orphanVersions: 0, orphanAudits: 0 });
+  });
+});
+
+test("a dump whose tables are gzipped (d1-dump compress) passes like a plain one", () => {
+  withDump((dir) => {
+    for (const name of Object.keys(ROWS)) {
+      const file = join(dir, `${name}.json`);
+      writeFileSync(`${file}.gz`, gzipSync(readFileSync(file)));
+      rmSync(file);
+    }
+    seal(dir);
+    assert.equal(checkDump(dir).documents, 2);
   });
 });
 

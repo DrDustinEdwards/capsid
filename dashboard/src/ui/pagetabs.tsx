@@ -1,5 +1,5 @@
 import { TabLink, TabsNav, type RenderTabLink } from "capsomer/react/tabs";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch } from "../lib/router";
 
 // A page's tabs as links (Capsomer's tabs, links form): each tab is the page's address with
 // ?tab=, so Back, a bookmark and an alert reach it, and a server-free reload keeps it. The

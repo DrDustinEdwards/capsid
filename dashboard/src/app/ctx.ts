@@ -128,7 +128,7 @@ export interface UndoRequest {
   focus?: string;
 }
 
-export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "pr_close", "canon_reject"]);
+export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "pr_close"]);
 
 // The actions whose dialog also offers an optional note under the reason: resume_job's
 // is the full approval, which the driver reads as resume_note.note.
@@ -157,9 +157,6 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   package_add: "Add package",
   package_edit: "Save changes",
   package_remove: "Remove package",
-  canon_approve: "Approve and write",
-  canon_reject: "Reject proposal",
-  canon_approve_all: "Approve all",
   site_repair: (p) => `Run ${p.tool ?? "repair"}`,
   sign_policy_change: (p) => (p.change === "demote" ? "Sign without the unit" : "Sign and promote"),
   sign_policy_from_repo: "Load from repo and sign",
@@ -173,7 +170,7 @@ export function performLabel(action: PortalAction, params: Record<string, string
 }
 
 // One-way actions: once the preview arrives, focus goes to Cancel, not to perform.
-export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job", "close_shipped", "supersede_job", "pr_close", "canon_approve", "canon_reject", "canon_approve_all"]);
+export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job", "close_shipped", "supersede_job", "pr_close"]);
 
 // Destructive actions: the perform button is the danger style and sits apart from Cancel.
 export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove"]);

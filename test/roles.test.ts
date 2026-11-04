@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ROLES, roleMintCommand, selectAgents } from "../scripts/mint-agents.ts";
+import { ROLES } from "../scripts/roles.ts";
 import { SCOPE_FLAGS, allowsToolAction, defaultScopes, parseScopes, serializeScopes } from "../src/agents-schema.ts";
 import { type Agent } from "../src/agents.ts";
-import { checkScope, repoWriteFlags } from "../src/scope.ts";
+import { checkScope } from "../src/scope.ts";
 import { buildServer } from "../src/server.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
@@ -109,19 +109,7 @@ test("the jobs tool asks the enforcement point about the qualified name", async 
   assert.equal(JSON.parse(listed).ok, true, `the narrowing refused the one action it allows: ${listed}`);
 });
 
-// the reviewer's flag
-
-test("can_comment_pr is a real flag and a comment is what requires it", () => {
-  assert.ok((SCOPE_FLAGS as readonly string[]).includes("can_comment_pr"));
-  assert.deepEqual(repoWriteFlags("capsid_open_pr", "comment", {}), ["can_comment_pr"]);
-});
-
-test("commenting needs can_comment_pr and NOT can_merge, which is the whole point of the role", () => {
-  assert.deepEqual(repoWriteFlags("capsid_close_pr", "merge", {}), ["can_merge"]);
-  assert.ok(!repoWriteFlags("capsid_open_pr", "comment", {}).includes("can_merge"));
-});
-
-// the four roles
+// the roles
 
 const byName = (name: string) => {
   const role = ROLES.find((r: (typeof ROLES)[number]) => r.name === name);
@@ -135,15 +123,6 @@ test("the auditor reads everything and writes nothing", () => {
   assert.deepEqual(auditor.repos, ["*"]);
   assert.deepEqual(auditor.grants, ["read"], "an auditor holding the write grant is not an auditor");
   assert.equal(auditor.flags, undefined);
-});
-
-test("the reviewer reads everything and may comment, and holds nothing else", () => {
-  const reviewer = byName("reviewer");
-  assert.deepEqual(reviewer.grants, ["read", "write"], "commenting goes through a write tool, so the grant is needed");
-  assert.deepEqual(reviewer.tools, ["capsid_open_pr", "capsid_open_pr.comment"], "an unqualified capsid_open_pr would let a reviewer open pull requests");
-  assert.equal(allowsToolAction(reviewer.tools, "capsid_close_pr", "merge"), false, "merge and close are capsid_close_pr, which a reviewer must not reach");
-  assert.equal(allowsToolAction(reviewer.tools, "capsid_close_pr", "close"), false);
-  assert.deepEqual(reviewer.flags, { can_comment_pr: true });
 });
 
 test("the watcher may post a job and cannot claim, complete or resume one", () => {
@@ -165,18 +144,20 @@ test("the site seat is one namespace and one repo, and merges nothing else", () 
   assert.deepEqual(seat.repos, ["*"], "repos is scoped by the namespace mapping, which is the authorization boundary");
   assert.deepEqual(seat.flags, { can_merge: true });
   const held = Object.keys(seat.flags ?? {});
-  for (const flag of ["can_direct_write", "can_write_workflows", "can_touch_protected", "money_paths"]) {
+  for (const flag of ["can_touch_protected"]) {
     assert.ok(!held.includes(flag), `the site seat must not hold ${flag}`);
   }
 });
 
-test("the live probe reads capsid with the read tool and holds nothing else", () => {
-  const probe = byName("live-probe");
-  assert.deepEqual(probe.namespaces, ["capsid"]);
-  assert.deepEqual(probe.grants, ["read"], "the live gate's key is a CI secret, so it must not write");
-  assert.deepEqual(probe.tools, ["capsid_read_doc"]);
-  assert.deepEqual(probe.repos, [], "the probe reads documents, never a repo");
-  assert.equal(probe.flags, undefined);
+test("the live probe and the daily live check read capsid with the read tool and hold nothing else", () => {
+  for (const name of ["live-probe", "live-check"]) {
+    const probe = byName(name);
+    assert.deepEqual(probe.namespaces, ["capsid"], name);
+    assert.deepEqual(probe.grants, ["read"], `${name}'s key is a CI secret, so it must not write`);
+    assert.deepEqual(probe.tools, ["capsid_read_doc"], name);
+    assert.deepEqual(probe.repos, [], `${name} reads documents, never a repo`);
+    assert.equal(probe.flags, undefined, name);
+  }
 });
 
 test("DERIVED: every role names only flags this system has", () => {
@@ -195,31 +176,4 @@ test("DERIVED: no role is a driver in disguise", () => {
     const flags = Object.keys(role.flags ?? {});
     assert.ok(flags.length <= 1, `${role.name} holds ${flags.length} flags; a role is one capability, not a bundle`);
   }
-});
-
-test("each role prints a mint command the script itself can parse", () => {
-  for (const role of ROLES) {
-    const command = roleMintCommand(role);
-    assert.match(command, /node scripts\/mint-agents\.ts --role /);
-    assert.match(command, new RegExp(`--role ${role.name}\\b`));
-    assert.match(command, /--apply/);
-    assert.ok(!command.includes("CAPSID_OPERATOR_KEY=<"), "a command with a placeholder key is one nobody can paste");
-    assert.match(command, /^CAPSID_OPERATOR_KEY=\$CAPSID_OPERATOR_KEY /);
-  }
-});
-
-test("--role selects exactly one agent, and an unknown role is refused rather than matching nothing", () => {
-  assert.deepEqual(
-    selectAgents(undefined, undefined, "auditor").map((a) => a.name),
-    ["auditor"]
-  );
-  assert.throws(() => selectAgents(undefined, undefined, "nope"), /no role named 'nope'/);
-});
-
-test("a role is NOT reachable through --namespace, so the two selectors cannot collide", () => {
-  // site-seat is scoped to dustinedwards. If --namespace dustinedwards picked it up,
-  // a routine driver mint would quietly mint a credential holding can_merge.
-  const picked = selectAgents("dustinedwards").map((a) => a.name);
-  assert.deepEqual(picked, ["dustinedwards-driver"]);
-  assert.ok(!picked.includes("site-seat"), "a namespace mint must never reach a role that holds can_merge");
 });

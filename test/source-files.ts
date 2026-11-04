@@ -23,9 +23,8 @@ const MIN_SOURCE_FILES = 10;
 // Recursive, so a tool moved into a subdirectory cannot hide from the guards that
 // read through here. The name is the path relative to the root
 // with forward slashes, so a top-level file keeps its basename (env.ts) and a
-// nested one is addressable (tools/documents.ts). Exported so the recursion
-// itself is testable against a fixture tree without touching src/.
-export function collectSourceFiles(root: string): SourceFile[] {
+// nested one is addressable (tools/documents.ts).
+function collectSourceFiles(root: string): SourceFile[] {
   const out: SourceFile[] = [];
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {

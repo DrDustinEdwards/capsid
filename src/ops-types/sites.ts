@@ -200,3 +200,10 @@ export interface PortalPackageHistory {
   notes: string[];
   weeks: Array<{ week: string; stars: number; open_issues: number; open_prs: number; latest_release: string | null }>;
 }
+
+/** One site's returned 5xx over an hour: the count, and the busiest path and status pairs
+ *  behind it, so a finding names where the errors are and not only how many. */
+export interface ServerErrors {
+  count: number;
+  top: Array<{ path: string; status: number; hits: number }>;
+}

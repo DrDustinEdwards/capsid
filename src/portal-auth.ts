@@ -1,9 +1,9 @@
 import { ACCESS_LOGOUT_PATH, ADMIN_IDLE_SECONDS, ADMIN_SEEN_COOKIE, accessIssuer, adminIdle } from "@dustinedwards/site-runtime/access";
 import { clearStateCookie, completeAccessLogin, type LoginFlow, startAccessLogin } from "./access-login";
-import { cookieName, getCookie, hmacHex, isAdminEmail } from "./auth";
+import { capsidCookie, getCookie, hmacHex, isAdminEmail } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
-import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { emailKey } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
 import { isPortalHost, isSameOriginPath, PORTAL_HOST, portalCookiePath, publicPortalPath } from "./portal-host";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
@@ -35,7 +35,7 @@ const decodeBase64url = (text: string): string => new TextDecoder().decode(fromB
 //
 // Every cookie here is host-only (no Domain attribute, ever) and scoped by portalCookiePath
 // (src/portal-host.ts): Path=/ on portal.dustinedwards.info, a host that serves nothing
-// but the Portal, and Path=/portal on workers.dev, so /mcp and /ops there never see it. The Portal was at /console until PR B
+// but the Portal, and Path=/portal on any other host, so /mcp and /ops there never see it. The Portal was at /console until PR B
 // of capsid/research/design-portal-unify.md. A Path=/console cookie from then is never
 // sent here, so a browser signed in there signs in once more.
 
@@ -92,16 +92,17 @@ export async function portalSessionCookie(user: PortalUser, secret: string, now:
   };
   const encoded = base64url(JSON.stringify(payload));
   const sig = await hmacHex(secret, encoded);
-  return `${cookieName(PORTAL_SESSION_COOKIE, cookiePath)}=${sig}.${encoded}; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=${PORTAL_COOKIE_MAX_AGE}`;
+  return capsidCookie(PORTAL_SESSION_COOKIE, `${sig}.${encoded}`, cookiePath, PORTAL_COOKIE_MAX_AGE);
 }
 
 /** The Set-Cookie values that sign this browser out: the session and CSRF cookies,
  *  same name, path and attributes, Max-Age=0, under the prefixed name and the bare one
  *  they had before (for one release, with getCookie's fallback). */
 export function portalSignOutCookies(cookiePath: string = PORTAL_PATH): string[] {
-  return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].flatMap((name) =>
-    [cookieName(name, cookiePath), name].map((n) => `${n}=; HttpOnly; Secure; SameSite=Lax; Path=${cookiePath}; Max-Age=0`),
-  );
+  return [PORTAL_SESSION_COOKIE, PORTAL_CSRF_COOKIE].flatMap((name) => [
+    capsidCookie(name, "", cookiePath, 0),
+    `${name}=; Path=${cookiePath}; Secure; HttpOnly; SameSite=Lax; Max-Age=0`,
+  ]);
 }
 
 // The verified payload, expired or not, or null: a bad signature or shape, an email no
@@ -159,15 +160,9 @@ export async function portalSessionId(request: Request, env: Env): Promise<strin
   return (await verifiedSession(request, env))?.sid ?? null;
 }
 
-// The auth event log names a person by a digest of the address, never the address
-// (site-runtime ./log, "The auth event log").
-async function emailKey(email: string): Promise<string> {
-  return `email:${await sha256Hex(email.trim().toLowerCase())}`;
-}
-
 /** The auth event line for a Portal sign-out (POST /portal/api/sign-out). */
 export async function logPortalSignOut(email: string): Promise<void> {
-  logEvent(OWASP_EVENTS.signOut, { message: "Portal sign-out", app: "portal", email_key: await emailKey(email) });
+  logEvent(OWASP_EVENTS.signOut, { message: "Portal sign-out", app: "portal", email_key: await emailKey("email", email) });
 }
 
 /**
@@ -187,7 +182,7 @@ export async function withPortalIdle(request: Request, env: Env, handle: () => P
   const gate = await adminIdle(request, { session: { id, signedInAt: session.at }, now: now.getTime() });
   if (gate.idle) {
     await endPortalSession(env, session.sid, now);
-    logEvent(OWASP_EVENTS.sessionExpired, { message: "Portal session ended after an idle hour", app: "portal", reason: "idle", email_key: await emailKey(session.email) });
+    logEvent(OWASP_EVENTS.sessionExpired, { message: "Portal session ended after an idle hour", app: "portal", reason: "idle", email_key: await emailKey("email", session.email) });
     const issuer = accessIssuer(env.ACCESS_TEAM_DOMAIN);
     const url = new URL(request.url);
     const headers = new Headers({ "Cache-Control": "no-store", Location: issuer ? `${issuer}${ACCESS_LOGOUT_PATH}` : publicPortalPath(url, PORTAL_PREFIX) });
@@ -233,7 +228,7 @@ export async function handlePortalCallback(request: Request, env: Env, now: Date
     return login.response;
   }
   const { email, name, state: returnTo } = login;
-  logEvent(OWASP_EVENTS.signInSuccess, { message: "Portal sign-in", app: "portal", via: "access", email_key: await emailKey(email) });
+  logEvent(OWASP_EVENTS.signInSuccess, { message: "Portal sign-in", app: "portal", via: "access", email_key: await emailKey("email", email) });
 
   // A relative Portal path only, checked rather than trusted from KV, so a bad write
   // cannot become an open redirect.
@@ -245,12 +240,12 @@ export async function handlePortalCallback(request: Request, env: Env, now: Date
   return new Response(null, { status: 302, headers });
 }
 
-// A bearer token is refused, not redirected. An agent or operator key presented to
+// A bearer token is refused, not redirected. An agent key presented to
 // the Portal is a caller that cannot follow a login redirect: a 302 would send a
 // machine to the Access sign-in and look, from its side, like the Portal being down.
 // The refusal names what was presented and what the page admits instead.
 const BEARER_REFUSAL =
-  "forbidden: Capsid Portal admits the administrator's Access session only. An operator key or an agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_run_improve action status and capsid_work_jobs there. Open the Portal in a browser to sign in as the administrator.";
+  "forbidden: Capsid Portal admits the administrator's Access session only. An agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_run_improve action status and capsid_work_jobs there. Open the Portal in a browser to sign in as the administrator.";
 
 export type PortalGate = { ok: true; user: PortalUser } | { ok: false; response: Response };
 

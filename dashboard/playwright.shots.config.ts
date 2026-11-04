@@ -2,8 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 import { SHOTS_NOW } from "./screenshots/clock.ts";
 
 // The README screenshots (docs/images), taken from sample data only: the production
-// build (dashboard/dist) under `vite preview` with the dev mock answering the API, as
-// the browser tests run (playwright.config.ts). Build first: `npm run build`, then
+// build rendered by dev/serve.ts with the dev mock answering the API, as the browser tests
+// run (playwright.config.ts). Build first: `npm run build`, then
 // `npm run shots`. scripts/shots-privacy.mjs runs first and stops the run if the
 // fixtures hold anything that looks real.
 //
@@ -24,7 +24,7 @@ export default defineConfig({
   retries: 0,
   reporter: [["list"]],
   use: {
-    baseURL: `http://localhost:${PORT}/portal/`,
+    baseURL: `http://localhost:${PORT}/`,
     trace: "retain-on-failure",
   },
   projects: [
@@ -34,8 +34,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npx vite preview --port ${PORT} --strictPort`,
-    url: `http://localhost:${PORT}/portal/`,
+    command: `node --import ../test/resolve-ts.mjs dev/serve.ts ${PORT}`,
+    url: `http://localhost:${PORT}/`,
     reuseExistingServer: false,
     timeout: 60_000,
     env: { WF_MOCK_NOW: SHOTS_NOW },

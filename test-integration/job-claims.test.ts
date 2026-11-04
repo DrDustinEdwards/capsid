@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, failAsCaller, failJob, postJob } from "../src/jobs";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { buildServer } from "../src/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
@@ -16,7 +16,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 
 const SEAT = "access:admin@example.com";
 const DRIVER_ACTOR = "agent:driver-aaaa";
-const DRIVER = legacyAgent("write", DRIVER_ACTOR);
+const DRIVER = grantAgent("write", DRIVER_ACTOR);
 const NS = "sample";
 const PR = "https://github.com/example/sample/pull/3";
 const HEAD = "c".repeat(40);
@@ -28,7 +28,7 @@ function jobsEnv() {
 }
 
 async function claimed(title: string, actor = DRIVER) {
-  const posted = await postJob(jobsEnv(), legacyAgent("write", SEAT), NOW, { namespace: NS, title, body: "do the thing" });
+  const posted = await postJob(jobsEnv(), grantAgent("write", SEAT), NOW, { namespace: NS, title, body: "do the thing" });
   expect(posted.ok, posted.refusal).toBe(true);
   const id = posted.job!.id;
   const claim = await claimJob(jobsEnv(), actor, NOW, { id });
@@ -198,7 +198,7 @@ describe("job_claims: what the agent said", () => {
 
   it("the seat failing somebody else's job writes no claim: the agent made none", async () => {
     const id = await claimed("the seat fails it");
-    const seat = legacyAgent("write", SEAT);
+    const seat = grantAgent("write", SEAT);
     const failed = await failAsCaller(jobsEnv(), seat, LATER, id, "the driver is gone");
     expect(failed.ok, failed.refusal).toBe(true);
     expect(failed.action).toBe("admin-fail");
@@ -208,7 +208,7 @@ describe("job_claims: what the agent said", () => {
 
   it("PLANT: the seat sending a claim on somebody else's job is refused, not dropped, and the job stays claimed", async () => {
     const id = await claimed("the seat fails it with a claim");
-    const seat = legacyAgent("write", SEAT);
+    const seat = grantAgent("write", SEAT);
     const failed = await failAsCaller(jobsEnv(), seat, LATER, id, "the driver is gone", { claim: { deploy_state: "none" } });
     expect(failed.ok).toBe(false);
     expect(failed.refusal).toContain("takes no claim");
@@ -223,7 +223,7 @@ describe("skills do not ride on claim", () => {
     await env.DB.prepare(
       "INSERT INTO documents (namespace, path, title, body, type, status) VALUES ('capsid', 'improve/skills/sk-x.md', 'sk-x', 'check the slow query before the fix', 'reference', 'published')"
     ).run();
-    const posted = await postJob(jobsEnv(), legacyAgent("write", SEAT), NOW, { namespace: NS, title: "Fix the slow query", body: "the slow query in the loader" });
+    const posted = await postJob(jobsEnv(), grantAgent("write", SEAT), NOW, { namespace: NS, title: "Fix the slow query", body: "the slow query in the loader" });
     const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
     expect(claim.ok, claim.refusal).toBe(true);
     expect(claim).not.toHaveProperty("offered_skills");
@@ -252,7 +252,7 @@ describe("a refused call writes no claim", () => {
 
   it("a caller that does not hold the job writes no claim", async () => {
     const id = await claimed("held by another");
-    const other = legacyAgent("write", "agent:driver-bbbb");
+    const other = grantAgent("write", "agent:driver-bbbb");
     const out = await completeJob(jobsEnv(), other, LATER, id, { result_summary: "mine now", claim: { deploy_state: "deployed" } });
     expect(out.ok).toBe(false);
     expect(out.refusal).toMatch(/held by agent:driver-aaaa/);

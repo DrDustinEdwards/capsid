@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { workflowWriteRefusal, writeRepoFile, deleteRepoFile } from "../src/github.ts";
 import { policyWriteRefusal } from "../src/signed-docs.ts";
-import { fakeD1, fakeEnv, fakeKv, withFetch, type FakeD1Options } from "./fakes.ts";
+import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 import { operationBlocks } from "./source-files.ts";
 import { servedAs } from "./served.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -137,79 +136,4 @@ test("an ordinary move is untouched at both ends", () => {
   assert.equal(policyWriteRefusal("capsid", "notes/a.md", false), null);
   assert.equal(policyWriteRefusal("capsid", "improve/prompts/run.md", false), null);
   assert.equal(policyWriteRefusal("capsid", "notes/policy/a.md", false), null);
-});
-
-// .github/workflows/
-
-test("PLANT: a write-grant key cannot author a workflow without the flag", async () => {
-  const env = fakeEnv({
-    DB: {
-      prepare: () => ({
-        bind: () => ({ first: async () => ({ repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) }) }),
-      }),
-    },
-    APP_KV: fakeKv({ seedToken: true }).kv,
-  });
-  await withFetch({}, async (calls) => {
-    await assert.rejects(
-      () => writeRepoFile(env, "ns", ".github/workflows/evil.yml", "on: push", "m", "direct", "main"),
-      /allow_workflow_write/,
-      "a workflow is code CI executes with the repo's secrets in scope"
-    );
-    await assert.rejects(
-      () => deleteRepoFile(env, "ns", ".github/workflows/ci.yml", "m", "direct", "main"),
-      /allow_workflow_write/,
-      "deleting a workflow is a CI change too"
-    );
-    assert.equal(calls.length, 0, "the refusal must cost no GitHub round trip");
-  });
-});
-
-test("the workflow refusal cannot be walked around by path spelling", () => {
-  for (const path of [
-    ".github/workflows/x.yml",
-    ".github/workflows/nested/x.yml",
-    "./.github/workflows/x.yml",
-    ".github//workflows/x.yml",
-  ]) {
-    assert.ok(workflowWriteRefusal(path, false), `${path} must be refused`);
-    assert.ok(workflowWriteRefusal(path, undefined), `${path} must be refused when the flag is absent`);
-  }
-});
-
-test("the flag opens it, and ordinary paths were never closed", () => {
-  assert.equal(workflowWriteRefusal(".github/workflows/x.yml", true), null);
-  for (const path of ["src/index.ts", ".github/dependabot.yml", ".github/ISSUE_TEMPLATE/bug.md", "workflows/x.yml"]) {
-    assert.equal(workflowWriteRefusal(path, false), null, `${path} is not a workflow and must stay writable`);
-  }
-});
-
-test("the opt-in is returned, so guardedWrite files it into audit_log", async () => {
-  // guardedWrite writes the whole result into audit_log.params, so a workflow authored
-  // or removed through the repo tools is greppable afterwards only if the flag is on
-  // the result. An ordinary write carries no flag.
-  const env = fakeEnv({
-    DB: {
-      prepare: () => ({
-        bind: () => ({ first: async () => ({ repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) }) }),
-      }),
-    },
-    APP_KV: fakeKv({ seedToken: true }).kv,
-  });
-  const file = (path: string) => ({
-    [`GET /repos/owner/repo/contents/${path}`]: { body: { sha: "old" } },
-    [`PUT /repos/owner/repo/contents/${path}`]: { body: { content: { sha: "new" }, commit: { sha: "c1" } } },
-    [`DELETE /repos/owner/repo/contents/${path}`]: { body: { commit: { sha: "c2" } } },
-  });
-  await withFetch(
-    { "GET /repos/owner/repo": { body: { default_branch: "main" } }, ...file(".github/workflows/x.yml"), ...file("src/x.ts") },
-    async () => {
-      const wrote = await writeRepoFile(env, "ns", ".github/workflows/x.yml", "on: push", "m", "direct", "main", undefined, true);
-      const removed = await deleteRepoFile(env, "ns", ".github/workflows/x.yml", "m", "direct", "main", undefined, true);
-      const ordinary = await writeRepoFile(env, "ns", "src/x.ts", "x", "m", "direct", "main");
-      assert.equal((wrote as { allow_workflow_write?: boolean }).allow_workflow_write, true, "a workflow write does not report its flag");
-      assert.equal((removed as { allow_workflow_write?: boolean }).allow_workflow_write, true, "a workflow delete does not report its flag");
-      assert.equal(Object.hasOwn(ordinary, "allow_workflow_write"), false, "an ordinary write reports a flag it did not use");
-    }
-  );
 });

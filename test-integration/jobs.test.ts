@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { adminFailJob, blockJob, claimJob, completeJob, editJob, failJob, jobsSummary, listJobs, parkJob, postJob, releaseJob, resumeJob, supersedeJob, unparkJob } from "../src/jobs";
 import { capsidStatus } from "../src/status";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { loadRecordRows } from "../src/agent-record";
 import { CORRECTION_CAP, RETRY_CAP_REASON, jobDocPath } from "../src/jobs-schema";
@@ -30,8 +30,8 @@ const SEAT = "github:DrDustinEdwards";
 // credential rather than a shared one.
 const DRIVER_ACTOR = "agent:driver-aaaa";
 const OTHER_ACTOR = "agent:driver-dddd";
-const DRIVER = legacyAgent("write", DRIVER_ACTOR);
-const OTHER = legacyAgent("write", OTHER_ACTOR);
+const DRIVER = grantAgent("write", DRIVER_ACTOR);
+const OTHER = grantAgent("write", OTHER_ACTOR);
 
 function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
@@ -74,7 +74,7 @@ function racingEnv(between: () => Promise<void>) {
 }
 
 async function post(over: Partial<{ namespace: string; title: string; body: string; priority: number; gate_required: boolean; kind: string }> = {}) {
-  return postJob(jobsEnv(), legacyAgent("write", SEAT), NOW, {
+  return postJob(jobsEnv(), grantAgent("write", SEAT), NOW, {
     namespace: "capsid",
     title: "a job",
     body: "do the thing",
@@ -233,7 +233,7 @@ describe("the refusals", () => {
       ["held by a key", "opkey:0123456789ab"],
     ] as const) {
       const posted = await post({ title });
-      const claimed = await claimJob(jobsEnv(), legacyAgent("write", actor), NOW, { id: posted.job!.id });
+      const claimed = await claimJob(jobsEnv(), grantAgent("write", actor), NOW, { id: posted.job!.id });
       expect(claimed.ok, `${actor}: ${claimed.refusal}`).toBe(true);
       expect(claimed.job!.claimed_by).toBe(actor);
     }
@@ -274,7 +274,7 @@ describe("the refusals", () => {
 
   it("post refuses when there is no key to sign with", async () => {
     const unconfigured = { ...env, IMPROVE_SCORE_SECRET: undefined } as unknown as Parameters<typeof postJob>[0];
-    const result = await postJob(unconfigured, legacyAgent("write", SEAT), NOW, { namespace: "capsid", title: "unsignable", body: "x" });
+    const result = await postJob(unconfigured, grantAgent("write", SEAT), NOW, { namespace: "capsid", title: "unsignable", body: "x" });
     expect(result.ok).toBe(false);
     expect(result.refusal).toMatch(/IMPROVE_SCORE_SECRET is unset/);
     // Fail closed: nothing queued.
@@ -299,7 +299,7 @@ describe("a claim has no lease", () => {
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const later = new Date(NOW.getTime() + 3_600_000);
-    const released = await releaseJob(jobsEnv(), legacyAgent("write", SEAT), later, id, "the holder is gone");
+    const released = await releaseJob(jobsEnv(), grantAgent("write", SEAT), later, id, "the holder is gone");
     expect(released.ok, released.refusal).toBe(true);
     const returned = await row(id);
     expect(returned?.status).toBe("queued");
@@ -312,7 +312,7 @@ describe("a claim has no lease", () => {
     const posted = await post({ title: "released from under it" });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    await releaseJob(jobsEnv(), legacyAgent("write", SEAT), NOW, id, "the holder is gone");
+    await releaseJob(jobsEnv(), grantAgent("write", SEAT), NOW, id, "the holder is gone");
     const late = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished eventually" });
     expect(late.ok).toBe(false);
     expect(late.refusal).toMatch(/is back in the queue/);
@@ -453,7 +453,7 @@ describe("resume", () => {
     const racing = racingEnv(async () => {
       await env.DB.prepare("UPDATE jobs SET status = 'failed', updated_at = ?2 WHERE id = ?1").bind(id, "2026-09-10T12:00:01.000Z").run();
     });
-    const resumed = await resumeJob(racing, legacyAgent("write", SEAT), NOW, id, "the human approved it");
+    const resumed = await resumeJob(racing, grantAgent("write", SEAT), NOW, id, "the human approved it");
     expect(resumed.ok).toBe(false);
     expect((await row(id))?.status).toBe("failed");
     expect(await auditActions(id)).not.toContain("job-resumed");
@@ -511,7 +511,7 @@ describe("resume", () => {
 
 // The resume reason reaches whoever holds the job next, not only the audit row.
 describe("the resume note", () => {
-  const SEAT_AGENT = legacyAgent("write", SEAT);
+  const SEAT_AGENT = grantAgent("write", SEAT);
   // A driver as the roster mints one: its own namespace, write, and no flags.
   function agentDriver(): Agent {
     const scopes = defaultScopes(["capsid"]);
@@ -1101,7 +1101,7 @@ describe("supersede", () => {
   });
   const PLAIN_DRIVER = plain(DRIVER);
   const PLAIN_OTHER = plain(OTHER);
-  const SEAT_AGENT = legacyAgent("write", SEAT);
+  const SEAT_AGENT = grantAgent("write", SEAT);
 
   async function outcomeCount(id: string): Promise<number> {
     const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE job_id = ?1").bind(id).first<{ n: number }>();
@@ -1386,7 +1386,7 @@ describe("every transition is one guarded batch", () => {
       const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished first" });
       expect(done.ok, done.refusal).toBe(true);
     });
-    const failed = await adminFailJob(racing, legacyAgent("write", SEAT), NOW, id, "driver went away");
+    const failed = await adminFailJob(racing, grantAgent("write", SEAT), NOW, id, "driver went away");
     expect(failed.ok).toBe(false);
     expect(failed.refusal).toMatch(/changed between reading it and failing it: it is now done/);
     expect((await row(id))?.status).toBe("done");
@@ -1412,7 +1412,7 @@ describe("every transition is one guarded batch", () => {
       const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished first" });
       expect(done.ok, done.refusal).toBe(true);
     });
-    const released = await releaseJob(racing, legacyAgent("write", SEAT), NOW, id, "the holder is gone");
+    const released = await releaseJob(racing, grantAgent("write", SEAT), NOW, id, "the holder is gone");
     expect(released.ok).toBe(false);
     expect((await row(id))?.status).toBe("done");
     expect(await auditActions(id)).not.toContain("job-released");
@@ -1535,7 +1535,7 @@ describe("edit", () => {
     admin: false,
     scopes: { ...DRIVER.scopes, flags: { ...DRIVER.scopes.flags, can_merge: false } },
   };
-  const SEAT_AGENT = legacyAgent("write", SEAT);
+  const SEAT_AGENT = grantAgent("write", SEAT);
   const LATER = at("2026-09-10T12:05:00.000Z");
 
   async function versionCount(id: string): Promise<number> {
@@ -1644,7 +1644,7 @@ describe("park", () => {
     admin: false,
     scopes: { ...DRIVER.scopes, flags: { ...DRIVER.scopes.flags, can_merge: false } },
   };
-  const SEAT_AGENT = legacyAgent("write", SEAT);
+  const SEAT_AGENT = grantAgent("write", SEAT);
   const LATER = at("2026-09-10T12:05:00.000Z");
   const WHY = "comes back when the keys question is answered";
 

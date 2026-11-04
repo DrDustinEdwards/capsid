@@ -1,8 +1,9 @@
 import { env, SELF } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import { capsidStatus } from "../src/status";
 import type { Inbox } from "../src/inbox";
@@ -14,9 +15,11 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 const ORIGIN = "https://capsid.test";
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
+// A key on every namespace (the seat), which sees every app.
+const SEAT_KEY = "capsid_agent_" + "e".repeat(64);
 const SECRET = "test-root-secret";
-const ADMIN = legacyAgent("write", "github:DrDustinEdwards");
-const DRIVER = legacyAgent("write", "agent:driver-aaaa");
+const ADMIN = grantAgent("write", "github:DrDustinEdwards");
+const DRIVER = grantAgent("write", "agent:driver-aaaa");
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 const PR = "https://github.com/example-org/sample/pull/42";
 
@@ -54,8 +57,7 @@ const snapshot = {
 };
 
 beforeEach(async () => {
-  for (const table of ["jobs", "audit_log", "job_outcomes", "agents"]) await env.DB.prepare(`DELETE FROM ${table}`).run().catch(() => undefined);
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   for (const ns of ["capsid", "sample"]) {
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(ns, JSON.stringify([{ repo: "example-org/sample", label: "primary" }])).run();
   }
@@ -66,6 +68,14 @@ beforeEach(async () => {
      VALUES ('agent_driver000001', 'capsid-driver', 'driver', ?1, ?2, 'github:dustin', '2026-09-11 00:00:00')`
   )
     .bind(await sha256Hex(DRIVER_KEY), serializeScopes(scopes))
+    .run();
+  const everywhere = defaultScopes([]);
+  everywhere.namespaces = "*";
+  await env.DB.prepare(
+    `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at)
+     VALUES ('agent_seat00000001', 'seat', 'seat', ?1, ?2, 'github:dustin', '2026-09-11 00:00:00')`
+  )
+    .bind(await sha256Hex(SEAT_KEY), serializeScopes(everywhere))
     .run();
   await env.APP_KV.put("ops:snapshot", JSON.stringify(snapshot));
   await env.APP_KV.put("improve:awaiting-seat", JSON.stringify([{ namespace: "capsid", repo: "example-org/sample", number: 7, failed: "paths_not_refused", why: "touches a protected path", at: "2026-10-08T09:00:00.000Z", class: "approve", path_class: "src-worth", class_reasons: ["the policy stops at paths_not_refused"] }]));
@@ -100,15 +110,15 @@ describe("GET /ops/inbox", () => {
     // The test database has every migration in migrations/ applied, 0001_init among them.
     await blocked("capsid", "Apply the first migration", "needs the seat", false, "npx wrangler d1 migrations apply capsid --remote (migrations/0001_init.sql)");
     await blocked("capsid", "Apply a future migration", "needs the seat", false, "npx wrangler d1 migrations apply capsid --remote (migrations/9999_not_yet.sql)");
-    const body = (await (await inboxAs(env.TEST_OPERATOR_KEYS.write)).json()) as Inbox;
+    const body = (await (await inboxAs(SEAT_KEY)).json()) as Inbox;
     const titles = body.apps.flatMap((a) => a.items.map((i) => i.title));
     expect(titles).not.toContain("Apply the first migration");
     expect(titles).toContain("Apply a future migration");
   });
 
-  it("gives the admin every app: a question and a down site under a namespace with no site row, and quiet configured apps at none", async () => {
+  it("gives an every-namespace key every app: a question and a down site under a namespace with no site row, and quiet configured apps at none", async () => {
     await blocked("sample", "Choose a name", "Which name do you want?", true);
-    const response = await inboxAs(env.TEST_OPERATOR_KEYS.write);
+    const response = await inboxAs(SEAT_KEY);
     expect(response.status, await response.clone().text()).toBe(200);
     const body = (await response.json()) as Inbox;
     const sample = body.apps.find((a) => a.namespace === "sample");
@@ -121,7 +131,7 @@ describe("GET /ops/inbox", () => {
   });
 
   it("a site that is down and nothing else is failing, not needs-you", async () => {
-    const response = await inboxAs(env.TEST_OPERATOR_KEYS.write);
+    const response = await inboxAs(SEAT_KEY);
     const body = (await response.json()) as Inbox;
     expect(body.apps.find((a) => a.namespace === "sample")).toMatchObject({ count: 1, severity: "failing" });
   });

@@ -1,16 +1,17 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { claimJob, completeJob, failAsCaller, postJob } from "../src/jobs";
 import { breakerState } from "../src/job-breaker";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { readJob } from "../src/jobs-transition";
 
 // The CI gate on complete (src/complete-ci.ts) against real D1, with GitHub as a fetch stub.
 
 const NS = "sample";
 const PR = (n: number) => `https://github.com/example/sample/pull/${n}`;
-const DRIVER = legacyAgent("write", "agent:driver-aaaa");
-const SEAT = legacyAgent("write", "access:seat@example.com");
+const DRIVER = grantAgent("write", "agent:driver-aaaa");
+const SEAT = grantAgent("write", "access:seat@example.com");
 const NOW = new Date("2026-10-23T12:00:00.000Z");
 
 function jobsEnv() {
@@ -24,9 +25,7 @@ type File = string | { filename: string; status: string };
 const github = new Map<number, { checks: Check[]; files: File[] }>();
 
 beforeEach(async () => {
-  for (const table of ["job_outcomes", "jobs", "audit_log", "job_outcome_prs", "job_claims"]) {
-    await env.DB.prepare(`DELETE FROM ${table}`).run().catch(() => undefined);
-  }
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }])).run();
   await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
   github.clear();

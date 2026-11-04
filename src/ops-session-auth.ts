@@ -8,7 +8,7 @@ import { textResponse as text } from "./http";
 //
 // The bearer is the session's own driver key. Accepted:
 //   - a minted driver (kind driver, row-backed),
-//   - the admin (a legacy write operator key), for testing.
+//   - the admin.
 // Anything else that resolves is 403; nothing that resolves is 401.
 //
 // The write grant is asked of checkScope (one enforcement point, test/scope.test.ts): what
@@ -54,7 +54,7 @@ async function sessionJobFor(db: D1Database, agent: Agent): Promise<{ job_id: st
 /** The caller and its job, or the refusal to send. */
 export async function resolveSessionCaller(
   request: Request,
-  env: { DB: D1Database; OPERATOR_KEY_HASH?: string },
+  env: { DB: D1Database },
   now: Date = new Date()
 ): Promise<SessionCaller | Response> {
   const resolved = await resolveAgent(request, env, now);

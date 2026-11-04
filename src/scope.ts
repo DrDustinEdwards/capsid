@@ -4,10 +4,11 @@ import type { Agent } from "./agents";
 import type { AdminWriteObserver } from "./admin-client-audit";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { appendAudit, correlationId, loggedArgs, loggedResult, recordAudit, type AuditEnv } from "@dustinedwards/site-runtime/audit-log";
+import { authorizeCall, mcpScopes, outsideResult, toolScopeChallenge, type McpCaller } from "@dustinedwards/site-runtime/mcp-server";
 import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
-import { protectedHits } from "./protected-paths";
 import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
 import { MINUTE_MS, HOUR_MS } from "./time";
+import { withCallSignal } from "./call-signal";
 
 // The one enforcement point. Every tool call, and every repo mutation inside one, is
 // checked here and nowhere else.
@@ -26,7 +27,7 @@ import { MINUTE_MS, HOUR_MS } from "./time";
 //     knowable from the tool and its arguments: the tool allowlist, the grant, the
 //     namespace and the repo selector.
 //   - The handler, for the flags, which depend on what the call asks to do.
-//     `mode: "direct"` needs can_direct_write and `mode: "pr"` does not, and no
+//     A forced branch delete needs can_merge and a plain one does not, and no
 //     wrapper can know that before reading the arguments.
 
 // What each tool requires, stated once. The registrar enforces this table and
@@ -50,7 +51,7 @@ import { MINUTE_MS, HOUR_MS } from "./time";
 // decides a grant for itself.
 export type ToolRequirement = "read" | "write" | "action" | "admin" | "admin_read";
 
-// Capsid (14) and Capsid Admin (8): src/tools/surface.ts.
+// Capsid (11) and Capsid Admin (8): src/tools/surface.ts.
 export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_start_session: "read",
   capsid_find_docs: "read",
@@ -63,10 +64,7 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_read_repo: "read",
   // The CI log tail beyond the summary needs write, checked by the handler.
   capsid_inspect_repo: "read",
-  capsid_change_repo: "write",
-  capsid_open_pr: "write",
   capsid_close_pr: "write",
-  capsid_run_ci: "write",
   // list reads; every other action changes the queue.
   capsid_work_jobs: "action",
   // Capsid's status (src/status.ts). The name is the improve loop's, kept when the loop
@@ -86,16 +84,17 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // Claims apart from verified outcomes. It only reads; it spans every namespace and
   // every agent, and its export is the whole dataset.
   capsid_admin_read_claims: "admin_read",
-  // The watcher's last pass, Cloudflare Access and Email Routing, and Workers Builds.
+  // The watcher's last pass, Cloudflare Access and Email Routing, Workers Builds, and the
+  // secrets and data model (secret names, never values).
   // It only reads, and spans every namespace's sites, CI runs and Cloudflare state.
   capsid_admin_read_ops: "admin_read",
   // The administrator's controls (preview, then perform with a signed single-use
   // token). A control revokes an agent, resumes a job or edits a site, so a caller
   // that could use one could widen itself.
   capsid_admin_run_controls: "admin",
-  // mint_operator_key issues a credential, sign_policy decides whether this Worker may
-  // merge without a human, breaker_reset reopens a namespace's queue and overnight
-  // starts unattended sessions. None of those is a driver's work.
+  // sign_policy decides whether this Worker may merge without a human, breaker_reset
+  // reopens a namespace's queue and overnight starts unattended sessions. None of those
+  // is a driver's work.
   capsid_admin_control_improve: "admin",
   // Mints a site key and sets it on the site Worker and on Carrel.
   capsid_admin_set_site_key: "admin",
@@ -122,6 +121,43 @@ export function requiredForAction(tool: string, action: string | undefined): Too
   return Object.hasOwn(spec.actions, action) ? spec.actions[action] : spec.default;
 }
 
+// The OAuth scopes of the admin login (src/routes.ts consent page): every grant reads, and
+// writes only when the box was ticked. An agent key's grants map onto the same two.
+export const SCOPES = mcpScopes("capsid");
+
+// For an "action" tool, the actions that only read; every other action writes. The
+// handlers split the same way where the namespace is known (src/tools/jobs.ts list,
+// src/tools/lint.ts gather).
+const READ_ACTIONS: Record<string, readonly string[]> = {
+  capsid_work_jobs: ["list"],
+  capsid_lint_namespace: ["gather"],
+};
+
+/** The scope a call needs, from TOOL_GRANTS (never from readOnlyHint): read for a read or
+ *  admin_read tool and for a read action, write for everything else. */
+function declaredScope(tool: string, action: string | undefined): string {
+  const requirement = requiredForAction(tool, action);
+  if (requirement === "read" || requirement === "admin_read") return SCOPES.read;
+  if (requirement === "action" && action !== undefined && READ_ACTIONS[tool]?.includes(action)) return SCOPES.read;
+  return SCOPES.write;
+}
+
+// The family's grant gate (site-runtime authorizeCall; area 11, S3 and A13) on every tool
+// call, deciding on declaredScope against the scopes the caller's grants map to. The
+// caller is one Capsid's own door already resolved (the OAuth login or a key), so it is
+// passed as a `person` and only the scopes decide. A refusal is worded by checkScope, which
+// names the tool axis first and tells a key holder to ask for a wider key rather than to
+// reconnect. An "action" tool (jobs, lint) is left to its handler, which checks the same
+// split after its arguments, as it always has; its OAuth step-up still comes first.
+function sharedGrantRefusal(agent: Agent, tool: string, action: string | undefined): string | null {
+  if (requiredForAction(tool, action) === "action") return null;
+  const scope = declaredScope(tool, action);
+  const caller: McpCaller = { kind: "person", email: agent.actor, scopes: agent.scopes.grants.map((g) => SCOPES[g]) };
+  if (authorizeCall({}, caller, scope, { site: "Capsid", scopes: SCOPES }) === null) return null;
+  const grant: AgentGrant = scope === SCOPES.read ? "read" : "write";
+  return checkScope(agent, { tool, action, grant }) ?? `unauthorized: '${tool}' requires the ${grant} grant.`;
+}
+
 // A requirement as the part of a ScopeNeed it decides. The registrar and every route
 // use this one mapping, so "admin" means the same thing wherever it is enforced.
 export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" | "admin"> {
@@ -140,9 +176,7 @@ export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" |
 // rather than a gap.
 
 // A route that goes through checkScope, and what it requires.
-export const ROUTE_GRANTS: Record<string, ToolRequirement> = {
-  "/ops/backup": "admin",
-};
+export const ROUTE_GRANTS: Record<string, ToolRequirement> = {};
 
 // A route that does not, and why. Each reason names what authorizes the request
 // instead, because "public" and "authorized some other way" are different claims.
@@ -154,13 +188,13 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "the public aggregate numbers (src/public-stats.ts): counts, rates and medians over every namespace, agent and site, whole UTC days, null under ten rows, no string but a date and the sha /health shows; it serves only what the daily build stored, never D1; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
   "/public/code/v1.json":
     "the public code maps (src/public-code.ts): each public system's repos' code-map.json from their code-map branch, parsed field by field, a private system's repos never read; it serves only what the daily build stored, never GitHub; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
+  "/public/versions/v1.json":
+    "the public versions model (src/system-versions.ts): which version of each network package each system installs, read from the repos' lockfiles, a private system's without its file paths; it serves only what the nightly build stored, never GitHub; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
   "/reports/signed-in-security.json":
-    "the signed-in crawl's report (src/signed-in-crawl.ts): findings about the Portal's and Desk's headers, for devkit's scoreboard; it serves only what the hourly crawl stored in KV, never a page, cookie or token; GET only",
+    "the signed-in crawl's report (src/signed-in-crawl.ts): findings about the Portal's signed-in headers, for devkit's scoreboard; it serves only what the hourly crawl stored in KV, never a page, cookie or token; GET only",
   "/oauth/clients/verify-live.json": "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
   "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
   "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
-  "/ops/mcp/admin":
-    "Capsid Admin for a key: resolveAgent on the bearer (401 without one), then the admin identity only (403 for any other key), and every tool call it serves then passes checkScope in the registrar, where each tool is admin only",
   "/backup/credential": "signed with the backup-specific HMAC key, derived from the Worker's root secret under its own context, and replay-protected",
   "/bench/tasks": "signed with the capsid-bench HMAC key (src/bench.ts), which no backup key can produce, and replay-protected; registers a task once and never changes one",
   "/bench/draw": "signed with the capsid-bench HMAC key and replay-protected; records the registration once and appends the drawn task order, which never changes",
@@ -168,13 +202,13 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/bench/repro": "signed with the capsid-bench HMAC key and replay-protected; writes the harness's reproduction receipt once for one running treatment run, which its run key's complete then requires",
   "/shadow/job": "a GitHub Actions OIDC token whose repository is the capsid namespace's primary repo and whose workflow is shadow-test.yml on a pull request; returns only the capsid job that pull request names",
   "/shadow/result": "the same OIDC token as /shadow/job; keeps the shadow test written for that pull request's job and records its base and head results",
+  "/review/run":
+    "a GitHub Actions OIDC token (audience capsid-review) whose owner id is Dustin's, whose job workflow is devkit's review.yml and whose event is a pull request; reviews only that pull request, read through the GitHub App, and records the verdict (src/review.ts)",
   "/bench/score": "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, takes every arm's claim from the report, and checks the treatment's job is its own, and closes that job in the same step",
   "/ops/inbox":
     "what needs Dustin, per app (src/inbox.ts): resolveAgent on the bearer (401 without one), then each app is kept only if checkScope admits the caller's read grant on that app's namespace, so a key scoped to one namespace sees that app alone and the admin or an all-namespace read key sees every app. GET only, no CORS headers (an app's server calls it, never a browser), nothing written",
   "/ops/inbox/report":
     "what an app reports about itself to the inbox (src/inbox-report.ts): resolveAgent on the bearer (401 without one), then checkScope for the write grant on the namespace the report names (403 otherwise), so a key reports for its own app alone; one report per minute per key, failing closed; at most 20 items, links on the app's own ops_sites origin only, a 16KB body cap; POST only, no CORS",
-  "/ops/access-sync":
-    "an app's members list made its Cloudflare Access group (src/access-sync.ts): resolveAgent on the bearer (401 without one), then checkScope for the write grant on the namespace the body names (403 otherwise); the group is never named by the caller but read from access_sync_groups for that namespace, and its name is checked against the pin before any write; per-key hourly and daily limits failing closed; a 64KB body cap; every call audited; POST only, no CORS",
   "/ops/hooks":
     "Claude Code's HTTP hooks: resolveAgent on the bearer (401 without one), then only a driver or the admin, and through checkScope only a caller holding the write grant on capsid_work_jobs (403 otherwise); each event binds to the one job the driver holds claimed, and a session keeps its first binding. 64KB body cap, allowlisted fields only (src/ops-hooks.ts, caller check in src/ops-session-auth.ts)",
   "/ops/otlp/v1/metrics":
@@ -183,6 +217,10 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "Claude Code's OTLP logs, counted as api_error events only: resolveAgent on the bearer and the same caller and job binding as the metrics route (src/ops-session-auth.ts)",
   "/authorize": "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
   "/callback": "the OAuth callback, which validates state before issuing anything",
+  "/owner":
+    "site-runtime's owner page (./owner-page), gated as /owner/* is: the Access for SaaS sign-in and admission of consent, ADMIN_EMAIL and CO_OWNER_EMAILS, before it shows anything",
+  "/owner/*":
+    "the owner page's POSTs /owner/revoke and /owner/sign-out (site-runtime ./owner-page): the same Access for SaaS sign-in and admission as consent (ADMIN_EMAIL and CO_OWNER_EMAILS), a state bound to the browser, a hashed 30-minute session in OAUTH_KV; a revoke needs a same-origin Origin and the session's CSRF token and reaches only the signed-in person's own grants",
   "/register":
     "tightened Dynamic Client Registration for Grok and Gemini (site-runtime registrationLimited and registrationRefusal, src/index.ts): rate limited per address (5 an hour) and overall (30 a day), failing closed, every redirect URI matched exactly against the allowlist; it writes a client record and grants nothing, since the client still meets the consent page and the Access sign-in",
   "/portal/callback": "Capsid Portal's Access for SaaS callback, which validates state before issuing a session",
@@ -203,7 +241,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_run_improve action status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
   "/portal/api/completeness": "the Portal's Completeness view: devkit's daily scoreboard (board.json on its scoreboard branch), read through the GitHub App and cached for ten minutes, gated by portalGate",
-  "/portal/api/shared-code": "the Portal's Shared code view: each configured shared package's tags and the pins in the configured sites' repos, read through the GitHub App and cached for an hour, gated by portalGate",
+  "/portal/api/shared-code": "the Portal's Shared code view: each network package's releases and the pins in every model repo, read nightly through the GitHub App and kept in KV, gated by portalGate",
+  "/portal/api/resources": "the Portal's Workers tab: the secrets and data model (secret names, never values, and each Worker's stores), read nightly from Cloudflare and kept in KV, gated by portalGate",
   "/portal/api/library": "the Portal's read-only Library: the knowledge store's shelves, a search and one document with its edges, through the readers behind capsid_find_docs and capsid_read_doc, gated by portalGate",
   "/portal/api/trends": "the Portal's trends for its charts: minutes, the queue, merges and rollbacks from D1, backup slots from R2, default-branch CI from GitHub (cached an hour), read-only, gated by portalGate",
   "/portal/api/push":
@@ -263,12 +302,7 @@ export const JOBS_TOOL = "capsid_work_jobs";
 // Why a flag is needed, so a refusal tells the caller what to ask for.
 const FLAG_REASON: Record<ScopeFlag, string> = {
   can_merge: "merging a pull request can trigger a deploy on a repo that deploys on push",
-  can_direct_write: "a direct-mode commit lands on the default branch with no review",
-  can_dispatch: "dispatching a workflow spends CI minutes and runs code with that repo's secrets in scope",
-  can_write_workflows: "a workflow is what MEASURES the code, and a caller that can edit its own measurements has none",
-  can_touch_protected: "a protected path is tests, CI, lint or compiler config, a lockfile, a manifest, the agent steering layer, or a migration",
-  money_paths: "the path names a billing or payment surface",
-  can_comment_pr: "commenting on a pull request writes to a repo, and a reviewer that may comment must not thereby be able to merge or close",
+  can_touch_protected: "an autonomy policy document decides what this Worker may do without a human, so writing one is a ruling",
 };
 
 // Order is deliberate: tool, grant, admin, namespace, repo, flags. A caller that
@@ -377,9 +411,8 @@ export function portfolioOnly(agent: Agent, namespace: string | undefined): bool
 // allows an AAL3 session no more than 12 hours overall), so only a new sign-in extends
 // past it.
 //
-// Only an OAuth session carries a sign-in time (Agent.signedInAt). A key holder (the
-// seat's operator key at its terminal) has no session to refresh and is not stepped up;
-// its key is the credential.
+// Only an OAuth session carries a sign-in time (Agent.signedInAt). A key holder has no
+// session to refresh and is not stepped up; its key is the credential.
 const STEP_UP_IDLE_MS = 2 * HOUR_MS;
 const STEP_UP_MAX_MS = 12 * HOUR_MS;
 
@@ -465,9 +498,8 @@ const ADMIN_REASON: Record<string, string> = {
   capsid_admin_run_controls:
     "It runs the administrator's controls (revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
   capsid_admin_control_improve:
-    "It holds the administrator's switches: mint_operator_key issues a credential, sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_run_improve.",
+    "It holds the administrator's switches: sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_run_improve.",
   capsid_admin_set_site_key: "It mints a site's operator key and sets it as a secret on the site's Worker and on Carrel, so a caller that could use it could hand itself a site's key.",
-  "/ops/backup": "It backs up and prunes every namespace in the store, which is wider than any one namespace's scope.",
 };
 
 function adminReason(tool: string): string {
@@ -510,6 +542,7 @@ interface RegisteredConfig {
 }
 
 type ToolHandler = (...args: unknown[]) => unknown;
+type ScopeChallengeHandler = (context: { request: { params?: Record<string, unknown> }; authInfo?: { scopes: string[]; clientId?: string; extra?: Record<string, unknown> } }) => ReturnType<ReturnType<typeof toolScopeChallenge>>;
 
 // Whether a handler's result is a success. An error result is not, and neither is a
 // domain refusal, which the tools return as an ordinary result whose JSON says ok:false
@@ -531,8 +564,8 @@ function toolSucceeded(result: unknown): boolean {
 // modes separate a read (gather) from two writes. The registrar needs this to populate
 // need.action, and a per-tool answer scattered across the handlers leaves the
 // qualifier unwired. A tool absent here cannot be narrowed below the tool name. `mode` on
-// capsid_write_doc and capsid_change_repo is not an action: it already decides a flag
-// (can_direct_write) or a write shape, and one setting should not have two authorities.
+// capsid_write_doc is not an action: it already decides a write shape, and one setting
+// should not have two authorities.
 const ACTION_ARG: Record<string, string> = {
   capsid_find_docs: "action",
   capsid_read_doc: "action",
@@ -540,8 +573,6 @@ const ACTION_ARG: Record<string, string> = {
   capsid_lint_namespace: "mode",
   capsid_read_repo: "action",
   capsid_inspect_repo: "action",
-  capsid_change_repo: "action",
-  capsid_open_pr: "action",
   capsid_close_pr: "action",
   capsid_work_jobs: "action",
   capsid_run_improve: "action",
@@ -615,9 +646,47 @@ export interface CallLog {
   clientId?: string;
 }
 
-export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, stepUpKv?: KVNamespace, log?: CallLog): void {
+// The tools whose answers carry text written outside Capsid, and its label: a repository's
+// files, code search hits, pull request titles and bodies, review comments and CI logs, all
+// written by whoever can push or comment (area 11, S2). Their successful results go through
+// site-runtime's outsideResult: the shared notice, then the answer inside <data> delimiters,
+// and the notice beside the answer in structuredContent. Documents are not listed: a
+// document's provenance (last_actor) travels with it, and the server's instructions name
+// documents as data.
+const OUTSIDE_TOOLS: Record<string, string> = {
+  capsid_read_repo: "repo",
+  capsid_inspect_repo: "repo",
+};
+
+/** A successful result of a tool in OUTSIDE_TOOLS, marked as outside data; anything else as it is. */
+function markOutside(tool: string, result: unknown): unknown {
+  const label = Object.hasOwn(OUTSIDE_TOOLS, tool) ? OUTSIDE_TOOLS[tool] : undefined;
+  const r = result as { isError?: boolean; content?: Array<{ text?: unknown }>; structuredContent?: unknown } | null;
+  if (!label || !r || r.isError === true || !Array.isArray(r.content)) return result;
+  const structured = r.structuredContent;
+  if (structured && typeof structured === "object" && !Array.isArray(structured)) return outsideResult(label, structured as Record<string, unknown>);
+  return outsideResult(label, r.content.map((c) => (typeof c.text === "string" ? c.text : "")).join("\n"));
+}
+
+/** An MCP icon, as serverInfo and tools/list carry it (area 11, T9). */
+export type ToolIcon = { src: string; mimeType?: string; sizes?: string[] };
+
+// Whether this caller's grant could ever call the tool, whatever the arguments: the grant
+// TOOL_GRANTS names (area 11, T7). A tool its grant never could is not registered for it, so
+// tools/list shows a read grant no write tool, as site-runtime's toolsForGrant does on the
+// other servers, and a call to one is an unknown tool. An "action" tool is listed for every
+// grant: one of its actions needs only read. The admin identity (Capsid Admin's route admits
+// only the admin, src/mcp-handler.ts), the tools axis, an action, a namespace, a repo and the
+// flags stay call-time checks in refusalFor, each refused by name.
+export function toolListed(agent: Agent, tool: string): boolean {
+  const { grant } = needFor(requiredGrant(tool));
+  return grant === undefined || agent.scopes.grants.includes(grant);
+}
+
+export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, stepUpKv?: KVNamespace, log?: CallLog, icons?: readonly ToolIcon[]): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
+    if (!toolListed(agent, name)) return undefined;
     const shape = declaredShape(config);
     const declared = Boolean(shape && Object.hasOwn(shape, "namespace"));
     const namespaceActions = config?.namespaceActions;
@@ -625,6 +694,8 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       namespaceActions && action !== undefined ? namespaceActions.includes(action) : declared;
     // Why this call may not run, or null.
     const refusalFor = async (args: Record<string, unknown>, action: string | undefined): Promise<string | null> => {
+      const shared = sharedGrantRefusal(agent, name, action);
+      if (shared) return shared;
       const namespace = typeof args.namespace === "string" ? args.namespace : undefined;
       // Only a full owner/name can be compared to the axis here; the repo tools
       // resolve a label and check the result (scopedRepo in src/tools/repo.ts).
@@ -666,8 +737,10 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       }
       return null;
     };
-    const run = async (callArgs: unknown[], action: string | undefined): Promise<unknown> => {
-      const result = await handler(...callArgs);
+    const run = async (callArgs: unknown[], action: string | undefined, signal: AbortSignal | undefined): Promise<unknown> => {
+      // The request's abort signal reaches every outbound request the handler makes
+      // (src/call-signal.ts; area 11, P11).
+      const result = markOutside(name, await withCallSignal(signal, () => handler(...callArgs)));
       // A step-up action that succeeded resets the idle clock (STEP_UP). A refused or
       // failed one does not: it proves nothing about the person being there.
       const signedInAt = agent.signedInAt;
@@ -684,7 +757,9 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
     const guarded: ToolHandler = async (...callArgs: unknown[]) => {
       const args = (callArgs[0] ?? {}) as Record<string, unknown>;
       const action = actionOf(name, config, args);
-      const meta = (callArgs[1] as { mcpReq?: { _meta?: { traceparent?: unknown } } } | undefined)?.mcpReq?._meta;
+      const mcpReq = (callArgs[1] as { mcpReq?: { _meta?: { traceparent?: unknown }; signal?: AbortSignal } } | undefined)?.mcpReq;
+      const meta = mcpReq?._meta;
+      const signal = mcpReq?.signal;
       const row = log && {
         callId: crypto.randomUUID(),
         caller: agent.actor,
@@ -707,12 +782,38 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
           return deny(`refused: the tool-call log could not be written (${cause instanceof Error ? cause.message : String(cause)}), and no tool runs unlogged. Nothing was done.`);
         }
       }
-      const result = await run(callArgs, action);
-      if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: loggedResult(result as { isError?: boolean; content: Array<{ text: string }> }) });
+      // A client that left before the handler ran gets nothing run; one that leaves during it
+      // is logged canceled (site-runtime's invokeTool does the same).
+      if (signal?.aborted) {
+        const out = deny("canceled: the client closed the call before the tool ran. Nothing was done.");
+        if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: { ...loggedResult(out), canceled: true } });
+        return out;
+      }
+      const canceled = () => (signal?.aborted ? { canceled: true } : {});
+      let result: unknown;
+      try {
+        result = await run(callArgs, action, signal);
+      } catch (error) {
+        // A handler that throws still ends its call in the log, so no `started` row is left
+        // without its `finished` (the log's /health check counts those).
+        if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: { isError: true, text: `threw: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1000), ...canceled() } });
+        throw error;
+      }
+      if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: { ...loggedResult(result as { isError?: boolean; content: Array<{ text: string }> }), ...canceled() } });
       return result;
     };
-    const { namespaceActions: _namespaceActions, ...served } = config ?? {};
-    return original(name, served, guarded);
+    // An OAuth token without the scope the call needs is answered 403 insufficient_scope
+    // before the handler runs, naming every scope it needs, so the client can step up
+    // instead of the person reconnecting by hand (area 11, A3). A key carries no token and
+    // gets the refusal above in words. A grant from before the scopes existed carries none
+    // and reads, as src/index.ts treats it.
+    const challenge = log && toolScopeChallenge(log.env, { site: "Capsid", scopes: SCOPES, ...log.server }, { name, scope: (args: Record<string, unknown>) => declaredScope(name, actionOf(name, config, args)) });
+    const scopeChallenge: ScopeChallengeHandler | undefined =
+      challenge && ((context) => challenge({ ...context, authInfo: context.authInfo && { ...context.authInfo, scopes: context.authInfo.scopes.length > 0 ? context.authInfo.scopes : [SCOPES.read] } }));
+    const { namespaceActions: _namespaceActions, ...declaredConfig } = config ?? {};
+    // Each tool carries the server's icon unless it names its own (area 11, T9).
+    const served = icons && !(declaredConfig as { icons?: unknown }).icons ? { ...declaredConfig, icons } : declaredConfig;
+    return original(name, scopeChallenge ? { ...served, scopeChallenge } : served, guarded);
   };
   (server as unknown as { registerTool: unknown }).registerTool = patched;
 }
@@ -730,14 +831,8 @@ export function isMoneyPath(path: string): boolean {
 
 // Every flag a repo mutation needs, derived from the call, in one function so the
 // repo write tools cannot each decide a different answer.
-export function repoWriteFlags(
-  tool: string,
-  action: string | undefined,
-  args: { path?: string; mode?: string; allow_workflow_write?: boolean; force?: boolean }
-): ScopeFlag[] {
+export function repoWriteFlags(tool: string, action: string | undefined, args: { force?: boolean }): ScopeFlag[] {
   const flags: ScopeFlag[] = [];
-  if (args.mode === "direct") flags.push("can_direct_write");
-  if (args.allow_workflow_write === true) flags.push("can_write_workflows");
   // close deletes the head branch, so a plain write grant could destroy the only copy
   // of a branch somebody else pushed. That is the same blast radius as merge, so it
   // needs can_merge too. Not deleting on close would leave stale branches behind. A tag
@@ -746,13 +841,5 @@ export function repoWriteFlags(
   // A forced branch delete too: force lifts the open-PR refusal, so it could delete
   // another agent's open PR head. A delete without force needs no flag.
   if (tool === "capsid_close_pr" && action === "delete_branch" && args.force === true) flags.push("can_merge");
-  // Separate from can_merge so the reviewer role can comment without merging.
-  if (tool === "capsid_open_pr" && action === "comment") flags.push("can_comment_pr");
-  if (tool === "capsid_run_ci") flags.push("can_dispatch");
-  // The protected list (src/protected-paths.ts). Those paths are what measure a repo:
-  // its tests, CI, lint and compiler config, lockfiles and manifests, agent steering
-  // layer and migrations. A scoped caller may touch them holding this flag.
-  if (args.path && protectedHits([args.path]).length > 0) flags.push("can_touch_protected");
-  if (args.path && isMoneyPath(args.path)) flags.push("money_paths");
   return flags;
 }

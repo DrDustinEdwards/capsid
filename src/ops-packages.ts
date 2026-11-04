@@ -4,6 +4,7 @@ import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./
 import { auditStatement } from "./store-guards";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
+import { callSignal } from "./call-signal";
 
 // The packages Capsid Portal watches (job_c6e4ab939a54). Ruled 2026-09-29: "Portal monitoring is optional and configured per install; packages panel
 // approved". Configured like the sites (src/ops-sites.ts): rows in D1 (ops_packages,
@@ -171,7 +172,7 @@ type Got = { ok: true; status: number; json: unknown } | { ok: false; status: nu
 
 async function getJson(fetchImpl: FetchLike, url: string, accept = "application/json"): Promise<Got> {
   try {
-    const res = await fetchImpl(url, { headers: { "User-Agent": USER_AGENT, Accept: accept }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const res = await fetchImpl(url, { headers: { "User-Agent": USER_AGENT, Accept: accept }, signal: callSignal(FETCH_TIMEOUT_MS) });
     if (!res.ok) {
       await res.body?.cancel();
       return { ok: false, status: res.status, reason: `${new URL(url).host} answered ${res.status}` };
@@ -211,6 +212,15 @@ export async function readNpm(fetchImpl: FetchLike, name: string): Promise<Packa
     versions: Object.keys(doc.versions ?? {}).length,
     modified: typeof doc.modified === "string" ? doc.modified : null,
   };
+}
+
+/** Every version npm has published of `name`, for the versions model's "behind" count
+ *  (src/shared-code.ts). The same abbreviated document readNpm reads; throws with npm's
+ *  answer when it cannot be read. */
+export async function readNpmVersions(fetchImpl: FetchLike, name: string): Promise<string[]> {
+  const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`, "application/vnd.npm.install-v1+json");
+  if (!got.ok) throw new Error(got.status === 404 ? `npm has no package ${name}` : got.reason);
+  return Object.keys((got.json as { versions?: Record<string, unknown> }).versions ?? {});
 }
 
 async function readDownloads(fetchImpl: FetchLike, name: string): Promise<PackageSnapshot["downloads"]> {

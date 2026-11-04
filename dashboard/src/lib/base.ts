@@ -1,14 +1,8 @@
-// Where the Portal lives, read from the page's own address: "/portal" on the dev server
-// and the test hosts, "" on portal.dustinedwards.info,
-// where the Portal is the whole host (src/portal-host.ts). The router and every API URL
-// build on it, so one build serves both hosts. The hashed files keep their /portal/assets/
-// paths on both (vite.config.ts base), which the Worker serves as they are.
-const PORTAL = "/portal";
+// Where the Portal's reads go, from the page's own address: "" on portal.dustinedwards.info,
+// where the Portal is the whole host (src/portal-host.ts in the Worker), and /demos on the chart
+// demo, whose reads lib/demo.ts answers from the captured sample files. Pages render on the
+// server, which reads through the Worker directly (src/server/read.ts), so this is the browser's
+// half only. A component asks useDemo() (lib/router.tsx) whether it is on the demo.
+import { pageBase } from "./router";
 
-function baseFor(pathname: string): string {
-  return pathname === PORTAL || pathname.startsWith(`${PORTAL}/`) ? PORTAL : "";
-}
-
-// Outside a browser (a spec importing this in Node) there is no location: the
-// workers.dev base, which the dev server and the browser tests serve.
-export const BASE = typeof window === "undefined" ? PORTAL : baseFor(window.location.pathname);
+export const BASE = typeof window === "undefined" ? "" : pageBase(window.location.pathname);

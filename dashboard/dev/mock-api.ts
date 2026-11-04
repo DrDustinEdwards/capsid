@@ -1,6 +1,6 @@
-// Dev and preview only: serves dev/sample-feed.json at /portal/api/ops so `npm run
-// dev`, and the browser tests under `vite preview`, run with fake data and no Worker.
-// Never part of the build (apply: "serve").
+// Dev and tests only: serves dev/sample-feed.json at /portal/api/ops so `npm run dev`, the
+// browser tests (dev/serve.ts) and the demo's capture (scripts/demo-api.mjs) run with fake data
+// and no Worker. Never part of the build.
 //
 // The fixture's timestamps are fixed; each response shifts every ISO timestamp and
 // ring_slot so live.generated is "now", which keeps the relative times readable.
@@ -24,7 +24,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
-import { DASHBOARD_CSP } from "../../src/dashboard-csp.ts";
+import { shiftTimes } from "../src/lib/demo.ts";
 import type {
   ClaimsGroup,
   OpsFeed,
@@ -55,13 +55,11 @@ import type {
 } from "../src/types.ts";
 
 const FIXTURE = fileURLToPath(new URL("./sample-feed.json", import.meta.url));
-const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
-const SLOT_MS = 30 * 60_000;
 const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "canon_approve", "canon_reject", "canon_approve_all", "site_repair", "sign_policy_from_repo"];
+const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "site_repair", "sign_policy_from_repo"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["overnight"];
@@ -94,18 +92,7 @@ function mockNow(): number {
   return PINNED_NOW ?? Date.now();
 }
 
-function shift(value: unknown, delta: number): unknown {
-  if (typeof value === "string" && ISO.test(value)) return new Date(Date.parse(value) + delta).toISOString();
-  if (Array.isArray(value)) return value.map((v) => shift(v, delta));
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) {
-      out[k] = k === "ring_slot" && typeof v === "number" ? v + Math.round(delta / SLOT_MS) : shift(v, delta);
-    }
-    return out;
-  }
-  return value;
-}
+const shift = shiftTimes;
 
 // What the controls changed since the dev server started.
 interface MockState {
@@ -121,8 +108,6 @@ interface MockState {
   // The package configuration as it stands.
   packages: OpsPackageConfig[];
   activity: PortalActivityRow[];
-  // Canon proposals approved or rejected since the mock started.
-  canonDecided: Set<number>;
   // Repairs run since the mock started, newest first (GET /portal/api/convergence).
   repairs: Array<{ namespace: string; tool: string; at: string }>;
   // Pull requests closed from the Portal since the mock started, as "<repo>#<number>".
@@ -187,6 +172,31 @@ function completeness() {
     return { id, name, builder: `Build ${name.toLowerCase()}`, verifier: id === 1 ? "Verify search" : null, lines, cells };
   });
   return { read: new Date(mockNow() - 5 * 60_000).toISOString(), as_of: new Date(mockNow() - 6 * 3600_000).toISOString(), error: null, finished: false, public_token: true, sites, areas };
+}
+
+// The Workers tab's answer (src/system-resources.ts), in sample names: two Workers of one
+// system sharing a database, a preview-only bucket, one Worker no system lists, and a bucket
+// nothing binds.
+function resources() {
+  const read_at = new Date(mockNow() - 5 * 3600_000).toISOString();
+  const none = { durable_objects: [], queues: [], services: [], other: [], previews: [] };
+  return {
+    version: 1,
+    read_at,
+    workers: [
+      { script: "sample-web", system: "sample", error: null, secrets: ["SAMPLE_API_KEY", "SESSION_SECRET"], vars: ["DEPLOY_SHA"], d1: [{ binding: "DB", database: "sample" }], kv: [{ binding: "APP_KV", namespace: "sample-app-kv" }], r2: [{ binding: "MEDIA", bucket: "sample-media" }], ...none, durable_objects: [{ binding: "RATE_LIMITER", class: "RateLimiter", script: null }], previews: [{ binding: "MEDIA", store: "sample-preview-media" }] },
+      { script: "sample-admin", system: "sample", error: null, secrets: ["OPERATOR_TOKEN"], vars: [], d1: [{ binding: "DB", database: "sample" }], kv: [], r2: [], ...none, services: [{ binding: "SITE", service: "sample-web" }] },
+      { script: "sample-old", system: null, error: null, secrets: [], vars: ["DEPLOY_SHA"], d1: [], kv: [], r2: [], ...none },
+    ],
+    databases: [{ name: "sample", tables: ["posts", "posts_fts", "media", "cron_runs"], tables_error: null, used_by: [{ script: "sample-web", system: "sample", binding: "DB" }, { script: "sample-admin", system: "sample", binding: "DB" }] }],
+    kv_namespaces: [{ title: "sample-app-kv", used_by: [{ script: "sample-web", system: "sample", binding: "APP_KV" }] }],
+    buckets: [
+      { name: "sample-media", used_by: [{ script: "sample-web", system: "sample", binding: "MEDIA" }] },
+      { name: "sample-old-media", used_by: [] },
+      { name: "sample-preview-media", used_by: [{ script: "sample-web", system: "sample", binding: "MEDIA (preview)" }] },
+    ],
+    problems: [],
+  };
 }
 
 // The Shared code view's answer (src/shared-code.ts), in sample names: one app two
@@ -361,6 +371,12 @@ function mockTrends(weeks: number): PortalTrends {
       weeks: weekRows.map((w, i) => ({ week: w.week, start: w.start, auto: 4 + i, approved: 3, seat: Math.max(0, 6 - i), closed: 1 })),
       rollbacks: [{ at: new Date(now - 3 * DAYMS).toISOString(), repo: "example-org/sample", pr: 12, outcome: "rolled_back" as const }],
     },
+    deploys: {
+      repos: [
+        { repo: "example-org/sample", deploys: 17, per_week: 2.1, shipped: 15, refused: 1, rolled_back: 1, unverified: 1, change_failure_rate: 0.063, restore_median_seconds: 94 },
+        { repo: "example-org/sample-site", deploys: 9, per_week: 1.1, shipped: 9, refused: 0, rolled_back: 0, unverified: 0, change_failure_rate: 0, restore_median_seconds: null },
+      ],
+    },
     // Weekly model spend: one week with no costed outcome (a gap, not a zero).
     cost: { weeks: weekRows.map((w, i) => ({ week: w.week, start: w.start, usd: i === 1 && weeks > 3 ? null : 6 + ((i * 7) % 9) * 1.5, jobs: i === 1 && weeks > 3 ? 0 : 3 + (i % 4) })) },
     backups: {
@@ -490,7 +506,6 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   for (const a of out.live.agents) if (st.revoked.has(a.name)) a.revoked_at = st.revoked.get(a.name) ?? null;
   out.live.sites = st.sites.map((s) => ({ ...s }));
   out.live.packages = st.packages.map((p) => ({ ...p }));
-  out.live.canon_proposals = out.live.canon_proposals.filter((c) => !st.canonDecided.has(c.id));
   out.live.awaiting_seat = out.live.awaiting_seat.filter((a) => !st.closedPrs.has(`${a.repo}#${a.number}`));
   out.refresh_allowed_at = nextRefresh > mockNow() ? new Date(nextRefresh).toISOString() : null;
   return out;
@@ -511,11 +526,10 @@ function refuse(res: ServerResponse, status: number, text: string): void {
 }
 
 class Refusal extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
+  readonly status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -802,64 +816,6 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         done: `Removed ${name}.`,
         changes: [`ops_packages: remove ${name}. Its weekly rows stay.`],
         apply: (st) => void (st.packages = st.packages.filter((p) => p.name !== name)),
-      };
-    }
-    case "canon_approve":
-    case "canon_reject": {
-      const id = revisionOf(params.id);
-      const proposal = f.live.canon_proposals.find((c) => c.id === id);
-      if (id === null || !proposal) throw new Refusal(400, `no pending canon proposal ${params.id ?? ""}.`);
-      const target = `${proposal.namespace}/${proposal.path}`;
-      if (action === "canon_reject") {
-        if (!(params.reason ?? "").trim()) throw new Refusal(400, "canon_reject needs a reason: the proposer reads it, and a rejection with no reason is one nobody can act on.");
-        return {
-          summary: `Reject canon proposal ${id}.`,
-          done: `Rejected proposal ${id} for ${target}.`,
-          changes: [`canon proposal ${id} (${target}): pending -> rejected. ${target} is not touched.`],
-          apply: (st) => void st.canonDecided.add(id),
-        };
-      }
-      if (proposal.stale) throw new Refusal(400, `${target} changed since proposal ${id} was written. Reject it, and the proposer writes it again.`);
-      return {
-        summary: `Approve canon proposal ${id}.`,
-        done: `Approved proposal ${id}: ${target} is written as ${proposal.proposer} proposed.`,
-        changes: [
-          `${target} is overwritten as ${proposal.proposer} proposed. The current version is snapshotted first.`,
-          `${proposal.added} line(s) added, ${proposal.removed} removed.`,
-          ...proposal.directive_lines.map((l) => `instruction: ${l}`),
-          "added: The sample service answers on port 8080.",
-        ],
-        apply: (st) => void st.canonDecided.add(id),
-      };
-    }
-    case "canon_approve_all": {
-      // The Worker's plan (src/canon.ts, planSweep): the newest proposal on each document
-      // is approved unless stale; older ones are superseded, a stale newest one outdated.
-      const list = [...f.live.canon_proposals].sort((a, b) => a.id - b.id);
-      if (!list.length) throw new Refusal(400, "no pending canon proposals.");
-      const key = (c: (typeof list)[number]) => `${c.namespace}/${c.path}`;
-      const newest = new Map<string, number>();
-      for (const c of list) newest.set(key(c), Math.max(newest.get(key(c)) ?? 0, c.id));
-      const plan = list.map((c) => {
-        const top = newest.get(key(c)) ?? c.id;
-        const reason = c.id !== top ? `superseded by proposal ${top} on the same document` : c.stale ? `outdated: ${key(c)} changed after this proposal was written; write it again against the current body` : null;
-        return { c, reason };
-      });
-      const approvals = plan.filter((p) => p.reason === null);
-      const rejections = plan.filter((p) => p.reason !== null);
-      const flagged = approvals.filter((p) => p.c.directive_lines.length);
-      return {
-        summary: "Decide every pending canon proposal at once.",
-        done: `Decided ${plan.length} of ${plan.length} canon proposal(s). Approved ${approvals.map((p) => `${p.c.id} (${key(p.c)})`).join(", ")}. Rejected ${rejections.map((p) => `${p.c.id} (${key(p.c)})`).join(", ")}.`,
-        changes: [
-          `${plan.length} pending canon proposal(s): ${approvals.length} approved, ${rejections.length} rejected. Rejections run first, then approvals, each its own decision; one that fails does not stop the rest.`,
-          ...(flagged.length
-            ? [`${flagged.length} approval(s) add lines that read as instructions addressed to agents. Read them before approving:`, ...flagged.flatMap((p) => p.c.directive_lines.map((l) => `instruction (proposal ${p.c.id}, ${key(p.c)}): ${l}`))]
-            : ["No approval adds a line that reads as an instruction addressed to agents."]),
-          ...rejections.map((p) => `reject proposal ${p.c.id} (${key(p.c)}, from ${p.c.proposer}): pending -> rejected, with the reason "${p.reason}". ${key(p.c)} is not touched.`),
-          ...approvals.map((p) => `approve proposal ${p.c.id} (${key(p.c)}, from ${p.c.proposer}): ${key(p.c)} is overwritten, the current version snapshotted first; ${p.c.added} line(s) added, ${p.c.removed} removed.`),
-        ],
-        apply: (st) => void plan.forEach((p) => st.canonDecided.add(p.c.id)),
       };
     }
     case "site_repair": {
@@ -1318,9 +1274,23 @@ function isoOrNull(value: string | null): string | null {
   return /^\d{4}-\d{2}-\d{2}(T|$)/.test(value) && !Number.isNaN(parsed) ? new Date(parsed).toISOString() : "bad";
 }
 
-export function mockOpsApi(): Plugin {
+// A browser test's "nothing waits" (cookie wf-mock=quiet): the feed's inbox empty and no
+// namespace paused. A cookie, not a route the test intercepts, since the page's first reads are
+// the server's (dev/serve.ts forwards the page's cookies to them).
+function quiet(req: IncomingMessage): boolean {
+  return /(?:^|;\s*)wf-mock=quiet(?:;|$)/.test(req.headers.cookie ?? "");
+}
+
+function quietFeed(f: OpsFeed): OpsFeed {
+  f.live.inbox = { ...f.live.inbox, count: 0, severity: "none", apps: f.live.inbox.apps.map((a) => ({ ...a, count: 0, severity: "none", items: [] })) };
+  return f;
+}
+
+/** The mock's routes as a Node request handler: /portal/api/... as the Worker routes them, and
+ *  /api/... as the browser on the Portal host asks for them. */
+export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => void {
   let nextRefresh = 0;
-  const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), canonDecided: new Set(), repairs: [], closedPrs: new Set(), tokens: new Map() };
+  const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), repairs: [], closedPrs: new Set(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();
@@ -1381,22 +1351,26 @@ export function mockOpsApi(): Plugin {
     }
   }
 
-  const handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
+  return (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
-        const path = url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/completeness", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
+        const path = url.pathname.startsWith("/api/") ? `/portal${url.pathname}` : url.pathname;
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
-          return send(res, 200, feed(nextRefresh, st));
+          return send(res, 200, quiet(req) ? quietFeed(feed(nextRefresh, st)) : feed(nextRefresh, st));
         }
         if (path === "/portal/api/actions/preview" || path === "/portal/api/actions/perform") {
           // An unexpected error goes to Vite's error handler, which answers 500 with it.
           action(req, res, path.endsWith("preview") ? "preview" : "perform").catch(next);
           return;
         }
-        if (path === "/portal/api/namespaces") return send(res, 200, namespaces(feed(nextRefresh, st), st));
+        if (path === "/portal/api/namespaces") {
+          const out = namespaces(feed(nextRefresh, st), st);
+          if (quiet(req)) for (const n of out.namespaces) n.breaker.open = false;
+          return send(res, 200, out);
+        }
         if (path === "/portal/api/stale") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, stale(feed(nextRefresh, st)));
@@ -1465,6 +1439,10 @@ export function mockOpsApi(): Plugin {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, completeness());
         }
+        if (path === "/portal/api/resources") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, resources());
+        }
         if (path === "/portal/api/shared-code") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, sharedCode());
@@ -1503,21 +1481,15 @@ export function mockOpsApi(): Plugin {
         if (process.env.WF_MOCK === "warn") res.setHeader("x-capsid-warning", "the pass ran, but the Portal audit row naming access:admin@example.com was not written: D1 is unavailable");
         return send(res, 200, feed(nextRefresh, st));
   };
+}
 
+/** Dev only: the mock in front of the dev server, so its pages read from it (server/prefetch.ts). */
+export function mockOpsApi(): Plugin {
+  const handle = mockHandler();
   return {
     name: "watch-floor-mock-ops",
     apply: "serve",
     configureServer(server) {
-      server.middlewares.use(handle);
-    },
-    // `vite preview` serves the production build: the browser tests (dashboard/e2e)
-    // run against it with the same mock, and with the Worker's own page CSP on every
-    // response, so a script or style the Worker's page would refuse fails the tests too.
-    configurePreviewServer(server) {
-      server.middlewares.use((_req: IncomingMessage, res: ServerResponse, next: () => void) => {
-        res.setHeader("Content-Security-Policy", DASHBOARD_CSP);
-        next();
-      });
       server.middlewares.use(handle);
     },
   };

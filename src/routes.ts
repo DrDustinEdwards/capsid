@@ -1,10 +1,10 @@
 import { handleSignedInReport, SIGNED_IN_REPORT_PATH } from "./signed-in-crawl";
-import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, handlePublicDocument } from "./public-data";
+import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, PUBLIC_VERSIONS_PATH, handlePublicDocument } from "./public-data";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResult } from "./shadow";
+import { REVIEW_RUN_PATH, handleReviewRun } from "./review";
 import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
 import { resolveAgent } from "./agents";
-import { backupHttpStatus, runBackup } from "./backup";
-import { checkScope, routeRefusal } from "./scope";
+import { checkScope } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
 import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
 import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
@@ -13,8 +13,8 @@ import { consentDialogHeaders, REPORT_PATH, securityHeadersFor } from "./securit
 import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";
 import { ipKey, limit } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
-import { buildAdminServer, buildServer, SERVER_INFO } from "./server";
-import { ADMIN_OPS_MCP_ROUTE, mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
+import { buildServer, SERVER_INFO } from "./server";
+import { mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
 import { isAdminEmail } from "./auth";
 import { loginHandler } from "@dustinedwards/site-runtime/mcp-login";
 import {
@@ -32,7 +32,6 @@ import { PORTAL_HOST } from "./portal-host";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH, handleOpsFeed, handleOpsRefresh } from "./ops-feed";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH, handleOtlpLogs, handleOtlpMetrics } from "./ops-otlp";
 import { OPS_HOOKS_PATH, handleOpsHooks } from "./ops-hooks";
-import { ACCESS_SYNC_PATH, handleAccessSync } from "./access-sync";
 import {
   handlePortalActivity,
   handlePortalApiNotFound,
@@ -56,7 +55,7 @@ import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "./portal-conve
 import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "./push";
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "./portal-library";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "./portal-trends";
-import { handlePortalCompleteness, handlePortalPackageHistory, handlePortalSharedCode, PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
+import { handlePortalCompleteness, handlePortalPackageHistory, handlePortalResources, handlePortalSharedCode, PORTAL_COMPLETENESS_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_RESOURCES_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { rateLimiter, textResponse } from "./http";
 
@@ -95,61 +94,20 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 
 async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   // The bearer is resolved to a caller once, here, and every tool in this request is
-  // checked against it. A minted agent carries the scopes its row says; a legacy
-  // operator key resolves to the unrestricted caller until it is revoked by hand.
+  // checked against it. A minted agent carries the scopes its row says.
   const resolved = await resolveAgent(request, env);
   if (!resolved) {
-    return new Response("unauthorized: valid operator key or agent key required", {
+    return new Response("unauthorized: a valid agent key is required", {
       status: 401,
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
   }
-  const limited = await mcpRateLimited(env, resolved.agent.actor);
+  const limited = await mcpRateLimited(env, resolved.agent.actor, SERVER_INFO);
   if (limited) return limited;
   // last_seen is not part of authorizing, so a slow or failing write rides on
   // waitUntil rather than slowing the tool call.
   ctx.waitUntil(resolved.touch());
   return serveMcp(request, env, ctx, "/ops/mcp", () => buildServer(env, resolved.agent));
-}
-
-// Capsid Admin for a key (src/mcp-handler.ts ADMIN_OPS_MCP_ROUTE): the seat's scripts
-// (scripts/mint-agents.ts) reach the administrator tools with its operator key. Only
-// the admin identity is served; any other key is refused here, before a server is
-// built, and every tool on it is admin only in the registrar as well.
-async function handleOperatorAdminMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  const resolved = await resolveAgent(request, env);
-  if (!resolved) {
-    return new Response("unauthorized: an admin operator key is required", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
-    });
-  }
-  if (!resolved.agent.admin) {
-    return new Response(`forbidden: ${resolved.agent.actor} is not the admin. Capsid Admin serves the administrator alone.`, { status: 403 });
-  }
-  const limited = await mcpRateLimited(env, resolved.agent.actor);
-  if (limited) return limited;
-  ctx.waitUntil(resolved.touch());
-  return serveMcp(request, env, ctx, ADMIN_OPS_MCP_ROUTE, () => buildAdminServer(env, resolved.agent));
-}
-
-async function handleBackup(request: Request, env: Env): Promise<Response> {
-  // No credential, or one that resolves to nobody: 401, so a client knows to send one.
-  const caller = await resolveAgent(request, env);
-  if (!caller) {
-    return new Response("unauthorized: admin operator key required", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
-    });
-  }
-  // A caller that resolved but may not run this: 403. A backup and its prune cover
-  // every namespace, so ROUTE_GRANTS in src/scope.ts requires the admin, through the
-  // same checkScope the tools use. The write grant alone is held by every
-  // namespace-scoped driver.
-  const refusal = routeRefusal("/ops/backup", caller.agent);
-  if (refusal) return new Response(refusal, { status: 403 });
-  const result = await runBackup(env);
-  return Response.json(result, { status: backupHttpStatus(result) });
 }
 
 // What needs Dustin, per app (src/inbox.ts), for the admin shell's app strip. It is read
@@ -161,7 +119,7 @@ async function handleBackup(request: Request, env: Env): Promise<Response> {
 async function handleInbox(request: Request, env: Env): Promise<Response> {
   const caller = await resolveAgent(request, env);
   if (!caller) {
-    return new Response("unauthorized: an agent key or the operator key is required", {
+    return new Response("unauthorized: an agent key is required", {
       status: 401,
       headers: { "WWW-Authenticate": 'Bearer realm="capsid-operator"' },
     });
@@ -283,14 +241,12 @@ export const defaultHandler = {
     if (url.pathname === PUBLIC_MODEL_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.model);
     if (url.pathname === PUBLIC_STATS_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.stats);
     if (url.pathname === PUBLIC_CODE_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.code);
+    if (url.pathname === PUBLIC_VERSIONS_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.versions);
     if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET") return handleClientDocument(request);
     if (url.pathname === REPORT_PATH) return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
-    if (url.pathname === ADMIN_OPS_MCP_ROUTE) return handleOperatorAdminMcp(request, env, ctx);
-    if (url.pathname === "/ops/backup" && request.method === "POST") return handleBackup(request, env);
     if (url.pathname === "/ops/inbox" && request.method === "GET") return handleInbox(request, env);
     if (url.pathname === "/ops/inbox/report" && request.method === "POST") return handleInboxReport(request, env);
-    if (url.pathname === ACCESS_SYNC_PATH && request.method === "POST") return handleAccessSync(request, env);
     if (url.pathname === OPS_HOOKS_PATH && request.method === "POST") return handleOpsHooks(request, env, ctx);
     if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);
     if (url.pathname === OTLP_LOGS_PATH && request.method === "POST") return handleOtlpLogs(request, env);
@@ -302,8 +258,11 @@ export const defaultHandler = {
     if (url.pathname === BENCH_SCORE_PATH && request.method === "POST") return handleBenchScore(request, env);
     if (url.pathname === SHADOW_JOB_PATH && request.method === "GET") return handleShadowJob(request, env);
     if (url.pathname === SHADOW_RESULT_PATH && request.method === "POST") return handleShadowResult(request, env);
+    if (url.pathname === REVIEW_RUN_PATH && request.method === "POST") return handleReviewRun(request, env);
     if (url.pathname === "/authorize") return handleLogin(request, env);
     if (url.pathname === "/callback") return handleLogin(request, env);
+    // The owner page: the same sign-in and admission as consent (site-runtime ./owner-page).
+    if (url.pathname === "/owner" || url.pathname.startsWith("/owner/")) return handleLogin(request, env);
     // Capsid Portal. The callback and every /portal/api/ route are matched before the
     // app's catch-all, and an unknown /portal/api/ path is a 404, never the app's page.
     // Nothing answers under /console: the Portal moved without redirects
@@ -334,6 +293,7 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
   if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET") return handlePortalSharedCode(request, env);
   if (url.pathname === PORTAL_COMPLETENESS_PATH && request.method === "GET") return handlePortalCompleteness(request, env);
+  if (url.pathname === PORTAL_RESOURCES_PATH && request.method === "GET") return handlePortalResources(request, env);
   if (url.pathname === PORTAL_LIBRARY_PATH && request.method === "GET") return handlePortalLibrary(request, env);
   if (url.pathname === PORTAL_TRENDS_PATH && request.method === "GET") return handlePortalTrends(request, env);
   if (url.pathname === PORTAL_PUSH_PATH && request.method === "GET") return handlePortalPushGet(request, env);
@@ -341,5 +301,5 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST") return handlePortalSignOut(request, env);
   if (url.pathname.startsWith(PORTAL_API_PREFIX)) return handlePortalApiNotFound(request, env);
   // The app and everything under it, every method: the handler gates first.
-  return handlePortalApp(request, env);
+  return handlePortalApp(request, env, (inner) => portalRoute(inner, env, new URL(inner.url)));
 }

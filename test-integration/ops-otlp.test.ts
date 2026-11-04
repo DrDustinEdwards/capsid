@@ -1,8 +1,9 @@
 import { env, SELF } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { claimJob, completeJob, postJob } from "../src/jobs";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
@@ -36,7 +37,7 @@ async function seedAgent(id: string, name: string, key: string, grants: Array<"r
 }
 
 async function queued(title: string): Promise<string> {
-  const posted = await postJob(jobsEnv(), legacyAgent("write", "github:sample"), NOW, { namespace: "sample", title, body: "do the thing" });
+  const posted = await postJob(jobsEnv(), grantAgent("write", "github:sample"), NOW, { namespace: "sample", title, body: "do the thing" });
   expect(posted.ok, posted.refusal).toBe(true);
   return posted.job!.id;
 }
@@ -44,7 +45,7 @@ async function queued(title: string): Promise<string> {
 // The driver claims it under its own actor, which is what resolveSessionCaller looks up.
 async function claimedByDriver(title: string): Promise<string> {
   const id = await queued(title);
-  const claimed = await claimJob(jobsEnv(), legacyAgent("write", DRIVER_ACTOR), NOW, { namespace: "sample", id });
+  const claimed = await claimJob(jobsEnv(), grantAgent("write", DRIVER_ACTOR), NOW, { namespace: "sample", id });
   expect(claimed.ok, claimed.refusal).toBe(true);
   return id;
 }
@@ -80,10 +81,7 @@ async function outcome(id: string) {
 }
 
 beforeEach(async () => {
-  for (const table of ["session_usage", "agent_sessions", "job_outcomes", "jobs", "agents", "audit_log", "job_outcome_prs"]) {
-    await env.DB.prepare(`DELETE FROM ${table}`).run();
-  }
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('sample', ?1)")
     .bind(JSON.stringify([{ repo: "example/sample", label: "primary" }]))
     .run();
@@ -101,11 +99,9 @@ describe("who may send", () => {
     expect(await usageRows()).toEqual([]);
   });
 
-  it("PLANT: a read-only key is 403, the legacy one and a read-only driver alike, and nothing is written", async () => {
-    for (const key of [env.TEST_OPERATOR_KEYS.read, READ_ONLY_DRIVER_KEY]) {
-      const response = await send(key, COST);
-      expect(response.status, await response.clone().text()).toBe(403);
-    }
+  it("PLANT: a read-only driver is 403, and nothing is written", async () => {
+    const response = await send(READ_ONLY_DRIVER_KEY, COST);
+    expect(response.status, await response.clone().text()).toBe(403);
     expect(await usageRows()).toEqual([]);
   });
 
@@ -194,7 +190,7 @@ describe("the outcome row", () => {
         ]),
       ])
     );
-    const done = await completeJob(jobsEnv(), legacyAgent("write", DRIVER_ACTOR), NOW, id, { result_summary: "landed" });
+    const done = await completeJob(jobsEnv(), grantAgent("write", DRIVER_ACTOR), NOW, id, { result_summary: "landed" });
     expect(done.ok, done.refusal).toBe(true);
     const row = await outcome(id);
     expect(row).toMatchObject({
@@ -213,7 +209,7 @@ describe("the outcome row", () => {
     expect((await send(DRIVER_KEY, COST)).status).toBe(200);
     expect((await usageRows()).length).toBe(1);
     const id = await claimedByDriver("an uncosted job");
-    const done = await completeJob(jobsEnv(), legacyAgent("write", DRIVER_ACTOR), NOW, id, { result_summary: "landed" });
+    const done = await completeJob(jobsEnv(), grantAgent("write", DRIVER_ACTOR), NOW, id, { result_summary: "landed" });
     expect(done.ok, done.refusal).toBe(true);
     const row = await outcome(id);
     for (const column of ["cost_usd", "tokens_input", "tokens_output", "tokens_cache_read", "tokens_cache_creation", "active_seconds"]) {

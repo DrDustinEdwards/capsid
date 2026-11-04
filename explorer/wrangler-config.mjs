@@ -1,7 +1,7 @@
 // Prints the explorer's Wrangler config, which the deploy writes to a temporary file and passes
 // with --config. Generated, not committed (CLAUDE.md, public repo rule), though it holds no id or
-// secret: static assets with a Worker (worker.mjs) only for paths with no file, and no binding but
-// the assets, so nothing to keep out of the repo.
+// secret: static assets with site-runtime's staticSite Worker (worker.mjs) in front of every page,
+// and no binding but the assets, so nothing to keep out of the repo.
 //
 //   node explorer/wrangler-config.mjs <assets directory> [--local]
 //
@@ -21,8 +21,10 @@ const config = {
   assets: {
     directory: resolve(directory),
     binding: "ASSETS",
-    // Any address with no file reaches worker.mjs, which sends dist/404.html with its charset;
-    // /s/x is /s/x/ (src/pages.mjs writes index.html).
+    // Every page reaches worker.mjs first; the assets and fonts go straight to the asset server.
+    // An address with no file gets dist/404.html from the Worker; /s/x is /s/x/ (src/pages.mjs
+    // writes index.html).
+    run_worker_first: ["/*", "!/assets/*", "!/fonts/*"],
     not_found_handling: "none",
     html_handling: "auto-trailing-slash",
   },

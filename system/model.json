@@ -10,7 +10,8 @@
       "ring": "core",
       "description": "Shared memory, the job queue and the GitHub access that every other project's agents work through.",
       "domain": "mcp.dustinedwards.info",
-      "repos": ["DrDustinEdwards/capsid"]
+      "repos": ["DrDustinEdwards/capsid"],
+      "workers": ["capsid-mcp", "capsid"]
     },
     {
       "id": "d1-dump",
@@ -28,7 +29,8 @@
       "family": "plumbing",
       "ring": "shared",
       "description": "Shared CI workflows, Renovate rules, and test helpers.",
-      "repos": ["DrDustinEdwards/devkit"]
+      "repos": ["DrDustinEdwards/devkit"],
+      "workers": ["devkit-rollback-drill"]
     },
     {
       "id": "site-runtime",
@@ -46,7 +48,8 @@
       "family": "writing",
       "ring": "shared",
       "description": "Turns finished writing into pages, feeds, and sitemaps.",
-      "repos": ["DrDustinEdwards/prelum"]
+      "repos": ["DrDustinEdwards/prelum"],
+      "workers": ["prelum"]
     },
     {
       "id": "capsomer",
@@ -56,7 +59,8 @@
       "ring": "shared",
       "description": "Design tokens, the app shell and shared controls in plain CSS, used by every app.",
       "domain": "capsomer.dustinedwards.info",
-      "repos": ["DrDustinEdwards/capsomer"]
+      "repos": ["DrDustinEdwards/capsomer"],
+      "workers": ["capsomer"]
     },
     {
       "id": "site-api",
@@ -74,7 +78,8 @@
       "family": "site",
       "ring": "used",
       "description": "Runs dustinedwards.info from a chat, covering health, mentions, media, registries, citations, and lab procedures. Writing stays in Carrel.",
-      "repos": ["DrDustinEdwards/dustinedwards-info"]
+      "repos": ["DrDustinEdwards/dustinedwards-info"],
+      "workers": ["dustinedwards-admin-mcp"]
     },
     {
       "id": "germomics",
@@ -84,7 +89,8 @@
       "ring": "used",
       "description": "A podcast and writing site about microbiology and history, with interactive virus and bacteria data pages and browser games.",
       "domain": "germomics.com",
-      "repos": ["DrDustinEdwards/germomics"]
+      "repos": ["DrDustinEdwards/germomics"],
+      "workers": ["germomics"]
     },
     {
       "id": "dustinedwards-info",
@@ -94,7 +100,8 @@
       "ring": "used",
       "description": "Dustin's personal site.",
       "domain": "dustinedwards.info",
-      "repos": ["DrDustinEdwards/dustinedwards-info"]
+      "repos": ["DrDustinEdwards/dustinedwards-info"],
+      "workers": ["dustinedwards", "dustinedwards-watchdog"]
     },
     {
       "id": "txasm",
@@ -104,7 +111,8 @@
       "ring": "used",
       "description": "Runs the Texas Branch ASM meetings: registration, abstract submission and review, the program, and the abstract book PDF.",
       "domain": "txasm.org",
-      "repos": ["DrDustinEdwards/txasm"]
+      "repos": ["DrDustinEdwards/txasm"],
+      "workers": ["txasm"]
     },
     {
       "id": "julieedwards-info",
@@ -114,7 +122,8 @@
       "ring": "used",
       "description": "Julie Edwards's campaign site for the Bluff Dale ISD school board. Its copy lives in D1 and is edited through Carrel.",
       "domain": "julieedwards.info",
-      "repos": ["DrDustinEdwards/julieedwards-info"]
+      "repos": ["DrDustinEdwards/julieedwards-info"],
+      "workers": ["julieedwards"]
     },
     {
       "id": "foxing",
@@ -124,7 +133,8 @@
       "ring": "used",
       "description": "A reading app and web platform, Letterboxd for books: a web app, an Expo phone reader and a Discord Activity for reading clubs.",
       "domain": "foxing.app",
-      "repos": ["DrDustinEdwards/foxing"]
+      "repos": ["DrDustinEdwards/foxing"],
+      "workers": ["foxing"]
     },
     {
       "id": "foxhound-mcp",
@@ -134,7 +144,8 @@
       "ring": "used",
       "description": "Runs Foxhound from a chat. It holds no Stripe key and no database: every action is a call to the foxhound Worker's admin API.",
       "domain": "admin-mcp.foxhoundapp.com",
-      "repos": ["DrDustinEdwards/foxhound"]
+      "repos": ["DrDustinEdwards/foxhound"],
+      "workers": ["foxhound-admin-mcp"]
     },
     {
       "id": "foxhound",
@@ -144,7 +155,8 @@
       "ring": "used",
       "description": "Recovers failed Stripe payments, handles disputes and reports subscription health for merchants, and is paid only on money it recovers.",
       "domain": "foxhoundapp.com",
-      "repos": ["DrDustinEdwards/foxhound"]
+      "repos": ["DrDustinEdwards/foxhound"],
+      "workers": ["foxhound"]
     },
     {
       "id": "foxing-mcp",
@@ -153,7 +165,8 @@
       "family": "product",
       "ring": "used",
       "description": "Runs Foxing from a chat: stats, users, badges, journal posts and catalog health, all through the foxing Worker. Built, not yet deployed.",
-      "repos": ["DrDustinEdwards/foxing"]
+      "repos": ["DrDustinEdwards/foxing"],
+      "workers": ["foxing-admin-mcp"]
     },
     {
       "id": "carrel",
@@ -163,7 +176,8 @@
       "ring": "used",
       "description": "The writing desk, where drafts are written, checked, and published.",
       "domain": "carrel.dustinedwards.info",
-      "repos": ["DrDustinEdwards/carrel"]
+      "repos": ["DrDustinEdwards/carrel"],
+      "workers": ["carrel", "carrel-desk"]
     },
     {
       "id": "enarratio",
@@ -173,16 +187,8 @@
       "ring": "used",
       "description": "An npm package of charts, with a gallery.",
       "domain": "enarratio.dustinedwards.info",
-      "repos": ["DrDustinEdwards/enarratio"]
-    },
-    {
-      "id": "writing",
-      "name": "Writing",
-      "short": "Books",
-      "family": "writing",
-      "ring": "used",
-      "description": "Dustin's books: scenes, outlines and story bibles, which Carrel reads and commits through its own GitHub App.",
-      "repos": ["DrDustinEdwards/writing"]
+      "repos": ["DrDustinEdwards/enarratio"],
+      "workers": ["enarratio"]
     },
     {
       "id": "skills",
@@ -193,15 +199,6 @@
       "description": "The instructions AI sessions follow.",
       "repos": ["DrDustinEdwards/claude-skills"],
       "hide_repo_link": true
-    },
-    {
-      "id": "skills-private",
-      "name": "Private skills",
-      "short": "My skills",
-      "family": "plumbing",
-      "ring": "used",
-      "description": "Dustin's own session setup, which every AI session loads beside the public skills.",
-      "repos": ["DrDustinEdwards/claude-skills-private"]
     },
     {
       "id": "capsid-bench",
@@ -270,6 +267,14 @@
       "kind": "bucket",
       "technology": "R2",
       "description": "Media and the daily backups."
+    },
+    {
+      "id": "capsid-tool-calls",
+      "system": "capsid",
+      "name": "capsid-mcp-tool-calls",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Copies of the tool-call log, kept a year under a lock rule after the log prunes them."
     },
     {
       "id": "capsid-kv",
@@ -528,6 +533,14 @@
       "description": "The append-only log of every tool call, written before and after it runs. A call that cannot be logged does not run."
     },
     {
+      "id": "admin-mcp-tool-calls",
+      "system": "dustinedwards-mcp",
+      "name": "dustinedwards-admin-mcp-tool-calls",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Copies of the tool-call log, kept after the log prunes them."
+    },
+    {
       "id": "admin-mcp-github",
       "system": "dustinedwards-mcp",
       "name": "GitHub sign-in",
@@ -589,7 +602,7 @@
       "name": "GitHub",
       "kind": "external",
       "technology": "Repos, Actions, a GitHub App",
-      "description": "The writing repository Carrel commits book files to through its App, and CI, which deploys the Worker."
+      "description": "The GitHub App Carrel commits book files to Writings through, and CI, which deploys the Worker."
     },
     {
       "id": "carrel-google",
@@ -1265,24 +1278,17 @@
     },
     {
       "id": "writing-repo",
-      "system": "writing",
-      "name": "Books",
-      "kind": "package",
-      "technology": "Git repository",
+      "system": "carrel",
+      "name": "Writings",
+      "kind": "external",
+      "technology": "Private Git repository",
       "description": "One folder per book: chapters of scene files, outlines, characters, places and world rules, plus Dustin's own voice passages."
-    },
-    {
-      "id": "skills-private-repo",
-      "system": "skills-private",
-      "name": "Skills",
-      "kind": "package",
-      "technology": "Git repository",
-      "description": "The dustin-workflow skill and the script a session-start hook runs to print it."
     }
   ],
   "relationships": [
     { "from": "capsid-worker", "to": "capsid-db", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-media", "kind": "writes" },
+    { "from": "capsid-worker", "to": "capsid-tool-calls", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-kv", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-oauth-kv", "kind": "writes" },
     { "from": "capsid-worker", "to": "capsid-portal", "kind": "serves" },
@@ -1331,6 +1337,7 @@
     { "from": "admin-mcp-worker", "to": "admin-mcp-probe-kv", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-rate-limit", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-tool-log", "kind": "writes" },
+    { "from": "admin-mcp-worker", "to": "admin-mcp-tool-calls", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "website-worker", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "website-worker", "kind": "reads" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-github", "kind": "reads" },
@@ -1448,7 +1455,6 @@
     { "from": "carrel", "to": "foxing", "kind": "publishes-to" },
     { "from": "capsid", "to": "txasm", "kind": "coordinates" },
     { "from": "capsid", "to": "julieedwards-info", "kind": "coordinates" },
-    { "from": "capsid", "to": "writing", "kind": "coordinates" },
     { "from": "capsid", "to": "capsid-bench", "kind": "coordinates" },
     { "from": "capsid", "to": "skills", "kind": "coordinates" },
     { "from": "capsid", "to": "devkit", "kind": "installs" },
@@ -1581,9 +1587,10 @@
     }
   ],
   "left_off": [
-    { "repo": "DrDustinEdwards/bsw", "why": "Kept off the map (Dustin, 2026-10-23)." },
+    { "repo": "DrDustinEdwards/bsw", "why": "Kept off the map (Dustin, 2026-10-23).", "workers": ["bsw"] },
     { "repo": "DrDustinEdwards/recova", "why": "Kept off the map (Dustin, 2026-10-23); Foxhound replaces it." },
     { "repo": "DrDustinEdwards/recova-mcp", "why": "Kept off the map (Dustin, 2026-10-23); goes with Recova." },
-    { "repo": "DrDustinEdwards/foxing-admin-mcp", "why": "Kept off the map (Dustin, 2026-10-23); replaced by Foxing Admin and to be deleted." }
+    { "repo": "DrDustinEdwards/foxing-admin-mcp", "why": "Kept off the map (Dustin, 2026-10-23); replaced by Foxing Admin and to be deleted." },
+    { "repo": "DrDustinEdwards/writing", "why": "Not a system of its own: Carrel's Writings part (Dustin, 2026-11-03)." }
   ]
 }

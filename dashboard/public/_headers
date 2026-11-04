@@ -1,0 +1,5 @@
+# The hashed build files never change under one name. The Worker runs first and sets the same
+# header on them (src/portal-app.ts, portalAsset); this states it for the assets layer too, as
+# the network's other React Router sites do.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

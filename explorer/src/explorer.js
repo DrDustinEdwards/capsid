@@ -1,11 +1,11 @@
-// The explorer's one script. Every page is complete without it: the maps are named pictures with
-// their lists open, every step is a page, every tool and module has an address, and the tables
+// The explorer's one script. Every page is complete without it: the maps are cards and lists, every step is a page, every tool and module has an address, and the tables
 // are plain tables. This makes them move: Capsomer's system map (copied from capsomer at build),
 // its tabs, Enarratio's chart tooltips, the flow players, the front page's panel and tour, the filters
 // and sorting, and search.
 import { controller } from "./capsomer/system-map/system-map.js";
 import { enhance as enhanceTabs } from "./tabs.js";
-import { enhance as enhanceCharts } from "./enhance.js";
+// Every chart in Capsomer's frame: drawn again at its column's width where the server wrote a spec, and enhanced.
+import "capsomer/behavior/chart-enhance";
 import { enhance as enhanceHeader } from "./capsomer/site-header/site-header.js";
 import { enhance as enhanceTheme, toggleTheme } from "./capsomer/theme-switch/theme-switch.js";
 import { enhance as enhanceMeters } from "./capsomer/meter/meter.js";
@@ -21,20 +21,9 @@ enhanceTheme();
 
 for (const root of document.querySelectorAll("[data-cap='system-map']")) {
   if (root.hasAttribute("data-cap-ready")) continue;
-  root.setAttribute("data-cap-ready", "");
   const host = root.closest(".map-host");
-  if (host?.dataset.flow) {
-    // The page arrives drawn at its step (src/pages.mjs, markStep). Capsomer starts from the
-    // shell and goes inside itself, so the drawn state goes first; in one task, so nothing moves.
-    root.removeAttribute("data-entered");
-    for (const el of root.querySelectorAll("[data-on], [data-lit], [data-at]")) {
-      el.removeAttribute("data-on");
-      el.removeAttribute("data-lit");
-      el.removeAttribute("data-at");
-    }
-  }
-  // A page drawn zoomed into a system (src/pages.mjs, familyMap) is zoomed again by Capsomer, with no movement.
-  const map = controller(root, root.dataset.openLabel ?? "Open");
+  // A flow's page arrives with its step lit (src/pages.mjs, flowMap), which Capsomer starts from.
+  const map = controller(root);
   if (host?.dataset.flow) {
     if (host.hasAttribute("data-player")) player(map, root, host);
     else flowPage(map, root, host);
@@ -189,7 +178,6 @@ function flowPage(map, root, host) {
 }
 
 enhanceTabs();
-enhanceCharts(document, { tooltips: true, filter: true, brush: false, entrance: !reduced.matches });
 
 // The front page's panel: each breaker switches a grant, and every circuit lights by the rule
 // the build drew it with (src/home.mjs, reaches), which is src/scope.ts's needFor.

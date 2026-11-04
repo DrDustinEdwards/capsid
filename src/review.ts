@@ -1,292 +1,359 @@
-// A job posted with review_required does not reach the seat until a reviewer has
-// given a verdict on its pull request.
-//
-// The verdict is a comment, not a GitHub review, because the reviewer agent holds only
-// can_comment_pr; accepting a GitHub review would need a wider scope. The envelope is
-// strict, `REVIEW:` at the start and one of three words at the end, so no verdict is
-// guessed out of free prose.
-
+import { verifyJwt } from "@dustinedwards/site-runtime/access-login";
+import { untrusted, UNTRUSTED_DATA_RULE } from "@dustinedwards/site-runtime/anthropic";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { Env } from "./env";
-import { ghFetch, parsePrUrl, resolveRepo, type PrUrl } from "./github/client";
-import { readAllPages } from "./github/pr-files";
-import { parseScopes } from "./agents-schema";
+import { ghFetch } from "./github/client";
+import { textResponse } from "./http";
+import { readJob } from "./jobs-transition";
+import { pathClassOf, type PathClass } from "./merge-class";
+import { worthReviewer, type ChangedFile } from "./model-routing";
+import { issuerKeys, ISSUER } from "./shadow";
+import { splitSignedTask } from "./signed-docs";
+import { auditStatement } from "./store-guards";
 
-const REVIEW_PREFIX = "REVIEW:";
+// THE AUTOMATIC PR REVIEWER (D5; Dustin 2026-11-03, "lets do it"). A reviewer that did not
+// build the work reads a pull request and says whether it does what it claims. It catches
+// what CI and the claim checks cannot: work that passes and is still wrong (a misread job, a
+// skipped requirement, a weak test). An ADVISORY TRIAL of four weeks: it never fails a check
+// and never blocks a merge. Each verdict is recorded in the audit log, and after the trial
+// the verdicts are compared with what really went wrong (reverts, fix-up PRs, defects Dustin
+// flagged). It becomes a required check only if it caught real problems with few false
+// alarms; otherwise it is removed.
+//
+// devkit's shared review.yml calls this from every network repository with its GitHub
+// Actions OIDC token, so no key is stored anywhere. Capsid reads the pull request itself
+// with its GitHub App, decides whether it is worth a review, asks the model and records the
+// verdict. The workflow writes the verdict to the pull request's checks, never a comment
+// (comments notify).
+//
+// GOLDFISH INPUT (Google's Elephant-Goldfish model). The reviewer sees the diff, the
+// description, the job the description names (if any) and the repository's CLAUDE.md at the
+// BASE, so a pull request cannot rewrite the rules it is judged by. It never sees the session
+// that wrote the code.
+//
+// THE MODEL. DeepSeek V4.1 Flash on Workers AI, through the account's `default` AI Gateway,
+// so the gateway's logs, analytics and spend limit apply. Another vendor than the author, so
+// it does not share Claude's blind spots. Swapping it is the one line below.
+//
+//   POST /review/run   reviews the token's pull request at its head, or answers with the
+//                      verdict already recorded for that head
 
-export const VERDICTS = ["APPROVE", "CHANGES", "BLOCK"] as const;
-type Verdict = (typeof VERDICTS)[number];
+export const REVIEW_RUN_PATH = "/review/run";
+const REVIEW_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
+const REVIEW_GATEWAY = "default";
+const REVIEW_ACTION = "pr-review";
+const REVIEW_AUDIENCE = "capsid-review";
+// The one workflow allowed to ask, at any ref of devkit, in any repository Dustin owns.
+const REVIEW_WORKFLOW = "drdustinedwards/devkit/.github/workflows/review.yml@";
+// Dustin's GitHub account id. Owner ids never change; a login can be renamed and reused.
+export const REVIEW_OWNER_ID = "204601333";
+const RENOVATE = /^renovate(\[bot\])?$/i;
+// A verdict per head commit, so a re-run of the same push asks the model nothing.
+const CACHE_TTL_S = 14 * 24 * 3600;
+// The diff the model reads, at most. About 75,000 tokens, under a cent of input.
+const MAX_DIFF_CHARS = 300_000;
+const MAX_FILES = 300;
+const MAX_CONTEXT_CHARS = 20_000;
+const MAX_FINDINGS = 5;
+// The model's deadline. A reasoning model on a large diff can take minutes; the workflow
+// waits up to ten, and a run that runs out is recorded as an error and asked again next push.
+const MODEL_TIMEOUT_MS = 6 * 60_000;
+// At the default (high) effort the model spent all 16,000 tokens second-guessing a two-line
+// workflow change and never answered (capsid #745, 2026-11-03). Low still reasons, and answers.
+const REASONING = "low";
 
-export interface ReviewComment {
-  // GitHub's issue-comment id. The gate counts a verdict only when Capsid posted this
-  // id for an actor holding can_comment_pr (see reviewerCommentIds). A comment with no
-  // id is never eligible.
-  id?: number;
-  // The author login, recorded for the audit row. Not the check: every comment Capsid
-  // posts has the same App author.
-  user: string;
+const VERDICTS = ["APPROVE", "CHANGES", "BLOCK"] as const;
+export type Verdict = (typeof VERDICTS)[number];
+const FINDING_KINDS = ["misread job", "skipped requirement", "weak test", "bug", "security"] as const;
+type FindingKind = (typeof FINDING_KINDS)[number];
+
+export interface Finding {
+  kind: FindingKind;
+  file: string;
+  line: number | null;
+  note: string;
+}
+
+type ReviewResult =
+  | { status: "reviewed"; verdict: Verdict; summary: string; findings: Finding[]; model: string; head_sha: string }
+  | { status: "skipped"; reasons: string[]; head_sha: string }
+  | { status: "error"; error: string; head_sha: string };
+
+// Path classes nothing in the diff can go wrong in quietly: prose and pictures, tests alone,
+// lockfiles and manifests (routine bumps), and the Portal's stylesheets. A pull request made
+// only of these is skipped to save the cost; anything else, code or config, is reviewed.
+const SKIPPED_CLASSES: ReadonlySet<PathClass> = new Set(["docs", "tests", "deps-other", "dashboard-css"]);
+
+/** Whether a pull request's files are worth a review, and why. */
+export function reviewScope(files: readonly ChangedFile[]): { review: boolean; reasons: string[] } {
+  if (files.length === 0) return { review: false, reasons: ["no changed files were read"] };
+  const paths = files.flatMap((f) => (f.previous_filename ? [f.previous_filename, f.filename] : [f.filename]));
+  const reviewed = paths.filter((p) => !SKIPPED_CLASSES.has(pathClassOf(p)));
+  if (reviewed.length === 0) return { review: false, reasons: ["only documents, images, tests, lockfiles or manifests changed"] };
+  const worth = worthReviewer(files);
+  return { review: true, reasons: worth.level === "worth" ? worth.reasons : [`${reviewed.length} changed file(s) hold code or configuration`] };
+}
+
+export interface ReviewCaller {
+  owner: string;
+  repo: string;
+  pr: number;
+}
+
+/** Who a verified token's claims admit: devkit's review.yml, on a pull request, in a
+ *  repository Dustin owns. Anything else is refused with the reason. */
+export function reviewCaller(claims: Record<string, unknown>): ReviewCaller | { refusal: string } {
+  const claim = (name: string) => (typeof claims[name] === "string" ? (claims[name] as string) : "");
+  const [owner, repo] = claim("repository").split("/");
+  const pr = /^refs\/pull\/(\d+)\/merge$/.exec(claim("ref"))?.[1];
+  if (claim("repository_owner_id") !== REVIEW_OWNER_ID || !owner || !repo) return { refusal: "only a repository Dustin owns may ask for a review" };
+  if (!claim("job_workflow_ref").toLowerCase().startsWith(REVIEW_WORKFLOW)) return { refusal: "only devkit's review.yml may ask for a review" };
+  if (claim("event_name") !== "pull_request" || !pr) return { refusal: "a review is asked for on a pull request only" };
+  return { owner, repo, pr: Number(pr) };
+}
+
+async function caller(request: Request): Promise<ReviewCaller | Response> {
+  const token = /^Bearer (\S+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
+  if (!token) return textResponse("a GitHub Actions OIDC token is required", 401);
+  try {
+    const verdict = await verifyJwt(token, await issuerKeys(), { issuer: ISSUER, audience: REVIEW_AUDIENCE });
+    if (!verdict.ok) return textResponse("the OIDC token does not verify", 401);
+    const who = reviewCaller(verdict.claims);
+    return "refusal" in who ? textResponse(who.refusal, 403) : who;
+  } catch {
+    return textResponse("the OIDC token does not verify", 401);
+  }
+}
+
+interface Pull {
+  title: string;
   body: string;
-  created_at: string;
+  head: string;
+  base: string;
+  author: string;
 }
 
-export interface Review {
-  verdict: Verdict;
-  by: string;
-  at: string;
-  // The comment with its envelope stripped.
-  said: string;
+async function ghJson<T>(env: Env, who: ReviewCaller, path: string): Promise<T> {
+  const resp = await ghFetch(env, who.owner, who.repo, `/repos/${who.owner}/${who.repo}${path}`);
+  if (!resp.ok) throw new Error(`GitHub answered ${resp.status} for ${path}`);
+  return (await resp.json()) as T;
 }
 
-/** The verdict a single comment carries, or null when it is not a review. Both the
- *  prefix and the closing verdict word are required. */
-export function verdictOf(comment: ReviewComment): Review | null {
-  const body = comment.body?.trim() ?? "";
-  if (!body.toUpperCase().startsWith(REVIEW_PREFIX)) return null;
-  const rest = body.slice(REVIEW_PREFIX.length).trim();
-  // The last word, allowing trailing punctuation and formatting ("CHANGES.", "**BLOCK**").
-  const tail = rest.replace(/[\s*_`.!]+$/u, "");
-  const match = /([A-Za-z]+)$/u.exec(tail);
-  if (!match) return null;
-  const word = match[1].toUpperCase();
-  if (!(VERDICTS as readonly string[]).includes(word)) return null;
-  return {
-    verdict: word as Verdict,
-    by: comment.user,
-    at: comment.created_at,
-    said: tail.slice(0, tail.length - match[1].length).replace(/[\s*_`,:-]+$/u, "").trim(),
-  };
+async function readPull(env: Env, who: ReviewCaller): Promise<Pull> {
+  const p = await ghJson<{ title?: string; body?: string | null; head?: { sha?: string }; base?: { sha?: string }; user?: { login?: string } }>(env, who, `/pulls/${who.pr}`);
+  return { title: p.title ?? "", body: p.body ?? "", head: p.head?.sha ?? "", base: p.base?.sha ?? "", author: p.user?.login ?? "" };
 }
 
-/** The review that decides: the newest verdict, by created_at rather than array
- *  position, because GitHub's ordering is not promised. */
-export function decidingReview(comments: readonly ReviewComment[]): Review | null {
-  let best: Review | null = null;
-  let bestAt = Number.NEGATIVE_INFINITY;
-  for (const comment of comments) {
-    const review = verdictOf(comment);
-    if (!review) continue;
-    const at = Date.parse(review.at);
-    // An unparseable timestamp counts only when nothing else does.
-    const rank = Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at;
-    if (best === null || rank >= bestAt) {
-      best = review;
-      bestAt = rank;
-    }
+interface PullFile extends ChangedFile {
+  patch?: string;
+}
+
+async function readFiles(env: Env, who: ReviewCaller): Promise<PullFile[]> {
+  const files: PullFile[] = [];
+  for (let page = 1; files.length < MAX_FILES; page++) {
+    const batch = await ghJson<PullFile[]>(env, who, `/pulls/${who.pr}/files?per_page=100&page=${page}`);
+    files.push(...batch);
+    if (batch.length < 100) break;
   }
-  return best;
+  return files.slice(0, MAX_FILES);
 }
 
-export type ReviewOutcome =
-  // No review yet. The job stays where it is.
-  | { kind: "waiting"; reason: string }
-  // The seat may have it.
-  | { kind: "proceed"; review: Review }
-  // Back to the driver, and it costs a correction.
-  | { kind: "rework"; review: Review }
-  // Stopped for the seat, with the reviewer's objection as the reason.
-  | { kind: "halt"; review: Review };
+// CLAUDE.md as it stands at the base. Missing is not an error: not every repository has one.
+async function readRules(env: Env, who: ReviewCaller, base: string): Promise<string> {
+  const resp = await ghFetch(env, who.owner, who.repo, `/repos/${who.owner}/${who.repo}/contents/CLAUDE.md?ref=${base}`, {
+    headers: { Accept: "application/vnd.github.raw+json" },
+  });
+  return resp.ok ? (await resp.text()).slice(0, MAX_CONTEXT_CHARS) : "";
+}
 
-/** What a job with review_required does when its driver tries to hand it on. Pure,
- *  so every branch is tested without GitHub. */
-export function outcomeOf(review: Review | null): ReviewOutcome {
-  if (!review) {
-    return {
-      kind: "waiting",
-      reason:
-        `no review yet. This job was posted with review_required, so it waits for a comment on its pull request ` +
-        `starting with '${REVIEW_PREFIX}' and ending with ${VERDICTS.join(", ")}. An APPROVE must also quote the pull request's head sha.`,
-    };
+// The Capsid job the description names, when it is a job of a namespace this repository is
+// mapped to. A job of another namespace is not this pull request's to be judged against.
+async function readNamedJob(env: Env, who: ReviewCaller, body: string): Promise<{ id: string; text: string } | null> {
+  const id = /\bjob_[0-9a-f]{12}\b/.exec(body)?.[0];
+  if (!id) return null;
+  const job = await readJob(env.DB, id);
+  if (!job) return null;
+  const row = await env.DB.prepare("SELECT repos FROM namespaces WHERE namespace = ?1").bind(job.namespace).first<{ repos: string }>();
+  const full = `${who.owner}/${who.repo}`.toLowerCase();
+  let mapped = false;
+  try {
+    mapped = (JSON.parse(row?.repos ?? "[]") as Array<{ repo?: string }>).some((r) => r.repo?.toLowerCase() === full);
+  } catch {
+    mapped = false;
   }
-  switch (review.verdict) {
-    case "APPROVE":
-      return { kind: "proceed", review };
-    case "CHANGES":
-      return { kind: "rework", review };
-    case "BLOCK":
-      return { kind: "halt", review };
-  }
+  return mapped ? { id, text: `${job.title}\n\n${splitSignedTask(job.body).body}`.slice(0, MAX_CONTEXT_CHARS) } : null;
 }
 
-// The issue comments endpoint lists oldest first and has no direction parameter, so
-// the newest review is on the last page and every page is read.
-const COMMENT_MAX_PAGES = 30;
-
-/** Every comment on a pull request. Issue comments, not review comments, because
- *  capsid_open_pr action `comment` posts there. Throws when the list cannot be read
- *  whole, which the caller treats as an unread review rather than an approval. */
-export async function readReviewComments(
-  env: Env,
-  pr: PrUrl
-): Promise<ReviewComment[]> {
-  const read = await readAllPages(
-    env, pr.owner, pr.repo, `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments`,
-    (page) => page as Array<{ id?: number; user?: { login?: string }; body?: string; created_at?: string }>, COMMENT_MAX_PAGES
-  );
-  if (read.problem) throw new Error(`reading review comments failed: ${read.problem}`);
-  return read.items.map((r) => ({
-    id: typeof r.id === "number" ? r.id : undefined,
-    user: r.user?.login ?? "(unknown)",
-    body: r.body ?? "",
-    created_at: r.created_at ?? "",
-  }));
-}
-
-/** The pull request's current head sha, read so an APPROVE counts only for the code it
- *  names. Throws on a GitHub failure, which the caller treats as an unread review
- *  rather than an approval. */
-async function readHeadSha(env: Env, pr: PrUrl): Promise<string> {
-  const resp = await ghFetch(env, pr.owner, pr.repo, `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`);
-  if (!resp.ok) throw new Error(`reading the pull request failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
-  const sha = ((await resp.json()) as { head?: { sha?: string } }).head?.sha ?? "";
-  if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error(`the pull request reported no head commit`);
-  return sha;
-}
-
-// The shortest sha prefix a review may quote, as `git log --oneline` prints.
-const MIN_QUOTED_SHA = 7;
-
-/** Whether a review's text quotes `head`: some standalone run of 7 to 40 hex
- *  characters in it is a prefix of the head sha (case-insensitive). */
-function quotesSha(text: string, head: string): boolean {
-  const want = head.toLowerCase();
-  for (const token of text.match(new RegExp(`\\b[0-9a-f]{${MIN_QUOTED_SHA},40}\\b`, "gi")) ?? []) {
-    if (want.startsWith(token.toLowerCase())) return true;
-  }
-  return false;
-}
-
-// Owner and repo compare case-insensitively because GitHub resolves them that way.
-function samePr(a: PrUrl, b: PrUrl): boolean {
-  return a.number === b.number && `${a.owner}/${a.repo}`.toLowerCase() === `${b.owner}/${b.repo}`.toLowerCase();
-}
-
-// How far back the eligibility scan reads, in audit rows for one namespace.
-const REVIEWER_AUDIT_SCAN = 500;
-
-/** The issue-comment ids Capsid posted for an actor allowed to review, in a namespace.
- *
- *  The identity half of the gate, read from audit_log rather than off the comment:
- *  `capsid_open_pr` action `comment` posts through the App installation, so every comment
- *  Capsid writes has the same author login and the login cannot separate a reviewer's
- *  verdict from a driver's. What does separate them is who asked Capsid to post it,
- *  which the audit row records beside the comment_id.
- *
- *  A verdict counts when Capsid posted it and the actor that asked held
- *  can_comment_pr. A driver with local `gh` can still write `REVIEW: ... APPROVE` on
- *  the pull request, but it is not a review, because nothing in this set names it; with
- *  newest-wins it would otherwise also overwrite a real CHANGES.
- *
- *  A non-agent actor (the admin session or the legacy operator key) has unrestricted
- *  scopes and counts: a human reviewing by hand is a case this gate exists to allow. */
-async function reviewerCommentIds(db: D1Database, namespace: string): Promise<Set<number>> {
-  const rows = await db
-    .prepare(
-      `SELECT a.actor AS actor, a.params AS params, COALESCE(g.scopes, x.scopes) AS scopes
-         FROM audit_log a
-         LEFT JOIN agents g ON g.name = substr(a.actor, 7)
-         LEFT JOIN agents_archive x ON x.name = substr(a.actor, 7)
-        WHERE a.action = 'manage_pr' AND a.namespace = ?1 AND a.params LIKE '%"comment_id":%'
-        ORDER BY a.id DESC
-        LIMIT ?2`
-    )
-    .bind(namespace, REVIEWER_AUDIT_SCAN)
-    .all<{ actor: string; params: string; scopes: string | null }>();
-  const ids = new Set<number>();
-  for (const row of rows.results ?? []) {
-    if (row.actor?.startsWith("agent:")) {
-      // An agent with no row in either table fails closed. An archived one is judged
-      // on the scopes it held, as it was before it moved (src/agents-archive.ts).
-      if (!row.scopes || !parseScopes(row.scopes).flags.can_comment_pr) continue;
-    }
-    let commentId: unknown;
-    try {
-      commentId = (JSON.parse(row.params) as { comment_id?: unknown }).comment_id;
-    } catch {
+/** The diff as the model reads it: each file's patch under its name, lockfiles left out, cut
+ *  at the cap with a line that says so. */
+function diffText(files: readonly PullFile[]): string {
+  let out = "";
+  for (const f of files) {
+    if (pathClassOf(f.filename) === "deps-other" && !/package\.json$/i.test(f.filename)) {
+      out += `--- ${f.filename} (${f.status ?? "modified"}; a lockfile, not shown)\n`;
       continue;
     }
-    if (typeof commentId === "number") ids.add(commentId);
+    const section = `--- ${f.filename} (${f.status ?? "modified"}${f.previous_filename ? `, was ${f.previous_filename}` : ""})\n${f.patch ?? "(no text diff: binary or too large)"}\n`;
+    if (out.length + section.length > MAX_DIFF_CHARS) {
+      out += `[the diff is cut here at ${MAX_DIFF_CHARS} characters; ${files.length} files changed in all]\n`;
+      break;
+    }
+    out += section;
   }
-  return ids;
+  return out;
 }
 
-/** The gate, end to end: what the review says about this job's pull request. A job
- *  with no pull request proceeds unless requirePullRequest is set. */
-export type GateOutcome = ReviewOutcome & {
-  // The pull request the gate read, so the caller can bind the job to it.
-  pr?: string;
-};
+const SYSTEM = [
+  "You review one pull request for a small network of web apps. You did not write it. CI already ran the tests and type checks, so do not repeat what they catch.",
+  "Look for what passes and is still wrong:",
+  "- misread job: the change does something other than what the job or the description asks.",
+  "- skipped requirement: something the job, the description or the repository's rules require is missing.",
+  "- weak test: a test that would pass even if the change were wrong, or a behavior change with no test where the rules ask for one.",
+  "- bug: code that will misbehave on a real input.",
+  "- security: a secret, an injection, a missing check on who may do something, or untrusted input that is trusted.",
+  "Report only a problem you can point to in the diff. Do not report style, naming or taste. Never invent a file or a line. When nothing is wrong, say APPROVE with no findings; that is the most common right answer.",
+  "Verdict: APPROVE (nothing found), CHANGES (should be fixed before merging), BLOCK (merging it would do harm that is hard to undo: data loss, a leaked secret, a broken deploy).",
+  `Answer by calling report_review once, with at most ${MAX_FINDINGS} findings, the most serious first.`,
+  UNTRUSTED_DATA_RULE,
+].join("\n");
 
-export async function reviewGate(
-  env: Env,
-  // The stored result_ref. On a claimed job only the gate writes it, so a pull request
-  // URL there is the job's own, bound the first time the gate read one.
-  job: { namespace: string; review_required: number; result_ref: string | null },
-  opts: {
-    // Set on `complete` only; see reviewRefusal in src/jobs.ts for why.
-    requirePullRequest?: boolean;
-    // The references this call names: its result_ref, then a complete's evidence.prs.
-    candidateRefs?: readonly (string | null | undefined)[];
-  } = {}
-): Promise<GateOutcome | null> {
-  if (!job.review_required) return null;
-  let named: PrUrl | null = null;
-  for (const ref of opts.candidateRefs ?? []) {
-    named = parsePrUrl(ref);
-    if (named) break;
-  }
-  // Bound to the job's own pull request: once the gate has read one, a call naming a
-  // different one is refused, so a CHANGES cannot be escaped with an older approval.
-  const bound = parsePrUrl(job.result_ref);
-  if (bound && named && !samePr(bound, named)) {
-    return {
-      kind: "waiting",
-      reason:
-        `bound to ${job.result_ref}, the pull request its review gate first read, and this call names ` +
-        `https://github.com/${named.owner}/${named.repo}/pull/${named.number}. A review of a different pull request does not review this job's work.`,
-    };
-  }
-  const pr = bound ?? named;
-  if (!pr) {
-    if (!opts.requirePullRequest) return null;
-    return {
-      kind: "waiting",
-      reason:
-        `posted with review_required and names no pull request. Pass the pull request URL as result_ref, or in evidence.prs, ` +
-        `so that a reviewer has something to read. A job that must be reviewed cannot be handed on with a document key, ` +
-        `because that would let the driver decide whether the review applied.`,
-    };
-  }
-  // Resolved through the namespace mapping, the authorization boundary, as prFacts does.
-  let target: PrUrl;
-  let url: string;
+function prompt(pull: Pull, rules: string, job: { id: string; text: string } | null, diff: string): string {
+  return [
+    `The pull request's title and description:\n${untrusted("pull-request", `${pull.title}\n\n${pull.body}`.slice(0, MAX_CONTEXT_CHARS))}`,
+    job ? `The job it names, ${job.id}:\n${untrusted("job", job.text)}` : "The description names no Capsid job, so judge the change against the description and the rules alone.",
+    rules ? `The repository's rules (CLAUDE.md at the base):\n${untrusted("rules", rules)}` : "The repository has no CLAUDE.md.",
+    `The diff:\n${untrusted("diff", diff)}`,
+  ].join("\n\n");
+}
+
+// The answer as structured output: one call of this tool, its arguments read whole. DeepSeek
+// V4.1 Flash supports function calling on Workers AI; JSON mode does not list it yet.
+const REPORT_TOOL = {
+  type: "function",
+  function: {
+    name: "report_review",
+    description: "Report the review of this pull request.",
+    parameters: {
+      type: "object",
+      properties: {
+        verdict: { type: "string", enum: [...VERDICTS] },
+        summary: { type: "string", description: "One or two plain sentences." },
+        findings: {
+          type: "array",
+          maxItems: MAX_FINDINGS,
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: [...FINDING_KINDS] },
+              file: { type: "string", description: "A path from the diff." },
+              line: { type: ["integer", "null"], description: "The line in the new file, or null." },
+              note: { type: "string", description: "What is wrong and why, in one or two sentences." },
+            },
+            required: ["kind", "file", "line", "note"],
+          },
+        },
+      },
+      required: ["verdict", "summary", "findings"],
+    },
+  },
+} as const;
+
+/** The arguments of the model's report_review call, in either answer shape Workers AI gives
+ *  (its own `tool_calls`, or the OpenAI `choices`), parsed whole. Null when there is none. */
+export function toolArguments(answer: unknown): unknown {
+  const a = answer as {
+    tool_calls?: Array<{ name?: string; arguments?: unknown; function?: { name?: string; arguments?: unknown } }>;
+    choices?: Array<{ message?: { tool_calls?: Array<{ function?: { name?: string; arguments?: unknown } }> } }>;
+  } | null;
+  const calls = [...(a?.tool_calls ?? []), ...(a?.choices?.[0]?.message?.tool_calls ?? [])];
+  const call = calls.find((c) => ((c as { name?: string }).name ?? c.function?.name) === "report_review");
+  const args = (call as { arguments?: unknown } | undefined)?.arguments ?? call?.function?.arguments;
+  if (typeof args !== "string") return args ?? null;
   try {
-    const resolved = await resolveRepo(env, job.namespace, `${pr.owner}/${pr.repo}`);
-    target = { owner: resolved.owner, repo: resolved.repo, number: pr.number };
-    url = `https://github.com/${resolved.full}/pull/${pr.number}`;
-  } catch (err) {
-    return {
-      kind: "waiting",
-      reason:
-        `naming a pull request the review gate may not read: ${err instanceof Error ? err.message : String(err)} ` +
-        `Name a pull request in a repo that namespace ${job.namespace} maps.`,
-    };
+    return JSON.parse(args);
+  } catch {
+    return null;
   }
-  const comments = await readReviewComments(env, target);
-  const eligible = await reviewerCommentIds(env.DB, job.namespace);
-  const review = decidingReview(comments.filter((c) => c.id !== undefined && eligible.has(c.id)));
-  // An APPROVE counts only when it quotes the current head sha, so a push after the
-  // review needs a fresh one. A sha, not a committer date, which the committer sets.
-  // CHANGES and BLOCK need no sha.
-  if (review?.verdict === "APPROVE") {
-    const head = await readHeadSha(env, target);
-    if (!quotesSha(review.said, head)) {
-      return {
-        kind: "waiting",
-        reason:
-          `approved without quoting the current head of ${url}, which is ${head}. An APPROVE counts only when its ` +
-          `${REVIEW_PREFIX} comment quotes the head sha it reviewed (at least ${MIN_QUOTED_SHA} hex characters), so this needs a fresh review.`,
-        pr: url,
-      };
+}
+
+/** Whether the model stopped at max_tokens, which leaves no tool call to read. */
+function ranOut(answer: unknown): boolean {
+  return (answer as { choices?: Array<{ finish_reason?: string }> } | null)?.choices?.[0]?.finish_reason === "length";
+}
+
+/** The model's answer, held to the shape the check shows: a known verdict, at most five
+ *  findings of a known kind on a file the pull request changed. Anything else is null. */
+export function parseVerdict(args: unknown, changed: ReadonlySet<string>): { verdict: Verdict; summary: string; findings: Finding[] } | null {
+  if (!args || typeof args !== "object") return null;
+  const raw = args as { verdict?: unknown; summary?: unknown; findings?: unknown };
+  const verdict = typeof raw.verdict === "string" ? (raw.verdict.trim().toUpperCase() as Verdict) : null;
+  if (!verdict || !VERDICTS.includes(verdict)) return null;
+  const findings: Finding[] = [];
+  for (const f of Array.isArray(raw.findings) ? (raw.findings as Array<Record<string, unknown>>) : []) {
+    const kind = typeof f?.kind === "string" ? (f.kind.trim().toLowerCase() as FindingKind) : null;
+    const file = typeof f?.file === "string" ? f.file.trim().replace(/^[ab]\//, "") : "";
+    const note = typeof f?.note === "string" ? f.note.trim().slice(0, 600) : "";
+    if (!kind || !FINDING_KINDS.includes(kind) || !changed.has(file) || !note) continue;
+    const line = typeof f.line === "number" && Number.isInteger(f.line) && f.line > 0 ? f.line : null;
+    findings.push({ kind, file, line, note });
+    if (findings.length === MAX_FINDINGS) break;
+  }
+  const summary = typeof raw.summary === "string" ? raw.summary.trim().slice(0, 600) : "";
+  return { verdict, summary, findings };
+}
+
+async function record(env: Env, who: ReviewCaller, result: ReviewResult, extra: Record<string, unknown>): Promise<void> {
+  const full = `${who.owner}/${who.repo}`;
+  await auditStatement(env.DB, "system:reviewer", REVIEW_ACTION, null, `${full}#${who.pr}`, { repo: full, pr: who.pr, ...result, ...extra }).run();
+}
+
+export async function handleReviewRun(request: Request, env: Env): Promise<Response> {
+  const who = await caller(request);
+  if (who instanceof Response) return who;
+  const full = `${who.owner}/${who.repo}`;
+  let pull: Pull;
+  try {
+    pull = await readPull(env, who);
+  } catch (err) {
+    return textResponse(`could not read ${full}#${who.pr}: ${err instanceof Error ? err.message : String(err)}`, 502);
+  }
+  const cacheKey = `review:${full.toLowerCase()}:${who.pr}:${pull.head}`;
+  const cached = await env.APP_KV.get(cacheKey, "json");
+  if (cached) return Response.json(cached);
+
+  let result: ReviewResult;
+  let extra: Record<string, unknown> = {};
+  if (RENOVATE.test(pull.author)) {
+    result = { status: "skipped", reasons: ["a Renovate pull request"], head_sha: pull.head };
+  } else {
+    try {
+      const files = await readFiles(env, who);
+      const scope = reviewScope(files);
+      if (!scope.review) {
+        result = { status: "skipped", reasons: scope.reasons, head_sha: pull.head };
+      } else if (!env.AI) {
+        result = { status: "error", error: "this Worker has no AI binding", head_sha: pull.head };
+      } else {
+        const [rules, job] = await Promise.all([readRules(env, who, pull.base), readNamedJob(env, who, pull.body)]);
+        const answer = await env.AI.run(
+          REVIEW_MODEL,
+          { messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt(pull, rules, job, diffText(files)) }], tools: [REPORT_TOOL], tool_choice: "required", reasoning_effort: REASONING, max_tokens: 16_000 },
+          { gateway: { id: REVIEW_GATEWAY, metadata: { app: "capsid-reviewer", repo: full } }, signal: AbortSignal.timeout(MODEL_TIMEOUT_MS) }
+        );
+        const parsed = parseVerdict(toolArguments(answer), new Set(files.map((f) => f.filename)));
+        result = parsed
+          ? { status: "reviewed", ...parsed, model: REVIEW_MODEL, head_sha: pull.head }
+          : { status: "error", error: ranOut(answer) ? "the model ran out of room before it answered" : "the model's answer was not a verdict", head_sha: pull.head };
+        const usage = (answer as { usage?: unknown } | null)?.usage;
+        extra = { job_id: job?.id ?? null, why: scope.reasons, usage: usage ?? null };
+      }
+    } catch (err) {
+      result = { status: "error", error: err instanceof Error ? err.message.slice(0, 300) : String(err), head_sha: pull.head };
     }
   }
-  return { ...outcomeOf(review), pr: url };
+  await record(env, who, result, extra);
+  // An error is not kept, so the next push or a re-run asks again.
+  if (result.status !== "error") await env.APP_KV.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL_S });
+  logEvent("PR_REVIEW", { message: `PR_REVIEW ${full}#${who.pr} ${result.status}${result.status === "reviewed" ? ` ${result.verdict}` : ""}` });
+  return Response.json(result);
 }

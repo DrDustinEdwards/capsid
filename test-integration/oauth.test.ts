@@ -18,10 +18,9 @@ describe("discovery", () => {
     // its path-suffixed location only, on the canonical host, and every 401 challenge
     // names that URL. Measured 2026-09-27: 0.10.3 also answered the bare
     // /.well-known/oauth-protected-resource and any host; 1.1.0 answers 404 to both.
-    // Each MCP host is its own resource (src/mcp-host.ts): mcp.dustinedwards.info, and the
-    // old workers.dev address for the hours of the same-day cut, each served by its own
-    // provider (src/index.ts).
-    for (const origin of ["https://mcp.dustinedwards.info", "https://capsid.dustin-edwards.workers.dev"]) {
+    // The MCP host is the resource (src/mcp-host.ts, src/index.ts).
+    {
+      const origin = "https://mcp.dustinedwards.info";
       const resource = await SELF.fetch(`${origin}/.well-known/oauth-protected-resource/mcp`);
       expect(resource.status, origin).toBe(200);
       const resourceDoc = (await resource.json()) as { resource?: string; authorization_servers?: string[] };
@@ -46,11 +45,8 @@ describe("discovery", () => {
     expect(serverDoc.token_endpoint).toContain("/token");
     // PKCE is the provider default, asserted so it cannot change unnoticed.
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
-    // CIMD for Claude, Claude Code and ChatGPT, and tightened DCR for Grok and Gemini,
-    // on the MCP host only.
+    // CIMD for Claude, Claude Code and ChatGPT, and tightened DCR for Grok and Gemini.
     expect(serverDoc.registration_endpoint).toBe("https://capsid.test/register");
-    const legacy = (await (await SELF.fetch("https://capsid.dustin-edwards.workers.dev/.well-known/oauth-authorization-server")).json()) as { registration_endpoint?: string };
-    expect(legacy.registration_endpoint).toBeUndefined();
     expect((serverDoc as { client_id_metadata_document_supported?: boolean }).client_id_metadata_document_supported).toBe(true);
   });
 });
@@ -73,11 +69,13 @@ describe("tightened dynamic client registration", () => {
     expect(await clients()).toBe(before);
   });
 
-  it("the old address registers nothing", async () => {
-    const before = await clients();
-    const response = await register([GROK], "capsid.dustin-edwards.workers.dev");
-    expect(response.status).not.toBe(201);
-    expect(await clients()).toBe(before);
+  it("a refused registration spends none of the limit, so the live gate's probe cannot use it up", async () => {
+    // Five an hour per address: six refusals from one address all answer 400, never 429
+    // (run 41245505021 rolled a deploy back when the gate's probes had spent the day's 30).
+    for (let i = 0; i < 6; i++) {
+      const response = await register(["https://client.example.com/callback"], "capsid.test", "198.51.100.30");
+      expect(response.status, `refusal ${i + 1}`).toBe(400);
+    }
   });
 
   it("PLANT: Grok's callback registers, and the registration grants nothing: the client meets the consent page", async () => {

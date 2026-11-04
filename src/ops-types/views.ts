@@ -157,12 +157,27 @@ export interface TrendCiRepo {
   truncated: boolean;
 }
 
+// DORA's deploy measures for one repository over the window, from deploy_outcomes (checklist
+// F4): every deploy whose live gate ran, split by what the gate decided.
+export interface TrendDeployRepo {
+  repo: string;
+  deploys: number;
+  per_week: number; // deploy frequency
+  shipped: number; // the gate passed
+  refused: number; // the gate refused: rolled back, rollback failed, or the guard declined
+  rolled_back: number;
+  unverified: number; // the gate could not run; neither shipped nor refused
+  change_failure_rate: number | null; // refused / (shipped + refused); null with none decided
+  restore_median_seconds: number | null; // median time to restore over rolled-back deploys
+}
+
 export interface PortalTrends {
   generated: string;
   weeks: number;
   minutes: { weeks: TrendMinutesWeek[]; truncated: boolean; note: string };
   queue: TrendQueueDay[];
   merges: { weeks: TrendMergeWeek[]; rollbacks: Array<{ at: string; repo: string; pr: number | null; outcome: "rolled_back" | "rollback_failed" }> };
+  deploys: { repos: TrendDeployRepo[] };
   // Visual 6: model spend per week (a read-only sum over job_outcomes.cost_usd).
   cost: { weeks: TrendCostWeek[] };
   // null slots and runs, with error set, when the bucket could not be listed.

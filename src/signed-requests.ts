@@ -12,7 +12,7 @@ import { MINUTE_MS } from "./time";
 // Signed with a backup-specific key derived under its own context, so the mirror job's
 // key opens read access to backups/json/ on a pinned site's backup bucket
 // (src/offaccount.ts) and nothing else. Not under /ops/: an /ops/ path would invite
-// adding the operator-key check.
+// adding the bearer-key check.
 export const BACKUP_CREDENTIAL_PATH = "/backup/credential";
 
 // A signature older than this is refused. It bounds replay to the window in which a

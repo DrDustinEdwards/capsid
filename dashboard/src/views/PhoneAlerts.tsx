@@ -1,6 +1,8 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { PUSH_KEY } from "../lib/keys";
 import { useApp } from "../app/ctx";
-import { fetchPush, postPush, queryClient, useAnswer, type Answer, type PushOp } from "../lib/api";
+import { fetchPush, postPush, useAnswer, type Answer, type PushOp } from "../lib/api";
 import { BASE } from "../lib/base";
 import { ago, msSql } from "../lib/format";
 import type { PortalPush } from "../types";
@@ -11,7 +13,6 @@ import { Panel } from "capsomer/react/panel";
 // Loaded on its own after Settings' first paint, so it adds nothing to the initial
 // script. The alert itself is shown by dashboard/public/sw.js.
 
-const PUSH_KEY = ["push"];
 
 const supported = () => typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
@@ -25,6 +26,7 @@ function deviceLabel(ua: string): string {
 export function PhoneAlerts() {
   const { feed, now, signOut } = useApp();
   const load = useAnswer(PUSH_KEY, fetchPush);
+  const queryClient = useQueryClient();
   const data = load.data;
   const [busy, setBusy] = useState(false);
   const [said, setNote] = useState<{ kind: "ok" | "crit"; text: string } | null>(null);

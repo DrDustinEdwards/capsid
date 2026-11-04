@@ -8,6 +8,6 @@
     "allowJs": true,
     "checkJs": true
   },
-  "files": ["../worker-configuration.d.ts", "../src/generated-env.d.ts"],
-  "include": ["build.mjs", "wrangler-config.mjs", "playwright.config.mjs", "src/pages.mjs", "src/security-headers.mjs", "worker.mjs", "test"]
+  "files": ["../worker-configuration.d.ts", "../src/generated-env.d.ts", "../src/portal-pages.d.ts"],
+  "include": ["build.mjs", "wrangler-config.mjs", "playwright.config.mjs", "src/pages.mjs", "worker.mjs", "test"]
 }

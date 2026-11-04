@@ -1,0 +1,23 @@
+{
+  "mcp": { "entry": "test/conformance/entry.ts", "config": "test/conformance/wrangler.conformance.jsonc", "port": 8789, "persist": ".wrangler/state-conformance", "migrate": "DB" },
+  "auth": {
+    "entry": "test/conformance/auth-entry.ts",
+    "config": "test/conformance/wrangler.conformance.jsonc",
+    "port": 8791,
+    "persist": ".wrangler/state-conformance-auth",
+    "resourceMetadata": false,
+    "note": "The provider's resource is pinned to https://mcp.dustinedwards.info/mcp (src/mcp-host.ts), so on localhost its 401 names no resource_metadata; the live 401 does, and site-runtime's ai-audit checks it there (A2)."
+  },
+  "scenarios": [
+    {
+      "spec": "2026-07-28",
+      "scenario": "server-stateless",
+      "passed": 24,
+      "total": 28,
+      "note": "As Carrel's: undeclared-capability and its HTTP 400 (upstream SDK), and independent requests on the stream and log without logLevel (the suite's diagnostic tools, which Capsid does not serve)"
+    },
+    { "spec": "2026-07-28", "scenario": "http-header-validation" },
+    { "spec": "2025-11-25", "scenario": "server-initialize" }
+  ],
+  "registration": { "allowed": "https://grok.com/connectors/oauth/callback" }
+}

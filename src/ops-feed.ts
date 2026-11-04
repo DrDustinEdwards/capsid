@@ -1,6 +1,6 @@
 import { gatherInbox } from "./inbox";
 import { adminAgentForEmail } from "./agents";
-import { cookieName, getCookie } from "./auth";
+import { capsidCookie, getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
 import { loadMergePolicy } from "./auto-merge-policy";
 import { readSafetyReport } from "./merge-safety";
@@ -25,7 +25,6 @@ import { openQuietFindings } from "./watcher-digest";
 import { DEFAULT_CADENCE_MINUTES, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { pendingProposals } from "./canon";
 import { textResponse } from "./http";
 import { MINUTE_MS, DAY_MS } from "./time";
 
@@ -41,15 +40,14 @@ import { MINUTE_MS, DAY_MS } from "./time";
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 14 statements plus one per TASKS entry (9 today, so 23):
+//   D1, 14 statements plus one per TASKS entry (18 today, so 32):
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     3  agentSummaries: the inventory, then loadRecordRows' two grouped reads
 //     1  job_outcome_prs in the last 7 days
 //     1  ops_sites: the site configuration, every row
 //     1  ops_packages: the package configuration, every row
 //     1  agent_sessions: live sessions from the hook receiver, at most 50
-//     1  canon_proposals: the pending proposals joined to their documents, at most 50
-//     9  task_runs: each scheduled task's newest runs, one keyed read per task in
+//    18  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
 //     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
 //     1  ops_uptime_daily: each site's last 90 days, grouped (siteUptime below)
@@ -71,7 +69,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
 // D1 statements: one per task, and 14 more, one of them the signed policy's read (liveMergePolicy).
-export const OPS_FEED_READS = { d1: 15 + TASKS.length, kv: 10 } as const;
+export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 } as const;
 
 // The uptime target the Portal shows each site against (area 8, U4).
 const UPTIME_TARGET = 0.999;
@@ -109,7 +107,7 @@ export function portalCsrf(request: Request): { value: string; setCookie: string
   const path = portalCookiePath(new URL(request.url));
   return {
     value,
-    setCookie: `${cookieName(PORTAL_CSRF_COOKIE, path)}=${value}; HttpOnly; Secure; SameSite=Lax; Path=${path}; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`,
+    setCookie: capsidCookie(PORTAL_CSRF_COOKIE, value, path, PORTAL_SESSION_TTL_SECONDS),
   };
 }
 
@@ -371,7 +369,7 @@ async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
 }
 
 async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, canonProposals, inbox, findings, mergePolicy] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, inbox, findings, mergePolicy] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -381,7 +379,6 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     liveSessions(env.DB, now),
     readPackageConfig(env.DB),
     overnightState(env),
-    pendingProposals(env.DB),
     gatherInbox(env, now, null),
     openQuietFindings(env.DB),
     liveMergePolicy(env),
@@ -400,7 +397,6 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     sites,
     packages,
     store: { size_bytes: jobRead.sizeBytes, cap_bytes: D1_CAP_BYTES },
-    canon_proposals: canonProposals,
     inbox,
     findings,
   };

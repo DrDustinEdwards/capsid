@@ -44,7 +44,7 @@ export const ACCESS_SAAS = {
 // Resolution elsewhere is by EXACT TITLE and refuses ambiguity: the account also
 // contains a namespace literally titled "OAUTH_KV" belonging to dustinedwards-mcp.
 export const APP_KV = { name: "capsid-app-kv-v2", id: "21465e558b464cbf893753d2b2cb7829" };
-export const OAUTH_KV = { name: "capsid-oauth", id: "5fac20b95ad541a39f24eb8c5a753b6c" };
+export const OAUTH_KV = { name: "capsid-mcp-oauth", id: "5fac20b95ad541a39f24eb8c5a753b6c" };
 
 export const R2 = { name: "capsid-media" };
 

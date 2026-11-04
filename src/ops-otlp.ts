@@ -448,7 +448,7 @@ export async function recordExport(
   return json({ partialSuccess: { rejectedDataPoints: rejected, errorMessage: problems.join("; ") } });
 }
 
-async function handle(request: Request, env: { DB: D1Database; OPERATOR_KEY_HASH?: string }, parse: (body: unknown) => ParsedExport): Promise<Response> {
+async function handle(request: Request, env: { DB: D1Database }, parse: (body: unknown) => ParsedExport): Promise<Response> {
   const caller = await resolveSessionCaller(request, env);
   if (caller instanceof Response) return caller;
   const body = await readOtlpBody(request);
@@ -463,10 +463,10 @@ async function handle(request: Request, env: { DB: D1Database; OPERATOR_KEY_HASH
   return recordExport(env.DB, caller, parse(decoded), new Date());
 }
 
-export function handleOtlpMetrics(request: Request, env: { DB: D1Database; OPERATOR_KEY_HASH?: string }): Promise<Response> {
+export function handleOtlpMetrics(request: Request, env: { DB: D1Database }): Promise<Response> {
   return handle(request, env, parseMetrics);
 }
 
-export function handleOtlpLogs(request: Request, env: { DB: D1Database; OPERATOR_KEY_HASH?: string }): Promise<Response> {
+export function handleOtlpLogs(request: Request, env: { DB: D1Database }): Promise<Response> {
   return handle(request, env, parseLogs);
 }

@@ -267,7 +267,7 @@ test("hybrid search says why instead of answering when the index cannot, so the 
   assert.equal(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: failing.ns }), "q", filter, DAY1), "the search index is not built yet");
   const capped = fakeKv({ seed: { ...READY, "doc-index:queries:2026-10": String(HYBRID_MONTHLY_CAP) } });
   assert.match(String(await hybridSearch(fakeEnv({ DB: db, APP_KV: capped.kv, AI_SEARCH: failing.ns }), "q", filter, DAY1)), /hybrid queries are used/);
-  assert.match(String(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv, AI_SEARCH: failing.ns }), "q", filter, DAY1)), /refused the query: index unavailable/);
+  assert.match(String(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv, AI_SEARCH: failing.ns }), "q", filter, DAY1)), /^the search index did not answer$/);
 });
 
 test("when the index refuses every document the cursor stays, reconcile waits, and the note names the refusal", async () => {

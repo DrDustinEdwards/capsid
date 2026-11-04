@@ -10,6 +10,7 @@ import { repoPathProblem } from "../limits";
 import type { RepoEnv as Env } from "../env";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { base64url } from "@dustinedwards/site-runtime/encoding";
+import { callSignal } from "../call-signal";
 
 const GH = "https://api.github.com";
 const GH_HEADERS: Record<string, string> = {
@@ -76,7 +77,7 @@ async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Res
   return fetch(`${GH}${path}`, {
     ...init,
     headers: { ...GH_HEADERS, ...(init?.headers as Record<string, string>), Authorization: `Bearer ${jwt}` },
-    signal: init?.signal ?? AbortSignal.timeout(GH_TIMEOUT_MS),
+    signal: init?.signal ?? callSignal(GH_TIMEOUT_MS),
   });
 }
 
@@ -163,7 +164,7 @@ export async function listInstalledRepos(env: Env): Promise<{ repos: InstalledRe
       if (page > LIST_MAX_PAGES) throw new Error(`installation ${id} lists more than ${LIST_MAX_PAGES * LIST_PER_PAGE} repos`);
       const resp = await fetch(`${GH}/installation/repositories?per_page=${LIST_PER_PAGE}&page=${page}`, {
         headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(GH_TIMEOUT_MS),
+        signal: callSignal(GH_TIMEOUT_MS),
       });
       if (!resp.ok) throw new Error(`could not list the repos of installation ${id} (${resp.status})`);
       const body = (await resp.json()) as {
@@ -211,7 +212,7 @@ export async function ghFetch(env: Env, owner: string, repo: string, path: strin
     fetch(url, {
       ...init,
       headers: { ...GH_HEADERS, ...(init?.headers as Record<string, string>), Authorization: `Bearer ${token}` },
-      signal: init?.signal ?? AbortSignal.timeout(GH_TIMEOUT_MS),
+      signal: init?.signal ?? callSignal(GH_TIMEOUT_MS),
     });
   let resp = await call(await getInstallationToken(env, owner, repo));
   if (resp.status === 401) {
@@ -322,9 +323,9 @@ export function requireSinglePrimary(list: RepoEntry[]): string | null {
   return primaries === 1 ? null : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
 
-// https://github.com/<owner>/<repo>/pull/<number>, as capsid_open_pr action open returns it and a
-// driver pastes it. The one spelling for every site that reads one (the review gate,
-// the evidence verifier and the prose scan in outcome-prs.ts): separate spellings
+// https://github.com/<owner>/<repo>/pull/<number>, as GitHub returns it and a driver
+// pastes it. The one spelling for every site that reads one (the CI gate, the evidence
+// verifier and the prose scan in outcome-prs.ts): separate spellings
 // with different character classes let the gate accept owner/repo strings the
 // verifier refused. The owner and repo are what the URL says, not what the namespace
 // maps: a caller resolves them through resolveRepo before reaching GitHub.
@@ -425,15 +426,6 @@ export async function getRefSha(env: Env, owner: string, repo: string, branch: s
   const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
   if (!resp.ok) throw new Error(`ref lookup failed for ${branch} (${resp.status}): ${await resp.text()}`);
   return ((await resp.json()) as { object: { sha: string } }).object.sha;
-}
-
-export async function getFileSha(env: Env, owner: string, repo: string, path: string, ref: string): Promise<string | undefined> {
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`);
-  if (resp.status === 404) return undefined;
-  if (!resp.ok) throw new Error(`file sha lookup failed (${resp.status}): ${await resp.text()}`);
-  const data = (await resp.json()) as { sha: string } | unknown[];
-  if (Array.isArray(data)) throw new Error(`${path} is a directory`);
-  return data.sha;
 }
 
 // The default branch's head commit sha. listRepoTree has no top-level sha (its shas

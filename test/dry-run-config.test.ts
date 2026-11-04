@@ -32,17 +32,16 @@ test("it writes wrangler.dryrun.jsonc and leaves an existing wrangler.jsonc alon
 
 // Capsid Portal's assets block (wrangler.jsonc.example). run_worker_first true is
 // what keeps a browser's /authorize and /portal/callback navigations reaching the
-// Worker; not_found_handling "none" leaves the single-page fallback to the Worker, after
-// the Portal gate.
+// Worker; not_found_handling "none" leaves every page to the Worker, after the Portal gate.
 test("the example serves the dashboard with every request reaching the Worker first", () => {
   const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
   const line = example.split("\n").find((l) => l.trim().startsWith('"assets"'));
   assert.ok(line, "wrangler.jsonc.example has no assets block");
   const assets = JSON.parse(line.trim().replace(/^"assets":\s*/, "").replace(/,$/, "")) as Record<string, unknown>;
   assert.equal(assets.run_worker_first, true, "run_worker_first must be true, or navigations can be answered with index.html");
-  assert.equal(assets.not_found_handling, "none", "the platform's single-page fallback would run before the Portal gate");
+  assert.equal(assets.not_found_handling, "none", "the platform's own fallback would run before the Portal gate");
   assert.equal(assets.binding, "ASSETS");
-  assert.equal(assets.directory, "./dashboard/dist");
+  assert.equal(assets.directory, "./dashboard/build/client");
 });
 
 test("the dry run drops the assets block, since `npm run types` builds no dashboard", () => {

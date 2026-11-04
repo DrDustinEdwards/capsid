@@ -9,8 +9,8 @@ import { St } from "../ui/icons";
 // SHARED CODE (job_584b4e7f2824): how far the centralization has got. One panel per shared
 // package from configuration (shared_packages), each app that uses it with the tag it
 // pins and how many releases behind it is, and the known local copies still in the apps.
-// Read from GET /portal/api/shared-code, which reads the repos through the GitHub App and
-// keeps the answer for an hour. Nothing here changes anything. The Packages view (npm
+// Read from GET /portal/api/shared-code: what the nightly build read from every repo in the
+// system model through the GitHub App (src/system-facts.ts). Nothing here changes anything. The Packages view (npm
 // statistics) stays as it is.
 
 export function SharedCode() {
@@ -39,7 +39,7 @@ export function SharedCode() {
           {/* What was read, at the foot: a view's heading stands alone (design D13). */}
           <p className="faint shared-read">
             Read {ago(ms(data.generated), now)} from {data.apps_read} {data.apps_read === 1 ? "app" : "apps"}
-            {data.apps_failed.length ? `; ${data.apps_failed.length} could not be read: ${data.apps_failed.map((a) => `${a.namespace} (${a.error})`).join("; ")}` : ""}. Kept for an hour.
+            {data.apps_failed.length ? `; ${data.apps_failed.length} could not be read: ${data.apps_failed.map((a) => `${a.namespace} (${a.error})`).join("; ")}` : ""}. Read nightly.
           </p>
         </>
       )}

@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import type { SiteOperator } from "./ops-types/sites";
 import { MINUTE_MS } from "./time";
+import { callSignal } from "./call-signal";
 
 // A SITE'S OPERATOR API (job_09e5f6cbf782, Dustin 2026-10-03). Capsid is the operations
 // hub and may trigger an allowlist of a site's own repair tools, so the repairs, the
@@ -154,7 +155,7 @@ export async function callOperator(
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "user-agent": "capsid" },
       body: JSON.stringify({ tool, args: {} }),
       redirect: "manual",
-      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+      signal: callSignal(CALL_TIMEOUT_MS),
     });
     payload = await response.json().catch(() => null);
   } catch (err) {

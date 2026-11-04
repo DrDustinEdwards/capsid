@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { claimJob, failAsCaller, postJob } from "../src/jobs";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey, breakerState, resetBreaker } from "../src/job-breaker";
 
@@ -10,7 +11,7 @@ import { BREAKER_THRESHOLD_KEY, breakerResetKey, breakerState, resetBreaker } fr
 // audit_log.at is the database's own clock, so these run on the real time.
 
 const SECRET = "test-root-secret";
-const POSTER = legacyAgent("write", "github:DrDustinEdwards");
+const POSTER = grantAgent("write", "github:DrDustinEdwards");
 
 function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
@@ -50,8 +51,7 @@ async function status(id: string) {
 }
 
 beforeEach(async () => {
-  for (const table of ["jobs", "audit_log", "job_outcomes"]) await env.DB.prepare(`DELETE FROM ${table}`).run();
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   for (const ns of ["capsid", "sample"]) {
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
       .bind(ns, JSON.stringify([{ repo: `example/${ns}`, label: "primary" }]))

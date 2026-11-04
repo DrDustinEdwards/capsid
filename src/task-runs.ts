@@ -23,6 +23,7 @@ export type TaskId =
   | "maintenance"
   | "site-repair"
   | "public-build"
+  | "system-facts"
   | "push"
   | "digest"
   | "merge-units"
@@ -30,7 +31,8 @@ export type TaskId =
   | "doc-index"
   | "supersede"
   | "site-pulse"
-  | "signed-in-crawl";
+  | "signed-in-crawl"
+  | "tool-call-log-export";
 
 // Each task, and how long it may go without a run before the Portal says it has
 // gone quiet: twice its period, Foxhound's rule (app/lib/cron/alerts.server.ts),
@@ -63,6 +65,8 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   { id: "site-repair", label: "Site repairs", period_ms: null },
   // The public system model (src/public-data.ts), built once a UTC day on the tick.
   { id: "public-build", label: "Public model build", period_ms: DAY_MS },
+  // The versions and secrets models (src/system-facts.ts), built once a UTC day on the tick.
+  { id: "system-facts", label: "Versions and secrets build", period_ms: DAY_MS },
   // Phone alerts (src/push.ts), on the tick; recorded only when an alert was due.
   { id: "push", label: "Phone alerts", period_ms: null },
   // The daily email digest (src/digest.ts), on the tick; off until Email Routing is on,
@@ -83,11 +87,25 @@ export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number
   // The five-minute site pulse (src/site-pulse.ts), on the tick; recorded only when a site
   // was called down or came back.
   { id: "site-pulse", label: "Site pulse", period_ms: null },
-  // The signed-in crawl of the Portal and Desk (src/signed-in-crawl.ts), hourly on the tick.
+  // The signed-in crawl of the Portal (src/signed-in-crawl.ts), hourly on the tick.
   { id: "signed-in-crawl", label: "Signed-in header crawl", period_ms: 2 * HOUR_MS },
+  // The daily copy of the tool-call log to AUDIT_BUCKET (site-runtime exportAuditLog; area
+  // 11, L6-L7), with the backup.
+  { id: "tool-call-log-export", label: "Tool-call log export", period_ms: DAY_MS },
 ];
 
 const STALE_PERIODS = 2;
+// How long the newest failure of a task without a period counts as current. Such a task
+// records a run only when it acts, so no later "ok" row may ever come to clear a failure:
+// doc-index stays silent while nothing changes, site-repair while no site drifts. Read
+// as current forever, one transient refusal (an AI Search timeout, a slow operator call)
+// held /health at warn for days after the cause was fixed. Best practice for event
+// alerts is a window the event ages out of (Prometheus increase(errors[window]) > 0; the
+// SRE workbook's "reset time": an alert that keeps firing after recovery gets ignored).
+// A day is the longest retry among these tasks (doc-index's daily reconcile, the daily
+// digest; site-repair retries every 30 minutes, up to AUTO_PER_DAY times), so a fault that
+// persists fails again, and is flagged again, before its last failure ages out.
+const EVENT_FAILURE_WINDOW_MS = DAY_MS;
 // Rows older than this are pruned, PRUNE_BATCH at a time on each write.
 export const RUN_RETENTION_DAYS = 14;
 const PRUNE_BATCH = 50;
@@ -206,7 +224,9 @@ export async function readTaskRuns(db: D1Database): Promise<Map<TaskId, OpsTaskR
 }
 
 /** Each task with its newest runs and its flag, decided at `now`.
- *  - `failing`: the newest run threw or was refused.
+ *  - `failing`: the newest run threw or was refused; for a task without a period, only
+ *    while that run is inside EVENT_FAILURE_WINDOW_MS. A periodic task's next run is its
+ *    retry, so its failure stands until that run.
  *  - `quiet`: a periodic task whose newest run is more than STALE_PERIODS periods old.
  *  - `never`: no run in the ledger. A notice, not a fault: after the migration every
  *    task starts here, and the daily ones stay here until their hour. */
@@ -217,7 +237,9 @@ export function taskStates(runs: Map<TaskId, OpsTaskRun[]>, now: Date, watcherCa
     const period = t.id === "watcher" ? watcherCadenceMin * MINUTE_MS : t.period_ms;
     let flag: OpsTask["flag"] = null;
     if (last === null) flag = "never";
-    else if (last.outcome === "threw" || last.outcome === "refused") flag = "failing";
+    else if (last.outcome === "threw" || last.outcome === "refused") {
+      if (t.period_ms !== null || now.getTime() - Date.parse(last.finished_at) <= EVENT_FAILURE_WINDOW_MS) flag = "failing";
+    }
     else if (period !== null && now.getTime() - Date.parse(last.finished_at) > STALE_PERIODS * period) flag = "quiet";
     return { id: t.id, label: t.label, period_ms: period, flag, recent };
   });

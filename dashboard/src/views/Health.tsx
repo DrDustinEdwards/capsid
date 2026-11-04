@@ -1,5 +1,5 @@
 import { Suspense, lazy, useSyncExternalStore, type ReactNode } from "react";
-import { Link } from "wouter";
+import { Link } from "../lib/router";
 import { HEALTH_TABS, healthTab, placePath, useApp, type HealthTab } from "../app/ctx";
 import { WAITING_KINDS, attentionGroups, hasSites, type AttentionRow } from "../lib/derive";
 import { St } from "../ui/icons";
@@ -26,7 +26,8 @@ const NAMED = 3;
 
 // The address's #fragment, followed as it changes.
 const onHash = (cb: () => void) => (window.addEventListener("hashchange", cb), () => window.removeEventListener("hashchange", cb));
-const useHash = () => useSyncExternalStore(onHash, () => window.location.hash.slice(1));
+// The server never sees the fragment, so its render is the bare address.
+const useHash = () => useSyncExternalStore(onHash, () => window.location.hash.slice(1), () => "");
 
 export function Health() {
   const { feed } = useApp();

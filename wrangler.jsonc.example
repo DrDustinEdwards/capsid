@@ -2,6 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "capsid-mcp",
   "main": "src/index.ts",
+  // Off: the Worker answers only on its Custom Domains (src/mcp-host.ts, src/portal-host.ts).
+  // The workers.dev address served the MCP endpoint until the move to mcp.dustinedwards.info.
+  "workers_dev": false,
   // Bumped 2026-06-01 -> 2026-09-06 (platform arc). nodejs_compat is enabled by
   // default for dates >= 2026-08-04, so the explicit flag below is now redundant;
   // it stays because an explicit flag survives a future date rollback and costs
@@ -57,16 +60,19 @@
   //                  src/skills-refresh.ts decides whether today is the
   //                  configured day, so the day is a KV edit not a redeploy.
   "triggers": { "crons": ["0 9 * * *", "*/5 * * * *", "30 9 * * *"] },
-  // CAPSID PORTAL (dashboard/, built to dashboard/dist by scripts/deploy.mjs).
+  // CAPSID PORTAL (dashboard/, built by scripts/deploy.mjs): server-rendered pages and their files.
+  // The pages are dashboard/build/worker/portal.js, bundled into this Worker under the name
+  // src/portal-pages.d.ts declares (the alias below); the files are dashboard/build/client.
   // run_worker_first is REQUIRED, not a preference: with it off, the platform's
   // navigation handling could answer a browser's /authorize or /portal/callback with
-  // index.html and break both logins. Every request reaches the Worker, which serves an
-  // asset only under /portal/ and only after the Portal gate. not_found_handling
-  // is "none" because the Worker does the single-page fallback itself, after the gate.
-  // scripts/dry-run-config.mjs removes this block (between the two markers) for
-  // `npm run types`, which builds no dashboard.
+  // a file and break both logins. Every request reaches the Worker, which serves the hashed
+  // files on the Portal host and everything else only after the Portal gate.
+  // not_found_handling is "none" because every page is the Worker's own render.
+  // scripts/dry-run-config.mjs removes the assets block (between the two markers) for
+  // `npm run types`; the alias stays, so the dry run measures the pages with the Worker.
+  "alias": { "capsid-portal-pages": "./dashboard/build/worker/portal.js" },
   // ASSETS-BEGIN
-  "assets": { "directory": "./dashboard/dist", "binding": "ASSETS", "run_worker_first": true, "not_found_handling": "none" },
+  "assets": { "directory": "./dashboard/build/client", "binding": "ASSETS", "run_worker_first": true, "not_found_handling": "none" },
   // ASSETS-END
   // Non-secret vars. The GitHub App client id is public; the App private key is set
   // with `wrangler secret put` and never committed. The installation id is not
@@ -83,9 +89,6 @@
   //   wrangler secret put BING_WEBMASTER_API_KEY       (capsid_inspect_repo action bing:
   //                                                     Bing Webmaster Tools' API key,
   //                                                     docs/bing-webmaster.md)
-  //   wrangler secret put DESK_CRAWL_CLIENT_ID         (the signed-in crawl's Access service
-  //   wrangler secret put DESK_CRAWL_CLIENT_SECRET     token for Carrel Desk, src/signed-in-crawl.ts,
-  //                                                     docs/live-checks.md)
   "vars": {
     "GITHUB_APP_CLIENT_ID": "YOUR_GITHUB_APP_CLIENT_ID"
   },
@@ -117,12 +120,20 @@
     {
       "binding": "MEDIA",
       "bucket_name": "YOUR_R2_BUCKET"
+    },
+    // The tool-call log's copies (area 11, L6-L7), and nothing else: the daily 09:00 run
+    // copies new TOOL_CALL_LOG rows here as tool-calls/<first>-<last>.json, then the log
+    // drops copied rows older than 90 days. A lock rule on tool-calls/ keeps a copy from
+    // being changed or removed. Its own bucket, so MEDIA's prune never reaches it.
+    {
+      "binding": "AUDIT_BUCKET",
+      "bucket_name": "capsid-mcp-tool-calls"
     }
   ],
   // TWO DURABLE OBJECTS from @dustinedwards/site-runtime, exported by src/index.ts.
   //   RATE_LIMITER   the family's exact limiter (site-runtime/rate-limit): /mcp and
-  //                  /ops/mcp per caller, the CSP report sink, the public documents and
-  //                  the Access sync. Each fails closed when it cannot count.
+  //                  /ops/mcp per caller, the CSP report sink and the public documents.
+  //                  Each fails closed when it cannot count.
   //   TOOL_CALL_LOG  the append-only, hash-chained log of every tool call (site-runtime
   //                  /audit-log): refused, started, finished, and each MCP sign-in.
   // Both are SQLite-backed, so their classes are created by the migration below.
@@ -142,5 +153,11 @@
       "binding": "AI_SEARCH",
       "namespace": "default"
     }
-  ]
+  ],
+  // THE AUTOMATIC PR REVIEWER (src/review.ts). Workers AI, each call routed through the
+  // account's `default` AI Gateway by the call itself, so the gateway's logs and spend limit
+  // apply. No id: the binding is the account's.
+  "ai": {
+    "binding": "AI"
+  }
 }

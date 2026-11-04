@@ -1,8 +1,10 @@
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
-import { readRepoFile, repoBlobPaths } from "./github/contents";
-import { readNpm, type FetchLike } from "./ops-packages";
-import { readSiteConfig, isFurtherHost } from "./ops-sites";
+import { parseReposList } from "./github/client";
+import { readNpm, readNpmVersions, readPackageConfig, type FetchLike } from "./ops-packages";
+import { npmLockVersions, pnpmLockVersions, workflowPins } from "./lockfiles";
+import { bundledModel } from "./public-data";
+import type { SystemModel } from "./system-model";
 import type { PackageSnapshot } from "./ops-types/sites";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types/feed";
 import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
@@ -14,14 +16,19 @@ const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase
 // (shared_packages, migrations/0036): its newest tag, the tag each app pins, how many
 // releases behind each app is, and how many known local copies are still in the apps.
 //
-// The apps are the configured sites' namespaces (ops_sites, the same list the inbox and
-// the watcher use), each read on its default branch through the GitHub App the watcher
-// already uses: one recursive tree, then every package.json outside node_modules (up to
-// MANIFESTS_PER_APP) and the Renovate config. Every shared package is a git dependency
-// ("github:DrDustinEdwards/<repo>#v1.2.3"), so the manifest names the tag itself; the
-// lockfile is read only for a spec with no tag, for the version it resolved. devkit is
-// a Renovate preset ("github>DrDustinEdwards/devkit"), so it is found in the Renovate
-// config, not in a manifest.
+// THE VERSIONS MODEL (Dustin, 2026-11-03: which Enarratio, Capsomer and devkit version each
+// site is pinned to, so a fix does not mean hunting through every repo). The apps are every
+// repo system/model.json names, each read on its default branch through the GitHub App: one
+// recursive tree, then every package.json outside node_modules (up to MANIFESTS_PER_APP),
+// the lockfile that covers it (package-lock.json or pnpm-lock.yaml, src/lockfiles.ts), the
+// Renovate config and the workflow files. The packages are the shared ones (shared_packages,
+// git dependencies, "github:DrDustinEdwards/<repo>#v1.2.3") and the published ones the
+// Packages view watches (ops_packages: Enarratio and its Astro packages, from npm). A pin is
+// the version the lockfile installed, else the tag the spec names. devkit is also a
+// Renovate preset ("github>DrDustinEdwards/devkit") and a set of reusable workflows
+// ("uses: DrDustinEdwards/devkit/.github/workflows/x.yml@<sha> # v0.21.0"), so it is found
+// in those too. The nightly build (src/system-facts.ts) publishes it per system
+// (src/system-versions.ts) and lists drift.
 //
 // Release tracking (Capsid improvement list, item 13): each package's own repo is read
 // too, for the version in its root package.json on the default branch, whether that
@@ -31,14 +38,19 @@ const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase
 // maintenance pass tags an untagged version (src/maintenance-releases.ts), using
 // releaseDecision below, so the view and the pass agree on what "untagged" means.
 //
-// Read on demand by the Portal (GET /portal/api/shared-code) and kept for an hour in KV:
-// a few dozen GitHub reads per refresh, not per watcher pass. Read-only: it writes
-// nothing but its own cache. The key's version moves when the view's shape does, so a
-// cached answer without the newer fields is never served.
+// Read nightly by src/system-facts.ts and kept in KV, where the Portal (GET
+// /portal/api/shared-code) reads it: a few hundred GitHub reads a night, not per page.
+// The Portal reads afresh only when nothing is kept. Read-only: it writes nothing but its
+// own cache. The key's version moves when the view's shape does, so a cached answer
+// without the newer fields is never served.
 
-export const SHARED_CODE_CACHE_KEY = "portal:shared-code:v2";
-const CACHE_TTL_SECONDS = 3600;
-const MANIFESTS_PER_APP = 8;
+export const SHARED_CODE_CACHE_KEY = "portal:shared-code:v3";
+// The nightly build (src/system-facts.ts) writes the view; the Portal reads that. Kept a
+// day and a half, so a build that stops leaves the view to be read afresh, not served stale.
+const CACHE_TTL_SECONDS = 36 * 3600;
+const APP_CONCURRENCY = 6;
+const MANIFESTS_PER_APP = 16;
+const WORKFLOWS_PER_APP = 40;
 const TAGS_PER_PAGE = 100;
 const RENOVATE_FILES = ["renovate.json", ".github/renovate.json", "renovate.json5", ".github/renovate.json5", ".renovaterc", ".renovaterc.json"];
 
@@ -52,6 +64,8 @@ interface SharedRow {
 export interface SharedConfig {
   name: string;
   repo: string;
+  // git when absent: a GitHub dependency. npm: matched by package name in the manifests.
+  registry?: "git" | "npm";
   // Earlier names of the repo (security-headers for site-runtime): an app still pinned
   // through GitHub's redirect counts as a consumer.
   formerly: string[];
@@ -175,13 +189,17 @@ export interface ReleaseRead {
   npm: PackageSnapshot["npm"] | null;
 }
 
-interface AppRead {
+export interface AppRead {
   namespace: string;
   name: string;
+  system?: string;
+  repo?: string;
   blobs: Set<string> | null;
-  // Each manifest's dependencies of every kind, by path.
+  // Each manifest's dependencies of every kind, by path, and the versions its lockfile installed.
   manifests: Array<{ path: string; deps: Record<string, string>; lockVersions: Record<string, string> }>;
   presets: string[];
+  // Each workflow file's `uses:` pins.
+  workflows?: Array<{ path: string; pins: Array<{ repo: string; pinned: string | null }> }>;
   error: string | null;
 }
 
@@ -200,20 +218,46 @@ export function sharedCodeView(
     const latest = latestTag(list);
     // Without the tags, how far behind is unknown, never zero.
     const behind = (pinned: string | null) => (Array.isArray(t) ? behindBy(pinned, list) : null);
+    const npm = pkg.registry === "npm";
+    // An npm package is known by its name and any earlier one.
+    const npmNames = new Set([pkg.name, ...pkg.formerly]);
     const users: SharedCodeApp[] = [];
     for (const app of apps) {
+      const who = { namespace: app.namespace, name: app.name, system: app.system ?? null, repo: app.repo ?? null };
       for (const m of app.manifests) {
         for (const [dep, spec] of Object.entries(m.deps)) {
           const g = gitSpec(spec);
+          if (npm) {
+            if (g || !npmNames.has(dep) || /^(?:workspace|file|link):/.test(spec)) continue;
+            const exact = /^v?\d+\.\d+\.\d+$/.test(spec) ? (spec.startsWith("v") ? spec : `v${spec}`) : null;
+            const pinned = m.lockVersions[dep] ?? exact;
+            users.push({ ...who, where: m.path, pinned, behind: behind(pinned), via_old_name: dep !== pkg.name });
+            continue;
+          }
           if (!g || !names.has(g.repo)) continue;
-          const pinned = g.ref ?? m.lockVersions[dep] ?? null;
-          users.push({ namespace: app.namespace, name: app.name, where: m.path, pinned, behind: behind(pinned), via_old_name: g.repo !== pkg.repo.toLowerCase() });
+          const pinned = m.lockVersions[dep] ?? g.ref ?? null;
+          users.push({ ...who, where: m.path, pinned, behind: behind(pinned), via_old_name: g.repo !== pkg.repo.toLowerCase() });
         }
       }
+      if (npm) continue;
       for (const entry of app.presets) {
         const p = presetSpec(entry);
         if (!p || !names.has(p.repo)) continue;
-        users.push({ namespace: app.namespace, name: app.name, where: "renovate", pinned: p.ref, behind: behind(p.ref), via_old_name: p.repo !== pkg.repo.toLowerCase() });
+        users.push({ ...who, where: "renovate", pinned: p.ref, behind: behind(p.ref), via_old_name: p.repo !== pkg.repo.toLowerCase() });
+      }
+      // One row per version the workflows pin, so a repo whose files disagree shows both.
+      const byPin = new Map<string | null, { files: number; old: boolean }>();
+      for (const w of app.workflows ?? []) {
+        for (const pin of w.pins) {
+          if (!names.has(pin.repo)) continue;
+          const row = byPin.get(pin.pinned) ?? { files: 0, old: false };
+          row.files += 1;
+          row.old ||= pin.repo !== pkg.repo.toLowerCase();
+          byPin.set(pin.pinned, row);
+        }
+      }
+      for (const [pinned, row] of byPin) {
+        users.push({ ...who, where: `.github/workflows (${row.files} ${row.files === 1 ? "use" : "uses"})`, pinned, behind: behind(pinned), via_old_name: row.old });
       }
     }
     const local = pkg.local_paths.map((entry) => {
@@ -228,6 +272,7 @@ export function sharedCodeView(
     return {
       name: pkg.name,
       repo: pkg.repo,
+      registry: npm ? "npm" : "git",
       latest,
       tags_error: typeof t === "string" ? t : null,
       ...release,
@@ -242,7 +287,7 @@ export function sharedCodeView(
     configured: true,
     error: null,
     apps_read: apps.filter((a) => a.error === null).length,
-    apps_failed: apps.filter((a) => a.error !== null).map((a) => ({ namespace: a.namespace, error: a.error! })),
+    apps_failed: apps.filter((a) => a.error !== null).map((a) => (a.system ? { namespace: a.namespace, system: a.system, error: a.error! } : { namespace: a.namespace, error: a.error! })),
     packages,
   };
 }
@@ -308,36 +353,94 @@ function depsOf(raw: string): Record<string, string> {
   return out;
 }
 
-async function readApp(env: Env, namespace: string, name: string): Promise<AppRead> {
-  const app: AppRead = { namespace, name, blobs: null, manifests: [], presets: [], error: null };
+/** One file of a repo on its default branch, as text, through the App, uncached: the
+ *  nightly build reads a few hundred files and would otherwise write as many cache keys. */
+async function rawFile(env: Env, full: string, path: string): Promise<string> {
+  const [owner, repo] = full.split("/");
+  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}`, { headers: { Accept: "application/vnd.github.raw+json" } });
+  if (!resp.ok) {
+    await resp.body?.cancel();
+    throw new Error(`GitHub answered ${resp.status} for ${full}'s ${path}`);
+  }
+  return resp.text();
+}
+
+/** Every blob path on the default branch, or an error when the tree is missing or truncated. */
+async function blobPaths(env: Env, full: string): Promise<Set<string>> {
+  const [owner, repo] = full.split("/");
+  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
+  if (!resp.ok) {
+    await resp.body?.cancel();
+    throw new Error(`its file tree could not be read (GitHub answered ${resp.status})`);
+  }
+  const tree = (await resp.json()) as { tree?: Array<{ path: string; type: string }>; truncated?: boolean };
+  if (!Array.isArray(tree.tree) || tree.truncated) throw new Error("its file tree is too large to read whole");
+  return new Set(tree.tree.filter((e) => e.type === "blob").map((e) => e.path));
+}
+
+const dirOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+
+/** The nearest lockfile at or above `dir`: its directory and kind. */
+function lockFor(blobs: Set<string>, dir: string): { dir: string; kind: "npm" | "pnpm" } | null {
+  for (let d = dir; ; d = dirOf(d)) {
+    const at = (f: string) => (d ? `${d}/${f}` : f);
+    if (blobs.has(at("package-lock.json"))) return { dir: d, kind: "npm" };
+    if (blobs.has(at("pnpm-lock.yaml"))) return { dir: d, kind: "pnpm" };
+    if (!d) return null;
+  }
+}
+
+async function readApp(env: Env, target: { namespace: string; name: string; system: string; repo: string }, watched: ReadonlySet<string>): Promise<AppRead> {
+  const app: AppRead = { ...target, blobs: null, manifests: [], presets: [], workflows: [], error: null };
+  const locks = new Map<string, Promise<string>>();
+  const lockText = (path: string) => {
+    if (!locks.has(path)) locks.set(path, rawFile(env, target.repo, path));
+    return locks.get(path)!;
+  };
   try {
-    app.blobs = await repoBlobPaths(env, namespace);
-    if (!app.blobs) throw new Error("its file tree could not be read (missing, or too large)");
-    const manifests = [...app.blobs].filter((p) => (p === "package.json" || p.endsWith("/package.json")) && !p.includes("node_modules/")).sort((a, b) => a.split("/").length - b.split("/").length).slice(0, MANIFESTS_PER_APP);
+    const blobs = await blobPaths(env, target.repo);
+    app.blobs = blobs;
+    const manifests = [...blobs].filter((p) => (p === "package.json" || p.endsWith("/package.json")) && !p.includes("node_modules/")).sort((a, b) => a.split("/").length - b.split("/").length).slice(0, MANIFESTS_PER_APP);
     for (const path of manifests) {
-      const deps = depsOf((await readRepoFile(env, namespace, path)).content);
-      const lockVersions: Record<string, string> = {};
-      const untagged = Object.entries(deps).filter(([, spec]) => gitSpec(spec)?.ref === null);
-      const lockPath = path.replace(/package\.json$/, "package-lock.json");
-      if (untagged.length && app.blobs.has(lockPath)) {
-        const lock = JSON.parse((await readRepoFile(env, namespace, lockPath)).content) as { packages?: Record<string, { version?: string }> };
-        for (const [dep] of untagged) {
-          const v = lock.packages?.[`node_modules/${dep}`]?.version;
-          if (v) lockVersions[dep] = `v${v}`;
-        }
+      const deps = depsOf(await rawFile(env, target.repo, path));
+      // Only the dependencies a package is matched on are looked up in the lockfile.
+      const wanted = Object.entries(deps)
+        .filter(([dep, spec]) => watched.has(dep) || gitSpec(spec) !== null)
+        .map(([dep]) => dep);
+      let lockVersions: Record<string, string> = {};
+      const lock = wanted.length ? lockFor(blobs, dirOf(path)) : null;
+      if (lock) {
+        const file = `${lock.dir ? `${lock.dir}/` : ""}${lock.kind === "npm" ? "package-lock.json" : "pnpm-lock.yaml"}`;
+        const text = await lockText(file);
+        lockVersions = lock.kind === "npm" ? npmLockVersions(text, lock.dir, dirOf(path), wanted) : pnpmLockVersions(text, lock.dir, dirOf(path), wanted);
       }
       app.manifests.push({ path, deps, lockVersions });
     }
     for (const path of RENOVATE_FILES) {
-      if (!app.blobs.has(path)) continue;
+      if (!blobs.has(path)) continue;
       // renovate.json5 allows comments; the extends line is read either way.
-      const text = (await readRepoFile(env, namespace, path)).content;
+      const text = await rawFile(env, target.repo, path);
       app.presets.push(...[...text.matchAll(/"(github>[^"]+)"/g)].map((m) => m[1]));
     }
+    const workflows = [...blobs].filter((p) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(p)).sort().slice(0, WORKFLOWS_PER_APP);
+    for (const path of workflows) app.workflows!.push({ path, pins: workflowPins(await rawFile(env, target.repo, path)) });
   } catch (err) {
     app.error = err instanceof Error ? err.message : String(err);
   }
   return app;
+}
+
+/** The repos the model names, once each, with the system that owns each and the namespace
+ *  that maps it. A repo several systems share (a site and its admin MCP) is read once, under
+ *  the system named for the repo, else the one with a domain, else the first. */
+function modelApps(model: SystemModel, namespaceOf: ReadonlyMap<string, string>): Array<{ namespace: string; name: string; system: string; repo: string }> {
+  const byRepo = new Map<string, SystemModel["systems"]>();
+  for (const s of model.systems) for (const r of s.repos) byRepo.set(r, [...(byRepo.get(r) ?? []), s]);
+  return [...byRepo].map(([repo, systems]) => {
+    const short = repo.split("/")[1].toLowerCase();
+    const owner = systems.find((s) => s.id === short) ?? systems.find((s) => s.domain) ?? systems[0];
+    return { namespace: namespaceOf.get(repo.toLowerCase()) ?? owner.id, name: owner.name, system: owner.id, repo };
+  });
 }
 
 async function readTags(env: Env, full: string): Promise<string[] | string> {
@@ -348,7 +451,7 @@ async function readTags(env: Env, full: string): Promise<string[] | string> {
 }
 
 /** The view, from the hour's cache unless `fresh`. A missing table says so. */
-export async function readSharedCode(env: Env, now: Date, fresh = false, fetchImpl: FetchLike = (url, init) => fetch(url, init)): Promise<SharedCodeView> {
+export async function readSharedCode(env: Env, now: Date, fresh = false, fetchImpl: FetchLike = (url, init) => fetch(url, init), model: SystemModel = bundledModel()): Promise<SharedCodeView> {
   if (!fresh) {
     const cached = await env.APP_KV.get(SHARED_CODE_CACHE_KEY);
     if (cached) return JSON.parse(cached) as SharedCodeView;
@@ -360,17 +463,37 @@ export async function readSharedCode(env: Env, now: Date, fresh = false, fetchIm
     const why = err instanceof Error ? err.message : String(err);
     return { generated: now.toISOString(), configured: false, error: /no such table/i.test(why) ? "shared_packages does not exist yet: migrations/0036_shared_packages.sql is the seat's to apply" : why, apps_read: 0, apps_failed: [], packages: [] };
   }
+  // The published packages the Packages view watches, matched by name. Optional: a
+  // missing table is no npm packages, not a failed view.
+  const published = await readPackageConfig(env.DB).catch(() => []);
+  for (const p of published) {
+    if (p.repo) config.push({ name: p.name, repo: p.repo, registry: "npm", formerly: p.formerly ? [p.formerly] : [], local_paths: [] });
+  }
   if (config.length === 0) return { generated: now.toISOString(), configured: false, error: null, apps_read: 0, apps_failed: [], packages: [] };
-  // A further host's row (capsid-portal, foxhound-admin-mcp) is not a namespace and has no
-  // repository to read, so only registered namespaces' rows are apps here.
-  const registered = ((await env.DB.prepare("SELECT namespace FROM namespaces").all<{ namespace: string }>()).results ?? []).map((r) => r.namespace);
-  const sites = (await readSiteConfig(env.DB)).filter((s) => !isFurtherHost(s.namespace, registered));
-  const apps: AppRead[] = [];
-  for (const s of sites) apps.push(await readApp(env, s.namespace, s.name));
+  const rows = (await env.DB.prepare("SELECT namespace, repos FROM namespaces").all<{ namespace: string; repos: string }>()).results ?? [];
+  const namespaceOf = new Map<string, string>();
+  for (const row of rows) {
+    const parsed = parseReposList(row.repos);
+    if ("list" in parsed) for (const r of parsed.list) if (!namespaceOf.has(r.repo.toLowerCase())) namespaceOf.set(r.repo.toLowerCase(), row.namespace);
+  }
+  const watched = new Set(config.filter((c) => c.registry === "npm").flatMap((c) => [c.name, ...c.formerly]));
+  // A few repos at a time: one repo is a few dozen reads, and the nightly build has the
+  // tick's four minutes for everything.
+  const targets = modelApps(model, namespaceOf);
+  const apps: AppRead[] = new Array(targets.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(APP_CONCURRENCY, targets.length) }, async () => {
+      for (let i = next++; i < targets.length; i = next++) apps[i] = await readApp(env, targets[i], watched);
+    })
+  );
   const tags = new Map<string, string[] | string>();
-  for (const pkg of config) tags.set(pkg.name, await readTags(env, pkg.repo).catch((err: unknown) => (err instanceof Error ? err.message : String(err))));
+  const failed = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  for (const pkg of config) tags.set(pkg.name, await (pkg.registry === "npm" ? readNpmVersions(fetchImpl, pkg.name) : readTags(env, pkg.repo)).catch(failed));
   const releases = new Map<string, ReleaseRead>();
-  for (const pkg of config) releases.set(pkg.name, await readRelease(env, pkg.repo, fetchImpl));
+  // A published package's repo may hold several packages (the Astro workspace), so its
+  // root package.json says nothing about it; its release is npm's.
+  for (const pkg of config) if (pkg.registry !== "npm") releases.set(pkg.name, await readRelease(env, pkg.repo, fetchImpl));
   const view = sharedCodeView(config, tags, apps, now, releases);
   await env.APP_KV.put(SHARED_CODE_CACHE_KEY, JSON.stringify(view), { expirationTtl: CACHE_TTL_SECONDS });
   return view;

@@ -4,15 +4,13 @@
 //
 // The Portal's routes are written once, under /portal (src/routes.ts). On the Portal host a
 // request for /x is handled as /portal/x, so every route, the gate and every check apply
-// unchanged; the workers.dev /portal keeps answering as before until the new address is
-// verified live, and is then retired by a follow-up PR. Two exceptions on the Portal host:
-//   - a browser asking for /portal/... is sent to the same path at the root (308), so an
-//     old link lands on the new address;
-//   - /portal/assets/... is served as it is, not redirected. The built app names its
-//     hashed files by that absolute path (dashboard/vite.config.ts base), on both hosts.
+// unchanged. On the Portal host a browser asking for /portal/... is sent to the same path
+// at the root (308), so an old link lands on the new address. The build's hashed files (/assets/...) are answered before this rewrite
+// (src/portal-app.ts portalAsset).
 // Nothing else is reachable on the Portal host: /mcp, /health and the /ops routes are on
 // mcp.dustinedwards.info (src/mcp-host.ts), and on this host they are Portal paths behind
-// the gate.
+// the gate. The one exception is /admin/access-drift, the drift check's hashed admin list,
+// answered in src/index.ts before this rewrite.
 
 // The same values as portal-auth's PORTAL_PATH and PORTAL_PREFIX, stated here rather than
 // imported, because portal-auth imports this module.
@@ -20,7 +18,6 @@ const PORTAL_PATH = "/portal";
 const PORTAL_PREFIX = "/portal/";
 
 export const PORTAL_HOST = "portal.dustinedwards.info";
-const PORTAL_ASSETS_PREFIX = "/portal/assets/";
 
 export function isPortalHost(url: URL): boolean {
   return url.hostname === PORTAL_HOST;
@@ -57,7 +54,7 @@ export function portalHostRequest(request: Request): { redirect: Response } | { 
   if (!isPortalHost(url)) return { request };
   const path = url.pathname;
   const underPortal = path === PORTAL_PATH || path.startsWith(PORTAL_PREFIX);
-  if (underPortal && !path.startsWith(PORTAL_ASSETS_PREFIX)) {
+  if (underPortal) {
     const publicPath = publicPortalPath(url, path);
     // /portal//attacker.example would otherwise become a 308 to https://attacker.example/,
     // carrying an OAuth code or a phishing visitor off the host (Grok audit 2026-10, C1).
@@ -67,7 +64,6 @@ export function portalHostRequest(request: Request): { redirect: Response } | { 
     // into a GET.
     return { redirect: new Response(null, { status: 308, headers: { Location: target.toString(), "Cache-Control": "no-store" } }) };
   }
-  if (underPortal) return { request };
   const inner = new URL(url);
   inner.pathname = path === "/" ? PORTAL_PREFIX : PORTAL_PATH + path;
   return { request: new Request(inner.toString(), request) };
