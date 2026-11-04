@@ -581,6 +581,14 @@
       "description": "The nightly D1 dumps."
     },
     {
+      "id": "carrel-tool-calls",
+      "system": "carrel",
+      "name": "carrel-desk-tool-calls",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Copies of the tool-call log, kept after the log prunes them."
+    },
+    {
       "id": "carrel-access",
       "system": "carrel",
       "name": "Cloudflare Access",
@@ -917,6 +925,14 @@
       "description": "The nightly D1 dumps."
     },
     {
+      "id": "foxing-covers",
+      "system": "foxing",
+      "name": "foxing-covers",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Book cover images."
+    },
+    {
       "id": "foxing-kv",
       "system": "foxing",
       "name": "APP_KV",
@@ -989,6 +1005,14 @@
       "description": "The MCP door an operator's AI session uses, signed in through Cloudflare Access. It calls the foxing Worker over a service binding."
     },
     {
+      "id": "foxing-mcp-tool-calls",
+      "system": "foxing-mcp",
+      "name": "foxing-admin-mcp-tool-calls",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Copies of the tool-call log, kept after the log prunes them."
+    },
+    {
       "id": "foxing-mcp-oauth-kv",
       "system": "foxing-mcp",
       "name": "OAUTH_KV",
@@ -1035,6 +1059,30 @@
       "kind": "bucket",
       "technology": "R2",
       "description": "The nightly D1 dumps."
+    },
+    {
+      "id": "foxhound-media",
+      "system": "foxhound",
+      "name": "foxhound-media",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The blog's media library."
+    },
+    {
+      "id": "foxhound-evidence",
+      "system": "foxhound",
+      "name": "foxhound-dispute-evidence",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Merchant dispute evidence files."
+    },
+    {
+      "id": "foxhound-tool-calls",
+      "system": "foxhound",
+      "name": "foxhound-tool-calls",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Copies of the tool-call log, kept after the log prunes them."
     },
     {
       "id": "foxhound-money",
@@ -1133,6 +1181,14 @@
       "description": "The MCP door at admin-mcp.foxhoundapp.com, calling the foxhound Worker over a service binding."
     },
     {
+      "id": "foxhound-mcp-tool-calls",
+      "system": "foxhound-mcp",
+      "name": "foxhound-admin-mcp-tool-calls",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "Copies of the tool-call log, kept after the log prunes them."
+    },
+    {
       "id": "foxhound-mcp-oauth-kv",
       "system": "foxhound-mcp",
       "name": "OAUTH_KV",
@@ -1219,6 +1275,14 @@
       "kind": "bucket",
       "technology": "R2",
       "description": "The nightly D1 dumps."
+    },
+    {
+      "id": "julie-media",
+      "system": "julieedwards-info",
+      "name": "julieedwards-media",
+      "kind": "bucket",
+      "technology": "R2",
+      "description": "The site's images."
     },
     {
       "id": "julie-cron",
@@ -1403,6 +1467,7 @@
     { "from": "foxing-worker", "to": "foxing-mobile", "kind": "serves" },
     { "from": "foxing-worker", "to": "foxing-discord", "kind": "serves" },
     { "from": "foxing-worker", "to": "foxing-email", "kind": "writes" },
+    { "from": "foxing-worker", "to": "foxing-covers", "kind": "writes" },
     { "from": "foxing-mobile", "to": "foxing-supabase", "kind": "reads" },
     { "from": "foxing-cron", "to": "foxing-db", "kind": "writes" },
     { "from": "foxing-cron", "to": "foxing-companion-queue", "kind": "writes" },
@@ -1412,6 +1477,7 @@
     { "from": "foxing-mcp-worker", "to": "foxing-mcp-tool-log", "kind": "writes" },
     { "from": "foxing-mcp-worker", "to": "foxing-worker", "kind": "writes" },
     { "from": "foxing-mcp-worker", "to": "foxing-worker", "kind": "reads" },
+    { "from": "foxing-mcp-worker", "to": "foxing-mcp-tool-calls", "kind": "writes" },
     { "from": "foxhound-worker", "to": "foxhound-db", "kind": "writes" },
     { "from": "foxhound-worker", "to": "foxhound-money", "kind": "writes" },
     { "from": "foxhound-worker", "to": "foxhound-rate-limiter", "kind": "reads" },
@@ -1425,6 +1491,9 @@
     { "from": "foxhound-worker", "to": "foxhound-email", "kind": "writes" },
     { "from": "foxhound-worker", "to": "foxhound-stripe", "kind": "reads" },
     { "from": "foxhound-worker", "to": "foxhound-stripe", "kind": "writes" },
+    { "from": "foxhound-worker", "to": "foxhound-media", "kind": "writes" },
+    { "from": "foxhound-worker", "to": "foxhound-evidence", "kind": "writes" },
+    { "from": "foxhound-worker", "to": "foxhound-tool-calls", "kind": "writes" },
     { "from": "foxhound-cron", "to": "foxhound-cron-lock", "kind": "writes" },
     { "from": "foxhound-cron", "to": "foxhound-db", "kind": "writes" },
     { "from": "foxhound-cron", "to": "foxhound-backups", "kind": "writes" },
@@ -1432,6 +1501,7 @@
     { "from": "foxhound-mcp-worker", "to": "foxhound-mcp-oauth-kv", "kind": "writes" },
     { "from": "foxhound-mcp-worker", "to": "foxhound-worker", "kind": "writes" },
     { "from": "foxhound-mcp-worker", "to": "foxhound-worker", "kind": "reads" },
+    { "from": "foxhound-mcp-worker", "to": "foxhound-mcp-tool-calls", "kind": "writes" },
     { "from": "txasm-worker", "to": "txasm-db", "kind": "writes" },
     { "from": "txasm-worker", "to": "txasm-uploads", "kind": "writes" },
     { "from": "txasm-worker", "to": "txasm-books", "kind": "writes" },
@@ -1439,6 +1509,7 @@
     { "from": "txasm-worker", "to": "txasm-browser", "kind": "reads" },
     { "from": "txasm-cron", "to": "txasm-db", "kind": "reads" },
     { "from": "julie-worker", "to": "julie-db", "kind": "reads" },
+    { "from": "julie-worker", "to": "julie-media", "kind": "writes" },
     { "from": "julie-cron", "to": "julie-db", "kind": "reads" },
     { "from": "julie-cron", "to": "julie-backups", "kind": "writes" },
     { "from": "capsid-backups-mirror", "to": "capsid-media", "kind": "reads" },
@@ -1449,6 +1520,7 @@
     { "from": "bench-run", "to": "bench-drand", "kind": "writes" },
     { "from": "carrel-worker", "to": "writing-repo", "kind": "writes" },
     { "from": "carrel-worker", "to": "writing-repo", "kind": "reads" },
+    { "from": "carrel-worker", "to": "carrel-tool-calls", "kind": "writes" },
     { "from": "carrel", "to": "txasm", "kind": "publishes-to" },
     { "from": "carrel", "to": "julieedwards-info", "kind": "publishes-to" },
     { "from": "carrel", "to": "foxhound", "kind": "publishes-to" },
