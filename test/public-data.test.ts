@@ -23,7 +23,7 @@ const NOW = new Date("2026-10-11T00:05:00Z");
 const ctx = { waitUntil: (_p: Promise<unknown>) => {} };
 
 // GitHub's answer for every repo the bundled model names, as measured 2026-10-10.
-const PRIVATE_REPOS = new Set(["capsid-backups", "claude-skills-private", "writing"]);
+const PRIVATE_REPOS = new Set(["capsid-backups", "writing"]);
 const NO_ROWS = (systems: StatsRows["systems"]): StatsRows => ({ finished: [], open: [], outcomes: [], evaluations: [], waits: [], rings: [], documents: 0, namespaces: 0, systems, sha: undefined });
 function githubSays(names: string[]): PublicBuildReaders {
   return {
@@ -41,7 +41,7 @@ test("the model is built once a UTC day and stores the filtered bundled model", 
   const env = fakeEnv({ APP_KV: kv.kv });
   const first = await publicBuildTick(env, NOW, githubSays(ALL));
   assert.equal(first.ran, true, first.note);
-  assert.match(first.note, /20 public and 2 private system\(s\)/);
+  assert.match(first.note, /20 public and 1 private system\(s\)/);
 
   const doc = PublicModelSchema.parse(JSON.parse(kv.store.get(PUBLIC_MODEL_KEY) ?? "null"));
   assert.equal(doc.as_of, "2026-10-11");
@@ -56,7 +56,7 @@ test("the model is built once a UTC day and stores the filtered bundled model", 
   assert.ok(skills && !skills.private && skills.repos === undefined);
   // The numbers are built in the same run, and carry the model's system counts.
   const stats = PublicStatsSchema.parse(JSON.parse(kv.store.get(PUBLIC_STATS_KEY) ?? "null"));
-  assert.deepEqual(stats.systems, { public: 20, private: 2 });
+  assert.deepEqual(stats.systems, { public: 20, private: 1 });
   assert.equal(stats.as_of, "2026-10-11");
 
   // Later that day only the code maps are rebuilt (test/public-code.test.ts).

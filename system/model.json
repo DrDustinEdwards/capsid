@@ -201,15 +201,6 @@
       "hide_repo_link": true
     },
     {
-      "id": "skills-private",
-      "name": "Private skills",
-      "short": "My skills",
-      "family": "plumbing",
-      "ring": "used",
-      "description": "Dustin's own session setup, which every AI session loads beside the public skills.",
-      "repos": ["DrDustinEdwards/claude-skills-private"]
-    },
-    {
       "id": "capsid-bench",
       "name": "capsid-bench",
       "short": "Bench",
@@ -1292,14 +1283,6 @@
       "kind": "external",
       "technology": "Private Git repository",
       "description": "One folder per book: chapters of scene files, outlines, characters, places and world rules, plus Dustin's own voice passages."
-    },
-    {
-      "id": "skills-private-repo",
-      "system": "skills-private",
-      "name": "Skills",
-      "kind": "package",
-      "technology": "Git repository",
-      "description": "The dustin-workflow skill and the script a session-start hook runs to print it."
     }
   ],
   "relationships": [
