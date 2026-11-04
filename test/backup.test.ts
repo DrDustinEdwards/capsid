@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { credentialProblems } from "@dustinedwards/d1-dump";
-import { backupHttpStatus, CREDENTIAL_ALLOW, EXCLUDED, runBackup, TABLES } from "../src/backup.ts";
+import { CREDENTIAL_ALLOW, EXCLUDED, runBackup, TABLES } from "../src/backup.ts";
 import { BACKUP_LAST_OK_KEY } from "../src/health.ts";
 import { dumpJson, fakeD1, fakeEnv, fakeKv, fakeR2, type FakeD1Options } from "./fakes.ts";
 
@@ -161,19 +161,6 @@ test("an empty documents read refuses the prune, loudly, and deletes nothing", a
   for (const key of result.json_keys) assert.ok(r2.objects.has(key));
   // A refused run is not marked complete, so it takes no slot in the retention floor.
   assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a refused run was marked complete");
-});
-
-// /ops/backup answers with this status. A refused run still has ran: true, so a
-// status keyed on ran alone answered 200 to a curl whose prune did nothing.
-test("PLANT: a refused prune answers /ops/backup with a non-2xx status", async () => {
-  const refused = makeEnv({ documents: [] }, MIRROR);
-  const { result } = await captureErrors(() => runBackup(refused.env));
-  assert.equal(result.ran, true);
-  assert.equal(backupHttpStatus(result), 503);
-
-  const healthy = makeEnv({ documents: DOCS }, MIRROR);
-  assert.equal(backupHttpStatus(await runBackup(healthy.env)), 200);
-  assert.equal(backupHttpStatus({ ran: false, skipped: "lease-held" }), 409);
 });
 
 test("a failing FTS probe refuses the prune even when documents has rows", async () => {

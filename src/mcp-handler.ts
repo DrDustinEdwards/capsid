@@ -16,17 +16,15 @@ import { rateLimiter } from "./http";
 // Origins: /mcp and /mcp/admin have their own Origin rule before the OAuth provider
 // (src/index.ts, mcpOriginRefusal admitting https://claude.ai), so the wrapper's
 // default list, which would refuse claude.ai, is not applied there a second time.
-// /ops/mcp and /ops/mcp/admin are called with a bearer key and no browser, so they keep
+// /ops/mcp is called with a bearer key and no browser, so it keeps
 // the wrapper's default: a present Origin must be localhost-class or the workers.dev host.
-// Capsid Admin's routes: the administrator's OAuth session, and an admin key for the
-// seat's scripts (src/routes.ts).
+// Capsid Admin's route: the administrator's OAuth session alone.
 export const ADMIN_MCP_ROUTE = "/mcp/admin";
-export const ADMIN_OPS_MCP_ROUTE = "/ops/mcp/admin";
 
 // The OAuth scopes of the admin login, stated with the grant gate (src/scope.ts).
 export { SCOPES } from "./scope";
 
-export type McpRoute = "/mcp" | "/ops/mcp" | typeof ADMIN_MCP_ROUTE | typeof ADMIN_OPS_MCP_ROUTE;
+export type McpRoute = "/mcp" | "/ops/mcp" | typeof ADMIN_MCP_ROUTE;
 
 export async function serveMcp(request: Request, env: Env, ctx: ExecutionContext, route: McpRoute, build: () => McpServer): Promise<Response> {
   const browserFacing = route === "/mcp" || route === ADMIN_MCP_ROUTE;

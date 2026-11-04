@@ -4,7 +4,7 @@ import worker from "../src/index";
 import { forgetKeys } from "@dustinedwards/site-runtime/access-login";
 
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
-import { ADMIN_MCP_ROUTE, ADMIN_OPS_MCP_ROUTE } from "../src/mcp-handler";
+import { ADMIN_MCP_ROUTE } from "../src/mcp-handler";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface";
 import { stubAccess } from "@dustinedwards/devkit/access";
 import { cimdClient, cimdResponse } from "./cimd-stub";
@@ -114,40 +114,6 @@ async function callTool(path: string, bearer: string, name: string, args: Record
 }
 
 const sorted = (names: readonly string[]) => [...names].sort();
-
-describe(`${ADMIN_OPS_MCP_ROUTE}, for a key`, () => {
-  it("PLANT: answers 401 with no key, before any server is built", async () => {
-    for (const method of ["initialize", "tools/list"]) {
-      const answer = await rpc(ADMIN_OPS_MCP_ROUTE, null, method, method === "initialize" ? { protocolVersion: ERA, capabilities: {}, clientInfo: { name: "admin-route", version: "1.0.0" } } : {});
-      expect(answer.status, answer.text).toBe(401);
-      expect(answer.text).toMatch(/an admin key is required/);
-      // The route's own refusal, not a server's: no JSON-RPC answer came back.
-      expect(answer.message, "a JSON-RPC answer came back, so a server was built").toBeNull();
-    }
-  });
-
-  it("PLANT: answers 401 to a key that resolves to nobody", async () => {
-    const answer = await rpc(ADMIN_OPS_MCP_ROUTE, "capsid_agent_" + "f".repeat(64), "tools/list", {});
-    expect(answer.status, answer.text).toBe(401);
-    expect(answer.message).toBeNull();
-  });
-
-  it("PLANT: answers 403 to a non-admin driver key, before any server is built, and serves it nothing", async () => {
-    for (const method of ["initialize", "tools/list"]) {
-      const answer = await rpc(ADMIN_OPS_MCP_ROUTE, DRIVER_KEY, method, method === "initialize" ? { protocolVersion: ERA, capabilities: {}, clientInfo: { name: "admin-route", version: "1.0.0" } } : {});
-      expect(answer.status, answer.text).toBe(403);
-      expect(answer.text).toMatch(/agent:capsid-driver is not the admin\. Capsid Admin serves the administrator alone/);
-      expect(answer.message, "a JSON-RPC answer came back, so a server was built").toBeNull();
-    }
-    // An admin tool named outright is refused the same way, by the route.
-    const called = await rpc(ADMIN_OPS_MCP_ROUTE, DRIVER_KEY, "tools/call", { name: "capsid_admin_read_claims", arguments: { namespace: "capsid" } });
-    expect(called.status).toBe(403);
-    expect(called.message).toBeNull();
-    // The same key is good on /ops/mcp, so the 403 above was about the route.
-    const capsid = await listTools("/ops/mcp", DRIVER_KEY);
-    expect(capsid.tools.length).toBeGreaterThan(0);
-  });
-});
 
 describe("/ops/mcp serves Capsid and no Capsid Admin tool", () => {
   it("PLANT: lists exactly Capsid's 11 to a key, and no capsid_admin_ tool", async () => {

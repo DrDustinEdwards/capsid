@@ -176,9 +176,7 @@ export function needFor(requirement: ToolRequirement): Pick<ScopeNeed, "grant" |
 // rather than a gap.
 
 // A route that goes through checkScope, and what it requires.
-export const ROUTE_GRANTS: Record<string, ToolRequirement> = {
-  "/ops/backup": "admin",
-};
+export const ROUTE_GRANTS: Record<string, ToolRequirement> = {};
 
 // A route that does not, and why. Each reason names what authorizes the request
 // instead, because "public" and "authorized some other way" are different claims.
@@ -197,8 +195,6 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/oauth/clients/verify-live.json": "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
   "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
   "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
-  "/ops/mcp/admin":
-    "Capsid Admin for a key: resolveAgent on the bearer (401 without one), then the admin identity only (403 for any other key), and every tool call it serves then passes checkScope in the registrar, where each tool is admin only",
   "/backup/credential": "signed with the backup-specific HMAC key, derived from the Worker's root secret under its own context, and replay-protected",
   "/bench/tasks": "signed with the capsid-bench HMAC key (src/bench.ts), which no backup key can produce, and replay-protected; registers a task once and never changes one",
   "/bench/draw": "signed with the capsid-bench HMAC key and replay-protected; records the registration once and appends the drawn task order, which never changes",
@@ -504,7 +500,6 @@ const ADMIN_REASON: Record<string, string> = {
   capsid_admin_control_improve:
     "It holds the administrator's switches: sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_run_improve.",
   capsid_admin_set_site_key: "It mints a site's operator key and sets it as a secret on the site's Worker and on Carrel, so a caller that could use it could hand itself a site's key.",
-  "/ops/backup": "It backs up and prunes every namespace in the store, which is wider than any one namespace's scope.",
 };
 
 function adminReason(tool: string): string {
