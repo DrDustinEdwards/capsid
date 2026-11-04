@@ -512,7 +512,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
     notes,
     source: { name: "Cloudflare deployments and the watcher's probes" },
   };
-  return <ChartFrame className="deploy-timeline" draw={(width) => timeline({ ...opts, width })} />;
+  return <ChartFrame className="deploy-timeline" draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
 }
 
 // ---- 4. Tonight -------------------------------------------------------------------------
@@ -552,7 +552,7 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
     label: `Tonight's plan, ${events.length} ${events.length === 1 ? "job" : "jobs"} by repo, as if it started when the plan was read (UTC)`,
     source: { name: "The overnight planner's estimates" },
   };
-  return <ChartFrame className="tonight-chart" draw={(width) => timeline({ ...opts, width })} />;
+  return <ChartFrame className="tonight-chart" draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
 }
 
 // ---- 10. Backup retention slots ---------------------------------------------------------
@@ -591,7 +591,7 @@ export function BackupSlots() {
               cellLabels: slots.map((s) => s.key),
               formatValue: missing,
             };
-            return <ChartFrame key={name} inline draw={(width) => heatStrip({ ...opts, width })} />;
+            return <ChartFrame key={name} inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />;
           })
         )}
       </div>
@@ -648,7 +648,7 @@ export function CiHistory() {
               };
               return (
                 <div className="slot-row" key={r.namespace} data-ci={r.namespace}>
-                  <ChartFrame inline draw={(width) => heatStrip({ ...opts, width })} />
+                  <ChartFrame inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />
                 </div>
               );
             })}
