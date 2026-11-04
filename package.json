@@ -64,5 +64,10 @@
       "@modelcontextprotocol/client": "$@modelcontextprotocol/client",
       "@modelcontextprotocol/sdk": "1.32.1"
     }
+  },
+  "allowScripts": {
+    "core-js-pure": false,
+    "esbuild": false,
+    "workerd": false
   }
 }
