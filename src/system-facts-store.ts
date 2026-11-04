@@ -41,6 +41,11 @@ export async function readFactsDrift(env: Pick<Env, "APP_KV">, now: Date): Promi
 }
 
 /** The stored secrets and data model, or null before the first build. */
-export function readResources(env: Pick<Env, "APP_KV">): Promise<ResourcesDoc | null> {
-  return readJson<ResourcesDoc>(env, RESOURCES_KEY);
+export async function readResources(env: Pick<Env, "APP_KV">): Promise<ResourcesDoc | null> {
+  const doc = await readJson<ResourcesDoc>(env, RESOURCES_KEY);
+  if (!doc) return null;
+  // The stored doc is one night old at most and can predate a field the type has since gained
+  // (#762 added `previews`, and the Workers tab crashed on the earlier night's doc until the next
+  // build). Fill what the type promises, so a reader never meets a missing list.
+  return { ...doc, workers: (doc.workers ?? []).map((w) => ({ ...w, previews: w.previews ?? [] })) };
 }
