@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { adminFailJob, claimJob, failAsCaller, postJob, releaseJob } from "../src/jobs";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 
 // The seat stepping in on a claimed job whose holder is gone: release it to the queue,
@@ -9,7 +10,7 @@ import { defaultScopes } from "../src/agents-schema";
 // the seat read, and every assertion reads the rows back.
 
 const SECRET = "test-root-secret";
-const POSTER = legacyAgent("write", "github:DrDustinEdwards");
+const POSTER = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-09-26T06:00:00.000Z");
 const LATER = new Date("2026-09-26T07:00:00.000Z");
 
@@ -55,8 +56,7 @@ async function outcome(id: string) {
 }
 
 beforeEach(async () => {
-  for (const table of ["jobs", "audit_log", "job_outcomes"]) await env.DB.prepare(`DELETE FROM ${table}`).run();
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
     .run();
@@ -95,10 +95,11 @@ describe("release", () => {
     expect((await row(id))?.claimed_by).toBe("agent:capsid-driver");
   });
 
-  it("the holder cannot release its own job, and only a claimed job is released", async () => {
+  it("the seat releases its own claim too, and only a claimed job is released", async () => {
     const seat = seatAgent();
     const own = await claimedJob(seat, "held by the seat");
-    expect((await releaseJob(jobsEnv(), seat, LATER, own, "x")).refusal).toMatch(/held by agent:seat itself/);
+    expect((await releaseJob(jobsEnv(), seat, LATER, own, "x")).ok).toBe(true);
+    expect((await row(own))?.status).toBe("queued");
 
     const posted = await postJob(jobsEnv(), POSTER, NOW, { namespace: "capsid", title: "still queued", body: "b" });
     const queued = await releaseJob(jobsEnv(), seat, LATER, posted.job!.id, "x");

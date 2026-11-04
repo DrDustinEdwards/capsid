@@ -1,4 +1,5 @@
-import { Suspense, lazy } from "react";
+import { trendChart } from "./charts";
+import { Suspense } from "react";
 import { useApp } from "../app/ctx";
 import { DAY, ago, bytes, ms } from "../lib/format";
 import { storeUse } from "../lib/store";
@@ -8,7 +9,7 @@ import { Panel } from "capsomer/react/panel";
 import { NoSnapshot, PageHead } from "./shared";
 
 // Chart 10, the retention slots, from GET /portal/api/trends; Enarratio loads with it.
-const BackupSlots = lazy(() => import("./TrendCharts").then((m) => ({ default: m.BackupSlots })));
+const BackupSlots = trendChart("BackupSlots");
 
 export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
   const { feed, now } = useApp();

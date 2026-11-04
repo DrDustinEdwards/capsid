@@ -4,6 +4,7 @@ import { packageHistory, readPackageRow, type FetchLike } from "./ops-packages";
 import { portalGate } from "./portal-auth";
 import { readSharedCode } from "./shared-code";
 import { readCompleteness } from "./completeness";
+import { readResources } from "./system-facts-store";
 import { textResponse } from "./http";
 import { notFoundReport } from "@dustinedwards/site-runtime/not-found";
 import type { PortalNotFound } from "./ops-types/sites";
@@ -75,5 +76,17 @@ export async function handlePortalCompleteness(request: Request, env: Env, now: 
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const body = await readCompleteness(env, now);
+  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+}
+
+// The Workers tab's read: GET /portal/api/resources, the secrets and data model the nightly
+// build stored (src/system-resources.ts). Private, so gated by portalGate like the views
+// above; it reads one KV value and never calls Cloudflare.
+export const PORTAL_RESOURCES_PATH = "/portal/api/resources";
+
+export async function handlePortalResources(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
+  if (!gate.ok) return gate.response;
+  const body = (await readResources(env)) ?? { version: 1, read_at: null, workers: [], databases: [], kv_namespaces: [], buckets: [], problems: ["The nightly build has not read Cloudflare yet."] };
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 }

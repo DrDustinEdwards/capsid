@@ -207,7 +207,7 @@ ${[...folders].map(([folder, mods]) => `<div class="code-folder" id="${folderId(
   const body = `${pageHead([["/", "Overview"], ["/code/", "Code"], [systemPath(s.id), s.name]], "Code", `The code of ${escapeHtml(s.name)}`)}
 <p class="lead">Each module by folder, with two scores. CRAP shows its riskiest function: it rises when code is complex and its tests cover little of it. Over ${CRAP_CRIT} is critical, and over ${CRAP_WATCH} is worth a look. The mutation score is the share of planted bugs its tests catch. Under ${SCORE_WATCH}% is critical, and under ${SCORE_OK}% is worth a look. Each module links to its source on GitHub.</p>
 ${sections.join("\n")}`;
-  return layout({ title: `The code of ${s.name}`, description: `${s.name}'s modules, import cycles and riskiest functions.`, path: codePath(s.id), body, asOf });
+  return layout({ title: `The code of ${s.name}`, description: `${s.name}'s ${codeSummary(maps)}: each module's riskiest function, its mutation score and the import cycles.`, path: codePath(s.id), body, asOf });
 }
 
 /**
@@ -277,7 +277,7 @@ ${scroller("risk", `<table class="cap-table code-table"><caption>The five functi
  */
 export function codeIndexPage(model, bySystem, totals, asOf) {
   const repos = reposOf(model, bySystem);
-  const head = pageHead([["/", "Overview"]], "Code", "The code, measured", totals
+  const head = pageHead([], "Code", "The code, measured", totals
     ? `${totals.lines.toLocaleString("en-US")} lines in ${totals.modules.toLocaleString("en-US")} modules and ${totals.functions.toLocaleString("en-US")} functions across ${totals.repos} public repos, measured after each push. Two scores flag risky code. CRAP rises when a function is complex and its tests cover little of it; over ${CRAP_CRIT} is critical. The mutation score is the share of planted bugs the tests catch; under ${SCORE_WATCH}% is critical.`
     : "No code maps have been published yet.");
   if (!totals) return layout({ title: "Code", description: "The public repos' code, measured.", path: "/code/", body: head, asOf });

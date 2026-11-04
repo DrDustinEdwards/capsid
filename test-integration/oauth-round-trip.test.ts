@@ -166,14 +166,14 @@ describe("the OAuth round trip", () => {
 
   it("PLANT: a token issued for this server is refused by another resource (RFC 8707 audience)", async () => {
     // Rule 12 of capsid/rulings/mcp-2026-10-10.md: reject any token not issued for this
-    // server. The old address is a second resource on the same Worker and the same
-    // OAUTH_KV, so the token is found there and refused only for its audience.
+    // server. Another host on the same Worker reaches the same OAUTH_KV, so the token is
+    // found there and refused only for its audience.
     const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
     const exchanged = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
     const { access_token } = (await exchanged.json()) as { access_token: string };
     expect((await mcpInitialize(access_token)).status, "the token does not open its own resource, so the refusal below proves nothing").toBe(200);
     const elsewhere = await call(
-      new Request("https://capsid.dustin-edwards.workers.dev/mcp", {
+      new Request("https://elsewhere.example.com/mcp", {
         method: "POST",
         headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "audience", version: "1.0.0" } } }),
@@ -201,7 +201,7 @@ describe("the OAuth round trip", () => {
     expect(new URL(String(callback.headers.get("location"))).searchParams.get("error")).toBe("access_denied");
   });
 
-  it("PLANT: a grant without the write box holds the read grant only, and a write tool is refused", async () => {
+  it("PLANT: a grant without the write box holds the read grant only: a write tool is not served, and a write action is answered 403 insufficient_scope (step-up)", async () => {
     const { clientId, code } = await authorize(env.ADMIN_EMAIL!, {}, undefined, false);
     const exchanged = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
     const { access_token, scope } = (await exchanged.json()) as { access_token: string; scope: string };
@@ -215,8 +215,16 @@ describe("the OAuth round trip", () => {
         })
       );
     await rpc(1, "initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "read-only", version: "1.0.0" } });
-    const written = await (await rpc(2, "tools/call", { name: "capsid_write_doc", arguments: { namespace: "sample", path: "notes/x.md", body: "x" } })).text();
-    expect(written, "a read-only grant wrote a document").toMatch(/requires the write grant/);
+    // T7: a write-only tool is not served to a read grant, so a call to it is an unknown tool and never runs.
+    const written = await rpc(2, "tools/call", { name: "capsid_write_doc", arguments: { namespace: "sample", path: "notes/x.md", body: "x" } });
+    expect(await written.text(), "a read-only grant reached the write tool").toMatch(/capsid_write_doc not found/);
+    // A served tool's write action still steps up.
+    const posted = await rpc(3, "tools/call", { name: "capsid_work_jobs", arguments: { action: "post", namespace: "sample", title: "x", body: "x" } });
+    expect(posted.status, "a read-only grant reached a write action").toBe(403);
+    const challenge = posted.headers.get("WWW-Authenticate") ?? "";
+    expect(challenge).toMatch(/error="insufficient_scope"/);
+    expect(challenge).toMatch(/scope="capsid\.read capsid\.write"/);
+    expect(challenge).toMatch(/resource_metadata=/);
   });
 
   it("/mcp without a token is a 401 that names the resource metadata and no error (RFC 6750 3.1)", async () => {
@@ -227,5 +235,8 @@ describe("the OAuth round trip", () => {
     expect(response.headers.get("WWW-Authenticate") ?? "").toMatch(/resource_metadata=/);
     expect(response.headers.get("WWW-Authenticate") ?? "").toMatch(/scope="capsid\.read"/);
     expect(response.headers.get("WWW-Authenticate") ?? "").not.toMatch(/error=/);
+    // The challenge asks for the least scope; the metadata lists every scope (area 11, A1).
+    const metadata = (await (await call(new Request(`${ORIGIN}/.well-known/oauth-protected-resource/mcp`))).json()) as { scopes_supported?: string[] };
+    expect(metadata.scopes_supported).toEqual(["capsid.read", "capsid.write"]);
   });
 });

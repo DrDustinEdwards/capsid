@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, postJob, resumeJob } from "../src/jobs";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { reverifySweep } from "../src/outcome-prs";
 
 // A pull request named only in result_ref is verified against GitHub, whoever completes
@@ -15,9 +16,9 @@ const NS = "sample";
 const PR = "https://github.com/example/sample/pull/3";
 const SHA = "a".repeat(40);
 const DRIVER_ACTOR = "agent:driver-aaaa";
-const DRIVER = legacyAgent("write", DRIVER_ACTOR);
+const DRIVER = grantAgent("write", DRIVER_ACTOR);
 const SEAT_ACTOR = "access:seat@example.com";
-const SEAT = legacyAgent("write", SEAT_ACTOR);
+const SEAT = grantAgent("write", SEAT_ACTOR);
 const NOW = new Date("2026-10-05T12:00:00.000Z");
 const LATER = new Date("2026-10-05T13:00:00.000Z");
 
@@ -59,10 +60,7 @@ async function claimed(title: string) {
 const VERIFIED = { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: true };
 
 beforeEach(async () => {
-  for (const table of ["job_outcomes", "jobs", "audit_log", "agents", "job_outcome_prs", "job_claims"]) {
-    await env.DB.prepare(`DELETE FROM ${table}`).run().catch(() => undefined);
-  }
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }])).run();
   await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
 });

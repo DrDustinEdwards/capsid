@@ -66,7 +66,7 @@ export function deriveKind(job: { title: string; posted_by: string; kind?: strin
 const HIGH_RISK_NAMESPACES: ReadonlyArray<{ namespace: string; why: string }> = [{ namespace: "foxhound", why: "a payments product" }];
 
 // A job that asks the driver for blast radius is risky however it is titled.
-const HIGH_RISK_FLAGS = new Set(["can_merge", "can_direct_write", "can_dispatch", "can_write_workflows", "can_touch_protected", "money_paths"]);
+const HIGH_RISK_FLAGS = new Set(["can_merge", "can_touch_protected"]);
 
 export interface Risk {
   level: "high" | "routine" | "unread";

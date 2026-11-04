@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, commandFromSummary, completeJob, postJob } from "../src/jobs";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { OTHER_PRS_READ } from "../src/job-overlaps";
 
 // Overlap warnings (Track A D1) against real D1, with GitHub as a fetch stub: block and
@@ -11,8 +12,8 @@ import { OTHER_PRS_READ } from "../src/job-overlaps";
 const SECRET = "test-root-secret";
 const NS = "sample";
 const PR = (n: number) => `https://github.com/example/sample/pull/${n}`;
-const DRIVER = legacyAgent("write", "agent:driver-aaaa");
-const SEAT = legacyAgent("write", "access:seat@example.com");
+const DRIVER = grantAgent("write", "agent:driver-aaaa");
+const SEAT = grantAgent("write", "access:seat@example.com");
 const NOW = new Date("2026-10-07T12:00:00.000Z");
 
 function jobsEnv() {
@@ -48,10 +49,7 @@ async function claimed(title: string) {
 }
 
 beforeEach(async () => {
-  for (const table of ["job_outcomes", "jobs", "audit_log", "agents", "job_outcome_prs", "job_claims"]) {
-    await env.DB.prepare(`DELETE FROM ${table}`).run().catch(() => undefined);
-  }
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }])).run();
   await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
 });

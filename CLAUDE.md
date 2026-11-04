@@ -11,6 +11,6 @@ A Cloudflare Worker, run by its owner and the co-owners in `CO_OWNER_EMAILS`, se
 
 Code comments cite these by name ("CLAUDE.md, public repo rule").
 
-1. **Tool surface.** Every served tool is in `TOOL_GRANTS` and `src/tools/surface.ts`; a new tool needs Dustin's ruling first, recorded as its own file under `capsid/rulings/`.
+1. **Tool surface.** Every served tool is in `TOOL_GRANTS` and `src/tools/surface.ts`; a new tool needs Dustin's yes first.
 2. **Public repo.** Never commit `wrangler.jsonc`, `.dev.vars`, `.env`, a key or real vault content; fixtures use fake data (example.com, namespace "sample"). Never print a token.
 3. **Tests.** Keep the minimal set (a few browser tests for flows that must never break, one integration test per real behavior, unit tests only for tricky logic, shared code tested once where it lives), and remove any test that pins design, repeats coverage or has never caught a real mistake, unless it guards a harm that cannot be undone.

@@ -36,7 +36,7 @@ export interface AgentResult {
 }
 
 // What an agent looks like to a reader. The stored hash never appears, only its
-// first twelve hex, the same shape as an operator-key fingerprint, so an agent can be
+// first twelve hex, so an agent can be
 // matched against an audit row without handing out what it authenticates with.
 interface PublicAgent {
   id: string;
@@ -112,15 +112,14 @@ function applyScopes(base: AgentScopes, args: ScopeArgs): AgentScopes {
 
 // The repos axis a mint gets when the caller names none: every repo the named
 // namespaces map. Starting from defaultScopes (repos "*") would give every agent
-// minted through MCP every repo in the portfolio, while scripts/mint-agents.ts
-// derives a narrow list; two mint paths must agree about the default.
+// minted through MCP every repo in the portfolio.
 //
 // Derived from the live namespaces mapping, the same table resolveRepo reads and the
 // repos axis is compared against, so the two cannot drift apart.
 //
 // A namespace scope of "*" derives "*": enumerating today's mapping would silently
 // exclude a namespace registered later. A namespace with no mapped repo refuses
-// rather than falling back to the wildcard, as the script does.
+// rather than falling back to the wildcard.
 async function reposForNamespaces(db: D1Database, namespaces: "*" | string[]): Promise<{ repos: "*" | string[] } | { error: string }> {
   if (namespaces === "*") return { repos: "*" };
   const repos: string[] = [];

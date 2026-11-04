@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 
 // THE SEAT'S QUEUE ACTIONS AS access:<email>, through the real capsid_work_jobs tool,
@@ -16,7 +16,7 @@ const SECRET = "test-root-secret";
 const ADMIN_EMAIL = "admin@example.com";
 const SEAT_ACTOR = `access:${ADMIN_EMAIL}`;
 const SEAT = adminAgentForEmail(ADMIN_EMAIL);
-const DRIVER = legacyAgent("write", "agent:access-seat-driver");
+const DRIVER = grantAgent("write", "agent:access-seat-driver");
 const NOW = new Date("2026-09-28T01:00:00.000Z");
 
 function jobsEnv() {
@@ -123,13 +123,5 @@ describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
     const result = await jobsTool(SEAT, { action: "fail", id, reason: "cannot be done" });
     expect(result.ok, result.refusal).toBe(true);
     expect((await row(id))?.status).toBe("failed");
-  });
-
-  it("fire: the seat passes the seat check, and is refused only because the namespace has no routine", async () => {
-    const id = await driverJob();
-    const result = await jobsTool(SEAT, { action: "fire", id });
-    expect(result.ok).toBe(false);
-    expect(result.refusal).toMatch(/routine_missing/);
-    expect(result.refusal).not.toMatch(/cannot fire a routine|not a caller identity/);
   });
 });

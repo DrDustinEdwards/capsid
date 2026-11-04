@@ -3,6 +3,8 @@ import type { FetchLike } from "./live-checks";
 import { CF_API, CF_GRAPHQL, cfGetAll, cloudflareCredentials } from "./ops-cloudflare";
 import { AI_SEARCH_BOTS, AI_TRAINING_BOTS, DENIED_BOTS, SEARCH_ENGINE_BOTS } from "@drdustinedwards/site-helpers/robots";
 import { reportSite } from "./site-reports";
+import type { ServerErrors } from "./ops-types/sites";
+import { callSignal } from "./call-signal";
 
 // What Cloudflare saw at a namespace's site, served as capsid_inspect_repo action traffic
 // (the SEO plan, "Beyond the module"). not_found: the paths that answered 404 over a
@@ -23,7 +25,7 @@ const SQL_API = `${CF_API}/analytics/sql`;
 const TIMEOUT_MS = 15_000;
 const DAY_MS = 86_400_000;
 
-export const TRAFFIC_REPORTS = ["not_found", "web_vitals", "ai_crawlers"] as const;
+export const TRAFFIC_REPORTS = ["not_found", "server_errors", "web_vitals", "ai_crawlers"] as const;
 export const MAX_TRAFFIC_DAYS = 30;
 export const MAX_TRAFFIC_ROWS = 200;
 type TrafficReport = (typeof TRAFFIC_REPORTS)[number];
@@ -51,7 +53,7 @@ async function sql(fetchImpl: FetchLike, token: string, account: string, query: 
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "capsid (site traffic)" },
     body: JSON.stringify({ query, params, scope: { accountTag: account } }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: callSignal(TIMEOUT_MS),
   });
   const text = await resp.text();
   let body: { data?: unknown; errors?: Array<{ message?: string }>; message?: string; error?: string } | null = null;
@@ -111,7 +113,7 @@ async function webVitals(fetchImpl: FetchLike, token: string, account: string, h
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "capsid (site traffic)" },
     body: JSON.stringify({ query, variables: { account, siteTag, start, end } }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: callSignal(TIMEOUT_MS),
   });
   const text = await resp.text();
   let body: { data?: { viewer?: { accounts?: Array<{ rumWebVitalsEventsAdaptiveGroups?: Array<{ count?: number; quantiles?: Record<string, number> }> }> } }; errors?: Array<{ message?: string }> } | null = null;
@@ -169,6 +171,12 @@ function crawlerRows(raw: Array<Record<string, unknown>>) {
   return [...by.values()].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || b.hits - a.hits);
 }
 
+// Visitors' requests only (Cloudflare's "filter end users", requestSource = eyeball). The record also holds the
+// zone's own subrequests: a Workers cache lookup that misses and an Early Hints lookup with nothing cached are each
+// logged as a 504 (developers.cloudflare.com/workers/runtime-apis/cache, "Errors"). Every site renders through the
+// Workers cache and sends Early Hints, so those misses read as thousands of 504s nobody was served (2026-10-31).
+const END_USERS = "requestSource = 'eyeball'";
+
 export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs, fetchImpl: FetchLike = fetch, now: Date = new Date()) {
   const report: TrafficReport = args.report ?? "not_found";
   const days = args.days ?? 7;
@@ -203,6 +211,33 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
       truncated: raw.length >= QUERY_ROWS,
     };
   }
+  if (report === "server_errors") {
+    const raw = await sql(
+      fetchImpl,
+      creds.token,
+      creds.account,
+      `SELECT clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND ${END_USERS} AND edgeResponseStatus >= 500 GROUP BY clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
+      { start, host }
+    );
+    // When, too: a burst in one hour beside a deploy reads differently from a trickle all day (2026-10-31).
+    const byHour = await sql(
+      fetchImpl,
+      creds.token,
+      creds.account,
+      `SELECT toStartOfHour(timestamp) AS hour, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND clientRequestHttpHost = $host AND ${END_USERS} AND edgeResponseStatus >= 500 GROUP BY hour, edgeResponseStatus ORDER BY hour LIMIT ${QUERY_ROWS}`,
+      { start, host }
+    );
+    return {
+      namespace,
+      origin: site.origin,
+      report,
+      since: start,
+      note: "Every 5xx the edge answered a visitor, by path and status, and by hour (UTC). Sampled, so hits are estimates; paths are what visitors sent. A 501 is a site saying it does not offer that Carrel API, which Carrel's conformance check asks for on purpose.",
+      failures: raw.slice(0, limit).map((r) => ({ path: typeof r.path === "string" ? r.path : "", status: Number(r.status), hits: count(r.hits) })),
+      hours: byHour.map((r) => ({ hour: String(r.hour), status: Number(r.status), hits: count(r.hits) })),
+      truncated: raw.length > limit,
+    };
+  }
   const rows = await sql(
     fetchImpl,
     creds.token,
@@ -222,19 +257,25 @@ export async function siteTraffic(env: Env, namespace: string, args: TrafficArgs
 
 const HOUR_MS = 3_600_000;
 
+// How many path and status pairs a finding names.
+const TOP_5XX = 5;
+
 /**
  * Returned 5xx at the edge per site host, over the most recent complete hour (L6, 2026-10-31):
  * Workers analytics count only invocations that threw, so a Worker that catches its error and
  * answers 500 or 503 was invisible to the error-rate finding. Read from the same SQL API record
  * as the 404 report, sampled, so the counts are estimates. A host with no row had none. Keyed
  * by namespace; a site whose origin is a workers.dev host is not in the record and is left out.
+ * Grouped by path and status too: the first findings (2026-10-31) said only "79 answers were
+ * 5xx", and nobody could tell which page without a dashboard. A 501 is left out: it is a site's contract
+ * answer for a Carrel API it does not offer, and Carrel's conformance check asks for one every run.
  */
 export async function readServerErrors(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
   sites: ReadonlyArray<{ namespace: string; origin: string }>,
   fetchImpl: FetchLike,
   now: Date
-): Promise<Record<string, number>> {
+): Promise<Record<string, ServerErrors>> {
   const creds = cloudflareCredentials(env);
   if (!creds.ok) throw new Error(creds.reason);
   const end = new Date(Math.floor(now.getTime() / HOUR_MS) * HOUR_MS);
@@ -243,15 +284,23 @@ export async function readServerErrors(
     fetchImpl,
     creds.token,
     creds.account,
-    `SELECT clientRequestHttpHost AS host, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND timestamp < $end AND edgeResponseStatus >= 500 GROUP BY clientRequestHttpHost LIMIT ${QUERY_ROWS}`,
+    `SELECT clientRequestHttpHost AS host, clientRequestPath AS path, edgeResponseStatus AS status, COUNT(*) AS hits FROM events.httpRequests WHERE timestamp >= $start AND timestamp < $end AND ${END_USERS} AND edgeResponseStatus >= 500 AND edgeResponseStatus != 501 GROUP BY clientRequestHttpHost, clientRequestPath, edgeResponseStatus ORDER BY hits DESC LIMIT ${QUERY_ROWS}`,
     { start: start.toISOString(), end: end.toISOString() }
   );
-  const byHost = new Map(rows.map((r) => [typeof r.host === "string" ? r.host.toLowerCase() : "", count(r.hits)]));
-  const out: Record<string, number> = {};
+  const byHost = new Map<string, ServerErrors>();
+  for (const r of rows) {
+    const host = typeof r.host === "string" ? r.host.toLowerCase() : "";
+    const e = byHost.get(host) ?? { count: 0, top: [] };
+    const hits = count(r.hits);
+    e.count += hits;
+    if (e.top.length < TOP_5XX) e.top.push({ path: typeof r.path === "string" ? r.path : "", status: Number(r.status), hits });
+    byHost.set(host, e);
+  }
+  const out: Record<string, ServerErrors> = {};
   for (const site of sites) {
     const host = new URL(site.origin).hostname.toLowerCase();
     if (host.endsWith(".workers.dev")) continue;
-    out[site.namespace] = byHost.get(host) ?? 0;
+    out[site.namespace] = byHost.get(host) ?? { count: 0, top: [] };
   }
   return out;
 }

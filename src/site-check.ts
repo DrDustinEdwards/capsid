@@ -5,6 +5,7 @@ import { healthReport } from "./health";
 import { readPage, type FetchLike } from "./live-checks";
 import { probeSite } from "./ops-snapshot";
 import { readSiteRow, sitesFrom } from "./ops-sites";
+import { callSignal } from "./call-signal";
 
 // A live check of one namespace's site, on demand, served as capsid_inspect_repo action site. Three reads of the site's own configured
 // origin, never another host: its health route (as the watcher probes it), one page
@@ -63,7 +64,7 @@ export async function siteCheck(env: Env, namespace: string, args: SiteCheckArgs
         redirect: "manual",
         headers: { "Content-Type": "application/json", "User-Agent": "capsid-inspect (401 probe)" },
         body: "{}",
-        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        signal: callSignal(PROBE_TIMEOUT_MS),
       });
       status = resp.status;
       await resp.body?.cancel();

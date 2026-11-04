@@ -36,5 +36,6 @@ function subscribeSingleKeys(l: () => void): () => void {
 
 // Single-key shortcuts ("g" then a letter, "j", "t", ...): on unless turned off.
 export function useSingleKeys(): boolean {
-  return useSyncExternalStore(subscribeSingleKeys, singleKeysOn);
+  // On unless turned off, and on in the server's render, which cannot read the browser's choice.
+  return useSyncExternalStore(subscribeSingleKeys, singleKeysOn, () => true);
 }

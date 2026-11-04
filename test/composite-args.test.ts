@@ -38,13 +38,6 @@ test("PLANT: a comment sent with a merge is refused, and nothing reaches GitHub"
   assert.equal(r.fetches, 0);
 });
 
-test("PLANT: a sha sent with a comment is refused, and nothing is posted", async () => {
-  const r = await call("capsid_open_pr", { action: "comment", namespace: "sample", number: 7, comment: "a note", sha: "a".repeat(40) });
-  assert.equal(r.isError, true);
-  assert.match(r.text, /capsid_open_pr action 'comment' does not take sha/);
-  assert.equal(r.fetches, 0);
-});
-
 test("PLANT: a sha sent with a close is refused", async () => {
   const r = await call("capsid_close_pr", { action: "close", namespace: "sample", number: 7, sha: "a".repeat(40) });
   assert.equal(r.isError, true);

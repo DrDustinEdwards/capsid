@@ -4,7 +4,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer } from "../src/server.ts";
 
 import { SCOPE_FLAGS, defaultScopes, serializeScopes } from "../src/agents-schema.ts";
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, type FakeD1 } from "./fakes.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
@@ -94,7 +94,7 @@ test("a new agent is born with read on its named namespaces and no flags", async
 
 test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wildcard", async () => {
   // defaultScopes has repos "*", so the handler must derive the repos from the
-  // namespace mapping, as scripts/mint-agents.ts does. Driven through a real MCP
+  // namespace mapping. Driven through a real MCP
   // capsid_admin_manage_agents call.
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
   const body = parse(await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }));
@@ -123,8 +123,7 @@ test("A NAMESPACE SCOPE OF '*' DERIVES '*', because tomorrow's namespace is not 
 });
 
 test("PLANT: a mint for a namespace that maps no repos is REFUSED rather than widened", async () => {
-  // Fail closed, as scripts/mint-agents.ts reposForNamespace does, rather than fall
-  // back to the wildcard.
+  // Fail closed rather than fall back to the wildcard.
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"), []);
   const result = await call({ action: "mint", name: "ghost-driver", kind: "driver", namespaces: ["not-registered"] });
   await close();
@@ -160,12 +159,12 @@ test("A MINTED AGENT CANNOT MINT, REVOKE OR RE-SCOPE ANOTHER", async () => {
   assert.equal(d1.recorded.length, 0, "a refused call wrote something");
 });
 
-test("a read-only caller is refused before the admin check even runs", async () => {
-  const { call, close } = await connect(legacyAgent("read", "opkey:0123456789ab"));
-  const result = await call({ action: "list" });
+test("a read-only caller is never served the agents tool, so the admin check is never reached", async () => {
+  // The tool needs the write grant, so it is not registered for a read grant (src/scope.ts
+  // toolListed; area 11, T7) and the call is refused by the protocol.
+  const { call, close } = await connect(grantAgent("read", "opkey:0123456789ab"));
+  await assert.rejects(call({ action: "list" }), /not found/i);
   await close();
-  assert.equal(result.isError, true);
-  assert.match(result.content[0].text, /requires the write grant/);
 });
 
 test("list shows the inventory and last_seen, and never the verifier", async () => {
@@ -208,14 +207,14 @@ test("revoking or re-scoping an agent that is not there is a refusal, not a sile
 
 test("update_scopes replaces the scopes and records both sides in the audit row", async () => {
   const { d1, call, close } = await connect(adminAgentForEmail("admin@example.com"), [await liveRow()]);
-  const result = await call({ action: "update_scopes", name: "capsid-driver", grants: ["read", "write"], flags: { can_direct_write: true } });
+  const result = await call({ action: "update_scopes", name: "capsid-driver", grants: ["read", "write"], flags: { can_touch_protected: true } });
   await close();
   assert.notEqual(result.isError, true, result.content[0].text);
   const body = parse(result);
   assert.equal(body.ok, true, refusalOf(result));
   const scopes = body.scopes as { grants: string[]; flags: Record<string, boolean> };
   assert.deepEqual(scopes.grants, ["read", "write"]);
-  assert.equal(scopes.flags.can_direct_write, true);
+  assert.equal(scopes.flags.can_touch_protected, true);
   assert.equal(scopes.flags.can_merge, false, "an unnamed flag must not be turned on by a call that did not name it");
   const audit = statements(d1).find((r) => /INSERT INTO audit_log/i.test(r.sql));
   assert.ok(audit, "update_scopes was not audit-logged");

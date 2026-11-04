@@ -10,7 +10,7 @@ export const VIEW_COUNT = 9;
 // section or tab that holds its content now.
 export type Place = ViewId | MovedId;
 
-// Relative to the /portal/ base URL.
+// Relative to the Portal's root.
 function urlOf(id: Place): string {
   return `.${placePath(id)}`;
 }
@@ -35,6 +35,20 @@ export interface Overflow {
 
 // root: "main" for a view, the drawer's selector for a drawer.
 export async function measure(page: Page, root = "main"): Promise<Overflow> {
+  // A folded section is measured open, as a visitor would see it: its charts are on the page
+  // (rendered on the server) and redraw to their width once it opens.
+  const opened = await page.evaluate((sel) => {
+    const closed = [...(document.querySelector(sel)?.querySelectorAll<HTMLDetailsElement>("details:not([open])") ?? [])];
+    for (const d of closed) d.open = true;
+    return closed.length;
+  }, root);
+  // A chart redraws to its width after the fold opens (a resize observer, then a render), so
+  // the measure waits for that, up to two seconds; a chart that never fits is still reported.
+  if (opened) {
+    await page
+      .waitForFunction((sel) => [...(document.querySelector(sel)?.querySelectorAll<HTMLElement>("details[open] .enarratio-frame") ?? [])].every((f) => f.scrollWidth <= f.clientWidth + 1), root, { timeout: 2000 })
+      .catch(() => {});
+  }
   return page.evaluate((sel) => {
     const de = document.documentElement;
     const r = document.querySelector<HTMLElement>(sel);

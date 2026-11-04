@@ -1,4 +1,5 @@
 import { env, SELF } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { defaultScopes, serializeScopes } from "../src/agents-schema";
@@ -44,12 +45,7 @@ function job(id: string, status: string, claimedBy: string | null) {
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM agents"),
-    env.DB.prepare("DELETE FROM jobs"),
-    env.DB.prepare("DELETE FROM agent_sessions"),
-    env.DB.prepare("DELETE FROM session_events"),
-  ]);
+  await resetCapsidDb();
   await env.DB.batch([
     await agentRow("agent_hook00000001", "sample-driver", "driver", DRIVER_KEY, ["read", "write"]),
     await agentRow("agent_hook00000002", "sample-ro-driver", "driver", RO_DRIVER_KEY, ["read"]),
@@ -96,12 +92,11 @@ const start = (id = SESSION) => ({ session_id: id, hook_event_name: "SessionStar
 const notify = (type: string) => ({ session_id: SESSION, hook_event_name: "Notification", notification_type: type, title: "Sample", message: "Claude needs your permission" });
 
 describe("who may post hooks", () => {
-  it("PLANT: no key, a revoked key, a read-only key and a non-driver agent are refused, and nothing is written", async () => {
+  it("PLANT: no key, a revoked key, a read-only driver and a non-driver agent are refused, and nothing is written", async () => {
     const none = await hook(null, start());
     expect(none.status).toBe(401);
     expect(none.headers.get("WWW-Authenticate")).toBe('Bearer realm="capsid-hooks"');
     expect((await hook(REVOKED_KEY, start())).status, "a revoked driver key").toBe(401);
-    expect((await hook(env.TEST_OPERATOR_KEYS.read, start())).status, "the legacy read-only key").toBe(403);
     const ro = await hook(RO_DRIVER_KEY, start());
     expect(ro.status, "a driver minted read-only").toBe(403);
     expect(await ro.text()).toMatch(/write grant/);
@@ -110,13 +105,6 @@ describe("who may post hooks", () => {
     expect(await cron.text()).toMatch(/is not a driver\./);
     expect(await sessionCount()).toBe(0);
     expect(await eventCount()).toBe(0);
-  });
-
-  it("the admin's write key is admitted, for testing, and binds to no job", async () => {
-    await ok(env.TEST_OPERATOR_KEYS.write, start());
-    const row = await session();
-    expect(row?.agent).toMatch(/^opkey:/);
-    expect(row?.job_id).toBeNull();
   });
 
   it("a driver binds to the one job it holds claimed, and the session keeps that job when the driver moves on", async () => {

@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { docPath, MAX_PATH, pathProblem, resultRef, resultRefProblem } from "../src/limits.ts";
 import {
-  CI_DISPATCH_POLL_INTERVAL_MS,
-  CI_DISPATCH_POLL_MS,
   CI_LOG_BUDGET,
   REPO_HISTORY_DEFAULT_LIMIT,
   REPO_HISTORY_MAX_LIMIT,
@@ -96,11 +94,6 @@ test("the CI log budget is larger than the tail it replaced", () => {
 
 test("the history default limit is below the maximum", () => {
   assert.ok(REPO_HISTORY_DEFAULT_LIMIT < REPO_HISTORY_MAX_LIMIT, "the default is not below the maximum");
-});
-
-test("the ci_dispatch poll fits inside its own timeout with room for several polls", () => {
-  // At least a few polls must fit, or the timeout is a single attempt.
-  assert.ok(CI_DISPATCH_POLL_MS / CI_DISPATCH_POLL_INTERVAL_MS >= 5, "too few polls fit in the timeout");
 });
 
 // result_ref: a document key or a PR URL. `docPath` alone would refuse every URL on

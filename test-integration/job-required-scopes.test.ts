@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 
 // required_scopes at the claim and the resume, on the real path. test/jobs-agents.test.ts
@@ -36,7 +36,7 @@ function mintedSeat(namespace = "capsid"): Agent {
   return { id: "agent_0123456789ab", name, kind: "driver", actor: `agent:${name}`, scopes, admin: false, row: null };
 }
 
-const SEAT_AGENT = legacyAgent("write", SEAT);
+const SEAT_AGENT = grantAgent("write", SEAT);
 
 // No cast on purpose: a cast would let a misspelled field (the tool's required_flags
 // instead of the function's required_scopes) typecheck and post a job with no
@@ -85,7 +85,7 @@ describe("required_scopes on the real queue transitions", () => {
     // Resume is a claim: the caller ends up holding the claim and doing the rest of
     // the work, so a caller that could not have claimed this job must not acquire it
     // by resuming it.
-    const posted = await post({ required_scopes: { flags: ["can_dispatch"] } });
+    const posted = await post({ required_scopes: { flags: ["can_touch_protected"] } });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
     await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
@@ -95,7 +95,7 @@ describe("required_scopes on the real queue transitions", () => {
     // acquires nothing.
     const refused = await resumeJob(jobsEnv(), mintedSeat(), NOW, id, "picking it up", { take: true });
     expect(refused.ok).toBe(false);
-    expect(refused.refusal).toMatch(/can_dispatch/);
+    expect(refused.refusal).toMatch(/can_touch_protected/);
     expect(await statusOf(id)).toBe("blocked");
 
     // Without take the resumer acquires nothing. The seat blocked it as the shared admin

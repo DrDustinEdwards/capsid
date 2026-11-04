@@ -349,15 +349,18 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
     }
 
     for (const pr of prs) {
-      // A PR whose body names no job is declined before any GitHub read, since
-      // body_names_job refuses it anyway and the reads share the rate limit. A visual PR,
-      // or one Dustin approved, is judged all the same: body_names_job leaves it class
-      // approve, so his approval merges it on green CI (job_0368576da167).
+      // A PR whose body names no job is declined before any GitHub read when its
+      // namespace has no promoted unit, since body_names_job refuses it anyway and the
+      // reads share the rate limit. With a promoted unit its files are read: a PR in that
+      // unit merges on the unit instead of a job (policy version 10). A visual PR, or one
+      // Dustin approved, is judged all the same: body_names_job leaves it class approve,
+      // so his approval merges it on green CI (job_0368576da167).
       const visual = isVisual(pr);
-      if (!jobIdFromBody(pr.body ?? "") && !visual && !approvals.has(pr.number)) {
+      const hasUnit = policy.units.some((u) => u.startsWith(`${namespace} / `));
+      if (!jobIdFromBody(pr.body ?? "") && !visual && !approvals.has(pr.number) && !hasUnit) {
         const skipped = {
           failed: "body_names_job" as const,
-          why: "the PR body names no job id, so there is no request this change can be traced back to. Its files and checks were not read.",
+          why: "the PR body names no job id, and no unit in its namespace has earned unattended merging, so a person approves it. Its files and checks were not read.",
           passed: [] as PolicyCheck[],
         };
         outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, head_sha: pr.head.sha, ...skipped });
@@ -467,7 +470,7 @@ async function listOpenPrs(env: Env, owner: string, repo: string): Promise<OpenP
   return `more than ${OPEN_PR_PAGES * 100} open PRs`;
 }
 
-/** Judge one PR that names a job, merge it when the policy passes, and audit either way.
+/** Judge one PR (named job, promoted unit, visual or approved), merge it when the policy passes, and audit either way.
  *  Pushes exactly one outcome, before its audit row, so a caller can tell a PR that was
  *  judged from one that threw first. */
 async function judgeOnePr(
@@ -568,7 +571,7 @@ async function judgeOnePr(
   // the new head.
   let result: unknown;
   try {
-    result = await managePr(env, namespace, pr.number, "merge", "merge", undefined, undefined, facts.headSha);
+    result = await managePr(env, namespace, pr.number, "merge", "merge", undefined, facts.headSha);
   } catch (err) {
     if (!(err instanceof HeadMovedError)) throw err;
     const moved = {

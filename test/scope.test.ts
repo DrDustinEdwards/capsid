@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents.ts";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
 import { AUTHORITATIVE } from "../src/counts.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface.ts";
-import { TOOL_GRANTS, TOOL_ACTION_GRANTS, actionArgFor, checkScope, isMoneyPath, repoWriteFlags, requiredForAction, requiredGrant } from "../src/scope.ts";
+import { TOOL_GRANTS, TOOL_ACTION_GRANTS, actionArgFor, checkScope, isMoneyPath, repoWriteFlags, requiredForAction, requiredGrant, toolListed } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 // One enforcement point, and the refusal names what is missing.
@@ -56,7 +56,7 @@ test("the refusal names the axis that failed, and names the scope the caller act
 test("a missing flag is refused by name, and the refusal says why the flag exists", () => {
   const agent = scopedAgent();
   for (const flag of SCOPE_FLAGS) {
-    const refusal = checkScope(agent, { tool: "capsid_change_repo", action: "write_file", namespace: "capsid", grant: "write", flags: [flag] });
+    const refusal = checkScope(agent, { tool: "capsid_close_pr", action: "merge", namespace: "capsid", grant: "write", flags: [flag] });
     assert.match(String(refusal), new RegExp(`needs the ${flag} flag`), `${flag} was not refused by name`);
     assert.match(String(refusal), /because /, `the ${flag} refusal does not say why the flag exists`);
   }
@@ -86,7 +86,7 @@ test("a caller with no scopes at all is refused everything, which is what the fa
 });
 
 test("the legacy caller passes every check, which is the one thing this migration must not break", () => {
-  const legacy = legacyAgent("write", "opkey:0123456789ab");
+  const legacy = grantAgent("write", "opkey:0123456789ab");
   for (const tool of Object.keys(TOOL_GRANTS)) {
     assert.equal(checkScope(legacy, { tool, namespace: "foxhound", repo: "legacy", grant: "write", flags: SCOPE_FLAGS }), null, `the legacy key was refused ${tool}`);
   }
@@ -99,9 +99,7 @@ test("requiredGrant fails closed for a tool nobody has classified", () => {
   assert.equal(requiredGrant("toString"), "write");
 });
 
-test("repoWriteFlags derives the flags from the CALL, not from the tool name", () => {
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "src/x.ts", mode: "pr" }), []);
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "src/x.ts", mode: "direct" }), ["can_direct_write"]);
+test("repoWriteFlags derives the flags from the CALL, not from the tool name alone", () => {
   assert.deepEqual(repoWriteFlags("capsid_close_pr", "merge", {}), ["can_merge"]);
   // close carries can_merge too: closing deletes the head branch, as merging does.
   assert.deepEqual(repoWriteFlags("capsid_close_pr", "close", {}), ["can_merge"]);
@@ -111,18 +109,6 @@ test("repoWriteFlags derives the flags from the CALL, not from the tool name", (
   // A branch delete needs can_merge only when forced past an open pull request.
   assert.deepEqual(repoWriteFlags("capsid_close_pr", "delete_branch", {}), []);
   assert.deepEqual(repoWriteFlags("capsid_close_pr", "delete_branch", { force: true }), ["can_merge"]);
-  // A comment needs can_comment_pr and not can_merge; opening a pull request needs neither.
-  assert.deepEqual(repoWriteFlags("capsid_open_pr", "comment", {}), ["can_comment_pr"]);
-  assert.deepEqual(repoWriteFlags("capsid_open_pr", "open", {}), []);
-  assert.deepEqual(repoWriteFlags("capsid_run_ci", undefined, { path: "improve-score.yml" }), ["can_dispatch"]);
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: ".github/workflows/ci.yml", mode: "pr", allow_workflow_write: true }), [
-    "can_write_workflows",
-    "can_touch_protected",
-  ]);
-  // The protected list is the improve loop's, not a second copy.
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "package.json", mode: "pr" }), ["can_touch_protected"]);
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "test/thing.test.ts", mode: "pr" }), ["can_touch_protected"]);
-  assert.deepEqual(repoWriteFlags("capsid_change_repo", "write_file", { path: "app/billing/charge.ts", mode: "pr" }), ["money_paths"]);
 });
 
 test("a money path is matched by name, and an innocent path is not", () => {
@@ -258,7 +244,11 @@ async function sweep(caller: Agent, surface: Surface, calls: (tools: ServedTool[
         await withFetch({}, async (fetches) => {
           const before = prepared;
           const kvBefore = kvReads;
-          const result = (await client.callTool({ name: tool, arguments: args })) as { isError?: boolean; content: Array<{ text?: string }> };
+          // A tool the caller's grant can never call is not served to it (src/scope.ts
+          // toolListed), so the protocol refuses the call; that refusal is recorded as the result.
+          const result = (await client
+            .callTool({ name: tool, arguments: args })
+            .catch((error: unknown) => ({ isError: true, content: [{ text: `protocol: ${error instanceof Error ? error.message : String(error)}` }] }))) as { isError?: boolean; content: Array<{ text?: string }> };
           const text = result.content[0]?.text ?? "";
           results.set(label, { text, isError: result.isError === true, prepared: prepared - before, fetched: fetches.length, kvReads: kvReads - kvBefore });
           const parse = /^invalid arguments for [^:]+: (.*)$/s.exec(text);
@@ -347,7 +337,7 @@ function isReadCall(tool: string, action: string | undefined): boolean {
 // admin identity holding only the read grant: a non-admin is refused there as not the
 // admin before any grant question arises, which would prove nothing about the grant.
 function readOnlyCaller(surface: Surface): Agent {
-  const reader = legacyAgent("read", "opkey:readonly0000");
+  const reader = grantAgent("read", "opkey:readonly0000");
   return surface === "admin" ? { ...reader, admin: true } : reader;
 }
 
@@ -362,10 +352,22 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
   const writeTools = new Set<string>();
   const readTools = new Set<string>();
   for (const surface of Object.keys(SURFACES) as Surface[]) {
-    const { served, results } = await sweep(readOnlyCaller(surface), surface, (tools) =>
-      tools.flatMap((tool) => actionsOf(tool).map((action) => ({ tool: tool.name, args: argsFor(tool, action) })))
-    );
-    assertServedAll(surface, served);
+    const caller = readOnlyCaller(surface);
+    const unserved = SURFACES[surface].tools.filter((tool) => !toolListed(caller, tool));
+    const { served, results } = await sweep(caller, surface, (tools) => [
+      ...tools.flatMap((tool) => actionsOf(tool).map((action) => ({ tool: tool.name, args: argsFor(tool, action) }))),
+      ...unserved.map((tool) => ({ tool, args: {} as Record<string, unknown> })),
+    ]);
+    // A read grant is served every tool but those that need write in whole (area 11, T7).
+    assert.deepEqual(served.map((t) => t.name).sort(), SURFACES[surface].tools.filter((tool) => !unserved.includes(tool)).sort());
+    for (const tool of unserved) {
+      const result = results.get(tool);
+      assert.ok(result, `${tool} was not called`);
+      writes += 1;
+      writeTools.add(tool);
+      assert.match(result.text, /not found/i, `${tool} answered a read-only caller: ${result.text}`);
+      assert.equal(result.prepared + result.fetched + result.kvReads, 0, `${tool} reached a store or the network before refusing`);
+    }
     for (const tool of served) {
       for (const action of actionsOf(tool)) {
         const label = action === undefined ? tool.name : `${tool.name}.${action}`;

@@ -1,7 +1,8 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import { capsidStatus } from "../src/status";
@@ -20,7 +21,6 @@ import {
 } from "../src/portal-actions";
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
-import { proposeCanon } from "../src/canon";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
 import { AUTO_MERGE_ALLOWED_PATHS, AUTO_MERGE_POLICY_PATH, AUTO_MERGE_REFUSED_PATHS, AUTO_MERGE_REQUIRED_CI, loadMergePolicy, POLICY_CHECKS, requiredCiLabel } from "../src/auto-merge-policy";
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs";
@@ -37,7 +37,7 @@ const SECRET = "integration-portal-cookie-key";
 const CSRF = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 const NOW = new Date();
 const ACTOR = "access:admin@example.com";
-const DRIVER = legacyAgent("write", "agent:capsid-driver");
+const DRIVER = grantAgent("write", "agent:capsid-driver");
 
 // The operator token migrations/0035 names for dustinedwards: set, so site_repair may call.
 const OPERATOR_TOKEN = "integration-operator-token-0000000000000";
@@ -97,7 +97,7 @@ async function jobsEnv() {
 }
 
 async function postedJob(title: string): Promise<string> {
-  const posted = await postJob(await jobsEnv(), legacyAgent("write", "github:DrDustinEdwards"), NOW, { namespace: "capsid", title, body: "do the thing", gate_required: true });
+  const posted = await postJob(await jobsEnv(), grantAgent("write", "github:DrDustinEdwards"), NOW, { namespace: "capsid", title, body: "do the thing", gate_required: true });
   expect(posted.ok, posted.refusal).toBe(true);
   return posted.job!.id;
 }
@@ -134,10 +134,7 @@ async function auditRows(): Promise<Array<{ id: number; actor: string; action: s
 const KEYS = [OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...APP_ROSTER.map(breakerResetKey)];
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM jobs").run();
-  await env.DB.prepare("DELETE FROM audit_log").run();
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
-  await env.DB.prepare("DELETE FROM agents").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
     .run();
@@ -146,7 +143,6 @@ beforeEach(async () => {
     .bind("sample", JSON.stringify([{ repo: "example/sample", label: "primary" }]))
     .run();
   await env.DB.prepare("DELETE FROM ops_sites WHERE namespace = 'sample'").run();
-  await env.DB.prepare("DELETE FROM ops_packages").run();
   for (const key of KEYS) await env.APP_KV.delete(key);
 });
 
@@ -156,39 +152,6 @@ async function packageRow(name: string) {
 
 async function siteRow(namespace: string) {
   return env.DB.prepare("SELECT * FROM ops_sites WHERE namespace = ?1").bind(namespace).first<Record<string, unknown>>();
-}
-
-// A driver's pending proposal for sample/core.md, written against the body stored now.
-async function proposal(fresh = true, body = "The sample service answers on port 8080."): Promise<string> {
-  if (fresh) {
-    await env.DB.prepare("DELETE FROM canon_proposals").run();
-    await env.DB.prepare("DELETE FROM documents WHERE namespace = 'sample' AND path = 'core.md'").run();
-    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body, type) VALUES ('sample', 'core.md', 'sample - core', 'The sample service answers on port 80.', 'core')").run();
-  }
-  const proposed = await proposeCanon(env.DB, "agent:sample-driver", NOW, {
-    namespace: "sample",
-    path: "core.md",
-    title: null,
-    body,
-    type: null,
-    tags: null,
-    status: null,
-    mode: "replace",
-    priorBody: "The sample service answers on port 80.",
-    priorExists: true,
-  });
-  return String(proposed.id);
-}
-
-// The ids canon_approve_all's case wrote, for its after.
-const sweepIds = { older: "", newer: "" };
-
-async function coreBody() {
-  return (await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'sample' AND path = 'core.md'").first<{ body: string }>())?.body;
-}
-
-async function proposalRow(id: string) {
-  return env.DB.prepare("SELECT state, decided_by, decided_reason FROM canon_proposals WHERE id = ?1").bind(Number(id)).first<Record<string, unknown>>();
 }
 
 // A signed auto-merge policy that agrees with the code, at version 7 (as shipped since #367), and its pin, as a
@@ -394,30 +357,6 @@ const CASES: Record<string, Case> = {
     },
     after: async () => expect(await packageRow("sample-pkg")).toBeNull(),
   },
-  canon_approve: {
-    params: async () => ({ id: await proposal() }),
-    after: async ({ id }) => {
-      expect(await coreBody()).toBe("The sample service answers on port 8080.");
-      expect(await proposalRow(id)).toMatchObject({ state: "approved", decided_by: ACTOR });
-      const version = await env.DB.prepare("SELECT body FROM document_versions WHERE namespace = 'sample' AND path = 'core.md' ORDER BY id DESC LIMIT 1").first<{ body: string }>();
-      expect(version?.body, "the approval did not snapshot the body it replaced").toBe("The sample service answers on port 80.");
-    },
-  },
-  // Two proposals on one document: the older is rejected as superseded, the newer approved.
-  canon_approve_all: {
-    params: async () => {
-      sweepIds.older = await proposal();
-      sweepIds.newer = await proposal(false, "The sample service answers on port 9090.");
-      return { reason: "the rules audit" };
-    },
-    after: async () => {
-      expect(await coreBody()).toBe("The sample service answers on port 9090.");
-      expect(await proposalRow(sweepIds.older)).toMatchObject({ state: "rejected", decided_by: ACTOR, decided_reason: `superseded by proposal ${sweepIds.newer} on the same document` });
-      expect(await proposalRow(sweepIds.newer)).toMatchObject({ state: "approved", decided_by: ACTOR });
-      const click = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'portal-canon_approve_all' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
-      expect(JSON.parse(click?.params ?? "{}")).toMatchObject({ reason: "the rules audit", approved: [Number(sweepIds.newer)], rejected: [Number(sweepIds.older)], failed: [] });
-    },
-  },
   sign_policy_change: {
     // Version 8, signed, with the unit, snapshotting version 7, and loading as the Worker's
     // copy: the typed version is what lets it through.
@@ -496,19 +435,12 @@ const CASES: Record<string, Case> = {
       expect(run).toEqual({ outcome: "ok", reason: "dustinedwards: sync_pages converged (14 of 14 present) (portal)" });
     },
   },
-  canon_reject: {
-    params: async () => ({ id: await proposal(), reason: "the port belongs in the typed doc" }),
-    after: async ({ id }) => {
-      expect(await coreBody()).toBe("The sample service answers on port 80.");
-      expect(await proposalRow(id)).toMatchObject({ state: "rejected", decided_by: ACTOR, decided_reason: "the port belongs in the typed doc" });
-    },
-  },
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-six actions", () => {
+  it("covers the allow-list, twenty-three actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(26);
+    expect(Object.keys(CASES).length).toBe(23);
   });
 
   for (const action of PORTAL_ACTIONS) {
@@ -641,7 +573,7 @@ describe("the automation switches against real D1 and KV", () => {
 
 describe("the job actions against real D1", () => {
   it("resume: the preview says the queue, and why, when the job was blocked by a shared identity, and the perform sends it there", async () => {
-    const id = await blockedJob("blocked by a shared identity", legacyAgent("write", "access:someone@example.com"));
+    const id = await blockedJob("blocked by a shared identity", grantAgent("write", "access:someone@example.com"));
     const previewed = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } });
     const preview = (await previewed.json()) as PortalPreview;
     expect(preview.changes[0]).toMatch(/blocked -> queued/);

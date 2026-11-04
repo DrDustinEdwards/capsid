@@ -1,7 +1,8 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
-import { legacyAgent, type Agent } from "../src/agents";
+import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 
 // Resume when the job cannot go back to the credential that blocked it: the credential
@@ -10,7 +11,7 @@ import { defaultScopes } from "../src/agents-schema";
 // and the next free session claims it. A driver that holds other claims is no reason.
 
 const SECRET = "test-root-secret";
-const ADMIN = legacyAgent("write", "github:DrDustinEdwards");
+const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-09-26T06:00:00.000Z");
 const LATER = new Date("2026-09-26T07:00:00.000Z");
 
@@ -56,8 +57,7 @@ async function resumedAudit(id: string) {
 }
 
 beforeEach(async () => {
-  for (const table of ["jobs", "audit_log", "job_outcomes"]) await env.DB.prepare(`DELETE FROM ${table}`).run();
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
     .run();

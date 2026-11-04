@@ -38,7 +38,7 @@ Capsid is written in TypeScript and deployed as one Cloudflare Worker. It uses t
 | `OAUTH_KV` | KV | OAuth grants and client registrations. |
 | `MEDIA` | R2 | Daily database exports and the Markdown mirror of every document. |
 | `AI_SEARCH` | AI Search | A derived semantic index of the documents, used for hybrid search. D1 remains the source of record. |
-| `ASSETS` | Static assets | The built Capsid Portal (`dashboard/dist`). |
+| `ASSETS` | Static assets | The built Capsid Portal's browser files (`dashboard/build/client`). |
 
 ### Hosts
 
@@ -79,17 +79,17 @@ Every overwrite or delete stores the previous body in `document_versions` and wr
 
 ### Authorization
 
-An agent's scopes have five axes: `namespaces`, `repos`, `tools`, `grants` (read, or read and write) and `flags`. Flags control operations with a wide effect, such as merging (`can_merge`), committing directly to a default branch (`can_direct_write`), dispatching workflows (`can_dispatch`) and writing protected paths (`can_touch_protected`). A new agent receives read access to its named namespaces and no flags. Scopes that fail to parse resolve to no access. The required grant for each tool is declared in `TOOL_GRANTS` (`src/scope.ts`), and a tool absent from that table requires the write grant. See [docs/auth.md](docs/auth.md).
+An agent's scopes have five axes: `namespaces`, `repos`, `tools`, `grants` (read, or read and write) and `flags`. Two flags control operations with a wide effect: merging, closing, tagging or releasing (`can_merge`), and writing autonomy policy documents (`can_touch_protected`). A new agent receives read access to its named namespaces and no flags. Scopes that fail to parse resolve to no access. The required grant for each tool is declared in `TOOL_GRANTS` (`src/scope.ts`), and a tool absent from that table requires the write grant. See [docs/auth.md](docs/auth.md).
 
 ### Work queue
 
 A job consists of a title and a body; the body is the complete prompt an agent executes. Bodies are signed when posted, and a claim verifies the signature first, so a body altered outside the queue's own `edit` action is rejected. The lifecycle is `post`, `claim`, then `complete`, `fail`, `block` or `resume`. A job that reaches an operation requiring a person (a push, a deploy, a secret, a live migration or a merge) is blocked with the exact command to run. Capsid assigns each job a kind and a recommended model and effort (`src/model-routing.ts`).
 
-Capsid can start a Claude Code cloud session for a queued job by firing a saved Claude Code routine ([docs/routines.md](docs/routines.md)). When an agent completes a job, it names the pull request that carries the work. Capsid then reads that pull request from GitHub and stores the verified state beside the agent's claim, so the two can be compared ([docs/work-queue.md](docs/work-queue.md)).
+When an agent completes a job, it names the pull request that carries the work. Capsid then reads that pull request from GitHub and stores the verified state beside the agent's claim, so the two can be compared ([docs/work-queue.md](docs/work-queue.md)).
 
 ### GitHub integration and merge policy
 
-Repository tools resolve the target repository from the namespace mapping and check the resolved repository against the caller's `repos` axis ([docs/repo-access.md](docs/repo-access.md)). Agents open pull requests; merging requires the `can_merge` flag.
+Repository tools resolve the target repository from the namespace mapping and check the resolved repository against the caller's `repos` axis ([docs/repo-access.md](docs/repo-access.md)). Capsid reads repositories and ends or publishes work: merging, closing, tagging and releasing require the `can_merge` flag. Agents push branches and open pull requests with their own GitHub access.
 
 Automatic merging is governed by a policy document that must be signed by the administrator before it has any effect; an unsigned policy, or one edited after signing, authorizes nothing. When enabled, the tick merges only pull requests that pass every check in the policy. Certain paths, including migrations, workflows, lockfiles and authentication code, are always refused automatic merging ([docs/autonomy.md](docs/autonomy.md)). Both automatic merging and the overnight run ([docs/overnight.md](docs/overnight.md)) are disabled in a new installation.
 
@@ -123,9 +123,9 @@ D1 Time Travel provides 30-day point-in-time recovery. In addition, the daily ba
 
 ## MCP tools
 
-Capsid serves 22 tools over two MCP servers. The count is derived from `TOOL_GRANTS` by `src/counts.ts`, and the registrations are in `src/tools/surface.ts`. Most tools take an `action` argument that selects one operation.
+Capsid serves 19 tools over two MCP servers. The count is derived from `TOOL_GRANTS` by `src/counts.ts`, and the registrations are in `src/tools/surface.ts`. Most tools take an `action` argument that selects one operation.
 
-**Capsid** (`/mcp`, `/ops/mcp`): 14 tools for project work.
+**Capsid** (`/mcp`, `/ops/mcp`): 11 tools for project work.
 
 | Tool | Grant | Function |
 | --- | --- | --- |
@@ -137,14 +137,11 @@ Capsid serves 22 tools over two MCP servers. The count is derived from `TOOL_GRA
 | `capsid_lint_namespace` | per action | Gather, finalize and report on a namespace's documents ([docs/consolidation.md](docs/consolidation.md)). |
 | `capsid_read_repo` | read | List directories, read files and search code in a mapped repository. |
 | `capsid_inspect_repo` | read | Branches, tags, pull requests, history, CI runs, live site checks and search-console data. |
-| `capsid_change_repo` | write | Write or delete a file, or create a branch. |
-| `capsid_open_pr` | write | Open a pull request or comment on one. |
 | `capsid_close_pr` | write | Merge or close a pull request, delete a branch, tag a commit or publish a release. |
-| `capsid_run_ci` | write | Dispatch a workflow or rerun failed jobs. |
 | `capsid_work_jobs` | per action | The work queue lifecycle. |
 | `capsid_run_improve` | read | Capsid status per namespace: queue, breaker, maintenance and items awaiting the owner. The name is retained from a removed feature. |
 
-**Capsid Admin** (`/mcp/admin`, `/ops/mcp/admin`): 8 tools, available to the administrator identity only.
+**Capsid Admin** (`/mcp/admin`): 8 tools, available to the administrator identity only.
 
 | Tool | Grant | Function |
 | --- | --- | --- |
@@ -166,12 +163,12 @@ The router is `defaultHandler` in `src/routes.ts`. The principal routes are:
 | Route | Authentication | Purpose |
 | --- | --- | --- |
 | `POST /mcp`, `POST /mcp/admin` | OAuth | MCP over Streamable HTTP for the owner and co-owners. |
-| `POST /ops/mcp`, `POST /ops/mcp/admin` | Bearer key | MCP for agents and scheduled clients. |
+| `POST /ops/mcp` | Bearer key | MCP for agents and scheduled clients. |
 | `/authorize`, `/callback`, `/token`, `/register`, `/.well-known/*` | None | OAuth sign-in and discovery. |
 | `POST /ops/hooks`, `POST /ops/otlp/v1/*` | Bearer key | Claude Code hook events and telemetry. |
 | `GET /ops/inbox`, `POST /ops/inbox/report` | Bearer key | Items awaiting the owner, per application. |
 | `GET /health` | None | Deploy provenance and a store probe; returns 503 when D1 or FTS5 fails. |
-| `GET /public/model/v1.json`, `/public/stats/v1.json`, `/public/code/v1.json` | None | Public system model, statistics and code maps. |
+| `GET /public/model/v1.json`, `/public/stats/v1.json`, `/public/code/v1.json`, `/public/versions/v1.json` | None | Public system model, statistics, code maps and package versions. |
 | `/portal/*` | Access session | The Capsid Portal and its API. |
 
 The complete list, including signed backup and benchmark routes, is in [docs/auth.md](docs/auth.md#endpoints).
@@ -193,7 +190,7 @@ The complete list, including signed backup and benchmark routes, is in [docs/aut
 
 ## Installation
 
-An installation requires a Cloudflare account and a GitHub App. The procedure is given in full in [docs/bootstrap.md](docs/bootstrap.md), section 10. In outline:
+An installation requires a Cloudflare account and a GitHub App. The procedure is given in full in [docs/bootstrap.md](docs/bootstrap.md), section 9. In outline:
 
 1. Install dependencies with `npm install`. Node.js 26.11.1 or later is required.
 2. Create a D1 database, two KV namespaces and an R2 bucket with Wrangler.
@@ -218,7 +215,7 @@ An installation requires a Cloudflare account and a GitHub App. The procedure is
 | `npm --prefix dashboard run dev` | Serve the Portal locally against sample data. |
 | `EXPECT_SHA=<sha> npm run verify:live` | Verify the deployed Worker. |
 
-The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#12-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
+The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#11-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
 
 ## Documentation
 
@@ -233,7 +230,6 @@ The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#12-checks
 **Jobs and agents**
 
 - [docs/work-queue.md](docs/work-queue.md): the job lifecycle, signing and recorded evidence.
-- [docs/routines.md](docs/routines.md): starting cloud sessions through routines.
 - [docs/autonomy.md](docs/autonomy.md): automatic merging and pre-approved gates.
 - [docs/overnight.md](docs/overnight.md): the overnight plan and morning digest.
 - [docs/bench.md](docs/bench.md): the paired comparison run in capsid-bench.

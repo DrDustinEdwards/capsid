@@ -6,7 +6,7 @@
 // metadata, /register, the consent page and the Access redirect, and then broke every
 // tool call, passed them all (job_bb06c9be24c4, found in the #331 rollback report).
 // This gate makes the calls a client makes, through /ops/mcp with the live-probe agent's
-// key (scripts/mint-agents.ts, role live-probe: read grant on capsid, the capsid_read_doc tool
+// key (scripts/roles.ts, role live-probe: read grant on capsid, the capsid_read_doc tool
 // only), in both protocol eras Capsid serves:
 //
 //   2025-11-25  initialize, notifications/initialized, tools/list, tools/call capsid_read_doc
@@ -17,10 +17,13 @@
 
 export const ERAS = ["2025-11-25", "2026-07-28"];
 
-// What tools/list must return on /mcp: Capsid's tools, not Capsid Admin's.
-// test/live-gate-mcp.test.ts holds it to CAPSID_TOOLS in src/tools/surface.ts, so a
-// change to the served surface changes this in the same commit.
-export const EXPECTED_TOOLS = 14;
+// What tools/list must return on /mcp to the live-probe agent, which holds the read grant:
+// Capsid's tools a read grant can call, not Capsid Admin's and not the write tools, which
+// are not listed for a read grant (src/scope.ts toolListed; area 11, T7). So the gate
+// catches a deploy that lost a read tool; one that lost a write tool shows in the tests.
+// test/live-gate-mcp.test.ts holds it to CAPSID_TOOLS and TOOL_GRANTS, so a change to the
+// served surface changes this in the same commit.
+export const EXPECTED_TOOLS = 8;
 
 // The tool the probe reads with.
 export const READ_TOOL = "capsid_read_doc";

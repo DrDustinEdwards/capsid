@@ -109,16 +109,13 @@ test("a runner key moves once its job has ended, and waits its 7 days while the 
   assert.deepEqual(names(raw, "agents"), ["runner-blocked"]);
 });
 
-test("PLANT: an archived key is refused, and not tried as an operator key even when it is one", async () => {
+test("PLANT: an archived key is refused", async () => {
   const { raw, db } = fresh();
   const key = await plantAgent(raw, "gone", daysAgo(ARCHIVE_AFTER_DAYS + 1));
   await archiveRevokedAgents(db, ACTOR, NOW);
   assert.deepEqual(names(raw, "agents_archive"), ["gone"], "the plant did not land in the archive");
   const request = new Request("https://capsid.example.com/ops/mcp", { headers: { Authorization: `Bearer ${key}` } });
-  // The same digest as a write operator key: a refusal that only looked in agents would
-  // fall through and resolve it as the operator.
-  const env = { DB: db, OPERATOR_KEY_HASH: await sha256Hex(key) };
-  assert.equal(await resolveAgent(request, env, NOW), null);
+  assert.equal(await resolveAgent(request, { DB: db }, NOW), null);
 });
 
 test("PLANT: an archived name is never minted again", async () => {

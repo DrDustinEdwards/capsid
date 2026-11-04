@@ -1,5 +1,5 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
-import { adminGrantEmail } from "./auth";
+import { adminEmailList, adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
 import { readLastStepUp } from "./scope";
 import { adminWriteObserver, recordAdminInitialize } from "./admin-client-audit";
@@ -8,18 +8,21 @@ import { supersedePass } from "./supersede";
 import { defaultHandler } from "./routes";
 import { withSecurityHeaders } from "./security-headers";
 import type { Env, Props } from "./env";
-import { buildAdminServer, buildServer } from "./server";
+import { ADMIN_SERVER_INFO, buildAdminServer, buildServer, SERVER_INFO } from "./server";
 import { ADMIN_MCP_ROUTE, mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
-import { mcpOriginRefusal } from "@dustinedwards/site-runtime/mcp-server";
+import { audienceRefusal, mcpOriginRefusal } from "@dustinedwards/site-runtime/mcp-server";
 import { DCR_CALLBACKS, registrationLimited, registrationRefusal } from "@dustinedwards/site-runtime/mcp-login";
 import { runTick } from "./tick";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
-import { portalHostRequest } from "./portal-host";
-import { hostRefusal, LEGACY_HOST, LEGACY_MCP_URL, MCP_URL } from "./mcp-host";
+import { isPortalHost, portalHostRequest } from "./portal-host";
+import { handlePortalDemo, isDemoRequest } from "./portal-demo";
+import { portalAsset } from "./portal-app";
+import { hostRefusal, MCP_URL } from "./mcp-host";
 import { logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
 import { countNotFound } from "@dustinedwards/site-runtime/not-found";
 import { securityTxtResponse } from "@dustinedwards/site-runtime/security-txt";
+import { ADMIN_LIST_PATH, adminListResponse } from "@dustinedwards/site-runtime/access-drift";
 
 const SECURITY_TXT_PATH = "/.well-known/security.txt";
 // Under a year out (RFC 9116); the family check reminds a month ahead.
@@ -28,6 +31,7 @@ const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 // The Durable Objects wrangler.jsonc binds (RATE_LIMITER, TOOL_CALL_LOG), from site-runtime.
 export { RateLimiter } from "@dustinedwards/site-runtime/rate-limit/durable-object";
 export { ToolCallLog } from "@dustinedwards/site-runtime/audit-log";
+import { exportAuditLog } from "@dustinedwards/site-runtime/audit-log";
 
 // Spelled once. wrangler.jsonc declares them; test/crons.test.ts derives one list
 // from the other and fails in both directions.
@@ -39,11 +43,18 @@ export const SKILLS_REFRESH_CRON = "30 9 * * *";
 
 // What the OAuth provider hands its API handler: the grant's props, and what it verified
 // about the token, its scopes among them.
-type ApiContext = ExecutionContext & { props?: Props; auth?: { scope?: string[]; clientId?: string } };
+type ApiContext = ExecutionContext & { props?: Props; auth?: { scope?: string[]; clientId?: string; audience?: string } };
 
 const apiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const { props, auth } = ctx as ApiContext;
+    const url = new URL(request.url);
+    // The token must have been issued for this host's resource (RFC 8707), re-checked with
+    // the family's shared check against the resource this host serves, not only the one the
+    // provider was built with (area 11, A5). Capsid Admin on /mcp/admin takes the /mcp token.
+    const wrongAudience = audienceRefusal(auth, MCP_URL, [SCOPES.read]);
+    if (wrongAudience) return wrongAudience;
+    const adminRoute = url.pathname === ADMIN_MCP_ROUTE;
     // Checked on every request, not only at sign-in (src/auth.ts adminGrantEmail).
     const email = await adminGrantEmail(env, props);
     if (!email) {
@@ -51,7 +62,7 @@ const apiHandler = {
         status: 403,
       });
     }
-    const limited = await mcpRateLimited(env, `access:${email}`);
+    const limited = await mcpRateLimited(env, `access:${email}`, adminRoute ? ADMIN_SERVER_INFO : SERVER_INFO);
     if (limited) return limited;
     // The admin agent holds every scope the token does: every namespace, tool and flag,
     // and the write grant only when the consent page's box was ticked (capsid.write). A
@@ -63,7 +74,6 @@ const apiHandler = {
     const clientId = auth?.clientId;
     // Only Capsid Admin serves step-up actions, so only its route reads the clock. A KV
     // failure leaves it undefined, which falls back to the sign-in time alone (src/scope.ts STEP_UP).
-    const adminRoute = new URL(request.url).pathname === ADMIN_MCP_ROUTE;
     if (adminRoute && signedInAt !== null) admin.lastStepUpAt = await readLastStepUp(env.APP_KV, admin.actor, signedInAt);
     // Observation only, for 30 days (src/admin-client-audit.ts): which client the admin
     // acts through. It never refuses on what the client says.
@@ -92,22 +102,35 @@ function withCacheDefault(response: Response, pathname: string): Response {
 
 // The RFC 8707 resource is per host. workers-oauth-provider binds every access token to
 // ONE configured resource and refuses a token whose audience origin is not the host the
-// request arrived on (token_audience_unbound, audience_mismatch), so one provider cannot
-// serve /mcp on two hosts. The MCP endpoint lives at MCP_URL; the old address keeps its
-// own provider only for the hours of the same-day cut (job_2f9671f89e89), so the
-// claude.ai connector, authorized there, works until it is switched. Both share OAUTH_KV.
-// The step that turns workers.dev off removes the legacy one.
+// request arrived on (token_audience_unbound, audience_mismatch). The MCP endpoint lives
+// at MCP_URL, and the provider serves that resource only.
 //
-// Each is built once per registration allowlist, which is the env's: a changed
+// It is built once per registration allowlist, which is the env's: a changed
 // DCR_REDIRECT_URIS gets a new provider, never a stale one.
 const providers = new Map<string, OAuthProvider<Env>>();
 
-function providerFor(env: Env, resource: string, registration: boolean): OAuthProvider<Env> {
+function dcrAllowlist(env: Env): string {
+  return [...DCR_CALLBACKS, env.DCR_REDIRECT_URIS ?? ""].join(",");
+}
+
+// A registration the allowlist refuses writes nothing, so it spends none of the limit: the
+// provider's callback still answers it 400 invalid_redirect_uri. Counting refusals let the
+// live gate's own unlisted-redirect probe, one per deploy, use up the daily 30 and roll a
+// deploy back on a 429 (run 41245505021). Only a registration that would be written counts.
+async function registrationWouldBeRefused(request: Request, env: Env): Promise<boolean> {
+  try {
+    const metadata = (await request.clone().json()) as Record<string, unknown>;
+    return metadata !== null && typeof metadata === "object" && registrationRefusal(dcrAllowlist(env), metadata) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function providerFor(env: Env): OAuthProvider<Env> {
   // The callbacks every user shares (Grok, ChatGPT, Gemini) and the per-connector ones the
   // seat lists in DCR_REDIRECT_URIS, each matched exactly.
-  const allowed = [...DCR_CALLBACKS, env.DCR_REDIRECT_URIS ?? ""].join(",");
-  const key = `${resource} ${registration} ${allowed}`;
-  let provider = providers.get(key);
+  const allowed = dcrAllowlist(env);
+  let provider = providers.get(allowed);
   if (provider) return provider;
   provider = new OAuthProvider<Env>({
     apiRoute: "/mcp",
@@ -119,29 +142,24 @@ function providerFor(env: Env, resource: string, registration: boolean): OAuthPr
     // resource metadata's scopes_supported); write is added on the consent page.
     scopesSupported: SCOPES.all,
     requiredScopes: [SCOPES.read],
-    resourceMetadata: { resource, resource_name: "Capsid" },
+    resourceMetadata: { resource: MCP_URL, resource_name: "Capsid" },
     // CIMD first (capsid/mcp-wrapper-standard.md, amendment 2026-09-27): a client's id is
     // the URL of its metadata document. The provider advertises CIMD only while the
     // global_fetch_strictly_public compatibility flag is set (wrangler.jsonc.example).
     clientIdMetadataDocumentEnabled: true,
-    // Tightened DCR for Grok and Gemini, on the MCP host only (rule 13): exact redirect
-    // URIs only, rate limited before the provider sees it (default export below), and a
-    // registration grants nothing, since the consent page and Access still decide. Remove
-    // when both sign in by CIMD, at the latest when the specification removes DCR. The old
-    // address keeps none; it is going.
-    ...(registration
-      ? {
-          clientRegistrationEndpoint: "/register",
-          clientRegistrationCallback: ({ clientMetadata }: { clientMetadata: Record<string, unknown> }) => {
-            const why = registrationRefusal(allowed, clientMetadata);
-            if (!why) return undefined;
-            logEvent("DCR_REDIRECT_REFUSED", { message: `DCR_REDIRECT_REFUSED ${why}` }, { level: "error" });
-            return { code: "invalid_redirect_uri", description: why };
-          },
-        }
-      : {}),
+    // Tightened DCR for Grok and Gemini (rule 13): exact redirect URIs only, rate limited
+    // before the provider sees it (default export below), and a registration grants
+    // nothing, since the consent page and Access still decide. Remove when both sign in by
+    // CIMD, at the latest when the specification removes DCR.
+    clientRegistrationEndpoint: "/register",
+    clientRegistrationCallback: ({ clientMetadata }: { clientMetadata: Record<string, unknown> }) => {
+      const why = registrationRefusal(allowed, clientMetadata);
+      if (!why) return undefined;
+      logEvent("DCR_REDIRECT_REFUSED", { message: `DCR_REDIRECT_REFUSED ${why}` }, { level: "error" });
+      return { code: "invalid_redirect_uri", description: why };
+    },
   });
-  providers.set(key, provider);
+  providers.set(allowed, provider);
   return provider;
 }
 
@@ -156,11 +174,27 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   const secured = (response: Response, path: string) => withSecurityHeaders(withCacheDefault(response, path), hostname);
   // security.txt on both hosts, before the Portal's sign-in and the MCP host's path list.
   if (asked === SECURITY_TXT_PATH) return secured(securityTxtResponse({ origin: `https://${hostname}`, contact: "security@dustinedwards.info", expires: SECURITY_TXT_EXPIRES }), asked);
+  // The admin list, hashed with a fresh salt, for the daily Access drift check
+  // (.github/workflows/access-drift.yml). The Portal signs people in through Access for
+  // SaaS, so no Access application stands in front of it: this one path on the Portal host
+  // has its own self-hosted application, Service Auth only, whose tag is ACCESS_DRIFT_AUD.
+  // adminListResponse answers only a GET carrying that application's verified Access token
+  // from a service token, and 404 to everything else, so it runs before the Portal's sign-in.
+  if (asked === ADMIN_LIST_PATH && isPortalHost(new URL(original.url))) {
+    const list = await adminListResponse(original, { ACCESS_TEAM_DOMAIN: env.ACCESS_TEAM_DOMAIN, ACCESS_AUD: env.ACCESS_DRIFT_AUD }, { admins: adminEmailList(env) });
+    return secured(list, asked);
+  }
+  // The Portal's chart demo (src/portal-demo.ts): sample data, no sign-in, nothing written. Before the
+  // Portal host's rewrite and its gate, which every other path on that host goes through.
+  if (isDemoRequest(new URL(original.url))) return secured(await handlePortalDemo(original, env), asked);
+  // The Portal's hashed build files, which the demo's pages load too (src/portal-app.ts).
+  const asset = await portalAsset(original, env);
+  if (asset) return secured(asset, asked);
   const host = portalHostRequest(original);
   if ("redirect" in host) return secured(host.redirect, asked);
   const request = host.request;
-  // The MCP host serves the machine surface only, and the old address's /portal is
-  // retired (src/mcp-host.ts). Also before the provider, for the same reason.
+  // The MCP host serves the machine surface only (src/mcp-host.ts). Also before the
+  // provider, for the same reason.
   const pathname = new URL(request.url).pathname;
   const refused = hostRefusal(request);
   if (refused) return secured(refused, pathname);
@@ -170,13 +204,26 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
     const foreign = mcpOriginRefusal(request, ["https://claude.ai"]);
     if (foreign) return secured(foreign, pathname);
   }
-  const legacy = new URL(request.url).hostname === LEGACY_HOST;
-  if (!legacy && pathname === "/register" && request.method === "POST") {
+  if (pathname === "/register" && request.method === "POST" && !(await registrationWouldBeRefused(request, env))) {
     const limited = await registrationLimited(request, env.OAUTH_KV);
     if (limited) return secured(limited, pathname);
   }
-  const response = await providerFor(env, legacy ? LEGACY_MCP_URL : MCP_URL, !legacy).fetch(request, env, ctx);
-  return secured(response, pathname);
+  const response = await providerFor(env).fetch(request, env, ctx);
+  return secured(pathname.startsWith(PRM_PATH) ? await withEveryScope(response) : response, pathname);
+}
+
+// The protected resource metadata lists every scope the resource takes (area 11, A1), read
+// and write. The provider publishes its requiredScopes there, which are also the 401's
+// scope=, the least a client asks for first; that stays the read scope alone, so a client
+// that follows the challenge meets the consent page with the write box unticked.
+const PRM_PATH = "/.well-known/oauth-protected-resource";
+
+async function withEveryScope(response: Response): Promise<Response> {
+  if (!response.ok || !response.headers.get("Content-Type")?.includes("application/json")) return response;
+  const metadata = (await response.json()) as Record<string, unknown>;
+  const headers = new Headers(response.headers);
+  headers.delete("Content-Length");
+  return Response.json({ ...metadata, scopes_supported: SCOPES.all }, { status: response.status, headers });
 }
 
 // Every request writes one `request` line (site-runtime withRequestLog: cf-ray, method, path
@@ -228,6 +275,18 @@ export default {
             };
           },
           { tag: "BACKUP_CRON_THREW", rethrow: true }
+        )
+      );
+      // The tool-call log's daily copy to AUDIT_BUCKET and the 90-day prune of copied rows
+      // (area 11, L6-L7). Its own task, so a failed write cannot stop the backup; it throws,
+      // so the run is recorded threw, and /health's tool-call-log check warns after two days.
+      ctx.waitUntil(
+        runTask(
+          env,
+          "tool-call-log-export",
+          () => exportAuditLog(env, env.AUDIT_BUCKET),
+          (done): TaskResult => ({ outcome: "ok", reason: `copied ${done.exported} rows in ${done.objects.length} objects; pruned ${done.pruned}` }),
+          { tag: "TOOL_CALL_LOG_EXPORT_THREW", rethrow: true }
         )
       );
       // Its own task, so a throw here cannot stop the backup (design-hybrid-search 3.4).

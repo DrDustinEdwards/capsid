@@ -46,7 +46,7 @@ const SEEDED = [
   site("foxhound-admin-mcp", "Foxhound Admin MCP", "https://admin-mcp.foxhoundapp.com", "/health"),
   site("dustinedwards-admin-mcp", "dustinedwards.info Admin MCP", "https://admin-mcp.dustinedwards.info", "/health"),
   site("foxing-admin-mcp", "Foxing Admin MCP", "https://admin-mcp.foxing.app", "/health"),
-  // migrations/0056_ops_sites_unwatched.sql: the explorer, Desk and txasm.org.
+  // migrations/0058_ops_sites_unwatched.sql: the explorer, Desk and txasm.org.
   site("capsid-explorer", "Capsid explorer", "https://capsid.dustinedwards.info", null),
   site("carrel-desk", "Desk", "https://desk.dustinedwards.info", "/health"),
   site("txasm-org", "txasm.org", "https://txasm.org", null),

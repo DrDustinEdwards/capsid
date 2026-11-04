@@ -65,10 +65,16 @@ describe("the trends series", () => {
     await audit("access:admin@example.com", "manage_pr", "2030-01-14 14:00:00", { action: "close" });
     await audit("access:admin@example.com", "manage_pr", "2030-01-14 15:00:00", { action: "comment" });
     await env.DB.prepare(
-      "INSERT INTO deploy_outcomes (repo, namespace, run_id, head_sha, pr, outcome, run_at) VALUES ('example-org/sample', 'sample', 7, ?1, 12, 'rolled_back', '2030-01-15T10:00:00.000Z')"
+      "INSERT INTO deploy_outcomes (repo, namespace, run_id, head_sha, pr, outcome, run_at, restore_seconds) VALUES ('example-org/sample', 'sample', 7, ?1, 12, 'rolled_back', '2030-01-15T10:00:00.000Z', 90)"
     )
       .bind("a".repeat(40))
       .run();
+    // Three more deploys for the DORA measures: two that shipped and one whose gate could not run.
+    for (const [id, outcome] of [[8, "verified"], [9, "verified"], [10, "unverified"]] as const) {
+      await env.DB.prepare("INSERT INTO deploy_outcomes (repo, namespace, run_id, head_sha, outcome, run_at) VALUES ('example-org/sample', 'sample', ?1, ?2, ?3, '2030-01-14T10:00:00.000Z')")
+        .bind(id, "b".repeat(40), outcome)
+        .run();
+    }
 
     // Cost: two outcomes this week with a cost and one without; none the week before.
     const outcome = (id: string, cost: number | null, at: string) =>
@@ -100,6 +106,10 @@ describe("the trends series", () => {
     expect(day("2030-01-15")).toMatchObject({ posted: 1, ended: 0, open: 2 });
 
     expect(t.merges.weeks[1]).toMatchObject({ auto: 1, approved: 1, seat: 1, closed: 2 });
+    // Deploy frequency, change failure rate (1 refused of 3 decided) and time to restore (F4).
+    expect(t.deploys.repos).toEqual([
+      { repo: "example-org/sample", deploys: 4, per_week: 2, shipped: 2, refused: 1, rolled_back: 1, unverified: 1, change_failure_rate: 0.333, restore_median_seconds: 90 },
+    ]);
     expect(t.merges.rollbacks).toEqual([{ at: "2030-01-15T10:00:00.000Z", repo: "example-org/sample", pr: 12, outcome: "rolled_back" }]);
 
     expect(t.cost.weeks.map((w) => [w.week, w.usd, w.jobs])).toEqual([

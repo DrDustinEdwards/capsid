@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { adminAgentForEmail, legacyAgent, type Agent } from "../src/agents";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { buildAdminServer } from "../src/server";
 import type { ClaimsAggregate, ClaimsJob } from "../src/ops-types/claims";
@@ -15,7 +15,7 @@ import type { ClaimsExportPage } from "../src/job-claims-read";
 // by them.
 
 const ADMIN = adminAgentForEmail("admin@example.com");
-const READ_ONLY = legacyAgent("read", "opkey:readonly0000");
+const READ_ONLY = grantAgent("read", "opkey:readonly0000");
 const AGENT = "agent:sample-driver";
 
 function driver(): Agent {

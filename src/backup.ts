@@ -1,4 +1,4 @@
-import { BackupIncomplete, runCheckedBackup, type DumpResult } from "@dustinedwards/d1-dump";
+import { BackupIncomplete, DEFAULT_RETENTION, readDumpJson, runCheckedBackup, type DumpResult } from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./security-headers";
@@ -11,15 +11,21 @@ const JSON_PREFIX = "backups/json/";
 const MARKDOWN_PREFIX = "backups/markdown/";
 const PUT_CONCURRENCY = 20;
 
-// KV lease is best-effort (no CAS). Export before prune. Dump retention is d1-dump's graduated policy.
+// Dump retention (Dustin, 2026-11-02, a trim of the shared default): the newest complete run
+// of each of the last 14 days, 4 ISO weeks and 3 calendar months, about 17 runs. `daily`
+// stays at d1-dump's 14 on purpose: the 13-day bucket lock (docs/backups.md, "Why 13 days")
+// refuses a delete of any run younger than 13 days, so a shorter daily window would only
+// turn into locked refusals each night.
+export const DUMP_RETENTION = { daily: DEFAULT_RETENTION.daily, weekly: 4, monthly: 3 };
+
+// KV lease is best-effort (no CAS). Export before prune. Dump retention is d1-dump's graduated policy with Capsid's DUMP_RETENTION.
 // Two runs can both read the key empty and both take it, so the run re-reads the lease
 // after its export and refuses every destructive step unless the lease is still its own.
 //
 // The lease value carries a per-run token and a run releases only its own, so a run
 // that outlived its TTL cannot delete the lease of the run that started after it. The
-// TTL is an hour: above the 15-minute wall limit on a cron invocation, with room for
-// an /ops/backup run, which has no wall limit. A lease left by an isolate that died
-// mid-run then blocks backups for at most an hour of a daily schedule.
+// TTL is an hour: above the 15-minute wall limit on a cron invocation. A lease left by
+// an isolate that died mid-run then blocks backups for at most an hour of a daily schedule.
 const LEASE_KEY = "backup:lease";
 const LEASE_TTL_SECONDS = 3600;
 
@@ -136,10 +142,6 @@ export const TABLES = [
   // Each job's earlier versions, kept by capsid_work_jobs action "edit" (migrations/0033_job_versions.sql).
   // Nothing prunes it, and the job's row holds only the newest version.
   "job_versions",
-  // Drivers' proposed changes to canon documents, pending or decided
-  // (migrations/0034_canon_proposals.sql). Nothing prunes it: a decided row is the
-  // record of who proposed and who approved a canon change.
-  "canon_proposals",
   // The shared packages the Shared code view follows (migrations/0036_shared_packages.sql):
   // configuration, seeded by its migration, so a restore empties it before importing.
   "shared_packages",
@@ -152,9 +154,6 @@ export const TABLES = [
   // What became of each deploy whose live gate ran (migrations/0039_deploy_outcomes.sql),
   // the evidence the promotion and demotion proposals read. Nothing prunes it.
   "deploy_outcomes",
-  // The Access group pinned for each app's members page (migrations/0040_access_sync_groups.sql):
-  // configuration the seat writes by hand. Nothing prunes it.
-  "access_sync_groups",
   // The methods paper's paired comparison (migrations/0047_bench.sql): the registered
   // tasks and every run's outcome, the data its primary outcome is computed from.
   // Insert-only and close-once by trigger; nothing prunes them.
@@ -203,14 +202,6 @@ interface BackupSkipped {
 }
 
 export type BackupResult = BackupSummary | BackupSkipped;
-
-// The HTTP status /ops/backup answers with, so "did nothing" is visible without the
-// body: 409 when another run holds the lease, 503 when the preflight refused the prune
-// (the dumps were written but nothing was marked, mirrored or pruned), 200 otherwise.
-export function backupHttpStatus(result: BackupResult): number {
-  if (!result.ran) return 409;
-  return result.prune_refused === null ? 200 : 503;
-}
 
 // R2's bulk delete takes at most 1000 keys per call and refuses the rest rather than
 // truncating, so an unbounded array throws after the dumps are written and before
@@ -319,9 +310,9 @@ type DocRow = { namespace: string; path: string; body: string | null };
 // written. A documents object that cannot be read fails the run.
 async function dumpedDocs(env: Env, dump: DumpResult): Promise<DocRow[]> {
   const docsKey = dump.tables.find((t) => t.name === "documents")?.key;
-  const docsObject = docsKey ? await env.MEDIA.get(docsKey) : null;
-  if (!docsObject) throw new Error(`BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
-  return (JSON.parse(await docsObject.text()) as { rows: DocRow[] }).rows;
+  if (!docsKey) throw new Error(`BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
+  const read = await readDumpJson<{ rows: DocRow[] }>(env.MEDIA, docsKey, () => `BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
+  return read.rows;
 }
 
 // The package dumps what sqlite_master holds; TABLES is what the migrations create
@@ -371,7 +362,7 @@ async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
 
 // Deletes CSP reports past retention (the sink stopped storing them on 2026-10-20; this
 // reaps the last of them). The JSON dump runs outside the graduated retention (14 daily,
-// 8 weekly and 6 monthly copies, capsid/rulings/shared-homes-2026-10-06.md) are pruned by
+// 4 weekly and 3 monthly copies, DUMP_RETENTION above) are pruned by
 // runCheckedBackup with d1-dump's default policy: it counts runs and not objects,
 // deletes a run whole, never prunes the newest complete run, and deletes nothing while
 // no complete run exists.
@@ -446,6 +437,8 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
     const result = await runCheckedBackup(env.DB, env.MEDIA, {
       prefix: JSON_PREFIX,
       now: new Date(now),
+      retention: { policy: DUMP_RETENTION },
+      compress: true,
       paged: PAGED,
       exclude: [...EXCLUDED],
       sidecars: { kv: { keys: await readKvPins(env) } },

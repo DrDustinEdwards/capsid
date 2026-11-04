@@ -227,11 +227,11 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     }
   }
 
-  // The sites that opted into Capsid calling their operator API (src/site-watch.ts): the
-  // repair each failing health check maps to, the weekly tools, and the red and green
-  // mail. A site whose health could not be read leaves the check un-run, so its open
-  // finding is not cleared on no evidence.
-  if (config && config.some((c) => c.origin && c.operator)) {
+  // Every site's health route, and for the sites that opted into Capsid calling their
+  // operator API, the repair each failing health check maps to and the weekly tools
+  // (src/site-watch.ts); then the red and green mail. A site whose health could not be read
+  // leaves the check un-run, so its open finding is not cleared on no evidence.
+  if (config && config.some((c) => c.origin && (c.operator || c.health_path))) {
     const repairs = await attempt("site repairs", () => watchSites(env, config, WATCHER_ACTOR, fetchImpl, now));
     if (repairs) {
       if (repairs.complete) ran.add("site repairs");
@@ -239,7 +239,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
       if (repairs.lines.length) logEvent("WATCHER_SITE_REPAIRS", { message: `WATCHER_SITE_REPAIRS ${repairs.lines.join(" | ")}` });
     }
   } else if (config) {
-    // No site opted in: nothing to judge, so nothing open can be stale.
+    // No site to read: nothing to judge, so nothing open can be stale.
     ran.add("site repairs");
   }
 

@@ -134,7 +134,7 @@ export async function executeApproval(
   try {
     // merge_method "merge", as the tick's own merges, so the approved sha stays in history;
     // pinned to it, so a push since this read gets a 409 and nothing merges.
-    const result = (await managePr(env, namespace, facts.number, "merge", "merge", undefined, undefined, approval.head_sha)) as { sha?: string };
+    const result = (await managePr(env, namespace, facts.number, "merge", "merge", undefined, approval.head_sha)) as { sha?: string };
     mergeSha = result.sha ?? null;
   } catch (err) {
     if (!(err instanceof HeadMovedError)) throw err;

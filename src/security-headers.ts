@@ -1,6 +1,7 @@
-import { buildPolicy, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
-import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
+import { buildPolicy, CSP_REPORT_GROUP, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
+import { applyHeaderSet, buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
+import { OWNER_STYLE } from "@dustinedwards/site-runtime/owner-page";
 import { capsidMcp, capsidPortal } from "@dustinedwards/site-runtime/sites";
 import { MCP_HOST } from "./mcp-host";
 import { PORTAL_HOST } from "./portal-host";
@@ -19,23 +20,25 @@ export const REPORT_PATH = "/csp-report";
 // is behind Access, so a report sent to its own /csp-report met the sign-in redirect and was
 // lost; every host now reports to this one (routes.ts answers the Portal's preflight).
 export const REPORT_URL = `https://${MCP_HOST}${REPORT_PATH}`;
-const REPORTING_ENDPOINTS = reportingEndpoints("csp", REPORT_URL);
+const REPORTING_ENDPOINTS = reportingEndpoints(CSP_REPORT_GROUP, REPORT_URL);
 // Where CSP reports used to be stored. Nothing writes there; the backup prune
 // (backup.ts) reaps what is left.
 export const REPORT_PREFIX = "reports/csp/";
 
 // The policy on every response that names none of its own (the Portal page and the consent dialog do): nothing
-// loads, nothing may frame it, no <base>. A JSON or text answer needs none of that, and an HTML page left without a
-// policy gets the strictest one rather than none. form-action is deliberately absent, as below.
-const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]);
+// loads, nothing may frame it, no <base>, and no string reaches a script sink (Trusted Types: these pages run no
+// script, as the registry's door entry declares). A JSON or text answer needs none of that, and an HTML page left
+// without a policy gets the strictest one rather than none. form-action is deliberately absent, as below.
+const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", `report-uri ${REPORT_URL}`, `report-to ${CSP_REPORT_GROUP}`]);
 
 // The OAuth consent dialog's own headers (src/routes.ts, renderApprovalDialog), less
 // its per-request Set-Cookie; withSecurityHeaders adds the shared set. Kept here so node
 // can import them: routes.ts cannot load under node --test.
 //
 // The dialog is site-runtime's (./mcp-login): one inline <style>, CONSENT_STYLE, trusted
-// by its hash, and a form that posts back to /authorize. No scripts or images, so
-// everything else is locked down.
+// by its hash, and a form that posts back to /authorize. The owner page (/owner,
+// ./owner-page) leaves with the same headers; its one style, OWNER_STYLE, is trusted by
+// hash too. No scripts or images, so everything else is locked down.
 //
 // form-action is deliberately absent. Approving submits this form into a redirect
 // chain: POST /authorize, 302 to the Access sign-in, back to /callback, 302 out to the
@@ -49,9 +52,9 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 // because the approvedClients fast path 302s out of the GET and never submits a form.
 let consentHeaders: Promise<Readonly<Record<string, string>>> | undefined;
 export function consentDialogHeaders(): Promise<Readonly<Record<string, string>>> {
-  consentHeaders ??= scriptHash(CONSENT_STYLE).then((hash) => ({
+  consentHeaders ??= Promise.all([scriptHash(CONSENT_STYLE), scriptHash(OWNER_STYLE)]).then(([consent, owner]) => ({
     "Content-Type": "text/html;charset=utf-8",
-    "Content-Security-Policy": buildPolicy(["default-src 'none'", `style-src '${hash}'`, "base-uri 'none'", "frame-ancestors 'none'", `report-uri ${REPORT_URL}`, "report-to csp"]),
+    "Content-Security-Policy": buildPolicy(["default-src 'none'", `style-src '${consent}' '${owner}'`, "base-uri 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", `report-uri ${REPORT_URL}`, `report-to ${CSP_REPORT_GROUP}`]),
   }));
   return consentHeaders;
 }
@@ -63,13 +66,7 @@ export function securityHeadersFor(host: string): Record<string, string> {
 }
 
 export function withSecurityHeaders(response: Response, host: string = MCP_HOST): Response {
-  const wanted = securityHeadersFor(host);
-
-  const absent = Object.entries(wanted).filter(([k]) => !response.headers.has(k));
-  if (absent.length === 0) return response;
-
-  // Headers on an already-constructed Response can be immutable, so rebuild.
-  const headers = new Headers(response.headers);
-  for (const [key, value] of absent) headers.set(key, value);
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  // A route's own value wins (overwrite: false). applyHeaderSet also gives a text or XML Content-Type with no charset
+  // `charset=utf-8` (H2): the assets binding serves the Portal's page and scripts without one.
+  return applyHeaderSet(response, securityHeadersFor(host), { overwrite: false });
 }

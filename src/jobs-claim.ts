@@ -110,7 +110,6 @@ export async function postJob(
     gate_required?: boolean;
     required_scopes?: Partial<RequiredScopes>;
     min_record?: MinRecord;
-    review_required?: boolean;
     // Optional: when absent Capsid reads it from the title and the poster (src/model-routing.ts).
     kind?: string;
   }
@@ -171,7 +170,9 @@ export async function postJob(
     blocked_count: 0,
     resumed_count: 0,
     corrections_count: 0,
-    review_required: args.review_required ? 1 : 0,
+    // The review gate was removed with capsid_open_pr (Dustin, 2026-10-31); the column
+    // stays for the rows that carry it.
+    review_required: 0,
     kind: routing.kind,
     model_recommended: routing.model,
     effort_recommended: routing.effort,
@@ -210,7 +211,6 @@ export async function postJob(
       gate_required: job.gate_required,
       ...(job.required_scopes ? { required_scopes: job.required_scopes } : {}),
       ...(job.min_record ? { min_record: job.min_record } : {}),
-      ...(job.review_required ? { review_required: true } : {}),
       model_recommended: routing.model,
       effort_recommended: routing.effort,
       kind: routing.kind,

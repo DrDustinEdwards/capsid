@@ -1,7 +1,7 @@
 import { overnightState, type OvernightState } from "./overnight";
 import type { Env } from "./env";
 import { APP_ROSTER } from "./roster";
-import { pendingProposals, servedCanonPaths, type PendingProposal } from "./canon";
+import { servedCanonPaths } from "./canon";
 import { loadGatePolicy } from "./gate-policy";
 import { loadMergePolicy } from "./auto-merge-policy";
 import { breakerState, type BreakerState } from "./job-breaker";
@@ -54,11 +54,9 @@ interface NamespaceStatus {
 }
 
 export interface StatusReport {
-  // The canon documents a driver's write turns into a proposal (src/canon.ts), so a
-  // driver knows before it writes.
+  // The canon documents a key scoped to some namespaces may not change (src/canon.ts),
+  // so a driver knows before it writes.
   canon_paths: ReturnType<typeof servedCanonPaths>;
-  // Admin only: the proposals waiting for approval.
-  canon_proposals?: PendingProposal[];
   // The version a driver passes as approved_by_policy, served here because a
   // namespace-scoped driver cannot read the capsid namespace. Only the version and
   // whether it is on, never the body. Reported only when the policy loads (signature
@@ -227,7 +225,7 @@ export async function capsidStatus(
     overnight: await overnightState(env),
     merge_safety: mergeSafety && allowed !== "*" ? { ...mergeSafety, namespaces: mergeSafety.namespaces.filter((n) => allowed.includes(n.namespace)) } : mergeSafety,
     // Admin only: the inventory is the map an agent looking to widen itself would want.
-    ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB), canon_proposals: await pendingProposals(env.DB) }),
+    ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB) }),
     namespaces: out,
   };
 }

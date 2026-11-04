@@ -220,7 +220,8 @@ test("PLANT: every call is logged, refused or started and finished, and one whos
   const server = { name: "capsid", version: "1.0.0" };
   const log = fakeToolCallLog();
   const ran: string[] = [];
-  const reader = { ...minted, scopes: { ...minted.scopes, grants: ["read" as const] } };
+  // Scoped to one tool, so the other is listed (its grant holds write) and refused by name.
+  const reader = { ...minted, scopes: { ...minted.scopes, grants: ["read" as const, "write" as const], tools: ["capsid_read_doc"] } };
   const logged = await connect(reader, undefined, ran, { env: { TOOL_CALL_LOG: log as never }, server, clientId: "https://client.example.com/meta.json" });
   try {
     assert.notEqual((await logged.call("capsid_read_doc")).isError, true);

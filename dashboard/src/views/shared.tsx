@@ -1,19 +1,20 @@
+import { trendChart } from "./charts";
 import { Empty } from "capsomer/react/empty";
 import { Meter } from "capsomer/react/meter";
 import "capsomer/meter.css";
 import { Panel } from "capsomer/react/panel";
-import { lazy, useCallback, useState, type ReactNode } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useCallback, useState, type ReactNode } from "react";
+import { useLocation, useSearch } from "../lib/router";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
-import { JOB, PROBE, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
+import { JOB, PROBE, jobBadge, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
 import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
 import { ChartSlot } from "../ui/ChartSlot";
 
 // The deploys timeline loads with the tab that shows it, in the charts' lazy chunk.
-const DeployTimeline = lazy(() => import("./TrendCharts").then((m) => ({ default: m.DeployTimeline })));
+const DeployTimeline = trendChart("DeployTimeline");
 
 // The risky controls, set apart from the safe ones (the UX audit's M9): a red-edged area
 // under its own "Danger" label, after everything else, so a Remove or a Mark failed is never
@@ -292,7 +293,7 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                           : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
                   // A blocked job that asks something is marked as a question: it waits on
                   // an answer, not on a command (design-portal-evaluation.md, the question row).
-                  const k = j.status === "blocked" && j.question ? { kind: JOB.blocked.kind, label: "Question" } : JOB[j.status];
+                  const k = j.status === "blocked" && j.question ? { kind: JOB.blocked.kind, label: "Question" } : jobBadge(j, now);
                   return (
                     <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0} {...(j.question ? { "data-question": "" } : {})}>
                       <St kind={k.kind}>{k.label}</St>
@@ -341,7 +342,7 @@ export function IncidentFeed({ ns }: { ns?: string }) {
             tabIndex={it.ref ? 0 : undefined}
             title={it.ref ? undefined : `fingerprint ${it.fp}`}
           >
-            <Icon kind={kind} style={{ color: `var(--${kind})` }} />
+            <Icon kind={kind} tone />
             <div className="t">
               <b>{it.title}</b>
               <div className="sub">

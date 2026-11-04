@@ -6,6 +6,7 @@ import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-pr
 import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";
 import { gatherReleaseItems, githubReleaseReaders, type ReleaseReaders } from "./maintenance-releases";
 import { gatherModelDriftItems } from "./model-drift";
+import { readFactsDrift } from "./system-facts-store";
 import { bundledModel } from "./public-data";
 import { gatherRuleDocItems } from "./rule-docs";
 import { DAY_MS } from "./time";
@@ -110,7 +111,11 @@ export async function gatherMaintenance(
   prReaders: PrReaders = githubPrReaders(env),
   branchReaders: BranchReaders = githubBranchReaders(env),
   deployReaders: DeployReaders = githubDeployReaders(env),
-  driftReader: DriftReader = (e) => gatherModelDriftItems(e, bundledModel()),
+  // The model's own drift, then the versions and secrets models' from the nightly build.
+  driftReader: DriftReader = async (e) => {
+    const [model, facts] = [await gatherModelDriftItems(e, bundledModel()), await readFactsDrift(e, now)];
+    return { items: [...model.items, ...facts.items], read: model.read + facts.read };
+  },
   releaseReaders: ReleaseReaders = githubReleaseReaders(env)
 ): Promise<MaintenanceList> {
   const today = now.toISOString().slice(0, 10);

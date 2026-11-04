@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   addPackage,
@@ -22,7 +23,7 @@ const ACTOR = "access:admin@example.com";
 const NOW = new Date("2026-09-30T08:00:00Z");
 
 beforeEach(async () => {
-  for (const table of ["ops_packages", "ops_package_weeks", "audit_log"]) await env.DB.prepare(`DELETE FROM ${table}`).run();
+  await resetCapsidDb();
   for (const name of ["sample-pkg", "sample-old"]) await env.APP_KV.delete(historyKey(name));
 });
 

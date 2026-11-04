@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { postJob } from "../src/jobs";
 import { ACTIVITY_LIMIT, loadActivity } from "../src/portal-activity";
 
@@ -61,7 +61,7 @@ describe("a job transition's two audit rows", () => {
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
       .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
       .run();
-    const posted = await postJob(env as never, legacyAgent("write", "github:sample"), new Date(), {
+    const posted = await postJob(env as never, grantAgent("write", "github:sample"), new Date(), {
       namespace: "capsid",
       title: "a job whose post is read back from Activity",
       body: "do the thing",

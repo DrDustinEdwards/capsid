@@ -6,12 +6,13 @@ import { createMcpHandler } from "agents/mcp/server";
 // @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
 // runs in the live CI job with no npm ci and no build step.
 import { EXPECTED_TOOLS, eraSteps, probeMcp, rpcMessage, stepProblem } from "../scripts/mcp-probe-lib.mjs";
-import { ROLES } from "../scripts/mint-agents.ts";
+import { ROLES } from "../scripts/roles.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";
 import { serveMcp } from "../src/mcp-handler.ts";
 import { CAPSID_TOOLS } from "../src/tools/surface.ts";
 import { buildServer } from "../src/server.ts";
+import { toolListed } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 import { breaking, type Handler, healthy, NON_HTML, run } from "./verify-live-stub.ts";
 
@@ -23,10 +24,10 @@ import { breaking, type Handler, healthy, NON_HTML, run } from "./verify-live-st
 
 const KEY = "live-probe-test-key";
 
-// The live-probe role, as an agent: its scopes from scripts/mint-agents.ts, not restated.
+// The live-probe role, as an agent: its scopes from scripts/roles.ts, not restated.
 function probeAgent(): Agent {
   const role = ROLES.find((r) => r.name === "live-probe");
-  assert.ok(role, "no live-probe role in scripts/mint-agents.ts");
+  assert.ok(role, "no live-probe role in scripts/roles.ts");
   const scopes = defaultScopes(role.namespaces);
   type Scopes = Agent["scopes"];
   scopes.grants = role.grants as Scopes["grants"];
@@ -71,8 +72,9 @@ function bridge(serve: Serve): Handler {
 
 const withKey = { CAPSID_LIVE_PROBE_KEY: KEY };
 
-test("EXPECTED_TOOLS is Capsid's served tool count, from CAPSID_TOOLS", () => {
-  assert.equal(EXPECTED_TOOLS, CAPSID_TOOLS.length, "scripts/mcp-probe-lib.mjs EXPECTED_TOOLS drifted from the served surface");
+test("EXPECTED_TOOLS is the count of Capsid's served tools a read grant can call, from CAPSID_TOOLS", () => {
+  const readable = CAPSID_TOOLS.filter((tool) => toolListed(probeAgent(), tool));
+  assert.equal(EXPECTED_TOOLS, readable.length, "scripts/mcp-probe-lib.mjs EXPECTED_TOOLS drifted from the served surface");
 });
 
 test("an event-stream answer is read off its data line", () => {

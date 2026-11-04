@@ -67,7 +67,7 @@ export function healthy(req: IncomingMessage, res: ServerResponse) {
     res.writeHead(204, NON_HTML);
     return res.end();
   }
-  const status = url.pathname === "/nope" || url.pathname.startsWith("/console") ? 404 : url.pathname.endsWith("mcp") || url.pathname === "/ops/backup" ? 401 : 400;
+  const status = url.pathname === "/nope" || url.pathname.startsWith("/console") ? 404 : url.pathname.endsWith("mcp") ? 401 : 400;
   return json(status, { error: "x" });
 }
 

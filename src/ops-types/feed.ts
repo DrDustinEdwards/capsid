@@ -138,9 +138,14 @@ export interface OpsSession {
 export interface SharedCodeApp {
   namespace: string;
   name: string;
-  // The manifest it was read from ("package.json", "dashboard/package.json") or "renovate".
+  // The system in system/model.json the repo belongs to, and the repo, for the versions
+  // model (src/system-versions.ts); null for an app read before the model named its repo.
+  system: string | null;
+  repo: string | null;
+  // The manifest it was read from ("package.json", "dashboard/package.json"), "renovate", or
+  // ".github/workflows" for the reusable workflows a repo calls.
   where: string;
-  // The tag the app pins, or the lockfile's version for a spec with no tag; null when
+  // The version the lockfile says is installed, else the tag the spec names; null when
   // neither says (a branch).
   pinned: string | null;
   // Release tags newer than the pin, or null when the pin is not a release.
@@ -152,6 +157,9 @@ export interface SharedCodeApp {
 export interface SharedCodePackage {
   name: string;
   repo: string;
+  // git: a GitHub dependency (shared_packages), latest from the repo's tags. npm: a
+  // published package (ops_packages, Enarratio), latest from npm's versions.
+  registry: "git" | "npm";
   latest: string | null;
   tags_error: string | null;
   // The version in the package repo's root package.json on its default branch; null when
@@ -181,7 +189,7 @@ export interface SharedCodeView {
   error: string | null;
   // How many apps were read, so "nobody is behind" is never "nothing was read".
   apps_read: number;
-  apps_failed: Array<{ namespace: string; error: string }>;
+  apps_failed: Array<{ namespace: string; system?: string | null; error: string }>;
   packages: SharedCodePackage[];
 }
 
@@ -308,9 +316,6 @@ export interface OpsLive {
   // The D1 store's size, from the jobs read's meta.size_after (null when D1 did not
   // report it), against the per-database cap (D1_CAP_BYTES in src/ops-feed.ts).
   store: { size_bytes: number | null; cap_bytes: number };
-  // Drivers' writes to canon documents waiting for approval (src/canon.ts), oldest
-  // first, at most 50.
-  canon_proposals: OpsCanonProposal[];
   // What needs Dustin, per app, from the same gatherer GET /ops/inbox answers with
   // (src/inbox.ts), unrestricted: the Portal is the admin's.
   inbox: Inbox;
@@ -329,22 +334,6 @@ export interface OpsFinding {
   seen_count: number;
   // The newest sighting's evidence lines, at most three.
   evidence: string[];
-}
-
-// One pending canon proposal, measured against the document as it is now. stale: the
-// document moved past the body the proposal was written against, so it can only be
-// rejected. directive_lines: the added lines that read as instructions to agents.
-export interface OpsCanonProposal {
-  id: number;
-  namespace: string;
-  path: string;
-  proposer: string;
-  created_at: string;
-  creates: boolean;
-  stale: boolean;
-  added: number;
-  removed: number;
-  directive_lines: string[];
 }
 
 // The run ledger (src/task-runs.ts): each scheduled task's newest runs, and its flag
@@ -406,4 +395,34 @@ export interface OpsFeed {
   csrf: string;
   // Who is signed in, for the top bar: from the session, never from configuration.
   user: { name: string; initials: string };
+}
+
+type ResourceUser = { script: string; system: string | null; binding: string };
+
+// The secrets and data model (src/system-resources.ts): names, never values. Private: the
+// Portal's Workers tab and capsid_admin_read_ops action resources read it.
+export interface ResourcesDoc {
+  version: 1;
+  read_at: string;
+  workers: Array<{
+    script: string;
+    system: string | null;
+    error: string | null;
+    secrets: string[];
+    vars: string[];
+    d1: Array<{ binding: string; database: string }>;
+    kv: Array<{ binding: string; namespace: string }>;
+    r2: Array<{ binding: string; bucket: string }>;
+    durable_objects: Array<{ binding: string; class: string; script: string | null }>;
+    queues: Array<{ binding: string; queue: string }>;
+    services: Array<{ binding: string; service: string }>;
+    other: Array<{ binding: string; kind: string }>;
+    // The stores this Worker's Previews bind (preview-only databases and buckets).
+    previews: Array<{ binding: string; store: string }>;
+  }>;
+  databases: Array<{ name: string; tables: string[] | null; tables_error: string | null; used_by: ResourceUser[] }>;
+  kv_namespaces: Array<{ title: string; used_by: ResourceUser[] }>;
+  buckets: Array<{ name: string; used_by: ResourceUser[] }>;
+  // Parts that could not be read, each with the permission that would let it.
+  problems: string[];
 }

@@ -23,6 +23,7 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
 
 export const COMPLETE_MARKER = "_complete.json";
 export const SIDECARS = ["_kv.json"];
@@ -38,7 +39,8 @@ function fail(reason: string): never {
 
 function readJson(dumpDir: string, file: string): Json {
   try {
-    return JSON.parse(readFileSync(join(dumpDir, file), "utf8"));
+    const bytes = readFileSync(join(dumpDir, file));
+    return JSON.parse((file.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8"));
   } catch (e) {
     fail(`${file} does not parse as JSON: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -64,9 +66,10 @@ export interface DumpSummary {
   orphanAudits: number;
 }
 
-/** `dumpDir` is one run directory: <table>.json files, sidecars and _complete.json. */
+/** `dumpDir` is one run directory: <table>.json or <table>.json.gz files (d1-dump's
+ * `compress`), plain sidecars and _complete.json. */
 export function checkDump(dumpDir: string): DumpSummary {
-  const files = readdirSync(dumpDir).filter((f) => f.endsWith(".json"));
+  const files = readdirSync(dumpDir).filter((f) => f.endsWith(".json") || f.endsWith(".json.gz"));
   if (files.length === 0) fail(`${dumpDir} holds no JSON files; the check read nothing`);
   if (!files.includes(COMPLETE_MARKER)) fail(`${COMPLETE_MARKER} is missing, so this run is not a complete dump`);
 
@@ -88,7 +91,7 @@ export function checkDump(dumpDir: string): DumpSummary {
   const tables: Record<string, Json[]> = {};
   let rows = 0;
   for (const file of files.filter((f) => !f.startsWith("_"))) {
-    const name = file.replace(/\.json$/, "");
+    const name = file.replace(/\.json(\.gz)?$/, "");
     const parsed = readJson(dumpDir, file);
     if (parsed.table !== name) fail(`${file} says it dumps '${parsed.table}'; refusing to restore shuffled files`);
     if (!Array.isArray(parsed.rows)) fail(`${file} carries no rows array`);

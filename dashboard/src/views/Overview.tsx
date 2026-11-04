@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link } from "wouter";
+import { Link } from "../lib/router";
 import { placePath, useApp } from "../app/ctx";
 import { counts, hasSites } from "../lib/derive";
 import { DAY, ago, ms } from "../lib/format";

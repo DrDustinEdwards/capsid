@@ -87,7 +87,7 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
     caption: `An estimate from what you did in Capsid: each stretch of actions with no gap over 5 minutes counts from its first action to its last, plus a minute. Reading the Portal without acting is not counted.${minutes.truncated ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Capsid audit log, your actions" },
   } as const;
-  return <ChartFrame className="minutes-chart" draw={(width) => lineChart({ ...opts, width })} />;
+  return <ChartFrame className="minutes-chart" draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />;
 }
 
 // ---- 2. Where does waiting go? ----------------------------------------------------------
@@ -164,7 +164,7 @@ export function WaitingChart() {
     caption: `Total time between a job stopping at a gate and the gate being answered, last 14 days${classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.${load.data.truncated.includes("waits") ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Claims aggregate, gate waits" },
   } as const;
-  return <ChartFrame className="wait-chart" draw={(width) => barChart({ ...opts, width })} />;
+  return <ChartFrame className="wait-chart" draw={(width, fit) => barChart({ ...opts, width, ...fit })} />;
 }
 
 // ---- 3. Is the queue growing or draining? -------------------------------------------------
@@ -198,9 +198,49 @@ export function QueueChart() {
   return (
     <ChartPanel id="queue-trend">
       <Stale error={error} />
-      <ChartFrame draw={(width) => areaChart({ ...opts, width })} />
+      <ChartFrame draw={(width, fit) => areaChart({ ...opts, width, ...fit })} />
     </ChartPanel>
   );
+}
+
+// ---- 3b. Where is the work waiting? ------------------------------------------------------------
+
+const JOB_STATES = ["Blocked", "Running", "Queued"] as const;
+
+export interface ProjectCounts {
+  project: string;
+  blocked: number;
+  running: number;
+  queued: number;
+}
+
+/** Jobs' "By project" panel: each project's blocked, running and queued jobs as one stacked
+ *  bar, the counts in the figure's table. Status colors through Capsomer's color pairs. */
+export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
+  if (!counts.length) return null;
+  const sum = (k: "blocked" | "running" | "queued") => counts.reduce((a, c) => a + c[k], 0);
+  const rows = counts.flatMap((c) => [
+    { project: c.project, state: "Blocked", jobs: c.blocked },
+    { project: c.project, state: "Running", jobs: c.running },
+    { project: c.project, state: "Queued", jobs: c.queued },
+  ]);
+  const opts = {
+    data: rows,
+    x: "project",
+    y: "jobs",
+    series: "state",
+    seriesDomain: JOB_STATES,
+    layout: "stacked",
+    orientation: "horizontal",
+    colors: { Blocked: "var(--warn)", Running: "var(--info)", Queued: "var(--nodata)" },
+    xLabel: null,
+    yLabel: "Jobs",
+    height: 64 + 36 * counts.length,
+    title: "Where is the work waiting?",
+    alt: `Live jobs per project, ${counts.length} ${counts.length === 1 ? "project" : "projects"}: ${sum("blocked")} blocked, ${sum("running")} running, ${sum("queued")} queued.`,
+    source: { name: "D1 jobs, the live window" },
+  } as const;
+  return <ChartFrame draw={(width, fit) => barChart({ ...opts, width, ...fit })} />;
 }
 
 // ---- 5. Does each agent's claim match what was verified? -----------------------------------
@@ -219,6 +259,8 @@ export function agreementRows(groups: ClaimsGroup[]): Array<{ agent: string; agr
   return [...per].filter(([, c]) => AGREEMENTS.some((a) => c[a] > 0)).flatMap(([agent, c]) => AGREEMENTS.map((agreement) => ({ agent, agreement, checks: c[agreement] })));
 }
 
+const NARROW = 560;
+
 export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
   const rows = agreementRows(groups);
   if (!rows.length) return null;
@@ -230,19 +272,26 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     y: "checks",
     series: "agreement",
     seriesDomain: AGREEMENTS,
+    // A color that means a status takes the status token (capsomer/enarratio.css themes the pair).
+    colors: { agree: "var(--ok)", disagree: "var(--crit)", unclaimed: "var(--nodata)", unchecked: "var(--warn)" },
     layout: "grouped",
     xLabel: null,
     yLabel: "Checks",
-    // Capped, so the drawing is not scaled down to unreadable text; Enarratio's frame scrolls past it.
-    width: Math.min(900, Math.max(560, 150 * agents)),
-    height: 260,
     title: "Does each agent's claim match what was verified?",
     alt: `Claims against what the Worker verified, for ${agents} ${agents === 1 ? "agent" : "agents"}: ${sum("agree")} agree, ${sum("disagree")} disagree, ${sum("unclaimed")} unclaimed, ${sum("unchecked")} unchecked.`,
     source: { name: "Every check, summed per agent" },
   } as const;
   return (
     <ChartPanel id="claim-agreement">
-      <ChartFrame className="agree-chart" chart={barChart(opts)} />
+      {/* Columns where they fit, at most 900 px wide; under NARROW px, bars across, one band per
+          agent, so a phone reads it without scrolling sideways (live chart check C12, 2026-11-03). */}
+      <ChartFrame
+        draw={(width) =>
+          width < NARROW
+            ? barChart({ ...opts, width, orientation: "horizontal", height: 56 + agents * AGREEMENTS.length * 16 })
+            : barChart({ ...opts, width: Math.min(900, width), height: 260 })
+        }
+      />
     </ChartPanel>
   );
 }
@@ -273,7 +322,7 @@ export function CostChart() {
   return (
     <ChartPanel id="cost-trend">
       <Stale error={error} />
-      <ChartFrame draw={(width) => lineChart({ ...opts, width })} />
+      <ChartFrame draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />
     </ChartPanel>
   );
 }
@@ -316,8 +365,63 @@ export function MergesChart() {
   return (
     <ChartPanel id="merge-trend">
       <Stale error={error} />
-      <ChartFrame className="merge-chart" draw={(width) => barChart({ ...opts, width })} />
+      <ChartFrame className="merge-chart" draw={(width, fit) => barChart({ ...opts, width, ...fit })} />
     </ChartPanel>
+  );
+}
+
+// ---- 8. How often do deploys ship, fail and recover? ---------------------------------------
+
+/** Restore time in words: seconds under two minutes, else whole minutes. */
+const restoreWords = (s: number | null) => (s === null ? "-" : s < 120 ? `${s} s` : `${Math.round(s / 60)} min`);
+
+/** DORA's deploy measures per repository (checklist F4): deploy frequency, change failure
+ *  rate and median time to restore, from each deploy's live gate. */
+export function DeploysTable() {
+  const { data, error, loading } = useTrends();
+  if (loading && !data) return null;
+  if (!data) return <p className="faint">Deploys could not be read: {error}</p>;
+  const repos = data.deploys.repos;
+  return (
+    <Panel flush title={`Deploys, ${data.weeks} weeks`} src="deploy_outcomes, each deploy's live gate" id="deploy-measures">
+      <Stale error={error} />
+      <div className="scroll-x reflow">
+        <table className="list cards-below-1100">
+          <thead>
+            <tr>
+              <th>Repository</th>
+              <th>Per week</th>
+              <th>Shipped</th>
+              <th>Refused</th>
+              <th>Change failure rate</th>
+              <th>Median time to restore</th>
+            </tr>
+          </thead>
+          <tbody>
+            {repos.map((r) => (
+              <tr key={r.repo}>
+                <td>{r.repo.split("/")[1]}</td>
+                <td data-label="Per week">{r.per_week}</td>
+                <td data-label="Shipped">{r.shipped}</td>
+                <td data-label="Refused">
+                  {r.refused}
+                  {r.unverified ? <span className="faint"> ({r.unverified} could not be checked)</span> : null}
+                </td>
+                <td data-label="Change failure rate">{pct(r.change_failure_rate, 0)}</td>
+                <td data-label="Median time to restore">{restoreWords(r.restore_median_seconds)}</td>
+              </tr>
+            ))}
+            {repos.length === 0 && (
+              <tr>
+                <td colSpan={6} className="faint">
+                  No deploy went through a live gate in this window.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   );
 }
 
@@ -356,7 +460,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     caption: inWindow.length ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.` : "No deploy in the window.",
     source: { name: "Cloudflare Workers analytics, hourly" },
   } as const;
-  return <ChartFrame className="error-rate" draw={(width) => lineChart({ ...opts, width })} />;
+  return <ChartFrame className="error-rate" draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />;
 }
 
 // ---- 9b. Deploys and downtime, one lane per site ------------------------------------------
@@ -408,7 +512,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
     notes,
     source: { name: "Cloudflare deployments and the watcher's probes" },
   };
-  return <ChartFrame className="deploy-timeline" draw={(width) => timeline({ ...opts, width })} />;
+  return <ChartFrame className="deploy-timeline" draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
 }
 
 // ---- 4. Tonight -------------------------------------------------------------------------
@@ -448,13 +552,14 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
     label: `Tonight's plan, ${events.length} ${events.length === 1 ? "job" : "jobs"} by repo, as if it started when the plan was read (UTC)`,
     source: { name: "The overnight planner's estimates" },
   };
-  return <ChartFrame className="tonight-chart" draw={(width) => timeline({ ...opts, width })} />;
+  return <ChartFrame className="tonight-chart" draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
 }
 
 // ---- 10. Backup retention slots ---------------------------------------------------------
 
-// Drawn as a heat strip with the CI history's two ends, green kept and red missing, at full
-// height: as an uptime strip a missing slot was a third-height tick that read as an underline.
+// Drawn as a heat strip on the family ramp (capsomer/enarratio.css), a missing slot at its
+// strong end, at full height: as an uptime strip a missing slot was a third-height tick that
+// read as an underline. The subtitle and each cell's hover text say kept or missing.
 const missing = (v: number): string => (v >= 1 ? "missing" : "kept");
 
 export function BackupSlots() {
@@ -486,7 +591,7 @@ export function BackupSlots() {
               cellLabels: slots.map((s) => s.key),
               formatValue: missing,
             };
-            return <ChartFrame key={name} className="ci-strip" inline draw={(width) => heatStrip({ ...opts, width })} />;
+            return <ChartFrame key={name} inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />;
           })
         )}
       </div>
@@ -496,8 +601,8 @@ export function BackupSlots() {
 
 // ---- 11. Default branches by day --------------------------------------------------------
 
-// Green 0, red 1, no run yet as no value: a heat strip's two ends, so red reads as the
-// strong end and a day with no verdict is drawn as missing, never as green.
+// Green 0, red 1, no run yet as no value: a heat strip's two ends on the family ramp, so red
+// reads as the strong end and a day with no verdict is drawn as missing, never as green.
 function ciValues(r: TrendCiRepo): (number | null)[] {
   return r.days.map((d) => (d.state === "none" ? null : d.state === "red" ? 1 : 0));
 }
@@ -543,7 +648,7 @@ export function CiHistory() {
               };
               return (
                 <div className="slot-row" key={r.namespace} data-ci={r.namespace}>
-                  <ChartFrame className="ci-strip" inline draw={(width) => heatStrip({ ...opts, width })} />
+                  <ChartFrame inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />
                 </div>
               );
             })}

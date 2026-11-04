@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { JOB, resumeCall } from "../lib/derive";
+import { jobBadge, resumeCall } from "../lib/derive";
 import { ago, ms } from "../lib/format";
 import type { OpsJob, OpsAgent } from "../types";
 import { Pill, St } from "../ui/icons";
@@ -146,7 +146,7 @@ export function AgentControls({ a }: { a: OpsAgent }) {
 
 export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
   const { now, feed } = useApp();
-  const k = JOB[j.status];
+  const k = jobBadge(j, now);
   const prs = feed.live.prs.filter((p) => p.job_id === j.id);
   return (
     <>

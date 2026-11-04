@@ -1,8 +1,9 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { postJob } from "../src/jobs";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import { handleShadowJob, handleShadowResult } from "../src/shadow";
 
 // The shadow test's two routes (src/shadow.ts): only shadow-test.yml on a pull request in
@@ -26,10 +27,10 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  for (const table of ["jobs", "audit_log"]) await env.DB.prepare(`DELETE FROM ${table}`).run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES ('capsid', ?1)").bind(JSON.stringify([{ repo: REPO, label: "primary" }])).run();
   await env.APP_KV.put(`gh:token:v3:${REPO}`, "test-token");
-  const seat = legacyAgent("write", "access:seat@example.com");
+  const seat = grantAgent("write", "access:seat@example.com");
   jobId = (await postJob(jobsEnv(), seat, new Date(), { namespace: "capsid", title: "shadow", body: "do the thing" } as Parameters<typeof postJob>[3])).job!.id;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);

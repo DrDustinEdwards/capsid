@@ -7,6 +7,7 @@ import { watcherTick } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
 import { maintenanceTick } from "./maintenance";
 import { publicBuildTick } from "./public-data";
+import { systemFactsTick } from "./system-facts";
 import { docIndexTick } from "./doc-index";
 import { pushTick } from "./push";
 import { sitePulseTick } from "./site-pulse";
@@ -142,6 +143,22 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "PUBLIC_BUILD_THREW:", rethrow: false }
   );
 
+  // The versions and secrets models (src/system-facts.ts): once a UTC day after 06:00, every
+  // model repo's package pins from its lockfiles and every Worker's secret names and stores
+  // from Cloudflare, so the 11:00 maintenance pass lists their drift. A half that cannot be
+  // read keeps its last good document and is recorded as refused.
+  await runTask(
+    env,
+    "system-facts",
+    () => systemFactsTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      logEvent("SYSTEM_FACTS", { message: `SYSTEM_FACTS ${report.note}` }, { level: report.failed ? "error" : "log" });
+      return { outcome: report.failed ? "refused" : "ok", reason: report.note };
+    },
+    { tag: "SYSTEM_FACTS_THREW:", rethrow: false }
+  );
+
   // The meaning index (src/doc-index.ts): documents changed since the last tick go to
   // AI Search, and once a day stale items are removed and missing ones re-sent. A
   // refused upload is recorded as refused; the next edit or the daily pass retries it.
@@ -190,8 +207,8 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     { tag: "SITE_PULSE_THREW:", rethrow: false }
   );
 
-  // The signed-in crawl (src/signed-in-crawl.ts): hourly, the Portal through this Worker's own handler (`self`) and
-  // Desk with its Access service token, published for devkit's scoreboard. Recorded only when it ran.
+  // The signed-in crawl (src/signed-in-crawl.ts): hourly, the Portal through this Worker's own handler (`self`),
+  // published for devkit's scoreboard. Recorded only when it ran.
   if (self) {
     await runTask(
       env,

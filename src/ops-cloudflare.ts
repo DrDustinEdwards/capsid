@@ -4,6 +4,7 @@ import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types/sites";
 import type { WebAnalyticsSite } from "./ops-types/views";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
+import { callSignal } from "./call-signal";
 
 // The watcher's read of Cloudflare, for the Watch Floor's deploy and error columns
 // (capsid/research/design-ops-console.md). It runs inside the watcher pass only, never
@@ -44,7 +45,6 @@ const ERROR_HOURS = 24;
 const SCRIPT_NAME = /^[A-Za-z0-9_-]{1,63}$/;
 
 // The scriptName Cloudflare's analytics gives a row it cannot name.
-const UNKNOWN_SCRIPT = "__unknown__";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -84,11 +84,17 @@ export async function cfGet(fetchImpl: FetchLike, token: string, url: string, wh
   return (await cfEnvelope(fetchImpl, token, url, what)).result;
 }
 
-async function cfEnvelope(fetchImpl: FetchLike, token: string, url: string, what: string): Promise<CfEnvelope> {
+/** A POST that only reads (a D1 query of sqlite_master), through the same envelope. */
+export async function cfPostRead(fetchImpl: FetchLike, token: string, url: string, what: string, body: unknown): Promise<unknown> {
+  return (await cfEnvelope(fetchImpl, token, url, what, body)).result;
+}
+
+async function cfEnvelope(fetchImpl: FetchLike, token: string, url: string, what: string, post?: unknown): Promise<CfEnvelope> {
   const res = await fetchImpl(url, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}`, "User-Agent": "capsid-watcher (ops read)" },
-    signal: AbortSignal.timeout(CF_TIMEOUT_MS),
+    method: post === undefined ? "GET" : "POST",
+    headers: { Authorization: `Bearer ${token}`, "User-Agent": "capsid-watcher (ops read)", ...(post === undefined ? {} : { "Content-Type": "application/json" }) },
+    ...(post === undefined ? {} : { body: JSON.stringify(post) }),
+    signal: callSignal(CF_TIMEOUT_MS),
   });
   const body = parseJson(await res.text(), `${what} answered ${res.status} with a body that is not JSON`) as CfEnvelope | null;
   if (!res.ok || body?.success !== true) {
@@ -251,6 +257,9 @@ function errorsQuery(scripts: string[]): string {
 }`;
 }
 
+// The name Cloudflare gives invocations it does not attribute to a script.
+const UNATTRIBUTED_SCRIPT = "__unknown__";
+
 /** ONE GraphQL Analytics query for every script, hourly, over errorWindow. A script
  *  with no row in an hour had no invocations then, which is a real zero from a query
  *  that succeeded. A query that failed throws, and the caller records no data with the
@@ -270,7 +279,7 @@ async function readErrors(
       query: errorsQuery(scripts),
       variables: { accountTag: account, datetimeStart: start.toISOString(), datetimeEnd: end.toISOString() },
     }),
-    signal: AbortSignal.timeout(CF_TIMEOUT_MS),
+    signal: callSignal(CF_TIMEOUT_MS),
   });
   const body = parseJson(await res.text(), `the analytics query answered ${res.status} with a body that is not JSON`) as {
     data?: unknown;
@@ -287,7 +296,6 @@ async function readErrors(
 
   const index = new Map(hours.map((h, i) => [h, i]));
   const out = new Map<string, HourBucket[]>(scripts.map((s) => [s, hours.map((hour) => ({ hour, requests: 0, errors: 0, cpu_ms: 0 }))]));
-  let unattributed = 0;
   for (const row of rows as Array<{ sum?: { requests?: unknown; errors?: unknown; cpuTimeUs?: unknown }; dimensions?: { scriptName?: unknown; datetimeHour?: unknown } }>) {
     const script = row?.dimensions?.scriptName;
     const hourRaw = row?.dimensions?.datetimeHour;
@@ -297,14 +305,11 @@ async function readErrors(
     if (typeof script !== "string" || typeof hourRaw !== "string" || typeof requests !== "number" || typeof errors !== "number" || typeof cpuUs !== "number") {
       throw new Error("the analytics query returned a row without scriptName, datetimeHour, requests, errors and cpuTimeUs");
     }
-    // Cloudflare names a row it could not tie to a Worker "__unknown__", even under a
-    // scriptName_in filter (live on every pass from 2026-10-31: "__unknown__
-    // 2026-10-31T15:00:00Z"). No site owns it, so it is set aside and counted, never
-    // a reason to drop every site's read.
-    if (script === UNKNOWN_SCRIPT) {
-      unattributed += requests;
-      continue;
-    }
+    // Cloudflare answered a row named "__unknown__" for 2026-10-31 15:00 although the filter
+    // names only our scripts; failing on it left every site's error and CPU checks blind for
+    // hours. It is no script this pass asked for, so it is skipped by that exact name; any
+    // other stray name still fails the read below.
+    if (script === UNATTRIBUTED_SCRIPT) continue;
     const at = Date.parse(hourRaw);
     const i = Number.isNaN(at) ? undefined : index.get(new Date(at).toISOString());
     const buckets = out.get(script);
@@ -315,7 +320,6 @@ async function readErrors(
     buckets[i].errors += errors;
     buckets[i].cpu_ms += Math.round(cpuUs / 1000);
   }
-  if (unattributed > 0) logEvent("WATCHER_ANALYTICS_UNATTRIBUTED", { message: `the analytics query returned ${unattributed} requests under ${UNKNOWN_SCRIPT}, set aside` });
   return out;
 }
 

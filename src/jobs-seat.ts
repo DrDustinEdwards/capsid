@@ -316,7 +316,7 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
   if (!callerIsSeat(agent)) {
     return refuse(
       "release",
-      `${agent.actor} cannot release a job. Releasing a claim somebody else holds is the seat's act, and this caller holds neither the admin identity nor can_merge.`
+      `${agent.actor} cannot release a job. Releasing a claim is the seat's act, and this caller holds neither the admin identity nor can_merge.`
     );
   }
   if (!reason?.trim()) {
@@ -333,9 +333,6 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
       "release",
       `${id} is ${current.status}, not claimed. Release returns a claimed job to the queue; a blocked job is resumed, a queued one is already free, and a finished one is not reopened.`
     );
-  }
-  if (current.claimed_by === agent.actor) {
-    return refuse("release", `${id} is held by ${agent.actor} itself. A holder ends its own claim with fail or block.`);
   }
   const job: JobRow = { ...current, status: "queued", claimed_by: null, updated_at: now.toISOString() };
   const won = await guardedTransition(env, current, [
@@ -522,7 +519,7 @@ export async function supersedeJob(
 // instead, and it runs every check a claim runs.
 //
 // Unless that credential cannot take it back. A credential that is not a minted agent
-// (the admin identity every chat tab connects as, or a legacy operator key) names no
+// (the admin identity every chat tab connects as) names no
 // particular session, so a claim given to it is worked by nobody. The same holds for a
 // runner whose session ended and a revoked agent. The job then goes back to the queue
 // with its approval, and whichever session claims it next gets the resume note. The job's flags
@@ -552,8 +549,8 @@ export interface ResumeOptions {
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 
 // A minted agent's actor is `agent:<name>`: one credential, one driver. The admin
-// identity (`access:<email>`, or `github:<login>` from the old console) and a legacy
-// operator key (`opkey:<fingerprint>`) are shared by whatever sessions connect with them.
+// identity (`access:<email>`, or `github:<login>` from the old console) and a retired
+// operator key (`opkey:<fingerprint>`, on older rows) are shared by whatever sessions connect with them.
 const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
 
 /** Where a resume sends a blocked job: back to `holder` (toQueue null), or to the queue

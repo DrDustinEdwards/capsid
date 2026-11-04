@@ -4,6 +4,7 @@ import type { Env } from "./env";
 import type { FetchLike } from "./live-checks";
 import { pageOnSite, reportSite } from "./site-reports";
 import { MINUTE_MS, DAY_MS } from "./time";
+import { callSignal } from "./call-signal";
 
 // Google Search Console for a namespace's site, served as capsid_inspect_repo action
 // search (Dustin, 2026-10-18: Search Console tools system wide, in Capsid). Three
@@ -101,7 +102,7 @@ async function accessToken(key: ServiceAccountKey, fetchImpl: FetchLike, now: Da
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }).toString(),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: callSignal(TIMEOUT_MS),
   });
   const body = (await resp.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: string; error_description?: string };
   if (!resp.ok || !body.access_token) {
@@ -117,7 +118,7 @@ async function google(fetchImpl: FetchLike, token: string, url: string, body?: u
     method: body === undefined ? "GET" : "POST",
     headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: callSignal(TIMEOUT_MS),
   });
   const parsed = (await resp.json().catch(() => null)) as { error?: { message?: string } } | null;
   if (!resp.ok) {

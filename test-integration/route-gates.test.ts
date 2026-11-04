@@ -12,17 +12,6 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 const ORIGIN = "https://capsid.test";
 const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
 
-async function backupAs(bearer: string | null): Promise<Response> {
-  return SELF.fetch(`${ORIGIN}/ops/backup`, {
-    method: "POST",
-    headers: bearer ? { Authorization: `Bearer ${bearer}` } : {},
-  });
-}
-
-async function dumpCount(): Promise<number> {
-  return (await env.MEDIA.list({ prefix: "backups/" })).objects.length;
-}
-
 beforeEach(async () => {
   // A driver minted for one namespace with the write grant.
   const scopes = defaultScopes(["capsid"]);
@@ -34,40 +23,6 @@ beforeEach(async () => {
   )
     .bind(await sha256Hex(DRIVER_KEY), serializeScopes(scopes))
     .run();
-});
-
-describe("/ops/backup", () => {
-  it("REPRODUCTION: refuses a one-namespace driver that holds write with 403, and runs nothing", async () => {
-    const before = await dumpCount();
-    const response = await backupAs(DRIVER_KEY);
-    expect(response.status, "a resolved caller that is refused should get 403, not 401").toBe(403);
-    const text = await response.text();
-    expect(text).toMatch(/admin only/);
-    expect(text, "the refusal does not say why a backup is admin work").toMatch(/every namespace/);
-    expect(await dumpCount(), "a refused caller started a backup").toBe(before);
-  });
-
-  it("admits the legacy write-grant operator key, which is the admin, and the backup runs", async () => {
-    const before = await dumpCount();
-    const response = await backupAs(env.TEST_OPERATOR_KEYS.write);
-    // The test store has no documents, so the preflight refuses the prune and the run
-    // answers 503 (backupHttpStatus); admission is what this test is about.
-    expect(response.status, await response.clone().text()).toBe(503);
-    const body = (await response.json()) as { ran?: boolean; prune_refused?: string | null };
-    expect(body.ran).toBe(true);
-    expect(body.prune_refused).toBe("documents-empty");
-    expect(await dumpCount()).toBeGreaterThan(before);
-  });
-
-  it("refuses the legacy read-only operator key with 403", async () => {
-    const response = await backupAs(env.TEST_OPERATOR_KEYS.read);
-    expect(response.status).toBe(403);
-  });
-
-  it("answers 401 to a request with no credential, so a client knows to send one", async () => {
-    const response = await backupAs(null);
-    expect(response.status).toBe(401);
-  });
 });
 
 describe("the route tables are a statement about the Worker that serves them", () => {
@@ -94,9 +49,9 @@ describe("the route tables are a statement about the Worker that serves them", (
     const portalRoutes = Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/portal") && !NOT_GATED.has(p));
     // The feed, the refresh, preview, perform, namespaces, activity, claims, stale jobs,
     // the Tonight plan, the digest, the Maintenance list, the convergence view, package
-    // history, the completeness board, the 404 counts, the Library, the trends, phone alerts, sign-out, the /portal/api/ fallback,
-    // the app and the app's files.
-    expect(portalRoutes.length, `Portal routes found: ${portalRoutes.join(", ")}`).toBe(23);
+    // history, the completeness board, the 404 counts, the Workers' resources, the Library, the trends,
+    // phone alerts, sign-out, the /portal/api/ fallback, the app and the app's files.
+    expect(portalRoutes.length, `Portal routes found: ${portalRoutes.join(", ")}`).toBe(24);
     for (const path of portalRoutes) {
       for (const method of ["GET", "POST"]) {
         const bearer = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual", headers: { Authorization: `Bearer ${DRIVER_KEY}` } });
@@ -126,14 +81,5 @@ describe("the route tables are a statement about the Worker that serves them", (
       }
     }
     expect(Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/console")), "src/scope.ts still names a /console route").toEqual([]);
-  });
-
-  it("every gated route refuses a non-admin driver with 403, so each one asks routeRefusal", async () => {
-    const gated = Object.keys(ROUTE_GRANTS);
-    expect(gated.length, "ROUTE_GRANTS is empty, so this proves nothing").toBeGreaterThan(0);
-    for (const path of gated) {
-      const response = await SELF.fetch(`${ORIGIN}${path}`, { method: "POST", headers: { Authorization: `Bearer ${DRIVER_KEY}` } });
-      expect(response.status, `${path} is in ROUTE_GRANTS and served a one-namespace driver`).toBe(403);
-    }
   });
 });

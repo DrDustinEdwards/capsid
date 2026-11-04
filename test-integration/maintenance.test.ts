@@ -1,8 +1,9 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { postJob } from "../src/jobs";
 import { gatherMaintenance, maintenanceTick, readMaintenance, MAINTENANCE_LAST_KEY } from "../src/maintenance";
-import { legacyAgent } from "../src/agents";
+import { grantAgent } from "../src/agents";
 import type { PrReaders } from "../src/maintenance-prs";
 import { PRUNE_AUDIT_ACTION, PRUNE_SWITCH_KEY, type BranchReaders } from "../src/maintenance-branches";
 import type { DeployReaders } from "../src/maintenance-deploys";
@@ -20,7 +21,7 @@ import { gatherRuleDocItems, RULE_DOC_CAP_BYTES } from "../src/rule-docs";
 // one at a time beside a clean job each must leave alone.
 
 const SECRET = "test-root-secret";
-const ADMIN = legacyAgent("write", "github:DrDustinEdwards");
+const ADMIN = grantAgent("write", "github:DrDustinEdwards");
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 const PR = "https://github.com/example-org/sample/pull/7";
 // The pull request rules read GitHub; here every repo has no open pull request, so the job
@@ -74,10 +75,7 @@ async function post(title: string, body = "do the thing"): Promise<string> {
 }
 
 beforeEach(async () => {
-  for (const table of ["jobs", "audit_log", "job_outcomes", "job_outcome_prs", "job_touches"]) {
-    await env.DB.prepare(`DELETE FROM ${table}`).run().catch(() => undefined);
-  }
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
+  await resetCapsidDb();
   await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
     .bind("sample", JSON.stringify([{ repo: "example-org/sample", label: "primary" }]))
     .run();

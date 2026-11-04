@@ -52,7 +52,7 @@ const READ_ONLY: ReadonlyArray<string> = ["read", "admin_read"];
 test("the block scan found the whole tool surface", () => {
   // Vacuity guard: if this parse broke, every assertion below would pass over an
   // empty list.
-  assert.ok(REGISTRATIONS.length >= 20, `expected the full tool surface, parsed ${REGISTRATIONS.length} registrations`);
+  assert.ok(REGISTRATIONS.length >= 17, `expected the full tool surface, parsed ${REGISTRATIONS.length} registrations`);
   assert.ok(BLOCKS.length >= 37, `expected every operation, parsed ${BLOCKS.length} blocks`);
   for (const name of ["write", "delete", "move", "lint", "restore", "read", "search"]) {
     assert.ok(BLOCKS.some((b) => b.name === name), `did not parse a block for the ${name} operation`);

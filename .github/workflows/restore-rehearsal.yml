@@ -28,6 +28,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -116,7 +118,7 @@ jobs:
             exit 1
           fi
           echo "newest run: ${NEWEST}"
-          # Laid out as the keys are (dump/backups/json/<run>/<table>.json), which is the
+          # Laid out as the keys are (dump/backups/json/<run>/<table>.json.gz), which is the
           # shape d1-dump's drill reads from a directory.
           mkdir -p "dump/${RUN_PREFIX}"
           aws s3 sync "s3://${DUMP_BUCKET}/${RUN_PREFIX}" "dump/${RUN_PREFIX}" --endpoint-url "${DUMP_ENDPOINT}"

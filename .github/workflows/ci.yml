@@ -63,13 +63,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
 
-      # The no AI trailer check is ai-author.yml (devkit's reusable workflow), and the
+      # The no AI trailer check is checks.yml (devkit's reusable workflow), and the
       # no-bloat report is no-bloat.yml.
 
       # Verified on a fresh clone 2026-08-11: npm ci, npm run check and npm test all
@@ -144,7 +146,7 @@ jobs:
         run: npm run build:dashboard
 
       # The app in a real browser (dashboard/e2e, Playwright): the build above under
-      # vite preview, the dev mock, and the Worker's page CSP. A Preview click that did
+      # dev/serve.ts (the pages rendered as the Worker renders them), the dev mock, and the Worker's page CSP. A Preview click that did
       # nothing live, and pages that scrolled sideways, passed every other step here.
       # Only Chromium is installed; its version is pinned by @playwright/test in
       # dashboard/package-lock.json.
@@ -153,6 +155,33 @@ jobs:
 
       - name: Browser tests
         run: npm run test:browser
+
+  # THE MCP CONFORMANCE GATE (devkit-conformance, read from .conformance.json; area 11,
+  # P2 to P7 and P10): the official suite against the real protocol layer
+  # (test/conformance/entry.ts) and the real door with its OAuth provider (src/index.ts)
+  # under wrangler dev, each scenario held to its recorded count, then the 401 challenge,
+  # CIMD and the /register allowlist. Its own job, beside checks, so it adds no
+  # wall-clock time; not on the schedule, for the reason checks is not.
+  conformance:
+    name: conformance
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: MCP conformance
+        run: npm run check:conformance
 
   # Ordered after checks: a failing typecheck or test never reaches production. No
   # continue-on-error, and deliberately no `if: secrets.X != ''` guard. A job that skips
@@ -172,6 +201,8 @@ jobs:
       attempt: ${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -216,8 +247,9 @@ jobs:
   live:
     name: live gate
     needs: [checks, deploy]
-    # Above the poll budget (40 x 3s per polling gate) with room for every gate.
-    timeout-minutes: 15
+    # Above the schedule run's wait (20 minutes at most) plus the poll budget (40 x 3s per
+    # polling gate) with room for every gate.
+    timeout-minutes: 40
     # Never on pull_request. A PR head sha is not deployed, so asserting anything about
     # production from one is meaningless.
     #
@@ -227,8 +259,42 @@ jobs:
     # failed.
     if: github.event_name != 'pull_request' && !failure() && !cancelled()
     runs-on: ubuntu-latest
+    # actions: read is for the schedule run's wait below, which lists this workflow's push runs.
+    permissions:
+      contents: read
+      actions: read
     steps:
+      # THE SIX-HOURLY RUN WAITS FOR A PUSH DEPLOY IN FLIGHT. The schedule and push runs
+      # keep separate concurrency groups (above), so a schedule run can start while a push
+      # run is still deploying the commit it will expect. On 2026-11-01 the 05:57Z run
+      # expected 33ca891 while its push run was still deploying it (live stayed at 4b0bba1
+      # until 06:05Z), gave up after 41 polls and turned master red. So the schedule run
+      # waits until no push run on its branch is unfinished, then expects the branch head as
+      # it stands, which still catches a master head that never went live.
+      - name: Wait for a push deploy still running
+        id: head
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            busy=$(gh api "repos/${REPO}/actions/workflows/ci.yml/runs?branch=${BRANCH}&event=push&per_page=20" --jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            if [ "$busy" = "0" ]; then
+              echo "sha=$(gh api "repos/${REPO}/commits/${BRANCH}" --jq .sha)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "${busy} push run(s) on ${BRANCH} still running; waiting"
+            sleep 20
+          done
+          echo "::error::a push run on ${BRANCH} was still running after 20 minutes, so the live gate did not run"
+          exit 1
+
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -242,8 +308,8 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      # EXPECT_SHA is this run's commit when deploy succeeded, and master head on a
-      # schedule run. Empty otherwise: the ternary below is the behavior.
+      # EXPECT_SHA is this run's commit when deploy succeeded, and on a schedule run the
+      # branch head read after the wait above. Empty otherwise: the ternary below is the behavior.
       #
       # EXIT 1 IS A REFUSAL, EXIT 3 IS "COULD NOT RUN". A gate whose requests never got
       # an answer (a reset connection, a timeout) has not refused the deploy; on
@@ -252,7 +318,7 @@ jobs:
       - name: verify:live
         id: verify
         env:
-          EXPECT_SHA: ${{ (needs.deploy.result == 'success' || github.event_name == 'schedule') && github.sha || '' }}
+          EXPECT_SHA: ${{ needs.deploy.result == 'success' && github.sha || github.event_name == 'schedule' && steps.head.outputs.sha || '' }}
           VERIFY_POLL_ATTEMPTS: "40"
           # GATE 1c ASSERTS BACKUP FRESHNESS ON THE SCHEDULED RUN ONLY (residual 7).
           # /health has reported backup.last_ok since 2026-09-07 and nothing read it. A
@@ -268,7 +334,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           # Gate 8 makes a real MCP call through /ops/mcp (initialize or server/discover,
           # tools/list, one read) as the live-probe agent: read grant on capsid, the read
-          # tool only (scripts/mint-agents.ts). A broken connection refuses (exit 1), so
+          # tool only (scripts/roles.ts). A broken connection refuses (exit 1), so
           # the step below rolls the deploy back. Without the secret the gate SKIPS, says
           # so, and warns.
           CAPSID_LIVE_PROBE_KEY: ${{ secrets.CAPSID_LIVE_PROBE_KEY }}
@@ -322,7 +388,7 @@ jobs:
           # The rollout is not instant, so read the sha back rather than assuming, and
           # say so when it never moved.
           ROLLBACK_TO=unreadable
-          for i in $(seq 1 20); do
+          for _ in $(seq 1 20); do
             ROLLBACK_TO=$(live_sha)
             if node scripts/rollback-guard.mjs --after "${ROLLBACK_TO}" "${GITHUB_SHA}" > /dev/null; then
               echo "::error::rolled back: was ${ROLLBACK_FROM} (this run's commit ${GITHUB_SHA}), now ${ROLLBACK_TO}. master still points at the bad commit; land a fix or revert it."

@@ -7,7 +7,7 @@ import { visit } from "./views.ts";
 // dismissed or replaced. Undo is its own action, recorded as an undo. Every test that
 // changes the mock's state undoes it, so later specs read the fixture as it was.
 
-const PREVIEW_URL = "**/portal/api/actions/preview";
+const PREVIEW_URL = "**/api/actions/preview";
 
 const seat = (page: Page) => page.getByRole("switch", { name: "Overnight run", exact: true });
 const message = (page: Page) => page.locator(".msg-region");

@@ -1,4 +1,5 @@
 import { env } from "cloudflare:test";
+import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
 import { WATCHER_ACTOR, watcherTick, type Gathered } from "../src/watcher";
 import { WATCHER_CHECKS } from "../src/watcher-checks";
@@ -56,10 +57,7 @@ const redRun = (sha: string, when: Date, hoursOld: number) => ({
 const SITE_MAP_DRIFT = () => siteMapFindings({ unmapped: ["sample"], unknown: [] });
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM jobs").run();
-  await env.DB.prepare("DELETE FROM audit_log").run();
-  await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
-  await env.DB.prepare("DELETE FROM watcher_findings").run();
+  await resetCapsidDb();
   for (const ns of ["capsid", "sample"]) {
     await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
       .bind(ns, JSON.stringify([{ repo: `example/${ns}`, label: "primary" }]))

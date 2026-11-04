@@ -59,7 +59,7 @@ const MIN_CADENCE_MINUTES = 5;
 export const MAX_FINDINGS_PER_PASS = 10;
 
 // The watcher's identity inside the Worker, matching the minted `watcher` role in
-// scripts/mint-agents.ts (every namespace, write, `capsid_work_jobs.post`, no flags), so the
+// scripts/roles.ts (every namespace, write, `capsid_work_jobs.post`, no flags), so the
 // credential a person can mint and the identity the tick uses are the same authority.
 // Spelled here because the tick has no bearer token to present.
 // test/watcher.test.ts fails if they drift.

@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 // leave, not that the session expired. A failed sign-out must be said, because a
 // session left open on a shared screen is the case the button exists for.
 
-const SIGN_OUT_URL = "**/portal/api/sign-out";
+const SIGN_OUT_URL = "**/api/sign-out";
 
 test("Sign out posts with the feed's CSRF value and shows the signed-out page", async ({ page }) => {
   const sent: Array<{ method: string; csrf: string | null }> = [];
@@ -19,7 +19,7 @@ test("Sign out posts with the feed's CSRF value and shows the signed-out page", 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Signed out" })).toBeVisible();
   await expect(page.getByText("You signed out of Capsid Portal in this browser.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/portal/");
+  await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/");
   expect(sent).toHaveLength(1);
   expect(sent[0]?.method).toBe("POST");
   expect(sent[0]?.csrf, "the sign-out carried no CSRF header").toBeTruthy();
