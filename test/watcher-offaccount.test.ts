@@ -61,11 +61,12 @@ test("the drill must have passed within 35 days; a newer failure does not count 
   assert.deepEqual(offaccountDrillFindings("capsid", [], NOW).map((f) => f.fingerprint), ["offaccount-drill-stale"]);
 });
 
-test("every D1 database a Worker binds needs a copy; an unbound one does not", () => {
+test("every D1 database a Worker binds needs a copy; a preview-only or unbound one does not", () => {
   const dbs = [
     { name: "lorem", used_by: [{ script: "lorem" }] },
     { name: "ipsum", used_by: [{ script: "ipsum-desk" }] },
-    { name: "lorem-preview", used_by: [] },
+    { name: "lorem-preview", used_by: [{ script: "lorem", binding: "DB (preview)" }] },
+    { name: "leftover", used_by: [] },
   ];
   assert.deepEqual(offaccountCoverageFindings("capsid", ["lorem"], dbs).map((f) => f.fingerprint), ["offaccount-uncovered-ipsum"]);
 });
