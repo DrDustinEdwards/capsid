@@ -29,13 +29,22 @@ const LIVE_JOB_SUFFIX = ` / ${LIVE_JOB}`;
 // namespace's "prelum" repo. A run with two live gates (carrel's app and public site) records
 // the one that did not pass, else the first. Enarratio's gallery deploys through worker-deploy
 // too (checklist F4, 2026-11-01).
+// dustinedwards.info deploys from its own Deploy workflow, started by CI's completion (workflow_run)
+// and on a schedule, never by a push, so its runs are read by `workflow`, of any event; its "live gate"
+// job is in that workflow (area 8, D7).
 export interface DeployRepo {
   key: string;
   namespace: string;
   selector?: string;
+  workflow?: string;
 }
+const OWN_DEPLOY_WORKFLOW: Readonly<Record<string, string>> = { dustinedwards: "deploy.yml" };
 export const DEPLOY_ROSTER: readonly DeployRepo[] = [
-  ...[...APP_ROSTER, "carrel", "julieedwards", "txasm", "bsw", "capsomer", "enarratio"].map((namespace) => ({ key: namespace, namespace })),
+  ...[...APP_ROSTER, "carrel", "julieedwards", "txasm", "bsw", "capsomer", "enarratio"].map((namespace) => ({
+    key: namespace,
+    namespace,
+    ...(OWN_DEPLOY_WORKFLOW[namespace] ? { workflow: OWN_DEPLOY_WORKFLOW[namespace] } : {}),
+  })),
   { key: "prelum", namespace: "dustinedwards", selector: "prelum" },
 ];
 
@@ -146,12 +155,15 @@ export function deployFindings(namespace: string, row: DeployRow, key: string = 
   return [];
 }
 
-/** Reads one repo's newest completed push runs on its default branch, records each new one
- *  whose live gate ran, and returns the newest recorded deploy (or null when none ran). */
-export async function readDeployOutcomes(env: Env, namespace: string, selector?: string): Promise<DeployRow | null> {
+/** Reads one repo's newest completed push runs on its default branch (or, given `workflow`, that workflow's runs of
+ *  any event), records each new one whose live gate ran, and returns the newest recorded deploy (or null when none ran). */
+export async function readDeployOutcomes(env: Env, namespace: string, selector?: string, workflow?: string): Promise<DeployRow | null> {
   const { owner, repo, full } = await resolveRepo(env, namespace, selector);
   const branch = await getDefaultBranch(env, owner, repo);
-  const listed = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs?branch=${encodeURIComponent(branch)}&event=push&status=completed&per_page=${RUNS_READ}`);
+  const runsPath = workflow
+    ? `/repos/${owner}/${repo}/actions/workflows/${encodeURIComponent(workflow)}/runs?branch=${encodeURIComponent(branch)}&status=completed&per_page=${RUNS_READ}`
+    : `/repos/${owner}/${repo}/actions/runs?branch=${encodeURIComponent(branch)}&event=push&status=completed&per_page=${RUNS_READ}`;
+  const listed = await ghFetch(env, owner, repo, runsPath);
   if (!listed.ok) throw new Error(`the run list returned ${listed.status}`);
   const runs = (((await listed.json()) as { workflow_runs?: RunRow[] }).workflow_runs ?? []).sort((a, b) => b.id - a.id);
   if (!runs.length) return null;
