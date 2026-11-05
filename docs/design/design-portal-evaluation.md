@@ -110,7 +110,7 @@ WHERE at >= datetime('now', '-30 days')
 GROUP BY day, action ORDER BY day, n DESC;
 ```
 
-The range form on `at` uses the `audit_log_at` index (migration 0005). Retention is 180 days, so 30 days is complete. The second filter drops the mirror-document row a job transition also writes.
+The range form on `at` uses the `audit_log_at` index (migration 0005). Retention is 365 days, so 30 days is complete. The second filter drops the mirror-document row a job transition also writes.
 
 **Task rank** (14-day counts quoted in the review):
 
