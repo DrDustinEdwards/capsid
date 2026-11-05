@@ -196,7 +196,8 @@ export interface SharedCodeView {
 // The completeness scoreboard (src/completeness.ts): devkit's daily board, every area of the
 // shared code against the package and every live site, filled only from live checks and
 // verifiers' verdicts.
-export type CompletenessStatus = "complete" | "partial" | "missing" | "n/a";
+// "unmeasured": a check could not measure the cell, and its reason says why; never a pass or a failure.
+export type CompletenessStatus = "complete" | "partial" | "missing" | "unmeasured" | "n/a";
 
 export interface CompletenessCell {
   status: CompletenessStatus;
