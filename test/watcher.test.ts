@@ -22,7 +22,7 @@ import {
   DEPLOY_SETTLE_MINUTES,
   MASTER_CI_WORKFLOW,
   deployVerdict, ciFindings, healthFindings, statusFindings,
-  mirrorFindings, type Finding
+  offaccountFindings, offaccountDrillFindings, offaccountCoverageFindings, type Finding
 } from "../src/watcher-detect.ts";
 import { CI_RED_HOURS } from "../src/watcher-detect.ts";
 
@@ -306,12 +306,16 @@ test("every fingerprint the checks produce has an owning check", () => {
         namespaces: [{ namespace: "sample", breaker: { namespace: "sample", open: true, failed: 3, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
       } as never
     ),
-    ...mirrorFindings("capsid", null, [], NOW),
-    ...mirrorFindings("capsid", stale, [], NOW),
-    ...mirrorFindings("capsid", stale, [{ name: "mirror", status: "completed", conclusion: "failure" }], NOW),
-    ...mirrorFindings("capsid", stale, [{ name: "mirror", status: "completed", conclusion: "success" }], NOW),
+    ...offaccountFindings("capsid", ["lorem"], null, null, NOW),
+    ...offaccountFindings("capsid", ["lorem", "ipsum", "dolor"], { received_at: stale.toISOString(), sites: {
+      lorem: { newest: null, bytes: null, recent_bytes: [], weekly: null, monthly: null },
+      ipsum: { newest: "2026-01-01T09-00-00-000Z", bytes: 1, recent_bytes: [1, 100, 100, 100], weekly: null, monthly: null },
+      dolor: { newest: new Date(NOW.getTime() - 31 * 3_600_000).toISOString().replace(/[:.]/g, "-"), bytes: 1, recent_bytes: [1], weekly: null, monthly: null },
+    } }, null, NOW),
+    ...offaccountDrillFindings("capsid", [], NOW),
+    ...offaccountCoverageFindings("capsid", [], [{ name: "lorem", used_by: [{ script: "lorem" }] }]),
   ];
-  assert.equal(all.length, 11, `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`);
+  assert.equal(all.length, 15, `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`);
   for (const f of all) assert.ok(owningCheck(f.fingerprint), `${f.fingerprint} has no owning check, so a failed read would clear it`);
 });
 

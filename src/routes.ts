@@ -19,13 +19,14 @@ import { isAdminEmail } from "./auth";
 import { loginHandler } from "@dustinedwards/site-runtime/mcp-login";
 import {
   BACKUP_CREDENTIAL_PATH,
-  claimJti,
-  MAX_REPORT_BYTES,
   mintBackupCredential,
   parseBackupCredentialRequest,
   readBoundedText,
+  signedRequestBody,
   verifyBackupCredentialRequest,
 } from "./signed-requests";
+import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_REPORT_PATH, parseOffaccountReport } from "./offaccount";
+import type { OffaccountReport } from "./watcher-detect";
 import { handleHealth } from "./health";
 import { handlePortalApp } from "./portal-app";
 import { PORTAL_HOST } from "./portal-host";
@@ -191,35 +192,21 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
 // /health lives in src/health.ts: routes.ts pulls cloudflare:workers via the Agents
 // SDK and cannot load under node --test.
 
-async function readSignedBody(request: Request, tooLarge: string): Promise<{ ok: true; body: string } | { ok: false; response: Response }> {
-  const bounded = await readBoundedText(request, MAX_REPORT_BYTES);
-  if (!bounded.ok) return { ok: false, response: textResponse(tooLarge, 413) };
-  return { ok: true, body: bounded.text };
-}
+// Both backup endpoints read the X-Backup-* pair and verify against the backup key.
+const backupFront = (env: Env) => ({
+  headers: "Backup" as const,
+  verify: (signed: { timestamp: string; signature: string; body: string }, now: Date) => verifyBackupCredentialRequest(env, signed, now),
+  db: env.DB,
+});
 
 // The backup-credential mint: an HMAC over timestamp.body with the backup-specific
 // derived key, a bounded body and the jti replay cache, then one hour of
 // object-read-only on backups/json/. The jti cache runs under the literal scope
 // "backup", which is not in ROSTER.
 async function handleBackupCredential(request: Request, env: Env): Promise<Response> {
-  const timestamp = request.headers.get("X-Backup-Timestamp") ?? "";
-  const signature = request.headers.get("X-Backup-Signature") ?? "";
-
-  const bounded = await readSignedBody(request, `request too large: exceeds ${MAX_REPORT_BYTES} bytes`);
-  if (!bounded.ok) return bounded.response;
-  const body = bounded.body;
-
-  const verdict = await verifyBackupCredentialRequest(env, { timestamp, signature, body }, new Date());
-  if (!verdict.ok) {
-    logEvent("BACKUP_CREDENTIAL_REJECTED", { message: `BACKUP_CREDENTIAL_REJECTED ${verdict.refusal}` }, { level: "error" });
-    return textResponse(verdict.refusal, verdict.status);
-  }
-
-  const parsed = parseBackupCredentialRequest(body);
-  if (!parsed.ok) return textResponse(parsed.refusal, 400);
-
-  const claim = await claimJti(env.DB, "backup", parsed.jti);
-  if (!claim.ok) return textResponse(claim.refusal, claim.status);
+  const front = await signedRequestBody(request, { ...backupFront(env), scope: "backup", event: "BACKUP_CREDENTIAL_REJECTED", parse: parseBackupCredentialRequest });
+  if (!front.ok) return front.response;
+  const parsed = front.value;
 
   const minted = await mintBackupCredential(env, parsed.site);
   if (!minted.ok) {
@@ -228,6 +215,18 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
   }
   logEvent("BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED site=${parsed.site} ttl=${minted.credential.expires_in}s` });
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+// The Amazon copy's report from capsid-backups' watch.yml: the same backup key and checks
+// as the credential mint, its own jti scope, and the report stored whole for the watcher.
+// It mints nothing and reads nothing back.
+async function handleOffaccountReport(request: Request, env: Env): Promise<Response> {
+  const front = await signedRequestBody(request, { ...backupFront(env), scope: "backup-report", event: "OFFACCOUNT_REPORT_REJECTED", parse: parseOffaccountReport });
+  if (!front.ok) return front.response;
+  const parsed = front.value;
+  const report: OffaccountReport = { received_at: new Date().toISOString(), sites: parsed.sites };
+  await env.APP_KV.put(OFFACCOUNT_REPORT_KEY, JSON.stringify(report));
+  return new Response(null, { status: 204 });
 }
 
 export const defaultHandler = {
@@ -251,6 +250,7 @@ export const defaultHandler = {
     if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);
     if (url.pathname === OTLP_LOGS_PATH && request.method === "POST") return handleOtlpLogs(request, env);
     if (url.pathname === BACKUP_CREDENTIAL_PATH && request.method === "POST") return handleBackupCredential(request, env);
+    if (url.pathname === OFFACCOUNT_REPORT_PATH && request.method === "POST") return handleOffaccountReport(request, env);
     if (url.pathname === BENCH_TASKS_PATH && request.method === "POST") return handleBenchTasks(request, env);
     if (url.pathname === BENCH_DRAW_PATH && request.method === "POST") return handleBenchDraw(request, env);
     if (url.pathname === BENCH_START_PATH && request.method === "POST") return handleBenchStart(request, env);

@@ -85,15 +85,15 @@ test("PLANT: problems hold no notice; missing data, a check that could not run, 
   assert.deepEqual(sevs, [...sevs].sort((a, b) => (a === b ? 0 : a === "crit" ? -1 : 1)));
 });
 
-test("health not read and the mirror not read stay warnings, not notices", () => {
+test("health not read and the Amazon copy not read stay warnings, not notices", () => {
   const { f, now } = feed();
   assert.ok(f.snapshot);
   f.snapshot.health = null;
-  f.snapshot.mirror = null;
+  f.snapshot.offaccount = null;
   const g = attentionGroups(f, now);
   const warn = g.problems.filter((r) => r.sev === "warn").map((r) => r.title);
   assert.ok(warn.includes("Capsid health was not read on the last pass"), warn.join(" | "));
-  assert.ok(warn.includes("The off-account mirror was not read on the last pass"), warn.join(" | "));
+  assert.ok(warn.includes("The Amazon backup copy's report was not read on the last pass"), warn.join(" | "));
   assert.equal(g.notices.filter((r) => /was not read on the last pass/.test(r.title)).length, 0);
 });
 

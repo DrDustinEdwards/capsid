@@ -48,7 +48,7 @@ const snapshot = {
   cadence_min: 30,
   checks: [],
   health: null,
-  mirror: null,
+  offaccount: null,
   ci: [{ namespace: "capsid", latest: { head_sha: "abcdef1234567", status: "completed", conclusion: "failure", created_at: "2026-10-08T10:00:00.000Z", url: "https://github.com/example-org/sample/actions/runs/1" } }],
   site_map: null,
   sites: [

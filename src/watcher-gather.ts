@@ -14,6 +14,8 @@ import { readPackageConfig, readPackage, npmVersions } from "./ops-packages";
 import { readSiteConfig, type OpsSite, sitesFrom, siteMapDrift } from "./ops-sites";
 import { type SiteProbe, probeSite, readSnapshot } from "./ops-snapshot";
 import type { PackageSnapshot } from "./ops-types/sites";
+import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "./offaccount";
+import { readResources } from "./system-facts-store";
 import { APP_ROSTER } from "./roster";
 import { secretPresence, storeSecrets } from "./secret-presence";
 import { watchSites } from "./site-watch";
@@ -22,7 +24,7 @@ import { capsidStatus } from "./status";
 import { readRepoMap } from "./unmapped-repos";
 import { type Gathered, type Observed, WATCHER_ACTOR } from "./watcher";
 import type { WatcherCheck } from "./watcher-checks";
-import { type Finding, type DeployVerdict, deployVerdict, healthFindings, statusFindings, MIRROR_DUMP_PREFIX, MIRROR_REPO_LABEL, type MirrorRun, newestDump, mirrorFindings, latestMirrorRun, type CiRun, ciFindings, siteMapFindings, unmappedRepoFindings, repoMapUnreadableFinding, siteDownFindings, liveFinding, finding, siteErrorFindings, siteCpuFindings } from "./watcher-detect";
+import { type Finding, type DeployVerdict, deployVerdict, healthFindings, statusFindings, BACKUPS_REPO_LABEL, type OffaccountReport, type WorkflowRun, offaccountFindings, offaccountDrillFindings, offaccountCoverageFindings, parseDumpStamp, type CiRun, ciFindings, siteMapFindings, unmappedRepoFindings, repoMapUnreadableFinding, siteDownFindings, liveFinding, finding, siteErrorFindings, siteCpuFindings } from "./watcher-detect";
 
 // The watcher's reads (src/watcher.ts runs the pass): every surface it checks, read
 // once per pass and turned into findings by src/watcher-detect.ts.
@@ -40,6 +42,9 @@ async function attempt<T>(what: string, fn: () => Promise<T>): Promise<T | null>
   }
 }
 
+// A run id as an ISO time, or null for none or a name that is not a run id.
+const dumpTime = (run: string | null): string | null => (run ? parseDumpStamp(run)?.toISOString() ?? null : null);
+
 const basename = (path: string): string => path.split("/").filter(Boolean).pop() ?? "";
 
 /** The newest migration filename on master, compared against the live schema_version.
@@ -52,7 +57,7 @@ export function newestMigration(names: string[]): string | null {
 export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetch = fetch): Promise<Gathered> {
   const out: Finding[] = [];
   const ran = new Set<WatcherCheck>();
-  const observed: Observed = { health: null, mirror: null, ci: [], siteMap: null, probes: null };
+  const observed: Observed = { health: null, offaccount: null, ci: [], siteMap: null, probes: null };
 
   // No casts on a repo reader's result, so a renamed field fails `npm run check`.
   // attempt() swallows a throw, so a cast would hide a check that never runs.
@@ -87,24 +92,37 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     out.push(...statusFindings(status));
   }
 
-  // The off-account mirror, resolved through the capsid namespace mapping (selector
-  // "backups"). A failed dump read skips the check: "cannot see the mirror" is not
-  // "the mirror is dead", and an outage must not file a job every half hour. A failed
-  // run read degrades to an empty list, so the stale-dump finding still fires.
-  const dumps = await attempt("mirror dumps", async () => {
-    const tree = await listRepoTree(env, "capsid", MIRROR_DUMP_PREFIX, undefined, MIRROR_REPO_LABEL);
-    return tree.entries;
-  });
-  if (dumps) {
-    ran.add("mirror dumps");
-    const runs: MirrorRun[] | null = await attempt("mirror runs", async () => (await ciStatus(env, "capsid", MIRROR_REPO_LABEL, { limit: 10 })).runs);
-    if (runs) ran.add("mirror runs");
-    const newest = newestDump(dumps);
-    out.push(...mirrorFindings("capsid", newest, runs ?? [], now));
-    const last = runs ? latestMirrorRun(runs) : null;
-    observed.mirror = {
-      newest_dump: newest?.toISOString() ?? null,
-      last_run: last ? { at: last.created_at ?? null, conclusion: last.conclusion ?? null, url: last.url ?? null } : null,
+  // The Amazon copy, as capsid-backups' watch.yml last reported it (src/offaccount.ts).
+  // An unreadable report skips the check: "cannot see the copy" is not "the copy is dead".
+  // The copy workflow's runs, read through the capsid namespace's "backups" mapping, are
+  // evidence only; a failed read leaves them out and the age findings still fire.
+  const report = await attempt("offaccount report", async () => ({ value: await env.APP_KV.get<OffaccountReport>(OFFACCOUNT_REPORT_KEY, "json") }));
+  const copyRuns: WorkflowRun[] | null = await attempt("offaccount runs", async () => (await ciStatus(env, "capsid", BACKUPS_REPO_LABEL, { workflow: "offaccount.yml", limit: 5 })).runs);
+  const lastCopy = copyRuns?.find((r) => r.status === "completed") ?? null;
+  if (report) {
+    ran.add("offaccount");
+    out.push(...offaccountFindings("capsid", OFFACCOUNT_SITES, report.value, lastCopy, now));
+  }
+  // The restore drill's own runs, so a monthly drill is not pushed out by the nightly ones.
+  const drillRuns: WorkflowRun[] | null = await attempt("offaccount drill", async () => (await ciStatus(env, "capsid", BACKUPS_REPO_LABEL, { workflow: "drill.yml", limit: 10 })).runs);
+  if (drillRuns) {
+    ran.add("offaccount drill");
+    out.push(...offaccountDrillFindings("capsid", drillRuns, now));
+  }
+  // Every D1 database a Worker binds against the ones copied, from the nightly resources
+  // model. Before the first build there is nothing to compare, so the check does not run.
+  const resources = await attempt("offaccount coverage", () => readResources(env));
+  if (resources) {
+    ran.add("offaccount coverage");
+    out.push(...offaccountCoverageFindings("capsid", OFFACCOUNT_SITES.map((s) => OFFACCOUNT_SOURCES[s].database), resources.databases));
+  }
+  const run = (r: WorkflowRun | null | undefined) => (r ? { at: r.created_at ?? null, conclusion: r.conclusion ?? null, url: r.url ?? null } : null);
+  if (report) {
+    observed.offaccount = {
+      reported_at: report.value?.received_at ?? null,
+      sites: OFFACCOUNT_SITES.map((site) => ({ site, newest: dumpTime(report.value?.sites[site]?.newest ?? null) })),
+      last_run: run(lastCopy),
+      last_drill: run(drillRuns?.find((r) => r.status === "completed" && r.conclusion === "success")),
     };
   }
 

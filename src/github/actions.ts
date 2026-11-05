@@ -26,6 +26,9 @@ const SHA_SHAPE = /^[0-9a-f]{7,40}$/i;
 
 interface CiRunsOpts {
   limit?: number;
+  // One workflow's runs, by its file name (offaccount.yml): a busy repo's other
+  // workflows would otherwise push a monthly one out of the newest 20.
+  workflow?: string;
   logTail?: boolean;
   ref?: string;
   runId?: number;
@@ -67,7 +70,12 @@ export async function ciStatus(
   if (opts.ref) assertRepoArg("ref", opts.ref);
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
   const limit = opts.limit && opts.limit > 0 ? Math.min(opts.limit, 20) : 10;
-  let query = `/repos/${owner}/${repo}/actions/runs?per_page=${limit}`;
+  if (opts.workflow !== undefined && !/^[A-Za-z0-9_.-]{1,100}\.ya?ml$/.test(opts.workflow)) {
+    throw new Error("ci_status: workflow must be a workflow file name such as ci.yml");
+  }
+  let query = opts.workflow
+    ? `/repos/${owner}/${repo}/actions/workflows/${opts.workflow}/runs?per_page=${limit}`
+    : `/repos/${owner}/${repo}/actions/runs?per_page=${limit}`;
   if (opts.runId) {
     // One run, by id. Wrapped back into the list's shape so the failed-run drill-in
     // has one code path.

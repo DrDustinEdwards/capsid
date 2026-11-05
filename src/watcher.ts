@@ -15,7 +15,7 @@ import {
   readSnapshot,
   writeSnapshot,
   type CiObservation,
-  type MirrorObservation,
+  type OffaccountObservation,
   type OpsSnapshot,
   type SiteProbe,
 } from "./ops-snapshot";
@@ -153,7 +153,7 @@ export async function clearFinding(env: Env, id: string, now: Date, summary: str
 // where the read failed, so the snapshot says "could not read" rather than "none".
 export interface Observed {
   health: HealthReport | null;
-  mirror: MirrorObservation | null;
+  offaccount: OffaccountObservation | null;
   ci: CiObservation[];
   siteMap: SiteMapDrift | null;
   probes: SiteProbe[] | null;
@@ -371,7 +371,7 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
       cadence_min: minutes,
       checks: checkStates(gathered),
       health: o.health,
-      mirror: o.mirror,
+      offaccount: o.offaccount,
       ci: o.ci,
       site_map: o.siteMap,
       probes: o.probes,

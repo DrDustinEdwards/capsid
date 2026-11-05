@@ -3,14 +3,14 @@ import type { HealthReport } from "./health";
 import { healthOf, parseHealth } from "./health-format";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { healthUrl, type OpsSite } from "./ops-sites";
-import type { CiObservation, ExpirySnapshot, MirrorObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
+import type { CiObservation, ExpirySnapshot, OffaccountObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
 // The watcher's pass, kept (capsid/research/design-ops-console.md, PR 1 of the Watch
 // Floor build). Until this, a pass kept only its timestamp: every check's outcome, the
-// mirror's newest dump and last run, and each repo's latest CI run were computed and
+// Amazon backup copy's report, and each repo's latest CI run were computed and
 // thrown away. The dashboard reads this one KV value instead of assembling the same
 // facts from about a hundred reads per load.
 
@@ -32,7 +32,7 @@ export const MAX_HEALTH_BYTES = 65_536;
 // but the root did, or its body reports warn, `ok: false` or a backup warning.
 // liveness: the site has no health route and its root answered 2xx, which proves it is
 // up and nothing more. down: nothing answered 2xx.
-export type { CiObservation, MirrorObservation, OpsSnapshot, SiteProbe, SiteSnapshot } from "./ops-types/sites";
+export type { CiObservation, OffaccountObservation, OpsSnapshot, SiteProbe, SiteSnapshot } from "./ops-types/sites";
 
 export const ringSlot = (at: Date): number => Math.floor(at.getTime() / (RING_SLOT_MINUTES * MINUTE_MS));
 
@@ -190,7 +190,7 @@ export interface SnapshotInput {
   cadence_min: number;
   checks: OpsSnapshot["checks"];
   health: HealthReport | null;
-  mirror: MirrorObservation | null;
+  offaccount: OffaccountObservation | null;
   ci: CiObservation[];
   site_map: SiteMapDrift | null;
   // Null when the probes could not run at all this pass.
@@ -238,7 +238,7 @@ export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): O
     cadence_min: input.cadence_min,
     checks: input.checks,
     health: input.health,
-    mirror: input.mirror,
+    offaccount: input.offaccount,
     ci: input.ci,
     site_map: input.site_map,
     sites,

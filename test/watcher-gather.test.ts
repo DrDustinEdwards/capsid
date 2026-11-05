@@ -141,46 +141,6 @@ test("a live schema AT the newest migration is not a finding, so the check is no
   assert.ok(!fingerprints(found).some((f) => f.startsWith("schema-behind-")), JSON.stringify(fingerprints(found)));
 });
 
-// The mirror check is gated on its dump listing. "Cannot see the mirror" and "the
-// mirror is dead" are different facts, and posting the second during a GitHub outage
-// would file a job every half hour.
-const BACKUPS = [
-  { repo: `${OWNER}/${REPO}`, label: "primary" },
-  { repo: `${OWNER}/capsid-backups`, label: "backups" },
-];
-const BACKUPS_REPO = { [`GET /repos/${OWNER}/capsid-backups`]: { body: { default_branch: "main" } } };
-
-test("an unreadable mirror listing posts nothing about the mirror", async () => {
-  const { found, failures } = await gather(NEWER, BACKUPS, {
-    ...BACKUPS_REPO,
-    [`GET /repos/${OWNER}/capsid-backups/contents/backups/json`]: { status: 500, body: { message: "boom" } },
-  });
-  assert.ok(failures.some((f) => f.includes("mirror dumps")), "the dump listing did not fail, so this proves nothing");
-  assert.deepEqual(fingerprints(found).filter((f) => f.startsWith("mirror-")), [], "an unreadable mirror was reported as a dead one");
-});
-
-test("a readable, empty mirror listing is the no-dump finding", async () => {
-  const { found } = await gather(NEWER, BACKUPS, {
-    ...BACKUPS_REPO,
-    [`GET /repos/${OWNER}/capsid-backups/contents/backups/json`]: { body: [] },
-  });
-  assert.ok(fingerprints(found).includes("mirror-no-dump"), `no mirror-no-dump finding: ${fingerprints(found).join(", ")}`);
-});
-
-test("the mirror is read from whichever repo the namespace maps to its backups label", async () => {
-  // The namespace-to-repo mapping is the authorization boundary, so the watcher must
-  // not know the mirror's name. Mapped here to a repo with a different name, the
-  // listing has to follow the mapping.
-  const elsewhere = `${OWNER}/lorem-mirror`;
-  const { found, calls } = await gather(NEWER, [BACKUPS[0], { repo: elsewhere, label: "backups" }], {
-    [`GET /repos/${elsewhere}`]: { body: { default_branch: "main" } },
-    [`GET /repos/${elsewhere}/contents/backups/json`]: { body: [] },
-  });
-  assert.ok(calls.some((c) => c.path === `/repos/${elsewhere}/contents/backups/json`), "the dump listing was not requested from the mapped repo");
-  assert.ok(!calls.some((c) => c.path.includes("capsid-backups")), "the watcher read a repo the mapping does not name");
-  assert.ok(fingerprints(found).includes("mirror-no-dump"), `the mapped repo's empty listing was not judged: ${fingerprints(found).join(", ")}`);
-});
-
 // A check whose read failed is not reported as run, so runPass does not clear the jobs
 // it owns. In this harness the status read and every roster CI
 // read fail, while /health, master head and the migrations listing succeed.

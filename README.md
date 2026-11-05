@@ -119,7 +119,7 @@ Once a day the Worker builds a public system model and a set of aggregate statis
 
 ### Backups and recovery
 
-D1 Time Travel provides 30-day point-in-time recovery. In addition, the daily backup writes one JSON export per table and a Markdown mirror of every document to R2, and the exports are mirrored to a private repository outside the Cloudflare account. A scheduled workflow rehearses a restore ([docs/backups.md](docs/backups.md)). Rolling back a faulty deploy is described in [docs/rollback.md](docs/rollback.md).
+D1 Time Travel provides 30-day point-in-time recovery. In addition, the daily backup writes one JSON export per table and a Markdown mirror of every document to R2, and the exports of every site are copied to a locked Amazon S3 bucket outside the Cloudflare account. A scheduled workflow rehearses a restore ([docs/backups.md](docs/backups.md)). Rolling back a faulty deploy is described in [docs/rollback.md](docs/rollback.md).
 
 ## MCP tools
 

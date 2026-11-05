@@ -4,7 +4,7 @@
 # local SQLite database, check counts against the marker, FTS5 agreement and a search,
 # and delete the scratch database. It fails loudly when a dump cannot be rebuilt.
 #
-# The pull uses the SAME /backup/credential mint as the off-account mirror, signed with
+# The pull uses the SAME /backup/credential mint as the off-account copy, signed with
 # BACKUP_CREDENTIAL_KEY, so that secret belongs on capsid-mcp as well as
 # capsid-backups. The pull reads only the newest run (object-read-only) and never writes.
 # The drill restores into a node:sqlite file and holds no Cloudflare credential: a D1

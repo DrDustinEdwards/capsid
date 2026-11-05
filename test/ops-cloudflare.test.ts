@@ -331,7 +331,7 @@ const prevWith = (rings: Record<string, string>): OpsSnapshot =>
     cadence_min: 30,
     checks: [],
     health: null,
-    mirror: null,
+    offaccount: null,
     ci: [],
     site_map: null,
     sites: Object.entries(rings).map(([ns, ring]) => ({ ...probe(ns, ring.endsWith("0") ? "down" : "ok"), ring, ring_slot: ringSlot(NOW) - 1 })),
@@ -423,7 +423,7 @@ test("the snapshot carries each site's Cloudflare state, and an old snapshot wit
     a: hourly(10, 0),
     b: { state: "unresolved", reason: "no Workers custom domain on the account names b.example.com, so its script is not known" },
   };
-  const base = { now: NOW, pass_ms: 1, cadence_min: 30, checks: [], health: null, mirror: null, ci: [], site_map: null };
+  const base = { now: NOW, pass_ms: 1, cadence_min: 30, checks: [], health: null, offaccount: null, ci: [], site_map: null };
   const snap = buildSnapshot(null, { ...base, probes: [probe("a", "ok"), probe("b", "ok"), probe("c", "ok")], cloudflare: cf });
   assert.equal(snap.version, 1);
   assert.deepEqual(snap.sites[0].cloudflare, cf.a);

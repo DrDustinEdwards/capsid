@@ -39,7 +39,7 @@ const SNAPSHOT: OpsSnapshot = {
   cadence_min: 30,
   checks: [{ id: "health", state: "clear", findings: [] }],
   health: null,
-  mirror: null,
+  offaccount: null,
   ci: [],
   site_map: null,
   sites: [SITE],

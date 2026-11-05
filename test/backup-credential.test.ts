@@ -16,7 +16,7 @@ import { R2 } from "../scripts/bindings.mjs";
 import { fakeEnv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
 
-// The off-account backup credential. The mirror job in the
+// The off-account backup credential. The Amazon copy job in the
 // private capsid-backups repo holds no long-lived R2 secret: it signs a request
 // with a backup-specific derived key and receives a one-hour object-read-only
 // credential scoped to backups/json/ on capsid-media, from its own parent token.
@@ -156,7 +156,7 @@ test("the pinned table: the six sites that dump, capsid on its media pin, no buc
   assert.equal(new Set(buckets).size, buckets.length, "two sites share a backup bucket");
 });
 
-test("a request with no site is capsid's, so the existing mirror and rehearsal keep working", () => {
+test("a request with no site is capsid's, so the rehearsal keeps working", () => {
   const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789" }));
   assert.ok(parsed.ok);
   assert.equal(parsed.site, "capsid");
