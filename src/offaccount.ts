@@ -18,6 +18,9 @@ export const OFFACCOUNT_SOURCES = {
   foxing: { bucket: "foxing-backups", database: "foxing" },
   foxhound: { bucket: "foxhound-backups", database: "foxhound" },
   dustinedwards: { bucket: "dustinedwards-backups", database: "dustinedwards" },
+  julieedwards: { bucket: "julieedwards-backups", database: "julieedwards" },
+  carrel: { bucket: "carrel-backups", database: "carrel" },
+  bsw: { bucket: "bsw-backups", database: "bsw" },
 } as const satisfies Record<string, { bucket: string; database: string }>;
 
 export type OffaccountSite = keyof typeof OFFACCOUNT_SOURCES;
