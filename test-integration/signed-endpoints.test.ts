@@ -65,7 +65,7 @@ describe("/backup/credential", () => {
 
   it("refuses an unknown site with 400 before it mints or spends the jti", async () => {
     const jti = crypto.randomUUID();
-    const unknown = await backupPost(await backupKey(), { jti, site: "julieedwards" });
+    const unknown = await backupPost(await backupKey(), { jti, site: "sample" });
     expect(unknown.status).toBe(400);
     expect(await unknown.text()).toMatch(/names no known site/);
     // The jti was not claimed: the same jti with a pinned site gets past the replay
