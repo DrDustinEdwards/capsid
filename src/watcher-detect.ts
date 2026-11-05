@@ -379,14 +379,15 @@ export function offaccountFindings(
 
 /** Every D1 database a Worker binds has an Amazon copy: the nightly resources model
  *  (src/system-resources.ts) against the databases OFFACCOUNT_SOURCES dumps. A database
- *  no Worker binds (a preview, a leftover) is not data anyone writes, so it is left out. */
+ *  bound only as a Workers preview (binding "X (preview)") holds test data, and one no
+ *  Worker binds is a leftover; neither is anyone's data, so both are left out. */
 export function offaccountCoverageFindings(
   namespace: string,
   covered: readonly string[],
-  databases: ReadonlyArray<{ name: string; used_by: ReadonlyArray<{ script: string }> }>
+  databases: ReadonlyArray<{ name: string; used_by: ReadonlyArray<{ script: string; binding?: string }> }>
 ): Finding[] {
   return databases
-    .filter((d) => d.used_by.length > 0 && !covered.includes(d.name))
+    .filter((d) => d.used_by.some((u) => !u.binding?.endsWith(" (preview)")) && !covered.includes(d.name))
     .map((d) =>
       finding(namespace, `offaccount-uncovered-${d.name}`, `the D1 database ${d.name} has no Amazon copy`, [
         `bound by ${d.used_by.map((u) => u.script).join(", ")}`,
