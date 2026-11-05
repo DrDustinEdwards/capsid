@@ -13,7 +13,7 @@
   "dependencies": {
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.32.1",
     "capsomer": "github:DrDustinEdwards/capsomer#v0.75.0",
-    "enarratio": "^0.7.3"
+    "enarratio": "0.7.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
