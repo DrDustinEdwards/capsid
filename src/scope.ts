@@ -241,6 +241,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_run_improve action status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
   "/portal/api/completeness": "the Portal's Completeness view: devkit's daily scoreboard (board.json on its scoreboard branch), read through the GitHub App and cached for ten minutes, gated by portalGate",
+  "/portal/api/not-found": "the Portal's 404 panel: Capsid's own missing pages from page_404_daily over 30 days, read-only, gated by portalGate",
   "/portal/api/shared-code": "the Portal's Shared code view: each network package's releases and the pins in every model repo, read nightly through the GitHub App and kept in KV, gated by portalGate",
   "/portal/api/resources": "the Portal's Workers tab: the secrets and data model (secret names, never values, and each Worker's stores), read nightly from Cloudflare and kept in KV, gated by portalGate",
   "/portal/api/library": "the Portal's read-only Library: the knowledge store's shelves, a search and one document with its edges, through the readers behind capsid_find_docs and capsid_read_doc, gated by portalGate",

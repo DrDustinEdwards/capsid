@@ -27,10 +27,10 @@ test("PLANT: on the Portal host, a root path is handled as the Portal's", () => 
   assert.equal(routed(`${PORTAL}/queue/job/job_0123456789ab`), "/portal/queue/job/job_0123456789ab");
   assert.equal(routed(`${PORTAL}/api/ops`), "/portal/api/ops");
   assert.equal(routed(`${PORTAL}/callback?code=c&state=s`), "/portal/callback?code=c&state=s");
-  // Nothing but the Portal: the MCP endpoint and /health become Portal paths behind the
-  // gate, not the Worker's own routes.
+  // Nothing but the Portal: the MCP endpoint becomes a Portal path behind the gate, not the
+  // Worker's own route. /health alone is the Worker's shared health (area 8, H1).
   assert.equal(routed(`${PORTAL}/mcp`), "/portal/mcp");
-  assert.equal(routed(`${PORTAL}/health`), "/portal/health");
+  assert.equal(routed(`${PORTAL}/health`), "/health");
 });
 
 test("PLANT: on the Portal host, an old /portal address redirects to the same path at the root, keeping the method", () => {

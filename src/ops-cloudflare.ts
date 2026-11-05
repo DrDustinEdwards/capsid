@@ -44,6 +44,8 @@ const ERROR_HOURS = 24;
 // that cannot break out of a string literal is sent.
 const SCRIPT_NAME = /^[A-Za-z0-9_-]{1,63}$/;
 
+// The scriptName Cloudflare's analytics gives a row it cannot name.
+
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export type CfCredentials = { ok: true; token: string; account: string } | { ok: false; reason: string };

@@ -307,18 +307,21 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     const domains = [...new Set(config.map((c) => (c.origin ? registrableDomain(c.origin) : null)).filter((d): d is string => d !== null))].sort();
     const read = await attempt("domains", () => readExpiries(env.APP_KV, domains, fetchImpl, now));
     if (read) {
+      observed.expiry = { tls: null, ...observed.expiry, domains: { read_at: now.toISOString(), domains: read.expiries, failed: read.failed } };
       out.push(...expiryFindings(read.expiries, now));
       if (read.failed.length === 0) ran.add("domains");
       for (const f of read.failed) logEvent("WATCHER_DOMAIN_UNREAD", { message: `${f.domain}: ${f.error}` }, { level: "warn" });
     }
     // Each Cloudflare-hosted site's TLS certificate (src/tls-expiry.ts): kept in KV for the
-    // push, which alerts at 14 and 3 days. No finding. A host that could not be read keeps
+    // push, which alerts at 21 and 3 days, and shown in the snapshot. No finding. A host that could not be read keeps
     // its last stored date, so a failed read never drops an expiry the push still needs.
     const tls = await attempt("tls", () => readTlsExpiry(env, config, fetchImpl, now));
     if (tls) {
       const stored = ((await env.APP_KV.get(TLS_EXPIRY_KEY, "json")) as typeof tls | null)?.hosts ?? [];
       const kept = stored.filter((h) => tls.failed.some((f) => f.host === h.host));
-      await env.APP_KV.put(TLS_EXPIRY_KEY, JSON.stringify({ ...tls, hosts: [...tls.hosts, ...kept] }));
+      const merged = { ...tls, hosts: [...tls.hosts, ...kept] };
+      await env.APP_KV.put(TLS_EXPIRY_KEY, JSON.stringify(merged));
+      observed.expiry = { domains: null, ...observed.expiry, tls: merged };
       for (const f of tls.failed) logEvent("WATCHER_TLS_UNREAD", { message: `${f.host}: ${f.error}` }, { level: "warn" });
     }
   }

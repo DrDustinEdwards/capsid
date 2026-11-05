@@ -1354,7 +1354,7 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
   return (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname.startsWith("/api/") ? `/portal${url.pathname}` : url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/not-found", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1438,6 +1438,10 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
         if (path === "/portal/api/completeness") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, completeness());
+        }
+        if (path === "/portal/api/not-found") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, { days: 30, generated: new Date().toISOString(), pages: [{ path: "/old-page", hits: 4, referrers: [{ host: "example.com", hits: 3 }, { host: "", hits: 1 }] }], probes: 12, error: null });
         }
         if (path === "/portal/api/resources") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });

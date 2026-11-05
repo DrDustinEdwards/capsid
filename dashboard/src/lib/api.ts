@@ -1,7 +1,7 @@
 import { QueryCache, QueryClient, keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView, ResourcesDoc } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalNotFound, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView, ResourcesDoc } from "../types";
 
 // Every URL under the Portal's base on this page (lib/base.ts): /api/... on
 // portal.dustinedwards.info, /demos/api/... on the chart demo.
@@ -14,6 +14,7 @@ const ACTIVITY_URL = `${BASE}/api/activity`;
 const CLAIMS_URL = `${BASE}/api/claims`;
 const PACKAGE_HISTORY_URL = `${BASE}/api/packages/history`;
 const SHARED_CODE_URL = `${BASE}/api/shared-code`;
+const NOT_FOUND_URL = `${BASE}/api/not-found`;
 const COMPLETENESS_URL = `${BASE}/api/completeness`;
 const RESOURCES_URL = `${BASE}/api/resources`;
 const LIBRARY_URL = `${BASE}/api/library`;
@@ -312,6 +313,11 @@ export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageH
 // the local copies left (src/shared-code.ts), cached by the Worker for an hour.
 export function fetchSharedCode(): Promise<Answer<SharedCodeView>> {
   return get<SharedCodeView>(SHARED_CODE_URL);
+}
+
+// GET /portal/api/not-found: Capsid's own missing pages over 30 days (page_404_daily).
+export function fetchNotFound(): Promise<Answer<PortalNotFound>> {
+  return get<PortalNotFound>(NOT_FOUND_URL);
 }
 
 // GET /portal/api/resources: the secrets and data model the nightly build read from
