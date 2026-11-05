@@ -9,7 +9,7 @@ A daily Cron Trigger (09:00 UTC) exports the database to `MEDIA`:
 
 Every put to `MEDIA` in a run is tried up to three times, a second and then two apart (`retryingPuts`, `src/backup.ts`): R2 now and then refuses one with "We encountered an internal error. Please try again. (10001)", and before this one refusal threw the whole run away (the runs of 2026-10-27 and 2026-10-30 did, and `/health` reported the backup 38 hours old). The multipart parts d1-dump streams for the paged tables are not retried; a failed part still fails the run.
 
-After each export, `document_versions` rows older than 90 days and `audit_log` rows older than 180 are pruned. Pruning runs after the export, so every pruned row exists in at least one retained dump.
+After each export, `document_versions` rows older than 90 days and `audit_log` rows older than 365 are pruned. Pruning runs after the export, so every pruned row exists in at least one retained dump.
 
 The private `DrDustinEdwards/capsid-backups` repository mirrors the JSON dumps off-account, so they survive loss of the whole Cloudflare account. Its workflow, schedule and retention live in that repository; this repo mints its credential at `POST /backup/credential` and observes the result. The request may name a `site`; the Worker scopes the credential to that site's bucket from the pinned table in `src/offaccount.ts` and refuses any other site with 400. A request with no site is capsid's (`capsid-media`).
 

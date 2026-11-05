@@ -31,7 +31,7 @@ const LEASE_TTL_SECONDS = 3600;
 
 // Retention for the history tables. Both are covered by the dump shelf life above.
 const VERSION_RETENTION_DAYS = 90;
-const AUDIT_RETENTION_DAYS = 180;
+const AUDIT_RETENTION_DAYS = 365;
 
 // CSP and COOP violation reports. Nothing else prunes this prefix, and a public
 // unauthenticated path writes it.
