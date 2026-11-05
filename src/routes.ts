@@ -208,12 +208,13 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
   if (!front.ok) return front.response;
   const parsed = front.value;
 
-  const minted = await mintBackupCredential(env, parsed.site);
+  const target = parsed.audit === undefined ? `site=${parsed.site}` : `audit=${parsed.audit}`;
+  const minted = await mintBackupCredential(env, parsed.site, parsed.audit);
   if (!minted.ok) {
-    logEvent("BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED site=${parsed.site} ${minted.refusal}` }, { level: "error" });
+    logEvent("BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED ${target} ${minted.refusal}` }, { level: "error" });
     return textResponse(minted.refusal, minted.status);
   }
-  logEvent("BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED site=${parsed.site} ttl=${minted.credential.expires_in}s` });
+  logEvent("BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED ${target} ttl=${minted.credential.expires_in}s` });
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
