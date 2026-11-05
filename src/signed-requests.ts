@@ -200,7 +200,8 @@ const BACKUP_FILES_PREFIX = "files/";
 // bucket each mint is scoped to comes from the pinned table, never the caller.
 export async function mintBackupCredential(
   env: Env,
-  site: OffaccountSite = OFFACCOUNT_DEFAULT_SITE
+  site: OffaccountSite = OFFACCOUNT_DEFAULT_SITE,
+  audit?: OffaccountAudit
 ): Promise<{ ok: true; credential: ScopedCredential } | { ok: false; status: number; refusal: string }> {
   if (!env.R2_TEMP_CRED_TOKEN || !env.R2_BACKUP_PARENT_ACCESS_KEY_ID || !env.R2_ACCOUNT_ID) {
     return {
@@ -210,32 +211,17 @@ export async function mintBackupCredential(
         "backup credential minting is not configured. Set R2_TEMP_CRED_TOKEN, R2_BACKUP_PARENT_ACCESS_KEY_ID and R2_ACCOUNT_ID with wrangler secret put.",
     };
   }
+  // An MCP tool-call log (audit) is one bucket read on tool-calls/ alone; a site is its backups
+  // bucket read on the dumps and the media copies.
   return mintScopedCredential(env, {
-    bucket: OFFACCOUNT_SOURCES[site].bucket,
-    prefix: BACKUP_DUMP_PREFIX,
-    filesPrefix: BACKUP_FILES_PREFIX,
+    bucket: audit ? OFFACCOUNT_AUDIT_SOURCES[audit] : OFFACCOUNT_SOURCES[site].bucket,
+    prefix: audit ? AUDIT_PREFIX : BACKUP_DUMP_PREFIX,
+    filesPrefix: audit ? AUDIT_PREFIX : BACKUP_FILES_PREFIX,
     parentAccessKeyId: env.R2_BACKUP_PARENT_ACCESS_KEY_ID,
   });
 }
 
 const AUDIT_PREFIX = "tool-calls/";
-
-// The read credential for one MCP tool-call log bucket, scoped to its tool-calls/ prefix. The
-// response keeps the site credential's shape, with prefix and files_prefix both tool-calls/.
-export async function mintAuditCredential(
-  env: Env,
-  audit: OffaccountAudit
-): Promise<{ ok: true; credential: ScopedCredential } | { ok: false; status: number; refusal: string }> {
-  if (!env.R2_TEMP_CRED_TOKEN || !env.R2_BACKUP_PARENT_ACCESS_KEY_ID || !env.R2_ACCOUNT_ID) {
-    return { ok: false, status: 503, refusal: "backup credential minting is not configured. Set R2_TEMP_CRED_TOKEN, R2_BACKUP_PARENT_ACCESS_KEY_ID and R2_ACCOUNT_ID with wrangler secret put." };
-  }
-  return mintScopedCredential(env, {
-    bucket: OFFACCOUNT_AUDIT_SOURCES[audit],
-    prefix: AUDIT_PREFIX,
-    filesPrefix: AUDIT_PREFIX,
-    parentAccessKeyId: env.R2_BACKUP_PARENT_ACCESS_KEY_ID,
-  });
-}
 
 // A jti and an optional site. The site only picks a row of the pinned table, so an
 // unknown one is refused here, before the jti is spent or anything is minted.

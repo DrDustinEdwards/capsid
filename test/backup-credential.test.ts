@@ -5,7 +5,6 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   deriveBackupCredentialKey,
-  mintAuditCredential,
   mintBackupCredential,
   parseBackupCredentialRequest,
   verifyBackupCredentialRequest,
@@ -204,7 +203,7 @@ test("an audit log is minted on its own bucket and tool-calls/ alone; a body can
       for (const audit of OFFACCOUNT_AUDITS) {
         const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", audit }));
         assert.ok(parsed.ok && parsed.audit === audit);
-        const minted = await mintAuditCredential(env, audit);
+        const minted = await mintBackupCredential(env, undefined, audit);
         assert.ok(minted.ok);
         assert.equal(minted.credential.prefix, "tool-calls/");
       }

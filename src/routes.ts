@@ -19,7 +19,6 @@ import { isAdminEmail } from "./auth";
 import { loginHandler } from "@dustinedwards/site-runtime/mcp-login";
 import {
   BACKUP_CREDENTIAL_PATH,
-  mintAuditCredential,
   mintBackupCredential,
   parseBackupCredentialRequest,
   readBoundedText,
@@ -210,7 +209,7 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
   const parsed = front.value;
 
   const target = parsed.audit === undefined ? `site=${parsed.site}` : `audit=${parsed.audit}`;
-  const minted = parsed.audit === undefined ? await mintBackupCredential(env, parsed.site) : await mintAuditCredential(env, parsed.audit);
+  const minted = await mintBackupCredential(env, parsed.site, parsed.audit);
   if (!minted.ok) {
     logEvent("BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED ${target} ${minted.refusal}` }, { level: "error" });
     return textResponse(minted.refusal, minted.status);
