@@ -227,7 +227,7 @@ function tickEnv(kv: ReturnType<typeof fakeKv>) {
 const gathered = (): Gathered => ({
   findings: [],
   ran: new Set(["health", "site probes"] as const),
-  observed: { health: HEALTH, offaccount: { reported_at: null, sites: [], last_run: null }, ci: [], siteMap: { unmapped: [], unknown: [] }, probes: [probe("capsid", "ok")] },
+  observed: { health: HEALTH, offaccount: { reported_at: null, sites: [], last_run: null, last_drill: null }, ci: [], siteMap: { unmapped: [], unknown: [] }, probes: [probe("capsid", "ok")] },
 });
 
 test("a pass writes ops:snapshot, then the watcher stamp", async () => {

@@ -81,6 +81,11 @@
         { "site": "sample", "newest": "2026-09-18T07:12:00.000Z" },
         { "site": "lorem", "newest": "2026-09-28T03:10:00.000Z" }
       ],
+      "last_drill": {
+        "at": "2026-09-03T12:41:00.000Z",
+        "conclusion": "success",
+        "url": "https://github.com/example-org/sample-backups/actions/runs/1000000002"
+      },
       "last_run": {
         "at": "2026-09-28T08:36:00.000Z",
         "conclusion": "failure",

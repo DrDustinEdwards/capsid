@@ -199,8 +199,8 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       out.push({ sev: "warn", kind: "Backup", title: "The Amazon backup copy's report was not read on the last pass", sub: "Each site's newest copy is unknown", at: ms(snap.pass_at), open: "view:backups" });
     } else {
       const st = offaccountState(o, now);
-      if (st.bad) {
-        out.push({ sev: "crit", kind: "Backup", title: st.headline, sub: st.detail, at: o.reported_at ? ms(o.reported_at) : ms(snap.pass_at), open: "view:backups" });
+      if (st.bad || st.warn) {
+        out.push({ sev: st.bad ? "crit" : "warn", kind: "Backup", title: st.headline, sub: st.detail, at: o.reported_at ? ms(o.reported_at) : ms(snap.pass_at), open: "view:backups" });
       }
     }
     for (const c of snap.ci) {
@@ -546,19 +546,26 @@ export function driverOf(feed: OpsFeed, ns: string): OpsAgent | null {
   return feed.live.agents.find((a) => a.name === `${ns}-driver`) ?? null;
 }
 
-// The Amazon backup copy at a glance (src/watcher-detect.ts holds the same windows: 36
-// hours for a copy, 13 for the report). worst is the oldest of the sites' newest copies.
+// The Amazon backup copy at a glance (src/watcher-detect.ts holds the same windows: a
+// warning at 30 hours and a job at 36 for a copy, 13 hours for the report, 35 days for the
+// restore drill). worst is the oldest of the sites' newest copies.
+export const OFFACCOUNT_LATE = 30 * HOUR;
 export const OFFACCOUNT_STALE = 36 * HOUR;
 export const OFFACCOUNT_REPORT_STALE = 13 * HOUR;
+export const OFFACCOUNT_DRILL_STALE = 35 * DAY;
 
 export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: number) {
   const missing = o.sites.filter((s) => !s.newest).map((s) => s.site);
-  const stale = o.sites.filter((s) => s.newest && now - ms(s.newest) >= OFFACCOUNT_STALE).map((s) => s.site);
-  const ages = o.sites.filter((s) => s.newest).map((s) => now - ms(s.newest as string));
+  const ageOf = (s: { newest: string | null }) => (s.newest ? now - ms(s.newest) : null);
+  const stale = o.sites.filter((s) => (ageOf(s) ?? 0) >= OFFACCOUNT_STALE).map((s) => s.site);
+  const late = o.sites.filter((s) => { const a = ageOf(s); return a != null && a >= OFFACCOUNT_LATE && a < OFFACCOUNT_STALE; }).map((s) => s.site);
+  const ages = o.sites.map(ageOf).filter((a): a is number => a != null);
   const worst = ages.length ? Math.max(...ages) : null;
   const reportAge = o.reported_at ? now - ms(o.reported_at) : null;
   const silent = reportAge == null || reportAge >= OFFACCOUNT_REPORT_STALE;
-  const bad = missing.length > 0 || stale.length > 0 || silent;
+  const drill = o.last_drill ?? null;
+  const drillOk = drill?.conclusion === "success" && drill.at != null && now - ms(drill.at) < OFFACCOUNT_DRILL_STALE;
+  const bad = missing.length > 0 || stale.length > 0 || silent || !drillOk;
   const headline =
     reportAge == null
       ? "No report of the Amazon backup copy has arrived"
@@ -568,7 +575,11 @@ export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: 
           ? `The Amazon backup copy is stale for ${stale.join(", ")}`
           : silent
             ? `The Amazon backup copy has not reported in ${(reportAge / HOUR).toFixed(0)} hours`
-            : "The Amazon backup copy is current";
+            : !drillOk
+              ? drill?.conclusion && drill.conclusion !== "success" ? `The last restore drill from Amazon ended ${drill.conclusion}` : "No restore drill from Amazon has passed in 35 days"
+              : late.length
+                ? `The Amazon backup copy is late for ${late.join(", ")}`
+                : "The Amazon backup copy is current";
   const detail = o.last_run ? `Last copy run ${o.last_run.conclusion ?? "still running"}${o.last_run.at ? ` ${ago(ms(o.last_run.at), now)}` : ""}` : "No copy run recorded";
-  return { missing, stale, worst, reportAge, bad, headline, detail };
+  return { missing, stale, late, worst, reportAge, bad, warn: !bad && late.length > 0, headline, detail };
 }

@@ -2,7 +2,7 @@ import { trendChart } from "./charts";
 import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
 import { ago, bytes, ms } from "../lib/format";
-import { OFFACCOUNT_STALE, offaccountState } from "../lib/derive";
+import { OFFACCOUNT_LATE, OFFACCOUNT_STALE, offaccountState } from "../lib/derive";
 import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
@@ -84,8 +84,8 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
               </div>
             ) : (
               <>
-                {os.bad && (
-                  <div className="callout crit">
+                {(os.bad || os.warn) && (
+                  <div className={`callout ${os.bad ? "crit" : "warn"}`}>
                     <b>{os.headline}.</b> {os.detail}.
                   </div>
                 )}
@@ -96,7 +96,7 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
                       <dd className="num">
                         {s.newest ? (
                           <>
-                            {ago(ms(s.newest), now)} <When t={ms(s.newest)} /> {now - ms(s.newest) >= OFFACCOUNT_STALE && <St kind="crit">stale</St>}
+                            {ago(ms(s.newest), now)} <When t={ms(s.newest)} /> {now - ms(s.newest) >= OFFACCOUNT_STALE ? <St kind="crit">stale</St> : now - ms(s.newest) >= OFFACCOUNT_LATE ? <St kind="warn">late</St> : null}
                           </>
                         ) : (
                           <St kind="crit">No copy</St>
@@ -113,6 +113,21 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
                         {o.last_run.conclusion === "success" ? <St kind="ok">success</St> : o.last_run.conclusion ? <St kind="crit">{o.last_run.conclusion}</St> : <St kind="run">running</St>}{" "}
                         {o.last_run.url && (
                           <a href={o.last_run.url} target="_blank" rel="noopener noreferrer">
+                            run
+                          </a>
+                        )}
+                      </>
+                    ) : (
+                      <St kind="nodata">none</St>
+                    )}
+                  </dd>
+                  <dt>Last restore drill</dt>
+                  <dd>
+                    {o.last_drill ? (
+                      <>
+                        {o.last_drill.conclusion === "success" ? <St kind="ok">success</St> : o.last_drill.conclusion ? <St kind="crit">{o.last_drill.conclusion}</St> : <St kind="run">running</St>}{" "}
+                        {o.last_drill.url && (
+                          <a href={o.last_drill.url} target="_blank" rel="noopener noreferrer">
                             run
                           </a>
                         )}

@@ -108,13 +108,13 @@ describe("/backup/credential", () => {
 // The Amazon copy's report: the backup key, its own jti scope, and the report stored for
 // the watcher. A refused report must leave the stored one alone.
 describe("/backup/offaccount-report", () => {
-  const sites = Object.fromEntries(OFFACCOUNT_SITES.map((s) => [s, "2026-11-05T09-00-48-001Z"]));
+  const sites = Object.fromEntries(OFFACCOUNT_SITES.map((s) => [s, { newest: "2026-11-05T09-00-48-001Z", bytes: 10, recent_bytes: [10], weekly: null, monthly: null }]));
   it("stores a signed report once, and refuses another key and a replay", async () => {
     const jti = crypto.randomUUID();
     expect((await backupPost(await otherKey(), { jti, sites }, OFFACCOUNT_REPORT_PATH)).status).toBe(401);
     expect(await env.APP_KV.get(OFFACCOUNT_REPORT_KEY)).toBeNull();
     expect((await backupPost(await backupKey(), { jti, sites }, OFFACCOUNT_REPORT_PATH)).status).toBe(204);
-    const stored = await env.APP_KV.get<{ received_at: string; sites: Record<string, string> }>(OFFACCOUNT_REPORT_KEY, "json");
+    const stored = await env.APP_KV.get<{ received_at: string; sites: Record<string, unknown> }>(OFFACCOUNT_REPORT_KEY, "json");
     expect(stored?.sites).toEqual(sites);
     expect((await backupPost(await backupKey(), { jti, sites }, OFFACCOUNT_REPORT_PATH)).status).toBe(409);
   });

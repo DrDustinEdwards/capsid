@@ -82,6 +82,8 @@ export interface OffaccountObservation {
   reported_at: string | null;
   sites: Array<{ site: string; newest: string | null }>;
   last_run: { at: string | null; conclusion: string | null; url: string | null } | null;
+  // The restore drill's latest completed run (capsid-backups drill.yml).
+  last_drill: { at: string | null; conclusion: string | null; url: string | null } | null;
 }
 
 export interface SiteMapDrift {

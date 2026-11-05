@@ -44,8 +44,8 @@ export function Overview() {
       ? {
           label: "Amazon copy",
           v: copyState.worst == null ? <small>No copy</small> : <>{(copyState.worst / HOUR).toFixed(0)}<small>h</small></>,
-          d: copyState.bad ? copyState.headline : `oldest of ${copy.sites.length} sites · ${copyState.detail.toLowerCase()}`,
-          cls: copyState.bad ? "crit" : "ok",
+          d: copyState.bad || copyState.warn ? copyState.headline : `oldest of ${copy.sites.length} sites · ${copyState.detail.toLowerCase()}`,
+          cls: copyState.bad ? "crit" : copyState.warn ? "warn" : "ok",
           go: "backups",
         }
       : { label: "Amazon copy", v: <small>No data</small>, d: snap ? "not read on the last pass" : "no watcher pass yet", cls: snap ? "warn" : "", go: "backups" },
