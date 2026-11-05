@@ -381,12 +381,12 @@
       "description": "Derived social cards and the CV PDF. Regenerable, so it may be emptied and rebuilt."
     },
     {
-      "id": "website-media-backup",
+      "id": "website-media-revisions",
       "system": "dustinedwards-info",
-      "name": "dustinedwards-media-backup",
+      "name": "dustinedwards-media-revisions",
       "kind": "bucket",
       "technology": "R2",
-      "description": "The media mirror. No site code path deletes from it."
+      "description": "Every earlier version of an uploaded file, kept before an overwrite so a revert can put it back. No site code path deletes from it."
     },
     {
       "id": "website-backups",
@@ -394,7 +394,7 @@
       "name": "dustinedwards-backups",
       "kind": "bucket",
       "technology": "R2",
-      "description": "The nightly D1 dumps, pruned to 14 daily, 8 weekly and 6 monthly."
+      "description": "The nightly D1 dumps, pruned to 14 daily, 8 weekly and 6 monthly, and the nightly copies of the media and revision buckets."
     },
     {
       "id": "website-media-events",
@@ -402,7 +402,7 @@
       "name": "dustinedwards-media-events",
       "kind": "queue",
       "technology": "Queues, R2 event notifications, dead-letter queue",
-      "description": "Object-create events from the media bucket. The consumer derives the media table row and the mirror copy."
+      "description": "Object-create events from the media bucket. The consumer derives the media table row."
     },
     {
       "id": "website-webmention-queue",
@@ -1377,7 +1377,7 @@
     { "from": "website-worker", "to": "website-media", "kind": "writes" },
     { "from": "website-worker", "to": "website-og", "kind": "writes" },
     { "from": "website-worker", "to": "website-backups", "kind": "writes" },
-    { "from": "website-worker", "to": "website-media-backup", "kind": "writes" },
+    { "from": "website-worker", "to": "website-media-revisions", "kind": "writes" },
     { "from": "website-worker", "to": "website-webmention-queue", "kind": "writes" },
     { "from": "website-worker", "to": "website-ask-budget", "kind": "writes" },
     { "from": "website-worker", "to": "website-github", "kind": "writes" },
