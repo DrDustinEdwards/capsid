@@ -145,16 +145,18 @@ export interface ScopedCredential {
   session_token: string;
   endpoint: string;
   bucket: string;
+  // The dump runs. files_prefix is d1-dump's backupFiles copies of the site's media.
   prefix: string;
+  files_prefix: string;
   expires_in: number;
 }
 
 // The call to the temp-access-credentials API: object-read-only, one hour, one bucket,
-// one prefix, derived from the named parent token. The parent's secret never leaves the
+// the dump and files prefixes, derived from the named parent token. The parent's secret never leaves the
 // dashboard; the Worker holds only its access key id and the mint token.
 async function mintScopedCredential(
   env: Env,
-  scope: { bucket: string; prefix: string; parentAccessKeyId: string }
+  scope: { bucket: string; prefix: string; filesPrefix: string; parentAccessKeyId: string }
 ): Promise<{ ok: true; credential: ScopedCredential } | { ok: false; status: number; refusal: string }> {
   const resp = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.R2_ACCOUNT_ID}/r2/temp-access-credentials`, {
     method: "POST",
@@ -164,7 +166,7 @@ async function mintScopedCredential(
       parentAccessKeyId: scope.parentAccessKeyId,
       permission: "object-read-only",
       ttlSeconds: CREDENTIAL_TTL_SECONDS,
-      prefixes: [scope.prefix],
+      prefixes: [scope.prefix, scope.filesPrefix],
     }),
   });
   if (!resp.ok) {
@@ -184,12 +186,15 @@ async function mintScopedCredential(
       endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
       bucket: scope.bucket,
       prefix: scope.prefix,
+      files_prefix: scope.filesPrefix,
       expires_in: CREDENTIAL_TTL_SECONDS,
     },
   };
 }
 
 const BACKUP_DUMP_PREFIX = "backups/json/";
+// Where d1-dump's backupFiles keeps each site's media copies, beside the dumps.
+const BACKUP_FILES_PREFIX = "files/";
 
 // Derived from its own parent token. One parent covers every pinned site's bucket; the
 // bucket each mint is scoped to comes from the pinned table, never the caller.
@@ -208,6 +213,7 @@ export async function mintBackupCredential(
   return mintScopedCredential(env, {
     bucket: OFFACCOUNT_SOURCES[site].bucket,
     prefix: BACKUP_DUMP_PREFIX,
+    filesPrefix: BACKUP_FILES_PREFIX,
     parentAccessKeyId: env.R2_BACKUP_PARENT_ACCESS_KEY_ID,
   });
 }

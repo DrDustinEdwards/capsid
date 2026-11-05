@@ -30,7 +30,7 @@ test("the backup credential key derives from the root with its own context, uneq
   assert.notEqual(backup, await deriveTaskKey(root), "the backup key collides with the signed-document key");
 });
 
-test("the mint asks for object-read-only, one hour, backups/json/ on capsid-media, from the BACKUP parent", async () => {
+test("the mint asks for object-read-only, one hour, backups/json/ and files/ on capsid-media, from the BACKUP parent", async () => {
   await withFetch(
     {
       "POST /client/v4/accounts/acct-1/r2/temp-access-credentials": (body: unknown) => {
@@ -39,7 +39,7 @@ test("the mint asks for object-read-only, one hour, backups/json/ on capsid-medi
         assert.equal(request.permission, "object-read-only");
         assert.equal(request.ttlSeconds, 3600);
         assert.equal(request.parentAccessKeyId, "backup-parent-key-id");
-        assert.deepEqual(request.prefixes, ["backups/json/"]);
+        assert.deepEqual(request.prefixes, ["backups/json/", "files/"]);
         return { body: { success: true, result: { accessKeyId: "AK", secretAccessKey: "SK", sessionToken: "ST" } } };
       },
     },
@@ -53,6 +53,7 @@ test("the mint asks for object-read-only, one hour, backups/json/ on capsid-medi
       assert.ok(minted.ok, `mint refused: ${minted.ok ? "" : minted.refusal}`);
       assert.equal(minted.credential.bucket, "capsid-media");
       assert.equal(minted.credential.prefix, "backups/json/");
+      assert.equal(minted.credential.files_prefix, "files/");
       assert.equal(minted.credential.endpoint, "https://acct-1.r2.cloudflarestorage.com");
       assert.equal(minted.credential.session_token, "ST");
     }
@@ -115,7 +116,7 @@ test("the request body must carry a jti", () => {
 // The site field (capsid/rulings/backups-offaccount-2026-10-10.md): one endpoint mints
 // for every pinned site, and the bucket comes from src/offaccount.ts, never the body.
 
-test("every pinned site mints object-read-only on its OWN bucket and backups/json/, and nothing else", async () => {
+test("every pinned site mints object-read-only on its OWN bucket, backups/json/ and files/, and nothing else", async () => {
   const asked: string[] = [];
   await withFetch(
     {
@@ -123,7 +124,7 @@ test("every pinned site mints object-read-only on its OWN bucket and backups/jso
         const request = body as Record<string, unknown>;
         asked.push(String(request.bucket));
         assert.equal(request.permission, "object-read-only");
-        assert.deepEqual(request.prefixes, ["backups/json/"]);
+        assert.deepEqual(request.prefixes, ["backups/json/", "files/"]);
         return { body: { success: true, result: { accessKeyId: "AK", secretAccessKey: "SK", sessionToken: "ST" } } };
       },
     },
