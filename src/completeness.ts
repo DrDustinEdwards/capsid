@@ -24,15 +24,21 @@ export const COMPLETENESS_CACHE_KEY = "portal:completeness:v1";
 const CACHE_TTL_SECONDS = 600;
 const MAX_ERRORS_SHOWN = 5;
 
-const Text = (max: number) => bounded(max).catch("");
+// Text the board wrote, kept within `max` characters: a longer one is cut with an ellipsis,
+// never dropped, so a cell's reason still says why (a 1,214-character reason once showed blank).
+const Text = (max: number) =>
+  z
+    .string()
+    .catch("")
+    .transform((s) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s));
 const Https = bounded(2000).regex(/^https:\/\//);
 
 const CellSchema = z.object({
   status: z.enum(["complete", "partial", "missing", "n/a"]),
-  reason: Text(600),
+  reason: Text(2000),
   evidence: z.array(z.unknown()).max(50).optional(),
   clean_days: z.number().int().min(0).optional(),
-  findings: z.array(z.object({ severity: bounded(20), check: Text(200), detail: Text(600) })).max(500).optional(),
+  findings: z.array(z.object({ severity: bounded(20), check: Text(200), detail: Text(1000) })).max(500).optional(),
 });
 
 const BoardSchema = z.object({
