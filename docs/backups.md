@@ -32,7 +32,7 @@ The nightly dump is D1 and one KV pin (`backup:last-ok`, in `_kv.json`). Nothing
 
 ## Bucket locks on the dumps
 
-Each bucket that holds d1-dump runs gets one R2 bucket lock rule on `backups/json/` with a 13 day age, so no delete or overwrite (a buggy prune, a leaked R2 token, a Worker gone wrong) can remove a dump in its first 13 days. Older dumps are protected by the off-account mirror, not by the lock. Nothing else in a bucket is locked: in `capsid-media` the rule never covers `backups/markdown/` (the mirror rewrites and prunes it every night) or media, and in `txasm-books` it never covers the generated books.
+Each bucket that holds d1-dump runs gets one R2 bucket lock rule on `backups/json/` with a 13 day age, so no delete or overwrite (a buggy prune, a leaked R2 token, a Worker gone wrong) can remove a dump in its first 13 days. Older dumps are protected by the Amazon copy, not by the lock. Nothing else in a bucket is locked: in `capsid-media` the rule never covers `backups/markdown/` (the mirror rewrites and prunes it every night) or media, and in `txasm-books` it never covers the generated books.
 
 ### What R2 does
 

@@ -98,7 +98,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   const report = await attempt("offaccount report", async () => ({ value: await env.APP_KV.get<OffaccountReport>(OFFACCOUNT_REPORT_KEY, "json") }));
   if (report) {
     ran.add("offaccount");
-    const runs: WorkflowRun[] | null = await attempt("offaccount runs", async () => (await ciStatus(env, "capsid", BACKUPS_REPO_LABEL, { limit: 20 })).runs);
+    const runs: WorkflowRun[] | null = await attempt("offaccount runs", async () => (await ciStatus(env, "capsid", BACKUPS_REPO_LABEL, { limit: 50 })).runs);
     const last = runs ? latestRunOf(runs, "offaccount") : null;
     out.push(...offaccountFindings("capsid", OFFACCOUNT_SITES, report.value, last, now));
     observed.offaccount = {

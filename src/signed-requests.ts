@@ -4,12 +4,14 @@ import type { Env } from "./env";
 import { isOffaccountSite, OFFACCOUNT_DEFAULT_SITE, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES, type OffaccountSite } from "./offaccount";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
+import { textResponse } from "./http";
+import { logEvent } from "@dustinedwards/site-runtime/log";
 
-// The signed endpoints that are not MCP: the backup mirror's credential mint here, and
+// The signed endpoints that are not MCP: the backup credential mint and the Amazon copy's report, and
 // the bench's three (src/bench.ts). Each is HMAC over timestamp and body, refused
 // outside a time window and replay-protected by a jti the database claims.
 
-// Signed with a backup-specific key derived under its own context, so the mirror job's
+// Signed with a backup-specific key derived under its own context, so the copy job's
 // key opens read access to backups/json/ on a pinned site's backup bucket
 // (src/offaccount.ts) and nothing else. Not under /ops/: an /ops/ path would invite
 // adding the bearer-key check.
@@ -69,7 +71,7 @@ export async function claimJti(
   }
 }
 
-// The backup mirror's key: IMPROVE_SCORE_SECRET, the Worker's one root secret, under
+// The backup key: IMPROVE_SCORE_SECRET, the Worker's one root secret, under
 // the backup's own context string, so it differs from the job and policy signing key
 // (src/signed-docs.ts) by construction. The version segment is in the string so a
 // rotation is a one-character change. scripts/derive-backup-key.mjs computes the same
@@ -131,11 +133,11 @@ function jtiOf(parsed: unknown): { ok: true; jti: string } | { ok: false; refusa
   return { ok: true, jti };
 }
 
-// The mirror reads backups within minutes of asking; an hour is generous headroom and
+// The copy reads backups within minutes of asking; an hour is generous headroom and
 // far under the API's 7-day ceiling.
 const CREDENTIAL_TTL_SECONDS = 3600;
 
-// Everything the mirror job needs to run `aws s3 sync` with no long-lived repo secret,
+// Everything the copy job needs to read R2 with no long-lived repo secret,
 // including the endpoint so the account id lives in no repo either.
 export interface ScopedCredential {
   access_key_id: string;
@@ -255,4 +257,41 @@ export async function verifyBenchRequest(
     missingSecret: "bench reporting is not configured: BENCH_SECRET is unset",
     badSig: "bench request signature does not verify",
   });
+}
+type Verify = (signed: { timestamp: string; signature: string; body: string }, now: Date) => Promise<{ ok: true } | HmacFail>;
+
+// The shared front of every HMAC-signed endpoint (the backup pair in src/routes.ts, the
+// bench's in src/bench.ts): a bounded body, the signature over the endpoint family's own
+// header pair, then the parse, then the jti. The jti is spent only once the body is known
+// good. A bad signature is logged under the endpoint's own event name.
+export async function signedRequestBody<T extends { jti: string }>(
+  request: Request,
+  opts: {
+    headers: "Backup" | "Bench";
+    verify: Verify;
+    db: D1Database;
+    scope: string;
+    event: string;
+    parse: (body: string) => ({ ok: true } & T) | { ok: false; refusal: string };
+  }
+): Promise<{ ok: true; value: T } | { ok: false; response: Response }> {
+  const bounded = await readBoundedText(request, MAX_REPORT_BYTES);
+  if (!bounded.ok) return { ok: false, response: textResponse(`request too large: exceeds ${MAX_REPORT_BYTES} bytes`, 413) };
+  const verdict = await opts.verify(
+    {
+      timestamp: request.headers.get(`X-${opts.headers}-Timestamp`) ?? "",
+      signature: request.headers.get(`X-${opts.headers}-Signature`) ?? "",
+      body: bounded.text,
+    },
+    new Date()
+  );
+  if (!verdict.ok) {
+    logEvent(opts.event, { message: `${opts.event} ${verdict.refusal}` }, { level: "error" });
+    return { ok: false, response: textResponse(verdict.refusal, verdict.status) };
+  }
+  const parsed = opts.parse(bounded.text);
+  if (!parsed.ok) return { ok: false, response: textResponse(parsed.refusal, 400) };
+  const claim = await claimJti(opts.db, opts.scope, parsed.jti);
+  if (!claim.ok) return { ok: false, response: textResponse(claim.refusal, claim.status) };
+  return { ok: true, value: parsed };
 }

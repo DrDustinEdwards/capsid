@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { claimJti, MAX_REPORT_BYTES, readBoundedText, verifyBenchRequest } from "./signed-requests";
+import { signedRequestBody, verifyBenchRequest } from "./signed-requests";
 import { breakerRefusal, breakerState } from "./job-breaker";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { BENCH_NAMESPACE, BENCH_REPRO_ACTION, BENCH_STALE_MS, newRunKey, readReproReceipt, runJobTitle } from "./bench-run-key";
@@ -67,35 +67,15 @@ export const BENCH_REPEATS = 3;
 // before it on the draw has ended all six.
 const BENCH_OUTAGE_MIN_ENDED = 4;
 const MODEL_ARMS: readonly Arm[] = ["baseline", "treatment"];
-// The shared front of all three endpoints: bounded body, signature, then the parse,
-// then the jti. The jti is spent only once the body is known good, as in the improve
-// scorer's credential mint.
-async function signedBody<T extends { jti: string }>(
+// The shared front of every bench endpoint (signedRequestBody, src/signed-requests.ts),
+// against the bench key and under the bench's jti scope.
+function signedBody<T extends { jti: string }>(
   request: Request,
   env: Env,
   event: string,
   parse: (body: string) => ({ ok: true } & T) | Refusal
 ): Promise<{ ok: true; value: T } | { ok: false; response: Response }> {
-  const bounded = await readBoundedText(request, MAX_REPORT_BYTES);
-  if (!bounded.ok) return { ok: false, response: textResponse(`request too large: exceeds ${MAX_REPORT_BYTES} bytes`, 413) };
-  const verdict = await verifyBenchRequest(
-    env,
-    {
-      timestamp: request.headers.get("X-Bench-Timestamp") ?? "",
-      signature: request.headers.get("X-Bench-Signature") ?? "",
-      body: bounded.text,
-    },
-    new Date()
-  );
-  if (!verdict.ok) {
-    logEvent(event, { message: `${event} ${verdict.refusal}` }, { level: "error" });
-    return { ok: false, response: textResponse(verdict.refusal, verdict.status) };
-  }
-  const parsed = parse(bounded.text);
-  if (!parsed.ok) return { ok: false, response: textResponse(parsed.refusal, 400) };
-  const claim = await claimJti(env.DB, JTI_SCOPE, parsed.jti);
-  if (!claim.ok) return { ok: false, response: textResponse(claim.refusal, claim.status) };
-  return { ok: true, value: parsed };
+  return signedRequestBody(request, { headers: "Bench", verify: (signed, now) => verifyBenchRequest(env, signed, now), db: env.DB, scope: JTI_SCOPE, event, parse });
 }
 
 const TASK_FIELDS = ["source", "split", "repo", "issue_created_at", "fail_to_pass_count", "pass_to_pass_count"] as const;
