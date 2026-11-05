@@ -37,6 +37,14 @@ const SHAPES: Record<Kind, ReactNode> = {
       <path d="M4.5 7h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </>
   ),
+  // Could not be measured: a question mark, so it never reads as a pass, a failure or "does not apply".
+  unknown: (
+    <>
+      <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M5.2 5.4a1.9 1.9 0 1 1 2.6 1.7c-.5.3-.8.6-.8 1.2v.3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="7" cy="10.3" r=".85" fill="currentColor" />
+    </>
+  ),
   queued: <circle cx="7" cy="7" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.5" />,
   run: (
     <>

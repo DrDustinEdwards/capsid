@@ -3,7 +3,7 @@ import { DAY, HOUR, SLOT_MS, age, agentLabel, ago, hostOf, ms } from "./format";
 import { storeAttention } from "./store";
 
 // The status vocabulary: every state is a shape, a word and a color.
-export type Kind = "ok" | "warn" | "crit" | "nodata" | "run" | "queued" | "blocked" | "done";
+export type Kind = "ok" | "warn" | "crit" | "nodata" | "unknown" | "run" | "queued" | "blocked" | "done";
 
 export const PROBE: Record<ProbeState, { kind: Kind; label: string }> = {
   ok: { kind: "ok", label: "Up" },

@@ -34,7 +34,7 @@ const Text = (max: number) =>
 const Https = bounded(2000).regex(/^https:\/\//);
 
 const CellSchema = z.object({
-  status: z.enum(["complete", "partial", "missing", "n/a"]),
+  status: z.enum(["complete", "partial", "missing", "unmeasured", "n/a"]),
   reason: Text(2000),
   evidence: z.array(z.unknown()).max(50).optional(),
   clean_days: z.number().int().min(0).optional(),

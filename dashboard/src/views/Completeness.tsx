@@ -14,8 +14,9 @@ import "./Completeness.css";
 // Nothing here changes anything: a verdict is a file in devkit, signed by a verifier.
 
 const BOARD_URL = "https://github.com/DrDustinEdwards/devkit/blob/scoreboard/SCOREBOARD.md";
-const KIND = { complete: "ok", partial: "warn", missing: "crit", "n/a": "nodata" } as const;
-const LABEL: Record<CompletenessStatus, string> = { complete: "Complete", partial: "Partial", missing: "Missing", "n/a": "Does not apply" };
+// "unmeasured": a check could not measure the cell (its reason says why), which is neither a pass nor a failure.
+const KIND = { complete: "ok", partial: "warn", missing: "crit", unmeasured: "unknown", "n/a": "nodata" } as const;
+const LABEL: Record<CompletenessStatus, string> = { complete: "Complete", partial: "Partial", missing: "Missing", unmeasured: "Could not measure", "n/a": "Does not apply" };
 const CLEAN_DAYS = 7;
 
 type Column = { id: string; name: string };
@@ -51,7 +52,7 @@ export function Completeness() {
   return (
     <div className="embedded">
       <div className={`callout${data.finished ? "" : " warn"} done-verdict`}>
-        <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial, {fmtN(count("missing"))} missing.{" "}
+        <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial, {fmtN(count("missing"))} missing{count("unmeasured") ? `, ${fmtN(count("unmeasured"))} could not be measured` : ""}.{" "}
         {data.finished ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.` : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
       </div>
       <Panel flush title="Every area on every site" id="done-grid" section="Grid" src={<>From the live checks and the verifiers' verdicts only · <a href={BOARD_URL} target="_blank" rel="noreferrer noopener">the board on GitHub</a></>}>
