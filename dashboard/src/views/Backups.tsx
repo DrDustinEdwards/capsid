@@ -121,7 +121,7 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
                       <St kind="nodata">none</St>
                     )}
                   </dd>
-                  <dt>Last restore drill</dt>
+                  <dt>Last passing drill</dt>
                   <dd>
                     {o.last_drill ? (
                       <>

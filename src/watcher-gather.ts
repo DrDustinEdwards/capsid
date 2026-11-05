@@ -122,7 +122,7 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
       reported_at: report.value?.received_at ?? null,
       sites: OFFACCOUNT_SITES.map((site) => ({ site, newest: dumpTime(report.value?.sites[site]?.newest ?? null) })),
       last_run: run(lastCopy),
-      last_drill: run(drillRuns?.find((r) => r.status === "completed")),
+      last_drill: run(drillRuns?.find((r) => r.status === "completed" && r.conclusion === "success")),
     };
   }
 

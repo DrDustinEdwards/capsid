@@ -82,7 +82,8 @@ export interface OffaccountObservation {
   reported_at: string | null;
   sites: Array<{ site: string; newest: string | null }>;
   last_run: { at: string | null; conclusion: string | null; url: string | null } | null;
-  // The restore drill's latest completed run (capsid-backups drill.yml).
+  // The restore drill's latest passing run (capsid-backups drill.yml), the one the watcher's
+  // 35-day window is measured from.
   last_drill: { at: string | null; conclusion: string | null; url: string | null } | null;
 }
 

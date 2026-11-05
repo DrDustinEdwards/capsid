@@ -563,8 +563,10 @@ export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: 
   const worst = ages.length ? Math.max(...ages) : null;
   const reportAge = o.reported_at ? now - ms(o.reported_at) : null;
   const silent = reportAge == null || reportAge >= OFFACCOUNT_REPORT_STALE;
-  const drill = o.last_drill ?? null;
-  const drillOk = drill?.conclusion === "success" && drill.at != null && now - ms(drill.at) < OFFACCOUNT_DRILL_STALE;
+  // The latest passing drill; undefined on a snapshot written before the field, which says
+  // nothing either way until the next pass.
+  const drill = o.last_drill;
+  const drillOk = drill === undefined || (drill?.at != null && now - ms(drill.at) < OFFACCOUNT_DRILL_STALE);
   const bad = missing.length > 0 || stale.length > 0 || silent || !drillOk;
   const headline =
     reportAge == null
@@ -576,7 +578,7 @@ export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: 
           : silent
             ? `The Amazon backup copy has not reported in ${(reportAge / HOUR).toFixed(0)} hours`
             : !drillOk
-              ? drill?.conclusion && drill.conclusion !== "success" ? `The last restore drill from Amazon ended ${drill.conclusion}` : "No restore drill from Amazon has passed in 35 days"
+              ? "No restore drill from Amazon has passed in 35 days"
               : late.length
                 ? `The Amazon backup copy is late for ${late.join(", ")}`
                 : "The Amazon backup copy is current";
