@@ -115,7 +115,7 @@ export function layout({ title, description, path, body, asOf, wide = false, dat
 <meta name="color-scheme" content="light dark">
 ${headMarkup}
 ${ICON_LINKS}
-<link rel="preload" href="/fonts/inter-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/capsomer.css">
 ${body.includes('class="enarratio') ? '<link rel="stylesheet" href="/assets/enarratio.css">\n' : ""}<link rel="stylesheet" href="/assets/explorer.css">
 <script src="/assets/theme.js"></script>
