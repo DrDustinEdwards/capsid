@@ -19,6 +19,7 @@ import { isAdminEmail } from "./auth";
 import { loginHandler } from "@dustinedwards/site-runtime/mcp-login";
 import {
   BACKUP_CREDENTIAL_PATH,
+  mintAuditCredential,
   mintBackupCredential,
   parseBackupCredentialRequest,
   readBoundedText,
@@ -208,12 +209,13 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
   if (!front.ok) return front.response;
   const parsed = front.value;
 
-  const minted = await mintBackupCredential(env, parsed.site);
+  const target = parsed.audit === undefined ? `site=${parsed.site}` : `audit=${parsed.audit}`;
+  const minted = parsed.audit === undefined ? await mintBackupCredential(env, parsed.site) : await mintAuditCredential(env, parsed.audit);
   if (!minted.ok) {
-    logEvent("BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED site=${parsed.site} ${minted.refusal}` }, { level: "error" });
+    logEvent("BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED ${target} ${minted.refusal}` }, { level: "error" });
     return textResponse(minted.refusal, minted.status);
   }
-  logEvent("BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED site=${parsed.site} ttl=${minted.credential.expires_in}s` });
+  logEvent("BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED ${target} ttl=${minted.credential.expires_in}s` });
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 

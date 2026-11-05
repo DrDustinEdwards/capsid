@@ -25,6 +25,27 @@ export const OFFACCOUNT_SOURCES = {
 
 export type OffaccountSite = keyof typeof OFFACCOUNT_SOURCES;
 
+// The MCP tool-call logs (site-runtime exportAuditLog, tool-calls/ in a bucket of its own, locked
+// 365 days). The Durable Object that feeds them prunes its rows after 90 days, so days 90 to 365
+// exist only in Cloudflare; capsid-backups copies each bucket to Amazon under files/audit/<name>/,
+// add-only. Pinned like the sites: the name picks a row, the request never names a bucket.
+export const OFFACCOUNT_AUDIT_SOURCES = {
+  "capsid-mcp": "capsid-mcp-tool-calls",
+  "carrel-desk": "carrel-desk-tool-calls",
+  "dustinedwards-admin-mcp": "dustinedwards-admin-mcp-tool-calls",
+  foxhound: "foxhound-tool-calls",
+  "foxhound-admin-mcp": "foxhound-admin-mcp-tool-calls",
+  "foxing-admin-mcp": "foxing-admin-mcp-tool-calls",
+} as const satisfies Record<string, string>;
+
+export type OffaccountAudit = keyof typeof OFFACCOUNT_AUDIT_SOURCES;
+
+export const OFFACCOUNT_AUDITS = Object.keys(OFFACCOUNT_AUDIT_SOURCES) as OffaccountAudit[];
+
+export function isOffaccountAudit(name: string): name is OffaccountAudit {
+  return Object.hasOwn(OFFACCOUNT_AUDIT_SOURCES, name);
+}
+
 // keeps working.
 // send none, keep working through the cutover.
 export const OFFACCOUNT_DEFAULT_SITE: OffaccountSite = "capsid";

@@ -5,12 +5,13 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   deriveBackupCredentialKey,
+  mintAuditCredential,
   mintBackupCredential,
   parseBackupCredentialRequest,
   verifyBackupCredentialRequest,
 } from "../src/signed-requests.ts";
 import { deriveTaskKey } from "../src/signed-docs.ts";
-import { OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "../src/offaccount.ts";
+import { OFFACCOUNT_AUDIT_SOURCES, OFFACCOUNT_AUDITS, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES } from "../src/offaccount.ts";
 // @ts-expect-error scripts/ is plain .mjs with no declarations (see test/canary.test.ts).
 import { R2 } from "../scripts/bindings.mjs";
 import { fakeEnv, withFetch } from "./fakes.ts";
@@ -186,6 +187,34 @@ test("a body cannot name its own bucket or prefix: only site picks the scope", (
   const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", site: "foxing", bucket: "capsid-media", prefix: "" }));
   assert.ok(parsed.ok);
   assert.deepEqual(Object.keys(parsed).sort(), ["jti", "ok", "site"]);
+});
+
+test("an audit log is minted on its own bucket and tool-calls/ alone; a body cannot name both or an unknown one", async () => {
+  const asked: { bucket: unknown; prefixes: unknown }[] = [];
+  await withFetch(
+    {
+      "POST /client/v4/accounts/acct-1/r2/temp-access-credentials": (body: unknown) => {
+        const request = body as Record<string, unknown>;
+        asked.push({ bucket: request.bucket, prefixes: request.prefixes });
+        return { body: { success: true, result: { accessKeyId: "AK", secretAccessKey: "SK", sessionToken: "ST" } } };
+      },
+    },
+    async () => {
+      const env = fakeEnv({ R2_TEMP_CRED_TOKEN: "t", R2_BACKUP_PARENT_ACCESS_KEY_ID: "backup-parent-key-id", R2_ACCOUNT_ID: "acct-1" });
+      for (const audit of OFFACCOUNT_AUDITS) {
+        const parsed = parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", audit }));
+        assert.ok(parsed.ok && parsed.audit === audit);
+        const minted = await mintAuditCredential(env, audit);
+        assert.ok(minted.ok);
+        assert.equal(minted.credential.prefix, "tool-calls/");
+      }
+    }
+  );
+  assert.deepEqual(asked, OFFACCOUNT_AUDITS.map((audit) => ({ bucket: OFFACCOUNT_AUDIT_SOURCES[audit], prefixes: ["tool-calls/"] })));
+  assert.equal(parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", audit: "capsid-mcp", site: "foxing" })).ok, false);
+  for (const audit of ["foxing", "constructor", "", 5]) {
+    assert.equal(parseBackupCredentialRequest(JSON.stringify({ jti: "0123456789", audit })).ok, false);
+  }
 });
 
 // The refusal each signed endpoint returns is checked against the real Worker in

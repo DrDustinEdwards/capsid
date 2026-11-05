@@ -1,7 +1,7 @@
 import { hmacHex } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
-import { isOffaccountSite, OFFACCOUNT_DEFAULT_SITE, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES, type OffaccountSite } from "./offaccount";
+import { isOffaccountAudit, isOffaccountSite, OFFACCOUNT_AUDIT_SOURCES, OFFACCOUNT_AUDITS, OFFACCOUNT_DEFAULT_SITE, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES, type OffaccountAudit, type OffaccountSite } from "./offaccount";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
 import { textResponse } from "./http";
@@ -166,7 +166,7 @@ async function mintScopedCredential(
       parentAccessKeyId: scope.parentAccessKeyId,
       permission: "object-read-only",
       ttlSeconds: CREDENTIAL_TTL_SECONDS,
-      prefixes: [scope.prefix, scope.filesPrefix],
+      prefixes: [...new Set([scope.prefix, scope.filesPrefix])],
     }),
   });
   if (!resp.ok) {
@@ -218,16 +218,42 @@ export async function mintBackupCredential(
   });
 }
 
+const AUDIT_PREFIX = "tool-calls/";
+
+// The read credential for one MCP tool-call log bucket, scoped to its tool-calls/ prefix. The
+// response keeps the site credential's shape, with prefix and files_prefix both tool-calls/.
+export async function mintAuditCredential(
+  env: Env,
+  audit: OffaccountAudit
+): Promise<{ ok: true; credential: ScopedCredential } | { ok: false; status: number; refusal: string }> {
+  if (!env.R2_TEMP_CRED_TOKEN || !env.R2_BACKUP_PARENT_ACCESS_KEY_ID || !env.R2_ACCOUNT_ID) {
+    return { ok: false, status: 503, refusal: "backup credential minting is not configured. Set R2_TEMP_CRED_TOKEN, R2_BACKUP_PARENT_ACCESS_KEY_ID and R2_ACCOUNT_ID with wrangler secret put." };
+  }
+  return mintScopedCredential(env, {
+    bucket: OFFACCOUNT_AUDIT_SOURCES[audit],
+    prefix: AUDIT_PREFIX,
+    filesPrefix: AUDIT_PREFIX,
+    parentAccessKeyId: env.R2_BACKUP_PARENT_ACCESS_KEY_ID,
+  });
+}
+
 // A jti and an optional site. The site only picks a row of the pinned table, so an
 // unknown one is refused here, before the jti is spent or anything is minted.
 export function parseBackupCredentialRequest(
   body: string
-): { ok: true; jti: string; site: OffaccountSite } | { ok: false; refusal: string } {
+): { ok: true; jti: string; site: OffaccountSite; audit?: undefined } | { ok: true; jti: string; audit: OffaccountAudit; site?: undefined } | { ok: false; refusal: string } {
   const json = parseJsonBody(body);
   if (!json.ok) return json;
   const jti = jtiOf(json.parsed);
   if (!jti.ok) return jti;
-  const site = (json.parsed as { site?: unknown } | null)?.site;
+  const { site, audit } = (json.parsed ?? {}) as { site?: unknown; audit?: unknown };
+  if (audit !== undefined) {
+    if (site !== undefined) return { ok: false, refusal: "the credential request names a site or an audit log, not both" };
+    if (typeof audit !== "string" || !isOffaccountAudit(audit)) {
+      return { ok: false, refusal: `the credential request names no known audit log; the logs are ${OFFACCOUNT_AUDITS.join(", ")}` };
+    }
+    return { ok: true, jti: jti.jti, audit };
+  }
   if (site === undefined) return { ok: true, jti: jti.jti, site: OFFACCOUNT_DEFAULT_SITE };
   if (typeof site !== "string" || !isOffaccountSite(site)) {
     return { ok: false, refusal: `the credential request names no known site; the sites are ${OFFACCOUNT_SITES.join(", ")}` };
