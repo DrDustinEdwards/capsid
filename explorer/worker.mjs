@@ -19,7 +19,7 @@ import { staticSite } from "@dustinedwards/site-runtime/static-site";
 export const PAGE_PRELOADS = preloads([
   { href: "/assets/capsomer.css", as: "style" },
   { href: "/assets/explorer.css", as: "style" },
-  { href: "/fonts/inter-latin-opsz-normal.woff2", as: "font", type: "font/woff2" },
+  { href: "/fonts/inter-latin-wght-normal.woff2", as: "font", type: "font/woff2" },
 ]);
 
 export default staticSite({ site: capsid, headers: TDM_RESERVATION_HEADERS, preload: PAGE_PRELOADS.header, reportPath: null, canonical: false });
