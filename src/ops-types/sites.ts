@@ -76,8 +76,11 @@ export interface CiObservation {
   latest: { head_sha: string; status: string; conclusion: string | null; created_at: string; url: string | null } | null;
 }
 
-export interface MirrorObservation {
-  newest_dump: string | null;
+// The Amazon backup copy as the last report had it (src/offaccount.ts). reported_at is
+// null when no report has arrived; newest is the newest complete copy's dump time.
+export interface OffaccountObservation {
+  reported_at: string | null;
+  sites: Array<{ site: string; newest: string | null }>;
   last_run: { at: string | null; conclusion: string | null; url: string | null } | null;
 }
 
@@ -137,7 +140,7 @@ export interface OpsSnapshot {
   cadence_min: number;
   checks: Array<{ id: string; state: CheckState; findings: string[] }>;
   health: HealthSnapshot | null;
-  mirror: MirrorObservation | null;
+  offaccount: OffaccountObservation | null;
   ci: CiObservation[];
   site_map: SiteMapDrift | null;
   sites: SiteSnapshot[];

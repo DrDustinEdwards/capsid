@@ -14,25 +14,26 @@ import { MINUTE_MS, HOUR_MS } from "./time";
 // Red this long is not a flake somebody is already fixing.
 export const CI_RED_HOURS = 2;
 
-// The off-account mirror's window, and it is not BACKUP_STALE_HOURS.
+// The Amazon copy's window (capsid/rulings/backups-offaccount-2026-10-10.md), and it is
+// not BACKUP_STALE_HOURS.
 //
-// BACKUP_STALE_HOURS is the local dump, measured from a key this Worker writes
-// itself. This measures the newest dump present in the backups repo
-// (MIRROR_REPO_LABEL, below), which this Worker only observes. The mirror's schedule
-// lives in that repo and can change without this one hearing, so one constant
-// standing for both would go wrong silently the day it does.
+// BACKUP_STALE_HOURS is the local dump, measured from a key this Worker writes itself.
+// This measures the newest complete copy in the Amazon bucket, which this Worker only
+// hears about from capsid-backups' watch.yml. That repo's schedules can change without
+// this one hearing, so one constant standing for both would go wrong silently.
 //
-// 36 hours is the daily cadence plus slack. The newest dump is stamped at the backup
-// cron's 09:00 UTC and the mirror picks it up hours later, so just before 09:00 UTC
-// the freshest possible dump is already about 24 hours old before the mirror has run.
-// A tighter window would fire every morning.
-export const MIRROR_STALE_HOURS = 36;
+// 36 hours is the daily cadence plus slack. Capsid dumps at 09:00 UTC and offaccount.yml
+// copies at 11:23 UTC, so just before a copy the newest one is already about 24 hours
+// older than the next dump. A tighter window would fire every morning.
+export const OFFACCOUNT_STALE_HOURS = 36;
+
+// watch.yml reports every 6 hours. Two missed reports plus GitHub's cron delay is a
+// stopped report, not a late one.
+export const OFFACCOUNT_REPORT_STALE_HOURS = 13;
 
 // The repo is never named in this module: it is resolved from the capsid namespace's
-// mapping, which is the authorization boundary. A hardcoded owner/name would be a
-// second copy of that mapping outside the boundary.
-export const MIRROR_REPO_LABEL = "backups";
-export const MIRROR_DUMP_PREFIX = "backups/json";
+// mapping, which is the authorization boundary.
+export const BACKUPS_REPO_LABEL = "backups";
 
 export interface Finding {
   // Stable while the finding persists, different for a different problem. It goes in
@@ -244,18 +245,14 @@ export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding
   ];
 }
 
-// The off-account mirror. Measure the dump, not the attempt. A credential request
-// proves the mirror started; a run can pass its credential step and then fail before
-// the dump lands. Only a dump proves a backup exists.
-//
-// The timestamp comes from the directory name, not the commit date or message. The
-// mirror writes backups/json/<dump timestamp>/, so the directory names are the thing
-// being asked about. A commit date answers "when did the mirror last push", which is
-// the same only while the mirror is healthy, and a commit message would couple this
-// check to how the other repo words its commits.
+// The Amazon copy. Measure the copy, not the attempt: a run can be green and copy nothing,
+// and the git mirror was dead from 2026-09-09 to 09-12 while every credential request
+// succeeded. watch.yml lists the bucket with a list-only role and reports, per site, the
+// run id of the newest copy under daily/<site>/ that carries _complete.json. The run id is
+// the dump's own timestamp, so the age here is the age of the data, not of the copy.
 
-// `2026-09-12T09-00-11-132Z` as the backup writes it. Anchored, so a stray directory
-// yields null rather than looking like a fresh backup.
+// `2026-09-12T09-00-11-132Z` as d1-dump writes it. Anchored, so a stray name yields null
+// rather than looking like a fresh backup.
 const DUMP_STAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/;
 
 export function parseDumpStamp(name: string): Date | null {
@@ -266,19 +263,14 @@ export function parseDumpStamp(name: string): Date | null {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
-/** The newest dump present, from listRepoTree entries under backups/json/. Null when
- *  none of the entries parse, which is "no dump" and not "a very old dump". */
-export function newestDump(entries: Array<{ path?: string }>): Date | null {
-  let newest: Date | null = null;
-  for (const entry of entries) {
-    const name = (entry.path ?? "").split("/").filter(Boolean).pop() ?? "";
-    const at = parseDumpStamp(name);
-    if (at && (!newest || at > newest)) newest = at;
-  }
-  return newest;
+// What watch.yml last reported (POST /backup/offaccount-report), as stored in APP_KV.
+export interface OffaccountReport {
+  received_at: string;
+  // Every site in OFFACCOUNT_SOURCES: its newest complete run id, or null for none.
+  sites: Record<string, string | null>;
 }
 
-export interface MirrorRun {
+export interface WorkflowRun {
   name?: string;
   status?: string;
   conclusion?: string | null;
@@ -286,74 +278,65 @@ export interface MirrorRun {
   url?: string;
 }
 
-/** The mirror's latest completed run, matched on workflow name (what the runs API
- *  returns). */
-export function latestMirrorRun(runs: MirrorRun[]): MirrorRun | null {
-  return runs.find((r) => r.status === "completed" && (r.name ?? "").toLowerCase().includes("mirror")) ?? null;
+/** The latest completed run of the named workflow, matched on its name (what the runs
+ *  API returns), so a drill or watch run never stands in for a copy run. */
+export function latestRunOf(runs: WorkflowRun[], workflow: string): WorkflowRun | null {
+  return runs.find((r) => r.status === "completed" && (r.name ?? "").toLowerCase() === workflow) ?? null;
 }
 
-/** The dump age decides whether there is a finding; the run conclusion explains why.
- *  Three states need three different actions, so they are three findings, and
- *  collapsing them is how the third one gets missed: a green run with no new dump is
- *  the one a conclusion-first check cannot see at all. */
-export function mirrorFindings(
+/** One finding per site whose copy is missing or past the window, and one for a report
+ *  that stopped arriving. The copy workflow's last run goes in as evidence: it says why,
+ *  the copy's age says whether. */
+export function offaccountFindings(
   namespace: string,
-  newest: Date | null,
-  runs: MirrorRun[],
+  sites: readonly string[],
+  report: OffaccountReport | null,
+  copyRun: WorkflowRun | null,
   now: Date
 ): Finding[] {
-  // No dump at all is its own fact. "Never mirrored" is a setup that never worked;
-  // "stopped mirroring" is a regression in one that did.
-  if (newest === null) {
+  if (!report) {
     return [
-      finding(namespace, "mirror-no-dump", "the off-account mirror holds no dump at all", [
-        "No directory under backups/json/ parses as a dump timestamp.",
-        "Either the mirror has never succeeded, or the layout changed and this check is reading the wrong place.",
+      finding(namespace, "offaccount-no-report", "no report of the Amazon backup copy has arrived", [
+        "Nothing is stored at POST /backup/offaccount-report.",
+        "capsid-backups' watch.yml has never reported, or APP_KV lost the report; its next run writes it again.",
       ]),
     ];
   }
-
-  const hours = (now.getTime() - newest.getTime()) / HOUR_MS;
-  if (hours < MIRROR_STALE_HOURS) return [];
-
-  const age = `newest dump: ${newest.toISOString()} (${hours.toFixed(1)} hours old, the window is ${MIRROR_STALE_HOURS})`;
-  const latest = latestMirrorRun(runs);
-
-  // (b) Nothing has run. The schedule is off, Actions is off, or the repo is archived.
-  if (!latest) {
-    return [
-      finding(namespace, "mirror-not-running", "the off-account mirror is stale and its workflow has not run", [
-        age,
-        "No completed mirror run was returned for this repo.",
-        "A disabled schedule, Actions turned off, or an archived repo all look like this.",
-      ]),
-    ];
+  const out: Finding[] = [];
+  const reportHours = (now.getTime() - Date.parse(report.received_at)) / HOUR_MS;
+  if (!(reportHours < OFFACCOUNT_REPORT_STALE_HOURS)) {
+    out.push(
+      finding(namespace, "offaccount-report-stale", "the Amazon backup copy's report has stopped arriving", [
+        `last report: ${report.received_at} (${reportHours.toFixed(1)} hours old, the window is ${OFFACCOUNT_REPORT_STALE_HOURS})`,
+        "capsid-backups' watch.yml runs every 6 hours; its schedule, its role or its signing key has stopped working.",
+      ])
+    );
   }
-
-  const conclusion = latest.conclusion ?? "none";
-  const green = conclusion === "success" || conclusion === "skipped" || conclusion === "neutral";
-
-  // (c) Green and no dump, which a conclusion-first check reports as healthy.
-  if (green) {
-    return [
-      finding(namespace, "mirror-green-no-dump", "the off-account mirror ran green and no new dump appeared", [
-        age,
-        `last run: ${latest.created_at ?? "unknown"} concluded ${conclusion}`,
-        latest.url ? `run: ${latest.url}` : "no run url reported",
-        "A commit step that no-ops, or a sync that wrote nothing, passes CI and backs up nothing.",
-      ]),
-    ];
+  const run = copyRun
+    ? `last copy run: ${copyRun.created_at ?? "unknown"} concluded ${copyRun.conclusion ?? "none"}${copyRun.url ? ` (${copyRun.url})` : ""}`
+    : "no completed offaccount run was returned for the backups repo";
+  for (const site of sites) {
+    const newest = report.sites[site] ?? null;
+    const at = newest ? parseDumpStamp(newest) : null;
+    if (!at) {
+      out.push(
+        finding(namespace, `offaccount-no-copy-${site}`, `the Amazon bucket holds no complete copy of ${site}`, [
+          `report of ${report.received_at}: nothing complete under daily/${site}/`,
+          run,
+        ])
+      );
+      continue;
+    }
+    const hours = (now.getTime() - at.getTime()) / HOUR_MS;
+    if (hours < OFFACCOUNT_STALE_HOURS) continue;
+    out.push(
+      finding(namespace, `offaccount-stale-${site}`, `the Amazon copy of ${site} is stale`, [
+        `newest complete copy: ${newest} (${hours.toFixed(1)} hours old, the window is ${OFFACCOUNT_STALE_HOURS})`,
+        run,
+      ])
+    );
   }
-
-  // (a) Ran and failed.
-  return [
-    finding(namespace, `mirror-run-failed-${conclusion}`, "the off-account mirror's workflow is failing", [
-      age,
-      `last run: ${latest.created_at ?? "unknown"} concluded ${conclusion}`,
-      latest.url ? `run: ${latest.url}` : "no run url reported",
-      "The mirror commits the dump in its last step, so a red run anywhere earlier means no backup landed.",
-    ]),
-  ];
+  return out;
 }
 
 /** A registered namespace the site map neither covers nor excludes, or a map entry

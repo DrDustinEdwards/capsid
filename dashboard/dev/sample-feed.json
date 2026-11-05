@@ -21,10 +21,10 @@
         "findings": []
       },
       {
-        "id": "mirror",
+        "id": "offaccount",
         "state": "finding",
         "findings": [
-          "mirror-run-failed"
+          "offaccount-stale-sample"
         ]
       },
       {
@@ -75,8 +75,12 @@
         "age_hours": 3.2
       }
     },
-    "mirror": {
-      "newest_dump": "2026-09-18T07:12:00.000Z",
+    "offaccount": {
+      "reported_at": "2026-09-28T09:00:00.000Z",
+      "sites": [
+        { "site": "sample", "newest": "2026-09-18T07:12:00.000Z" },
+        { "site": "lorem", "newest": "2026-09-28T03:10:00.000Z" }
+      ],
       "last_run": {
         "at": "2026-09-28T08:36:00.000Z",
         "conclusion": "failure",
@@ -1298,7 +1302,7 @@
       {
         "id": "job_7c1e44b0a912",
         "namespace": "sample",
-        "title": "Watcher: the off-account mirror's workflow is failing [mirror-run-failed]",
+        "title": "Watcher: the Amazon copy of sample is stale [offaccount-stale-sample]",
         "status": "blocked",
         "priority": 0,
         "posted_by": "agent:watcher",
@@ -1308,12 +1312,12 @@
         "blocked_count": 1,
         "resumed_count": 0,
         "gate_required": false,
-        "waits_on": "Clear the billing hold on the backup account, then run the mirror.",
-        "command": "gh workflow run mirror --repo example-org/sample-backups",
+        "waits_on": "Clear the billing hold on the backup account, then run the copy.",
+        "command": "gh workflow run offaccount --repo example-org/sample-backups",
         "command_signature": "verified",
         "result_ref": null,
         "finding": {
-          "fingerprint": "mirror-run-failed",
+          "fingerprint": "offaccount-stale-sample",
           "seen_count": 14,
           "last_seen": "2026-09-28T11:30:00.000Z"
         }
@@ -2036,7 +2040,7 @@
           "severity": "needs-you",
           "items": [
             {
-              "title": "Watcher: the off-account mirror's workflow is failing [mirror-run-failed]",
+              "title": "Watcher: the Amazon copy of sample is stale [offaccount-stale-sample]",
               "kind": "blocked-job",
               "link": null,
               "since": "2026-09-18T19:12:00.000Z",

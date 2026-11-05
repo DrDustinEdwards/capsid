@@ -26,6 +26,7 @@ const MCP_HOST_PATHS = new Set([
   "/health",
   "/csp-report",
   "/backup/credential",
+  "/backup/offaccount-report",
   "/bench/tasks",
   "/bench/draw",
   "/bench/start",

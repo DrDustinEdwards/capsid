@@ -1255,7 +1255,7 @@ function seedClaimJobs(): Map<string, Omit<PortalClaimsJob, "generated">> {
     [
       blocked,
       {
-        job: { id: blocked, namespace: "sample", title: "Watcher: the off-account mirror's workflow is failing [mirror-run-failed]", status: "blocked", claimed_by: "agent:sample-driver" },
+        job: { id: blocked, namespace: "sample", title: "Watcher: the Amazon copy of sample is stale [offaccount-stale-sample]", status: "blocked", claimed_by: "agent:sample-driver" },
         outcome: null,
         claims: [claim(1, blocked, "block", 26, { raw: '{"reason":"the workflow needs a secret","command":"gh secret set SAMPLE_KEY"}' })],
         evaluations: [],

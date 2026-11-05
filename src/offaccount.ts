@@ -18,7 +18,7 @@ export const OFFACCOUNT_SOURCES = {
 
 export type OffaccountSite = keyof typeof OFFACCOUNT_SOURCES;
 
-// A request with no site is capsid's, so mirror.yml and restore-rehearsal.yml, which
+// keeps working.
 // send none, keep working through the cutover.
 export const OFFACCOUNT_DEFAULT_SITE: OffaccountSite = "capsid";
 
@@ -27,4 +27,44 @@ export const OFFACCOUNT_SITES = Object.keys(OFFACCOUNT_SOURCES) as OffaccountSit
 // Own keys only, so "constructor" or "__proto__" is an unknown site like any other.
 export function isOffaccountSite(site: string): site is OffaccountSite {
   return Object.hasOwn(OFFACCOUNT_SOURCES, site);
+}
+
+// The Amazon copy's report (job_51bf55f7b42c step 4). capsid-backups' watch.yml lists the
+// Object Lock bucket every 6 hours with a list-only role and POSTs, signed with the backup
+// key, the newest complete run id under daily/<site>/ for every site. The Worker holds no
+// AWS key: the bucket's state reaches it only this way. The watcher reads the stored
+// report (src/watcher-detect.ts offaccountFindings); APP_KV is enough, since a lost report
+// is rewritten by the next run and its absence is itself a finding.
+export const OFFACCOUNT_REPORT_PATH = "/backup/offaccount-report";
+export const OFFACCOUNT_REPORT_KEY = "offaccount:report";
+
+const RUN_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/;
+
+// A jti and a value for every site, each a d1-dump run id or null. Every site is
+// required, so a report that forgot one cannot read as that site being fine; a site
+// this Worker does not know is refused, so the two lists cannot drift apart silently.
+export function parseOffaccountReport(
+  body: string
+): { ok: true; jti: string; sites: Record<OffaccountSite, string | null> } | { ok: false; refusal: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return { ok: false, refusal: "the report body is not JSON" };
+  }
+  const { jti, sites } = (parsed ?? {}) as { jti?: unknown; sites?: unknown };
+  if (typeof jti !== "string" || jti.length < 8 || jti.length > 128) return { ok: false, refusal: "the report must carry a jti of 8 to 128 characters" };
+  if (typeof sites !== "object" || sites === null || Array.isArray(sites)) return { ok: false, refusal: "the report must carry a sites object" };
+  const named = Object.keys(sites);
+  const unknown = named.filter((s) => !isOffaccountSite(s));
+  if (unknown.length) return { ok: false, refusal: `the report names unknown sites: ${unknown.join(", ")}` };
+  const missing = OFFACCOUNT_SITES.filter((s) => !named.includes(s));
+  if (missing.length) return { ok: false, refusal: `the report leaves out: ${missing.join(", ")}` };
+  const out = {} as Record<OffaccountSite, string | null>;
+  for (const site of OFFACCOUNT_SITES) {
+    const run = (sites as Record<string, unknown>)[site];
+    if (run !== null && (typeof run !== "string" || !RUN_ID.test(run))) return { ok: false, refusal: `${site}: expected a run id or null` };
+    out[site] = run;
+  }
+  return { ok: true, jti, sites: out };
 }

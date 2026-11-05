@@ -1,7 +1,8 @@
 import { trendChart } from "./charts";
-import { Suspense } from "react";
+import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
-import { DAY, ago, bytes, ms } from "../lib/format";
+import { ago, bytes, ms } from "../lib/format";
+import { OFFACCOUNT_STALE, offaccountState } from "../lib/derive";
 import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
@@ -24,9 +25,8 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
     );
   }
   const h = snap.health;
-  const m = snap.mirror;
-  const dumpAge = m?.newest_dump ? now - ms(m.newest_dump) : null;
-  const mirrorBad = !m || dumpAge == null || dumpAge > 2 * DAY || (m.last_run?.conclusion != null && m.last_run.conclusion !== "success");
+  const o = snap.offaccount;
+  const os = o ? offaccountState(o, now) : null;
   return (
     <div className={embedded ? "embedded" : "page"}>
       {head}
@@ -76,30 +76,43 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
             )}
           </div>
         </Panel>
-        <Panel flush title="Off-account mirror" src="mirror workflow">
+        <Panel flush title="Off-account: Amazon S3" src="watch.yml report">
           <div className="body stack-gap">
-            {!m ? (
+            {!o || !os ? (
               <div className="callout">
-                <St kind="nodata">No data</St> The mirror was not read on the last pass.
+                <St kind="nodata">No data</St> The Amazon copy's report was not read on the last pass.
               </div>
             ) : (
               <>
-                {mirrorBad && (
+                {os.bad && (
                   <div className="callout crit">
-                    <b>{dumpAge == null ? "No dump recorded." : `No dump for ${(dumpAge / DAY).toFixed(1)} days.`}</b>{" "}
-                    {m.last_run ? `Last run ${m.last_run.conclusion ?? "still running"}${m.last_run.at ? ` ${ago(ms(m.last_run.at), now)}` : ""}.` : "No run recorded."}
+                    <b>{os.headline}.</b> {os.detail}.
                   </div>
                 )}
                 <dl className="kv">
-                  <dt>Newest dump</dt>
-                  <dd className="num">{m.newest_dump ? <>{ago(ms(m.newest_dump), now)} <When t={ms(m.newest_dump)} /></> : "none"}</dd>
-                  <dt>Last run</dt>
+                  {o.sites.map((s) => (
+                    <Fragment key={s.site}>
+                      <dt>{s.site}</dt>
+                      <dd className="num">
+                        {s.newest ? (
+                          <>
+                            {ago(ms(s.newest), now)} <When t={ms(s.newest)} /> {now - ms(s.newest) >= OFFACCOUNT_STALE && <St kind="crit">stale</St>}
+                          </>
+                        ) : (
+                          <St kind="crit">No copy</St>
+                        )}
+                      </dd>
+                    </Fragment>
+                  ))}
+                  <dt>Report</dt>
+                  <dd className="num">{o.reported_at ? <>{ago(ms(o.reported_at), now)} <When t={ms(o.reported_at)} /></> : <St kind="crit">none yet</St>}</dd>
+                  <dt>Last copy run</dt>
                   <dd>
-                    {m.last_run ? (
+                    {o.last_run ? (
                       <>
-                        {m.last_run.conclusion === "success" ? <St kind="ok">success</St> : m.last_run.conclusion ? <St kind="crit">{m.last_run.conclusion}</St> : <St kind="run">running</St>}{" "}
-                        {m.last_run.url && (
-                          <a href={m.last_run.url} target="_blank" rel="noopener noreferrer">
+                        {o.last_run.conclusion === "success" ? <St kind="ok">success</St> : o.last_run.conclusion ? <St kind="crit">{o.last_run.conclusion}</St> : <St kind="run">running</St>}{" "}
+                        {o.last_run.url && (
+                          <a href={o.last_run.url} target="_blank" rel="noopener noreferrer">
                             run
                           </a>
                         )}
@@ -117,7 +130,7 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
       <Suspense fallback={null}>
         <BackupSlots />
       </Suspense>
-      <p className="faint note">The feed reports Capsid's own store and its mirror. Backups of the other sites are not part of it, so they are not shown here.</p>
+      <p className="faint note">The primary panel is Capsid's own store. The Amazon panel is every site's off-account copy, each site's newest complete one, as capsid-backups last reported it.</p>
     </div>
   );
 }

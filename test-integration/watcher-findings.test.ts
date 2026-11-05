@@ -29,7 +29,7 @@ function gathered(findings: Finding[]): () => Promise<Gathered> {
   return async () => ({
     findings,
     ran: new Set(WATCHER_CHECKS),
-    observed: { health: null, mirror: null, ci: [], siteMap: null, probes: null },
+    observed: { health: null, offaccount: null, ci: [], siteMap: null, probes: null },
   });
 }
 

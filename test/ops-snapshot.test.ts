@@ -174,8 +174,7 @@ test("each check is clear, a finding, or could not run, and only a check that ra
   assert.equal(byId.ci.state, "finding");
   assert.deepEqual(byId.ci.findings, ["ci-red-abc1234"]);
   assert.equal(byId.health.state, "clear");
-  assert.equal(byId.mirror_runs, undefined);
-  assert.equal(byId["mirror runs"].state, "could-not-run");
+  assert.equal(byId.offaccount.state, "could-not-run");
 });
 
 // The snapshot
@@ -185,7 +184,7 @@ const probe = (namespace: string, state: SiteProbe["state"]): SiteProbe => ({
   state, http_status: state === "down" ? null : 200, latency_ms: 10, sha: null, error: null, checked_at: NOW.toISOString(),
 });
 const input = (probes: SiteProbe[] | null, at = NOW) => ({
-  now: at, pass_ms: 1200, cadence_min: 30, checks: [], health: HEALTH, mirror: null, ci: [], site_map: null, probes,
+  now: at, pass_ms: 1200, cadence_min: 30, checks: [], health: HEALTH, offaccount: null, ci: [], site_map: null, probes,
 });
 
 test("each pass carries every site's ring forward from the last snapshot", () => {
@@ -228,7 +227,7 @@ function tickEnv(kv: ReturnType<typeof fakeKv>) {
 const gathered = (): Gathered => ({
   findings: [],
   ran: new Set(["health", "site probes"] as const),
-  observed: { health: HEALTH, mirror: { newest_dump: null, last_run: null }, ci: [], siteMap: { unmapped: [], unknown: [] }, probes: [probe("capsid", "ok")] },
+  observed: { health: HEALTH, offaccount: { reported_at: null, sites: [], last_run: null }, ci: [], siteMap: { unmapped: [], unknown: [] }, probes: [probe("capsid", "ok")] },
 });
 
 test("a pass writes ops:snapshot, then the watcher stamp", async () => {

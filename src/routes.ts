@@ -26,6 +26,8 @@ import {
   readBoundedText,
   verifyBackupCredentialRequest,
 } from "./signed-requests";
+import { OFFACCOUNT_REPORT_KEY, OFFACCOUNT_REPORT_PATH, parseOffaccountReport } from "./offaccount";
+import type { OffaccountReport } from "./watcher-detect";
 import { handleHealth } from "./health";
 import { handlePortalApp } from "./portal-app";
 import { PORTAL_HOST } from "./portal-host";
@@ -230,6 +232,29 @@ async function handleBackupCredential(request: Request, env: Env): Promise<Respo
   return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
+// The Amazon copy's report from capsid-backups' watch.yml: the same backup key and checks
+// as the credential mint, its own jti scope, and the report stored whole for the watcher.
+// It mints nothing and reads nothing back.
+async function handleOffaccountReport(request: Request, env: Env): Promise<Response> {
+  const timestamp = request.headers.get("X-Backup-Timestamp") ?? "";
+  const signature = request.headers.get("X-Backup-Signature") ?? "";
+  const bounded = await readSignedBody(request, `request too large: exceeds ${MAX_REPORT_BYTES} bytes`);
+  if (!bounded.ok) return bounded.response;
+  const now = new Date();
+  const verdict = await verifyBackupCredentialRequest(env, { timestamp, signature, body: bounded.body }, now);
+  if (!verdict.ok) {
+    logEvent("OFFACCOUNT_REPORT_REJECTED", { message: `OFFACCOUNT_REPORT_REJECTED ${verdict.refusal}` }, { level: "error" });
+    return textResponse(verdict.refusal, verdict.status);
+  }
+  const parsed = parseOffaccountReport(bounded.body);
+  if (!parsed.ok) return textResponse(parsed.refusal, 400);
+  const claim = await claimJti(env.DB, "backup-report", parsed.jti);
+  if (!claim.ok) return textResponse(claim.refusal, claim.status);
+  const report: OffaccountReport = { received_at: now.toISOString(), sites: parsed.sites };
+  await env.APP_KV.put(OFFACCOUNT_REPORT_KEY, JSON.stringify(report));
+  return new Response(null, { status: 204 });
+}
+
 export const defaultHandler = {
   async fetch(original: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // The Portal host's rewrite has already run, in src/index.ts, before the OAuth
@@ -251,6 +276,7 @@ export const defaultHandler = {
     if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);
     if (url.pathname === OTLP_LOGS_PATH && request.method === "POST") return handleOtlpLogs(request, env);
     if (url.pathname === BACKUP_CREDENTIAL_PATH && request.method === "POST") return handleBackupCredential(request, env);
+    if (url.pathname === OFFACCOUNT_REPORT_PATH && request.method === "POST") return handleOffaccountReport(request, env);
     if (url.pathname === BENCH_TASKS_PATH && request.method === "POST") return handleBenchTasks(request, env);
     if (url.pathname === BENCH_DRAW_PATH && request.method === "POST") return handleBenchDraw(request, env);
     if (url.pathname === BENCH_START_PATH && request.method === "POST") return handleBenchStart(request, env);

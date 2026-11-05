@@ -321,7 +321,7 @@ test("the feed and the refresh refuse a bearer with 403 and send an anonymous re
 const gathered = async (): Promise<Gathered> => ({
   findings: [],
   ran: new Set(["health"] as const),
-  observed: { health: null, mirror: null, ci: [], siteMap: null, probes: [] },
+  observed: { health: null, offaccount: null, ci: [], siteMap: null, probes: [] },
 });
 
 const refreshRequest = (headers: Record<string, string> = { [OPS_REFRESH_HEADER]: "refresh" }) =>

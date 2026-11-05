@@ -59,7 +59,7 @@ Each old view's content moved whole, so nothing it showed was lost. An old addre
 
 **Health** (`/portal/health`) answers "is anything broken" (the Portal UX audit's M1, m2 and m3). It holds, in order:
 - one line: "All good", or how many problems there are and the first three by name, each a link to where it is fixed, then "N more" to the whole list on Needs you. They are the same problems as Needs you's, so the two pages never disagree;
-- four tiles, each a link to its tab: Sites up, Open findings, Backup (the primary dump) and Mirror (the off-account copy), so a stale mirror never turns a good backup red;
+- four tiles, each a link to its tab: Sites up, Open findings, Backup (the primary dump) and Amazon copy (the oldest of the sites' newest off-account copies), so a stale copy never turns a good backup red;
 - five tabs, one shown at a time, the choice in the address (`?tab=`): **Sites** (one row per site, with every column; only while a site is configured), **Problems** (the watcher's findings, the scheduled tasks and the daily maintenance pass's list), **Deploys**, **Backups** and **CI** (the default branches).
 
 Its menu count is the number of critical problems, leaving out what waits on you. It has no Queue panel and no attention list. One namespace filter in the address (`?ns=`) narrows every tab and is kept when the tab changes. With no site configured there is no site tile and no Sites tab. The rules are the UI audit's (`capsid/research/audit-ui-patterns.md`, rulings 1 to 4 and 10). On Jobs, blocked jobs are ordered by priority, then the newest first, with those blocked for over 7 days after them; Done and Failed start closed. A queued job somebody began (`capsid_work_jobs` action `begin`, docs/work-queue.md) says who started it and how long ago. Parked jobs have their own group, each row saying when it comes back; a parked job stays in the feed whatever its age, so it never vanishes. A blocked job that asks a question is marked Question, its row says what it asks, and its drawer shows the question instead of a command. Stuck jobs appear in one place, the Stuck jobs panel (named "Stale jobs" before the UX audit), by the Worker's own rules (src/stale-jobs.ts): the list's old "Stale" group was folded into it (Dustin, 2026-10-09). The page's chart comes after its lists.
@@ -84,7 +84,7 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 **The snapshot** is the watcher's last pass, one KV read of `ops:snapshot`. The watcher writes it every 30 minutes, or on Refresh (`src/ops-snapshot.ts`, [autonomy.md](autonomy.md)). It holds:
 - each check's result: clear, finding, or could not run;
 - Capsid's `/health`;
-- the backup mirror;
+- the Amazon backup copy, per site;
 - each roster repo's latest CI run;
 - the site configuration compared with the registered namespaces;
 - a probe of every configured site, with a 7-day uptime ring;

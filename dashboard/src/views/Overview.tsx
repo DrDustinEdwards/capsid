@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { Link } from "../lib/router";
 import { placePath, useApp } from "../app/ctx";
-import { counts, hasSites } from "../lib/derive";
-import { DAY, ago, ms } from "../lib/format";
+import { counts, hasSites, offaccountState } from "../lib/derive";
+import { HOUR, ago, ms } from "../lib/format";
 
 // The tiles at the top of Health (docs/design/design-portal-evaluation.md section 2; the UX
 // audit's m2 and m3, 2026-10): sites up, open findings, the primary backup and the
-// off-account mirror, each a link to the tab that holds it. Backup and Mirror are two
-// tiles, so a stale mirror never turns a good primary backup red. What waits on you is
+// Amazon backup copy, each a link to the tab that holds it. Backup and Amazon copy are two
+// tiles, so a stale copy never turns a good primary backup red. What waits on you is
 // counted on Needs you only, so there is no "Blocked on you" tile. With no site configured
 // there is no site tile.
 
@@ -25,9 +25,8 @@ export function Overview() {
   const c = counts(feed);
   const snap = feed.snapshot;
   const backup = snap?.health?.backup ?? null;
-  const mirror = snap?.mirror ?? null;
-  const mirrorAge = mirror?.newest_dump ? now - ms(mirror.newest_dump) : null;
-  const mirrorFailed = mirror?.last_run?.conclusion != null && mirror.last_run.conclusion !== "success";
+  const copy = snap?.offaccount ?? null;
+  const copyState = copy ? offaccountState(copy, now) : null;
   const findingsOpen = c.findings;
   const sitesOn = hasSites(feed);
   const siteTile: Tile | null = !sitesOn
@@ -41,15 +40,15 @@ export function Overview() {
     backup && backup.age_hours != null
       ? { label: "Backup", v: <>{backup.age_hours.toFixed(1)}<small>h</small></>, d: backup.warning ?? (backup.last_ok ? `last good dump ${ago(ms(backup.last_ok), now)}` : "no good dump recorded"), cls: backup.warning ? "crit" : "ok", go: "backups" }
       : { label: "Backup", v: <small>No data</small>, d: snap?.health ? "no good dump recorded" : "health not read", cls: snap?.health ? "crit" : "", go: "backups" },
-    mirror
+    copy && copyState
       ? {
-          label: "Mirror",
-          v: mirrorAge == null ? <small>No dump</small> : <>{Math.floor(mirrorAge / DAY)}<small>d</small></>,
-          d: mirror.last_run ? `last run ${mirror.last_run.conclusion ?? "still running"}${mirror.last_run.at ? ` ${ago(ms(mirror.last_run.at), now)}` : ""}` : "no run recorded",
-          cls: mirrorAge == null || mirrorAge > 2 * DAY || mirrorFailed ? "crit" : "ok",
+          label: "Amazon copy",
+          v: copyState.worst == null ? <small>No copy</small> : <>{(copyState.worst / HOUR).toFixed(0)}<small>h</small></>,
+          d: copyState.bad ? copyState.headline : `oldest of ${copy.sites.length} sites · ${copyState.detail.toLowerCase()}`,
+          cls: copyState.bad ? "crit" : "ok",
           go: "backups",
         }
-      : { label: "Mirror", v: <small>No data</small>, d: snap ? "not read on the last pass" : "no watcher pass yet", cls: snap ? "warn" : "", go: "backups" },
+      : { label: "Amazon copy", v: <small>No data</small>, d: snap ? "not read on the last pass" : "no watcher pass yet", cls: snap ? "warn" : "", go: "backups" },
   ];
   return (
     <div className="embedded" id="summary">

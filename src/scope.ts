@@ -196,6 +196,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
   "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
   "/backup/credential": "signed with the backup-specific HMAC key, derived from the Worker's root secret under its own context, and replay-protected",
+  "/backup/offaccount-report":
+    "signed with the same backup-specific HMAC key and replay-protected under its own jti scope; stores the Amazon copy's per-site run ids for the watcher (src/offaccount.ts) and returns nothing",
   "/bench/tasks": "signed with the capsid-bench HMAC key (src/bench.ts), which no backup key can produce, and replay-protected; registers a task once and never changes one",
   "/bench/draw": "signed with the capsid-bench HMAC key and replay-protected; records the registration once and appends the drawn task order, which never changes",
   "/bench/start": "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap, and returns a treatment run's own run key once",
