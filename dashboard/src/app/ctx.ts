@@ -1,19 +1,18 @@
 import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
 
-// Nine pages, regrouped by task (docs/design/design-portal-evaluation.md section 2, DECIDE
-// 2 and 8, ruled 2026-10-09; job_d62abdbfc270 PR 2 and PR 7; the Portal UX audit's sitemap,
-// 2026-10). Health holds what Overview, Sites, Incidents, Deploys, Backups and CI's
-// default-branch table held; Pull requests holds CI's PR half; Agents holds Claims as its
-// Checks tab; Packages holds Shared code as its Shared tab; Settings holds the Namespaces
-// panel. The ids are internal and stay; only the labels are the audit's words (the Queue is
-// "Jobs"). The order is the menu's, Settings last. The letters follow the pages, with no
-// redirect period for the old ones (Dustin, 2026-10-09).
+// Eleven pages, grouped by what a person is doing (the Portal audit and new map, ruled
+// 2026-11-06): Needs you and Health; Sites, one page for every site and one for each; Pull
+// requests, Jobs and Projects; Activity, Agents, Packages and Library; Settings last, which
+// holds preferences only. The ids are internal; the labels are the menu's words (the Queue is
+// "Jobs"). There is no redirect for an old address (pre-launch: no legacy shims).
 export const VIEWS = [
   { id: "needs", label: "Needs you", key: "y" },
   { id: "health", label: "Health", key: "h" },
+  { id: "sites", label: "Sites", key: "s" },
   { id: "prs", label: "Pull requests", key: "p" },
   { id: "queue", label: "Jobs", key: "q" },
+  { id: "projects", label: "Projects", key: "o" },
   { id: "activity", label: "Activity", key: "l" },
   { id: "agents", label: "Agents", key: "a" },
   { id: "packages", label: "Packages", key: "k" },
@@ -21,43 +20,66 @@ export const VIEWS = [
   { id: "settings", label: "Settings", key: "e" },
 ] as const;
 
-// Where each retired view's content lives now, so an old address, an old "view:" reference
-// and a bookmark land on the page and section that hold it.
-export type MovedId = "overview" | "sites" | "incidents" | "deploys" | "backups" | "ci" | "namespaces" | "claims" | "shared";
-export const MOVED: Record<MovedId, { view: (typeof VIEWS)[number]["id"]; anchor?: string; tab?: string }> = {
-  overview: { view: "health" },
-  sites: { view: "health", tab: "sites" },
-  incidents: { view: "health", tab: "problems" },
-  deploys: { view: "health", tab: "deploys" },
-  backups: { view: "health", tab: "backups" },
-  ci: { view: "prs" },
-  namespaces: { view: "settings", anchor: "automation" },
-  claims: { view: "agents", tab: "claims" },
-  shared: { view: "packages", tab: "shared" },
-};
-
-// Health's tabs (the UX audit's M1): the verdict and the tiles, then one of these at a
-// time, its choice in the address (?tab=). An old section anchor names the tab that holds
-// it now, so a bookmark to /health#deploys or a "view:health#ci" reference still lands.
+// The tabs of each page that has them, in order: the first is the bare address, the rest
+// ?tab=<id>. A "page#tab" reference (placePath) names one. A site's own page has its tabs in
+// SITE_TABS.
 export const HEALTH_TABS = [
-  { id: "sites", label: "Sites" },
   { id: "problems", label: "Problems" },
-  { id: "deploys", label: "Deploys" },
   { id: "backups", label: "Backups" },
   { id: "ci", label: "CI" },
+  { id: "scheduled", label: "Scheduled tasks" },
+  { id: "resources", label: "Cloudflare" },
 ] as const;
 export type HealthTab = (typeof HEALTH_TABS)[number]["id"];
-const HEALTH_ALIAS: Record<string, HealthTab> = { incidents: "problems", maintenance: "problems" };
-export function healthTab(name: string | null | undefined): HealthTab | null {
-  if (!name) return null;
-  if (HEALTH_TABS.some((t) => t.id === name)) return name as HealthTab;
-  return Object.hasOwn(HEALTH_ALIAS, name) ? HEALTH_ALIAS[name]! : null;
+
+export const SITES_TABS = [
+  { id: "all", label: "All sites" },
+  { id: "deploys", label: "Deploys" },
+] as const;
+
+export const QUEUE_TABS = [
+  { id: "jobs", label: "Jobs" },
+  { id: "checks", label: "Checks" },
+] as const;
+
+export const AGENT_TABS = [
+  { id: "roster", label: "Agents" },
+  { id: "archive", label: "Archive" },
+  { id: "access", label: "AI access" },
+] as const;
+
+export const PACKAGE_TABS = [
+  { id: "published", label: "Published" },
+  { id: "shared", label: "Shared" },
+  { id: "complete", label: "Completeness" },
+] as const;
+
+export const SITE_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "deploys", label: "Deploys" },
+  { id: "traffic", label: "Search and traffic" },
+  { id: "sync", label: "Sync and repairs" },
+  { id: "setup", label: "Setup" },
+] as const;
+export type SiteTab = (typeof SITE_TABS)[number]["id"];
+
+const PAGE_TABS: Partial<Record<(typeof VIEWS)[number]["id"], ReadonlyArray<{ id: string }>>> = {
+  health: HEALTH_TABS,
+  sites: SITES_TABS,
+  queue: QUEUE_TABS,
+  agents: AGENT_TABS,
+  packages: PACKAGE_TABS,
+};
+
+/** The tab a page's ?tab= names, when the page has it; else null. */
+export function tabOf<T extends { id: string }>(tabs: ReadonlyArray<T>, name: string | null | undefined): T["id"] | null {
+  return name && tabs.some((t) => t.id === name) ? name : null;
 }
 
 export type ViewId = (typeof VIEWS)[number]["id"];
 
 export type ViewDef = (typeof VIEWS)[number];
-export type DrawerType = "site" | "job" | "agent" | "audit";
+export type DrawerType = "job" | "agent" | "audit";
 
 export function isView(v: string | undefined): v is ViewId {
   return VIEWS.some((x) => x.id === v);
@@ -187,15 +209,19 @@ export function useApp(): Ctx {
 }
 
 // Routes, relative to the /portal base:
-//   /                      needs you, the home (design-portal-evaluation.md, DECIDE 1)
-//   /<view>                a view
-//   /<view>/<type>/<id>    a view with a drawer open over it (site, job, agent, audit row)
+//   /                          needs you, the home (design-portal-evaluation.md, DECIDE 1)
+//   /<view>                    a view
+//   /<view>/<type>/<id>        a view with a drawer open over it (job, agent, audit row)
+//   /sites/<namespace>         one site's own page
+//   /sites/<namespace>/<type>/<id>  the same with a drawer over it
 export interface Route {
   view: ViewId;
+  // The site's namespace on a site's own page, else null.
+  site: string | null;
   drawer: { type: DrawerType; id: string } | null;
 }
 
-const TYPES: DrawerType[] = ["site", "job", "agent", "audit"];
+export const DRAWER_TYPES: readonly DrawerType[] = ["job", "agent", "audit"];
 
 export function parseRoute(path: string): Route {
   const segs = path.split("/").filter(Boolean).map((s) => {
@@ -207,30 +233,33 @@ export function parseRoute(path: string): Route {
     }
   });
   let view: ViewId = "needs";
+  let site: string | null = null;
   let i = 0;
   if (isView(segs[0])) (view = segs[0]), (i = 1);
-  else if (segs[0] !== undefined && Object.hasOwn(MOVED, segs[0])) (view = MOVED[segs[0] as MovedId].view), (i = 1);
+  if (view === "sites" && segs[1] !== undefined) (site = segs[1]), (i = 2);
   const type = segs[i] as DrawerType | undefined;
   const id = segs[i + 1];
-  return { view, drawer: type && TYPES.includes(type) && id ? { type, id } : null };
+  return { view, site, drawer: type && DRAWER_TYPES.includes(type) && id ? { type, id } : null };
 }
 
-/** The address an old view id or a current one names: its page, with the section's anchor
- *  or the tab's query when it moved into one. A current id may name its section itself,
- *  as "health#ci", which on Health is a tab. */
+/** The address a page names, or a page and its tab or section as "page#tab": a tab of a page
+ *  that has tabs is its ?tab=, anything else a #section on the page. */
 export function placePath(id: string): string {
   const [page, anchor] = id.split("#");
-  if (isView(page)) {
-    const tab = page === "health" ? healthTab(anchor) : null;
-    if (tab) return `${routePath(page)}?tab=${tab}`;
-    return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
-  }
-  const moved = Object.hasOwn(MOVED, id) ? MOVED[id as MovedId] : null;
-  if (!moved) return routePath("needs");
-  return `${routePath(moved.view)}${moved.tab ? `?tab=${moved.tab}` : ""}${moved.anchor ? `#${moved.anchor}` : ""}`;
+  if (!isView(page)) return routePath("needs");
+  const tabs = PAGE_TABS[page];
+  const tab = tabs ? tabOf(tabs, anchor) : null;
+  if (tab) return `${routePath(page)}${tab === tabs![0]!.id ? "" : `?tab=${tab}`}`;
+  return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
 }
 
-export function routePath(view: ViewId, drawer?: { type: DrawerType; id: string } | null): string {
-  if (drawer) return `/${view}/${drawer.type}/${encodeURIComponent(drawer.id)}`;
-  return view === "needs" ? "/" : `/${view}`;
+/** One site's own page, at a tab when one is named. */
+export function sitePath(namespace: string, tab?: SiteTab): string {
+  return `/sites/${encodeURIComponent(namespace)}${tab && tab !== SITE_TABS[0].id ? `?tab=${tab}` : ""}`;
+}
+
+export function routePath(view: ViewId, drawer?: { type: DrawerType; id: string } | null, site?: string | null): string {
+  const page = site && view === "sites" ? sitePath(site) : view === "needs" ? "/" : `/${view}`;
+  if (drawer) return `${page === "/" ? "/needs" : page}/${drawer.type}/${encodeURIComponent(drawer.id)}`;
+  return page;
 }

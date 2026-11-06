@@ -23,7 +23,6 @@ function prLabel(url: string): string {
 const CiHistory = trendChart("CiHistory");
 // Chart 7, merges per week by who acted, loads the same way for Pull requests.
 const MergesChart = trendChart("MergesChart");
-const DeploysTable = trendChart("DeploysTable");
 
 // CI's default-branch table, a section of Health (design-portal-evaluation.md section 2).
 export function DefaultBranches() {
@@ -237,9 +236,6 @@ export function PullRequests() {
       </Panel>
       <ChartSlot>
         <MergesChart />
-      </ChartSlot>
-      <ChartSlot>
-        <DeploysTable />
       </ChartSlot>
     </div>
   );

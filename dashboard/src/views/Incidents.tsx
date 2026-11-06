@@ -5,17 +5,17 @@ import type { OpsTask } from "../types";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
-import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
+import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, useNsFilter } from "./shared";
 
-export function Incidents({ embedded = false }: { embedded?: boolean } = {}) {
+// Health's Problems tab: the watcher's findings and its last pass.
+export function Incidents() {
   const { feed, now } = useApp();
   const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
   const all = incidents(feed);
   const emptied = ns !== "all" && all.length > 0 && !all.some((x) => x.ns === ns);
   return (
-    <div className={embedded ? "embedded" : "page"}>
-      {!embedded && <PageHead title="Incidents" />}
+    <div className="embedded">
       <NsChips list={all.map((x) => x.ns)} />
       <div className="grid2">
         <Panel flush title="Findings" src="jobs posted by agent:watcher">
@@ -76,7 +76,6 @@ export function Incidents({ embedded = false }: { embedded?: boolean } = {}) {
           )}
         </Panel>
       </div>
-      <ScheduledTasks />
     </div>
   );
 }
@@ -90,7 +89,7 @@ const FLAG: Record<NonNullable<OpsTask["flag"]>, string> = {
 // The run ledger (src/task-runs.ts): every scheduled task, its newest run, and the
 // runs before it. A task is flagged when its newest run threw or was refused, or when
 // a periodic task has had no run in twice its period.
-function ScheduledTasks() {
+export function ScheduledTasks() {
   const { feed, now } = useApp();
   const s = feed.scheduled;
   return (

@@ -1,26 +1,15 @@
-import { trendChart } from "../views/charts";
-import { ChartSlot } from "../ui/ChartSlot";
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
-import type { SiteSnapshot } from "../types";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
-import { JOB, PROBE, cfNoData, cfOk, siteKey } from "../lib/derive";
-import { ago, hostOf, ms, pct, shortId, utc } from "../lib/format";
-import { NoData, Pill, St } from "../ui/icons";
+import { JOB } from "../lib/derive";
+import { ago, ms } from "../lib/format";
+import { Pill, St } from "../ui/icons";
 import { When } from "../ui/When";
-import { uptimeOptions } from "../ui/charts";
-import { agentState, nsList, ringOf, uptime } from "../lib/derive";
-import { ChartFrame } from "capsomer/react/chart-frame";
-import "capsomer/chart-frame.css";
-import "capsomer/uptime-strip.css";
-import { uptimeStrip } from "enarratio";
+import { agentState, nsList } from "../lib/derive";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
 
-// Chart 9 (error rate with deploy markers) is an Enarratio line chart, loaded when a site's
-// drawer opens so it stays out of the initial bundle.
-const ErrorRate = trendChart("ErrorRate");
 
 type Ref = { type: DrawerType; id: string };
 
@@ -30,124 +19,6 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
       <Head label="Not found" title={what} sub="" onClose={onClose} />
       <div className="dbody">
         <div className="callout">It is not in the current feed. It may have ended more than 24 hours ago, or the watcher has not seen it yet.</div>
-      </div>
-    </>
-  );
-}
-
-// The site's uptime as Capsomer's uptime strip: Enarratio's figure with the week's and the
-// day's share up at the end of its title's line, and the key after it.
-const UPTIME_KEYS = [
-  ["up", "Up"],
-  ["degraded", "Degraded"],
-  ["down", "Down"],
-  ["nodata", "No data"],
-] as const;
-
-function SiteUptime({ s }: { s: SiteSnapshot }) {
-  const ring = ringOf(s);
-  const p7 = uptime(ring);
-  const p24 = uptime(ring.slice(-48));
-  const subtitle = `${p7 == null ? "no data" : pct(p7)} up over 7 days, ${p24 == null ? "no data" : pct(p24, 1)} over 24 hours`;
-  return (
-    <ChartFrame inline chart={uptimeStrip({ ...uptimeOptions(s), title: "Uptime, 7 days", subtitle, source: { name: "The watcher's probes, every half hour" } })}>
-      <ul className="cap-uptime-legend" aria-label="Key">
-        {UPTIME_KEYS.map(([key, word]) => (
-          <li key={key}>
-            <span className="cap-uptime-key" data-key={key} aria-hidden="true" />
-            {word}
-          </li>
-        ))}
-      </ul>
-    </ChartFrame>
-  );
-}
-
-function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
-  const { now } = useApp();
-  const p = PROBE[s.state];
-  const cf = cfOk(s);
-  const detail = s.error ?? (s.state === "liveness" ? "No health route; a root 200 is liveness only." : s.state !== "ok" ? p.label : null);
-  return (
-    <>
-      <Head label={`Site · ${s.namespace}`} title={s.name} sub={hostOf(s.origin)} badge={<Pill kind={p.kind}>{p.label}</Pill>} onClose={onClose} />
-      <div className="dbody">
-        {detail && <div className={`callout ${s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : ""}`}>{detail}</div>}
-        <SiteUptime s={s} />
-        <ChartSlot>
-          <ErrorRate site={s} />
-        </ChartSlot>
-        <div>
-          <p className="section-title">Probe</p>
-          <dl className="kv">
-            <dt>Checked</dt>
-            <dd>
-              {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
-            </dd>
-            <dt>URL</dt>
-            <dd className="mono">
-              {s.origin}
-              {s.health_path ?? "/"}
-            </dd>
-            <dt>HTTP status</dt>
-            <dd className="num">{s.http_status ?? "no answer"}</dd>
-            <dt>Latency</dt>
-            <dd className="num">{s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}</dd>
-            <dt>Reports sha</dt>
-            <dd className="mono">{s.sha ?? <span className="faint">not reported</span>}</dd>
-            <dt>Platform</dt>
-            <dd>{s.platform === "vercel" ? "Vercel" : "Cloudflare"}</dd>
-            <dt>Cloudflare script</dt>
-            <dd className="mono">{cf ? cf.script : <NoData reason={cfNoData(s.cloudflare) ?? ""} />}</dd>
-          </dl>
-        </div>
-        <div>
-          <p className="section-title">Deploys</p>
-          {!cf ? (
-            <div className="faint">No data: {cfNoData(s.cloudflare)}</div>
-          ) : cf.deploys.length ? (
-            <div className="scroll-x">
-              <table className="list">
-                <thead>
-                  <tr>
-                    <th scope="col">Version</th>
-                    <th scope="col">Message</th>
-                    <th scope="col">Author</th>
-                    <th scope="col">When</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cf.deploys.map((d) => (
-                    <tr key={d.id}>
-                      <td className="mono">{shortId(d.version_id ?? d.id)}</td>
-                      <td className="muted">{d.message ?? d.triggered_by ?? ""}</td>
-                      <td className="muted">{d.author_email ?? ""}</td>
-                      <td className="num" title={utc(ms(d.created_on))}>
-                        {ago(ms(d.created_on), now)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="faint">No deploys recorded.</div>
-          )}
-        </div>
-        <div>
-          <p className="section-title">Open elsewhere</p>
-          <div className="toolbar">
-            <a className="btn" href={s.origin} target="_blank" rel="noopener noreferrer">
-              Site
-            </a>
-            {s.health_path && (
-              <a className="btn" href={s.health_path.startsWith("https://") ? s.health_path : `${s.origin}${s.health_path}`} target="_blank" rel="noopener noreferrer">
-                Health route
-              </a>
-            )}
-          </div>
-        </div>
-        <div className="src">Source: watcher pass, KV ops:snapshot, sites[{s.name}]</div>
       </div>
     </>
   );
@@ -374,10 +245,7 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
   }, [key]);
   const ref = route ?? shown;
   let body: ReactNode = null;
-  if (ref?.type === "site") {
-    const s = feed.snapshot?.sites.find((x) => siteKey(x) === ref.id);
-    body = s ? <SiteBody s={s} onClose={onClose} /> : <Missing what={`Site ${ref.id}`} onClose={onClose} />;
-  } else if (ref?.type === "job") {
+  if (ref?.type === "job") {
     const j = feed.live.jobs.find((x) => x.id === ref.id);
     body = j ? <JobBody j={j} onClose={onClose} /> : <Missing what={`Job ${ref.id}`} onClose={onClose} />;
   } else if (ref?.type === "agent") {

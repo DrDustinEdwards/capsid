@@ -66,9 +66,10 @@ const PORTAL_URL = `https://${PORTAL_HOST}/`;
 const portalPath = (path: string) => `https://${PORTAL_HOST}${path}`;
 const prUrl = (repo: string, number: number) => portalPath(`/prs#pr-${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${number}`);
 const jobUrl = (id: string) => portalPath(`/queue/job/${encodeURIComponent(id)}`);
-const DEPLOYS_URL = portalPath("/health?tab=deploys");
+// A site's own page (/sites/<namespace>), at a tab when one is named.
+const siteUrl = (namespace: string, tab?: "deploys") => portalPath(`/sites/${encodeURIComponent(namespace)}${tab ? `?tab=${tab}` : ""}`);
 const AUTO_MERGE_URL = portalPath("/prs#auto-merge");
-const SITES_URL = portalPath("/health?tab=sites");
+const SITES_URL = portalPath("/sites");
 
 type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr" | "site" | "tls" | "domain";
 
@@ -158,7 +159,7 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
       namespace: r.namespace,
       title: failed ? "Rollback failed" : "Deploy rolled back",
       body: `${r.repo} at ${r.head_sha.slice(0, 7)}: ${failed ? "the live gate failed and the rollback did not take effect" : "the live gate failed and the deploy was rolled back"}.`,
-      url: DEPLOYS_URL,
+      url: siteUrl(r.namespace, "deploys"),
     });
   }
 
@@ -187,7 +188,7 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
   }
 
   // 7. Sites, from the five-minute pulse.
-  for (const a of pulseAlerts(await readPulse(env), now)) out.push({ ...a, kind: "site", url: SITES_URL });
+  for (const a of pulseAlerts(await readPulse(env), now)) out.push({ ...a, kind: "site", url: siteUrl(a.namespace) });
 
   // 7, the error rate: the watcher's site-errors findings from its last pass. A snapshot
   // that cannot be read alerts nothing; the Portal shows that it could not be read.
@@ -197,7 +198,7 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
     if (!fingerprint.startsWith("site-errors-")) continue;
     const namespace = fingerprint.slice("site-errors-".length);
     const name = snapshot?.sites.find((s) => s.namespace === namespace)?.name ?? namespace;
-    out.push({ key: `site-errors:${namespace}:${day}`, kind: "site", namespace, title: `${name} is returning errors`, body: `Over 1 percent of requests in the last complete hour threw or answered 5xx (watcher pass ${snapshot?.pass_at}).`, url: SITES_URL });
+    out.push({ key: `site-errors:${namespace}:${day}`, kind: "site", namespace, title: `${name} is returning errors`, body: `Over 1 percent of requests in the last complete hour threw or answered 5xx (watcher pass ${snapshot?.pass_at}).`, url: siteUrl(namespace) });
   }
 
   // 8. A TLS certificate 21 or 3 days from expiry (src/tls-expiry.ts), from the watcher's

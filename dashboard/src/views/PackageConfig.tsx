@@ -1,12 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useApp } from "../app/ctx";
-import { ago, msSql, utc } from "../lib/format";
 import type { OpsPackageConfig } from "../types";
-import { Panel } from "capsomer/react/panel";
 import { Danger } from "./shared";
 
 // The package configuration (live.packages, the ops_packages table): one row per npm
-// package the Packages view shows. Every change goes through the confirm dialog, which
+// package Packages' Published tab shows, added and changed there. Every change goes through the confirm dialog, which
 // previews it first; the server validates every field.
 
 interface Draft {
@@ -15,7 +13,7 @@ interface Draft {
   formerly: string;
 }
 
-type Editing = { kind: "add" } | { kind: "edit"; row: OpsPackageConfig };
+export type PackageEditing = { kind: "add" } | { kind: "edit"; row: OpsPackageConfig };
 
 function paramsOf(d: Draft): Record<string, string> {
   const p: Record<string, string> = {};
@@ -26,7 +24,7 @@ function paramsOf(d: Draft): Record<string, string> {
   return p;
 }
 
-function PackageForm({ editing, onClose }: { editing: Editing; onClose: () => void }) {
+export function PackageForm({ editing, onClose }: { editing: PackageEditing; onClose: () => void }) {
   const { confirm } = useApp();
   const id = useId();
   const box = useRef<HTMLElement>(null);
@@ -113,64 +111,3 @@ function PackageForm({ editing, onClose }: { editing: Editing; onClose: () => vo
   );
 }
 
-export function PackageSettings() {
-  const { feed, now } = useApp();
-  const [editing, setEditing] = useState<Editing | null>(null);
-  const rows = feed.live.packages;
-  const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.row.name}`) : "";
-  return (
-    <>
-      <div className="toolbar">
-        <button type="button" className="btn" onClick={() => setEditing({ kind: "add" })} disabled={editing?.kind === "add"}>
-          Add package
-        </button>
-      </div>
-      {editing && <PackageForm key={formKey} editing={editing} onClose={() => setEditing(null)} />}
-      <Panel flush title="Packages" count={rows.length} src="D1 ops_packages">
-        {rows.length ? (
-          <div className="scroll-x">
-            <table className="list">
-              <thead>
-                <tr>
-                  <th>npm name</th>
-                  <th>Repository</th>
-                  <th>Formerly</th>
-                  <th>Revision</th>
-                  <th>
-                    <span className="sr-only">Controls</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => {
-                  const at = msSql(p.updated_at);
-                  return (
-                    <tr key={p.name} data-row="" data-package={p.name}>
-                      <td className="mono">{p.name}</td>
-                      <td className="mono">{p.repo ?? <span className="faint">none</span>}</td>
-                      <td className="mono">{p.formerly ?? <span className="faint">none</span>}</td>
-                      <td>
-                        <span className="num">{p.revision}</span>
-                        <div className="src" title={Number.isNaN(at) ? p.updated_at : utc(at)}>
-                          {Number.isNaN(at) ? `updated ${p.updated_at}` : `updated ${ago(at, now)}`}
-                        </div>
-                      </td>
-                      <td className="ctl">
-                        {/* Edit only: Remove is in the form's Danger area (UX audit M9). */}
-                        <button type="button" className="btn" aria-label={`Edit ${p.name}`} onClick={() => setEditing({ kind: "edit", row: p })}>
-                          Edit
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="body faint">No package is configured, so the Portal shows no Packages view. Add one to start.</div>
-        )}
-      </Panel>
-    </>
-  );
-}

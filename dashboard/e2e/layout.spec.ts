@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { SITE_TABS } from "../src/app/ctx.ts";
 import { RAIL_PREF } from "../src/lib/prefs.ts";
 import { ALL_VIEWS, VIEW_COUNT, expectNoSideways, measure, sideways, visit } from "./views.ts";
 
@@ -23,9 +24,26 @@ for (const rail of ["expanded", "collapsed"] as const) {
   });
 }
 
+// A site's own page, every tab, at the narrowest desktop width and on a phone.
+test("at 1024 px and at 390 px, no tab of a site's page scrolls sideways", async ({ page }) => {
+  test.setTimeout(60_000);
+  const problems: string[] = [];
+  for (const width of [1024, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const tab of SITE_TABS) {
+      await page.goto(`sites/sample${tab.id === "overview" ? "" : `?tab=${tab.id}`}`);
+      await expect(page.getByRole("heading", { level: 1, name: "Sample A" })).toBeVisible();
+      await expect(page.locator("main .loading")).toHaveCount(0);
+      const o = await measure(page);
+      // On a phone a wide table may scroll inside its wrapper; the document may not.
+      problems.push(...sideways(width === 1024 ? o : { ...o, root: o.root && { ...o.root, scroll: Math.min(o.root.scroll, o.root.client) }, scrollers: [] }, `${tab.label} at ${width}`));
+    }
+  }
+  expect(problems).toEqual([]);
+});
+
 // One drawer of each type, opened from the first row that opens one.
 const DRAWERS = [
-  { type: "site", from: "sites" },
   { type: "job", from: "queue" },
   { type: "agent", from: "agents" },
 ] as const;

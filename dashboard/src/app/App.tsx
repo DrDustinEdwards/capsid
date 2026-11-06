@@ -9,7 +9,7 @@ import { ago, ms, portalNow, utc } from "../lib/format";
 import { RAIL_PREF, THEME_PREF, readPref, toggleTheme, useSingleKeys, writePref } from "../lib/prefs";
 import { register, setSheetOpener } from "capsomer/behavior/shortcuts";
 import { NavIcon } from "../ui/icons";
-import { AppCtx, VIEWS, parseRoute, placePath, routePath, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
+import { AppCtx, VIEWS, parseRoute, placePath, routePath, sitePath, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
 import { DemoNotice } from "./DemoNotice";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
@@ -28,14 +28,16 @@ const ShortcutSheet = lazy(() => import("./ShortcutSheet").then((m) => ({ defaul
 // the views' intro sentences there). Jobs, Pull requests and the rest that need none have none.
 const ABOUT: Partial<Record<ViewId, string>> = {
   needs: "The home: every decision waiting for you, with its buttons, then every problem worst first.",
-  queue: "Every job by state. A blocked job shows what it waits on; open it to answer or resume it.",
-  prs: "The pull requests waiting for you, with Approve and Close, then those recorded against jobs.",
-  health: "One line on whether anything is broken, the tiles, then a tab each for sites, problems, deploys, backups and CI. Deploys are from Cloudflare's own record, so a hand-run wrangler deploy shows up too.",
+  health: "One line on whether anything is broken, the tiles, then a tab each for problems, backups, CI, scheduled tasks and the Cloudflare resources no site owns.",
+  sites: "Every site in one table: status, uptime, last deploy, errors and backup age. Each site has its own page: overview, deploys, search and traffic, sync and repairs, and setup.",
+  queue: "Every job by state. A blocked job shows what it waits on; open it to answer or resume it. Checks sets what each agent said beside what the Worker verified.",
+  prs: "The pull requests waiting for you, with Approve and Close, then auto-merge and those recorded against jobs.",
+  projects: "Each project's driver, its jobs and its integrity, with Reset for one paused after repeated failures.",
   activity: "The audit log, newest first: who did what, where.",
-  agents: "Every credential and when it was last seen; Checks sets what each agent said beside what the Worker verified.",
-  packages: "Published: each npm package configured in Settings. Shared: the tag each app pins, who is behind, and the local copies left.",
+  agents: "Every credential and when it was last seen, the archive of revoked ones, and the AI access granted on each server.",
+  packages: "Published: each npm package, added and changed here. Shared: the tag each app pins, who is behind, and the local copies left. Completeness: every shared area on every site.",
   library: "The knowledge store, read-only: decisions, rulings and research, a search, and each document with its links and jobs.",
-  settings: "The automation switches first, then phone alerts and email, sites, packages, projects and display. Every change is previewed first.",
+  settings: "Your preferences: the overnight run, phone alerts, the daily digest and this browser's display. Every change is previewed first.",
 };
 
 // The phone tab bar (the Portal UX audit's sitemap, 2026-10): Needs you, Health and Pull
@@ -43,13 +45,13 @@ const ABOUT: Partial<Record<ViewId, string>> = {
 // (Capsomer has no Menu tab yet), Settings among them.
 const TABS: ViewId[] = ["needs", "health", "prs"];
 
-// The menu's groups (design section 2 and the UX audit's sitemap): Now, Work, Records, then
-// Settings at the foot, with no heading of its own (the UX audit's M4: it was only under
-// the avatar). It is still in the avatar's menu, with its g then e shortcut and its
-// command-menu entry.
+// The menu's groups (the Portal audit's new map, 2026-11-06): Now, Sites, Work, Records, then
+// Settings at the foot, with no heading of its own. It is also in the avatar's menu, with its
+// g then e shortcut and its command-menu entry.
 const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
   { label: "Now", views: ["needs", "health"] },
-  { label: "Work", views: ["prs", "queue"] },
+  { label: "Sites", views: ["sites"] },
+  { label: "Work", views: ["prs", "queue", "projects"] },
   { label: "Records", views: ["activity", "agents", "packages", "library"] },
   { views: ["settings"] },
 ];
@@ -237,12 +239,19 @@ export function App() {
         else window.scrollTo(0, 0);
         return;
       }
-      if (type === "site" || type === "job" || type === "agent" || type === "audit") navigate(routePath(route.view, { type, id }) + qs);
+      // A site is a page of its own; a job, an agent or an audit row opens in the drawer over
+      // the page you are on.
+      if (type === "site") {
+        navigate(sitePath(id));
+        window.scrollTo(0, 0);
+        return;
+      }
+      if (type === "job" || type === "agent" || type === "audit") navigate(routePath(route.view, { type, id }, route.site) + qs);
     },
-    [go, navigate, route.view, qs],
+    [navigate, route.view, route.site, qs],
   );
 
-  const closeDrawer = useCallback(() => navigate(routePath(route.view) + qs), [navigate, route.view, qs]);
+  const closeDrawer = useCallback(() => navigate(routePath(route.view, null, route.site) + qs), [navigate, route.view, route.site, qs]);
 
   const copy = useCallback(
     (text: string) => {
@@ -389,7 +398,7 @@ export function App() {
   // the switch to render, and says so if it never appears rather than doing nothing.
   const flip = useCallback(
     (id: string) => {
-      navigate(placePath("namespaces"));
+      navigate(placePath("settings#automation"));
       const until = Date.now() + 3000;
       const press = () => {
         const el = document.getElementById(id);
@@ -401,7 +410,7 @@ export function App() {
       };
       setTimeout(press, 0);
     },
-    [go, say],
+    [navigate, say],
   );
   const paletteActions = useMemo(() => ({ go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy, confirm, flip }), [go, open, refresh, theme, copy, confirm, flip]);
   const [paletteUsed, setPaletteUsed] = useState(false);
@@ -443,7 +452,8 @@ export function App() {
   // "Fix the probe · Queue · Capsid Portal".
   const d = route.drawer;
   const subject = !d ? "" : d.type === "job" ? (feed?.live.jobs.find((j) => j.id === d.id)?.title ?? `Job ${d.id}`) : d.id;
-  const pageTitle = [subject, VIEWS.find((v) => v.id === route.view)?.label, "Capsid Portal"].filter(Boolean).join(" · ");
+  const siteName = route.site ? (feed?.live.sites.find((s) => s.namespace === route.site)?.name ?? route.site) : "";
+  const pageTitle = [subject, siteName, VIEWS.find((v) => v.id === route.view)?.label, "Capsid Portal"].filter(Boolean).join(" · ");
   useEffect(() => {
     document.title = signedOut ? "Signed out · Capsid Portal" : pageTitle;
   }, [pageTitle, signedOut]);

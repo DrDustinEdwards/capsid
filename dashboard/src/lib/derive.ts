@@ -19,13 +19,9 @@ export function hasSites(feed: OpsFeed): boolean {
   return feed.live.sites.some((s) => s.origin !== null);
 }
 
-// The Packages view is on offer only while a package is configured (ops_packages).
-export function hasPackages(feed: OpsFeed): boolean {
-  return feed.live.packages.length > 0;
-}
-
+// A site is named by its namespace: one ops_sites row each, and its page is /sites/<namespace>.
 export function siteKey(s: SiteSnapshot): string {
-  return s.name;
+  return s.namespace;
 }
 
 // Why a site has no Cloudflare numbers. Every state but "ok" is no data, never zero.
@@ -56,6 +52,18 @@ export function cfShort(cf: SiteCloudflare | undefined): string | null {
 
 export function cfOk(s: SiteSnapshot) {
   return s.cloudflare?.state === "ok" ? s.cloudflare : null;
+}
+
+/** The Worker scripts the sites run: each settings row's script, or the one the watcher found
+ *  from the account's custom domains. One site's when a namespace is named. */
+export function siteScripts(feed: OpsFeed, ns?: string): string[] {
+  const out = new Set<string>();
+  for (const r of feed.live.sites) if (r.script && (ns === undefined || r.namespace === ns)) out.add(r.script);
+  for (const s of feed.snapshot?.sites ?? []) {
+    const cf = cfOk(s);
+    if (cf && (ns === undefined || s.namespace === ns)) out.add(cf.script);
+  }
+  return [...out];
 }
 
 // ---- probe ring -------------------------------------------------------------
@@ -163,10 +171,10 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   const sitesOn = hasSites(feed);
   if (!snap) {
     // A warning, not a notice: until the first pass nothing about sites or backups is known.
-    out.push({ sev: "warn", kind: "Watcher", title: "The watcher has not written its first pass yet", sub: "Sites, deploys, errors, backups and CI appear after the first pass", at: ms(live.generated), open: "view:incidents" });
+    out.push({ sev: "warn", kind: "Watcher", title: "The watcher has not written its first pass yet", sub: "Sites, deploys, errors, backups and CI appear after the first pass", at: ms(live.generated), open: "view:health#problems" });
   } else {
     if (passStale(snap, now)) {
-      out.push({ sev: "warn", kind: "Watcher", title: `The last watcher pass is ${age(ms(snap.pass_at), now)} old`, sub: `It runs every ${snap.cadence_min} min; site data is stale after ${2 * snap.cadence_min} min`, at: ms(snap.pass_at), open: "view:incidents" });
+      out.push({ sev: "warn", kind: "Watcher", title: `The last watcher pass is ${age(ms(snap.pass_at), now)} old`, sub: `It runs every ${snap.cadence_min} min; site data is stale after ${2 * snap.cadence_min} min`, at: ms(snap.pass_at), open: "view:health#problems" });
     }
     for (const s of sitesOn ? snap.sites : []) {
       if (s.state === "down" || s.state === "degraded") {
@@ -187,20 +195,20 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
     const h = snap.health;
     if (!h) {
       // A warning, not a notice: an unknown backup is not a quiet fact (audit ruling 3).
-      out.push({ sev: "warn", kind: "Backup", title: "Capsid health was not read on the last pass", sub: "Backup age is unknown", at: ms(snap.pass_at), open: "view:backups" });
+      out.push({ sev: "warn", kind: "Backup", title: "Capsid health was not read on the last pass", sub: "Backup age is unknown", at: ms(snap.pass_at), open: "view:health#backups" });
     } else {
-      if (h.status === "degraded") out.push({ sev: "warn", kind: "Health", title: "Capsid reports degraded health", sub: `store d1 ${h.store.d1}, fts ${h.store.fts} · sha ${h.sha.slice(0, 7)}`, at: ms(snap.pass_at), open: "view:backups" });
+      if (h.status === "degraded") out.push({ sev: "warn", kind: "Health", title: "Capsid reports degraded health", sub: `store d1 ${h.store.d1}, fts ${h.store.fts} · sha ${h.sha.slice(0, 7)}`, at: ms(snap.pass_at), open: "view:health#backups" });
       if (h.backup.warning || !h.backup.last_ok) {
-        out.push({ sev: "crit", kind: "Backup", title: h.backup.warning ?? "No good backup is recorded", sub: h.backup.last_ok ? `last good dump ${ago(ms(h.backup.last_ok), now)}` : "no last_ok", at: h.backup.last_ok ? ms(h.backup.last_ok) : ms(snap.pass_at), open: "view:backups" });
+        out.push({ sev: "crit", kind: "Backup", title: h.backup.warning ?? "No good backup is recorded", sub: h.backup.last_ok ? `last good dump ${ago(ms(h.backup.last_ok), now)}` : "no last_ok", at: h.backup.last_ok ? ms(h.backup.last_ok) : ms(snap.pass_at), open: "view:health#backups" });
       }
     }
     const o = snap.offaccount;
     if (!o) {
-      out.push({ sev: "warn", kind: "Backup", title: "The Amazon backup copy's report was not read on the last pass", sub: "Each site's newest copy is unknown", at: ms(snap.pass_at), open: "view:backups" });
+      out.push({ sev: "warn", kind: "Backup", title: "The Amazon backup copy's report was not read on the last pass", sub: "Each site's newest copy is unknown", at: ms(snap.pass_at), open: "view:health#backups" });
     } else {
       const st = offaccountState(o, now);
       if (st.bad || st.warn) {
-        out.push({ sev: st.bad ? "crit" : "warn", kind: "Backup", title: st.headline, sub: st.detail, at: o.reported_at ? ms(o.reported_at) : ms(snap.pass_at), open: "view:backups" });
+        out.push({ sev: st.bad ? "crit" : "warn", kind: "Backup", title: st.headline, sub: st.detail, at: o.reported_at ? ms(o.reported_at) : ms(snap.pass_at), open: "view:health#backups" });
       }
     }
     for (const c of snap.ci) {
@@ -209,11 +217,11 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       else if (st.red) out.push({ sev: "warn", kind: "CI", title: `${c.namespace} default branch is ${st.label}`, sub: `${c.latest.head_sha.slice(0, 7)} · ${c.latest.status}`, at: ms(c.latest.created_at), open: "view:health#ci" });
     }
     for (const c of snap.checks) {
-      if (c.state === "could-not-run") out.push({ sev: "nodata", kind: "Watcher", title: `Check '${c.id}' could not run on the last pass`, sub: c.findings.join("; "), at: ms(snap.pass_at), open: "view:incidents" });
+      if (c.state === "could-not-run") out.push({ sev: "nodata", kind: "Watcher", title: `Check '${c.id}' could not run on the last pass`, sub: c.findings.join("; "), at: ms(snap.pass_at), open: "view:health#problems" });
     }
     const drift = snap.site_map;
     if (sitesOn && drift && (drift.unmapped.length || drift.unknown.length)) {
-      out.push({ sev: "nodata", kind: "Watcher", title: `Site map drift: ${drift.unmapped.length} unmapped, ${drift.unknown.length} unknown`, sub: [...drift.unmapped, ...drift.unknown].join(", "), at: ms(snap.pass_at), open: "view:incidents" });
+      out.push({ sev: "nodata", kind: "Watcher", title: `Site map drift: ${drift.unmapped.length} unmapped, ${drift.unknown.length} unknown`, sub: [...drift.unmapped, ...drift.unknown].join(", "), at: ms(snap.pass_at), open: "view:health#problems" });
     }
   }
   // The run ledger (src/task-runs.ts): a scheduled task whose newest run threw or was
@@ -221,7 +229,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   // backup is critical, as a stale backup is above. A task with no run yet is shown on
   // Incidents only: after the ledger's first deploy every task starts there.
   if (feed.scheduled.error !== null) {
-    out.push({ sev: "nodata", kind: "Scheduled", title: "The run ledger could not be read", sub: feed.scheduled.error, at: ms(live.generated), open: "view:incidents" });
+    out.push({ sev: "nodata", kind: "Scheduled", title: "The run ledger could not be read", sub: feed.scheduled.error, at: ms(live.generated), open: "view:health#problems" });
   } else {
     for (const t of feed.scheduled.tasks) {
       const last = t.recent[0];
@@ -232,15 +240,15 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
         title: t.flag === "failing" ? `${t.label}: its last run ${TASK_OUTCOME[last.outcome].label.toLowerCase()}` : `${t.label} has not run for ${age(ms(last.finished_at), now)}`,
         sub: last.reason,
         at: ms(last.finished_at),
-        open: "view:incidents",
+        open: "view:health#problems",
       });
     }
   }
   if (!feed.cloudflare_configured) {
-    out.push({ sev: "nodata", kind: "Watcher", title: "Cloudflare read not configured", sub: "Deploy and error columns show no data until it is", at: ms(live.generated), open: "view:deploys" });
+    out.push({ sev: "nodata", kind: "Watcher", title: "Cloudflare read not configured", sub: "Deploy and error columns show no data until it is", at: ms(live.generated), open: "view:sites#deploys" });
   }
   const store = storeAttention(feed);
-  if (store) out.push({ sev: "warn", kind: "Backup", ...store, at: ms(live.generated), open: "view:backups" });
+  if (store) out.push({ sev: "warn", kind: "Backup", ...store, at: ms(live.generated), open: "view:health#backups" });
   const blocked = live.jobs.filter((j) => j.status === "blocked");
   if (blocked.length) {
     out.push({
@@ -266,7 +274,7 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       title: f.headline,
       sub: agent ? "Out of its usual pattern · a finding only, nothing suspended" : (f.evidence[0] ?? "Paused after repeated failures"),
       at: ms(f.last_seen),
-      open: agent ? "view:incidents" : "view:needs#waiting",
+      open: agent ? "view:health#problems" : "view:needs#waiting",
     });
   }
   for (const a of live.awaiting_seat) {
@@ -323,7 +331,7 @@ export const PROBLEM_ROWS = 8;
 
 const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; label: string }> = {
   // The blocked row is already one row (attentionItems); the group gives it children.
-  blocked: { title: (n) => `${n} ${n === 1 ? "job is" : "jobs are"} waiting on you`, view: "queue", label: "Queue" },
+  blocked: { title: (n) => `${n} ${n === 1 ? "job is" : "jobs are"} waiting on you`, view: "queue", label: "Jobs" },
   "pr-seat": { title: (n) => `${n} pull requests await the seat`, view: "prs", label: "Pull requests" },
   silent: { title: (n) => `${n} drivers have been silent for over 7 days`, view: "agents", label: "Agents" },
 };

@@ -1,76 +1,64 @@
-import { Suspense, lazy, useSyncExternalStore, type ReactNode } from "react";
+import { Suspense, lazy, type ReactNode } from "react";
 import { Link } from "../lib/router";
-import { HEALTH_TABS, healthTab, placePath, useApp, type HealthTab } from "../app/ctx";
-import { WAITING_KINDS, attentionGroups, hasSites, type AttentionRow } from "../lib/derive";
+import { HEALTH_TABS, placePath, tabOf, useApp, type HealthTab } from "../app/ctx";
+import { WAITING_KINDS, attentionGroups, siteScripts, type AttentionRow } from "../lib/derive";
 import { St } from "../ui/icons";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Backups } from "./Backups";
 import { DefaultBranches } from "./Ci";
-import { Deploys } from "./Deploys";
-import { Incidents } from "./Incidents";
+import { Incidents, ScheduledTasks } from "./Incidents";
 import { Overview } from "./Overview";
-import { Sites } from "./Sites";
+import { UnownedResources } from "./Workers";
 import { PageHead } from "./shared";
 
-// HEALTH (docs/design/design-portal-evaluation.md section 2, DECIDE 2, ruled 2026-10-09;
-// the UX audit's M1, 2026-10): "is anything broken", answered in one line first. Then the
-// tiles, then one tab at a time: Sites (only while one is configured), Problems (the
-// watcher's findings and the maintenance pass's list), Deploys, Backups and CI's default
-// branches. The tab is in the address (?tab=), so Back, a bookmark and an alert reach it;
-// the one namespace filter (?ns=) narrows every tab and is kept when the tab changes.
+// HEALTH (docs/design/design-portal-evaluation.md section 2; the Portal audit's new map,
+// 2026-11-06): "is anything broken" across everything, answered in one line first. Then the
+// tiles, then one tab at a time: Problems (the watcher's findings and the maintenance pass's
+// list), Backups, CI's default branches, Scheduled tasks, and Cloudflare (the Workers no site
+// owns, and every store). Each site's own state is on its page under Sites. The tab is in the
+// address (?tab=), so Back, a bookmark and an alert reach it; the one namespace filter (?ns=)
+// narrows every tab and is kept when the tab changes.
 
 const Maintenance = lazy(() => import("./Maintenance").then((m) => ({ default: m.Maintenance })));
 
 // The problems the verdict names before it says "and N more".
 const NAMED = 3;
 
-// The address's #fragment, followed as it changes.
-const onHash = (cb: () => void) => (window.addEventListener("hashchange", cb), () => window.removeEventListener("hashchange", cb));
-// The server never sees the fragment, so its render is the bare address.
-const useHash = () => useSyncExternalStore(onHash, () => window.location.hash.slice(1), () => "");
-
 export function Health() {
-  const { feed } = useApp();
-  const param = useTabParam();
-  const hash = useHash();
-  const sitesOn = hasSites(feed);
-  const tabs = HEALTH_TABS.filter((t) => t.id !== "sites" || sitesOn);
-  const first = tabs[0]!.id;
-  // An old section anchor (a bookmark to /health#deploys) names its tab too.
-  const asked = healthTab(param) ?? healthTab(hash);
-  const tab: HealthTab = asked && tabs.some((t) => t.id === asked) ? asked : first;
+  const tab: HealthTab = tabOf(HEALTH_TABS, useTabParam()) ?? HEALTH_TABS[0].id;
   return (
     <div className="page">
       <PageHead title="Health" />
       <Verdict />
       <Overview />
-      <PageTabs label="Health" path="/health" tabs={tabs} current={tab} />
+      <PageTabs label="Health" path="/health" tabs={HEALTH_TABS} current={tab} />
       <div className="embedded" id={tab} data-tab-panel={tab}>
-        {panel(tab)}
+        <TabPanel tab={tab} />
       </div>
     </div>
   );
 }
 
-function panel(tab: HealthTab): ReactNode {
+function TabPanel({ tab }: { tab: HealthTab }): ReactNode {
+  const { feed } = useApp();
   switch (tab) {
-    case "sites":
-      return <Sites embedded />;
     case "problems":
       return (
         <>
-          <Incidents embedded />
+          <Incidents />
           <Suspense fallback={null}>
             <Maintenance />
           </Suspense>
         </>
       );
-    case "deploys":
-      return <Deploys embedded />;
     case "backups":
-      return <Backups embedded />;
+      return <Backups />;
     case "ci":
       return <DefaultBranches />;
+    case "scheduled":
+      return <ScheduledTasks />;
+    case "resources":
+      return <UnownedResources siteScripts={siteScripts(feed)} />;
   }
 }
 

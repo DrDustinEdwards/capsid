@@ -10,14 +10,14 @@ import { Panel } from "capsomer/react/panel";
 import { areaChart } from "enarratio/lite/area";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { useDemo } from "../lib/router";
-import { hasPackages } from "../lib/derive";
 import { Completeness } from "./Completeness";
 import { SharedCode } from "./SharedCode";
-import { Workers } from "./Workers";
+import { PackageForm, type PackageEditing } from "./PackageConfig";
+import { PACKAGE_TABS, tabOf } from "../app/ctx";
 import { NoSnapshot, PageHead } from "./shared";
 
-// The optional Packages panel (capsid/decisions.md, 2026-09-29): one panel per package
-// configured in Settings, as the watcher's last pass read it (src/ops-packages.ts), and
+// The Packages panels (capsid/decisions.md, 2026-09-29): one panel per package configured
+// here, with Add package above them and Edit on each, as the watcher's last pass read it (src/ops-packages.ts), and
 // the daily download history when asked for. Dependents are counts from deps.dev: no
 // public API lists them, so the lists are links to npmjs.com's and deps.dev's pages.
 
@@ -141,11 +141,22 @@ function HistoryPanel({ name }: { name: string }) {
   );
 }
 
-function PackagePanel({ cfg, snap }: { cfg: OpsPackageConfig; snap: PackageSnapshot | null }) {
+function PackagePanel({ cfg, snap, onEdit }: { cfg: OpsPackageConfig; snap: PackageSnapshot | null; onEdit: () => void }) {
   const { now } = useApp();
   const enc = encodeURIComponent(cfg.name);
   return (
-    <Panel flush title={cfg.name} src={snap ? `read ${ago(ms(snap.at), now)}` : "not read yet"}>
+    <Panel
+      flush
+      title={cfg.name}
+      src={
+        <>
+          {snap ? `read ${ago(ms(snap.at), now)} · ` : "not read yet · "}
+          <button type="button" className="btn" aria-label={`Edit ${cfg.name}`} onClick={onEdit}>
+            Edit
+          </button>
+        </>
+      }
+    >
       <div className="body stack-gap" data-package={cfg.name}>
         {!snap ? (
           <p className="faint">The watcher reads this package on its next pass.</p>
@@ -249,22 +260,19 @@ function PackagePanel({ cfg, snap }: { cfg: OpsPackageConfig; snap: PackageSnaps
   );
 }
 
-// One page for one kind of thing (the UX audit's m1): Published, the npm packages configured
-// in Settings (only while one is), and Shared, the git-pinned packages the apps share (what
-// was the Shared code page), Completeness, devkit's scoreboard of every area of that shared code
-// on every live site, and Workers, each Worker's secret names and stores (the secrets and data
-// model). The tab is in the address (?tab=shared); /shared lands there.
+// One page for one kind of thing (the UX audit's m1; the Portal audit's new map, 2026-11-06):
+// Published, the npm packages, added and changed here; Shared, the git-pinned packages the apps
+// share; and Completeness, devkit's scoreboard of every area of that shared code on every live
+// site. Each Worker's secrets and stores are on its site's Setup tab, and those no site owns on
+// Health's Cloudflare tab. The tab is in the address (?tab=shared).
 export function Packages() {
-  const { feed } = useApp();
-  const tabs = [...(hasPackages(feed) ? [{ id: "published", label: "Published" }] : []), { id: "shared", label: "Shared" }, { id: "complete", label: "Completeness" }, { id: "workers", label: "Workers" }];
-  const asked = useTabParam();
-  const tab = tabs.some((t) => t.id === asked) ? asked! : tabs[0]!.id;
+  const tab = tabOf(PACKAGE_TABS, useTabParam()) ?? PACKAGE_TABS[0].id;
   return (
     <div className="page">
       <PageHead title="Packages" />
-      <PageTabs label="Packages" path="/packages" tabs={tabs} current={tab} />
+      <PageTabs label="Packages" path="/packages" tabs={PACKAGE_TABS} current={tab} />
       <div className="embedded" id={tab}>
-        {tab === "shared" ? <SharedCode /> : tab === "complete" ? <Completeness /> : tab === "workers" ? <Workers /> : <Published />}
+        {tab === "shared" ? <SharedCode /> : tab === "complete" ? <Completeness /> : <Published />}
       </div>
     </div>
   );
@@ -272,12 +280,23 @@ export function Packages() {
 
 function Published() {
   const { feed } = useApp();
+  const [editing, setEditing] = useState<PackageEditing | null>(null);
   const byName = new Map((feed.snapshot?.packages ?? []).map((p) => [p.name, p]));
+  const rows = feed.live.packages;
+  // The form is keyed on what it edits, so switching rows starts a fresh draft.
+  const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.row.name}`) : "";
   return (
     <>
-      {!feed.snapshot && <NoSnapshot />}
-      {feed.live.packages.map((cfg) => (
-        <PackagePanel key={cfg.name} cfg={cfg} snap={byName.get(cfg.name) ?? null} />
+      <div className="toolbar">
+        <button type="button" className="btn primary" onClick={() => setEditing({ kind: "add" })} disabled={editing?.kind === "add"}>
+          Add package
+        </button>
+      </div>
+      {editing && <PackageForm key={formKey} editing={editing} onClose={() => setEditing(null)} />}
+      {!rows.length && <div className="callout" role="status">No package is configured yet. Add one to watch its versions, downloads and dependents.</div>}
+      {rows.length > 0 && !feed.snapshot && <NoSnapshot />}
+      {rows.map((cfg) => (
+        <PackagePanel key={cfg.name} cfg={cfg} snap={byName.get(cfg.name) ?? null} onEdit={() => setEditing({ kind: "edit", row: cfg })} />
       ))}
     </>
   );

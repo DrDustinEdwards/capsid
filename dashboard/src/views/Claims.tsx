@@ -9,7 +9,6 @@ import { age, ago, ms } from "../lib/format";
 import { download, toCsv } from "../lib/csv";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { Panel } from "capsomer/react/panel";
-import { PageHead } from "./shared";
 import { byCheck, None, AgreementCounts, totals, counts, wait, JobDetail, AGREEMENTS } from "./ClaimsJob";
 
 // Chart 5, claim against verified per agent, is Enarratio's grouped bar chart, in the same
@@ -21,7 +20,7 @@ type Filter = Record<FilterKey, string>;
 
 // The filters and the open job live in the address (?namespace=&agent=&since=&until=&job=),
 // so a view can be reloaded or shared. The inputs apply on submit.
-export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
+export function Claims() {
   const { feed, now } = useApp();
   const search = useSearch();
   const [, navigate] = useLocation();
@@ -41,11 +40,11 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
   const detail = useAnswer<PortalClaimsJob>(["claims", "job", job], () => fetchClaimsJob(job), { keep: false, enabled: job !== "" });
 
   const go = (next: Filter, nextJob: string) => {
-    // Claims is Agents' tab, so the tab stays in the address beside the filter.
-    const qs = new URLSearchParams({ tab: "claims" });
+    // Checks is Jobs' tab, so the tab stays in the address beside the filter.
+    const qs = new URLSearchParams({ tab: "checks" });
     for (const k of FILTER_KEYS) if (next[k].trim()) qs.set(k, next[k].trim());
     if (nextJob.trim()) qs.set("job", nextJob.trim());
-    navigate(`/agents?${qs}`, { replace: true });
+    navigate(`/queue?${qs}`, { replace: true });
   };
 
   const data = agg.data;
@@ -55,8 +54,7 @@ export function Claims({ embedded = false }: { embedded?: boolean } = {}) {
   const checks = data ? byCheck(data.groups) : [];
 
   return (
-    <div className={embedded ? "embedded" : "page"}>
-      {!embedded && <PageHead title="Claims" />}
+    <div className="embedded">
       <form
         className="toolbar"
         role="search"

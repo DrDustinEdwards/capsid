@@ -369,7 +369,7 @@ export function TimelinePanel({ title, days, src, id, section }: { title: string
   return (
     <Panel flush title={title} src={src} id={id} section={section}>
       {!hasSites(feed) ? (
-        <div className="body faint">No site is configured, so there is no probe to chart. Add one in Settings.</div>
+        <div className="body faint">No site is configured, so there is no probe to chart. Add one on Sites.</div>
       ) : sites.length ? (
         <div className="body">
           <ChartSlot>

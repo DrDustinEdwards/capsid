@@ -253,7 +253,7 @@ test("no alert carries an action, and every alert opens its own item on the Port
   for (const g of s.got) {
     assert.deepEqual(Object.keys(g).sort(), ["body", "tag", "title", "url"], "an alert carried more than title, body, url and tag");
   }
-  assert.deepEqual(s.got.map((g) => g.url).sort(), ["https://portal.dustinedwards.info/health?tab=deploys", "https://portal.dustinedwards.info/prs#pr-owner-foxhound-7"]);
+  assert.deepEqual(s.got.map((g) => g.url).sort(), ["https://portal.dustinedwards.info/prs#pr-owner-foxhound-7", "https://portal.dustinedwards.info/sites/capsid?tab=deploys"]);
 });
 
 test("a job's alert opens its drawer on Jobs", async () => {
