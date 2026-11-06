@@ -35,11 +35,14 @@ export interface OpenApproval {
 }
 
 /** The open approvals on one repo, by pull request number. */
-export async function readOpenApprovals(db: D1Database, repo: string): Promise<Map<number, OpenApproval>> {
+export async function readOpenApprovals(
+  db: D1Database,
+  repo: string,
+): Promise<Map<number, OpenApproval>> {
   const { results } = await db
     .prepare(
       `SELECT id, pr, head_sha, class, approved_by, surface, batch_id, approved_at FROM pr_approvals
-       WHERE repo = ?1 AND status = 'approved'`
+       WHERE repo = ?1 AND status = 'approved'`,
     )
     .bind(repo)
     .all<OpenApproval>();
@@ -67,17 +70,13 @@ async function close(
   status: "voided" | "expired" | "refused" | "merged",
   reason: string,
   now: Date,
-  mergeSha: string | null = null
+  mergeSha: string | null = null,
 ): Promise<boolean> {
   const at = now.toISOString();
   const [moved] = await env.DB.batch([
-    env.DB.prepare(`UPDATE pr_approvals SET status = ?2, closed_at = ?3, close_reason = ?4, merge_sha = ?5 WHERE id = ?1 AND status = 'approved' RETURNING id`).bind(
-      approval.id,
-      status,
-      at,
-      reason,
-      mergeSha
-    ),
+    env.DB.prepare(
+      `UPDATE pr_approvals SET status = ?2, closed_at = ?3, close_reason = ?4, merge_sha = ?5 WHERE id = ?1 AND status = 'approved' RETURNING id`,
+    ).bind(approval.id, status, at, reason, mergeSha),
     systemAudit(env.DB, AUDIT[status], namespace, {
       repo: facts.repo,
       pr: facts.number,
@@ -102,14 +101,20 @@ export async function executeApproval(
   facts: PrFacts,
   classified: Classification | null,
   approval: OpenApproval,
-  now: Date
+  now: Date,
 ): Promise<ExecutorResult> {
-  const end = async (done: "voided" | "expired" | "refused", why: string): Promise<ExecutorResult> => {
+  const end = async (
+    done: "voided" | "expired" | "refused",
+    why: string,
+  ): Promise<ExecutorResult> => {
     await close(env, namespace, approval, facts, done, why, now);
     return { done, why };
   };
   if (facts.headSha !== approval.head_sha) {
-    return end("voided", `new push: approved at ${approval.head_sha.slice(0, 7)}, the head is ${facts.headSha.slice(0, 7)} now`);
+    return end(
+      "voided",
+      `new push: approved at ${approval.head_sha.slice(0, 7)}, the head is ${facts.headSha.slice(0, 7)} now`,
+    );
   }
   if (now.getTime() - Date.parse(approval.approved_at) > APPROVAL_DAYS * DAY_MS) {
     return end("expired", `approved ${APPROVAL_DAYS} days ago or more without merging`);
@@ -122,7 +127,10 @@ export async function executeApproval(
     return end("refused", "head_in_base_repo: the head is not on the base repo");
   }
   if (facts.baseRef !== facts.defaultBranch) {
-    return end("refused", `base_is_default_branch: the base is ${facts.baseRef}, not ${facts.defaultBranch}`);
+    return end(
+      "refused",
+      `base_is_default_branch: the base is ${facts.baseRef}, not ${facts.defaultBranch}`,
+    );
   }
   // A money path is approved only by typing (design section 8). The class is read again
   // from this tick's files, so a pull request that became one since is not merged on an
@@ -134,11 +142,22 @@ export async function executeApproval(
   try {
     // merge_method "merge", as the tick's own merges, so the approved sha stays in history;
     // pinned to it, so a push since this read gets a 409 and nothing merges.
-    const result = (await managePr(env, namespace, facts.number, "merge", "merge", undefined, approval.head_sha)) as { sha?: string };
+    const result = (await managePr(
+      env,
+      namespace,
+      facts.number,
+      "merge",
+      "merge",
+      undefined,
+      approval.head_sha,
+    )) as { sha?: string };
     mergeSha = result.sha ?? null;
   } catch (err) {
     if (!(err instanceof HeadMovedError)) throw err;
-    return end("voided", `head moved: GitHub refused the merge pinned to ${approval.head_sha.slice(0, 7)}`);
+    return end(
+      "voided",
+      `head moved: GitHub refused the merge pinned to ${approval.head_sha.slice(0, 7)}`,
+    );
   }
   const why = `merged on the approval of ${approval.approved_by} (${approval.surface}) at ${approval.head_sha.slice(0, 7)}`;
   await close(env, namespace, approval, facts, "merged", why, now, mergeSha);
@@ -150,8 +169,24 @@ export async function executeApproval(
 export const AUTO_MERGED_APPROVAL_REASON = "the signed policy merged it on its own";
 
 /** A pull request the policy merged on its own: its open approval is closed as merged. */
-export async function closeAsAutoMerged(env: Env, namespace: string, facts: PrFacts, approval: OpenApproval, mergeSha: string | null, now: Date): Promise<void> {
-  await close(env, namespace, approval, facts, "merged", AUTO_MERGED_APPROVAL_REASON, now, mergeSha);
+export async function closeAsAutoMerged(
+  env: Env,
+  namespace: string,
+  facts: PrFacts,
+  approval: OpenApproval,
+  mergeSha: string | null,
+  now: Date,
+): Promise<void> {
+  await close(
+    env,
+    namespace,
+    approval,
+    facts,
+    "merged",
+    AUTO_MERGED_APPROVAL_REASON,
+    now,
+    mergeSha,
+  );
 }
 
 /** Every approval older than 7 days, on any pull request, open or not: expired. The tick
@@ -159,13 +194,27 @@ export async function closeAsAutoMerged(env: Env, namespace: string, facts: PrFa
 export async function expireStaleApprovals(env: Env, now: Date): Promise<number> {
   const at = now.toISOString();
   const { results } = await env.DB.prepare(
-    `UPDATE pr_approvals SET status = 'expired', closed_at = ?1, close_reason = ?2 WHERE status = 'approved' AND approved_at < ?3 RETURNING id, repo, pr, head_sha`
+    `UPDATE pr_approvals SET status = 'expired', closed_at = ?1, close_reason = ?2 WHERE status = 'approved' AND approved_at < ?3 RETURNING id, repo, pr, head_sha`,
   )
-    .bind(at, `approved ${APPROVAL_DAYS} days ago or more without merging`, new Date(now.getTime() - APPROVAL_DAYS * DAY_MS).toISOString())
+    .bind(
+      at,
+      `approved ${APPROVAL_DAYS} days ago or more without merging`,
+      new Date(now.getTime() - APPROVAL_DAYS * DAY_MS).toISOString(),
+    )
     .all<{ id: number; repo: string; pr: number; head_sha: string }>();
   const rows = results ?? [];
   if (rows.length) {
-    await env.DB.batch(rows.map((r) => systemAudit(env.DB, "pr-approval-expired", null, { repo: r.repo, pr: r.pr, approved_sha: r.head_sha, reason: "7 days", at })));
+    await env.DB.batch(
+      rows.map((r) =>
+        systemAudit(env.DB, "pr-approval-expired", null, {
+          repo: r.repo,
+          pr: r.pr,
+          approved_sha: r.head_sha,
+          reason: "7 days",
+          at,
+        }),
+      ),
+    );
   }
   return rows.length;
 }

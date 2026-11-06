@@ -61,7 +61,8 @@ interface SiteRow {
   operator: string | null;
 }
 
-const SITE_COLUMNS = "namespace, name, origin, health_path, platform, script, self_probe, revision, updated_at, operator";
+const SITE_COLUMNS =
+  "namespace, name, origin, health_path, platform, script, self_probe, revision, updated_at, operator";
 
 function configFrom(row: SiteRow): OpsSiteConfig {
   return {
@@ -80,15 +81,22 @@ function configFrom(row: SiteRow): OpsSiteConfig {
 
 /** The stored operator JSON, parsed by the same rules an edit passes. A stored value that
  *  no longer passes (a ceiling tightened since) is not used, and the reason is shown. */
-function operatorFrom(raw: string | null | undefined): Pick<OpsSiteConfig, "operator" | "operator_problem"> {
+function operatorFrom(
+  raw: string | null | undefined,
+): Pick<OpsSiteConfig, "operator" | "operator_problem"> {
   if (raw === null || raw === undefined) return { operator: null, operator_problem: null };
   const parsed = parseOperator(raw);
-  return parsed.ok ? { operator: parsed.operator, operator_problem: null } : { operator: null, operator_problem: parsed.refusal };
+  return parsed.ok
+    ? { operator: parsed.operator, operator_problem: null }
+    : { operator: null, operator_problem: parsed.refusal };
 }
 
 /** Every configured row, sites and no-site declarations, by namespace. */
 export async function readSiteConfig(db: D1Database): Promise<OpsSiteConfig[]> {
-  const { results } = await db.prepare(`SELECT ${SITE_COLUMNS} FROM ops_sites ORDER BY namespace LIMIT ?1`).bind(SITE_ROWS_LIMIT).all<SiteRow>();
+  const { results } = await db
+    .prepare(`SELECT ${SITE_COLUMNS} FROM ops_sites ORDER BY namespace LIMIT ?1`)
+    .bind(SITE_ROWS_LIMIT)
+    .all<SiteRow>();
   return (results ?? []).map(configFrom);
 }
 
@@ -117,13 +125,18 @@ export function sitesFrom(config: readonly OpsSiteConfig[]): OpsSite[] {
  *  a namespace, so it has no repository of its own. */
 function owningNamespace(key: string, registered: readonly string[]): string | null {
   if (registered.includes(key)) return key;
-  const owners = registered.filter((ns) => key.startsWith(ns + "-")).sort((a, b) => b.length - a.length);
+  const owners = registered
+    .filter((ns) => key.startsWith(ns + "-"))
+    .sort((a, b) => b.length - a.length);
   return owners[0] ?? null;
 }
 
 // unmapped: registered, but in no row. unknown: in a row, but neither registered nor a
 // further host of a registered namespace.
-export function siteMapDrift(registered: readonly string[], config: readonly OpsSiteConfig[]): SiteMapDrift {
+export function siteMapDrift(
+  registered: readonly string[],
+  config: readonly OpsSiteConfig[],
+): SiteMapDrift {
   const covered = new Set(config.map((c) => c.namespace));
   return {
     unmapped: registered.filter((ns) => !covered.has(ns)).sort(),
@@ -160,27 +173,35 @@ const LOCAL_SUFFIXES = [".localhost", ".local", ".internal", ".home.arpa"];
 /** A hostname a probe may fetch: lowercase DNS labels, at least two, no IP literal and
  *  no local name. Returns the refusal, or null when it is fine. */
 export function hostnameRefusal(host: string): string | null {
-  if (host.length === 0 || host.length > 253) return `the hostname '${host}' must be 1 to 253 characters.`;
+  if (host.length === 0 || host.length > 253)
+    return `the hostname '${host}' must be 1 to 253 characters.`;
   if (host !== host.toLowerCase()) return `the hostname '${host}' must be lowercase.`;
-  if (host.startsWith("[") || /^[0-9.]+$/.test(host)) return `'${host}' is an IP address; a site is named by its hostname.`;
+  if (host.startsWith("[") || /^[0-9.]+$/.test(host))
+    return `'${host}' is an IP address; a site is named by its hostname.`;
   if (host === "localhost" || LOCAL_SUFFIXES.some((s) => host.endsWith(s))) {
     return `'${host}' is a local name, which a probe from Cloudflare cannot reach.`;
   }
   const labels = host.split(".");
-  if (labels.length < 2) return `'${host}' is a single-label name; a site needs a public hostname such as example.com.`;
+  if (labels.length < 2)
+    return `'${host}' is a single-label name; a site needs a public hostname such as example.com.`;
   for (const label of labels) {
-    if (!LABEL_SHAPE.test(label)) return `'${label}' in '${host}' is not a hostname label: letters, digits and inner hyphens, 1 to 63 characters.`;
+    if (!LABEL_SHAPE.test(label))
+      return `'${label}' in '${host}' is not a hostname label: letters, digits and inner hyphens, 1 to 63 characters.`;
   }
-  if (/^[0-9]+$/.test(labels[labels.length - 1])) return `'${host}' ends in a numeric label, which no public hostname does.`;
+  if (/^[0-9]+$/.test(labels[labels.length - 1]))
+    return `'${host}' ends in a numeric label, which no public hostname does.`;
   return null;
 }
 
 /** The origin as https://host, or the refusal. Nothing but a scheme and a host: no
  *  credentials, no port, no path, no query and no fragment. */
-export function originFrom(raw: string): { ok: true; origin: string } | { ok: false; refusal: string } {
+export function originFrom(
+  raw: string,
+): { ok: true; origin: string } | { ok: false; refusal: string } {
   const match = /^https:\/\/([^/?#@:]+)\/?$/.exec(raw);
   if (!match) {
-    if (!/^https:\/\//i.test(raw)) return { ok: false, refusal: `the origin must start with https://; got '${raw}'.` };
+    if (!/^https:\/\//i.test(raw))
+      return { ok: false, refusal: `the origin must start with https://; got '${raw}'.` };
     return {
       ok: false,
       refusal: `the origin is https:// and a hostname only, with no user, port, path, query or fragment; put a health route in the health path. Got '${raw}'.`,
@@ -219,10 +240,12 @@ export function healthUrl(origin: string, healthPath: string): string {
 export function validateSite(p: Record<string, string | undefined>): Validated {
   const refuse = (refusal: string): Validated => ({ ok: false, refusal });
   const namespace = p.namespace ?? "";
-  if (!NAMESPACE_SHAPE.test(namespace)) return refuse(`'${namespace}' is not a namespace name: lowercase letters, digits and hyphens.`);
+  if (!NAMESPACE_SHAPE.test(namespace))
+    return refuse(`'${namespace}' is not a namespace name: lowercase letters, digits and hyphens.`);
   const name = p.name ?? namespace;
   // oxlint-disable-next-line no-control-regex -- refusing control characters is the point
-  if (name.length > NAME_MAX || /[\u0000-\u001f\u007f]/.test(name)) return refuse(`the name must be at most ${NAME_MAX} characters with no control characters.`);
+  if (name.length > NAME_MAX || /[\u0000-\u001f\u007f]/.test(name))
+    return refuse(`the name must be at most ${NAME_MAX} characters with no control characters.`);
 
   // operator: absent leaves an edit's stored value alone, "none" clears it, anything else
   // is the JSON, checked whole and stored in its normalized form.
@@ -237,14 +260,29 @@ export function validateSite(p: Record<string, string | undefined>): Validated {
   if (!p.origin) {
     if (operator) return refuse("a namespace that serves no site has no operator API.");
     if (p.health_path || p.platform || p.script) {
-      return refuse("a namespace that serves no site takes no health path, platform or script. Give an origin to make it a site.");
+      return refuse(
+        "a namespace that serves no site takes no health path, platform or script. Give an origin to make it a site.",
+      );
     }
-    return { ok: true, site: { namespace, name, origin: null, health_path: null, platform: null, script: null, operator: null } };
+    return {
+      ok: true,
+      site: {
+        namespace,
+        name,
+        origin: null,
+        health_path: null,
+        platform: null,
+        script: null,
+        operator: null,
+      },
+    };
   }
   const origin = originFrom(p.origin);
   if (!origin.ok) return refuse(origin.refusal);
   if (!p.platform || !(SITE_PLATFORMS as readonly string[]).includes(p.platform)) {
-    return refuse(`the platform must be one of ${SITE_PLATFORMS.join(", ")}; got '${p.platform ?? ""}'.`);
+    return refuse(
+      `the platform must be one of ${SITE_PLATFORMS.join(", ")}; got '${p.platform ?? ""}'.`,
+    );
   }
   const platform = p.platform as SitePlatform;
   if (p.health_path) {
@@ -253,18 +291,33 @@ export function validateSite(p: Record<string, string | undefined>): Validated {
   }
   if (p.script) {
     if (platform !== "cloudflare") return refuse("only a Cloudflare site names a Worker script.");
-    if (!SCRIPT_SHAPE.test(p.script)) return refuse(`'${p.script}' is not a Worker script name: lowercase letters, digits, - and _.`);
+    if (!SCRIPT_SHAPE.test(p.script))
+      return refuse(
+        `'${p.script}' is not a Worker script name: lowercase letters, digits, - and _.`,
+      );
   }
   return {
     ok: true,
-    site: { namespace, name, origin: origin.origin, health_path: p.health_path ?? null, platform, script: p.script ?? null, ...(operator !== undefined ? { operator } : {}) },
+    site: {
+      namespace,
+      name,
+      origin: origin.origin,
+      health_path: p.health_path ?? null,
+      platform,
+      script: p.script ?? null,
+      ...(operator !== undefined ? { operator } : {}),
+    },
   };
 }
 
 /** One line for a preview: what the row is. */
-export function describeSite(site: Pick<SiteInput, "origin" | "health_path" | "platform" | "script" | "name">): string {
+export function describeSite(
+  site: Pick<SiteInput, "origin" | "health_path" | "platform" | "script" | "name">,
+): string {
   if (site.origin === null) return `"${site.name}", serves no site (not probed)`;
-  const probe = site.health_path ? healthUrl(site.origin, site.health_path) : `${site.origin}/ (no health route, so the root)`;
+  const probe = site.health_path
+    ? healthUrl(site.origin, site.health_path)
+    : `${site.origin}/ (no health route, so the root)`;
   return `"${site.name}", probed at ${probe}, on ${site.platform}${site.script ? `, Worker script ${site.script}` : ""}`;
 }
 
@@ -273,8 +326,14 @@ export function describeSite(site: Pick<SiteInput, "origin" | "health_path" | "p
 export type SiteResult = { ok: true; site: OpsSiteConfig } | { ok: false; refusal: string };
 
 /** One row, or null. */
-export async function readSiteRow(db: D1Database, namespace: string): Promise<OpsSiteConfig | null> {
-  const row = await db.prepare(`SELECT ${SITE_COLUMNS} FROM ops_sites WHERE namespace = ?1`).bind(namespace).first<SiteRow>();
+export async function readSiteRow(
+  db: D1Database,
+  namespace: string,
+): Promise<OpsSiteConfig | null> {
+  const row = await db
+    .prepare(`SELECT ${SITE_COLUMNS} FROM ops_sites WHERE namespace = ?1`)
+    .bind(namespace)
+    .first<SiteRow>();
   return row ? configFrom(row) : null;
 }
 
@@ -283,44 +342,87 @@ export async function addSite(db: D1Database, actor: string, site: SiteInput): P
   const won = await db
     .prepare(
       `INSERT INTO ops_sites (namespace, name, origin, health_path, platform, script, operator)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(namespace) DO NOTHING RETURNING namespace`
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(namespace) DO NOTHING RETURNING namespace`,
     )
-    .bind(site.namespace, site.name, site.origin, site.health_path, site.platform, site.script, site.operator ?? null)
+    .bind(
+      site.namespace,
+      site.name,
+      site.origin,
+      site.health_path,
+      site.platform,
+      site.script,
+      site.operator ?? null,
+    )
     .first<{ namespace: string }>();
   if (!won) return { ok: false, refusal: `${site.namespace} already has a row. Edit it instead.` };
   const after = await readSiteRow(db, site.namespace);
-  if (!after) return { ok: false, refusal: `${site.namespace} was added and then removed before it could be read back.` };
+  if (!after)
+    return {
+      ok: false,
+      refusal: `${site.namespace} was added and then removed before it could be read back.`,
+    };
   await db.batch([auditStatement(db, actor, "ops-site-added", site.namespace, null, { after })]);
   return { ok: true, site: after };
 }
 
 /** Replace a row's fields, only if it is still at `revision`. An origin change clears
  *  the in-process probe, which is right for Capsid's own origin only. */
-export async function editSite(db: D1Database, actor: string, site: SiteInput, revision: number): Promise<SiteResult> {
+export async function editSite(
+  db: D1Database,
+  actor: string,
+  site: SiteInput,
+  revision: number,
+): Promise<SiteResult> {
   const before = await readSiteRow(db, site.namespace);
-  if (!before) return { ok: false, refusal: `${site.namespace} has no row to edit. Add it instead.` };
+  if (!before)
+    return { ok: false, refusal: `${site.namespace} has no row to edit. Add it instead.` };
   const selfProbe = before.self_probe && before.origin === site.origin ? 1 : 0;
   const won = await db
     .prepare(
       `UPDATE ops_sites SET name = ?3, origin = ?4, health_path = ?5, platform = ?6, script = ?7, self_probe = ?8,
          operator = CASE WHEN ?9 = 1 THEN ?10 ELSE operator END,
          revision = revision + 1, updated_at = datetime('now')
-       WHERE namespace = ?1 AND revision = ?2 RETURNING revision`
+       WHERE namespace = ?1 AND revision = ?2 RETURNING revision`,
     )
-    .bind(site.namespace, revision, site.name, site.origin, site.health_path, site.platform, site.script, selfProbe, site.operator === undefined ? 0 : 1, site.operator ?? null)
+    .bind(
+      site.namespace,
+      revision,
+      site.name,
+      site.origin,
+      site.health_path,
+      site.platform,
+      site.script,
+      selfProbe,
+      site.operator === undefined ? 0 : 1,
+      site.operator ?? null,
+    )
     .first<{ revision: number }>();
   if (!won) {
-    return { ok: false, refusal: `${site.namespace} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.` };
+    return {
+      ok: false,
+      refusal: `${site.namespace} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.`,
+    };
   }
   const after = await readSiteRow(db, site.namespace);
-  if (!after) return { ok: false, refusal: `${site.namespace} was edited and then removed before it could be read back.` };
-  await db.batch([auditStatement(db, actor, "ops-site-edited", site.namespace, null, { before, after })]);
+  if (!after)
+    return {
+      ok: false,
+      refusal: `${site.namespace} was edited and then removed before it could be read back.`,
+    };
+  await db.batch([
+    auditStatement(db, actor, "ops-site-edited", site.namespace, null, { before, after }),
+  ]);
   return { ok: true, site: after };
 }
 
 /** Remove a row, only if it is still at `revision`. The prior row goes in the audit
  *  row, which is the only copy afterwards outside the nightly dump. */
-export async function removeSite(db: D1Database, actor: string, namespace: string, revision: number): Promise<SiteResult> {
+export async function removeSite(
+  db: D1Database,
+  actor: string,
+  namespace: string,
+  revision: number,
+): Promise<SiteResult> {
   const before = await readSiteRow(db, namespace);
   if (!before) return { ok: false, refusal: `${namespace} has no row to remove.` };
   const won = await db
@@ -328,7 +430,10 @@ export async function removeSite(db: D1Database, actor: string, namespace: strin
     .bind(namespace, revision)
     .first<{ namespace: string }>();
   if (!won) {
-    return { ok: false, refusal: `${namespace} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.` };
+    return {
+      ok: false,
+      refusal: `${namespace} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.`,
+    };
   }
   await db.batch([auditStatement(db, actor, "ops-site-removed", namespace, null, { before })]);
   return { ok: true, site: before };

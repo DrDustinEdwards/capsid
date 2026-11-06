@@ -73,7 +73,12 @@ export interface JobOutcomeRow {
 // A job's telemetry totals, as the outcome row stores them.
 export type JobUsage = Pick<
   JobOutcomeRow,
-  "cost_usd" | "tokens_input" | "tokens_output" | "tokens_cache_read" | "tokens_cache_creation" | "active_seconds"
+  | "cost_usd"
+  | "tokens_input"
+  | "tokens_output"
+  | "tokens_cache_read"
+  | "tokens_cache_creation"
+  | "active_seconds"
 >;
 
 const NO_USAGE: JobUsage = {
@@ -85,7 +90,10 @@ const NO_USAGE: JobUsage = {
   active_seconds: null,
 };
 
-const TOKEN_COLUMN: Record<string, "tokens_input" | "tokens_output" | "tokens_cache_read" | "tokens_cache_creation"> = {
+const TOKEN_COLUMN: Record<
+  string,
+  "tokens_input" | "tokens_output" | "tokens_cache_read" | "tokens_cache_creation"
+> = {
   input: "tokens_input",
   output: "tokens_output",
   cacheRead: "tokens_cache_read",
@@ -98,7 +106,9 @@ const TOKEN_COLUMN: Record<string, "tokens_input" | "tokens_output" | "tokens_ca
  * (nothing was reported); once a family has a row, a type it lacks is 0, because
  * Claude Code exports no point for a counter that did not move.
  */
-export function usageFromTotals(rows: ReadonlyArray<{ metric: string; kind: string; total: number | null }>): JobUsage {
+export function usageFromTotals(
+  rows: ReadonlyArray<{ metric: string; kind: string; total: number | null }>,
+): JobUsage {
   const usage: JobUsage = { ...NO_USAGE };
   const families = new Set(rows.map((r) => r.metric));
   if (families.has("claude_code.cost.usage")) usage.cost_usd = 0;
@@ -110,7 +120,8 @@ export function usageFromTotals(rows: ReadonlyArray<{ metric: string; kind: stri
     const total = Number(row.total ?? 0);
     if (!Number.isFinite(total)) continue;
     if (row.metric === "claude_code.cost.usage") usage.cost_usd = (usage.cost_usd ?? 0) + total;
-    else if (row.metric === "claude_code.active_time.total") usage.active_seconds = (usage.active_seconds ?? 0) + total;
+    else if (row.metric === "claude_code.active_time.total")
+      usage.active_seconds = (usage.active_seconds ?? 0) + total;
     else if (row.metric === "claude_code.token.usage" && Object.hasOwn(TOKEN_COLUMN, row.kind)) {
       const column = TOKEN_COLUMN[row.kind];
       usage[column] = (usage[column] ?? 0) + total;
@@ -130,7 +141,7 @@ export async function readJobUsage(db: D1Database, jobId: string): Promise<JobUs
     .prepare(
       `SELECT metric, kind, SUM(value) AS total FROM session_usage
        WHERE job_id = ?1 AND metric IN ('claude_code.cost.usage', 'claude_code.token.usage', 'claude_code.active_time.total')
-       GROUP BY metric, kind`
+       GROUP BY metric, kind`,
     )
     .bind(jobId)
     .all<{ metric: string; kind: string; total: number | null }>();
@@ -204,7 +215,12 @@ export interface EvidenceVerdict {
   // it; merged has an entry only for a pull request that was read.
   github?: GitHubFacts;
   // The driver's numbers as sent, before any of them was replaced by GitHub's.
-  reported?: { prs: string[] | null; commits: number | null; files_changed: number | null; tests_added: number | null };
+  reported?: {
+    prs: string[] | null;
+    commits: number | null;
+    files_changed: number | null;
+    tests_added: number | null;
+  };
 }
 
 export interface GitHubFacts {
@@ -219,7 +235,8 @@ export interface GitHubFacts {
 
 export async function prFacts(env: Env, namespace: string, url: string): Promise<PrFacts | string> {
   const parsed = parsePrUrl(url);
-  if (!parsed) return `${url} is not a GitHub pull request URL, so nothing could be verified about it`;
+  if (!parsed)
+    return `${url} is not a GitHub pull request URL, so nothing could be verified about it`;
   const { owner, repo, number } = parsed;
   // Resolved through the namespace mapping, the authorization boundary, so the
   // outcome recorder cannot read a repo the namespace does not map.
@@ -230,9 +247,21 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
     return `${url}: ${err instanceof Error ? err.message : String(err)}`;
   }
   // Caught too: verifyEvidence promises its callers a note, never a throw.
-  let pr: { merged?: boolean; commits?: number; changed_files?: number; head?: { sha?: string }; node_id?: string; created_at?: string };
+  let pr: {
+    merged?: boolean;
+    commits?: number;
+    changed_files?: number;
+    head?: { sha?: string };
+    node_id?: string;
+    created_at?: string;
+  };
   try {
-    const resp = await ghFetch(env, resolved.owner, resolved.repo, `/repos/${resolved.owner}/${resolved.repo}/pulls/${number}`);
+    const resp = await ghFetch(
+      env,
+      resolved.owner,
+      resolved.repo,
+      `/repos/${resolved.owner}/${resolved.repo}/pulls/${number}`,
+    );
     if (!resp.ok) return `${url}: GitHub answered ${resp.status}, so its state could not be read`;
     pr = (await resp.json()) as typeof pr;
   } catch (err) {
@@ -254,19 +283,38 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
 // `neutral` do not fail, since a paths filter that excluded the change did not judge it.
 const NOT_A_FAILURE = new Set(["success", "skipped", "neutral"]);
 
-async function ciGreenForSha(env: Env, namespace: string, sha: string, repo: string): Promise<{ green: boolean | null; note?: string }> {
-  if (!sha) return { green: null, note: "the pull request carried no head sha, so CI could not be looked up" };
+async function ciGreenForSha(
+  env: Env,
+  namespace: string,
+  sha: string,
+  repo: string,
+): Promise<{ green: boolean | null; note?: string }> {
+  if (!sha)
+    return {
+      green: null,
+      note: "the pull request carried no head sha, so CI could not be looked up",
+    };
   let status;
   try {
     // The repo the pull request is on, not the namespace primary.
     status = await ciStatus(env, namespace, repo, { ref: sha, limit: 20 });
   } catch (err) {
-    return { green: null, note: `CI could not be read for ${sha.slice(0, 7)}: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      green: null,
+      note: `CI could not be read for ${sha.slice(0, 7)}: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   const runs = status.runs ?? [];
-  if (runs.length === 0) return { green: null, note: `no workflow runs for ${sha.slice(0, 7)}, so CI has nothing to say about it` };
+  if (runs.length === 0)
+    return {
+      green: null,
+      note: `no workflow runs for ${sha.slice(0, 7)}, so CI has nothing to say about it`,
+    };
   if (runs.some((r) => r.status !== "completed")) {
-    return { green: null, note: `CI for ${sha.slice(0, 7)} has not finished, so it is neither green nor red yet` };
+    return {
+      green: null,
+      note: `CI for ${sha.slice(0, 7)} has not finished, so it is neither green nor red yet`,
+    };
   }
   return { green: runs.every((r) => NOT_A_FAILURE.has(r.conclusion ?? "")) };
 }
@@ -277,7 +325,9 @@ async function ciGreenForSha(env: Env, namespace: string, sha: string, repo: str
 // never silently discarded.
 export type EvidenceInput = JobEvidence | string | undefined;
 
-export function parseEvidence(input: EvidenceInput): { evidence: JobEvidence | undefined } | { error: string } {
+export function parseEvidence(
+  input: EvidenceInput,
+): { evidence: JobEvidence | undefined } | { error: string } {
   if (input === undefined) return { evidence: undefined };
   if (typeof input !== "string") return { evidence: input };
   const text = input.trim();
@@ -289,7 +339,9 @@ export function parseEvidence(input: EvidenceInput): { evidence: JobEvidence | u
     return { error: `evidence was sent as a string that is not JSON: ${text.slice(0, 120)}` };
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { error: "evidence parsed to something that is not an object, so there are no fields to read." };
+    return {
+      error: "evidence parsed to something that is not an object, so there are no fields to read.",
+    };
   }
   const row = parsed as Record<string, unknown>;
   const num = (key: string): number | undefined => {
@@ -299,7 +351,9 @@ export function parseEvidence(input: EvidenceInput): { evidence: JobEvidence | u
     // Dropped rather than coerced: a stored 0 would read as counted and found none.
     return Number.isInteger(n) && n >= 0 ? n : undefined;
   };
-  const prs = Array.isArray(row.prs) ? row.prs.filter((p): p is string => typeof p === "string") : undefined;
+  const prs = Array.isArray(row.prs)
+    ? row.prs.filter((p): p is string => typeof p === "string")
+    : undefined;
   return {
     evidence: {
       ...(prs && prs.length > 0 ? { prs } : {}),
@@ -315,9 +369,15 @@ export function parseEvidence(input: EvidenceInput): { evidence: JobEvidence | u
 // took, or a driver that left evidence out) named its pull request all the same, and
 // GitHub, not the sender, is the authority on it (job_d5262df1dc32). Deduplicated, in
 // order, so the pull request named twice is read and counted once.
-export function namedPrUrls(evidence: JobEvidence | undefined, resultRef: string | null | undefined): string[] {
+export function namedPrUrls(
+  evidence: JobEvidence | undefined,
+  resultRef: string | null | undefined,
+): string[] {
   const urls: string[] = [];
-  for (const url of [...(evidence?.prs ?? []), ...(parsePrUrl(resultRef) ? [resultRef!.trim()] : [])]) {
+  for (const url of [
+    ...(evidence?.prs ?? []),
+    ...(parsePrUrl(resultRef) ? [resultRef!.trim()] : []),
+  ]) {
     if (!urls.includes(url)) urls.push(url);
   }
   return urls;
@@ -332,7 +392,7 @@ export async function verifyEvidence(
   env: Env,
   namespace: string,
   evidence: JobEvidence | undefined,
-  resultRef?: string | null
+  resultRef?: string | null,
 ): Promise<EvidenceVerdict> {
   const reported = {
     commits: evidence?.commits ?? null,
@@ -349,7 +409,10 @@ export async function verifyEvidence(
     verified: { ...NOTHING_VERIFIED },
     notes: [],
     github,
-    reported: { prs: evidence?.prs && evidence.prs.length > 0 ? [...evidence.prs] : null, ...reported },
+    reported: {
+      prs: evidence?.prs && evidence.prs.length > 0 ? [...evidence.prs] : null,
+      ...reported,
+    },
   };
   if (urls.length === 0) return verdict;
 
@@ -364,7 +427,9 @@ export async function verifyEvidence(
     }
   }
   verdict.pr_states = Object.fromEntries([...read].map(([url, f]) => [url, f.merged]));
-  verdict.pr_identity = Object.fromEntries([...read].map(([url, f]) => [url, { node_id: f.node_id, created_at: f.created_at }]));
+  verdict.pr_identity = Object.fromEntries(
+    [...read].map(([url, f]) => [url, { node_id: f.node_id, created_at: f.created_at }]),
+  );
   github.merged = { ...verdict.pr_states };
 
   // A partly read list keeps what was read. prs_merged counts the pull requests that
@@ -379,13 +444,15 @@ export async function verifyEvidence(
       verdict.verified.prs_merged = true;
     }
     verdict.notes.push(
-      `${facts.length} of ${urls.length} named pull requests could be read. prs_merged counts the ${facts.length} read and is verified; prs_opened, commits and files_changed stay the driver's and unverified, and the run is not judged.`
+      `${facts.length} of ${urls.length} named pull requests could be read. prs_merged counts the ${facts.length} read and is verified; prs_opened, commits and files_changed stay the driver's and unverified, and the run is not judged.`,
     );
     // CI on the last named pull request, when that one was read.
     const lastUrl = urls[urls.length - 1];
     const lastRead = read.get(lastUrl);
     if (!lastRead) {
-      verdict.notes.push(`the last named pull request (${lastUrl}) could not be read, so CI was not looked up`);
+      verdict.notes.push(
+        `the last named pull request (${lastUrl}) could not be read, so CI was not looked up`,
+      );
       return verdict;
     }
     const partialCi = await ciGreenForSha(env, namespace, lastRead.head_sha, lastRead.repo);
@@ -423,7 +490,13 @@ export async function verifyEvidence(
 
 // usage: the job's telemetry totals (readJobUsage). Omitted is no telemetry: NULL.
 // actualModel: the model_id the session reported in its claim, or null when it reported none.
-export function outcomeFrom(job: JobRow, verdict: EvidenceVerdict, now: Date, usage: JobUsage = NO_USAGE, actualModel: string | null = null): JobOutcomeRow {
+export function outcomeFrom(
+  job: JobRow,
+  verdict: EvidenceVerdict,
+  now: Date,
+  usage: JobUsage = NO_USAGE,
+  actualModel: string | null = null,
+): JobOutcomeRow {
   return {
     job_id: job.id,
     // Copied, not joined, because a release clears claimed_by.
@@ -464,7 +537,7 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
          recorded_at, cost_usd, tokens_input, tokens_output,
          tokens_cache_read, tokens_cache_creation, active_seconds, job_kind, model_chosen, model_actual)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
-       ON CONFLICT(job_id) DO NOTHING`
+       ON CONFLICT(job_id) DO NOTHING`,
     )
     .bind(
       row.job_id,
@@ -490,6 +563,6 @@ export function outcomeStatement(db: D1Database, row: JobOutcomeRow) {
       row.active_seconds,
       row.job_kind ?? null,
       row.model_chosen ?? null,
-      row.model_actual ?? null
+      row.model_actual ?? null,
     );
 }

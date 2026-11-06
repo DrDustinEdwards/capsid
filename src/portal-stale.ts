@@ -15,10 +15,21 @@ import { staleJobs } from "./stale-jobs";
 export const PORTAL_STALE_PATH = "/portal/api/stale";
 
 /** GET /portal/api/stale: the jobs that look stuck, each with its rule and reason. */
-export async function handlePortalStale(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalStale(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const read = await staleJobs(env, now);
-  const body: PortalStale = { generated: now.toISOString(), rows: read.rows, truncated: read.truncated, note: read.note ?? null };
-  return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  const body: PortalStale = {
+    generated: now.toISOString(),
+    rows: read.rows,
+    truncated: read.truncated,
+    note: read.note ?? null,
+  };
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }

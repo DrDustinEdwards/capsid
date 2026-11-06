@@ -27,7 +27,12 @@ export function repoGuards(ctx: ToolCtx) {
 
   // The read tools' wrapper: resolve, check the axis, then run. Reads are open to any
   // admitted client by grant, and the axis is what says WHICH repo they may read.
-  const guardedRead = async (op: string, namespace: string, selector: string | undefined, fn: () => Promise<unknown>) => {
+  const guardedRead = async (
+    op: string,
+    namespace: string,
+    selector: string | undefined,
+    fn: () => Promise<unknown>,
+  ) => {
     try {
       const { refusal } = await scopedRepo(op, namespace, selector);
       if (refusal) return fail(refusal);
@@ -49,7 +54,12 @@ export function repoGuards(ctx: ToolCtx) {
     // registrar has already checked the tool, the grant, the namespace and the repo
     // selector by now; a wrapper could not have checked these, because a forced branch
     // delete needs can_merge and a plain one does not.
-    intent: { action?: string; force?: boolean; repo?: string; surface?: { tool: string; action?: string } } = {}
+    intent: {
+      action?: string;
+      force?: boolean;
+      repo?: string;
+      surface?: { tool: string; action?: string };
+    } = {},
   ) => {
     // Every repo mutation passes through here, so the flag check is here and not in
     // each tool. test/blast-radius.test.ts derives that no repo write tool reaches
@@ -91,7 +101,13 @@ export function repoGuards(ctx: ToolCtx) {
     try {
       await auditStatement(db, actor, action, namespace, path, result).run();
     } catch (err) {
-      logEvent("AUDIT_INSERT_FAILED", { message: `AUDIT_INSERT_FAILED ${action} ${namespace}/${path ?? ""}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+      logEvent(
+        "AUDIT_INSERT_FAILED",
+        {
+          message: `AUDIT_INSERT_FAILED ${action} ${namespace}/${path ?? ""}: ${err instanceof Error ? err.message : String(err)}`,
+        },
+        { level: "error" },
+      );
       return ok({
         ...result,
         audit_warning:

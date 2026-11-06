@@ -46,8 +46,16 @@ function Display() {
           <ThemeSwitch prefKey={THEME_PREF} />
         </div>
         <div className="prefrow">
-          <Switch id="display-single-keys" label="Single-key shortcuts" checked={singleKeys} onCheckedChange={setSingleKeys} />
-          <span className="faint">g then a letter, j, k, r, t and the rest. Turn them off if they clash with a screen reader.</span>
+          <Switch
+            id="display-single-keys"
+            label="Single-key shortcuts"
+            checked={singleKeys}
+            onCheckedChange={setSingleKeys}
+          />
+          <span className="faint">
+            g then a letter, j, k, r, t and the rest. Turn them off if they clash with a screen
+            reader.
+          </span>
         </div>
       </div>
     </Panel>

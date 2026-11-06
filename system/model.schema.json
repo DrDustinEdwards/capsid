@@ -33,21 +33,11 @@
           },
           "family": {
             "type": "string",
-            "enum": [
-              "system",
-              "writing",
-              "product",
-              "plumbing",
-              "site"
-            ]
+            "enum": ["system", "writing", "product", "plumbing", "site"]
           },
           "ring": {
             "type": "string",
-            "enum": [
-              "core",
-              "shared",
-              "used"
-            ]
+            "enum": ["core", "shared", "used"]
           },
           "description": {
             "type": "string",
@@ -89,14 +79,7 @@
             }
           }
         },
-        "required": [
-          "id",
-          "name",
-          "short",
-          "family",
-          "ring",
-          "repos"
-        ],
+        "required": ["id", "name", "short", "family", "ring", "repos"],
         "additionalProperties": false
       }
     },
@@ -145,13 +128,7 @@
             "maxLength": 280
           }
         },
-        "required": [
-          "id",
-          "system",
-          "name",
-          "kind",
-          "technology"
-        ],
+        "required": ["id", "system", "name", "kind", "technology"],
         "additionalProperties": false
       }
     },
@@ -189,11 +166,7 @@
             "maxLength": 280
           }
         },
-        "required": [
-          "from",
-          "to",
-          "kind"
-        ],
+        "required": ["from", "to", "kind"],
         "additionalProperties": false
       }
     },
@@ -267,22 +240,12 @@
                   }
                 }
               },
-              "required": [
-                "from",
-                "kind",
-                "to",
-                "toward",
-                "text"
-              ],
+              "required": ["from", "kind", "to", "toward", "text"],
               "additionalProperties": false
             }
           }
         },
-        "required": [
-          "id",
-          "name",
-          "steps"
-        ],
+        "required": ["id", "name", "steps"],
         "additionalProperties": false
       }
     },
@@ -310,19 +273,11 @@
             }
           }
         },
-        "required": [
-          "repo",
-          "why"
-        ],
+        "required": ["repo", "why"],
         "additionalProperties": false
       }
     }
   },
-  "required": [
-    "version",
-    "systems",
-    "containers",
-    "relationships"
-  ],
+  "required": ["version", "systems", "containers", "relationships"],
   "additionalProperties": false
 }

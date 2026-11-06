@@ -13,21 +13,36 @@ const KEEP_SECONDS = 7 * 86_400;
 export type StoredSecrets = NonNullable<ConvergenceSite["secrets"]> & { read_at: string };
 
 /** Each expected name, set or not, then any name the Worker has that nobody expected. */
-export function secretPresence(expected: readonly string[], listed: readonly string[]): SecretPresence[] {
+export function secretPresence(
+  expected: readonly string[],
+  listed: readonly string[],
+): SecretPresence[] {
   const have = new Set(listed);
   const want = new Set(expected);
   return [
     ...expected.map((name) => ({ name, set: have.has(name), expected: true })),
-    ...[...have].filter((name) => !want.has(name)).sort().map((name) => ({ name, set: true, expected: false })),
+    ...[...have]
+      .filter((name) => !want.has(name))
+      .sort()
+      .map((name) => ({ name, set: true, expected: false })),
   ];
 }
 
-export async function storeSecrets(env: Pick<Env, "APP_KV">, namespace: string, value: StoredSecrets): Promise<void> {
-  await env.APP_KV.put(KEY_PREFIX + namespace, JSON.stringify(value), { expirationTtl: KEEP_SECONDS });
+export async function storeSecrets(
+  env: Pick<Env, "APP_KV">,
+  namespace: string,
+  value: StoredSecrets,
+): Promise<void> {
+  await env.APP_KV.put(KEY_PREFIX + namespace, JSON.stringify(value), {
+    expirationTtl: KEEP_SECONDS,
+  });
 }
 
 /** What the last pass stored, or null when no pass has read it. */
-export async function readStoredSecrets(env: Pick<Env, "APP_KV">, namespace: string): Promise<StoredSecrets | null> {
+export async function readStoredSecrets(
+  env: Pick<Env, "APP_KV">,
+  namespace: string,
+): Promise<StoredSecrets | null> {
   const raw = await env.APP_KV.get(KEY_PREFIX + namespace);
   if (!raw) return null;
   try {

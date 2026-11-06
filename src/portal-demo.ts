@@ -26,16 +26,25 @@ export function isDemoRequest(url: URL): boolean {
   return isPortalHost(url) && (url.pathname === DEMO_PATH || url.pathname.startsWith(DEMO_PREFIX));
 }
 
-export async function handlePortalDemo(request: Request, env: Env, render = renderDemoPage): Promise<Response> {
-  if (request.method !== "GET" && request.method !== "HEAD") return text("method not allowed: the demo is read only.", 405, { Allow: "GET, HEAD" });
+export async function handlePortalDemo(
+  request: Request,
+  env: Env,
+  render = renderDemoPage,
+): Promise<Response> {
+  if (request.method !== "GET" && request.method !== "HEAD")
+    return text("method not allowed: the demo is read only.", 405, { Allow: "GET, HEAD" });
   const assets = env.ASSETS;
-  if (!assets) return text("The Portal's demo is not deployed: this Worker has no ASSETS binding.", 503);
+  if (!assets)
+    return text("The Portal's demo is not deployed: this Worker has no ASSETS binding.", 503);
   const { pathname } = new URL(request.url);
   if (NOT_SERVED.has(pathname)) return text("not found", 404);
 
   // A captured answer is a file; every other address is a page.
   if (pathname.startsWith(`${DEMO_PREFIX}api/`)) {
-    return serveFile(assets, pathname, request.method, { "X-Robots-Tag": "noindex", "Cache-Control": "no-store" });
+    return serveFile(assets, pathname, request.method, {
+      "X-Robots-Tag": "noindex",
+      "Cache-Control": "no-store",
+    });
   }
 
   const csp = dashboardCsp();

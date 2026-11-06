@@ -20,13 +20,20 @@ const DAY_MS = 86_400_000;
  *  bare date (the trends' days, 2026-09-18) moves by as many whole days too: the mock makes those from
  *  its clock, which the demo's captured answers pinned. */
 export function shiftTimes(value: unknown, delta: number, days = false): unknown {
-  if (typeof value === "string" && ISO.test(value)) return new Date(Date.parse(value) + delta).toISOString();
-  if (days && typeof value === "string" && DAY.test(value)) return new Date(Date.parse(value) + Math.round(delta / DAY_MS) * DAY_MS).toISOString().slice(0, 10);
+  if (typeof value === "string" && ISO.test(value))
+    return new Date(Date.parse(value) + delta).toISOString();
+  if (days && typeof value === "string" && DAY.test(value))
+    return new Date(Date.parse(value) + Math.round(delta / DAY_MS) * DAY_MS)
+      .toISOString()
+      .slice(0, 10);
   if (Array.isArray(value)) return value.map((v) => shiftTimes(v, delta, days));
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
-      out[k] = k === "ring_slot" && typeof v === "number" ? v + Math.round(delta / SLOT_MS) : shiftTimes(v, delta, days);
+      out[k] =
+        k === "ring_slot" && typeof v === "number"
+          ? v + Math.round(delta / SLOT_MS)
+          : shiftTimes(v, delta, days);
     }
     return out;
   }
@@ -48,11 +55,19 @@ export function installDemoFetch(): void {
   window.fetch = async (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
-    if (url.origin !== window.location.origin || !url.pathname.startsWith(prefix)) return real(input, init);
+    if (url.origin !== window.location.origin || !url.pathname.startsWith(prefix))
+      return real(input, init);
     if (request.method !== "GET") {
-      return new Response("This is a demo with sample data: nothing is saved or changed.", { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      return new Response("This is a demo with sample data: nothing is saved or changed.", {
+        status: 409,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
     }
-    return movedToNow(await real(demoFile(url.pathname.slice(prefix.length - 1) + url.search), { credentials: "omit" }));
+    return movedToNow(
+      await real(demoFile(url.pathname.slice(prefix.length - 1) + url.search), {
+        credentials: "omit",
+      }),
+    );
   };
 }
 
@@ -68,5 +83,8 @@ export function demoFile(path: string): string {
 export async function movedToNow(res: Response): Promise<Response> {
   if (!res.ok) return res;
   const moved = shiftTimes(await res.json(), Date.now() - Date.parse(DEMO_CAPTURED), true);
-  return new Response(JSON.stringify(moved), { status: 200, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify(moved), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }

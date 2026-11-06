@@ -46,12 +46,15 @@ export function overlapsOf(named: PrPaths[], others: PrPaths[]): PrOverlap[] {
       if (files.length > 0) found.push({ pr: mine.number, other: other.number, files });
     }
   }
-  return found.sort((a, b) => Math.min(a.pr, a.other) - Math.min(b.pr, b.other) || a.pr - b.pr || a.other - b.other);
+  return found.sort(
+    (a, b) => Math.min(a.pr, a.other) - Math.min(b.pr, b.other) || a.pr - b.pr || a.other - b.other,
+  );
 }
 
 /** The line appended to a summary, or null when there is nothing to say. */
 export function overlapLine(report: OverlapReport): string | null {
-  if (report.overlaps.length === 0) return report.problem ? `Overlaps: not checked (${report.problem}).` : null;
+  if (report.overlaps.length === 0)
+    return report.problem ? `Overlaps: not checked (${report.problem}).` : null;
   const parts = report.overlaps.map((o) => {
     const shown = o.files.slice(0, FILES_SHOWN).join(", ");
     const more = o.files.length > FILES_SHOWN ? `, +${o.files.length - FILES_SHOWN} more` : "";
@@ -70,12 +73,20 @@ export function prUrlsIn(text: string | null | undefined): string[] {
 /** Compare the named pull requests with every other open pull request in the namespace's
  *  repo. Null when none of `urls` is a pull request of that repo, which is the normal case
  *  for a job that opened nothing. Never throws: a failure is the report's `problem`. */
-export async function checkOverlaps(env: Env, namespace: string, urls: string[]): Promise<OverlapReport | null> {
-  const parsed = urls.map((u) => parsePrUrl(u)).filter((p): p is NonNullable<typeof p> => p !== null);
+export async function checkOverlaps(
+  env: Env,
+  namespace: string,
+  urls: string[],
+): Promise<OverlapReport | null> {
+  const parsed = urls
+    .map((u) => parsePrUrl(u))
+    .filter((p): p is NonNullable<typeof p> => p !== null);
   if (parsed.length === 0) return null;
   try {
     const repo = await resolveRepo(env, namespace);
-    const mine = parsed.filter((p) => `${p.owner}/${p.repo}`.toLowerCase() === repo.full.toLowerCase());
+    const mine = parsed.filter(
+      (p) => `${p.owner}/${p.repo}`.toLowerCase() === repo.full.toLowerCase(),
+    );
     if (mine.length === 0) return null;
     const numbers = [...new Set(mine.map((p) => p.number))];
 
@@ -85,22 +96,41 @@ export async function checkOverlaps(env: Env, namespace: string, urls: string[])
   }
 }
 
-async function compare(env: Env, owner: string, repo: string, numbers: number[]): Promise<OverlapReport> {
+async function compare(
+  env: Env,
+  owner: string,
+  repo: string,
+  numbers: number[],
+): Promise<OverlapReport> {
   const problems: string[] = [];
   const listed = await readAllPages<{ number: number }>(
-    env, owner, repo, `/repos/${owner}/${repo}/pulls?state=open`,
-    (page) => page as Array<{ number: number }>, OPEN_LIST_MAX_PAGES
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/pulls?state=open`,
+    (page) => page as Array<{ number: number }>,
+    OPEN_LIST_MAX_PAGES,
   );
   if (listed.problem) problems.push(`the open pull request list: ${listed.problem}`);
-  const otherNumbers = listed.items.map((p) => p.number).filter((n) => !numbers.includes(n)).sort((a, b) => a - b);
+  const otherNumbers = listed.items
+    .map((p) => p.number)
+    .filter((n) => !numbers.includes(n))
+    .sort((a, b) => a - b);
   const read = otherNumbers.slice(0, OTHER_PRS_READ);
-  if (otherNumbers.length > read.length) problems.push(`${otherNumbers.length - read.length} open pull requests were not read`);
+  if (otherNumbers.length > read.length)
+    problems.push(`${otherNumbers.length - read.length} open pull requests were not read`);
 
   const readOne = async (number: number): Promise<PrPaths> => {
     const files = await readPrFiles(env, owner, repo, number);
     if (files.problem) problems.push(`#${number} files: ${files.problem}`);
     return { number, paths: files.paths };
   };
-  const [named, others] = await Promise.all([Promise.all(numbers.map(readOne)), Promise.all(read.map(readOne))]);
-  return { overlaps: overlapsOf(named, others), problem: problems.length > 0 ? problems.join("; ") : null };
+  const [named, others] = await Promise.all([
+    Promise.all(numbers.map(readOne)),
+    Promise.all(read.map(readOne)),
+  ]);
+  return {
+    overlaps: overlapsOf(named, others),
+    problem: problems.length > 0 ? problems.join("; ") : null,
+  };
 }

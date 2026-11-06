@@ -3,7 +3,12 @@ import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchCompleteness, useAnswer } from "../lib/api";
 import { ago, fmtN, ms } from "../lib/format";
-import type { CompletenessArea, CompletenessCell, CompletenessStatus, CompletenessView } from "../types";
+import type {
+  CompletenessArea,
+  CompletenessCell,
+  CompletenessStatus,
+  CompletenessView,
+} from "../types";
 import { St } from "../ui/icons";
 import "./Completeness.css";
 
@@ -15,8 +20,20 @@ import "./Completeness.css";
 
 const BOARD_URL = "https://github.com/DrDustinEdwards/devkit/blob/scoreboard/SCOREBOARD.md";
 // "unmeasured": a check could not measure the cell (its reason says why), which is neither a pass nor a failure.
-const KIND = { complete: "ok", partial: "warn", missing: "crit", unmeasured: "unknown", "n/a": "nodata" } as const;
-const LABEL: Record<CompletenessStatus, string> = { complete: "Complete", partial: "Partial", missing: "Missing", unmeasured: "Could not measure", "n/a": "Does not apply" };
+const KIND = {
+  complete: "ok",
+  partial: "warn",
+  missing: "crit",
+  unmeasured: "unknown",
+  "n/a": "nodata",
+} as const;
+const LABEL: Record<CompletenessStatus, string> = {
+  complete: "Complete",
+  partial: "Partial",
+  missing: "Missing",
+  unmeasured: "Could not measure",
+  "n/a": "Does not apply",
+};
 const CLEAN_DAYS = 7;
 
 type Column = { id: string; name: string };
@@ -47,18 +64,42 @@ export function Completeness() {
     );
   }
   const columns: Column[] = [{ id: "package", name: "Package" }, ...data.sites];
-  const cells = data.areas.flatMap((a) => columns.map((c) => a.cells[c.id]).filter((cell): cell is CompletenessCell => cell !== undefined && cell.status !== "n/a"));
+  const cells = data.areas.flatMap((a) =>
+    columns
+      .map((c) => a.cells[c.id])
+      .filter((cell): cell is CompletenessCell => cell !== undefined && cell.status !== "n/a"),
+  );
   const count = (s: CompletenessStatus) => cells.filter((c) => c.status === s).length;
   return (
     <div className="embedded">
       <div className={`callout${data.finished ? "" : " warn"} done-verdict`}>
-        <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial, {fmtN(count("missing"))} missing{count("unmeasured") ? `, ${fmtN(count("unmeasured"))} could not be measured` : ""}.{" "}
-        {data.finished ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.` : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
+        <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of{" "}
+        {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial,{" "}
+        {fmtN(count("missing"))} missing
+        {count("unmeasured") ? `, ${fmtN(count("unmeasured"))} could not be measured` : ""}.{" "}
+        {data.finished
+          ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
+          : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
       </div>
-      <Panel flush title="Every area on every site" id="done-grid" section="Grid" src={<>From the live checks and the verifiers' verdicts only · <a href={BOARD_URL} target="_blank" rel="noreferrer noopener">the board on GitHub</a></>}>
+      <Panel
+        flush
+        title="Every area on every site"
+        id="done-grid"
+        section="Grid"
+        src={
+          <>
+            From the live checks and the verifiers' verdicts only ·{" "}
+            <a href={BOARD_URL} target="_blank" rel="noreferrer noopener">
+              the board on GitHub
+            </a>
+          </>
+        }
+      >
         <div className="scroll-x">
           <table className="brief done-grid">
-            <caption className="sr-only">Each area of the shared code, for the package and each live site</caption>
+            <caption className="sr-only">
+              Each area of the shared code, for the package and each live site
+            </caption>
             <thead>
               <tr>
                 <th scope="col">Area</th>
@@ -79,7 +120,15 @@ export function Completeness() {
                   </th>
                   {columns.map((c) => {
                     const cell = a.cells[c.id];
-                    return <td key={c.id}>{cell ? <Mark cell={cell} where={`${a.name}, ${c.name}`} /> : <span className="faint">·</span>}</td>;
+                    return (
+                      <td key={c.id}>
+                        {cell ? (
+                          <Mark cell={cell} where={`${a.name}, ${c.name}`} />
+                        ) : (
+                          <span className="faint">·</span>
+                        )}
+                      </td>
+                    );
                   })}
                 </tr>
               ))}
@@ -91,7 +140,8 @@ export function Completeness() {
         <AreaPanel key={a.id} area={a} columns={columns} publicOnly={data.public_token} />
       ))}
       <p className="faint shared-read">
-        Newest run {data.as_of ? ago(ms(data.as_of), now) : "unknown"}; read {ago(ms(data.read), now)}. Runs daily at 06:23 UTC. Kept for ten minutes.
+        Newest run {data.as_of ? ago(ms(data.as_of), now) : "unknown"}; read{" "}
+        {ago(ms(data.read), now)}. Runs daily at 06:23 UTC. Kept for ten minutes.
       </p>
     </div>
   );
@@ -114,10 +164,25 @@ function linesText(area: CompletenessArea, publicOnly: boolean): string {
   return `${fmtN(prs)} ${prs === 1 ? "PR" : "PRs"}, +${fmtN(added)} −${fmtN(removed)} lines${publicOnly ? " (public repos only)" : ""}`;
 }
 
-function AreaPanel({ area, columns, publicOnly }: { area: CompletenessArea; columns: Column[]; publicOnly: boolean }) {
-  const open = columns.map((c) => ({ c, cell: area.cells[c.id] })).filter((x): x is { c: Column; cell: CompletenessCell } => x.cell !== undefined && x.cell.status !== "complete" && x.cell.status !== "n/a");
+function AreaPanel({
+  area,
+  columns,
+  publicOnly,
+}: {
+  area: CompletenessArea;
+  columns: Column[];
+  publicOnly: boolean;
+}) {
+  const open = columns
+    .map((c) => ({ c, cell: area.cells[c.id] }))
+    .filter(
+      (x): x is { c: Column; cell: CompletenessCell } =>
+        x.cell !== undefined && x.cell.status !== "complete" && x.cell.status !== "n/a",
+    );
   const done = columns.filter((c) => area.cells[c.id]?.status === "complete");
-  const sites = columns.filter((c) => c.id !== "package" && area.cells[c.id] && area.cells[c.id]!.status !== "n/a").length;
+  const sites = columns.filter(
+    (c) => c.id !== "package" && area.cells[c.id] && area.cells[c.id]!.status !== "n/a",
+  ).length;
   return (
     <Panel
       flush
@@ -126,7 +191,12 @@ function AreaPanel({ area, columns, publicOnly }: { area: CompletenessArea; colu
       section={area.name}
       src={
         <>
-          Built by {area.builder} · {area.verifier ? <>verified by {area.verifier}</> : <St kind="nodata">no verifier yet</St>}
+          Built by {area.builder} ·{" "}
+          {area.verifier ? (
+            <>verified by {area.verifier}</>
+          ) : (
+            <St kind="nodata">no verifier yet</St>
+          )}
         </>
       }
       footer={<span className="faint">{linesText(area, publicOnly)}</span>}
@@ -135,13 +205,24 @@ function AreaPanel({ area, columns, publicOnly }: { area: CompletenessArea; colu
         <ul className="done-open" aria-label={`Not complete in ${area.name}`}>
           {groups(open).map(({ names, cell }) => (
             <li key={names.join("|")}>
-              <St kind={KIND[cell.status]}>{sites > 1 && names.length === sites && !names.includes("Package") ? "Every site" : names.join(", ")}</St> <span>{cell.reason}</span>
-              {cell.clean_days !== null && cell.status === "partial" && <span className="faint"> · clean {cell.clean_days} of {CLEAN_DAYS} days</span>}
+              <St kind={KIND[cell.status]}>
+                {sites > 1 && names.length === sites && !names.includes("Package")
+                  ? "Every site"
+                  : names.join(", ")}
+              </St>{" "}
+              <span>{cell.reason}</span>
+              {cell.clean_days !== null && cell.status === "partial" && (
+                <span className="faint">
+                  {" "}
+                  · clean {cell.clean_days} of {CLEAN_DAYS} days
+                </span>
+              )}
               {cell.errors.length > 0 && (
                 <ul className="done-errors">
                   {cell.errors.map((e, i) => (
                     <li key={i}>
-                      <span className="mono">{e.check}</span> <span className="faint">{e.detail}</span>
+                      <span className="mono">{e.check}</span>{" "}
+                      <span className="faint">{e.detail}</span>
                     </li>
                   ))}
                 </ul>
@@ -164,10 +245,15 @@ function AreaPanel({ area, columns, publicOnly }: { area: CompletenessArea; colu
 
 // Cells that say the same thing (no check yet, the same reason) share one line, so twelve
 // sites without a check read as one sentence; a cell with errors or proof keeps its own.
-function groups(open: Array<{ c: Column; cell: CompletenessCell }>): Array<{ names: string[]; cell: CompletenessCell }> {
+function groups(
+  open: Array<{ c: Column; cell: CompletenessCell }>,
+): Array<{ names: string[]; cell: CompletenessCell }> {
   const out: Array<{ key: string; names: string[]; cell: CompletenessCell }> = [];
   for (const { c, cell } of open) {
-    const key = cell.errors.length || cell.evidence.length ? `own:${c.id}` : `${cell.status}|${cell.reason}|${cell.clean_days}`;
+    const key =
+      cell.errors.length || cell.evidence.length
+        ? `own:${c.id}`
+        : `${cell.status}|${cell.reason}|${cell.clean_days}`;
     const found = out.find((g) => g.key === key);
     if (found) found.names.push(c.name);
     else out.push({ key, names: [c.name], cell });

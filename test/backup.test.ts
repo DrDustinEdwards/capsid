@@ -15,7 +15,9 @@ const DERIVED = /^(documents_fts|sqlite_)/;
 function tablesInMigrations(): string[] {
   const dir = join(import.meta.dirname, "..", "migrations");
   const names = new Set<string>();
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+  for (const file of readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()) {
     // Statements in file order, comment lines skipped so prose drops nothing. A table
     // rebuild (0031) creates a scratch table, drops the original and renames the scratch
     // over it; a dropped table (0048, the improve loop's) is gone.
@@ -24,7 +26,9 @@ function tablesInMigrations(): string[] {
       .filter((l) => !l.trim().startsWith("--"))
       .join("\n");
     // CREATE VIRTUAL TABLE does not match, which keeps documents_fts out.
-    for (const m of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)|DROP TABLE(?: IF EXISTS)?\s+(\w+)|ALTER TABLE\s+(\w+)\s+RENAME TO\s+(\w+)/gi)) {
+    for (const m of sql.matchAll(
+      /CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)|DROP TABLE(?: IF EXISTS)?\s+(\w+)|ALTER TABLE\s+(\w+)\s+RENAME TO\s+(\w+)/gi,
+    )) {
       if (m[1] && !DERIVED.test(m[1])) names.add(m[1]);
       if (m[2]) names.delete(m[2]);
       if (m[3]) {
@@ -46,7 +50,11 @@ test("every table the migrations create is backed up", () => {
   // Every one, or excluded by name (push_subscriptions holds device keys, src/backup.ts).
   const covered = new Set<string>([...TABLES, ...EXCLUDED]);
   const missing = tablesInMigrations().filter((t) => !covered.has(t));
-  assert.deepEqual(missing, [], `migrations create tables that src/backup.ts does not export: ${missing.join(", ")}`);
+  assert.deepEqual(
+    missing,
+    [],
+    `migrations create tables that src/backup.ts does not export: ${missing.join(", ")}`,
+  );
 });
 
 // The nightly run refuses a dump with a credential-looking column (d1-dump `credentials`),
@@ -55,16 +63,29 @@ test("every table the migrations create is backed up", () => {
 test("the migrated schema passes the credential-column check with CREDENTIAL_ALLOW", () => {
   const db = new DatabaseSync(":memory:");
   const dir = join(import.meta.dirname, "..", "migrations");
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) db.exec(readFileSync(join(dir, file), "utf8"));
-  const schema = db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL").all() as Array<{ type: "table"; name: string; tbl_name: string; sql: string }>;
-  const tables = schema.filter((t) => !(EXCLUDED as readonly string[]).includes(t.name)).map((t) => ({ name: t.name, rows: 1, key: `${t.name}.json` }));
+  for (const file of readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort())
+    db.exec(readFileSync(join(dir, file), "utf8"));
+  const schema = db
+    .prepare(
+      "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL",
+    )
+    .all() as Array<{ type: "table"; name: string; tbl_name: string; sql: string }>;
+  const tables = schema
+    .filter((t) => !(EXCLUDED as readonly string[]).includes(t.name))
+    .map((t) => ({ name: t.name, rows: 1, key: `${t.name}.json` }));
   assert.deepEqual(credentialProblems({ tables }, schema, { allow: CREDENTIAL_ALLOW }), []);
 });
 
 test("every backed-up table exists in the migrations", () => {
   const inMigrations = tablesInMigrations();
   const unknown = TABLES.filter((t) => !inMigrations.includes(t));
-  assert.deepEqual(unknown, [], `src/backup.ts exports tables no migration creates: ${unknown.join(", ")}`);
+  assert.deepEqual(
+    unknown,
+    [],
+    `src/backup.ts exports tables no migration creates: ${unknown.join(", ")}`,
+  );
 });
 
 // the run itself
@@ -76,7 +97,11 @@ test("every backed-up table exists in the migrations", () => {
 // The fake D1's prune batch reports an inflated meta.changes, because the FTS5
 // triggers inflate it on real D1 and it is the number the run must not read.
 
-function makeEnv(dbOpts: FakeD1Options, seedR2: Record<string, string> = {}, seedKv: Record<string, string> = {}) {
+function makeEnv(
+  dbOpts: FakeD1Options,
+  seedR2: Record<string, string> = {},
+  seedKv: Record<string, string> = {},
+) {
   const r2 = fakeR2(seedR2);
   const kv = fakeKv({ seed: seedKv });
   const { db, batches } = fakeD1(dbOpts);
@@ -121,7 +146,10 @@ test("a healthy run dumps one object per table, keyed by TABLES", async () => {
     `${result.json_prefix}_complete.json`,
   ].sort();
   assert.deepEqual([...result.json_keys].sort(), expected);
-  assert.deepEqual([...r2.objects.keys()].filter((k) => k.startsWith(result.json_prefix)).sort(), expected);
+  assert.deepEqual(
+    [...r2.objects.keys()].filter((k) => k.startsWith(result.json_prefix)).sort(),
+    expected,
+  );
   // Each object carries its own table's rows, not the whole database.
   const dumped = dumpJson(r2, `${result.json_prefix}documents.json.gz`);
   assert.equal(dumped.table, "documents");
@@ -153,14 +181,21 @@ test("an empty documents read refuses the prune, loudly, and deletes nothing", a
   assert.deepEqual(r2.deleted, [], "the refused run deleted objects");
   for (const key of Object.keys(MIRROR)) assert.ok(r2.objects.has(key), `${key} was wiped`);
   // Loud, and named, so a log search finds it without knowing the wording.
-  assert.ok(logged.some((line) => line.includes("BACKUP_PREFLIGHT_REFUSED")), logged.join("\n"));
+  assert.ok(
+    logged.some((line) => line.includes("BACKUP_PREFLIGHT_REFUSED")),
+    logged.join("\n"),
+  );
   // The dumps are still written: an export deletes nothing, and an empty dump is
   // the evidence of the day the store looked empty.
   // Every table, _schema.json and the KV sidecar.
   assert.equal(result.json_keys.length, TABLES.length + 2);
   for (const key of result.json_keys) assert.ok(r2.objects.has(key));
   // A refused run is not marked complete, so it takes no slot in the retention floor.
-  assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a refused run was marked complete");
+  assert.equal(
+    r2.objects.has(`${result.json_prefix}_complete.json`),
+    false,
+    "a refused run was marked complete",
+  );
 });
 
 test("a failing FTS probe refuses the prune even when documents has rows", async () => {
@@ -184,8 +219,15 @@ test("a live table TABLES does not list refuses the run, keeps the dumps, and ma
   if (!result.ran) return;
 
   assert.equal(result.prune_refused, "tables-mismatch: missing none; unlisted stray");
-  assert.ok(r2.objects.has(`${result.json_prefix}stray.json.gz`), "the unlisted table was not dumped");
-  assert.equal(r2.objects.has(`${result.json_prefix}_complete.json`), false, "a mismatched run was marked complete");
+  assert.ok(
+    r2.objects.has(`${result.json_prefix}stray.json.gz`),
+    "the unlisted table was not dumped",
+  );
+  assert.equal(
+    r2.objects.has(`${result.json_prefix}_complete.json`),
+    false,
+    "a mismatched run was marked complete",
+  );
   assert.deepEqual(r2.deleted, []);
   assert.equal(await kv.kv.get("backup:last-ok"), null);
   assert.ok(logged.some((line) => line.includes("BACKUP_PREFLIGHT_REFUSED")));
@@ -248,10 +290,15 @@ test("versions_pruned and audit_pruned come from a COUNT, not meta.changes", asy
   // a different set of rows than the one that leaves. The prune batch is found by
   // what it contains rather than by position, so another batch cannot retarget these
   // assertions.
-  const pruneBatch = batches.find((b) => b.some((sql) => sql.startsWith("DELETE FROM document_versions")));
+  const pruneBatch = batches.find((b) =>
+    b.some((sql) => sql.startsWith("DELETE FROM document_versions")),
+  );
   assert.ok(pruneBatch, "no batch carried the prune");
   const [countVersions, deleteVersions, countAudit, deleteAudit] = pruneBatch;
-  assert.match(countVersions, /^SELECT COUNT\(\*\) AS n FROM document_versions WHERE snapshot_at < /);
+  assert.match(
+    countVersions,
+    /^SELECT COUNT\(\*\) AS n FROM document_versions WHERE snapshot_at < /,
+  );
   assert.equal(deleteVersions.replace(/^DELETE FROM/, "SELECT COUNT(*) AS n FROM"), countVersions);
   assert.match(countAudit, /^SELECT COUNT\(\*\) AS n FROM audit_log WHERE at < /);
   assert.equal(deleteAudit.replace(/^DELETE FROM/, "SELECT COUNT(*) AS n FROM"), countAudit);
@@ -274,7 +321,11 @@ test("a preflight-refused run does NOT stamp backup:last-ok", async () => {
   // a fresh backup, or /health would go quiet on exactly the day it should warn.
   const { env, kv } = makeEnv({ documents: [] }, MIRROR);
   await captureErrors(() => runBackup(env));
-  assert.equal(kv.puts.some((p) => p.key === "backup:last-ok"), false, "a refused run stamped itself as fresh");
+  assert.equal(
+    kv.puts.some((p) => p.key === "backup:last-ok"),
+    false,
+    "a refused run stamped itself as fresh",
+  );
 });
 
 // the 1000-key delete ceiling
@@ -298,7 +349,7 @@ test("no single R2 delete call exceeds R2's 1000-key ceiling", async () => {
   assert.deepEqual(
     oversized.map((call) => call.length),
     [],
-    `an R2 delete call carried more than ${R2_DELETE_CEILING} keys, which R2 refuses`
+    `an R2 delete call carried more than ${R2_DELETE_CEILING} keys, which R2 refuses`,
   );
   // A chunker that dropped the tail would satisfy the assertion above.
   assert.equal(result.markdown_pruned, 1001);
@@ -323,9 +374,15 @@ test("the dump prune chunks too, not just the mirror", async () => {
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  assert.deepEqual(r2.deleted.filter((c) => c.length > R2_DELETE_CEILING).map((c) => c.length), []);
+  assert.deepEqual(
+    r2.deleted.filter((c) => c.length > R2_DELETE_CEILING).map((c) => c.length),
+    [],
+  );
   assert.equal(result.reports_pruned, 1200);
-  assert.deepEqual([...r2.objects.keys()].filter((k) => k.startsWith("reports/csp/")), []);
+  assert.deepEqual(
+    [...r2.objects.keys()].filter((k) => k.startsWith("reports/csp/")),
+    [],
+  );
 });
 
 // one consistent snapshot
@@ -350,13 +407,32 @@ test("every table read whole is read at ONE instant, however many writes land be
     generation += 1;
     const gen = `gen-${generation}`;
     const rows = d1.rows;
-    rows.documents = [...rows.documents, { id: 1000 + generation, namespace: "capsid", path: `${gen}.md`, body: gen }];
+    rows.documents = [
+      ...rows.documents,
+      { id: 1000 + generation, namespace: "capsid", path: `${gen}.md`, body: gen },
+    ];
     rows.namespaces = [...rows.namespaces, { namespace: gen, repos: "[]" }];
-    rows.links = [...rows.links, { from_ns: "capsid", from_path: `${gen}.md`, type: "references", to_ns: "capsid", to_path: "core.md" }];
+    rows.links = [
+      ...rows.links,
+      {
+        from_ns: "capsid",
+        from_path: `${gen}.md`,
+        type: "references",
+        to_ns: "capsid",
+        to_path: "core.md",
+      },
+    ];
     rows.agents = [...rows.agents, { id: gen, name: gen }];
     rows.jobs = [...rows.jobs, { id: gen, namespace: "capsid", title: gen, status: "queued" }];
   };
-  type Stmt = { sql: string; params: unknown[]; bind: (...a: unknown[]) => Stmt; first: () => Promise<unknown>; all: () => Promise<unknown>; run: () => Promise<unknown> };
+  type Stmt = {
+    sql: string;
+    params: unknown[];
+    bind: (...a: unknown[]) => Stmt;
+    first: () => Promise<unknown>;
+    all: () => Promise<unknown>;
+    run: () => Promise<unknown>;
+  };
   const wrap = (s: Stmt): Stmt => ({
     ...s,
     bind: (...a: unknown[]) => wrap(s.bind(...a)),
@@ -364,7 +440,10 @@ test("every table read whole is read at ONE instant, however many writes land be
     all: async () => (write(), s.all()),
     run: async () => (write(), s.run()),
   });
-  const db = d1.db as unknown as { prepare: (sql: string) => Stmt; batch: (s: Stmt[]) => Promise<unknown> };
+  const db = d1.db as unknown as {
+    prepare: (sql: string) => Stmt;
+    batch: (s: Stmt[]) => Promise<unknown>;
+  };
   const prepare = db.prepare.bind(db);
   const batch = db.batch.bind(db);
   db.prepare = (sql: string) => wrap(prepare(sql));
@@ -375,15 +454,30 @@ test("every table read whole is read at ONE instant, however many writes land be
   if (!result.ran) return;
 
   const lastGeneration = (table: string): number => {
-    const dumped = dumpJson(r2, `${result.json_prefix}${table}.json.gz`) as { rows: Array<Record<string, unknown>> };
-    const gens = dumped.rows.flatMap((r) => Object.values(r).map((v) => String(v).match(/^gen-(\d+)/)?.[1]).filter((g) => g !== undefined)).map(Number);
+    const dumped = dumpJson(r2, `${result.json_prefix}${table}.json.gz`) as {
+      rows: Array<Record<string, unknown>>;
+    };
+    const gens = dumped.rows
+      .flatMap((r) =>
+        Object.values(r)
+          .map((v) => String(v).match(/^gen-(\d+)/)?.[1])
+          .filter((g) => g !== undefined),
+      )
+      .map(Number);
     assert.ok(gens.length > 0, `${table} carries no writer row, so this compares nothing`);
     return Math.max(...gens);
   };
   const whole = ["documents", "namespaces", "document_links", "agents", "jobs"];
-  assert.ok(whole.every((t) => (TABLES as readonly string[]).includes(t)), "a table this test seeds is no longer exported");
+  assert.ok(
+    whole.every((t) => (TABLES as readonly string[]).includes(t)),
+    "a table this test seeds is no longer exported",
+  );
   const seen = Object.fromEntries(whole.map((t) => [t, lastGeneration(t)]));
-  assert.equal(new Set(Object.values(seen)).size, 1, `the tables were read at different instants: ${JSON.stringify(seen)}`);
+  assert.equal(
+    new Set(Object.values(seen)).size,
+    1,
+    `the tables were read at different instants: ${JSON.stringify(seen)}`,
+  );
 });
 
 // audit_log is paged too
@@ -392,7 +486,15 @@ test("every table read whole is read at ONE instant, however many writes land be
 // one instant.
 
 function auditRow(id: number) {
-  return { id, namespace: "capsid", path: "core.md", actor: "operator", action: "write", params: "{}", at: "2026-09-01 00:00:00" };
+  return {
+    id,
+    namespace: "capsid",
+    path: "core.md",
+    actor: "operator",
+    action: "write",
+    params: "{}",
+    at: "2026-09-01 00:00:00",
+  };
 }
 
 test("audit_log is streamed in pages, every row once and in id order, in the same file shape", async () => {
@@ -404,12 +506,22 @@ test("audit_log is streamed in pages, every row once and in id order, in the sam
   if (!result.ran) return;
 
   const key = `${result.json_prefix}audit_log.json.gz`;
-  assert.ok(r2.multipart.some((m) => m.key === key), "audit_log was not written as a multipart upload");
+  assert.ok(
+    r2.multipart.some((m) => m.key === key),
+    "audit_log was not written as a multipart upload",
+  );
   const exportedAt = dumpJson(r2, `${result.json_prefix}documents.json.gz`).exported_at;
   const sorted = [...audit].sort((a, b) => a.id - b.id);
-  assert.deepEqual(dumpJson(r2, key), { exported_at: exportedAt, table: "audit_log", rows: sorted });
+  assert.deepEqual(dumpJson(r2, key), {
+    exported_at: exportedAt,
+    table: "audit_log",
+    rows: sorted,
+  });
   const exportBatch = batches.find((b) => b.includes('SELECT * FROM "documents"'));
-  assert.ok(exportBatch && !exportBatch.includes('SELECT * FROM "audit_log"'), "audit_log was read whole inside the batch");
+  assert.ok(
+    exportBatch && !exportBatch.includes('SELECT * FROM "audit_log"'),
+    "audit_log was read whole inside the batch",
+  );
 });
 
 test("an audit row written after the snapshot batch is not in the dump", async () => {
@@ -418,7 +530,9 @@ test("an audit row written after the snapshot batch is not in the dump", async (
   const d1 = fakeD1({ documents: DOCS, auditLog: [auditRow(1), auditRow(2)] });
   const batch = d1.db.batch.bind(d1.db);
   let first = true;
-  (d1.db as unknown as { batch: typeof batch }).batch = (async (statements: Parameters<typeof batch>[0]) => {
+  (d1.db as unknown as { batch: typeof batch }).batch = (async (
+    statements: Parameters<typeof batch>[0],
+  ) => {
     const out = await batch(statements);
     if (first) {
       first = false;
@@ -432,7 +546,10 @@ test("an audit row written after the snapshot batch is not in the dump", async (
   if (!result.ran) return;
 
   const dumped = dumpJson(r2, `${result.json_prefix}audit_log.json.gz`);
-  assert.deepEqual(dumped.rows.map((r) => r.id), [1, 2]);
+  assert.deepEqual(
+    dumped.rows.map((r) => r.id),
+    [1, 2],
+  );
 });
 
 // the streamed table
@@ -443,13 +560,23 @@ test("an audit row written after the snapshot batch is not in the dump", async (
 // and the snapshot is still one instant.
 
 function version(id: number, body: string) {
-  return { id, document_id: 1, namespace: "capsid", path: "core.md", title: "t", body, snapshot_at: "2026-09-01 00:00:00" };
+  return {
+    id,
+    document_id: 1,
+    namespace: "capsid",
+    path: "core.md",
+    title: "t",
+    body,
+    snapshot_at: "2026-09-01 00:00:00",
+  };
 }
 
 test("the streamed versions dump is byte-identical to the whole-object dump, across several parts", async () => {
   // Three 7MB bodies make a ~21MB file, which crosses two 8MiB part boundaries,
   // one of them inside a row.
-  const versions = [1, 2, 3].map((id) => version(id, String.fromCharCode(96 + id).repeat(7 * 1024 * 1024)));
+  const versions = [1, 2, 3].map((id) =>
+    version(id, String.fromCharCode(96 + id).repeat(7 * 1024 * 1024)),
+  );
   const { env, r2 } = makeEnv({ documents: DOCS, versions }, MIRROR);
   const result = await runBackup(env);
   assert.equal(result.ran, true);
@@ -457,8 +584,15 @@ test("the streamed versions dump is byte-identical to the whole-object dump, acr
 
   const key = `${result.json_prefix}document_versions.json.gz`;
   const exportedAt = dumpJson(r2, `${result.json_prefix}documents.json.gz`).exported_at;
-  assert.deepEqual(dumpJson(r2, key), { exported_at: exportedAt, table: "document_versions", rows: versions });
-  assert.ok(r2.multipart.some((m) => m.key === key), "document_versions was not written as a multipart upload");
+  assert.deepEqual(dumpJson(r2, key), {
+    exported_at: exportedAt,
+    table: "document_versions",
+    rows: versions,
+  });
+  assert.ok(
+    r2.multipart.some((m) => m.key === key),
+    "document_versions was not written as a multipart upload",
+  );
 });
 
 test("the streamed versions dump pages past one page and keeps every row in id order", async () => {
@@ -473,7 +607,7 @@ test("the streamed versions dump pages past one page and keeps every row in id o
   const dumped = dumpJson(r2, `${result.json_prefix}document_versions.json.gz`);
   assert.deepEqual(
     dumped.rows.map((r) => r.id),
-    Array.from({ length: 250 }, (_, i) => i + 1)
+    Array.from({ length: 250 }, (_, i) => i + 1),
   );
 });
 
@@ -496,7 +630,9 @@ test("a version written after the snapshot batch is not in the dump", async () =
   const d1 = fakeD1({ documents: DOCS, versions: [version(1, "a"), version(2, "b")] });
   const batch = d1.db.batch.bind(d1.db);
   let first = true;
-  (d1.db as unknown as { batch: typeof batch }).batch = (async (statements: Parameters<typeof batch>[0]) => {
+  (d1.db as unknown as { batch: typeof batch }).batch = (async (
+    statements: Parameters<typeof batch>[0],
+  ) => {
     const out = await batch(statements);
     if (first) {
       first = false;
@@ -510,21 +646,32 @@ test("a version written after the snapshot batch is not in the dump", async () =
   if (!result.ran) return;
 
   const dumped = dumpJson(r2, `${result.json_prefix}document_versions.json.gz`);
-  assert.deepEqual(dumped.rows.map((r) => r.id), [1, 2]);
+  assert.deepEqual(
+    dumped.rows.map((r) => r.id),
+    [1, 2],
+  );
 });
 
 test("a failed part aborts the multipart upload and fails the run", async () => {
   const { env, r2, kv } = makeEnv({ documents: DOCS, versions: [version(1, "a")] }, MIRROR);
   const create = r2.bucket.createMultipartUpload.bind(r2.bucket);
-  (r2.bucket as unknown as { createMultipartUpload: typeof create }).createMultipartUpload = (async (
-    ...args: Parameters<typeof create>
-  ) => {
-    const upload = await create(...args);
-    return { ...upload, uploadPart: async () => { throw new Error("part refused"); } };
-  }) as typeof create;
+  (r2.bucket as unknown as { createMultipartUpload: typeof create }).createMultipartUpload =
+    (async (...args: Parameters<typeof create>) => {
+      const upload = await create(...args);
+      return {
+        ...upload,
+        uploadPart: async () => {
+          throw new Error("part refused");
+        },
+      };
+    }) as typeof create;
   await assert.rejects(() => runBackup(env), /part refused/);
   assert.equal(r2.multipart.at(-1)?.aborted, true, "the failed upload was left open");
-  assert.equal(kv.puts.some((p) => p.key === "backup:last-ok"), false, "a failed run stamped itself as fresh");
+  assert.equal(
+    kv.puts.some((p) => p.key === "backup:last-ok"),
+    false,
+    "a failed run stamped itself as fresh",
+  );
 });
 
 test("a put R2 refuses once is tried again, and the run still completes", async () => {
@@ -533,12 +680,17 @@ test("a put R2 refuses once is tried again, and the run still completes", async 
   const put = r2.bucket.put.bind(r2.bucket);
   let refused = 0;
   (r2.bucket as unknown as { put: typeof put }).put = (async (...args: Parameters<typeof put>) => {
-    if (refused++ === 0) throw new Error("put: We encountered an internal error. Please try again. (10001)");
+    if (refused++ === 0)
+      throw new Error("put: We encountered an internal error. Please try again. (10001)");
     return put(...args);
   }) as typeof put;
   const result = await runBackup(env, 0);
   assert.equal(result.ran && result.prune_refused, null);
-  assert.equal(kv.puts.some((p) => p.key === BACKUP_LAST_OK_KEY), true, "the run did not stamp itself as fresh");
+  assert.equal(
+    kv.puts.some((p) => p.key === BACKUP_LAST_OK_KEY),
+    true,
+    "the run did not stamp itself as fresh",
+  );
 });
 
 test("the dump carries the KV pins, by allowlist and never by prefix sweep", async () => {
@@ -557,12 +709,18 @@ test("the dump carries the KV pins, by allowlist and never by prefix sweep", asy
   const dumped = JSON.parse(raw as string) as { keys: Record<string, string | null> };
   assert.equal(dumped.keys["backup:last-ok"], "2026-10-18T02:00:00.000Z");
   const leaked = Object.keys(dumped.keys).filter((k) => k.startsWith("gh:"));
-  assert.deepEqual(leaked, [], "the KV dump swept a prefix and carried a cached credential out of the account");
+  assert.deepEqual(
+    leaked,
+    [],
+    "the KV dump swept a prefix and carried a cached credential out of the account",
+  );
 });
 
 test("an unreadable KV pin is recorded as unreadable, not as an unset null", async () => {
   // A restore that put back a null would clear a value that existed.
-  const { env, r2, kv } = makeEnv({ documents: DOCS }, MIRROR, { "backup:last-ok": "2026-10-18T02:00:00.000Z" });
+  const { env, r2, kv } = makeEnv({ documents: DOCS }, MIRROR, {
+    "backup:last-ok": "2026-10-18T02:00:00.000Z",
+  });
   const get = kv.kv.get.bind(kv.kv);
   (kv.kv as unknown as { get: unknown }).get = async (key: string, ...rest: unknown[]) => {
     if (key === "backup:last-ok") throw new Error("KV get timed out");
@@ -585,10 +743,13 @@ function seedRun(seed: Record<string, string>, id: string, shape: "marked" | "le
 }
 
 function survivingRuns(r2: { objects: Map<string, string | Uint8Array> }, ids: string[]): string[] {
-  return ids.filter((id) => [...r2.objects.keys()].some((k) => k.startsWith(`backups/json/${id}/`)));
+  return ids.filter((id) =>
+    [...r2.objects.keys()].some((k) => k.startsWith(`backups/json/${id}/`)),
+  );
 }
 
-const day = (month: number, d: number) => `2020-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}T00-00-00-000Z`;
+const day = (month: number, d: number) =>
+  `2020-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}T00-00-00-000Z`;
 
 // The policy itself (14 daily, 4 weekly, 3 monthly, the newest complete run never pruned,
 // nothing pruned while no run is complete) is tested in d1-dump, where pruneDumps lives.
@@ -628,7 +789,9 @@ test("a stale run a bucket lock refuses is counted as locked and the run still s
   r2.bucket.delete = async (keys: string | string[]) => {
     const list = Array.isArray(keys) ? keys : [keys];
     if (list.some((k) => k.startsWith(`backups/json/${day(1, 1)}/`))) {
-      throw new Error("delete: This object is subject to an object lock and cannot be deleted (10069)");
+      throw new Error(
+        "delete: This object is subject to an object lock and cannot be deleted (10069)",
+      );
     }
     return realDelete(keys);
   };
@@ -650,7 +813,9 @@ test("a run whose lease was taken over does not release the new holder's lease",
   const d1 = fakeD1({ documents: DOCS });
   const batch = d1.db.batch.bind(d1.db);
   let first = true;
-  (d1.db as unknown as { batch: typeof batch }).batch = (async (statements: Parameters<typeof batch>[0]) => {
+  (d1.db as unknown as { batch: typeof batch }).batch = (async (
+    statements: Parameters<typeof batch>[0],
+  ) => {
     if (first) {
       first = false;
       kv.store.set("backup:lease", "2026-09-25T10:00:00.000Z another-run");
@@ -661,12 +826,22 @@ test("a run whose lease was taken over does not release the new holder's lease",
   const { result, logged } = await captureErrors(() => runBackup(env));
   assert.equal(result.ran, true);
 
-  assert.equal(kv.store.get("backup:lease"), "2026-09-25T10:00:00.000Z another-run", "the run deleted a lease it did not hold");
+  assert.equal(
+    kv.store.get("backup:lease"),
+    "2026-09-25T10:00:00.000Z another-run",
+    "the run deleted a lease it did not hold",
+  );
   assert.equal(kv.deleted.includes("backup:lease"), false);
-  assert.ok(logged.some((line) => line.includes("BACKUP_LEASE_LOST")), logged.join("\n"));
+  assert.ok(
+    logged.some((line) => line.includes("BACKUP_LEASE_LOST")),
+    logged.join("\n"),
+  );
   // The TTL sits above the 15-minute wall limit on a cron invocation.
   const lease = kv.puts.find((p) => p.key === "backup:lease");
-  assert.ok((lease?.ttl ?? 0) > 900, `lease ttl ${lease?.ttl} does not cover a run past the cron wall limit`);
+  assert.ok(
+    (lease?.ttl ?? 0) > 900,
+    `lease ttl ${lease?.ttl} does not cover a run past the cron wall limit`,
+  );
 });
 
 // The lease is get-then-put (no CAS), so two runs can both take it. The one whose lease
@@ -677,7 +852,9 @@ test("PLANT: a run that lost its lease after the export prunes nothing", async (
   const d1 = fakeD1({ documents: DOCS });
   const batch = d1.db.batch.bind(d1.db);
   let first = true;
-  (d1.db as unknown as { batch: typeof batch }).batch = (async (statements: Parameters<typeof batch>[0]) => {
+  (d1.db as unknown as { batch: typeof batch }).batch = (async (
+    statements: Parameters<typeof batch>[0],
+  ) => {
     if (first) {
       first = false;
       kv.store.set("backup:lease", "2026-09-25T10:00:00.000Z another-run");

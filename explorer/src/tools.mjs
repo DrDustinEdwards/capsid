@@ -18,7 +18,11 @@ const GRANT = {
 const prose = (text) => escapeHtml(text).replace(/`([^`]+)`/g, "<code>$1</code>");
 
 /** A description's first sentence, for a card. @param {string} text */
-const sentence = (text) => text.split("\n\n")[0].match(/^[\s\S]*?[.:](?=\s|$)/)?.[0].replace(/:$/, ".") ?? text.split("\n\n")[0];
+const sentence = (text) =>
+  text
+    .split("\n\n")[0]
+    .match(/^[\s\S]*?[.:](?=\s|$)/)?.[0]
+    .replace(/:$/, ".") ?? text.split("\n\n")[0];
 
 /** What a tool may do, in words a reader can filter by. @param {any} t */
 export function kindsOf(t) {
@@ -28,10 +32,22 @@ export function kindsOf(t) {
   return kinds;
 }
 
-const KIND_WORD = { reads: "Reads only", changes: "Can change or remove", adds: "Adds, never removes", admin: "Admin only", outside: "Reaches GitHub or Cloudflare" };
+const KIND_WORD = {
+  reads: "Reads only",
+  changes: "Can change or remove",
+  adds: "Adds, never removes",
+  admin: "Admin only",
+  outside: "Reaches GitHub or Cloudflare",
+};
 
 /** @param {any} t */
-const pills = (t) => kindsOf(t).map((k) => `<span class="cap-pill" data-kind="${k}">${KIND_WORD[/** @type {keyof typeof KIND_WORD} */ (k)]}</span>`).join("");
+const pills = (t) =>
+  kindsOf(t)
+    .map(
+      (k) =>
+        `<span class="cap-pill" data-kind="${k}">${KIND_WORD[/** @type {keyof typeof KIND_WORD} */ (k)]}</span>`,
+    )
+    .join("");
 
 /**
  * One paragraph of a description, laid out as it is meant to be read. A run of lines each opened
@@ -46,7 +62,11 @@ function said(para) {
     const m = line.match(/^([a-z_]+(?:(?: \/ |, )[a-z_]+)*): ([\s\S]+)$/);
     if (m) list += `<li><code>${escapeHtml(m[1])}</code><span>${prose(m[2])}</span></li>`;
     else if (list) list += `<li class="said-note"><span>${prose(line)}</span></li>`;
-    else out += line.split(/(?<=\. )(?=(?:action|mode) ["'][a-z_]+["'])/).map((x) => `<p class="measure">${prose(x)}</p>`).join("");
+    else
+      out += line
+        .split(/(?<=\. )(?=(?:action|mode) ["'][a-z_]+["'])/)
+        .map((x) => `<p class="measure">${prose(x)}</p>`)
+        .join("");
   }
   return out + (list ? `<ul class="said">${list}</ul>` : "");
 }
@@ -54,7 +74,13 @@ function said(para) {
 /** @param {any[]} tools @param {string} asOf */
 export function toolsPage(tools, asOf) {
   const servers = ["Capsid", "Capsid Admin"];
-  const chips = [["all", "All"], ["reads", "Reads only"], ["changes", "Can change"], ["admin", "Admin only"], ["outside", "Reaches outside"]];
+  const chips = [
+    ["all", "All"],
+    ["reads", "Reads only"],
+    ["changes", "Can change"],
+    ["admin", "Admin only"],
+    ["outside", "Reaches outside"],
+  ];
   const body = `${pageHead([], "Tools", "Every tool Capsid serves", `${tools.length} tools over MCP, ${tools.filter((t) => t.server === "Capsid").length} on Capsid for project work and ${tools.filter((t) => t.server === "Capsid Admin").length} on Capsid Admin for the admin only. Each entry comes straight from the server's code: the access it needs, what it can change, its actions and its arguments.`)}
 <div class="filter-bar" data-filter="tools" hidden>
 <label class="cap-sr-only" for="tool-q">Filter the tools</label>
@@ -70,19 +96,27 @@ ${servers
 <ul class="tool-cards">${tools
       .filter((t) => t.server === server)
       .map(
-        (t) => `<li class="tool-card" data-livery data-item data-kinds="${kindsOf(t).join(" ")}" data-text="${escapeHtml([t.name, t.title, ...t.actions.map((/** @type {any} */ a) => a.name), ...t.params.map((/** @type {any} */ p) => p.name)].join(" ").toLowerCase())}">
+        (
+          t,
+        ) => `<li class="tool-card" data-livery data-item data-kinds="${kindsOf(t).join(" ")}" data-text="${escapeHtml([t.name, t.title, ...t.actions.map((/** @type {any} */ a) => a.name), ...t.params.map((/** @type {any} */ p) => p.name)].join(" ").toLowerCase())}">
 <a href="${toolPath(t.name)}"><code>${escapeHtml(t.name)}</code><span class="tool-card-title">${escapeHtml(t.title)}</span></a>
 <p>${prose(sentence(t.description))}</p>
 <p class="tool-tags">${pills(t)}</p>
 <p class="hint">${t.actions.length ? `${t.actions.length === 1 ? "One action" : `${t.actions.length} actions`}: ${t.actions.map((/** @type {any} */ a) => escapeHtml(a.name)).join(", ")}` : "One action"}; ${t.params.length} argument${t.params.length === 1 ? "" : "s"}.</p>
-</li>`
+</li>`,
       )
       .join("")}</ul>
-</section>`
+</section>`,
   )
   .join("\n")}
 <p class="hint" data-filter-empty hidden>No tool matches that.</p>`;
-  return layout({ title: "Tools", description: `The ${tools.length} MCP tools Capsid and Capsid Admin serve, each with its actions, its arguments and who may call it.`, path: "/tools/", body, asOf });
+  return layout({
+    title: "Tools",
+    description: `The ${tools.length} MCP tools Capsid and Capsid Admin serve, each with its actions, its arguments and who may call it.`,
+    path: "/tools/",
+    body,
+    asOf,
+  });
 }
 
 /**
@@ -99,7 +133,8 @@ function split(t) {
     // A paragraph may open with several actions' names: '"merge", "close": ...'.
     const m = para.match(/^((?:"[a-z_]+"(?:, )?)+): ([\s\S]*)$/);
     const named = m ? [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]) : [];
-    if (m && named.length && named.every((n) => names.has(n))) for (const n of named) byAction.set(n, m[2]);
+    if (m && named.length && named.every((n) => names.has(n)))
+      for (const n of named) byAction.set(n, m[2]);
     else if (!para.startsWith("Actions: ")) rest.push(para);
   }
   return { byAction, rest };
@@ -110,7 +145,8 @@ export function toolPage(t, tools, asOf) {
   const { byAction, rest } = split(t);
   const i = tools.indexOf(t);
   const near = [tools[i - 1], tools[i + 1]].filter(Boolean);
-  const hint = (/** @type {boolean} */ on, /** @type {string} */ yes, /** @type {string} */ no) => `<li data-on="${on}">${on ? yes : no}</li>`;
+  const hint = (/** @type {boolean} */ on, /** @type {string} */ yes, /** @type {string} */ no) =>
+    `<li data-on="${on}">${on ? yes : no}</li>`;
   const params = t.params.length
     ? scroller(
         "params",
@@ -119,10 +155,10 @@ export function toolPage(t, tools, asOf) {
 <tbody>${t.params
           .map(
             (/** @type {any} */ p) =>
-              `<tr id="arg-${escapeHtml(p.name)}"><th scope="row"><code>${escapeHtml(p.name)}</code></th><td>${escapeHtml(p.type)}${p.values.length ? `: ${p.values.map((/** @type {string} */ v) => `<code>${escapeHtml(v)}</code>`).join(", ")}` : ""}</td><td>${p.required ? "always" : "no"}</td><td data-wrap>${prose(p.description)}</td></tr>`
+              `<tr id="arg-${escapeHtml(p.name)}"><th scope="row"><code>${escapeHtml(p.name)}</code></th><td>${escapeHtml(p.type)}${p.values.length ? `: ${p.values.map((/** @type {string} */ v) => `<code>${escapeHtml(v)}</code>`).join(", ")}` : ""}</td><td>${p.required ? "always" : "no"}</td><td data-wrap>${prose(p.description)}</td></tr>`,
           )
           .join("")}</tbody></table>`,
-        `The arguments of ${t.name}`
+        `The arguments of ${t.name}`,
       )
     : "<p>None.</p>";
   const actions = t.actions.length
@@ -130,13 +166,24 @@ export function toolPage(t, tools, asOf) {
 <p class="section-sub">Chosen by the <code>action</code> argument${t.params.some((/** @type {any} */ p) => p.name === "action" && !p.required) ? ", with a default when it is left out" : ""}.</p>
 <dl class="actions">${t.actions
         .map(
-          (/** @type {any} */ a) => `<div class="action" id="action-${escapeHtml(a.name)}"><dt><code>${escapeHtml(a.name)}</code> ${escapeHtml(a.summary)}</dt><dd>${byAction.has(a.name) ? `<p>${prose(byAction.get(a.name) ?? "")}</p>` : ""}<p class="hint">${
-            a.params.length ? `Takes ${a.params.map((/** @type {string} */ p) => `<a href="#arg-${escapeHtml(p)}"><code>${escapeHtml(p)}</code></a>`).join(", ")}.` : "Takes nothing else."
-          }</p></dd></div>`
+          (/** @type {any} */ a) =>
+            `<div class="action" id="action-${escapeHtml(a.name)}"><dt><code>${escapeHtml(a.name)}</code> ${escapeHtml(a.summary)}</dt><dd>${byAction.has(a.name) ? `<p>${prose(byAction.get(a.name) ?? "")}</p>` : ""}<p class="hint">${
+              a.params.length
+                ? `Takes ${a.params.map((/** @type {string} */ p) => `<a href="#arg-${escapeHtml(p)}"><code>${escapeHtml(p)}</code></a>`).join(", ")}.`
+                : "Takes nothing else."
+            }</p></dd></div>`,
         )
         .join("")}</dl></section>`
     : "";
-  const body = `${pageHead([["/", "Overview"], ["/tools/", "Tools"]], t.name, escapeHtml(t.title), `<code>${escapeHtml(t.name)}</code>, on ${escapeHtml(t.server)}. Needs ${GRANT[/** @type {keyof typeof GRANT} */ (t.grant)] ?? escapeHtml(t.grant)}.`)}
+  const body = `${pageHead(
+    [
+      ["/", "Overview"],
+      ["/tools/", "Tools"],
+    ],
+    t.name,
+    escapeHtml(t.title),
+    `<code>${escapeHtml(t.name)}</code>, on ${escapeHtml(t.server)}. Needs ${GRANT[/** @type {keyof typeof GRANT} */ (t.grant)] ?? escapeHtml(t.grant)}.`,
+  )}
 <p class="tool-tags">${pills(t)}</p>
 <section aria-labelledby="does-title"><h2 id="does-title">What it does</h2>${rest.map(said).join("")}</section>
 <section aria-labelledby="hints-title"><h2 id="hints-title">What a client is told</h2>
@@ -146,11 +193,22 @@ export function toolPage(t, tools, asOf) {
 ${actions}
 <section aria-labelledby="args-title"><h2 id="args-title">Arguments</h2>${params}</section>
 <nav class="pager cap-signs" aria-label="Other tools">${near.map((n) => `<a class="cap-sign" href="${toolPath(n.name)}" rel="${tools.indexOf(n) < i ? "prev" : "next"}">${tools.indexOf(n) < i ? "Previous" : "Next"}: <code>${escapeHtml(n.name).replaceAll("_", "_<wbr>")}</code></a>`).join("")}</nav>`;
-  return layout({ title: t.name, description: `${t.title}: ${t.description.split("\n\n")[0]}`, path: toolPath(t.name), body, asOf });
+  return layout({
+    title: t.name,
+    description: `${t.title}: ${t.description.split("\n\n")[0]}`,
+    path: toolPath(t.name),
+    body,
+    asOf,
+  });
 }
 
 /** Every tools page. @param {any[]} tools @param {string} asOf @returns {Array<[string, string]>} */
 export function toolPages(tools, asOf) {
   if (!tools.length) return [];
-  return [["/tools/", toolsPage(tools, asOf)], ...tools.map((t) => /** @type {[string, string]} */ ([toolPath(t.name), toolPage(t, tools, asOf)]))];
+  return [
+    ["/tools/", toolsPage(tools, asOf)],
+    ...tools.map(
+      (t) => /** @type {[string, string]} */ ([toolPath(t.name), toolPage(t, tools, asOf)]),
+    ),
+  ];
 }

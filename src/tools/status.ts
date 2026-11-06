@@ -16,17 +16,33 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "admin_control",
     {
-      description:
-        `The administrator's switches. action "breaker_reset" closes the queue's circuit breaker for namespace, so jobs its drivers failed before now stop counting toward the threshold (default 3 holder fails in 24 hours), and with threshold sets that threshold for every namespace; audit-logged and read back. action "overnight" sets the overnight run's switch (value "off" | "api" | "subscription", and a reason, both required): off unless set, with a "Runs on" choice of API key or subscription; choosing subscription records Dustin's decision, its date and its reasoning with the switch; audit-logged and read back. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies; the prior body is snapshotted and the signing is audit-logged. Admin only.`,
+      description: `The administrator's switches. action "breaker_reset" closes the queue's circuit breaker for namespace, so jobs its drivers failed before now stop counting toward the threshold (default 3 holder fails in 24 hours), and with threshold sets that threshold for every namespace; audit-logged and read back. action "overnight" sets the overnight run's switch (value "off" | "api" | "subscription", and a reason, both required): off unless set, with a "Runs on" choice of API key or subscription; choosing subscription records Dustin's decision, its date and its reasoning with the switch; audit-logged and read back. action "sign_policy" signs the policy document already stored at path (namespace "capsid", path under "policy/"), never a body the caller supplies; the prior body is snapshotted and the signing is audit-logged. Admin only.`,
       inputSchema: {
         action: z.enum(["sign_policy", "breaker_reset", "overnight"]),
-        namespace: nsName.optional().describe('For "breaker_reset", the namespace. For "sign_policy", "capsid".'),
-        value: z.enum(["off", "subscription", "api"]).optional().describe('For action "overnight": "off", "api" or "subscription".'),
-        threshold: z.number().int().min(1).max(50).optional().describe('For action "breaker_reset": the number of holder fails in 24 hours that opens the breaker of any namespace.'),
-        reason: bounded(MAX_DOC_STATUS).optional().describe('For action "overnight": the required reason for the change.'),
+        namespace: nsName
+          .optional()
+          .describe('For "breaker_reset", the namespace. For "sign_policy", "capsid".'),
+        value: z
+          .enum(["off", "subscription", "api"])
+          .optional()
+          .describe('For action "overnight": "off", "api" or "subscription".'),
+        threshold: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe(
+            'For action "breaker_reset": the number of holder fails in 24 hours that opens the breaker of any namespace.',
+          ),
+        reason: bounded(MAX_DOC_STATUS)
+          .optional()
+          .describe('For action "overnight": the required reason for the change.'),
         path: bounded(512)
           .optional()
-          .describe('For action "sign_policy": the path of the stored policy document to sign, under "policy/" in the capsid namespace.'),
+          .describe(
+            'For action "sign_policy": the path of the stored policy document to sign, under "policy/" in the capsid namespace.',
+          ),
       },
     },
     async ({ action, namespace, value, reason, path, threshold }) => {
@@ -34,18 +50,20 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
         // Admin only, stated in TOOL_GRANTS (src/scope.ts) and enforced by the registrar
         // before this handler runs.
         if (action === "sign_policy") {
-          if (!namespace || !path) return fail("sign_policy needs the namespace and the path of the policy document.");
+          if (!namespace || !path)
+            return fail("sign_policy needs the namespace and the path of the policy document.");
           const signed = await signPolicyDocument(env, ctx.actor, namespace, path);
           return signed.ok ? ok(signed) : fail(signed.error);
         }
-        if (action === "overnight") return ok(await setOvernight(env, ctx.actor, new Date(), { value, reason }));
+        if (action === "overnight")
+          return ok(await setOvernight(env, ctx.actor, new Date(), { value, reason }));
         if (!namespace || namespace === "all") return fail("breaker_reset needs one namespace.");
         const reset = await resetBreaker(env, ctx.actor, new Date(), { namespace, threshold });
         return reset.ok ? ok(reset) : fail(reset.error);
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
-    }
+    },
   );
 
   ctx.ops.define(
@@ -54,15 +72,22 @@ export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {
       description:
         "Capsid's state per namespace: a jobs block (queued, claimed and blocked counts, jobs finished today, and each blocked job with the command it is waiting on), the queue's breaker, the latest lint report, the pull requests auto-merge declined, the daily maintenance list and what needs Dustin. Also the signed policies' versions, the overnight switch, the auto-merge safety meter, canon_paths (the canon documents a key scoped to some namespaces may not change) and, for the admin, agents: every minted agent with its kind, namespaces, grants, the flags it holds, when it was last seen and whether it is revoked. Never returns a key or a stored verifier. Read-only.",
       inputSchema: {
-        namespace: nsName.optional().describe("Limit to one namespace. Omit for every app namespace."),
+        namespace: nsName
+          .optional()
+          .describe("Limit to one namespace. Omit for every app namespace."),
       },
     },
     async ({ namespace }) => {
       try {
-        return ok(await capsidStatus(env, namespace, { namespaces: ctx.agent.scopes.namespaces, admin: ctx.agent.admin }));
+        return ok(
+          await capsidStatus(env, namespace, {
+            namespaces: ctx.agent.scopes.namespaces,
+            admin: ctx.agent.admin,
+          }),
+        );
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
-    }
+    },
   );
 }

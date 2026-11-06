@@ -51,7 +51,8 @@ export interface OvernightState {
   decision: OvernightDecision | null;
 }
 
-const isMode = (value: unknown): value is OvernightMode => typeof value === "string" && (OVERNIGHT_MODES as readonly string[]).includes(value);
+const isMode = (value: unknown): value is OvernightMode =>
+  typeof value === "string" && (OVERNIGHT_MODES as readonly string[]).includes(value);
 
 function parseDecision(raw: string | null): OvernightDecision | null {
   if (raw === null) return null;
@@ -70,13 +71,24 @@ function parseDecision(raw: string | null): OvernightDecision | null {
       return value as OvernightDecision;
     }
   } catch (err) {
-    logEvent("OVERNIGHT_DECISION_UNREADABLE", { message: `OVERNIGHT_DECISION_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the record as absent` }, { level: "error" });
+    logEvent(
+      "OVERNIGHT_DECISION_UNREADABLE",
+      {
+        message: `OVERNIGHT_DECISION_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the record as absent`,
+      },
+      { level: "error" },
+    );
     return null;
   }
   // Valid JSON of another shape: reported and read as absent, never as a decision.
-  logEvent("OVERNIGHT_DECISION_UNREADABLE", {
-    message: "OVERNIGHT_DECISION_UNREADABLE: the stored decision record is not the shape setOvernight writes; treating it as absent",
-  }, { level: "error" });
+  logEvent(
+    "OVERNIGHT_DECISION_UNREADABLE",
+    {
+      message:
+        "OVERNIGHT_DECISION_UNREADABLE: the stored decision record is not the shape setOvernight writes; treating it as absent",
+    },
+    { level: "error" },
+  );
   return null;
 }
 
@@ -93,18 +105,33 @@ export async function overnightState(env: Env): Promise<OvernightState> {
     const decision = parseDecision(await env.APP_KV.get(OVERNIGHT_DECISION_KEY));
     return decision ? { mode, decision } : { mode: "off", decision: null };
   } catch (err) {
-    logEvent("OVERNIGHT_UNREADABLE", { message: `OVERNIGHT_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the switch as off` }, { level: "error" });
+    logEvent(
+      "OVERNIGHT_UNREADABLE",
+      {
+        message: `OVERNIGHT_UNREADABLE: ${err instanceof Error ? err.message : String(err)}; treating the switch as off`,
+      },
+      { level: "error" },
+    );
     return { mode: "off", decision: null };
   }
 }
 
 export function overnightValueRefusal(value: string | undefined): string | null {
-  return isMode(value) ? null : `overnight must be one of ${OVERNIGHT_MODES.join(", ")}; got '${value ?? ""}'.`;
+  return isMode(value)
+    ? null
+    : `overnight must be one of ${OVERNIGHT_MODES.join(", ")}; got '${value ?? ""}'.`;
 }
 
 /** What setting the switch will record, for the confirm step and the audit row. */
-export function decisionFor(value: OvernightMode, actor: string, now: Date, reason: string): OvernightDecision | null {
-  return value === "subscription" ? { ...SUBSCRIPTION_DECISION, set_by: actor, set_at: now.toISOString(), reason } : null;
+export function decisionFor(
+  value: OvernightMode,
+  actor: string,
+  now: Date,
+  reason: string,
+): OvernightDecision | null {
+  return value === "subscription"
+    ? { ...SUBSCRIPTION_DECISION, set_by: actor, set_at: now.toISOString(), reason }
+    : null;
 }
 
 /**
@@ -113,17 +140,31 @@ export function decisionFor(value: OvernightMode, actor: string, now: Date, reas
  * record in the same step; any other value deletes it, so a later choice of the
  * subscription records its own date and reason rather than inheriting an old one.
  */
-export async function setOvernight(env: Env, actor: string, now: Date, opts: { value?: string; reason?: string }): Promise<{ action: "overnight" } & OvernightState> {
+export async function setOvernight(
+  env: Env,
+  actor: string,
+  now: Date,
+  opts: { value?: string; reason?: string },
+): Promise<{ action: "overnight" } & OvernightState> {
   const value = opts.value?.trim().toLowerCase();
   const bad = overnightValueRefusal(value);
   if (bad) throw new Error(`${bad} Nothing was changed.`);
   const reason = opts.reason?.trim();
-  if (!reason) throw new Error("overnight needs a reason: why the overnight run goes on, off, or changes what it runs on. It is recorded with the change. Nothing was changed.");
+  if (!reason)
+    throw new Error(
+      "overnight needs a reason: why the overnight run goes on, off, or changes what it runs on. It is recorded with the change. Nothing was changed.",
+    );
   const mode = value as OvernightMode;
   const decision = decisionFor(mode, actor, now, reason);
   await env.APP_KV.put(OVERNIGHT_MODE_KEY, mode);
   if (decision) await env.APP_KV.put(OVERNIGHT_DECISION_KEY, JSON.stringify(decision));
   else await env.APP_KV.delete(OVERNIGHT_DECISION_KEY);
-  await env.DB.batch([auditStatement(env.DB, actor, "overnight-set", null, null, { mode, reason, ...(decision ? { decision } : {}) })]);
+  await env.DB.batch([
+    auditStatement(env.DB, actor, "overnight-set", null, null, {
+      mode,
+      reason,
+      ...(decision ? { decision } : {}),
+    }),
+  ]);
   return { action: "overnight", ...(await overnightState(env)) };
 }

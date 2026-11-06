@@ -15,33 +15,78 @@ async function toolOut(name: string, documents: DocRow[]) {
   const client = new Client({ name: "doc-meta", version: "1.0.0" });
   const [c, t] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(t), client.connect(c)]);
-  const result = (await client.callTool({ name, arguments: { namespace: "capsid" } })) as { isError?: boolean; content: Array<{ text: string }> };
+  const result = (await client.callTool({ name, arguments: { namespace: "capsid" } })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
   await client.close();
   assert.notEqual(result.isError, true, result.content[0]?.text);
   return JSON.parse(result.content[0].text);
 }
 
 const CLOSED_AND_OPEN: DocRow[] = [
-  { namespace: "capsid", path: "core.md", title: "core", body: "core", type: "core", status: "published" },
-  { namespace: "capsid", path: "concept-closed.md", title: "c", body: "c", type: "concept", status: "closed" },
-  { namespace: "capsid", path: "ep-closed.md", title: "e", body: "e", type: "episodic", status: "closed" },
-  { namespace: "capsid", path: "TASK-closed.md", title: "t", body: "t", type: "task", status: "closed" },
-  { namespace: "capsid", path: "TASK-open.md", title: "t", body: "t", type: "task", status: "active" },
+  {
+    namespace: "capsid",
+    path: "core.md",
+    title: "core",
+    body: "core",
+    type: "core",
+    status: "published",
+  },
+  {
+    namespace: "capsid",
+    path: "concept-closed.md",
+    title: "c",
+    body: "c",
+    type: "concept",
+    status: "closed",
+  },
+  {
+    namespace: "capsid",
+    path: "ep-closed.md",
+    title: "e",
+    body: "e",
+    type: "episodic",
+    status: "closed",
+  },
+  {
+    namespace: "capsid",
+    path: "TASK-closed.md",
+    title: "t",
+    body: "t",
+    type: "task",
+    status: "closed",
+  },
+  {
+    namespace: "capsid",
+    path: "TASK-open.md",
+    title: "t",
+    body: "t",
+    type: "task",
+    status: "active",
+  },
 ];
 
 test("closure does not remove a document from the lint loop", async () => {
   const packet = await toolOut("capsid_lint_namespace", CLOSED_AND_OPEN);
-  assert.deepEqual(packet.wiki.map((d: { path: string }) => d.path), ["concept-closed.md"], "a closed concept fell out of gather");
+  assert.deepEqual(
+    packet.wiki.map((d: { path: string }) => d.path),
+    ["concept-closed.md"],
+    "a closed concept fell out of gather",
+  );
   assert.deepEqual(
     packet.unconsolidated.map((d: { path: string }) => d.path),
     ["ep-closed.md"],
-    "a closed episodic fell out of gather, so it can never be consolidated"
+    "a closed episodic fell out of gather, so it can never be consolidated",
   );
 });
 
 test("brief leaves a closed task out of its open tasks, and keeps an open one", async () => {
   const out = await toolOut("capsid_start_session", CLOSED_AND_OPEN);
-  assert.deepEqual(out.open_tasks.map((t: { path: string }) => t.path), ["TASK-open.md"]);
+  assert.deepEqual(
+    out.open_tasks.map((t: { path: string }) => t.path),
+    ["TASK-open.md"],
+  );
 });
 
 test("every valid status is accepted", () => {

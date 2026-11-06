@@ -4,9 +4,20 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { SCOPE_FLAGS, defaultScopes, type ScopeFlag } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { IMPROVE_OVERRIDE_FLAGS, TOOL_ACTION_GRANTS, TOOL_GRANTS, repoWriteFlags } from "../src/scope.ts";
+import {
+  IMPROVE_OVERRIDE_FLAGS,
+  TOOL_ACTION_GRANTS,
+  TOOL_GRANTS,
+  repoWriteFlags,
+} from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import { operationBlocks, sourceFile, sourceFiles, toolBlocks, type SourceFile } from "./source-files.ts";
+import {
+  operationBlocks,
+  sourceFile,
+  sourceFiles,
+  toolBlocks,
+  type SourceFile,
+} from "./source-files.ts";
 import { servedOperations } from "./served.ts";
 
 // The blast-radius suite. One plant per flag, driven through a real MCP connection
@@ -34,7 +45,15 @@ function driver(namespace = "capsid", grant: ScopeFlag[] = []): Agent {
   const scopes = defaultScopes([namespace]);
   scopes.grants = ["read", "write"];
   for (const flag of grant) scopes.flags[flag] = true;
-  return { id: "agent_0123456789ab", name: `${namespace}-driver`, kind: "driver", actor: `agent:${namespace}-driver`, scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name: `${namespace}-driver`,
+    kind: "driver",
+    actor: `agent:${namespace}-driver`,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 interface ToolResult {
@@ -42,7 +61,11 @@ interface ToolResult {
   content: Array<{ text: string }>;
 }
 
-async function callAs(caller: Agent, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
+async function callAs(
+  caller: Agent,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
   const server = buildServer(env(), caller);
   const client = new Client({ name: "blast-radius", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -55,7 +78,12 @@ async function callAs(caller: Agent, tool: string, args: Record<string, unknown>
 
 // Every path that needs a flag, one row each: the tool, the arguments that make the
 // call need it, and the flag it needs.
-const PLANTS: Array<{ flag: ScopeFlag; tool: string; args: Record<string, unknown>; what: string }> = [
+const PLANTS: Array<{
+  flag: ScopeFlag;
+  tool: string;
+  args: Record<string, unknown>;
+  what: string;
+}> = [
   {
     flag: "can_merge",
     tool: "capsid_close_pr",
@@ -83,9 +111,15 @@ const PLANTS: Array<{ flag: ScopeFlag; tool: string; args: Record<string, unknow
   {
     flag: "can_merge",
     tool: "capsid_close_pr",
-    args: { action: "delete_branch", namespace: "capsid", branch: "feature/other-agent", force: true },
+    args: {
+      action: "delete_branch",
+      namespace: "capsid",
+      branch: "feature/other-agent",
+      force: true,
+    },
     what: "a forced branch delete, which lifts the open-PR refusal and so can delete another agent's PR head",
-  },];
+  },
+];
 
 for (const plant of PLANTS) {
   test(`PLANT: without ${plant.flag}, a driver is refused ${plant.what}`, async () => {
@@ -95,8 +129,16 @@ for (const plant of PLANTS) {
       const caller = driver(String(plant.args.namespace));
       const result = await callAs(caller, plant.tool, plant.args);
       assert.equal(result.isError, true, `${plant.tool} was not refused without ${plant.flag}`);
-      assert.match(result.content[0].text, new RegExp(`needs the ${plant.flag} flag`), `the refusal does not name ${plant.flag}: ${result.content[0].text}`);
-      assert.equal(calls.length, 0, `${plant.tool} reached GitHub before refusing, so the refusal describes something that already happened`);
+      assert.match(
+        result.content[0].text,
+        new RegExp(`needs the ${plant.flag} flag`),
+        `the refusal does not name ${plant.flag}: ${result.content[0].text}`,
+      );
+      assert.equal(
+        calls.length,
+        0,
+        `${plant.tool} reached GitHub before refusing, so the refusal describes something that already happened`,
+      );
     });
   });
 
@@ -107,10 +149,17 @@ for (const plant of PLANTS) {
       const result = await callAs(adminAgentForEmail("admin@example.com"), plant.tool, plant.args);
       const text = result.content[0]?.text ?? "";
       assert.ok(text.length > 0, "the call returned no text, so an absent refusal proves nothing");
-      assert.doesNotMatch(text, /needs the .* flag/, `the admin was refused a flag it holds: ${text}`);
+      assert.doesNotMatch(
+        text,
+        /needs the .* flag/,
+        `the admin was refused a flag it holds: ${text}`,
+      );
       assert.doesNotMatch(text, /unauthorized:/, `the admin was refused: ${text}`);
       // Past the scope check means GitHub was asked.
-      assert.ok(calls.length > 0, `${plant.tool} never reached GitHub for a caller holding ${plant.flag}: ${text}`);
+      assert.ok(
+        calls.length > 0,
+        `${plant.tool} never reached GitHub for a caller holding ${plant.flag}: ${text}`,
+      );
     });
   });
 }
@@ -120,17 +169,36 @@ test("PLANT: a driver IS allowed a branch delete without force, which still refu
   // needs no flag. Holding it to can_merge would take branch cleanup away from every
   // driver.
   await withFetch({}, async (calls) => {
-    const result = await callAs(driver(), "capsid_close_pr", { action: "delete_branch", namespace: "capsid", branch: "feature/mine" });
+    const result = await callAs(driver(), "capsid_close_pr", {
+      action: "delete_branch",
+      namespace: "capsid",
+      branch: "feature/mine",
+    });
     const text = result.content[0]?.text ?? "";
-    assert.doesNotMatch(text, /needs the .* flag/, `an unforced capsid_close_pr delete_branch was refused a flag for a driver: ${text}`);
-    assert.doesNotMatch(text, /unauthorized:/, `an unforced capsid_close_pr delete_branch was refused for a driver: ${text}`);
-    assert.ok(calls.length > 0, "the call never reached GitHub, so this asserts nothing about the guard");
+    assert.doesNotMatch(
+      text,
+      /needs the .* flag/,
+      `an unforced capsid_close_pr delete_branch was refused a flag for a driver: ${text}`,
+    );
+    assert.doesNotMatch(
+      text,
+      /unauthorized:/,
+      `an unforced capsid_close_pr delete_branch was refused for a driver: ${text}`,
+    );
+    assert.ok(
+      calls.length > 0,
+      "the call never reached GitHub, so this asserts nothing about the guard",
+    );
   });
 });
 
 test("PLANT: a driver cannot reach a namespace it was not minted for", async () => {
   await withFetch({}, async (calls) => {
-    const result = await callAs(driver("capsid"), "capsid_close_pr", { action: "delete_branch", namespace: "sample", branch: "feature/x" });
+    const result = await callAs(driver("capsid"), "capsid_close_pr", {
+      action: "delete_branch",
+      namespace: "sample",
+      branch: "feature/x",
+    });
     assert.equal(result.isError, true);
     assert.match(result.content[0].text, /not scoped to the 'sample' namespace/);
     assert.equal(calls.length, 0, "the refused call still reached GitHub");
@@ -151,17 +219,28 @@ test("PLANT: a namespace-scoped caller that omits the namespace is refused, not 
   const client = new Client({ name: "blast-radius", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const allowed = (await client.callTool({ name: "capsid_find_docs", arguments: { namespace: "capsid" } })) as ToolResult;
+  const allowed = (await client.callTool({
+    name: "capsid_find_docs",
+    arguments: { namespace: "capsid" },
+  })) as ToolResult;
   await client.close();
   await server.close();
   assert.notEqual(allowed.isError, true, allowed.content[0]?.text);
-  assert.match(allowed.content[0].text, /core\.md/, "the allowed read came back empty, so it proves nothing about the guard");
+  assert.match(
+    allowed.content[0].text,
+    /core\.md/,
+    "the allowed read came back empty, so it proves nothing about the guard",
+  );
 });
 
 test("PLANT: an unscoped tool is refused even when the grant and the namespace are fine", async () => {
   const narrow = driver();
   narrow.scopes.tools = ["capsid_read_doc", "capsid_find_docs", "capsid_write_doc"];
-  const result = await callAs(narrow, "capsid_close_pr", { action: "close", namespace: "capsid", number: 7 });
+  const result = await callAs(narrow, "capsid_close_pr", {
+    action: "close",
+    namespace: "capsid",
+    number: 7,
+  });
   assert.equal(result.isError, true);
   // The refusal names the action, which shows the registrar populates need.action.
   assert.match(result.content[0].text, /not scoped to the 'capsid_close_pr\.close' tool/);
@@ -181,17 +260,25 @@ test("DERIVED: every write tool is on the enforcement point's path", () => {
   const served = servedOperations();
   const ownCheck = (tool: string): boolean => {
     const bodies = served.filter((s) => s.tool === tool).map((s) => ops.get(s.op));
-    return bodies.length > 0 && bodies.every((body) => body !== undefined && /ctx\.scope\(/.test(body));
+    return (
+      bodies.length > 0 && bodies.every((body) => body !== undefined && /ctx\.scope\(/.test(body))
+    );
   };
   const uncovered = toolBlocks()
     .filter((b) => TOOL_GRANTS[b.name] !== "read")
     .filter(
       (b) =>
         !Object.hasOwn(TOOL_GRANTS, b.name) ||
-        (TOOL_GRANTS[b.name] === "action" && !Object.hasOwn(TOOL_ACTION_GRANTS, b.name) && !ownCheck(b.name))
+        (TOOL_GRANTS[b.name] === "action" &&
+          !Object.hasOwn(TOOL_ACTION_GRANTS, b.name) &&
+          !ownCheck(b.name)),
     )
     .map((b) => b.name);
-  assert.deepEqual(uncovered, [], `these write tools are not covered by checkScope: ${uncovered.join(", ")}`);
+  assert.deepEqual(
+    uncovered,
+    [],
+    `these write tools are not covered by checkScope: ${uncovered.join(", ")}`,
+  );
   // Vacuity: the walk found a real surface, and the operations it dispatches to.
   assert.ok(toolBlocks().length >= 17, "the tool walk collapsed");
   assert.ok(ops.size >= 30, "the operation walk collapsed");
@@ -209,29 +296,45 @@ function githubMutationHelpers(files: SourceFile[]): string[] {
   for (const file of files.filter((f) => f.name.startsWith("github/"))) {
     const heads = [...file.text.matchAll(/^(export )?(?:async )?function (\w+)/gm)];
     heads.forEach((m, i) => {
-      const body = file.text.slice(m.index, i + 1 < heads.length ? heads[i + 1].index : file.text.length);
+      const body = file.text.slice(
+        m.index,
+        i + 1 < heads.length ? heads[i + 1].index : file.text.length,
+      );
       blocks.push({ name: m[2], exported: Boolean(m[1]), body });
     });
   }
-  const mutating = new Set(blocks.filter((b) => /ghFetch\(/.test(b.body) && MUTATING_METHOD.test(b.body)).map((b) => b.name));
-  for (let grew = true; grew; ) {
+  const mutating = new Set(
+    blocks
+      .filter((b) => /ghFetch\(/.test(b.body) && MUTATING_METHOD.test(b.body))
+      .map((b) => b.name),
+  );
+  for (let grew = true; grew;) {
     grew = false;
     for (const b of blocks) {
       if (mutating.has(b.name)) continue;
-      if ([...mutating].some((name) => new RegExp(`\\b${name}\\(`).test(b.body.slice(b.body.indexOf("{"))))) {
+      if (
+        [...mutating].some((name) =>
+          new RegExp(`\\b${name}\\(`).test(b.body.slice(b.body.indexOf("{"))),
+        )
+      ) {
         mutating.add(b.name);
         grew = true;
       }
     }
   }
-  return blocks.filter((b) => b.exported && mutating.has(b.name)).map((b) => b.name).sort();
+  return blocks
+    .filter((b) => b.exported && mutating.has(b.name))
+    .map((b) => b.name)
+    .sort();
 }
 
 // Import lists and comment lines are blanked (same length, so offsets hold): they name
 // a helper without calling it.
 function codeOnly(text: string): string {
   const blank = (m: string) => m.replace(/[^\n]/g, " ");
-  return text.replace(/^import[\s\S]*?from\s+"[^"]+";/gm, blank).replace(/^\s*(?:\/\/|\*|\/\*).*$/gm, blank);
+  return text
+    .replace(/^import[\s\S]*?from\s+"[^"]+";/gm, blank)
+    .replace(/^\s*(?:\/\/|\*|\/\*).*$/gm, blank);
 }
 
 // Every call to a mutation helper outside src/github/ that is not inside a guardedWrite
@@ -255,7 +358,10 @@ function unguardedMutations(files: SourceFile[], helpers: string[]): string[] {
         if (code[at] === "(") depth += 1;
         else if (code[at] === ")" && --depth === 0) break;
       }
-      if (MUTATING_METHOD.test(code.slice(m.index, at)) || /method:\s*\w/.test(code.slice(m.index, at))) {
+      if (
+        MUTATING_METHOD.test(code.slice(m.index, at)) ||
+        /method:\s*\w/.test(code.slice(m.index, at))
+      ) {
         found.push(`${file.name}: ghFetch`);
       }
     }
@@ -305,26 +411,41 @@ test("DERIVED: every repo mutation goes through the one wrapper that computes th
   // Vacuity and drift: the derivation finds every helper the repo tools are known to
   // call. A helper missing here means the derivation stopped seeing it.
   for (const known of ["managePr", "deleteBranch", "pruneMergedBranches", "tagRelease"]) {
-    assert.ok(helpers.includes(known), `the derivation did not find ${known} as a mutation helper; it found ${helpers.join(", ")}`);
+    assert.ok(
+      helpers.includes(known),
+      `the derivation did not find ${known} as a mutation helper; it found ${helpers.join(", ")}`,
+    );
   }
   const repo = codeOnly(sourceFile("tools/repo.ts"));
   for (const known of ["managePr(", "deleteBranch(", "tagRelease("]) {
-    assert.ok(repo.includes(known), `the scan found no call to ${known} in tools/repo.ts; it is reading nothing`);
+    assert.ok(
+      repo.includes(known),
+      `the scan found no call to ${known} in tools/repo.ts; it is reading nothing`,
+    );
   }
   assert.deepEqual(
     unguardedMutations(files, helpers),
     UNGUARDED_EXCEPTIONS.map((e) => e.site).sort(),
     "a GitHub mutation is called outside guardedWrite, so no flag is checked for it. Route it through guardedWrite, " +
-      "or, where there is no caller to check, add it to UNGUARDED_EXCEPTIONS with the reason"
+      "or, where there is no caller to check, add it to UNGUARDED_EXCEPTIONS with the reason",
   );
 });
 
 test("PLANT: the mutation scan catches a helper called outside guardedWrite, and a raw mutating ghFetch", () => {
   const helpers = githubMutationHelpers(sourceFiles());
   const planted: SourceFile[] = [
-    { name: "tools/guarded.ts", text: 'return guardedWrite("manage_pr", ns, null, () => managePr(env, ns, 1, "merge"));\n' },
-    { name: "rogue.ts", text: 'import { managePr } from "./github/refs";\n// managePr( in a comment is not a call\nawait managePr(env, ns, 1, "merge");\n' },
-    { name: "raw.ts", text: 'await ghFetch(env, o, r, `/repos/${o}/${r}/pulls/1/merge`, { method: "PUT" });\nawait ghFetch(env, o, r, "/repos/x");\n' },
+    {
+      name: "tools/guarded.ts",
+      text: 'return guardedWrite("manage_pr", ns, null, () => managePr(env, ns, 1, "merge"));\n',
+    },
+    {
+      name: "rogue.ts",
+      text: 'import { managePr } from "./github/refs";\n// managePr( in a comment is not a call\nawait managePr(env, ns, 1, "merge");\n',
+    },
+    {
+      name: "raw.ts",
+      text: 'await ghFetch(env, o, r, `/repos/${o}/${r}/pulls/1/merge`, { method: "PUT" });\nawait ghFetch(env, o, r, "/repos/x");\n',
+    },
   ];
   assert.deepEqual(unguardedMutations(planted, helpers), ["raw.ts: ghFetch", "rogue.ts: managePr"]);
 });
@@ -343,8 +464,14 @@ test("every flag is required by some path, so none of them is decoration", () =>
   // test/improve-protected-paths.test.ts.
   for (const flag of IMPROVE_OVERRIDE_FLAGS) produced.add(flag);
   // The loops over SCOPE_FLAGS in the agents-* tests rely on this list being non-empty.
-  assert.ok(SCOPE_FLAGS.length > 0, "SCOPE_FLAGS is empty, so no flag was checked here or in the agents tests");
+  assert.ok(
+    SCOPE_FLAGS.length > 0,
+    "SCOPE_FLAGS is empty, so no flag was checked here or in the agents tests",
+  );
   for (const flag of SCOPE_FLAGS) {
-    assert.ok(produced.has(flag), `${flag} is required by no path, so holding it or not changes nothing`);
+    assert.ok(
+      produced.has(flag),
+      `${flag} is required by no path, so holding it or not changes nothing`,
+    );
   }
 });

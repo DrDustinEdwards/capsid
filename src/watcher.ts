@@ -5,7 +5,13 @@ import { type HealthReport } from "./health";
 import { postJob } from "./jobs";
 import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { markJobFailed, readJob } from "./jobs-transition";
-import { CLEARED_SUMMARY, d1FindingMemory, onSighting, type FindingMemory, type FindingRow } from "./watcher-findings";
+import {
+  CLEARED_SUMMARY,
+  d1FindingMemory,
+  onSighting,
+  type FindingMemory,
+  type FindingRow,
+} from "./watcher-findings";
 import { type SiteMapDrift } from "./ops-sites";
 import { weekStatement } from "./ops-packages";
 import type { ExpirySnapshot, PackageSnapshot, SiteCloudflare } from "./ops-types/sites";
@@ -21,7 +27,13 @@ import {
 } from "./ops-snapshot";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { Finding } from "./watcher-detect";
-import { type WatcherCheck, WATCHER_CHECKS, owningCheck, type FindingClass, findingClass } from "./watcher-checks";
+import {
+  type WatcherCheck,
+  WATCHER_CHECKS,
+  owningCheck,
+  type FindingClass,
+  findingClass,
+} from "./watcher-checks";
 import { MINUTE_MS } from "./time";
 
 // The watcher looks at the surface every half hour and, when something is wrong,
@@ -101,10 +113,21 @@ export function passDue(lastIso: string | null, minutes: number, now: Date): Due
   const last = Date.parse(lastIso);
   // A corrupt stamp runs the pass: an extra pass is cheap, a watcher that silently
   // stopped is not.
-  if (Number.isNaN(last)) return { due: true, reason: `last-run stamp '${lastIso}' does not parse; running rather than blocking.` };
+  if (Number.isNaN(last))
+    return {
+      due: true,
+      reason: `last-run stamp '${lastIso}' does not parse; running rather than blocking.`,
+    };
   const elapsed = (now.getTime() - last) / MINUTE_MS;
-  if (elapsed < minutes) return { due: false, reason: `${Math.floor(elapsed)} of ${minutes} minutes since the last pass.` };
-  return { due: true, reason: `${Math.floor(elapsed)} minutes since the last pass, cadence is ${minutes}.` };
+  if (elapsed < minutes)
+    return {
+      due: false,
+      reason: `${Math.floor(elapsed)} of ${minutes} minutes since the last pass.`,
+    };
+  return {
+    due: true,
+    reason: `${Math.floor(elapsed)} minutes since the last pass, cadence is ${minutes}.`,
+  };
 }
 
 export interface WatcherReport {
@@ -124,7 +147,7 @@ export interface WatcherReport {
 export async function openWatcherFingerprints(env: Env): Promise<Map<string, string>> {
   const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
   const { results } = await env.DB.prepare(
-    `SELECT id, title FROM jobs WHERE posted_by = ?1 AND status IN (${placeholders})`
+    `SELECT id, title FROM jobs WHERE posted_by = ?1 AND status IN (${placeholders})`,
   )
     .bind(WATCHER_ACTOR, ...OPEN_JOB_STATUSES)
     .all<{ id: string; title: string }>();
@@ -139,13 +162,27 @@ export async function openWatcherFingerprints(env: Env): Promise<Map<string, str
 /** A finding that is no longer found: the job is marked failed with "cleared", since
  *  nobody did the work. Keyed on queued, so a job claimed between the read and the
  *  write is not closed underneath its driver; RETURNING, not meta.changes. */
-export async function clearFinding(env: Env, id: string, now: Date, summary: string = CLEARED_SUMMARY): Promise<boolean> {
+export async function clearFinding(
+  env: Env,
+  id: string,
+  now: Date,
+  summary: string = CLEARED_SUMMARY,
+): Promise<boolean> {
   const job = await readJob(env.DB, id);
   if (!job || job.status !== "queued" || job.posted_by !== WATCHER_ACTOR) return false;
   // The mirror document closes in the same batch as the row (snapshot invariant, test/write-invariants.test.ts),
   // and the batch is guarded on the status read above, so a job claimed in between is
   // left alone.
-  const result = await markJobFailed(env, job, "queued", summary, "job-cleared", WATCHER_ACTOR, {}, now);
+  const result = await markJobFailed(
+    env,
+    job,
+    "queued",
+    summary,
+    "job-cleared",
+    WATCHER_ACTOR,
+    {},
+    now,
+  );
   return result.failed;
 }
 
@@ -177,8 +214,14 @@ export interface Gathered {
 /** The snapshot's check list: every check, as clear, finding, or could not run. */
 export function checkStates(gathered: Pick<Gathered, "findings" | "ran">): OpsSnapshot["checks"] {
   return WATCHER_CHECKS.map((id) => {
-    const findings = gathered.findings.filter((f) => owningCheck(f.fingerprint) === id).map((f) => f.fingerprint);
-    return { id, state: !gathered.ran.has(id) ? "could-not-run" : findings.length ? "finding" : "clear", findings };
+    const findings = gathered.findings
+      .filter((f) => owningCheck(f.fingerprint) === id)
+      .map((f) => f.fingerprint);
+    return {
+      id,
+      state: !gathered.ran.has(id) ? "could-not-run" : findings.length ? "finding" : "clear",
+      findings,
+    };
   });
 }
 
@@ -209,7 +252,14 @@ const movedSummary = (klass: FindingClass): string =>
 // A keyed write that moved nothing lost a race with another pass (the tick and the
 // Portal's Refresh). Said, not swallowed; the next pass reads the row again.
 function moved(ok: boolean, fingerprint: string, what: string): void {
-  if (!ok) logEvent("WATCHER_FINDING_MOVED", { message: `WATCHER_FINDING_MOVED ${fingerprint}: the row changed between the read and the ${what}; left for the next pass` }, { level: "error" });
+  if (!ok)
+    logEvent(
+      "WATCHER_FINDING_MOVED",
+      {
+        message: `WATCHER_FINDING_MOVED ${fingerprint}: the row changed between the read and the ${what}; left for the next pass`,
+      },
+      { level: "error" },
+    );
 }
 
 export async function runPass(readers: PassReaders, now: Date): Promise<PassResult> {
@@ -266,16 +316,31 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
       routed.push(f.fingerprint);
       const heldJob = stillHeld.get(f.fingerprint) ?? null;
       const justMoved = movedOff.has(f.fingerprint) && row?.state === "open";
-      const rowJob = !heldJob && !justMoved && row?.state === "open" && row.job_id ? await readers.memory.job(row.job_id) : null;
+      const rowJob =
+        !heldJob && !justMoved && row?.state === "open" && row.job_id
+          ? await readers.memory.job(row.job_id)
+          : null;
       const verdict = justMoved ? ({ do: "post" } as const) : onSighting(row, heldJob, rowJob, now);
-      if (verdict.do === "bump") moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, "sighting");
-      else if (verdict.do === "adopt") moved(row ? await readers.memory.open(row, f, verdict.jobId, now) : await readers.memory.insert(f, "open", verdict.jobId, now), f.fingerprint, "adoption of its open job");
+      if (verdict.do === "bump")
+        moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, "sighting");
+      else if (verdict.do === "adopt")
+        moved(
+          row
+            ? await readers.memory.open(row, f, verdict.jobId, now)
+            : await readers.memory.insert(f, "open", verdict.jobId, now),
+          f.fingerprint,
+          "adoption of its open job",
+        );
       else if (verdict.do === "dismiss") {
         held.push(f.fingerprint);
         moved(await readers.memory.dismiss(row as FindingRow, f, now), f.fingerprint, "dismissal");
       } else if (verdict.do === "quiet") {
         held.push(f.fingerprint);
-        moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, `sighting (${verdict.why})`);
+        moved(
+          await readers.memory.sight(row as FindingRow, f, now),
+          f.fingerprint,
+          `sighting (${verdict.why})`,
+        );
       } else {
         const ok = !row
           ? await readers.memory.insert(f, "open", null, now)
@@ -288,7 +353,8 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
     }
     const openJob = open.get(f.fingerprint) ?? null;
     // How the row's job ended, read only when the decision turns on it.
-    const rowJob = !openJob && row?.state === "open" && row.job_id ? await readers.memory.job(row.job_id) : null;
+    const rowJob =
+      !openJob && row?.state === "open" && row.job_id ? await readers.memory.job(row.job_id) : null;
     const verdict = onSighting(row, openJob, rowJob, now);
 
     if (verdict.do === "bump") {
@@ -297,16 +363,22 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
       moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, "sighting");
     } else if (verdict.do === "adopt") {
       moved(
-        row ? await readers.memory.open(row, f, verdict.jobId, now) : await readers.memory.insert(f, "open", verdict.jobId, now),
+        row
+          ? await readers.memory.open(row, f, verdict.jobId, now)
+          : await readers.memory.insert(f, "open", verdict.jobId, now),
         f.fingerprint,
-        "adoption of its open job"
+        "adoption of its open job",
       );
     } else if (verdict.do === "dismiss") {
       held.push(f.fingerprint);
       moved(await readers.memory.dismiss(row as FindingRow, f, now), f.fingerprint, "dismissal");
     } else if (verdict.do === "quiet") {
       held.push(f.fingerprint);
-      moved(await readers.memory.sight(row as FindingRow, f, now), f.fingerprint, `sighting (${verdict.why})`);
+      moved(
+        await readers.memory.sight(row as FindingRow, f, now),
+        f.fingerprint,
+        `sighting (${verdict.why})`,
+      );
     } else {
       // The bound on posts per pass. The rest are found again next pass.
       if (posted.length >= MAX_FINDINGS_PER_PASS) continue;
@@ -314,12 +386,20 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
       if (result.ok) {
         posted.push(f.fingerprint);
         moved(
-          row ? await readers.memory.open(row, f, result.jobId, now) : await readers.memory.insert(f, "open", result.jobId, now),
+          row
+            ? await readers.memory.open(row, f, result.jobId, now)
+            : await readers.memory.insert(f, "open", result.jobId, now),
           f.fingerprint,
-          "record of its new job"
+          "record of its new job",
         );
       } else {
-        logEvent("WATCHER_POST_REFUSED", { message: `WATCHER_POST_REFUSED ${f.fingerprint}: ${result.refusal ?? "no reason given"}` }, { level: "error" });
+        logEvent(
+          "WATCHER_POST_REFUSED",
+          {
+            message: `WATCHER_POST_REFUSED ${f.fingerprint}: ${result.refusal ?? "no reason given"}`,
+          },
+          { level: "error" },
+        );
         if (row) moved(await readers.memory.sight(row, f, now), f.fingerprint, "sighting");
       }
     }
@@ -329,10 +409,17 @@ export async function runPass(readers: PassReaders, now: Date): Promise<PassResu
 
 /** The step the five-minute tick calls. Gates on its own cadence first, unless `force`
  *  (the Portal's Refresh, src/ops-feed.ts), which skips that check and nothing else. */
-export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gathered>, opts: { force?: boolean } = {}): Promise<WatcherReport> {
+export async function watcherTick(
+  env: Env,
+  now: Date,
+  gather: () => Promise<Gathered>,
+  opts: { force?: boolean } = {},
+): Promise<WatcherReport> {
   const minutes = await cadenceMinutes(env);
   const last = await env.APP_KV.get(WATCHER_LAST_KEY).catch(() => null);
-  const due: DueVerdict = opts.force ? { due: true, reason: "an on-demand pass." } : passDue(last, minutes, now);
+  const due: DueVerdict = opts.force
+    ? { due: true, reason: "an on-demand pass." }
+    : passDue(last, minutes, now);
   if (!due.due) return { ran: false, note: due.reason, posted: [], cleared: [] };
 
   const agent = watcherAgent();
@@ -353,11 +440,13 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
           // marking it here would demand a human confirmation before anyone read it.
           gate_required: false,
         });
-        return result.ok && result.job ? { ok: true as const, jobId: result.job.id } : { ok: false as const, refusal: result.refusal };
+        return result.ok && result.job
+          ? { ok: true as const, jobId: result.job.id }
+          : { ok: false as const, refusal: result.refusal };
       },
       memory: d1FindingMemory(env),
     },
-    now
+    now,
   );
 
   // The pass, kept for the dashboard. Before the stamp: a snapshot that fails to write
@@ -378,17 +467,25 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
       cloudflare: o.cloudflare,
       packages: o.packages,
       expiry: o.expiry,
-    })
+    }),
   );
   // The week's GitHub numbers, once per package per ISO week (ops_package_weeks). A
   // failed write loses one week's row, not the pass: it is logged, and the next pass
   // that week writes it.
-  const weekly = (o.packages ?? []).map((p) => weekStatement(env.DB, p, now)).filter((st): st is D1PreparedStatement => st !== null);
+  const weekly = (o.packages ?? [])
+    .map((p) => weekStatement(env.DB, p, now))
+    .filter((st): st is D1PreparedStatement => st !== null);
   if (weekly.length > 0) {
     try {
       await env.DB.batch(weekly);
     } catch (err) {
-      logEvent("WATCHER_PACKAGE_WEEKS_FAILED", { message: `WATCHER_PACKAGE_WEEKS_FAILED: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+      logEvent(
+        "WATCHER_PACKAGE_WEEKS_FAILED",
+        {
+          message: `WATCHER_PACKAGE_WEEKS_FAILED: ${err instanceof Error ? err.message : String(err)}`,
+        },
+        { level: "error" },
+      );
     }
   }
 
@@ -402,7 +499,13 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
       });
     }
   } catch (err) {
-    logEvent("WATCHER_AGENTS_ARCHIVE_FAILED", { message: `WATCHER_AGENTS_ARCHIVE_FAILED: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "WATCHER_AGENTS_ARCHIVE_FAILED",
+      {
+        message: `WATCHER_AGENTS_ARCHIVE_FAILED: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
 
   // Written last and only on a pass that ran. A stamp written first would make a
@@ -415,4 +518,3 @@ export async function watcherTick(env: Env, now: Date, gather: () => Promise<Gat
     cleared,
   };
 }
-

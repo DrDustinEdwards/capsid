@@ -16,16 +16,38 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 const DOCS = [
   { namespace: "capsid", path: "core.md", title: "capsid core", body: "ours", type: "core" },
   { namespace: "foxhound", path: "core.md", title: "foxhound core", body: "SECRET", type: "core" },
-  { namespace: "capsid", path: "prompts/ours.md", title: "ours", body: "hello {{name}}", type: "prompt" },
-  { namespace: "foxhound", path: "prompts/theirs.md", title: "theirs", body: "secret {{name}}", type: "prompt" },
+  {
+    namespace: "capsid",
+    path: "prompts/ours.md",
+    title: "ours",
+    body: "hello {{name}}",
+    type: "prompt",
+  },
+  {
+    namespace: "foxhound",
+    path: "prompts/theirs.md",
+    title: "theirs",
+    body: "secret {{name}}",
+    type: "prompt",
+  },
 ];
 
 const NAMESPACES = [
-  { namespace: "capsid", repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]) },
-  { namespace: "foxhound", repos: JSON.stringify([{ repo: "DrDustinEdwards/foxhound", label: "primary" }]) },
+  {
+    namespace: "capsid",
+    repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]),
+  },
+  {
+    namespace: "foxhound",
+    repos: JSON.stringify([{ repo: "DrDustinEdwards/foxhound", label: "primary" }]),
+  },
 ];
 
-async function connect(caller: Agent, jobs: Array<Record<string, unknown>> = [], build: typeof buildServer = buildServer) {
+async function connect(
+  caller: Agent,
+  jobs: Array<Record<string, unknown>> = [],
+  build: typeof buildServer = buildServer,
+) {
   const d1 = fakeD1({ documents: DOCS, namespaces: NAMESPACES, jobs });
   const server = build(fakeEnv({ DB: d1.db, APP_KV: fakeKv({ seedToken: true }).kv }), caller);
   const client = new Client({ name: "scope-surfaces", version: "1.0.0" });
@@ -44,7 +66,15 @@ async function connect(caller: Agent, jobs: Array<Record<string, unknown>> = [],
 function driver(namespace = "capsid"): Agent {
   const scopes = defaultScopes([namespace]);
   scopes.grants = ["read", "write"];
-  return { id: "agent_0123456789ab", name: `${namespace}-driver`, kind: "driver", actor: `agent:${namespace}-driver`, scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name: `${namespace}-driver`,
+    kind: "driver",
+    actor: `agent:${namespace}-driver`,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 // resources and prompts
@@ -55,16 +85,22 @@ test("PLANT: a driver cannot READ another namespace's document by resource URI",
   await assert.rejects(
     () => client.readResource({ uri: "capsid://foxhound/core.md" }),
     /not scoped to the 'foxhound' namespace/,
-    "a one-namespace driver read another namespace's document by URI"
+    "a one-namespace driver read another namespace's document by URI",
   );
   await close();
 });
 
 test("THE INNOCENT DIRECTION: the same driver reads its OWN namespace by URI", async () => {
   const { client, close } = await connect(driver());
-  const result = (await client.readResource({ uri: "capsid://capsid/core.md" })) as { contents: Array<{ text: string }> };
+  const result = (await client.readResource({ uri: "capsid://capsid/core.md" })) as {
+    contents: Array<{ text: string }>;
+  };
   await close();
-  assert.equal(result.contents[0].text, "ours", "the driver was refused its own namespace, so the plant above proves nothing");
+  assert.equal(
+    result.contents[0].text,
+    "ours",
+    "the driver was refused its own namespace, so the plant above proves nothing",
+  );
 });
 
 test("PLANT: resources/list shows only the namespaces the caller is scoped to", async () => {
@@ -76,9 +112,12 @@ test("PLANT: resources/list shows only the namespaces the caller is scoped to", 
   assert.deepEqual(
     uris.filter((u) => u.includes("foxhound")),
     [],
-    "another namespace's documents were listed to a scoped caller"
+    "another namespace's documents were listed to a scoped caller",
   );
-  assert.ok(uris.some((u) => u === "capsid://capsid/core.md"), "the caller's own documents went missing with the filter");
+  assert.ok(
+    uris.some((u) => u === "capsid://capsid/core.md"),
+    "the caller's own documents went missing with the filter",
+  );
 });
 
 test("THE ADMIN STILL SEES EVERY NAMESPACE, so the filter is a scope and not a ceiling", async () => {
@@ -86,7 +125,10 @@ test("THE ADMIN STILL SEES EVERY NAMESPACE, so the filter is a scope and not a c
   const listed = (await client.listResources()) as { resources: Array<{ uri: string }> };
   await close();
   const uris = listed.resources.map((r) => r.uri);
-  assert.ok(uris.includes("capsid://foxhound/core.md"), "the admin lost sight of a namespace it is scoped to");
+  assert.ok(
+    uris.includes("capsid://foxhound/core.md"),
+    "the admin lost sight of a namespace it is scoped to",
+  );
 });
 
 test("PLANT: a driver cannot GET another namespace's prompt", async () => {
@@ -96,14 +138,17 @@ test("PLANT: a driver cannot GET another namespace's prompt", async () => {
   await assert.rejects(
     () => client.getPrompt({ name: "foxhound/prompts/theirs", arguments: { name: "x" } }),
     /not scoped to the 'foxhound' namespace/,
-    "a one-namespace driver fetched another namespace's prompt"
+    "a one-namespace driver fetched another namespace's prompt",
   );
   await close();
 });
 
 test("THE INNOCENT DIRECTION: the same driver gets its OWN prompt", async () => {
   const { client, close } = await connect(driver());
-  const result = (await client.getPrompt({ name: "capsid/prompts/ours", arguments: { name: "world" } })) as {
+  const result = (await client.getPrompt({
+    name: "capsid/prompts/ours",
+    arguments: { name: "world" },
+  })) as {
     messages: Array<{ content: { resource: { text: string } } }>;
   };
   await close();
@@ -116,7 +161,11 @@ test("PLANT: prompts/list shows only the caller's namespaces", async () => {
   await close();
   const names = listed.prompts.map((p) => p.name);
   assert.ok(names.length > 0, "the prompt listing came back empty, so it proves nothing");
-  assert.deepEqual(names.filter((n) => n.startsWith("foxhound/")), [], "another namespace's prompts were listed");
+  assert.deepEqual(
+    names.filter((n) => n.startsWith("foxhound/")),
+    [],
+    "another namespace's prompts were listed",
+  );
 });
 
 test("PLANT: a caller narrowed away from capsid_read_doc lists no resources and no prompts", async () => {
@@ -136,15 +185,25 @@ test("PLANT: `capsid_find_docs` action `namespaces` shows a scoped caller only i
   // The action takes no arguments, so namespaceRefusal has nothing to fire on. The mapping
   // is what the repos axis is built from and what resolveRepo resolves through.
   const { client, close } = await connect(driver());
-  const result = (await client.callTool({ name: "capsid_find_docs", arguments: { action: "namespaces" } })) as { content: Array<{ text: string }> };
+  const result = (await client.callTool({
+    name: "capsid_find_docs",
+    arguments: { action: "namespaces" },
+  })) as { content: Array<{ text: string }> };
   await close();
   const rows = JSON.parse(result.content[0].text) as Array<{ namespace: string }>;
-  assert.deepEqual(rows.map((r) => r.namespace), ["capsid"], "a one-namespace driver read the whole namespace-to-repo mapping");
+  assert.deepEqual(
+    rows.map((r) => r.namespace),
+    ["capsid"],
+    "a one-namespace driver read the whole namespace-to-repo mapping",
+  );
 });
 
 test("THE ADMIN STILL SEES THE WHOLE MAPPING", async () => {
   const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const result = (await client.callTool({ name: "capsid_find_docs", arguments: { action: "namespaces" } })) as { content: Array<{ text: string }> };
+  const result = (await client.callTool({
+    name: "capsid_find_docs",
+    arguments: { action: "namespaces" },
+  })) as { content: Array<{ text: string }> };
   await close();
   const rows = JSON.parse(result.content[0].text) as Array<{ namespace: string }>;
   assert.deepEqual(rows.map((r) => r.namespace).sort(), ["capsid", "foxhound"]);
@@ -154,7 +213,10 @@ test("PLANT: capsid_read_status status hands a scoped caller NO credential inven
   // `agents` names every minted credential, its namespaces, its grants and its
   // blast-radius flags: the map an agent looking to widen itself would want.
   const { client, close } = await connect(driver());
-  const result = (await client.callTool({ name: "capsid_read_status", arguments: { action: "status", namespace: "capsid" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_read_status",
+    arguments: { action: "status", namespace: "capsid" },
+  })) as {
     content: Array<{ text: string }>;
   };
   await close();
@@ -164,7 +226,10 @@ test("PLANT: capsid_read_status status hands a scoped caller NO credential inven
 
 test("THE ADMIN STILL GETS THE INVENTORY, which is who it is for", async () => {
   const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const result = (await client.callTool({ name: "capsid_read_status", arguments: { action: "status" } })) as { content: Array<{ text: string }> };
+  const result = (await client.callTool({
+    name: "capsid_read_status",
+    arguments: { action: "status" },
+  })) as { content: Array<{ text: string }> };
   await close();
   const body = JSON.parse(result.content[0].text) as { agents?: unknown[] };
   assert.ok(Array.isArray(body.agents), "the admin lost the inventory it is the audience for");
@@ -177,30 +242,59 @@ test("PLANT: an agent scoped to capsid_work_jobs.post is REFUSED action list", a
   const caller = driver();
   caller.scopes.tools = ["capsid_work_jobs", "capsid_work_jobs.post"];
   const { client, close } = await connect(caller);
-  const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", namespace: "capsid" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_work_jobs",
+    arguments: { action: "list", namespace: "capsid" },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
   await close();
   assert.equal(result.isError, true, "a post-only agent listed the queue");
-  assert.match(result.content[0].text, /not scoped to the 'capsid_work_jobs\.list' tool/, result.content[0].text);
+  assert.match(
+    result.content[0].text,
+    /not scoped to the 'capsid_work_jobs\.list' tool/,
+    result.content[0].text,
+  );
 });
 
 test("THE INNOCENT DIRECTION: an agent scoped to capsid_work_jobs.list may list", async () => {
   const caller = driver();
   caller.scopes.tools = ["capsid_work_jobs", "capsid_work_jobs.list"];
-  const seeded = { id: "job_listed", namespace: "capsid", title: "a listed job", status: "queued", priority: 0, posted_by: "github:seat" };
+  const seeded = {
+    id: "job_listed",
+    namespace: "capsid",
+    title: "a listed job",
+    status: "queued",
+    priority: 0,
+    posted_by: "github:seat",
+  };
   const { client, close } = await connect(caller, [seeded]);
-  const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", namespace: "capsid" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_work_jobs",
+    arguments: { action: "list", namespace: "capsid" },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
   await close();
-  assert.doesNotMatch(result.content[0].text, /unauthorized:/, `a list-scoped agent was refused list: ${result.content[0].text}`);
+  assert.doesNotMatch(
+    result.content[0].text,
+    /unauthorized:/,
+    `a list-scoped agent was refused list: ${result.content[0].text}`,
+  );
   assert.notEqual(result.isError, true, result.content[0].text);
-  const listed = JSON.parse(result.content[0].text) as { ok: boolean; action: string; jobs: Array<{ id: string }> };
+  const listed = JSON.parse(result.content[0].text) as {
+    ok: boolean;
+    action: string;
+    jobs: Array<{ id: string }>;
+  };
   assert.equal(listed.ok, true);
-  assert.deepEqual(listed.jobs.map((j) => j.id), ["job_listed"], "the list did not return the queue");
+  assert.deepEqual(
+    listed.jobs.map((j) => j.id),
+    ["job_listed"],
+    "the list did not return the queue",
+  );
 });
 
 test("PLANT: a WRITE-ONLY agent is refused jobs list, which is the grant half", async () => {
@@ -211,7 +305,10 @@ test("PLANT: a WRITE-ONLY agent is refused jobs list, which is the grant half", 
   const caller = driver();
   caller.scopes.grants = ["write"];
   const { client, close } = await connect(caller);
-  const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", namespace: "capsid" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_work_jobs",
+    arguments: { action: "list", namespace: "capsid" },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
@@ -225,7 +322,10 @@ test("PLANT: a driver is REFUSED the administrator's switches: its status tool s
   // Neither is an action of the driver's capsid_read_status; both are
   // capsid_admin_manage_switches, admin only.
   const driverSide = await connect(driver());
-  const asked = (await driverSide.client.callTool({ name: "capsid_read_status", arguments: { action: "breaker_reset", namespace: "capsid" } })) as {
+  const asked = (await driverSide.client.callTool({
+    name: "capsid_read_status",
+    arguments: { action: "breaker_reset", namespace: "capsid" },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
@@ -238,7 +338,10 @@ test("PLANT: a driver is REFUSED the administrator's switches: its status tool s
     // The namespace is passed because the tool declares one and namespaceRefusal fires
     // first for a scoped caller that omits it; this plant is about the admin check.
     const admin = await connect(driver(), [], buildAdminServer);
-    const result = (await admin.client.callTool({ name: "capsid_admin_manage_switches", arguments: args })) as {
+    const result = (await admin.client.callTool({
+      name: "capsid_admin_manage_switches",
+      arguments: args,
+    })) as {
       content: Array<{ text: string }>;
     };
     await admin.close();
@@ -255,7 +358,10 @@ test("PLANT: a WRITE-ONLY agent is refused lint gather, which is the grant half"
   const caller = driver();
   caller.scopes.grants = ["write"];
   const { client, close } = await connect(caller);
-  const result = (await client.callTool({ name: "capsid_lint_namespace", arguments: { namespace: "capsid" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_lint_namespace",
+    arguments: { namespace: "capsid" },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
@@ -269,14 +375,24 @@ test("THE INNOCENT DIRECTION: a read-grant agent may still gather", async () => 
   const caller = driver();
   caller.scopes.grants = ["read"];
   const { client, close } = await connect(caller);
-  const result = (await client.callTool({ name: "capsid_lint_namespace", arguments: { namespace: "capsid" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_lint_namespace",
+    arguments: { namespace: "capsid" },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
   await close();
-  assert.doesNotMatch(result.content[0].text, /unauthorized:/, `a read agent was refused gather: ${result.content[0].text}`);
+  assert.doesNotMatch(
+    result.content[0].text,
+    /unauthorized:/,
+    `a read agent was refused gather: ${result.content[0].text}`,
+  );
   assert.notEqual(result.isError, true, result.content[0].text);
-  const packet = JSON.parse(result.content[0].text) as { mode: string; core: { body: string } | null };
+  const packet = JSON.parse(result.content[0].text) as {
+    mode: string;
+    core: { body: string } | null;
+  };
   assert.equal(packet.mode, "gather");
   assert.equal(packet.core?.body, "ours", "gather did not return the caller's own core document");
 });
@@ -286,7 +402,10 @@ test("THE OTHER INNOCENT DIRECTION: the write branches still take the write gran
   const caller = driver();
   caller.scopes.grants = ["read"];
   const { client, close } = await connect(caller);
-  const result = (await client.callTool({ name: "capsid_lint_namespace", arguments: { namespace: "capsid", mode: "report" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_lint_namespace",
+    arguments: { namespace: "capsid", mode: "report" },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
@@ -300,11 +419,18 @@ test("the in-Worker watcher is NOT the write-only caller that reaches gather", a
   // before any grant is considered. An omitted mode resolves to the handler's default
   // before the axis is consulted, so the refusal names capsid_lint_namespace.gather.
   const { client, close } = await connect(watcherAgent());
-  const result = (await client.callTool({ name: "capsid_lint_namespace", arguments: { namespace: "capsid" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_lint_namespace",
+    arguments: { namespace: "capsid" },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
   await close();
   assert.equal(result.isError, true);
-  assert.match(result.content[0].text, /not scoped to the 'capsid_lint_namespace\.gather' tool/, result.content[0].text);
+  assert.match(
+    result.content[0].text,
+    /not scoped to the 'capsid_lint_namespace\.gather' tool/,
+    result.content[0].text,
+  );
 });

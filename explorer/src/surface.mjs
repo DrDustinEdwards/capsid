@@ -16,7 +16,13 @@ import { defineOpsSnapshotOperations } from "../../src/tools/ops.ts";
 import { defineRepoOperations } from "../../src/tools/repo.ts";
 import { defineStatusOperations } from "../../src/tools/status.ts";
 import { defineSystemOperations } from "../../src/tools/system.ts";
-import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS, COMPOSITES, registerCapsidAdminTools, registerCapsidTools } from "../../src/tools/surface.ts";
+import {
+  CAPSID_ADMIN_TOOLS,
+  CAPSID_TOOLS,
+  COMPOSITES,
+  registerCapsidAdminTools,
+  registerCapsidTools,
+} from "../../src/tools/surface.ts";
 import { TOOL_GRANTS } from "../../src/scope.ts";
 
 /**
@@ -49,7 +55,13 @@ function valuesOf(s) {
 function param(key, type) {
   // The schema's own method, so the zod that made it writes it (the explorer installs its own).
   const json = type.toJSONSchema({ unrepresentable: "any", io: "input" });
-  return { name: key, type: typeOf(json), required: !type.safeParse(undefined).success, description: json.description ?? "", values: valuesOf(json) };
+  return {
+    name: key,
+    type: typeOf(json),
+    required: !type.safeParse(undefined).success,
+    description: json.description ?? "",
+    values: valuesOf(json),
+  };
 }
 
 /** Every tool Capsid and Capsid Admin serve, in the order tools/list publishes them. @returns {Tool[]} */
@@ -57,9 +69,42 @@ export function servedTools() {
   const ops = new Operations();
   /** @type {Array<{ name: string, config: any }>} */
   const registered = [];
-  const server = /** @type {any} */ (new Proxy({}, { get: (_t, key) => (key === "registerTool" ? (/** @type {string} */ name, /** @type {any} */ config) => registered.push({ name, config }) : () => undefined) }));
-  const ctx = /** @type {any} */ ({ env: {}, db: {}, actor: "", agent: {}, scope: () => null, lastActor: async () => null, ops });
-  for (const define of [defineDocOperations, defineLintOperations, defineRepoOperations, defineStatusOperations, defineSystemOperations, defineJobOperations, defineAgentOperations, defineClaimsOperations, defineOpsSnapshotOperations, defineCloudflareOperations, defineControlOperations, defineAdminOperations]) define(server, ctx);
+  const server = /** @type {any} */ (
+    new Proxy(
+      {},
+      {
+        get: (_t, key) =>
+          key === "registerTool"
+            ? (/** @type {string} */ name, /** @type {any} */ config) =>
+                registered.push({ name, config })
+            : () => undefined,
+      },
+    )
+  );
+  const ctx = /** @type {any} */ ({
+    env: {},
+    db: {},
+    actor: "",
+    agent: {},
+    scope: () => null,
+    lastActor: async () => null,
+    ops,
+  });
+  for (const define of [
+    defineDocOperations,
+    defineLintOperations,
+    defineRepoOperations,
+    defineStatusOperations,
+    defineSystemOperations,
+    defineJobOperations,
+    defineAgentOperations,
+    defineClaimsOperations,
+    defineOpsSnapshotOperations,
+    defineCloudflareOperations,
+    defineControlOperations,
+    defineAdminOperations,
+  ])
+    define(server, ctx);
   // As a writer sees it: every action of every tool.
   registerCapsidTools(server, ops, false);
   registerCapsidAdminTools(server, ops);
@@ -67,7 +112,10 @@ export function servedTools() {
   const admin = new Set(/** @type {readonly string[]} */ (CAPSID_ADMIN_TOOLS));
   const order = [...CAPSID_TOOLS, ...CAPSID_ADMIN_TOOLS];
   return registered
-    .sort((a, b) => order.indexOf(/** @type {any} */ (a.name)) - order.indexOf(/** @type {any} */ (b.name)))
+    .sort(
+      (a, b) =>
+        order.indexOf(/** @type {any} */ (a.name)) - order.indexOf(/** @type {any} */ (b.name)),
+    )
     .map(({ name, config }) => {
       const spec = composites.get(name);
       // A tool's schema is an object schema or its shape, as the SDK takes either.
@@ -77,9 +125,22 @@ export function servedTools() {
         ? Object.entries(spec.actions).map(([action, a]) => ({
             name: action,
             summary: a.summary,
-            params: a.fields ? [...a.fields] : Object.keys(ops.config(a.op).inputSchema.shape ?? ops.config(a.op).inputSchema).filter((k) => !(a.inject && Object.hasOwn(a.inject, k))),
+            params: a.fields
+              ? [...a.fields]
+              : Object.keys(
+                  ops.config(a.op).inputSchema.shape ?? ops.config(a.op).inputSchema,
+                ).filter((k) => !(a.inject && Object.hasOwn(a.inject, k))),
           }))
         : [];
-      return { name, server: admin.has(name) ? "Capsid Admin" : "Capsid", title: config.title, description: config.description, grant: TOOL_GRANTS[name] ?? "write", hints: config.annotations, actions, params };
+      return {
+        name,
+        server: admin.has(name) ? "Capsid Admin" : "Capsid",
+        title: config.title,
+        description: config.description,
+        grant: TOOL_GRANTS[name] ?? "write",
+        hints: config.annotations,
+        actions,
+        params,
+      };
     });
 }

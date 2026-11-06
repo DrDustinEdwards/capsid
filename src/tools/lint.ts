@@ -1,9 +1,22 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { repoBlobPaths, resolveRepo } from "../github";
-import { auditStatement, documentUpsert, isMissingRowAbort, requireExists, snapshotLive } from "../store-guards";
+import {
+  auditStatement,
+  documentUpsert,
+  isMissingRowAbort,
+  requireExists,
+  snapshotLive,
+} from "../store-guards";
 import { authoritativeFor, scanCountClaims } from "../counts";
-import { buildTruthReport, isUnscanned, renderTruthReport, reportPath, type ReportDoc, type ReportEdge } from "../truth-report";
+import {
+  buildTruthReport,
+  isUnscanned,
+  renderTruthReport,
+  reportPath,
+  type ReportDoc,
+  type ReportEdge,
+} from "../truth-report";
 import { docPath, GATHER_BUDGET, LINT_CONSUMED_MAX, nsName } from "../limits";
 import { policyWriteRefusal } from "../signed-docs";
 import { fail, ok, pathMutation, requireConfirmation, type ToolCtx } from "./docs";
@@ -46,7 +59,8 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
       // checkScope with this call's action before it is read or returned. capsid's
       // conventions is exempt: see the rules query in gather.
       const action = mode ?? "gather";
-      const reaches = (other: string) => ctx.scope({ tool: LINT_TOOL, action, namespace: other }) === null;
+      const reaches = (other: string) =>
+        ctx.scope({ tool: LINT_TOOL, action, namespace: other }) === null;
       const withinScope = <T extends { from_ns: unknown; to_ns: unknown }>(rows: T[]) =>
         rows.filter((e) => reaches(String(e.from_ns)) && reaches(String(e.to_ns)));
       if (action === "gather") {
@@ -54,10 +68,17 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         // no grant and leaves it to the handler, where the mode is known, and gather
         // returns before the write-grant check below. Without this, gather would ask
         // for no grant at all.
-        const gatherRefusal = ctx.scope({ tool: LINT_TOOL, action: "gather", grant: "read", namespace });
+        const gatherRefusal = ctx.scope({
+          tool: LINT_TOOL,
+          action: "gather",
+          grant: "read",
+          namespace,
+        });
         if (gatherRefusal) return fail(gatherRefusal);
         const core = await db
-          .prepare("SELECT namespace, path, title, type, status, body, updated_at FROM documents WHERE namespace = ?1 AND path = 'core.md'")
+          .prepare(
+            "SELECT namespace, path, title, type, status, body, updated_at FROM documents WHERE namespace = ?1 AND path = 'core.md'",
+          )
           .bind(namespace)
           .first();
         const wiki = await db
@@ -65,7 +86,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
             `SELECT namespace, path, title, type, status, tags, body, updated_at
              FROM documents
              WHERE namespace = ?1 AND type IN ('concept', 'decision')
-             ORDER BY path`
+             ORDER BY path`,
           )
           .bind(namespace)
           .all();
@@ -77,7 +98,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
              FROM documents
              WHERE namespace = ?1 AND type IN ('episodic', 'source')
                AND path NOT LIKE 'archive/%'
-             ORDER BY created_at`
+             ORDER BY created_at`,
           )
           .bind(namespace)
           .all();
@@ -85,7 +106,9 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         // every caller's lint runs under. The exemption is this one path; no other
         // capsid document is read here.
         const rules = await db
-          .prepare("SELECT namespace, path, title, body FROM documents WHERE namespace = 'capsid' AND path IN ('conventions.md') ORDER BY path")
+          .prepare(
+            "SELECT namespace, path, title, body FROM documents WHERE namespace = 'capsid' AND path IN ('conventions.md') ORDER BY path",
+          )
           .all();
         // Typed edges whose endpoint no longer exists. Gather is read-only and the
         // client judges, so these are reported, never auto-repaired: a dangling edge
@@ -104,7 +127,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
              LEFT JOIN documents t ON t.namespace = l.to_ns AND t.path = l.to_path
              WHERE (f.id IS NULL OR t.id IS NULL)
                AND (l.from_ns = ?1 OR l.to_ns = ?1)
-             ORDER BY l.from_ns, l.from_path, l.type`
+             ORDER BY l.from_ns, l.from_path, l.type`,
           )
           .bind(namespace)
           .all<ReportEdge>();
@@ -119,10 +142,14 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
           const body = (row as PacketRow | null)?.body;
           return typeof body === "string" ? body.length : 0;
         };
-        const sumChars = (rows: unknown[]) => rows.reduce<number>((sum, r) => sum + bodyChars(r), 0);
+        const sumChars = (rows: unknown[]) =>
+          rows.reduce<number>((sum, r) => sum + bodyChars(r), 0);
         const toStub = (row: unknown) => {
           const r = row as PacketRow;
-          return { ...(row as object), body: `(trimmed for size: read it with capsid_read_doc, ${String(r.namespace)}/${String(r.path)})` };
+          return {
+            ...(row as object),
+            body: `(trimmed for size: read it with capsid_read_doc, ${String(r.namespace)}/${String(r.path)})`,
+          };
         };
 
         const trimmed: string[] = [];
@@ -130,7 +157,9 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         let wikiOut: unknown[] = wiki.results;
         if (fixed + sumChars(wiki.results) + sumChars(raw.results) > GATHER_BUDGET) {
           wikiOut = wiki.results.map(toStub);
-          trimmed.push(`${wiki.results.length} wiki bodies (concept and decision docs; read them individually by path with capsid_read_doc)`);
+          trimmed.push(
+            `${wiki.results.length} wiki bodies (concept and decision docs; read them individually by path with capsid_read_doc)`,
+          );
         }
 
         // Keep whole documents, never half a body: a truncated markdown document is
@@ -148,7 +177,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         });
         if (heldBack > 0) {
           trimmed.push(
-            `${heldBack} of ${raw.results.length} unconsolidated bodies (the oldest were kept, which is the compile order; finalize this batch and call gather again for the rest)`
+            `${heldBack} of ${raw.results.length} unconsolidated bodies (the oldest were kept, which is the compile order; finalize this batch and call gather again for the rest)`,
           );
         }
         const packetChars = fixed + sumChars(wikiOut) + sumChars(unconsolidatedOut);
@@ -158,7 +187,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         const standing = await db
           .prepare(
             `SELECT path, type, body FROM documents
-             WHERE namespace = ?1 AND path NOT LIKE 'archive/%'`
+             WHERE namespace = ?1 AND path NOT LIKE 'archive/%'`,
           )
           .bind(namespace)
           .all<{ path: string; type: string | null; body: string | null }>();
@@ -197,14 +226,14 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         const docs = await db
           .prepare(
             `SELECT path, type, status, title, body, updated_at FROM documents
-             WHERE namespace = ?1 ORDER BY path`
+             WHERE namespace = ?1 ORDER BY path`,
           )
           .bind(namespace)
           .all<ReportDoc>();
         const edges = await db
           .prepare(
             `SELECT from_ns, from_path, type, to_ns, to_path FROM document_links
-             WHERE from_ns = ?1 OR to_ns = ?1`
+             WHERE from_ns = ?1 OR to_ns = ?1`,
           )
           .bind(namespace)
           .all<ReportEdge>();
@@ -217,7 +246,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
              LEFT JOIN documents f ON f.namespace = l.from_ns AND f.path = l.from_path
              LEFT JOIN documents t ON t.namespace = l.to_ns AND t.path = l.to_path
              WHERE (f.id IS NULL OR t.id IS NULL)
-               AND (l.from_ns = ?1 OR l.to_ns = ?1)`
+               AND (l.from_ns = ?1 OR l.to_ns = ?1)`,
           )
           .bind(namespace)
           .all<ReportEdge>();
@@ -225,8 +254,10 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         // `isUnscanned` is the one statement of which prefixes those are, so the
         // scanner and the report cannot disagree about what is a subject.
         const claims = scanCountClaims(
-          docs.results.filter((d) => !isUnscanned(d.path)).map((d) => ({ path: d.path, type: d.type, body: d.body })),
-          namespace
+          docs.results
+            .filter((d) => !isUnscanned(d.path))
+            .map((d) => ({ path: d.path, type: d.type, body: d.body })),
+          namespace,
         );
         // Undefined, not an empty set, when the tree cannot be read or the repo is out
         // of this caller's scope: an empty set would report every path the canon names
@@ -249,7 +280,13 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
           // broken_links counts subjects and findings over the same edges.
           edges: withinScope(edges.results),
           danglingEdges: withinScope(dangling.results),
-          countClaims: claims.map((c) => ({ path: c.path, noun: c.noun, states: c.states, authoritative: c.authoritative, quote: c.quote })),
+          countClaims: claims.map((c) => ({
+            path: c.path,
+            noun: c.noun,
+            states: c.states,
+            authoritative: c.authoritative,
+            quote: c.quote,
+          })),
           repoPaths,
         });
         const path = reportPath(now);
@@ -277,9 +314,14 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
           statements.push(snapshotLive(db, namespace, path));
         }
         // The same upsert `capsid_write_doc` issues, from the one helper both call.
-        statements.push(documentUpsert(db, namespace, path, title, body, "reference", null, "published"));
         statements.push(
-          auditStatement(db, actor, "lint_report", namespace, path, { integrity: report.integrity, findings: report.findings.length })
+          documentUpsert(db, namespace, path, title, body, "reference", null, "published"),
+        );
+        statements.push(
+          auditStatement(db, actor, "lint_report", namespace, path, {
+            integrity: report.integrity,
+            findings: report.findings.length,
+          }),
         );
         await db.batch(statements);
         return ok({ mode: "report", stored: `${namespace}/${path}`, ...report });
@@ -287,7 +329,9 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
 
       const paths = [...new Set(consumed ?? [])];
       if (paths.length === 0) {
-        return fail("finalize requires consumed: the episodic/source paths that were compiled into the wiki");
+        return fail(
+          "finalize requires consumed: the episodic/source paths that were compiled into the wiki",
+        );
       }
       const problems: string[] = [];
       for (const path of paths) {
@@ -296,17 +340,23 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
           .bind(namespace, path)
           .first<{ type: string | null }>();
         if (!row) problems.push(`not found: ${namespace}/${path}`);
-        else if (path.startsWith("archive/")) problems.push(`already archived: ${namespace}/${path}`);
+        else if (path.startsWith("archive/"))
+          problems.push(`already archived: ${namespace}/${path}`);
         else if (row.type !== "episodic" && row.type !== "source") {
-          problems.push(`not consumable: ${namespace}/${path} has type '${row.type}' (only episodic and source docs are archived)`);
+          problems.push(
+            `not consumable: ${namespace}/${path} has type '${row.type}' (only episodic and source docs are archived)`,
+          );
         }
       }
-      if (problems.length > 0) return fail(`finalize aborted, nothing archived:\n${problems.join("\n")}`);
+      if (problems.length > 0)
+        return fail(`finalize aborted, nothing archived:\n${problems.join("\n")}`);
       // The policy-document guard. finalize is type-gated to episodic and source
       // documents, but a document written under policy/ with the opt-in flag can carry
       // type 'source', and finalize would then archive a signed policy. No opt-in here:
       // archiving a policy is never right.
-      const consumedPolicyRefusals = paths.map((consumedPath) => policyWriteRefusal(namespace, consumedPath, false)).filter((r): r is string => r !== null);
+      const consumedPolicyRefusals = paths
+        .map((consumedPath) => policyWriteRefusal(namespace, consumedPath, false))
+        .filter((r): r is string => r !== null);
       if (consumedPolicyRefusals.length > 0) {
         return fail(`finalize aborted, nothing archived:\n${consumedPolicyRefusals.join("\n")}`);
       }
@@ -327,16 +377,23 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         requireExists(db, namespace, path),
         ...pathMutation(db, namespace, path, `archive/${path}`),
       ]);
-      statements.push(auditStatement(db, actor, "lint", namespace, null, { consolidated: paths.length, consumed: paths }));
+      statements.push(
+        auditStatement(db, actor, "lint", namespace, null, {
+          consolidated: paths.length,
+          consumed: paths,
+        }),
+      );
       try {
         await db.batch(statements);
       } catch (err) {
         if (isMissingRowAbort(err)) {
           return fail(
-            "finalize aborted, nothing archived: one of the consumed paths no longer exists. Another session moved or removed it after this call started. Re-run gather and finalize the current set."
+            "finalize aborted, nothing archived: one of the consumed paths no longer exists. Another session moved or removed it after this call started. Re-run gather and finalize the current set.",
           );
         }
-        return fail(`finalize failed, nothing archived (an archive/ target may already exist): ${err instanceof Error ? err.message : String(err)}`);
+        return fail(
+          `finalize failed, nothing archived (an archive/ target may already exist): ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
       return ok({
         mode: "finalize",
@@ -344,6 +401,6 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
         consolidated: paths.length,
         archived: paths.map((path) => ({ from: path, to: `archive/${path}` })),
       });
-    }
+    },
   );
 }

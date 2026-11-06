@@ -1,7 +1,14 @@
 // The explorer's build, over explorer/fixtures (invented systems, example.com): the pages it
 // writes, what they may and may not say, and the assets and headers beside them.
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { test } from "node:test";
@@ -12,7 +19,17 @@ import { codePage, codePath } from "../src/code.mjs";
 import { numbersHtml } from "../src/numbers.mjs";
 import { servedTools } from "../src/surface.mjs";
 import { PAGE_PRELOADS } from "../worker.mjs";
-import { SITE, allPages, containersPath, escapeHtml, flowPath, percent, stepPath, stepWords, systemPath } from "../src/pages.mjs";
+import {
+  SITE,
+  allPages,
+  containersPath,
+  escapeHtml,
+  flowPath,
+  percent,
+  stepPath,
+  stepWords,
+  systemPath,
+} from "../src/pages.mjs";
 
 const fixtures = new URL("../fixtures/", import.meta.url).pathname;
 const read = (/** @type {string} */ name) => JSON.parse(readFileSync(join(fixtures, name), "utf8"));
@@ -36,9 +53,16 @@ function walk(/** @type {string} */ dir, /** @type {string} */ root = dir) {
 }
 
 const out = mkdtempSync(join(tmpdir(), "explorer-"));
-const built = await build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), ...withCode, out });
+const built = await build({
+  model: join(fixtures, "model.json"),
+  stats: join(fixtures, "stats.json"),
+  ...withCode,
+  out,
+});
 const files = walk(out);
-const html = files.filter((f) => f.endsWith(".html")).map((f) => ({ file: f, text: readFileSync(join(out, f), "utf8") }));
+const html = files
+  .filter((f) => f.endsWith(".html"))
+  .map((f) => ({ file: f, text: readFileSync(join(out, f), "utf8") }));
 
 test("every system has a page, a public one with parts has its parts page, every flow and each step of it a page, every tool a page, and nothing else is built", () => {
   const pages = files.filter((f) => f.endsWith(".html")).sort();
@@ -51,7 +75,12 @@ test("every system has a page, a public one with parts has its parts page, every
     ...model.systems.map((/** @type {any} */ s) => `s/${s.id}/index.html`),
     "s/hub/containers/index.html",
     "s/theme/code/index.html",
-    ...model.flows.flatMap((/** @type {any} */ f) => [`flows/${f.id}/index.html`, ...f.steps.map((/** @type {any} */ _s, /** @type {number} */ i) => `flows/${f.id}/${i + 1}/index.html`)]),
+    ...model.flows.flatMap((/** @type {any} */ f) => [
+      `flows/${f.id}/index.html`,
+      ...f.steps.map(
+        (/** @type {any} */ _s, /** @type {number} */ i) => `flows/${f.id}/${i + 1}/index.html`,
+      ),
+    ]),
   ].sort();
   assert.deepEqual(pages, expected);
   assert.equal(built.pages, expected.length);
@@ -60,7 +89,10 @@ test("every system has a page, a public one with parts has its parts page, every
 test("every system page links to the same system on dustinedwards.info, and the front page to the systems", () => {
   for (const s of model.systems) {
     const page = readFileSync(join(out, "s", s.id, "index.html"), "utf8");
-    assert.ok(page.includes(`href="${SITE}/systems/${s.id}"`), `${s.id} has no link to dustinedwards.info`);
+    assert.ok(
+      page.includes(`href="${SITE}/systems/${s.id}"`),
+      `${s.id} has no link to dustinedwards.info`,
+    );
   }
   const home = readFileSync(join(out, "index.html"), "utf8");
   assert.ok(home.includes('href="/systems/"'), "the front page does not link the systems");
@@ -78,15 +110,26 @@ test("a private page says it is private and carries no repo link", () => {
 
 test("the build refuses a model the privacy filter could not have written", async () => {
   const leaky = structuredClone(model);
-  leaky.systems.find((/** @type {any} */ s) => s.id === "vault").repos = ["https://github.com/example-org/vault"];
+  leaky.systems.find((/** @type {any} */ s) => s.id === "vault").repos = [
+    "https://github.com/example-org/vault",
+  ];
   const file = join(mkdtempSync(join(tmpdir(), "explorer-leak-")), "model.json");
   writeFileSync(file, JSON.stringify(leaky));
-  await assert.rejects(build({ model: file, stats: join(fixtures, "stats.json"), out: mkdtempSync(join(tmpdir(), "explorer-out-")) }));
+  await assert.rejects(
+    build({
+      model: file,
+      stats: join(fixtures, "stats.json"),
+      out: mkdtempSync(join(tmpdir(), "explorer-out-")),
+    }),
+  );
 });
 
 test("a system with a code map links to it, and its code page shows each module's worst function and the cycle", () => {
   const theme = readFileSync(join(out, "s", "theme", "index.html"), "utf8");
-  assert.ok(theme.includes(`href="${codePath("theme")}"`), "the system page does not link its code");
+  assert.ok(
+    theme.includes(`href="${codePath("theme")}"`),
+    "the system page does not link its code",
+  );
   assert.match(theme, /4 modules and 3 functions, measured 2026-10-17/);
   const hub = readFileSync(join(out, "s", "hub", "index.html"), "utf8");
   assert.ok(!hub.includes(codePath("hub")), "a system with no code map links to a code page");
@@ -94,44 +137,89 @@ test("a system with a code map links to it, and its code page shows each module'
   const page = readFileSync(join(out, "s", "theme", "code", "index.html"), "utf8");
   assert.match(page, /By CRAP, 1 critical, 1 to watch and 1 ok\./);
   // Each status is a glyph, a word and the number: never color alone.
-  assert.match(page, /data-tone="crit"><svg class="cap-status-glyph"[^>]*aria-hidden="true"[^>]*>.*?<\/svg>Critical<span class="code-num">CRAP 90<\/span>/);
+  assert.match(
+    page,
+    /data-tone="crit"><svg class="cap-status-glyph"[^>]*aria-hidden="true"[^>]*>.*?<\/svg>Critical<span class="code-num">CRAP 90<\/span>/,
+  );
   assert.match(page, /data-tone="warn">.*?Watch<span class="code-num">CRAP 12<\/span>/);
   assert.match(page, /data-tone="ok">.*?Ok<span class="code-num">CRAP 2<\/span>/);
   // A number nobody measured says why, never 0.
-  assert.match(page, /No data<span class="cap-sr-only">: mutation testing has not run on this repo yet<\/span>/);
+  assert.match(
+    page,
+    /No data<span class="cap-sr-only">: mutation testing has not run on this repo yet<\/span>/,
+  );
   assert.match(page, /src\/tokens\.ts.*?<span class="code-none">No functions<\/span>/s);
   assert.doesNotMatch(page, /CRAP 0\b|>0%</);
-  assert.ok(page.includes(`<li><a href="${blob("src/util/a.ts")}">src/util/a.ts</a> imports <a href="${blob("src/util/b.ts")}">src/util/b.ts</a>, and back</li>`));
+  assert.ok(
+    page.includes(
+      `<li><a href="${blob("src/util/a.ts")}">src/util/a.ts</a> imports <a href="${blob("src/util/b.ts")}">src/util/b.ts</a>, and back</li>`,
+    ),
+  );
   assert.match(page, /<caption>src\/util\/<\/caption>/);
 });
 
 test("the code page draws the folders, then each folder's modules, every box linked and colored by its worst function", () => {
   const page = readFileSync(join(out, "s", "theme", "code", "index.html"), "utf8");
-  const figures = [...page.matchAll(/<figure class="code-graph">(.*?)<\/figure>/gs)].map((m) => m[1]);
-  assert.equal(figures.length, 3, "one drawing of the folders and one for each folder with more than one module");
-  assert.match(figures[0], /<figcaption[^>]*>The folders of example\/theme and the imports between them<\/figcaption>/);
+  const figures = [...page.matchAll(/<figure class="code-graph">(.*?)<\/figure>/gs)].map(
+    (m) => m[1],
+  );
+  assert.equal(
+    figures.length,
+    3,
+    "one drawing of the folders and one for each folder with more than one module",
+  );
+  assert.match(
+    figures[0],
+    /<figcaption[^>]*>The folders of example\/theme and the imports between them<\/figcaption>/,
+  );
   // A box per folder, leading to that folder's drawing and table; a wire from src/ to src/util/.
-  assert.match(figures[0], /<a href="#theme-f-src" tabindex="-1"><g class="code-graph-box" data-tone="crit">/);
-  assert.match(figures[0], /<a href="#theme-f-src-util" tabindex="-1"><g class="code-graph-box" data-tone="warn" data-cycle>/);
+  assert.match(
+    figures[0],
+    /<a href="#theme-f-src" tabindex="-1"><g class="code-graph-box" data-tone="crit">/,
+  );
+  assert.match(
+    figures[0],
+    /<a href="#theme-f-src-util" tabindex="-1"><g class="code-graph-box" data-tone="warn" data-cycle>/,
+  );
   assert.equal((figures[0].match(/class="code-graph-wire"/g) ?? []).length, 1);
   // The util folder's modules, each linked to its file on GitHub, both in the cycle, with a wire each way.
-  assert.ok(figures[2].includes(`<a href="${blob("src/util/a.ts")}" tabindex="-1"><g class="code-graph-box" data-tone="ok" data-cycle>`));
+  assert.ok(
+    figures[2].includes(
+      `<a href="${blob("src/util/a.ts")}" tabindex="-1"><g class="code-graph-box" data-tone="ok" data-cycle>`,
+    ),
+  );
   assert.equal((figures[2].match(/class="code-graph-wire"/g) ?? []).length, 2);
   assert.equal((figures[2].match(/>cycle<\/text>/g) ?? []).length, 2);
   // The drawing repeats the table: hidden from assistive technology, its links no tab stop.
   for (const f of figures) {
     assert.match(f, /<svg class="code-graph-svg"[^>]*aria-hidden="true"/);
     assert.doesNotMatch(f, /<a href="[^"]*"(?! tabindex="-1")/);
-    assert.match(f, /<div class="scroller" role="region" aria-labelledby="[^"]+-caption" tabindex="0">/);
+    assert.match(
+      f,
+      /<div class="scroller" role="region" aria-labelledby="[^"]+-caption" tabindex="0">/,
+    );
   }
-  for (const id of ["theme-f-src", "theme-f-src-util"]) assert.ok(page.includes(`id="${id}"`), `the folder anchor ${id} is missing`);
+  for (const id of ["theme-f-src", "theme-f-src-util"])
+    assert.ok(page.includes(`id="${id}"`), `the folder anchor ${id} is missing`);
 });
 
 test("a route file name with $ and brackets links to GitHub escaped", () => {
   const map = structuredClone(code.maps[0]);
-  map.modules.push({ path: "src/routes/blog.$slug[.md].ts", loc: 1, imports: ["src/index.ts"], functions: [] });
-  const page = codePage(model.systems.find((/** @type {any} */ s) => s.id === "theme"), [map], "2026-10-17");
-  assert.ok(page.includes(`href="${blob("src/routes/blog.%24slug%5B.md%5D.ts")}"`), "the route module is not linked escaped");
+  map.modules.push({
+    path: "src/routes/blog.$slug[.md].ts",
+    loc: 1,
+    imports: ["src/index.ts"],
+    functions: [],
+  });
+  const page = codePage(
+    model.systems.find((/** @type {any} */ s) => s.id === "theme"),
+    [map],
+    "2026-10-17",
+  );
+  assert.ok(
+    page.includes(`href="${blob("src/routes/blog.%24slug%5B.md%5D.ts")}"`),
+    "the route module is not linked escaped",
+  );
 });
 
 test("a function changed since the mutation run shows no score and says why, and the page dates the run", () => {
@@ -144,8 +232,14 @@ test("a function changed since the mutation run shows no score and says why, and
   Object.assign(b.functions[0], { mutants: 4, score: 75 });
   const theme = model.systems.find((/** @type {any} */ s) => s.id === "theme");
   const page = codePage(theme, [map], "2026-10-17");
-  assert.match(page, /Mutation scores are from the run on <span class="nowrap">2026-10-12<\/span> at commit <code>bbbbbbb<\/code>; 1 function has changed since and shows none until the next run\./);
-  assert.match(page, /a\.ts<\/a>.*?No data<span class="cap-sr-only">: changed since the last mutation run<\/span>/s);
+  assert.match(
+    page,
+    /Mutation scores are from the run on <span class="nowrap">2026-10-12<\/span> at commit <code>bbbbbbb<\/code>; 1 function has changed since and shows none until the next run\./,
+  );
+  assert.match(
+    page,
+    /a\.ts<\/a>.*?No data<span class="cap-sr-only">: changed since the last mutation run<\/span>/s,
+  );
   assert.match(page, />mutation stale<\/text>/);
   assert.match(page, /data-tone="crit">.*?Critical<span class="code-num">50%<\/span>/);
   assert.match(page, /data-tone="warn">.*?Watch<span class="code-num">75%<\/span>/);
@@ -159,10 +253,19 @@ test("the build refuses a code map for a system that is not public, and a code d
     writeFileSync(file, JSON.stringify(doc));
     return file;
   };
-  const run = (/** @type {string} */ file) => build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), code: file, out: mkdtempSync(join(tmpdir(), "explorer-out-")) });
+  const run = (/** @type {string} */ file) =>
+    build({
+      model: join(fixtures, "model.json"),
+      stats: join(fixtures, "stats.json"),
+      code: file,
+      out: mkdtempSync(join(tmpdir(), "explorer-out-")),
+    });
   const vault = structuredClone(code);
   vault.maps[0].system = "vault";
-  await assert.rejects(run(write("vault.json", vault)), /belongs to vault, which is not a public system/);
+  await assert.rejects(
+    run(write("vault.json", vault)),
+    /belongs to vault, which is not a public system/,
+  );
   const unknown = structuredClone(code);
   unknown.maps[0].system = "nowhere";
   await assert.rejects(run(write("unknown.json", unknown)), /belongs to nowhere/);
@@ -174,7 +277,11 @@ test("the build refuses a code map for a system that is not public, and a code d
 test("no page carries an inline script, an inline style or a time of day", () => {
   for (const { file, text } of html) {
     // JSON-LD is a data block, which the policy does not govern.
-    assert.doesNotMatch(text, /<script(?![^>]*\bsrc=)(?![^>]*type="application\/ld\+json")[^>]*>/, `${file} has an inline script`);
+    assert.doesNotMatch(
+      text,
+      /<script(?![^>]*\bsrc=)(?![^>]*type="application\/ld\+json")[^>]*>/,
+      `${file} has an inline script`,
+    );
     assert.doesNotMatch(text, /<style[\s>]/, `${file} has an inline style element`);
     assert.doesNotMatch(text, /\sstyle="/, `${file} has a style attribute`);
     assert.doesNotMatch(text, /\b\d{1,2}:\d{2}\b/, `${file} shows a time of day`);
@@ -190,7 +297,9 @@ test("every link inside the explorer reaches a page or an asset it built, and th
     }
   }
   const home = readFileSync(join(out, "index.html"), "utf8");
-  const linked = [...home.matchAll(/<link rel="(?:stylesheet|preload)" href="([^"]+)"/g)].map((m) => m[1]);
+  const linked = [...home.matchAll(/<link rel="(?:stylesheet|preload)" href="([^"]+)"/g)].map(
+    (m) => m[1],
+  );
   assert.deepEqual(PAGE_PRELOADS.links.map((link) => link.href).sort(), linked.sort());
 });
 
@@ -204,31 +313,58 @@ test("a rate with too few cases is said so, and has no picture", () => {
 });
 
 test("the map's script is under 25 KB gzip and all the explorer's script under 105 KB", () => {
-  const gz = (/** @type {string} */ f) => gzipSync(readFileSync(join(out, "assets", f)), { level: 9 }).length;
-  const map = readdirSync(join(out, "assets")).filter((f) => f.startsWith("system-map")).reduce((sum, f) => sum + gz(f), 0);
+  const gz = (/** @type {string} */ f) =>
+    gzipSync(readFileSync(join(out, "assets", f)), { level: 9 }).length;
+  const map = readdirSync(join(out, "assets"))
+    .filter((f) => f.startsWith("system-map"))
+    .reduce((sum, f) => sum + gz(f), 0);
   assert.ok(map < 25 * 1024, `the system map's modules are ${map} bytes gzip`);
-  const all = files.filter((f) => f.endsWith(".js")).reduce((sum, f) => sum + gzipSync(readFileSync(join(out, f)), { level: 9 }).length, 0);
+  const all = files
+    .filter((f) => f.endsWith(".js"))
+    .reduce((sum, f) => sum + gzipSync(readFileSync(join(out, f)), { level: 9 }).length, 0);
   assert.ok(all < 105 * 1024, `the explorer's script is ${all} bytes gzip`);
   assert.ok(existsSync(join(out, "build.json")));
 });
 
 test("build.json's hash is the same for the same input and changes with what a reader gets", async () => {
-  const again = await build({ model: join(fixtures, "model.json"), stats: join(fixtures, "stats.json"), ...withCode, out: mkdtempSync(join(tmpdir(), "explorer-again-")) });
+  const again = await build({
+    model: join(fixtures, "model.json"),
+    stats: join(fixtures, "stats.json"),
+    ...withCode,
+    out: mkdtempSync(join(tmpdir(), "explorer-again-")),
+  });
   assert.equal(again.content, built.content);
   assert.equal(JSON.parse(readFileSync(join(out, "build.json"), "utf8")).content, built.content);
   const later = structuredClone(stats);
   later.jobs.completed_7d += 1;
   const file = join(mkdtempSync(join(tmpdir(), "explorer-later-")), "stats.json");
   writeFileSync(file, JSON.stringify(later));
-  const changed = await build({ model: join(fixtures, "model.json"), stats: file, ...withCode, out: mkdtempSync(join(tmpdir(), "explorer-changed-")) });
+  const changed = await build({
+    model: join(fixtures, "model.json"),
+    stats: file,
+    ...withCode,
+    out: mkdtempSync(join(tmpdir(), "explorer-changed-")),
+  });
   assert.notEqual(changed.content, built.content);
 });
 
 test("every system's page shows it in the network: what uses it, its parts and what it uses", () => {
-  const withParts = { ...model, containers: [...model.containers, { id: "kit-lib", system: "kit", name: "Kit library", kind: "package", technology: "npm" }] };
+  const withParts = {
+    ...model,
+    containers: [
+      ...model.containers,
+      { id: "kit-lib", system: "kit", name: "Kit library", kind: "package", technology: "npm" },
+    ],
+  };
   const page = allPages(withParts, stats).find(([path]) => path === systemPath("kit"))?.[1] ?? "";
-  assert.match(page, /<figure class="cap-system-map" data-cap="system-map" data-level="system" data-system="kit"/);
-  assert.match(page, /data-column="used-by".*data-column="inside".*Kit library.*data-column="uses"/s);
+  assert.match(
+    page,
+    /<figure class="cap-system-map" data-cap="system-map" data-level="system" data-system="kit"/,
+  );
+  assert.match(
+    page,
+    /data-column="used-by".*data-column="inside".*Kit library.*data-column="uses"/s,
+  );
 });
 
 test("each week is labeled by its last whole day, the day before as_of for the newest", () => {
@@ -243,17 +379,26 @@ test("an external container is listed outside the system, never as one of its pa
   const page = readFileSync(join(out, "s", "hub", "containers", "index.html"), "utf8");
   const table = page.slice(page.indexOf("<table"), page.indexOf("</table>"));
   assert.doesNotMatch(table, /Agents/);
-  assert.match(page, /<h2 id="outside-title"[^>]*>Outside it<\/h2>\s*<ul><li id="part-hub-agents"><strong>Agents<\/strong> \(Sample sessions\)/);
+  assert.match(
+    page,
+    /<h2 id="outside-title"[^>]*>Outside it<\/h2>\s*<ul><li id="part-hub-agents"><strong>Agents<\/strong> \(Sample sessions\)/,
+  );
   assert.match(page, /Its 3 parts, .*, plus the one outside system it works with\./);
-  assert.match(readFileSync(join(out, "s", "hub", "index.html"), "utf8"), /its 3 parts as a table, and every line between them/);
+  assert.match(
+    readFileSync(join(out, "s", "hub", "index.html"), "utf8"),
+    /its 3 parts as a table, and every line between them/,
+  );
 });
 
 // Flows (design section 4, "Animated flows"). Read from the fixture's own steps, not through
 // the renderer's resolveFlow, so a mistake there cannot agree with itself here.
-const stepFile = (/** @type {string} */ flow, /** @type {number} */ n) => readFileSync(join(out, "flows", flow, String(n), "index.html"), "utf8");
-const edge = (/** @type {string} */ id) => model.relationships.find((/** @type {any} */ r) => r.id === id);
+const stepFile = (/** @type {string} */ flow, /** @type {number} */ n) =>
+  readFileSync(join(out, "flows", flow, String(n), "index.html"), "utf8");
+const edge = (/** @type {string} */ id) =>
+  model.relationships.find((/** @type {any} */ r) => r.id === id);
 /** Every link's target in one region of a page, by the attribute that marks the link. */
-const hrefOf = (/** @type {string} */ page, /** @type {string} */ rel) => page.match(new RegExp(`<a rel="${rel}" href="([^"]+)"`))?.[1];
+const hrefOf = (/** @type {string} */ page, /** @type {string} */ rel) =>
+  page.match(new RegExp(`<a rel="${rel}" href="([^"]+)"`))?.[1];
 
 test("the fixtures carry flows enough to test with: one with a middle step", () => {
   assert.ok(model.flows.length >= 2);
@@ -266,14 +411,28 @@ test("every step of every flow has its page, saying the flow's name, where it is
     assert.ok(existsSync(join(out, "flows", f.id, "index.html")), `${f.id} has no page`);
     f.steps.forEach((/** @type {any} */ st, /** @type {number} */ i) => {
       const page = stepFile(f.id, i + 1);
-      assert.ok(page.includes(`<h1>${f.name.replace("'", "&#39;")}</h1>`), `${f.id} step ${i + 1} does not name its flow`);
-      assert.ok(page.includes(`Step ${i + 1} of ${f.steps.length}`), `${f.id} step ${i + 1} does not say where it is`);
+      assert.ok(
+        page.includes(`<h1>${f.name.replace("'", "&#39;")}</h1>`),
+        `${f.id} step ${i + 1} does not name its flow`,
+      );
+      assert.ok(
+        page.includes(`Step ${i + 1} of ${f.steps.length}`),
+        `${f.id} step ${i + 1} does not say where it is`,
+      );
       const w = stepWords({ n: i + 1, text: st.text });
-      assert.ok(page.includes(`<p class="cap-cue-title step-head">${escapeHtml(w.name)}</p>\n<p class="flow-text">${escapeHtml(w.text)}</p>`), `${f.id} step ${i + 1} does not say what happens`);
+      assert.ok(
+        page.includes(
+          `<p class="cap-cue-title step-head">${escapeHtml(w.name)}</p>\n<p class="flow-text">${escapeHtml(w.text)}</p>`,
+        ),
+        `${f.id} step ${i + 1} does not say what happens`,
+      );
       seen++;
     });
   }
-  assert.equal(seen, model.flows.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + f.steps.length, 0));
+  assert.equal(
+    seen,
+    model.flows.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + f.steps.length, 0),
+  );
 });
 
 test("each step page lays every step's text in one stack, the shown one alone read and linked", () => {
@@ -281,19 +440,40 @@ test("each step page lays every step's text in one stack, the shown one alone re
   for (const f of model.flows) {
     for (let n = 1; n <= f.steps.length; n++) {
       const page = stepFile(f.id, n);
-      const stack = page.slice(page.indexOf('<div class="flow-stack">'), page.indexOf('<nav class="flow-nav"'));
+      const stack = page.slice(
+        page.indexOf('<div class="flow-stack">'),
+        page.indexOf('<nav class="flow-nav"'),
+      );
       const blocks = stack.split(/(?=<div class="cap-cue(?: flow-unseen"[^>]*|")>\n)/).slice(1);
-      assert.equal(blocks.length, f.steps.length, `${f.id} step ${n} stacks ${blocks.length} steps`);
+      assert.equal(
+        blocks.length,
+        f.steps.length,
+        `${f.id} step ${n} stacks ${blocks.length} steps`,
+      );
       blocks.forEach((b, i) => {
         const shown = i + 1 === n;
-        assert.ok(b.includes(`Step ${i + 1} of ${f.steps.length}`), `${f.id} step ${n}: block ${i + 1} is out of order`);
-        assert.equal(b.startsWith('<div class="cap-cue flow-unseen" aria-hidden="true" inert>'), !shown, `${f.id} step ${n}: block ${i + 1} is ${shown ? "hidden" : "read"}`);
-        assert.equal(/<a |id=|data-part=/.test(b), shown, `${f.id} step ${n}: block ${i + 1} ${shown ? "lacks" : "carries"} links or ids`);
+        assert.ok(
+          b.includes(`Step ${i + 1} of ${f.steps.length}`),
+          `${f.id} step ${n}: block ${i + 1} is out of order`,
+        );
+        assert.equal(
+          b.startsWith('<div class="cap-cue flow-unseen" aria-hidden="true" inert>'),
+          !shown,
+          `${f.id} step ${n}: block ${i + 1} is ${shown ? "hidden" : "read"}`,
+        );
+        assert.equal(
+          /<a |id=|data-part=/.test(b),
+          shown,
+          `${f.id} step ${n}: block ${i + 1} ${shown ? "lacks" : "carries"} links or ids`,
+        );
       });
       pages++;
     }
   }
-  assert.equal(pages, model.flows.reduce((/** @type {number} */ k, /** @type {any} */ f) => k + f.steps.length, 0));
+  assert.equal(
+    pages,
+    model.flows.reduce((/** @type {number} */ k, /** @type {any} */ f) => k + f.steps.length, 0),
+  );
 });
 
 test("Back and Next chain every step to the next both ways, with no Back on the first and no Next on the last", () => {
@@ -302,17 +482,41 @@ test("Back and Next chain every step to the next both ways, with no Back on the 
     const total = f.steps.length;
     for (let n = 1; n <= total; n++) {
       const page = stepFile(f.id, n);
-      assert.equal(hrefOf(page, "prev"), n > 1 ? stepPath(f.id, n - 1) : undefined, `${f.id} step ${n}'s Back`);
-      assert.equal(hrefOf(page, "next"), n < total ? stepPath(f.id, n + 1) : undefined, `${f.id} step ${n}'s Next`);
+      assert.equal(
+        hrefOf(page, "prev"),
+        n > 1 ? stepPath(f.id, n - 1) : undefined,
+        `${f.id} step ${n}'s Back`,
+      );
+      assert.equal(
+        hrefOf(page, "next"),
+        n < total ? stepPath(f.id, n + 1) : undefined,
+        `${f.id} step ${n}'s Next`,
+      );
       if (n < total) {
-        assert.equal(hrefOf(stepFile(f.id, n + 1), "prev"), stepPath(f.id, n), `${f.id} step ${n + 1} does not lead back to ${n}`);
+        assert.equal(
+          hrefOf(stepFile(f.id, n + 1), "prev"),
+          stepPath(f.id, n),
+          `${f.id} step ${n + 1} does not lead back to ${n}`,
+        );
         links += 2;
       }
       // The list of all steps is on every step, the shown one marked.
-      for (let k = 1; k <= total; k++) assert.ok(page.includes(`href="${stepPath(f.id, k)}" data-go="${k}"${k === n ? ' aria-current="step"' : ""}>`), `${f.id} step ${n} does not list step ${k}`);
+      for (let k = 1; k <= total; k++)
+        assert.ok(
+          page.includes(
+            `href="${stepPath(f.id, k)}" data-go="${k}"${k === n ? ' aria-current="step"' : ""}>`,
+          ),
+          `${f.id} step ${n} does not list step ${k}`,
+        );
     }
   }
-  assert.equal(links, model.flows.reduce((/** @type {number} */ n, /** @type {any} */ f) => n + 2 * (f.steps.length - 1), 0));
+  assert.equal(
+    links,
+    model.flows.reduce(
+      (/** @type {number} */ n, /** @type {any} */ f) => n + 2 * (f.steps.length - 1),
+      0,
+    ),
+  );
 });
 
 test("each step page names exactly the parts its step touches, and its drawing lights exactly them", () => {
@@ -322,25 +526,49 @@ test("each step page names exactly the parts its step touches, and its drawing l
       const r = edge(st.relationship);
       const want = [...new Set([r.from, r.to, ...(st.lights ?? [])])].sort();
       // The shown step's list, after its heading; the unseen steps around it carry no data-part.
-      const at = page.indexOf('<ul class="cap-cue-lines flow-touches">', page.indexOf('id="step-title"'));
+      const at = page.indexOf(
+        '<ul class="cap-cue-lines flow-touches">',
+        page.indexOf('id="step-title"'),
+      );
       const touches = page.slice(at, page.indexOf("</ul>", at));
-      const named = [...touches.matchAll(/<li data-part="([^"]+)"><a class="cap-cue-name" href="([^"]+)">/g)];
-      assert.deepEqual(named.map((m) => m[1]).sort(), want, `${f.id} step ${i + 1} names the wrong parts`);
+      const named = [
+        ...touches.matchAll(/<li data-part="([^"]+)"><a class="cap-cue-name" href="([^"]+)">/g),
+      ];
+      assert.deepEqual(
+        named.map((m) => m[1]).sort(),
+        want,
+        `${f.id} step ${i + 1} names the wrong parts`,
+      );
       for (const [, id, href] of named) {
         const c = model.containers.find((/** @type {any} */ x) => x.id === id);
         assert.equal(href, `${containersPath(c.system)}#part-${id}`);
       }
-      const lit = [...page.matchAll(/<li class="cap-system-map-part" id="[^"]+" data-id="([^"]+)" data-place="[a-z]+"[^>]* data-lit[ >]/g)].map((m) => m[1]).sort();
+      const lit = [
+        ...page.matchAll(
+          /<li class="cap-system-map-part" id="[^"]+" data-id="([^"]+)" data-place="[a-z]+"[^>]* data-lit[ >]/g,
+        ),
+      ]
+        .map((m) => m[1])
+        .sort();
       assert.deepEqual(lit, want, `${f.id} step ${i + 1} lights the wrong parts`);
-      assert.match(page, new RegExp(`data-id="${st.toward}" data-place="[a-z]+"[^>]* data-lit data-at>`));
-      assert.match(page, new RegExp(`<figure class="cap-system-map" data-cap="system-map"[^>]* data-flow="${f.id}" data-step="${i + 1}">`));
+      assert.match(
+        page,
+        new RegExp(`data-id="${st.toward}" data-place="[a-z]+"[^>]* data-lit data-at>`),
+      );
+      assert.match(
+        page,
+        new RegExp(
+          `<figure class="cap-system-map" data-cap="system-map"[^>]* data-flow="${f.id}" data-step="${i + 1}">`,
+        ),
+      );
     });
   }
 });
 
 test("a part's link from a step lands on its row on the parts page", () => {
   const parts = readFileSync(join(out, "s", "hub", "containers", "index.html"), "utf8");
-  for (const c of model.containers.filter((/** @type {any} */ x) => x.system === "hub")) assert.ok(parts.includes(`id="part-${c.id}"`), `no anchor for ${c.id}`);
+  for (const c of model.containers.filter((/** @type {any} */ x) => x.system === "hub"))
+    assert.ok(parts.includes(`id="part-${c.id}"`), `no anchor for ${c.id}`);
 });
 
 test("a flow step riding an edge the model does not have fails the build", async () => {
@@ -348,7 +576,14 @@ test("a flow step riding an edge the model does not have fails the build", async
   bad.flows[0].steps[1].relationship = "hub-tick--reads--hub-worker";
   const file = join(mkdtempSync(join(tmpdir(), "explorer-edge-")), "model.json");
   writeFileSync(file, JSON.stringify(bad));
-  await assert.rejects(build({ model: file, stats: join(fixtures, "stats.json"), out: mkdtempSync(join(tmpdir(), "explorer-out-")) }), /rides hub-tick--reads--hub-worker, which is not a relationship/);
+  await assert.rejects(
+    build({
+      model: file,
+      stats: join(fixtures, "stats.json"),
+      out: mkdtempSync(join(tmpdir(), "explorer-out-")),
+    }),
+    /rides hub-tick--reads--hub-worker, which is not a relationship/,
+  );
   const away = structuredClone(model);
   away.flows[0].steps[0].toward = "hub-tick";
   assert.throws(() => allPages(away, stats), /goes toward hub-tick, which is not an end/);
@@ -358,27 +593,49 @@ test("a flow touching a part the public model does not hold renders nothing", ()
   const viaEdge = structuredClone(model);
   viaEdge.flows[0].steps[0].relationship = "hub--coordinates--vault";
   viaEdge.flows[0].steps[0].toward = "vault";
-  assert.throws(() => allPages(viaEdge, stats), /touches hub, which is not a part in the public model/);
+  assert.throws(
+    () => allPages(viaEdge, stats),
+    /touches hub, which is not a part in the public model/,
+  );
   const viaLight = structuredClone(model);
   viaLight.flows[0].steps[0].lights = ["vault-db"];
-  assert.throws(() => allPages(viaLight, stats), /touches vault-db, which is not a part in the public model/);
+  assert.throws(
+    () => allPages(viaLight, stats),
+    /touches vault-db, which is not a part in the public model/,
+  );
 });
 
 test("the core's page and its parts page link each flow over its parts, and a system it does not touch does not", () => {
-  for (const page of [join(out, "s", "hub", "index.html"), join(out, "s", "hub", "containers", "index.html")]) {
+  for (const page of [
+    join(out, "s", "hub", "index.html"),
+    join(out, "s", "hub", "containers", "index.html"),
+  ]) {
     const text = readFileSync(page, "utf8");
-    for (const f of model.flows) assert.ok(text.includes(`href="${flowPath(f.id)}"`), `${page} does not link ${f.id}`);
+    for (const f of model.flows)
+      assert.ok(text.includes(`href="${flowPath(f.id)}"`), `${page} does not link ${f.id}`);
   }
-  assert.doesNotMatch(readFileSync(join(out, "s", "kit", "index.html"), "utf8"), /href="\/flows\/[^"]/);
+  assert.doesNotMatch(
+    readFileSync(join(out, "s", "kit", "index.html"), "utf8"),
+    /href="\/flows\/[^"]/,
+  );
 });
 
 test("two systems that share a repo get its code pages once, under the one named after it, and the other links there", () => {
-  const shared = { ...model, systems: model.systems.map((/** @type {any} */ s) => (s.id === "kit" ? { ...s, repos: ["https://github.com/example/theme"] } : s)) };
+  const shared = {
+    ...model,
+    systems: model.systems.map((/** @type {any} */ s) =>
+      s.id === "kit" ? { ...s, repos: ["https://github.com/example/theme"] } : s,
+    ),
+  };
   const twice = { ...code, maps: [{ ...code.maps[0], system: "kit" }, ...code.maps] };
   const paths = allPages(shared, stats, twice).map(([path]) => path);
   assert.ok(paths.includes(codePath("theme")));
-  assert.ok(!paths.some((p) => p.startsWith(codePath("kit"))), "kit's copy of theme's code was built");
-  const kit = allPages(shared, stats, twice).find(([path]) => path === systemPath("kit"))?.[1] ?? "";
+  assert.ok(
+    !paths.some((p) => p.startsWith(codePath("kit"))),
+    "kit's copy of theme's code was built",
+  );
+  const kit =
+    allPages(shared, stats, twice).find(([path]) => path === systemPath("kit"))?.[1] ?? "";
   assert.match(kit, new RegExp(`<a href="${codePath("theme")}">Measured with`));
 });
 

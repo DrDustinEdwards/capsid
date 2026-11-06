@@ -18,7 +18,13 @@ import { buildServer } from "../src/server";
 // agent would hold it, not a hand-built caller.
 
 async function hmacHex(key: string, message: string): Promise<string> {
-  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const k = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
   const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -28,7 +34,14 @@ async function post(path: string, body: Record<string, unknown>) {
   const ts = new Date().toISOString().replace(/\.\d+Z$/, "Z");
   return SELF.fetch(`https://capsid.test${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Bench-Timestamp": ts, "X-Bench-Signature": await hmacHex("integration-bench-secret-not-a-real-one", `${ts}.${text}`) },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Bench-Timestamp": ts,
+      "X-Bench-Signature": await hmacHex(
+        "integration-bench-secret-not-a-real-one",
+        `${ts}.${text}`,
+      ),
+    },
     body: text,
   });
 }
@@ -39,7 +52,15 @@ const jobsEnv = () => env as unknown as Parameters<typeof postJob>[0];
 let n = 0;
 async function startTreatment(): Promise<{ task_id: string; run_id: string; run_key: string }> {
   const task_id = `sample__key-${++n}`;
-  const task = { task_id, source: "swe-rebench", split: "pilot", repo: "sample/repo", issue_created_at: "2026-07-15T00:00:00Z", fail_to_pass_count: 2, pass_to_pass_count: 3 };
+  const task = {
+    task_id,
+    source: "swe-rebench",
+    split: "pilot",
+    repo: "sample/repo",
+    issue_created_at: "2026-07-15T00:00:00Z",
+    fail_to_pass_count: 2,
+    pass_to_pass_count: 3,
+  };
   expect((await post("/bench/tasks", { task })).status).toBe(200);
   const response = await post("/bench/start", { task_id, arm: "treatment", gh_run: "123.1" });
   expect(response.status, await response.clone().text()).toBe(200);
@@ -47,13 +68,19 @@ async function startTreatment(): Promise<{ task_id: string; run_id: string; run_
 }
 
 async function postFor(namespace: string, title: string): Promise<string> {
-  const posted = await postJob(jobsEnv(), POSTER, new Date(), { namespace, title, body: "fix the sample bug" });
+  const posted = await postJob(jobsEnv(), POSTER, new Date(), {
+    namespace,
+    title,
+    body: "fix the sample bug",
+  });
   expect(posted.ok, posted.refusal).toBe(true);
   return posted.job!.id;
 }
 
 async function resolve(key: string): Promise<Agent | null> {
-  const request = new Request("https://capsid.test/mcp", { headers: { Authorization: `Bearer ${key}` } });
+  const request = new Request("https://capsid.test/mcp", {
+    headers: { Authorization: `Bearer ${key}` },
+  });
   return (await resolveAgent(request, env))?.agent ?? null;
 }
 
@@ -64,9 +91,15 @@ async function connect(agent: Agent) {
   return {
     client,
     // A refusal is an error result or a thrown call; both leave nothing done.
-    call: async (name: string, args: Record<string, unknown>): Promise<{ ok: boolean; text: string }> => {
+    call: async (
+      name: string,
+      args: Record<string, unknown>,
+    ): Promise<{ ok: boolean; text: string }> => {
       try {
-        const result = (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+        const result = (await client.callTool({ name, arguments: args })) as {
+          isError?: boolean;
+          content: Array<{ text: string }>;
+        };
         return { ok: !result.isError, text: result.content.map((p) => p.text).join("\n") };
       } catch (err) {
         return { ok: false, text: err instanceof Error ? err.message : String(err) };
@@ -81,14 +114,20 @@ describe("the run key", () => {
   it("claims and reads its own job, is refused everything else, and dies when the run is scored", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     for (const ns of ["bench", "sample"]) {
-      await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')").bind(ns).run();
+      await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')")
+        .bind(ns)
+        .run();
     }
-    await env.DB.prepare("INSERT OR IGNORE INTO documents (namespace, path, body) VALUES ('sample', 'notes/a.md', 'sample note')").run();
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO documents (namespace, path, body) VALUES ('sample', 'notes/a.md', 'sample note')",
+    ).run();
 
     const run = await startTreatment();
     const other = await startTreatment();
     expect(run.run_key).toMatch(/^capsid_run_[0-9a-f]{64}$/);
-    const stored = await env.DB.prepare("SELECT run_key_hash FROM bench_runs WHERE id = ?1").bind(run.run_id).first<{ run_key_hash: string }>();
+    const stored = await env.DB.prepare("SELECT run_key_hash FROM bench_runs WHERE id = ?1")
+      .bind(run.run_id)
+      .first<{ run_key_hash: string }>();
     expect(stored!.run_key_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(stored!.run_key_hash).not.toContain(run.run_key.slice(11));
 
@@ -97,7 +136,11 @@ describe("the run key", () => {
     const elsewhere = await postFor("sample", `bench ${run.task_id} ${run.run_id}`);
 
     const agent = await resolve(run.run_key);
-    expect(agent).toMatchObject({ actor: `agent:bench-run-${run.run_id}`, admin: false, benchRun: { run: run.run_id, job } });
+    expect(agent).toMatchObject({
+      actor: `agent:bench-run-${run.run_id}`,
+      admin: false,
+      benchRun: { run: run.run_id, job },
+    });
     const { client, call } = await connect(agent!);
 
     // Its own job: read by id, claimed, read again.
@@ -132,11 +175,19 @@ describe("the run key", () => {
     ];
     for (const [tool, args] of refused) {
       const result = await call(tool, args);
-      expect(result.ok, `${tool} ${JSON.stringify(args)} should be refused: ${result.text}`).toBe(false);
-      expect(result.text).toContain(`is the run key of bench run ${run.run_id} and may only claim, read, complete or fail its own job`);
+      expect(result.ok, `${tool} ${JSON.stringify(args)} should be refused: ${result.text}`).toBe(
+        false,
+      );
+      expect(result.text).toContain(
+        `is the run key of bench run ${run.run_id} and may only claim, read, complete or fail its own job`,
+      );
     }
     // The refused calls changed nothing: the job is still claimed by the run, the others untouched.
-    const rows = await env.DB.prepare("SELECT id, status, claimed_by FROM jobs WHERE id IN (?1, ?2, ?3) ORDER BY id").bind(job, otherJob, elsewhere).all<{ id: string; status: string; claimed_by: string | null }>();
+    const rows = await env.DB.prepare(
+      "SELECT id, status, claimed_by FROM jobs WHERE id IN (?1, ?2, ?3) ORDER BY id",
+    )
+      .bind(job, otherJob, elsewhere)
+      .all<{ id: string; status: string; claimed_by: string | null }>();
     expect(Object.fromEntries(rows.results.map((r) => [r.id, [r.status, r.claimed_by]]))).toEqual({
       [job]: ["claimed", `agent:bench-run-${run.run_id}`],
       [otherJob]: ["queued", null],
@@ -145,10 +196,24 @@ describe("the run key", () => {
     await client.close();
 
     // The score step finishes the run and closes its job in one step, and the key stops resolving.
-    const scored = await post("/bench/score", { run_id: run.run_id, hidden: counts, claimed_done: true, capsid_job_id: job });
-    expect(await scored.json()).toMatchObject({ status: "scored", claimed_done: true, false_claim: true });
-    const closed = await env.DB.prepare("SELECT status, result_summary FROM jobs WHERE id = ?1").bind(job).first<{ status: string; result_summary: string }>();
-    expect(closed).toEqual({ status: "superseded", result_summary: `Superseded: ${BENCH_CLOSE_REASON}` });
+    const scored = await post("/bench/score", {
+      run_id: run.run_id,
+      hidden: counts,
+      claimed_done: true,
+      capsid_job_id: job,
+    });
+    expect(await scored.json()).toMatchObject({
+      status: "scored",
+      claimed_done: true,
+      false_claim: true,
+    });
+    const closed = await env.DB.prepare("SELECT status, result_summary FROM jobs WHERE id = ?1")
+      .bind(job)
+      .first<{ status: string; result_summary: string }>();
+    expect(closed).toEqual({
+      status: "superseded",
+      result_summary: `Superseded: ${BENCH_CLOSE_REASON}`,
+    });
     expect(await resolve(run.run_key)).toBeNull();
     // The other run's key still works, on its own job only.
     expect((await resolve(other.run_key))?.benchRun).toEqual({ run: other.run_id, job: otherJob });
@@ -156,37 +221,83 @@ describe("the run key", () => {
 
   it("completes its job only with the harness's passing receipt, and an honest fail does not trip the breaker", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('bench', '[]')").run();
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('bench', '[]')",
+    ).run();
     const done = await startTreatment();
     const doneJob = await postFor("bench", runJobTitle(done.task_id, done.run_id));
     const { client, call } = await connect((await resolve(done.run_key))!);
     expect((await call("capsid_work_jobs", { action: "claim", id: doneJob })).ok).toBe(true);
 
     // No receipt yet, then a receipt that did not pass: both refused, with the receipt's reason.
-    const tryComplete = () => call("capsid_work_jobs", { action: "complete", id: doneJob, result_summary: "fixed" });
+    const tryComplete = () =>
+      call("capsid_work_jobs", { action: "complete", id: doneJob, result_summary: "fixed" });
     for (const receipt of [null, { passed: false, reason: "your test did not fail on the base" }]) {
-      if (receipt) expect((await post("/bench/repro", { run_id: done.run_id, ...receipt })).status).toBe(200);
+      if (receipt)
+        expect((await post("/bench/repro", { run_id: done.run_id, ...receipt })).status).toBe(200);
       const refused = await tryComplete();
       expect(refused.ok, refused.text).toBe(false);
       expect(refused.text).toContain("not done, here's why");
       if (receipt) expect(refused.text).toContain(receipt.reason);
     }
     // The receipt is written once, so the refused run stays refused.
-    expect((await post("/bench/repro", { run_id: done.run_id, passed: true, reason: "failed on the base, passed on the diff" })).status).toBe(409);
+    expect(
+      (
+        await post("/bench/repro", {
+          run_id: done.run_id,
+          passed: true,
+          reason: "failed on the base, passed on the diff",
+        })
+      ).status,
+    ).toBe(409);
 
     const proven = await startTreatment();
     const provenJob = await postFor("bench", runJobTitle(proven.task_id, proven.run_id));
     const own = await connect((await resolve(proven.run_key))!);
     expect((await own.call("capsid_work_jobs", { action: "claim", id: provenJob })).ok).toBe(true);
-    expect((await post("/bench/repro", { run_id: proven.run_id, passed: true, reason: "failed on the base, passed on the diff" })).status).toBe(200);
-    const completed = await own.call("capsid_work_jobs", { action: "complete", id: provenJob, result_summary: "fixed" });
+    expect(
+      (
+        await post("/bench/repro", {
+          run_id: proven.run_id,
+          passed: true,
+          reason: "failed on the base, passed on the diff",
+        })
+      ).status,
+    ).toBe(200);
+    const completed = await own.call("capsid_work_jobs", {
+      action: "complete",
+      id: provenJob,
+      result_summary: "fixed",
+    });
     expect(completed.ok, completed.text).toBe(true);
     await own.client.close();
     await client.close();
-    expect((await post("/bench/score", { run_id: done.run_id, hidden: counts, claimed_done: false, capsid_job_id: doneJob })).status).toBe(200);
+    expect(
+      (
+        await post("/bench/score", {
+          run_id: done.run_id,
+          hidden: counts,
+          claimed_done: false,
+          capsid_job_id: doneJob,
+        })
+      ).status,
+    ).toBe(200);
     // The score step leaves a job the agent closed as it is.
-    expect((await post("/bench/score", { run_id: proven.run_id, hidden: counts, claimed_done: true, capsid_job_id: provenJob })).status).toBe(200);
-    expect((await env.DB.prepare("SELECT status FROM jobs WHERE id = ?1").bind(provenJob).first<{ status: string }>())!.status).toBe("done");
+    expect(
+      (
+        await post("/bench/score", {
+          run_id: proven.run_id,
+          hidden: counts,
+          claimed_done: true,
+          capsid_job_id: provenJob,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await env.DB.prepare("SELECT status FROM jobs WHERE id = ?1")
+        .bind(provenJob)
+        .first<{ status: string }>())!.status,
+    ).toBe("done");
 
     // Three honest "not done" runs in a day, the breaker's default threshold.
     for (let i = 0; i < 3; i++) {
@@ -194,28 +305,75 @@ describe("the run key", () => {
       const job = await postFor("bench", runJobTitle(run.task_id, run.run_id));
       const own = await connect((await resolve(run.run_key))!);
       expect((await own.call("capsid_work_jobs", { action: "claim", id: job })).ok).toBe(true);
-      const failed = await own.call("capsid_work_jobs", { action: "fail", id: job, reason: "could not reproduce the issue" });
+      const failed = await own.call("capsid_work_jobs", {
+        action: "fail",
+        id: job,
+        reason: "could not reproduce the issue",
+      });
       expect(failed.ok, failed.text).toBe(true);
       await own.client.close();
-      expect((await post("/bench/score", { run_id: run.run_id, hidden: counts, claimed_done: false, capsid_job_id: job })).status).toBe(200);
+      expect(
+        (
+          await post("/bench/score", {
+            run_id: run.run_id,
+            hidden: counts,
+            claimed_done: false,
+            capsid_job_id: job,
+          })
+        ).status,
+      ).toBe(200);
     }
-    expect((await breakerState(env as unknown as Parameters<typeof breakerState>[0], "bench", new Date())).open).toBe(false);
+    expect(
+      (
+        await breakerState(
+          env as unknown as Parameters<typeof breakerState>[0],
+          "bench",
+          new Date(),
+        )
+      ).open,
+    ).toBe(false);
   });
 
   it("fails a job with work recorded on it instead, with no outcome row", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('bench', '[]')").run();
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('bench', '[]')",
+    ).run();
     const run = await startTreatment();
     const job = await postFor("bench", runJobTitle(run.task_id, run.run_id));
-    await env.DB.prepare("UPDATE jobs SET status = 'blocked', claimed_by = ?2, blocked_count = 1 WHERE id = ?1").bind(job, `agent:bench-run-${run.run_id}`).run();
+    await env.DB.prepare(
+      "UPDATE jobs SET status = 'blocked', claimed_by = ?2, blocked_count = 1 WHERE id = ?1",
+    )
+      .bind(job, `agent:bench-run-${run.run_id}`)
+      .run();
 
-    const scored = await post("/bench/score", { run_id: run.run_id, hidden: counts, claimed_done: false, capsid_job_id: job });
+    const scored = await post("/bench/score", {
+      run_id: run.run_id,
+      hidden: counts,
+      claimed_done: false,
+      capsid_job_id: job,
+    });
     expect(scored.status, await scored.clone().text()).toBe(200);
-    const closed = await env.DB.prepare("SELECT status, result_summary FROM jobs WHERE id = ?1").bind(job).first<{ status: string; result_summary: string }>();
+    const closed = await env.DB.prepare("SELECT status, result_summary FROM jobs WHERE id = ?1")
+      .bind(job)
+      .first<{ status: string; result_summary: string }>();
     expect(closed).toEqual({ status: "failed", result_summary: BENCH_CLOSE_REASON });
-    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE job_id = ?1").bind(job).first<{ n: number }>())!.n).toBe(0);
+    expect(
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE job_id = ?1")
+        .bind(job)
+        .first<{ n: number }>())!.n,
+    ).toBe(0);
 
     // A second report finds the run closed and writes nothing.
-    expect((await post("/bench/score", { run_id: run.run_id, hidden: counts, claimed_done: true, capsid_job_id: job })).status).toBe(409);
+    expect(
+      (
+        await post("/bench/score", {
+          run_id: run.run_id,
+          hidden: counts,
+          claimed_done: true,
+          capsid_job_id: job,
+        })
+      ).status,
+    ).toBe(409);
   });
 });

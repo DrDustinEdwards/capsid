@@ -20,11 +20,16 @@ export async function readAllPages<T>(
   repo: string,
   path: string,
   rowsOf: (body: unknown) => T[],
-  maxPages: number
+  maxPages: number,
 ): Promise<{ items: T[]; problem: string | null }> {
   const items: T[] = [];
   for (let page = 1; page <= maxPages; page++) {
-    const resp = await ghFetch(env, owner, repo, `${path}${path.includes("?") ? "&" : "?"}per_page=${PER_PAGE}&page=${page}`);
+    const resp = await ghFetch(
+      env,
+      owner,
+      repo,
+      `${path}${path.includes("?") ? "&" : "?"}per_page=${PER_PAGE}&page=${page}`,
+    );
     if (!resp.ok) return { items, problem: `page ${page} returned ${resp.status}` };
     items.push(...(rowsOf(await resp.json()) ?? []));
     if (!/rel="next"/.test(resp.headers.get("Link") ?? "")) return { items, problem: null };
@@ -45,9 +50,16 @@ export async function readCheckRuns<T extends CheckRunRow = CheckRunRow>(
   owner: string,
   repo: string,
   sha: string,
-  maxPages: number
+  maxPages: number,
 ): Promise<{ items: T[]; problem: string | null }> {
-  return readAllPages<T>(env, owner, repo, `/repos/${owner}/${repo}/commits/${sha}/check-runs`, (page) => (page as { check_runs: T[] }).check_runs, maxPages);
+  return readAllPages<T>(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/commits/${sha}/check-runs`,
+    (page) => (page as { check_runs: T[] }).check_runs,
+    maxPages,
+  );
 }
 
 export interface PrFiles {
@@ -80,7 +92,8 @@ export interface PrFileRow {
 // Where the tests live: capsid's three directories, and anything merge-class names a test
 // (tests/, __tests__/, e2e/, *.test.* and *.spec.*), which is what the other covered repos use.
 const TEST_DIRS = ["test/", "test-integration/", "dashboard/e2e/"];
-export const inTestDir = (path: string | undefined) => path !== undefined && (TEST_DIRS.some((d) => path.startsWith(d)) || TEST_FILE.test(path));
+export const inTestDir = (path: string | undefined) =>
+  path !== undefined && (TEST_DIRS.some((d) => path.startsWith(d)) || TEST_FILE.test(path));
 
 /** The tests a pull request changes that already exist: a test removed or renamed away
  *  (the old path is deleted), or any file there with a deleted line. A file added whole,
@@ -91,24 +104,54 @@ export function existingTestEdits(files: readonly PrFileRow[]): string[] {
   const edited: string[] = [];
   for (const f of files) {
     // A rename is a deletion of the old path whichever directory the new one is in.
-    const path = inTestDir(f.previous_filename) ? f.previous_filename! : inTestDir(f.filename) ? f.filename : null;
+    const path = inTestDir(f.previous_filename)
+      ? f.previous_filename!
+      : inTestDir(f.filename)
+        ? f.filename
+        : null;
     if (path === null) continue;
     if (f.status === "added") continue;
-    const pureAdditions = f.status === "modified" && Number.isInteger(f.deletions) && f.deletions === 0;
+    const pureAdditions =
+      f.status === "modified" && Number.isInteger(f.deletions) && f.deletions === 0;
     if (!pureAdditions) edited.push(path);
   }
   return edited;
 }
 
-export async function readPrFiles(env: Env, owner: string, repo: string, number: number): Promise<PrFiles> {
+export async function readPrFiles(
+  env: Env,
+  owner: string,
+  repo: string,
+  number: number,
+): Promise<PrFiles> {
   const files = await readAllPages<PrFileRow>(
-    env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}/files`,
-    (page) => page as PrFileRow[], FILES_MAX_PAGES
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/pulls/${number}/files`,
+    (page) => page as PrFileRow[],
+    FILES_MAX_PAGES,
   );
   // A list that reached FILES_LIMIT may have been cut by GitHub with no next page.
-  const problem = files.problem ?? (files.items.length >= FILES_LIMIT ? `GitHub lists at most ${FILES_LIMIT} files for a pull request and this one reached that` : null);
-  const paths = files.items.flatMap((f) => (f.previous_filename ? [f.previous_filename, f.filename] : [f.filename]));
-  const counted = files.items.every((f) => Number.isInteger(f.additions) && Number.isInteger(f.deletions));
-  const changedLines = counted ? files.items.reduce((n, f) => n + (f.additions ?? 0) + (f.deletions ?? 0), 0) : null;
-  return { paths, problem, changedLines, testEdits: existingTestEdits(files.items), rows: files.items };
+  const problem =
+    files.problem ??
+    (files.items.length >= FILES_LIMIT
+      ? `GitHub lists at most ${FILES_LIMIT} files for a pull request and this one reached that`
+      : null);
+  const paths = files.items.flatMap((f) =>
+    f.previous_filename ? [f.previous_filename, f.filename] : [f.filename],
+  );
+  const counted = files.items.every(
+    (f) => Number.isInteger(f.additions) && Number.isInteger(f.deletions),
+  );
+  const changedLines = counted
+    ? files.items.reduce((n, f) => n + (f.additions ?? 0) + (f.deletions ?? 0), 0)
+    : null;
+  return {
+    paths,
+    problem,
+    changedLines,
+    testEdits: existingTestEdits(files.items),
+    rows: files.items,
+  };
 }

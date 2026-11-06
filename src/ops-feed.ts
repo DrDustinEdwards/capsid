@@ -4,7 +4,15 @@ import { capsidCookie, getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
 import { loadMergePolicy } from "./auto-merge-policy";
 import { readSafetyReport } from "./merge-safety";
-import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, type PortalUser, portalDisplay, portalGate, sourceAddress } from "./portal-auth";
+import {
+  PORTAL_CSRF_COOKIE,
+  PORTAL_PREFIX,
+  PORTAL_SESSION_TTL_SECONDS,
+  type PortalUser,
+  portalDisplay,
+  portalGate,
+  sourceAddress,
+} from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
 import { agentSummaries, type AgentSummary } from "./status";
@@ -16,13 +24,30 @@ import { readSiteConfig } from "./ops-sites";
 import { readPackageConfig } from "./ops-packages";
 import { readSnapshot } from "./ops-snapshot";
 import { INCIDENT_FAILURES, NEEDS_INPUT_INCIDENT_MS } from "./ops-hooks";
-import type { OpsAgent, OpsAwaitingSeat, OpsFeed, OpsJob, OpsJobStatus, OpsLive, OpsPr, OpsSession, OpsUptime, OpsUptimeCounts } from "./ops-types/feed";
+import type {
+  OpsAgent,
+  OpsAwaitingSeat,
+  OpsFeed,
+  OpsJob,
+  OpsJobStatus,
+  OpsLive,
+  OpsPr,
+  OpsSession,
+  OpsUptime,
+  OpsUptimeCounts,
+} from "./ops-types/feed";
 import { DAILY_RETENTION_DAYS } from "./backup";
 import { overnightState } from "./overnight";
 import { auditStatement } from "./store-guards";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
 import { openQuietFindings } from "./watcher-digest";
-import { DEFAULT_CADENCE_MINUTES, watcherTick, WATCHER_ACTOR, type Gathered, type WatcherReport } from "./watcher";
+import {
+  DEFAULT_CADENCE_MINUTES,
+  watcherTick,
+  WATCHER_ACTOR,
+  type Gathered,
+  type WatcherReport,
+} from "./watcher";
 import { gatherFindings } from "./watcher-gather";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { textResponse } from "./http";
@@ -77,19 +102,28 @@ const UPTIME_TARGET = 0.999;
 /** Each site's probes and up probes over the retention window, and the days under the
  *  target. Null, logged, when the table cannot be read (before migrations/0054). */
 async function siteUptime(env: Env, now: Date): Promise<OpsUptime | null> {
-  const since = new Date(now.getTime() - (DAILY_RETENTION_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
+  const since = new Date(now.getTime() - (DAILY_RETENTION_DAYS - 1) * DAY_MS)
+    .toISOString()
+    .slice(0, 10);
   try {
     const { results } = await env.DB.prepare(
       `SELECT namespace, substr(day, 1, 7) AS month, SUM(probes) AS probes, SUM(up) AS up, COUNT(*) AS days,
               SUM(CASE WHEN up * 1000 < probes * 999 THEN 1 ELSE 0 END) AS below
-       FROM ops_uptime_daily WHERE day >= ?1 GROUP BY namespace, month ORDER BY namespace, month`
+       FROM ops_uptime_daily WHERE day >= ?1 GROUP BY namespace, month ORDER BY namespace, month`,
     )
       .bind(since)
       .all<{ namespace: string; month: string } & OpsUptimeCounts>();
     // One row per site and month, folded into each site's totals and its months.
     const sites = new Map<string, OpsUptime["sites"][number]>();
     for (const { namespace, month, probes, up, days, below } of results ?? []) {
-      const s = sites.get(namespace) ?? { namespace, probes: 0, up: 0, days: 0, below: 0, months: [] };
+      const s = sites.get(namespace) ?? {
+        namespace,
+        probes: 0,
+        up: 0,
+        days: 0,
+        below: 0,
+        months: [],
+      };
       s.probes += probes;
       s.up += up;
       s.days += days;
@@ -99,7 +133,11 @@ async function siteUptime(env: Env, now: Date): Promise<OpsUptime | null> {
     }
     return { target: UPTIME_TARGET, days: DAILY_RETENTION_DAYS, sites: [...sites.values()] };
   } catch (err) {
-    logEvent("OPS_FEED_UPTIME_UNREADABLE", { message: `OPS_FEED_UPTIME_UNREADABLE ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "OPS_FEED_UPTIME_UNREADABLE",
+      { message: `OPS_FEED_UPTIME_UNREADABLE ${err instanceof Error ? err.message : String(err)}` },
+      { level: "error" },
+    );
     return null;
   }
 }
@@ -113,7 +151,8 @@ const CSRF_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 /** The request's Portal CSRF value, and the Set-Cookie that mints one when it has none. */
 export function portalCsrf(request: Request): { value: string; setCookie: string | null } {
   const presented = getCookie(request, PORTAL_CSRF_COOKIE);
-  if (presented !== null && CSRF_SHAPE.test(presented)) return { value: presented, setCookie: null };
+  if (presented !== null && CSRF_SHAPE.test(presented))
+    return { value: presented, setCookie: null };
   const value = crypto.randomUUID();
   const path = portalCookiePath(new URL(request.url));
   return {
@@ -144,7 +183,9 @@ export function isoTime(value: string): string;
 export function isoTime(value: string | null): string | null;
 export function isoTime(value: string | null): string | null {
   if (value === null) return null;
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(" ", "T")}Z` : value;
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+    ? `${value.replace(" ", "T")}Z`
+    : value;
 }
 
 export interface JobFeedRow {
@@ -179,11 +220,17 @@ const FINGERPRINT = /\[([^\]]+)\]\s*$/;
 
 /** A job as the feed shows it. A blocked job's summary is split into what it waits on
  *  and the exact command (commandFromSummary), so the app can show the command to copy. */
-export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | null = null): OpsJob {
+export function opsJobFrom(
+  row: JobFeedRow,
+  commandSignature: SignatureCheck | null = null,
+): OpsJob {
   const blocked = row.status === "blocked";
   const summary = row.result_summary;
   const marker = summary === null ? -1 : (resumeMarkerIn(summary)?.at ?? -1);
-  const waitsOn = !blocked || summary === null ? null : (marker === -1 ? summary : summary.slice(0, marker)).trim() || null;
+  const waitsOn =
+    !blocked || summary === null
+      ? null
+      : (marker === -1 ? summary : summary.slice(0, marker)).trim() || null;
   const print = row.posted_by === WATCHER_ACTOR ? FINGERPRINT.exec(row.title) : null;
   return {
     id: row.id,
@@ -204,9 +251,17 @@ export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | n
     command_signature: blocked ? commandSignature : null,
     question: blocked && commandSignature !== "mismatch" && isQuestionSummary(summary),
     ...(row.status === "parked" && summary !== null ? { parked_reason: summary } : {}),
-    ...(row.started_by && row.started_at ? { started_by: row.started_by, started_at: isoTime(row.started_at) } : {}),
+    ...(row.started_by && row.started_at
+      ? { started_by: row.started_by, started_at: isoTime(row.started_at) }
+      : {}),
     result_ref: row.result_ref,
-    finding: print ? { fingerprint: print[1], seen_count: row.finding_seen_count ?? null, last_seen: isoTime(row.finding_last_seen ?? null) } : null,
+    finding: print
+      ? {
+          fingerprint: print[1],
+          seen_count: row.finding_seen_count ?? null,
+          last_seen: isoTime(row.finding_last_seen ?? null),
+        }
+      : null,
   };
 }
 
@@ -243,7 +298,13 @@ export function awaitingFrom(raw: string | null): OpsAwaitingSeat[] {
     if (!Array.isArray(parsed)) throw new Error("not an array");
     return parsed as OpsAwaitingSeat[];
   } catch (err) {
-    logEvent("OPS_FEED_AWAITING_UNREADABLE", { message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "OPS_FEED_AWAITING_UNREADABLE",
+      {
+        message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
     return [];
   }
 }
@@ -271,7 +332,11 @@ export function sizeFrom(meta: unknown): number | null {
   return typeof size === "number" && Number.isFinite(size) && size >= 0 ? size : null;
 }
 
-async function liveJobs(db: D1Database, now: Date, secret: string | undefined): Promise<{ jobs: OpsJob[]; sizeBytes: number | null }> {
+async function liveJobs(
+  db: D1Database,
+  now: Date,
+  secret: string | undefined,
+): Promise<{ jobs: OpsJob[]; sizeBytes: number | null }> {
   const open = OPEN_JOB_STATUSES.map((_, i) => `?${i + 2}`).join(", ");
   // datetime() on both sides: updated_at is written both as ISO and as D1's default
   // text form, and the two do not compare as text. The watcher's finding row joins
@@ -287,7 +352,7 @@ async function liveJobs(db: D1Database, now: Date, secret: string | undefined): 
               wf.seen_count AS finding_seen_count, wf.last_seen_at AS finding_last_seen
        FROM jobs j LEFT JOIN watcher_findings wf ON wf.job_id = j.id
        WHERE j.status IN (${open}) OR j.status = 'parked' OR datetime(j.updated_at) >= datetime(?1)
-       ORDER BY j.updated_at DESC`
+       ORDER BY j.updated_at DESC`,
     )
     .bind(new Date(now.getTime() - DAY_MS).toISOString(), ...OPEN_JOB_STATUSES)
     .all<JobFeedRow>();
@@ -295,9 +360,15 @@ async function liveJobs(db: D1Database, now: Date, secret: string | undefined): 
   const checks = await Promise.all(
     rows.map((r) =>
       r.status === "blocked" && r.result_summary !== null
-        ? checkJobText(secret, "summary", r.id, { summary: r.result_summary }, r.summary_sig ?? null)
-        : Promise.resolve(null)
-    )
+        ? checkJobText(
+            secret,
+            "summary",
+            r.id,
+            { summary: r.result_summary },
+            r.summary_sig ?? null,
+          )
+        : Promise.resolve(null),
+    ),
   );
   return { jobs: rows.map((r, i) => opsJobFrom(r, checks[i])), sizeBytes: sizeFrom(meta) };
 }
@@ -306,10 +377,16 @@ async function livePrs(db: D1Database, now: Date): Promise<OpsPr[]> {
   const { results } = await db
     .prepare(
       `SELECT job_id, pr_url, merged, merge_verified_at, recorded_at FROM job_outcome_prs
-       WHERE recorded_at >= ?1 ORDER BY recorded_at DESC`
+       WHERE recorded_at >= ?1 ORDER BY recorded_at DESC`,
     )
     .bind(sqliteTime(new Date(now.getTime() - WEEK_MS)))
-    .all<{ job_id: string; pr_url: string; merged: number | null; merge_verified_at: string | null; recorded_at: string }>();
+    .all<{
+      job_id: string;
+      pr_url: string;
+      merged: number | null;
+      merge_verified_at: string | null;
+      recorded_at: string;
+    }>();
   return (results ?? []).map((r) => ({
     job_id: r.job_id,
     pr_url: r.pr_url,
@@ -361,7 +438,7 @@ async function liveSessions(db: D1Database, now: Date): Promise<OpsSession[]> {
       `SELECT session_id, agent, job_id, namespace, source, model, permission_mode, started_at, last_event_at, last_event,
               last_notification_type, needs_input, last_failure
        FROM agent_sessions WHERE ended_at IS NULL AND last_event_at >= ?1
-       ORDER BY last_event_at DESC LIMIT ?2`
+       ORDER BY last_event_at DESC LIMIT ?2`,
     )
     .bind(new Date(now.getTime() - DAY_MS).toISOString(), SESSION_ROWS_LIMIT)
     .all<SessionFeedRow>();
@@ -373,14 +450,37 @@ async function liveSessions(db: D1Database, now: Date): Promise<OpsSession[]> {
 async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
   try {
     const loaded = await loadMergePolicy(env);
-    return "error" in loaded ? { loads: false, reason: loaded.error } : { loads: true, version: loaded.policy.version, enabled: loaded.policy.enabled, units: [...loaded.policy.units] };
+    return "error" in loaded
+      ? { loads: false, reason: loaded.error }
+      : {
+          loads: true,
+          version: loaded.policy.version,
+          enabled: loaded.policy.enabled,
+          units: [...loaded.policy.units],
+        };
   } catch (err) {
-    return { loads: false, reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      loads: false,
+      reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 
 async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, inbox, findings, mergePolicy] = await Promise.all([
+  const [
+    jobRead,
+    agents,
+    prs,
+    awaitingRaw,
+    mergeSafety,
+    sites,
+    sessions,
+    packages,
+    overnight,
+    inbox,
+    findings,
+    mergePolicy,
+  ] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -419,18 +519,30 @@ export type OpsFeedData = Omit<OpsFeed, "csrf" | "user">;
 
 /** The run ledger as the feed shows it. A failed read is said in the panel, not
  *  turned into a failure of the whole feed. */
-async function scheduled(env: Env): Promise<{ read: Awaited<ReturnType<typeof readTaskRuns>> } | { error: string }> {
+async function scheduled(
+  env: Env,
+): Promise<{ read: Awaited<ReturnType<typeof readTaskRuns>> } | { error: string }> {
   try {
     return { read: await readTaskRuns(env.DB) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("OPS_FEED_TASK_RUNS_UNREADABLE", { message: `OPS_FEED_TASK_RUNS_UNREADABLE ${message}` }, { level: "error" });
+    logEvent(
+      "OPS_FEED_TASK_RUNS_UNREADABLE",
+      { message: `OPS_FEED_TASK_RUNS_UNREADABLE ${message}` },
+      { level: "error" },
+    );
     return { error: message };
   }
 }
 
 export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
-  const [snapshot, live, last, runs, uptime] = await Promise.all([readSnapshot(env), opsLive(env, now), env.APP_KV.get(OPS_REFRESH_KEY), scheduled(env), siteUptime(env, now)]);
+  const [snapshot, live, last, runs, uptime] = await Promise.all([
+    readSnapshot(env),
+    opsLive(env, now),
+    env.APP_KV.get(OPS_REFRESH_KEY),
+    scheduled(env),
+    siteUptime(env, now),
+  ]);
   return {
     snapshot,
     uptime,
@@ -438,16 +550,28 @@ export async function opsFeed(env: Env, now: Date): Promise<OpsFeedData> {
     scheduled:
       "error" in runs
         ? { tasks: null, error: runs.error }
-        : { tasks: taskStates(runs.read, now, snapshot?.cadence_min ?? DEFAULT_CADENCE_MINUTES), error: null },
+        : {
+            tasks: taskStates(runs.read, now, snapshot?.cadence_min ?? DEFAULT_CADENCE_MINUTES),
+            error: null,
+          },
     refresh_allowed_at: refreshAllowedAt(last, now),
     cloudflare_configured: Boolean(env.CF_OPS_TOKEN),
   };
 }
 
-function feedResponse(request: Request, user: PortalUser, data: OpsFeedData, extra: Record<string, string> = {}): Response {
+function feedResponse(
+  request: Request,
+  user: PortalUser,
+  data: OpsFeedData,
+  extra: Record<string, string> = {},
+): Response {
   const csrf = portalCsrf(request);
   const feed: OpsFeed = { ...data, csrf: csrf.value, user: portalDisplay(user) };
-  const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store", ...extra });
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+    ...extra,
+  });
   if (csrf.setCookie) headers.set("Set-Cookie", csrf.setCookie);
   return new Response(JSON.stringify(feed), { status: 200, headers });
 }
@@ -460,17 +584,30 @@ export interface OpsDeps {
   gather?: (env: Env, now: Date) => Promise<Gathered>;
 }
 
-export async function handleOpsFeed(request: Request, env: Env, now: Date = new Date(), deps: OpsDeps = {}): Promise<Response> {
+export async function handleOpsFeed(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+  deps: OpsDeps = {},
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   return feedResponse(request, gate.user, await (deps.feed ?? opsFeed)(env, now));
 }
 
-export async function handleOpsRefresh(request: Request, env: Env, now: Date = new Date(), deps: OpsDeps = {}): Promise<Response> {
+export async function handleOpsRefresh(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+  deps: OpsDeps = {},
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   if (request.headers.get(OPS_REFRESH_HEADER) !== OPS_REFRESH_HEADER_VALUE) {
-    return textResponse(`forbidden: a refresh must carry the header ${OPS_REFRESH_HEADER}: ${OPS_REFRESH_HEADER_VALUE}. The dashboard sends it; a cross-site form cannot.`, 403);
+    return textResponse(
+      `forbidden: a refresh must carry the header ${OPS_REFRESH_HEADER}: ${OPS_REFRESH_HEADER_VALUE}. The dashboard sends it; a cross-site form cannot.`,
+      403,
+    );
   }
 
   // The rate limit fails closed: a stamp that cannot be read or written refuses the
@@ -481,22 +618,40 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     last = await env.APP_KV.get(OPS_REFRESH_KEY);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("OPS_REFRESH_LIMIT_UNREADABLE", { message: `OPS_REFRESH_LIMIT_UNREADABLE ${message}` }, { level: "error" });
-    return textResponse(`the refresh rate limit could not be read (${message}), so no pass was run. Try again shortly.`, 503);
+    logEvent(
+      "OPS_REFRESH_LIMIT_UNREADABLE",
+      { message: `OPS_REFRESH_LIMIT_UNREADABLE ${message}` },
+      { level: "error" },
+    );
+    return textResponse(
+      `the refresh rate limit could not be read (${message}), so no pass was run. Try again shortly.`,
+      503,
+    );
   }
   const allowedAt = refreshAllowedAt(last, now);
   if (allowedAt !== null) {
     const seconds = Math.max(1, Math.ceil((Date.parse(allowedAt) - now.getTime()) / 1000));
-    return textResponse(`a watcher pass was run on demand less than two minutes ago. The next is allowed at ${allowedAt}.`, 429, {
-      "Retry-After": String(seconds),
-    });
+    return textResponse(
+      `a watcher pass was run on demand less than two minutes ago. The next is allowed at ${allowedAt}.`,
+      429,
+      {
+        "Retry-After": String(seconds),
+      },
+    );
   }
   try {
     await env.APP_KV.put(OPS_REFRESH_KEY, now.toISOString());
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("OPS_REFRESH_LIMIT_UNWRITABLE", { message: `OPS_REFRESH_LIMIT_UNWRITABLE ${message}` }, { level: "error" });
-    return textResponse(`the refresh rate limit could not be written (${message}), so no pass was run. Try again shortly.`, 503);
+    logEvent(
+      "OPS_REFRESH_LIMIT_UNWRITABLE",
+      { message: `OPS_REFRESH_LIMIT_UNWRITABLE ${message}` },
+      { level: "error" },
+    );
+    return textResponse(
+      `the refresh rate limit could not be written (${message}), so no pass was run. Try again shortly.`,
+      503,
+    );
   }
 
   const actor = adminAgentForEmail(gate.user.email).actor;
@@ -506,8 +661,18 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     report = await watcherTick(env, now, () => gather(env, now), { force: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("OPS_REFRESH_PASS_FAILED", { message: `OPS_REFRESH_PASS_FAILED ${message}` }, { level: "error" });
-    await env.DB.batch([auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: false, error: message, source_address: sourceAddress(request) })]);
+    logEvent(
+      "OPS_REFRESH_PASS_FAILED",
+      { message: `OPS_REFRESH_PASS_FAILED ${message}` },
+      { level: "error" },
+    );
+    await env.DB.batch([
+      auditStatement(env.DB, actor, "portal-ops-refresh", null, null, {
+        ran: false,
+        error: message,
+        source_address: sourceAddress(request),
+      }),
+    ]);
     return textResponse(`the watcher pass failed: ${message}`, 500);
   }
 
@@ -515,7 +680,13 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
   let warning: string | null = null;
   try {
     await env.DB.batch([
-      auditStatement(env.DB, actor, "portal-ops-refresh", null, null, { ran: report.ran, note: report.note, posted: report.posted, cleared: report.cleared, source_address: sourceAddress(request) }),
+      auditStatement(env.DB, actor, "portal-ops-refresh", null, null, {
+        ran: report.ran,
+        note: report.note,
+        posted: report.posted,
+        cleared: report.cleared,
+        source_address: sourceAddress(request),
+      }),
     ]);
   } catch (err) {
     // The pass happened; only its audit row failed. Said in a header and the log, not
@@ -524,5 +695,10 @@ export async function handleOpsRefresh(request: Request, env: Env, now: Date = n
     logEvent("OPS_REFRESH_AUDIT_FAILED", { message: warning }, { level: "error" });
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
-  return feedResponse(request, gate.user, feed, warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
+  return feedResponse(
+    request,
+    gate.user,
+    feed,
+    warning ? { "X-Capsid-Warning": warning.replace(/[^\x20-\x7e]+/g, " ") } : {},
+  );
 }

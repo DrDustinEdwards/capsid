@@ -62,7 +62,11 @@ const NULLABLE = [
 // parsing
 
 test("a claim arrives as an object or as a JSON string, and both parse to the same claim", () => {
-  const claim = { prs_opened: [PR], tests: { run: 12, passed: 12, failed: 0, result: "pass" as const }, deploy_state: "none" as const };
+  const claim = {
+    prs_opened: [PR],
+    tests: { run: 12, passed: 12, failed: 0, result: "pass" as const },
+    deploy_state: "none" as const,
+  };
   const asObject = parseClaim(claim);
   const asString = parseClaim(JSON.stringify(claim));
   assert.ok("claim" in asObject && "claim" in asString);
@@ -109,7 +113,12 @@ test("PLANT: an unknown key is refused, never dropped, at the top level and insi
 
 test("a claim out of bounds is refused, not trimmed", () => {
   const cases: unknown[] = [
-    { prs_opened: Array.from({ length: MAX_CLAIM_PRS + 1 }, (_, i) => `https://github.com/example/sample/pull/${i}`) },
+    {
+      prs_opened: Array.from(
+        { length: MAX_CLAIM_PRS + 1 },
+        (_, i) => `https://github.com/example/sample/pull/${i}`,
+      ),
+    },
     { prs_merged: ["x".repeat(513)] },
     { files_touched: Array.from({ length: 501 }, (_, i) => `src/f${i}.ts`) },
     { tests: { run: -1 } },
@@ -131,7 +140,12 @@ test("PLANT: an absent field is NULL, never 0", () => {
   // No claim and no evidence: every structured column is NULL. A 0 here would read as
   // "counted and found none", which nobody said.
   const empty = row();
-  for (const column of NULLABLE) assert.equal(empty[column], null, `${column} is ${JSON.stringify(empty[column])} with nothing said`);
+  for (const column of NULLABLE)
+    assert.equal(
+      empty[column],
+      null,
+      `${column} is ${JSON.stringify(empty[column])} with nothing said`,
+    );
   // A partial claim leaves its siblings NULL too.
   const partial = row({ claim: { tests: { run: 4 } } });
   assert.equal(partial.tests_run, 4);
@@ -154,7 +168,10 @@ test("prs_opened comes from the claim, else from evidence.prs; prs_merged only f
   assert.equal(fromEvidence.prs_opened, 2);
   assert.deepEqual(JSON.parse(fromEvidence.prs_opened_urls ?? "null"), [PR, PR2]);
   assert.equal(fromEvidence.prs_merged, null);
-  const fromClaim = row({ claim: { prs_opened: [PR2], prs_merged: [PR2] }, evidence: { prs: [PR, PR2] } });
+  const fromClaim = row({
+    claim: { prs_opened: [PR2], prs_merged: [PR2] },
+    evidence: { prs: [PR, PR2] },
+  });
   assert.deepEqual(JSON.parse(fromClaim.prs_opened_urls ?? "null"), [PR2]);
   assert.equal(fromClaim.prs_opened, 1);
   assert.equal(fromClaim.prs_merged, 1);
@@ -166,7 +183,12 @@ test("the claim row carries every claim field, the agent, the namespace and the 
       tests: { run: 10, passed: 9, failed: 1, result: "partial" },
       deploy_state: "pending",
       files_touched: ["src/a.ts", "test/a.test.ts"],
-      versions: { model_id: "model-x", client_name: "claude-code", client_version: "9.9.9", permission_mode: "auto" },
+      versions: {
+        model_id: "model-x",
+        client_name: "claude-code",
+        client_version: "9.9.9",
+        permission_mode: "auto",
+      },
     },
     evidence: { commits: 2, files_changed: 3, tests_added: 4 },
     capsid_sha: "abc1234",
@@ -174,13 +196,23 @@ test("the claim row carries every claim field, the agent, the namespace and the 
   assert.equal(full.agent, "agent:sample-driver");
   assert.equal(full.namespace, "sample");
   assert.equal(full.action, "complete");
-  assert.deepEqual([full.tests_run, full.tests_passed, full.tests_failed, full.tests_result], [10, 9, 1, "partial"]);
+  assert.deepEqual(
+    [full.tests_run, full.tests_passed, full.tests_failed, full.tests_result],
+    [10, 9, 1, "partial"],
+  );
   assert.equal(full.deploy_state, "pending");
   assert.deepEqual(JSON.parse(full.files_touched ?? "null"), ["src/a.ts", "test/a.test.ts"]);
-  assert.deepEqual([full.model_id, full.client_name, full.client_version, full.permission_mode], ["model-x", "claude-code", "9.9.9", "auto"]);
+  assert.deepEqual(
+    [full.model_id, full.client_name, full.client_version, full.permission_mode],
+    ["model-x", "claude-code", "9.9.9", "auto"],
+  );
   assert.deepEqual([full.commits, full.files_changed, full.tests_added], [2, 3, 4]);
   assert.equal(full.capsid_sha, "abc1234");
-  assert.equal(full.recorded_at, NOW.toISOString(), "recorded_at is ISO with milliseconds, bound from code");
+  assert.equal(
+    full.recorded_at,
+    NOW.toISOString(),
+    "recorded_at is ISO with milliseconds, bound from code",
+  );
 });
 
 test("raw keeps the arguments as sent: JSON strings parsed once, and an unsent key absent rather than null", () => {
@@ -190,7 +222,7 @@ test("raw keeps the arguments as sent: JSON strings parsed once, and an unsent k
       claim: { deploy_state: "none" },
       result_summary: "landed",
       result_ref: undefined,
-    })
+    }),
   ) as Record<string, unknown>;
   // The evidence exactly as the driver sent it, including the field parseEvidence
   // would drop.
@@ -216,11 +248,15 @@ const ctx = { evaluator_id: workerEvaluatorId("abc1234"), now: NOW };
 const facts = (over: Partial<GitHubFacts> = {}): { github: GitHubFacts } => ({
   github: { merged: {}, commits: null, files_changed: null, ci_green: null, ...over },
 });
-const byName = (rows: ReturnType<typeof evaluationRows>) => Object.fromEntries(rows.map((r) => [r.name, r]));
+const byName = (rows: ReturnType<typeof evaluationRows>) =>
+  Object.fromEntries(rows.map((r) => [r.name, r]));
 
 test("the worker writes exactly its five checks, each named by evaluator and sha", () => {
   const rows = evaluationRows(row(), facts(), ctx);
-  assert.deepEqual(rows.map((r) => r.name), [...WORKER_EVALUATIONS]);
+  assert.deepEqual(
+    rows.map((r) => r.name),
+    [...WORKER_EVALUATIONS],
+  );
   for (const r of rows) {
     assert.equal(r.evaluator, "worker");
     assert.equal(r.evaluator_id, "capsid@abc1234");
@@ -239,23 +275,71 @@ test("PLANT: nothing claimed and nothing checked is NULL and unknown, never 0 or
 });
 
 test("claim and verified side by side: a driver's count GitHub contradicts is a disagreement", () => {
-  const claim = row({ claim: { prs_merged: [PR] }, evidence: { prs: [PR], commits: 2, files_changed: 1 } });
-  const rows = byName(evaluationRows(claim, facts({ merged: { [PR]: true }, commits: 3, files_changed: 1, ci_green: 1 }), ctx));
-  assert.deepEqual([rows.commits.claimed, rows.commits.verified, rows.commits.agreement], ["2", "3", "disagree"]);
+  const claim = row({
+    claim: { prs_merged: [PR] },
+    evidence: { prs: [PR], commits: 2, files_changed: 1 },
+  });
+  const rows = byName(
+    evaluationRows(
+      claim,
+      facts({ merged: { [PR]: true }, commits: 3, files_changed: 1, ci_green: 1 }),
+      ctx,
+    ),
+  );
+  assert.deepEqual(
+    [rows.commits.claimed, rows.commits.verified, rows.commits.agreement],
+    ["2", "3", "disagree"],
+  );
   assert.equal(rows.commits.score_value, 3);
-  assert.equal(rows.commits.score_label, "fail", "a count GitHub contradicts is never labeled pass");
+  assert.equal(
+    rows.commits.score_label,
+    "fail",
+    "a count GitHub contradicts is never labeled pass",
+  );
   assert.equal(rows.files_changed.score_label, "pass", "a count GitHub agrees with passes");
-  assert.deepEqual([rows.files_changed.claimed, rows.files_changed.verified, rows.files_changed.agreement], ["1", "1", "agree"]);
-  assert.deepEqual([rows.pr_merged.claimed, rows.pr_merged.verified, rows.pr_merged.agreement, rows.pr_merged.score_label], ["1", "1", "agree", "pass"]);
-  assert.deepEqual([rows.prs_opened.claimed, rows.prs_opened.verified, rows.prs_opened.agreement], ["1", "1", "agree"]);
+  assert.deepEqual(
+    [rows.files_changed.claimed, rows.files_changed.verified, rows.files_changed.agreement],
+    ["1", "1", "agree"],
+  );
+  assert.deepEqual(
+    [
+      rows.pr_merged.claimed,
+      rows.pr_merged.verified,
+      rows.pr_merged.agreement,
+      rows.pr_merged.score_label,
+    ],
+    ["1", "1", "agree", "pass"],
+  );
+  assert.deepEqual(
+    [rows.prs_opened.claimed, rows.prs_opened.verified, rows.prs_opened.agreement],
+    ["1", "1", "agree"],
+  );
   // No claim field speaks for CI, so ci_green is unclaimed and still scored.
-  assert.deepEqual([rows.ci_green.claimed, rows.ci_green.verified, rows.ci_green.agreement, rows.ci_green.score_label], [null, "1", "unclaimed", "pass"]);
+  assert.deepEqual(
+    [
+      rows.ci_green.claimed,
+      rows.ci_green.verified,
+      rows.ci_green.agreement,
+      rows.ci_green.score_label,
+    ],
+    [null, "1", "unclaimed", "pass"],
+  );
 });
 
 test("a pull request claimed merged that GitHub reads as open fails pr_merged and disagrees", () => {
   const claim = row({ claim: { prs_merged: [PR, PR2] }, evidence: { prs: [PR, PR2] } });
-  const rows = byName(evaluationRows(claim, facts({ merged: { [PR]: true, [PR2]: false }, ci_green: 0 }), ctx));
-  assert.deepEqual([rows.pr_merged.claimed, rows.pr_merged.verified, rows.pr_merged.agreement, rows.pr_merged.score_label], ["2", "1", "disagree", "fail"]);
+  const rows = byName(
+    evaluationRows(claim, facts({ merged: { [PR]: true, [PR2]: false }, ci_green: 0 }), ctx),
+  );
+  assert.deepEqual(
+    [
+      rows.pr_merged.claimed,
+      rows.pr_merged.verified,
+      rows.pr_merged.agreement,
+      rows.pr_merged.score_label,
+    ],
+    ["2", "1", "disagree", "fail"],
+  );
   assert.equal(rows.ci_green.score_value, 0);
   assert.equal(rows.ci_green.score_label, "fail");
 });
@@ -275,22 +359,46 @@ test("a pull request the Worker could not read leaves the check unchecked, with 
 function envWithRepo() {
   return fakeEnv({
     DB: {
-      prepare: () => ({ bind: () => ({ first: async () => ({ repos: JSON.stringify([{ repo: "example/sample", label: "primary" }]) }) }) }),
+      prepare: () => ({
+        bind: () => ({
+          first: async () => ({
+            repos: JSON.stringify([{ repo: "example/sample", label: "primary" }]),
+          }),
+        }),
+      }),
     },
     APP_KV: fakeKv({ seedToken: true }).kv,
   });
 }
 const HEAD = "b".repeat(40);
-const prRoute = (merged: boolean, commits: number, changed: number): Route => ({ body: { merged, commits, changed_files: changed, head: { sha: HEAD } } });
+const prRoute = (merged: boolean, commits: number, changed: number): Route => ({
+  body: { merged, commits, changed_files: changed, head: { sha: HEAD } },
+});
 const greenRuns: Route = {
-  body: { workflow_runs: [{ id: 1, name: "ci", head_sha: HEAD, status: "completed", conclusion: "success", event: "push", created_at: "x", html_url: "u" }] },
+  body: {
+    workflow_runs: [
+      {
+        id: 1,
+        name: "ci",
+        head_sha: HEAD,
+        status: "completed",
+        conclusion: "success",
+        event: "push",
+        created_at: "x",
+        html_url: "u",
+      },
+    ],
+  },
 };
 
 test("PLANT: the claim row keeps the driver's count when GitHub's differs", async () => {
   // The driver says two commits and one file; GitHub says five and eight. job_outcomes
   // keeps GitHub's (unchanged); the claim keeps the driver's; the evaluation holds both.
   await withFetch(
-    { "GET /repos/example/sample/pulls/3": prRoute(true, 5, 8), "GET /repos/example/sample/actions/runs": greenRuns },
+    {
+      "GET /repos/example/sample/pulls/3": prRoute(true, 5, 8),
+      "GET /repos/example/sample/actions/runs": greenRuns,
+    },
     async () => {
       const evidence = { prs: [PR], commits: 2, files_changed: 1, tests_added: 4 };
       const claim = row({ evidence, claim: { prs_merged: [PR] } });
@@ -298,19 +406,42 @@ test("PLANT: the claim row keeps the driver's count when GitHub's differs", asyn
       assert.equal(verdict.commits, 5, "job_outcomes' value stopped being GitHub's");
       assert.equal(claim.commits, 2, "the claim row took GitHub's count");
       assert.equal(claim.files_changed, 1);
-      assert.deepEqual(verdict.github, { merged: { [PR]: true }, commits: 5, files_changed: 8, ci_green: 1 });
-      assert.deepEqual(verdict.reported, { prs: [PR], commits: 2, files_changed: 1, tests_added: 4 });
+      assert.deepEqual(verdict.github, {
+        merged: { [PR]: true },
+        commits: 5,
+        files_changed: 8,
+        ci_green: 1,
+      });
+      assert.deepEqual(verdict.reported, {
+        prs: [PR],
+        commits: 2,
+        files_changed: 1,
+        tests_added: 4,
+      });
       const rows = byName(evaluationRows(claim, verdict, ctx));
-      assert.deepEqual([rows.commits.claimed, rows.commits.verified, rows.commits.agreement], ["2", "5", "disagree"]);
+      assert.deepEqual(
+        [rows.commits.claimed, rows.commits.verified, rows.commits.agreement],
+        ["2", "5", "disagree"],
+      );
       assert.deepEqual([rows.files_changed.claimed, rows.files_changed.verified], ["1", "8"]);
-    }
+    },
   );
 });
 
 test("verifyEvidence with nothing to read exposes NULL facts, never 0 or false", async () => {
   const verdict = await verifyEvidence(fakeEnv({}), "sample", { commits: 0 });
-  assert.deepEqual(verdict.github, { merged: {}, commits: null, files_changed: null, ci_green: null });
-  assert.deepEqual(verdict.reported, { prs: null, commits: 0, files_changed: null, tests_added: null });
+  assert.deepEqual(verdict.github, {
+    merged: {},
+    commits: null,
+    files_changed: null,
+    ci_green: null,
+  });
+  assert.deepEqual(verdict.reported, {
+    prs: null,
+    commits: 0,
+    files_changed: null,
+    tests_added: null,
+  });
 });
 
 // refusals happen before anything is written
@@ -320,20 +451,32 @@ test("PLANT: complete, fail and block refuse a bad claim and write nothing", asy
   // missing binding rather than pass quietly.
   const agent = grantAgent("write", "agent:sample-driver");
   const id = "job_abc123abc123";
-  const completed = await completeJob(fakeEnv({}), agent, NOW, id, { result_summary: "landed", claim: "{not json" });
+  const completed = await completeJob(fakeEnv({}), agent, NOW, id, {
+    result_summary: "landed",
+    claim: "{not json",
+  });
   assert.equal(completed.ok, false, "complete accepted an unparseable claim");
   assert.match(completed.refusal ?? "", /not JSON/);
-  const failed = await failJob(fakeEnv({}), agent, NOW, id, "broke", { claim: { tests: { run: 1, flaky: 2 } } as never });
+  const failed = await failJob(fakeEnv({}), agent, NOW, id, "broke", {
+    claim: { tests: { run: 1, flaky: 2 } } as never,
+  });
   assert.equal(failed.ok, false, "fail accepted an unknown claim key");
   assert.match(failed.refusal ?? "", /flaky/);
-  const blocked = await blockJob(fakeEnv({}), agent, NOW, id, { reason: "needs a push", claim: '{"deploy_state":"shipped"}' });
+  const blocked = await blockJob(fakeEnv({}), agent, NOW, id, {
+    reason: "needs a push",
+    claim: '{"deploy_state":"shipped"}',
+  });
   assert.equal(blocked.ok, false, "block accepted a bad deploy_state");
   assert.match(blocked.refusal ?? "", /deploy_state/);
 });
 
 // claim.usage: what the session says it used (PR 1 of capsid/research/design-automation-for-speed.md)
 
-const USAGE = { cost_usd: 1.25, active_seconds: 900.5, tokens: { input: 100, output: 200, cache_read: 300, cache_creation: 400 } };
+const USAGE = {
+  cost_usd: 1.25,
+  active_seconds: 900.5,
+  tokens: { input: 100, output: 200, cache_read: 300, cache_creation: 400 },
+};
 
 test("claim.usage parses as an object and as a JSON string, and every part is optional", () => {
   const asObject = parseClaim({ usage: USAGE });
@@ -369,7 +512,11 @@ test("claim.usage is kept whole in raw, with no column of its own, so the aggreg
   const stored = row({ claim: { usage: USAGE }, raw: { claim: { usage: USAGE } } });
   assert.deepEqual(JSON.parse(stored.raw).claim.usage, USAGE);
   const sent = row({ claim: { usage: USAGE }, raw: { claim: JSON.stringify({ usage: USAGE }) } });
-  assert.deepEqual(JSON.parse(sent.raw).claim.usage, USAGE, "a claim sent as a string is stored as one parsed document");
+  assert.deepEqual(
+    JSON.parse(sent.raw).claim.usage,
+    USAGE,
+    "a claim sent as a string is stored as one parsed document",
+  );
   assert.equal("usage" in stored, false);
   assert.equal("cost_usd" in stored, false);
 });

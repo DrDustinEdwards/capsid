@@ -63,18 +63,34 @@ interface PackageRow {
 const PACKAGE_COLUMNS = "name, registry, repo, formerly, revision, updated_at";
 
 function configFrom(row: PackageRow): OpsPackageConfig {
-  return { name: row.name, registry: "npm", repo: row.repo, formerly: row.formerly, revision: row.revision, updated_at: row.updated_at };
+  return {
+    name: row.name,
+    registry: "npm",
+    repo: row.repo,
+    formerly: row.formerly,
+    revision: row.revision,
+    updated_at: row.updated_at,
+  };
 }
 
 /** Every configured package, by name. */
 export async function readPackageConfig(db: D1Database): Promise<OpsPackageConfig[]> {
-  const { results } = await db.prepare(`SELECT ${PACKAGE_COLUMNS} FROM ops_packages ORDER BY name LIMIT ?1`).bind(PACKAGE_ROWS_LIMIT).all<PackageRow>();
+  const { results } = await db
+    .prepare(`SELECT ${PACKAGE_COLUMNS} FROM ops_packages ORDER BY name LIMIT ?1`)
+    .bind(PACKAGE_ROWS_LIMIT)
+    .all<PackageRow>();
   return (results ?? []).map(configFrom);
 }
 
 /** One row, or null. */
-export async function readPackageRow(db: D1Database, name: string): Promise<OpsPackageConfig | null> {
-  const row = await db.prepare(`SELECT ${PACKAGE_COLUMNS} FROM ops_packages WHERE name = ?1`).bind(name).first<PackageRow>();
+export async function readPackageRow(
+  db: D1Database,
+  name: string,
+): Promise<OpsPackageConfig | null> {
+  const row = await db
+    .prepare(`SELECT ${PACKAGE_COLUMNS} FROM ops_packages WHERE name = ?1`)
+    .bind(name)
+    .first<PackageRow>();
   return row ? configFrom(row) : null;
 }
 
@@ -92,7 +108,8 @@ const REPO_SHAPE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[A-Za-z0-9._
 
 function nameRefusal(field: string, value: string): string | null {
   if (value.length > 214) return `${field} is longer than npm's 214 characters.`;
-  if (!UNSCOPED.test(value) && !SCOPED.test(value)) return `${field} '${value}' is not an npm package name: lowercase letters, digits and - . _ ~, or @scope/name.`;
+  if (!UNSCOPED.test(value) && !SCOPED.test(value))
+    return `${field} '${value}' is not an npm package name: lowercase letters, digits and - . _ ~, or @scope/name.`;
   return null;
 }
 
@@ -104,7 +121,8 @@ export function validatePackage(p: Record<string, string | undefined>): Validate
   const bad = nameRefusal("the name", name);
   if (bad) return { ok: false, refusal: bad };
   const repo = (p.repo ?? "").trim() || null;
-  if (repo !== null && !REPO_SHAPE.test(repo)) return { ok: false, refusal: `the repository '${repo}' is not owner/name on GitHub.` };
+  if (repo !== null && !REPO_SHAPE.test(repo))
+    return { ok: false, refusal: `the repository '${repo}' is not owner/name on GitHub.` };
   const formerly = (p.formerly ?? "").trim() || null;
   if (formerly !== null) {
     const badFormer = nameRefusal("the former name", formerly);
@@ -121,43 +139,78 @@ export function describePackage(p: PackageInput): string {
 export type PackageResult = { ok: true; pkg: OpsPackageConfig } | { ok: false; refusal: string };
 
 /** Add a row. A package already configured is refused, not replaced. */
-export async function addPackage(db: D1Database, actor: string, p: PackageInput): Promise<PackageResult> {
+export async function addPackage(
+  db: D1Database,
+  actor: string,
+  p: PackageInput,
+): Promise<PackageResult> {
   const won = await db
-    .prepare("INSERT INTO ops_packages (name, repo, formerly) VALUES (?1, ?2, ?3) ON CONFLICT(name) DO NOTHING RETURNING name")
+    .prepare(
+      "INSERT INTO ops_packages (name, repo, formerly) VALUES (?1, ?2, ?3) ON CONFLICT(name) DO NOTHING RETURNING name",
+    )
     .bind(p.name, p.repo, p.formerly)
     .first<{ name: string }>();
   if (!won) return { ok: false, refusal: `${p.name} is already configured. Edit it instead.` };
   const after = await readPackageRow(db, p.name);
-  if (!after) return { ok: false, refusal: `${p.name} was added and then removed before it could be read back.` };
+  if (!after)
+    return {
+      ok: false,
+      refusal: `${p.name} was added and then removed before it could be read back.`,
+    };
   await db.batch([auditStatement(db, actor, "ops-package-added", null, null, { after })]);
   return { ok: true, pkg: after };
 }
 
 /** Replace a row's fields, only if it is still at `revision`. */
-export async function editPackage(db: D1Database, actor: string, p: PackageInput, revision: number): Promise<PackageResult> {
+export async function editPackage(
+  db: D1Database,
+  actor: string,
+  p: PackageInput,
+  revision: number,
+): Promise<PackageResult> {
   const before = await readPackageRow(db, p.name);
   if (!before) return { ok: false, refusal: `${p.name} is not configured. Add it instead.` };
   const won = await db
     .prepare(
       `UPDATE ops_packages SET repo = ?3, formerly = ?4, revision = revision + 1, updated_at = datetime('now')
-       WHERE name = ?1 AND revision = ?2 RETURNING revision`
+       WHERE name = ?1 AND revision = ?2 RETURNING revision`,
     )
     .bind(p.name, revision, p.repo, p.formerly)
     .first<{ revision: number }>();
-  if (!won) return { ok: false, refusal: `${p.name} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.` };
+  if (!won)
+    return {
+      ok: false,
+      refusal: `${p.name} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.`,
+    };
   const after = await readPackageRow(db, p.name);
-  if (!after) return { ok: false, refusal: `${p.name} was edited and then removed before it could be read back.` };
+  if (!after)
+    return {
+      ok: false,
+      refusal: `${p.name} was edited and then removed before it could be read back.`,
+    };
   await db.batch([auditStatement(db, actor, "ops-package-edited", null, null, { before, after })]);
   // A changed name source makes the cached history wrong; the next view refetches.
   return { ok: true, pkg: after };
 }
 
 /** Remove a row, only if it is still at `revision`. Its weekly rows stay, as history. */
-export async function removePackage(db: D1Database, actor: string, name: string, revision: number): Promise<PackageResult> {
+export async function removePackage(
+  db: D1Database,
+  actor: string,
+  name: string,
+  revision: number,
+): Promise<PackageResult> {
   const before = await readPackageRow(db, name);
   if (!before) return { ok: false, refusal: `${name} is not configured.` };
-  const won = await db.prepare("DELETE FROM ops_packages WHERE name = ?1 AND revision = ?2 RETURNING name").bind(name, revision).first<{ name: string }>();
-  if (!won) return { ok: false, refusal: `${name} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.` };
+  const won = await db
+    .prepare("DELETE FROM ops_packages WHERE name = ?1 AND revision = ?2 RETURNING name")
+    .bind(name, revision)
+    .first<{ name: string }>();
+  if (!won)
+    return {
+      ok: false,
+      refusal: `${name} changed since the preview (it is at revision ${before.revision}, the preview read ${revision}). Preview again.`,
+    };
   await db.batch([auditStatement(db, actor, "ops-package-removed", null, null, { before })]);
   return { ok: true, pkg: before };
 }
@@ -168,18 +221,35 @@ export async function removePackage(db: D1Database, actor: string, name: string,
 // per-version endpoint require and the download counts accept.
 const pathName = (name: string) => name.replace("/", "%2F");
 
-type Got = { ok: true; status: number; json: unknown } | { ok: false; status: number | null; reason: string };
+type Got =
+  | { ok: true; status: number; json: unknown }
+  | { ok: false; status: number | null; reason: string };
 
-async function getJson(fetchImpl: FetchLike, url: string, accept = "application/json"): Promise<Got> {
+async function getJson(
+  fetchImpl: FetchLike,
+  url: string,
+  accept = "application/json",
+): Promise<Got> {
   try {
-    const res = await fetchImpl(url, { headers: { "User-Agent": USER_AGENT, Accept: accept }, signal: callSignal(FETCH_TIMEOUT_MS) });
+    const res = await fetchImpl(url, {
+      headers: { "User-Agent": USER_AGENT, Accept: accept },
+      signal: callSignal(FETCH_TIMEOUT_MS),
+    });
     if (!res.ok) {
       await res.body?.cancel();
-      return { ok: false, status: res.status, reason: `${new URL(url).host} answered ${res.status}` };
+      return {
+        ok: false,
+        status: res.status,
+        reason: `${new URL(url).host} answered ${res.status}`,
+      };
     }
     return { ok: true, status: res.status, json: await res.json() };
   } catch (err) {
-    return { ok: false, status: null, reason: `${new URL(url).host} could not be read: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}` };
+    return {
+      ok: false,
+      status: null,
+      reason: `${new URL(url).host} could not be read: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`,
+    };
   }
 }
 
@@ -190,7 +260,11 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
  *  job's "check: npm <name>@<version>" line (src/manual-steps.ts) and the job body fact
  *  check (src/job-fact-check.ts). */
 export async function npmVersions(fetchImpl: FetchLike, name: string): Promise<string[] | null> {
-  const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`, "application/vnd.npm.install-v1+json");
+  const got = await getJson(
+    fetchImpl,
+    `https://registry.npmjs.org/${pathName(name)}`,
+    "application/vnd.npm.install-v1+json",
+  );
   if (!got.ok) {
     if (got.status === 404) return null;
     throw new Error(got.reason);
@@ -201,10 +275,25 @@ export async function npmVersions(fetchImpl: FetchLike, name: string): Promise<s
 // Also read by the Shared code view (src/shared-code.ts), for each shared package that is
 // not private, so it can say whether the version in the repo has reached npm.
 export async function readNpm(fetchImpl: FetchLike, name: string): Promise<PackageSnapshot["npm"]> {
-  const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`, "application/vnd.npm.install-v1+json");
-  if (!got.ok) return got.status === 404 ? { state: "none", reason: `npm has no package ${name}` } : { state: "error", reason: got.reason };
-  const doc = got.json as { "dist-tags"?: Record<string, unknown>; versions?: Record<string, unknown>; modified?: unknown };
-  const tags = Object.fromEntries(Object.entries(doc["dist-tags"] ?? {}).filter((e): e is [string, string] => typeof e[1] === "string"));
+  const got = await getJson(
+    fetchImpl,
+    `https://registry.npmjs.org/${pathName(name)}`,
+    "application/vnd.npm.install-v1+json",
+  );
+  if (!got.ok)
+    return got.status === 404
+      ? { state: "none", reason: `npm has no package ${name}` }
+      : { state: "error", reason: got.reason };
+  const doc = got.json as {
+    "dist-tags"?: Record<string, unknown>;
+    versions?: Record<string, unknown>;
+    modified?: unknown;
+  };
+  const tags = Object.fromEntries(
+    Object.entries(doc["dist-tags"] ?? {}).filter(
+      (e): e is [string, string] => typeof e[1] === "string",
+    ),
+  );
   return {
     state: "ok",
     latest: tags.latest ?? null,
@@ -218,50 +307,98 @@ export async function readNpm(fetchImpl: FetchLike, name: string): Promise<Packa
  *  (src/shared-code.ts). The same abbreviated document readNpm reads; throws with npm's
  *  answer when it cannot be read. */
 export async function readNpmVersions(fetchImpl: FetchLike, name: string): Promise<string[]> {
-  const got = await getJson(fetchImpl, `https://registry.npmjs.org/${pathName(name)}`, "application/vnd.npm.install-v1+json");
+  const got = await getJson(
+    fetchImpl,
+    `https://registry.npmjs.org/${pathName(name)}`,
+    "application/vnd.npm.install-v1+json",
+  );
   if (!got.ok) throw new Error(got.status === 404 ? `npm has no package ${name}` : got.reason);
   return Object.keys((got.json as { versions?: Record<string, unknown> }).versions ?? {});
 }
 
-async function readDownloads(fetchImpl: FetchLike, name: string): Promise<PackageSnapshot["downloads"]> {
+async function readDownloads(
+  fetchImpl: FetchLike,
+  name: string,
+): Promise<PackageSnapshot["downloads"]> {
   const point = async (period: string) => {
     const got = await getJson(fetchImpl, `https://api.npmjs.org/downloads/point/${period}/${name}`);
     // No counts yet is zero downloads, not a failure (npm answers 404 "not found").
     if (!got.ok) return got.status === 404 ? { downloads: 0, end: null } : got.reason;
     const body = got.json as { downloads?: unknown; end?: unknown };
     const downloads = num(body.downloads);
-    return downloads === null ? `api.npmjs.org sent no count for ${period}` : { downloads, end: typeof body.end === "string" ? body.end : null };
+    return downloads === null
+      ? `api.npmjs.org sent no count for ${period}`
+      : { downloads, end: typeof body.end === "string" ? body.end : null };
   };
   const week = await point("last-week");
   if (typeof week === "string") return { state: "error", reason: week };
   const month = await point("last-month");
   if (typeof month === "string") return { state: "error", reason: month };
   const byVersion: Record<string, number> = {};
-  const versions = await getJson(fetchImpl, `https://api.npmjs.org/versions/${pathName(name)}/last-week`);
+  const versions = await getJson(
+    fetchImpl,
+    `https://api.npmjs.org/versions/${pathName(name)}/last-week`,
+  );
   if (versions.ok) {
-    for (const [v, n] of Object.entries((versions.json as { downloads?: Record<string, unknown> }).downloads ?? {})) {
+    for (const [v, n] of Object.entries(
+      (versions.json as { downloads?: Record<string, unknown> }).downloads ?? {},
+    )) {
       const count = num(n);
       if (count !== null) byVersion[v] = count;
     }
   } else if (versions.status !== 404) {
     return { state: "error", reason: versions.reason };
   }
-  return { state: "ok", last_week: week.downloads, last_month: month.downloads, through: week.end ?? month.end, by_version_last_week: byVersion };
+  return {
+    state: "ok",
+    last_week: week.downloads,
+    last_month: month.downloads,
+    through: week.end ?? month.end,
+    by_version_last_week: byVersion,
+  };
 }
 
-async function readDependents(fetchImpl: FetchLike, name: string): Promise<PackageSnapshot["dependents"]> {
-  const pkg = await getJson(fetchImpl, `https://api.deps.dev/v3/systems/npm/packages/${encodeURIComponent(name)}`);
-  if (!pkg.ok) return pkg.status === 404 ? { state: "none", reason: `deps.dev has no record of ${name} yet` } : { state: "error", reason: pkg.reason };
-  const versions = (pkg.json as { versions?: Array<{ versionKey?: { version?: unknown }; isDefault?: unknown }> }).versions ?? [];
+async function readDependents(
+  fetchImpl: FetchLike,
+  name: string,
+): Promise<PackageSnapshot["dependents"]> {
+  const pkg = await getJson(
+    fetchImpl,
+    `https://api.deps.dev/v3/systems/npm/packages/${encodeURIComponent(name)}`,
+  );
+  if (!pkg.ok)
+    return pkg.status === 404
+      ? { state: "none", reason: `deps.dev has no record of ${name} yet` }
+      : { state: "error", reason: pkg.reason };
+  const versions =
+    (pkg.json as { versions?: Array<{ versionKey?: { version?: unknown }; isDefault?: unknown }> })
+      .versions ?? [];
   const chosen = versions.find((v) => v.isDefault === true)?.versionKey?.version;
-  if (typeof chosen !== "string") return { state: "none", reason: `deps.dev names no default version of ${name}` };
-  const got = await getJson(fetchImpl, `https://api.deps.dev/v3alpha/systems/npm/packages/${encodeURIComponent(name)}/versions/${encodeURIComponent(chosen)}:dependents`);
+  if (typeof chosen !== "string")
+    return { state: "none", reason: `deps.dev names no default version of ${name}` };
+  const got = await getJson(
+    fetchImpl,
+    `https://api.deps.dev/v3alpha/systems/npm/packages/${encodeURIComponent(name)}/versions/${encodeURIComponent(chosen)}:dependents`,
+  );
   // deps.dev answers 404 "dependents not found" for a version nothing depends on.
-  if (!got.ok) return got.status === 404 ? { state: "none", reason: `deps.dev knows no package that depends on ${name}@${chosen}` } : { state: "error", reason: got.reason };
-  const c = got.json as { dependentCount?: unknown; directDependentCount?: unknown; indirectDependentCount?: unknown };
+  if (!got.ok)
+    return got.status === 404
+      ? { state: "none", reason: `deps.dev knows no package that depends on ${name}@${chosen}` }
+      : { state: "error", reason: got.reason };
+  const c = got.json as {
+    dependentCount?: unknown;
+    directDependentCount?: unknown;
+    indirectDependentCount?: unknown;
+  };
   const total = num(c.dependentCount);
   if (total === null) return { state: "error", reason: "deps.dev sent no dependentCount" };
-  return { state: "ok", version: chosen, direct: num(c.directDependentCount) ?? 0, indirect: num(c.indirectDependentCount) ?? 0, total };
+  return {
+    state: "ok",
+    version: chosen,
+    direct: num(c.directDependentCount) ?? 0,
+    indirect: num(c.indirectDependentCount) ?? 0,
+    total,
+  };
 }
 
 async function ghJson(env: Env, owner: string, repo: string, path: string): Promise<Got> {
@@ -273,7 +410,11 @@ async function ghJson(env: Env, owner: string, repo: string, path: string): Prom
     }
     return { ok: true, status: res.status, json: await res.json() };
   } catch (err) {
-    return { ok: false, status: null, reason: `GitHub could not be read: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}` };
+    return {
+      ok: false,
+      status: null,
+      reason: `GitHub could not be read: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`,
+    };
   }
 }
 
@@ -283,7 +424,12 @@ async function readGithub(env: Env, repo: string | null): Promise<PackageSnapsho
   const r = await ghJson(env, owner, name, `/repos/${owner}/${name}`);
   if (!r.ok) return { state: "error", reason: r.reason };
   const info = r.json as { stargazers_count?: unknown; open_issues_count?: unknown };
-  const pulls = await ghJson(env, owner, name, `/repos/${owner}/${name}/pulls?state=open&per_page=100`);
+  const pulls = await ghJson(
+    env,
+    owner,
+    name,
+    `/repos/${owner}/${name}/pulls?state=open&per_page=100`,
+  );
   if (!pulls.ok) return { state: "error", reason: pulls.reason };
   const openPrs = Array.isArray(pulls.json) ? pulls.json.length : 0;
   const release = await ghJson(env, owner, name, `/repos/${owner}/${name}/releases/latest`);
@@ -298,13 +444,24 @@ async function readGithub(env: Env, repo: string | null): Promise<PackageSnapsho
     open_issues: Math.max(0, openIssuesAndPrs - openPrs),
     open_prs: openPrs,
     open_prs_capped: openPrs >= 100,
-    latest_release: rel && typeof rel.tag_name === "string" ? { tag: rel.tag_name, published_at: typeof rel.published_at === "string" ? rel.published_at : null } : null,
+    latest_release:
+      rel && typeof rel.tag_name === "string"
+        ? {
+            tag: rel.tag_name,
+            published_at: typeof rel.published_at === "string" ? rel.published_at : null,
+          }
+        : null,
   };
 }
 
 /** One package, as one watcher pass reads it: nine requests at most, sequential, each
  *  failing on its own so one unreachable source does not blank the others. */
-export async function readPackage(env: Env, cfg: OpsPackageConfig, fetchImpl: FetchLike, now: Date): Promise<PackageSnapshot> {
+export async function readPackage(
+  env: Env,
+  cfg: OpsPackageConfig,
+  fetchImpl: FetchLike,
+  now: Date,
+): Promise<PackageSnapshot> {
   return {
     name: cfg.name,
     registry: "npm",
@@ -328,15 +485,27 @@ export function isoWeek(d: Date): string {
 
 /** The week's GitHub numbers, written once: the first pass of each ISO week that read
  *  the repository keeps its row, and later passes that week change nothing. */
-export function weekStatement(db: D1Database, snap: PackageSnapshot, now: Date): D1PreparedStatement | null {
+export function weekStatement(
+  db: D1Database,
+  snap: PackageSnapshot,
+  now: Date,
+): D1PreparedStatement | null {
   const g = snap.github;
   if (g.state !== "ok") return null;
   return db
     .prepare(
       `INSERT INTO ops_package_weeks (name, week, repo, stars, open_issues, open_prs, latest_release)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT (name, week) DO NOTHING`
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT (name, week) DO NOTHING`,
     )
-    .bind(snap.name, isoWeek(now), g.repo, g.stars, g.open_issues, g.open_prs, g.latest_release?.tag ?? null);
+    .bind(
+      snap.name,
+      isoWeek(now),
+      g.repo,
+      g.stars,
+      g.open_issues,
+      g.open_prs,
+      g.latest_release?.tag ?? null,
+    );
 }
 
 // ---- The daily history, on demand ------------------------------------------------------
@@ -359,16 +528,26 @@ export function historyRanges(from: string, to: string): Array<[string, string]>
   let start = new Date(`${from}T00:00:00Z`);
   const end = new Date(`${to}T00:00:00Z`);
   while (start <= end) {
-    const chunkEnd = new Date(Math.min(start.getTime() + (RANGE_CHUNK_DAYS - 1) * DAY_MS, end.getTime()));
+    const chunkEnd = new Date(
+      Math.min(start.getTime() + (RANGE_CHUNK_DAYS - 1) * DAY_MS, end.getTime()),
+    );
     out.push([dayOf(start), dayOf(chunkEnd)]);
     start = new Date(chunkEnd.getTime() + DAY_MS);
   }
   return out;
 }
 
-async function dailyDownloads(fetchImpl: FetchLike, name: string, now: Date, notes: string[]): Promise<Array<{ day: string; downloads: number; name: string }>> {
+async function dailyDownloads(
+  fetchImpl: FetchLike,
+  name: string,
+  now: Date,
+  notes: string[],
+): Promise<Array<{ day: string; downloads: number; name: string }>> {
   const first = await firstPublished(fetchImpl, name);
-  if (!first) notes.push(`npm did not say when ${name} was first published, so its history is read from ${NPM_FIRST_DAY}, the first day npm counted.`);
+  if (!first)
+    notes.push(
+      `npm did not say when ${name} was first published, so its history is read from ${NPM_FIRST_DAY}, the first day npm counted.`,
+    );
   const from = first && first > NPM_FIRST_DAY ? first : NPM_FIRST_DAY;
   // npm counts each day after UTC midnight; yesterday is the newest it may have.
   const to = dayOf(new Date(now.getTime() - DAY_MS));
@@ -376,12 +555,15 @@ async function dailyDownloads(fetchImpl: FetchLike, name: string, now: Date, not
   for (const [a, b] of historyRanges(from, to)) {
     const got = await getJson(fetchImpl, `https://api.npmjs.org/downloads/range/${a}:${b}/${name}`);
     if (!got.ok) {
-      if (got.status !== 404) notes.push(`${name}, ${a} to ${b}: ${got.reason}; those days are missing, not zero.`);
+      if (got.status !== 404)
+        notes.push(`${name}, ${a} to ${b}: ${got.reason}; those days are missing, not zero.`);
       continue;
     }
-    for (const d of (got.json as { downloads?: Array<{ day?: unknown; downloads?: unknown }> }).downloads ?? []) {
+    for (const d of (got.json as { downloads?: Array<{ day?: unknown; downloads?: unknown }> })
+      .downloads ?? []) {
       const n = num(d.downloads);
-      if (typeof d.day === "string" && n !== null && n > 0) days.push({ day: d.day, downloads: n, name });
+      if (typeof d.day === "string" && n !== null && n > 0)
+        days.push({ day: d.day, downloads: n, name });
     }
   }
   return days;
@@ -389,24 +571,43 @@ async function dailyDownloads(fetchImpl: FetchLike, name: string, now: Date, not
 
 /** The package's daily downloads, and its former name's, oldest first, with its weekly
  *  GitHub rows. Cached for HISTORY_TTL_SECONDS under historyKey. */
-export async function packageHistory(env: Env, cfg: OpsPackageConfig, fetchImpl: FetchLike, now: Date): Promise<PortalPackageHistory> {
+export async function packageHistory(
+  env: Env,
+  cfg: OpsPackageConfig,
+  fetchImpl: FetchLike,
+  now: Date,
+): Promise<PortalPackageHistory> {
   const weeks = await env.DB.prepare(
-    "SELECT week, stars, open_issues, open_prs, latest_release FROM ops_package_weeks WHERE name = ?1 ORDER BY week DESC LIMIT 104"
+    "SELECT week, stars, open_issues, open_prs, latest_release FROM ops_package_weeks WHERE name = ?1 ORDER BY week DESC LIMIT 104",
   )
     .bind(cfg.name)
     .all<PortalPackageHistory["weeks"][number]>();
   const key = historyKey(cfg.name);
-  let cached: { formerly: string | null; fetched_at: string; days: PortalPackageHistory["days"]; notes: string[] } | null = null;
+  let cached: {
+    formerly: string | null;
+    fetched_at: string;
+    days: PortalPackageHistory["days"];
+    notes: string[];
+  } | null = null;
   try {
     const raw = await env.APP_KV.get(key);
     cached = raw ? JSON.parse(raw) : null;
   } catch (err) {
-    logEvent("PACKAGES_HISTORY_CACHE_UNREADABLE", { message: `PACKAGES_HISTORY_CACHE_UNREADABLE ${key}: ${err instanceof Error ? err.message : String(err)}` }, { level: "warn" });
+    logEvent(
+      "PACKAGES_HISTORY_CACHE_UNREADABLE",
+      {
+        message: `PACKAGES_HISTORY_CACHE_UNREADABLE ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "warn" },
+    );
   }
   // A cache written before the former name changed is not this package's history.
   if (!cached || cached.formerly !== cfg.formerly) {
     const notes: string[] = [];
-    const days = [...(cfg.formerly ? await dailyDownloads(fetchImpl, cfg.formerly, now, notes) : []), ...(await dailyDownloads(fetchImpl, cfg.name, now, notes))];
+    const days = [
+      ...(cfg.formerly ? await dailyDownloads(fetchImpl, cfg.formerly, now, notes) : []),
+      ...(await dailyDownloads(fetchImpl, cfg.name, now, notes)),
+    ];
     days.sort((a, b) => (a.day === b.day ? a.name.localeCompare(b.name) : a.day < b.day ? -1 : 1));
     cached = { formerly: cfg.formerly, fetched_at: now.toISOString(), days, notes };
     await env.APP_KV.put(key, JSON.stringify(cached), { expirationTtl: HISTORY_TTL_SECONDS });
@@ -423,4 +624,3 @@ export async function packageHistory(env: Env, cfg: OpsPackageConfig, fetchImpl:
     weeks: weeks.results ?? [],
   };
 }
-

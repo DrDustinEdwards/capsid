@@ -4,12 +4,16 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // the batch. A pre-read is a different transaction. meta.changes is inflated by
 // FTS5 triggers and cannot count what a batch did.
 const GUARD_VIOLATION = "document_versions.document_id";
-export function requireExists(db: D1Database, namespace: string, path: string): D1PreparedStatement {
+export function requireExists(
+  db: D1Database,
+  namespace: string,
+  path: string,
+): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO document_versions (document_id, namespace, path)
        SELECT NULL, ?1, ?2
-       WHERE NOT EXISTS (SELECT 1 FROM documents WHERE namespace = ?1 AND path = ?2)`
+       WHERE NOT EXISTS (SELECT 1 FROM documents WHERE namespace = ?1 AND path = ?2)`,
     )
     .bind(namespace, path);
 }
@@ -24,13 +28,13 @@ export function requireJobUnchanged(
   id: string,
   status: string,
   claimedBy: string | null,
-  updatedAt: string
+  updatedAt: string,
 ): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO document_versions (document_id, namespace, path)
        SELECT NULL, 'jobs', ?1
-       WHERE NOT EXISTS (SELECT 1 FROM jobs WHERE id = ?1 AND status = ?2 AND claimed_by IS ?3 AND updated_at = ?4)`
+       WHERE NOT EXISTS (SELECT 1 FROM jobs WHERE id = ?1 AND status = ?2 AND claimed_by IS ?3 AND updated_at = ?4)`,
     )
     .bind(id, status, claimedBy, updatedAt);
 }
@@ -42,7 +46,7 @@ export function requireBenchRunRunning(db: D1Database, runId: string): D1Prepare
     .prepare(
       `INSERT INTO document_versions (document_id, namespace, path)
        SELECT NULL, 'bench', ?1
-       WHERE NOT EXISTS (SELECT 1 FROM bench_runs WHERE id = ?1 AND status = 'running')`
+       WHERE NOT EXISTS (SELECT 1 FROM bench_runs WHERE id = ?1 AND status = 'running')`,
     )
     .bind(runId);
 }
@@ -57,13 +61,13 @@ export function requireBodyUnchanged(
   db: D1Database,
   namespace: string,
   path: string,
-  expectedBody: string | null
+  expectedBody: string | null,
 ): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO document_versions (document_id, namespace, path)
        SELECT NULL, ?1, ?2
-       WHERE NOT EXISTS (SELECT 1 FROM documents WHERE namespace = ?1 AND path = ?2 AND body IS ?3)`
+       WHERE NOT EXISTS (SELECT 1 FROM documents WHERE namespace = ?1 AND path = ?2 AND body IS ?3)`,
     )
     .bind(namespace, path, expectedBody);
 }
@@ -73,7 +77,7 @@ function requireMissing(db: D1Database, namespace: string, path: string): D1Prep
     .prepare(
       `INSERT INTO document_versions (document_id, namespace, path)
        SELECT NULL, ?1, ?2
-       WHERE EXISTS (SELECT 1 FROM documents WHERE namespace = ?1 AND path = ?2)`
+       WHERE EXISTS (SELECT 1 FROM documents WHERE namespace = ?1 AND path = ?2)`,
     )
     .bind(namespace, path);
 }
@@ -86,7 +90,7 @@ export function snapshotLive(db: D1Database, namespace: string, path: string): D
     .prepare(
       `INSERT INTO document_versions (document_id, namespace, path, title, body)
        SELECT id, namespace, path, title, body FROM documents WHERE namespace = ?1 AND path = ?2
-       RETURNING id`
+       RETURNING id`,
     )
     .bind(namespace, path);
 }
@@ -130,7 +134,7 @@ export function guardedCommit(opts: {
     // statement with RETURNING did.
     async run(
       elicited: boolean,
-      statements: D1PreparedStatement[]
+      statements: D1PreparedStatement[],
     ): Promise<{ refusal: string } | { results: D1Result[] }> {
       let guard: WriteGuard = "none";
       const armed: D1PreparedStatement[] = [];
@@ -146,7 +150,9 @@ export function guardedCommit(opts: {
         return { results: results.slice(armed.length) };
       } catch (err) {
         if (!isMissingRowAbort(err)) {
-          return { refusal: refusals.batchFailed(err instanceof Error ? err.message : String(err)) };
+          return {
+            refusal: refusals.batchFailed(err instanceof Error ? err.message : String(err)),
+          };
         }
         if (guard === "missing") return { refusal: refusals.createCollision };
         const current = await db
@@ -174,7 +180,7 @@ export function documentUpsert(
   body: string,
   type: string | null,
   tags: string | null,
-  status: string | null
+  status: string | null,
 ): D1PreparedStatement {
   return db
     .prepare(
@@ -186,7 +192,7 @@ export function documentUpsert(
          type = COALESCE(?5, documents.type),
          tags = COALESCE(?6, documents.tags),
          status = COALESCE(?7, documents.status),
-         updated_at = datetime('now')`
+         updated_at = datetime('now')`,
     )
     .bind(namespace, path, title, body, type, tags, status);
 }
@@ -201,9 +207,11 @@ export function auditStatement(
   action: string,
   namespace: string | null,
   path: string | null,
-  params: unknown
+  params: unknown,
 ): D1PreparedStatement {
   return db
-    .prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, ?2, ?3, ?4, ?5)")
+    .prepare(
+      "INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, ?2, ?3, ?4, ?5)",
+    )
     .bind(actor, action, namespace, path, JSON.stringify(params));
 }

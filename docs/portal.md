@@ -5,6 +5,7 @@ Capsid Portal is the administrator's view of Capsid, one app at https://portal.d
 **It moved from `/console` with no redirects.** Until the move, a server-rendered summary page answered at `/console` and this app at `/console/app/`. The move deleted that page, after every part of it had a replacement here (the design's section 5), and every `/console` address now answers the Worker's plain 404. A browser signed in at `/console` signs in once more at `/portal/`, because the old cookies were scoped to `Path=/console`.
 
 **Its controls are the registry in `src/controls.ts`**, each on the row it changes:
+
 - the job drawer: resume a blocked job (with an optional note, the full approval the driver reads as `resume_note.note`; a blocked job that asks a question offers it as Answer), close a blocked job as shipped, release a claimed one, mark a job failed, supersede a queued job or a claimed one with no work recorded (`supersede_job`, with a reason; no outcome is written against anybody), park a queued job with a one-line reason saying when it comes back, and unpark a parked one (`park_job` and `unpark_job`, each other's reverse, so the result offers Undo);
 - Needs you and the Pull requests page: approve a pull request waiting for you at the head reviewed (`approve_pr`, docs/autonomy.md, "The approval record"); it records and never merges;
 - the Pull requests page, its Auto-merge section: Resume on a project whose auto-merge is paused after bad unattended merges (`automerge_resume`, with a reason) (docs/autonomy.md, "The safety meter, the shutoff, and existing tests"); and the Merge units panel, one row per unit the policy promotes, a suspended unit and a unit the units tick proposes, with Promote and Demote (`sign_policy_change`, signing the policy's next version, that version typed as confirm) and Lift suspension (`unit_resume`, with a reason) (docs/autonomy.md, "Earned promotion and demotion"). The feed carries the promoted units in `merge_policy.units`; the suspended units and the proposals are `GET /portal/api/merge-units` (`src/portal-merge-units.ts`), read when the page opens;
@@ -29,6 +30,7 @@ Every other control opens a dialog that previews what will change and the audit 
 ## Needs you, the home
 
 **Needs you** is the home page (`/portal/`), the answer to "what do I have to decide" (docs/design/design-portal-evaluation.md, DECIDE 1, ruled 2026-10-09; the Portal UX audit's B1, B3 and M3, 2026-10). It holds, in order:
+
 - **Waiting for you**, every decision with its own buttons, so nothing needs a second page: the pull requests waiting for you (Approve, `approve_pr`, and Close, `pr_close`, with a box to tick each and "Approve N selected"), the questions and blocked jobs (Answer or Resume opens a reply box; Send is `resume_job` with the reply as its reason), the projects paused after repeated failures (Reset, `reset_breaker`), and then the rest of the inbox (`GET /ops/inbox`, src/inbox.ts, carried as `live.inbox`). Several ticked rows are one confirm that previews each control in turn and performs them one by one; a refused one is named and the rest still go. Empty is "Nothing waiting". The header's inbox count is this list's number, and no menu entry repeats it;
 - **Problems**, critical then warnings, without what is already waiting above. Rows of one kind and cause fold into one row that opens in place to its first five. A critical row is never folded. Past eight rows the rest of the warnings wait behind "N more warnings". The watcher's attention-class findings (an agent out of its usual pattern) are warning rows marked "nothing suspended". One **Notices** row at the foot, closed, holds facts with nothing to do now: a site with no Cloudflare data, the Cloudflare read not configured, a check that could not run, CI that could not be read, site map drift, drivers silent for over 7 days. "Health not read" and "Amazon copy not read" stay warnings, because an unknown backup is not a quiet fact;
 - **Since you last looked**, one line, with its lists behind "Show them";
@@ -42,6 +44,7 @@ Browser tests: dashboard/e2e/needs.spec.ts.
 ## The pages
 
 The pages, grouped by what a person is doing (the Portal audit and new map, Dustin's yes of 2026-11-06, which gave Sites its own group). The internal ids (`queue`) stay in the code and the addresses:
+
 - **Now:** Needs you (above) and Health;
 - **Sites:** Sites (`/portal/sites`), and one page for each site (`/portal/sites/<namespace>`);
 - **Work:** Pull requests, Jobs (`/portal/queue`) and Projects;
@@ -61,6 +64,7 @@ An old address answers nothing: the Portal is pre-launch, so a page that moves l
 **Jobs** has two tabs: the jobs, and **Checks** (`?tab=checks`), the claims ledger (below).
 
 **Health** (`/portal/health`) answers "is anything broken" (the Portal UX audit's M1, m2 and m3). It holds, in order:
+
 - one line: "All good", or how many problems there are and the first three by name, each a link to where it is fixed, then "N more" to the whole list on Needs you. They are the same problems as Needs you's, so the two pages never disagree;
 - four tiles, each a link to its tab: Sites up, Open findings, Backup (the primary dump) and Amazon copy (the oldest of the sites' newest off-account copies), so a stale copy never turns a good backup red;
 - five tabs, one shown at a time, the choice in the address (`?tab=`): **Problems** (the watcher's findings and the daily maintenance pass's list), **Backups**, **CI** (the default branches), **Scheduled tasks** (`?tab=scheduled`) and **Cloudflare** (`?tab=resources`: the Workers no site owns, and every D1 database, KV namespace and R2 bucket with who uses it).
@@ -85,6 +89,7 @@ The Portal is served at https://portal.dustinedwards.info, a Custom Domain on th
 The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `src/ops-types/feed.ts`. The app and the Worker both typecheck against `src/ops-types/`. The feed has three parts.
 
 **The snapshot** is the watcher's last pass, one KV read of `ops:snapshot`. The watcher writes it every 30 minutes, or on Refresh (`src/ops-snapshot.ts`, [autonomy.md](autonomy.md)). It holds:
+
 - each check's result: clear, finding, or could not run;
 - Capsid's `/health`;
 - the Amazon backup copy, per site;
@@ -95,6 +100,7 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 - each configured package as the pass read it, from `src/ops-packages.ts`.
 
 **The live part** is read from D1 and KV on every request. It holds:
+
 - every open job, and every job that ended in the last day;
 - the agents and their records;
 - pull requests from the last week;
@@ -105,6 +111,7 @@ The app reads one endpoint, `GET /portal/api/ops`, whose shape is `OpsFeed` in `
 **The run ledger** is read from D1 on every request too: each scheduled task's five newest runs (below).
 
 These read more when they open, and not on every poll:
+
 - **Queue** reads `GET /portal/api/plan` for its Tonight section: the overnight plan over every namespace, the reader behind `capsid_work_jobs` action `list` view `plan` (docs/overnight.md), one group per repo with each planned job's estimate and whether it is gated, then what is skipped and why. A parked job is never planned.
 - **Needs you** reads `GET /portal/api/digest?since=` for its "Since you last looked" strip, loaded after the page's first paint: what finished, what was merged, the pull requests ready for the seat and what blocked, the reader behind `capsid_work_jobs` action `list` view `digest`. `since` is when this browser last opened Needs you (localStorage `wf-last-looked`), or the last 24 hours with no record.
 - **Jobs** reads `GET /portal/api/stale` for its Stuck jobs panel: the rows `capsid_work_jobs` action `list` with `stale: true` returns, over every namespace, each with the rule it met and why (docs/work-queue.md). It reads again with each feed, so a job resumed or failed from its drawer leaves the panel, and the Queue's namespace chips narrow it. A row opens the job's drawer, which holds the controls. The Queue's Jobs list leaves out every job the panel shows, so a stale job is listed once; until the panel has read, or if its first read fails, the list shows every job.
@@ -132,6 +139,7 @@ Health's **Problems** tab shows every task in the Scheduled tasks panel: its sta
 ## Packages
 
 Optional, like the sites: packages are added on the Packages page's Published tab, and with none configured the watcher reads nothing for packages. Each watcher pass reads every configured npm package, each source failing on its own (`src/ops-packages.ts`, which cites each API's documentation):
+
 - **Versions**: the registry's abbreviated document, `latest` and the other dist-tags.
 - **Downloads**: the last 7 and 30 days from `api.npmjs.org`, and the last 7 days per version, the only per-version counts npm keeps. A package npm has not counted yet shows zero.
 - **Dependents**: deps.dev's counts of packages that depend on the default version, directly or through another package. deps.dev calls them indicative, and no public API lists them, so the view links to npm's and deps.dev's lists. GitHub has no API for the repositories that use a package.
@@ -159,15 +167,15 @@ Search, the document read and the edges go through `src/doc-reads.ts`, the same 
 
 `GET /portal/api/trends?weeks=` (`src/trends.ts`, `src/portal-trends.ts`; DECIDE 5 of docs/design/design-portal-evaluation.md, ruled 2026-10-09) serves the series the charts need and the feed does not carry. Admin only (portalGate), read-only. `weeks` is 1 to 26, default 8; every time is UTC and weeks start on Monday.
 
-| Series | Chart | Read from |
-|---|---|---|
-| `minutes`: per ISO week, minutes, sessions and decisions | 1, minutes of Dustin per week | `audit_log` rows by an `access:` actor and human `job_touches`, split into sessions at a 5-minute gap, each its span plus 1 minute. Decisions are human touches other than notes, plus approvals by an `access:` actor. An estimate, and it says so: reading the Portal writes nothing, so it is not counted |
-| `queue`: per day for 14 days, posted, ended, open at the day's end | 3, is the queue growing or draining | `jobs`: created, ended (done, failed, superseded; such a job never moves again, so its last update is when), and the open count when the window starts |
-| `cost`: per week, model spend and the outcomes that carried one | 6, what the work costs | `job_outcomes.cost_usd` (the session telemetry total, written when a job ends) summed by `recorded_at`. A week with no costed outcome is null, not 0 |
-| `merges`: per week, auto, approved, seat, closed; and each rollback | 7, how much merges with no human | `audit_log` actions `auto-merged`, `approved-merged`, `manage_pr` (a merge or a close) and `pr-closed`; `deploy_outcomes` rolled back or failed to roll back. A policy merge that also closed an approval writes both `auto-merged` and `approved-merged`; it is counted once, as auto |
-| `deploys`: per repo, deploys, per week, shipped, refused, rolled back, unverified, change failure rate, median time to restore | 8, deploys (the CI page's table) | `deploy_outcomes` in the window: `verified` shipped; `rolled_back`, `rollback_failed` and `rollback_skipped` refused; the rate is refused over shipped plus refused; restore is the median `restore_seconds` of the rolled-back rows |
-| `backups`: 14 daily, 4 weekly and 3 monthly slots, filled or not | 10, is every retention slot filled | the complete runs (`_complete.json`) under `backups/json/` in the backup bucket |
-| `ci`: per roster repo and day for 14 days, green, red or none | 11, which repos are red, and for how long | GitHub, each repo's default branch runs; a day is red when any workflow's last completed run up to then failed and green when every one passed, carried over a day with none. Kept in KV for an hour (`portal:trends-ci:v1`) only when every repo was read; a repo that could not be read is in `not_read`, never drawn green |
+| Series                                                                                                                         | Chart                                     | Read from                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `minutes`: per ISO week, minutes, sessions and decisions                                                                       | 1, minutes of Dustin per week             | `audit_log` rows by an `access:` actor and human `job_touches`, split into sessions at a 5-minute gap, each its span plus 1 minute. Decisions are human touches other than notes, plus approvals by an `access:` actor. An estimate, and it says so: reading the Portal writes nothing, so it is not counted                  |
+| `queue`: per day for 14 days, posted, ended, open at the day's end                                                             | 3, is the queue growing or draining       | `jobs`: created, ended (done, failed, superseded; such a job never moves again, so its last update is when), and the open count when the window starts                                                                                                                                                                        |
+| `cost`: per week, model spend and the outcomes that carried one                                                                | 6, what the work costs                    | `job_outcomes.cost_usd` (the session telemetry total, written when a job ends) summed by `recorded_at`. A week with no costed outcome is null, not 0                                                                                                                                                                          |
+| `merges`: per week, auto, approved, seat, closed; and each rollback                                                            | 7, how much merges with no human          | `audit_log` actions `auto-merged`, `approved-merged`, `manage_pr` (a merge or a close) and `pr-closed`; `deploy_outcomes` rolled back or failed to roll back. A policy merge that also closed an approval writes both `auto-merged` and `approved-merged`; it is counted once, as auto                                        |
+| `deploys`: per repo, deploys, per week, shipped, refused, rolled back, unverified, change failure rate, median time to restore | 8, deploys (the CI page's table)          | `deploy_outcomes` in the window: `verified` shipped; `rolled_back`, `rollback_failed` and `rollback_skipped` refused; the rate is refused over shipped plus refused; restore is the median `restore_seconds` of the rolled-back rows                                                                                          |
+| `backups`: 14 daily, 4 weekly and 3 monthly slots, filled or not                                                               | 10, is every retention slot filled        | the complete runs (`_complete.json`) under `backups/json/` in the backup bucket                                                                                                                                                                                                                                               |
+| `ci`: per roster repo and day for 14 days, green, red or none                                                                  | 11, which repos are red, and for how long | GitHub, each repo's default branch runs; a day is red when any workflow's last completed run up to then failed and green when every one passed, carried over a day with none. Kept in KV for an hour (`portal:trends-ci:v1`) only when every repo was read; a repo that could not be read is in `not_read`, never drawn green |
 
 Charts 2 and 5 (waits, claim agreement) read `GET /portal/api/claims`, which serves them already; 4 reads the Tonight plan; 8 and 9 read the feed; 6 also reads the monthly cap from the feed. Tests: test/trends.test.ts, test-integration/portal-trends.test.ts.
 
@@ -256,22 +264,27 @@ A value the feed does not have is shown as **No data** with its reason. It is ne
 ## The Cloudflare token
 
 `CF_OPS_TOKEN` is a Cloudflare API token that can only read. The watcher needs two permissions:
+
 - **Account Analytics Read**, for requests and errors per Worker per hour;
 - **Workers Scripts Read**, for deployments, the custom-domain list and the secret names of a site that opted into repairs (names only; above, "Site repairs").
 
 The watcher's live checks need one more for the `analytics` rule (docs/live-checks.md):
+
 - **Account / Account Settings / Read**, for the Web Analytics sites list (`GET /accounts/{id}/rum/site_info/list`). Add it to the same token the same way; until it is there the rule files `live-analytics-unread-<site>`.
 
 The certificate-expiry read ("Phone alerts", item 8) needs one more:
+
 - **Zone / SSL and Certificates / Read**, for each zone's certificate packs (`GET /zones/{id}/ssl/certificate_packs`), with **Zone / Zone / Read** to find the zones. Until it is there the read fails per host and no expiry alert can fire.
 
 The admin-only `capsid_admin_read_ops` MCP tool's Cloudflare configuration actions (`src/tools/cloudflare.ts`, reading through `src/ops-cloudflare-config.ts`) need four more:
+
 - **Account / Access: Apps and Policies / Read**, for `access_apps` and `access_policies`;
 - **Account / Email Routing Addresses / Read**, for `email_addresses`;
 - **Zone / Zone / Read**, to list the zones `email_rules` reads;
 - **Zone / Email Routing Rules / Read**, for `email_rules`.
 
 The nightly secrets and data model (docs/public-data.md, "The secrets and data model") needs three more, beside Workers Scripts Read for each Worker's settings and secret names:
+
 - **Account / D1 / Read**, for the database list and each database's tables (`sqlite_master`, read-only);
 - **Account / Workers KV Storage / Read**, for the namespace list;
 - **Account / Workers R2 Storage / Read**, for the bucket list.
@@ -281,9 +294,11 @@ Until each is there, that part of the document says the read failed and Health's
 A 403 from any of these names the permission that is missing. The tool copies named fields only, so an Access for SaaS client secret, a SCIM credential or an application's aud tag never reaches the caller. It runs once per tool call, never from a Portal page.
 
 Its `builds` and `build_logs` actions (`src/workers-builds.ts`) need one more:
+
 - **Account / Workers CI / Read**, for each Worker's Workers Builds and one build's log. Add it the same way; until it is there both actions refuse with a 403 that names it, never an empty list.
 
 To add the four to the existing token:
+
 1. Open dash.cloudflare.com/profile/api-tokens.
 2. On the token **capsid-portal-read**, choose **Edit**.
 3. Add **Account / Access: Apps and Policies / Read**, **Account / Email Routing Addresses / Read**, **Zone / Email Routing Rules / Read** and **Zone / Zone / Read**.
@@ -299,6 +314,7 @@ The account id comes from `CF_ACCOUNT_ID`, or from `R2_ACCOUNT_ID` when that is 
 Settings has a **Phone alerts** panel (`dashboard/src/views/PhoneAlerts.tsx`, loaded on its own). **Turn on for this device** asks the browser for notification permission, registers the Portal's service worker (`dashboard/public/sw.js`, which shows an alert and opens its item on a tap, and caches nothing), subscribes with the VAPID public key and stores the subscription in `push_subscriptions` (`migrations/0041_push_subscriptions.sql`). Each device can be turned off from the list, and **Send a test alert** sends one alert to every device and shows each push service's answer.
 
 The five-minute tick's `push` step (`src/push.ts`) sends an alert for eight things only (docs/design/design-merge-pipeline.md section 5; Dustin, 2026-10-09, DECIDE 5 and 6; the sixth from job_0368576da167; the seventh and eighth from area 8, 2026-10-30 and 2026-10-31):
+
 1. a `typed` pull request (a money path) waiting more than 2 hours, counted from the first tick that saw it typed;
 2. a rollback or a failed rollback recorded in `deploy_outcomes` in the last day;
 3. a job blocked at the correction cap in the last day;
@@ -311,6 +327,7 @@ The five-minute tick's `push` step (`src/push.ts`) sends an alert for eight thin
 Each item is sent once (KV `push:state` keeps what was sent for 30 days), at most three items a tick, and an item no device received is tried again on the next tick. An alert names the repo and the pull request number, or the namespace and job id, and its class. It never carries a title and never an Approve button: a typed pull request is approved only by typing its number, a visual one after looking at it in the Portal, and the other six are not pull requests, so there is no approve-from-push route. Every alert opens its own item on https://portal.dustinedwards.info (the UX audit's M2, 2026-10): a pull request opens its card on Pull requests (`/prs#pr-<repo>-<number>`), a rollback opens the site's Deploys tab (`/sites/<namespace>?tab=deploys`), a site alert the site's own page (`/sites/<namespace>`), a job opens its drawer on Jobs (`/queue/job/<id>`), a pause opens Auto-merge on Pull requests (`/prs#auto-merge`), and the test alert opens the home page. A tap moves a Portal tab already open to that page and brings it forward, and opens a new one only when none is open. The service worker opens only a page on its own scope; any other url opens the Portal itself. The Worker encrypts each alert to the browser's own keys (RFC 8291) and signs the request with the VAPID key (RFC 8292), with WebCrypto only (`src/web-push.ts`), so the push service (Google's, for Chrome on Android) sees neither the text nor a third-party account. A subscription whose endpoint is not on a known push service is refused before it is stored, and one the push service answers 404 or 410 for is marked `gone`. Audit rows: `push-device-on`, `push-device-off`, `push-test`, `push-sent` and `push-device-gone`.
 
 To set it up, the seat, one step at a time:
+
 1. Apply the migration: `npx wrangler d1 migrations apply capsid --remote`. It is additive: one table, one index.
 2. Make and store the key: `node scripts/vapid-keys.mjs`. It puts `VAPID_PRIVATE_KEY` with wrangler and prints only the public half. Running it again replaces the key, and every device must turn alerts on again.
 3. Deploy, open Settings on the phone, and press **Turn on for this device**, then **Send a test alert**.
@@ -324,6 +341,7 @@ Everything that is not urgent enough for a phone alert waits for one email a day
 **It does nothing until Email Routing is on.** Cloudflare sends from a Worker only from a domain with Email Routing turned on and only to a verified destination address, and turning it on is an account setting only Dustin can change. So the digest needs the `send_email` binding `EMAIL`, `ALERT_EMAIL`, `ALERT_FROM` and the var `EMAIL_ROUTING` set to `"on"`. Until all four are set, every tick returns at once, and Settings, **Daily digest**, says which is missing.
 
 Turning it on, one step at a time:
+
 1. **Dustin:** at dash.cloudflare.com open the dustinedwards.info zone, then **Email**, **Email Routing**. If it says the domain already receives mail through another provider (existing MX records), stop and tell the seat: turning Email Routing on would move that mail.
 2. **Dustin:** press **Get started** (or **Enable Email Routing**), then **Add records and enable**. Cloudflare adds the MX and SPF records itself.
 3. **Dustin:** on **Destination addresses**, **Add destination address**: the address the digest should go to.
@@ -350,6 +368,7 @@ The same binding and addresses also turn on the watcher's site health mail (abov
 ## Building and changing it
 
 `dashboard/` is its own package (React 19, React Router 8.5.1 in framework mode, TanStack Query), with its own lockfile and README. Like the network's other sites, every page is rendered on the server, so its content, text, tables and charts are in the HTML with scripts off:
+
 - **Rendering:** the capsid Worker renders each page after the gate (`src/portal-app.ts`, `renderPortalPage`). `dashboard/src/worker.ts` and the server build are bundled into `dashboard/build/worker/portal.js`, which the Worker imports as `capsid-portal-pages` (the `alias` in `wrangler.jsonc.example`; the tests use the stand-in `test/fixtures/portal-pages.ts`). Each route's loader prefetches the queries its view reads into a QueryClient made for that request (`dashboard/src/server/prefetch.ts`, TanStack Query's Advanced SSR pattern) through the Worker's own `/portal/api` routes, with the visitor's cookies, and the page hydrates from them. After the first page, moves happen in the browser and reads go to `/portal/api` as before.
 - **CSP:** each page carries its own nonce (`src/dashboard-csp.ts`, site-runtime's builder), given to React Router's scripts and the theme script; no `unsafe-inline`.
 - **Develop:** `npm --prefix dashboard run dev` serves it with fake sample data (`dashboard/dev/sample-feed.json`, checked against `OpsFeed`).

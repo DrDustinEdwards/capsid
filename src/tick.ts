@@ -36,7 +36,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       }
       return merged.policy_version === null ? { outcome: "refused", reason: merged.note } : null;
     },
-    { tag: "AUTO_MERGE_THREW:", rethrow: false }
+    { tag: "AUTO_MERGE_THREW:", rethrow: false },
   );
 
   // The watcher, on its own half-hourly stamp. It only posts jobs, so the worst a
@@ -50,7 +50,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       logEvent("WATCHER", { message: `WATCHER ${watched.note}` });
       return { outcome: "ok", reason: watched.note };
     },
-    { tag: "WATCHER_THREW:", rethrow: false }
+    { tag: "WATCHER_THREW:", rethrow: false },
   );
 
   // Merge units (src/merge-units.ts): after the watcher, which records rollbacks in
@@ -63,10 +63,14 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     () => unitsTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent("MERGE_UNITS", { message: `MERGE_UNITS ${report.note}` }, { level: report.newly_suspended.length ? "error" : "log" });
+      logEvent(
+        "MERGE_UNITS",
+        { message: `MERGE_UNITS ${report.note}` },
+        { level: report.newly_suspended.length ? "error" : "log" },
+      );
       return { outcome: "ok", reason: report.note };
     },
-    { tag: "MERGE_UNITS_THREW:", rethrow: false }
+    { tag: "MERGE_UNITS_THREW:", rethrow: false },
   );
 
   // The auto-merge safety meter and shutoff (src/merge-safety.ts): after merge-units. Its
@@ -79,10 +83,14 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     () => mergeSafetyTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent("MERGE_SAFETY", { message: `MERGE_SAFETY ${report.note}` }, { level: report.newly_paused.length ? "error" : "log" });
+      logEvent(
+        "MERGE_SAFETY",
+        { message: `MERGE_SAFETY ${report.note}` },
+        { level: report.newly_paused.length ? "error" : "log" },
+      );
       return { outcome: "ok", reason: report.note };
     },
-    { tag: "MERGE_SAFETY_THREW:", rethrow: false }
+    { tag: "MERGE_SAFETY_THREW:", rethrow: false },
   );
 
   // Stale jobs: a blocked job whose named pull requests have all merged goes back to its
@@ -96,14 +104,18 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       // A stale:prs cache that could not be written is recorded even on a pass that
       // resumed nothing, so the stale view's missing rows have a cause on the ledger.
       if (report.cache_error) {
-        logEvent("MERGE_RESUME_CACHE", { message: `MERGE_RESUME_CACHE ${report.note}` }, { level: "error" });
+        logEvent(
+          "MERGE_RESUME_CACHE",
+          { message: `MERGE_RESUME_CACHE ${report.note}` },
+          { level: "error" },
+        );
         return { outcome: "refused", reason: report.note };
       }
       if (report.resumed.length === 0) return null;
       logEvent("MERGE_RESUME", { message: `MERGE_RESUME ${report.note}` });
       return { outcome: "ok", reason: report.note };
     },
-    { tag: "MERGE_RESUME_THREW:", rethrow: false }
+    { tag: "MERGE_RESUME_THREW:", rethrow: false },
   );
 
   // The daily maintenance pass (src/maintenance.ts): once a UTC day after 11:00, it lists
@@ -121,7 +133,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       logEvent("MAINTENANCE", { message: `MAINTENANCE ${report.note}` });
       return { outcome: "ok", reason: report.note };
     },
-    { tag: "MAINTENANCE_THREW:", rethrow: false }
+    { tag: "MAINTENANCE_THREW:", rethrow: false },
   );
 
   // The public system model (src/public-data.ts): once a UTC day, repo visibility read
@@ -137,10 +149,14 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       if (!report.ran) return null;
       // A code map that would not parse is a refusal the ledger shows; the model was still built.
       const failed = "codeFailed" in report;
-      logEvent("PUBLIC_BUILD", { message: `PUBLIC_BUILD ${report.note}` }, { level: failed ? "error" : "log" });
+      logEvent(
+        "PUBLIC_BUILD",
+        { message: `PUBLIC_BUILD ${report.note}` },
+        { level: failed ? "error" : "log" },
+      );
       return { outcome: failed ? "refused" : "ok", reason: report.note };
     },
-    { tag: "PUBLIC_BUILD_THREW:", rethrow: false }
+    { tag: "PUBLIC_BUILD_THREW:", rethrow: false },
   );
 
   // The versions and secrets models (src/system-facts.ts): once a UTC day after 06:00, every
@@ -153,10 +169,14 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     () => systemFactsTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent("SYSTEM_FACTS", { message: `SYSTEM_FACTS ${report.note}` }, { level: report.failed ? "error" : "log" });
+      logEvent(
+        "SYSTEM_FACTS",
+        { message: `SYSTEM_FACTS ${report.note}` },
+        { level: report.failed ? "error" : "log" },
+      );
       return { outcome: report.failed ? "refused" : "ok", reason: report.note };
     },
-    { tag: "SYSTEM_FACTS_THREW:", rethrow: false }
+    { tag: "SYSTEM_FACTS_THREW:", rethrow: false },
   );
 
   // The meaning index (src/doc-index.ts): documents changed since the last tick go to
@@ -168,10 +188,14 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     () => docIndexTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent("DOC_INDEX", { message: `DOC_INDEX ${report.note}` }, { level: report.failed > 0 ? "error" : "log" });
+      logEvent(
+        "DOC_INDEX",
+        { message: `DOC_INDEX ${report.note}` },
+        { level: report.failed > 0 ? "error" : "log" },
+      );
       return { outcome: report.failed > 0 ? "refused" : "ok", reason: report.note };
     },
-    { tag: "DOC_INDEX_THREW:", rethrow: false }
+    { tag: "DOC_INDEX_THREW:", rethrow: false },
   );
 
   // The daily merge-state sweep. Outcome rows record a pull request as unmerged when
@@ -189,7 +213,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       logEvent("OUTCOME_SWEEP", { message: `OUTCOME_SWEEP ${line}` });
       return { outcome: "ok", reason: line };
     },
-    { tag: "OUTCOME_SWEEP_THREW:", rethrow: false }
+    { tag: "OUTCOME_SWEEP_THREW:", rethrow: false },
   );
 
   // The site pulse (src/site-pulse.ts): every site's health route, every tick, so a site
@@ -204,7 +228,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       logEvent("SITE_PULSE", { message: `SITE_PULSE ${report.note}` }, { level: "error" });
       return { outcome: "ok", reason: report.note };
     },
-    { tag: "SITE_PULSE_THREW:", rethrow: false }
+    { tag: "SITE_PULSE_THREW:", rethrow: false },
   );
 
   // The signed-in crawl (src/signed-in-crawl.ts): hourly, the Portal through this Worker's own handler (`self`),
@@ -215,7 +239,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       "signed-in-crawl",
       () => signedInCrawlTick(env, now, self),
       (report): TaskResult => (report ? { outcome: "ok", reason: report.note } : null),
-      { tag: "SIGNED_IN_CRAWL_THREW:", rethrow: false }
+      { tag: "SIGNED_IN_CRAWL_THREW:", rethrow: false },
     );
   }
 
@@ -232,7 +256,7 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       logEvent("PUSH", { message: `PUSH ${report.note}` });
       return { outcome: report.sent.length > 0 ? "ok" : "refused", reason: report.note };
     },
-    { tag: "PUSH_THREW:", rethrow: false }
+    { tag: "PUSH_THREW:", rethrow: false },
   );
 
   // The daily email digest (src/digest.ts): once a UTC day, and only once Email Routing is
@@ -243,9 +267,13 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
     () => digestTick(env, now),
     (report): TaskResult => {
       if (!report.ran) return null;
-      logEvent("DIGEST", { message: `DIGEST ${report.note}` }, { level: report.sent ? "log" : "error" });
+      logEvent(
+        "DIGEST",
+        { message: `DIGEST ${report.note}` },
+        { level: report.sent ? "log" : "error" },
+      );
       return { outcome: report.sent ? "ok" : "refused", reason: report.note };
     },
-    { tag: "DIGEST_THREW:", rethrow: false }
+    { tag: "DIGEST_THREW:", rethrow: false },
   );
 }

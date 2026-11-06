@@ -22,26 +22,39 @@ export function defineSystemOperations(_server: McpServer, ctx: ToolCtx): void {
         "The network package versions (Capsomer, Prelum, devkit, Enarratio...) each system installs, read nightly from its lockfiles, with the newest release and how far behind. system or package narrows it. REFUSES: no build yet, an unknown system or package.",
       inputSchema: {
         system: nsName.optional().describe("A system id from system/model.json, such as foxing."),
-        package: bounded(100).optional().describe("A package name as the document lists it, such as Capsomer or enarratio."),
+        package: bounded(100)
+          .optional()
+          .describe("A package name as the document lists it, such as Capsomer or enarratio."),
       },
     },
     async ({ system, package: pkg }) => {
       const raw = await env.APP_KV.get(PUBLIC_VERSIONS_KEY);
-      if (!raw) return fail("system_versions: the nightly build has not stored the versions model yet (task system-facts in the run ledger).");
+      if (!raw)
+        return fail(
+          "system_versions: the nightly build has not stored the versions model yet (task system-facts in the run ledger).",
+        );
       const doc = JSON.parse(raw) as PublicVersions;
       let systems = doc.systems;
       if (system !== undefined) {
         systems = systems.filter((s) => s.system === system);
-        if (!systems.length) return fail(`system_versions: no system '${system}' pins a network package. Systems: ${doc.systems.map((s) => s.system).join(", ")}.`);
+        if (!systems.length)
+          return fail(
+            `system_versions: no system '${system}' pins a network package. Systems: ${doc.systems.map((s) => s.system).join(", ")}.`,
+          );
       }
       if (pkg !== undefined) {
         const known = doc.packages.find((p) => p.name.toLowerCase() === pkg.toLowerCase());
-        if (!known) return fail(`system_versions: no package '${pkg}'. Packages: ${doc.packages.map((p) => p.name).join(", ")}.`);
-        systems = systems.map((s) => ({ ...s, pins: s.pins.filter((p) => p.package === known.name) })).filter((s) => s.pins.length);
+        if (!known)
+          return fail(
+            `system_versions: no package '${pkg}'. Packages: ${doc.packages.map((p) => p.name).join(", ")}.`,
+          );
+        systems = systems
+          .map((s) => ({ ...s, pins: s.pins.filter((p) => p.package === known.name) }))
+          .filter((s) => s.pins.length);
         return ok({ as_of: doc.as_of, packages: [known], systems, unread: doc.unread });
       }
       return ok({ as_of: doc.as_of, packages: doc.packages, systems, unread: doc.unread });
-    }
+    },
   );
 
   ctx.ops.define(
@@ -55,12 +68,26 @@ export function defineSystemOperations(_server: McpServer, ctx: ToolCtx): void {
     },
     async ({ script }) => {
       const doc = await readResources(env);
-      if (!doc) return fail("system_resources: the nightly build has not stored the secrets and data model yet (task system-facts in the run ledger).");
+      if (!doc)
+        return fail(
+          "system_resources: the nightly build has not stored the secrets and data model yet (task system-facts in the run ledger).",
+        );
       if (script === undefined) return ok(doc);
       const worker = doc.workers.find((w) => w.script === script);
-      if (!worker) return fail(`system_resources: no Worker '${script}'. Workers: ${doc.workers.map((w) => w.script).join(", ")}.`);
-      const uses = (list: Array<{ used_by: Array<{ script: string }> }>) => list.filter((x) => x.used_by.some((u) => u.script === script));
-      return ok({ read_at: doc.read_at, worker, databases: uses(doc.databases), kv_namespaces: uses(doc.kv_namespaces), buckets: uses(doc.buckets), problems: doc.problems });
-    }
+      if (!worker)
+        return fail(
+          `system_resources: no Worker '${script}'. Workers: ${doc.workers.map((w) => w.script).join(", ")}.`,
+        );
+      const uses = (list: Array<{ used_by: Array<{ script: string }> }>) =>
+        list.filter((x) => x.used_by.some((u) => u.script === script));
+      return ok({
+        read_at: doc.read_at,
+        worker,
+        databases: uses(doc.databases),
+        kv_namespaces: uses(doc.kv_namespaces),
+        buckets: uses(doc.buckets),
+        problems: doc.problems,
+      });
+    },
   );
 }

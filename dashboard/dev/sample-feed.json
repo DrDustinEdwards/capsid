@@ -23,37 +23,27 @@
       {
         "id": "offaccount",
         "state": "finding",
-        "findings": [
-          "offaccount-stale-sample"
-        ]
+        "findings": ["offaccount-stale-sample"]
       },
       {
         "id": "ci",
         "state": "finding",
-        "findings": [
-          "ci-red-sample-b-c91d7aa"
-        ]
+        "findings": ["ci-red-sample-b-c91d7aa"]
       },
       {
         "id": "site-probes",
         "state": "finding",
-        "findings": [
-          "probe-sample-f"
-        ]
+        "findings": ["probe-sample-f"]
       },
       {
         "id": "errors",
         "state": "finding",
-        "findings": [
-          "errors-sample-c"
-        ]
+        "findings": ["errors-sample-c"]
       },
       {
         "id": "cf-deploys",
         "state": "could-not-run",
-        "findings": [
-          "Cloudflare API answered 429 on one call; retried next pass"
-        ]
+        "findings": ["Cloudflare API answered 429 on one call; retried next pass"]
       }
     ],
     "health": {
@@ -129,9 +119,7 @@
       }
     ],
     "site_map": {
-      "unmapped": [
-        "sample-i"
-      ],
+      "unmapped": ["sample-i"],
       "unknown": []
     },
     "sites": [
@@ -1574,9 +1562,7 @@
       {
         "name": "sample-driver",
         "kind": "driver",
-        "namespaces": [
-          "sample"
-        ],
+        "namespaces": ["sample"],
         "flags": [],
         "last_seen": "2026-09-28T11:57:00.000Z",
         "revoked_at": null,
@@ -1593,9 +1579,7 @@
       {
         "name": "sample-b-driver",
         "kind": "driver",
-        "namespaces": [
-          "sample-b"
-        ],
+        "namespaces": ["sample-b"],
         "flags": [],
         "last_seen": "2026-09-28T06:12:00.000Z",
         "revoked_at": null,
@@ -1612,9 +1596,7 @@
       {
         "name": "sample-c-driver",
         "kind": "driver",
-        "namespaces": [
-          "sample-c"
-        ],
+        "namespaces": ["sample-c"],
         "flags": [],
         "last_seen": "2026-09-27T07:12:00.000Z",
         "revoked_at": null,
@@ -1631,9 +1613,7 @@
       {
         "name": "sample-d-driver",
         "kind": "driver",
-        "namespaces": [
-          "sample-d"
-        ],
+        "namespaces": ["sample-d"],
         "flags": [],
         "last_seen": "2026-09-20T09:36:00.000Z",
         "revoked_at": null,
@@ -1651,9 +1631,7 @@
         "name": "seat",
         "kind": "seat",
         "namespaces": "*",
-        "flags": [
-          "can_merge"
-        ],
+        "flags": ["can_merge"],
         "last_seen": "2026-09-28T11:22:00.000Z",
         "revoked_at": null,
         "archived_at": null,
@@ -1720,9 +1698,7 @@
       {
         "name": "sample-old-key",
         "kind": "driver",
-        "namespaces": [
-          "sample"
-        ],
+        "namespaces": ["sample"],
         "flags": [],
         "last_seen": "2026-09-21T10:02:00.000Z",
         "revoked_at": "2026-09-25T15:20:00.000Z",
@@ -1739,9 +1715,7 @@
       {
         "name": "runner-job_6b5a4c3d2e1f-s4410",
         "kind": "session",
-        "namespaces": [
-          "sample"
-        ],
+        "namespaces": ["sample"],
         "flags": [],
         "last_seen": "2026-09-26T08:40:00.000Z",
         "revoked_at": "2026-09-26T08:41:00.000Z",
@@ -1779,12 +1753,40 @@
         "recorded_at": "2026-09-26T07:12:00.000Z"
       }
     ],
-    "merge_policy": { "loads": true, "version": "7", "enabled": true, "units": ["sample-a/docs", "sample-a/tests", "sample-c/docs"] },
+    "merge_policy": {
+      "loads": true,
+      "version": "7",
+      "enabled": true,
+      "units": ["sample-a/docs", "sample-a/tests", "sample-c/docs"]
+    },
     "merge_safety": {
       "generated": "2026-09-28T12:00:00.000Z",
       "namespaces": [
-        { "namespace": "sample-a", "auto_merged": 5, "approved": 2, "deploys_verified": 7, "rolled_back": 0, "rollback_failed": 0, "reverts": 0, "bad_auto_7d": 0, "paused": null },
-        { "namespace": "sample-c", "auto_merged": 3, "approved": 1, "deploys_verified": 3, "rolled_back": 1, "rollback_failed": 0, "reverts": 1, "bad_auto_7d": 2, "paused": { "since": "2026-09-27T09:00:00.000Z", "reason": "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days" } }
+        {
+          "namespace": "sample-a",
+          "auto_merged": 5,
+          "approved": 2,
+          "deploys_verified": 7,
+          "rolled_back": 0,
+          "rollback_failed": 0,
+          "reverts": 0,
+          "bad_auto_7d": 0,
+          "paused": null
+        },
+        {
+          "namespace": "sample-c",
+          "auto_merged": 3,
+          "approved": 1,
+          "deploys_verified": 3,
+          "rolled_back": 1,
+          "rollback_failed": 0,
+          "reverts": 1,
+          "bad_auto_7d": 2,
+          "paused": {
+            "since": "2026-09-27T09:00:00.000Z",
+            "reason": "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days"
+          }
+        }
       ]
     },
     "awaiting_seat": [
@@ -1916,14 +1918,8 @@
             "pages-drift": "sync_pages",
             "ask-index-drift": "sync_ask"
           },
-          "weekly": [
-            "refresh_citations"
-          ],
-          "secrets": [
-            "GITHUB_TOKEN",
-            "OPERATOR_TOKEN",
-            "SMOKE_TOKEN"
-          ],
+          "weekly": ["refresh_citations"],
+          "secrets": ["GITHUB_TOKEN", "OPERATOR_TOKEN", "SMOKE_TOKEN"],
           "backup": true
         },
         "operator_problem": null

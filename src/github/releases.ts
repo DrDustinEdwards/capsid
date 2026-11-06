@@ -17,7 +17,9 @@ const NOTES_MAX = 50_000;
 
 /** Why a tag name is refused, or null. */
 export function tagRefusal(tag: string): string | null {
-  return TAG.test(tag) ? null : `'${tag}' is not a release tag: use a version such as v1.4.0 or 1.4.0-rc.1.`;
+  return TAG.test(tag)
+    ? null
+    : `'${tag}' is not a release tag: use a version such as v1.4.0 or 1.4.0-rc.1.`;
 }
 
 /**
@@ -57,15 +59,24 @@ export interface TagReleaseArgs {
   changelogPath: string;
 }
 
-export async function tagRelease(env: Env, namespace: string, args: TagReleaseArgs, repoSelector?: string) {
+export async function tagRelease(
+  env: Env,
+  namespace: string,
+  args: TagReleaseArgs,
+  repoSelector?: string,
+) {
   const badTag = tagRefusal(args.tag);
   if (badTag) throw new Error(badTag);
   assertRepoArg("changelog", args.changelogPath);
-  if (args.sha !== undefined && !SHA.test(args.sha)) throw new Error("sha must be a full 40-character commit sha.");
-  if (args.sha !== undefined && args.ref !== undefined) throw new Error("pass sha or ref, not both.");
+  if (args.sha !== undefined && !SHA.test(args.sha))
+    throw new Error("sha must be a full 40-character commit sha.");
+  if (args.sha !== undefined && args.ref !== undefined)
+    throw new Error("pass sha or ref, not both.");
   if (args.ref !== undefined) assertRepoArg("ref", args.ref);
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
-  const sha = args.sha ?? (await getRefSha(env, owner, repo, args.ref ?? (await getDefaultBranch(env, owner, repo))));
+  const sha =
+    args.sha ??
+    (await getRefSha(env, owner, repo, args.ref ?? (await getDefaultBranch(env, owner, repo))));
 
   // The notes first, at the tagged commit, so a release with no section writes nothing.
   let notes: string | null = null;
@@ -73,7 +84,9 @@ export async function tagRelease(env: Env, namespace: string, args: TagReleaseAr
     const file = await readRepoFile(env, namespace, args.changelogPath, sha, repoSelector);
     notes = releaseNotes(file.content, args.tag);
     if (!notes) {
-      throw new Error(`${args.changelogPath} at ${sha.slice(0, 7)} has no section for ${args.tag}. Add one (a heading naming the version), merge it, and release that commit. Nothing was tagged.`);
+      throw new Error(
+        `${args.changelogPath} at ${sha.slice(0, 7)} has no section for ${args.tag}. Add one (a heading naming the version), merge it, and release that commit. Nothing was tagged.`,
+      );
     }
   }
 
@@ -86,10 +99,15 @@ export async function tagRelease(env: Env, namespace: string, args: TagReleaseAr
   } catch (err) {
     throw new Error(
       `the tag ${args.tag} was created at ${sha.slice(0, 7)} but the release was not (${err instanceof Error ? err.message : String(err)}). ` +
-        `Publish it from the tag on GitHub, or delete the tag and release again.`
+        `Publish it from the tag on GitHub, or delete the tag and release again.`,
     );
   }
-  return { repo: full, tag: args.tag, sha, release: { id: release.id, url: release.url, notes_chars: notes.length } };
+  return {
+    repo: full,
+    tag: args.tag,
+    sha,
+    release: { id: release.id, url: release.url, notes_chars: notes.length },
+  };
 }
 
 // The two writes, shared with the maintenance pass's release-tag rule
@@ -101,12 +119,20 @@ export async function tagRelease(env: Env, namespace: string, args: TagReleaseAr
 export function releaseNotes(markdown: string, tag: string): string | null {
   const notes = changelogSection(markdown, tag);
   if (!notes) return null;
-  return notes.length > NOTES_MAX ? `${notes.slice(0, NOTES_MAX)}\n\n(The CHANGELOG section continues past ${NOTES_MAX} characters.)` : notes;
+  return notes.length > NOTES_MAX
+    ? `${notes.slice(0, NOTES_MAX)}\n\n(The CHANGELOG section continues past ${NOTES_MAX} characters.)`
+    : notes;
 }
 
 /** Create the tag's ref at `sha`. Never moves a tag: GitHub refuses a ref that already
  *  exists (422), and that refusal is thrown saying nothing was changed. */
-export async function createTag(env: Env, owner: string, repo: string, tag: string, sha: string): Promise<void> {
+export async function createTag(
+  env: Env,
+  owner: string,
+  repo: string,
+  tag: string,
+  sha: string,
+): Promise<void> {
   const badTag = tagRefusal(tag);
   if (badTag) throw new Error(badTag);
   if (!SHA.test(sha)) throw new Error("sha must be a full 40-character commit sha.");
@@ -117,17 +143,32 @@ export async function createTag(env: Env, owner: string, repo: string, tag: stri
   });
   if (!tagged.ok) {
     const detail = await tagged.text();
-    if (tagged.status === 422) throw new Error(`tag ${tag} already exists in ${owner}/${repo}, or the commit is unknown. Nothing was changed. Detail: ${detail.slice(0, 300)}`);
+    if (tagged.status === 422)
+      throw new Error(
+        `tag ${tag} already exists in ${owner}/${repo}, or the commit is unknown. Nothing was changed. Detail: ${detail.slice(0, 300)}`,
+      );
     throw new Error(`tag failed (${tagged.status}): ${detail.slice(0, 300)}`);
   }
 }
 
 /** Publish the release of an existing tag with these notes. Throws with GitHub's answer. */
-export async function publishRelease(env: Env, owner: string, repo: string, tag: string, notes: string): Promise<{ id: number; url: string }> {
+export async function publishRelease(
+  env: Env,
+  owner: string,
+  repo: string,
+  tag: string,
+  notes: string,
+): Promise<{ id: number; url: string }> {
   const released = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/releases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tag_name: tag, name: tag, body: notes, draft: false, prerelease: /-/.test(tag) }),
+    body: JSON.stringify({
+      tag_name: tag,
+      name: tag,
+      body: notes,
+      draft: false,
+      prerelease: /-/.test(tag),
+    }),
   });
   if (!released.ok) throw new Error(`${released.status}: ${(await released.text()).slice(0, 300)}`);
   const release = (await released.json()) as { id: number; html_url: string };

@@ -36,14 +36,19 @@ import type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops
 
 const MAX_BLOCKED = 200;
 const MAX_ITEMS_PER_APP = 50;
-const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set(["blocked-job", "question", "pr", "report", "proposal"]);
+const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set([
+  "blocked-job",
+  "question",
+  "pr",
+  "report",
+  "proposal",
+]);
 
 /** The worst severity of a set of items. */
 export function severityOf(items: readonly Pick<InboxItem, "kind">[]): InboxSeverity {
   if (items.some((i) => WAITING_ON_PERSON.has(i.kind))) return "needs-you";
   return items.length > 0 ? "failing" : "none";
 }
-
 
 // What answering it takes, by the class the tick gave it (src/merge-class.ts).
 const CLASS_WORDS: Record<MergeClass, string> = {
@@ -58,7 +63,9 @@ const CLASS_WORDS: Record<MergeClass, string> = {
  *  A visual pull request one tap would merge says it waits for his look, whichever check
  *  stopped it first: a session's visual PR usually names no job, and "names no job" hid
  *  that there was something to look at (job_0368576da167). */
-export function prHoldTitle(a: Pick<AwaitingSeat, "number" | "failed" | "class" | "visual">): string {
+export function prHoldTitle(
+  a: Pick<AwaitingSeat, "number" | "failed" | "class" | "visual">,
+): string {
   const why = checkWords(a.visual && a.class === "approve" ? "visual_awaits_look" : a.failed);
   return `PR #${a.number} waits for you: ${why}${a.class ? ` (${CLASS_WORDS[a.class]})` : ""}`;
 }
@@ -83,7 +90,7 @@ export function blockSettled(
   job: { id: string; result_summary: string | null; updated_at: string },
   stale: StalePrCache,
   applied: ReadonlySet<string> | null,
-  steps: StaleStepCache = {}
+  steps: StaleStepCache = {},
 ): boolean {
   const entry = stale[job.id];
   if (entry && entry.at >= job.updated_at && prsSettled(entry)) return true;
@@ -106,17 +113,33 @@ export async function appliedMigrations(db: D1Database): Promise<Set<string> | n
 
 /** A blocked job as an inbox item. A block that asks a question is marked in its summary
  *  (src/jobs-holder.ts), and it is the kind that most needs a person's words. */
-export function blockedJobItem(job: { id: string; title: string; result_ref: string | null; result_summary: string | null; updated_at: string }): InboxItem {
+export function blockedJobItem(job: {
+  id: string;
+  title: string;
+  result_ref: string | null;
+  result_summary: string | null;
+  updated_at: string;
+}): InboxItem {
   const question = (job.result_summary ?? "").startsWith("QUESTION:");
   const [pr] = prUrlsFromJob({ result_ref: job.result_ref, result_summary: job.result_summary });
-  return { title: job.title, kind: question ? "question" : "blocked-job", link: pr ?? null, since: job.updated_at, job: job.id };
+  return {
+    title: job.title,
+    kind: question ? "question" : "blocked-job",
+    link: pr ?? null,
+    since: job.updated_at,
+    job: job.id,
+  };
 }
 
 /**
  * Gather the inbox for `namespaces` (the ones the caller may read; null means all).
  * `now` stamps the answer.
  */
-export async function gatherInbox(env: Env, now: Date, namespaces: readonly string[] | null): Promise<Inbox> {
+export async function gatherInbox(
+  env: Env,
+  now: Date,
+  namespaces: readonly string[] | null,
+): Promise<Inbox> {
   const allowed = namespaces === null ? null : new Set(namespaces);
   const keep = (namespace: string) => allowed === null || allowed.has(namespace);
   const byNamespace = new Map<string, InboxItem[]>();
@@ -128,10 +151,17 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
   };
 
   const blocked = await env.DB.prepare(
-    "SELECT id, namespace, title, result_ref, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT ?1"
+    "SELECT id, namespace, title, result_ref, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT ?1",
   )
     .bind(MAX_BLOCKED)
-    .all<{ id: string; namespace: string; title: string; result_ref: string | null; result_summary: string | null; updated_at: string }>();
+    .all<{
+      id: string;
+      namespace: string;
+      title: string;
+      result_ref: string | null;
+      result_summary: string | null;
+      updated_at: string;
+    }>();
   // An unreadable cache or migrations table settles nothing: the job shows, as before.
   // All three are read whether or not a job is blocked, so the feed's stated read count
   // (src/ops-feed.ts, OPS_FEED_READS) does not move with the data.
@@ -149,7 +179,12 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     if (Array.isArray(parsed)) {
       for (const a of parsed as AwaitingSeat[]) {
-        add(a.namespace, { title: prHoldTitle(a), kind: "pr", link: `https://github.com/${a.repo}/pull/${a.number}`, since: a.at });
+        add(a.namespace, {
+          title: prHoldTitle(a),
+          kind: "pr",
+          link: `https://github.com/${a.repo}/pull/${a.number}`,
+          since: a.at,
+        });
       }
     }
   } catch {
@@ -160,12 +195,22 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
   const snapshot = await readSnapshot(env).catch(() => null);
   for (const ci of snapshot?.ci ?? []) {
     if (ci.latest?.conclusion === "failure") {
-      add(ci.namespace, { title: `CI is failing on ${ci.latest.head_sha.slice(0, 7)}`, kind: "ci", link: ci.latest.url, since: ci.latest.created_at });
+      add(ci.namespace, {
+        title: `CI is failing on ${ci.latest.head_sha.slice(0, 7)}`,
+        kind: "ci",
+        link: ci.latest.url,
+        since: ci.latest.created_at,
+      });
     }
   }
   for (const site of snapshot?.sites ?? []) {
     if (site.state === "down") {
-      add(site.namespace, { title: `${site.name} is down${site.error ? ` (${site.error})` : ""}`, kind: "site-down", link: site.origin, since: site.checked_at });
+      add(site.namespace, {
+        title: `${site.name} is down${site.error ? ` (${site.error})` : ""}`,
+        kind: "site-down",
+        link: site.origin,
+        since: site.checked_at,
+      });
     }
   }
 
@@ -192,7 +237,13 @@ export async function gatherInbox(env: Env, now: Date, namespaces: readonly stri
   }
   for (const [namespace, items] of byNamespace) {
     if (seen.has(namespace)) continue;
-    apps.push({ namespace, name: namespace, count: items.length, severity: severityOf(items), items });
+    apps.push({
+      namespace,
+      name: namespace,
+      count: items.length,
+      severity: severityOf(items),
+      items,
+    });
   }
 
   const all = apps.flatMap((a) => a.items);

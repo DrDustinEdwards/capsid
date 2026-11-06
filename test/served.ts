@@ -14,11 +14,13 @@ export interface Served {
 export function servedAs(op: string): Served[] {
   const out: Served[] = [];
   for (const [tool, single] of Object.entries(SINGLE_TOOLS)) {
-    if (single.op === op) out.push({ tool, action: undefined, requirement: requiredForAction(tool, undefined) });
+    if (single.op === op)
+      out.push({ tool, action: undefined, requirement: requiredForAction(tool, undefined) });
   }
   for (const spec of COMPOSITES) {
     for (const [action, a] of Object.entries(spec.actions)) {
-      if (a.op === op) out.push({ tool: spec.name, action, requirement: requiredForAction(spec.name, action) });
+      if (a.op === op)
+        out.push({ tool: spec.name, action, requirement: requiredForAction(spec.name, action) });
     }
   }
   return out;
@@ -27,9 +29,21 @@ export function servedAs(op: string): Served[] {
 /** Every operation a served tool runs, with the tool and action. */
 export function servedOperations(): Array<Served & { op: string }> {
   const out: Array<Served & { op: string }> = [];
-  for (const [tool, single] of Object.entries(SINGLE_TOOLS)) out.push({ op: single.op, tool, action: undefined, requirement: requiredForAction(tool, undefined) });
+  for (const [tool, single] of Object.entries(SINGLE_TOOLS))
+    out.push({
+      op: single.op,
+      tool,
+      action: undefined,
+      requirement: requiredForAction(tool, undefined),
+    });
   for (const spec of COMPOSITES) {
-    for (const [action, a] of Object.entries(spec.actions)) out.push({ op: a.op, tool: spec.name, action, requirement: requiredForAction(spec.name, action) });
+    for (const [action, a] of Object.entries(spec.actions))
+      out.push({
+        op: a.op,
+        tool: spec.name,
+        action,
+        requirement: requiredForAction(spec.name, action),
+      });
   }
   return out;
 }

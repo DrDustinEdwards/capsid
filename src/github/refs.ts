@@ -23,12 +23,20 @@ async function deleteHeadBranchAfterPr(
   env: Env,
   owner: string,
   repo: string,
-  number: number
-): Promise<{ head_branch: string | null; head_branch_deleted: boolean; head_branch_note?: string }> {
+  number: number,
+): Promise<{
+  head_branch: string | null;
+  head_branch_deleted: boolean;
+  head_branch_note?: string;
+}> {
   try {
     const prResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}`);
     if (!prResp.ok) {
-      return { head_branch: null, head_branch_deleted: false, head_branch_note: `could not read the PR to find its head branch (${prResp.status})` };
+      return {
+        head_branch: null,
+        head_branch_deleted: false,
+        head_branch_note: `could not read the PR to find its head branch (${prResp.status})`,
+      };
     }
     const pr = (await prResp.json()) as {
       head: { ref: string; repo?: { full_name?: string } | null };
@@ -40,18 +48,40 @@ async function deleteHeadBranchAfterPr(
     // anyway. Compared by full_name rather than inferred from the ref.
     const headRepo = pr.head.repo?.full_name;
     if (headRepo && headRepo !== `${owner}/${repo}`) {
-      return { head_branch: branch, head_branch_deleted: false, head_branch_note: `head is on ${headRepo}, not this repo, so it was left alone` };
+      return {
+        head_branch: branch,
+        head_branch_deleted: false,
+        head_branch_note: `head is on ${headRepo}, not this repo, so it was left alone`,
+      };
     }
     if (branch === pr.base.ref) {
-      return { head_branch: branch, head_branch_deleted: false, head_branch_note: "head and base are the same branch, so nothing was deleted" };
+      return {
+        head_branch: branch,
+        head_branch_deleted: false,
+        head_branch_note: "head and base are the same branch, so nothing was deleted",
+      };
     }
     const defaultBranch = await getDefaultBranch(env, owner, repo);
     if (branch === defaultBranch) {
-      return { head_branch: branch, head_branch_deleted: false, head_branch_note: "head is the default branch, which is never deleted" };
+      return {
+        head_branch: branch,
+        head_branch_deleted: false,
+        head_branch_note: "head is the default branch, which is never deleted",
+      };
     }
-    const del = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/refs/heads/${encodePath(branch)}`, { method: "DELETE" });
+    const del = await ghFetch(
+      env,
+      owner,
+      repo,
+      `/repos/${owner}/${repo}/git/refs/heads/${encodePath(branch)}`,
+      { method: "DELETE" },
+    );
     if (!del.ok) {
-      return { head_branch: branch, head_branch_deleted: false, head_branch_note: `delete failed (${del.status}); the PR action itself succeeded` };
+      return {
+        head_branch: branch,
+        head_branch_deleted: false,
+        head_branch_note: `delete failed (${del.status}); the PR action itself succeeded`,
+      };
     }
     return { head_branch: branch, head_branch_deleted: true };
   } catch (err) {
@@ -84,16 +114,21 @@ export async function managePr(
   repoSelector?: string,
   // For a merge: the head sha the caller judged. Sent as `sha`, so GitHub merges only
   // that commit and refuses with 409 if the head moved.
-  expectedSha?: string
+  expectedSha?: string,
 ) {
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
   if (action === "merge") {
     const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}/merge`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(expectedSha ? { merge_method: mergeMethod, sha: expectedSha } : { merge_method: mergeMethod }),
+      body: JSON.stringify(
+        expectedSha
+          ? { merge_method: mergeMethod, sha: expectedSha }
+          : { merge_method: mergeMethod },
+      ),
     });
-    if (resp.status === 409 && expectedSha) throw new HeadMovedError(expectedSha, await resp.text());
+    if (resp.status === 409 && expectedSha)
+      throw new HeadMovedError(expectedSha, await resp.text());
     if (!resp.ok) throw new Error(`merge failed (${resp.status}): ${await resp.text()}`);
     const data = (await resp.json()) as { sha: string; merged: boolean; message: string };
     // A merge changes the base branch's contents, so it is a write to every path the
@@ -119,7 +154,14 @@ export async function managePr(
   if (!resp.ok) throw new Error(`close failed (${resp.status}): ${await resp.text()}`);
   const data = (await resp.json()) as { number: number; state: string; html_url: string };
   const cleanup = await deleteHeadBranchAfterPr(env, owner, repo, number);
-  return { repo: `${owner}/${repo}`, number: data.number, action: "close", state: data.state, url: data.html_url, ...cleanup };
+  return {
+    repo: `${owner}/${repo}`,
+    number: data.number,
+    action: "close",
+    state: data.state,
+    url: data.html_url,
+    ...cleanup,
+  };
 }
 
 // The read tools below expose what the App installation token already reaches. Each
@@ -139,9 +181,18 @@ export async function repoRefs(env: Env, namespace: string, repoSelector?: strin
     cachedGet(env, owner, repo, `${base}/tags?per_page=100`),
     cachedGet(env, owner, repo, `${base}/pulls?state=open&per_page=100`),
   ]);
-  if (!branchResp.ok) throw new Error(`repo_refs branches failed (${branchResp.status}): ${(await branchResp.text()).slice(0, 200)}`);
-  if (!tagResp.ok) throw new Error(`repo_refs tags failed (${tagResp.status}): ${(await tagResp.text()).slice(0, 200)}`);
-  if (!prResp.ok) throw new Error(`repo_refs pulls failed (${prResp.status}): ${(await prResp.text()).slice(0, 200)}`);
+  if (!branchResp.ok)
+    throw new Error(
+      `repo_refs branches failed (${branchResp.status}): ${(await branchResp.text()).slice(0, 200)}`,
+    );
+  if (!tagResp.ok)
+    throw new Error(
+      `repo_refs tags failed (${tagResp.status}): ${(await tagResp.text()).slice(0, 200)}`,
+    );
+  if (!prResp.ok)
+    throw new Error(
+      `repo_refs pulls failed (${prResp.status}): ${(await prResp.text()).slice(0, 200)}`,
+    );
 
   const branchRows = (await branchResp.json()) as Array<{ name: string; commit: { sha: string } }>;
   const tagRows = (await tagResp.json()) as Array<{ name: string; commit: { sha: string } }>;
@@ -188,7 +239,7 @@ export async function repoRefs(env: Env, namespace: string, repoSelector?: strin
         env,
         owner,
         repo,
-        `${base}/compare/${encodeURIComponent(defaultBranch)}...${encodeURIComponent(b.name)}`
+        `${base}/compare/${encodeURIComponent(defaultBranch)}...${encodeURIComponent(b.name)}`,
       );
       if (cmp.ok) {
         const c = (await cmp.json()) as {
@@ -202,7 +253,7 @@ export async function repoRefs(env: Env, namespace: string, repoSelector?: strin
         if (last) row.committed_date = last.commit.committer.date;
       }
       return row;
-    })
+    }),
   );
 
   return {
@@ -226,7 +277,10 @@ export const REPO_HISTORY_DEFAULT_LIMIT = 20;
 export const REPO_HISTORY_MAX_LIMIT = 100;
 export const REPO_PATCH_BUDGET = 200 * 1024;
 
-function summarizeCommit(c: { sha: string; commit: { message: string; author: { name: string; date: string } } }) {
+function summarizeCommit(c: {
+  sha: string;
+  commit: { message: string; author: { name: string; date: string } };
+}) {
   return {
     sha: c.sha,
     date: c.commit.author.date,
@@ -240,13 +294,25 @@ function summarizeCommit(c: { sha: string; commit: { message: string; author: { 
 // Patch bodies are OFF by default and budgeted when on. The file list is always
 // returned: names, status and line counts answer most questions and cost nothing.
 function filesWithBudget(
-  files: Array<{ filename: string; status: string; additions: number; deletions: number; patch?: string }>,
-  wantPatch: boolean
+  files: Array<{
+    filename: string;
+    status: string;
+    additions: number;
+    deletions: number;
+    patch?: string;
+  }>,
+  wantPatch: boolean,
 ) {
   let spent = 0;
   let truncated = false;
   const out = files.map((f) => {
-    const row: { path: string; status: string; additions: number; deletions: number; patch?: string } = {
+    const row: {
+      path: string;
+      status: string;
+      additions: number;
+      deletions: number;
+      patch?: string;
+    } = {
       path: f.filename,
       status: f.status,
       additions: f.additions,
@@ -271,36 +337,75 @@ function filesWithBudget(
 export async function repoHistory(
   env: Env,
   namespace: string,
-  args: { ref?: string; base?: string; head?: string; sha?: string; limit?: number; patch?: boolean },
-  repoSelector?: string
+  args: {
+    ref?: string;
+    base?: string;
+    head?: string;
+    sha?: string;
+    limit?: number;
+    patch?: boolean;
+  },
+  repoSelector?: string,
 ) {
-  for (const [kind, value] of [["ref", args.ref], ["base", args.base], ["head", args.head], ["sha", args.sha]] as const) {
+  for (const [kind, value] of [
+    ["ref", args.ref],
+    ["base", args.base],
+    ["head", args.head],
+    ["sha", args.sha],
+  ] as const) {
     if (value) assertRepoArg(kind, value);
   }
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
   const apiBase = `/repos/${owner}/${repo}`;
 
-  if (args.base && !args.head) throw new Error("repo_history: base was given without head; a comparison needs both");
-  if (args.head && !args.base) throw new Error("repo_history: head was given without base; a comparison needs both");
+  if (args.base && !args.head)
+    throw new Error("repo_history: base was given without head; a comparison needs both");
+  if (args.head && !args.base)
+    throw new Error("repo_history: head was given without base; a comparison needs both");
   const hasCompare = Boolean(args.base && args.head);
-  const asked = [args.sha ? "sha" : null, hasCompare ? "base+head" : null, args.ref ? "ref" : null].filter(Boolean);
+  const asked = [
+    args.sha ? "sha" : null,
+    hasCompare ? "base+head" : null,
+    args.ref ? "ref" : null,
+  ].filter(Boolean);
   if (asked.length > 1) {
-    throw new Error(`repo_history: ${asked.join(" and ")} are different questions; pass exactly one of sha, base+head, or ref`);
+    throw new Error(
+      `repo_history: ${asked.join(" and ")} are different questions; pass exactly one of sha, base+head, or ref`,
+    );
   }
   if (asked.length === 0) {
-    throw new Error("repo_history: pass ref for commits on a ref, base and head to compare, or sha for one commit");
+    throw new Error(
+      "repo_history: pass ref for commits on a ref, base and head to compare, or sha for one commit",
+    );
   }
 
-  const limit = Math.min(Math.max(args.limit ?? REPO_HISTORY_DEFAULT_LIMIT, 1), REPO_HISTORY_MAX_LIMIT);
+  const limit = Math.min(
+    Math.max(args.limit ?? REPO_HISTORY_DEFAULT_LIMIT, 1),
+    REPO_HISTORY_MAX_LIMIT,
+  );
 
   if (args.sha) {
-    const resp = await cachedGet(env, owner, repo, `${apiBase}/commits/${encodeURIComponent(args.sha)}`);
-    if (!resp.ok) throw new Error(`repo_history commit failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
+    const resp = await cachedGet(
+      env,
+      owner,
+      repo,
+      `${apiBase}/commits/${encodeURIComponent(args.sha)}`,
+    );
+    if (!resp.ok)
+      throw new Error(
+        `repo_history commit failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`,
+      );
     const c = (await resp.json()) as {
       sha: string;
       commit: { message: string; author: { name: string; date: string } };
       parents: Array<{ sha: string }>;
-      files?: Array<{ filename: string; status: string; additions: number; deletions: number; patch?: string }>;
+      files?: Array<{
+        filename: string;
+        status: string;
+        additions: number;
+        deletions: number;
+        patch?: string;
+      }>;
     };
     return {
       repo: full,
@@ -321,16 +426,28 @@ export async function repoHistory(
       env,
       owner,
       repo,
-      `${apiBase}/compare/${encodeURIComponent(args.base as string)}...${encodeURIComponent(args.head as string)}`
+      `${apiBase}/compare/${encodeURIComponent(args.base as string)}...${encodeURIComponent(args.head as string)}`,
     );
-    if (!resp.ok) throw new Error(`repo_history compare failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
+    if (!resp.ok)
+      throw new Error(
+        `repo_history compare failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`,
+      );
     const c = (await resp.json()) as {
       status: string;
       ahead_by: number;
       behind_by: number;
       total_commits: number;
-      commits: Array<{ sha: string; commit: { message: string; author: { name: string; date: string } } }>;
-      files?: Array<{ filename: string; status: string; additions: number; deletions: number; patch?: string }>;
+      commits: Array<{
+        sha: string;
+        commit: { message: string; author: { name: string; date: string } };
+      }>;
+      files?: Array<{
+        filename: string;
+        status: string;
+        additions: number;
+        deletions: number;
+        patch?: string;
+      }>;
     };
     return {
       repo: full,
@@ -346,10 +463,27 @@ export async function repoHistory(
     };
   }
 
-  const resp = await cachedGet(env, owner, repo, `${apiBase}/commits?sha=${encodeURIComponent(args.ref as string)}&per_page=${limit}`);
-  if (!resp.ok) throw new Error(`repo_history commits failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
-  const rows = (await resp.json()) as Array<{ sha: string; commit: { message: string; author: { name: string; date: string } } }>;
-  return { repo: full, mode: "commits" as const, ref: args.ref, limit, commits: rows.map(summarizeCommit) };
+  const resp = await cachedGet(
+    env,
+    owner,
+    repo,
+    `${apiBase}/commits?sha=${encodeURIComponent(args.ref as string)}&per_page=${limit}`,
+  );
+  if (!resp.ok)
+    throw new Error(
+      `repo_history commits failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`,
+    );
+  const rows = (await resp.json()) as Array<{
+    sha: string;
+    commit: { message: string; author: { name: string; date: string } };
+  }>;
+  return {
+    repo: full,
+    mode: "commits" as const,
+    ref: args.ref,
+    limit,
+    commits: rows.map(summarizeCommit),
+  };
 }
 
 /** Delete a branch. Three refusals; force lifts only two, never the default branch. */
@@ -358,7 +492,7 @@ export async function deleteBranch(
   namespace: string,
   branch: string,
   opts: { force?: boolean } = {},
-  repoSelector?: string
+  repoSelector?: string,
 ) {
   assertRepoArg("branch", branch);
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
@@ -368,31 +502,41 @@ export async function deleteBranch(
   // Not liftable by force: a flag that could delete a repo's default branch
   // eventually will, so this is checked before force is read.
   if (branch === defaultBranch) {
-    throw new Error(`delete_branch refuses: ${branch} is the default branch of ${full}. force does not lift this refusal.`);
+    throw new Error(
+      `delete_branch refuses: ${branch} is the default branch of ${full}. force does not lift this refusal.`,
+    );
   }
 
   if (!opts.force) {
-    const prResp = await cachedGet(env, owner, repo, `${base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`);
+    const prResp = await cachedGet(
+      env,
+      owner,
+      repo,
+      `${base}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`,
+    );
     // Fail closed: a lookup that errors is not "no open PRs". Skipping the refusal on
     // a 5xx would delete the branches this check protects whenever GitHub is flaky.
     if (!prResp.ok) {
       throw new Error(
-        `delete_branch refuses: could not verify open pull requests for ${branch} on ${full} (${prResp.status}), so the open-PR refusal cannot run. Retry, or pass force: true to delete without the check.`
+        `delete_branch refuses: could not verify open pull requests for ${branch} on ${full} (${prResp.status}), so the open-PR refusal cannot run. Retry, or pass force: true to delete without the check.`,
       );
     }
     const prs = (await prResp.json()) as Array<{ number: number; html_url: string }>;
     if (prs.length > 0) {
       throw new Error(
-        `delete_branch refuses: ${branch} has open pull request #${prs[0].number} (${prs[0].html_url}). Pass force: true to delete it anyway.`
+        `delete_branch refuses: ${branch} has open pull request #${prs[0].number} (${prs[0].html_url}). Pass force: true to delete it anyway.`,
       );
     }
   }
 
-  const resp = await ghFetch(env, owner, repo, `${base}/git/refs/heads/${encodePath(branch)}`, { method: "DELETE" });
+  const resp = await ghFetch(env, owner, repo, `${base}/git/refs/heads/${encodePath(branch)}`, {
+    method: "DELETE",
+  });
   if (resp.status === 422 || resp.status === 404) {
     throw new Error(`delete_branch failed: ${branch} does not exist on ${full} (${resp.status})`);
   }
-  if (!resp.ok) throw new Error(`delete_branch failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
+  if (!resp.ok)
+    throw new Error(`delete_branch failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
   await invalidateRepoReads(env, owner, repo);
   return { repo: full, branch, deleted: true, forced: opts.force === true };
 }

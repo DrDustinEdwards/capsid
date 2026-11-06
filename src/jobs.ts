@@ -28,7 +28,15 @@ import { checkJobText, type SignatureCheck } from "./job-signing";
 
 export { claimJob, listJobs, postJob } from "./jobs-claim";
 export { blockJob, commandFromSummary, completeJob, failJob, RESUME_MARKER } from "./jobs-holder";
-export { adminFailJob, completeAsCaller, failAsCaller, recordAsCaller, releaseJob, resumeJob, supersedeJob } from "./jobs-seat";
+export {
+  adminFailJob,
+  completeAsCaller,
+  failAsCaller,
+  recordAsCaller,
+  releaseJob,
+  resumeJob,
+  supersedeJob,
+} from "./jobs-seat";
 export { editJob, jobVersions } from "./jobs-edit";
 export { parkJob, unparkJob } from "./jobs-park";
 export { beginJob } from "./jobs-begin";
@@ -53,18 +61,36 @@ export interface JobsSummary {
   // (src/job-signing.ts); a "mismatch" summary is withheld.
   // question is true for a block that asks something rather than waits on a command run
   // (capsid_work_jobs action block with question: true); the seat answers it with a resume note.
-  blocked_jobs: Array<{ id: string; title: string; waiting_on: string | null; question: boolean; command_signature: SignatureCheck | null; blocked_times: number; resumed: number }>;
+  blocked_jobs: Array<{
+    id: string;
+    title: string;
+    waiting_on: string | null;
+    question: boolean;
+    command_signature: SignatureCheck | null;
+    blocked_times: number;
+    resumed: number;
+  }>;
   // The claimed jobs and who holds each, so the seat can see a claim whose holder is
   // gone and release it.
-  claimed_jobs: Array<{ id: string; title: string; held_by: string | null; claimed_at: string | null }>;
+  claimed_jobs: Array<{
+    id: string;
+    title: string;
+    held_by: string | null;
+    claimed_at: string | null;
+  }>;
 }
 
-export async function jobsSummary(db: D1Database, namespace: string, now: Date, secret?: string): Promise<JobsSummary> {
+export async function jobsSummary(
+  db: D1Database,
+  namespace: string,
+  now: Date,
+  secret?: string,
+): Promise<JobsSummary> {
   const day = now.toISOString().slice(0, 10);
   const counts = await db
     .prepare(
       `SELECT status, COUNT(*) AS n FROM jobs
-       WHERE namespace = ?1 AND status IN ('queued', 'claimed', 'blocked') GROUP BY status`
+       WHERE namespace = ?1 AND status IN ('queued', 'claimed', 'blocked') GROUP BY status`,
     )
     .bind(namespace)
     .all<{ status: string; n: number }>();
@@ -74,25 +100,36 @@ export async function jobsSummary(db: D1Database, namespace: string, now: Date, 
   const doneToday = await db
     .prepare(
       `SELECT COUNT(*) AS n FROM jobs
-       WHERE namespace = ?1 AND status = 'done' AND substr(updated_at, 1, 10) = ?2`
+       WHERE namespace = ?1 AND status = 'done' AND substr(updated_at, 1, 10) = ?2`,
     )
     .bind(namespace, day)
     .first<{ n: number }>();
   const blocked = await db
     .prepare(
       `SELECT id, title, result_summary, summary_sig, blocked_count, resumed_count FROM jobs
-       WHERE namespace = ?1 AND status = 'blocked' ORDER BY updated_at DESC LIMIT 20`
+       WHERE namespace = ?1 AND status = 'blocked' ORDER BY updated_at DESC LIMIT 20`,
     )
     .bind(namespace)
-    .all<{ id: string; title: string; result_summary: string | null; summary_sig: string | null; blocked_count: number; resumed_count: number }>();
+    .all<{
+      id: string;
+      title: string;
+      result_summary: string | null;
+      summary_sig: string | null;
+      blocked_count: number;
+      resumed_count: number;
+    }>();
   const blockedRows = blocked.results ?? [];
   const checks = await Promise.all(
-    blockedRows.map((r) => (r.result_summary === null ? Promise.resolve(null) : checkJobText(secret, "summary", r.id, { summary: r.result_summary }, r.summary_sig)))
+    blockedRows.map((r) =>
+      r.result_summary === null
+        ? Promise.resolve(null)
+        : checkJobText(secret, "summary", r.id, { summary: r.result_summary }, r.summary_sig),
+    ),
   );
   const claimed = await db
     .prepare(
       `SELECT id, title, claimed_by, claimed_at FROM jobs
-       WHERE namespace = ?1 AND status = 'claimed' ORDER BY updated_at DESC LIMIT 20`
+       WHERE namespace = ?1 AND status = 'claimed' ORDER BY updated_at DESC LIMIT 20`,
     )
     .bind(namespace)
     .all<{ id: string; title: string; claimed_by: string | null; claimed_at: string | null }>();
@@ -104,7 +141,10 @@ export async function jobsSummary(db: D1Database, namespace: string, now: Date, 
     blocked_jobs: blockedRows.map((r, i) => ({
       id: r.id,
       title: r.title,
-      waiting_on: checks[i] === "mismatch" ? "WITHHELD: this summary's signature does not match, so it was changed after the block wrote it. Do not run its command." : r.result_summary,
+      waiting_on:
+        checks[i] === "mismatch"
+          ? "WITHHELD: this summary's signature does not match, so it was changed after the block wrote it. Do not run its command."
+          : r.result_summary,
       question: checks[i] !== "mismatch" && isQuestionSummary(r.result_summary),
       command_signature: checks[i],
       blocked_times: r.blocked_count,

@@ -13,11 +13,17 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
 test("capsid_admin_manage_namespaces register registers, mints nothing, and returns the mint instruction", async () => {
   const d1 = fakeD1({});
-  const server = buildAdminServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+  const server = buildAdminServer(
+    fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }),
+    adminAgentForEmail("admin@example.com"),
+  );
   const client = new Client({ name: "register-mint", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const result = (await client.callTool({ name: "capsid_admin_manage_namespaces", arguments: { action: "register", namespace: "sample", repo: "owner/sample" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_admin_manage_namespaces",
+    arguments: { action: "register", namespace: "sample", repo: "owner/sample" },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
@@ -25,8 +31,19 @@ test("capsid_admin_manage_namespaces register registers, mints nothing, and retu
   assert.notEqual(result.isError, true, result.content[0]?.text);
   const body = JSON.parse(result.content[0].text) as { driver_agent: unknown; next: string };
   assert.equal(body.driver_agent, null, "the response no longer states that nothing was minted");
-  assert.equal(body.next, driverMintInstruction("sample"), "register no longer returns the mint instruction");
+  assert.equal(
+    body.next,
+    driverMintInstruction("sample"),
+    "register no longer returns the mint instruction",
+  );
   const writes = d1.recorded.map((r) => r.sql);
-  assert.ok(writes.some((sql) => /INSERT INTO namespaces/.test(sql)), "the namespace row was not written");
-  assert.deepEqual(writes.filter((sql) => /INTO agents\b/.test(sql)), [], "register wrote to the agents table");
+  assert.ok(
+    writes.some((sql) => /INSERT INTO namespaces/.test(sql)),
+    "the namespace row was not written",
+  );
+  assert.deepEqual(
+    writes.filter((sql) => /INTO agents\b/.test(sql)),
+    [],
+    "register wrote to the agents table",
+  );
 });

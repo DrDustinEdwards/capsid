@@ -13,26 +13,51 @@ const BODY = "# Policy\n\n- version: 7\n- enabled: false\n";
 
 function envWith(body: string | null) {
   const { db } = fakeD1({
-    documents: body === null ? [] : [{ namespace: "capsid", path: "policy/example.md", title: "policy", body }],
+    documents:
+      body === null
+        ? []
+        : [{ namespace: "capsid", path: "policy/example.md", title: "policy", body }],
   });
   return fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
 }
 
 test("readSignedPolicy returns the signed body and not the frontmatter", async () => {
-  const read = await readSignedPolicy(envWith(await signTaskBody(SECRET, BODY)), "policy/example.md", "example policy", "nothing happens");
+  const read = await readSignedPolicy(
+    envWith(await signTaskBody(SECRET, BODY)),
+    "policy/example.md",
+    "example policy",
+    "nothing happens",
+  );
   assert.deepEqual(read, { body: BODY });
 });
 
 test("readSignedPolicy refuses an absent, unsigned or edited document", async () => {
-  const absent = await readSignedPolicy(envWith(null), "policy/example.md", "example policy", "nothing happens");
-  assert.deepEqual(absent, { error: "no example policy at capsid/policy/example.md, so nothing happens." });
+  const absent = await readSignedPolicy(
+    envWith(null),
+    "policy/example.md",
+    "example policy",
+    "nothing happens",
+  );
+  assert.deepEqual(absent, {
+    error: "no example policy at capsid/policy/example.md, so nothing happens.",
+  });
 
-  const unsigned = await readSignedPolicy(envWith(BODY), "policy/example.md", "example policy", "nothing happens");
+  const unsigned = await readSignedPolicy(
+    envWith(BODY),
+    "policy/example.md",
+    "example policy",
+    "nothing happens",
+  );
   assert.ok("error" in unsigned);
   assert.match(unsigned.error, /carries no capsid-task-signature/);
 
   const edited = (await signTaskBody(SECRET, BODY)).replace("- enabled: false", "- enabled: true");
-  const tampered = await readSignedPolicy(envWith(edited), "policy/example.md", "example policy", "nothing happens");
+  const tampered = await readSignedPolicy(
+    envWith(edited),
+    "policy/example.md",
+    "example policy",
+    "nothing happens",
+  );
   assert.ok("error" in tampered);
   assert.match(tampered.error, /does not match its body/);
 });
@@ -50,8 +75,15 @@ test("neither policy loader reads, verifies or parses a policy field on its own"
   // The auto-merge loader is two modules, read as one.
   const files = ["src/auto-merge-policy.ts + src/auto-merge-tick.ts", "src/gate-policy.ts"];
   for (const file of files) {
-    const src = file.split(" + ").map((path) => readFileSync(path, "utf8")).join("\n");
-    assert.match(src, /readSignedPolicy\(/, `${file} does not read its policy through readSignedPolicy`);
+    const src = file
+      .split(" + ")
+      .map((path) => readFileSync(path, "utf8"))
+      .join("\n");
+    assert.match(
+      src,
+      /readSignedPolicy\(/,
+      `${file} does not read its policy through readSignedPolicy`,
+    );
     assert.doesNotMatch(src, /FROM documents/, `${file} queries the documents table itself`);
     assert.doesNotMatch(src, /verifySignedBody\(/, `${file} calls the verifier itself`);
     assert.doesNotMatch(src, /function field\(/, `${file} defines its own field parser`);

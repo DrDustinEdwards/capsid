@@ -1,5 +1,11 @@
 {
-  "mcp": { "entry": "test/conformance/entry.ts", "config": "test/conformance/wrangler.conformance.jsonc", "port": 8789, "persist": ".wrangler/state-conformance", "migrate": "DB" },
+  "mcp": {
+    "entry": "test/conformance/entry.ts",
+    "config": "test/conformance/wrangler.conformance.jsonc",
+    "port": 8789,
+    "persist": ".wrangler/state-conformance",
+    "migrate": "DB"
+  },
   "auth": {
     "entry": "test/conformance/auth-entry.ts",
     "config": "test/conformance/wrangler.conformance.jsonc",

@@ -5,7 +5,14 @@ import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { hasSites, type Kind } from "../lib/derive";
 import { age, agentLabel, ago, ms } from "../lib/format";
-import { approveAllRequest, approveRequest, canApprove, closeRequest, prAnchor, seatFor } from "../lib/pr-actions";
+import {
+  approveAllRequest,
+  approveRequest,
+  canApprove,
+  closeRequest,
+  prAnchor,
+  seatFor,
+} from "../lib/pr-actions";
 import type { InboxApp, InboxItem, OpsAwaitingSeat, OpsJob, PortalNamespace } from "../types";
 import { InboxMark, St } from "../ui/icons";
 import { Empty } from "capsomer/react/empty";
@@ -35,7 +42,9 @@ const KIND: Record<string, { label: string; kind: Kind } | undefined> = {
 
 // The digest strip loads after first paint, so the home's first screen is not held up by
 // its read.
-const SinceLastLooked = lazy(() => import("./Overnight").then((m) => ({ default: m.SinceLastLooked })));
+const SinceLastLooked = lazy(() =>
+  import("./Overnight").then((m) => ({ default: m.SinceLastLooked })),
+);
 // The two charts load only when Trends is opened: their Enarratio code and their reads stay
 // off the first screen.
 const MinutesTile = trendChart("MinutesTile");
@@ -65,7 +74,11 @@ type Entry = { app: InboxApp; item: InboxItem };
 // (GET /portal/api/namespaces), read again with each feed so a reset drops its row.
 function useStops(): { stops: PortalNamespace[]; error: string | null; reread: () => void } {
   const load = useAnswer([LIVE, "namespaces"], fetchNamespaces);
-  return { stops: load.data?.namespaces.filter((n) => n.breaker.open) ?? [], error: load.error, reread: load.reread };
+  return {
+    stops: load.data?.namespaces.filter((n) => n.breaker.open) ?? [],
+    error: load.error,
+    reread: load.reread,
+  };
 }
 
 function Waiting() {
@@ -85,7 +98,11 @@ function Waiting() {
       id="waiting"
       count={total}
       src={`read ${ago(ms(inbox.generated), now)}`}
-      footer={quiet.length > 0 ? <span className="faint">Nothing waiting: {quiet.map((a) => a.name).join(", ")}</span> : undefined}
+      footer={
+        quiet.length > 0 ? (
+          <span className="faint">Nothing waiting: {quiet.map((a) => a.name).join(", ")}</span>
+        ) : undefined
+      }
     >
       {error && (
         <div className="callout warn" role="status">
@@ -108,7 +125,19 @@ function Waiting() {
 
 // One kind's rows under its heading. With batch, the heading carries a "select all" box and,
 // once a row is ticked, the button that decides the ticked rows together.
-function Group({ id, title, count, batch, children }: { id: string; title: string; count: number; batch?: ReactNode; children: ReactNode }) {
+function Group({
+  id,
+  title,
+  count,
+  batch,
+  children,
+}: {
+  id: string;
+  title: string;
+  count: number;
+  batch?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section className="wgroup" aria-labelledby={`${id}-h`} data-group={id}>
       <div className="wgroup-head">
@@ -123,18 +152,32 @@ function Group({ id, title, count, batch, children }: { id: string; title: strin
 }
 
 // The ticked keys of one group, kept to the rows still shown.
-function useTicks(keys: string[]): { ticked: string[]; has: (k: string) => boolean; flip: (k: string) => void; all: (on: boolean) => void } {
+function useTicks(keys: string[]): {
+  ticked: string[];
+  has: (k: string) => boolean;
+  flip: (k: string) => void;
+  all: (on: boolean) => void;
+} {
   const [set, setSet] = useState<ReadonlySet<string>>(new Set());
   const ticked = keys.filter((k) => set.has(k));
   return {
     ticked,
     has: (k) => set.has(k),
-    flip: (k) => setSet((s) => (s.has(k) ? new Set([...s].filter((x) => x !== k)) : new Set([...s, k]))),
+    flip: (k) =>
+      setSet((s) => (s.has(k) ? new Set([...s].filter((x) => x !== k)) : new Set([...s, k]))),
     all: (on) => setSet(on ? new Set(keys) : new Set()),
   };
 }
 
-function SelectAll({ label, keys, ticks }: { label: string; keys: string[]; ticks: ReturnType<typeof useTicks> }) {
+function SelectAll({
+  label,
+  keys,
+  ticks,
+}: {
+  label: string;
+  keys: string[];
+  ticks: ReturnType<typeof useTicks>;
+}) {
   const n = ticks.ticked.length;
   return (
     <label className="wselect">
@@ -192,7 +235,13 @@ function PrGroup({ entries }: { entries: Entry[] }) {
           <div className="wbatch">
             <SelectAll label="Select all" keys={keys} ticks={ticks} />
             {chosen.length > 0 && (
-              <button type="button" className="btn primary" onClick={() => confirm({ ...approveAllRequest(chosen), onDone: () => ticks.all(false) })}>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() =>
+                  confirm({ ...approveAllRequest(chosen), onDone: () => ticks.all(false) })
+                }
+              >
                 Approve {chosen.length} selected
               </button>
             )}
@@ -201,19 +250,43 @@ function PrGroup({ entries }: { entries: Entry[] }) {
       }
     >
       {rows.map(({ app, item, seat }, i) => (
-        <PrRow key={`${item.link ?? item.title}|${i}`} app={app} item={item} seat={seat} ticks={approvable.length > 1 ? ticks : null} />
+        <PrRow
+          key={`${item.link ?? item.title}|${i}`}
+          app={app}
+          item={item}
+          seat={seat}
+          ticks={approvable.length > 1 ? ticks : null}
+        />
       ))}
     </Group>
   );
 }
 
-function PrRow({ app, item, seat, ticks }: { app: InboxApp; item: InboxItem; seat: OpsAwaitingSeat | undefined; ticks: ReturnType<typeof useTicks> | null }) {
+function PrRow({
+  app,
+  item,
+  seat,
+  ticks,
+}: {
+  app: InboxApp;
+  item: InboxItem;
+  seat: OpsAwaitingSeat | undefined;
+  ticks: ReturnType<typeof useTicks> | null;
+}) {
   const { now, confirm } = useApp();
   const name = seat ? `${seat.repo} #${seat.number}` : item.title;
   const ok = seat && canApprove(seat) ? seat : null;
   return (
     <li className="wrow" data-row="" data-kind="pr" id={seat ? `w-${prAnchor(seat)}` : undefined}>
-      {ticks && ok ? <Tick label={`Select ${name}`} on={ticks.has(prAnchor(ok))} flip={() => ticks.flip(prAnchor(ok))} /> : ticks ? <span className="wtick" /> : null}
+      {ticks && ok ? (
+        <Tick
+          label={`Select ${name}`}
+          on={ticks.has(prAnchor(ok))}
+          flip={() => ticks.flip(prAnchor(ok))}
+        />
+      ) : ticks ? (
+        <span className="wtick" />
+      ) : null}
       <div className="wmain">
         <b>{item.title}</b>
         <Meta>
@@ -224,16 +297,32 @@ function PrRow({ app, item, seat, ticks }: { app: InboxApp; item: InboxItem; sea
       </div>
       <div className="wact">
         {ok && (
-          <button type="button" className="btn primary" aria-label={`Approve ${name}`} onClick={() => confirm(approveRequest(ok))}>
+          <button
+            type="button"
+            className="btn primary"
+            aria-label={`Approve ${name}`}
+            onClick={() => confirm(approveRequest(ok))}
+          >
             Approve
           </button>
         )}
         {seat && (
-          <button type="button" className="btn" aria-label={`Close ${name}`} onClick={() => confirm(closeRequest(seat))}>
+          <button
+            type="button"
+            className="btn"
+            aria-label={`Close ${name}`}
+            onClick={() => confirm(closeRequest(seat))}
+          >
             Close
           </button>
         )}
-        {seat && !ok && <span className="faint wnote">{seat.class === "typed" ? "Approve it by typing its number in chat." : "Not approvable here."}</span>}
+        {seat && !ok && (
+          <span className="faint wnote">
+            {seat.class === "typed"
+              ? "Approve it by typing its number in chat."
+              : "Not approvable here."}
+          </span>
+        )}
       </div>
     </li>
   );
@@ -266,19 +355,32 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
   const blocked = j?.status === "blocked";
   const send = () => {
     const text = reply.trim();
-    if (!text) return setHint(question ? "Type your answer first." : "Say what you did or approved first.");
+    if (!text)
+      return setHint(question ? "Type your answer first." : "Say what you did or approved first.");
     if (!j) return;
     setHint(null);
-    confirm({ action: "resume_job", params: { id: j.id, reason: text }, title: `${question ? "Answer" : "Resume job"}: ${j.title}`, onDone: () => (setReplying(false), setReply("")) });
+    confirm({
+      action: "resume_job",
+      params: { id: j.id, reason: text },
+      title: `${question ? "Answer" : "Resume job"}: ${j.title}`,
+      onDone: () => (setReplying(false), setReply("")),
+    });
   };
   return (
-    <li className="wrow" data-row="" data-kind={question ? "question" : "blocked-job"} data-job={item.job}>
+    <li
+      className="wrow"
+      data-row=""
+      data-kind={question ? "question" : "blocked-job"}
+      data-job={item.job}
+    >
       <div className="wmain">
         <InboxMark kind={question ? "question" : "blocked-job"} tone="warn">
           {question ? "Question" : "Blocked"}
         </InboxMark>
         <b>{item.title}</b>
-        {j?.waits_on && <p className="wask">{question ? `Asks: ${asks(j)}` : `Waits on: ${j.waits_on}`}</p>}
+        {j?.waits_on && (
+          <p className="wask">{question ? `Asks: ${asks(j)}` : `Waits on: ${j.waits_on}`}</p>
+        )}
         <Meta>
           {app.name} · waiting {age(ms(item.since), now)}
           {j?.claimed_by ? ` · ${agentLabel(j.claimed_by)}` : ""}
@@ -300,8 +402,20 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
               send();
             }}
           >
-            <label htmlFor={`${box}-text`}>{question ? "Your answer, sent to its driver" : "What you did or approved, sent to its driver"}</label>
-            <textarea id={`${box}-text`} rows={3} value={reply} autoFocus aria-invalid={hint ? true : undefined} aria-describedby={hint ? `${box}-hint` : undefined} onChange={(e) => (setReply(e.target.value), setHint(null))} />
+            <label htmlFor={`${box}-text`}>
+              {question
+                ? "Your answer, sent to its driver"
+                : "What you did or approved, sent to its driver"}
+            </label>
+            <textarea
+              id={`${box}-text`}
+              rows={3}
+              value={reply}
+              autoFocus
+              aria-invalid={hint ? true : undefined}
+              aria-describedby={hint ? `${box}-hint` : undefined}
+              onChange={(e) => (setReply(e.target.value), setHint(null))}
+            />
             {hint && (
               <span className="err" id={`${box}-hint`} role="alert">
                 {hint}
@@ -311,7 +425,11 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
               <button type="submit" className="btn primary">
                 Send
               </button>
-              <button type="button" className="btn" onClick={() => (setReplying(false), setHint(null))}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => (setReplying(false), setHint(null))}
+              >
                 Cancel
               </button>
             </div>
@@ -320,7 +438,12 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
       </div>
       <div className="wact">
         {blocked && !replying && (
-          <button type="button" className="btn primary" aria-label={`${verb} ${item.title}`} onClick={() => setReplying(true)}>
+          <button
+            type="button"
+            className="btn primary"
+            aria-label={`${verb} ${item.title}`}
+            onClick={() => setReplying(true)}
+          >
             {verb}
           </button>
         )}
@@ -342,11 +465,24 @@ function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => 
             <St kind="crit">Paused</St>
             <b>{n.namespace}</b>
             <Meta>
-              {n.breaker.failed} jobs failed since {n.breaker.since} UTC. No job here starts until you reset it.
+              {n.breaker.failed} jobs failed since {n.breaker.since} UTC. No job here starts until
+              you reset it.
             </Meta>
           </div>
           <div className="wact">
-            <button type="button" className="btn primary" aria-label={`Reset ${n.namespace}`} onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Restart the queue for ${n.namespace}`, onDone: onReset })}>
+            <button
+              type="button"
+              className="btn primary"
+              aria-label={`Reset ${n.namespace}`}
+              onClick={() =>
+                confirm({
+                  action: "reset_breaker",
+                  params: { namespace: n.namespace },
+                  title: `Restart the queue for ${n.namespace}`,
+                  onDone: onReset,
+                })
+              }
+            >
               Reset
             </button>
           </div>
@@ -400,13 +536,27 @@ function WeeklyDigest() {
   if (open.length === 0) return null;
   const sites = [...new Set(open.map((f) => f.namespace))].sort();
   return (
-    <Panel title="Weekly digest" id="weekly-digest" section="Weekly digest" count={open.length} src="watcher findings that post no job">
+    <Panel
+      title="Weekly digest"
+      id="weekly-digest"
+      section="Weekly digest"
+      count={open.length}
+      src="watcher findings that post no job"
+    >
       {sites.map((site) => (
-        <section className="wgroup" key={site} aria-label={`Weekly digest, ${site}`} data-digest-site={site}>
+        <section
+          className="wgroup"
+          key={site}
+          aria-label={`Weekly digest, ${site}`}
+          data-digest-site={site}
+        >
           <div className="wgroup-head">
             <h3>
               {site}
-              <span className="num faint"> {open.filter((f) => f.namespace === site).length} open</span>
+              <span className="num faint">
+                {" "}
+                {open.filter((f) => f.namespace === site).length} open
+              </span>
             </h3>
           </div>
           <ul className="wlist">
@@ -450,4 +600,3 @@ function Trends() {
     </details>
   );
 }
-

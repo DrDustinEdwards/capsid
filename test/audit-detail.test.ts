@@ -9,7 +9,9 @@ import { auditDetail } from "../src/audit-detail.ts";
 const MARKER = "PLANTED-SECRET-5b1e";
 
 test("a switch's click row reads as its reason and its named fields", () => {
-  const d = auditDetail(JSON.stringify({ mode: "off", reason: "Budget resets Friday.", undo: true }));
+  const d = auditDetail(
+    JSON.stringify({ mode: "off", reason: "Budget resets Friday.", undo: true }),
+  );
   assert.equal(d.reason, "Budget resets Friday.");
   assert.equal(d.changes, null);
   assert.deepEqual(d.fields, [
@@ -20,11 +22,27 @@ test("a switch's click row reads as its reason and its named fields", () => {
 });
 
 test("PLANT: an edit lists only the fields that changed, the old value beside the new", () => {
-  const before = { namespace: "sample", origin: "https://sample.example.com", health_path: null, revision: 3, platform: "cloudflare" };
-  const after = { namespace: "sample", origin: "https://www.sample.example.com", health_path: "/health", revision: 4, platform: "cloudflare" };
+  const before = {
+    namespace: "sample",
+    origin: "https://sample.example.com",
+    health_path: null,
+    revision: 3,
+    platform: "cloudflare",
+  };
+  const after = {
+    namespace: "sample",
+    origin: "https://www.sample.example.com",
+    health_path: "/health",
+    revision: 4,
+    platform: "cloudflare",
+  };
   const d = auditDetail(JSON.stringify({ before, after }));
   assert.deepEqual(d.changes, [
-    { field: "Origin", before: "https://sample.example.com", after: "https://www.sample.example.com" },
+    {
+      field: "Origin",
+      before: "https://sample.example.com",
+      after: "https://www.sample.example.com",
+    },
     { field: "Health path", before: "none", after: "/health" },
     { field: "Revision", before: "3", after: "4" },
   ]);
@@ -32,7 +50,9 @@ test("PLANT: an edit lists only the fields that changed, the old value beside th
 });
 
 test("an add lists every field as new, and a remove every field as gone", () => {
-  const added = auditDetail(JSON.stringify({ after: { name: "sample-pkg", repo: "example/sample" } }));
+  const added = auditDetail(
+    JSON.stringify({ after: { name: "sample-pkg", repo: "example/sample" } }),
+  );
   assert.deepEqual(added.changes, [
     { field: "Name", before: null, after: "sample-pkg" },
     { field: "Repo", before: null, after: "example/sample" },
@@ -62,7 +82,9 @@ test("PLANT: a hash, a signature, a token or a nested value is never shown, only
 });
 
 test("a list of scalars is one line; an empty list is none; a long value is capped", () => {
-  const d = auditDetail(JSON.stringify({ posted: ["site-down-a", "ci-red-b"], cleared: [], note: "x".repeat(900) }));
+  const d = auditDetail(
+    JSON.stringify({ posted: ["site-down-a", "ci-red-b"], cleared: [], note: "x".repeat(900) }),
+  );
   assert.deepEqual(d.fields.slice(0, 2), [
     { name: "Findings posted", value: "site-down-a, ci-red-b" },
     { name: "Findings cleared", value: "none" },
@@ -71,8 +93,20 @@ test("a list of scalars is one line; an empty list is none; a long value is capp
 });
 
 test("params that are not JSON are unreadable, said, not guessed at", () => {
-  assert.deepEqual(auditDetail("not json {"), { reason: null, changes: null, fields: [], withheld: 0, unreadable: true });
-  assert.deepEqual(auditDetail(null), { reason: null, changes: null, fields: [], withheld: 0, unreadable: false });
+  assert.deepEqual(auditDetail("not json {"), {
+    reason: null,
+    changes: null,
+    fields: [],
+    withheld: 0,
+    unreadable: true,
+  });
+  assert.deepEqual(auditDetail(null), {
+    reason: null,
+    changes: null,
+    fields: [],
+    withheld: 0,
+    unreadable: false,
+  });
 });
 
 test("a blank reason is no reason, and stays out of the fields", () => {

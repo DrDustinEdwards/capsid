@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { backupSlots, ciDays, costWeeks, isoWeek, lastDays, mondayOf, sessionMinutes, timeMs, weekStarts } from "../src/trends.ts";
+import {
+  backupSlots,
+  ciDays,
+  costWeeks,
+  isoWeek,
+  lastDays,
+  mondayOf,
+  sessionMinutes,
+  timeMs,
+  weekStarts,
+} from "../src/trends.ts";
 
 // The counting rules behind GET /portal/api/trends, on plain values. The SQL runs against
 // a real D1 in test-integration/portal-trends.test.ts.
@@ -38,7 +48,7 @@ test("PLANT: a session ends after a gap over five minutes, and counts its span p
       // Before the window: not counted.
       at("2026-09-01 12:00:00"),
     ],
-    ["2026-09-28", "2026-10-05"]
+    ["2026-09-28", "2026-10-05"],
   );
   assert.deepEqual(weeks.get("2026-10-05"), { minutes: 11, sessions: 2 });
   assert.deepEqual(weeks.get("2026-09-28"), { minutes: 1, sessions: 1 });
@@ -46,7 +56,11 @@ test("PLANT: a session ends after a gap over five minutes, and counts its span p
 
 test("PLANT: a CI day is the last completed run's verdict, carried over days with none", () => {
   const days = ["2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11"];
-  const run = (created_at: string, conclusion: string | null, status = "completed") => ({ created_at, conclusion, status });
+  const run = (created_at: string, conclusion: string | null, status = "completed") => ({
+    created_at,
+    conclusion,
+    status,
+  });
   const out = ciDays(
     [
       run("2026-10-09T08:00:00Z", "success"),
@@ -56,7 +70,7 @@ test("PLANT: a CI day is the last completed run's verdict, carried over days wit
       run("2026-10-11T03:00:00Z", null, "in_progress"),
       run("2026-10-11T02:00:00Z", "success"),
     ],
-    days
+    days,
   );
   assert.deepEqual(
     out.map((d) => [d.day, d.state, d.runs, d.failed]),
@@ -65,13 +79,18 @@ test("PLANT: a CI day is the last completed run's verdict, carried over days wit
       ["2026-10-09", "red", 2, 1],
       ["2026-10-10", "red", 0, 0],
       ["2026-10-11", "green", 1, 0],
-    ]
+    ],
   );
 });
 
 test("PLANT: a green run of one workflow does not hide another workflow that is red", () => {
   const days = ["2026-10-09", "2026-10-10"];
-  const run = (created_at: string, conclusion: string, workflow_id: number) => ({ created_at, conclusion, status: "completed", workflow_id });
+  const run = (created_at: string, conclusion: string, workflow_id: number) => ({
+    created_at,
+    conclusion,
+    status: "completed",
+    workflow_id,
+  });
   const out = ciDays(
     [
       run("2026-10-09T08:00:00Z", "failure", 1),
@@ -79,23 +98,27 @@ test("PLANT: a green run of one workflow does not hide another workflow that is 
       run("2026-10-09T09:00:00Z", "success", 2),
       run("2026-10-10T08:00:00Z", "success", 1),
     ],
-    days
+    days,
   );
   assert.deepEqual(
     out.map((d) => [d.day, d.state]),
     [
       ["2026-10-09", "red"],
       ["2026-10-10", "green"],
-    ]
+    ],
   );
 });
 
 test("PLANT: a backup slot is filled only by a complete run inside it", () => {
-  const slots = backupSlots(["2026-10-11T03-10-00-000Z", "2026-10-09T03-10-00-000Z", "2026-08-01T03-10-00-000Z"], NOW);
+  const slots = backupSlots(
+    ["2026-10-11T03-10-00-000Z", "2026-10-09T03-10-00-000Z", "2026-08-01T03-10-00-000Z"],
+    NOW,
+  );
   assert.equal(slots.daily.length, 14);
   assert.equal(slots.weekly.length, 4);
   assert.equal(slots.monthly.length, 3);
-  const filled = (list: Array<{ key: string; filled: boolean }>) => list.filter((s) => s.filled).map((s) => s.key);
+  const filled = (list: Array<{ key: string; filled: boolean }>) =>
+    list.filter((s) => s.filled).map((s) => s.key);
   assert.deepEqual(filled(slots.daily), ["2026-10-09", "2026-10-11"]);
   assert.deepEqual(filled(slots.weekly), ["2026-10-05"]);
   assert.deepEqual(filled(slots.monthly), ["2026-08", "2026-10"]);
@@ -112,7 +135,7 @@ test("PLANT: a week's cost sums its costed outcomes, and a week with none is nul
       // Before the window: not counted.
       { day: "2026-09-01", usd: 9, n: 1 },
     ],
-    weeks
+    weeks,
   );
   assert.deepEqual(
     out.map((w) => [w.week, w.usd, w.jobs]),
@@ -120,6 +143,6 @@ test("PLANT: a week's cost sums its costed outcomes, and a week with none is nul
       ["2026-W39", 3.33, 1],
       ["2026-W40", null, 0],
       ["2026-W41", 1.75, 3],
-    ]
+    ],
   );
 });

@@ -13,11 +13,17 @@ export function NotFound() {
   const d = load.data;
   const title = `Missing pages, ${d?.days ?? 30} days`;
   const src = "Capsid's page_404_daily";
-  if (load.loading) return <Panel title={title} src={src}><Spinner label="Reading the 404 counts" /></Panel>;
+  if (load.loading)
+    return (
+      <Panel title={title} src={src}>
+        <Spinner label="Reading the 404 counts" />
+      </Panel>
+    );
   if (load.error || !d || d.pages === null) {
     return (
       <Panel title={title} src={src}>
-        <St kind="nodata">No data</St> The 404 counts could not be read: {load.error ?? d?.error ?? "no answer"}.
+        <St kind="nodata">No data</St> The 404 counts could not be read:{" "}
+        {load.error ?? d?.error ?? "no answer"}.
       </Panel>
     );
   }
@@ -40,7 +46,9 @@ export function NotFound() {
                 <tr key={p.path}>
                   <td className="mono">{p.path}</td>
                   <td className="num">{p.hits}</td>
-                  <td>{p.referrers.map((r) => `${r.host || "no referrer"} (${r.hits})`).join(", ")}</td>
+                  <td>
+                    {p.referrers.map((r) => `${r.host || "no referrer"} (${r.hits})`).join(", ")}
+                  </td>
                 </tr>
               ))}
             </tbody>

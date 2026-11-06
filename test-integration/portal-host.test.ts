@@ -20,7 +20,9 @@ describe("the Portal host through the whole Worker", () => {
     for (const path of ["/", "/mcp"]) {
       const response = await anonymous(path);
       expect(response.status, `${path} answered ${response.status}`).toBe(302);
-      expect(response.headers.get("Location") ?? "", `${path} redirected elsewhere`).toContain("sample.cloudflareaccess.com");
+      expect(response.headers.get("Location") ?? "", `${path} redirected elsewhere`).toContain(
+        "sample.cloudflareaccess.com",
+      );
     }
   });
 
@@ -49,8 +51,15 @@ describe("the Portal host through the whole Worker", () => {
 
   it("PLANT: the chart demo answers at /demos/ with no sign-in, and only there", async () => {
     // Its pages, rendered from the captured sample data, and that data, noindex.
-    for (const [path, accept] of [["/demos/", "text/html"], ["/demos/health", "text/html"], ["/demos/api/ops.json", "*/*"]] as const) {
-      const response = await SELF.fetch(`${PORTAL}${path}`, { headers: { Accept: accept }, redirect: "manual" });
+    for (const [path, accept] of [
+      ["/demos/", "text/html"],
+      ["/demos/health", "text/html"],
+      ["/demos/api/ops.json", "*/*"],
+    ] as const) {
+      const response = await SELF.fetch(`${PORTAL}${path}`, {
+        headers: { Accept: accept },
+        redirect: "manual",
+      });
       expect(response.status, `${path} answered ${response.status}`).toBe(200);
       expect(response.headers.get("X-Robots-Tag")).toBe("noindex");
     }
@@ -65,7 +74,10 @@ describe("the Portal host through the whole Worker", () => {
   });
 
   it("another host is untouched: /mcp there is still the MCP endpoint", async () => {
-    const response = await SELF.fetch("https://capsid.test/mcp", { method: "POST", redirect: "manual" });
+    const response = await SELF.fetch("https://capsid.test/mcp", {
+      method: "POST",
+      redirect: "manual",
+    });
     expect(response.status).toBe(401);
   });
 });

@@ -40,7 +40,7 @@ test("actorKind: every caller the queue sees maps to one kind, and the table cov
   assert.deepEqual(
     ACTOR_KINDS.filter((k) => !covered.has(k)),
     [],
-    "an actor_kind the table never produces is one no test has seen"
+    "an actor_kind the table never produces is one no test has seen",
   );
 });
 
@@ -81,7 +81,10 @@ test("touchStatement binds `at` and measures waited_ms in SQL from the latest ga
   });
   const [{ sql, params }] = seen;
   const flat = sql.replace(/\s+/g, " ");
-  assert.match(flat, /INSERT INTO job_touches \(job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at\)/);
+  assert.match(
+    flat,
+    /INSERT INTO job_touches \(job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at\)/,
+  );
   // The same bound time on both sides of the difference, so the wait is one clock.
   assert.match(flat, /julianday\(\?7\) - julianday\(g\.at\)/);
   assert.match(flat, /\* 86400000\.0/);

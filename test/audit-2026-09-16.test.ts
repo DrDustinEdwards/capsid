@@ -7,7 +7,13 @@ import { driverMintInstruction, defaultScopes } from "../src/agents-schema.ts";
 import { actionArgFor, defaultActionFor, requiredForAction } from "../src/scope.ts";
 import { surfaceOf } from "../src/tools/surface.ts";
 import { CORRECTION_CAP } from "../src/jobs-schema.ts";
-import { buildTruthReport, INTEGRITY_LINE, integrityOf, renderTruthReport, reportPath } from "../src/truth-report.ts";
+import {
+  buildTruthReport,
+  INTEGRITY_LINE,
+  integrityOf,
+  renderTruthReport,
+  reportPath,
+} from "../src/truth-report.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 
@@ -16,7 +22,11 @@ import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
 // planted in test/csp-rate-limit.test.ts, beside the fail-open tests it reverses.
 
 // Capsid by default; Capsid Admin, which serves the admin tools, when asked.
-async function connect(agent: Agent | "read" | "write", rows: Record<string, unknown[]> = {}, surface: "capsid" | "admin" = "capsid") {
+async function connect(
+  agent: Agent | "read" | "write",
+  rows: Record<string, unknown[]> = {},
+  surface: "capsid" | "admin" = "capsid",
+) {
   const { db, batches, recorded } = fakeD1(rows);
   const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv });
   const build = surface === "admin" ? buildAdminServer : buildServer;
@@ -28,9 +38,13 @@ async function connect(agent: Agent | "read" | "write", rows: Record<string, unk
 }
 
 const call = async (client: Client, name: string, args: Record<string, unknown> = {}) =>
-  (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+  (await client.callTool({ name, arguments: args })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
 
-const text = (result: { content: Array<{ text: string }> }) => result.content.map((c) => c.text).join("");
+const text = (result: { content: Array<{ text: string }> }) =>
+  result.content.map((c) => c.text).join("");
 
 // the mint instruction and TOOL_GRANTS
 
@@ -44,7 +58,11 @@ test("PLANT: the driver mint instruction agrees with what register_namespace act
   const served = surfaceOf("register_namespace");
   assert.deepEqual(served, { tool: "capsid_admin_manage_namespaces", action: "register" });
   const required = requiredForAction(served.tool, served.action);
-  assert.match(said, new RegExp(`${served.tool} action ${served.action} is itself ${required} only`), said);
+  assert.match(
+    said,
+    new RegExp(`${served.tool} action ${served.action} is itself ${required} only`),
+    said,
+  );
 });
 
 // the jobs description and the retry cap
@@ -60,7 +78,7 @@ test("PLANT: the jobs description states the correction cap rather than promisin
     const description = jobs.description ?? "";
     assert.ok(
       description.includes(`capped at ${CORRECTION_CAP}`),
-      `the description does not state the cap of ${CORRECTION_CAP}: ${description.slice(-400)}`
+      `the description does not state the cap of ${CORRECTION_CAP}: ${description.slice(-400)}`,
     );
   } finally {
     await close();
@@ -75,24 +93,58 @@ function narrowedTo(tools: string[]): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
   scopes.tools = tools;
-  return { id: "agent_narrow01", name: "narrow", kind: "session", actor: "agent:narrow", scopes, admin: false, row: null };
+  return {
+    id: "agent_narrow01",
+    name: "narrow",
+    kind: "session",
+    actor: "agent:narrow",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 test("PLANT: an agent scoped to capsid_lint_namespace.gather may call it with no mode at all", async () => {
   // capsid_lint_namespace's handler reads an omitted mode as gather. Unless DEFAULT_ACTION agrees, the
   // registrar passes no action and allowsToolAction refuses an unknown action on a
   // narrowed tool, so the caller is refused the one mode it was minted for.
-  const { client, close } = await connect(narrowedTo(["capsid_lint_namespace", "capsid_lint_namespace.gather"]), {
-    documents: [{ id: 1, namespace: "capsid", path: "core.md", title: "core", body: "the core", type: "core", status: "published", tags: null }],
-    namespaces: [{ namespace: "capsid", repos: "[]" }],
-  });
+  const { client, close } = await connect(
+    narrowedTo(["capsid_lint_namespace", "capsid_lint_namespace.gather"]),
+    {
+      documents: [
+        {
+          id: 1,
+          namespace: "capsid",
+          path: "core.md",
+          title: "core",
+          body: "the core",
+          type: "core",
+          status: "published",
+          tags: null,
+        },
+      ],
+      namespaces: [{ namespace: "capsid", repos: "[]" }],
+    },
+  );
   try {
     const result = await call(client, "capsid_lint_namespace", { namespace: "capsid" });
-    assert.notEqual(result.isError, true, `a gather-only caller was refused its own default mode: ${text(result)}`);
-    const packet = JSON.parse(text(result)) as { mode: string; namespace: string; core: { body?: string } | null };
+    assert.notEqual(
+      result.isError,
+      true,
+      `a gather-only caller was refused its own default mode: ${text(result)}`,
+    );
+    const packet = JSON.parse(text(result)) as {
+      mode: string;
+      namespace: string;
+      core: { body?: string } | null;
+    };
     assert.equal(packet.mode, "gather", "an omitted mode did not run gather");
     assert.equal(packet.namespace, "capsid");
-    assert.equal(packet.core?.body, "the core", "the gather packet came back without the namespace's core document");
+    assert.equal(
+      packet.core?.body,
+      "the core",
+      "the gather packet came back without the namespace's core document",
+    );
   } finally {
     await close();
   }
@@ -101,11 +153,20 @@ test("PLANT: an agent scoped to capsid_lint_namespace.gather may call it with no
 test("PLANT: the same caller with no mode is still refused finalize", async () => {
   // A default that widened the narrowing would pass the test above by handing the
   // caller the whole tool back.
-  const { client, close } = await connect(narrowedTo(["capsid_lint_namespace", "capsid_lint_namespace.gather"]));
+  const { client, close } = await connect(
+    narrowedTo(["capsid_lint_namespace", "capsid_lint_namespace.gather"]),
+  );
   try {
-    const result = await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "finalize" });
+    const result = await call(client, "capsid_lint_namespace", {
+      namespace: "capsid",
+      mode: "finalize",
+    });
     assert.equal(result.isError, true, "a gather-only caller ran finalize");
-    assert.match(text(result), /not scoped to the 'capsid_lint_namespace\.finalize' tool/, text(result));
+    assert.match(
+      text(result),
+      /not scoped to the 'capsid_lint_namespace\.finalize' tool/,
+      text(result),
+    );
   } finally {
     await close();
   }
@@ -124,10 +185,13 @@ test("DERIVED: every action tool whose action argument is optional has a table d
   }
   assert.ok(
     tools.some((t) => t.name === "capsid_admin_read_claims"),
-    "the Capsid Admin tools were not listed, so half the surface went unread"
+    "the Capsid Admin tools were not listed, so half the surface went unread",
   );
   const wired = tools.filter((t) => actionArgFor(t.name) !== undefined);
-  assert.ok(wired.length >= 5, `only ${wired.length} action tools were found, so this is passing by reading nothing`);
+  assert.ok(
+    wired.length >= 5,
+    `only ${wired.length} action tools were found, so this is passing by reading nothing`,
+  );
   const missing = wired
     .filter((t) => {
       const key = actionArgFor(t.name)!;
@@ -135,7 +199,11 @@ test("DERIVED: every action tool whose action argument is optional has a table d
       return !required.includes(key) && defaultActionFor(t.name) === undefined;
     })
     .map((t) => t.name);
-  assert.deepEqual(missing, [], `these tools make their action optional and the scope table cannot say what an omitted one means: ${missing.join(", ")}`);
+  assert.deepEqual(
+    missing,
+    [],
+    `these tools make their action optional and the scope table cannot say what an omitted one means: ${missing.join(", ")}`,
+  );
 });
 
 // a null integrity is not a zero
@@ -167,7 +235,16 @@ test("a measured integrity still renders as a number the parser reads back", () 
   const report = buildTruthReport({
     namespace: "capsid",
     now: new Date("2026-09-16T12:00:00Z"),
-    docs: [{ path: "core.md", type: "core", status: "published", title: "core", body: "the core", updated_at: "2026-09-16 00:00:00" }],
+    docs: [
+      {
+        path: "core.md",
+        type: "core",
+        status: "published",
+        title: "core",
+        body: "the core",
+        updated_at: "2026-09-16 00:00:00",
+      },
+    ],
     edges: [],
     danglingEdges: [],
     countClaims: [],
@@ -185,7 +262,17 @@ const TODAY = reportPath(new Date());
 
 function reportRows(withPrior: boolean) {
   const documents: Record<string, unknown>[] = [
-    { id: 1, namespace: "capsid", path: "core.md", title: "core", body: "the core", type: "core", status: "published", tags: null, updated_at: "2026-09-16 00:00:00" },
+    {
+      id: 1,
+      namespace: "capsid",
+      path: "core.md",
+      title: "core",
+      body: "the core",
+      type: "core",
+      status: "published",
+      tags: null,
+      updated_at: "2026-09-16 00:00:00",
+    },
   ];
   if (withPrior) {
     documents.push({
@@ -208,11 +295,22 @@ test("PLANT: a second report the same day is REFUSED without confirmation", asyn
   // asks for the same confirmation capsid_write_doc asks for on every other overwrite.
   const { client, batches, close } = await connect("write", reportRows(true));
   try {
-    const result = await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "report" });
+    const result = await call(client, "capsid_lint_namespace", {
+      namespace: "capsid",
+      mode: "report",
+    });
     assert.equal(result.isError, true, "a report overwrote today's report without asking");
     assert.match(text(result), /confirmation required/, text(result));
-    assert.match(text(result), new RegExp(`capsid/${TODAY.replace(/[.\\/-]/g, "\\$&")}`), text(result));
-    assert.deepEqual(batches, [], "the refusal came after the write, so it describes something that already happened");
+    assert.match(
+      text(result),
+      new RegExp(`capsid/${TODAY.replace(/[.\\/-]/g, "\\$&")}`),
+      text(result),
+    );
+    assert.deepEqual(
+      batches,
+      [],
+      "the refusal came after the write, so it describes something that already happened",
+    );
   } finally {
     await close();
   }
@@ -221,13 +319,20 @@ test("PLANT: a second report the same day is REFUSED without confirmation", asyn
 test("the same call WITH confirm: true overwrites, snapshotting first", async () => {
   const { client, batches, recorded, close } = await connect("write", reportRows(true));
   try {
-    const result = await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "report", confirm: true });
+    const result = await call(client, "capsid_lint_namespace", {
+      namespace: "capsid",
+      mode: "report",
+      confirm: true,
+    });
     assert.ok(!result.isError, text(result));
     const flat = batches.flat().map((s) => s.replace(/\s+/g, " "));
-    assert.ok(flat.some((s) => /INSERT INTO document_versions/.test(s)), "snapshot rule: the prior report was replaced without a snapshot");
+    assert.ok(
+      flat.some((s) => /INSERT INTO document_versions/.test(s)),
+      "snapshot rule: the prior report was replaced without a snapshot",
+    );
     assert.ok(
       recorded.some((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "lint_report"),
-      "the overwrite skipped the audit log"
+      "the overwrite skipped the audit log",
     );
   } finally {
     await close();
@@ -239,18 +344,30 @@ test("THE INNOCENT DIRECTION: the FIRST report of the day needs no confirmation"
   // answer a prompt.
   const { client, batches, recorded, close } = await connect("write", reportRows(false));
   try {
-    const result = await call(client, "capsid_lint_namespace", { namespace: "capsid", mode: "report" });
+    const result = await call(client, "capsid_lint_namespace", {
+      namespace: "capsid",
+      mode: "report",
+    });
     assert.ok(!result.isError, text(result));
     assert.ok(batches.length > 0, "the first report of the day was not written at all");
     const written = recorded.find((r) => /INSERT INTO documents/.test(r.sql));
     assert.ok(written, "no document write was issued for the report");
     assert.equal(written.params[0], "capsid");
-    assert.equal(written.params[1], TODAY, "the report was written somewhere other than today's report path");
+    assert.equal(
+      written.params[1],
+      TODAY,
+      "the report was written somewhere other than today's report path",
+    );
     assert.match(String(written.params[3]), /^# Truth report - capsid/);
     assert.match(String(written.params[3]), /integrity: \d+%/);
     assert.ok(
-      recorded.some((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "lint_report" && r.params[3] === TODAY),
-      "the first report skipped the audit log"
+      recorded.some(
+        (r) =>
+          /INSERT INTO audit_log/.test(r.sql) &&
+          r.params[1] === "lint_report" &&
+          r.params[3] === TODAY,
+      ),
+      "the first report skipped the audit log",
     );
   } finally {
     await close();
@@ -273,8 +390,26 @@ const CROWDED = {
       tags: null,
       body: "",
     })),
-    { id: 9001, namespace: "capsid", path: "core.md", title: "core", type: "core", status: "published", tags: null, body: "" },
-    { id: 9002, namespace: "capsid", path: "decisions.md", title: "decisions", type: "decision", status: "published", tags: null, body: "" },
+    {
+      id: 9001,
+      namespace: "capsid",
+      path: "core.md",
+      title: "core",
+      type: "core",
+      status: "published",
+      tags: null,
+      body: "",
+    },
+    {
+      id: 9002,
+      namespace: "capsid",
+      path: "decisions.md",
+      title: "decisions",
+      type: "decision",
+      status: "published",
+      tags: null,
+      body: "",
+    },
   ],
 };
 
@@ -284,11 +419,15 @@ test("PLANT: a caller scoped past 502 rows it cannot see still gets its own docu
   const { client, close } = await connect(narrowedTo(["capsid_read_doc"]), CROWDED);
   try {
     const listed = await client.listResources();
-    assert.equal(listed.resources.length, 2, `the scoped caller got ${listed.resources.length} resources, not its own two`);
+    assert.equal(
+      listed.resources.length,
+      2,
+      `the scoped caller got ${listed.resources.length} resources, not its own two`,
+    );
     assert.deepEqual(
       listed.resources.map((r) => r.uri).sort(),
       ["capsid://capsid/core.md", "capsid://capsid/decisions.md"],
-      "the listing is not this caller's own namespace"
+      "the listing is not this caller's own namespace",
     );
     assert.equal(listed.nextCursor, undefined, "a complete listing advertised another page");
   } finally {

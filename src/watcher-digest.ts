@@ -22,8 +22,14 @@ interface Row {
 function lastEvidence(raw: string): string[] {
   try {
     const list: unknown = JSON.parse(raw);
-    const last = Array.isArray(list) ? (list[list.length - 1] as { lines?: unknown } | undefined) : undefined;
-    return Array.isArray(last?.lines) ? (last.lines as unknown[]).filter((l): l is string => typeof l === "string").slice(0, LINES_SHOWN) : [];
+    const last = Array.isArray(list)
+      ? (list[list.length - 1] as { lines?: unknown } | undefined)
+      : undefined;
+    return Array.isArray(last?.lines)
+      ? (last.lines as unknown[])
+          .filter((l): l is string => typeof l === "string")
+          .slice(0, LINES_SHOWN)
+      : [];
   } catch {
     return [];
   }
@@ -33,7 +39,7 @@ export async function openQuietFindings(db: D1Database): Promise<OpsFinding[]> {
   const { results } = await db
     .prepare(
       `SELECT fingerprint, namespace, title, first_seen_at, last_seen_at, seen_count, evidence
-       FROM watcher_findings WHERE state = 'open' AND job_id IS NULL ORDER BY namespace, first_seen_at`
+       FROM watcher_findings WHERE state = 'open' AND job_id IS NULL ORDER BY namespace, first_seen_at`,
     )
     .all<Row>();
   const out: OpsFinding[] = [];

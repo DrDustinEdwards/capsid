@@ -20,9 +20,18 @@ const read = (p: string) => readFileSync(join(import.meta.dirname, p), "utf8");
 
 const CLIENT_ID = "canaryTestId123";
 const KEY = `client:${CLIENT_ID}`;
-const RECORD = JSON.stringify({ clientId: CLIENT_ID, clientName: "canary", redirectUris: ["https://example.com/x"] });
+const RECORD = JSON.stringify({
+  clientId: CLIENT_ID,
+  clientName: "canary",
+  redirectUris: ["https://example.com/x"],
+});
 
-type Reply = { ok: boolean; status: number; text?: () => Promise<string>; json?: () => Promise<unknown> };
+type Reply = {
+  ok: boolean;
+  status: number;
+  text?: () => Promise<string>;
+  json?: () => Promise<unknown>;
+};
 
 // A KV REST API stand-in covering the two endpoints the check uses: the value read
 // and the key listing that carries the expiry.
@@ -40,22 +49,34 @@ function fakeKvApi(opts: {
     if (url.includes("/values/")) {
       if (opts.throwOnValue) throw new Error(opts.throwOnValue);
       const status = opts.valueStatus ?? (opts.value == null ? 404 : 200);
-      return { ok: status >= 200 && status < 300, status, text: async () => opts.value ?? "" } as Reply;
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        text: async () => opts.value ?? "",
+      } as Reply;
     }
     // the /keys?prefix= listing
     if (opts.throwOnList) throw new Error(opts.throwOnList);
-    if (opts.listStatus && opts.listStatus !== 200) return { ok: false, status: opts.listStatus, json: async () => null } as Reply;
+    if (opts.listStatus && opts.listStatus !== 200)
+      return { ok: false, status: opts.listStatus, json: async () => null } as Reply;
     return {
       ok: true,
       status: 200,
-      json: async () => ({ result: [{ name: KEY, ...(opts.expiration ? { expiration: opts.expiration } : {}) }] }),
+      json: async () => ({
+        result: [{ name: KEY, ...(opts.expiration ? { expiration: opts.expiration } : {}) }],
+      }),
     } as Reply;
   }) as unknown as typeof fetch;
   return { fetchImpl, calls };
 }
 
 const check = (stub: ReturnType<typeof fakeKvApi>) =>
-  checkCanary({ fetchImpl: stub.fetchImpl, base: "https://kv.example/ns", clientId: CLIENT_ID, auth: { Authorization: "Bearer t" } });
+  checkCanary({
+    fetchImpl: stub.fetchImpl,
+    base: "https://kv.example/ns",
+    clientId: CLIENT_ID,
+    auth: { Authorization: "Bearer t" },
+  });
 
 test("a present, non-expiring canary passes", async () => {
   const stub = fakeKvApi({ value: RECORD });
@@ -80,7 +101,10 @@ test("a MISSING canary fails, and is named as the 2026-08-17 anomaly recurring",
 
 test("an UNREACHABLE store is NOT reported as data loss", async () => {
   // A KV blip must not read as a vanished record.
-  for (const stub of [fakeKvApi({ valueStatus: 500, value: RECORD }), fakeKvApi({ throwOnValue: "ECONNRESET" })]) {
+  for (const stub of [
+    fakeKvApi({ valueStatus: 500, value: RECORD }),
+    fakeKvApi({ throwOnValue: "ECONNRESET" }),
+  ]) {
     const result = await check(stub);
     assert.equal(result.outcome, "unreachable");
     const report = canaryReport(result, CLIENT_ID, "capsid-mcp-oauth");
@@ -93,7 +117,11 @@ test("an UNREACHABLE store is NOT reported as data loss", async () => {
 test("missing and unreachable are genuinely different outcomes", async () => {
   const gone = await check(fakeKvApi({ value: null }));
   const blip = await check(fakeKvApi({ valueStatus: 503, value: RECORD }));
-  assert.notEqual(gone.outcome, blip.outcome, "a KV outage and a vanished record are indistinguishable");
+  assert.notEqual(
+    gone.outcome,
+    blip.outcome,
+    "a KV outage and a vanished record are indistinguishable",
+  );
 });
 
 test("a canary that has acquired a TTL fails BEFORE it can expire", async () => {
@@ -111,9 +139,16 @@ test("a canary that has acquired a TTL fails BEFORE it can expire", async () => 
 test("an unreadable key listing is TTL-UNVERIFIED: neither a TTL nor non-expiring", async () => {
   // An unread expiry must not print as "non-expiring". Both failure shapes, because
   // they take different paths: a non-200 listing and a thrown listing.
-  for (const stub of [fakeKvApi({ value: RECORD, listStatus: 500 }), fakeKvApi({ value: RECORD, throwOnList: "ECONNRESET" })]) {
+  for (const stub of [
+    fakeKvApi({ value: RECORD, listStatus: 500 }),
+    fakeKvApi({ value: RECORD, throwOnList: "ECONNRESET" }),
+  ]) {
     const result = await check(stub);
-    assert.equal(result.outcome, "ttl-unverified", "an unreadable listing was reported as a checked TTL");
+    assert.equal(
+      result.outcome,
+      "ttl-unverified",
+      "an unreadable listing was reported as a checked TTL",
+    );
     assert.equal(result.expiration, undefined, "an expiry was invented from a failed listing");
     const report = canaryReport(result, CANARY_CLIENT.id, OAUTH_KV.name);
     assert.equal(report.passed, false);
@@ -137,13 +172,23 @@ test("gate 2b is wired into the run and counted", () => {
   // The gate total is pinned in counts.ts and checked by test/counts.test.ts; this
   // asserts only that the canary is one of the counted gates.
   const labels = new Set([...gate.matchAll(/record\(\s*"([^"]+)"/g)].map((m) => m[1]));
-  assert.ok(labels.has("2b canary client record"), "the canary gate is no longer one of the counted gates");
+  assert.ok(
+    labels.has("2b canary client record"),
+    "the canary gate is no longer one of the counted gates",
+  );
 });
 
 test("the credentials the gate needs are supplied to it in CI", () => {
   // Without these the gate skips silently in CI.
   const workflow = read("../.github/workflows/ci.yml");
-  const step = workflow.slice(workflow.indexOf("- name: verify:live"), workflow.indexOf("- name: Roll back the deploy this run shipped"));
-  assert.match(step, /CLOUDFLARE_API_TOKEN:/, "verify:live cannot read KV, so gate 2b will skip on every CI run");
+  const step = workflow.slice(
+    workflow.indexOf("- name: verify:live"),
+    workflow.indexOf("- name: Roll back the deploy this run shipped"),
+  );
+  assert.match(
+    step,
+    /CLOUDFLARE_API_TOKEN:/,
+    "verify:live cannot read KV, so gate 2b will skip on every CI run",
+  );
   assert.match(step, /CLOUDFLARE_ACCOUNT_ID:/);
 });

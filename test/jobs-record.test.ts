@@ -34,13 +34,24 @@ function job(over: Record<string, unknown> = {}) {
 // result_summary (every call below sends one, and the record path refuses a blank one
 // before it writes). Nothing else in the batch is touched.
 function store(jobs: Array<Record<string, unknown>>) {
-  const d1 = fakeD1({ namespaces: [{ namespace: "sample", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) }], jobs });
+  const d1 = fakeD1({
+    namespaces: [
+      { namespace: "sample", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) },
+    ],
+    jobs,
+  });
   const inner = d1.db;
   const db = {
     prepare: (sql: string) => inner.prepare(sql),
     batch: (statements: Array<{ sql: string; params: unknown[] }>) =>
       inner.batch(
-        statements.map((s) => ({ ...s, sql: s.sql.replace(/summary_sig = CASE WHEN \?3 IS NULL THEN summary_sig ELSE \?8 END/, "summary_sig = ?8") })) as unknown as D1PreparedStatement[]
+        statements.map((s) => ({
+          ...s,
+          sql: s.sql.replace(
+            /summary_sig = CASE WHEN \?3 IS NULL THEN summary_sig ELSE \?8 END/,
+            "summary_sig = ?8",
+          ),
+        })) as unknown as D1PreparedStatement[],
       ),
   } as unknown as D1Database;
   return { d1, env: fakeEnv({ DB: db, APP_KV: fakeKv({}).kv }) };
@@ -50,10 +61,21 @@ function driver(grant: ScopeFlag[] = [], namespaces = ["sample"]): Agent {
   const scopes = defaultScopes(namespaces);
   scopes.grants = ["read", "write"];
   for (const flag of grant) scopes.flags[flag] = true;
-  return { id: "agent_0123456789ab", name: "sample-driver", kind: "driver", actor: "agent:sample-driver", scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name: "sample-driver",
+    kind: "driver",
+    actor: "agent:sample-driver",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
-const ARGS = { result_summary: "Done by hand in the sample repo.", raw: { result_summary: "Done by hand in the sample repo." } };
+const ARGS = {
+  result_summary: "Done by hand in the sample repo.",
+  raw: { result_summary: "Done by hand in the sample repo." },
+};
 
 // The seat records
 
@@ -78,7 +100,10 @@ test("an audit row naming the record is written with the transition", async () =
   assert.equal(r.ok, true, r.refusal);
   const audit = d1.rows.audit_log as Array<Record<string, unknown>>;
   const records = audit.filter((a) => a.action === "job-record");
-  assert.ok(records.length >= 1, `no job-record audit row: ${JSON.stringify(audit.map((a) => a.action))}`);
+  assert.ok(
+    records.length >= 1,
+    `no job-record audit row: ${JSON.stringify(audit.map((a) => a.action))}`,
+  );
   const transition = records.find((a) => /"status":"done"/.test(String(a.params)));
   assert.ok(transition, "no audit row records the status the job moved to");
   assert.equal(transition.actor, ADMIN.actor);
@@ -119,10 +144,26 @@ test("PLANT: a seat key scoped to another namespace is refused the job", async (
 // A job that is not queued
 
 const NOT_QUEUED: Array<[string, Record<string, unknown>, RegExp]> = [
-  ["claimed", { status: "claimed", claimed_by: "agent:sample-driver" }, /is claimed by agent:sample-driver: its holder completes it/],
-  ["blocked", { status: "blocked", claimed_by: "agent:sample-driver" }, /is blocked: the seat completes a blocked job with action complete/],
-  ["done", { status: "done", claimed_by: "agent:sample-driver" }, /is done; record is for a queued job/],
-  ["failed", { status: "failed", claimed_by: "agent:sample-driver" }, /is failed; record is for a queued job/],
+  [
+    "claimed",
+    { status: "claimed", claimed_by: "agent:sample-driver" },
+    /is claimed by agent:sample-driver: its holder completes it/,
+  ],
+  [
+    "blocked",
+    { status: "blocked", claimed_by: "agent:sample-driver" },
+    /is blocked: the seat completes a blocked job with action complete/,
+  ],
+  [
+    "done",
+    { status: "done", claimed_by: "agent:sample-driver" },
+    /is done; record is for a queued job/,
+  ],
+  [
+    "failed",
+    { status: "failed", claimed_by: "agent:sample-driver" },
+    /is failed; record is for a queued job/,
+  ],
   ["superseded", { status: "superseded" }, /is superseded; record is for a queued job/],
   ["parked", { status: "parked" }, /is parked; record is for a queued job/],
 ];
@@ -165,7 +206,10 @@ async function callAs(env: never, caller: Agent, args: Record<string, unknown>) 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: args })) as {
+      isError?: boolean;
+      content: Array<{ text: string }>;
+    };
     return { isError: result.isError === true, text: result.content.map((c) => c.text).join("\n") };
   } finally {
     await client.close();
@@ -175,7 +219,12 @@ async function callAs(env: never, caller: Agent, args: Record<string, unknown>) 
 
 test("PLANT: capsid_work_jobs action record refuses a driver, and the job stays queued", async () => {
   const { d1, env } = store([job()]);
-  const r = await callAs(env, driver(), { action: "record", namespace: "sample", id: ID, result_summary: ARGS.result_summary });
+  const r = await callAs(env, driver(), {
+    action: "record",
+    namespace: "sample",
+    id: ID,
+    result_summary: ARGS.result_summary,
+  });
   assert.match(r.text, /may not record an outcome without a claim/);
   assert.equal(d1.rows.jobs[0].status, "queued");
   assert.equal(d1.rows.audit_log.length, 0);
@@ -183,15 +232,26 @@ test("PLANT: capsid_work_jobs action record refuses a driver, and the job stays 
 
 test("THE INNOCENT DIRECTION: capsid_work_jobs action record records for the admin", async () => {
   const { d1, env } = store([job()]);
-  const r = await callAs(env, ADMIN, { action: "record", namespace: "sample", id: ID, result_summary: ARGS.result_summary });
+  const r = await callAs(env, ADMIN, {
+    action: "record",
+    namespace: "sample",
+    id: ID,
+    result_summary: ARGS.result_summary,
+  });
   assert.doesNotMatch(r.text, /may not record|unauthorized:/, r.text);
   assert.equal(d1.rows.jobs[0].status, "done", r.text);
-  assert.ok((d1.rows.audit_log as Array<Record<string, unknown>>).some((a) => a.action === "job-record"));
+  assert.ok(
+    (d1.rows.audit_log as Array<Record<string, unknown>>).some((a) => a.action === "job-record"),
+  );
 });
 
 test("capsid_work_jobs action record without an id is refused before anything is read", async () => {
   const { d1, env } = store([job()]);
-  const r = await callAs(env, ADMIN, { action: "record", namespace: "sample", result_summary: ARGS.result_summary });
+  const r = await callAs(env, ADMIN, {
+    action: "record",
+    namespace: "sample",
+    result_summary: ARGS.result_summary,
+  });
   assert.match(r.text, /record needs the job id/);
   assert.deepEqual(d1.recorded, []);
 });

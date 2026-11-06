@@ -10,9 +10,13 @@
 import { spawnSync } from "node:child_process";
 
 const started = performance.now();
-const run = spawnSync(process.execPath, ["--import", "./test/resolve-ts.mjs", "--test", ...process.argv.slice(2)], {
-  stdio: "inherit",
-});
+const run = spawnSync(
+  process.execPath,
+  ["--import", "./test/resolve-ts.mjs", "--test", ...process.argv.slice(2)],
+  {
+    stdio: "inherit",
+  },
+);
 const ms = performance.now() - started;
 if (run.error) throw run.error;
 console.log(`unit suite took ${(ms / 1000).toFixed(1)}s.`);

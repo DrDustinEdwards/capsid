@@ -9,7 +9,13 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // (src/access-login.ts). The round trip through Access is test-integration/oauth-round-trip.test.ts.
 
 const ORIGIN = "https://capsid.example.com";
-const FLOW: LoginFlow = { callbackPath: "/callback", stateCookie: "sample_state", cookiePath: "/", kvPrefix: "sample:state:", restartHint: "Start again." };
+const FLOW: LoginFlow = {
+  callbackPath: "/callback",
+  stateCookie: "sample_state",
+  cookiePath: "/",
+  kvPrefix: "sample:state:",
+  restartHint: "Start again.",
+};
 
 function env() {
   const kv = fakeKv();
@@ -35,16 +41,30 @@ async function started(e: ReturnType<typeof env>["env"]) {
 }
 
 const callback = (state: string, cookie: string) =>
-  new Request(`${ORIGIN}${FLOW.callbackPath}?code=access-code&state=${state}`, { headers: { Cookie: `${FLOW.stateCookie}=${cookie}` } });
+  new Request(`${ORIGIN}${FLOW.callbackPath}?code=access-code&state=${state}`, {
+    headers: { Cookie: `${FLOW.stateCookie}=${cookie}` },
+  });
 
 test("PLANT: the state cookie cannot be computed from the state in the callback URL", async () => {
   const { env: e } = env();
   const { state, cookie } = await started(e);
-  assert.notEqual(cookie, await sha256Hex(state), "the cookie is the state's digest, which anyone holding the URL can compute");
-  const forged = await completeAccessLogin(callback(state, await sha256Hex(state)), e, FLOW, (s) => s);
+  assert.notEqual(
+    cookie,
+    await sha256Hex(state),
+    "the cookie is the state's digest, which anyone holding the URL can compute",
+  );
+  const forged = await completeAccessLogin(
+    callback(state, await sha256Hex(state)),
+    e,
+    FLOW,
+    (s) => s,
+  );
   assert.equal(forged.ok, false);
   assert.equal(!forged.ok && forged.response.status, 403);
-  assert.match(!forged.ok ? await forged.response.text() : "", /this browser did not start the flow/);
+  assert.match(
+    !forged.ok ? await forged.response.text() : "",
+    /this browser did not start the flow/,
+  );
 });
 
 test("the browser that started the sign-in passes the state check and reaches the token exchange", async () => {

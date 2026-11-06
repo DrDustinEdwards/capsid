@@ -49,7 +49,9 @@ export function bundledModel(): SystemModel {
   return parsed.model;
 }
 
-export type PublicBuildReport = { ran: false; note: string } | { ran: true; note: string; codeFailed?: true };
+export type PublicBuildReport =
+  | { ran: false; note: string }
+  | { ran: true; note: string; codeFailed?: true };
 
 export interface PublicBuildReaders {
   listRepos: (env: Env) => Promise<{ repos: InstalledRepo[] }>;
@@ -57,7 +59,11 @@ export interface PublicBuildReaders {
   codeMap: (env: Env, repo: string) => Promise<unknown>;
 }
 
-const LIVE: PublicBuildReaders = { listRepos: listInstalledRepos, statsRows: readStatsRows, codeMap: readCodeMap };
+const LIVE: PublicBuildReaders = {
+  listRepos: listInstalledRepos,
+  statsRows: readStatsRows,
+  codeMap: readCodeMap,
+};
 
 /**
  * Builds and stores the public documents once per UTC day. The model and the numbers
@@ -68,12 +74,18 @@ const LIVE: PublicBuildReaders = { listRepos: listInstalledRepos, statsRows: rea
  * the model or retry every tick. Later in the day the code document alone is rebuilt
  * each hour, so a repo's new map shows the same day.
  */
-export async function publicBuildTick(env: Env, now: Date, readers: PublicBuildReaders = LIVE, model: SystemModel = bundledModel()): Promise<PublicBuildReport> {
+export async function publicBuildTick(
+  env: Env,
+  now: Date,
+  readers: PublicBuildReaders = LIVE,
+  model: SystemModel = bundledModel(),
+): Promise<PublicBuildReport> {
   const today = now.toISOString().slice(0, 10);
   const last = await env.APP_KV.get(PUBLIC_BUILD_LAST_KEY);
   if (last && last.slice(0, 10) === today) {
     const codeLast = await env.APP_KV.get(PUBLIC_CODE_LAST_KEY);
-    if (codeLast && now.getTime() - Date.parse(codeLast) < CODE_REFRESH_MS) return { ran: false, note: `already built ${last}` };
+    if (codeLast && now.getTime() - Date.parse(codeLast) < CODE_REFRESH_MS)
+      return { ran: false, note: `already built ${last}` };
     const { repos } = await readers.listRepos(env);
     const code = await storeCode(env, model, privacyOf(repos), today, now, readers.codeMap);
     const note = `code maps only, the model was built ${last}: ${code.note}`;
@@ -83,7 +95,10 @@ export async function publicBuildTick(env: Env, now: Date, readers: PublicBuildR
   const { repos } = await readers.listRepos(env);
   const privacy = privacyOf(repos);
   const doc = toPublic(model, privacy, today);
-  const stats = summarize(await readers.statsRows(env, now, { public: doc.counts.public, private: doc.counts.private }), now);
+  const stats = summarize(
+    await readers.statsRows(env, now, { public: doc.counts.public, private: doc.counts.private }),
+    now,
+  );
 
   await env.APP_KV.put(PUBLIC_MODEL_KEY, JSON.stringify(doc));
   await env.APP_KV.put(PUBLIC_STATS_KEY, JSON.stringify(stats));
@@ -102,21 +117,37 @@ function privacyOf(repos: InstalledRepo[]): Map<string, boolean> {
 
 /** Builds and stores the code document. A map that fails its parse keeps the last good
  *  document. Either way the attempt is stamped, so a broken map is retried the next hour, not every tick. */
-async function storeCode(env: Env, model: SystemModel, privacy: Map<string, boolean>, today: string, now: Date, read: PublicBuildReaders["codeMap"]): Promise<{ note: string; failed: boolean }> {
+async function storeCode(
+  env: Env,
+  model: SystemModel,
+  privacy: Map<string, boolean>,
+  today: string,
+  now: Date,
+  read: PublicBuildReaders["codeMap"],
+): Promise<{ note: string; failed: boolean }> {
   let result: { note: string; failed: boolean };
   try {
     const built = await buildPublicCode(env, model, privacy, today, read);
     await env.APP_KV.put(PUBLIC_CODE_KEY, JSON.stringify(built));
-    result = { note: `${built.maps.length} code map(s)${built.maps.length ? ` (${built.maps.map((m) => m.repo.split("/")[1]).join(", ")})` : ""}`, failed: false };
+    result = {
+      note: `${built.maps.length} code map(s)${built.maps.length ? ` (${built.maps.map((m) => m.repo.split("/")[1]).join(", ")})` : ""}`,
+      failed: false,
+    };
   } catch (e) {
-    result = { note: `code maps kept from the last build: ${e instanceof Error ? e.message : String(e)}`, failed: true };
+    result = {
+      note: `code maps kept from the last build: ${e instanceof Error ? e.message : String(e)}`,
+      failed: true,
+    };
   }
   await env.APP_KV.put(PUBLIC_CODE_LAST_KEY, now.toISOString());
   return result;
 }
 
 function json(body: string, status: number, cache: string): Response {
-  return new Response(body, { status, headers: { "Content-Type": "application/json;charset=utf-8", "Cache-Control": cache } });
+  return new Response(body, {
+    status,
+    headers: { "Content-Type": "application/json;charset=utf-8", "Cache-Control": cache },
+  });
 }
 
 /** Which stored document a route serves. */
@@ -138,14 +169,17 @@ export async function handlePublicDocument(
   ctx: Pick<ExecutionContext, "waitUntil">,
   doc: (typeof PUBLIC_DOCS)[keyof typeof PUBLIC_DOCS],
   now: Date = new Date(),
-  cache: Cache | undefined = (globalThis as { caches?: CacheStorage & { default?: Cache } }).caches?.default
+  cache: Cache | undefined = (globalThis as { caches?: CacheStorage & { default?: Cache } }).caches
+    ?.default,
 ): Promise<Response> {
   // The query string is not part of the key, so it cannot be used to miss the cache.
   const key = new Request(new URL(doc.path, request.url).toString());
   const hit = await cache?.match(key);
   if (hit) return hit;
 
-  const verdict = await limit(rateLimiter(env), ipKey("public", request).key, PUBLIC_DATA_RULES, { onUnavailable: "refuse" });
+  const verdict = await limit(rateLimiter(env), ipKey("public", request).key, PUBLIC_DATA_RULES, {
+    onUnavailable: "refuse",
+  });
   if (verdict.status !== "ok") return limitedResponse(verdict);
 
   const stored = await env.APP_KV.get(doc.key);

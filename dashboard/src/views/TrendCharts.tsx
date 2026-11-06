@@ -11,7 +11,15 @@ import { fetchClaimsAggregate, useAnswer } from "../lib/api";
 import { cfNoData, cfOk, ringOf, slotStart } from "../lib/derive";
 import { DAY, HOUR, MIN, SLOT_MS, fmtN, ms, pct, shortId, utc } from "../lib/format";
 import { useTrends } from "../lib/trends";
-import type { ClaimsAgreement, ClaimsGroup, ClaimsWaitRow, PortalPlan, PortalTrends, SiteSnapshot, TrendCiRepo } from "../types";
+import type {
+  ClaimsAgreement,
+  ClaimsGroup,
+  ClaimsWaitRow,
+  PortalPlan,
+  PortalTrends,
+  SiteSnapshot,
+  TrendCiRepo,
+} from "../types";
 import { errorTotals } from "../ui/charts";
 import { St } from "../ui/icons";
 
@@ -50,7 +58,8 @@ function ChartPanel({ id, children }: { id: string; children: ReactNode }) {
 export function MinutesTile() {
   const { data, error, loading } = useTrends();
   if (loading && !data) return null;
-  if (!data) return <p className="faint minutes-none">Your time per week could not be read: {error}</p>;
+  if (!data)
+    return <p className="faint minutes-none">Your time per week could not be read: {error}</p>;
   return (
     <>
       <Minutes minutes={data.minutes} />
@@ -60,11 +69,17 @@ export function MinutesTile() {
 }
 
 /** The change on last week in words, with its direction: more of Dustin's time is worse. */
-export function minutesChange(now: number, before: number | null): { text: string; dir: "up" | "down" | "same" | null } {
+export function minutesChange(
+  now: number,
+  before: number | null,
+): { text: string; dir: "up" | "down" | "same" | null } {
   if (before === null) return { text: "no week before to compare", dir: null };
   const d = now - before;
   if (d === 0) return { text: "the same as last week", dir: "same" };
-  return { text: `${Math.abs(d)} min ${d > 0 ? "more" : "less"} than last week`, dir: d > 0 ? "up" : "down" };
+  return {
+    text: `${Math.abs(d)} min ${d > 0 ? "more" : "less"} than last week`,
+    dir: d > 0 ? "up" : "down",
+  };
 }
 
 function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
@@ -87,7 +102,12 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
     caption: `An estimate from what you did in Capsid: each stretch of actions with no gap over 5 minutes counts from its first action to its last, plus a minute. Reading the Portal without acting is not counted.${minutes.truncated ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Capsid audit log, your actions" },
   } as const;
-  return <ChartFrame className="minutes-chart" draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />;
+  return (
+    <ChartFrame
+      className="minutes-chart"
+      draw={(width, fit) => lineChart({ ...opts, width, ...fit })}
+    />
+  );
 }
 
 // ---- 2. Where does waiting go? ----------------------------------------------------------
@@ -107,7 +127,11 @@ const GATE_WORDS: Record<string, string> = {
   open_pr: "Opening a pull request",
   unreadable_gate: "A gate that could not be read",
 };
-const ENDED_BY_WORDS: Record<string, string> = { human: "You", policy: "The signed policy", seat: "A session acting for you" };
+const ENDED_BY_WORDS: Record<string, string> = {
+  human: "You",
+  policy: "The signed policy",
+  seat: "A session acting for you",
+};
 const words = (code: string) => code.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 
 export function gateWords(gate: string): string {
@@ -123,7 +147,12 @@ export function gateWords(gate: string): string {
 /** Total ended waiting per gate class, split by who ended it, longest first. A median
  *  cannot be combined across namespaces and says nothing of how often a gate waits; the
  *  total adds up, so the longest bar is where the hours went. */
-export function waitRows(waits: ClaimsWaitRow[]): { rows: Array<{ gate: string; endedBy: string; hours: number }>; classes: number; shown: number; allHours: number } {
+export function waitRows(waits: ClaimsWaitRow[]): {
+  rows: Array<{ gate: string; endedBy: string; hours: number }>;
+  classes: number;
+  shown: number;
+  allHours: number;
+} {
   const byClass = new Map<string, Map<string, number>>();
   for (const w of waits) {
     const ends = byClass.get(w.gate_class) ?? new Map<string, number>();
@@ -132,8 +161,19 @@ export function waitRows(waits: ClaimsWaitRow[]): { rows: Array<{ gate: string; 
   }
   const sum = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0);
   const ranked = [...byClass].sort(([, a], [, b]) => sum(b) - sum(a)).slice(0, MOST_CLASSES);
-  const rows = ranked.flatMap(([gate, ends]) => [...ends].map(([endedBy, h]) => ({ gate: gateWords(gate), endedBy: ENDED_BY_WORDS[endedBy] ?? words(endedBy), hours: Math.round(h * 100) / 100 })));
-  return { rows, classes: byClass.size, shown: ranked.length, allHours: [...byClass.values()].reduce((a, m) => a + sum(m), 0) };
+  const rows = ranked.flatMap(([gate, ends]) =>
+    [...ends].map(([endedBy, h]) => ({
+      gate: gateWords(gate),
+      endedBy: ENDED_BY_WORDS[endedBy] ?? words(endedBy),
+      hours: Math.round(h * 100) / 100,
+    })),
+  );
+  return {
+    rows,
+    classes: byClass.size,
+    shown: ranked.length,
+    allHours: [...byClass.values()].reduce((a, m) => a + sum(m), 0),
+  };
 }
 
 /** The header chart on Needs you: one bar per gate class, stacked by who ended the wait,
@@ -142,9 +182,20 @@ export function waitRows(waits: ClaimsWaitRow[]): { rows: Array<{ gate: string; 
 // and reopened without reading the aggregate again. The window is fixed when the read is made.
 export function WaitingChart() {
   const { now } = useApp();
-  const load = useAnswer(["claims", "waits"], () => fetchClaimsAggregate({ namespace: "", agent: "", since: new Date(now - 14 * DAY).toISOString(), until: "" }), { staleTime: 10 * 60_000 });
+  const load = useAnswer(
+    ["claims", "waits"],
+    () =>
+      fetchClaimsAggregate({
+        namespace: "",
+        agent: "",
+        since: new Date(now - 14 * DAY).toISOString(),
+        until: "",
+      }),
+    { staleTime: 10 * 60_000 },
+  );
   if (!load.data && load.loading) return null;
-  if (!load.data) return <p className="faint wait-none">Where waiting goes could not be read: {load.error}</p>;
+  if (!load.data)
+    return <p className="faint wait-none">Where waiting goes could not be read: {load.error}</p>;
   const { rows, classes, shown, allHours } = waitRows(load.data.waits);
   if (!rows.length) return <p className="faint wait-none">No wait ended in the last 14 days.</p>;
   const top = rows.filter((r) => r.gate === rows[0]!.gate).reduce((a, r) => a + r.hours, 0);
@@ -164,7 +215,12 @@ export function WaitingChart() {
     caption: `Total time between a job stopping at a gate and the gate being answered, last 14 days${classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.${load.data.truncated.includes("waits") ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Claims aggregate, gate waits" },
   } as const;
-  return <ChartFrame className="wait-chart" draw={(width, fit) => barChart({ ...opts, width, ...fit })} />;
+  return (
+    <ChartFrame
+      className="wait-chart"
+      draw={(width, fit) => barChart({ ...opts, width, ...fit })}
+    />
+  );
 }
 
 // ---- 3. Is the queue growing or draining? -------------------------------------------------
@@ -248,15 +304,22 @@ export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
 const AGREEMENTS: readonly ClaimsAgreement[] = ["agree", "disagree", "unclaimed", "unchecked"];
 
 /** Agreement counts per agent, summed over the checks. An agent with no check is left out. */
-export function agreementRows(groups: ClaimsGroup[]): Array<{ agent: string; agreement: ClaimsAgreement; checks: number }> {
+export function agreementRows(
+  groups: ClaimsGroup[],
+): Array<{ agent: string; agreement: ClaimsAgreement; checks: number }> {
   const per = new Map<string, Record<ClaimsAgreement, number>>();
   for (const g of groups) {
     const key = g.agent ?? "no claim yet";
     const sum = per.get(key) ?? { agree: 0, disagree: 0, unclaimed: 0, unchecked: 0 };
-    for (const counts of Object.values(g.evaluations)) for (const a of AGREEMENTS) sum[a] += counts[a];
+    for (const counts of Object.values(g.evaluations))
+      for (const a of AGREEMENTS) sum[a] += counts[a];
     per.set(key, sum);
   }
-  return [...per].filter(([, c]) => AGREEMENTS.some((a) => c[a] > 0)).flatMap(([agent, c]) => AGREEMENTS.map((agreement) => ({ agent, agreement, checks: c[agreement] })));
+  return [...per]
+    .filter(([, c]) => AGREEMENTS.some((a) => c[a] > 0))
+    .flatMap(([agent, c]) =>
+      AGREEMENTS.map((agreement) => ({ agent, agreement, checks: c[agreement] })),
+    );
 }
 
 const NARROW = 560;
@@ -265,7 +328,8 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
   const rows = agreementRows(groups);
   if (!rows.length) return null;
   const agents = new Set(rows.map((r) => r.agent)).size;
-  const sum = (a: ClaimsAgreement) => rows.filter((r) => r.agreement === a).reduce((n, r) => n + r.checks, 0);
+  const sum = (a: ClaimsAgreement) =>
+    rows.filter((r) => r.agreement === a).reduce((n, r) => n + r.checks, 0);
   const opts = {
     data: rows,
     x: "agent",
@@ -273,7 +337,12 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     series: "agreement",
     seriesDomain: AGREEMENTS,
     // A color that means a status takes the status token (capsomer/enarratio.css themes the pair).
-    colors: { agree: "var(--ok)", disagree: "var(--crit)", unclaimed: "var(--nodata)", unchecked: "var(--warn)" },
+    colors: {
+      agree: "var(--ok)",
+      disagree: "var(--crit)",
+      unclaimed: "var(--nodata)",
+      unchecked: "var(--warn)",
+    },
     layout: "grouped",
     xLabel: null,
     yLabel: "Checks",
@@ -288,7 +357,12 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
       <ChartFrame
         draw={(width) =>
           width < NARROW
-            ? barChart({ ...opts, width, orientation: "horizontal", height: 56 + agents * AGREEMENTS.length * 16 })
+            ? barChart({
+                ...opts,
+                width,
+                orientation: "horizontal",
+                height: 56 + agents * AGREEMENTS.length * 16,
+              })
             : barChart({ ...opts, width: Math.min(900, width), height: 260 })
         }
       />
@@ -304,7 +378,8 @@ export function CostChart() {
   if (loading && !data) return null;
   if (!data) return <p className="faint">Weekly cost could not be read: {error}</p>;
   const weeks = data.cost.weeks;
-  if (!weeks.some((w) => w.usd !== null)) return <p className="faint">No model cost was recorded in these {weeks.length} weeks.</p>;
+  if (!weeks.some((w) => w.usd !== null))
+    return <p className="faint">No model cost was recorded in these {weeks.length} weeks.</p>;
   const now = weeks[weeks.length - 1]!;
   const opts = {
     data: weeks.map((w) => ({ week: w.start, usd: w.usd })),
@@ -330,7 +405,12 @@ export function CostChart() {
 // ---- 7. How much merges with no human? -------------------------------------------------------
 
 const MERGE_KINDS = ["auto", "approved", "seat", "closed"] as const;
-const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = { auto: "Merged by policy", approved: "Merged on approval", seat: "Merged by you", closed: "Closed unmerged" };
+const MERGE_NAME: Record<(typeof MERGE_KINDS)[number], string> = {
+  auto: "Merged by policy",
+  approved: "Merged on approval",
+  seat: "Merged by you",
+  closed: "Closed unmerged",
+};
 
 /** Pull requests' chart: each week's merges and closes by who acted, stacked. Enarratio's bar
  *  chart has no event marker, so each rollback is listed under it. */
@@ -340,7 +420,9 @@ export function MergesChart() {
   if (!data) return <p className="faint">Merges per week could not be read: {error}</p>;
   const weeks = data.merges.weeks;
   const rollbacks = data.merges.rollbacks;
-  const rows = weeks.flatMap((w) => MERGE_KINDS.map((k) => ({ week: w.week.slice(5), kind: MERGE_NAME[k], pulls: w[k] })));
+  const rows = weeks.flatMap((w) =>
+    MERGE_KINDS.map((k) => ({ week: w.week.slice(5), kind: MERGE_NAME[k], pulls: w[k] })),
+  );
   const total = (k: (typeof MERGE_KINDS)[number]) => weeks.reduce((a, w) => a + w[k], 0);
   const merged = total("auto") + total("approved") + total("seat");
   const opts = {
@@ -355,7 +437,9 @@ export function MergesChart() {
     yLabel: "Pull requests",
     height: 240,
     title: "How much merges with no human, and is that rising?",
-    subtitle: merged ? `${Math.round((total("auto") / merged) * 100)}% of the ${merged} merged in ${weeks.length} weeks went through on the policy alone.` : `Nothing merged in ${weeks.length} weeks.`,
+    subtitle: merged
+      ? `${Math.round((total("auto") / merged) * 100)}% of the ${merged} merged in ${weeks.length} weeks went through on the policy alone.`
+      : `Nothing merged in ${weeks.length} weeks.`,
     alt: `Pull requests merged or closed per week for ${weeks.length} weeks: ${total("auto")} merged by policy with no human, ${total("approved")} on an approval, ${total("seat")} by you, ${total("closed")} closed unmerged. ${rollbacks.length} ${rollbacks.length === 1 ? "rollback" : "rollbacks"}.`,
     caption: rollbacks.length
       ? `Rollbacks: ${rollbacks.map((r) => `${r.at.slice(0, 10)} ${r.repo}${r.pr === null ? "" : ` #${r.pr}`}${r.outcome === "rollback_failed" ? " (rollback failed)" : ""}`).join("; ")}.`
@@ -365,7 +449,10 @@ export function MergesChart() {
   return (
     <ChartPanel id="merge-trend">
       <Stale error={error} />
-      <ChartFrame className="merge-chart" draw={(width, fit) => barChart({ ...opts, width, ...fit })} />
+      <ChartFrame
+        className="merge-chart"
+        draw={(width, fit) => barChart({ ...opts, width, ...fit })}
+      />
     </ChartPanel>
   );
 }
@@ -373,7 +460,8 @@ export function MergesChart() {
 // ---- 8. How often do deploys ship, fail and recover? ---------------------------------------
 
 /** Restore time in words: seconds under two minutes, else whole minutes. */
-const restoreWords = (s: number | null) => (s === null ? "-" : s < 120 ? `${s} s` : `${Math.round(s / 60)} min`);
+const restoreWords = (s: number | null) =>
+  s === null ? "-" : s < 120 ? `${s} s` : `${Math.round(s / 60)} min`;
 
 /** DORA's deploy measures per repository (checklist F4): deploy frequency, change failure
  *  rate and median time to restore, from each deploy's live gate. */
@@ -383,7 +471,12 @@ export function DeploysTable() {
   if (!data) return <p className="faint">Deploys could not be read: {error}</p>;
   const repos = data.deploys.repos;
   return (
-    <Panel flush title={`Deploys, ${data.weeks} weeks`} src="deploy_outcomes, each deploy's live gate" id="deploy-measures">
+    <Panel
+      flush
+      title={`Deploys, ${data.weeks} weeks`}
+      src="deploy_outcomes, each deploy's live gate"
+      id="deploy-measures"
+    >
       <Stale error={error} />
       <div className="scroll-x reflow">
         <table className="list cards-below-1100">
@@ -405,10 +498,14 @@ export function DeploysTable() {
                 <td data-label="Shipped">{r.shipped}</td>
                 <td data-label="Refused">
                   {r.refused}
-                  {r.unverified ? <span className="faint"> ({r.unverified} could not be checked)</span> : null}
+                  {r.unverified ? (
+                    <span className="faint"> ({r.unverified} could not be checked)</span>
+                  ) : null}
                 </td>
                 <td data-label="Change failure rate">{pct(r.change_failure_rate, 0)}</td>
-                <td data-label="Median time to restore">{restoreWords(r.restore_median_seconds)}</td>
+                <td data-label="Median time to restore">
+                  {restoreWords(r.restore_median_seconds)}
+                </td>
               </tr>
             ))}
             {repos.length === 0 && (
@@ -435,9 +532,13 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
   const why = cfNoData(site.cloudflare);
   const title = "Requests and error rate, 24 hours";
   if (!cf) return <ChartFrame noData={{ title, reason: why ?? "" }} />;
-  if (!cf.errors24) return <ChartFrame noData={{ title, reason: cf.errors_reason ?? "the analytics read failed" }} />;
+  if (!cf.errors24)
+    return (
+      <ChartFrame noData={{ title, reason: cf.errors_reason ?? "the analytics read failed" }} />
+    );
   const e = cf.errors24;
-  if (!e.length) return <ChartFrame noData={{ title, reason: "the analytics read returned no hours" }} />;
+  if (!e.length)
+    return <ChartFrame noData={{ title, reason: "the analytics read returned no hours" }} />;
   const rates = e.map((x) => (x.requests ? (x.errors / x.requests) * 100 : 0));
   const peak = Math.max(...rates);
   const t0 = ms(e[0]!.hour);
@@ -445,22 +546,35 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
   const inWindow = cf.deploys.filter((d) => ms(d.created_on) >= t0 && ms(d.created_on) <= t1);
   const tot = errorTotals(e);
   const opts = {
-    data: e.map((x, i) => ({ hour: new Date(ms(x.hour)).toISOString(), rate: Math.round(rates[i]! * 100) / 100 })),
+    data: e.map((x, i) => ({
+      hour: new Date(ms(x.hour)).toISOString(),
+      rate: Math.round(rates[i]! * 100) / 100,
+    })),
     x: "hour",
     y: "rate",
     xLabel: null,
     yLabel: "Error rate (%)",
     formatValue: (v: number) => `${v}%`,
     references: [{ y: 1, label: "Alert at 1%" }],
-    markers: inWindow.map((d) => ({ x: new Date(ms(d.created_on)).toISOString(), label: `Deploy ${shortId(d.version_id ?? d.id)}` })),
+    markers: inWindow.map((d) => ({
+      x: new Date(ms(d.created_on)).toISOString(),
+      label: `Deploy ${shortId(d.version_id ?? d.id)}`,
+    })),
     height: 220,
     title,
     subtitle: `${fmtN(tot.req)} requests and ${fmtN(tot.err)} errors (${pct(tot.rate)})`,
     alt: `Error rate for ${site.name} over the last 24 hours: peak ${peak.toFixed(2)}% in an hour, ${pct(tot.rate)} overall, ${inWindow.length} ${inWindow.length === 1 ? "deploy" : "deploys"} in the window.`,
-    caption: inWindow.length ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.` : "No deploy in the window.",
+    caption: inWindow.length
+      ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.`
+      : "No deploy in the window.",
     source: { name: "Cloudflare Workers analytics, hourly" },
   } as const;
-  return <ChartFrame className="error-rate" draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />;
+  return (
+    <ChartFrame
+      className="error-rate"
+      draw={(width, fit) => lineChart({ ...opts, width, ...fit })}
+    />
+  );
 }
 
 // ---- 9b. Deploys and downtime, one lane per site ------------------------------------------
@@ -479,7 +593,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
   for (const s of sites) {
     const ring = ringOf(s);
     // Consecutive slots of one kind make one span.
-    for (let k = 0; k < ring.length; ) {
+    for (let k = 0; k < ring.length;) {
       const c = ring[k];
       let end = k + 1;
       while (end < ring.length && ring[end] === c) end++;
@@ -487,7 +601,16 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
       const to = slotStart(s, end - 1) + SLOT_MS;
       if (c !== "1" && to > t0) {
         if (c === "0") downSlots += end - k;
-        events.push({ lane: s.name, label: c === "0" ? `Probe failed, ${end - k} half-hour ${end - k === 1 ? "slot" : "slots"}` : "No watcher pass", status: c === "0" ? "error" : "unknown", from, to });
+        events.push({
+          lane: s.name,
+          label:
+            c === "0"
+              ? `Probe failed, ${end - k} half-hour ${end - k === 1 ? "slot" : "slots"}`
+              : "No watcher pass",
+          status: c === "0" ? "error" : "unknown",
+          from,
+          to,
+        });
       }
       k = end;
     }
@@ -497,10 +620,18 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
       const t = ms(d.created_on);
       if (t < t0 || t > now) continue;
       deploys++;
-      events.push({ lane: s.name, label: `Deploy ${shortId(d.version_id ?? d.id)}${d.triggered_by ? `, ${d.triggered_by}` : ""}${d.message ? `: ${d.message}` : ""}`, status: "ok", at: t });
+      events.push({
+        lane: s.name,
+        label: `Deploy ${shortId(d.version_id ?? d.id)}${d.triggered_by ? `, ${d.triggered_by}` : ""}${d.message ? `: ${d.message}` : ""}`,
+        status: "ok",
+        at: t,
+      });
     }
   }
-  const notes = [...(days > 7 ? ["The probe ring holds 7 days; older downtime is not shown."] : []), ...(noData.length ? [`Deploys not read for ${noData.join("; ")}.`] : [])];
+  const notes = [
+    ...(days > 7 ? ["The probe ring holds 7 days; older downtime is not shown."] : []),
+    ...(noData.length ? [`Deploys not read for ${noData.join("; ")}.`] : []),
+  ];
   const opts = {
     events,
     lanes,
@@ -512,7 +643,12 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
     notes,
     source: { name: "Cloudflare deployments and the watcher's probes" },
   };
-  return <ChartFrame className="deploy-timeline" draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
+  return (
+    <ChartFrame
+      className="deploy-timeline"
+      draw={(width, fit) => timeline({ ...opts, width, ...fit })}
+    />
+  );
 }
 
 // ---- 4. Tonight -------------------------------------------------------------------------
@@ -531,7 +667,13 @@ function planEvents(plan: PortalPlan): { events: TimelineEvent[]; start: number;
     let at = lane.heavy ? heavyAt : start;
     for (const j of lane.jobs) {
       const to = at + Math.max(1, j.estimate_minutes) * MIN;
-      events.push({ lane: lane.repo, label: j.title, status: j.gated ? "warning" : "ok", from: at, to });
+      events.push({
+        lane: lane.repo,
+        label: j.title,
+        status: j.gated ? "warning" : "ok",
+        from: at,
+        to,
+      });
       at = to;
     }
     if (lane.heavy) heavyAt = at;
@@ -552,7 +694,12 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
     label: `Tonight's plan, ${events.length} ${events.length === 1 ? "job" : "jobs"} by repo, as if it started when the plan was read (UTC)`,
     source: { name: "The overnight planner's estimates" },
   };
-  return <ChartFrame className="tonight-chart" draw={(width, fit) => timeline({ ...opts, width, ...fit })} />;
+  return (
+    <ChartFrame
+      className="tonight-chart"
+      draw={(width, fit) => timeline({ ...opts, width, ...fit })}
+    />
+  );
 }
 
 // ---- 10. Backup retention slots ---------------------------------------------------------
@@ -570,15 +717,19 @@ export function BackupSlots() {
       <div className="body stack-gap">
         {b && <Stale error={error} />}
         {!b ? (
-          loading ? null : <St kind="nodata">Not read: {error}</St>
+          loading ? null : (
+            <St kind="nodata">Not read: {error}</St>
+          )
         ) : !b.slots ? (
           <St kind="nodata">{b.error}</St>
         ) : (
-          ([
-            ["Daily", "14 days", b.slots.daily],
-            ["Weekly", "8 weeks", b.slots.weekly],
-            ["Monthly", "6 months", b.slots.monthly],
-          ] as const).map(([name, span, slots]) => {
+          (
+            [
+              ["Daily", "14 days", b.slots.daily],
+              ["Weekly", "8 weeks", b.slots.weekly],
+              ["Monthly", "6 months", b.slots.monthly],
+            ] as const
+          ).map(([name, span, slots]) => {
             const kept = slots.filter((s) => s.filled).length;
             const opts = {
               values: slots.map((s) => (s.filled ? 0 : 1)),
@@ -591,7 +742,13 @@ export function BackupSlots() {
               cellLabels: slots.map((s) => s.key),
               formatValue: missing,
             };
-            return <ChartFrame key={name} inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />;
+            return (
+              <ChartFrame
+                key={name}
+                inline
+                draw={(width, fit) => heatStrip({ ...opts, width, ...fit })}
+              />
+            );
           })
         )}
       </div>
@@ -617,11 +774,18 @@ export function CiHistory() {
   const { data, error, loading } = useTrends();
   const ci = data?.ci;
   return (
-    <Panel flush title="The last 14 days" src="GitHub, default branch runs, kept an hour" id="ci-history">
+    <Panel
+      flush
+      title="The last 14 days"
+      src="GitHub, default branch runs, kept an hour"
+      id="ci-history"
+    >
       <div className="body stack-gap">
         {ci && <Stale error={error} />}
         {!ci ? (
-          loading ? null : <St kind="nodata">Not read: {error}</St>
+          loading ? null : (
+            <St kind="nodata">Not read: {error}</St>
+          )
         ) : (
           <>
             {ci.repos.map((r) => {
@@ -639,7 +803,9 @@ export function CiHistory() {
                 min: 0,
                 max: 1,
                 title: r.namespace,
-                subtitle: streak ? `red for ${streak === r.days.length ? "at least " : ""}${streak} ${streak === 1 ? "day" : "days"}` : "green",
+                subtitle: streak
+                  ? `red for ${streak === r.days.length ? "at least " : ""}${streak} ${streak === 1 ? "day" : "days"}`
+                  : "green",
                 label: `${r.namespace} default branch, red or green by day`,
                 notes: r.truncated ? "Over 100 runs; early days may be missing some." : undefined,
                 height: 20,

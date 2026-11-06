@@ -25,18 +25,18 @@ token-shaped string. Run it alone with `node dashboard/scripts/shots-privacy.mjs
 The mock's clock and the browser's are both pinned to the fixture's own time
 (`dashboard/screenshots/clock.ts`), so the same build gives the same pictures.
 
-| File | What it shows |
-| --- | --- |
-| `health-light.png` | Health, light theme, 1440 x 900 |
-| `health-dark.png` | Health, dark theme |
-| `sites-light.png` | Sites, every site in one table |
-| `site-light.png` | One site's own page, its Overview tab |
-| `queue-drawer-light.png` | Queue with a job's drawer open |
+| File                        | What it shows                                                       |
+| --------------------------- | ------------------------------------------------------------------- |
+| `health-light.png`          | Health, light theme, 1440 x 900                                     |
+| `health-dark.png`           | Health, dark theme                                                  |
+| `sites-light.png`           | Sites, every site in one table                                      |
+| `site-light.png`            | One site's own page, its Overview tab                               |
+| `queue-drawer-light.png`    | Queue with a job's drawer open                                      |
 | `control-preview-light.png` | A job's Mark failed control with its preview open (never performed) |
-| `activity-light.png` | Activity |
-| `checks-light.png` | Jobs, its Checks tab |
-| `phone-health-light.png` | Health on a phone, 390 x 844 |
-| `phone-health-dark.png` | Health on a phone, dark theme |
+| `activity-light.png`        | Activity                                                            |
+| `checks-light.png`          | Jobs, its Checks tab                                                |
+| `phone-health-light.png`    | Health on a phone, 390 x 844                                        |
+| `phone-health-dark.png`     | Health on a phone, dark theme                                       |
 
 ## The explorer picture
 

@@ -20,5 +20,16 @@
     "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "dev", "e2e", "screenshots", ".react-router/types/**/*", "vite.config.ts", "vite.worker.config.ts", "react-router.config.ts", "playwright.config.ts", "playwright.shots.config.ts"]
+  "include": [
+    "src",
+    "dev",
+    "e2e",
+    "screenshots",
+    ".react-router/types/**/*",
+    "vite.config.ts",
+    "vite.worker.config.ts",
+    "react-router.config.ts",
+    "playwright.config.ts",
+    "playwright.shots.config.ts"
+  ]
 }

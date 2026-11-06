@@ -24,11 +24,11 @@ describe("/health", () => {
     // if migrations/0001_init.sql wired its AFTER INSERT trigger correctly.
     await env.DB.prepare(
       `INSERT INTO documents (namespace, path, title, body, type, status)
-       VALUES ('capsid', 'conventions.md', 'Portfolio-wide conventions', 'Standing rules that apply across all projects.', 'procedural', 'published')`
+       VALUES ('capsid', 'conventions.md', 'Portfolio-wide conventions', 'Standing rules that apply across all projects.', 'procedural', 'published')`,
     ).run();
 
     const indexed = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM documents_fts WHERE documents_fts MATCH 'conventions'"
+      "SELECT COUNT(*) AS n FROM documents_fts WHERE documents_fts MATCH 'conventions'",
     ).first<{ n: number }>();
     expect(indexed?.n).toBe(1);
 

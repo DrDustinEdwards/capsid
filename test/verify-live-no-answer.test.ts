@@ -18,7 +18,10 @@ test("the fake Worker passes every gate, so the cases below measure the drops al
 test("a connection reset on the first try of every request is retried and the run passes", async () => {
   // One reset per request. Without the retry the first reset would exit 1, and exit 1
   // rolls back. The consent POST is single-shot (its handle works once), so it is spared.
-  const { code, out } = await run(healthy, (req, nth) => nth === 1 && !(req.method === "POST" && req.url === "/authorize"));
+  const { code, out } = await run(
+    healthy,
+    (req, nth) => nth === 1 && !(req.method === "POST" && req.url === "/authorize"),
+  );
   assert.equal(code, 0, out);
   assert.doesNotMatch(out, /FAIL|NORUN/);
 });
@@ -34,7 +37,10 @@ test("a server that never answers is could-not-run (exit 3), not a refusal (exit
 });
 
 test("one single-shot gate that never gets an answer makes the run exit 3", async () => {
-  const { code, out } = await run(healthy, (req) => req.method === "POST" && req.url === "/authorize");
+  const { code, out } = await run(
+    healthy,
+    (req) => req.method === "POST" && req.url === "/authorize",
+  );
   assert.equal(code, 3, out);
   assert.match(out, /NORUN {2}5 approve redirects to Access/);
 });
@@ -55,11 +61,16 @@ test("a refusal outranks a gate that could not run: exit 1", async () => {
   const wrongSha: Handler = (req, res) => {
     if (req.url === "/health") {
       res.writeHead(200, { ...NON_HTML, "content-type": "application/json" });
-      return res.end(JSON.stringify({ status: "ok", sha: "0".repeat(40), store: { d1: "ok", fts: "ok" } }));
+      return res.end(
+        JSON.stringify({ status: "ok", sha: "0".repeat(40), store: { d1: "ok", fts: "ok" } }),
+      );
     }
     healthy(req, res);
   };
-  const { code, out } = await run(wrongSha, (req) => req.method === "POST" && req.url === "/authorize");
+  const { code, out } = await run(
+    wrongSha,
+    (req) => req.method === "POST" && req.url === "/authorize",
+  );
   assert.equal(code, 1, out);
   assert.match(out, /FAIL {2}1 health \+ provenance/);
   assert.match(out, /NORUN {2}5 approve redirects to Access/);
@@ -76,7 +87,7 @@ test("gate 1 refuses a Worker whose FTS index is broken (was gate 1b)", async ()
       res.end(JSON.stringify({ status: "ok", sha: SHA, store: { d1: "ok", fts: "empty" } }));
       return true;
     }),
-    () => false
+    () => false,
   );
   assert.equal(code, 1, out);
   assert.match(out, /FAIL {2}1 health \+ provenance\n.*d1=ok fts=empty/);
@@ -86,14 +97,21 @@ test("gate 6 refuses a consent page without no-store (was gate 4b)", async () =>
   const { code, out } = await run(
     breaking((req, res) => {
       if (req.method !== "GET" || !req.url?.startsWith("/authorize?")) return false;
-      res.writeHead(200, { ...HTML, "cache-control": "public, max-age=60", "set-cookie": "__Host-consent=c1; Path=/" });
+      res.writeHead(200, {
+        ...HTML,
+        "cache-control": "public, max-age=60",
+        "set-cookie": "__Host-consent=c1; Path=/",
+      });
       res.end(`<form method="post"><input type="hidden" name="handle" value="h1"></form>`);
       return true;
     }),
-    () => false
+    () => false,
   );
   assert.equal(code, 1, out);
-  assert.match(out, /FAIL {2}6 security headers per class\n.*\/authorize consent: cache-control public, max-age=60, expected no-store/);
+  assert.match(
+    out,
+    /FAIL {2}6 security headers per class\n.*\/authorize consent: cache-control public, max-age=60, expected no-store/,
+  );
 });
 
 test("gate 6 refuses a report sink that does not answer 204 (was gate 7)", async () => {
@@ -104,10 +122,13 @@ test("gate 6 refuses a report sink that does not answer 204 (was gate 7)", async
       res.end();
       return true;
     }),
-    () => false
+    () => false,
   );
   assert.equal(code, 1, out);
-  assert.match(out, /FAIL {2}6 security headers per class\n.*\/csp-report: status 500, expected 204/);
+  assert.match(
+    out,
+    /FAIL {2}6 security headers per class\n.*\/csp-report: status 500, expected 204/,
+  );
 });
 
 // Gate 2 with tightened DCR: the script wiring, beside the decisions in
@@ -120,10 +141,13 @@ test("gate 2 refuses a Worker that registers an unlisted redirect", async () => 
       res.end(JSON.stringify({ client_id: "registered" }));
       return true;
     }),
-    () => false
+    () => false,
   );
   assert.equal(code, 1, out);
-  assert.match(out, /FAIL {2}2 CIMD, DCR allowlisted\n.*answered 201 for an unlisted redirect; the DCR allowlist is open/);
+  assert.match(
+    out,
+    /FAIL {2}2 CIMD, DCR allowlisted\n.*answered 201 for an unlisted redirect; the DCR allowlist is open/,
+  );
 });
 
 test("gate 2 refuses a probe document that is not its own URL's, and gates 3 to 5 do not run on it", async () => {
@@ -131,10 +155,17 @@ test("gate 2 refuses a probe document that is not its own URL's, and gates 3 to 
     breaking((req, res) => {
       if (req.url !== "/probe-client.json") return false;
       res.writeHead(200, { ...NON_HTML, "content-type": "application/json" });
-      res.end(JSON.stringify({ client_id: "https://example.com/elsewhere.json", client_name: "probe", redirect_uris: ["https://example.com/verify-live-callback"], token_endpoint_auth_method: "none" }));
+      res.end(
+        JSON.stringify({
+          client_id: "https://example.com/elsewhere.json",
+          client_name: "probe",
+          redirect_uris: ["https://example.com/verify-live-callback"],
+          token_endpoint_auth_method: "none",
+        }),
+      );
       return true;
     }),
-    () => false
+    () => false,
   );
   assert.equal(code, 1, out);
   assert.match(out, /FAIL {2}2 CIMD, DCR allowlisted\n.*not its own URL/);
@@ -149,7 +180,7 @@ test("a probe document the Worker does not serve is a fail of this deploy", asyn
       res.end();
       return true;
     }),
-    () => false
+    () => false,
   );
   assert.equal(code, 1, out);
   assert.match(out, /FAIL {2}2 CIMD, DCR allowlisted\n.*answered 404/);
@@ -160,14 +191,20 @@ test("gate 6 refuses the Portal answering on the MCP host", async () => {
   const { code, out } = await run(
     breaking((req, res) => {
       if (req.url !== "/portal/") return false;
-      res.writeHead(302, { ...NON_HTML, location: "https://sample.cloudflareaccess.com/cdn-cgi/access/sso/oidc/x/authorization" });
+      res.writeHead(302, {
+        ...NON_HTML,
+        location: "https://sample.cloudflareaccess.com/cdn-cgi/access/sso/oidc/x/authorization",
+      });
       res.end();
       return true;
     }),
-    () => false
+    () => false,
   );
   assert.equal(code, 1, out);
-  assert.match(out, /FAIL {2}6 security headers per class\n.*\/portal\/ not on this host: status 302, expected 404/);
+  assert.match(
+    out,
+    /FAIL {2}6 security headers per class\n.*\/portal\/ not on this host: status 302, expected 404/,
+  );
 });
 
 test("gate 6 refuses an old /console address that answers anything but 404", async () => {
@@ -178,8 +215,11 @@ test("gate 6 refuses an old /console address that answers anything but 404", asy
       res.end();
       return true;
     }),
-    () => false
+    () => false,
   );
   assert.equal(code, 1, out);
-  assert.match(out, /FAIL {2}6 security headers per class\n.*\/console\/app\/ gone: status 302, expected 404/);
+  assert.match(
+    out,
+    /FAIL {2}6 security headers per class\n.*\/console\/app\/ gone: status 302, expected 404/,
+  );
 });

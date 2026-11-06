@@ -17,14 +17,20 @@ export function accessRedirectProblem(status, location, origin, access = ACCESS_
     return `location is not a URL: ${String(location).slice(0, 80) || "(none)"}`;
   }
   const expectedPath = `/cdn-cgi/access/sso/oidc/${access.clientId}/authorization`;
-  if (url.origin !== access.teamDomain) return `redirects to ${url.origin}, not the Access team domain ${access.teamDomain}`;
-  if (url.pathname !== expectedPath) return `redirects to ${url.pathname}, not the Capsid app's authorization endpoint`;
+  if (url.origin !== access.teamDomain)
+    return `redirects to ${url.origin}, not the Access team domain ${access.teamDomain}`;
+  if (url.pathname !== expectedPath)
+    return `redirects to ${url.pathname}, not the Capsid app's authorization endpoint`;
   const q = url.searchParams;
   if (q.get("client_id") !== access.clientId) return "client_id is not the Capsid app's";
-  if (q.get("redirect_uri") !== `${origin}/callback`) return `redirect_uri is ${q.get("redirect_uri")}, not ${origin}/callback`;
-  if (q.get("response_type") !== "code") return `response_type is ${q.get("response_type")}, not code`;
-  if (q.get("code_challenge_method") !== "S256") return `code_challenge_method is ${q.get("code_challenge_method")}, not S256`;
-  if (!/^[A-Za-z0-9_-]{43}$/.test(q.get("code_challenge") ?? "")) return "code_challenge is not a S256 challenge";
+  if (q.get("redirect_uri") !== `${origin}/callback`)
+    return `redirect_uri is ${q.get("redirect_uri")}, not ${origin}/callback`;
+  if (q.get("response_type") !== "code")
+    return `response_type is ${q.get("response_type")}, not code`;
+  if (q.get("code_challenge_method") !== "S256")
+    return `code_challenge_method is ${q.get("code_challenge_method")}, not S256`;
+  if (!/^[A-Za-z0-9_-]{43}$/.test(q.get("code_challenge") ?? ""))
+    return "code_challenge is not a S256 challenge";
   if (!q.get("nonce")) return "no nonce";
   if (!q.get("state")) return "no state";
   return null;

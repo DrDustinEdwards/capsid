@@ -12,13 +12,22 @@ const REPO_META = { body: { default_branch: "main" } };
 
 function makeEnv() {
   return fakeEnv({
-    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: JSON.stringify(ONE_REPO) }) }) }) },
+    DB: {
+      prepare: () => ({
+        bind: () => ({ first: async () => ({ repos: JSON.stringify(ONE_REPO) }) }),
+      }),
+    },
     APP_KV: fakeKv({ seedToken: true }).kv,
   });
 }
 
 const SAME_REPO = { full_name: "o/r" };
-const pr = (number: number, ref: string, sha: string, o: { state?: string; merged?: boolean; repo?: { full_name: string } | null } = {}) => ({
+const pr = (
+  number: number,
+  ref: string,
+  sha: string,
+  o: { state?: string; merged?: boolean; repo?: { full_name: string } | null } = {},
+) => ({
   number,
   state: o.state ?? "closed",
   merged_at: o.merged === false || o.state === "open" ? null : "2026-10-01T00:00:00Z",
@@ -38,7 +47,10 @@ const BRANCHES = [
   { name: "stale/no-pr", commit: { sha: "n1" } },
   { name: "stable", commit: { sha: "s1" }, protected: true },
 ];
-const OPEN = [pr(3, "feat/open", "o1", { state: "open" }), pr(6, "feat/reopened", "r2", { state: "open" })];
+const OPEN = [
+  pr(3, "feat/open", "o1", { state: "open" }),
+  pr(6, "feat/reopened", "r2", { state: "open" }),
+];
 const CLOSED = [
   pr(1, "feat/merged-clean", "a1"),
   pr(2, "feat/merged-then-more", "a2"),
@@ -53,10 +65,14 @@ function routes(tips: Record<string, string> = {}) {
   const r: Record<string, unknown> = {
     "GET /repos/o/r": REPO_META,
     "GET /repos/o/r/branches": { body: BRANCHES },
-    "GET /repos/o/r/pulls": (_b: unknown, p: URLSearchParams) => ({ body: p.get("state") === "open" ? OPEN : CLOSED }),
+    "GET /repos/o/r/pulls": (_b: unknown, p: URLSearchParams) => ({
+      body: p.get("state") === "open" ? OPEN : CLOSED,
+    }),
   };
   for (const b of BRANCHES) {
-    r[`GET /repos/o/r/git/ref/heads/${b.name}`] = { body: { object: { sha: tips[b.name] ?? b.commit.sha } } };
+    r[`GET /repos/o/r/git/ref/heads/${b.name}`] = {
+      body: { object: { sha: tips[b.name] ?? b.commit.sha } },
+    };
     r[`DELETE /repos/o/r/git/refs/heads/${b.name}`] = { status: 204, text: "" };
   }
   return r as never;
@@ -66,14 +82,25 @@ test("the preview lists the one merged-clean branch, keeps every other with its 
   await withFetch(routes(), async (calls) => {
     const out = await pruneMergedBranches(makeEnv(), "ns");
     assert.equal(out.mode, "preview");
-    assert.deepEqual(out.prune.map((p) => p.branch), ["feat/merged-clean"]);
+    assert.deepEqual(
+      out.prune.map((p) => p.branch),
+      ["feat/merged-clean"],
+    );
     assert.equal(out.would_prune, 1);
     const reasons = Object.fromEntries(out.kept.map((k) => [k.branch, k.reason]));
     assert.match(reasons["feat/merged-then-more"], /commits after pull request #2 merged/);
     assert.match(reasons["feat/open"], /open pull request #3/);
     assert.match(reasons["feat/closed-unmerged"], /closed without merging/);
-    assert.match(reasons["feat/reopened"], /open pull request #6/, "the newest pull request decides, so a reopened branch is kept");
-    assert.match(reasons["feat/forky"], /no pull request/, "a fork's pull request of the same branch name is not this repo's");
+    assert.match(
+      reasons["feat/reopened"],
+      /open pull request #6/,
+      "the newest pull request decides, so a reopened branch is kept",
+    );
+    assert.match(
+      reasons["feat/forky"],
+      /no pull request/,
+      "a fork's pull request of the same branch name is not this repo's",
+    );
     assert.match(reasons["release/1.0"], /kept by name/);
     assert.match(reasons["gh-pages"], /kept by name/);
     assert.match(reasons["stale/no-pr"], /no pull request/);
@@ -86,10 +113,16 @@ test("the preview lists the one merged-clean branch, keeps every other with its 
 
 test("keep leaves a named branch alone even though it would be pruned", async () => {
   await withFetch(routes(), async (calls) => {
-    const out = await pruneMergedBranches(makeEnv(), "ns", { confirm: true, keep: ["feat/merged-clean"] });
+    const out = await pruneMergedBranches(makeEnv(), "ns", {
+      confirm: true,
+      keep: ["feat/merged-clean"],
+    });
     assert.deepEqual(out.prune, []);
     assert.deepEqual(out.deleted, []);
-    assert.match(out.kept.find((k) => k.branch === "feat/merged-clean")?.reason ?? "", /kept by request/);
+    assert.match(
+      out.kept.find((k) => k.branch === "feat/merged-clean")?.reason ?? "",
+      /kept by request/,
+    );
     assert.equal(calls.filter((c) => c.method === "DELETE").length, 0);
   });
 });
@@ -101,7 +134,10 @@ test("confirm deletes the listed branch only, and says nothing remains", async (
     assert.deepEqual(out.deleted, ["feat/merged-clean"]);
     assert.deepEqual(out.skipped, []);
     assert.equal(out.remaining, 0);
-    assert.deepEqual(calls.filter((c) => c.method === "DELETE").map((c) => c.path), ["/repos/o/r/git/refs/heads/feat/merged-clean"]);
+    assert.deepEqual(
+      calls.filter((c) => c.method === "DELETE").map((c) => c.path),
+      ["/repos/o/r/git/refs/heads/feat/merged-clean"],
+    );
   });
 });
 
@@ -117,11 +153,22 @@ test("a branch that gained a commit between the preview and the delete is skippe
 
 test("pruneVerdict keeps anything it could not see in full, and prunes only a clean merged tip", () => {
   const b = { name: "feat/x", sha: "t1", protected: false };
-  assert.deepEqual(pruneVerdict(b, "main", { number: 5, state: "closed", merged: true, headSha: "t1" }, true), { prune: true, pr: 5 });
-  assert.equal(pruneVerdict(b, "main", { number: 5, state: "closed", merged: true, headSha: "t0" }, true).prune, false);
+  assert.deepEqual(
+    pruneVerdict(b, "main", { number: 5, state: "closed", merged: true, headSha: "t1" }, true),
+    { prune: true, pr: 5 },
+  );
+  assert.equal(
+    pruneVerdict(b, "main", { number: 5, state: "closed", merged: true, headSha: "t0" }, true)
+      .prune,
+    false,
+  );
   const unseen = pruneVerdict(b, "main", undefined, false);
   assert.equal(unseen.prune, false);
   assert.match((unseen as { reason: string }).reason, /part of the list that was read/);
   // A merged clean tip still waits when the list was cut short: a newer PR may be unread.
-  assert.equal(pruneVerdict(b, "main", { number: 5, state: "closed", merged: true, headSha: "t1" }, false).prune, false);
+  assert.equal(
+    pruneVerdict(b, "main", { number: 5, state: "closed", merged: true, headSha: "t1" }, false)
+      .prune,
+    false,
+  );
 });

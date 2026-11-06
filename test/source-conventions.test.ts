@@ -28,12 +28,16 @@ test("every secret compare goes through safeEqual, in every file", () => {
     f.text
       .split("\n")
       .map((line, i) => ({ file: f.name, line: i + 1, text: line.trim() }))
-      .filter((l) => /(!==|===)\s*(await\s+)?(hmacHex|sha256Hex)\(/.test(l.text) || /(csrfCookie|stateCookie|clientSecret)\s*(!==|===)/.test(l.text))
+      .filter(
+        (l) =>
+          /(!==|===)\s*(await\s+)?(hmacHex|sha256Hex)\(/.test(l.text) ||
+          /(csrfCookie|stateCookie|clientSecret)\s*(!==|===)/.test(l.text),
+      ),
   );
   assert.deepEqual(
     offenders.map((o) => `src/${o.file}:${o.line} ${o.text}`),
     [],
-    "a secret is compared with === or !== instead of safeEqual"
+    "a secret is compared with === or !== instead of safeEqual",
   );
 });
 
@@ -44,15 +48,25 @@ test("every safeEqual, isAdminEmail and adminGrantEmail call is awaited, in ever
     f.text
       .split("\n")
       .map((line, i) => ({ file: f.name, line: i + 1, text: line.trim() }))
-      .flatMap((l) => [...l.text.matchAll(/(\bawait\s+\(?)?\b(safeEqual|isAdminEmail|adminGrantEmail)\(/g)].map((m) => ({ ...l, awaited: Boolean(m[1]) })))
-      .filter((c) => !c.text.startsWith("export async function "))
+      .flatMap((l) =>
+        [...l.text.matchAll(/(\bawait\s+\(?)?\b(safeEqual|isAdminEmail|adminGrantEmail)\(/g)].map(
+          (m) => ({ ...l, awaited: Boolean(m[1]) }),
+        ),
+      )
+      .filter((c) => !c.text.startsWith("export async function ")),
   );
   assert.ok(calls.length >= 16, `found only ${calls.length} calls`);
-  assert.deepEqual(calls.filter((c) => !c.awaited).map((c) => `src/${c.file}:${c.line} ${c.text}`), []);
+  assert.deepEqual(
+    calls.filter((c) => !c.awaited).map((c) => `src/${c.file}:${c.line} ${c.text}`),
+    [],
+  );
 });
 
 test("move and lint finalize still accept an optional boolean confirm", async () => {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+  const server = buildServer(
+    fakeEnv({ APP_KV: fakeKv({}).kv }),
+    adminAgentForEmail("admin@example.com"),
+  );
   const client = new Client({ name: "confirm-schema", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -62,7 +76,11 @@ test("move and lint finalize still accept an optional boolean confirm", async ()
   for (const name of ["capsid_write_doc", "capsid_lint_namespace"]) {
     const schema = tools.find((t) => t.name === name)?.inputSchema;
     assert.ok(schema, `${name} is not served`);
-    assert.equal((schema.properties?.confirm as { type?: string } | undefined)?.type, "boolean", `${name} does not accept confirm`);
+    assert.equal(
+      (schema.properties?.confirm as { type?: string } | undefined)?.type,
+      "boolean",
+      `${name} does not accept confirm`,
+    );
     assert.equal((schema.required ?? []).includes("confirm"), false, `${name} requires confirm`);
   }
 });

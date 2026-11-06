@@ -22,7 +22,10 @@ function deletingDb(db: D1Database, path: string): D1Database {
     batch: async (statements: D1PreparedStatement[]) => {
       if (!raced) {
         raced = true;
-        await db.prepare("DELETE FROM documents WHERE namespace = ?1 AND path = ?2").bind(NS, path).run();
+        await db
+          .prepare("DELETE FROM documents WHERE namespace = ?1 AND path = ?2")
+          .bind(NS, path)
+          .run();
       }
       return db.batch(statements);
     },
@@ -34,20 +37,34 @@ async function callTool(db: D1Database, name: string, args: Record<string, unkno
   const client = new Client({ name: "snapshotted", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
-  const result = (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+  const result = (await client.callTool({ name, arguments: args })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
   await client.close();
   expect(result.isError, result.content[0]?.text).toBeFalsy();
   return JSON.parse(result.content[0].text) as { snapshotted: boolean };
 }
 
 async function seed(path: string) {
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')").bind(NS).run();
-  await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, 'Lorem', 'lorem ipsum')")
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')")
+    .bind(NS)
+    .run();
+  await env.DB.prepare(
+    "INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, 'Lorem', 'lorem ipsum')",
+  )
     .bind(NS, path)
     .run();
 }
 
-const write = (path: string) => ({ action: "write", namespace: NS, path, title: "Lorem", body: "new lorem", confirm: true });
+const write = (path: string) => ({
+  action: "write",
+  namespace: NS,
+  path,
+  title: "Lorem",
+  body: "new lorem",
+  confirm: true,
+});
 
 describe("snapshotted is read from the batch", () => {
   it("write reports true when the snapshot was taken", async () => {
@@ -57,13 +74,18 @@ describe("snapshotted is read from the batch", () => {
 
   it("write reports false when the row was deleted before its batch", async () => {
     await seed("snap-2.md");
-    expect((await callTool(deletingDb(env.DB, "snap-2.md"), "capsid_write_doc", write("snap-2.md"))).snapshotted).toBe(false);
+    expect(
+      (await callTool(deletingDb(env.DB, "snap-2.md"), "capsid_write_doc", write("snap-2.md")))
+        .snapshotted,
+    ).toBe(false);
   });
 
   it("restore reports false when the row was deleted before its batch", async () => {
     await seed("snap-3.md");
     await callTool(env.DB, "capsid_write_doc", write("snap-3.md"));
-    const version = await env.DB.prepare("SELECT id FROM document_versions WHERE namespace = ?1 AND path = ?2")
+    const version = await env.DB.prepare(
+      "SELECT id FROM document_versions WHERE namespace = ?1 AND path = ?2",
+    )
       .bind(NS, "snap-3.md")
       .first<{ id: number }>();
     expect(version).not.toBeNull();

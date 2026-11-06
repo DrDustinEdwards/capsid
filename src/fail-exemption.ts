@@ -28,9 +28,16 @@ function remainingItems(reason: string): number[] | null {
   return m ? [...new Set(m[1].split(",").map((n) => Number(n.trim())))] : null;
 }
 
-export async function breakerExemption(env: Env, job: JobRow, reason: string): Promise<BreakerExemption | null> {
+export async function breakerExemption(
+  env: Env,
+  job: JobRow,
+  reason: string,
+): Promise<BreakerExemption | null> {
   const urls = parsePrUrl(job.result_ref) ? [job.result_ref!.trim()] : [];
-  const read = urls.length > 0 ? await readNamedPrs(env, job.namespace, urls, job.body) : { changed: [], unread: false };
+  const read =
+    urls.length > 0
+      ? await readNamedPrs(env, job.namespace, urls, job.body)
+      : { changed: [], unread: false };
   if (read && "refusal" in read) return "machinery";
   const items = checklistItems(job.body);
   const remaining = remainingItems(reason);

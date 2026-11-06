@@ -45,8 +45,12 @@ const kept = changed.filter(([status]) => status !== "D").map(([, file]) => file
 const testChanges = kept.filter((f) => TEST_DIR.test(f));
 const testFiles = testChanges.filter((f) => TEST_FILE.test(f));
 const code = kept.filter((f) => !TEST_DIR.test(f) && !DOC.test(f));
-if (code.length === 0) finish(true, ["The pull request changes no code, so there is nothing for a test to show."]);
-if (testFiles.length === 0) finish(false, [`The pull request changes code (${code.slice(0, 3).join(", ")}) and no test file, so no test shows the change.`]);
+if (code.length === 0)
+  finish(true, ["The pull request changes no code, so there is nothing for a test to show."]);
+if (testFiles.length === 0)
+  finish(false, [
+    `The pull request changes code (${code.slice(0, 3).join(", ")}) and no test file, so no test shows the change.`,
+  ]);
 
 // The base with the pull request's test changes laid on it, and nothing else of it.
 const baseDir = mkdtempSync(path.join(tmpdir(), "base-"));
@@ -62,12 +66,24 @@ const onHead = runTests(process.cwd(), testFiles);
 
 const failedOnBase = [...onBase.results].filter(([, s]) => s === "failed").map(([k]) => k);
 const lines = [];
-if (onBase.notLoaded.length) lines.push(`Did not load on the base, so not counted: ${onBase.notLoaded.join(", ")}.`);
+if (onBase.notLoaded.length)
+  lines.push(`Did not load on the base, so not counted: ${onBase.notLoaded.join(", ")}.`);
 if (failedOnBase.length === 0) {
-  finish(false, [...lines, `No test in ${testFiles.join(", ")} failed on the base ${from.slice(0, 7)}, so none of them shows the change.`]);
+  finish(false, [
+    ...lines,
+    `No test in ${testFiles.join(", ")} failed on the base ${from.slice(0, 7)}, so none of them shows the change.`,
+  ]);
 }
 const notPassing = failedOnBase.filter((k) => onHead.results.get(k) !== "passed");
 if (notPassing.length) {
-  finish(false, [...lines, `Failed on the base and did not pass on the head ${head.slice(0, 7)}:`, ...notPassing.map((k) => `- ${k}`)]);
+  finish(false, [
+    ...lines,
+    `Failed on the base and did not pass on the head ${head.slice(0, 7)}:`,
+    ...notPassing.map((k) => `- ${k}`),
+  ]);
 }
-finish(true, [...lines, `Failed on the base ${from.slice(0, 7)} and pass on the head ${head.slice(0, 7)}:`, ...failedOnBase.map((k) => `- ${k}`)]);
+finish(true, [
+  ...lines,
+  `Failed on the base ${from.slice(0, 7)} and pass on the head ${head.slice(0, 7)}:`,
+  ...failedOnBase.map((k) => `- ${k}`),
+]);

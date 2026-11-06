@@ -11,7 +11,15 @@ function driver(mutate: (scopes: ReturnType<typeof defaultScopes>) => void = () 
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
   mutate(scopes);
-  return { id: "agent_0123456789ab", name: "capsid-driver", kind: "driver", actor: "agent:capsid-driver", scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name: "capsid-driver",
+    kind: "driver",
+    actor: "agent:capsid-driver",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 test("a job with no requirement is claimable by any write-grant driver, which is every job posted so far", () => {
@@ -45,14 +53,23 @@ test("a read-only agent cannot claim, even a job that requires nothing", () => {
 
 test("the legacy key and the admin can still claim anything, which is what keeps the queue working today", () => {
   const everything = serializeRequiredScopes({ flags: [...SCOPE_FLAGS] });
-  assert.equal(missingForJob(grantAgent("write", "opkey:0123456789ab"), "sample", everything), null);
+  assert.equal(
+    missingForJob(grantAgent("write", "opkey:0123456789ab"), "sample", everything),
+    null,
+  );
   assert.equal(missingForJob(adminAgentForEmail("admin@example.com"), "sample", everything), null);
 });
 
 test("a required_scopes blob that cannot be read is CORRUPT, and refuses rather than demanding nothing", () => {
   // Failing open would lease a job with a damaged requirement to any driver. The claim
   // marks such a job failed, so it is not stranded either.
-  for (const bad of ["{", "[]", "null", '{"flags":"can_merge"}', '{"flags":["can_fly","can_merge"]}']) {
+  for (const bad of [
+    "{",
+    "[]",
+    "null",
+    '{"flags":"can_merge"}',
+    '{"flags":["can_fly","can_merge"]}',
+  ]) {
     const parsed = parseRequiredScopes(bad);
     assert.equal(parsed.ok, false, `${bad} parsed as a requirement`);
     const refusal = missingForJob(driver(), "capsid", bad);
@@ -61,7 +78,9 @@ test("a required_scopes blob that cannot be read is CORRUPT, and refuses rather 
   }
   // None is still none.
   assert.deepEqual(parseRequiredScopes(null), { ok: true, value: { flags: [] } });
-  assert.deepEqual(parseRequiredScopes('{"flags":["can_merge"]}'), { ok: true, value: { flags: ["can_merge"] } });
+  assert.deepEqual(parseRequiredScopes('{"flags":["can_merge"]}'), {
+    ok: true,
+    value: { flags: ["can_merge"] },
+  });
   assert.deepEqual(parseRequiredScopes("{}"), { ok: true, value: { flags: [] } });
 });
-

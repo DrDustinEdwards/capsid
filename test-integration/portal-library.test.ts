@@ -15,32 +15,52 @@ const SECRET = "integration-portal-library-key";
 const NS = "sample-library";
 
 async function signedGet(query: string): Promise<Response> {
-  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
+  const cookie = (
+    await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())
+  ).split(";")[0];
   const ctx = createExecutionContext();
   const response = await worker.fetch!(
-    new Request(`${ORIGIN}${PORTAL_LIBRARY_PATH}${query}`, { headers: { Cookie: cookie, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" }) as never,
+    new Request(`${ORIGIN}${PORTAL_LIBRARY_PATH}${query}`, {
+      headers: { Cookie: cookie, "Sec-Fetch-Site": "same-origin" },
+      redirect: "manual",
+    }) as never,
     { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never,
-    ctx
+    ctx,
   );
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
 
 async function plant(path: string, type: string, title: string, body: string): Promise<void> {
-  await env.DB.prepare("INSERT INTO documents (namespace, path, title, type, status, body) VALUES (?1, ?2, ?3, ?4, 'published', ?5)")
+  await env.DB.prepare(
+    "INSERT INTO documents (namespace, path, title, type, status, body) VALUES (?1, ?2, ?3, ?4, 'published', ?5)",
+  )
     .bind(NS, path, title, type, body)
     .run();
 }
 
-const auditRows = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log").first<{ n: number }>())!.n;
+const auditRows = async () =>
+  (await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log").first<{ n: number }>())!.n;
 
 beforeAll(async () => {
-  await plant("decisions.md", "decision", "Sample decisions", "We chose the quokka layout for job_0123456789ab.");
+  await plant(
+    "decisions.md",
+    "decision",
+    "Sample decisions",
+    "We chose the quokka layout for job_0123456789ab.",
+  );
   await plant("rulings/layout.md", "note", "Layout ruling", "The quokka layout stands.");
-  await plant("research/survey.md", "reference", "Survey", "Three layouts compared, quokka among them.");
+  await plant(
+    "research/survey.md",
+    "reference",
+    "Survey",
+    "Three layouts compared, quokka among them.",
+  );
   await plant("archive/research/old.md", "decision", "Old decisions", "Superseded quokka notes.");
   await plant("notes/loose.md", "note", "Loose note", "A quokka note on no shelf.");
-  await env.DB.prepare("INSERT INTO document_links (from_ns, from_path, to_ns, to_path, type) VALUES (?1, 'rulings/layout.md', ?1, 'decisions.md', 'implements')")
+  await env.DB.prepare(
+    "INSERT INTO document_links (from_ns, from_path, to_ns, to_path, type) VALUES (?1, 'rulings/layout.md', ?1, 'decisions.md', 'implements')",
+  )
     .bind(NS)
     .run();
 });
@@ -54,7 +74,8 @@ describe("GET /portal/api/library", () => {
     const body = (await response.json()) as PortalLibrary;
     expect(body.kind).toBe("shelves");
     if (body.kind !== "shelves") return;
-    const mine = (shelf: keyof typeof body.shelves) => body.shelves[shelf].filter((r) => r.namespace === NS).map((r) => r.path);
+    const mine = (shelf: keyof typeof body.shelves) =>
+      body.shelves[shelf].filter((r) => r.namespace === NS).map((r) => r.path);
     expect(mine("decisions")).toEqual(["decisions.md"]);
     expect(mine("rulings")).toEqual(["rulings/layout.md"]);
     expect(mine("research")).toEqual(["research/survey.md"]);
@@ -81,7 +102,9 @@ describe("GET /portal/api/library", () => {
     expect(body.doc.body).toContain("job_0123456789ab");
     expect(body.doc).not.toHaveProperty("id");
     expect(body.outgoing).toEqual([]);
-    expect(body.incoming).toEqual([{ type: "implements", from_ns: NS, from_path: "rulings/layout.md" }]);
+    expect(body.incoming).toEqual([
+      { type: "implements", from_ns: NS, from_path: "rulings/layout.md" },
+    ]);
   });
 
   it("refuses half a document name and a bad path with 400, and a missing document with 404", async () => {

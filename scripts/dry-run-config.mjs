@@ -37,7 +37,7 @@ for (const [placeholder, value] of SUBSTITUTIONS) {
   if (!config.includes(placeholder)) {
     console.error(
       `dry-run-config: wrangler.jsonc.example no longer contains the placeholder ${placeholder}. ` +
-        `Either it was renamed or the binding was removed; fix this script rather than shipping a config with a hole in it.`
+        `Either it was renamed or the binding was removed; fix this script rather than shipping a config with a hole in it.`,
     );
     process.exit(1);
   }
@@ -49,7 +49,9 @@ for (const [placeholder, value] of SUBSTITUTIONS) {
 // Between the markers only; a missing marker is a loud failure, not a silent keep.
 const ASSETS = /\n[ \t]*\/\/ ASSETS-BEGIN\n[\s\S]*?\n[ \t]*\/\/ ASSETS-END\n/;
 if (!ASSETS.test(config)) {
-  console.error("dry-run-config: wrangler.jsonc.example has no ASSETS-BEGIN / ASSETS-END block to remove; fix this script and the example together.");
+  console.error(
+    "dry-run-config: wrangler.jsonc.example has no ASSETS-BEGIN / ASSETS-END block to remove; fix this script and the example together.",
+  );
   process.exit(1);
 }
 config = config.replace(ASSETS, "\n");
@@ -59,9 +61,13 @@ config = config.replace(ASSETS, "\n");
 // never got measured.
 const leftover = config.match(/YOUR_[A-Z0-9_]+/g);
 if (leftover) {
-  console.error(`dry-run-config: unsubstituted placeholders remain: ${[...new Set(leftover)].join(", ")}`);
+  console.error(
+    `dry-run-config: unsubstituted placeholders remain: ${[...new Set(leftover)].join(", ")}`,
+  );
   process.exit(1);
 }
 
 writeFileSync(OUT, config);
-console.log(`dry-run-config: wrote ${OUT} from wrangler.jsonc.example with ${SUBSTITUTIONS.length} pinned values, no network, no secrets`);
+console.log(
+  `dry-run-config: wrote ${OUT} from wrangler.jsonc.example with ${SUBSTITUTIONS.length} pinned values, no network, no secrets`,
+);

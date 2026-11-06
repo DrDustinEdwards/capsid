@@ -40,7 +40,6 @@ function otherReaders(): Array<{ name: string; text: string }> {
 
 const READERS = otherReaders();
 
-
 // A barrel re-export is not a caller. `export { x } from "./y"` names x to forward
 // it, not to use it, so counting it would make every symbol behind a barrel look
 // called. A plain `import { x } from` is left alone, because importing a name to
@@ -112,7 +111,10 @@ function identifiers(text: string): Set<string> {
   return new Set(callableText(text).match(/\w+/g) ?? []);
 }
 
-let callerIndex: { src: Array<{ name: string; ids: Set<string> }>; readers: Array<Set<string>> } | null = null;
+let callerIndex: {
+  src: Array<{ name: string; ids: Set<string> }>;
+  readers: Array<Set<string>>;
+} | null = null;
 function callers() {
   callerIndex ??= {
     src: sourceFiles().map((f) => ({ name: f.name, ids: identifiers(f.text) })),
@@ -130,7 +132,10 @@ function hasCallerElsewhere(name: string, ownFile: string): boolean {
 // scanner-rule: capsid/conventions-verification.md 2026-09-08, an export is dead only with no caller in src/, test/ or scripts/ (count guard)
 test("the scan finds the exports at all, so nothing here can pass by reading nothing", () => {
   const exported = exportsOfSrc();
-  assert.ok(exported.length > 100, `only ${exported.length} exports found across src/; the walk is broken`);
+  assert.ok(
+    exported.length > 100,
+    `only ${exported.length} exports found across src/; the walk is broken`,
+  );
   assert.ok(sourceFiles().length > 20, "src/ walk returned too few files");
 });
 
@@ -162,8 +167,7 @@ test("every reviewed suspect is still exported from src/", () => {
     gone,
     [],
     `these reviewed exports are no longer exported from src/: ${gone.join(", ")}.
-` +
-      `Take each off KNOWN_SUSPECTS.`
+` + `Take each off KNOWN_SUSPECTS.`,
   );
 });
 
@@ -175,7 +179,10 @@ test("no new no-caller export appears without review", () => {
   // meaningful if this walked real exports across real readers.
   const examined = exportsOfSrc();
   assert.ok(examined.length > 100, `only ${examined.length} exports examined; the walk is broken`);
-  assert.ok(READERS.length > 20, `only ${READERS.length} reader files loaded; the caller scan is broken`);
+  assert.ok(
+    READERS.length > 20,
+    `only ${READERS.length} reader files loaded; the caller scan is broken`,
+  );
   for (const { file, name } of examined) {
     if (hasCallerElsewhere(name, file)) continue;
     if (reviewed.has(name)) continue;
@@ -187,7 +194,7 @@ test("no new no-caller export appears without review", () => {
     `these exports have no caller in src/, none in test/, test-integration/ or scripts/, ` +
       `and are not in the reviewed list: ${unreviewed.join(", ")}. ` +
       `Add them to KNOWN_SUSPECTS after looking, or give them a caller. ` +
-      `(${examined.length} exports examined against ${READERS.length} reader files; comments and barrel re-exports do not count as callers.)`
+      `(${examined.length} exports examined against ${READERS.length} reader files; comments and barrel re-exports do not count as callers.)`,
   );
 });
 // The stripper itself. stripComments decides what counts as a caller, so a bug in

@@ -1,4 +1,12 @@
-import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
 import { fetchActivity, useAnswer } from "../lib/api";
@@ -10,7 +18,6 @@ import { When } from "../ui/When";
 import { agentState, nsList } from "../lib/derive";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
 
-
 type Ref = { type: DrawerType; id: string };
 
 function Missing({ what, onClose }: { what: string; onClose: () => void }) {
@@ -18,7 +25,10 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
     <>
       <Head label="Not found" title={what} sub="" onClose={onClose} />
       <div className="dbody">
-        <div className="callout">It is not in the current feed. It may have ended more than 24 hours ago, or the watcher has not seen it yet.</div>
+        <div className="callout">
+          It is not in the current feed. It may have ended more than 24 hours ago, or the watcher
+          has not seen it yet.
+        </div>
       </div>
     </>
   );
@@ -60,7 +70,10 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
       <>
         <Head label="Not found" title={`Audit row #${id}`} sub="" onClose={onClose} />
         <div className="dbody">
-          <div className="callout">There is no audit row with this id. Rows older than the retention are pruned after the nightly dump.</div>
+          <div className="callout">
+            There is no audit row with this id. Rows older than the retention are pruned after the
+            nightly dump.
+          </div>
         </div>
       </>
     );
@@ -68,7 +81,12 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
   const d = r.detail;
   return (
     <>
-      <Head label={`Audit row · ${r.namespace ?? "no namespace"}`} title={actionWords(r.action) ?? r.action ?? "no action"} sub={`#${r.id} · ${r.action ?? "no action"} · ${r.actor ?? "no actor"}`} onClose={onClose} />
+      <Head
+        label={`Audit row · ${r.namespace ?? "no namespace"}`}
+        title={actionWords(r.action) ?? r.action ?? "no action"}
+        sub={`#${r.id} · ${r.action ?? "no action"} · ${r.actor ?? "no actor"}`}
+        onClose={onClose}
+      />
       <div className="dbody">
         {d.reason !== null && (
           <div>
@@ -128,10 +146,16 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
               </Fragment>
             ))}
           </dl>
-          {d.unreadable && <p className="faint">This row's recorded detail is not JSON, so it cannot be shown. Rows this old predate that rule.</p>}
+          {d.unreadable && (
+            <p className="faint">
+              This row's recorded detail is not JSON, so it cannot be shown. Rows this old predate
+              that rule.
+            </p>
+          )}
           {d.withheld > 0 && (
             <p className="faint">
-              {d.withheld} recorded {d.withheld === 1 ? "field is" : "fields are"} not shown: hashes, signatures and nested values stay in the audit log.
+              {d.withheld} recorded {d.withheld === 1 ? "field is" : "fields are"} not shown:
+              hashes, signatures and nested values stay in the audit log.
             </p>
           )}
         </div>
@@ -145,16 +169,32 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
   const a = feed.live.agents.find((x) => x.name === name);
   if (!a) return <Missing what={`Agent ${name}`} onClose={onClose} />;
   const st = agentState(a, now);
-  const mine = feed.live.jobs.filter((j) => j.claimed_by === `agent:${a.name}` || j.claimed_by === a.name);
+  const mine = feed.live.jobs.filter(
+    (j) => j.claimed_by === `agent:${a.name}` || j.claimed_by === a.name,
+  );
   return (
     <>
-      <Head label={`Agent · ${a.kind}`} title={a.name} sub={`agent:${a.name}`} badge={<Pill kind={st.kind}>{st.label}</Pill>} onClose={onClose} />
+      <Head
+        label={`Agent · ${a.kind}`}
+        title={a.name}
+        sub={`agent:${a.name}`}
+        badge={<Pill kind={st.kind}>{st.label}</Pill>}
+        onClose={onClose}
+      />
       <div className="dbody">
         <dl className="kv">
           <dt>Namespaces</dt>
           <dd className="mono">{nsList(a)}</dd>
           <dt>Last seen</dt>
-          <dd>{a.last_seen ? <>{ago(ms(a.last_seen), now)} <When t={ms(a.last_seen)} /></> : "never"}</dd>
+          <dd>
+            {a.last_seen ? (
+              <>
+                {ago(ms(a.last_seen), now)} <When t={ms(a.last_seen)} />
+              </>
+            ) : (
+              "never"
+            )}
+          </dd>
           {a.revoked_at && (
             <>
               <dt>Revoked</dt>
@@ -180,9 +220,13 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
             {a.prs_merged} merged of {a.prs_opened} opened
           </dd>
           <dt>CI green</dt>
-          <dd className="num">{a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}</dd>
+          <dd className="num">
+            {a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}
+          </dd>
           <dt>Median job</dt>
-          <dd className="num">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</dd>
+          <dd className="num">
+            {a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}
+          </dd>
           <dt>Flags</dt>
           <dd>{a.flags.join(", ") || "none"}</dd>
         </dl>
@@ -240,17 +284,24 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
       // Back to the row that opened it; when that is gone, or sat in a dialog since closed
       // (the command menu), to the view.
       const from = opener.current;
-      const back = from instanceof HTMLElement && from.isConnected && !from.closest("dialog:not([open])") ? from : document.querySelector<HTMLElement>("main");
+      const back =
+        from instanceof HTMLElement && from.isConnected && !from.closest("dialog:not([open])")
+          ? from
+          : document.querySelector<HTMLElement>("main");
       back?.focus();
       opener.current = null;
     }
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- `key` names the route (type:id); the effect runs when the drawer opens on another row, not on a new route object
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `key` names the route (type:id); the effect runs when the drawer opens on another row, not on a new route object
   }, [key]);
   const ref = route ?? shown;
   let body: ReactNode = null;
   if (ref?.type === "job") {
     const j = feed.live.jobs.find((x) => x.id === ref.id);
-    body = j ? <JobBody j={j} onClose={onClose} /> : <Missing what={`Job ${ref.id}`} onClose={onClose} />;
+    body = j ? (
+      <JobBody j={j} onClose={onClose} />
+    ) : (
+      <Missing what={`Job ${ref.id}`} onClose={onClose} />
+    );
   } else if (ref?.type === "agent") {
     body = <AgentBody name={ref.id} onClose={onClose} />;
   } else if (ref?.type === "audit") {
@@ -283,7 +334,13 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
         if (d && e.target === d) {
           // A click on the dialog element itself outside its box is the backdrop.
           const r = d.getBoundingClientRect();
-          if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return onClose();
+          if (
+            e.clientX < r.left ||
+            e.clientX > r.right ||
+            e.clientY < r.top ||
+            e.clientY > r.bottom
+          )
+            return onClose();
         }
         openRow(e);
       }}

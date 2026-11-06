@@ -1,8 +1,8 @@
 {
   "name": "capsid-explorer",
   "private": true,
-  "type": "module",
   "description": "capsid.dustinedwards.info: the system explorer, prerendered from Capsid's public model and numbers (capsid/research/design-system-explorer.md, section 4).",
+  "type": "module",
   "scripts": {
     "build": "node --import ../test/resolve-ts.mjs build.mjs",
     "check": "tsc -p .",

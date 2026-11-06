@@ -53,21 +53,34 @@ test("a missing run sha refuses, rather than comparing against nothing", () => {
 
 // The guard only matters if the workflow consults it.
 test("the rollback step calls the guard BEFORE it calls wrangler rollback", () => {
-  const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
+  const workflow = readFileSync(
+    join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"),
+    "utf8",
+  );
   // Up to the next step, or to the end of the file: it has been the job's last step
   // since the probe-client reaper went with DCR.
-  const step = /- name: Roll back the deploy this run shipped\n([\s\S]*?)(?:\n      - name: |\n*$)/.exec(workflow);
+  const step =
+    /- name: Roll back the deploy this run shipped\n([\s\S]*?)(?:\n      - name: |\n*$)/.exec(
+      workflow,
+    );
   assert.ok(step, "the rollback step was not found; this test is pinned to its name");
   const body = step[1];
   const guardAt = body.indexOf("scripts/rollback-guard.mjs");
   // The lockfile's wrangler: test/deploy-pipeline.test.ts holds it there.
   const rollbackAt = body.search(/wrangler rollback/);
   assert.ok(guardAt > -1, "the rollback step does not call the guard at all");
-  assert.ok(rollbackAt > -1, "the rollback step no longer calls wrangler rollback; this test is stale");
+  assert.ok(
+    rollbackAt > -1,
+    "the rollback step no longer calls wrangler rollback; this test is stale",
+  );
   assert.ok(guardAt < rollbackAt, "the guard runs AFTER the rollback, which decides nothing");
   // And the refusal must not fail the step: the gate has already failed the run, and
   // a red rollback step on top of it says the rollback broke rather than declined.
-  assert.match(body, /exit 0/, "a declined rollback should leave the step green, not add a second failure");
+  assert.match(
+    body,
+    /exit 0/,
+    "a declined rollback should leave the step green, not add a second failure",
+  );
 });
 
 // When /health is down. A deploy that breaks /health reads as "unreadable", and
@@ -104,20 +117,54 @@ test("the rollback took effect only when a readable, different sha is live", () 
 });
 
 test("the rollback step runs on a refusal only, reads /health without -f, and checks the sha moved", () => {
-  const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
+  const workflow = readFileSync(
+    join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"),
+    "utf8",
+  );
   // Up to the next step, or to the end of the file: it has been the job's last step
   // since the probe-client reaper went with DCR.
-  const step = /- name: Roll back the deploy this run shipped\n([\s\S]*?)(?:\n      - name: |\n*$)/.exec(workflow);
+  const step =
+    /- name: Roll back the deploy this run shipped\n([\s\S]*?)(?:\n      - name: |\n*$)/.exec(
+      workflow,
+    );
   assert.ok(step, "the rollback step was not found");
   const body = step[1];
   // Exit 3 from verify:live is "could not run" and must not roll back.
-  assert.match(body, /steps\.verify\.outputs\.exit_code == '1'/, "the rollback no longer waits for a refusal");
-  assert.match(workflow, /- name: verify:live\n\s+id: verify\n/, "the verify step has no id, so its exit code cannot be read");
-  assert.match(workflow, /echo "exit_code=\$\{code\}" >> "\$GITHUB_OUTPUT"/, "the verify step does not record its exit code");
+  assert.match(
+    body,
+    /steps\.verify\.outputs\.exit_code == '1'/,
+    "the rollback no longer waits for a refusal",
+  );
+  assert.match(
+    workflow,
+    /- name: verify:live\n\s+id: verify\n/,
+    "the verify step has no id, so its exit code cannot be read",
+  );
+  assert.match(
+    workflow,
+    /echo "exit_code=\$\{code\}" >> "\$GITHUB_OUTPUT"/,
+    "the verify step does not record its exit code",
+  );
   // curl -f turns a 5xx into a step abort under set -e, before the guard runs.
   assert.doesNotMatch(body, /curl -f/, "the rollback reads /health with -f again");
-  assert.match(body, /\$\{DEPLOY_ATTEMPT\}" "\$\{GITHUB_RUN_ATTEMPT\}"/, "the guard is not told which attempt deployed");
-  assert.match(workflow, /outputs:\n\s+attempt: \$\{\{ github\.run_attempt \}\}/, "the deploy job does not publish its attempt");
-  assert.match(body, /rollback-guard\.mjs --after/, "the step no longer checks that the rollback took effect");
-  assert.match(body, /did not take effect[\s\S]*exit 1/, "a rollback that never moved the sha does not fail the step");
+  assert.match(
+    body,
+    /\$\{DEPLOY_ATTEMPT\}" "\$\{GITHUB_RUN_ATTEMPT\}"/,
+    "the guard is not told which attempt deployed",
+  );
+  assert.match(
+    workflow,
+    /outputs:\n\s+attempt: \$\{\{ github\.run_attempt \}\}/,
+    "the deploy job does not publish its attempt",
+  );
+  assert.match(
+    body,
+    /rollback-guard\.mjs --after/,
+    "the step no longer checks that the rollback took effect",
+  );
+  assert.match(
+    body,
+    /did not take effect[\s\S]*exit 1/,
+    "a rollback that never moved the sha does not fail the step",
+  );
 });

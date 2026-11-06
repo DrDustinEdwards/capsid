@@ -56,26 +56,41 @@ function isCount(value: unknown): value is number {
 function isEntry(value: unknown): value is StalePrEntry {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const v = value as Record<string, unknown>;
-  return isCount(v.merged) && isCount(v.closed) && isCount(v.open) && isCount(v.unread) && typeof v.at === "string";
+  return (
+    isCount(v.merged) &&
+    isCount(v.closed) &&
+    isCount(v.open) &&
+    isCount(v.unread) &&
+    typeof v.at === "string"
+  );
 }
 
 /** The cache as stored, keeping only entries of the right shape. null (never written) is
  *  an empty cache; anything else that is not an object is reported as unreadable. */
 export function parseStaleCache(raw: unknown): { cache: StalePrCache; problem: string | null } {
   if (raw === null || raw === undefined) return { cache: {}, problem: null };
-  if (typeof raw !== "object" || Array.isArray(raw)) return { cache: {}, problem: `${STALE_PRS_KEY} is not a JSON object` };
+  if (typeof raw !== "object" || Array.isArray(raw))
+    return { cache: {}, problem: `${STALE_PRS_KEY} is not a JSON object` };
   const cache: StalePrCache = {};
   let dropped = 0;
   for (const [id, entry] of Object.entries(raw as Record<string, unknown>)) {
     if (isEntry(entry)) cache[id] = entry;
     else dropped++;
   }
-  return { cache, problem: dropped > 0 ? `${STALE_PRS_KEY} held ${dropped} entr${dropped === 1 ? "y" : "ies"} of the wrong shape, left out` : null };
+  return {
+    cache,
+    problem:
+      dropped > 0
+        ? `${STALE_PRS_KEY} held ${dropped} entr${dropped === 1 ? "y" : "ies"} of the wrong shape, left out`
+        : null,
+  };
 }
 
 /** The stored cache. A value that is not JSON is reported, not thrown, so the view
  *  still serves the two rules that do not need it. */
-export async function readStaleCache(kv: KVNamespace): Promise<{ cache: StalePrCache; problem: string | null }> {
+export async function readStaleCache(
+  kv: KVNamespace,
+): Promise<{ cache: StalePrCache; problem: string | null }> {
   const text = await kv.get(STALE_PRS_KEY);
   if (text === null) return { cache: {}, problem: null };
   let raw: unknown;
@@ -89,7 +104,11 @@ export async function readStaleCache(kv: KVNamespace): Promise<{ cache: StalePrC
 
 /** The next cache: this tick's reads replace each job's entry, and only jobs still
  *  blocked keep one. */
-export function nextStaleCache(prior: StalePrCache, reads: StalePrCache, stillBlocked: ReadonlySet<string>): StalePrCache {
+export function nextStaleCache(
+  prior: StalePrCache,
+  reads: StalePrCache,
+  stillBlocked: ReadonlySet<string>,
+): StalePrCache {
   const next: StalePrCache = {};
   for (const [id, entry] of Object.entries({ ...prior, ...reads })) {
     if (stillBlocked.has(id)) next[id] = entry;
@@ -100,7 +119,9 @@ export function nextStaleCache(prior: StalePrCache, reads: StalePrCache, stillBl
 /** Rule C's test on one cache entry: nothing open, nothing unread, and at least one
  *  pull request merged or closed. */
 export function prsSettled(entry: StalePrEntry | undefined): boolean {
-  return entry !== undefined && entry.open === 0 && entry.unread === 0 && entry.merged + entry.closed > 0;
+  return (
+    entry !== undefined && entry.open === 0 && entry.unread === 0 && entry.merged + entry.closed > 0
+  );
 }
 
 function plural(n: number, word: string): string {
@@ -118,7 +139,7 @@ export function classifyStale(
   job: { status: string; updated_at: string; auto_resumed_at: string | null },
   entry: StalePrEntry | undefined,
   now: Date,
-  steps?: StaleStepEntry
+  steps?: StaleStepEntry,
 ): { rule: StaleRule; reason: string } | null {
   const nowMs = now.getTime();
   if (job.status === "blocked" && entry && entry.at >= job.updated_at && prsSettled(entry)) {
@@ -128,7 +149,10 @@ export function classifyStale(
     };
   }
   if (job.status === "blocked" && steps && steps.at >= job.updated_at && stepsSeen(steps)) {
-    return { rule: "steps-seen", reason: `blocked, and every manual step it names is seen done (${plural(steps.seen, "step")}, read ${steps.at})` };
+    return {
+      rule: "steps-seen",
+      reason: `blocked, and every manual step it names is seen done (${plural(steps.seen, "step")}, read ${steps.at})`,
+    };
   }
   if (job.auto_resumed_at && ["blocked", "claimed", "queued"].includes(job.status)) {
     const since = Date.parse(job.auto_resumed_at);
@@ -144,7 +168,10 @@ export function classifyStale(
     const since = Date.parse(job.updated_at);
     if (Number.isFinite(since) && nowMs - since >= STALE_UNCHANGED_MS) {
       const days = Math.floor((nowMs - since) / DAY_MS);
-      return { rule: "unchanged", reason: `${job.status} and unchanged since ${job.updated_at} (${plural(days, "day")})` };
+      return {
+        rule: "unchanged",
+        reason: `${job.status} and unchanged since ${job.updated_at} (${plural(days, "day")})`,
+      };
     }
   }
   return null;
@@ -161,7 +188,11 @@ export interface StaleJobsResult {
  * every capsid_work_jobs action list (src/tools/jobs.ts); a caller scoped to one namespace must name it
  * (the registrar's namespaceRefusal), and an omitted namespace means every namespace.
  */
-export async function staleJobs(env: Env, now: Date, opts: { namespace?: string } = {}): Promise<StaleJobsResult> {
+export async function staleJobs(
+  env: Env,
+  now: Date,
+  opts: { namespace?: string } = {},
+): Promise<StaleJobsResult> {
   const read = await readStaleCache(env.APP_KV);
   const steps = await readStepCache(env.APP_KV);
   const settled = [
@@ -184,21 +215,51 @@ export async function staleJobs(env: Env, now: Date, opts: { namespace?: string 
           OR EXISTS (SELECT 1 FROM job_touches r WHERE r.job_id = j.id AND r.actor = ?1 AND r.kind = 'resume' AND r.at <= ?3)
           OR (j.status = 'blocked' AND j.id IN (SELECT value FROM json_each(?4))))
       ORDER BY j.updated_at ASC
-      LIMIT ?6`
+      LIMIT ?6`,
   )
-    .bind(MERGE_RESUME_ACTOR, unchangedBefore, resumedBefore, JSON.stringify(settled), opts.namespace ?? null, STALE_ROWS_MAX + 1)
-    .all<{ id: string; namespace: string; title: string; status: string; updated_at: string; auto_resumed_at: string | null }>();
+    .bind(
+      MERGE_RESUME_ACTOR,
+      unchangedBefore,
+      resumedBefore,
+      JSON.stringify(settled),
+      opts.namespace ?? null,
+      STALE_ROWS_MAX + 1,
+    )
+    .all<{
+      id: string;
+      namespace: string;
+      title: string;
+      status: string;
+      updated_at: string;
+      auto_resumed_at: string | null;
+    }>();
   const candidates = results ?? [];
   const truncated = candidates.length > STALE_ROWS_MAX;
   const rows: StaleRow[] = [];
   for (const job of truncated ? candidates.slice(0, STALE_ROWS_MAX) : candidates) {
     const why = classifyStale(job, read.cache[job.id], now, steps.cache[job.id]);
-    if (why) rows.push({ id: job.id, namespace: job.namespace, title: job.title, status: job.status, updated_at: job.updated_at, ...why });
+    if (why)
+      rows.push({
+        id: job.id,
+        namespace: job.namespace,
+        title: job.title,
+        status: job.status,
+        updated_at: job.updated_at,
+        ...why,
+      });
   }
   const notes = [
     ...(truncated ? [`more than ${STALE_ROWS_MAX} stale jobs; narrow by namespace.`] : []),
-    ...(read.problem ? [`the pull request cache could not be fully read (${read.problem}), so prs-settled may be missing rows.`] : []),
-    ...(steps.problem ? [`the manual steps cache could not be fully read (${steps.problem}), so steps-seen may be missing rows.`] : []),
+    ...(read.problem
+      ? [
+          `the pull request cache could not be fully read (${read.problem}), so prs-settled may be missing rows.`,
+        ]
+      : []),
+    ...(steps.problem
+      ? [
+          `the manual steps cache could not be fully read (${steps.problem}), so steps-seen may be missing rows.`,
+        ]
+      : []),
   ];
   return { rows, truncated, ...(notes.length ? { note: notes.join(" ") } : {}) };
 }

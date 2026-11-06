@@ -63,7 +63,7 @@ for (const action of ["update", "register"] as const) {
         grant: "write",
         admin: true,
       }),
-      null
+      null,
     );
   });
 }
@@ -93,12 +93,19 @@ interface ToolResult {
   content: Array<{ text: string }>;
 }
 
-async function callAs(caller: Agent, action: string, args: Record<string, unknown>): Promise<ToolResult> {
+async function callAs(
+  caller: Agent,
+  action: string,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
   const server = buildAdminServer(fakeEnv({ DB: fakeD1().db, APP_KV: fakeKv().kv }), caller);
   const client = new Client({ name: "namespace-remap", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const result = (await client.callTool({ name: "capsid_admin_manage_namespaces", arguments: { action, ...args } })) as ToolResult;
+  const result = (await client.callTool({
+    name: "capsid_admin_manage_namespaces",
+    arguments: { action, ...args },
+  })) as ToolResult;
   await client.close();
   await server.close();
   return result;
@@ -107,7 +114,15 @@ async function callAs(caller: Agent, action: string, args: Record<string, unknow
 function realDriver(namespace = "capsid"): Agent {
   const scopes = defaultScopes([namespace]);
   scopes.grants = ["read", "write"];
-  return { id: "agent_0123456789ab", name: `${namespace}-driver`, kind: "driver", actor: `agent:${namespace}-driver`, scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name: `${namespace}-driver`,
+    kind: "driver",
+    actor: `agent:${namespace}-driver`,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 test("END TO END: a driver is refused capsid_admin_manage_namespaces update through a real connection", async () => {
@@ -143,7 +158,11 @@ test("END TO END: the admin still maps namespaces", async () => {
   const text = result.content.map((c) => c.text).join("");
   assert.doesNotMatch(text, /admin only/, `the admin was refused its own tool: ${text}`);
   assert.notEqual(result.isError, true, `the admin's update failed: ${text}`);
-  const out = JSON.parse(text) as { namespace: string; action: string; repos: Array<{ repo: string; label: string }> };
+  const out = JSON.parse(text) as {
+    namespace: string;
+    action: string;
+    repos: Array<{ repo: string; label: string }>;
+  };
   assert.equal(out.namespace, "capsid");
   assert.equal(out.action, "updated");
   assert.deepEqual(out.repos, [{ repo: "DrDustinEdwards/capsid", label: "primary" }]);
@@ -155,7 +174,16 @@ test("PLANT: a driver narrowed to its own repos is refused on another, remap or 
   // Even if the mapping named capsid-backups, a driver whose axis lists only its own
   // repo is refused here, whatever the mapping says.
   const driver = agentWith({ repos: ["DrDustinEdwards/capsid"] });
-  assert.equal(checkScope(driver, { tool: "capsid_read_repo", action: "files", namespace: "capsid", repo: "DrDustinEdwards/capsid", grant: "read" }), null);
+  assert.equal(
+    checkScope(driver, {
+      tool: "capsid_read_repo",
+      action: "files",
+      namespace: "capsid",
+      repo: "DrDustinEdwards/capsid",
+      grant: "read",
+    }),
+    null,
+  );
   const refusal = checkScope(driver, {
     tool: "capsid_read_repo",
     action: "files",
@@ -171,7 +199,16 @@ test("the wildcard still means everything for an agent legitimately scoped to it
   // The seat, the auditor and the reviewer are not narrowed, so "*" must keep working.
   assert.equal(allowsScope("*", "DrDustinEdwards/anything"), true);
   const seat = agentWith({ namespaces: "*", repos: "*" });
-  assert.equal(checkScope(seat, { tool: "capsid_read_repo", action: "files", namespace: "foxhound", repo: "DrDustinEdwards/recova", grant: "read" }), null);
+  assert.equal(
+    checkScope(seat, {
+      tool: "capsid_read_repo",
+      action: "files",
+      namespace: "foxhound",
+      repo: "DrDustinEdwards/recova",
+      grant: "read",
+    }),
+    null,
+  );
 });
 
 test("a list containing the literal star is NOT a wildcard on the read path", () => {

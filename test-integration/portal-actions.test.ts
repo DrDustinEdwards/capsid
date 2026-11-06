@@ -9,7 +9,12 @@ import { capsidStatus } from "../src/status";
 import { APP_ROSTER } from "../src/roster";
 import { blockJob, claimJob, postJob } from "../src/jobs";
 import type { PortalDigest, PortalPlan } from "../src/ops-types/views";
-import type { PortalActivity, PortalNamespaces, PortalPerformed, PortalPreview } from "../src/ops-types/portal";
+import type {
+  PortalActivity,
+  PortalNamespaces,
+  PortalPerformed,
+  PortalPreview,
+} from "../src/ops-types/portal";
 import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight";
 import { PORTAL_ACTIONS } from "../src/controls-base";
 import {
@@ -22,7 +27,15 @@ import {
 import { OVERNIGHT_DECISION_KEY, OVERNIGHT_MODE_KEY } from "../src/overnight";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey } from "../src/job-breaker";
 import { AWAITING_SEAT_KEY } from "../src/auto-merge-tick";
-import { AUTO_MERGE_ALLOWED_PATHS, AUTO_MERGE_POLICY_PATH, AUTO_MERGE_REFUSED_PATHS, AUTO_MERGE_REQUIRED_CI, loadMergePolicy, POLICY_CHECKS, requiredCiLabel } from "../src/auto-merge-policy";
+import {
+  AUTO_MERGE_ALLOWED_PATHS,
+  AUTO_MERGE_POLICY_PATH,
+  AUTO_MERGE_REFUSED_PATHS,
+  AUTO_MERGE_REQUIRED_CI,
+  loadMergePolicy,
+  POLICY_CHECKS,
+  requiredCiLabel,
+} from "../src/auto-merge-policy";
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs";
 import { LIFTED_KEY, SUSPENDED_KEY } from "../src/merge-units";
 import { LIFTED_KEY as SAFETY_LIFTED_KEY, PAUSED_KEY } from "../src/merge-safety";
@@ -46,7 +59,13 @@ const OPERATOR_TOKEN = "integration-operator-token-0000000000000";
 const CF_ACCOUNT = "sample-account";
 
 function workerEnv(): Env {
-  return { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET, DUSTINEDWARDS_OPERATOR_TOKEN: OPERATOR_TOKEN, CF_SECRETS_TOKEN: "sample-secrets-token", CF_ACCOUNT_ID: CF_ACCOUNT } as Env;
+  return {
+    ...(env as unknown as Env),
+    COOKIE_ENCRYPTION_KEY: SECRET,
+    DUSTINEDWARDS_OPERATOR_TOKEN: OPERATOR_TOKEN,
+    CF_SECRETS_TOKEN: "sample-secrets-token",
+    CF_ACCOUNT_ID: CF_ACCOUNT,
+  } as Env;
 }
 
 // site_repair and site_backup reach the site's operator API through the global fetch, and pr_close
@@ -59,7 +78,9 @@ let repoPolicy = "";
 // site_key_rotate's secret writes, each { script, name, text }: the value is read here only
 // to check both sides got the same one and that it reached no audit row.
 const secretPuts: Array<{ script: string; name: string; text: string }> = [];
-const SECRETS_URL = new RegExp(`^https://api\\.cloudflare\\.com/client/v4/accounts/${CF_ACCOUNT}/workers/scripts/([^/]+)/secrets$`);
+const SECRETS_URL = new RegExp(
+  `^https://api\\.cloudflare\\.com/client/v4/accounts/${CF_ACCOUNT}/workers/scripts/([^/]+)/secrets$`,
+);
 const passThrough = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input instanceof Request ? input.url : input);
@@ -68,28 +89,70 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (secret && method === "PUT") {
     const body = JSON.parse(String(init?.body)) as { name: string; text: string };
     secretPuts.push({ script: secret[1], name: body.name, text: body.text });
-    return Response.json({ success: true, errors: [], result: { name: body.name, type: "secret_text" } });
+    return Response.json({
+      success: true,
+      errors: [],
+      result: { name: body.name, type: "secret_text" },
+    });
   }
   if (url.startsWith("https://api.github.com/repos/example/capsid")) {
     githubCalls.push(`${method} ${url}`);
-    if (url === GITHUB_PR && method === "PATCH") return Response.json({ number: 41, state: "closed", html_url: "https://github.com/example/capsid/pull/41" });
-    if (url === GITHUB_PR) return Response.json({ head: { ref: "feat/sample", sha: "c".repeat(40), repo: { full_name: "example/capsid" } }, base: { ref: "main" }, state: "open", merged: false });
-    if (url === "https://api.github.com/repos/example/capsid") return Response.json({ default_branch: "main" });
+    if (url === GITHUB_PR && method === "PATCH")
+      return Response.json({
+        number: 41,
+        state: "closed",
+        html_url: "https://github.com/example/capsid/pull/41",
+      });
+    if (url === GITHUB_PR)
+      return Response.json({
+        head: { ref: "feat/sample", sha: "c".repeat(40), repo: { full_name: "example/capsid" } },
+        base: { ref: "main" },
+        state: "open",
+        merged: false,
+      });
+    if (url === "https://api.github.com/repos/example/capsid")
+      return Response.json({ default_branch: "main" });
     if (url === "https://api.github.com/repos/example/capsid/contents/docs/policy/auto-merge.md") {
-      return Response.json({ type: "file", encoding: "base64", content: btoa(repoPolicy), size: repoPolicy.length, sha: "f".repeat(40) });
+      return Response.json({
+        type: "file",
+        encoding: "base64",
+        content: btoa(repoPolicy),
+        size: repoPolicy.length,
+        sha: "f".repeat(40),
+      });
     }
-    if (url.endsWith("/git/refs/heads/feat/sample") && method === "DELETE") return new Response(null, { status: 204 });
+    if (url.endsWith("/git/refs/heads/feat/sample") && method === "DELETE")
+      return new Response(null, { status: 204 });
     return new Response("not stubbed", { status: 404 });
   }
   if (url !== "https://dustinedwards.info/api/operator") return passThrough(input, init);
-  operatorCalls.push({ url, auth: new Headers(init?.headers).get("authorization"), body: String(init?.body) });
-  if ((JSON.parse(String(init?.body)) as { tool?: string }).tool === "backup_media") return Response.json({ ok: true, data: { files: [{ name: "images", complete: true, copied: 2 }] } });
-  return Response.json({ ok: true, data: { repaired: 1, expected: 14, present: 14, converged: true } });
+  operatorCalls.push({
+    url,
+    auth: new Headers(init?.headers).get("authorization"),
+    body: String(init?.body),
+  });
+  if ((JSON.parse(String(init?.body)) as { tool?: string }).tool === "backup_media")
+    return Response.json({
+      ok: true,
+      data: { files: [{ name: "images", complete: true, copied: 2 }] },
+    });
+  return Response.json({
+    ok: true,
+    data: { repaired: 1, expected: 14, present: 14, converged: true },
+  });
 }) as typeof fetch;
 
-async function call(path: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
-  const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
-  const headers = new Headers({ Cookie: `${session}; capsid_portal_csrf=${CSRF}`, "Sec-Fetch-Site": "same-origin" });
+async function call(
+  path: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<Response> {
+  const session = (
+    await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())
+  ).split(";")[0];
+  const headers = new Headers({
+    Cookie: `${session}; capsid_portal_csrf=${CSRF}`,
+    "Sec-Fetch-Site": "same-origin",
+  });
   if (init.body !== undefined) {
     headers.set(PORTAL_CSRF_HEADER, CSRF);
     headers.set("Content-Type", "application/json");
@@ -111,7 +174,12 @@ async function jobsEnv() {
 }
 
 async function postedJob(title: string): Promise<string> {
-  const posted = await postJob(await jobsEnv(), grantAgent("write", "github:DrDustinEdwards"), NOW, { namespace: "capsid", title, body: "do the thing", gate_required: true });
+  const posted = await postJob(
+    await jobsEnv(),
+    grantAgent("write", "github:DrDustinEdwards"),
+    NOW,
+    { namespace: "capsid", title, body: "do the thing", gate_required: true },
+  );
   expect(posted.ok, posted.refusal).toBe(true);
   return posted.job!.id;
 }
@@ -125,27 +193,45 @@ async function claimedJob(title: string, by = DRIVER): Promise<string> {
 
 async function blockedJob(title: string, by = DRIVER): Promise<string> {
   const id = await claimedJob(title, by);
-  const blocked = await blockJob(await jobsEnv(), by, NOW, id, { reason: "waiting on the push", command: "git push -u origin feat/x" });
+  const blocked = await blockJob(await jobsEnv(), by, NOW, id, {
+    reason: "waiting on the push",
+    command: "git push -u origin feat/x",
+  });
   expect(blocked.ok, blocked.refusal).toBe(true);
   return id;
 }
 
 async function parkedJob(title: string): Promise<string> {
   const id = await postedJob(title);
-  await env.DB.prepare("UPDATE jobs SET status = 'parked', result_summary = 'comes back when the design is ruled' WHERE id = ?1").bind(id).run();
+  await env.DB.prepare(
+    "UPDATE jobs SET status = 'parked', result_summary = 'comes back when the design is ruled' WHERE id = ?1",
+  )
+    .bind(id)
+    .run();
   return id;
 }
 
 async function job(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
+    .bind(id)
+    .first<Record<string, unknown>>();
 }
 
-async function auditRows(): Promise<Array<{ id: number; actor: string; action: string; params: string }>> {
-  const { results } = await env.DB.prepare("SELECT id, actor, action, params FROM audit_log ORDER BY id").all<{ id: number; actor: string; action: string; params: string }>();
+async function auditRows(): Promise<
+  Array<{ id: number; actor: string; action: string; params: string }>
+> {
+  const { results } = await env.DB.prepare(
+    "SELECT id, actor, action, params FROM audit_log ORDER BY id",
+  ).all<{ id: number; actor: string; action: string; params: string }>();
   return results ?? [];
 }
 
-const KEYS = [OVERNIGHT_MODE_KEY, OVERNIGHT_DECISION_KEY, BREAKER_THRESHOLD_KEY, ...APP_ROSTER.map(breakerResetKey)];
+const KEYS = [
+  OVERNIGHT_MODE_KEY,
+  OVERNIGHT_DECISION_KEY,
+  BREAKER_THRESHOLD_KEY,
+  ...APP_ROSTER.map(breakerResetKey),
+];
 
 beforeEach(async () => {
   await resetCapsidDb();
@@ -161,11 +247,15 @@ beforeEach(async () => {
 });
 
 async function packageRow(name: string) {
-  return env.DB.prepare("SELECT * FROM ops_packages WHERE name = ?1").bind(name).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM ops_packages WHERE name = ?1")
+    .bind(name)
+    .first<Record<string, unknown>>();
 }
 
 async function siteRow(namespace: string) {
-  return env.DB.prepare("SELECT * FROM ops_sites WHERE namespace = ?1").bind(namespace).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM ops_sites WHERE namespace = ?1")
+    .bind(namespace)
+    .first<Record<string, unknown>>();
 }
 
 // A signed auto-merge policy that agrees with the code, at version 7 (as shipped since #367), and its pin, as a
@@ -190,20 +280,39 @@ const policyText = (version: string): string =>
     "",
     ...AUTO_MERGE_REFUSED_PATHS.map((p) => `- path \`${p.pattern.source}\` ${p.why}`),
     "",
-    ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [`## Allowed paths, ${ns}`, "", ...rows.map((r) => `- allow \`${r.pattern.source}\` ${r.why}`), ""]),
-    ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [`## Required CI, ${ns}`, "", ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``), ""]),
+    ...Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => [
+      `## Allowed paths, ${ns}`,
+      "",
+      ...rows.map((r) => `- allow \`${r.pattern.source}\` ${r.why}`),
+      "",
+    ]),
+    ...Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => [
+      `## Required CI, ${ns}`,
+      "",
+      ...rows.map((r) => `- step \`${requiredCiLabel(r)}\``),
+      "",
+    ]),
   ].join("\n");
 
 async function signedPolicy(): Promise<void> {
   const body = policyText("7");
   const secret = (env as unknown as { IMPROVE_SCORE_SECRET: string }).IMPROVE_SCORE_SECRET;
-  await env.DB.prepare("DELETE FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(AUTO_MERGE_POLICY_PATH).run();
-  await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES ('capsid', ?1, 'Auto-merge policy', ?2)").bind(AUTO_MERGE_POLICY_PATH, await signTaskBody(secret, body)).run();
+  await env.DB.prepare("DELETE FROM documents WHERE namespace = 'capsid' AND path = ?1")
+    .bind(AUTO_MERGE_POLICY_PATH)
+    .run();
+  await env.DB.prepare(
+    "INSERT INTO documents (namespace, path, title, body) VALUES ('capsid', ?1, 'Auto-merge policy', ?2)",
+  )
+    .bind(AUTO_MERGE_POLICY_PATH, await signTaskBody(secret, body))
+    .run();
   await env.APP_KV.put(policyPinKey(AUTO_MERGE_POLICY_PATH), JSON.stringify(await policyPin(body)));
 }
 
 // Each action: its params, the state it starts from, and what the perform must leave.
-type Case = { params: () => Promise<Record<string, string>>; after: (params: Record<string, string>) => Promise<void> };
+type Case = {
+  params: () => Promise<Record<string, string>>;
+  after: (params: Record<string, string>) => Promise<void>;
+};
 
 const CASES: Record<string, Case> = {
   overnight: {
@@ -219,17 +328,31 @@ const CASES: Record<string, Case> = {
   },
   resume_job: {
     // With a note (stale jobs D6): the control hands it to the resume, which records it.
-    params: async () => ({ id: await blockedJob("a blocked job"), reason: "I ran the push myself", note: "Pushed at abc1234.\nConfirm the deploy, then complete." }),
+    params: async () => ({
+      id: await blockedJob("a blocked job"),
+      reason: "I ran the push myself",
+      note: "Pushed at abc1234.\nConfirm the deploy, then complete.",
+    }),
     after: async ({ id }) => {
       const stored = await job(id);
       expect(stored?.status).toBe("claimed");
-      expect(stored?.claimed_by, "the claim goes back to the driver that blocked it").toBe("agent:capsid-driver");
-      const resumed = (await auditRows()).filter((r) => r.action === "job-resumed").map((r) => JSON.parse(r.params));
-      expect(resumed.some((p) => p.note === "Pushed at abc1234.\nConfirm the deploy, then complete."), "the note did not reach the resume").toBe(true);
+      expect(stored?.claimed_by, "the claim goes back to the driver that blocked it").toBe(
+        "agent:capsid-driver",
+      );
+      const resumed = (await auditRows())
+        .filter((r) => r.action === "job-resumed")
+        .map((r) => JSON.parse(r.params));
+      expect(
+        resumed.some((p) => p.note === "Pushed at abc1234.\nConfirm the deploy, then complete."),
+        "the note did not reach the resume",
+      ).toBe(true);
     },
   },
   release_job: {
-    params: async () => ({ id: await claimedJob("a claim whose holder went away"), reason: "no session is running" }),
+    params: async () => ({
+      id: await claimedJob("a claim whose holder went away"),
+      reason: "no session is running",
+    }),
     after: async ({ id }) => {
       const stored = await job(id);
       expect(stored?.status).toBe("queued");
@@ -239,30 +362,53 @@ const CASES: Record<string, Case> = {
   close_shipped: {
     // The seat's admin complete (stale jobs D4, ruled 2026-10-09): done, credited to the
     // driver that blocked it, with an admin_complete touch naming the seat.
-    params: async () => ({ id: await blockedJob("a job whose work shipped"), reason: "merged and live" }),
+    params: async () => ({
+      id: await blockedJob("a job whose work shipped"),
+      reason: "merged and live",
+    }),
     after: async ({ id }) => {
       const stored = await job(id);
       expect(stored?.status).toBe("done");
-      expect(stored?.result_summary).toMatch(/^Closed as shipped by access:admin@example\.com: merged and live/);
-      const outcome = await env.DB.prepare("SELECT agent FROM job_outcomes WHERE job_id = ?1").bind(id).first<{ agent: string }>();
-      expect(outcome?.agent, "the outcome credits the driver that did the work").toBe("agent:capsid-driver");
-      const touch = await env.DB.prepare("SELECT actor FROM job_touches WHERE job_id = ?1 AND kind = 'admin_complete'").bind(id).first<{ actor: string }>();
+      expect(stored?.result_summary).toMatch(
+        /^Closed as shipped by access:admin@example\.com: merged and live/,
+      );
+      const outcome = await env.DB.prepare("SELECT agent FROM job_outcomes WHERE job_id = ?1")
+        .bind(id)
+        .first<{ agent: string }>();
+      expect(outcome?.agent, "the outcome credits the driver that did the work").toBe(
+        "agent:capsid-driver",
+      );
+      const touch = await env.DB.prepare(
+        "SELECT actor FROM job_touches WHERE job_id = ?1 AND kind = 'admin_complete'",
+      )
+        .bind(id)
+        .first<{ actor: string }>();
       expect(touch?.actor).toBe(ACTOR);
     },
   },
   supersede_job: {
     // A queued job nobody worked: superseded, with no outcome row against anybody.
-    params: async () => ({ id: await postedJob("a duplicate job"), reason: "a duplicate of the other one" }),
+    params: async () => ({
+      id: await postedJob("a duplicate job"),
+      reason: "a duplicate of the other one",
+    }),
     after: async ({ id }) => {
       const stored = await job(id);
       expect(stored?.status).toBe("superseded");
       expect(stored?.result_summary).toBe("Superseded: a duplicate of the other one");
-      const outcome = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE job_id = ?1").bind(id).first<{ n: number }>();
+      const outcome = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM job_outcomes WHERE job_id = ?1",
+      )
+        .bind(id)
+        .first<{ n: number }>();
       expect(outcome?.n).toBe(0);
     },
   },
   park_job: {
-    params: async () => ({ id: await postedJob("a job for later"), reason: "comes back when the design is ruled" }),
+    params: async () => ({
+      id: await postedJob("a job for later"),
+      reason: "comes back when the design is ruled",
+    }),
     after: async ({ id }) => {
       const stored = await job(id);
       expect(stored?.status).toBe("parked");
@@ -285,9 +431,19 @@ const CASES: Record<string, Case> = {
     },
     after: async () => {
       expect(githubCalls).toContain(`PATCH ${GITHUB_PR}`);
-      expect(githubCalls).toContain("DELETE https://api.github.com/repos/example/capsid/git/refs/heads/feat/sample");
-      const row = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'pr-closed' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
-      expect(JSON.parse(row?.params ?? "{}")).toMatchObject({ repo: "example/capsid", number: 41, reason: "replaced by #42", head_branch: "feat/sample", head_branch_deleted: true });
+      expect(githubCalls).toContain(
+        "DELETE https://api.github.com/repos/example/capsid/git/refs/heads/feat/sample",
+      );
+      const row = await env.DB.prepare(
+        "SELECT params FROM audit_log WHERE action = 'pr-closed' ORDER BY id DESC LIMIT 1",
+      ).first<{ params: string }>();
+      expect(JSON.parse(row?.params ?? "{}")).toMatchObject({
+        repo: "example/capsid",
+        number: 41,
+        reason: "replaced by #42",
+        head_branch: "feat/sample",
+        head_branch_deleted: true,
+      });
       await env.APP_KV.delete("gh:token:v3:example/capsid");
     },
   },
@@ -300,14 +456,40 @@ const CASES: Record<string, Case> = {
       await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
       await env.APP_KV.put(
         AWAITING_SEAT_KEY,
-        JSON.stringify([{ namespace: "capsid", repo: "example/capsid", number: 41, failed: "path_class", why: "a src change", at: NOW.toISOString(), class: "approve", path_class: "src-routine", class_reasons: [] }])
+        JSON.stringify([
+          {
+            namespace: "capsid",
+            repo: "example/capsid",
+            number: 41,
+            failed: "path_class",
+            why: "a src change",
+            at: NOW.toISOString(),
+            class: "approve",
+            path_class: "src-routine",
+            class_reasons: [],
+          },
+        ]),
       );
       return { namespace: "capsid", prs: "41", shas: "c".repeat(7), reason: "read the diff" };
     },
     after: async () => {
-      const row = await env.DB.prepare("SELECT repo, pr, head_sha, class, status, approved_by, surface, reason FROM pr_approvals").first<Record<string, unknown>>();
-      expect(row).toEqual({ repo: "example/capsid", pr: 41, head_sha: "c".repeat(40), class: "approve", status: "approved", approved_by: ACTOR, surface: "portal", reason: "read the diff" });
-      expect(githubCalls.filter((c) => c.includes("/merge")), "approve_pr merged").toEqual([]);
+      const row = await env.DB.prepare(
+        "SELECT repo, pr, head_sha, class, status, approved_by, surface, reason FROM pr_approvals",
+      ).first<Record<string, unknown>>();
+      expect(row).toEqual({
+        repo: "example/capsid",
+        pr: 41,
+        head_sha: "c".repeat(40),
+        class: "approve",
+        status: "approved",
+        approved_by: ACTOR,
+        surface: "portal",
+        reason: "read the diff",
+      });
+      expect(
+        githubCalls.filter((c) => c.includes("/merge")),
+        "approve_pr merged",
+      ).toEqual([]);
       await env.APP_KV.delete("gh:token:v3:example/capsid");
       await env.APP_KV.delete(AWAITING_SEAT_KEY);
     },
@@ -320,27 +502,61 @@ const CASES: Record<string, Case> = {
     params: async () => {
       await env.DB.prepare(
         `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at)
-         VALUES ('agent_sample00001', 'sample-driver', 'driver', ?1, ?2, 'github:sample', '2026-09-11 00:00:00')`
+         VALUES ('agent_sample00001', 'sample-driver', 'driver', ?1, ?2, 'github:sample', '2026-09-11 00:00:00')`,
       )
-        .bind("e".repeat(64), JSON.stringify({ namespaces: ["capsid"], repos: "*", tools: "*", grants: ["read"], flags: {} }))
+        .bind(
+          "e".repeat(64),
+          JSON.stringify({
+            namespaces: ["capsid"],
+            repos: "*",
+            tools: "*",
+            grants: ["read"],
+            flags: {},
+          }),
+        )
         .run();
       return { name: "sample-driver" };
     },
     after: async () => {
-      const row = await env.DB.prepare("SELECT revoked_at FROM agents WHERE name = 'sample-driver'").first<{ revoked_at: string | null }>();
+      const row = await env.DB.prepare(
+        "SELECT revoked_at FROM agents WHERE name = 'sample-driver'",
+      ).first<{ revoked_at: string | null }>();
       expect(row?.revoked_at).not.toBeNull();
     },
   },
   site_add: {
-    params: async () => ({ namespace: "sample", name: "Sample", origin: "https://sample.example.com", health_path: "/health", platform: "cloudflare" }),
-    after: async () => expect(await siteRow("sample")).toMatchObject({ origin: "https://sample.example.com", health_path: "/health", platform: "cloudflare", revision: 1 }),
+    params: async () => ({
+      namespace: "sample",
+      name: "Sample",
+      origin: "https://sample.example.com",
+      health_path: "/health",
+      platform: "cloudflare",
+    }),
+    after: async () =>
+      expect(await siteRow("sample")).toMatchObject({
+        origin: "https://sample.example.com",
+        health_path: "/health",
+        platform: "cloudflare",
+        revision: 1,
+      }),
   },
   site_edit: {
     params: async () => {
       const row = await siteRow("germomics");
-      return { namespace: "germomics", revision: String(row?.revision), name: "Germomics", origin: "https://germomics.com", health_path: "/api/health", platform: "cloudflare" };
+      return {
+        namespace: "germomics",
+        revision: String(row?.revision),
+        name: "Germomics",
+        origin: "https://germomics.com",
+        health_path: "/api/health",
+        platform: "cloudflare",
+      };
     },
-    after: async ({ revision }) => expect(await siteRow("germomics")).toMatchObject({ health_path: "/api/health", revision: Number(revision) + 1 }),
+    after: async ({ revision }) =>
+      expect(await siteRow("germomics")).toMatchObject({
+        health_path: "/api/health",
+        revision: Number(revision) + 1,
+      }),
   },
   site_remove: {
     params: async () => {
@@ -354,15 +570,32 @@ const CASES: Record<string, Case> = {
     after: async () => expect(await env.APP_KV.get(breakerResetKey("capsid"))).not.toBeNull(),
   },
   package_add: {
-    params: async () => ({ name: "sample-pkg", repo: "example-org/sample-pkg", formerly: "sample-old" }),
-    after: async () => expect(await packageRow("sample-pkg")).toMatchObject({ repo: "example-org/sample-pkg", formerly: "sample-old", revision: 1 }),
+    params: async () => ({
+      name: "sample-pkg",
+      repo: "example-org/sample-pkg",
+      formerly: "sample-old",
+    }),
+    after: async () =>
+      expect(await packageRow("sample-pkg")).toMatchObject({
+        repo: "example-org/sample-pkg",
+        formerly: "sample-old",
+        revision: 1,
+      }),
   },
   package_edit: {
     params: async () => {
-      await env.DB.prepare("INSERT INTO ops_packages (name, repo) VALUES ('sample-pkg', 'example-org/sample-pkg')").run();
-      return { name: "sample-pkg", revision: "1", repo: "example-org/sample-pkg", formerly: "sample-old" };
+      await env.DB.prepare(
+        "INSERT INTO ops_packages (name, repo) VALUES ('sample-pkg', 'example-org/sample-pkg')",
+      ).run();
+      return {
+        name: "sample-pkg",
+        revision: "1",
+        repo: "example-org/sample-pkg",
+        formerly: "sample-old",
+      };
     },
-    after: async () => expect(await packageRow("sample-pkg")).toMatchObject({ formerly: "sample-old", revision: 2 }),
+    after: async () =>
+      expect(await packageRow("sample-pkg")).toMatchObject({ formerly: "sample-old", revision: 2 }),
   },
   package_remove: {
     params: async () => {
@@ -379,14 +612,22 @@ const CASES: Record<string, Case> = {
       return { change: "promote", unit: "capsid/tests", confirm: "8" };
     },
     after: async () => {
-      const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
+      const row = await env.DB.prepare(
+        "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
+      )
+        .bind(AUTO_MERGE_POLICY_PATH)
+        .first<{ body: string }>();
       const { signature, body } = splitSignedTask(row!.body);
       expect(signature).toBeTruthy();
       expect(body).toMatch(/^- version: 8$/m);
       expect(body).toContain("- unit `capsid / tests`");
       const loaded = await loadMergePolicy(env as unknown as Env);
       expect("policy" in loaded && loaded.policy.units).toEqual(["capsid / tests"]);
-      const version = await env.DB.prepare("SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
+      const version = await env.DB.prepare(
+        "SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1",
+      )
+        .bind(AUTO_MERGE_POLICY_PATH)
+        .first<{ body: string }>();
       expect(version?.body, "version 7 was not snapshotted").toMatch(/- version: 7/);
     },
   },
@@ -401,21 +642,40 @@ const CASES: Record<string, Case> = {
       return { confirm: "8" };
     },
     after: async () => {
-      const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
+      const row = await env.DB.prepare(
+        "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
+      )
+        .bind(AUTO_MERGE_POLICY_PATH)
+        .first<{ body: string }>();
       const { signature, body } = splitSignedTask(row!.body);
       expect(signature).toBeTruthy();
       expect(body).toBe(policyText("8"));
       const loaded = await loadMergePolicy(env as unknown as Env);
       expect("policy" in loaded && loaded.policy.version).toBe("8");
-      const version = await env.DB.prepare("SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
+      const version = await env.DB.prepare(
+        "SELECT body FROM document_versions WHERE namespace = 'capsid' AND path = ?1 ORDER BY id DESC LIMIT 1",
+      )
+        .bind(AUTO_MERGE_POLICY_PATH)
+        .first<{ body: string }>();
       expect(version?.body, "version 7 was not snapshotted").toMatch(/- version: 7/);
-      const audit = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'policy-loaded-from-repo' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
-      expect(JSON.parse(audit?.params ?? "{}")).toMatchObject({ from: "7", to: "8", source: "docs/policy/auto-merge.md" });
+      const audit = await env.DB.prepare(
+        "SELECT params FROM audit_log WHERE action = 'policy-loaded-from-repo' ORDER BY id DESC LIMIT 1",
+      ).first<{ params: string }>();
+      expect(JSON.parse(audit?.params ?? "{}")).toMatchObject({
+        from: "7",
+        to: "8",
+        source: "docs/policy/auto-merge.md",
+      });
     },
   },
   unit_resume: {
     params: async () => {
-      await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify([{ unit: "capsid/docs", since: "2026-09-27T00:00:00.000Z", reason: "rolled back" }]));
+      await env.APP_KV.put(
+        SUSPENDED_KEY,
+        JSON.stringify([
+          { unit: "capsid/docs", since: "2026-09-27T00:00:00.000Z", reason: "rolled back" },
+        ]),
+      );
       await env.APP_KV.delete(LIFTED_KEY);
       return { unit: "capsid/docs", reason: "the cause is fixed" };
     },
@@ -426,42 +686,74 @@ const CASES: Record<string, Case> = {
   },
   automerge_resume: {
     params: async () => {
-      await env.APP_KV.put(PAUSED_KEY, JSON.stringify({ capsid: { since: "2026-09-27T00:00:00.000Z", reason: "2 rolled back" } }));
+      await env.APP_KV.put(
+        PAUSED_KEY,
+        JSON.stringify({ capsid: { since: "2026-09-27T00:00:00.000Z", reason: "2 rolled back" } }),
+      );
       await env.APP_KV.delete(SAFETY_LIFTED_KEY);
       return { namespace: "capsid", reason: "both are answered" };
     },
     after: async () => {
       expect(JSON.parse((await env.APP_KV.get(PAUSED_KEY))!)).toEqual({});
-      expect(Object.keys(JSON.parse((await env.APP_KV.get(SAFETY_LIFTED_KEY))!))).toEqual(["capsid"]);
+      expect(Object.keys(JSON.parse((await env.APP_KV.get(SAFETY_LIFTED_KEY))!))).toEqual([
+        "capsid",
+      ]);
     },
   },
   namespace_add: {
     params: async () => ({ namespace: "sample-added", repo: "example/sample-added" }),
     after: async () => {
-      const row = await env.DB.prepare("SELECT repos FROM namespaces WHERE namespace = 'sample-added'").first<{ repos: string }>();
-      expect(JSON.parse(row?.repos ?? "null")).toEqual([{ repo: "example/sample-added", label: "primary" }]);
+      const row = await env.DB.prepare(
+        "SELECT repos FROM namespaces WHERE namespace = 'sample-added'",
+      ).first<{ repos: string }>();
+      expect(JSON.parse(row?.repos ?? "null")).toEqual([
+        { repo: "example/sample-added", label: "primary" },
+      ]);
     },
   },
   namespace_edit: {
-    params: async () => ({ namespace: "sample", repos: JSON.stringify([{ repo: "example/sample-two", label: "primary" }]) }),
+    params: async () => ({
+      namespace: "sample",
+      repos: JSON.stringify([{ repo: "example/sample-two", label: "primary" }]),
+    }),
     after: async () => {
-      const row = await env.DB.prepare("SELECT repos FROM namespaces WHERE namespace = 'sample'").first<{ repos: string }>();
-      expect(JSON.parse(row?.repos ?? "null")).toEqual([{ repo: "example/sample-two", label: "primary" }]);
-      const audit = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'update_namespace' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
-      expect(JSON.parse(JSON.parse(audit?.params ?? "{}").old)).toEqual([{ repo: "example/sample", label: "primary" }]);
+      const row = await env.DB.prepare(
+        "SELECT repos FROM namespaces WHERE namespace = 'sample'",
+      ).first<{ repos: string }>();
+      expect(JSON.parse(row?.repos ?? "null")).toEqual([
+        { repo: "example/sample-two", label: "primary" },
+      ]);
+      const audit = await env.DB.prepare(
+        "SELECT params FROM audit_log WHERE action = 'update_namespace' ORDER BY id DESC LIMIT 1",
+      ).first<{ params: string }>();
+      expect(JSON.parse(JSON.parse(audit?.params ?? "{}").old)).toEqual([
+        { repo: "example/sample", label: "primary" },
+      ]);
     },
   },
   namespace_remove: {
     // A registered project with a live document: cascade deletes it, snapshotted first.
     params: async () => {
-      await env.DB.prepare("INSERT INTO namespaces (namespace, repos) VALUES ('sample-gone', ?1)").bind(JSON.stringify([{ repo: "example/sample-gone", label: "primary" }])).run();
-      await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES ('sample-gone', 'notes.md', 'Notes', 'lorem')").run();
+      await env.DB.prepare("INSERT INTO namespaces (namespace, repos) VALUES ('sample-gone', ?1)")
+        .bind(JSON.stringify([{ repo: "example/sample-gone", label: "primary" }]))
+        .run();
+      await env.DB.prepare(
+        "INSERT INTO documents (namespace, path, title, body) VALUES ('sample-gone', 'notes.md', 'Notes', 'lorem')",
+      ).run();
       return { namespace: "sample-gone", cascade: "true" };
     },
     after: async () => {
-      expect(await env.DB.prepare("SELECT namespace FROM namespaces WHERE namespace = 'sample-gone'").first()).toBeNull();
-      expect(await env.DB.prepare("SELECT path FROM documents WHERE namespace = 'sample-gone'").first()).toBeNull();
-      const kept = await env.DB.prepare("SELECT body FROM document_versions WHERE namespace = 'sample-gone' AND path = 'notes.md'").first<{ body: string }>();
+      expect(
+        await env.DB.prepare(
+          "SELECT namespace FROM namespaces WHERE namespace = 'sample-gone'",
+        ).first(),
+      ).toBeNull();
+      expect(
+        await env.DB.prepare("SELECT path FROM documents WHERE namespace = 'sample-gone'").first(),
+      ).toBeNull();
+      const kept = await env.DB.prepare(
+        "SELECT body FROM document_versions WHERE namespace = 'sample-gone' AND path = 'notes.md'",
+      ).first<{ body: string }>();
       expect(kept?.body, "the document was not snapshotted before it went").toBe("lorem");
     },
   },
@@ -469,7 +761,7 @@ const CASES: Record<string, Case> = {
     params: async () => {
       secretPuts.length = 0;
       await env.DB.prepare(
-        "INSERT INTO ops_sites (namespace, name, origin, health_path, platform, script, self_probe) VALUES ('sample', 'Sample', 'https://sample.example.com', '/health', 'cloudflare', 'sample-site', 0)"
+        "INSERT INTO ops_sites (namespace, name, origin, health_path, platform, script, self_probe) VALUES ('sample', 'Sample', 'https://sample.example.com', '/health', 'cloudflare', 'sample-site', 0)",
       ).run();
       return { namespace: "sample" };
     },
@@ -482,22 +774,42 @@ const CASES: Record<string, Case> = {
       expect(secretPuts[0].text).toHaveLength(43);
       expect(secretPuts[1].text).toBe(secretPuts[0].text);
       // The value is in no audit row, the mutator's or the click's.
-      for (const row of await auditRows()) expect(row.params, `${row.action} recorded the key`).not.toContain(secretPuts[0].text);
+      for (const row of await auditRows())
+        expect(row.params, `${row.action} recorded the key`).not.toContain(secretPuts[0].text);
     },
   },
   site_backup: {
     params: async () => {
       operatorCalls.length = 0;
-      await env.DB.prepare("UPDATE ops_sites SET operator = json_set(operator, '$.backup', json('true')) WHERE namespace = 'dustinedwards'").run();
+      await env.DB.prepare(
+        "UPDATE ops_sites SET operator = json_set(operator, '$.backup', json('true')) WHERE namespace = 'dustinedwards'",
+      ).run();
       return { namespace: "dustinedwards" };
     },
     after: async () => {
-      expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([["https://dustinedwards.info/api/operator", `Bearer ${OPERATOR_TOKEN}`, { tool: "backup_media", args: {} }]]);
-      const row = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'site-backup' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
-      expect(JSON.parse(row?.params ?? "{}")).toMatchObject({ tool: "backup_media", via: "portal", ok: true });
+      expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([
+        [
+          "https://dustinedwards.info/api/operator",
+          `Bearer ${OPERATOR_TOKEN}`,
+          { tool: "backup_media", args: {} },
+        ],
+      ]);
+      const row = await env.DB.prepare(
+        "SELECT params FROM audit_log WHERE action = 'site-backup' ORDER BY id DESC LIMIT 1",
+      ).first<{ params: string }>();
+      expect(JSON.parse(row?.params ?? "{}")).toMatchObject({
+        tool: "backup_media",
+        via: "portal",
+        ok: true,
+      });
       expect(row?.params, "the token reached the audit row").not.toContain(OPERATOR_TOKEN);
-      const run = await env.DB.prepare("SELECT outcome, reason FROM task_runs WHERE task = 'site-backup' ORDER BY id DESC LIMIT 1").first<{ outcome: string; reason: string }>();
-      expect(run).toEqual({ outcome: "ok", reason: "dustinedwards: backup_media ran: images complete (2 copied) (portal)" });
+      const run = await env.DB.prepare(
+        "SELECT outcome, reason FROM task_runs WHERE task = 'site-backup' ORDER BY id DESC LIMIT 1",
+      ).first<{ outcome: string; reason: string }>();
+      expect(run).toEqual({
+        outcome: "ok",
+        reason: "dustinedwards: backup_media ran: images complete (2 copied) (portal)",
+      });
     },
   },
   site_repair: {
@@ -506,12 +818,31 @@ const CASES: Record<string, Case> = {
       return { namespace: "dustinedwards", tool: "sync_pages" };
     },
     after: async () => {
-      expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([["https://dustinedwards.info/api/operator", `Bearer ${OPERATOR_TOKEN}`, { tool: "sync_pages", args: {} }]]);
-      const row = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'site-repair' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
-      expect(JSON.parse(row?.params ?? "{}")).toMatchObject({ tool: "sync_pages", via: "portal", converged: true, present: 14, expected: 14 });
+      expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([
+        [
+          "https://dustinedwards.info/api/operator",
+          `Bearer ${OPERATOR_TOKEN}`,
+          { tool: "sync_pages", args: {} },
+        ],
+      ]);
+      const row = await env.DB.prepare(
+        "SELECT params FROM audit_log WHERE action = 'site-repair' ORDER BY id DESC LIMIT 1",
+      ).first<{ params: string }>();
+      expect(JSON.parse(row?.params ?? "{}")).toMatchObject({
+        tool: "sync_pages",
+        via: "portal",
+        converged: true,
+        present: 14,
+        expected: 14,
+      });
       expect(row?.params, "the token reached the audit row").not.toContain(OPERATOR_TOKEN);
-      const run = await env.DB.prepare("SELECT outcome, reason FROM task_runs WHERE task = 'site-repair' ORDER BY id DESC LIMIT 1").first<{ outcome: string; reason: string }>();
-      expect(run).toEqual({ outcome: "ok", reason: "dustinedwards: sync_pages converged (14 of 14 present) (portal)" });
+      const run = await env.DB.prepare(
+        "SELECT outcome, reason FROM task_runs WHERE task = 'site-repair' ORDER BY id DESC LIMIT 1",
+      ).first<{ outcome: string; reason: string }>();
+      expect(run).toEqual({
+        outcome: "ok",
+        reason: "dustinedwards: sync_pages converged (14 of 14 present) (portal)",
+      });
     },
   },
 };
@@ -529,14 +860,23 @@ describe("every action, previewed then performed through the Worker", () => {
       const kvBefore = await Promise.all(KEYS.map((k) => env.APP_KV.get(k)));
       const jobBefore = params.id ? await job(params.id) : null;
 
-      const previewed = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action, params } });
+      const previewed = await call(PORTAL_PREVIEW_PATH, {
+        method: "POST",
+        body: { action, params },
+      });
       expect(previewed.status, await previewed.clone().text()).toBe(200);
       const preview = (await previewed.json()) as PortalPreview;
       expect(await auditRows(), "the preview wrote an audit row").toEqual(auditBefore);
-      expect(await Promise.all(KEYS.map((k) => env.APP_KV.get(k))), "the preview wrote to KV").toEqual(kvBefore);
+      expect(
+        await Promise.all(KEYS.map((k) => env.APP_KV.get(k))),
+        "the preview wrote to KV",
+      ).toEqual(kvBefore);
       if (params.id) expect(await job(params.id), "the preview moved the job").toEqual(jobBefore);
 
-      const performed = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+      const performed = await call(PORTAL_PERFORM_PATH, {
+        method: "POST",
+        body: { token: preview.token },
+      });
       expect(performed.status, await performed.clone().text()).toBe(200);
       const body = (await performed.json()) as PortalPerformed;
       expect(body.action).toBe(action);
@@ -549,7 +889,9 @@ describe("every action, previewed then performed through the Worker", () => {
       // writes its action twice, once for the job and once for its mirror document, so
       // the comparison is of distinct "<action> by <actor>" lines.
       const written = (await auditRows()).filter((r) => !auditBefore.some((b) => b.id === r.id));
-      expect([...new Set(written.map((r) => `${r.action} by ${r.actor}`))].sort()).toEqual([...preview.audit].sort());
+      expect([...new Set(written.map((r) => `${r.action} by ${r.actor}`))].sort()).toEqual(
+        [...preview.audit].sort(),
+      );
       const click = written.find((r) => r.action === `portal-${action}`);
       expect(click?.actor).toBe(ACTOR);
     });
@@ -559,14 +901,31 @@ describe("every action, previewed then performed through the Worker", () => {
 describe("parked jobs, the Tonight plan and the digest", () => {
   it("a parked job stays in the feed with its reason, and Unpark's Undo writes portal-undo-unpark_job", async () => {
     const id = await postedJob("a job to park and bring back");
-    const park = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "park_job", params: { id, reason: "comes back on Monday" } } })).json()) as PortalPreview;
-    const parked = (await (await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: park.token } })).json()) as PortalPerformed;
+    const park = (await (
+      await call(PORTAL_PREVIEW_PATH, {
+        method: "POST",
+        body: { action: "park_job", params: { id, reason: "comes back on Monday" } },
+      })
+    ).json()) as PortalPreview;
+    const parked = (await (
+      await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: park.token } })
+    ).json()) as PortalPerformed;
     const inFeed = parked.feed.live.jobs.find((j) => j.id === id);
     expect(inFeed?.status).toBe("parked");
     expect(inFeed?.parked_reason).toBe("comes back on Monday");
-    const undo = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "unpark_job", params: { id, reason: "Undo: comes back on Monday", undo: "true" } } })).json()) as PortalPreview;
+    const undo = (await (
+      await call(PORTAL_PREVIEW_PATH, {
+        method: "POST",
+        body: {
+          action: "unpark_job",
+          params: { id, reason: "Undo: comes back on Monday", undo: "true" },
+        },
+      })
+    ).json()) as PortalPreview;
     expect(undo.audit).toContain(`portal-undo-unpark_job by ${ACTOR}`);
-    expect((await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: undo.token } })).status).toBe(200);
+    expect(
+      (await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: undo.token } })).status,
+    ).toBe(200);
     expect((await job(id))?.status).toBe("queued");
   });
 
@@ -576,7 +935,9 @@ describe("parked jobs, the Tonight plan and the digest", () => {
     expect(plan.status, await plan.clone().text()).toBe(200);
     const planned = (await plan.json()) as PortalPlan;
     expect(planned.queued_read).toBeGreaterThanOrEqual(1);
-    expect([...planned.lanes.flatMap((l) => l.jobs), ...planned.skipped].some((j) => j.id === id)).toBe(true);
+    expect(
+      [...planned.lanes.flatMap((l) => l.jobs), ...planned.skipped].some((j) => j.id === id),
+    ).toBe(true);
     expect("for_namespace" in planned).toBe(false);
     const digest = await call(`${PORTAL_DIGEST_PATH}?since=2026-01-01`);
     expect(digest.status, await digest.clone().text()).toBe(200);
@@ -591,11 +952,28 @@ describe("the approval record against real D1", () => {
     await env.APP_KV.put("gh:token:v3:example/capsid", "test-token");
     await env.APP_KV.put(
       AWAITING_SEAT_KEY,
-      JSON.stringify([{ namespace: "capsid", repo: "example/capsid", number: 41, failed: "path_class", why: "a src change", at: NOW.toISOString(), class: "approve", path_class: "src-routine", class_reasons: [] }])
+      JSON.stringify([
+        {
+          namespace: "capsid",
+          repo: "example/capsid",
+          number: 41,
+          failed: "path_class",
+          why: "a src change",
+          at: NOW.toISOString(),
+          class: "approve",
+          path_class: "src-routine",
+          class_reasons: [],
+        },
+      ]),
     );
     const act = async (params: Record<string, string>) => {
-      const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "approve_pr", params } })).json()) as PortalPreview;
-      const performed = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+      const preview = (await (
+        await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "approve_pr", params } })
+      ).json()) as PortalPreview;
+      const performed = await call(PORTAL_PERFORM_PATH, {
+        method: "POST",
+        body: { token: preview.token },
+      });
       expect(performed.status, await performed.clone().text()).toBe(200);
       return preview;
     };
@@ -604,7 +982,9 @@ describe("the approval record against real D1", () => {
     expect(again.audit).toContain(`pr-approval-voided by ${ACTOR}`);
     const undo = await act({ namespace: "capsid", prs: "41", undo: "true" });
     expect(undo.audit).toContain(`portal-undo-approve_pr by ${ACTOR}`);
-    const { results } = await env.DB.prepare("SELECT status, close_reason FROM pr_approvals ORDER BY id").all<{ status: string; close_reason: string | null }>();
+    const { results } = await env.DB.prepare(
+      "SELECT status, close_reason FROM pr_approvals ORDER BY id",
+    ).all<{ status: string; close_reason: string | null }>();
     expect(results).toEqual([
       { status: "voided", close_reason: "replaced" },
       { status: "voided", close_reason: "undone" },
@@ -632,45 +1012,79 @@ describe("the automation switches against real D1 and KV", () => {
 
   it("a switch and its Undo write their own click rows: portal-overnight, then portal-undo-overnight, each with its reason", async () => {
     const flip = async (params: Record<string, string>) => {
-      const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "overnight", params } })).json()) as PortalPreview;
-      const performed = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+      const preview = (await (
+        await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "overnight", params } })
+      ).json()) as PortalPreview;
+      const performed = await call(PORTAL_PERFORM_PATH, {
+        method: "POST",
+        body: { token: preview.token },
+      });
       expect(performed.status, await performed.clone().text()).toBe(200);
       return preview;
     };
     await flip({ value: "api", reason: "queued jobs are waiting" });
     expect(await env.APP_KV.get(OVERNIGHT_MODE_KEY)).toBe("api");
-    const undo = await flip({ value: "off", reason: "Undo: queued jobs are waiting", undo: "true" });
+    const undo = await flip({
+      value: "off",
+      reason: "Undo: queued jobs are waiting",
+      undo: "true",
+    });
     expect(undo.audit).toContain(`portal-undo-overnight by ${ACTOR}`);
     expect(await env.APP_KV.get(OVERNIGHT_MODE_KEY)).toBe("off");
     const clicks = (await auditRows()).filter((r) => r.action.endsWith("overnight"));
     expect(clicks.map((r) => r.action)).toEqual(["portal-overnight", "portal-undo-overnight"]);
     expect(JSON.parse(clicks[0].params)).toMatchObject({ reason: "queued jobs are waiting" });
     expect(JSON.parse(clicks[0].params).undo).toBeUndefined();
-    expect(JSON.parse(clicks[1].params)).toMatchObject({ reason: "Undo: queued jobs are waiting", undo: true });
+    expect(JSON.parse(clicks[1].params)).toMatchObject({
+      reason: "Undo: queued jobs are waiting",
+      undo: true,
+    });
   });
 });
 
 describe("the job actions against real D1", () => {
   it("resume: the preview says the queue, and why, when the job was blocked by a shared identity, and the perform sends it there", async () => {
-    const id = await blockedJob("blocked by a shared identity", grantAgent("write", "access:someone@example.com"));
-    const previewed = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } });
+    const id = await blockedJob(
+      "blocked by a shared identity",
+      grantAgent("write", "access:someone@example.com"),
+    );
+    const previewed = await call(PORTAL_PREVIEW_PATH, {
+      method: "POST",
+      body: { action: "resume_job", params: { id, reason: "approved" } },
+    });
     const preview = (await previewed.json()) as PortalPreview;
     expect(preview.changes[0]).toMatch(/blocked -> queued/);
     expect(preview.changes[0]).toMatch(/shared identity/);
-    const performed = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+    const performed = await call(PORTAL_PERFORM_PATH, {
+      method: "POST",
+      body: { token: preview.token },
+    });
     expect(performed.status, await performed.clone().text()).toBe(200);
     expect((await job(id))?.status).toBe("queued");
   });
 
   it("a second perform of the same token is refused as already used, and writes no click row; a fresh preview is refused by the transition", async () => {
     const id = await blockedJob("resumed twice");
-    const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } })).json()) as PortalPreview;
-    expect((await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })).status).toBe(200);
+    const preview = (await (
+      await call(PORTAL_PREVIEW_PATH, {
+        method: "POST",
+        body: { action: "resume_job", params: { id, reason: "approved" } },
+      })
+    ).json()) as PortalPreview;
+    expect(
+      (await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })).status,
+    ).toBe(200);
     const clicks = (await auditRows()).filter((r) => r.action === "portal-resume_job").length;
-    const again = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
+    const again = await call(PORTAL_PERFORM_PATH, {
+      method: "POST",
+      body: { token: preview.token },
+    });
     expect(again.status).toBe(409);
     expect(await again.text()).toMatch(/already used/);
-    const fresh = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } });
+    const fresh = await call(PORTAL_PREVIEW_PATH, {
+      method: "POST",
+      body: { action: "resume_job", params: { id, reason: "approved" } },
+    });
     expect(fresh.status).toBe(400);
     expect(await fresh.text()).toMatch(/not blocked/);
     expect((await auditRows()).filter((r) => r.action === "portal-resume_job").length).toBe(clicks);
@@ -678,7 +1092,10 @@ describe("the job actions against real D1", () => {
 
   it("fail: a job id that does not exist is refused, rather than reported as a no-op that worked", async () => {
     await blockedJob("some other job");
-    const res = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "fail_job", params: { id: "job_missing", reason: "x" } } });
+    const res = await call(PORTAL_PREVIEW_PATH, {
+      method: "POST",
+      body: { action: "fail_job", params: { id: "job_missing", reason: "x" } },
+    });
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/no job job_missing/);
   });
@@ -687,7 +1104,10 @@ describe("the job actions against real D1", () => {
     const id = await blockedJob("needs a reason");
     await env.DB.prepare("DELETE FROM audit_log").run();
     for (const action of ["fail_job", "resume_job"]) {
-      const res = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action, params: { id } } });
+      const res = await call(PORTAL_PREVIEW_PATH, {
+        method: "POST",
+        body: { action, params: { id } },
+      });
       expect(res.status, `${action} without a reason`).toBe(400);
       expect(await res.text()).toMatch(/reason|what you approved/i);
     }
@@ -699,22 +1119,38 @@ describe("the job actions against real D1", () => {
     // A blocked job can be edited while it waits for a human, so resume re-verifies the
     // signature, and the Portal must show that refusal rather than report success.
     const id = await blockedJob("edited while blocked");
-    const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "resume_job", params: { id, reason: "approved" } } })).json()) as PortalPreview;
-    await env.DB.prepare("UPDATE jobs SET body = ?2 WHERE id = ?1").bind(id, "---\ncapsid-task-signature: deadbeef\n---\ntampered").run();
+    const preview = (await (
+      await call(PORTAL_PREVIEW_PATH, {
+        method: "POST",
+        body: { action: "resume_job", params: { id, reason: "approved" } },
+      })
+    ).json()) as PortalPreview;
+    await env.DB.prepare("UPDATE jobs SET body = ?2 WHERE id = ?1")
+      .bind(id, "---\ncapsid-task-signature: deadbeef\n---\ntampered")
+      .run();
     const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/signature|does not match its body/i);
     expect((await job(id))?.status).not.toBe("claimed");
-    expect((await auditRows()).some((r) => r.action === "portal-resume_job"), "a refused resume wrote a click row").toBe(false);
+    expect(
+      (await auditRows()).some((r) => r.action === "portal-resume_job"),
+      "a refused resume wrote a click row",
+    ).toBe(false);
   });
 
   it("release: the preview refuses a blocked job, and fail refuses a finished one", async () => {
     const blocked = await blockedJob("still blocked");
-    const release = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "release_job", params: { id: blocked, reason: "x" } } });
+    const release = await call(PORTAL_PREVIEW_PATH, {
+      method: "POST",
+      body: { action: "release_job", params: { id: blocked, reason: "x" } },
+    });
     expect(release.status).toBe(400);
     expect(await release.text()).toMatch(/not claimed/);
     await env.DB.prepare("UPDATE jobs SET status = 'done' WHERE id = ?1").bind(blocked).run();
-    const fail = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "fail_job", params: { id: blocked, reason: "x" } } });
+    const fail = await call(PORTAL_PREVIEW_PATH, {
+      method: "POST",
+      body: { action: "fail_job", params: { id: blocked, reason: "x" } },
+    });
     expect(fail.status).toBe(400);
     expect(await fail.text()).toMatch(/already done/);
   });
@@ -722,19 +1158,37 @@ describe("the job actions against real D1", () => {
 
 describe("the project actions against real D1", () => {
   it("a project delete keeps the delete tool's refusals, and a project changed after its preview is refused at perform and kept", async () => {
-    await env.DB.prepare("INSERT INTO namespaces (namespace, repos) VALUES ('sample-kept', ?1)").bind(JSON.stringify([{ repo: "example/sample-kept", label: "primary" }])).run();
-    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES ('sample-kept', 'notes.md', 'Notes', 'lorem')").run();
+    await env.DB.prepare("INSERT INTO namespaces (namespace, repos) VALUES ('sample-kept', ?1)")
+      .bind(JSON.stringify([{ repo: "example/sample-kept", label: "primary" }]))
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO documents (namespace, path, title, body) VALUES ('sample-kept', 'notes.md', 'Notes', 'lorem')",
+    ).run();
     const auditBefore = await auditRows();
-    const refused = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "namespace_remove", params: { namespace: "sample-kept" } } });
+    const refused = await call(PORTAL_PREVIEW_PATH, {
+      method: "POST",
+      body: { action: "namespace_remove", params: { namespace: "sample-kept" } },
+    });
     expect(refused.status).toBe(400);
     expect(await refused.text()).toMatch(/Pass cascade: true to delete them/);
 
-    const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "namespace_remove", params: { namespace: "sample-kept", cascade: "true" } } })).json()) as PortalPreview;
-    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES ('sample-kept', 'later.md', 'Later', 'ipsum')").run();
+    const preview = (await (
+      await call(PORTAL_PREVIEW_PATH, {
+        method: "POST",
+        body: { action: "namespace_remove", params: { namespace: "sample-kept", cascade: "true" } },
+      })
+    ).json()) as PortalPreview;
+    await env.DB.prepare(
+      "INSERT INTO documents (namespace, path, title, body) VALUES ('sample-kept', 'later.md', 'Later', 'ipsum')",
+    ).run();
     const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/changed since the preview/);
-    expect(await env.DB.prepare("SELECT namespace FROM namespaces WHERE namespace = 'sample-kept'").first()).not.toBeNull();
+    expect(
+      await env.DB.prepare(
+        "SELECT namespace FROM namespaces WHERE namespace = 'sample-kept'",
+      ).first(),
+    ).not.toBeNull();
     expect(await auditRows(), "a refused delete wrote a row").toEqual(auditBefore);
   });
 });
@@ -742,22 +1196,59 @@ describe("the project actions against real D1", () => {
 describe("the site actions against real D1", () => {
   it("a site edit previewed, then edited elsewhere, is refused at perform and the row keeps the other edit", async () => {
     const row = await siteRow("foxing");
-    const params = { namespace: "foxing", revision: String(row?.revision), name: "Foxing", origin: "https://foxing.app", health_path: "/api/health", platform: "cloudflare" };
-    const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_edit", params } })).json()) as PortalPreview;
-    await env.DB.prepare("UPDATE ops_sites SET name = 'Foxing (renamed)', revision = revision + 1 WHERE namespace = 'foxing'").run();
+    const params = {
+      namespace: "foxing",
+      revision: String(row?.revision),
+      name: "Foxing",
+      origin: "https://foxing.app",
+      health_path: "/api/health",
+      platform: "cloudflare",
+    };
+    const preview = (await (
+      await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_edit", params } })
+    ).json()) as PortalPreview;
+    await env.DB.prepare(
+      "UPDATE ops_sites SET name = 'Foxing (renamed)', revision = revision + 1 WHERE namespace = 'foxing'",
+    ).run();
     const res = await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } });
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/changed since the preview/);
-    expect(await siteRow("foxing")).toMatchObject({ name: "Foxing (renamed)", health_path: "/health" });
-    expect((await auditRows()).some((r) => r.action === "portal-site_edit"), "a refused edit wrote a click row").toBe(false);
+    expect(await siteRow("foxing")).toMatchObject({
+      name: "Foxing (renamed)",
+      health_path: "/health",
+    });
+    expect(
+      (await auditRows()).some((r) => r.action === "portal-site_edit"),
+      "a refused edit wrote a click row",
+    ).toBe(false);
   });
 
   it("add refuses an unregistered namespace and a bad origin at preview, with the reason, writing nothing", async () => {
     const auditBefore = await auditRows();
-    const unregistered = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_add", params: { namespace: "nobody", origin: "https://nobody.example.com", platform: "cloudflare" } } });
+    const unregistered = await call(PORTAL_PREVIEW_PATH, {
+      method: "POST",
+      body: {
+        action: "site_add",
+        params: {
+          namespace: "nobody",
+          origin: "https://nobody.example.com",
+          platform: "cloudflare",
+        },
+      },
+    });
     expect(unregistered.status).toBe(400);
     expect(await unregistered.text()).toMatch(/not a registered namespace/);
-    const http = await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_add", params: { namespace: "sample", origin: "http://sample.example.com", platform: "cloudflare" } } });
+    const http = await call(PORTAL_PREVIEW_PATH, {
+      method: "POST",
+      body: {
+        action: "site_add",
+        params: {
+          namespace: "sample",
+          origin: "http://sample.example.com",
+          platform: "cloudflare",
+        },
+      },
+    });
     expect(http.status).toBe(400);
     expect(await http.text()).toMatch(/must start with https/);
     expect(await siteRow("sample")).toBeNull();
@@ -766,9 +1257,19 @@ describe("the site actions against real D1", () => {
 
   it("the feed carries the configuration, and a perform's feed shows the change", async () => {
     const row = await siteRow("julieedwards");
-    const preview = (await (await call(PORTAL_PREVIEW_PATH, { method: "POST", body: { action: "site_remove", params: { namespace: "julieedwards", revision: String(row?.revision) } } })).json()) as PortalPreview;
+    const preview = (await (
+      await call(PORTAL_PREVIEW_PATH, {
+        method: "POST",
+        body: {
+          action: "site_remove",
+          params: { namespace: "julieedwards", revision: String(row?.revision) },
+        },
+      })
+    ).json()) as PortalPreview;
     expect(preview.changes.join(" ")).toMatch(/still registered|remove julieedwards/);
-    const performed = (await (await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })).json()) as PortalPerformed;
+    const performed = (await (
+      await call(PORTAL_PERFORM_PATH, { method: "POST", body: { token: preview.token } })
+    ).json()) as PortalPerformed;
     expect(performed.feed.live.sites.some((s) => s.namespace === "julieedwards")).toBe(false);
     expect(performed.feed.live.sites.some((s) => s.namespace === "capsid")).toBe(true);
   });
@@ -791,9 +1292,15 @@ describe("the Portal's reads", () => {
 
   it("activity is the filtered, bounded audit read, newest first, with ISO times", async () => {
     await env.DB.batch([
-      env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:sample', 'write', 'sample', 'a.md', '{}')"),
-      env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:other', 'write', 'sample', 'b.md', '{}')"),
-      env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:sample', 'write', 'capsid', 'c.md', '{}')"),
+      env.DB.prepare(
+        "INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:sample', 'write', 'sample', 'a.md', '{}')",
+      ),
+      env.DB.prepare(
+        "INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:other', 'write', 'sample', 'b.md', '{}')",
+      ),
+      env.DB.prepare(
+        "INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:sample', 'write', 'capsid', 'c.md', '{}')",
+      ),
     ]);
     const response = await call(`${PORTAL_ACTIVITY_PATH}?namespace=sample&actor=agent:sample`);
     expect(response.status).toBe(200);
@@ -806,10 +1313,18 @@ describe("the Portal's reads", () => {
     expect(all.rows.map((r) => r.path)).toEqual(["c.md", "b.md", "a.md"]);
 
     // The drawer's read: one row by id, with its detail and without its params.
-    const one = (await (await call(`${PORTAL_ACTIVITY_PATH}?id=${all.rows[1]!.id}`)).json()) as PortalActivity;
+    const one = (await (
+      await call(`${PORTAL_ACTIVITY_PATH}?id=${all.rows[1]!.id}`)
+    ).json()) as PortalActivity;
     expect(one.filter.id).toBe(all.rows[1]!.id);
     expect(one.rows.map((r) => r.path)).toEqual(["b.md"]);
-    expect(one.rows[0]!.detail).toEqual({ reason: null, changes: null, fields: [], withheld: 0, unreadable: false });
+    expect(one.rows[0]!.detail).toEqual({
+      reason: null,
+      changes: null,
+      fields: [],
+      withheld: 0,
+      unreadable: false,
+    });
     expect(Object.keys(one.rows[0]!)).not.toContain("params");
   });
 

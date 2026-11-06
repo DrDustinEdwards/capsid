@@ -53,20 +53,35 @@ function env(schema: string, repos?: Array<{ repo: string; label: string }>) {
 // GitHub as the real readers ask for it. The commits route is served too, so a
 // watcher that reads master head through repo_history with a ref is not failed by
 // the harness.
-const commit = (sha: string) => ({ sha, commit: { message: "m", author: { name: "a", date: "2026-09-16T00:00:00Z" } } });
-const entry = (name: string) => ({ path: `migrations/${name}`, type: "file", size: 1, sha: "c".repeat(40) });
+const commit = (sha: string) => ({
+  sha,
+  commit: { message: "m", author: { name: "a", date: "2026-09-16T00:00:00Z" } },
+});
+const entry = (name: string) => ({
+  path: `migrations/${name}`,
+  type: "file",
+  size: 1,
+  sha: "c".repeat(40),
+});
 const routes: Record<string, Route> = {
   [`GET /repos/${OWNER}/${REPO}`]: { body: { default_branch: "master" } },
   [`GET /repos/${OWNER}/${REPO}/git/ref/heads/master`]: { body: { object: { sha: MASTER } } },
   [`GET /repos/${OWNER}/${REPO}/commits`]: { body: [commit(MASTER)] },
-  [`GET /repos/${OWNER}/${REPO}/contents/migrations`]: { body: [entry(LIVE_SCHEMA), entry(NEWER), { ...entry("README.md") }] },
+  [`GET /repos/${OWNER}/${REPO}/contents/migrations`]: {
+    body: [entry(LIVE_SCHEMA), entry(NEWER), { ...entry("README.md") }],
+  },
 };
 
 async function gather(
   schema: string,
   repos?: Array<{ repo: string; label: string }>,
-  extra: Record<string, Route> = {}
-): Promise<{ found: Finding[]; ran: ReadonlySet<WatcherCheck>; failures: string[]; calls: FetchCall[] }> {
+  extra: Record<string, Route> = {},
+): Promise<{
+  found: Finding[];
+  ran: ReadonlySet<WatcherCheck>;
+  failures: string[];
+  calls: FetchCall[];
+}> {
   const failures: string[] = [];
   const original = console.error;
   console.error = (...args: unknown[]) => {
@@ -92,9 +107,13 @@ test("A DEPLOYED SHA THAT IS NOT MASTER HEAD REACHES THE QUEUE through gatherFin
   const { found, failures } = await gather(NEWER);
   assert.ok(
     fingerprints(found).includes(`deploy-drift-${MASTER.slice(0, 7)}`),
-    `no deploy-drift finding; read failures: ${failures.filter((f) => f.includes("master head")).join(" | ") || "none"}`
+    `no deploy-drift finding; read failures: ${failures.filter((f) => f.includes("master head")).join(" | ") || "none"}`,
   );
-  assert.deepEqual(failures.filter((f) => f.includes("master head")), [], "the master head read must not fail");
+  assert.deepEqual(
+    failures.filter((f) => f.includes("master head")),
+    [],
+    "the master head read must not fail",
+  );
 });
 
 // Master head's CI run, served for the head sha the watcher asks about and nothing else.
@@ -103,7 +122,19 @@ const headRuns = (status: string, conclusion: string | null): Record<string, Rou
     body: {
       workflow_runs:
         params.get("head_sha") === MASTER
-          ? [{ id: 1, name: "CI", head_sha: MASTER, status, conclusion, event: "push", created_at: new Date().toISOString(), updated_at: new Date().toISOString(), html_url: "u" }]
+          ? [
+              {
+                id: 1,
+                name: "CI",
+                head_sha: MASTER,
+                status,
+                conclusion,
+                event: "push",
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                html_url: "u",
+              },
+            ]
           : [],
     },
   }),
@@ -111,8 +142,14 @@ const headRuns = (status: string, conclusion: string | null): Record<string, Rou
 
 test("a deploy-drift finding waits while master head's CI run is in progress, and the check is left un-judged", async () => {
   const { found, ran, calls } = await gather(NEWER, undefined, headRuns("in_progress", null));
-  assert.ok(calls.some((c) => c.path.endsWith("/actions/runs") && c.search.includes(`head_sha=${MASTER}`)), "the watcher never read master head's CI run");
-  assert.ok(!fingerprints(found).some((f) => f.startsWith("deploy-drift-")), JSON.stringify(fingerprints(found)));
+  assert.ok(
+    calls.some((c) => c.path.endsWith("/actions/runs") && c.search.includes(`head_sha=${MASTER}`)),
+    "the watcher never read master head's CI run",
+  );
+  assert.ok(
+    !fingerprints(found).some((f) => f.startsWith("deploy-drift-")),
+    JSON.stringify(fingerprints(found)),
+  );
   assert.ok(!ran.has("master head"), "a deploy in flight must not clear an open drift finding");
 });
 
@@ -128,9 +165,13 @@ test("A LIVE SCHEMA BEHIND THE NEWEST MIGRATION REACHES THE QUEUE through gather
   const { found, failures } = await gather(LIVE_SCHEMA);
   assert.ok(
     fingerprints(found).includes(`schema-behind-${NEWER}`),
-    `no schema-behind finding; got ${JSON.stringify(fingerprints(found))}`
+    `no schema-behind finding; got ${JSON.stringify(fingerprints(found))}`,
   );
-  assert.deepEqual(failures.filter((f) => f.includes("migrations")), [], "the migrations read must not fail");
+  assert.deepEqual(
+    failures.filter((f) => f.includes("migrations")),
+    [],
+    "the migrations read must not fail",
+  );
 });
 
 // The field contract. The watcher reads repo-reader results with no cast, so the
@@ -138,7 +179,10 @@ test("A LIVE SCHEMA BEHIND THE NEWEST MIGRATION REACHES THE QUEUE through gather
 
 test("a live schema AT the newest migration is not a finding, so the check is not just always firing", async () => {
   const { found } = await gather(NEWER);
-  assert.ok(!fingerprints(found).some((f) => f.startsWith("schema-behind-")), JSON.stringify(fingerprints(found)));
+  assert.ok(
+    !fingerprints(found).some((f) => f.startsWith("schema-behind-")),
+    JSON.stringify(fingerprints(found)),
+  );
 });
 
 // A check whose read failed is not reported as run, so runPass does not clear the jobs
@@ -146,8 +190,16 @@ test("a live schema AT the newest migration is not a finding, so the check is no
 // read fail, while /health, master head and the migrations listing succeed.
 test("gatherFindings reports only the checks whose reads succeeded", async () => {
   const { ran, failures } = await gather(NEWER);
-  assert.ok(failures.some((f) => f.includes("status")), "the status read did not fail, so this proves nothing");
-  assert.ok(failures.some((f) => f.includes("ci ")), "no ci read failed, so this proves nothing");
-  for (const check of ["health", "master head", "migrations"] as const) assert.ok(ran.has(check), `${check} ran and was not reported`);
-  for (const check of ["status", "ci"] as const) assert.ok(!ran.has(check), `${check} failed and was reported as run`);
+  assert.ok(
+    failures.some((f) => f.includes("status")),
+    "the status read did not fail, so this proves nothing",
+  );
+  assert.ok(
+    failures.some((f) => f.includes("ci ")),
+    "no ci read failed, so this proves nothing",
+  );
+  for (const check of ["health", "master head", "migrations"] as const)
+    assert.ok(ran.has(check), `${check} ran and was not reported`);
+  for (const check of ["status", "ci"] as const)
+    assert.ok(!ran.has(check), `${check} failed and was reported as run`);
 });

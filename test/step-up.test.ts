@@ -19,7 +19,13 @@ const signedIn = (msAgo: number | null, lastStepUpMsAgo?: number) => {
   if (lastStepUpMsAgo !== undefined) agent.lastStepUpAt = Date.now() - lastStepUpMsAgo;
   return agent;
 };
-const performNeed = { tool: "capsid_admin_run_controls", action: "perform", grant: "write" as const, admin: true, stepUp: true };
+const performNeed = {
+  tool: "capsid_admin_run_controls",
+  action: "perform",
+  grant: "write" as const,
+  admin: true,
+  stepUp: true,
+};
 
 async function call(agent: Agent, name: string, args: Record<string, unknown>) {
   const server = buildAdminServer(fakeEnv({ APP_KV: fakeKv({}).kv }), agent);
@@ -27,7 +33,10 @@ async function call(agent: Agent, name: string, args: Record<string, unknown>) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    const result = (await client.callTool({ name, arguments: args })) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = (await client.callTool({ name, arguments: args })) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
     return { text: result.content.map((c) => c.text).join("\n"), isError: result.isError === true };
   } finally {
     await client.close();
@@ -35,7 +44,10 @@ async function call(agent: Agent, name: string, args: Record<string, unknown>) {
 }
 
 async function actionsOf(name: string): Promise<string[] | null> {
-  const server = buildAdminServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+  const server = buildAdminServer(
+    fakeEnv({ APP_KV: fakeKv({}).kv }),
+    adminAgentForEmail("admin@example.com"),
+  );
   const client = new Client({ name: "step-up", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -54,13 +66,19 @@ test("every STEP_UP entry is a served admin tool, and every action it lists is o
     const served = await actionsOf(tool);
     if (actions === "*") continue;
     assert.ok(served, `${tool} lists step-up actions and serves no action argument`);
-    for (const action of actions) assert.ok(served.includes(action), `${tool}.${action} is stepped up and not served`);
+    for (const action of actions)
+      assert.ok(served.includes(action), `${tool}.${action} is stepped up and not served`);
   }
 });
 
 test("PLANT: a stale sign-in is refused a risky admin action, naming the reconnect, before its handler runs", async () => {
   const stale = signedIn(STALE);
-  const r = await call(stale, "capsid_admin_manage_agents", { action: "mint", name: "sample-driver", kind: "driver", namespaces: ["sample"] });
+  const r = await call(stale, "capsid_admin_manage_agents", {
+    action: "mint",
+    name: "sample-driver",
+    kind: "driver",
+    namespaces: ["sample"],
+  });
   assert.equal(r.isError, true);
   assert.match(r.text, /step-up required: 'capsid_admin_manage_agents\.mint'/);
   assert.match(r.text, /Reconnect the Capsid Admin connector/);
@@ -93,9 +111,25 @@ test("THE INNOCENT DIRECTION: a stale sign-in still reads; only the risky action
 test("a key holder (no session) is not stepped up: its key is the credential", () => {
   const keyHolder = adminAgentForEmail("admin@example.com");
   assert.equal(keyHolder.signedInAt, undefined);
-  assert.equal(checkScope(keyHolder, { tool: "capsid_admin_set_site_key", grant: "write", admin: true, stepUp: true }), null);
+  assert.equal(
+    checkScope(keyHolder, {
+      tool: "capsid_admin_set_site_key",
+      grant: "write",
+      admin: true,
+      stepUp: true,
+    }),
+    null,
+  );
   // The same need from a stale session is refused, so the exemption is the key, not the need.
-  assert.match(checkScope(signedIn(STALE), { tool: "capsid_admin_set_site_key", grant: "write", admin: true, stepUp: true }) ?? "", /step-up required/);
+  assert.match(
+    checkScope(signedIn(STALE), {
+      tool: "capsid_admin_set_site_key",
+      grant: "write",
+      admin: true,
+      stepUp: true,
+    }) ?? "",
+    /step-up required/,
+  );
 });
 
 test("PLANT: allowed at 1h59 after sign-in with no other activity", () => {
@@ -114,7 +148,10 @@ test("PLANT: allowed at 3h after sign-in when a step-up action succeeded at 1h30
 });
 
 test("PLANT: refused at 3h when the last step-up action was 2h01 ago", () => {
-  assert.match(checkScope(signedIn(3 * HOUR, 2 * HOUR + MINUTE), performNeed) ?? "", /step-up required/);
+  assert.match(
+    checkScope(signedIn(3 * HOUR, 2 * HOUR + MINUTE), performNeed) ?? "",
+    /step-up required/,
+  );
 });
 
 test("PLANT: refused at 12h01 after sign-in even with a step-up action a minute ago", () => {
@@ -124,13 +161,25 @@ test("PLANT: refused at 12h01 after sign-in even with a step-up action a minute 
   assert.equal(checkScope(signedIn(12 * HOUR - MINUTE, MINUTE), performNeed), null);
 });
 
-async function mintAs(agent: Agent, kv: FakeKv, args: Record<string, unknown> = { action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }) {
+async function mintAs(
+  agent: Agent,
+  kv: FakeKv,
+  args: Record<string, unknown> = {
+    action: "mint",
+    name: "capsid-driver",
+    kind: "driver",
+    namespaces: ["capsid"],
+  },
+) {
   const server = buildAdminServer(fakeEnv({ APP_KV: kv.kv, DB: fakeD1({ agents: [] }).db }), agent);
   const client = new Client({ name: "step-up", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    const result = (await client.callTool({ name: "capsid_admin_manage_agents", arguments: args })) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = (await client.callTool({
+      name: "capsid_admin_manage_agents",
+      arguments: args,
+    })) as { content: Array<{ text: string }>; isError?: boolean };
     return { text: result.content.map((c) => c.text).join("\n"), isError: result.isError === true };
   } finally {
     await client.close();
@@ -187,18 +236,34 @@ test("PLANT: an unreadable or future last step-up time is treated as absent, nev
   assert.equal(await readLastStepUp(fakeKv({ failGet: true }).kv, ACTOR, at), undefined);
   assert.equal(await readLastStepUp(fakeKv({ corrupt: "not a number" }).kv, ACTOR, at), undefined);
   assert.equal(await readLastStepUp(fakeKv().kv, ACTOR, at), undefined);
-  assert.equal(await readLastStepUp(fakeKv({ seed: { [keyFor(at)]: "1234" } }).kv, ACTOR, at, 5000), 1234);
-  assert.equal(await readLastStepUp(fakeKv({ seed: { [keyFor(at)]: "9999" } }).kv, ACTOR, at, 5000), undefined, "a time after now widened the window");
+  assert.equal(
+    await readLastStepUp(fakeKv({ seed: { [keyFor(at)]: "1234" } }).kv, ACTOR, at, 5000),
+    1234,
+  );
+  assert.equal(
+    await readLastStepUp(fakeKv({ seed: { [keyFor(at)]: "9999" } }).kv, ACTOR, at, 5000),
+    undefined,
+    "a time after now widened the window",
+  );
 });
 
 test("a co-owner is stepped up exactly as the primary owner: the check keys on the admin agent, not on ADMIN_EMAIL", () => {
-  const need = { tool: "capsid_admin_set_site_key", grant: "write" as const, admin: true, stepUp: true };
-  const co = (msAgo: number | null) => adminAgentForEmail("co@example.com", msAgo === null ? null : Date.now() - msAgo);
+  const need = {
+    tool: "capsid_admin_set_site_key",
+    grant: "write" as const,
+    admin: true,
+    stepUp: true,
+  };
+  const co = (msAgo: number | null) =>
+    adminAgentForEmail("co@example.com", msAgo === null ? null : Date.now() - msAgo);
   assert.equal(co(STALE).actor, "access:co@example.com");
   assert.match(checkScope(co(STALE), need) ?? "", /step-up required/);
   assert.match(checkScope(co(null), need) ?? "", /step-up required/);
   assert.equal(checkScope(co(MINUTE), need), null);
   // Her idle clock is her own: the primary owner's recent step-up does not refresh hers.
-  assert.match(checkScope({ ...co(STALE), lastStepUpAt: undefined }, need) ?? "", /step-up required/);
+  assert.match(
+    checkScope({ ...co(STALE), lastStepUpAt: undefined }, need) ?? "",
+    /step-up required/,
+  );
   assert.equal(checkScope({ ...co(STALE), lastStepUpAt: Date.now() - MINUTE }, need), null);
 });

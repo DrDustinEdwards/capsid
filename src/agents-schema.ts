@@ -16,16 +16,19 @@ export type AgentGrant = (typeof AGENT_GRANTS)[number];
 
 // Each flag names an action whose consequence leaves this Worker, so the write grant
 // alone is not enough for any of them. The reasons are FLAG_REASON in src/scope.ts.
-export const SCOPE_FLAGS = [
-  "can_merge",
-  "can_touch_protected",
-] as const;
+export const SCOPE_FLAGS = ["can_merge", "can_touch_protected"] as const;
 export type ScopeFlag = (typeof SCOPE_FLAGS)[number];
 
 // Flags that gated only tools since removed (capsid_change_repo, capsid_open_pr and
 // capsid_run_ci, Dustin, 2026-10-31). Stored agent rows and queued jobs may still name
 // them, so every reader skips them rather than refusing the row.
-export const RETIRED_FLAGS: readonly string[] = ["can_direct_write", "can_dispatch", "can_write_workflows", "money_paths", "can_comment_pr"];
+export const RETIRED_FLAGS: readonly string[] = [
+  "can_direct_write",
+  "can_dispatch",
+  "can_write_workflows",
+  "money_paths",
+  "can_comment_pr",
+];
 
 // A list of names, or "*" for every name. "*" inside a list is not a wildcard, so a
 // typo in a mint command cannot grant everything.
@@ -75,7 +78,13 @@ function emptyScopes(): AgentScopes {
 // read grant cannot reach a write tool, and a repo read is a read); the axes that
 // must be narrowed at mint time are the ones the mint command asks for.
 export function defaultScopes(namespaces: string[]): AgentScopes {
-  return { namespaces: [...namespaces], repos: "*", tools: "*", grants: ["read"], flags: noFlags() };
+  return {
+    namespaces: [...namespaces],
+    repos: "*",
+    tools: "*",
+    grants: ["read"],
+    flags: noFlags(),
+  };
 }
 
 function parseList(value: unknown): ScopeList {
@@ -98,13 +107,18 @@ export function parseScopes(json: string | null | undefined): AgentScopes {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return emptyScopes();
   const record = raw as Record<string, unknown>;
   const grants = Array.isArray(record.grants)
-    ? (record.grants.filter((g): g is AgentGrant => (AGENT_GRANTS as readonly unknown[]).includes(g)) as AgentGrant[])
+    ? (record.grants.filter((g): g is AgentGrant =>
+        (AGENT_GRANTS as readonly unknown[]).includes(g),
+      ) as AgentGrant[])
     : [];
   const flags = noFlags();
   // Only the flags this system has, and only the boolean true, so a hand-written
   // scopes blob cannot add an axis the enforcement point does not know. Any other key
   // (a RETIRED_FLAGS entry on an older row) is ignored, so the row still loads.
-  const rawFlags = typeof record.flags === "object" && record.flags !== null ? (record.flags as Record<string, unknown>) : {};
+  const rawFlags =
+    typeof record.flags === "object" && record.flags !== null
+      ? (record.flags as Record<string, unknown>)
+      : {};
   for (const flag of SCOPE_FLAGS) flags[flag] = rawFlags[flag] === true;
   return {
     namespaces: parseList(record.namespaces),
@@ -137,7 +151,11 @@ export function allowsScope(list: ScopeList, value: string): boolean {
 //
 // Kept beside allowsScope rather than in the enforcement point so the rule is one
 // pure function the tests can drive without an agent or a server.
-export function allowsToolAction(list: ScopeList, tool: string, action: string | undefined): boolean {
+export function allowsToolAction(
+  list: ScopeList,
+  tool: string,
+  action: string | undefined,
+): boolean {
   if (list === "*") return true;
   if (!list.includes(tool)) return false;
   const prefix = `${tool}.`;

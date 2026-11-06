@@ -13,20 +13,28 @@
   "workers_dev": false,
   // The Portal's pages are the tests' stand-in (test/fixtures/portal-pages.ts), so no dashboard build is needed.
   "alias": { "capsid-portal-pages": "./test/fixtures/portal-pages.ts" },
-  "vars": { "GITHUB_APP_CLIENT_ID": "conformance", "AUDIT_SIGNING_KEY": "conformance-signing-key-not-a-real-one-0123456789" },
+  "vars": {
+    "GITHUB_APP_CLIENT_ID": "conformance",
+    "AUDIT_SIGNING_KEY": "conformance-signing-key-not-a-real-one-0123456789",
+  },
   "d1_databases": [
-    { "binding": "DB", "database_name": "capsid-conformance", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "../../migrations" }
+    {
+      "binding": "DB",
+      "database_name": "capsid-conformance",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../../migrations",
+    },
   ],
   "kv_namespaces": [
     { "binding": "APP_KV", "id": "00000000000000000000000000000001" },
-    { "binding": "OAUTH_KV", "id": "00000000000000000000000000000002" }
+    { "binding": "OAUTH_KV", "id": "00000000000000000000000000000002" },
   ],
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "capsid-conformance" }],
   "durable_objects": {
     "bindings": [
       { "name": "RATE_LIMITER", "class_name": "RateLimiter" },
-      { "name": "TOOL_CALL_LOG", "class_name": "ToolCallLog" }
-    ]
+      { "name": "TOOL_CALL_LOG", "class_name": "ToolCallLog" },
+    ],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter", "ToolCallLog"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter", "ToolCallLog"] }],
 }

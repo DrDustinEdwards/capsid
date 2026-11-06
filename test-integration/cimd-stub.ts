@@ -32,7 +32,8 @@ export function cimdResponse(url: string): Response | null {
   if (!url.startsWith("https://client.example.com/oauth/")) return null;
   const doc = documents.get(url);
   // no-store, so the provider's cache never answers for a document this module did not serve.
-  if (!doc) return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+  if (!doc)
+    return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
   return Response.json(doc, { headers: { "Cache-Control": "no-store" } });
 }
 

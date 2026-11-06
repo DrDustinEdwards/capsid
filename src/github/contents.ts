@@ -13,41 +13,64 @@ import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
 
 const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
 
-export async function listRepoTree(env: Env, namespace: string, path = "", ref?: string, repoSelector?: string) {
+export async function listRepoTree(
+  env: Env,
+  namespace: string,
+  path = "",
+  ref?: string,
+  repoSelector?: string,
+) {
   if (path) assertRepoArg("path", path);
   if (ref) assertRepoArg("ref", ref);
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
   const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
-  const resp = await cachedGet(env, owner, repo, `/repos/${owner}/${repo}/contents/${encodePath(path)}${query}`);
+  const resp = await cachedGet(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/contents/${encodePath(path)}${query}`,
+  );
   if (!resp.ok) throw new Error(`list_repo_tree failed (${resp.status}): ${await resp.text()}`);
   const data = (await resp.json()) as unknown;
   const entries = Array.isArray(data) ? data : [data];
   return {
     repo: `${owner}/${repo}`,
     path: path || "/",
-    entries: (entries as Array<{ path: string; type: string; size: number; sha: string }>).map((e) => ({
-      path: e.path,
-      type: e.type,
-      size: e.size,
-      sha: e.sha,
-    })),
+    entries: (entries as Array<{ path: string; type: string; size: number; sha: string }>).map(
+      (e) => ({
+        path: e.path,
+        type: e.type,
+        size: e.size,
+        sha: e.sha,
+      }),
+    ),
   };
 }
 
 // fresh: skip the KV read cache, for a caller that compares two reads (the second must be
 // GitHub's answer now, not the first one served back).
-export async function readRepoFile(env: Env, namespace: string, path: string, ref?: string, repoSelector?: string, fresh = false) {
+export async function readRepoFile(
+  env: Env,
+  namespace: string,
+  path: string,
+  ref?: string,
+  repoSelector?: string,
+  fresh = false,
+) {
   assertRepoArg("path", path);
   if (ref) assertRepoArg("ref", ref);
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
   const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
   const api = `/repos/${owner}/${repo}/contents/${encodePath(path)}${query}`;
-  const resp = fresh ? await ghFetch(env, owner, repo, api) : await cachedGet(env, owner, repo, api);
+  const resp = fresh
+    ? await ghFetch(env, owner, repo, api)
+    : await cachedGet(env, owner, repo, api);
   if (!resp.ok) throw new Error(`read_repo_file failed (${resp.status}): ${await resp.text()}`);
   const data = (await resp.json()) as
     | { type: string; content?: string; encoding?: string; size: number; sha: string }
     | unknown[];
-  if (Array.isArray(data)) throw new Error(`${path} is a directory; use capsid_read_repo action tree`);
+  if (Array.isArray(data))
+    throw new Error(`${path} is a directory; use capsid_read_repo action tree`);
   if (data.type !== "file") throw new Error(`${path} is not a file (type: ${data.type})`);
   let content: string;
   if (data.encoding === "base64" && data.content) {
@@ -71,10 +94,18 @@ export const REPO_FILE_BUDGET = 200 * 1024;
  *
  *  The per-file budget applies here and not to the single-path read, so an existing
  *  readRepoFile call never starts truncating silently. */
-export async function readRepoFiles(env: Env, namespace: string, paths: string[], ref?: string, repoSelector?: string) {
+export async function readRepoFiles(
+  env: Env,
+  namespace: string,
+  paths: string[],
+  ref?: string,
+  repoSelector?: string,
+) {
   if (paths.length === 0) throw new Error("read_repo_file: paths was empty");
   if (paths.length > REPO_BATCH_MAX_FILES) {
-    throw new Error(`read_repo_file: ${paths.length} paths exceeds the batch maximum of ${REPO_BATCH_MAX_FILES}`);
+    throw new Error(
+      `read_repo_file: ${paths.length} paths exceeds the batch maximum of ${REPO_BATCH_MAX_FILES}`,
+    );
   }
   const { full } = await resolveRepo(env, namespace, repoSelector);
   const files = await Promise.all(
@@ -94,7 +125,7 @@ export async function readRepoFiles(env: Env, namespace: string, paths: string[]
       } catch (err) {
         return { path, error: err instanceof Error ? err.message : String(err) };
       }
-    })
+    }),
   );
   const failed = files.filter((f) => "error" in f).length;
   return {
@@ -115,14 +146,27 @@ export async function readRepoFiles(env: Env, namespace: string, paths: string[]
 // Returns null rather than throwing when the tree cannot be read or is too large, so
 // the caller reports the check as unrun; an empty set would report every cited path
 // as drift.
-export async function repoBlobPaths(env: Env, namespace: string, repoSelector?: string): Promise<Set<string> | null> {
+export async function repoBlobPaths(
+  env: Env,
+  namespace: string,
+  repoSelector?: string,
+): Promise<Set<string> | null> {
   try {
     const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
     const ref = await getDefaultBranch(env, owner, repo);
-    const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
+    const resp = await ghFetch(
+      env,
+      owner,
+      repo,
+      `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
+    );
     if (!resp.ok) return null;
-    const tree = (await resp.json()) as { tree?: Array<{ path: string; type: string }>; truncated?: boolean };
-    if (!Array.isArray(tree.tree) || tree.truncated || tree.tree.length > SEARCH_TREE_LIMIT) return null;
+    const tree = (await resp.json()) as {
+      tree?: Array<{ path: string; type: string }>;
+      truncated?: boolean;
+    };
+    if (!Array.isArray(tree.tree) || tree.truncated || tree.tree.length > SEARCH_TREE_LIMIT)
+      return null;
     return new Set(tree.tree.filter((e) => e.type === "blob").map((e) => e.path));
   } catch {
     return null;

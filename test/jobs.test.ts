@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { JOB_ACTIONS, JOB_PARAM_NAMES, OPEN_JOB_STATUSES, jobDocPath, mintJobId, swallowedParamTag } from "../src/jobs-schema.ts";
+import {
+  JOB_ACTIONS,
+  JOB_PARAM_NAMES,
+  OPEN_JOB_STATUSES,
+  jobDocPath,
+  mintJobId,
+  swallowedParamTag,
+} from "../src/jobs-schema.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
@@ -21,7 +28,16 @@ const MIGRATIONS_DIR = join(import.meta.dirname, "..", "migrations");
 
 // The queue's transitions: src/jobs.ts and the modules it re-exports. sourceFile
 // throws on a missing name, so a renamed module fails here rather than going unscanned.
-const JOB_MODULES = ["jobs.ts", "jobs-claim.ts", "jobs-holder.ts", "jobs-seat.ts", "jobs-mirror.ts", "jobs-transition.ts", "jobs-edit.ts", "jobs-park.ts"];
+const JOB_MODULES = [
+  "jobs.ts",
+  "jobs-claim.ts",
+  "jobs-holder.ts",
+  "jobs-seat.ts",
+  "jobs-mirror.ts",
+  "jobs-transition.ts",
+  "jobs-edit.ts",
+  "jobs-park.ts",
+];
 const jobModulesSource = () => JOB_MODULES.map((name) => sourceFile(name)).join("\n");
 
 /** Every definition of the jobs_open_title index across migrations/, in the order
@@ -29,9 +45,12 @@ const jobModulesSource = () => JOB_MODULES.map((name) => sourceFile(name)).join(
  *  this reads the directory rather than one file. */
 function openTitleIndexClauses(): { file: string; statuses: string[] }[] {
   const found: { file: string; statuses: string[] }[] = [];
-  for (const file of readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort()) {
+  for (const file of readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
-    const definition = /CREATE UNIQUE INDEX[^;]*?jobs_open_title[^;]*?WHERE status IN \(([^)]*)\)/i.exec(sql);
+    const definition =
+      /CREATE UNIQUE INDEX[^;]*?jobs_open_title[^;]*?WHERE status IN \(([^)]*)\)/i.exec(sql);
     if (!definition) continue;
     found.push({
       file,
@@ -50,13 +69,17 @@ test("the partial index and OPEN_JOB_STATUSES name the same statuses", () => {
   const clauses = openTitleIndexClauses();
   // Stated as a count so a regex that stops matching fails here rather than passing
   // over an empty list.
-  assert.equal(clauses.length, 2, `expected 2 definitions of jobs_open_title, found ${clauses.map((c) => c.file).join(", ") || "none"}`);
+  assert.equal(
+    clauses.length,
+    2,
+    `expected 2 definitions of jobs_open_title, found ${clauses.map((c) => c.file).join(", ") || "none"}`,
+  );
   assert.equal(clauses[0].file, "0006_jobs.sql");
   const effective = clauses[clauses.length - 1];
   assert.deepEqual(
     effective.statuses,
     [...OPEN_JOB_STATUSES].sort(),
-    `${effective.file} is the last definition of the index, and it disagrees with OPEN_JOB_STATUSES`
+    `${effective.file} is the last definition of the index, and it disagrees with OPEN_JOB_STATUSES`,
   );
 });
 
@@ -68,7 +91,9 @@ test("supersede refuses a missing reason and a swallowed tag before it reads any
   const blank = await supersedeJob(fakeEnv({}), agent, now, "job_abc123abc123", { reason: "  " });
   assert.equal(blank.ok, false);
   assert.match(blank.refusal ?? "", /supersede needs a reason/);
-  const swallowed = await supersedeJob(fakeEnv({}), agent, now, "job_abc123abc123", { reason: "reposted</replaced_by>" });
+  const swallowed = await supersedeJob(fakeEnv({}), agent, now, "job_abc123abc123", {
+    reason: "reposted</replaced_by>",
+  });
   assert.equal(swallowed.ok, false);
   assert.match(swallowed.refusal ?? "", /^reason contains the literal text '<\/replaced_by>'\./);
 });
@@ -87,14 +112,20 @@ test("every action the schema advertises is one the tool handles", async () => {
   // called through the real tool; an action with no branch falls through to the
   // "unknown jobs action" refusal.
   const d1 = fakeD1({});
-  const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+  const server = buildServer(
+    fakeEnv({ DB: d1.db, APP_KV: fakeKv({}).kv }),
+    adminAgentForEmail("admin@example.com"),
+  );
   const client = new Client({ name: "jobs-actions", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const unhandled: string[] = [];
   assert.ok(JOB_ACTIONS.length > 0, "JOB_ACTIONS is empty, so no action was called");
   for (const action of JOB_ACTIONS) {
-    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action, namespace: "capsid" } })) as {
+    const result = (await client.callTool({
+      name: "capsid_work_jobs",
+      arguments: { action, namespace: "capsid" },
+    })) as {
       content: Array<{ text: string }>;
     };
     if (/unknown jobs action/.test(result.content[0]?.text ?? "")) unhandled.push(action);
@@ -109,17 +140,28 @@ test("every queue transition is a keyed UPDATE with RETURNING, never meta.change
   // document write in the same batch.
   const jobs = jobModulesSource();
   const updates = [...jobs.matchAll(/UPDATE jobs SET[\s\S]*?(?=`)/g)].map((m) => m[0]);
-  assert.ok(updates.length >= 3, `found ${updates.length} UPDATE statements in the job modules; the scan is broken`);
+  assert.ok(
+    updates.length >= 3,
+    `found ${updates.length} UPDATE statements in the job modules; the scan is broken`,
+  );
   for (const update of updates) {
     assert.match(update, /\bWHERE\b/, "an unkeyed UPDATE would move every job in the table");
-    assert.match(update, /RETURNING/, "a transition without RETURNING cannot tell a win from a lost race");
+    assert.match(
+      update,
+      /RETURNING/,
+      "a transition without RETURNING cannot tell a win from a lost race",
+    );
   }
   // Comment lines stripped first: the file's own header says "never meta.changes".
   const code = jobs
     .split("\n")
     .filter((line) => !line.trim().startsWith("//"))
     .join("\n");
-  assert.doesNotMatch(code, /meta\.changes/, "a job module reads meta.changes, which the FTS5 triggers inflate");
+  assert.doesNotMatch(
+    code,
+    /meta\.changes/,
+    "a job module reads meta.changes, which the FTS5 triggers inflate",
+  );
 });
 
 // scanner-rule: snapshot invariant, test/write-invariants.test.ts: every overwrite snapshots and audits. A second write path cannot be exercised before it exists
@@ -127,9 +169,17 @@ test("the queue's writes go through the shared document statements, not a second
   // The mirror uses docStatements, which carries document_versions and
   // audit_log in the same batch, rather than spelling its own upsert.
   const jobs = jobModulesSource();
-  assert.match(jobs, /\bdocStatements\(/, "the job mirror no longer uses the shared document statements");
+  assert.match(
+    jobs,
+    /\bdocStatements\(/,
+    "the job mirror no longer uses the shared document statements",
+  );
   assert.doesNotMatch(jobs, /INSERT INTO documents/, "a job module spells its own document upsert");
-  assert.doesNotMatch(jobs, /INSERT INTO document_versions/, "a job module spells its own snapshot");
+  assert.doesNotMatch(
+    jobs,
+    /INSERT INTO document_versions/,
+    "a job module spells its own snapshot",
+  );
 });
 
 // A swallowed parameter tag is a malformed call. A `complete` that closes a parameter
@@ -140,14 +190,18 @@ test("the queue's writes go through the shared document statements, not a second
 // The string below is a real stored summary tail, read back from the database rather
 // than reconstructed.
 const SWALLOWED_REAL =
-  'up.test.ts derives from migrations/ both ways.</result_summary>\n' +
-  '<result_ref>https://github.com/DrDustinEdwards/capsid-mcp/pull/21</result_ref>\n' +
+  "up.test.ts derives from migrations/ both ways.</result_summary>\n" +
+  "<result_ref>https://github.com/DrDustinEdwards/capsid-mcp/pull/21</result_ref>\n" +
   '<evidence>{"prs": ["https://github.com/DrDustinEdwards/capsid-mcp/pull/21"], "tests_added": 42}</evidence>\n' +
-  '</invoke>\n';
+  "</invoke>\n";
 
 test("PLANT: the real malformed summary from job_9980f57bd359 is detected", () => {
   const found = swallowedParamTag(SWALLOWED_REAL);
-  assert.equal(found, "result_summary", "the field's own closing tag is the first one in the swallowed text");
+  assert.equal(
+    found,
+    "result_summary",
+    "the field's own closing tag is the first one in the swallowed text",
+  );
 });
 
 test("every parameter name the guard knows is one the tool serves", async () => {
@@ -157,13 +211,18 @@ test("every parameter name the guard knows is one the tool serves", async () => 
   for (const name of JOB_PARAM_NAMES) {
     assert.equal(swallowedParamTag(`text </${name}> more`), name, `'</${name}>' is not detected`);
   }
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+  const server = buildServer(
+    fakeEnv({ APP_KV: fakeKv({}).kv }),
+    adminAgentForEmail("admin@example.com"),
+  );
   const client = new Client({ name: "jobs-params", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const { tools } = await client.listTools();
   await client.close();
-  const served = Object.keys(tools.find((tool) => tool.name === "capsid_work_jobs")?.inputSchema.properties ?? {});
+  const served = Object.keys(
+    tools.find((tool) => tool.name === "capsid_work_jobs")?.inputSchema.properties ?? {},
+  );
   const missing = JOB_PARAM_NAMES.filter((name) => !served.includes(name));
   assert.deepEqual(missing, [], `the jobs tool serves no parameter named: ${missing.join(", ")}`);
 });
@@ -171,14 +230,22 @@ test("every parameter name the guard knows is one the tool serves", async () => 
 test("the jobs tool takes a resume note longer than a reason, bounded by MAX_RESUME_NOTE", async () => {
   // reason stays at MAX_TITLE; note carries the full approval, so the served schema
   // has to admit it.
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+  const server = buildServer(
+    fakeEnv({ APP_KV: fakeKv({}).kv }),
+    adminAgentForEmail("admin@example.com"),
+  );
   const client = new Client({ name: "jobs-note", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const { tools } = await client.listTools();
   await client.close();
-  const props = (tools.find((tool) => tool.name === "capsid_work_jobs")?.inputSchema.properties ?? {}) as Record<string, { maxLength?: number }>;
-  assert.equal(props.note?.maxLength, MAX_RESUME_NOTE, "the jobs tool serves no note bounded by MAX_RESUME_NOTE");
+  const props = (tools.find((tool) => tool.name === "capsid_work_jobs")?.inputSchema.properties ??
+    {}) as Record<string, { maxLength?: number }>;
+  assert.equal(
+    props.note?.maxLength,
+    MAX_RESUME_NOTE,
+    "the jobs tool serves no note bounded by MAX_RESUME_NOTE",
+  );
   assert.equal(props.reason?.maxLength, MAX_TITLE, "reason's bound moved");
   assert.ok(MAX_RESUME_NOTE > MAX_TITLE * 10, "the note is not bounded well above the reason");
 });
@@ -234,17 +301,27 @@ test("PLANT: complete, fail and post all refuse a swallowed tag, and write nothi
 
 test("a jobs refusal comes back with isError set, and a caller still reads the refusal", async () => {
   // A client keying on isError must not read a refusal as success.
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+  const server = buildServer(
+    fakeEnv({ APP_KV: fakeKv({}).kv }),
+    adminAgentForEmail("admin@example.com"),
+  );
   const client = new Client({ name: "jobs-iserror", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "complete", id: "job_abc123abc123" } })) as {
+    const result = (await client.callTool({
+      name: "capsid_work_jobs",
+      arguments: { action: "complete", id: "job_abc123abc123" },
+    })) as {
       isError?: boolean;
       content: Array<{ text: string }>;
     };
     assert.equal(result.isError, true, `a refusal read as success: ${result.content[0].text}`);
-    const body = JSON.parse(result.content[0].text) as { ok: boolean; action: string; refusal?: string };
+    const body = JSON.parse(result.content[0].text) as {
+      ok: boolean;
+      action: string;
+      refusal?: string;
+    };
     assert.equal(body.ok, false);
     assert.equal(body.action, "complete");
     assert.match(body.refusal ?? "", /needs a result_summary/);
@@ -267,7 +344,8 @@ function movedJobDb(before: Record<string, unknown>, after: Record<string, unkno
       flat,
       bind: () => s,
       first: async () => {
-        if (/SELECT \* FROM jobs WHERE id = \?1/.test(flat)) return reads++ === 0 ? { ...before } : { ...after };
+        if (/SELECT \* FROM jobs WHERE id = \?1/.test(flat))
+          return reads++ === 0 ? { ...before } : { ...after };
         return null;
       },
       all: async () => ({ results: [] }),
@@ -293,9 +371,16 @@ function movedJobDb(before: Record<string, unknown>, after: Record<string, unkno
 // The one batch markJobFailed sends: the guard, then the UPDATE, then its records.
 function assertGuardedFailBatch(attempted: string[][]) {
   assert.equal(attempted.length, 1, "the job was never offered the failed UPDATE");
-  assert.match(attempted[0][0], /WHERE NOT EXISTS \(SELECT 1 FROM jobs/, "the batch does not open with the guard");
+  assert.match(
+    attempted[0][0],
+    /WHERE NOT EXISTS \(SELECT 1 FROM jobs/,
+    "the batch does not open with the guard",
+  );
   assert.match(attempted[0][1], /^UPDATE jobs SET status = 'failed'/);
-  assert.ok(attempted[0].some((sql) => /INSERT INTO audit_log/.test(sql)), "the audit row is not in the same batch");
+  assert.ok(
+    attempted[0].some((sql) => /INSERT INTO audit_log/.test(sql)),
+    "the audit row is not in the same batch",
+  );
 }
 
 const MOVED_JOB = {
@@ -321,11 +406,16 @@ const MOVED_JOB = {
 test("PLANT: a claim whose bad-signature job moved first writes no mirror and no audit row", async () => {
   const { db, attempted, committed } = movedJobDb(
     { ...MOVED_JOB, status: "queued", claimed_by: null },
-    { ...MOVED_JOB, status: "claimed", claimed_by: "agent:other-driver" }
+    { ...MOVED_JOB, status: "claimed", claimed_by: "agent:other-driver" },
   );
-  const out = await claimJob(fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }), grantAgent("write", "agent:capsid-driver"), new Date("2026-09-25T09:00:00Z"), {
-    id: "job_abc123abc123",
-  });
+  const out = await claimJob(
+    fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }),
+    grantAgent("write", "agent:capsid-driver"),
+    new Date("2026-09-25T09:00:00Z"),
+    {
+      id: "job_abc123abc123",
+    },
+  );
   assertGuardedFailBatch(attempted);
   assert.equal(out.ok, false);
   assert.deepEqual(committed, [], "a job that moved was still mirrored and audited as failed");
@@ -336,14 +426,14 @@ test("PLANT: a claim whose bad-signature job moved first writes no mirror and no
 test("PLANT: a resume whose bad-signature job moved first writes no mirror and no audit row", async () => {
   const { db, attempted, committed } = movedJobDb(
     { ...MOVED_JOB, status: "blocked", claimed_by: "agent:capsid-driver", blocked_count: 1 },
-    { ...MOVED_JOB, status: "failed", claimed_by: "agent:capsid-driver", blocked_count: 1 }
+    { ...MOVED_JOB, status: "failed", claimed_by: "agent:capsid-driver", blocked_count: 1 },
   );
   const out = await resumeJob(
     fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }),
     adminAgentForEmail("admin@example.com"),
     new Date("2026-09-25T09:00:00Z"),
     "job_abc123abc123",
-    "ran it"
+    "ran it",
   );
   assertGuardedFailBatch(attempted);
   assert.equal(out.ok, false);
@@ -352,13 +442,33 @@ test("PLANT: a resume whose bad-signature job moved first writes no mirror and n
 });
 
 test("PLANT: a driver may not plain-resume a sibling driver's blocked job; that approval is the seat's", async () => {
-  const blocked = { ...MOVED_JOB, status: "blocked", claimed_by: "agent:capsid-driver", blocked_count: 1 };
+  const blocked = {
+    ...MOVED_JOB,
+    status: "blocked",
+    claimed_by: "agent:capsid-driver",
+    blocked_count: 1,
+  };
   const { db, attempted } = movedJobDb(blocked, blocked);
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
-  const sibling: Agent = { id: "agent_ddddeeeeffff", name: "other-driver", kind: "driver", actor: "agent:other-driver", scopes, admin: false, row: null };
+  const sibling: Agent = {
+    id: "agent_ddddeeeeffff",
+    name: "other-driver",
+    kind: "driver",
+    actor: "agent:other-driver",
+    scopes,
+    admin: false,
+    row: null,
+  };
   for (const take of [false, true]) {
-    const out = await resumeJob(fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }), sibling, new Date("2026-09-25T09:00:00Z"), "job_abc123abc123", "ran it", { take });
+    const out = await resumeJob(
+      fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: "s" }),
+      sibling,
+      new Date("2026-09-25T09:00:00Z"),
+      "job_abc123abc123",
+      "ran it",
+      { take },
+    );
     assert.equal(out.ok, false, `a sibling driver resumed another driver's gate (take: ${take})`);
     assert.match(out.refusal ?? "", /the seat's act/);
   }
@@ -371,12 +481,24 @@ test("PLANT: post into a namespace that is not registered is refused and writes 
   const d1 = fakeD1({});
   const env = fakeEnv({ DB: d1.db, IMPROVE_SCORE_SECRET: "test-secret" });
   const agent = grantAgent("write", "agent:capsid-driver");
-  const refused = await postJob(env, agent, new Date("2026-09-25T09:00:00Z"), { namespace: "nosuchns", title: "a job", body: "do it" });
+  const refused = await postJob(env, agent, new Date("2026-09-25T09:00:00Z"), {
+    namespace: "nosuchns",
+    title: "a job",
+    body: "do it",
+  });
   assert.equal(refused.ok, false, "a job was posted into an unregistered namespace");
   assert.match(refused.refusal ?? "", /unknown namespace 'nosuchns'/);
-  assert.equal(d1.recorded.some((r) => /INSERT INTO jobs|INSERT INTO documents/.test(r.sql)), false, "a refused post wrote a row");
+  assert.equal(
+    d1.recorded.some((r) => /INSERT INTO jobs|INSERT INTO documents/.test(r.sql)),
+    false,
+    "a refused post wrote a row",
+  );
 
   // The innocent direction: a registered namespace still posts.
-  const posted = await postJob(env, agent, new Date("2026-09-25T09:00:00Z"), { namespace: "capsid", title: "a job", body: "do it" });
+  const posted = await postJob(env, agent, new Date("2026-09-25T09:00:00Z"), {
+    namespace: "capsid",
+    title: "a job",
+    body: "do it",
+  });
   assert.equal(posted.ok, true, JSON.stringify(posted));
 });

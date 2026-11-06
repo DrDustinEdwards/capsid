@@ -29,10 +29,13 @@ const EXPECTED = {
 // Refuse to run outside CI. This script WRITES wrangler.jsonc, and on a developer
 // machine that file is the real, gitignored config. GitHub Actions sets CI=true. The
 // escape hatch is explicit and named so it cannot be triggered by accident.
-if (process.env.CI !== "true" && process.env.CI_CONFIG_ALLOW_LOCAL !== "i-know-this-overwrites-wrangler-jsonc") {
+if (
+  process.env.CI !== "true" &&
+  process.env.CI_CONFIG_ALLOW_LOCAL !== "i-know-this-overwrites-wrangler-jsonc"
+) {
   console.error(
     "ci-config: refusing to run outside CI. This overwrites wrangler.jsonc, which on this machine is your real config.\n" +
-      "If you genuinely mean to, set CI_CONFIG_ALLOW_LOCAL=i-know-this-overwrites-wrangler-jsonc."
+      "If you genuinely mean to, set CI_CONFIG_ALLOW_LOCAL=i-know-this-overwrites-wrangler-jsonc.",
   );
   process.exit(1);
 }
@@ -59,7 +62,8 @@ function die(message) {
 function parseJsonArray(text, label) {
   const start = text.indexOf("[");
   const end = text.lastIndexOf("]");
-  if (start === -1 || end === -1) die(`could not find a JSON array in the ${label} listing. Output was:\n${text}`);
+  if (start === -1 || end === -1)
+    die(`could not find a JSON array in the ${label} listing. Output was:\n${text}`);
   try {
     const parsed = JSON.parse(text.slice(start, end + 1));
     if (!Array.isArray(parsed)) die(`${label} listing did not parse to an array`);
@@ -85,7 +89,7 @@ function assertId(label, actual, expected) {
         `  expected: ${expected}\n` +
         `  resolved: ${actual}\n` +
         `A name now points at a different resource. This is the failure mode the pin exists to catch: ` +
-        `deploying would have bound this Worker to the wrong data. Nothing was deployed.`
+        `deploying would have bound this Worker to the wrong data. Nothing was deployed.`,
     );
   }
   console.log(`ci-config: ${label} ok, name resolved to the pinned id ${expected}`);
@@ -93,22 +97,36 @@ function assertId(label, actual, expected) {
 
 // D1
 const d1List = parseJsonArray(wrangler(["d1", "list", "--json"]), "D1");
-const d1 = resolveUnique(d1List, `D1 database named "${EXPECTED.d1.name}"`, (d) => d.name === EXPECTED.d1.name);
+const d1 = resolveUnique(
+  d1List,
+  `D1 database named "${EXPECTED.d1.name}"`,
+  (d) => d.name === EXPECTED.d1.name,
+);
 assertId("D1 capsid", d1.uuid ?? d1.id, EXPECTED.d1.id);
 
 // KV
 const kvList = parseJsonArray(wrangler(["kv", "namespace", "list"]), "KV");
-const appKv = resolveUnique(kvList, `KV namespace titled "${EXPECTED.appKv.name}"`, (n) => n.title === EXPECTED.appKv.name);
+const appKv = resolveUnique(
+  kvList,
+  `KV namespace titled "${EXPECTED.appKv.name}"`,
+  (n) => n.title === EXPECTED.appKv.name,
+);
 assertId(`KV ${EXPECTED.appKv.name} (APP_KV)`, appKv.id, EXPECTED.appKv.id);
 // Either title while the namespace is renamed in place (same id) from "capsid-oauth" to
 // the <worker>-oauth rule's "capsid-mcp-oauth"; a later change drops the old title.
 const OAUTH_KV_TITLES = [EXPECTED.oauthKv.name, "capsid-oauth"];
-const oauthKv = resolveUnique(kvList, `KV namespace titled "${OAUTH_KV_TITLES.join('" or "')}"`, (n) => OAUTH_KV_TITLES.includes(n.title));
+const oauthKv = resolveUnique(
+  kvList,
+  `KV namespace titled "${OAUTH_KV_TITLES.join('" or "')}"`,
+  (n) => OAUTH_KV_TITLES.includes(n.title),
+);
 assertId(`KV ${EXPECTED.oauthKv.name} (OAUTH_KV)`, oauthKv.id, EXPECTED.oauthKv.id);
 // The split is the point: if these two ever resolve to the same id again, the Worker's
 // caches are back in the provider's keyspace and nothing else would say so.
 if (appKv.id === oauthKv.id) {
-  die(`APP_KV and OAUTH_KV resolved to the SAME namespace id (${appKv.id}). The 2026-08-15 split has been undone. Nothing was deployed.`);
+  die(
+    `APP_KV and OAUTH_KV resolved to the SAME namespace id (${appKv.id}). The 2026-08-15 split has been undone. Nothing was deployed.`,
+  );
 }
 
 // R2 is asserted against the COMMITTED CONFIG, not against the account.
@@ -124,7 +142,9 @@ if (appKv.id === oauthKv.id) {
 if (!EXPECTED.r2.name || EXPECTED.r2.name.startsWith("YOUR_")) {
   die("the R2 MEDIA bucket pin is unset or still a placeholder. Nothing was deployed.");
 }
-console.log(`ci-config: R2 MEDIA ${EXPECTED.r2.name} pinned by name, existence is enforced by the deploy step`);
+console.log(
+  `ci-config: R2 MEDIA ${EXPECTED.r2.name} pinned by name, existence is enforced by the deploy step`,
+);
 
 // Render the example into a real config.
 let config = readFileSync("wrangler.jsonc.example", "utf8");
@@ -137,7 +157,9 @@ const substitutions = [
 ];
 for (const [placeholder, value] of substitutions) {
   if (!config.includes(placeholder)) {
-    die(`wrangler.jsonc.example no longer contains the placeholder ${placeholder}. The example and this script have drifted; fix both together.`);
+    die(
+      `wrangler.jsonc.example no longer contains the placeholder ${placeholder}. The example and this script have drifted; fix both together.`,
+    );
   }
   config = config.split(placeholder).join(value);
 }
@@ -147,8 +169,12 @@ for (const [placeholder, value] of substitutions) {
 // to Cloudflare.
 const leftover = config.match(/YOUR_[A-Z0-9_]+/g);
 if (leftover) {
-  die(`unsubstituted placeholders remain: ${[...new Set(leftover)].join(", ")}. The example gained a binding this script does not handle. Nothing was deployed.`);
+  die(
+    `unsubstituted placeholders remain: ${[...new Set(leftover)].join(", ")}. The example gained a binding this script does not handle. Nothing was deployed.`,
+  );
 }
 
 writeFileSync("wrangler.jsonc", config, "utf8");
-console.log("ci-config: wrote wrangler.jsonc with every binding resolved by name and verified by id");
+console.log(
+  "ci-config: wrote wrangler.jsonc with every binding resolved by name and verified by id",
+);

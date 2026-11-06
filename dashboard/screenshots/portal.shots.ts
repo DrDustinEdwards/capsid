@@ -40,7 +40,13 @@ async function shoot(page: Page, name: string): Promise<void> {
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
-  await page.screenshot({ path: `${OUT}${name}.png`, fullPage: false, animations: "disabled", caret: "hide", scale: "css" });
+  await page.screenshot({
+    path: `${OUT}${name}.png`,
+    fullPage: false,
+    animations: "disabled",
+    caret: "hide",
+    scale: "css",
+  });
 }
 
 test("the pinned clock is the fixture's own now", () => {
@@ -88,7 +94,9 @@ test("a control's preview open, light", async ({ page }) => {
   await page.getByRole("button", { name: "Mark failed", exact: true }).click();
   const dialog = page.locator("dialog.confirm");
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("maintenance window");
+  await dialog
+    .getByRole("textbox", { name: "Reason", exact: true })
+    .pressSequentially("maintenance window");
   await dialog.getByRole("button", { name: "Preview" }).click();
   // The rows it changes are behind Details (e2e/confirm.spec.ts); the shot opens them.
   await dialog.getByText("Details", { exact: true }).click();
@@ -109,7 +117,12 @@ test("jobs' checks, light", async ({ page }) => {
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+  test.use({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    deviceScaleFactor: 1,
+  });
 
   test("health, light", async ({ page }) => {
     await open(page, "health");

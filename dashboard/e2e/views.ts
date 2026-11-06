@@ -38,7 +38,11 @@ export async function measure(page: Page, root = "main"): Promise<Overflow> {
   // A folded section is measured open, as a visitor would see it: its charts are on the page
   // (rendered on the server) and redraw to their width once it opens.
   const opened = await page.evaluate((sel) => {
-    const closed = [...(document.querySelector(sel)?.querySelectorAll<HTMLDetailsElement>("details:not([open])") ?? [])];
+    const closed = [
+      ...(document
+        .querySelector(sel)
+        ?.querySelectorAll<HTMLDetailsElement>("details:not([open])") ?? []),
+    ];
     for (const d of closed) d.open = true;
     return closed.length;
   }, root);
@@ -46,7 +50,16 @@ export async function measure(page: Page, root = "main"): Promise<Overflow> {
   // the measure waits for that, up to two seconds; a chart that never fits is still reported.
   if (opened) {
     await page
-      .waitForFunction((sel) => [...(document.querySelector(sel)?.querySelectorAll<HTMLElement>("details[open] .enarratio-frame") ?? [])].every((f) => f.scrollWidth <= f.clientWidth + 1), root, { timeout: 2000 })
+      .waitForFunction(
+        (sel) =>
+          [
+            ...(document
+              .querySelector(sel)
+              ?.querySelectorAll<HTMLElement>("details[open] .enarratio-frame") ?? []),
+          ].every((f) => f.scrollWidth <= f.clientWidth + 1),
+        root,
+        { timeout: 2000 },
+      )
       .catch(() => {});
   }
   return page.evaluate((sel) => {
@@ -56,7 +69,9 @@ export async function measure(page: Page, root = "main"): Promise<Overflow> {
     for (const el of r?.querySelectorAll<HTMLElement>("*") ?? []) {
       const ox = getComputedStyle(el).overflowX;
       if ((ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 1) {
-        scrollers.push(`${el.tagName.toLowerCase()}.${String(el.className).trim().replace(/\s+/g, ".")} ${el.scrollWidth} > ${el.clientWidth}`);
+        scrollers.push(
+          `${el.tagName.toLowerCase()}.${String(el.className).trim().replace(/\s+/g, ".")} ${el.scrollWidth} > ${el.clientWidth}`,
+        );
       }
     }
     return {
@@ -70,9 +85,11 @@ export async function measure(page: Page, root = "main"): Promise<Overflow> {
 // Every way the page scrolls sideways, named; empty when it does not.
 export function sideways(o: Overflow, where: string): string[] {
   const out: string[] = [];
-  if (o.doc.scroll > o.doc.client) out.push(`${where}: the document is ${o.doc.scroll} px wide in ${o.doc.client}`);
+  if (o.doc.scroll > o.doc.client)
+    out.push(`${where}: the document is ${o.doc.scroll} px wide in ${o.doc.client}`);
   if (!o.root) out.push(`${where}: the element to measure is missing`);
-  else if (o.root.scroll > o.root.client) out.push(`${where}: it is ${o.root.scroll} px wide in ${o.root.client}`);
+  else if (o.root.scroll > o.root.client)
+    out.push(`${where}: it is ${o.root.scroll} px wide in ${o.root.client}`);
   for (const s of o.scrollers) out.push(`${where}: ${s} scrolls sideways`);
   return out;
 }

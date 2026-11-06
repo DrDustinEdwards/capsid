@@ -52,11 +52,21 @@ export type TaskId =
 // cannot be canceled and may still finish. The tick gets four minutes, inside the five to
 // the next one; the backup and the skills refresh fourteen, inside a cron invocation's
 // fifteen-minute wall limit.
-export const TASKS: ReadonlyArray<{ id: TaskId; label: string; period_ms: number | null; timeout_ms?: number }> = [
+export const TASKS: ReadonlyArray<{
+  id: TaskId;
+  label: string;
+  period_ms: number | null;
+  timeout_ms?: number;
+}> = [
   { id: "tick", label: "Five-minute tick", period_ms: 5 * MINUTE_MS, timeout_ms: 4 * MINUTE_MS },
   { id: "watcher", label: "Watcher pass", period_ms: null },
   { id: "backup", label: "Backup", period_ms: DAY_MS, timeout_ms: 14 * MINUTE_MS },
-  { id: "skills-refresh", label: "Skills refresh", period_ms: 7 * DAY_MS, timeout_ms: 14 * MINUTE_MS },
+  {
+    id: "skills-refresh",
+    label: "Skills refresh",
+    period_ms: 7 * DAY_MS,
+    timeout_ms: 14 * MINUTE_MS,
+  },
   { id: "auto-merge", label: "Auto-merge step", period_ms: null },
   { id: "outcome-sweep", label: "Merge-state sweep", period_ms: null },
   { id: "merge-resume", label: "Stale-job merge resume", period_ms: null },
@@ -129,17 +139,28 @@ function oneLine(text: string): string {
 }
 
 /** The insert and a bounded prune, in one batch. */
-export function taskRunStatements(db: D1Database, task: TaskId, started: Date, finished: Date, outcome: OpsTaskRunOutcome, reason: string): D1PreparedStatement[] {
+export function taskRunStatements(
+  db: D1Database,
+  task: TaskId,
+  started: Date,
+  finished: Date,
+  outcome: OpsTaskRunOutcome,
+  reason: string,
+): D1PreparedStatement[] {
   const cutoff = new Date(finished.getTime() - RUN_RETENTION_DAYS * DAY_MS).toISOString();
   return [
     db
-      .prepare(`INSERT INTO task_runs (task, started_at, finished_at, outcome, reason) VALUES (?1, ?2, ?3, ?4, ?5)`)
+      .prepare(
+        `INSERT INTO task_runs (task, started_at, finished_at, outcome, reason) VALUES (?1, ?2, ?3, ?4, ?5)`,
+      )
       .bind(task, started.toISOString(), finished.toISOString(), outcome, oneLine(reason)),
     // The oldest PRUNE_BATCH rows by id, of which those past retention go: rows are
     // appended in time order, so this stays a short index walk however large the
     // table is (the same prune as session_events, src/ops-hooks.ts).
     db
-      .prepare(`DELETE FROM task_runs WHERE id IN (SELECT id FROM task_runs ORDER BY id LIMIT ?1) AND finished_at < ?2`)
+      .prepare(
+        `DELETE FROM task_runs WHERE id IN (SELECT id FROM task_runs ORDER BY id LIMIT ?1) AND finished_at < ?2`,
+      )
       .bind(PRUNE_BATCH, cutoff),
   ];
 }
@@ -147,11 +168,23 @@ export function taskRunStatements(db: D1Database, task: TaskId, started: Date, f
 /** Write one run. Never throws, so a failed ledger write cannot stop the task it
  *  records or the tasks after it. A write that fails is said in the log, by task, and
  *  the Portal then shows that task as quiet: the ledger's own failure is visible. */
-async function record(env: Env, task: TaskId, started: Date, outcome: OpsTaskRunOutcome, reason: string): Promise<void> {
+async function record(
+  env: Env,
+  task: TaskId,
+  started: Date,
+  outcome: OpsTaskRunOutcome,
+  reason: string,
+): Promise<void> {
   try {
     await env.DB.batch(taskRunStatements(env.DB, task, started, new Date(), outcome, reason));
   } catch (err) {
-    logEvent("TASK_RUN_UNRECORDED", { message: `TASK_RUN_UNRECORDED ${task} ${outcome}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "TASK_RUN_UNRECORDED",
+      {
+        message: `TASK_RUN_UNRECORDED ${task} ${outcome}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
 }
 
@@ -167,7 +200,7 @@ export async function runTask<T>(
   task: TaskId,
   body: () => Promise<T>,
   judge: (value: T) => TaskResult,
-  opts: { tag: string; rethrow: boolean }
+  opts: { tag: string; rethrow: boolean },
 ): Promise<T | null> {
   const started = new Date();
   const timeoutMs = TASKS.find((t) => t.id === task)?.timeout_ms;
@@ -176,9 +209,13 @@ export async function runTask<T>(
     value = timeoutMs === undefined ? await body() : await withTimeout(body(), timeoutMs);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent(opts.tag, {
-      message: `${opts.tag} ${err instanceof Error && err.stack ? `${message}\n${err.stack}` : message}`,
-    }, { level: "error" });
+    logEvent(
+      opts.tag,
+      {
+        message: `${opts.tag} ${err instanceof Error && err.stack ? `${message}\n${err.stack}` : message}`,
+      },
+      { level: "error" },
+    );
     await record(env, task, started, "threw", message);
     if (opts.rethrow) throw err;
     return null;
@@ -213,15 +250,22 @@ export async function readTaskRuns(db: D1Database): Promise<Map<TaskId, OpsTaskR
   const results = await db.batch<TaskRunRow>(
     TASKS.map((t) =>
       db
-        .prepare(`SELECT task, started_at, finished_at, outcome, reason FROM task_runs WHERE task = ?1 ORDER BY id DESC LIMIT ?2`)
-        .bind(t.id, RUNS_PER_TASK)
-    )
+        .prepare(
+          `SELECT task, started_at, finished_at, outcome, reason FROM task_runs WHERE task = ?1 ORDER BY id DESC LIMIT ?2`,
+        )
+        .bind(t.id, RUNS_PER_TASK),
+    ),
   );
   const out = new Map<TaskId, OpsTaskRun[]>();
   TASKS.forEach((t, i) => {
     out.set(
       t.id,
-      (results[i]?.results ?? []).map((r) => ({ started_at: r.started_at, finished_at: r.finished_at, outcome: r.outcome, reason: r.reason }))
+      (results[i]?.results ?? []).map((r) => ({
+        started_at: r.started_at,
+        finished_at: r.finished_at,
+        outcome: r.outcome,
+        reason: r.reason,
+      })),
     );
   });
   return out;
@@ -234,7 +278,11 @@ export async function readTaskRuns(db: D1Database): Promise<Map<TaskId, OpsTaskR
  *  - `quiet`: a periodic task whose newest run is more than STALE_PERIODS periods old.
  *  - `never`: no run in the ledger. A notice, not a fault: after the migration every
  *    task starts here, and the daily ones stay here until their hour. */
-export function taskStates(runs: Map<TaskId, OpsTaskRun[]>, now: Date, watcherCadenceMin: number): OpsTask[] {
+export function taskStates(
+  runs: Map<TaskId, OpsTaskRun[]>,
+  now: Date,
+  watcherCadenceMin: number,
+): OpsTask[] {
   return TASKS.map((t) => {
     const recent = runs.get(t.id) ?? [];
     const last = recent[0] ?? null;
@@ -242,9 +290,16 @@ export function taskStates(runs: Map<TaskId, OpsTaskRun[]>, now: Date, watcherCa
     let flag: OpsTask["flag"] = null;
     if (last === null) flag = "never";
     else if (last.outcome === "threw" || last.outcome === "refused") {
-      if (t.period_ms !== null || now.getTime() - Date.parse(last.finished_at) <= EVENT_FAILURE_WINDOW_MS) flag = "failing";
-    }
-    else if (period !== null && now.getTime() - Date.parse(last.finished_at) > STALE_PERIODS * period) flag = "quiet";
+      if (
+        t.period_ms !== null ||
+        now.getTime() - Date.parse(last.finished_at) <= EVENT_FAILURE_WINDOW_MS
+      )
+        flag = "failing";
+    } else if (
+      period !== null &&
+      now.getTime() - Date.parse(last.finished_at) > STALE_PERIODS * period
+    )
+      flag = "quiet";
     return { id: t.id, label: t.label, period_ms: period, flag, recent };
   });
 }

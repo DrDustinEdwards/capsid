@@ -6,13 +6,13 @@ One format for a site's health route, defined here so the watcher's `sha` live c
 
 JSON. The family's format is site-runtime's `/health` (the IETF health-check draft), sent as `application/health+json`:
 
-| Field | Value |
-| --- | --- |
-| `status` | `"pass"`, `"warn"` or `"fail"` |
-| `ok` | a boolean |
-| `sha` | the deployed commit as a string, or absent |
+| Field                  | Value                                                    |
+| ---------------------- | -------------------------------------------------------- |
+| `status`               | `"pass"`, `"warn"` or `"fail"`                           |
+| `ok`                   | a boolean                                                |
+| `sha`                  | the deployed commit as a string, or absent               |
 | `db`, `backup`, `time` | optional; `backup` is `{ last_ok, age_hours, warning? }` |
-| `checks` | `[{ name, status, detail? }]` |
+| `checks`               | `[{ name, status, detail? }]`                            |
 
 The watcher also reads the bodies sites sent before it: no `status`, only `ok`, `backup.warning` and `checks` whose entries carry `ok`, and Capsid's own before 2026-10-31, whose `status` is `"ok"`, `"degraded"` or `"down"` (Capsid's /health is the family shape since). Either JSON content type is read. Nothing secret goes in the body: no token, no binding id, no row content.
 

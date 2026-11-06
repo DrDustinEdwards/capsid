@@ -56,7 +56,9 @@ export function rdapBase(bootstrap: unknown, domain: string): string | null {
   for (const entry of services) {
     if (!Array.isArray(entry) || !Array.isArray(entry[0]) || !Array.isArray(entry[1])) continue;
     if ((entry[0] as unknown[]).some((t) => typeof t === "string" && t.toLowerCase() === tld)) {
-      const url = (entry[1] as unknown[]).find((u): u is string => typeof u === "string" && u.startsWith("https://"));
+      const url = (entry[1] as unknown[]).find(
+        (u): u is string => typeof u === "string" && u.startsWith("https://"),
+      );
       if (url) return url.endsWith("/") ? url : `${url}/`;
     }
   }
@@ -69,20 +71,31 @@ export function expirationOf(rdap: unknown): string | null {
   if (!Array.isArray(events)) return null;
   for (const e of events) {
     const ev = e as { eventAction?: unknown; eventDate?: unknown };
-    if (ev.eventAction === "expiration" && typeof ev.eventDate === "string" && Number.isFinite(Date.parse(ev.eventDate))) return new Date(ev.eventDate).toISOString();
+    if (
+      ev.eventAction === "expiration" &&
+      typeof ev.eventDate === "string" &&
+      Number.isFinite(Date.parse(ev.eventDate))
+    )
+      return new Date(ev.eventDate).toISOString();
   }
   return null;
 }
 
 /** The findings for domains whose expiry is known. */
-export function expiryFindings(expiries: ReadonlyArray<{ domain: string; expires: string }>, now: Date): Finding[] {
+export function expiryFindings(
+  expiries: ReadonlyArray<{ domain: string; expires: string }>,
+  now: Date,
+): Finding[] {
   const out: Finding[] = [];
   for (const { domain, expires } of expiries) {
     const days = Math.floor((Date.parse(expires) - now.getTime()) / DAY_MS);
     if (days > EARLY_DAYS) continue;
     const late = days <= LATE_DAYS;
     const fingerprint = `domain-expiry-${late ? "7d" : "30d"}-${domain.replace(/[^a-z0-9]+/g, "-")}`;
-    const headline = days < 0 ? `${domain}'s registration expired ${-days} days ago` : `${domain}'s registration expires in ${days} days`;
+    const headline =
+      days < 0
+        ? `${domain}'s registration expired ${-days} days ago`
+        : `${domain}'s registration expires in ${days} days`;
     const evidence = [`RDAP expiration ${expires}`, `read ${now.toISOString()}`];
     out.push({
       fingerprint,
@@ -104,14 +117,23 @@ export function expiryFindings(expiries: ReadonlyArray<{ domain: string; expires
 /** The pushes the last read stands behind (U5): each domain once at 30 days out and once at
  *  7, keyed by the date, so a renewal that moves it clears the alert and a new near date
  *  alerts again. The findings above stay; this is the phone line beside them. */
-export function domainAlerts(read: { read_at: string; domains: ReadonlyArray<{ domain: string; expires: string }> } | null | undefined, now: Date): Array<{ key: string; title: string; body: string }> {
+export function domainAlerts(
+  read:
+    | { read_at: string; domains: ReadonlyArray<{ domain: string; expires: string }> }
+    | null
+    | undefined,
+  now: Date,
+): Array<{ key: string; title: string; body: string }> {
   const out: Array<{ key: string; title: string; body: string }> = [];
   for (const { domain, expires } of read?.domains ?? []) {
     const days = Math.floor((Date.parse(expires) - now.getTime()) / DAY_MS);
     if (days > EARLY_DAYS) continue;
     out.push({
       key: `domain-${days <= LATE_DAYS ? "7d" : "30d"}:${domain}:${expires}`,
-      title: days < 0 ? `${domain}'s registration has expired` : `${domain}'s registration expires in ${days} days`,
+      title:
+        days < 0
+          ? `${domain}'s registration has expired`
+          : `${domain}'s registration expires in ${days} days`,
       body: `RDAP says it expires at ${expires} (read ${read?.read_at}). Renew it, or confirm auto-renew has run.`,
     });
   }
@@ -121,7 +143,10 @@ export function domainAlerts(read: { read_at: string; domains: ReadonlyArray<{ d
 type Cached = { expires: string; read_at: string };
 
 async function fetchJson(fetchImpl: typeof fetch, url: string): Promise<unknown> {
-  const resp = await fetchImpl(url, { headers: { Accept: "application/rdap+json, application/json" }, signal: callSignal(FETCH_TIMEOUT_MS) });
+  const resp = await fetchImpl(url, {
+    headers: { Accept: "application/rdap+json, application/json" },
+    signal: callSignal(FETCH_TIMEOUT_MS),
+  });
   if (!resp.ok) throw new Error(`${url} answered ${resp.status}`);
   return resp.json();
 }
@@ -134,8 +159,11 @@ export async function readExpiries(
   kv: KVNamespace,
   domains: readonly string[],
   fetchImpl: typeof fetch,
-  now: Date
-): Promise<{ expiries: Array<{ domain: string; expires: string }>; failed: Array<{ domain: string; error: string }> }> {
+  now: Date,
+): Promise<{
+  expiries: Array<{ domain: string; expires: string }>;
+  failed: Array<{ domain: string; error: string }>;
+}> {
   const expiries: Array<{ domain: string; expires: string }> = [];
   const failed: Array<{ domain: string; error: string }> = [];
   let bootstrap: unknown = null;
@@ -150,14 +178,23 @@ export async function readExpiries(
         bootstrap = await kv.get(BOOTSTRAP_KEY, "json");
         if (!bootstrap) {
           bootstrap = await fetchJson(fetchImpl, BOOTSTRAP_URL);
-          await kv.put(BOOTSTRAP_KEY, JSON.stringify(bootstrap), { expirationTtl: BOOTSTRAP_TTL_SECONDS });
+          await kv.put(BOOTSTRAP_KEY, JSON.stringify(bootstrap), {
+            expirationTtl: BOOTSTRAP_TTL_SECONDS,
+          });
         }
       }
       const base = rdapBase(bootstrap, domain);
-      if (!base) throw new Error(`the IANA bootstrap names no RDAP server for .${domain.split(".").pop()}`);
-      const expires = expirationOf(await fetchJson(fetchImpl, `${base}domain/${encodeURIComponent(domain)}`));
+      if (!base)
+        throw new Error(`the IANA bootstrap names no RDAP server for .${domain.split(".").pop()}`);
+      const expires = expirationOf(
+        await fetchJson(fetchImpl, `${base}domain/${encodeURIComponent(domain)}`),
+      );
       if (!expires) throw new Error("the RDAP answer has no expiration event");
-      await kv.put(expiryKey(domain), JSON.stringify({ expires, read_at: now.toISOString() } satisfies Cached), { expirationTtl: EXPIRY_TTL_SECONDS });
+      await kv.put(
+        expiryKey(domain),
+        JSON.stringify({ expires, read_at: now.toISOString() } satisfies Cached),
+        { expirationTtl: EXPIRY_TTL_SECONDS },
+      );
       expiries.push({ domain, expires });
     } catch (err) {
       failed.push({ domain, error: err instanceof Error ? err.message : String(err) });

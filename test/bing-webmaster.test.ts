@@ -29,7 +29,8 @@ function siteDb() {
     prepare: (sql: string) => ({
       bind: (...params: unknown[]) => ({
         first: async () => {
-          if (!/FROM ops_sites WHERE namespace = \?1/.test(sql)) throw new Error(`unexpected statement: ${sql}`);
+          if (!/FROM ops_sites WHERE namespace = \?1/.test(sql))
+            throw new Error(`unexpected statement: ${sql}`);
           return params[0] === ROW.namespace ? ROW : null;
         },
       }),
@@ -64,16 +65,43 @@ test("pickBingSite takes the exact origin, else the same host, and skips unverif
     { Url: "https://other.example.net/", IsVerified: true },
   ];
   assert.equal(pickBingSite(ORIGIN, sites), "http://sample.example.com/");
-  assert.equal(pickBingSite(ORIGIN, [...sites, { Url: "https://sample.example.com", IsVerified: true }]), "https://sample.example.com");
+  assert.equal(
+    pickBingSite(ORIGIN, [...sites, { Url: "https://sample.example.com", IsVerified: true }]),
+    "https://sample.example.com",
+  );
   assert.equal(pickBingSite("https://none.example.org", sites), null);
 });
 
 test("sumStats sums each query's weekly buckets inside the window and weights position by impressions", () => {
   const rows = [
-    { Query: "getting started", Date: day("2026-09-21"), Clicks: 2, Impressions: 10, AvgImpressionPosition: 4 },
-    { Query: "getting started", Date: day("2026-09-28"), Clicks: 1, Impressions: 30, AvgImpressionPosition: 8 },
-    { Query: "getting started", Date: day("2026-08-01"), Clicks: 50, Impressions: 500, AvgImpressionPosition: 1 },
-    { Query: "lysis", Date: day("2026-09-28"), Clicks: 0, Impressions: 5, AvgImpressionPosition: -1 },
+    {
+      Query: "getting started",
+      Date: day("2026-09-21"),
+      Clicks: 2,
+      Impressions: 10,
+      AvgImpressionPosition: 4,
+    },
+    {
+      Query: "getting started",
+      Date: day("2026-09-28"),
+      Clicks: 1,
+      Impressions: 30,
+      AvgImpressionPosition: 8,
+    },
+    {
+      Query: "getting started",
+      Date: day("2026-08-01"),
+      Clicks: 50,
+      Impressions: 500,
+      AvgImpressionPosition: 1,
+    },
+    {
+      Query: "lysis",
+      Date: day("2026-09-28"),
+      Clicks: 0,
+      Impressions: 5,
+      AvgImpressionPosition: -1,
+    },
   ];
   assert.deepEqual(sumStats(rows, "2026-09-18", "2026-10-15", "query", 1), {
     rows: [{ query: "getting started", clicks: 3, impressions: 40, position: 7 }],
@@ -85,11 +113,22 @@ test("sumStats sums each query's weekly buckets inside the window and weights po
 test("queries call only Get methods for the namespace's site, and the key never reaches the result", async () => {
   const api = bingApi({
     GetUserSites: [{ Url: "https://sample.example.com/", IsVerified: true }],
-    GetQueryStats: [{ Query: "getting started", Date: day("2026-10-05"), Clicks: 4, Impressions: 40, AvgImpressionPosition: 6 }],
+    GetQueryStats: [
+      {
+        Query: "getting started",
+        Date: day("2026-10-05"),
+        Clicks: 4,
+        Impressions: 40,
+        AvgImpressionPosition: 6,
+      },
+    ],
   });
   const env = fakeEnv({ DB: siteDb(), BING_WEBMASTER_API_KEY: KEY });
   const r = await bingWebmaster(env, "sample", {}, api.impl, NOW);
-  assert.deepEqual(api.calls.map((u) => u.pathname.split("/").pop()), ["GetUserSites", "GetQueryStats"]);
+  assert.deepEqual(
+    api.calls.map((u) => u.pathname.split("/").pop()),
+    ["GetUserSites", "GetQueryStats"],
+  );
   assert.equal(api.calls[1].searchParams.get("siteUrl"), "https://sample.example.com/");
   assert.ok("rows" in r);
   assert.deepEqual(r.rows, [{ query: "getting started", clicks: 4, impressions: 40, position: 6 }]);
@@ -99,9 +138,19 @@ test("queries call only Get methods for the namespace's site, and the key never 
 test("inspect refuses a URL on another host before calling Bing, and no key fetches nothing", async () => {
   const api = bingApi({});
   await assert.rejects(
-    () => bingWebmaster(fakeEnv({ DB: siteDb(), BING_WEBMASTER_API_KEY: KEY }), "sample", { report: "inspect", url: "https://other.example.net/" }, api.impl, NOW),
-    /must be a page on sample's site/
+    () =>
+      bingWebmaster(
+        fakeEnv({ DB: siteDb(), BING_WEBMASTER_API_KEY: KEY }),
+        "sample",
+        { report: "inspect", url: "https://other.example.net/" },
+        api.impl,
+        NOW,
+      ),
+    /must be a page on sample's site/,
   );
-  await assert.rejects(() => bingWebmaster(fakeEnv({ DB: siteDb() }), "sample", {}, api.impl, NOW), /BING_WEBMASTER_API_KEY is not set/);
+  await assert.rejects(
+    () => bingWebmaster(fakeEnv({ DB: siteDb() }), "sample", {}, api.impl, NOW),
+    /BING_WEBMASTER_API_KEY is not set/,
+  );
   assert.equal(api.calls.length, 0);
 });

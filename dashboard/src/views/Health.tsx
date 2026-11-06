@@ -72,7 +72,9 @@ function Verdict() {
     return (
       <p className="verdict" data-verdict="ok">
         <St kind="ok">All good</St>
-        <span className="muted">Sites, backups and default branches were fine on the last pass.</span>
+        <span className="muted">
+          Sites, backups and default branches were fine on the last pass.
+        </span>
       </p>
     );
   }

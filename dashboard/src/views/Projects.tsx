@@ -25,7 +25,13 @@ function Driver({ ns }: { ns: string }) {
   return (
     <>
       <St kind={st.kind}>{st.label}</St>
-      <div className="src">{d.revoked_at ? `revoked ${ago(ms(d.revoked_at), now)}` : d.last_seen ? `seen ${ago(ms(d.last_seen), now)}` : "never seen"}</div>
+      <div className="src">
+        {d.revoked_at
+          ? `revoked ${ago(ms(d.revoked_at), now)}`
+          : d.last_seen
+            ? `seen ${ago(ms(d.last_seen), now)}`
+            : "never seen"}
+      </div>
     </>
   );
 }
@@ -37,13 +43,25 @@ function Report({ n }: { n: PortalNamespace }) {
   if (!rep) return <St kind="nodata">No truth report</St>;
   return (
     <>
-      {rep.integrity == null ? <St kind="nodata">No integrity figure</St> : <span className="num">{pct(rep.integrity, 0)}</span>}
+      {rep.integrity == null ? (
+        <St kind="nodata">No integrity figure</St>
+      ) : (
+        <span className="num">{pct(rep.integrity, 0)}</span>
+      )}
       <div className="src">report {ago(ms(rep.generated), now)}</div>
     </>
   );
 }
 
-function Row({ n, onChanged, onEdit }: { n: PortalNamespace; onChanged: () => void; onEdit: () => void }) {
+function Row({
+  n,
+  onChanged,
+  onEdit,
+}: {
+  n: PortalNamespace;
+  onChanged: () => void;
+  onEdit: () => void;
+}) {
   const { confirm } = useApp();
   return (
     <tr data-row="">
@@ -55,7 +73,8 @@ function Row({ n, onChanged, onEdit }: { n: PortalNamespace; onChanged: () => vo
               <St kind="crit">Paused after repeated failures</St>
             </div>
             <div className="src wrap">
-              {n.breaker.failed} jobs failed since {n.breaker.since} UTC; it pauses at {n.breaker.threshold}. No job is handed out until it is reset.
+              {n.breaker.failed} jobs failed since {n.breaker.since} UTC; it pauses at{" "}
+              {n.breaker.threshold}. No job is handed out until it is reset.
             </div>
           </>
         )}
@@ -90,7 +109,19 @@ function Row({ n, onChanged, onEdit }: { n: PortalNamespace; onChanged: () => vo
             Edit
           </button>
           {n.breaker.open && (
-            <button type="button" className="btn" aria-label={`Reset ${n.namespace}`} onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Reset ${n.namespace} and hand out its jobs again`, onDone: onChanged })}>
+            <button
+              type="button"
+              className="btn"
+              aria-label={`Reset ${n.namespace}`}
+              onClick={() =>
+                confirm({
+                  action: "reset_breaker",
+                  params: { namespace: n.namespace },
+                  title: `Reset ${n.namespace} and hand out its jobs again`,
+                  onDone: onChanged,
+                })
+              }
+            >
               Reset
             </button>
           )}
@@ -114,7 +145,12 @@ function Roster() {
   return (
     <>
       <div className="toolbar">
-        <button type="button" className="btn primary" onClick={() => setEditing({ kind: "add" })} disabled={editing?.kind === "add"}>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() => setEditing({ kind: "add" })}
+          disabled={editing?.kind === "add"}
+        >
           Add project
         </button>
       </div>
@@ -160,7 +196,12 @@ function Roster() {
               </thead>
               <tbody>
                 {data.namespaces.map((n) => (
-                  <Row key={n.namespace} n={n} onChanged={read} onEdit={() => setEditing({ kind: "edit", n })} />
+                  <Row
+                    key={n.namespace}
+                    n={n}
+                    onChanged={read}
+                    onEdit={() => setEditing({ kind: "edit", n })}
+                  />
                 ))}
               </tbody>
             </table>

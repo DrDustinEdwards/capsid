@@ -49,7 +49,22 @@ export const RENAMED: Record<string, string> = {
 // The actions (lint: modes) of each renamed tool, so `jobs.claimed_by`, a column, is not
 // read as an action. test/tool-names-lib.test.ts holds these to src.
 export const RENAMED_ACTIONS: Record<string, string[]> = {
-  jobs: ["post", "list", "claim", "complete", "record", "fail", "block", "resume", "supersede", "release", "begin", "edit", "park", "unpark"],
+  jobs: [
+    "post",
+    "list",
+    "claim",
+    "complete",
+    "record",
+    "fail",
+    "block",
+    "resume",
+    "supersede",
+    "release",
+    "begin",
+    "edit",
+    "park",
+    "unpark",
+  ],
   lint: ["gather", "finalize", "report"],
   agents: ["mint", "list", "revoke", "update_scopes"],
   claims: ["job", "aggregate", "export"],
@@ -92,13 +107,18 @@ export const SPLIT: Record<string, Record<string, [string, string]>> = {
 const SPLIT_DEFAULT: Record<string, string> = { improve_run: "run" };
 
 /** Every old tool name. */
-export const OLD_TOOLS: string[] = [...Object.keys(SIMPLE), ...Object.keys(RENAMED), ...Object.keys(SPLIT)];
+export const OLD_TOOLS: string[] = [
+  ...Object.keys(SIMPLE),
+  ...Object.keys(RENAMED),
+  ...Object.keys(SPLIT),
+];
 
 // ---- prose ------------------------------------------------------------------------
 
 // A backticked old name followed by one of these words is not the tool: "the `write`
 // grant", "the `jobs` table".
-const NOT_A_TOOL_AFTER = /^\s+(grants?|tables?|columns?|rows?|fields?|flags?|modes?|status|scopes?|axis|role|key)\b/i;
+const NOT_A_TOOL_AFTER =
+  /^\s+(grants?|tables?|columns?|rows?|fields?|flags?|modes?|status|scopes?|axis|role|key)\b/i;
 
 /**
  * The new spelling of an old tool reference.
@@ -106,7 +126,11 @@ const NOT_A_TOOL_AFTER = /^\s+(grants?|tables?|columns?|rows?|fields?|flags?|mod
  * `action`: old action, where the reference named one
  * `called`: the reference is a call, name(...)
  */
-export function renamed(tool: string, action: string | undefined, called: boolean = false): { tool: string, action: string | null } | null {
+export function renamed(
+  tool: string,
+  action: string | undefined,
+  called: boolean = false,
+): { tool: string; action: string | null } | null {
   if (Object.hasOwn(SIMPLE, tool)) {
     const [next, nextAction] = SIMPLE[tool];
     return { tool: next, action: nextAction };
@@ -122,7 +146,8 @@ export function renamed(tool: string, action: string | undefined, called: boolea
     if (action === undefined && targets.size === 1) return { tool: [...targets][0], action: null };
     // An omitted action meant the old default only in a call; named bare in prose, a split
     // tool means all of it, which no one new tool is.
-    const asked = action ?? (called && Object.hasOwn(SPLIT_DEFAULT, tool) ? SPLIT_DEFAULT[tool] : undefined);
+    const asked =
+      action ?? (called && Object.hasOwn(SPLIT_DEFAULT, tool) ? SPLIT_DEFAULT[tool] : undefined);
     if (asked === undefined || !Object.hasOwn(actions, asked)) return null;
     const [next, nextAction] = actions[asked];
     return { tool: next, action: nextAction };
@@ -131,9 +156,15 @@ export function renamed(tool: string, action: string | undefined, called: boolea
 }
 
 // The new tools whose action an omitted `action` means, so prose need not name it.
-const DEFAULT_ACTIONS: Record<string, string> = { capsid_find_docs: "list", capsid_read_doc: "read", capsid_write_doc: "write" };
+const DEFAULT_ACTIONS: Record<string, string> = {
+  capsid_find_docs: "list",
+  capsid_read_doc: "read",
+  capsid_write_doc: "write",
+};
 
-const NAMES = OLD_TOOLS.slice().sort((a, b) => b.length - a.length).join("|");
+const NAMES = OLD_TOOLS.slice()
+  .sort((a, b) => b.length - a.length)
+  .join("|");
 
 // Old names that are also ordinary words, or name something else here (`open_pr` is a
 // gate class, `namespaces` a scope axis, `agents` a package, `list` a jobs action). One of
@@ -145,8 +176,11 @@ const AMBIGUOUS = new Set(OLD_TOOLS.filter((name) => !name.includes("_") || name
 // ` action `x`` or ` action "x"` after it. A bare word after "action" is prose ("the
 // `jobs` action is"), not an action.
 const SPAN = new RegExp(
-  "`(" + NAMES + ")(?:\\.([a-z_]+))?((?:\\([^`]*\\))?)(?:\\s+action\\s+\"?([a-z_]+)\"?)?`" + "(?:\\s+action\\s+(?:`([a-z_]+)`|\"([a-z_]+)\"))?",
-  "g"
+  "`(" +
+    NAMES +
+    ')(?:\\.([a-z_]+))?((?:\\([^`]*\\))?)(?:\\s+action\\s+"?([a-z_]+)"?)?`' +
+    '(?:\\s+action\\s+(?:`([a-z_]+)`|"([a-z_]+)"))?',
+  "g",
 );
 // name( outside backticks: not a method (.name(), a path (deploy-check(), or a longer word.
 const CALL = new RegExp("(^|[^\\w.`$/-])(" + NAMES + ")\\(", "g");
@@ -201,9 +235,15 @@ export function rewriteProse(text: string): {
       const trailing = tick ?? quoted;
       const action = dotted ?? inner ?? trailing;
       // "the `write` grant", "the `jobs` table": not the tool, and not worth reporting.
-      if (dotted === undefined && !call && action === undefined && NOT_A_TOOL_AFTER.test(after)) return whole;
+      if (dotted === undefined && !call && action === undefined && NOT_A_TOOL_AFTER.test(after))
+        return whole;
       if (AMBIGUOUS.has(tool)) {
-        const said = Boolean(call) || dotted !== undefined || action !== undefined || /^\s+tools?\b/.test(after) || CALL_BEFORE.test(before);
+        const said =
+          Boolean(call) ||
+          dotted !== undefined ||
+          action !== undefined ||
+          /^\s+tools?\b/.test(after) ||
+          CALL_BEFORE.test(before);
         if (!said) {
           ambiguous.push({ line: i + 1, text: whole });
           return whole;
@@ -211,8 +251,14 @@ export function rewriteProse(text: string): {
       }
       // A qualified name that is not one of the tool's actions is a column or a field
       // (`jobs.claimed_by`), not the tool.
-      if (dotted !== undefined && Object.hasOwn(RENAMED_ACTIONS, tool) && !RENAMED_ACTIONS[tool].includes(dotted)) return whole;
-      if (dotted !== undefined && Object.hasOwn(SPLIT, tool) && !Object.hasOwn(SPLIT[tool], dotted)) return whole;
+      if (
+        dotted !== undefined &&
+        Object.hasOwn(RENAMED_ACTIONS, tool) &&
+        !RENAMED_ACTIONS[tool].includes(dotted)
+      )
+        return whole;
+      if (dotted !== undefined && Object.hasOwn(SPLIT, tool) && !Object.hasOwn(SPLIT[tool], dotted))
+        return whole;
       if (dotted !== undefined && Object.hasOwn(SIMPLE, tool)) return whole;
       const r = renamed(tool, action, Boolean(call));
       if (!r) {
@@ -230,7 +276,8 @@ export function rewriteProse(text: string): {
         return `\`${r.tool}(${all2})\``;
       }
       // A renamed tool keeps the action the text gave it, in the text's own spelling.
-      if (trailing !== undefined && r.action === trailing) return `\`${r.tool}\` action \`${r.action}\``;
+      if (trailing !== undefined && r.action === trailing)
+        return `\`${r.tool}\` action \`${r.action}\``;
       return implied ? `\`${r.tool}\`` : `\`${r.tool}\` action \`${r.action}\``;
     });
     next = next.replace(CALL, (whole, before, tool) => {

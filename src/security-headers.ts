@@ -1,4 +1,9 @@
-import { buildPolicy, CSP_REPORT_GROUP, reportingEndpoints, scriptHash } from "@dustinedwards/site-runtime/csp";
+import {
+  buildPolicy,
+  CSP_REPORT_GROUP,
+  reportingEndpoints,
+  scriptHash,
+} from "@dustinedwards/site-runtime/csp";
 import { applyHeaderSet, buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
 import { OWNER_STYLE } from "@dustinedwards/site-runtime/owner-page";
@@ -29,7 +34,14 @@ export const REPORT_PREFIX = "reports/csp/";
 // loads, nothing may frame it, no <base>, and no string reaches a script sink (Trusted Types: these pages run no
 // script, as the registry's door entry declares). A JSON or text answer needs none of that, and an HTML page left
 // without a policy gets the strictest one rather than none. form-action is deliberately absent, as below.
-const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", `report-uri ${REPORT_URL}`, `report-to ${CSP_REPORT_GROUP}`]);
+const DEFAULT_CSP = buildPolicy([
+  "default-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+  "require-trusted-types-for 'script'",
+  `report-uri ${REPORT_URL}`,
+  `report-to ${CSP_REPORT_GROUP}`,
+]);
 
 // The OAuth consent dialog's own headers (src/routes.ts, renderApprovalDialog), less
 // its per-request Set-Cookie; withSecurityHeaders adds the shared set. Kept here so node
@@ -52,17 +64,31 @@ const DEFAULT_CSP = buildPolicy(["default-src 'none'", "base-uri 'none'", "frame
 // because the approvedClients fast path 302s out of the GET and never submits a form.
 let consentHeaders: Promise<Readonly<Record<string, string>>> | undefined;
 export function consentDialogHeaders(): Promise<Readonly<Record<string, string>>> {
-  consentHeaders ??= Promise.all([scriptHash(CONSENT_STYLE), scriptHash(OWNER_STYLE)]).then(([consent, owner]) => ({
-    "Content-Type": "text/html;charset=utf-8",
-    "Content-Security-Policy": buildPolicy(["default-src 'none'", `style-src '${consent}' '${owner}'`, "base-uri 'none'", "frame-ancestors 'none'", "require-trusted-types-for 'script'", `report-uri ${REPORT_URL}`, `report-to ${CSP_REPORT_GROUP}`]),
-  }));
+  consentHeaders ??= Promise.all([scriptHash(CONSENT_STYLE), scriptHash(OWNER_STYLE)]).then(
+    ([consent, owner]) => ({
+      "Content-Type": "text/html;charset=utf-8",
+      "Content-Security-Policy": buildPolicy([
+        "default-src 'none'",
+        `style-src '${consent}' '${owner}'`,
+        "base-uri 'none'",
+        "frame-ancestors 'none'",
+        "require-trusted-types-for 'script'",
+        `report-uri ${REPORT_URL}`,
+        `report-to ${CSP_REPORT_GROUP}`,
+      ]),
+    }),
+  );
   return consentHeaders;
 }
 
 /** The set a response on `host` leaves with, where it has not set the header itself. */
 export function securityHeadersFor(host: string): Record<string, string> {
   // no-store is applied by withCacheDefault, not here: /health is exempt and must stay cacheable.
-  return { ...(host === PORTAL_HOST ? PORTAL_SET : MCP_SET), "Reporting-Endpoints": REPORTING_ENDPOINTS, "Content-Security-Policy": DEFAULT_CSP };
+  return {
+    ...(host === PORTAL_HOST ? PORTAL_SET : MCP_SET),
+    "Reporting-Endpoints": REPORTING_ENDPOINTS,
+    "Content-Security-Policy": DEFAULT_CSP,
+  };
 }
 
 export function withSecurityHeaders(response: Response, host: string = MCP_HOST): Response {

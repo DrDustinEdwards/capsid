@@ -5,7 +5,9 @@ import { expect, test } from "@playwright/test";
 // site_repair control's preview, which names the operator route and never a token, and the
 // perform settles the drift on the panel's next read.
 
-test("Run on a drifted check previews the site_repair call, performs it, and the panel reads the check converged", async ({ page }) => {
+test("Run on a drifted check previews the site_repair call, performs it, and the panel reads the check converged", async ({
+  page,
+}) => {
   await page.goto("sites/sample-b?tab=sync");
   const panel = page.locator('[data-convergence="sample-b"]').locator("xpath=ancestor::section[1]");
   const drifted = panel.locator('tr[data-check="pages-drift"]');
@@ -15,7 +17,9 @@ test("Run on a drifted check previews the site_repair call, performs it, and the
   const dialog = page.locator("dialog.confirm");
   await dialog.getByText("Details", { exact: true }).click();
   await expect(dialog.getByText("What changes")).toBeVisible();
-  await expect(dialog).toContainText("POST https://sample-b.example.com/api/operator with tool sync_pages");
+  await expect(dialog).toContainText(
+    "POST https://sample-b.example.com/api/operator with tool sync_pages",
+  );
   await expect(dialog).toContainText("the token is never shown or recorded");
   await dialog.getByRole("button", { name: "Run sync_pages" }).click();
 

@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { mintAgent, listAgents } from "../src/agents-admin.ts";
-import { ARCHIVE_AFTER_DAYS, archiveRevokedAgents, listArchivedAgents } from "../src/agents-archive.ts";
+import {
+  ARCHIVE_AFTER_DAYS,
+  archiveRevokedAgents,
+  listArchivedAgents,
+} from "../src/agents-archive.ts";
 import { resolveAgent } from "../src/agents.ts";
 
 import { agentSummaries } from "../src/status.ts";
@@ -53,33 +57,72 @@ function d1(db: DatabaseSync): D1Database {
 
 function fresh(): { raw: DatabaseSync; db: D1Database } {
   const raw = new DatabaseSync(":memory:");
-  for (const name of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
+  for (const name of readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith(".sql"))
+    .sort())
+    raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
   return { raw, db: d1(raw) };
 }
 
 const sqlTime = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
 const daysAgo = (n: number) => sqlTime(new Date(NOW.getTime() - n * 86_400_000));
 
-async function plantAgent(raw: DatabaseSync, name: string, revoked: string | null, jobId: string | null = null): Promise<string> {
+async function plantAgent(
+  raw: DatabaseSync,
+  name: string,
+  revoked: string | null,
+  jobId: string | null = null,
+): Promise<string> {
   const key = `key-${name}`;
   raw
-    .prepare("INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, job_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .run(`agent_${name}`, name, jobId ? "session" : "driver", await sha256Hex(key), JSON.stringify({ namespaces: ["sample"], repos: [], tools: "*", grants: ["read"], flags: {} }), "access:dustin@example.com", daysAgo(30), revoked, jobId);
+    .prepare(
+      "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, job_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .run(
+      `agent_${name}`,
+      name,
+      jobId ? "session" : "driver",
+      await sha256Hex(key),
+      JSON.stringify({
+        namespaces: ["sample"],
+        repos: [],
+        tools: "*",
+        grants: ["read"],
+        flags: {},
+      }),
+      "access:dustin@example.com",
+      daysAgo(30),
+      revoked,
+      jobId,
+    );
   return key;
 }
 
 function plantJob(raw: DatabaseSync, id: string, status: string, by: string): void {
-  raw.prepare("INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?, 'sample', ?, 'b', ?, 'access:dustin@example.com', ?)").run(id, `t ${id}`, status, by);
+  raw
+    .prepare(
+      "INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?, 'sample', ?, 'b', ?, 'access:dustin@example.com', ?)",
+    )
+    .run(id, `t ${id}`, status, by);
 }
 
-const names = (raw: DatabaseSync, table: string) => raw.prepare(`SELECT name FROM ${table} ORDER BY name`).all().map((r) => r.name);
+const names = (raw: DatabaseSync, table: string) =>
+  raw
+    .prepare(`SELECT name FROM ${table} ORDER BY name`)
+    .all()
+    .map((r) => r.name);
 
 test("a revoked agent moves 7 days after revocation with its counts and an audit row; a live one and a recent one stay", async () => {
   const { raw, db } = fresh();
   await plantAgent(raw, "live", null);
   await plantAgent(raw, "recent", daysAgo(ARCHIVE_AFTER_DAYS - 1));
   await plantAgent(raw, "old", daysAgo(ARCHIVE_AFTER_DAYS + 1));
-  for (let i = 0; i < 3; i++) raw.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:old', 'write', 'sample', 'p', '{}')").run();
+  for (let i = 0; i < 3; i++)
+    raw
+      .prepare(
+        "INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:old', 'write', 'sample', 'p', '{}')",
+      )
+      .run();
   plantJob(raw, "job_aaaaaaaaaaaa", "done", "agent:old");
   plantJob(raw, "job_bbbbbbbbbbbb", "queued", "agent:live");
   assert.equal(names(raw, "agents").length, 3, "the plant did not land");
@@ -91,9 +134,18 @@ test("a revoked agent moves 7 days after revocation with its counts and an audit
   assert.equal(row.audit_rows, 3);
   assert.equal(row.jobs, 1);
   assert.equal(row.reason, "revoked-7-days");
-  assert.equal(row.revoked_at, daysAgo(ARCHIVE_AFTER_DAYS + 1), "the row is copied, not re-stamped");
-  const audit = raw.prepare("SELECT actor, path, params FROM audit_log WHERE action = 'agents.archive'").all();
-  assert.deepEqual(audit.map((a) => [a.actor, a.path]), [[ACTOR, "old"]]);
+  assert.equal(
+    row.revoked_at,
+    daysAgo(ARCHIVE_AFTER_DAYS + 1),
+    "the row is copied, not re-stamped",
+  );
+  const audit = raw
+    .prepare("SELECT actor, path, params FROM audit_log WHERE action = 'agents.archive'")
+    .all();
+  assert.deepEqual(
+    audit.map((a) => [a.actor, a.path]),
+    [[ACTOR, "old"]],
+  );
   // A second pass has nothing left to move.
   assert.deepEqual(await archiveRevokedAgents(db, ACTOR, NOW), { archived: [], skipped: [] });
 });
@@ -114,7 +166,9 @@ test("PLANT: an archived key is refused", async () => {
   const key = await plantAgent(raw, "gone", daysAgo(ARCHIVE_AFTER_DAYS + 1));
   await archiveRevokedAgents(db, ACTOR, NOW);
   assert.deepEqual(names(raw, "agents_archive"), ["gone"], "the plant did not land in the archive");
-  const request = new Request("https://capsid.example.com/ops/mcp", { headers: { Authorization: `Bearer ${key}` } });
+  const request = new Request("https://capsid.example.com/ops/mcp", {
+    headers: { Authorization: `Bearer ${key}` },
+  });
   assert.equal(await resolveAgent(request, { DB: db }, NOW), null);
 });
 
@@ -123,7 +177,12 @@ test("PLANT: an archived name is never minted again", async () => {
   await plantAgent(raw, "gone", daysAgo(ARCHIVE_AFTER_DAYS + 1));
   await archiveRevokedAgents(db, ACTOR, NOW);
   assert.deepEqual(names(raw, "agents"), [], "the plant is still in the live table");
-  const minted = await mintAgent(db, "access:dustin@example.com", { name: "gone", kind: "driver", namespaces: ["sample"], repos: ["*"] });
+  const minted = await mintAgent(db, "access:dustin@example.com", {
+    name: "gone",
+    kind: "driver",
+    namespaces: ["sample"],
+    repos: ["*"],
+  });
   assert.equal(minted.ok, false);
   assert.match(minted.refusal ?? "", /already exists/);
   assert.deepEqual(names(raw, "agents"), []);
@@ -142,11 +201,18 @@ test("the inventory lists live, then revoked, then archived with archived_at; th
       ["zz-live", false, false],
       ["revoked", true, false],
       ["aa-gone", true, true],
-    ]
+    ],
   );
-  assert.deepEqual((await listAgents(db)).agents?.map((a) => a.name), ["revoked", "zz-live"], "list is the live table");
+  assert.deepEqual(
+    (await listAgents(db)).agents?.map((a) => a.name),
+    ["revoked", "zz-live"],
+    "list is the live table",
+  );
   const archived = await listArchivedAgents(db);
-  assert.deepEqual(archived.map((a) => a.name), ["aa-gone"]);
+  assert.deepEqual(
+    archived.map((a) => a.name),
+    ["aa-gone"],
+  );
   assert.equal("key_hash" in archived[0], false);
   assert.match(archived[0].fingerprint, /^[0-9a-f]{12}$/);
 });

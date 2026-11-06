@@ -40,11 +40,13 @@ export interface DeployRepo {
 }
 const OWN_DEPLOY_WORKFLOW: Readonly<Record<string, string>> = { dustinedwards: "deploy.yml" };
 export const DEPLOY_ROSTER: readonly DeployRepo[] = [
-  ...[...APP_ROSTER, "carrel", "julieedwards", "txasm", "bsw", "capsomer", "enarratio"].map((namespace) => ({
-    key: namespace,
-    namespace,
-    ...(OWN_DEPLOY_WORKFLOW[namespace] ? { workflow: OWN_DEPLOY_WORKFLOW[namespace] } : {}),
-  })),
+  ...[...APP_ROSTER, "carrel", "julieedwards", "txasm", "bsw", "capsomer", "enarratio"].map(
+    (namespace) => ({
+      key: namespace,
+      namespace,
+      ...(OWN_DEPLOY_WORKFLOW[namespace] ? { workflow: OWN_DEPLOY_WORKFLOW[namespace] } : {}),
+    }),
+  ),
   { key: "prelum", namespace: "dustinedwards", selector: "prelum" },
 ];
 
@@ -56,7 +58,12 @@ export function isLiveGateJob(name: string): boolean {
 const ROLLBACK_STEP = /^Roll back/i;
 const RUNS_READ = 3;
 
-type DeployOutcome = "verified" | "rolled_back" | "rollback_failed" | "rollback_skipped" | "unverified";
+type DeployOutcome =
+  | "verified"
+  | "rolled_back"
+  | "rollback_failed"
+  | "rollback_skipped"
+  | "unverified";
 
 interface Job {
   id: number;
@@ -90,23 +97,66 @@ export interface OutcomeRead {
 /** What a live gate job's conclusion, its rollback step and its annotations say. Null for a
  *  run whose live gate did not run (a run with no deploy). */
 export function outcomeFrom(job: Job | undefined, annotations: string[]): OutcomeRead | null {
-  if (!job || job.conclusion === "skipped" || job.conclusion === null || job.conclusion === "cancelled") return null;
+  if (
+    !job ||
+    job.conclusion === "skipped" ||
+    job.conclusion === null ||
+    job.conclusion === "cancelled"
+  )
+    return null;
   const rollback = (job.steps ?? []).find((s) => ROLLBACK_STEP.test(s.name));
   const said = (re: RegExp) => annotations.map((a) => re.exec(a)).find((m) => m !== null) ?? null;
-  if (job.conclusion === "success" && (!rollback || rollback.conclusion === "skipped" || rollback.conclusion === null)) {
-    return { outcome: "verified", rollback_from: null, rollback_to: null, detail: "the live gate passed" };
+  if (
+    job.conclusion === "success" &&
+    (!rollback || rollback.conclusion === "skipped" || rollback.conclusion === null)
+  ) {
+    return {
+      outcome: "verified",
+      rollback_from: null,
+      rollback_to: null,
+      detail: "the live gate passed",
+    };
   }
   if (rollback?.conclusion === "failure") {
     const m = said(/the rollback did not take effect: \/health still reports (\S+)/);
-    return { outcome: "rollback_failed", rollback_from: null, rollback_to: m?.[1] ?? null, detail: "the live gate refused the deploy and the rollback did not take effect" };
+    return {
+      outcome: "rollback_failed",
+      rollback_from: null,
+      rollback_to: m?.[1] ?? null,
+      detail: "the live gate refused the deploy and the rollback did not take effect",
+    };
   }
   if (rollback?.conclusion === "success") {
     const back = said(/rolled back: was (\S+) \(this run's commit \S+\), now ([^.\s]+)/);
-    if (back) return { outcome: "rolled_back", rollback_from: back[1]!, rollback_to: back[2]!, detail: "the live gate refused the deploy and it was rolled back" };
-    if (said(/not rolling back/)) return { outcome: "rollback_skipped", rollback_from: null, rollback_to: null, detail: "the live gate refused the deploy and the guard declined to roll back: master and production may disagree" };
-    return { outcome: "rollback_skipped", rollback_from: null, rollback_to: null, detail: "the rollback step succeeded but said neither that it rolled back nor that it declined" };
+    if (back)
+      return {
+        outcome: "rolled_back",
+        rollback_from: back[1]!,
+        rollback_to: back[2]!,
+        detail: "the live gate refused the deploy and it was rolled back",
+      };
+    if (said(/not rolling back/))
+      return {
+        outcome: "rollback_skipped",
+        rollback_from: null,
+        rollback_to: null,
+        detail:
+          "the live gate refused the deploy and the guard declined to roll back: master and production may disagree",
+      };
+    return {
+      outcome: "rollback_skipped",
+      rollback_from: null,
+      rollback_to: null,
+      detail:
+        "the rollback step succeeded but said neither that it rolled back nor that it declined",
+    };
   }
-  return { outcome: "unverified", rollback_from: null, rollback_to: null, detail: `the live gate concluded ${job.conclusion} with no rollback (it could not run, or the deploy was not this run's)` };
+  return {
+    outcome: "unverified",
+    rollback_from: null,
+    rollback_to: null,
+    detail: `the live gate concluded ${job.conclusion} with no rollback (it could not run, or the deploy was not this run's)`,
+  };
 }
 
 interface RunRow {
@@ -125,7 +175,12 @@ export interface DeployRow extends OutcomeRead {
   run_at: string;
 }
 
-const mk = (namespace: string, fingerprint: string, headline: string, evidence: string[]): Finding => ({
+const mk = (
+  namespace: string,
+  fingerprint: string,
+  headline: string,
+  evidence: string[],
+): Finding => ({
   fingerprint,
   namespace,
   title: `Watcher: ${headline} [${fingerprint}]`,
@@ -143,21 +198,46 @@ const mk = (namespace: string, fingerprint: string, headline: string, evidence: 
 /** The finding a deploy row raises: a rollback, or one that did not take effect. A verified
  *  deploy, a declined rollback and an unverified gate raise none here (a red CI run is the
  *  ci check's finding). */
-export function deployFindings(namespace: string, row: DeployRow, key: string = namespace): Finding[] {
+export function deployFindings(
+  namespace: string,
+  row: DeployRow,
+  key: string = namespace,
+): Finding[] {
   const sha = row.head_sha.slice(0, 7);
-  const evidence = [`run: ${row.run_url ?? row.run_id}`, `commit: ${row.head_sha}${row.pr ? ` (#${row.pr})` : ""}`, row.detail];
+  const evidence = [
+    `run: ${row.run_url ?? row.run_id}`,
+    `commit: ${row.head_sha}${row.pr ? ` (#${row.pr})` : ""}`,
+    row.detail,
+  ];
   if (row.outcome === "rolled_back") {
-    return [mk(namespace, `deploy-rolled-back-${key}`, `${key} deploy ${sha} was rolled back`, [...evidence, `production went from ${row.rollback_from} back to ${row.rollback_to}`])];
+    return [
+      mk(namespace, `deploy-rolled-back-${key}`, `${key} deploy ${sha} was rolled back`, [
+        ...evidence,
+        `production went from ${row.rollback_from} back to ${row.rollback_to}`,
+      ]),
+    ];
   }
   if (row.outcome === "rollback_failed") {
-    return [mk(namespace, `deploy-rollback-failed-${key}`, `${key} deploy ${sha} was refused and its rollback did not take effect`, [...evidence, `production may still serve ${row.rollback_to ?? "the refused deploy"}`])];
+    return [
+      mk(
+        namespace,
+        `deploy-rollback-failed-${key}`,
+        `${key} deploy ${sha} was refused and its rollback did not take effect`,
+        [...evidence, `production may still serve ${row.rollback_to ?? "the refused deploy"}`],
+      ),
+    ];
   }
   return [];
 }
 
 /** Reads one repo's newest completed push runs on its default branch (or, given `workflow`, that workflow's runs of
  *  any event), records each new one whose live gate ran, and returns the newest recorded deploy (or null when none ran). */
-export async function readDeployOutcomes(env: Env, namespace: string, selector?: string, workflow?: string): Promise<DeployRow | null> {
+export async function readDeployOutcomes(
+  env: Env,
+  namespace: string,
+  selector?: string,
+  workflow?: string,
+): Promise<DeployRow | null> {
   const { owner, repo, full } = await resolveRepo(env, namespace, selector);
   const branch = await getDefaultBranch(env, owner, repo);
   const runsPath = workflow
@@ -165,11 +245,13 @@ export async function readDeployOutcomes(env: Env, namespace: string, selector?:
     : `/repos/${owner}/${repo}/actions/runs?branch=${encodeURIComponent(branch)}&event=push&status=completed&per_page=${RUNS_READ}`;
   const listed = await ghFetch(env, owner, repo, runsPath);
   if (!listed.ok) throw new Error(`the run list returned ${listed.status}`);
-  const runs = (((await listed.json()) as { workflow_runs?: RunRow[] }).workflow_runs ?? []).sort((a, b) => b.id - a.id);
+  const runs = (((await listed.json()) as { workflow_runs?: RunRow[] }).workflow_runs ?? []).sort(
+    (a, b) => b.id - a.id,
+  );
   if (!runs.length) return null;
   const { results } = await env.DB.prepare(
     `SELECT run_id, head_sha, pr, outcome, rollback_from, rollback_to, detail, run_url, run_at, restore_seconds FROM deploy_outcomes
-     WHERE repo = ?1 AND run_id IN (SELECT value FROM json_each(?2))`
+     WHERE repo = ?1 AND run_id IN (SELECT value FROM json_each(?2))`,
   )
     .bind(full, JSON.stringify(runs.map((r) => r.id)))
     .all<DeployRow>();
@@ -178,29 +260,72 @@ export async function readDeployOutcomes(env: Env, namespace: string, selector?:
   for (const run of runs) {
     let row = known.get(run.id) ?? null;
     if (!row) {
-      const jobsResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?per_page=100`);
+      const jobsResp = await ghFetch(
+        env,
+        owner,
+        repo,
+        `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?per_page=100`,
+      );
       if (!jobsResp.ok) throw new Error(`the jobs of run ${run.id} returned ${jobsResp.status}`);
       const jobs = ((await jobsResp.json()) as { jobs?: Job[] }).jobs ?? [];
       const gates = jobs.filter((j) => isLiveGateJob(j.name));
-      const job = gates.find((j) => j.conclusion !== "success" && j.conclusion !== "skipped") ?? gates[0];
+      const job =
+        gates.find((j) => j.conclusion !== "success" && j.conclusion !== "skipped") ?? gates[0];
       let annotations: string[] = [];
       if (job && job.conclusion !== "success" && job.conclusion !== "skipped") {
-        const notes = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/check-runs/${job.id}/annotations?per_page=100`);
+        const notes = await ghFetch(
+          env,
+          owner,
+          repo,
+          `/repos/${owner}/${repo}/check-runs/${job.id}/annotations?per_page=100`,
+        );
         if (!notes.ok) throw new Error(`the annotations of job ${job.id} returned ${notes.status}`);
-        annotations = ((await notes.json()) as Array<{ message?: string }>).map((a) => a.message ?? "");
+        annotations = ((await notes.json()) as Array<{ message?: string }>).map(
+          (a) => a.message ?? "",
+        );
       }
       const read = outcomeFrom(job, annotations);
       if (!read) continue;
       // The pull request the commit came from, when GitHub knows one.
-      const pulls = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/commits/${run.head_sha}/pulls`);
-      const pr = pulls.ok ? ((((await pulls.json()) as Array<{ number?: number }>)[0]?.number as number | undefined) ?? null) : null;
+      const pulls = await ghFetch(
+        env,
+        owner,
+        repo,
+        `/repos/${owner}/${repo}/commits/${run.head_sha}/pulls`,
+      );
+      const pr = pulls.ok
+        ? ((((await pulls.json()) as Array<{ number?: number }>)[0]?.number as
+            | number
+            | undefined) ?? null)
+        : null;
       const restore = read.outcome === "rolled_back" && job ? restoreSeconds(jobs, job) : null;
-      row = { ...read, run_id: run.id, restore_seconds: restore, head_sha: run.head_sha, pr, run_url: run.html_url ?? null, run_at: run.created_at };
+      row = {
+        ...read,
+        run_id: run.id,
+        restore_seconds: restore,
+        head_sha: run.head_sha,
+        pr,
+        run_url: run.html_url ?? null,
+        run_at: run.created_at,
+      };
       await env.DB.prepare(
         `INSERT OR IGNORE INTO deploy_outcomes (repo, namespace, run_id, head_sha, pr, outcome, rollback_from, rollback_to, detail, run_url, run_at, restore_seconds)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
       )
-        .bind(full, namespace, row.run_id, row.head_sha, row.pr, row.outcome, row.rollback_from, row.rollback_to, row.detail, row.run_url, row.run_at, row.restore_seconds)
+        .bind(
+          full,
+          namespace,
+          row.run_id,
+          row.head_sha,
+          row.pr,
+          row.outcome,
+          row.rollback_from,
+          row.rollback_to,
+          row.detail,
+          row.run_url,
+          row.run_at,
+          row.restore_seconds,
+        )
         .run();
     }
     newest ??= row;

@@ -72,7 +72,9 @@ interface NamespaceMerges {
 export type MergeMemory = Record<string, NamespaceMerges>;
 
 /** What one pull request's file rows remove, rename, modify and add. Pure. */
-export function changeFromFiles(rows: readonly PrFileRow[]): Pick<MergedChange, "removed" | "changed" | "added" | "partial"> {
+export function changeFromFiles(
+  rows: readonly PrFileRow[],
+): Pick<MergedChange, "removed" | "changed" | "added" | "partial"> {
   const removed: MergedChange["removed"] = [];
   const changed: string[] = [];
   const added: string[] = [];
@@ -85,12 +87,17 @@ export function changeFromFiles(rows: readonly PrFileRow[]): Pick<MergedChange, 
     // modified, changed, and a rename to the same name: the file is still there.
     else changed.push(f.filename);
   }
-  const cut = removed.length > MAX_PATHS_PER_PR || changed.length > MAX_PATHS_PER_PR || added.length > MAX_PATHS_PER_PR;
+  const cut =
+    removed.length > MAX_PATHS_PER_PR ||
+    changed.length > MAX_PATHS_PER_PR ||
+    added.length > MAX_PATHS_PER_PR;
   return {
     removed: removed.slice(0, MAX_PATHS_PER_PR),
     changed: changed.slice(0, MAX_PATHS_PER_PR),
     added: added.slice(0, MAX_PATHS_PER_PR),
-    partial: cut ? `more than ${MAX_PATHS_PER_PR} paths in one list; the first ${MAX_PATHS_PER_PR} were kept` : null,
+    partial: cut
+      ? `more than ${MAX_PATHS_PER_PR} paths in one list; the first ${MAX_PATHS_PER_PR} were kept`
+      : null,
   };
 }
 
@@ -106,7 +113,13 @@ export function citesPath(body: string, path: string): boolean {
 }
 
 // The types that say how an app works, beside the canon paths (src/canon.ts).
-const CANON_TYPES: ReadonlySet<string> = new Set(["core", "spec", "protocol", "procedural", "reference"]);
+const CANON_TYPES: ReadonlySet<string> = new Set([
+  "core",
+  "spec",
+  "protocol",
+  "procedural",
+  "reference",
+]);
 // Dated records say what was true when written (src/rule-docs.ts); an old path there is history.
 const DATED_PREFIXES = ["archive/", "research/", "reports/", "audits/", "jobs/"];
 const RETIRED_STATUSES: ReadonlySet<string> = new Set(["superseded", "closed"]);
@@ -121,7 +134,10 @@ export interface CanonDoc {
 
 /** Whether a document is one this check holds to the code: a canon path or a canon type,
  *  not a dated record, not retired. Pure. */
-export function staleCanonDoc(namespace: string, doc: Pick<CanonDoc, "path" | "type" | "status">): boolean {
+export function staleCanonDoc(
+  namespace: string,
+  doc: Pick<CanonDoc, "path" | "type" | "status">,
+): boolean {
   if (DATED_PREFIXES.some((p) => doc.path.startsWith(p))) return false;
   if (doc.status && RETIRED_STATUSES.has(doc.status)) return false;
   return isCanonPath(namespace, doc.path) || (doc.type !== null && CANON_TYPES.has(doc.type));
@@ -158,10 +174,16 @@ export interface StaleFlag {
 
 /** The documents each remembered merge leaves stale, per the rules at the top of this
  *  file. One flag per document and pull request, naming every path it cites. Pure. */
-export function staleCanonFlags(namespace: string, merges: readonly MergedChange[], docs: readonly CanonDoc[], edges: readonly Edge[]): StaleFlag[] {
+export function staleCanonFlags(
+  namespace: string,
+  merges: readonly MergedChange[],
+  docs: readonly CanonDoc[],
+  edges: readonly Edge[],
+): StaleFlag[] {
   const ordered = [...merges].sort((a, b) => instant(a.merged_at) - instant(b.merged_at));
   const edgesFrom = new Map<string, Set<string>>();
-  for (const e of edges) edgesFrom.set(e.from_path, (edgesFrom.get(e.from_path) ?? new Set()).add(e.to_path));
+  for (const e of edges)
+    edgesFrom.set(e.from_path, (edgesFrom.get(e.from_path) ?? new Set()).add(e.to_path));
   const flags: StaleFlag[] = [];
   ordered.forEach((pr, i) => {
     const merged = instant(pr.merged_at);
@@ -179,12 +201,22 @@ export function staleCanonFlags(namespace: string, merges: readonly MergedChange
         if (later.has(r.path)) continue;
         const how = r.to === null ? "deleted" : "renamed";
         if (linked.has(r.path)) cited.push({ path: r.path, how, to: r.to, via: "edge" });
-        else if (citesPath(doc.body ?? "", r.path)) cited.push({ path: r.path, how, to: r.to, via: "body" });
+        else if (citesPath(doc.body ?? "", r.path))
+          cited.push({ path: r.path, how, to: r.to, via: "body" });
       }
       for (const path of pr.changed) {
         if (linked.has(path)) cited.push({ path, how: "changed", to: null, via: "edge" });
       }
-      if (cited.length > 0) flags.push({ namespace, doc: doc.path, pr: pr.number, url: pr.url, merged_at: pr.merged_at, cited, partial: pr.partial });
+      if (cited.length > 0)
+        flags.push({
+          namespace,
+          doc: doc.path,
+          pr: pr.number,
+          url: pr.url,
+          merged_at: pr.merged_at,
+          cited,
+          partial: pr.partial,
+        });
     }
   });
   return flags;
@@ -213,7 +245,9 @@ const describe = (c: Cited): string =>
 
 /** The flags as watcher findings, sorted and capped at MAX_FLAGS. Pure. */
 export function staleCanonFindings(flags: readonly StaleFlag[]): Finding[] {
-  const sorted = [...flags].sort((a, b) => a.namespace.localeCompare(b.namespace) || b.pr - a.pr || a.doc.localeCompare(b.doc));
+  const sorted = [...flags].sort(
+    (a, b) => a.namespace.localeCompare(b.namespace) || b.pr - a.pr || a.doc.localeCompare(b.doc),
+  );
   return sorted.slice(0, MAX_FLAGS).map((f) => {
     const fingerprint = staleCanonFingerprint(f);
     const first = f.cited[0]!;
@@ -224,7 +258,9 @@ export function staleCanonFindings(flags: readonly StaleFlag[]): Finding[] {
       `document: ${f.namespace}/${f.doc}`,
       `pull request: ${f.url}, merged ${f.merged_at}`,
       ...f.cited.slice(0, CITED_SHOWN).map((c) => `cites ${describe(c)}`),
-      ...(f.cited.length > CITED_SHOWN ? [`and ${f.cited.length - CITED_SHOWN} more cited path(s)`] : []),
+      ...(f.cited.length > CITED_SHOWN
+        ? [`and ${f.cited.length - CITED_SHOWN} more cited path(s)`]
+        : []),
       ...(f.partial ? [`the pull request's file list was kept cut: ${f.partial}`] : []),
       "Read the document against the pull request and rewrite what no longer holds. Writing it clears this; nothing was rewritten.",
     ];
@@ -237,7 +273,11 @@ export function staleCanonFindings(flags: readonly StaleFlag[]): Finding[] {
         "",
         "## Evidence",
         "",
-        externalFence("watcher-evidence", fingerprint, evidence.map((line) => `- ${line}`).join("\n")),
+        externalFence(
+          "watcher-evidence",
+          fingerprint,
+          evidence.map((line) => `- ${line}`).join("\n"),
+        ),
       ].join("\n"),
       evidence,
     };
@@ -252,10 +292,12 @@ export function parseMemory(raw: string | null): { memory: MergeMemory } | { pro
   if (raw === null) return { memory: {} };
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { problem: "not an object" };
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return { problem: "not an object" };
     for (const v of Object.values(parsed as Record<string, unknown>)) {
       const ns = v as Partial<NamespaceMerges> | null;
-      if (!ns || typeof ns.repo !== "string" || !Array.isArray(ns.prs)) return { problem: "a namespace entry has no repo or prs" };
+      if (!ns || typeof ns.repo !== "string" || !Array.isArray(ns.prs))
+        return { problem: "a namespace entry has no repo or prs" };
     }
     return { memory: parsed as MergeMemory };
   } catch (err) {
@@ -282,7 +324,11 @@ export interface ListedPull {
 
 /** The listed pull requests that merged into the default branch inside the window and
  *  are not remembered yet, oldest first. Pure. */
-export function newMerges(listed: readonly ListedPull[], known: ReadonlySet<number>, now: Date): ListedPull[] {
+export function newMerges(
+  listed: readonly ListedPull[],
+  known: ReadonlySet<number>,
+  now: Date,
+): ListedPull[] {
   return listed
     .filter((p) => p.merged_at !== null && !known.has(p.number))
     .filter((p) => p.base?.ref !== undefined && p.base.ref === p.base.repo?.default_branch)
@@ -294,7 +340,10 @@ export function newMerges(listed: readonly ListedPull[], known: ReadonlySet<numb
  *  memory with every namespace no longer mapped forgotten. Past the cap the list is not
  *  the whole mapping, so a namespace missing from it may still be mapped: nothing is
  *  forgotten then, and the pass is not complete. Mutates `memory`. */
-export function namespacesThisPass(rows: readonly string[], memory: MergeMemory): { listed: string[]; capped: boolean } {
+export function namespacesThisPass(
+  rows: readonly string[],
+  memory: MergeMemory,
+): { listed: string[]; capped: boolean } {
   const capped = rows.length > MAX_NAMESPACES;
   const listed = rows.slice(0, MAX_NAMESPACES);
   if (!capped) {
@@ -321,21 +370,28 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
   if ("problem" in parsed) {
     // Logged and started again, never silently dropped. The findings it held are not
     // cleared on this pass: the check does not count as run.
-    logEvent("STALE_CANON_MEMORY_UNREADABLE", { message: `STALE_CANON_MEMORY_UNREADABLE: ${parsed.problem}; starting it again` }, { level: "error" });
+    logEvent(
+      "STALE_CANON_MEMORY_UNREADABLE",
+      { message: `STALE_CANON_MEMORY_UNREADABLE: ${parsed.problem}; starting it again` },
+      { level: "error" },
+    );
     complete = false;
   }
   const before = "memory" in parsed ? JSON.stringify(parsed.memory) : null;
   const memory = pruneMemory("memory" in parsed ? parsed.memory : {}, now);
 
   const { results: mapped } = await env.DB.prepare(
-    "SELECT namespace FROM namespaces WHERE repos IS NOT NULL AND repos NOT IN ('', '[]') ORDER BY namespace LIMIT ?1"
+    "SELECT namespace FROM namespaces WHERE repos IS NOT NULL AND repos NOT IN ('', '[]') ORDER BY namespace LIMIT ?1",
   )
     .bind(MAX_NAMESPACES + 1)
     .all<{ namespace: string }>();
 
   // Every namespace's new merges, then the oldest MAX_PR_READS_PER_PASS of them read.
   // A namespace no longer mapped is forgotten, unless the list hit MAX_NAMESPACES.
-  const { listed, capped } = namespacesThisPass((mapped ?? []).map((m) => m.namespace), memory);
+  const { listed, capped } = namespacesThisPass(
+    (mapped ?? []).map((m) => m.namespace),
+    memory,
+  );
   if (capped) complete = false;
   const pending: Array<{ namespace: string; owner: string; repo: string; pull: ListedPull }> = [];
   const unread: string[] = [];
@@ -344,11 +400,17 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
       const { owner, repo, full } = await resolveRepo(env, namespace);
       // A namespace remapped to another repo starts again: its paths were another repo's.
       if (memory[namespace] && memory[namespace].repo !== full) delete memory[namespace];
-      const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${PULLS_LISTED}`);
+      const resp = await ghFetch(
+        env,
+        owner,
+        repo,
+        `/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${PULLS_LISTED}`,
+      );
       if (!resp.ok) throw new Error(`the pull request list returned ${resp.status}`);
       const listed = (await resp.json()) as ListedPull[];
       const known = new Set((memory[namespace]?.prs ?? []).map((p) => p.number));
-      for (const pull of newMerges(Array.isArray(listed) ? listed : [], known, now)) pending.push({ namespace, owner, repo, pull });
+      for (const pull of newMerges(Array.isArray(listed) ? listed : [], known, now))
+        pending.push({ namespace, owner, repo, pull });
       memory[namespace] ??= { repo: full, prs: [] };
     } catch (err) {
       unread.push(`${namespace} (${err instanceof Error ? err.message : String(err)})`);
@@ -369,7 +431,9 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
       });
       read++;
     } catch (err) {
-      unread.push(`${p.namespace} #${p.pull.number} (${err instanceof Error ? err.message : String(err)})`);
+      unread.push(
+        `${p.namespace} #${p.pull.number} (${err instanceof Error ? err.message : String(err)})`,
+      );
     }
   }
   const kept = pruneMemory(memory, now);
@@ -383,11 +447,20 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
         `SELECT path, type, status, updated_at, body FROM documents
          WHERE namespace = ?1 AND path NOT LIKE 'archive/%'
            AND (type IN (SELECT value FROM json_each(?2)) OR path = 'core.md' OR path = 'decisions.md' OR path LIKE 'conventions%')
-         ORDER BY path LIMIT ?3`
+         ORDER BY path LIMIT ?3`,
       ).bind(namespace, JSON.stringify([...CANON_TYPES]), MAX_DOCS_PER_NAMESPACE),
-      env.DB.prepare("SELECT from_path, type, to_path FROM document_links WHERE from_ns = ?1 AND to_ns = ?1 LIMIT ?2").bind(namespace, MAX_EDGES_PER_NAMESPACE),
+      env.DB.prepare(
+        "SELECT from_path, type, to_path FROM document_links WHERE from_ns = ?1 AND to_ns = ?1 LIMIT ?2",
+      ).bind(namespace, MAX_EDGES_PER_NAMESPACE),
     ]);
-    flags.push(...staleCanonFlags(namespace, entry.prs, (docs?.results ?? []) as CanonDoc[], (edges?.results ?? []) as Edge[]));
+    flags.push(
+      ...staleCanonFlags(
+        namespace,
+        entry.prs,
+        (docs?.results ?? []) as CanonDoc[],
+        (edges?.results ?? []) as Edge[],
+      ),
+    );
   }
   const findings = staleCanonFindings(flags);
   const remembered = Object.values(kept).reduce((n, e) => n + e.prs.length, 0);

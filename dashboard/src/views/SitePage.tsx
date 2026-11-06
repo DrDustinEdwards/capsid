@@ -49,7 +49,15 @@ export function SitePage() {
     return (
       <div className="page">
         <PageHead title={name} />
-        <Empty kind="no-match" title="No site has this name." action={<Link className="btn" href="/sites">All sites</Link>}>
+        <Empty
+          kind="no-match"
+          title="No site has this name."
+          action={
+            <Link className="btn" href="/sites">
+              All sites
+            </Link>
+          }
+        >
           No site is configured for the project {ns}. It may have been removed.
         </Empty>
       </div>
@@ -75,7 +83,12 @@ export function SitePage() {
           </span>
         }
       />
-      <PageTabs label={name} path={`/sites/${encodeURIComponent(ns)}`} tabs={SITE_TABS} current={tab} />
+      <PageTabs
+        label={name}
+        path={`/sites/${encodeURIComponent(ns)}`}
+        tabs={SITE_TABS}
+        current={tab}
+      />
       <div className="embedded" id={tab} data-tab-panel={tab}>
         {tab === "overview" ? (
           <Overview ns={ns} snap={snap} />
@@ -113,7 +126,15 @@ function SiteUptime({ s }: { s: SiteSnapshot }) {
   const p24 = uptime(ring.slice(-48));
   const subtitle = `${p7 == null ? "no data" : pct(p7)} up over 7 days, ${p24 == null ? "no data" : pct(p24, 1)} over 24 hours`;
   return (
-    <ChartFrame inline chart={uptimeStrip({ ...uptimeOptions(s), title: "Uptime, 7 days", subtitle, source: { name: "The watcher's probes, every half hour" } })}>
+    <ChartFrame
+      inline
+      chart={uptimeStrip({
+        ...uptimeOptions(s),
+        title: "Uptime, 7 days",
+        subtitle,
+        source: { name: "The watcher's probes, every half hour" },
+      })}
+    >
       <ul className="cap-uptime-legend" aria-label="Key">
         {UPTIME_KEYS.map(([key, word]) => (
           <li key={key}>
@@ -138,11 +159,27 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
   const s = snap;
   const p = PROBE[s.state];
   const cf = cfOk(s);
-  const detail = s.error ?? (s.state === "liveness" ? "No health route; a root 200 is liveness only." : s.state !== "ok" ? p.label : null);
-  const healthUrl = s.health_path ? (s.health_path.startsWith("https://") ? s.health_path : `${s.origin}${s.health_path}`) : null;
+  const detail =
+    s.error ??
+    (s.state === "liveness"
+      ? "No health route; a root 200 is liveness only."
+      : s.state !== "ok"
+        ? p.label
+        : null);
+  const healthUrl = s.health_path
+    ? s.health_path.startsWith("https://")
+      ? s.health_path
+      : `${s.origin}${s.health_path}`
+    : null;
   return (
     <>
-      {detail && <div className={`callout ${s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : ""}`}>{detail}</div>}
+      {detail && (
+        <div
+          className={`callout ${s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : ""}`}
+        >
+          {detail}
+        </div>
+      )}
       <div className="grid2">
         <Panel flush title="Probe" src={`watcher pass · checked ${ago(ms(s.checked_at), now)}`}>
           <div className="body">
@@ -152,23 +189,43 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
                 {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
               </dd>
               <dt>URL</dt>
-              <dd className="mono">{healthUrl ? <a href={healthUrl} target="_blank" rel="noopener noreferrer">{healthUrl}</a> : `${s.origin}/`}</dd>
+              <dd className="mono">
+                {healthUrl ? (
+                  <a href={healthUrl} target="_blank" rel="noopener noreferrer">
+                    {healthUrl}
+                  </a>
+                ) : (
+                  `${s.origin}/`
+                )}
+              </dd>
               <dt>HTTP status</dt>
               <dd className="num">{s.http_status ?? "no answer"}</dd>
               <dt>Latency</dt>
               <dd className="num">{s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}</dd>
               <dt>Health route</dt>
-              <dd>{s.health_path ? <span className="mono">{s.health_path}</span> : <St kind="nodata">none</St>}</dd>
+              <dd>
+                {s.health_path ? (
+                  <span className="mono">{s.health_path}</span>
+                ) : (
+                  <St kind="nodata">none</St>
+                )}
+              </dd>
               <dt>Reports sha</dt>
               <dd className="mono">{s.sha ?? <span className="faint">not reported</span>}</dd>
               <dt>Platform</dt>
               <dd>{s.platform === "vercel" ? "Vercel" : "Cloudflare"}</dd>
               <dt>Cloudflare script</dt>
-              <dd className="mono">{cf ? cf.script : <NoData reason={cfNoData(s.cloudflare) ?? ""} />}</dd>
+              <dd className="mono">
+                {cf ? cf.script : <NoData reason={cfNoData(s.cloudflare) ?? ""} />}
+              </dd>
             </dl>
           </div>
         </Panel>
-        <Panel flush title="Uptime and errors" src="the watcher's probes and Cloudflare's analytics">
+        <Panel
+          flush
+          title="Uptime and errors"
+          src="the watcher's probes and Cloudflare's analytics"
+        >
           <div className="body stack-gap">
             <SiteUptime s={s} />
             <ChartSlot>
@@ -188,9 +245,16 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
   const { now } = useApp();
   const cf = snap ? cfOk(snap) : null;
   return (
-    <Panel flush title="Deploys" count={cf?.deploys.length} src="Cloudflare's record, at most 10, newest first">
+    <Panel
+      flush
+      title="Deploys"
+      count={cf?.deploys.length}
+      src="Cloudflare's record, at most 10, newest first"
+    >
       {!snap ? (
-        <div className="body faint">Not probed yet: deploys are read with the watcher's next pass.</div>
+        <div className="body faint">
+          Not probed yet: deploys are read with the watcher's next pass.
+        </div>
       ) : !cf ? (
         <div className="body">
           <NoData reason={cfNoData(snap.cloudflare) ?? ""} />
@@ -231,7 +295,15 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
 
 // ---- Setup ---------------------------------------------------------------------------------
 
-function Setup({ ns, row, snap }: { ns: string; row: OpsSiteConfig | null; snap: SiteSnapshot | null }) {
+function Setup({
+  ns,
+  row,
+  snap,
+}: {
+  ns: string;
+  row: OpsSiteConfig | null;
+  snap: SiteSnapshot | null;
+}) {
   const { feed, now, confirm } = useApp();
   const [editing, setEditing] = useState(false);
   const none = <span className="faint">none</span>;
@@ -240,7 +312,11 @@ function Setup({ ns, row, snap }: { ns: string; row: OpsSiteConfig | null; snap:
     <>
       {editing && row && (
         <Suspense fallback={null}>
-          <SiteForm key={`edit:${row.namespace}`} editing={{ kind: "edit", row }} onClose={() => setEditing(false)} />
+          <SiteForm
+            key={`edit:${row.namespace}`}
+            editing={{ kind: "edit", row }}
+            onClose={() => setEditing(false)}
+          />
         </Suspense>
       )}
       <Panel
@@ -250,7 +326,13 @@ function Setup({ ns, row, snap }: { ns: string; row: OpsSiteConfig | null; snap:
         section="Settings"
         src={
           row ? (
-            <button type="button" className="btn" aria-label={`Edit ${row.namespace}`} onClick={() => setEditing(true)} disabled={editing}>
+            <button
+              type="button"
+              className="btn"
+              aria-label={`Edit ${row.namespace}`}
+              onClick={() => setEditing(true)}
+              disabled={editing}
+            >
               Edit
             </button>
           ) : undefined
@@ -265,20 +347,53 @@ function Setup({ ns, row, snap }: { ns: string; row: OpsSiteConfig | null; snap:
               <dd>{row.name}</dd>
               <dt>Origin</dt>
               <dd>
-                {row.origin === null ? <St kind="nodata">Serves no site</St> : <span className="mono">{row.origin}</span>}
+                {row.origin === null ? (
+                  <St kind="nodata">Serves no site</St>
+                ) : (
+                  <span className="mono">{row.origin}</span>
+                )}
                 {row.self_probe && <span className="faint"> probed in-process</span>}
               </dd>
               <dt>Health path</dt>
-              <dd className="mono">{row.origin === null ? none : (row.health_path ?? <span className="faint">none, root probed</span>)}</dd>
+              <dd className="mono">
+                {row.origin === null
+                  ? none
+                  : (row.health_path ?? <span className="faint">none, root probed</span>)}
+              </dd>
               <dt>Platform</dt>
-              <dd>{row.platform === "vercel" ? "Vercel" : row.platform === "cloudflare" ? "Cloudflare" : none}</dd>
+              <dd>
+                {row.platform === "vercel"
+                  ? "Vercel"
+                  : row.platform === "cloudflare"
+                    ? "Cloudflare"
+                    : none}
+              </dd>
               <dt>Worker script</dt>
-              <dd className="mono">{row.script ?? (snap && cfOk(snap) ? <span className="faint">{cfOk(snap)!.script}, found from the custom domains</span> : none)}</dd>
+              <dd className="mono">
+                {row.script ??
+                  (snap && cfOk(snap) ? (
+                    <span className="faint">
+                      {cfOk(snap)!.script}, found from the custom domains
+                    </span>
+                  ) : (
+                    none
+                  ))}
+              </dd>
               <dt>Operator API</dt>
-              <dd>{row.operator ? <span className="mono">{row.operator.path}</span> : row.operator_problem ? <St kind="warn">{row.operator_problem}</St> : none}</dd>
+              <dd>
+                {row.operator ? (
+                  <span className="mono">{row.operator.path}</span>
+                ) : row.operator_problem ? (
+                  <St kind="warn">{row.operator_problem}</St>
+                ) : (
+                  none
+                )}
+              </dd>
               <dt>Revision</dt>
               <dd>
-                <span className="num" data-revision="">{row.revision}</span>{" "}
+                <span className="num" data-revision="">
+                  {row.revision}
+                </span>{" "}
                 <span className="faint" title={Number.isNaN(at) ? row.updated_at : utc(at)}>
                   {Number.isNaN(at) ? `updated ${row.updated_at}` : `updated ${ago(at, now)}`}
                 </span>
@@ -286,17 +401,37 @@ function Setup({ ns, row, snap }: { ns: string; row: OpsSiteConfig | null; snap:
             </dl>
           </div>
         ) : (
-          <div className="body faint">This site has no settings row: it is in the watcher's last pass only. It leaves the Portal on the next pass.</div>
+          <div className="body faint">
+            This site has no settings row: it is in the watcher's last pass only. It leaves the
+            Portal on the next pass.
+          </div>
         )}
       </Panel>
       {row?.operator && <SiteSecrets ns={ns} />}
       {row?.operator && (
-        <Panel title="Operator key" id="operator-key" src="the key Carrel and the admin tools call the site's operator API with">
+        <Panel
+          title="Operator key"
+          id="operator-key"
+          src="the key Carrel and the admin tools call the site's operator API with"
+        >
           <div className="toolbar">
-            <button type="button" className="btn" aria-label={`Rotate the operator key of ${row.name}`} onClick={() => confirm({ action: "site_key_rotate", params: { namespace: ns }, title: `Rotate the operator key of ${row.name}` })}>
+            <button
+              type="button"
+              className="btn"
+              aria-label={`Rotate the operator key of ${row.name}`}
+              onClick={() =>
+                confirm({
+                  action: "site_key_rotate",
+                  params: { namespace: ns },
+                  title: `Rotate the operator key of ${row.name}`,
+                })
+              }
+            >
               Rotate key
             </button>
-            <span className="faint note">A new key is minted and set on the site's Worker, then on Carrel. It is never shown.</span>
+            <span className="faint note">
+              A new key is minted and set on the site's Worker, then on Carrel. It is never shown.
+            </span>
           </div>
         </Panel>
       )}

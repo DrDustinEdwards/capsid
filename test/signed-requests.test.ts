@@ -38,7 +38,13 @@ test("claimJti admits a nonce once, then refuses the replay", async () => {
 
 test("claimJti FAILS CLOSED when the database cannot be reached", async () => {
   const broken = {
-    prepare: () => ({ bind: () => ({ all: async () => { throw new Error("unavailable"); } }) }),
+    prepare: () => ({
+      bind: () => ({
+        all: async () => {
+          throw new Error("unavailable");
+        },
+      }),
+    }),
   } as unknown as D1Database;
   const verdict = await claimJti(broken, "backup", "nonce-abc");
   assert.equal(verdict.ok, false);

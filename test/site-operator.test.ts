@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { allowedTools, callOperator, parseOperator, repairToolRefusal, toolRefusal } from "../src/site-operator.ts";
+import {
+  allowedTools,
+  callOperator,
+  parseOperator,
+  repairToolRefusal,
+  toolRefusal,
+} from "../src/site-operator.ts";
 import { failingChecks, repairPlan } from "../src/site-watch.ts";
 import { limitRefusal, AUTO_PER_DAY } from "../src/site-repair.ts";
 import { healthChecks, statusFields } from "../src/site-convergence.ts";
@@ -20,7 +26,11 @@ const TOKEN = "sample-operator-token-for-tests-only-0000";
 const OPERATOR: SiteOperator = {
   path: "/api/operator",
   auth_var: "SAMPLE_OPERATOR_TOKEN",
-  repairs: { "content-drift": "sync_posts", "pages-drift": "sync_pages", "ask-index-drift": "sync_ask" },
+  repairs: {
+    "content-drift": "sync_posts",
+    "pages-drift": "sync_pages",
+    "ask-index-drift": "sync_ask",
+  },
   weekly: ["refresh_citations"],
   secrets: ["GITHUB_TOKEN"],
   backup: false,
@@ -38,7 +48,10 @@ function recorder(answer: (url: string, init: RequestInit) => Response) {
 }
 
 test("the migration's dustinedwards configuration passes the same rules an edit passes, and names no backup_media", () => {
-  const sql = readFileSync(join(import.meta.dirname, "..", "migrations", "0035_ops_sites_operator.sql"), "utf8");
+  const sql = readFileSync(
+    join(import.meta.dirname, "..", "migrations", "0035_ops_sites_operator.sql"),
+    "utf8",
+  );
   const json = /SET operator = '([^']+)'/.exec(sql)?.[1];
   assert.ok(json, "the migration seeds no configuration");
   const parsed = parseOperator(json);
@@ -52,12 +65,24 @@ test("the migration's dustinedwards configuration passes the same rules an edit 
 test("PLANT: a configuration naming backup_media, a write tool or sync_status as a repair is refused whole", () => {
   const base = { path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN" };
   for (const [label, extra, pattern] of [
-    ["backup_media as a repair", { repairs: { "media-backup-drift": "backup_media" } }, /backup_media is a backup, not a repair/],
+    [
+      "backup_media as a repair",
+      { repairs: { "media-backup-drift": "backup_media" } },
+      /backup_media is a backup, not a repair/,
+    ],
     ["backup_media weekly", { weekly: ["backup_media"] }, /backup_media is a backup, not a repair/],
     ["backup not a boolean", { backup: "yes" }, /backup must be true or false/],
     ["a write tool", { repairs: { "content-drift": "save_post" } }, /'save_post' is not a repair/],
-    ["sync_status as a repair", { repairs: { "content-drift": "sync_status" } }, /sync_status is a read/],
-    ["a token that is not an operator token", { auth_var: "GITHUB_APP_PRIVATE_KEY" }, /must name a Capsid Worker secret ending in _OPERATOR_TOKEN/],
+    [
+      "sync_status as a repair",
+      { repairs: { "content-drift": "sync_status" } },
+      /sync_status is a read/,
+    ],
+    [
+      "a token that is not an operator token",
+      { auth_var: "GITHUB_APP_PRIVATE_KEY" },
+      /must name a Capsid Worker secret ending in _OPERATOR_TOKEN/,
+    ],
     ["a path off the origin", { path: "https://elsewhere.example.com/x" }, /path must be a path/],
     ["an unknown key", { url: "x" }, /'url' is not one of them/],
   ] as const) {
@@ -70,43 +95,75 @@ test("PLANT: a configuration naming backup_media, a write tool or sync_status as
 });
 
 test("PLANT: the backup tools go only from the backups and only to a site that sets backup: true; nothing else goes as a backup", async () => {
-  const { calls, impl } = recorder(() => Response.json({ ok: true, data: { last_ok: "2026-11-06T05:00:00.000Z", age_hours: 2 } }));
+  const { calls, impl } = recorder(() =>
+    Response.json({ ok: true, data: { last_ok: "2026-11-06T05:00:00.000Z", age_hours: 2 } }),
+  );
   const off = await callOperator(ENV, SITE, "backup_status", impl, { backup: true });
   assert.match(off.error ?? "", /does not set backup: true/);
   const on = { origin: SITE.origin, operator: { ...OPERATOR, backup: true } };
-  for (const tool of ["sync_posts", "delete_post"]) assert.match((await callOperator(ENV, on, tool, impl, { backup: true })).error ?? "", /is not a backup tool/);
-  assert.match((await callOperator(ENV, on, "backup_media", impl)).error ?? "", /is a backup, not a repair/, "a repair call cannot reach a backup tool");
+  for (const tool of ["sync_posts", "delete_post"])
+    assert.match(
+      (await callOperator(ENV, on, tool, impl, { backup: true })).error ?? "",
+      /is not a backup tool/,
+    );
+  assert.match(
+    (await callOperator(ENV, on, "backup_media", impl)).error ?? "",
+    /is a backup, not a repair/,
+    "a repair call cannot reach a backup tool",
+  );
   assert.equal(calls.length, 0, "a refused call reached the site");
   const read = await callOperator(ENV, on, "backup_status", impl, { backup: true });
-  assert.deepEqual([read.ok, read.data], [true, { last_ok: "2026-11-06T05:00:00.000Z", age_hours: 2 }]);
+  assert.deepEqual(
+    [read.ok, read.data],
+    [true, { last_ok: "2026-11-06T05:00:00.000Z", age_hours: 2 }],
+  );
   assert.deepEqual(JSON.parse(String(calls[0].init.body)), { tool: "backup_status", args: {} });
 });
 
 test("PLANT: backup_media and an unknown tool are refused at the Worker before any request, even when a stored configuration names them", async () => {
   // A row that bypassed the edit rules: the ceiling is checked again before every call.
-  const tampered: SiteOperator = { ...OPERATOR, repairs: { ...OPERATOR.repairs, "media-backup-drift": "backup_media", "x-drift": "delete_post" } };
+  const tampered: SiteOperator = {
+    ...OPERATOR,
+    repairs: {
+      ...OPERATOR.repairs,
+      "media-backup-drift": "backup_media",
+      "x-drift": "delete_post",
+    },
+  };
   const { calls, impl } = recorder(() => Response.json({ ok: true, data: { converged: true } }));
   for (const tool of ["backup_media", "delete_post", "sync_unlisted"]) {
     const got = await callOperator(ENV, { origin: SITE.origin, operator: tampered }, tool, impl);
     assert.equal(got.ok, false, `${tool} was called`);
     assert.match(got.error ?? "", /refused by Capsid before any request/);
   }
-  assert.equal(toolRefusal(tampered, "sync_unlisted"), "sync_unlisted is not in this site's allowlist (sync_posts, sync_pages, sync_ask, backup_media, delete_post, refresh_citations).");
+  assert.equal(
+    toolRefusal(tampered, "sync_unlisted"),
+    "sync_unlisted is not in this site's allowlist (sync_posts, sync_pages, sync_ask, backup_media, delete_post, refresh_citations).",
+  );
   assert.deepEqual(calls, [], "a refused tool reached the site");
 });
 
 test("with the token unset nothing is called; with it set the call carries it to the site's own route and reads the verdict", async () => {
   const { calls, impl } = recorder((_url, init) =>
     JSON.parse(String(init.body)).tool === "sync_pages"
-      ? Response.json({ ok: true, data: { repaired: 2, expected: 14, present: 14, converged: true } })
-      : Response.json({ ok: false, error: "sync_posts could not apply 1 file(s)" }, { status: 422 })
+      ? Response.json({
+          ok: true,
+          data: { repaired: 2, expected: 14, present: 14, converged: true },
+        })
+      : Response.json(
+          { ok: false, error: "sync_posts could not apply 1 file(s)" },
+          { status: 422 },
+        ),
   );
   const unset = await callOperator({} as Env, SITE, "sync_pages", impl);
   assert.match(unset.error ?? "", /SAMPLE_OPERATOR_TOKEN is not set, so nothing was called/);
   assert.equal(calls.length, 0);
 
   const ok = await callOperator(ENV, SITE, "sync_pages", impl);
-  assert.deepEqual([ok.ok, ok.converged, ok.expected, ok.present, ok.data], [true, true, 14, 14, null]);
+  assert.deepEqual(
+    [ok.ok, ok.converged, ok.expected, ok.present, ok.data],
+    [true, true, 14, 14, null],
+  );
   assert.equal(calls[0].url, "https://sample.example.com/api/operator");
   assert.equal((calls[0].init.headers as Record<string, string>).authorization, `Bearer ${TOKEN}`);
   assert.deepEqual(JSON.parse(String(calls[0].init.body)), { tool: "sync_pages", args: {} });
@@ -118,9 +175,19 @@ test("with the token unset nothing is called; with it set the call carries it to
 });
 
 test("the watcher repairs only when every failing check maps, in the configuration's order", () => {
-  const body = { ok: false, checks: [{ name: "ask-index-drift", ok: false }, { name: "content-drift", ok: false }, { name: "pages-drift", ok: true }, { name: "no-ok-field" }] };
+  const body = {
+    ok: false,
+    checks: [
+      { name: "ask-index-drift", ok: false },
+      { name: "content-drift", ok: false },
+      { name: "pages-drift", ok: true },
+      { name: "no-ok-field" },
+    ],
+  };
   assert.deepEqual(failingChecks(body), ["ask-index-drift", "content-drift"]);
-  assert.deepEqual(repairPlan(failingChecks(body), OPERATOR), { tools: ["sync_posts", "sync_ask"] });
+  assert.deepEqual(repairPlan(failingChecks(body), OPERATOR), {
+    tools: ["sync_posts", "sync_ask"],
+  });
   const unmapped = repairPlan(["content-drift", "media-backup-drift"], OPERATOR);
   assert.ok("none" in unmapped && /media-backup-drift maps to no repair/.test(unmapped.none));
   assert.ok("none" in repairPlan([], OPERATOR));
@@ -135,33 +202,80 @@ test("the rate limit: two minutes for anyone, thirty for the watcher, and four w
   assert.match(limitRefusal({ last: ago(5), auto: [] }, now, true) ?? "", /after 30 minutes/);
   const four = [ago(600), ago(400), ago(200), ago(60)];
   assert.equal(four.length, AUTO_PER_DAY);
-  assert.match(limitRefusal({ last: ago(60), auto: four }, now, true) ?? "", /4 times in the last day/);
-  assert.equal(limitRefusal({ last: ago(60), auto: four }, now, false), null, "a person can still run it");
-  assert.equal(limitRefusal({ last: ago(60), auto: [ago(1500), ...four.slice(1)] }, now, true), null, "a run over a day old no longer counts");
+  assert.match(
+    limitRefusal({ last: ago(60), auto: four }, now, true) ?? "",
+    /4 times in the last day/,
+  );
+  assert.equal(
+    limitRefusal({ last: ago(60), auto: four }, now, false),
+    null,
+    "a person can still run it",
+  );
+  assert.equal(
+    limitRefusal({ last: ago(60), auto: [ago(1500), ...four.slice(1)] }, now, true),
+    null,
+    "a run over a day old no longer counts",
+  );
 });
 
 test("the convergence view maps each check to its repair and keeps sync_status's scalars and divergences", () => {
-  const checks = healthChecks({ checks: [{ name: "content-drift", ok: false, detail: "2 posts differ", expected: 42, present: 40 }, { name: "media-backup-drift", ok: true }, { bad: 1 }] }, OPERATOR);
-  assert.deepEqual(checks.map((c) => [c.name, c.ok, c.repair, c.repair_refusal, c.present]), [
-    ["content-drift", false, "sync_posts", null, 40],
-    ["media-backup-drift", true, null, null, null],
-  ]);
-  assert.deepEqual(statusFields({ headSha: "abc", d1Posts: 42, askConfigured: true, nested: { x: 1 }, divergences: { known: true, list: [] } }), [
-    { key: "headSha", value: "abc" },
-    { key: "d1Posts", value: "42" },
-    { key: "askConfigured", value: "true" },
-    { key: "divergences", value: "none" },
-  ]);
+  const checks = healthChecks(
+    {
+      checks: [
+        { name: "content-drift", ok: false, detail: "2 posts differ", expected: 42, present: 40 },
+        { name: "media-backup-drift", ok: true },
+        { bad: 1 },
+      ],
+    },
+    OPERATOR,
+  );
+  assert.deepEqual(
+    checks.map((c) => [c.name, c.ok, c.repair, c.repair_refusal, c.present]),
+    [
+      ["content-drift", false, "sync_posts", null, 40],
+      ["media-backup-drift", true, null, null, null],
+    ],
+  );
+  assert.deepEqual(
+    statusFields({
+      headSha: "abc",
+      d1Posts: 42,
+      askConfigured: true,
+      nested: { x: 1 },
+      divergences: { known: true, list: [] },
+    }),
+    [
+      { key: "headSha", value: "abc" },
+      { key: "d1Posts", value: "42" },
+      { key: "askConfigured", value: "true" },
+      { key: "divergences", value: "none" },
+    ],
+  );
 });
 
 test("secret presence: each expected name set or not, then the Worker's other names, and a 403 names the permission", async () => {
-  assert.deepEqual(secretPresence(["GITHUB_TOKEN", "SMOKE_TOKEN"], ["OPERATOR_TOKEN", "GITHUB_TOKEN"]), [
-    { name: "GITHUB_TOKEN", set: true, expected: true },
-    { name: "SMOKE_TOKEN", set: false, expected: true },
-    { name: "OPERATOR_TOKEN", set: true, expected: false },
-  ]);
-  const listed = async () => Response.json({ success: true, errors: [], result: [{ name: "GITHUB_TOKEN", type: "secret_text", text: "never-read" }] });
+  assert.deepEqual(
+    secretPresence(["GITHUB_TOKEN", "SMOKE_TOKEN"], ["OPERATOR_TOKEN", "GITHUB_TOKEN"]),
+    [
+      { name: "GITHUB_TOKEN", set: true, expected: true },
+      { name: "SMOKE_TOKEN", set: false, expected: true },
+      { name: "OPERATOR_TOKEN", set: true, expected: false },
+    ],
+  );
+  const listed = async () =>
+    Response.json({
+      success: true,
+      errors: [],
+      result: [{ name: "GITHUB_TOKEN", type: "secret_text", text: "never-read" }],
+    });
   assert.deepEqual(await readSecretNames(listed, "cf-token", "acct", "sample"), ["GITHUB_TOKEN"]);
-  const denied = async () => Response.json({ success: false, errors: [{ message: "Authentication error" }] }, { status: 403 });
-  await assert.rejects(readSecretNames(denied, "cf-token", "acct", "sample"), /CF_OPS_TOKEN lacks Account \/ Workers Scripts \/ Read/);
+  const denied = async () =>
+    Response.json(
+      { success: false, errors: [{ message: "Authentication error" }] },
+      { status: 403 },
+    );
+  await assert.rejects(
+    readSecretNames(denied, "cf-token", "acct", "sample"),
+    /CF_OPS_TOKEN lacks Account \/ Workers Scripts \/ Read/,
+  );
 });

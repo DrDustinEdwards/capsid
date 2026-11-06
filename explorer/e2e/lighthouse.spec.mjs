@@ -19,7 +19,9 @@ const BUDGETS = [
 
 const median = (/** @type {number[]} */ xs) => {
   const s = [...xs].sort((a, b) => a - b);
-  return s.length % 2 ? (s[(s.length - 1) / 2] ?? NaN) : ((s[s.length / 2 - 1] ?? NaN) + (s[s.length / 2] ?? NaN)) / 2;
+  return s.length % 2
+    ? (s[(s.length - 1) / 2] ?? NaN)
+    : ((s[s.length / 2 - 1] ?? NaN) + (s[s.length / 2] ?? NaN)) / 2;
 };
 
 // One page at a time: Lighthouse's timings are worth nothing with another run sharing the machine.
@@ -27,27 +29,45 @@ test.describe.configure({ mode: "serial" });
 
 for (const path of PAGES) {
   const port = 9333;
-  test(`lighthouse: ${path} meets the design's budgets on a phone, median of ${RUNS}`, async ({ playwright, baseURL }, info) => {
+  test(`lighthouse: ${path} meets the design's budgets on a phone, median of ${RUNS}`, async ({
+    playwright,
+    baseURL,
+  }, info) => {
     test.skip(info.project.name !== "desktop", "Lighthouse emulates its own phone; once is enough");
     test.setTimeout(180_000);
     // A browser of its own with the DevTools port open, as Lighthouse drives it.
-    const browser = await playwright.chromium.launch({ ...info.project.use.launchOptions, args: [`--remote-debugging-port=${port}`] });
+    const browser = await playwright.chromium.launch({
+      ...info.project.use.launchOptions,
+      args: [`--remote-debugging-port=${port}`],
+    });
     try {
       /** @type {Record<string, number[]>} */
       const values = Object.fromEntries(BUDGETS.map((b) => [b.audit, []]));
       for (let run = 0; run < RUNS; run++) {
-        const lhr = (await lighthouse(`${baseURL}${path}`, { port, logLevel: "error", output: "json", onlyCategories: ["performance"] }))?.lhr;
+        const lhr = (
+          await lighthouse(`${baseURL}${path}`, {
+            port,
+            logLevel: "error",
+            output: "json",
+            onlyCategories: ["performance"],
+          })
+        )?.lhr;
         expect(lhr?.runtimeError, `Lighthouse did not measure ${path}`).toBeUndefined();
         expect(lhr?.configSettings.formFactor).toBe("mobile");
         for (const b of BUDGETS) {
           const v = lhr?.audits[b.audit]?.numericValue;
-          expect(typeof v === "number" && Number.isFinite(v), `${b.audit} did not measure on ${path}`).toBe(true);
+          expect(
+            typeof v === "number" && Number.isFinite(v),
+            `${b.audit} did not measure on ${path}`,
+          ).toBe(true);
           values[b.audit]?.push(/** @type {number} */ (v));
         }
       }
       for (const b of BUDGETS) {
         const v = median(values[b.audit] ?? []);
-        console.log(`${path} ${b.label} median ${b.audit === "cumulative-layout-shift" ? v.toFixed(3) : Math.round(v)}`);
+        console.log(
+          `${path} ${b.label} median ${b.audit === "cumulative-layout-shift" ? v.toFixed(3) : Math.round(v)}`,
+        );
         if (b.audit === "largest-contentful-paint" && v > LCP_DESIGN_MS) {
           const text = `${path} LCP median ${Math.round(v)} ms, over the design's ${LCP_DESIGN_MS} ms`;
           console.log(`WARN ${text}`);

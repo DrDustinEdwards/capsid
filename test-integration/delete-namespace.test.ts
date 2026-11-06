@@ -4,7 +4,11 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import type { Env } from "../src/env";
-import { NAMESPACE_DELETE_MAX_DOCUMENTS, planFingerprint, readDeletePlan } from "../src/namespace-delete";
+import {
+  NAMESPACE_DELETE_MAX_DOCUMENTS,
+  planFingerprint,
+  readDeletePlan,
+} from "../src/namespace-delete";
 import { signDeleteToken } from "../src/namespace-delete-token";
 import { buildAdminServer, buildServer } from "../src/server";
 
@@ -32,7 +36,15 @@ function fresh(): string {
 function driver(ns: string): Agent {
   const scopes = defaultScopes([ns]);
   scopes.grants = ["read", "write"];
-  return { id: "agent_driver00002", name: "sample-driver", kind: "driver", actor: "agent:sample-driver", scopes, admin: false, row: null };
+  return {
+    id: "agent_driver00002",
+    name: "sample-driver",
+    kind: "driver",
+    actor: "agent:sample-driver",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 interface Result {
@@ -40,13 +52,20 @@ interface Result {
   content: Array<{ text: string }>;
 }
 
-async function callAs(caller: Agent, args: Record<string, unknown>, db?: D1Database): Promise<Result> {
+async function callAs(
+  caller: Agent,
+  args: Record<string, unknown>,
+  db?: D1Database,
+): Promise<Result> {
   const server = buildAdminServer(workerEnv(db) as never, caller);
   const client = new Client({ name: "delete-namespace", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
-    return (await client.callTool({ name: "capsid_admin_manage_namespaces", arguments: args })) as Result;
+    return (await client.callTool({
+      name: "capsid_admin_manage_namespaces",
+      arguments: args,
+    })) as Result;
   } finally {
     await client.close();
   }
@@ -69,22 +88,30 @@ async function preview(ns: string, extra: Record<string, unknown> = {}): Promise
 }
 
 async function register(ns: string): Promise<void> {
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')").bind(ns).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')")
+    .bind(ns)
+    .run();
 }
 
 async function doc(ns: string, path: string, body = "lorem ipsum"): Promise<void> {
-  await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, ?3, ?4)").bind(ns, path, path, body).run();
+  await env.DB.prepare(
+    "INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, ?3, ?4)",
+  )
+    .bind(ns, path, path, body)
+    .run();
 }
 
 async function edge(fromNs: string, fromPath: string, toNs: string, toPath: string): Promise<void> {
-  await env.DB.prepare("INSERT INTO document_links (from_ns, from_path, type, to_ns, to_path) VALUES (?1, ?2, 'references', ?3, ?4)")
+  await env.DB.prepare(
+    "INSERT INTO document_links (from_ns, from_path, type, to_ns, to_path) VALUES (?1, ?2, 'references', ?3, ?4)",
+  )
     .bind(fromNs, fromPath, toNs, toPath)
     .run();
 }
 
 async function job(ns: string, id: string, status: string): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO jobs (id, namespace, title, body, status, posted_by) VALUES (?1, ?2, ?3, 'body', ?4, 'github:sample')"
+    "INSERT INTO jobs (id, namespace, title, body, status, posted_by) VALUES (?1, ?2, ?3, 'body', ?4, 'github:sample')",
   )
     .bind(id, ns, `a ${status} job ${id}`, status)
     .run();
@@ -93,14 +120,22 @@ async function job(ns: string, id: string, status: string): Promise<void> {
 async function agent(name: string, namespaces: string[], revoked: boolean): Promise<void> {
   const scopes = defaultScopes(namespaces);
   await env.DB.prepare(
-    "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, revoked_at) VALUES (?1, ?2, 'driver', ?3, ?4, 'github:sample', ?5)"
+    "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, revoked_at) VALUES (?1, ?2, 'driver', ?3, ?4, 'github:sample', ?5)",
   )
-    .bind(`agent_${name.slice(-12)}`, name, `hash-${name}`, JSON.stringify(scopes), revoked ? "2026-09-01 00:00:00" : null)
+    .bind(
+      `agent_${name.slice(-12)}`,
+      name,
+      `hash-${name}`,
+      JSON.stringify(scopes),
+      revoked ? "2026-09-01 00:00:00" : null,
+    )
     .run();
 }
 
 async function n(sql: string, ...binds: unknown[]): Promise<number> {
-  const row = await env.DB.prepare(sql).bind(...binds).first<{ n: number }>();
+  const row = await env.DB.prepare(sql)
+    .bind(...binds)
+    .first<{ n: number }>();
   return Number(row?.n ?? 0);
 }
 
@@ -209,9 +244,16 @@ describe("capsid_admin_manage_namespaces is admin only", () => {
     const ns = fresh();
     await register(ns);
     for (const action of ["delete_preview", "delete_perform"]) {
-      const result = await callAs(driver(ns), { namespace: ns, action, cascade: true, token: "x.0" });
+      const result = await callAs(driver(ns), {
+        namespace: ns,
+        action,
+        cascade: true,
+        token: "x.0",
+      });
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toMatch(/'capsid_admin_manage_namespaces\.(delete_preview|delete_perform)' is admin only/);
+      expect(result.content[0].text).toMatch(
+        /'capsid_admin_manage_namespaces\.(delete_preview|delete_perform)' is admin only/,
+      );
     }
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
@@ -221,7 +263,9 @@ describe("capsid_admin_manage_namespaces is admin only", () => {
     // toolListed; area 11, T7) and the protocol refuses the call.
     const ns = fresh();
     await register(ns);
-    await expect(callAs(grantAgent("read", "opkey:readonly0000"), { namespace: ns, action: "delete_preview" })).rejects.toThrow(/not found/i);
+    await expect(
+      callAs(grantAgent("read", "opkey:readonly0000"), { namespace: ns, action: "delete_preview" }),
+    ).rejects.toThrow(/not found/i);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
 });
@@ -241,7 +285,12 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     await doc(ns, "a.md");
     const p = await preview(ns, { cascade: true });
     await doc(ns, "b.md");
-    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token });
+    const result = await callAs(ADMIN, {
+      namespace: ns,
+      action: "delete_perform",
+      cascade: true,
+      token: p.token,
+    });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/changed since the preview/);
     expect(result.content[0].text).toMatch(/documents_live 1 -> 2/);
@@ -254,12 +303,21 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     await register(ns);
     await doc(ns, "a.md");
     const p = await preview(ns, { cascade: true });
-    await env.DB.prepare("DELETE FROM documents WHERE namespace = ?1 AND path = 'a.md'").bind(ns).run();
+    await env.DB.prepare("DELETE FROM documents WHERE namespace = ?1 AND path = 'a.md'")
+      .bind(ns)
+      .run();
     await doc(ns, "c.md");
-    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token });
+    const result = await callAs(ADMIN, {
+      namespace: ns,
+      action: "delete_perform",
+      cascade: true,
+      token: p.token,
+    });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/live_paths_sha256/);
-    expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path = 'c.md'", ns)).toBe(1);
+    expect(
+      await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path = 'c.md'", ns),
+    ).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
 
@@ -272,7 +330,9 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     const result = await callAs(ADMIN, { namespace: b, action: "delete_perform", token: p.token });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(new RegExp(`issued for namespace ${a}`));
-    expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace IN (?1, ?2)", a, b)).toBe(2);
+    expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace IN (?1, ?2)", a, b)).toBe(
+      2,
+    );
   });
 
   it("PLANT: a token issued with another cascade value is refused", async () => {
@@ -328,7 +388,15 @@ describe("capsid_admin_manage_namespaces delete_perform refuses a token that doe
     const plan = await readDeletePlan(env.DB, ns);
     const token = await signDeleteToken(
       { COOKIE_ENCRYPTION_KEY: "not-the-worker-key" },
-      { v: 1, namespace: ns, cascade: false, allow_improve_paths: false, actor: ACTOR, plan: planFingerprint(plan), exp: Math.floor(Date.now() / 1000) + 60 }
+      {
+        v: 1,
+        namespace: ns,
+        cascade: false,
+        allow_improve_paths: false,
+        actor: ACTOR,
+        plan: planFingerprint(plan),
+        exp: Math.floor(Date.now() / 1000) + 60,
+      },
     );
     const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", token });
     expect(result.isError).toBe(true);
@@ -367,7 +435,9 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     await edge(other, "x.md", ns, "never-existed.md");
     await job(ns, `job_${ns.slice(-12)}`, "done");
     await agent(`${ns}-gone`, [ns], true);
-    await env.DB.prepare("INSERT INTO ops_sites (namespace, name, origin, platform) VALUES (?1, 'Sample', 'https://sample.example.com', 'cloudflare')")
+    await env.DB.prepare(
+      "INSERT INTO ops_sites (namespace, name, origin, platform) VALUES (?1, 'Sample', 'https://sample.example.com', 'cloudflare')",
+    )
       .bind(ns)
       .run();
 
@@ -377,7 +447,12 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     expect(p.counts.documents_archived).toBe(2);
     expect(p.counts.document_links_removed).toBe(3);
 
-    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token });
+    const result = await callAs(ADMIN, {
+      namespace: ns,
+      action: "delete_perform",
+      cascade: true,
+      token: p.token,
+    });
     expect(result.isError, result.content[0].text).not.toBe(true);
     const done = JSON.parse(result.content[0].text) as {
       documents_deleted: number;
@@ -391,18 +466,25 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     expect(done.ops_site_removed).toBe(true);
 
     // Deleted: the live documents, their edges, the site row, the mapping.
-    expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'", ns)).toBe(0);
+    expect(
+      await n(
+        "SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'",
+        ns,
+      ),
+    ).toBe(0);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(0);
     expect(await n("SELECT COUNT(*) AS n FROM ops_sites WHERE namespace = ?1", ns)).toBe(0);
     expect(
       await n(
         "SELECT COUNT(*) AS n FROM document_links WHERE (from_ns = ?1 AND from_path IN ('core.md', 'notes/a.md')) OR (to_ns = ?1 AND to_path IN ('core.md', 'notes/a.md'))",
-        ns
-      )
+        ns,
+      ),
     ).toBe(0);
 
     // Snapshotted: each live document's body, by path.
-    const { results: versions } = await env.DB.prepare("SELECT path, body FROM document_versions WHERE namespace = ?1 AND document_id IS NOT NULL ORDER BY path")
+    const { results: versions } = await env.DB.prepare(
+      "SELECT path, body FROM document_versions WHERE namespace = ?1 AND document_id IS NOT NULL ORDER BY path",
+    )
       .bind(ns)
       .all<{ path: string; body: string }>();
     expect(versions.map((v) => [v.path, v.body])).toEqual([
@@ -413,15 +495,32 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
 
     // Kept: the archive and its own edge, the other namespace, the finished job, the
     // revoked agent.
-    expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path LIKE 'archive/%'", ns)).toBe(2);
-    expect(await n("SELECT COUNT(*) AS n FROM document_links WHERE from_ns = ?1 AND from_path = 'archive/old.md'", ns)).toBe(1);
+    expect(
+      await n(
+        "SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path LIKE 'archive/%'",
+        ns,
+      ),
+    ).toBe(2);
+    expect(
+      await n(
+        "SELECT COUNT(*) AS n FROM document_links WHERE from_ns = ?1 AND from_path = 'archive/old.md'",
+        ns,
+      ),
+    ).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1", other)).toBe(1);
-    expect(await n("SELECT COUNT(*) AS n FROM document_links WHERE to_ns = ?1 AND to_path = 'never-existed.md'", ns)).toBe(1);
+    expect(
+      await n(
+        "SELECT COUNT(*) AS n FROM document_links WHERE to_ns = ?1 AND to_path = 'never-existed.md'",
+        ns,
+      ),
+    ).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1", ns)).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM agents WHERE name = ?1", `${ns}-gone`)).toBe(1);
 
     // Recorded: one audit row holding the edges, the paths and both rows whole.
-    const audit = await env.DB.prepare("SELECT actor, params FROM audit_log WHERE action = 'namespace-delete' AND namespace = ?1")
+    const audit = await env.DB.prepare(
+      "SELECT actor, params FROM audit_log WHERE action = 'namespace-delete' AND namespace = ?1",
+    )
       .bind(ns)
       .all<{ actor: string; params: string }>();
     expect(audit.results).toHaveLength(1);
@@ -434,9 +533,17 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     };
     expect(params.plan.cascade).toBe(true);
     expect(params.plan.counts.documents_live).toBe(3);
-    expect(params.plan.documents_deleted.sort()).toEqual(["core.md", `jobs/job_${ns.slice(-12)}.md`, "notes/a.md"].sort());
+    expect(params.plan.documents_deleted.sort()).toEqual(
+      ["core.md", `jobs/job_${ns.slice(-12)}.md`, "notes/a.md"].sort(),
+    );
     expect(params.edges_removed).toHaveLength(3);
-    expect(params.edges_removed).toContainEqual({ from_ns: other, from_path: "x.md", type: "references", to_ns: ns, to_path: "core.md" });
+    expect(params.edges_removed).toContainEqual({
+      from_ns: other,
+      from_path: "x.md",
+      type: "references",
+      to_ns: ns,
+      to_path: "core.md",
+    });
     expect(params.ops_site?.origin).toBe("https://sample.example.com");
     expect(params.ops_site?.revision).toBe(1);
     expect(params.namespace_row?.namespace).toBe(ns);
@@ -446,7 +553,10 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
     const client = new Client({ name: "delete-namespace-read", version: "1.0.0" });
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
-    const read = (await client.callTool({ name: "capsid_read_doc", arguments: { action: "read", namespace: ns, path: "archive/old.md" } })) as Result;
+    const read = (await client.callTool({
+      name: "capsid_read_doc",
+      arguments: { action: "read", namespace: ns, path: "archive/old.md" },
+    })) as Result;
     await client.close();
     expect(read.isError, read.content[0].text).not.toBe(true);
     expect(read.content[0].text).toContain("old body");
@@ -482,22 +592,33 @@ describe("capsid_admin_manage_namespaces delete_perform", () => {
         return env.DB.batch(statements);
       },
     } as unknown as D1Database;
-    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token }, racing);
+    const result = await callAs(
+      ADMIN,
+      { namespace: ns, action: "delete_perform", cascade: true, token: p.token },
+      racing,
+    );
     expect(batches).toBe(2);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/aborted, nothing changed/);
     expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1", ns)).toBe(2);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
     expect(await n("SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1", ns)).toBe(0);
-    expect(await n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'namespace-delete' AND namespace = ?1", ns)).toBe(0);
+    expect(
+      await n(
+        "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'namespace-delete' AND namespace = ?1",
+        ns,
+      ),
+    ).toBe(0);
   });
 });
 
 async function docs(ns: string, count: number): Promise<void> {
   await env.DB.batch(
     Array.from({ length: count }, (_, i) =>
-      env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, ?2, ?3)").bind(ns, `notes/${String(i).padStart(3, "0")}.md`, `body ${i}`)
-    )
+      env.DB.prepare(
+        "INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, ?2, ?3)",
+      ).bind(ns, `notes/${String(i).padStart(3, "0")}.md`, `body ${i}`),
+    ),
   );
 }
 
@@ -512,7 +633,9 @@ describe("capsid_admin_manage_namespaces delete batch cap", () => {
     const refusal = p.refusals.join(" ");
     expect(refusal).toContain(`holds ${NAMESPACE_DELETE_MAX_DOCUMENTS + 1} live documents`);
     expect(refusal).toContain(`at most ${NAMESPACE_DELETE_MAX_DOCUMENTS}`);
-    expect(refusal).toMatch(/Delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper/);
+    expect(refusal).toMatch(
+      /Delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper/,
+    );
 
     // A token signed over this very plan is refused at perform too, by the same rule.
     const plan = await readDeletePlan(env.DB, ns);
@@ -525,10 +648,17 @@ describe("capsid_admin_manage_namespaces delete batch cap", () => {
       plan: planFingerprint(plan),
       exp: Math.floor(Date.now() / 1000) + 60,
     });
-    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token });
+    const result = await callAs(ADMIN, {
+      namespace: ns,
+      action: "delete_perform",
+      cascade: true,
+      token,
+    });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(`at most ${NAMESPACE_DELETE_MAX_DOCUMENTS}`);
-    expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1", ns)).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS + 1);
+    expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1", ns)).toBe(
+      NAMESPACE_DELETE_MAX_DOCUMENTS + 1,
+    );
     expect(await n("SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1", ns)).toBe(0);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(1);
   });
@@ -539,13 +669,26 @@ describe("capsid_admin_manage_namespaces delete batch cap", () => {
     await docs(ns, NAMESPACE_DELETE_MAX_DOCUMENTS);
     const p = await preview(ns, { cascade: true });
     expect(p.verdict, p.refusals.join(" ")).toBe("allowed");
-    const result = await callAs(ADMIN, { namespace: ns, action: "delete_perform", cascade: true, token: p.token });
+    const result = await callAs(ADMIN, {
+      namespace: ns,
+      action: "delete_perform",
+      cascade: true,
+      token: p.token,
+    });
     expect(result.isError, result.content[0].text).not.toBe(true);
-    const done = JSON.parse(result.content[0].text) as { documents_deleted: number; snapshots: number };
+    const done = JSON.parse(result.content[0].text) as {
+      documents_deleted: number;
+      snapshots: number;
+    };
     expect(done.documents_deleted).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS);
     expect(done.snapshots).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS);
     expect(await n("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1", ns)).toBe(0);
-    expect(await n("SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1 AND document_id IS NOT NULL", ns)).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS);
+    expect(
+      await n(
+        "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1 AND document_id IS NOT NULL",
+        ns,
+      ),
+    ).toBe(NAMESPACE_DELETE_MAX_DOCUMENTS);
     expect(await n("SELECT COUNT(*) AS n FROM namespaces WHERE namespace = ?1", ns)).toBe(0);
   });
 });
