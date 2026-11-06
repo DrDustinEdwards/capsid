@@ -25,6 +25,6 @@ concurrency:
 
 jobs:
   worker-size:
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-size.yml@3480f68abadcbcd50ddd72c826aa50787ea82bcc # v0.23.1
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-size.yml@a5562b298a5aa36f32c336ca153d47da09306862 # v0.24.1
     with:
       prepare: npm ci --prefix dashboard && npm --prefix dashboard run build && node scripts/dry-run-config.mjs
