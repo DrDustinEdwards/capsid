@@ -13,6 +13,7 @@ import { AppCtx, VIEWS, parseRoute, placePath, routePath, sitePath, type Confirm
 import { DemoNotice } from "./DemoNotice";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
+import { must } from "../lib/must";
 
 // Loaded the first time a panel opens or Ctrl K is pressed, then kept, so the initial bundle
 // carries neither (the size budget, after Capsomer 0.9.0's header joined the entry).
@@ -461,7 +462,7 @@ export function App() {
   const tabs: ViewId[] = TABS;
   // One menu entry per view, grouped, Settings last.
   const entryFor = (id: ViewId, group?: string): AdminEntry => {
-    const v = VIEWS.find((x) => x.id === id)!;
+    const v = must(VIEWS.find((x) => x.id === id));
     const b = badge[id];
     return {
       id,

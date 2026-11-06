@@ -8,6 +8,7 @@ import { buildAdminServer } from "../src/server.ts";
 import { CARREL_SCRIPT, SITE_SECRET, carrelSecretName, mintSiteKey, setSiteKey } from "../src/site-key.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 import { sourceFiles } from "./source-files.ts";
+import { must } from "../src/must.ts";
 
 // Set a site key (src/site-key.ts), served as capsid_admin_set_site_key. A new key is
 // minted and set on the site's Worker, then on Carrel. Its value is never returned,
@@ -49,7 +50,7 @@ function siteDb(opts: { script?: string | null; platform?: string; failAudit?: b
           return params[0] === "sample" ? row : null;
         },
         run: async () => {
-          if (!/^INSERT INTO audit_log/.test(sql)) throw new Error(`unexpected write: ${sql}`);
+          if (!sql.startsWith("INSERT INTO audit_log")) throw new Error(`unexpected write: ${sql}`);
           if (opts.failAudit) throw new Error("D1_ERROR: sample audit insert failed");
           const [actor, action, namespace, path, p] = params;
           audits.push({ actor, action, namespace, path, params: String(p) });
@@ -307,7 +308,7 @@ test("no Capsid code can set ADMIN_EMAIL or CO_OWNER_EMAILS: the only secret wri
     .filter((f) => /type:\s*"secret_text"/.test(f.text))
     .map((f) => f.name);
   assert.deepEqual(writers, ["site-key.ts"], "a second module writes a Worker secret");
-  const siteKey = sourceFiles().find((f) => f.name === "site-key.ts")!.text;
+  const siteKey = must(sourceFiles().find((f) => f.name === "site-key.ts")).text;
   const names = [...siteKey.matchAll(/putSecret\(fetchImpl, token, account, \w+, (\w+), key\)/g)].map((m) => m[1]);
   assert.deepEqual(names, ["SITE_SECRET", "carrelSecret"], "putSecret is called with a secret name other than the site key's");
   assert.equal(SITE_SECRET, "CARREL_SITE_KEY");

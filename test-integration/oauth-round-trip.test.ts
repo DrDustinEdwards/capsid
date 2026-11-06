@@ -4,6 +4,7 @@ import worker from "../src/index";
 import { forgetKeys } from "@dustinedwards/site-runtime/access-login";
 import { stubAccess } from "@dustinedwards/devkit/access";
 import { cimdClient, cimdResponse } from "./cimd-stub";
+import { must } from "../src/must";
 
 // THE WHOLE OAUTH ROUND TRIP, through the real provider in workerd: a CIMD client, consent,
 // the Access for SaaS sign-in (stubbed, with a real signed ID token), the code exchange with PKCE, an MCP call
@@ -27,7 +28,7 @@ afterEach(() => {
 
 async function call(request: Request): Promise<Response> {
   const ctx = createExecutionContext();
-  const response = await worker.fetch!(request as never, { ...env, COOKIE_ENCRYPTION_KEY: "integration-cookie-key" } as never, ctx);
+  const response = await must(worker.fetch).call(worker, request as never, { ...env, COOKIE_ENCRYPTION_KEY: "integration-cookie-key" } as never, ctx);
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
@@ -37,7 +38,7 @@ const cookieValues = (response: Response): string[] => response.headers.getSetCo
 function hidden(html: string, name: string): string {
   const match = new RegExp(`name="${name}" value="([^"]*)"`).exec(html);
   expect(match, `the dialog has no hidden ${name} field`).toBeTruthy();
-  return match![1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+  return must(match)[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 }
 
 async function tokenRequest(body: Record<string, string>): Promise<Response> {
@@ -97,7 +98,7 @@ async function authorize(email: string, extra: Record<string, unknown> = {}, sam
   forgetKeys();
   // The stub swaps the global fetch outright, so it is put back here rather than by
   // vi.restoreAllMocks. The token exchange after it finds the client documents again.
-  const access = await stubAccess({ issuer: ISSUER, audience: env.ACCESS_SAAS_CLIENT_ID!, email, authorizationUrl: signIn.href, claims: extra, fallback: (u) => cimdResponse(u) ?? undefined });
+  const access = await stubAccess({ issuer: ISSUER, audience: must(env.ACCESS_SAAS_CLIENT_ID), email, authorizationUrl: signIn.href, claims: extra, fallback: (u) => cimdResponse(u) ?? undefined });
   let callback: Response;
   try {
     callback = await call(new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, { headers: { Cookie: stateCookie } }));
@@ -112,7 +113,7 @@ async function authorize(email: string, extra: Record<string, unknown> = {}, sam
 
 describe("the OAuth round trip", () => {
   it("the admin gets a code, a token that opens /mcp, and a refresh that does too", async () => {
-    const { clientId, code, callback, tokenBodies, signIn } = await authorize(env.ADMIN_EMAIL!);
+    const { clientId, code, callback, tokenBodies, signIn } = await authorize(must(env.ADMIN_EMAIL));
     // The browser went to the Access SaaS app, with PKCE and a nonce, and the callback
     // exchanged the code with the verifier behind that challenge.
     expect(`${signIn.origin}${signIn.pathname}`).toBe(`${ISSUER}/authorization`);
@@ -125,7 +126,7 @@ describe("the OAuth round trip", () => {
     expect(code, `the callback did not send a code back to the client: ${callback.headers.get("location")}`).toBeTruthy();
     expect(new URL(String(callback.headers.get("location"))).searchParams.get("state")).toBe("client-state");
 
-    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
+    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: must(code), redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
     expect(exchanged.status, await exchanged.clone().text()).toBe(200);
     const tokens = (await exchanged.json()) as { access_token: string; refresh_token: string; token_type: string };
     expect(tokens.token_type.toLowerCase()).toBe("bearer");
@@ -146,15 +147,15 @@ describe("the OAuth round trip", () => {
     // (/mcp/admin) connectors. The provider revokes every earlier grant for the same
     // user and client on each authorization unless src/routes.ts passes loginHandler
     // revokeExistingGrants: false, so signing into one signed the other out.
-    const first = await authorize(env.ADMIN_EMAIL!);
-    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: first.code!, redirect_uri: REDIRECT, client_id: first.clientId, code_verifier: VERIFIER });
+    const first = await authorize(must(env.ADMIN_EMAIL));
+    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: must(first.code), redirect_uri: REDIRECT, client_id: first.clientId, code_verifier: VERIFIER });
     expect(exchanged.status, await exchanged.clone().text()).toBe(200);
     const one = (await exchanged.json()) as { access_token: string; refresh_token: string };
     expect((await mcpInitialize(one.access_token)).status, "the first token does not open /mcp before the second sign-in").toBe(200);
 
-    const second = await authorize(env.ADMIN_EMAIL!, {}, first.clientId);
+    const second = await authorize(must(env.ADMIN_EMAIL), {}, first.clientId);
     expect(second.code, "the second authorization sent no code").toBeTruthy();
-    const exchangedTwo = await tokenRequest({ grant_type: "authorization_code", code: second.code!, redirect_uri: REDIRECT, client_id: first.clientId, code_verifier: VERIFIER });
+    const exchangedTwo = await tokenRequest({ grant_type: "authorization_code", code: must(second.code), redirect_uri: REDIRECT, client_id: first.clientId, code_verifier: VERIFIER });
     expect(exchangedTwo.status, await exchangedTwo.clone().text()).toBe(200);
     const two = (await exchangedTwo.json()) as { access_token: string };
 
@@ -168,8 +169,8 @@ describe("the OAuth round trip", () => {
     // Rule 12 of capsid/rulings/mcp-2026-10-10.md: reject any token not issued for this
     // server. Another host on the same Worker reaches the same OAUTH_KV, so the token is
     // found there and refused only for its audience.
-    const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
-    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
+    const { clientId, code } = await authorize(must(env.ADMIN_EMAIL));
+    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: must(code), redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
     const { access_token } = (await exchanged.json()) as { access_token: string };
     expect((await mcpInitialize(access_token)).status, "the token does not open its own resource, so the refusal below proves nothing").toBe(200);
     const elsewhere = await call(
@@ -184,14 +185,14 @@ describe("the OAuth round trip", () => {
   });
 
   it("the exchange refuses a redirect_uri other than the authorization request's", async () => {
-    const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
-    const refused = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: "https://client.example.com/other", client_id: clientId, code_verifier: VERIFIER });
+    const { clientId, code } = await authorize(must(env.ADMIN_EMAIL));
+    const refused = await tokenRequest({ grant_type: "authorization_code", code: must(code), redirect_uri: "https://client.example.com/other", client_id: clientId, code_verifier: VERIFIER });
     expect(refused.status).toBe(400);
   });
 
   it("the exchange refuses a wrong PKCE verifier", async () => {
-    const { clientId, code } = await authorize(env.ADMIN_EMAIL!);
-    const refused = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: "not-the-verifier-not-the-verifier-not-the-verifier" });
+    const { clientId, code } = await authorize(must(env.ADMIN_EMAIL));
+    const refused = await tokenRequest({ grant_type: "authorization_code", code: must(code), redirect_uri: REDIRECT, client_id: clientId, code_verifier: "not-the-verifier-not-the-verifier-not-the-verifier" });
     expect(refused.status).toBe(400);
   });
 
@@ -202,8 +203,8 @@ describe("the OAuth round trip", () => {
   });
 
   it("PLANT: a grant without the write box holds the read grant only: a write tool is not served, and a write action is answered 403 insufficient_scope (step-up)", async () => {
-    const { clientId, code } = await authorize(env.ADMIN_EMAIL!, {}, undefined, false);
-    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
+    const { clientId, code } = await authorize(must(env.ADMIN_EMAIL), {}, undefined, false);
+    const exchanged = await tokenRequest({ grant_type: "authorization_code", code: must(code), redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER });
     const { access_token, scope } = (await exchanged.json()) as { access_token: string; scope: string };
     expect(scope).toBe("capsid.read");
     const rpc = (id: number, method: string, params: Record<string, unknown>) =>

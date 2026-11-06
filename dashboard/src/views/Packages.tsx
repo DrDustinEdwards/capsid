@@ -19,6 +19,7 @@ const Completeness = lazy(() => import("./Completeness").then((m) => ({ default:
 const PackageForm = lazy(() => import("./PackageConfig").then((m) => ({ default: m.PackageForm })));
 import { PACKAGE_TABS, tabOf } from "../app/ctx";
 import { NoSnapshot, PageHead } from "./shared";
+import { must } from "../lib/must";
 
 // The Packages panels (capsid/decisions.md, 2026-09-29): one panel per package configured
 // here, with Add package above them and Edit on each, as the watcher's last pass read it (src/ops-packages.ts), and
@@ -49,8 +50,8 @@ const plusDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:0
 /** The days (in order) summed by week and name, keeping only the weeks inside the history: a week
  *  npm has not finished counting, or one cut at the history's start, would read as a fall. */
 function byWeek(days: PortalPackageHistory["days"]): PortalPackageHistory["days"] {
-  const start = days[0]!.day;
-  const end = days[days.length - 1]!.day;
+  const start = must(days[0]).day;
+  const end = must(days[days.length - 1]).day;
   const sums = new Map<string, PortalPackageHistory["days"][number]>();
   for (const d of days) {
     const day = weekOf(d.day);
@@ -65,11 +66,11 @@ function byWeek(days: PortalPackageHistory["days"]): PortalPackageHistory["days"
 
 function DownloadsChart({ data }: { data: PortalPackageHistory }) {
   if (!data.days.length) return <ChartFrame noData={{ title: `Daily downloads of ${data.name}`, reason: "npm has counted no downloads for this package yet." }} />;
-  const weekly = Date.parse(data.days[data.days.length - 1]!.day) - Date.parse(data.days[0]!.day) > WEEKLY_AFTER * 86_400_000;
+  const weekly = Date.parse(must(data.days[data.days.length - 1]).day) - Date.parse(must(data.days[0]).day) > WEEKLY_AFTER * 86_400_000;
   const rows = weekly ? byWeek(data.days) : data.days;
   const total = rows.reduce((a, d) => a + d.downloads, 0);
-  const first = rows[0]!.day;
-  const last = weekly ? plusDays(rows[rows.length - 1]!.day, 6) : rows[rows.length - 1]!.day;
+  const first = must(rows[0]).day;
+  const last = weekly ? plusDays(must(rows[rows.length - 1]).day, 6) : must(rows[rows.length - 1]).day;
   const max = Math.max(...rows.map((d) => d.downloads));
   const per = weekly ? "week" : "day";
   const opts = {

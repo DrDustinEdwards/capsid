@@ -1,5 +1,6 @@
 import { AUTO_MERGE_REFUSED_PATHS } from "./auto-merge-policy";
 import { isMoneyPath } from "./scope";
+import { must } from "./must";
 
 // AUTOMATIC MODEL ROUTING (capsid/research/design-model-routing.md). Capsid picks the
 // model for every job from its kind and its risk, so nobody chooses a model by hand. The
@@ -272,7 +273,7 @@ export function routeJob(job: {
   const k = deriveKind(job);
   const fromJob = riskFromJob(job);
   const risk: Risk = job.pr_risk && job.pr_risk.level === "high" ? job.pr_risk : fromJob;
-  const rule = ROUTING_RULES.find((r) => (r.when.risk ? risk.level === r.when.risk : r.when.kind ? r.when.kind === k.kind : true))!;
+  const rule = must(ROUTING_RULES.find((r) => (r.when.risk ? risk.level === r.when.risk : r.when.kind ? r.when.kind === k.kind : true)));
   // A named model may raise a risky job's model, never lower it below the risk rule's.
   const asked = job.body ? (NAMED_MODEL.exec(job.body)?.[1]?.toLowerCase() as RoutedModel | undefined) : undefined;
   const overruled = asked !== undefined && rule.when.risk !== undefined && MODELS.indexOf(asked) < MODELS.indexOf(rule.model);
@@ -286,7 +287,7 @@ export function routeJob(job: {
     : risk.level === "high" && rule.when.risk
       ? `${rule.why}${overruled ? `, not the ${asked} the job names` : ""}: ${risk.reasons.join("; ")}`
       : trial
-        ? `trial arm: ${trial} on ${arm!.percent} percent of routine ${k.kind} jobs, measured against ${rule.model} (kind ${k.kind}, ${k.source})`
+        ? `trial arm: ${trial} on ${must(arm).percent} percent of routine ${k.kind} jobs, measured against ${rule.model} (kind ${k.kind}, ${k.source})`
         : `${rule.why} (kind ${k.kind}, ${k.source})`;
   return {
     kind: k.kind,
@@ -394,7 +395,7 @@ const rank = (model: string): number => MODELS.indexOf(model as RoutedModel);
 export function proposeRuleChanges(cells: readonly Cell[]): Proposal[] {
   const out: Proposal[] = [];
   for (const kind of JOB_KINDS) {
-    const rule = ROUTING_RULES.find((r) => r.when.kind === kind) ?? ROUTING_RULES[ROUTING_RULES.length - 1]!;
+    const rule = ROUTING_RULES.find((r) => r.when.kind === kind) ?? must(ROUTING_RULES[ROUTING_RULES.length - 1]);
     const current = cells.find((c) => c.kind === kind && c.model === rule.model && c.enough);
     if (!current) continue;
     const others = cells.filter((c) => c.kind === kind && c.model !== rule.model && c.enough);
@@ -433,7 +434,7 @@ const money = (usd: number | null): string => (usd === null ? "no cost recorded"
 export function trialStatus(cells: readonly Cell[]): TrialStatus[] {
   const proposals = proposeRuleChanges(cells);
   return TRIAL_ARMS.map((arm) => {
-    const rule = ROUTING_RULES.find((r) => r.when.kind === arm.kind)!;
+    const rule = must(ROUTING_RULES.find((r) => r.when.kind === arm.kind));
     const mine = cells.find((c) => c.kind === arm.kind && c.model === arm.model);
     const theirs = cells.find((c) => c.kind === arm.kind && c.model === rule.model);
     const base = { kind: arm.kind, model: arm.model, against: rule.model, percent: arm.percent, n: mine?.n ?? 0, against_n: theirs?.n ?? 0 };

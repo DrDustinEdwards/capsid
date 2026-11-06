@@ -12,6 +12,7 @@ import {
 import { missingForRecord, parseMinRecord, serializeMinRecord, type JobRow } from "../src/jobs-schema.ts";
 import { reverifyPr } from "../src/outcome-prs.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // Job outcomes: what node can check without a database (the verification rules, the
 // null-not-zero rule, and the derivation of a row from a job). "Written exactly once"
@@ -515,7 +516,7 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
   // The same agent at the bar clears it.
   assert.equal(missingForRecord({ prs_merged: 3 }, bar), null);
   // Singular reads as English rather than as "1 merged pull requests".
-  assert.match(missingForRecord({ prs_merged: 0 }, serializeMinRecord({ prs_merged: 1 }))!, /1 merged pull request\b/);
+  assert.match(must(missingForRecord({ prs_merged: 0 }, serializeMinRecord({ prs_merged: 1 }))), /1 merged pull request\b/);
 });
 
 // That the claim and a resume with take both ask the record question is driven against

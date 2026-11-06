@@ -12,6 +12,7 @@ import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_STALE_PATH } from "../src/portal-stale";
 import { buildServer } from "../src/server";
 import { STALE_PRS_KEY, staleJobs, type StalePrCache } from "../src/stale-jobs";
+import { must } from "../src/must";
 
 // The stale view (stale jobs D5) against a real D1 and KV: each rule's row is planted
 // beside a clean job that rule must leave out, rows are aged by direct SQL, and the
@@ -211,7 +212,7 @@ describe("GET /portal/api/stale, through the Worker", () => {
     const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
     const ctx = createExecutionContext();
     const request = new Request(`https://capsid.test${PORTAL_STALE_PATH}`, { headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" });
-    const response = (await worker.fetch!(request as never, { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
+    const response = (await must(worker.fetch).call(worker, request as never, { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
     await waitOnExecutionContext(ctx);
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");

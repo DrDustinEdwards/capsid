@@ -13,6 +13,7 @@ import type {
   JobEvaluationRow,
   JobTouchRow
 } from "./ops-types/claims";
+import { must } from "./must";
 
 // The read side of claims apart from verified outcomes (migrations/0023_job_claims.sql,
 // roadmap P0). One set of readers, shared by the `capsid_admin_read_claims` tool (src/tools/claims.ts)
@@ -360,7 +361,7 @@ export async function readClaimsAggregate(db: D1Database, filter: ClaimsFilter):
     }
   }
   for (const [key, list] of waits) {
-    const t = groups.get(key)!.touches;
+    const t = must(groups.get(key)).touches;
     t.waits = list.length;
     t.waited_ms_total = list.reduce((sum, v) => sum + v, 0);
     t.waited_ms_median = median(list);

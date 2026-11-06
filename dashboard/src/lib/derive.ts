@@ -1,6 +1,7 @@
 import type { CiObservation, OpsAgent, OpsFeed, OpsJob, OpsSession, OpsSnapshot, OpsTaskRun, ProbeState, SiteCloudflare, SiteSnapshot } from "../types";
 import { DAY, HOUR, SLOT_MS, age, agentLabel, ago, hostOf, ms } from "./format";
 import { storeAttention } from "./store";
+import { must } from "./must";
 
 // The status vocabulary: every state is a shape, a word and a color.
 export type Kind = "ok" | "warn" | "crit" | "nodata" | "unknown" | "run" | "queued" | "blocked" | "done";
@@ -85,7 +86,10 @@ export function uptime(ring: string): number | null {
   let up = 0;
   let seen = 0;
   for (const c of ring) {
-    if (c === "1") (up++, seen++);
+    if (c === "1") {
+      up++;
+      seen++;
+    }
     else if (c === "0") seen++;
   }
   return seen ? up / seen : null;
@@ -365,7 +369,7 @@ function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
   }
   for (const [key, list] of byKey) {
     const g = GROUPS[key];
-    const first = list[0]!;
+    const first = must(list[0]);
     if (key === "blocked") {
       const jobs = blockedOrder(feed.live.jobs, now).all;
       // One blocked job opens that job; more open in place.
@@ -388,9 +392,9 @@ function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
       continue;
     }
     const sorted = [...list].sort(worstFirst);
-    const facets = [...new Set(sorted.map((a) => a.group!.facet))];
+    const facets = [...new Set(sorted.map((a) => must(a.group).facet))];
     out.push({
-      sev: sorted[0]!.sev,
+      sev: must(sorted[0]).sev,
       kind: first.kind,
       title: g.title(list.length),
       sub: facets.length > 3 ? `${facets.slice(0, 3).join(", ")} and ${facets.length - 3} more` : facets.join(", "),

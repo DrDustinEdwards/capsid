@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
+import { must } from "../lib/must";
 
 // Eleven pages, grouped by what a person is doing (the Portal audit and new map, ruled
 // 2026-11-06): Needs you and Health; Sites, one page for every site and one for each; Pull
@@ -239,8 +240,14 @@ export function parseRoute(path: string): Route {
   let view: ViewId = "needs";
   let site: string | null = null;
   let i = 0;
-  if (isView(segs[0])) (view = segs[0]), (i = 1);
-  if (view === "sites" && segs[1] !== undefined) (site = segs[1]), (i = 2);
+  if (isView(segs[0])) {
+    view = segs[0];
+    i = 1;
+  }
+  if (view === "sites" && segs[1] !== undefined) {
+    site = segs[1];
+    i = 2;
+  }
   const type = segs[i] as DrawerType | undefined;
   const id = segs[i + 1];
   return { view, site, drawer: type && DRAWER_TYPES.includes(type) && id ? { type, id } : null };
@@ -253,7 +260,7 @@ export function placePath(id: string): string {
   if (!isView(page)) return routePath("needs");
   const tabs = PAGE_TABS[page];
   const tab = tabs ? tabOf(tabs, anchor) : null;
-  if (tab) return `${routePath(page)}${tab === tabs![0]!.id ? "" : `?tab=${tab}`}`;
+  if (tab) return `${routePath(page)}${tab === must(must(tabs)[0]).id ? "" : `?tab=${tab}`}`;
   return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
 }
 

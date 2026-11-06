@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { modelDrift, type DriftFacts } from "../src/model-drift.ts";
 import type { InstalledRepo } from "../src/github/client.ts";
 import type { SystemModel } from "../src/system-model.ts";
+import { must } from "../src/must.ts";
 
 // The model's daily drift check (docs/public-data.md): system/model.json against the
 // namespace mapping, the App's repo list and the watched sites, both ways.
@@ -57,7 +58,7 @@ test("both ways: a repo the model does not name, and a repo it names that GitHub
 
 test("a repo the model leaves off is not asked for, and is named once GitHub stops listing it", () => {
   const model: SystemModel = { ...MODEL, left_off: [{ repo: "example-org/sample-kept-off", why: "Sample." }, { repo: "example-org/sample-gone", why: "Sample." }] };
-  const out = modelDrift(model, facts({ installed: [...facts().installed!, repo("example-org/sample-kept-off")] }));
+  const out = modelDrift(model, facts({ installed: [...must(facts().installed), repo("example-org/sample-kept-off")] }));
   assert.deepEqual(out.items.map((i) => i.line), ["system/model.json leaves example-org/sample-gone off the map, but the App no longer lists it: drop it from left_off."]);
 });
 

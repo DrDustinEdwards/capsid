@@ -5,6 +5,7 @@ import { COMPLETENESS_CACHE_KEY } from "../src/completeness";
 import type { CompletenessView } from "../src/ops-types/feed";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_COMPLETENESS_PATH } from "../src/portal-packages";
+import { must } from "../src/must";
 
 // The Completeness view's route through the Worker. No GitHub is reachable here, so the
 // board cannot be read, and the view must say so rather than show an empty board as if
@@ -17,7 +18,7 @@ describe("GET /portal/api/completeness", () => {
   it("says why the board could not be read, and keeps no answer", async () => {
     const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
     const ctx = createExecutionContext();
-    const response = (await worker.fetch!(new Request(`${ORIGIN}${PORTAL_COMPLETENESS_PATH}`, { headers: { Cookie: cookie }, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
+    const response = (await must(worker.fetch).call(worker, new Request(`${ORIGIN}${PORTAL_COMPLETENESS_PATH}`, { headers: { Cookie: cookie }, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
     await waitOnExecutionContext(ctx);
     expect(response.status, await response.clone().text()).toBe(200);
     const view = (await response.json()) as CompletenessView;

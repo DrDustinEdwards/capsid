@@ -8,6 +8,7 @@ import { RESUME_MARKER } from "../src/jobs";
 import { OPS_FEED_PATH, OPS_FEED_READS, OPS_REFRESH_PATH, opsFeed } from "../src/ops-feed";
 import type { OpsFeed } from "../src/ops-types/feed";
 import { WATCHER_ACTOR } from "../src/watcher";
+import { must } from "../src/must";
 
 // The Watch Floor feed against a real D1 and KV: which rows each list keeps, and how
 // many reads one request costs (src/ops-feed.ts states the count; this counts).
@@ -94,20 +95,20 @@ describe("the feed against real D1", () => {
     // The PLANT above counts every statement, so a size read of its own would fail it.
     const feed = await opsFeed(env as unknown as Env, NOW);
     expect(typeof feed.live.store.size_bytes, "real D1 reports meta.size_after").toBe("number");
-    expect(feed.live.store.size_bytes!).toBeGreaterThan(0);
+    expect(must(feed.live.store.size_bytes)).toBeGreaterThan(0);
     expect(feed.live.store.cap_bytes).toBe(10 * 1024 ** 3);
   });
 
   it("lists every open job and every job that ended in the last day, and nothing older", async () => {
     const feed = await opsFeed(env as unknown as Env, NOW);
     expect(feed.live.jobs.map((j) => j.id).sort()).toEqual(["job_00000000000a", "job_00000000000b", "job_00000000000c", "job_00000000000d"]);
-    const blocked = feed.live.jobs.find((j) => j.id === "job_00000000000b")!;
+    const blocked = must(feed.live.jobs.find((j) => j.id === "job_00000000000b"));
     expect(blocked.waits_on).toBe("waiting on the push");
     expect(blocked.command).toBe("git push -u origin feat/x");
     // Needs you reads the same inbox GET /ops/inbox answers with: the blocked job is in it.
     expect(feed.live.inbox.apps.flatMap((a) => a.items).map((i) => i.title)).toContain(blocked.title);
     expect(feed.live.inbox.count).toBe(feed.live.inbox.apps.reduce((n, a) => n + a.count, 0));
-    const finding = feed.live.jobs.find((j) => j.id === "job_00000000000d")!;
+    const finding = must(feed.live.jobs.find((j) => j.id === "job_00000000000d"));
     expect(finding.finding).toEqual({ fingerprint: "ci-red-abc1234", seen_count: null, last_seen: null });
     expect(finding.updated_at, "a datetime('now') value is handed over as ISO").toMatch(/T.*Z$/);
   });
@@ -122,7 +123,7 @@ describe("the feed against real D1", () => {
       .run();
     const feed = await opsFeed(env as unknown as Env, NOW);
     expect(feed.live.jobs.map((j) => j.id).sort(), "the join multiplied or dropped a job").toEqual(["job_00000000000a", "job_00000000000b", "job_00000000000c", "job_00000000000d"]);
-    expect(feed.live.jobs.find((j) => j.id === "job_00000000000d")!.finding).toEqual({ fingerprint: "ci-red-abc1234", seen_count: 7, last_seen: iso(HOUR) });
+    expect(must(feed.live.jobs.find((j) => j.id === "job_00000000000d")).finding).toEqual({ fingerprint: "ci-red-abc1234", seen_count: 7, last_seen: iso(HOUR) });
     await env.DB.prepare("DELETE FROM watcher_findings").run();
   });
 
@@ -147,7 +148,7 @@ async function signedFetch(path: string, init: RequestInit = {}): Promise<Respon
   const headers = new Headers(init.headers);
   headers.set("Cookie", cookie);
   const ctx = createExecutionContext();
-  const response = await worker.fetch!(new Request(`${ORIGIN}${path}`, { ...init, headers, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx);
+  const response = await must(worker.fetch).call(worker, new Request(`${ORIGIN}${path}`, { ...init, headers, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx);
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }

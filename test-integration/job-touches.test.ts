@@ -6,6 +6,7 @@ import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
 import { signTaskBody } from "../src/signed-docs";
+import { must } from "../src/must";
 
 // The human-touch log (migrations/0023, src/job-touches.ts) on a real D1: each
 // transition that a person or a policy makes writes its touch in the same guarded batch,
@@ -57,7 +58,7 @@ async function post(): Promise<string> {
   serial += 1;
   const posted = await postJob(jobsEnv(), ADMIN, at(T0), { namespace: "capsid", title: `touch job ${serial} ${Date.now()}`, body: "do the work", gate_required: true });
   expect(posted.ok, posted.refusal).toBe(true);
-  return posted.job!.id;
+  return must(posted.job).id;
 }
 
 async function claimed(): Promise<string> {

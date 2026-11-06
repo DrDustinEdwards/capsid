@@ -33,6 +33,7 @@ import { readStepCache, stepsSeen, type StaleStepCache } from "./manual-steps";
 // The shapes are in the feed contract (src/ops-types/), which the Portal also reads.
 export type { Inbox, InboxApp, InboxItem, InboxSeverity } from "./ops-types/feed";
 import type { Inbox, InboxApp, InboxItem, InboxKind, InboxSeverity } from "./ops-types/feed";
+import { must } from "./must";
 
 const MAX_BLOCKED = 200;
 const MAX_ITEMS_PER_APP = 50;
@@ -76,7 +77,7 @@ const MIGRATION_FILE = /\b(\d{4}_[a-z0-9_]+)(?:\.sql)?\b/gi;
 
 /** The migration files a blocked job's summary names, without ".sql". */
 export function migrationsNamed(text: string): string[] {
-  return [...new Set([...text.matchAll(MIGRATION_FILE)].map((m) => m[1]!.toLowerCase()))];
+  return [...new Set([...text.matchAll(MIGRATION_FILE)].map((m) => must(m[1]).toLowerCase()))];
 }
 
 export function blockSettled(

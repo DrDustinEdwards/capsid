@@ -5,6 +5,7 @@ import { DIGEST_LAST_KEY, digestProblem, digestState, digestTick } from "../src/
 import type { OvernightDigest } from "../src/ops-types/views.ts";
 import { selectRows, type Row } from "./fake-sql.ts";
 import { fakeKv } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // The daily email digest (docs/design/design-merge-pipeline.md section 5; DECIDE 5 of
 // 2026-10-09). It sends nothing until Email Routing is on, once a UTC day after 12:00,
@@ -92,15 +93,15 @@ test("Email Routing not on: nothing is read or sent, and the reason names it", a
 });
 
 test("routing on but an address or the binding missing: still nothing, and it says which", () => {
-  assert.match(digestProblem({ EMAIL_ROUTING: "on", EMAIL: {}, ALERT_EMAIL: "a@example.com" } as never)!, /ALERT_FROM is not set/);
-  assert.match(digestProblem({ EMAIL_ROUTING: "on", ALERT_EMAIL: "a@example.com", ALERT_FROM: "b@example.com" } as never)!, /the send_email binding EMAIL/);
+  assert.match(must(digestProblem({ EMAIL_ROUTING: "on", EMAIL: {}, ALERT_EMAIL: "a@example.com" } as never)), /ALERT_FROM is not set/);
+  assert.match(must(digestProblem({ EMAIL_ROUTING: "on", ALERT_EMAIL: "a@example.com", ALERT_FROM: "b@example.com" } as never)), /the send_email binding EMAIL/);
   assert.equal(digestProblem({ EMAIL_ROUTING: "on", EMAIL: {}, ALERT_EMAIL: "a@example.com", ALERT_FROM: "b@example.com" } as never), null);
 });
 
 test("the Portal's state says off and why, or on and where", async () => {
   const off = await digestState(world({ routing: "" }).env);
   assert.equal(off.on, false);
-  assert.match(off.problem!, /Email Routing is not on/);
+  assert.match(must(off.problem), /Email Routing is not on/);
   assert.equal(off.to, null);
   const on = await digestState(world().env);
   assert.deepEqual({ on: on.on, to: on.to, hour: on.hour_utc }, { on: true, to: "admin@example.com", hour: 12 });
@@ -121,7 +122,7 @@ test("nothing before 12:00 UTC; then one mail, and none again that day", async (
 test("the mail lists what waits by class, questions, blocked jobs, rollbacks and what finished", async () => {
   const w = world({ deploys: [{ repo: "owner/capsid", head_sha: "a".repeat(40), outcome: "rolled_back", recorded_at: "2026-10-11 02:00:00" }] });
   await digestTick(w.env, NOON, read(FULL));
-  const m = w.sent[0]!;
+  const m = must(w.sent[0]);
   assert.equal(m.to, "admin@example.com");
   assert.equal(m.from, "capsid@example.com");
   assert.equal(m.subject, "Capsid digest 2026-10-11: 4 waiting on you");
@@ -139,8 +140,8 @@ test("a quiet day says so", async () => {
   const w = world();
   await w.kv.kv.put(AWAITING_SEAT_KEY, "[]");
   await digestTick(w.env, NOON, read(EMPTY));
-  assert.equal(w.sent[0]!.subject, "Capsid digest 2026-10-11: nothing waits on you");
-  assert.match(w.sent[0]!.text, /Nothing waits on you and nothing happened/);
+  assert.equal(must(w.sent[0]).subject, "Capsid digest 2026-10-11: nothing waits on you");
+  assert.match(must(w.sent[0]).text, /Nothing waits on you and nothing happened/);
 });
 
 test("a refused send is recorded for the day and not retried every tick", async () => {
@@ -189,7 +190,7 @@ test("on Monday the mail lists the open digest-class findings per site; other da
   ];
   const monday = world({ findings });
   await digestTick(monday.env, MONDAY, read(EMPTY));
-  const text = monday.sent[0]!.text;
+  const text = must(monday.sent[0]).text;
   assert.match(text, /Weekly digest \(3 open/);
   assert.match(text, /sample\n- Sample's CSP blocks the beacon script \(since 2026-10-05\)\n- Sample is missing security headers/);
   assert.match(text, /other\n- Other is missing security headers/);
@@ -197,18 +198,18 @@ test("on Monday the mail lists the open digest-class findings per site; other da
   assert.doesNotMatch(text, /is down/, "a job-class finding was in the weekly digest");
   const sunday = world({ findings });
   await digestTick(sunday.env, NOON, read(EMPTY));
-  assert.doesNotMatch(sunday.sent[0]!.text, /Weekly digest/);
+  assert.doesNotMatch(must(sunday.sent[0]).text, /Weekly digest/);
   const none = world();
   await digestTick(none.env, MONDAY, read(EMPTY));
-  assert.doesNotMatch(none.sent[0]!.text, /Weekly digest/);
+  assert.doesNotMatch(must(none.sent[0]).text, /Weekly digest/);
 });
 
 test("a failing weekly read is a one-line note and the mail still goes out", async () => {
   const w = world({ findingsThrow: true });
   const report = await digestTick(w.env, MONDAY, read(EMPTY));
   assert.equal(report.sent, true);
-  assert.match(w.sent[0]!.text, /Weekly digest could not be read\./);
+  assert.match(must(w.sent[0]).text, /Weekly digest could not be read\./);
   const other = world({ findingsThrow: true });
   await digestTick(other.env, NOON, read(EMPTY));
-  assert.doesNotMatch(other.sent[0]!.text, /Weekly digest/, "a non-Monday read the findings");
+  assert.doesNotMatch(must(other.sent[0]).text, /Weekly digest/, "a non-Monday read the findings");
 });

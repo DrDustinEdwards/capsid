@@ -51,7 +51,7 @@ function bareScan(detail: string): string | null {
 async function planOf(sql: string): Promise<{ details: string[] } | { error: string }> {
   try {
     const result = await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
-      .bind(...new Array(arity(sql)).fill("x"))
+      .bind(...Array.from({ length: arity(sql) }, () => "x"))
       .all<{ detail: string }>();
     return { details: result.results.map((r) => r.detail) };
   } catch (err) {
@@ -178,7 +178,7 @@ describe("query plans", () => {
   it("PLANT: every FILTERED activity read uses an index and sorts nothing", async () => {
     for (const [label, sql, n, index] of ACTIVITY_VARIANTS) {
       const result = await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
-        .bind(...new Array(n).fill("x"))
+        .bind(...Array.from({ length: n }, () => "x"))
         .all<{ detail: string }>();
       const plan = result.results.map((r) => r.detail).join(" | ");
       expect(plan, `activity ${label} does not use ${index}`).toContain(index);

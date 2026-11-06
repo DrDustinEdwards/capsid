@@ -242,6 +242,7 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
       back?.focus();
       opener.current = null;
     }
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- `key` names the route (type:id); the effect runs when the drawer opens on another row, not on a new route object
   }, [key]);
   const ref = route ?? shown;
   let body: ReactNode = null;

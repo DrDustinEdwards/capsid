@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { OpsFeed } from "../src/ops-types/feed.ts";
+import { must } from "../src/must.ts";
 
 // The Overview's Needs attention list, grouped and tiered (dashboard/src/lib/derive.ts,
 // attentionGroups and blockedOrder; capsid/research/audit-ui-patterns.md, rulings 3 and
@@ -29,7 +30,7 @@ test("PLANT: four pull requests awaiting the seat are one row that holds all fou
   const g = attentionGroups(f, now);
   const rows = g.problems.filter((r) => r.kind === "PR");
   assert.equal(rows.length, 1, rows.map((r) => r.title).join(" | "));
-  const row = rows[0]!;
+  const row = must(rows[0]);
   assert.equal(row.title, "4 pull requests await the seat");
   assert.equal(row.sub, "example-org/sample-info");
   assert.equal(row.total, 4);
@@ -113,7 +114,7 @@ test("silent drivers are one notice", () => {
 
 test("PLANT: blocked jobs are ordered by priority, then newest; over 7 days they are Stale", () => {
   const { f, now } = feed();
-  const base = f.live.jobs.find((j) => j.status === "blocked")!;
+  const base = must(f.live.jobs.find((j) => j.status === "blocked"));
   const at = (daysAgo: number) => new Date(now - daysAgo * DAY).toISOString();
   f.live.jobs = [
     { ...base, id: "job_000000000001", priority: 0, updated_at: at(1) },
@@ -144,7 +145,7 @@ test("PLANT: a scheduled task that failed or went quiet is a problem; a backup i
   const tasks = f.scheduled.tasks;
   const at = new Date(now - 60_000).toISOString();
   const set = (id: string, flag: "failing" | "quiet" | "never" | null, outcome: "ok" | "threw" | "refused" = "ok") => {
-    const t = tasks.find((x) => x.id === id)!;
+    const t = must(tasks.find((x) => x.id === id));
     t.flag = flag;
     t.recent = flag === "never" ? [] : [{ started_at: at, finished_at: at, outcome, reason: `${id} reason` }];
   };

@@ -16,6 +16,7 @@ import {
   readJobClaims,
 } from "../src/job-claims-read.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // The read side of claims apart from verified outcomes (src/job-claims-read.ts). These
 // are the statement-shape and folding tests; the rows a real job_claims returns, the
@@ -133,7 +134,7 @@ test("the aggregate folds claims, evaluations and touches into one group per age
   const out = await readClaimsAggregate(db, { namespace: null, agent: null, since: null, until: null });
   assert.deepEqual(out.truncated, []);
   assert.equal(out.groups.length, 2);
-  const driver = out.groups.find((g) => g.agent === "agent:sample-driver")!;
+  const driver = must(out.groups.find((g) => g.agent === "agent:sample-driver"));
   assert.equal(driver.jobs, 2);
   assert.equal(driver.claims, 3);
   assert.deepEqual(driver.evaluations.commits, { agree: 1, disagree: 2, unclaimed: 0, unchecked: 0 });
@@ -146,7 +147,7 @@ test("the aggregate folds claims, evaluations and touches into one group per age
   assert.equal(driver.touches.waited_ms_total, 4000);
   assert.equal(driver.touches.waited_ms_median, 2000);
   // A touch on a job nobody claimed keeps its own group, with no wait rather than a zero one.
-  const unclaimed = out.groups.find((g) => g.agent === null)!;
+  const unclaimed = must(out.groups.find((g) => g.agent === null));
   assert.equal(unclaimed.namespace, "sample-b");
   assert.equal(unclaimed.claims, 0);
   assert.equal(unclaimed.touches.waited_ms_total, null);
@@ -157,7 +158,7 @@ test("PLANT: a read that hits its bound says so by name instead of passing as wh
   // The stub answers every read with as many rows as its LIMIT asks for, which is one
   // past the bound, so each read must report the cut.
   const { db } = stubDb((sql, params) => {
-    const limit = Number(params[Number(/LIMIT \?(\d+)/.exec(sql)![1]) - 1]);
+    const limit = Number(params[Number(must(/LIMIT \?(\d+)/.exec(sql))[1]) - 1]);
     return Array.from({ length: limit }, (_, i) =>
       sql.includes("gate_detail")
         ? { namespace: "sample", actor_kind: "human", waited_ms: 1, gate_detail: null }
@@ -304,7 +305,7 @@ test("a gate detail that is not JSON is named, not folded into needs_human", () 
 test("the waits read is one row per wait: the gate is a subquery and the agent filter is a test, never a join", async () => {
   const { db, calls } = stubDb();
   await readClaimsAggregate(db, { namespace: null, agent: "agent:x", since: null, until: null });
-  const waits = calls.find((c) => c.sql.includes("gate_detail"))!;
+  const waits = must(calls.find((c) => c.sql.includes("gate_detail")));
   assert.ok(waits, "no waits read");
   assert.match(waits.sql, /t\.waited_ms IS NOT NULL/);
   assert.match(waits.sql, /g\.id < t\.id ORDER BY g\.id DESC LIMIT 1/, "the gate must be the latest one before the touch, as touchStatement measures");
@@ -338,12 +339,12 @@ test("usage: telemetry and reported stay apart per namespace, and a figure nobod
   const { db } = stubDb((sql) => (sql.includes("FROM job_outcomes") ? [telemetry] : sql.includes("json_extract") ? [reported] : []));
   const out = await readClaimsAggregate(db, { namespace: null, agent: null, since: null, until: null });
   assert.equal(out.usage.length, 2);
-  const a = out.usage.find((u) => u.namespace === "sample")!;
+  const a = must(out.usage.find((u) => u.namespace === "sample"));
   assert.equal(a.telemetry.rows, 2);
   assert.equal(a.telemetry.cost_usd, 1.5);
   assert.equal(a.reported.rows, 0);
   assert.equal(a.reported.cost_usd, null, "no reported usage is null");
-  const b = out.usage.find((u) => u.namespace === "sample-b")!;
+  const b = must(out.usage.find((u) => u.namespace === "sample-b"));
   assert.equal(b.reported.cost_usd, 0.25);
   assert.equal(b.reported.active_seconds, null, "a field the agent did not report is null, not 0");
   assert.equal(b.telemetry.rows, 0);
@@ -353,9 +354,9 @@ test("usage: telemetry and reported stay apart per namespace, and a figure nobod
 test("the usage reads only count rows that carried something, and read job_claims.raw's claim.usage", async () => {
   const { db, calls } = stubDb();
   await readClaimsAggregate(db, { namespace: null, agent: null, since: null, until: null });
-  const telemetry = calls.find((c) => c.sql.includes("FROM job_outcomes"))!;
+  const telemetry = must(calls.find((c) => c.sql.includes("FROM job_outcomes")));
   assert.match(telemetry.sql, /cost_usd IS NOT NULL OR active_seconds IS NOT NULL/);
-  const reported = calls.find((c) => c.sql.includes("json_extract(raw, '$.claim.usage') IS NOT NULL"))!;
+  const reported = must(calls.find((c) => c.sql.includes("json_extract(raw, '$.claim.usage') IS NOT NULL")));
   assert.ok(reported, "the reported read does not select only claims that carry usage");
   assert.match(reported.sql, /\$\.claim\.usage\.tokens\.cache_creation/);
 });

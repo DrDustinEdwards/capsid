@@ -6,6 +6,7 @@ import { logEvent } from "@dustinedwards/site-runtime/log";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
 import { DAY_MS } from "./time";
+import { must } from "./must";
 
 // STALE CANON AFTER A MERGE (Capsid improvement list, item 23: Foxhound's ROUTES.md and
 // DESIGN.md still said the admin reused the app shell after a pull request changed it).
@@ -216,7 +217,7 @@ export function staleCanonFindings(flags: readonly StaleFlag[]): Finding[] {
   const sorted = [...flags].sort((a, b) => a.namespace.localeCompare(b.namespace) || b.pr - a.pr || a.doc.localeCompare(b.doc));
   return sorted.slice(0, MAX_FLAGS).map((f) => {
     const fingerprint = staleCanonFingerprint(f);
-    const first = f.cited[0]!;
+    const first = must(f.cited[0]);
     const more = f.cited.length > 1 ? ` and ${f.cited.length - 1} more` : "";
     const verb = first.how === "renamed" ? "renamed" : first.how;
     const headline = `${f.namespace}/${f.doc} may be stale after PR #${f.pr}: it cites ${first.path}${more}, which the PR ${verb}`;
@@ -286,8 +287,8 @@ export function newMerges(listed: readonly ListedPull[], known: ReadonlySet<numb
   return listed
     .filter((p) => p.merged_at !== null && !known.has(p.number))
     .filter((p) => p.base?.ref !== undefined && p.base.ref === p.base.repo?.default_branch)
-    .filter((p) => now.getTime() - instant(p.merged_at!) <= RETAIN_MS)
-    .sort((a, b) => instant(a.merged_at!) - instant(b.merged_at!));
+    .filter((p) => now.getTime() - instant(must(p.merged_at)) <= RETAIN_MS)
+    .sort((a, b) => instant(must(a.merged_at)) - instant(must(b.merged_at)));
 }
 
 /** The namespaces this pass reads, from a list read with one row past the cap, and the
@@ -354,16 +355,16 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
       unread.push(`${namespace} (${err instanceof Error ? err.message : String(err)})`);
     }
   }
-  pending.sort((a, b) => instant(a.pull.merged_at!) - instant(b.pull.merged_at!));
+  pending.sort((a, b) => instant(must(a.pull.merged_at)) - instant(must(b.pull.merged_at)));
   let read = 0;
   for (const p of pending.slice(0, MAX_PR_READS_PER_PASS)) {
     try {
       const files = await readPrFiles(env, p.owner, p.repo, p.pull.number);
       const change = changeFromFiles(files.rows);
-      memory[p.namespace]!.prs.push({
+      must(memory[p.namespace]).prs.push({
         number: p.pull.number,
         url: p.pull.html_url,
-        merged_at: p.pull.merged_at!,
+        merged_at: must(p.pull.merged_at),
         ...change,
         partial: [files.problem, change.partial].filter(Boolean).join("; ") || null,
       });

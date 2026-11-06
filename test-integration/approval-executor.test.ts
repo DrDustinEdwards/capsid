@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { executeApproval, expireStaleApprovals, readOpenApprovals } from "../src/approval-executor";
 import type { PrFacts } from "../src/auto-merge-policy";
+import { must } from "../src/must";
 
 // The executor's SQL against a real D1 with migrations/0037 applied: the read of the open
 // approvals, a state move with its audit row, and the 7-day sweep. The decisions are tested
@@ -32,14 +33,14 @@ describe("the executor against real D1", () => {
     await approve(41, NOW.toISOString());
     const open = await readOpenApprovals(env.DB, "example/capsid");
     expect([...open.keys()]).toEqual([41]);
-    const result = await executeApproval(env as unknown as Env, "capsid", facts(41, B), null, open.get(41)!, NOW);
+    const result = await executeApproval(env as unknown as Env, "capsid", facts(41, B), null, must(open.get(41)), NOW);
     expect(result).toMatchObject({ done: "voided" });
     const row = await env.DB.prepare("SELECT status, close_reason, closed_at FROM pr_approvals WHERE pr = 41").first<Record<string, string>>();
     expect(row?.status).toBe("voided");
     expect(row?.close_reason).toMatch(/^new push: approved at aaaaaaa, the head is bbbbbbb now/);
     const audit = await env.DB.prepare("SELECT actor, action, params FROM audit_log").all<{ actor: string; action: string; params: string }>();
     expect(audit.results.map((r) => r.action)).toEqual(["pr-approval-voided"]);
-    expect(JSON.parse(audit.results[0]!.params)).toMatchObject({ repo: "example/capsid", pr: 41, approved_sha: A, head_sha: B });
+    expect(JSON.parse(must(audit.results[0]).params)).toMatchObject({ repo: "example/capsid", pr: 41, approved_sha: A, head_sha: B });
     expect((await readOpenApprovals(env.DB, "example/capsid")).size).toBe(0);
   });
 

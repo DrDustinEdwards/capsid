@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import vm from "node:vm";
+import { must } from "../src/must.ts";
 
 // The Portal's service worker (dashboard/public/sw.js): a tapped alert opens the url its push
 // named only when that url is on the worker's own scope. Any other url, or none, opens the
@@ -42,7 +43,7 @@ async function tap(data: unknown, windows: Win[] = []): Promise<string> {
   await done;
   const moved = windows.flatMap((w) => w.went);
   assert.equal(opened.length + moved.length, 1, "a tap opened or moved more than one page");
-  return opened[0] ?? moved[0]!;
+  return opened[0] ?? must(moved[0]);
 }
 
 test("an alert's url on the Portal's scope opens as sent", async () => {

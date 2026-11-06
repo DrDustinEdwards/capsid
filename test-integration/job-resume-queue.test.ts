@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
+import { must } from "../src/must";
 
 // Resume when the job cannot go back to the credential that blocked it: the credential
 // is shared (the admin identity every chat tab connects as, or a legacy operator key)
@@ -35,7 +36,7 @@ function driverAgent(actor = "agent:capsid-driver"): Agent {
 async function post(title: string): Promise<string> {
   const posted = await postJob(jobsEnv(), ADMIN, NOW, { namespace: "capsid", title, body: "do the thing", gate_required: true });
   expect(posted.ok, posted.refusal).toBe(true);
-  return posted.job!.id;
+  return must(posted.job).id;
 }
 
 async function blockedBy(holder: Agent, title: string): Promise<string> {

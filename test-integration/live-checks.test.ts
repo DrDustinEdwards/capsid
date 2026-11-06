@@ -1,6 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { liveChecks, parseLiveConfig, readLiveConfig } from "../src/live-checks";
+import { must } from "../src/must";
 
 // The live-checks document read against a real D1: the statement runs on SQLite, finds
 // only a published capsid/policy/live-checks.md, and the document it returns parses.
@@ -24,7 +25,7 @@ describe("readLiveConfig", () => {
     await put("published", BODY);
     const config = await readLiveConfig(env.DB);
     expect(config).toEqual({ body: BODY });
-    expect(parseLiveConfig(config!.body)).toEqual({
+    expect(parseLiveConfig(must(config).body)).toEqual({
       rules: [
         { namespace: "sample", kind: "beacon", path: "/" },
         { namespace: "sample", kind: "nobeacon", path: "/account" },

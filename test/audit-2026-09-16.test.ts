@@ -10,6 +10,7 @@ import { CORRECTION_CAP } from "../src/jobs-schema.ts";
 import { buildTruthReport, INTEGRITY_LINE, integrityOf, renderTruthReport, reportPath } from "../src/truth-report.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // Small defects from the 2026-09-16 source audit, one plant each, kept so a fixed defect
 // cannot return unnoticed when its file is rewritten. The CSP rate-limit defect is
@@ -130,7 +131,7 @@ test("DERIVED: every action tool whose action argument is optional has a table d
   assert.ok(wired.length >= 5, `only ${wired.length} action tools were found, so this is passing by reading nothing`);
   const missing = wired
     .filter((t) => {
-      const key = actionArgFor(t.name)!;
+      const key = must(actionArgFor(t.name));
       const required = (t.inputSchema.required ?? []) as string[];
       return !required.includes(key) && defaultActionFor(t.name) === undefined;
     })

@@ -3,4 +3,5 @@ import { Agents } from "../views/Agents";
 
 export const loader = viewLoader("agents");
 export const clientLoader = browserLoader;
-export default viewPage(Agents);
+const AgentsPage = viewPage(Agents);
+export default AgentsPage;

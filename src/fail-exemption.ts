@@ -3,6 +3,7 @@ import type { JobRow } from "./jobs-schema";
 import { parsePrUrl } from "./github/client";
 import { readNamedPrs } from "./complete-ci";
 import { checklistItems, unchangedItems } from "./job-checklist";
+import { must } from "./must";
 
 // Which holder fails the breaker does not count (src/job-breaker.ts; Grok design review
 // 2026-10-23, build step 7). "Not done, here's why" is a good outcome, but a breaker
@@ -29,7 +30,7 @@ function remainingItems(reason: string): number[] | null {
 }
 
 export async function breakerExemption(env: Env, job: JobRow, reason: string): Promise<BreakerExemption | null> {
-  const urls = parsePrUrl(job.result_ref) ? [job.result_ref!.trim()] : [];
+  const urls = parsePrUrl(job.result_ref) ? [must(job.result_ref).trim()] : [];
   const read = urls.length > 0 ? await readNamedPrs(env, job.namespace, urls, job.body) : { changed: [], unread: false };
   if (read && "refusal" in read) return "machinery";
   const items = checklistItems(job.body);

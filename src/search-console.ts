@@ -5,6 +5,7 @@ import type { FetchLike } from "./live-checks";
 import { pageOnSite, reportSite } from "./site-reports";
 import { MINUTE_MS, DAY_MS } from "./time";
 import { callSignal } from "./call-signal";
+import { must } from "./must";
 
 // Google Search Console for a namespace's site, served as capsid_inspect_repo action
 // search (Dustin, 2026-10-18: Search Console tools system wide, in Capsid). Three
@@ -174,7 +175,7 @@ export async function searchConsole(env: Env, namespace: string, args: SearchCon
 
   const site = await reportSite(env, namespace, "Search Console property");
 
-  const inspectUrl = report === "inspect" ? pageOnSite(site.origin, namespace, args.url!) : null;
+  const inspectUrl = report === "inspect" ? pageOnSite(site.origin, namespace, must(args.url)) : null;
   // Validated before any network call, so a bad window costs nothing.
   const window = report === "performance" ? dateWindow(args, now) : null;
 
@@ -229,7 +230,7 @@ export async function searchConsole(env: Env, namespace: string, args: SearchCon
     };
   }
 
-  const { start, end } = window!;
+  const { start, end } = must(window);
   const dimensions = args.dimensions ?? ["query"];
   const rowLimit = args.row_limit ?? 25;
   const filters = [

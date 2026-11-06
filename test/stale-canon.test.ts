@@ -19,6 +19,7 @@ import {
   type MergedChange,
 } from "../src/stale-canon.ts";
 import { findingClass, owningCheck, WATCHER_CHECKS } from "../src/watcher-checks.ts";
+import { must } from "../src/must.ts";
 
 // Stale canon after a merge (improvement item 23, src/stale-canon.ts): the pure matching.
 // Fake data throughout: namespace "sample", repo paths of a made-up app.
@@ -108,9 +109,9 @@ test("PLANT: a canon document citing a file the merge deleted is flagged, naming
     []
   );
   assert.equal(flags.length, 1);
-  assert.equal(flags[0]!.doc, "ROUTES.md");
-  assert.equal(flags[0]!.pr, 41);
-  assert.deepEqual(flags[0]!.cited, [{ path: "src/admin/shell.ts", how: "deleted", to: null, via: "body" }]);
+  assert.equal(must(flags[0]).doc, "ROUTES.md");
+  assert.equal(must(flags[0]).pr, 41);
+  assert.deepEqual(must(flags[0]).cited, [{ path: "src/admin/shell.ts", how: "deleted", to: null, via: "body" }]);
 });
 
 test("a rename is flagged by body or by a typed edge to the old path", () => {
@@ -121,7 +122,7 @@ test("a rename is flagged by body or by a typed edge to the old path", () => {
     [{ from_path: "core.md", type: "references", to_path: "src/admin/app-shell.ts" }]
   );
   assert.deepEqual(
-    flags.map((f) => [f.doc, f.cited[0]!.via, f.cited[0]!.how, f.cited[0]!.to]),
+    flags.map((f) => [f.doc, must(f.cited[0]).via, must(f.cited[0]).how, must(f.cited[0]).to]),
     [
       ["core.md", "edge", "renamed", "src/admin/layout.ts"],
       ["DESIGN.md", "body", "renamed", "src/admin/layout.ts"],
@@ -143,7 +144,7 @@ test("a modified file flags a canon document only through a typed edge, never by
       { from_path: "notes/x.md", type: "references", to_path: "src/routes.ts" },
     ]
   );
-  assert.deepEqual(flags.map((f) => [f.doc, f.cited[0]!.how, f.cited[0]!.via]), [["DESIGN.md", "changed", "edge"]]);
+  assert.deepEqual(flags.map((f) => [f.doc, must(f.cited[0]).how, must(f.cited[0]).via]), [["DESIGN.md", "changed", "edge"]]);
 });
 
 test("a document written after the merge is not flagged, so writing it clears the flag", () => {
@@ -176,7 +177,7 @@ test("one flag per document and pull request, naming every cited path", () => {
     []
   );
   assert.equal(flags.length, 1);
-  assert.deepEqual(flags[0]!.cited.map((c) => c.path), ["a/one.ts", "a/two.ts"]);
+  assert.deepEqual(must(flags[0]).cited.map((c) => c.path), ["a/one.ts", "a/two.ts"]);
 });
 
 test("findings: digest class, owned by the stale canon check, a stable fingerprint, and the headline names doc, PR and path", () => {
@@ -238,7 +239,7 @@ test("memory: absent is empty, damage is reported, old merges are pruned", () =>
     NOW
   );
   assert.deepEqual(Object.keys(kept), ["sample"]);
-  assert.deepEqual(kept.sample!.prs.map((p) => p.number), [2]);
+  assert.deepEqual(must(kept.sample).prs.map((p) => p.number), [2]);
 });
 
 test("PLANT: a namespace list past the cap forgets nothing and is not complete", () => {

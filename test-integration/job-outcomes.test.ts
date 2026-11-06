@@ -8,6 +8,7 @@ import { outcomeStatement } from "../src/job-outcomes";
 import { grantAgent } from "../src/agents";
 import { buildServer } from "../src/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import { must } from "../src/must";
 
 // Jobs as evidence, against a real D1 (migrations/0011). Every property below is a
 // property of the database: "exactly one outcome row per job" is a PRIMARY KEY, and
@@ -104,7 +105,7 @@ beforeEach(async () => {
 describe("job outcomes", () => {
   it("a completed job gets EXACTLY ONE outcome row, attributed to its holder", async () => {
     const posted = await post({ title: "completes" });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     const done = await completeJob(jobsEnv(), DRIVER, at("2026-09-10T13:30:00.000Z"), id, {
       result_summary: "landed",
@@ -128,7 +129,7 @@ describe("job outcomes", () => {
 
   it("a reported zero is stored as zero, beside a null nobody reported", async () => {
     const posted = await post({ title: "counts zero" });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     await completeJob(jobsEnv(), DRIVER, NOW, id, {
       result_summary: "no tests needed",
@@ -150,7 +151,7 @@ describe("job outcomes", () => {
     try {
       const evidence = { tests_added: 3 };
       for (const [form, sent] of [["object", evidence], ["string", JSON.stringify(evidence)]] as const) {
-        const id = (await post({ title: `evidence as ${form}` })).job!.id;
+        const id = must((await post({ title: `evidence as ${form}` })).job).id;
         expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
         const result = (await client.callTool({
           name: "capsid_work_jobs",
@@ -167,7 +168,7 @@ describe("job outcomes", () => {
 
   it("A FAILED JOB IS RECORDED TOO, because a record of successes only is not a record", async () => {
     const posted = await post({ title: "fails" });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     await failJob(jobsEnv(), DRIVER, NOW, id, "the approach did not work");
     expect(await outcomeCount(id)).toBe(1);
@@ -176,7 +177,7 @@ describe("job outcomes", () => {
 
   it("a gated job carries its gate counts, and its duration runs from the FIRST claim", async () => {
     const posted = await post({ title: "gated" });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     await blockJob(jobsEnv(), DRIVER, at("2026-09-10T12:30:00.000Z"), id, {
       reason: "needs a push",
@@ -197,7 +198,7 @@ describe("job outcomes", () => {
     // Exercised against a real insert rather than read off the DDL: an outcome that
     // could be rewritten after the fact is not evidence.
     const posted = await post({ title: "cannot be rewritten" });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "first" });
     const before = await outcomeRow(id);
@@ -257,8 +258,8 @@ describe("job outcomes", () => {
 
   it("PLANT: the bar a job sets on a driver's history is enforced at the CLAIM", async () => {
     const posted = await post({ title: "needs a track record", min_record: { prs_merged: 2 } });
-    const id = posted.job!.id;
-    expect(posted.job!.min_record).toBe(JSON.stringify({ prs_merged: 2 }));
+    const id = must(posted.job).id;
+    expect(must(posted.job).min_record).toBe(JSON.stringify({ prs_merged: 2 }));
 
     // This driver has no record, so it is refused and the job stays queued rather
     // than being failed or handed out.
@@ -291,7 +292,7 @@ describe("job outcomes", () => {
     const OTHER = grantAgent("write", OTHER_ACTOR);
     await plantOutcome("job_history0001", 2, 2, FULLY_VERIFIED);
     const posted = await post({ title: "needs a record to take over", min_record: { prs_merged: 2 }, gate_required: true });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id });
     expect(claimed.ok, claimed.refusal).toBe(true);
     const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a human", command: "git push -u origin feat/x" });
@@ -379,11 +380,11 @@ describe("job outcomes", () => {
     const row = await env.DB
       .prepare("SELECT prs_opened, prs_merged, verified FROM job_outcomes WHERE job_id = 'job_unverified'")
       .first<{ prs_opened: number; prs_merged: number; verified: string }>();
-    const verified = JSON.parse(String(row!.verified)) as Record<string, boolean>;
-    expect(row!.prs_merged).toBe(1);
+    const verified = JSON.parse(String(must(row).verified)) as Record<string, boolean>;
+    expect(must(row).prs_merged).toBe(1);
     expect(verified.prs_merged).toBe(true);
     expect(verified.prs_opened).toBe(true);
-    expect(row!.prs_opened).toBe(1);
+    expect(must(row).prs_opened).toBe(1);
   });
 
   it("A JOB WITH AN UNREAD PULL REQUEST LEFT does NOT get prs_opened verified", async () => {
@@ -409,7 +410,7 @@ describe("job outcomes", () => {
     const row = await env.DB
       .prepare("SELECT verified FROM job_outcomes WHERE job_id = 'job_partial'")
       .first<{ verified: string }>();
-    const verified = JSON.parse(String(row!.verified)) as Record<string, boolean>;
+    const verified = JSON.parse(String(must(row).verified)) as Record<string, boolean>;
     expect(verified.prs_merged).toBe(true);
     expect(verified.prs_opened).toBe(false);
   });
@@ -429,7 +430,7 @@ describe("a holder transition commits with every record of it, or not at all", (
 
   async function claimed(title: string) {
     const posted = await post({ namespace: NS, title });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
     expect(claim.ok, claim.refusal).toBe(true);
     return id;
@@ -525,7 +526,7 @@ describe("model routing, against the real tables (migrations/0032)", () => {
   it("a posted job carries its routing, a claim settles it, and the outcome records the model chosen and the model run", async () => {
     const posted = await post({ title: "Design: the routing check", body: "think about it" });
     expect(posted.ok).toBe(true);
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     const stored = await jobRow(id);
     expect([stored?.kind, stored?.model_recommended, stored?.effort_recommended]).toEqual(["design", "opus", "high"]);
     expect(String(stored?.routing_reason)).toMatch(/design/);
@@ -544,18 +545,18 @@ describe("model routing, against the real tables (migrations/0032)", () => {
 
   it("an outcome with no reported model keeps model_actual NULL, never the chosen one", async () => {
     const posted = await post({ title: "Update the readme", body: "x" });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     await failJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, "gave up");
     const outcome = await outcomeRow(id);
     // A docs job is on sonnet or, for a share of ids, on the haiku trial arm (src/model-routing.ts TRIAL_ARMS).
-    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual(["docs", posted.job!.model_recommended, null]);
+    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual(["docs", must(posted.job).model_recommended, null]);
     expect(["sonnet", "haiku"]).toContain(outcome?.model_chosen);
   });
 
   it("a job row from before routing is routed at its claim and recorded", async () => {
     const posted = await post({ title: "Build X: an old job", body: "x" });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await env.DB.prepare("UPDATE jobs SET kind = NULL, model_recommended = NULL, effort_recommended = NULL, routing_reason = NULL WHERE id = ?1").bind(id).run();
     const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
     expect(claim.routing).toMatchObject({ model: "opusplan", kind: "build" });

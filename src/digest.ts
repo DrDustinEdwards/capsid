@@ -6,6 +6,7 @@ import type { DigestState } from "./ops-types/views";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { weeklyDigestLines } from "./watcher-digest";
 import { DAY_MS } from "./time";
+import { must } from "./must";
 
 // THE DAILY EMAIL DIGEST (docs/design/design-merge-pipeline.md section 5; Dustin's DECIDE
 // 5 of 2026-10-09: Web Push for the four urgent things, and everything else in a daily
@@ -142,7 +143,7 @@ export async function digestTick(env: Env, now: Date, read: DigestReader = readO
   const mail = await composeDigest(env, now, since, read);
   let record: LastDigest;
   try {
-    await env.EMAIL!.send({ from: env.ALERT_FROM!, to: env.ALERT_EMAIL!, subject: mail.subject, text: mail.text });
+    await must(env.EMAIL).send({ from: must(env.ALERT_FROM), to: must(env.ALERT_EMAIL), subject: mail.subject, text: mail.text });
     record = { at: now.toISOString(), outcome: "sent", note: mail.subject };
   } catch (err) {
     // Recorded for the day, so a refusal is not retried every five minutes; the Portal

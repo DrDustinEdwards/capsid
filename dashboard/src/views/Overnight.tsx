@@ -145,6 +145,7 @@ export function SinceLastLooked() {
     const at = saved ? Date.parse(saved) : NaN;
     if (!Number.isNaN(at)) setSince(new Date(at).toISOString());
     writePref(LAST_LOOKED_PREF, new Date(now).toISOString());
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- once after hydration; a later `now` must not rewrite the saved look
   }, []);
   const load = useAnswer<PortalDigest>([LIVE, "digest", since], () => fetchDigest(since));
   const d = load.data;

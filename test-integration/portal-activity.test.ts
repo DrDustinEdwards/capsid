@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { grantAgent } from "../src/agents";
 import { postJob } from "../src/jobs";
 import { ACTIVITY_LIMIT, loadActivity } from "../src/portal-activity";
+import { must } from "../src/must";
 
 // THE PORTAL'S RECENT ACTIVITY, read from a real audit_log. The node tests read the
 // statement's text for the LIMIT and the two filter clauses; these seed more rows than
@@ -67,7 +68,7 @@ describe("a job transition's two audit rows", () => {
       body: "do the thing",
     });
     expect(posted.ok, posted.refusal).toBe(true);
-    const path = `jobs/${posted.job!.id}.md`;
+    const path = `jobs/${must(posted.job).id}.md`;
     const rows = (await loadActivity(env.DB, { namespace: "capsid", actor: "github:sample", id: null })).filter((r) => r.path === path);
     expect(rows.map((r) => r.action)).toEqual(["job-posted", "job-posted"]);
     expect(rows.map((r) => r.target).sort()).toEqual(["document", "job"]);
@@ -97,9 +98,9 @@ describe("one audit row by id", () => {
       .first<{ id: number }>();
     await env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('agent:sample', 'write', 'act-d', 'after.md', '{}')").run();
 
-    const rows = await loadActivity(env.DB, { namespace: "some-other", actor: "agent:nobody", id: row!.id });
-    expect(rows.map((r) => r.id), "the id read ignores the namespace and actor filters").toEqual([row!.id]);
-    const detail = rows[0]!.detail;
+    const rows = await loadActivity(env.DB, { namespace: "some-other", actor: "agent:nobody", id: must(row).id });
+    expect(rows.map((r) => r.id), "the id read ignores the namespace and actor filters").toEqual([must(row).id]);
+    const detail = must(rows[0]).detail;
     expect(detail.reason).toBe("the origin moved");
     expect(detail.changes).toEqual([
       { field: "Origin", before: "https://a.example.com", after: "https://b.example.com" },
@@ -107,7 +108,7 @@ describe("one audit row by id", () => {
     ]);
     expect(detail.withheld).toBe(1);
     expect(JSON.stringify(rows[0])).not.toContain("f".repeat(64));
-    expect(Object.keys(rows[0]!)).not.toContain("params");
+    expect(Object.keys(must(rows[0]))).not.toContain("params");
   });
 
   it("an id with no row is no rows, not the whole log", async () => {

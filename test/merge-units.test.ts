@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { judgeUnits, REPORT_KEY, SUSPENDED_KEY, unitInboxItems, unitsTick, type ApprovalEvidence, type RollbackEvidence } from "../src/merge-units.ts";
 import { fakeKv } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // Earned promotion and demotion (docs/design/design-merge-pipeline.md section 7, PR 9;
 // DECIDE 9 and 10 of 2026-10-09). Proves: a fixture with 20 clean merges proposes; one
@@ -32,7 +33,7 @@ const rollback = (over: Partial<RollbackEvidence> = {}): RollbackEvidence => ({
 test("PLANT: 20 clean approved merges over 14 days propose promoting the unit", () => {
   const report = judgeUnits(merges(20, 14), [], [], NOW);
   assert.equal(report.proposals.length, 1);
-  const p = report.proposals[0]!;
+  const p = must(report.proposals[0]);
   assert.equal(p.kind, "promote");
   assert.equal(p.unit, "capsid/tests");
   assert.deepEqual(p.evidence, { approved_merges: 20, span_days: 14, rollbacks: 0, bad_voids: 0 });
@@ -58,9 +59,9 @@ test("an approval with no unit recorded (before migration 0043) counts toward no
 test("PLANT: one rollback of an unattended merge suspends its unit and proposes removing it", () => {
   const report = judgeUnits([], [rollback()], [], NOW);
   assert.deepEqual(report.suspended.map((s) => s.unit), ["capsid/docs"]);
-  assert.match(report.suspended[0]!.reason, /owner\/capsid#41 merged unattended and was rolled back/);
+  assert.match(must(report.suspended[0]).reason, /owner\/capsid#41 merged unattended and was rolled back/);
   assert.equal(report.proposals.length, 1);
-  assert.equal(report.proposals[0]!.kind, "demote");
+  assert.equal(must(report.proposals[0]).kind, "demote");
 });
 
 test("a rollback of an approved merge blocks the unit's promotion but suspends nothing", () => {
@@ -93,7 +94,7 @@ test("the step suspends once, audits once, and the next pass changes nothing", a
   const first = await unitsTick(w.env, NOW, read);
   assert.deepEqual(first.newly_suspended, ["capsid/docs"]);
   assert.equal(w.batches.length, 1, "the suspension was not audited");
-  assert.deepEqual(JSON.parse(w.kv.store.get(SUSPENDED_KEY)!).map((s: { unit: string }) => s.unit), ["capsid/docs"]);
+  assert.deepEqual(JSON.parse(must(w.kv.store.get(SUSPENDED_KEY))).map((s: { unit: string }) => s.unit), ["capsid/docs"]);
   const second = await unitsTick(w.env, new Date(NOW.getTime() + 300_000), read);
   assert.equal(second.ran, false);
   assert.equal(w.batches.length, 1, "the same suspension was audited twice");

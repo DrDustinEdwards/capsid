@@ -4,6 +4,7 @@ import type { OpsMaintenanceItem } from "./ops-types/views";
 import type { SharedCodeView } from "./ops-types/feed";
 import type { RepoPrivacy, SystemModel } from "./system-model";
 import { DAY_MS } from "./time";
+import { must } from "./must";
 
 // THE VERSIONS MODEL, per system (Dustin, 2026-11-03). src/shared-code.ts reads, from every
 // repo the system model names, which version of each network package it installs; this
@@ -57,7 +58,7 @@ export function toPublicVersions(view: SharedCodeView, model: SystemModel, priva
     as_of: asOf,
     packages: view.packages.map((p) => ({ name: p.name, registry: p.registry, latest: p.latest })),
     // In the model's order, every system that pins anything.
-    systems: model.systems.flatMap((s) => (bySystem.has(s.id) ? [{ system: s.id, pins: bySystem.get(s.id)! }] : [])),
+    systems: model.systems.flatMap((s) => (bySystem.has(s.id) ? [{ system: s.id, pins: must(bySystem.get(s.id)) }] : [])),
     unread: model.systems.filter((s) => failed.has(s.id)).map((s) => s.id),
   };
 }

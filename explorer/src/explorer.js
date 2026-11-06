@@ -150,7 +150,7 @@ function flowPage(map, root, host) {
   map.playFlow(flow, current);
   // Whatever stepped (a link, a key, the map's own Back and Next), the map says so here.
   root.addEventListener("cap:system-map-flow", (e) => {
-    if (e.detail.id === flow) show(e.detail.step, true);
+    if (e.detail.id === flow) void show(e.detail.step, true);
   });
   document.addEventListener("click", (e) => {
     const link = e.target.closest?.("a[data-go]");
@@ -172,7 +172,7 @@ function flowPage(map, root, host) {
     const n = Number(location.pathname.split("/").filter(Boolean)[2]);
     if (!n) return;
     play.stop();
-    show(n, false);
+    void show(n, false);
     go(n);
   });
 }
@@ -274,14 +274,14 @@ for (const desk of document.querySelectorAll("[data-desk]")) {
     k.addEventListener("click", () => {
       pick(k);
       claim = truth;
-      check(false);
+      void check(false);
     });
   }
   for (const b of desk.querySelectorAll("[data-desk-step]")) {
     b.addEventListener("click", () => {
       const max = kind === "ci_green" ? 1 : 99;
       claim = Math.min(max, Math.max(0, claim + Number(b.dataset.deskStep)));
-      check(false);
+      void check(false);
     });
   }
   // A lie at random: any of the checks, a claim that is never what GitHub reads.
@@ -292,7 +292,7 @@ for (const desk of document.querySelectorAll("[data-desk]")) {
       const off = 1 + Math.floor(Math.random() * 3);
       claim = truth - off >= 0 && Math.random() < 0.4 ? truth - off : truth + off;
     }
-    check(true);
+    void check(true);
   });
 }
 
@@ -338,7 +338,7 @@ for (const box of document.querySelectorAll("[data-session]")) {
   enhanceMeters(box);
   setBudget(0);
   budgetWords.textContent = "Nothing sent yet.";
-  start.addEventListener("click", async () => {
+  const runStart = async () => {
     const mine0 = ++run;
     write.disabled = true;
     const shown = items.filter((li) => li !== mine || written);
@@ -356,7 +356,8 @@ for (const box of document.querySelectorAll("[data-session]")) {
     budgetWords.textContent = `${total} KB of the 40 KB limit. Nothing cut.`;
     said.textContent = written ? "New session. Your note from last time is there." : "The session has the project's notes. Write a note, then start again.";
     write.disabled = written;
-  });
+  };
+  start.addEventListener("click", () => void runStart());
   write.addEventListener("click", () => {
     written = true;
     write.disabled = true;

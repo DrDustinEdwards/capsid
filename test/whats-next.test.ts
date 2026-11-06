@@ -196,7 +196,7 @@ test("PLANT: a pull request list that fails lands in not_checked, not as a repo 
   await withFetch({ "GET /repos/o/r/pulls": { status: 500, body: { message: "Server Error" } } }, async () => {
     const r = await whatsNext(env(db({ namespaces: [{ namespace: "sample", repos: repos("o/r") }] })), NOW);
     assert.deepEqual(r.pull_requests.all, []);
-    assert.ok(r.not_checked.some((n) => /^o\/r open pull requests: page 1 returned 500/.test(n)), `not_checked does not name the failed list: ${JSON.stringify(r.not_checked)}`);
+    assert.ok(r.not_checked.some((n) => n.startsWith("o/r open pull requests: page 1 returned 500")), `not_checked does not name the failed list: ${JSON.stringify(r.not_checked)}`);
   });
 });
 
@@ -219,8 +219,8 @@ test("PLANT: a failed mergeability read and a failed check-runs read are named, 
 test("PLANT: a namespace mapping that cannot be read, and a stale read that fails, each land in not_checked", async () => {
   await withFetch({}, async (calls) => {
     const r = await whatsNext(env(db({ failNamespaces: true, failStale: true })), NOW);
-    assert.ok(r.not_checked.some((n) => /^the namespace mapping: D1_ERROR: sample namespaces read failed/.test(n)), JSON.stringify(r.not_checked));
-    assert.ok(r.not_checked.some((n) => /^stale jobs: D1_ERROR: sample stale read failed/.test(n)), JSON.stringify(r.not_checked));
+    assert.ok(r.not_checked.some((n) => n.startsWith("the namespace mapping: D1_ERROR: sample namespaces read failed")), JSON.stringify(r.not_checked));
+    assert.ok(r.not_checked.some((n) => n.startsWith("stale jobs: D1_ERROR: sample stale read failed")), JSON.stringify(r.not_checked));
     assert.equal(r.pull_requests.repos_read, 0);
     assert.equal(calls.length, 0);
   });

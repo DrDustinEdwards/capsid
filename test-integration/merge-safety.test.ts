@@ -4,6 +4,7 @@ import type { Env } from "../src/env";
 import { PAUSED_KEY, readSafetyReport, recordOutcomeReverts, recordReverts, REPORT_KEY, safetyTick } from "../src/merge-safety";
 import { readModelLearning } from "../src/model-learning";
 import { readUnitEvidence, SUSPENDED_KEY, unitsTick } from "../src/merge-units";
+import { must } from "../src/must";
 
 // The safety meter against a real D1: revert tracking from the closed pull requests
 // GitHub lists (answered here), recorded once per revert; the counts and the pause from
@@ -92,7 +93,7 @@ describe("the shutoff against D1", () => {
     await env.DB.prepare(`INSERT INTO deploy_outcomes (repo, namespace, run_id, head_sha, pr, outcome, run_at) VALUES ('example/capsid', 'capsid', 3, ?1, 43, 'verified', ?2)`).bind(A, daysAgo(1)).run();
     const first = await safetyTick(env as unknown as Env, NOW, ["capsid"]);
     expect(first.newly_paused).toEqual(["capsid"]);
-    expect(Object.keys(JSON.parse((await env.APP_KV.get(PAUSED_KEY))!))).toEqual(["capsid"]);
+    expect(Object.keys(JSON.parse(must((await env.APP_KV.get(PAUSED_KEY)))))).toEqual(["capsid"]);
     const audit = await env.DB.prepare("SELECT actor, namespace FROM audit_log WHERE action = 'auto-merge-paused'").all<{ actor: string; namespace: string }>();
     expect(audit.results).toEqual([{ actor: "capsid:merge-safety", namespace: "capsid" }]);
     const report = await readSafetyReport(env.APP_KV);

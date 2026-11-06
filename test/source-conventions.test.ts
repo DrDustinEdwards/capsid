@@ -5,6 +5,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // One definition, imported. Conventions about the shape of src/ rather than the
 // behavior of any one module: each guard asks whether a fact is still stated once,
@@ -16,9 +17,9 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 // scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("every secret compare goes through safeEqual, in every file", () => {
   // The specific compares, still where they belong.
-  const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
+  const auth = must(sourceFiles().find((f) => f.name === "auth.ts")).text;
   assert.ok(auth.includes("await safeEqual(candidate, entry)"));
-  const accessLogin = sourceFiles().find((f) => f.name === "access-login.ts")!.text;
+  const accessLogin = must(sourceFiles().find((f) => f.name === "access-login.ts")).text;
   assert.match(accessLogin, /await safeEqual\(await sha256Hex\(stateCookie\), signIn\.binding\)/);
 
   // And no file anywhere has gone back to a short-circuiting compare of a secret.
@@ -45,7 +46,7 @@ test("every safeEqual, isAdminEmail and adminGrantEmail call is awaited, in ever
       .split("\n")
       .map((line, i) => ({ file: f.name, line: i + 1, text: line.trim() }))
       .flatMap((l) => [...l.text.matchAll(/(\bawait\s+\(?)?\b(safeEqual|isAdminEmail|adminGrantEmail)\(/g)].map((m) => ({ ...l, awaited: Boolean(m[1]) })))
-      .filter((c) => !/^export async function /.test(c.text))
+      .filter((c) => !c.text.startsWith("export async function "))
   );
   assert.ok(calls.length >= 16, `found only ${calls.length} calls`);
   assert.deepEqual(calls.filter((c) => !c.awaited).map((c) => `src/${c.file}:${c.line} ${c.text}`), []);

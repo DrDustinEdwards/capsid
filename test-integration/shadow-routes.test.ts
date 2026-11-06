@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { postJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
 import { handleShadowJob, handleShadowResult } from "../src/shadow";
+import { must } from "../src/must";
 
 // The shadow test's two routes (src/shadow.ts): only shadow-test.yml on a pull request in
 // the capsid namespace's repo reads the job that pull request names. GitHub's OIDC issuer
@@ -31,7 +32,7 @@ beforeEach(async () => {
   await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES ('capsid', ?1)").bind(JSON.stringify([{ repo: REPO, label: "primary" }])).run();
   await env.APP_KV.put(`gh:token:v3:${REPO}`, "test-token");
   const seat = grantAgent("write", "access:seat@example.com");
-  jobId = (await postJob(jobsEnv(), seat, new Date(), { namespace: "capsid", title: "shadow", body: "do the thing" } as Parameters<typeof postJob>[3])).job!.id;
+  jobId = must((await postJob(jobsEnv(), seat, new Date(), { namespace: "capsid", title: "shadow", body: "do the thing" } as Parameters<typeof postJob>[3])).job).id;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     if (url === `${ISSUER}/.well-known/openid-configuration`) return Response.json({ issuer: ISSUER, jwks_uri: `${ISSUER}/.well-known/jwks` });

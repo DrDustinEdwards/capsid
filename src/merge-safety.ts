@@ -8,6 +8,7 @@ import { auditStatement } from "./store-guards";
 import { timeMs } from "./trends";
 import { passDue } from "./watcher";
 import { DAY_MS } from "./time";
+import { must } from "./must";
 
 // THE AUTO-MERGE SAFETY METER AND SHUTOFF (docs/design/design-merge-pipeline.md, "The
 // safety meter"). Merge units (src/merge-units.ts) narrow one path class after a bad
@@ -60,13 +61,13 @@ export function revertTargets(title: string, body: string, repo: string): { prs:
   const shas = new Set<string>();
   const text = `${title ?? ""}\n${body ?? ""}`;
   for (const m of text.matchAll(/\breverts?\s+([\w.-]+\/[\w.-]+)#(\d+)\b/gi)) {
-    if (m[1]!.toLowerCase() === repo.toLowerCase()) prs.add(Number(m[2]));
+    if (must(m[1]).toLowerCase() === repo.toLowerCase()) prs.add(Number(m[2]));
   }
   // A bare "revert #N" is a statement only at the start of the title or of a body line
   // (after a list marker at most): "Don't revert #12 here" is prose and names nothing.
   const lead = /^[ \t]*(?:[-*][ \t]+)?reverts?\s+#(\d+)\b/gim;
   for (const m of `${title ?? ""}\n${body ?? ""}`.matchAll(lead)) prs.add(Number(m[1]));
-  for (const m of text.matchAll(/\bThis reverts commit\s+([0-9a-f]{7,40})\b/gi)) shas.add(m[1]!.toLowerCase());
+  for (const m of text.matchAll(/\bThis reverts commit\s+([0-9a-f]{7,40})\b/gi)) shas.add(must(m[1]).toLowerCase());
   return { prs: [...prs].sort((a, b) => a - b), shas: [...shas] };
 }
 
@@ -184,7 +185,7 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
     const ref = parsePrUrl(row.pr_url);
     if (!ref) continue;
     const key = `${ref.owner}/${ref.repo}`.toLowerCase();
-    const entry = repos.get(key) ?? (repos.set(key, { owner: ref.owner, repo: ref.repo, prs: new Map() }), repos.get(key)!);
+    const entry = repos.get(key) ?? (repos.set(key, { owner: ref.owner, repo: ref.repo, prs: new Map() }), must(repos.get(key)));
     entry.prs.set(ref.number, [...(entry.prs.get(ref.number) ?? []), { job_id: row.job_id, namespace: row.namespace }]);
   }
   const recorded: string[] = [];
@@ -315,7 +316,7 @@ export function countsFrom(audit: readonly AuditEvidence[], outcomes: readonly O
   const t = now.getTime();
   const out = new Map<string, SafetyCounts>();
   const get = (ns: string): SafetyCounts =>
-    out.get(ns) ?? (out.set(ns, { namespace: ns, auto_merged: 0, approved: 0, deploys_verified: 0, rolled_back: 0, rollback_failed: 0, reverts: 0, bad_auto_7d: 0, bad_at: [], auto_at: [] }), out.get(ns)!);
+    out.get(ns) ?? (out.set(ns, { namespace: ns, auto_merged: 0, approved: 0, deploys_verified: 0, rolled_back: 0, rollback_failed: 0, reverts: 0, bad_auto_7d: 0, bad_at: [], auto_at: [] }), must(out.get(ns)));
   for (const ns of namespaces) get(ns);
   const inWeek = (ms: number) => ms > t - WEEK_MS && ms <= t;
   const inReach = (ms: number) => ms > t - WEEK_MS - BASELINE_MS && ms <= t;

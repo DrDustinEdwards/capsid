@@ -34,6 +34,7 @@ export function Claims() {
   useEffect(() => {
     setInput({ ...filter });
     setJobInput(job);
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- `key` is the filter (and `job` the job): resync the inputs only when the address changed
   }, [key, job]);
 
   const agg = useAnswer<PortalClaimsAggregate>(["claims", key], () => fetchClaimsAggregate(filter));

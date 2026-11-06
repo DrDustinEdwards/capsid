@@ -62,6 +62,7 @@ import type {
   PortalPerformed,
   PortalPreview,
 } from "../src/types.ts";
+import { must } from "../src/lib/must.ts";
 
 const FIXTURE = fileURLToPath(new URL("./sample-feed.json", import.meta.url));
 const REFRESH_GAP_MS = 30_000;
@@ -362,7 +363,7 @@ function mockTrends(weeks: number): PortalTrends {
   const minutes = [72, 81, 66, 58, 61, 49, 52, 41, 38, 35, 30, 34];
   const weekRows = Array.from({ length: weeks }, (_, i) => {
     const start = new Date(monday - (weeks - 1 - i) * 7 * DAYMS).toISOString().slice(0, 10);
-    const m = minutes[(minutes.length - weeks + i + minutes.length) % minutes.length]!;
+    const m = must(minutes[(minutes.length - weeks + i + minutes.length) % minutes.length]);
     return { start, week: `${start.slice(0, 4)}-W${String(30 + i).padStart(2, "0")}`, m };
   });
   const days = Array.from({ length: 14 }, (_, i) => day(13 - i));
@@ -469,7 +470,7 @@ function validateSite(p: Record<string, string>): SiteFields {
   if (host !== host.toLowerCase()) throw new Refusal(400, `the hostname '${host}' must be lowercase.`);
   if (!host.includes(".")) throw new Refusal(400, `'${host}' is a single-label name; a site needs a public hostname such as example.com.`);
   if (p.platform !== "cloudflare" && p.platform !== "vercel") throw new Refusal(400, `the platform must be one of cloudflare, vercel; got '${p.platform ?? ""}'.`);
-  if (p.health_path && !/^\/[A-Za-z0-9._~\/-]{0,199}$/.test(p.health_path)) {
+  if (p.health_path && !/^\/[A-Za-z0-9._~/-]{0,199}$/.test(p.health_path)) {
     throw new Refusal(400, `the health path '${p.health_path}' must start with / and use only letters, digits and - . _ ~ /, at most 200 characters, with no query or fragment.`);
   }
   if (p.script) {
@@ -1199,7 +1200,7 @@ function convergence(st: MockState): PortalConvergence {
   const sites: ConvergenceSite[] = st.sites
     .filter((s) => s.origin && s.operator)
     .map((s) => {
-      const op = s.operator!;
+      const op = must(s.operator);
       const repaired = st.repairs.some((r) => r.namespace === s.namespace && r.tool === "sync_pages");
       const recent = [
         ...st.repairs.filter((r) => r.namespace === s.namespace).map((r) => ({ at: r.at, actor: "access:admin@example.com", tool: r.tool, via: "portal", converged: true, error: null })),
@@ -1208,7 +1209,7 @@ function convergence(st: MockState): PortalConvergence {
       return {
         namespace: s.namespace,
         name: s.name,
-        origin: s.origin!,
+        origin: must(s.origin),
         read_at: new Date(now).toISOString(),
         operator: { path: op.path, auth_var: op.auth_var, secret_set: true, repairs: op.repairs, weekly: op.weekly },
         problem: null,
@@ -1260,8 +1261,8 @@ function maintenance(f: OpsFeed): PortalMaintenance {
   const now = mockNow();
   if (process.env.WF_MOCK === "no-snapshot") return { generated: null, items: [], read: { prs: 0, branches: 0, repos: 0, roster: 7, deploys: 0 } };
   // The sample feed has both; a feed without one fails here, not with a made-up id.
-  const queued = f.live.jobs.find((j) => j.status === "queued")!.id;
-  const blocked = f.live.jobs.find((j) => j.status === "blocked")!.id;
+  const queued = must(f.live.jobs.find((j) => j.status === "queued")).id;
+  const blocked = must(f.live.jobs.find((j) => j.status === "blocked")).id;
   const pr = "https://github.com/example-org/sample/pull/41";
   return {
     generated: new Date(now - 3 * 3_600_000).toISOString(),
@@ -1353,7 +1354,7 @@ function seedClaimGroups(): ClaimsGroup[] {
   const touches = (count: number, byKind: Record<string, number>, byActor: Record<string, number>, waits: number[]): ClaimsGroup["touches"] => {
     const sorted = [...waits].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
-    const median = sorted.length === 0 ? null : sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+    const median = sorted.length === 0 ? null : sorted.length % 2 ? must(sorted[mid]) : Math.round((must(sorted[mid - 1]) + must(sorted[mid])) / 2);
     return { count, by_kind: byKind, by_actor_kind: byActor, waits: waits.length, waited_ms_total: waits.length ? waits.reduce((a, b) => a + b, 0) : null, waited_ms_median: median };
   };
   const agr = (agree: number, disagree: number, unclaimed: number, unchecked: number) => ({ agree, disagree, unclaimed, unchecked });

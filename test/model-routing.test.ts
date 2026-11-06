@@ -28,6 +28,7 @@ import {
 import { WATCHER_ACTOR } from "../src/watcher.ts";
 import { pullRequestRisk } from "../src/model-routing-pr.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // Automatic model routing (src/model-routing.ts, docs/work-queue.md). The titles below are
 // real ones from the capsid queue, so the kind rules are held to the work they will read.
@@ -162,19 +163,19 @@ test("every kind and the rule list are tied: the last rule is the catch-all, and
 
 // Ids shaped like mintJobId's, and the first of them in and out of the arms.
 const ids = Array.from({ length: 2000 }, (_, i) => `job_${(i * 2654435761 >>> 0).toString(16).padStart(12, "0").slice(-12)}`);
-const inArm = ids.find((id) => trialBucket(id) < 25)!;
-const outOfArm = ids.find((id) => trialBucket(id) >= 25)!;
+const inArm = must(ids.find((id) => trialBucket(id) < 25));
+const outOfArm = must(ids.find((id) => trialBucket(id) >= 25));
 
 test("trial arms: a share of routine watcher, maintenance and docs jobs go to haiku at the rule's effort, the rest stay on the rule", () => {
   assert.deepEqual(TRIAL_ARMS.map((a) => [a.kind, a.model]).sort(), [["docs", "haiku"], ["maintenance", "haiku"], ["watcher", "haiku"]]);
   for (const arm of TRIAL_ARMS) {
-    const rule = ROUTING_RULES.find((r) => r.when.kind === arm.kind)!;
+    const rule = must(ROUTING_RULES.find((r) => r.when.kind === arm.kind));
     assert.ok(MODELS.indexOf(arm.model) < MODELS.indexOf(rule.model), `${arm.kind}'s arm is not cheaper than its rule`);
     const routes = ids.map((id) => routeJob(job("x", { kind: arm.kind, id })));
     const taken = routes.filter((r) => r.model === arm.model);
     assert.ok(taken.length / ids.length > (arm.percent - 4) / 100 && taken.length / ids.length < (arm.percent + 4) / 100, `${arm.kind}: ${taken.length} of ${ids.length}`);
     for (const r of taken) assert.deepEqual([r.trial, r.effort], [arm.model, rule.effort]);
-    assert.match(taken[0]!.reason, new RegExp(`trial arm: haiku on ${arm.percent} percent of routine ${arm.kind} jobs, measured against ${rule.model}`));
+    assert.match(must(taken[0]).reason, new RegExp(`trial arm: haiku on ${arm.percent} percent of routine ${arm.kind} jobs, measured against ${rule.model}`));
     for (const r of routes.filter((x) => x.model !== arm.model)) assert.deepEqual([r.model, r.trial], [rule.model, null]);
   }
 });
@@ -202,17 +203,17 @@ test("PLANT: a risky job or one that names its model never takes an arm, and kin
 test("trialStatus: collecting below the minimum, then the verdict proposeRuleChanges gives, with cost", () => {
   const thin = trialStatus(cellsOf([...many(MIN_SAMPLE - 1, 9, "docs", "haiku"), ...many(40, 30, "docs", "sonnet")]));
   assert.equal(thin.length, TRIAL_ARMS.length, "one status per arm");
-  const docs = thin.find((t) => t.kind === "docs")!;
+  const docs = must(thin.find((t) => t.kind === "docs"));
   assert.deepEqual([docs.verdict, docs.n, docs.against_n, docs.against], ["collecting", MIN_SAMPLE - 1, 40, "sonnet"]);
-  assert.equal(thin.find((t) => t.kind === "watcher")!.verdict, "collecting");
+  assert.equal(must(thin.find((t) => t.kind === "watcher")).verdict, "collecting");
 
   const cost = (usd: number) => (f: OutcomeFact) => ({ ...f, cost_usd: usd });
   const good = trialStatus(cellsOf([...many(12, 10, "docs", "haiku").map(cost(0.1)), ...many(12, 10, "docs", "sonnet").map(cost(1.5))]));
-  const supports = good.find((t) => t.kind === "docs")!;
+  const supports = must(good.find((t) => t.kind === "docs"));
   assert.equal(supports.verdict, "supports");
   assert.match(supports.why, /haiku merged green 10\/12 at \$0\.10 a job, sonnet 10\/12 at \$1\.50 a job/);
   const bad = trialStatus(cellsOf([...many(12, 6, "maintenance", "haiku"), ...many(12, 11, "maintenance", "sonnet")]));
-  assert.equal(bad.find((t) => t.kind === "maintenance")!.verdict, "does not support");
+  assert.equal(must(bad.find((t) => t.kind === "maintenance")).verdict, "does not support");
 });
 
 // RISK

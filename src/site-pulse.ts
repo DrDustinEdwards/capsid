@@ -5,6 +5,7 @@ import { readSiteConfig, sitesFrom } from "./ops-sites";
 import type { SiteProbe } from "./ops-types/sites";
 import { DAY_MS } from "./time";
 import { logEvent } from "@dustinedwards/site-runtime/log";
+import { must } from "./must";
 
 // THE FIVE-MINUTE PULSE (area 8, 2026-10-30). The watcher probes the sites half-hourly
 // for the Portal's rings and findings, and until this nothing told Dustin when a site went
@@ -74,7 +75,7 @@ export function nextPulse(prev: PulseSite | undefined, probe: SiteProbe, now: Da
  *  part such as "backup: last successful backup was 38h ago" is keyed by its name only, so
  *  an age that grows each probe is still one check. */
 function degradedChecks(reason: string): string[] {
-  const names = reason.split("; ").map((part) => part.split(":")[0]!.trim().slice(0, 60)).filter(Boolean);
+  const names = reason.split("; ").map((part) => must(part.split(":")[0]).trim().slice(0, 60)).filter(Boolean);
   return names.length ? [...new Set(names)] : ["health"];
 }
 

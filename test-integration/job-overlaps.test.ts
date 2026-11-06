@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, commandFromSummary, completeJob, postJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
 import { OTHER_PRS_READ } from "../src/job-overlaps";
+import { must } from "../src/must";
 
 // Overlap warnings (Track A D1) against real D1, with GitHub as a fetch stub: block and
 // complete name a pull request, the Worker reads the files of every other open pull request
@@ -43,7 +44,7 @@ function stubGitHub(files: Record<number, Array<string | [string, string]>>, ope
 
 async function claimed(title: string) {
   const posted = await postJob(jobsEnv(), SEAT, NOW, { namespace: NS, title, body: "do the thing" } as Parameters<typeof postJob>[3]);
-  const id = posted.job!.id;
+  const id = must(posted.job).id;
   expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
   return id;
 }
@@ -71,7 +72,7 @@ describe("overlap warnings on block and complete", () => {
     // The command is still the last thing, so what the seat runs is what the driver wrote.
     expect(commandFromSummary(summary)).toBe(`gh pr merge ${PR(134)} --squash`);
     const audit = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'job-block' AND params LIKE ?1").bind(`%${id}%`).first<{ params: string }>();
-    expect(JSON.parse(audit!.params).overlaps.overlaps).toHaveLength(1);
+    expect(JSON.parse(must(audit).params).overlaps.overlaps).toHaveLength(1);
   });
 
   it("a complete whose evidence names an overlapping pull request carries the line in the stored summary", async () => {

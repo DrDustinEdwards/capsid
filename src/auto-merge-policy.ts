@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { onRoster } from "./roster";
 import { isMoneyPath } from "./scope";
 import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./signed-docs";
+import { must } from "./must";
 
 // What the Worker may merge without a human, and where that list lives. The document
 // is capsid/policy/auto-merge.md, signed with the same key and envelope as a task
@@ -340,13 +341,13 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
     if (unitItem) {
       // A unit is a widening, so every way it can be malformed refuses the whole document.
       if (!inUnits) return { error: `the policy lists unit '${unitItem[1]}' outside the ## Auto units section, so whether it is promoted is unstated.` };
-      const m = /^([a-z0-9-]+)\s*\/\s*([a-z-]+)$/.exec(unitItem[1]!.trim());
+      const m = /^([a-z0-9-]+)\s*\/\s*([a-z-]+)$/.exec(must(unitItem[1]).trim());
       if (!m) return { error: `the policy's unit '${unitItem[1]}' is not '<namespace> / <path class>'.` };
       const [, ns, cls] = m;
-      if (!PROMOTABLE_PATH_CLASSES.includes(cls!)) {
+      if (!PROMOTABLE_PATH_CLASSES.includes(must(cls))) {
         return { error: `the policy's unit '${unitItem[1]}' names path class '${cls}', which is ${cls === "money" || cls === "migration" || cls === "workflow" ? "never promoted to auto" : "not a path class this Worker knows"}. Refusing the whole document rather than guessing what it widens.` };
       }
-      if (!namespaces.includes(ns!)) return { error: `the policy's unit '${unitItem[1]}' names ${ns}, which the policy does not cover.` };
+      if (!namespaces.includes(must(ns))) return { error: `the policy's unit '${unitItem[1]}' names ${ns}, which the policy does not cover.` };
       const unit = `${ns} / ${cls}`;
       if (units.includes(unit)) return { error: `the policy lists unit '${unit}' twice.` };
       units.push(unit);

@@ -6,6 +6,7 @@ import { bundledModel } from "../src/public-data";
 import { PORTAL_SHARED_CODE_PATH } from "../src/portal-packages";
 import { SHARED_CODE_CACHE_KEY } from "../src/shared-code";
 import type { SharedCodeView } from "../src/ops-types/feed";
+import { must } from "../src/must";
 
 // The Shared code view's route through the Worker, against the D1 the migrations build:
 // the six seeded packages are read from configuration, every repo in the system model is
@@ -18,7 +19,7 @@ const SECRET = "integration-portal-cookie-key";
 async function signedGet(path: string): Promise<Response> {
   const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
   const ctx = createExecutionContext();
-  const response = await worker.fetch!(new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie }, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx);
+  const response = await must(worker.fetch).call(worker, new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie }, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx);
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }

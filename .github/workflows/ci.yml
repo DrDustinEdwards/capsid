@@ -112,11 +112,16 @@ jobs:
           npm run check:dashboard || status=1
           exit $status
 
-      # THE LINTS (test/lint/: dead exports, doc drift, oxlint). BEFORE Tests on
-      # purpose: this step is not on the auto-merge policy's required list, so a failure
-      # here stops the job, and the skipped required Tests step refuses the merge.
-      - name: Lint dead exports and doc drift
+      # THE LINTS. BEFORE Tests on purpose: these steps are not on the auto-merge
+      # policy's required list, so a failure here stops the job, and the skipped required
+      # Tests step refuses the merge. Lint is the network's shared Oxlint config (type-aware,
+      # so after the typechecks); the repo's own lints (test/lint/: dead exports, doc drift)
+      # are not part of it.
+      - name: Lint
         run: npm run lint
+
+      - name: Lint dead exports and doc drift
+        run: npm run lint:repo
 
       # THE RATCHETS (devkit): no raw console.* call in src/ (the baseline in .console.json
       # is 0; server code logs through logEvent), and no applied migration edited, renamed or

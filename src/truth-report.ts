@@ -1,5 +1,6 @@
 import { ruleDocCap, ruleDocProblem, staleSummary, type RuleDocProblem } from "./rule-docs";
 import { DAY_MS } from "./time";
+import { must } from "./must";
 interface TruthFinding {
   // What was checked, and what did not pass.
   check: string;
@@ -243,10 +244,10 @@ export function buildTruthReport(input: TruthInput): TruthReport {
         if (documentPaths.has(path)) continue;
         if (!repoRoots.has(path.split("/")[0])) continue;
         if (!cited.has(path)) cited.set(path, new Set());
-        cited.get(path)!.add(doc.path);
+        must(cited.get(path)).add(doc.path);
       }
     }
-    const missing = [...cited.entries()].filter(([path]) => !input.repoPaths!.has(path));
+    const missing = [...cited.entries()].filter(([path]) => !must(input.repoPaths).has(path));
     checks.push({
       check: "doc_vs_code_drift",
       subjects: cited.size,

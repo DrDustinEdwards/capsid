@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 import { HISTORY_ROWS } from "../src/limits";
+import { must } from "../src/must";
 
 // write, delete and restore snapshot the live row inside their batch, and the history
 // listing is bounded. These run against real D1 because the node fake neither
@@ -48,7 +49,7 @@ async function seed(path: string): Promise<number> {
   const row = await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, 'Lorem', 'lorem read body') RETURNING id")
     .bind(NS, path)
     .first<{ id: number }>();
-  return row!.id;
+  return must(row).id;
 }
 
 async function versionBodies(path: string): Promise<Array<string | null>> {
@@ -89,7 +90,7 @@ describe("the snapshot holds the row the table held at commit", () => {
       action: "restore",
       namespace: NS,
       path: "live-3.md",
-      version_id: version!.id,
+      version_id: must(version).id,
       confirm: true,
     });
     expect(await versionBodies("live-3.md")).toEqual(["lorem old body", RACED]);

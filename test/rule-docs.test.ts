@@ -6,6 +6,7 @@ import { CORE_CAP_BYTES, RULE_DOC_CAP_BYTES, ruleDocCap, ruleDocProblem, ruleDoc
 import { buildTruthReport, type ReportDoc } from "../src/truth-report.ts";
 import { TOOL_GRANTS } from "../src/scope.ts";
 import { fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // The rule documents' two checks (src/rule-docs.ts, job_c13dc0d4f22f): the cap
 // and stale tool names. Each is planted and seen red here; the
@@ -102,8 +103,8 @@ test("the truth report names both checks, judged over the rule documents only", 
     danglingEdges: [],
     countClaims: [],
   });
-  const caps = report.checks.find((c) => c.check === "rule_doc_caps")!;
-  const names = report.checks.find((c) => c.check === "stale_tool_names")!;
+  const caps = must(report.checks.find((c) => c.check === "rule_doc_caps"));
+  const names = must(report.checks.find((c) => c.check === "stale_tool_names"));
   assert.equal(caps.subjects, 3, "three rule documents, the research note is a record");
   assert.deepEqual(caps.findings.map((f) => f.subject), ["capsid/decisions.md"]);
   assert.deepEqual(names.findings.map((f) => f.subject), ["capsid/rulings/sample.md"]);

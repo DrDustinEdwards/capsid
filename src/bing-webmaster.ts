@@ -3,6 +3,7 @@ import type { FetchLike } from "./live-checks";
 import { pageOnSite, reportSite } from "./site-reports";
 import { dateWindow } from "./search-console";
 import { callSignal } from "./call-signal";
+import { must } from "./must";
 
 // Bing Webmaster Tools for a namespace's site, served as capsid_inspect_repo action bing
 // (Dustin, 2026-10-18, beside Search Console). Bing's index also feeds ChatGPT search and
@@ -129,7 +130,7 @@ export async function bingWebmaster(env: Env, namespace: string, args: BingArgs,
 
   const site = await reportSite(env, namespace, "Bing site");
 
-  const inspectUrl = report === "inspect" ? pageOnSite(site.origin, namespace, args.url!) : null;
+  const inspectUrl = report === "inspect" ? pageOnSite(site.origin, namespace, must(args.url)) : null;
   const window = report === "queries" || report === "pages" || report === "traffic" ? dateWindow(args, now) : null;
   const limit = args.row_limit ?? 25;
 
@@ -144,13 +145,13 @@ export async function bingWebmaster(env: Env, namespace: string, args: BingArgs,
 
   if (report === "queries" || report === "pages") {
     const rows = ((await bing(fetchImpl, key, report === "queries" ? "GetQueryStats" : "GetPageStats", { siteUrl })) ?? []) as StatRow[];
-    const { start, end } = window!;
+    const { start, end } = must(window);
     return { ...base, start_date: start, end_date: end, note: "Bing reports these in weekly buckets, so the window's edges are a week's grain.", ...sumStats(rows, start, end, report === "queries" ? "query" : "page", limit) };
   }
 
   if (report === "traffic") {
     const rows = ((await bing(fetchImpl, key, "GetRankAndTrafficStats", { siteUrl })) ?? []) as StatRow[];
-    const { start, end } = window!;
+    const { start, end } = must(window);
     const days = rows
       .map((r) => ({ date: bingDay(r.Date), clicks: r.Clicks ?? 0, impressions: r.Impressions ?? 0 }))
       .filter((r): r is { date: string; clicks: number; impressions: number } => r.date !== null && r.date >= start && r.date <= end)
@@ -166,7 +167,7 @@ export async function bingWebmaster(env: Env, namespace: string, args: BingArgs,
   }
 
   if (report === "inspect") {
-    const info = ((await bing(fetchImpl, key, "GetUrlInfo", { siteUrl, url: inspectUrl! })) ?? {}) as Record<string, unknown>;
+    const info = ((await bing(fetchImpl, key, "GetUrlInfo", { siteUrl, url: must(inspectUrl) })) ?? {}) as Record<string, unknown>;
     return {
       ...base,
       url: inspectUrl,

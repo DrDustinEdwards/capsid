@@ -9,6 +9,7 @@ import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface";
 import { stubAccess } from "@dustinedwards/devkit/access";
 import { cimdClient, cimdResponse } from "./cimd-stub";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
+import { must } from "../src/must";
 
 // CAPSID ADMIN ON ITS OWN ROUTES (capsid/rulings/mcp-2026-10-10.md, amendment answer 2),
 // through the WHOLE Worker: the host rules, the OAuth provider, src/routes.ts
@@ -47,7 +48,7 @@ beforeEach(async () => {
 
 async function call(request: Request): Promise<Response> {
   const ctx = createExecutionContext();
-  const response = await worker.fetch!(request as never, { ...env, COOKIE_ENCRYPTION_KEY: "integration-cookie-key" } as never, ctx);
+  const response = await must(worker.fetch).call(worker, request as never, { ...env, COOKIE_ENCRYPTION_KEY: "integration-cookie-key" } as never, ctx);
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
@@ -140,7 +141,7 @@ const cookieValues = (response: Response): string[] => response.headers.getSetCo
 function hidden(html: string, name: string): string {
   const match = new RegExp(`name="${name}" value="([^"]*)"`).exec(html);
   expect(match, `the dialog has no hidden ${name} field`).toBeTruthy();
-  return match![1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+  return must(match)[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 }
 
 async function adminToken(): Promise<string> {
@@ -168,8 +169,8 @@ async function adminToken(): Promise<string> {
   forgetKeys();
   const access = await stubAccess({
     issuer: `${env.ACCESS_TEAM_DOMAIN}/cdn-cgi/access/sso/oidc/${env.ACCESS_SAAS_CLIENT_ID}`,
-    audience: env.ACCESS_SAAS_CLIENT_ID!,
-    email: env.ADMIN_EMAIL!,
+    audience: must(env.ACCESS_SAAS_CLIENT_ID),
+    email: must(env.ADMIN_EMAIL),
     authorizationUrl: signIn.href,
     fallback: (u) => cimdResponse(u) ?? undefined,
   });
@@ -186,7 +187,7 @@ async function adminToken(): Promise<string> {
     new Request(`${ORIGIN}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER }).toString(),
+      body: new URLSearchParams({ grant_type: "authorization_code", code: must(code), redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER }).toString(),
     })
   );
   expect(exchanged.status, await exchanged.clone().text()).toBe(200);

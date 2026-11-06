@@ -1,6 +1,7 @@
 import type { OpsSiteConfig, SiteMapDrift } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
 import { parseOperator } from "./site-operator";
+import { must } from "./must";
 
 // The sites the watcher probes for Capsid Portal (capsid/research/design-ops-console.md),
 // read from configuration, not code. Ruled 2026-09-29: "Portal
@@ -197,7 +198,7 @@ export function originFrom(raw: string): { ok: true; origin: string } | { ok: fa
  *  whose path passes the same rules, for a site that serves its health on another host. */
 export function healthPathRefusal(path: string): string | null {
   const absolute = /^https:\/\/([^/?#@:]+)(\/.*)$/.exec(path);
-  if (absolute) return hostnameRefusal(absolute[1]!) ?? healthPathRefusal(absolute[2]!);
+  if (absolute) return hostnameRefusal(must(absolute[1])) ?? healthPathRefusal(must(absolute[2]));
   if (!HEALTH_PATH_SHAPE.test(path)) {
     return `the health path '${path}' must start with / (or be https://host/path) and use only letters, digits and - . _ ~ /, at most 200 characters, with no query or fragment.`;
   }

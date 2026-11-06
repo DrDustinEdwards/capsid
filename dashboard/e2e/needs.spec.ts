@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { visit } from "./views.ts";
+import { must } from "../src/lib/must.ts";
 
 // Needs you, the home (docs/design/design-portal-evaluation.md DECIDE 1; the UX audit of
 // 2026-10-19, B1, B3 and M3): everything waiting for you first, by kind, each row deciding
@@ -38,9 +39,9 @@ test("PLANT: the home is Needs you, the list comes first by kind, and the charts
   await expect(page.getByRole("heading", { level: 1, name: "Needs you" })).toBeVisible();
   await expect(waiting(page).locator(".wgroup h3")).toHaveText([/^Pull requests 2/, /^Questions and blocked jobs 3/, /^Paused after repeated failures 1/, /^Also waiting 2/]);
   // The list is above Problems and Trends, and nothing above it waits on a chart.
-  const order = await page.evaluate(() => ["#waiting", "#attention", "#trends"].map((s) => document.querySelector(s)!.getBoundingClientRect().top));
-  expect(order[0]).toBeLessThan(order[1]!);
-  expect(order[1]).toBeLessThan(order[2]!);
+  const order = await page.evaluate(() => ["#waiting", "#attention", "#trends"].map((s) => must(document.querySelector(s)).getBoundingClientRect().top));
+  expect(order[0]).toBeLessThan(must(order[1]));
+  expect(order[1]).toBeLessThan(must(order[2]));
   await expect(page.locator("#trends")).not.toHaveAttribute("open", "");
   // Drawn on the server inside the fold, so they are there with scripts off once it is opened.
   await expect(page.locator("#trends .cap-chart")).toHaveCount(2);
@@ -168,8 +169,8 @@ test("on a phone each row's buttons are full width and at least 44 px tall, and 
   await visit(page, "needs");
   const approve = group(page, "w-prs").getByRole("button", { name: "Approve example-org/sample-c #32", exact: true });
   const close = group(page, "w-prs").getByRole("button", { name: "Close example-org/sample-c #32", exact: true });
-  const a = (await approve.boundingBox())!;
-  const c = (await close.boundingBox())!;
+  const a = must((await approve.boundingBox()));
+  const c = must((await close.boundingBox()));
   expect(a.height).toBeGreaterThanOrEqual(44);
   expect(a.width + c.width).toBeGreaterThan(300);
   expect(a.y + a.height).toBeLessThan(915);

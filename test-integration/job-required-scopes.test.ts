@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { blockJob, claimJob, postJob, resumeJob } from "../src/jobs";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
+import { must } from "../src/must";
 
 // required_scopes at the claim and the resume, on the real path. test/jobs-agents.test.ts
 // drives `missingForJob` directly, which stays green if the `if (missing)` block is
@@ -65,7 +66,7 @@ describe("required_scopes on the real queue transitions", () => {
 
   it("PLANT: a job naming a flag is not handed to a driver without it, and STAYS QUEUED", async () => {
     const posted = await post({ required_scopes: { flags: ["can_merge"] } });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
 
     const refused = await claimJob(jobsEnv(), driver(), NOW, { namespace: "capsid" });
     expect(refused.ok).toBe(false);
@@ -78,7 +79,7 @@ describe("required_scopes on the real queue transitions", () => {
     const posted = await post({ required_scopes: { flags: ["can_merge"] } });
     const won = await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
     expect(won.ok, won.refusal).toBe(true);
-    expect(won.job?.id).toBe(posted.job!.id);
+    expect(won.job?.id).toBe(must(posted.job).id);
   });
 
   it("PLANT: a blocked job naming a flag is not RESUMED by a caller without it", async () => {
@@ -86,7 +87,7 @@ describe("required_scopes on the real queue transitions", () => {
     // the work, so a caller that could not have claimed this job must not acquire it
     // by resuming it.
     const posted = await post({ required_scopes: { flags: ["can_touch_protected"] } });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
     await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
     expect(await statusOf(id)).toBe("blocked");
@@ -110,7 +111,7 @@ describe("required_scopes on the real queue transitions", () => {
     // A resume that returns the job to its claimant acquires nothing, so it skips the
     // flag check. It still moves a job, so the namespace is asked either way.
     const posted = await post({ required_scopes: undefined });
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
     await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
     const refused = await resumeJob(jobsEnv(), mintedSeat("foxhound"), NOW, id, "not mine");
@@ -124,7 +125,7 @@ describe("required_scopes on the real queue transitions", () => {
     const posted = await post({ required_scopes: { flags: ["can_merge"] } });
     const refused = await claimJob(jobsEnv(), driver("foxhound"), NOW, { namespace: "capsid" });
     expect(refused.ok).toBe(false);
-    expect(await statusOf(posted.job!.id)).toBe("queued");
+    expect(await statusOf(must(posted.job).id)).toBe("queued");
   });
 });
 
@@ -149,7 +150,7 @@ describe("a corrupt job requirement fails closed at the claim", () => {
   ] as const) {
     it(`PLANT: ${field} = ${value} refuses the claim, names the job and the field, and fails the job`, async () => {
       const posted = await post();
-      const id = posted.job!.id;
+      const id = must(posted.job).id;
       await env.DB.prepare(`UPDATE jobs SET ${field} = ?1 WHERE id = ?2`).bind(value, id).run();
 
       const refused = await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
@@ -164,7 +165,7 @@ describe("a corrupt job requirement fails closed at the claim", () => {
 
   it("a corrupt requirement on a BLOCKED job refuses the resume and leaves it blocked", async () => {
     const posted = await post();
-    const id = posted.job!.id;
+    const id = must(posted.job).id;
     await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
     await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
     await env.DB.prepare("UPDATE jobs SET required_scopes = '{not json' WHERE id = ?1").bind(id).run();

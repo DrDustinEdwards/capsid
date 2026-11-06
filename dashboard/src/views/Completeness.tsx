@@ -6,6 +6,7 @@ import { ago, fmtN, ms } from "../lib/format";
 import type { CompletenessArea, CompletenessCell, CompletenessStatus, CompletenessView } from "../types";
 import { St } from "../ui/icons";
 import "./Completeness.css";
+import { must } from "../lib/must";
 
 // COMPLETENESS: devkit's daily scoreboard (src/completeness.ts). Every area of the shared code
 // against the package and every live site, each cell from the live checks and the verifiers'
@@ -117,7 +118,7 @@ function linesText(area: CompletenessArea, publicOnly: boolean): string {
 function AreaPanel({ area, columns, publicOnly }: { area: CompletenessArea; columns: Column[]; publicOnly: boolean }) {
   const open = columns.map((c) => ({ c, cell: area.cells[c.id] })).filter((x): x is { c: Column; cell: CompletenessCell } => x.cell !== undefined && x.cell.status !== "complete" && x.cell.status !== "n/a");
   const done = columns.filter((c) => area.cells[c.id]?.status === "complete");
-  const sites = columns.filter((c) => c.id !== "package" && area.cells[c.id] && area.cells[c.id]!.status !== "n/a").length;
+  const sites = columns.filter((c) => c.id !== "package" && area.cells[c.id] && must(area.cells[c.id]).status !== "n/a").length;
   return (
     <Panel
       flush

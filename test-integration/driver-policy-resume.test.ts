@@ -6,6 +6,7 @@ import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
 import { signTaskBody } from "../src/signed-docs";
+import { must } from "../src/must";
 
 // The driver pushes its own branch and opens its own pull request.
 //
@@ -45,7 +46,7 @@ const at = (iso: string) => new Date(iso);
 
 async function blockedAtPush(title: string, command: string): Promise<string> {
   const posted = await postJob(jobsEnv(), SEAT, at("2026-09-17T01:00:00.000Z"), { namespace: "capsid", title, body: "do the work", gate_required: true });
-  const id = posted.job!.id;
+  const id = must(posted.job).id;
   const claimed = await claimJob(jobsEnv(), driver(), at("2026-09-17T01:00:00.000Z"), { id });
   expect(claimed.ok, claimed.refusal).toBe(true);
   const blocked = await blockJob(jobsEnv(), driver(), at("2026-09-17T01:30:00.000Z"), id, { reason: "finished up to the push", command });

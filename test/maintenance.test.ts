@@ -7,6 +7,7 @@ import { gatherDeployItems, type DeployReaders } from "../src/maintenance-deploy
 import type { OpsSnapshot, SiteSnapshot } from "../src/ops-types/sites.ts";
 import type { Env } from "../src/env.ts";
 import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // The daily maintenance pass's pure rules (job_549550d73d4e). Each rule is seen firing on a
 // planted case and staying quiet on a clean one. The queries that feed them run against a
@@ -90,7 +91,7 @@ test("the gathered list names the failing step, counts what it read, and stays q
   const red = pr(7, { checks: [check({ conclusion: "failure", completed_at: "2026-10-05T08:00:00.000Z" })] });
   const got = await gatherPrItems(["sample"], readers([red, pr(9)]), NOW);
   assert.deepEqual(got.items.map((i) => i.rule).sort(), ["pr-awaiting-seat", "pr-red"]);
-  assert.match(got.items.find((i) => i.rule === "pr-red")!.line, /red for 3\.2 days: "test" failed at step "Run unit tests"/);
+  assert.match(must(got.items.find((i) => i.rule === "pr-red")).line, /red for 3\.2 days: "test" failed at step "Run unit tests"/);
   assert.deepEqual(got.read, { sample: 2 });
 
   const clean = await gatherPrItems(["sample"], readers([pr(9, { job: null })]), NOW);

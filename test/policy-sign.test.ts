@@ -15,6 +15,7 @@ import { adminAgentForEmail } from "../src/agents.ts";
 import { checkScope, needFor, requiredForAction } from "../src/scope.ts";
 import { COMPOSITES } from "../src/tools/surface.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { must } from "../src/must.ts";
 
 // The one thing that mints policy authority: the counterpart to verifySignedBody. The
 // tests are mostly refusals, because a signer's value is in what it declines to sign.
@@ -219,7 +220,7 @@ function pinnedStore(kvOpts: Parameters<typeof fakeKv>[0] = {}) {
   const fake = fakeD1({ documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }] });
   const kv = fakeKv(kvOpts);
   const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: kv.kv });
-  const row = fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!;
+  const row = must(fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH));
   // Sign whatever the row holds, and store the signed text the way the upsert would.
   const sign = async (): Promise<string> => {
     const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);

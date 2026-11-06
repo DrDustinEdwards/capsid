@@ -102,10 +102,10 @@ export function fakeKv(opts: FakeKvOptions = {}): FakeKv {
 // R2
 
 /** The JSON a dump table holds, read the way d1-dump writes it: gzip when the key ends in .gz. */
-export function dumpJson(r2: { objects: Map<string, string | Uint8Array> }, key: string): any {
+export function dumpJson<T = { exported_at: string; table: string; rows: Array<Record<string, unknown>> }>(r2: { objects: Map<string, string | Uint8Array> }, key: string): T {
   const value = r2.objects.get(key);
   if (value === undefined) throw new Error(`no object ${key}`);
-  return JSON.parse(typeof value === "string" ? value : gunzipSync(value).toString("utf8"));
+  return JSON.parse(typeof value === "string" ? value : gunzipSync(value).toString("utf8")) as T;
 }
 
 export interface FakeR2 {
@@ -1027,7 +1027,7 @@ export function withPortalSessionEnds(db?: unknown): { db: D1Database; ended: Ma
         return ended.has(String(statement.params[0])) ? { ended: 1 } : null;
       },
       async run() {
-        if (!/^INSERT OR IGNORE INTO portal_session_ends \(sid, ended_at, expires_at\)/.test(sql)) throw new Error(`fake: unmodelled portal_session_ends write: ${sql}`);
+        if (!sql.startsWith("INSERT OR IGNORE INTO portal_session_ends (sid, ended_at, expires_at)")) throw new Error(`fake: unmodelled portal_session_ends write: ${sql}`);
         const [sid, at] = statement.params as [string, number];
         if (!ended.has(sid)) ended.set(sid, at);
         return { results: [], meta: { changes: 1 } };

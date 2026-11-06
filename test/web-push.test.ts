@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 import { encryptPayload, readVapidKey, sendPush, subscriptionProblem, vapidJwt } from "../src/web-push.ts";
+import { must } from "../src/must.ts";
 
 // Web Push from the Worker (docs/design/design-merge-pipeline.md section 5, PR 7). The
 // encryption is checked against RFC 8291's worked example (Appendix A) byte for byte, and
@@ -32,7 +33,7 @@ async function decrypt(body: Uint8Array, uaJwk: JsonWebKey, uaPublic: Uint8Array
   const salt = body.slice(0, 16);
   const rs = new DataView(body.buffer, body.byteOffset).getUint32(16);
   assert.equal(rs, 4096);
-  const idlen = body[20]!;
+  const idlen = must(body[20]);
   const asPublic = body.slice(21, 21 + idlen);
   const sealed = body.slice(21 + idlen);
   const ecdh = { name: "ECDH", namedCurve: "P-256" } as const;
@@ -86,9 +87,9 @@ test("the VAPID JWT verifies with the public key and names the push service's or
   const jwt = await vapidJwt(key, "https://fcm.googleapis.com", "mailto:admin@example.com", now);
   const [h, c, s] = jwt.split(".");
   const pub = await crypto.subtle.importKey("raw", fromBase64url(AS_PUBLIC), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
-  const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pub, fromBase64url(s!), new TextEncoder().encode(`${h}.${c}`));
+  const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pub, fromBase64url(must(s)), new TextEncoder().encode(`${h}.${c}`));
   assert.ok(ok, "the signature verifies");
-  const claims = JSON.parse(new TextDecoder().decode(fromBase64url(c!)));
+  const claims = JSON.parse(new TextDecoder().decode(fromBase64url(must(c))));
   assert.equal(claims.aud, "https://fcm.googleapis.com");
   assert.equal(claims.sub, "mailto:admin@example.com");
   assert.equal(claims.exp, Math.floor(now.getTime() / 1000) + 12 * 3600);
@@ -97,12 +98,12 @@ test("the VAPID JWT verifies with the public key and names the push service's or
 test("only a known push service's https endpoint with well-formed keys is accepted", () => {
   assert.equal(subscriptionProblem(SUB), null);
   assert.equal(subscriptionProblem({ ...SUB, endpoint: "https://web.push.apple.com/abc" }), null);
-  assert.match(subscriptionProblem({ ...SUB, endpoint: "http://fcm.googleapis.com/x" })!, /not https/);
-  assert.match(subscriptionProblem({ ...SUB, endpoint: "https://evil.example.com/x" })!, /not a known push service/);
-  assert.match(subscriptionProblem({ ...SUB, endpoint: "https://fcm.googleapis.com.evil.example/x" })!, /not a known push service/);
-  assert.match(subscriptionProblem({ ...SUB, p256dh: AUTH })!, /p256dh/);
-  assert.match(subscriptionProblem({ ...SUB, auth: UA_PUBLIC })!, /auth/);
-  assert.match(subscriptionProblem({ endpoint: "not a url" })!, /not a URL/);
+  assert.match(must(subscriptionProblem({ ...SUB, endpoint: "http://fcm.googleapis.com/x" })), /not https/);
+  assert.match(must(subscriptionProblem({ ...SUB, endpoint: "https://evil.example.com/x" })), /not a known push service/);
+  assert.match(must(subscriptionProblem({ ...SUB, endpoint: "https://fcm.googleapis.com.evil.example/x" })), /not a known push service/);
+  assert.match(must(subscriptionProblem({ ...SUB, p256dh: AUTH })), /p256dh/);
+  assert.match(must(subscriptionProblem({ ...SUB, auth: UA_PUBLIC })), /auth/);
+  assert.match(must(subscriptionProblem({ endpoint: "not a url" })), /not a URL/);
 });
 
 test("sendPush posts the encrypted body with the VAPID header, and a 410 says the subscription is gone", async () => {
@@ -110,16 +111,16 @@ test("sendPush posts the encrypted body with the VAPID header, and a 410 says th
   assert.ok(typeof key !== "string");
   const seen: { url: string; init: RequestInit }[] = [];
   const answer = (status: number) => (async (url: string | URL | Request, init?: RequestInit) => {
-    seen.push({ url: String(url), init: init! });
+    seen.push({ url: String(url), init: must(init) });
     return new Response(null, { status });
   }) as typeof fetch;
   const ok = await sendPush(key, "mailto:admin@example.com", SUB, { kind: "rollback" }, new Date(), answer(201));
   assert.deepEqual(ok, { status: 201, gone: false });
-  const headers = seen[0]!.init.headers as Record<string, string>;
-  assert.equal(seen[0]!.url, ENDPOINT);
+  const headers = must(seen[0]).init.headers as Record<string, string>;
+  assert.equal(must(seen[0]).url, ENDPOINT);
   assert.equal(headers["Content-Encoding"], "aes128gcm");
-  assert.match(headers.Authorization!, new RegExp(`^vapid t=[^,]+, k=${AS_PUBLIC}$`));
-  const text = await decrypt(seen[0]!.init.body as Uint8Array, jwkOf(UA_PRIVATE, UA_PUBLIC), fromBase64url(UA_PUBLIC), fromBase64url(AUTH));
+  assert.match(must(headers.Authorization), new RegExp(`^vapid t=[^,]+, k=${AS_PUBLIC}$`));
+  const text = await decrypt(must(seen[0]).init.body as Uint8Array, jwkOf(UA_PRIVATE, UA_PUBLIC), fromBase64url(UA_PUBLIC), fromBase64url(AUTH));
   assert.deepEqual(JSON.parse(text), { kind: "rollback" });
   assert.deepEqual(await sendPush(key, "mailto:a@example.com", SUB, {}, new Date(), answer(410)), { status: 410, gone: true });
   assert.deepEqual(await sendPush(key, "mailto:a@example.com", SUB, {}, new Date(), answer(404)), { status: 404, gone: true });

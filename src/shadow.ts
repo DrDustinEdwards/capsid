@@ -7,6 +7,7 @@ import { jobDocPath } from "./jobs-schema";
 import { splitSignedTask } from "./signed-docs";
 import { readBoundedText } from "./signed-requests";
 import { auditStatement } from "./store-guards";
+import { must } from "./must";
 
 // THE SHADOW TEST (docs/work-queue.md, "The shadow test"; Grok design review 2026-10-23,
 // build step 8). On a capsid pull request that names its job, .github/workflows/shadow-test.yml
@@ -88,7 +89,7 @@ async function caller(request: Request, env: Env): Promise<Caller> {
 export async function handleShadowJob(request: Request, env: Env): Promise<Response> {
   const who = await caller(request, env);
   if (!who.ok) return who.response;
-  const job = (await readJob(env.DB, who.jobId))!;
+  const job = must((await readJob(env.DB, who.jobId)));
   const test = await env.APP_KV.get(testKey(who.jobId), "json");
   // The body as its poster wrote it, without the signature frontmatter.
   return Response.json({ job_id: job.id, title: job.title, body: splitSignedTask(job.body).body, test });
