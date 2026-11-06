@@ -20,7 +20,7 @@ import {
   repoRefs,
   searchCode,
 } from "../github";
-import { bounded, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, gitSha, isoDay, MAX_CI_NAME, MAX_PATH, MAX_QUERY, MAX_REF, MAX_SCAN_CAP, nsName, repoSelector } from "../limits";
+import { bounded, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, gitSha, dayParam, MAX_CI_NAME, MAX_PATH, MAX_QUERY, MAX_REF, MAX_SCAN_CAP, nsName, repoSelector } from "../limits";
 import { fail, ok, type ToolCtx } from "./docs";
 import { tagRelease } from "../github/releases";
 import { siteCheck } from "../site-check";
@@ -360,8 +360,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       inputSchema: {
         namespace: nsName,
         report: z.enum(SEARCH_REPORTS).optional().describe("performance | inspect | sitemaps. Defaults to performance."),
-        start_date: isoDay.optional().describe("performance: first day, YYYY-MM-DD. Defaults to 27 days before end_date."),
-        end_date: isoDay.optional().describe("performance: last day, YYYY-MM-DD. Defaults to 3 days ago."),
+        start_date: dayParam.optional().describe("performance: first day, YYYY-MM-DD. Defaults to 27 days before end_date."),
+        end_date: dayParam.optional().describe("performance: last day, YYYY-MM-DD. Defaults to 3 days ago."),
         dimensions: z.array(z.enum(SEARCH_DIMENSIONS)).min(1).max(3).optional().describe("performance: what to group by, in order. Defaults to [query]."),
         search_type: z.enum(SEARCH_TYPES).optional().describe("performance: which Google results. Defaults to web."),
         query_contains: bounded(200).optional().describe("performance: only queries containing this text."),
@@ -387,8 +387,8 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       inputSchema: {
         namespace: nsName,
         report: z.enum(BING_REPORTS).optional().describe("queries | pages | traffic | inspect | sitemaps | crawl_issues. Defaults to queries."),
-        start_date: isoDay.optional().describe("queries, pages, traffic: first day, YYYY-MM-DD. Defaults to 27 days before end_date."),
-        end_date: isoDay.optional().describe("queries, pages, traffic: last day, YYYY-MM-DD. Defaults to 3 days ago."),
+        start_date: dayParam.optional().describe("queries, pages, traffic: first day, YYYY-MM-DD. Defaults to 27 days before end_date."),
+        end_date: dayParam.optional().describe("queries, pages, traffic: last day, YYYY-MM-DD. Defaults to 3 days ago."),
         row_limit: z.number().int().min(1).max(MAX_BING_ROWS).optional().describe(`queries, pages, crawl_issues: rows to return, 1 to ${MAX_BING_ROWS}. Defaults to 25.`),
         url: bounded(2048).regex(/^https:\/\//, "an https address").optional().describe("inspect: the page to inspect, a whole https address on the site."),
       },

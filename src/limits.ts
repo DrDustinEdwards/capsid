@@ -103,7 +103,7 @@ export const repoSelector = bounded(MAX_REPO_SELECTOR).regex(/^[A-Za-z0-9._-]+(?
 // A commit sha: hex, abbreviated or full (SHA-1 or SHA-256).
 export const gitSha = bounded(MAX_SHA).regex(/^[0-9a-fA-F]{7,64}$/, "a sha is 7 to 64 hex characters");
 // A calendar day, YYYY-MM-DD.
-export const isoDay = bounded(10).regex(/^\d{4}-\d{2}-\d{2}$/, "a day is YYYY-MM-DD");
+export const dayParam = bounded(10).regex(/^\d{4}-\d{2}-\d{2}$/, "a day is YYYY-MM-DD");
 
 // A job's result_ref is where the work landed: a document key inside the store, or
 // a pull request URL outside it. The URL is rendered as a link a human may click, so
