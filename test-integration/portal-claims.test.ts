@@ -5,7 +5,6 @@ import { portalSessionCookie } from "../src/portal-auth";
 import type { Env } from "../src/env";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../src/ops-types/claims";
 import { PORTAL_CLAIMS_PATH } from "../src/portal-claims";
-import { must } from "../src/must";
 
 // GET /portal/api/claims through the whole Worker against a real D1: the route reads
 // through the same readers as the claims tool (src/job-claims-read.ts), behind
@@ -27,7 +26,7 @@ async function get(query: string): Promise<Response> {
   const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
   const ctx = createExecutionContext();
   const request = new Request(`${ORIGIN}${PORTAL_CLAIMS_PATH}${query}`, { headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" });
-  const response = await must(worker.fetch).call(worker, request as never, workerEnv() as never, ctx);
+  const response = await worker.fetch!(request as never, workerEnv() as never, ctx);
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }

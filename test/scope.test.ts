@@ -8,7 +8,6 @@ import { buildAdminServer, buildServer } from "../src/server.ts";
 import { CAPSID_ADMIN_TOOLS, CAPSID_TOOLS } from "../src/tools/surface.ts";
 import { TOOL_GRANTS, TOOL_ACTION_GRANTS, actionArgFor, checkScope, isMoneyPath, repoWriteFlags, requiredForAction, requiredGrant, toolListed } from "../src/scope.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // One enforcement point, and the refusal names what is missing.
 //
@@ -309,7 +308,7 @@ test("SWEEP: every served tool on both servers refuses a caller whose tools axis
     for (const tool of served) {
       const key = [...results.keys()].find((label) => label === tool.name || label.startsWith(`${tool.name}.`));
       assert.ok(key, `${tool.name} was not called`);
-      const result = must(results.get(key));
+      const result = results.get(key)!;
       assert.equal(result.isError, true, `${tool.name} answered a caller with no tools: ${result.text}`);
       assert.match(result.text, new RegExp(`not scoped to the '${tool.name}(\\.[a-z_]+)?' tool`), `${tool.name} was not refused by name: ${result.text}`);
       assert.equal(result.prepared, 0, `${tool.name} reached D1 before refusing, so its handler ran`);

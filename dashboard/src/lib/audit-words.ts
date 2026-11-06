@@ -1,5 +1,3 @@
-import { must } from "./must";
-
 // What an audit row's action code means, in words (the UX audit's M5: Activity showed raw
 // codes such as "jobs.block" and "portal-overnight"). The code stays beside the words and
 // in the row's panel, so nothing is lost; an action not listed here shows its code.
@@ -33,5 +31,5 @@ const WORDS: Record<string, string> = {
 };
 
 export function actionWords(code: string | null): string | null {
-  return code && Object.hasOwn(WORDS, code) ? must(WORDS[code]) : null;
+  return code && Object.hasOwn(WORDS, code) ? WORDS[code]! : null;
 }

@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { decodeJwt } from "jose";
 import { dateWindow, pickProperty, resetSearchConsoleToken, searchConsole } from "../src/search-console.ts";
 import { fakeEnv } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // Search Console for a namespace's site (src/search-console.ts), served as
 // capsid_inspect_repo action search. The namespace picks the property; the caller never
@@ -45,7 +44,7 @@ async function serviceAccountKey(): Promise<string> {
     ["sign", "verify"]
   )) as CryptoKeyPair;
   const der = Buffer.from(await crypto.subtle.exportKey("pkcs8", pair.privateKey)).toString("base64");
-  const pem = `-----BEGIN PRIVATE KEY-----\n${must(der.match(/.{1,64}/g)).join("\n")}\n-----END PRIVATE KEY-----\n`;
+  const pem = `-----BEGIN PRIVATE KEY-----\n${der.match(/.{1,64}/g)!.join("\n")}\n-----END PRIVATE KEY-----\n`;
   return JSON.stringify({ type: "service_account", client_email: "reader@sample-project.iam.gserviceaccount.com", private_key: pem });
 }
 
@@ -96,14 +95,14 @@ test("performance signs in with a read-only assertion, picks the namespace's pro
   const env = fakeEnv({ DB: siteDb([ROW]), GSC_SERVICE_ACCOUNT_KEY: await serviceAccountKey() });
   const r = await searchConsole(env, "sample", { dimensions: ["query", "page"], row_limit: 10 }, g.impl, NOW);
 
-  const claims = decodeJwt(must(new URLSearchParams(must(g.calls[0].body)).get("assertion")));
+  const claims = decodeJwt(new URLSearchParams(g.calls[0].body!).get("assertion")!);
   assert.equal(claims.scope, "https://www.googleapis.com/auth/webmasters.readonly");
   assert.equal(claims.iss, "reader@sample-project.iam.gserviceaccount.com");
 
-  const query = must(g.calls.find((c) => c.url.endsWith("/searchAnalytics/query")));
+  const query = g.calls.find((c) => c.url.endsWith("/searchAnalytics/query"))!;
   assert.equal(query.url, "https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Asample.example.com/searchAnalytics/query");
   assert.equal(query.auth, "Bearer ya29.fake");
-  assert.deepEqual(JSON.parse(must(query.body)), { startDate: "2026-09-18", endDate: "2026-10-15", type: "web", dimensions: ["query", "page"], rowLimit: 10, dataState: "final" });
+  assert.deepEqual(JSON.parse(query.body!), { startDate: "2026-09-18", endDate: "2026-10-15", type: "web", dimensions: ["query", "page"], rowLimit: 10, dataState: "final" });
 
   assert.equal(r.property, "sc-domain:sample.example.com");
   assert.ok("rows" in r);

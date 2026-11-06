@@ -38,7 +38,6 @@ import { actorKind, touchStatement } from "./job-touches";
 import { ciRefusal } from "./complete-ci";
 import { breakerExemption, type BreakerExemption } from "./fail-exemption";
 import { parsePrUrl } from "./github/client";
-import { must } from "./must";
 
 // The transitions the driver holding a job makes: complete, fail and block.
 
@@ -343,7 +342,7 @@ async function completeWith(
   // request that was not green, so naming a different one next time does not escape it.
   // The seat's close writes nothing before it is allowed.
   if (held) {
-    const bound = parsePrUrl(held.result_ref) ? [must(held.result_ref).trim()] : [];
+    const bound = parsePrUrl(held.result_ref) ? [held.result_ref!.trim()] : [];
     const ci = await ciRefusal(env, held.namespace, [...new Set([...bound, ...namedPrUrls(args.evidence, args.result_ref)])], held.body);
     if (ci) {
       if (!seatCloses && !held.result_ref && ci.pr) {

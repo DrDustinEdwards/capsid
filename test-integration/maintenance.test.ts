@@ -16,7 +16,6 @@ import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance";
 import { gatherModelDriftItems } from "../src/model-drift";
 import type { SystemModel } from "../src/system-model";
 import { gatherRuleDocItems, RULE_DOC_CAP_BYTES } from "../src/rule-docs";
-import { must } from "../src/must";
 
 // The daily maintenance pass against a real D1 (job_549550d73d4e). The rules are planted
 // one at a time beside a clean job each must leave alone.
@@ -72,7 +71,7 @@ function jobsEnv() {
 async function post(title: string, body = "do the thing"): Promise<string> {
   const posted = await postJob(jobsEnv(), ADMIN, NOW, { namespace: "sample", title, body });
   expect(posted.ok, posted.refusal).toBe(true);
-  return must(posted.job).id;
+  return posted.job!.id;
 }
 
 beforeEach(async () => {
@@ -246,7 +245,7 @@ describe("GET /portal/api/maintenance, through the Worker", () => {
     const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
     const ctx = createExecutionContext();
     const request = new Request(`https://capsid.test${PORTAL_MAINTENANCE_PATH}`, { headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" });
-    const response = (await must(worker.fetch).call(worker, request as never, { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
+    const response = (await worker.fetch!(request as never, { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
     await waitOnExecutionContext(ctx);
     return { status: response.status, cache: response.headers.get("Cache-Control"), body: (await response.json()) as PortalMaintenance };
   }

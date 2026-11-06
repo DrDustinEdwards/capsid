@@ -1,6 +1,5 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { must } from "../src/must";
 
 // /health AGAINST A REAL D1. The endpoint probes the store as well as reporting
 // provenance: a SELECT 1 plus an FTS MATCH pinned to capsid/conventions.md, and it
@@ -48,6 +47,6 @@ describe("/health", () => {
     // what the endpoint must name, so adding a migration cannot leave this stale.
     const newest = env.TEST_MIGRATIONS.at(-1);
     expect(newest, "no migrations were handed to the setup file").toBeDefined();
-    expect(body.schema_version).toBe(must(newest).name);
+    expect(body.schema_version).toBe(newest!.name);
   });
 });

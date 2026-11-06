@@ -2,7 +2,6 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { WATCHER_ACTOR, clearFinding, openWatcherFingerprints } from "../src/watcher";
 import { gatherFindings } from "../src/watcher-gather";
-import { must } from "../src/must";
 
 // The watcher's reads and writes of the jobs table, against a real D1. The rows
 // are seeded and the assertions are on which rows come back or change, not on SQL text.
@@ -128,7 +127,7 @@ describe("migrations/0030, the mirror backfill", () => {
     ).run();
 
     const before = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-mirror-closed'").first<{ n: number }>();
-    for (const query of must(backfill).queries) await env.DB.prepare(query).run();
+    for (const query of backfill!.queries) await env.DB.prepare(query).run();
     const audited = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-mirror-closed'").first<{ n: number }>();
     const versions = await env.DB.prepare("SELECT COUNT(*) AS n FROM document_versions WHERE path LIKE 'jobs/job_bf%'").first<{ n: number }>();
 
@@ -137,12 +136,12 @@ describe("migrations/0030, the mirror backfill", () => {
       expect((await statusOf(id))?.status, `${id} (${status})`).toBe(finished ? "closed" : "active");
     }
     expect((await statusOf("job_bf0000000001-notes"))?.status).toBe("active");
-    expect(must(audited).n - must(before).n).toBe(3);
-    expect(must(versions).n).toBe(3);
+    expect(audited!.n - before!.n).toBe(3);
+    expect(versions!.n).toBe(3);
 
     // Run again: nothing left to close, so nothing more is written.
-    for (const query of must(backfill).queries) await env.DB.prepare(query).run();
+    for (const query of backfill!.queries) await env.DB.prepare(query).run();
     const again = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-mirror-closed'").first<{ n: number }>();
-    expect(must(again).n).toBe(must(audited).n);
+    expect(again!.n).toBe(audited!.n);
   });
 });

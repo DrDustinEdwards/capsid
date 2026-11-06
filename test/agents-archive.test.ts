@@ -9,7 +9,6 @@ import { resolveAgent } from "../src/agents.ts";
 
 import { agentSummaries } from "../src/status.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { must } from "../src/must.ts";
 
 // Revoked agents move to agents_archive and keep their history (job_24e460427d6c). The
 // move is SQL across five tables, so these run every migration with Node's SQLite and
@@ -88,7 +87,7 @@ test("a revoked agent moves 7 days after revocation with its counts and an audit
   const pass = await archiveRevokedAgents(db, ACTOR, NOW);
   assert.deepEqual(pass, { archived: [{ name: "old", reason: "revoked-7-days" }], skipped: [] });
   assert.deepEqual(names(raw, "agents"), ["live", "recent"]);
-  const row = must(raw.prepare("SELECT * FROM agents_archive WHERE name = 'old'").get());
+  const row = raw.prepare("SELECT * FROM agents_archive WHERE name = 'old'").get()!;
   assert.equal(row.audit_rows, 3);
   assert.equal(row.jobs, 1);
   assert.equal(row.reason, "revoked-7-days");

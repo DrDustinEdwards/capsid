@@ -27,7 +27,6 @@ import { PAUSED_KEY } from "../src/merge-safety.ts";
 import { APP_ROSTER, ROSTER, onRoster } from "../src/roster.ts";
 import { signTaskBody } from "../src/signed-docs.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // The Worker may merge a pull request with no human when every check in
 // capsid/policy/auto-merge.md passes. These tests drive each check to its refusal on
@@ -756,7 +755,7 @@ test("loadMergePolicy accepts the signed policy and refuses one that names fewer
 
 test("loadMergePolicy refuses a signed policy whose refused paths or required steps differ from the code, in either direction", async () => {
   const load = async (body: string) => loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, body)));
-  const migrations = must(AUTO_MERGE_REFUSED_PATHS.find((p) => p.pattern.source.includes("migrations")));
+  const migrations = AUTO_MERGE_REFUSED_PATHS.find((p) => p.pattern.source.includes("migrations"))!;
   const migrationLine = `- path \`${migrations.pattern.source}\` ${migrations.why}\n`;
 
   // Dropped from the document.
@@ -779,7 +778,7 @@ test("loadMergePolicy refuses a signed policy whose refused paths or required st
 
 test("loadMergePolicy refuses a signed policy whose allowed paths differ from the code, in either direction", async () => {
   const load = async (body: string) => loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, body)));
-  const css = must(AUTO_MERGE_ALLOWED_PATHS.capsid.find((p) => p.pattern.source.includes("css")));
+  const css = AUTO_MERGE_ALLOWED_PATHS.capsid.find((p) => p.pattern.source.includes("css"))!;
   const cssLine = `- allow \`${css.pattern.source}\` ${css.why}\n`;
 
   // A function replacement, because the pattern ends in "$" and "$`" in a replacement
@@ -1124,14 +1123,14 @@ test("PLANT: an enabled policy DECLINES a protected-path PR and issues no merge"
 async function tickPlant(files: string[], opts: { claimedBy?: string; steps?: string[] } = {}) {
   const env = await enabledEnv(opts.claimedBy);
   const routes = { ...tickRoutes(files), ...ciRunRoutes(opts.steps ?? CAPSID_CI.map((r) => r.step)) };
-  let out = null as { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null;
+  let out: { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null = null;
   await withFetch(routes as never, async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-17T14:00:00Z"));
     assert.equal(report.ran, true, report.note);
     assert.equal(report.outcomes.length, 1);
     out = { outcome: report.outcomes[0], merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length };
   });
-  return must(out);
+  return out!;
 }
 
 test("PLANT v6: a capsid driver PR touching only test/ and src/ is declined by the tick, where v2 to v5 merged it", async () => {
@@ -1227,14 +1226,14 @@ test("PLANT v7: a 1,001-line PR is declined by the tick and held as approve", as
 // the refusal can only come from a fact about the PR itself.
 
 async function tickWith(env: Awaited<ReturnType<typeof enabledEnv>>, routes: Record<string, unknown>) {
-  let out = null as { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null;
+  let out: { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null = null;
   await withFetch(routes as never, async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
     assert.equal(report.ran, true, report.note);
     assert.equal(report.outcomes.length, 1);
     out = { outcome: report.outcomes[0], merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length };
   });
-  return must(out);
+  return out!;
 }
 
 test("PLANT v5: a same-repo PR opened by an account off the allowlist is refused by the tick", async () => {
@@ -1440,12 +1439,12 @@ const green = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `check
 
 async function tickOnce(routes: Record<string, unknown>) {
   const env = await enabledEnv();
-  let result = null as { report: Awaited<ReturnType<typeof autoMergeTick>>; merges: number } | null;
+  let result: { report: Awaited<ReturnType<typeof autoMergeTick>>; merges: number } | null = null;
   await withFetch(routes as never, async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-17T12:00:00Z"));
     result = { report, merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length };
   });
-  return must(result);
+  return result!;
 }
 
 test("PLANT: a protected path on the SECOND page of files is seen, and the PR is not merged", async () => {
@@ -1513,11 +1512,11 @@ function twoPrRoutes(mergeRoute: unknown) {
 
 test("PLANT F3-6: a merge GitHub refuses with 405 is audited as failed, and the tick goes on to the next PR and writes the awaiting set", async () => {
   const { d1, kv, env } = await pinnedEnv();
-  let report = null as Awaited<ReturnType<typeof autoMergeTick>> | null;
+  let report: Awaited<ReturnType<typeof autoMergeTick>> | null = null;
   await withFetch(twoPrRoutes({ status: 405, body: { message: "Pull Request is not mergeable" } }) as never, async () => {
     report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
   });
-  const out = must(report);
+  const out = report!;
   assert.equal(out.ran, true, out.note);
   assert.equal(out.outcomes.length, 2, "the throw on PR 23 stopped the tick before PR 30");
   const first = out.outcomes.find((o) => o.number === 23);
@@ -1533,18 +1532,18 @@ test("PLANT F3-6: a merge GitHub refuses with 405 is audited as failed, and the 
 test("PLANT F7-1: a PR whose body names no job is declined without reading its files, checks or CI runs", async () => {
   const { d1, env } = await pinnedEnv();
   let calls: Array<{ method: string; path: string; search?: string }> = [];
-  let report = null as Awaited<ReturnType<typeof autoMergeTick>> | null;
+  let report: Awaited<ReturnType<typeof autoMergeTick>> | null = null;
   await withFetch(twoPrRoutes({ body: { sha: "merged00000000000000000000000000000000000" } }) as never, async (c) => {
     report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
     calls = c;
   });
-  const skipped = must(report).outcomes.find((o) => o.number === 30);
+  const skipped = report!.outcomes.find((o) => o.number === 30);
   assert.equal(skipped?.merged, false);
   assert.equal(skipped?.failed, "body_names_job");
   const aboutPr30 = calls.filter((c) => c.path.includes("/pulls/30") || c.path.includes(NO_JOB_SHA) || (c.search ?? "").includes(NO_JOB_SHA));
   assert.deepEqual(aboutPr30, [], "the tick read GitHub for a PR that names no job");
   // The PR that names a job is still judged and merged, so the skip is not a wall.
-  assert.equal(must(report).outcomes.find((o) => o.number === 23)?.merged, true);
+  assert.equal(report!.outcomes.find((o) => o.number === 23)?.merged, true);
   const declined = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "auto-merge-declined");
   assert.equal(declined.length, 1);
   assert.equal(JSON.parse(String(declined[0].params[4])).head_sha, NO_JOB_SHA);
@@ -1565,11 +1564,11 @@ function declineRows(d1: { recorded: Array<{ sql: string; params: unknown[] }> }
 }
 
 async function tickAt(env: Awaited<ReturnType<typeof pinnedEnv>>["env"], routes: unknown, minute: number) {
-  let out = null as Awaited<ReturnType<typeof autoMergeTick>> | null;
+  let out: Awaited<ReturnType<typeof autoMergeTick>> | null = null;
   await withFetch(routes as never, async () => {
     out = await autoMergeTick(env, new Date(Date.UTC(2026, 9, 4, 12, minute)));
   });
-  return must(out);
+  return out!;
 }
 
 // The same PR, with its head moved to NEW_SHA: the PR list and the per-sha reads follow it.

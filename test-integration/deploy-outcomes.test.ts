@@ -2,7 +2,6 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { readDeployOutcomes } from "../src/deploy-outcomes";
-import { must } from "../src/must";
 
 // The deploy-outcome reader against a real D1 with migrations/0038 applied, and GitHub
 // answered here: a rolled-back run is recorded once with where production went, its pull
@@ -27,7 +26,7 @@ beforeEach(async () => {
     const url = String(input instanceof Request ? input.url : input);
     if (!url.startsWith(API)) return passThrough(input, init);
     const path = url.slice(API.length);
-    calls.push(must(path.split("?")[0]));
+    calls.push(path.split("?")[0]!);
     if (path === "") return Response.json({ default_branch: "master" });
     if (path.startsWith("/actions/runs?")) {
       expect(path).toContain("branch=master&event=push&status=completed");

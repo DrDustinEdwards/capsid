@@ -12,7 +12,6 @@ import {
   type FetchLike,
 } from "../src/ops-packages";
 import type { PackageSnapshot } from "../src/ops-types/sites";
-import { must } from "../src/must";
 
 // The Packages panel against a real D1 and KV (job_c6e4ab939a54): its configuration is
 // written like the sites', its weekly rows are written once a week, and its history is
@@ -50,7 +49,7 @@ describe("configuration", () => {
       const rows = (await audit(action)).results ?? [];
       expect(rows.map((r) => r.actor), action).toEqual([ACTOR]);
     }
-    const removed = JSON.parse(must((await audit("ops-package-removed")).results)[0].params);
+    const removed = JSON.parse((await audit("ops-package-removed")).results![0].params);
     expect(removed.before).toMatchObject({ name: "sample-pkg", formerly: "sample-old" });
   });
 
@@ -71,9 +70,9 @@ describe("the weekly GitHub row", () => {
   });
 
   it("is written by the first pass of the week, and later passes that week change nothing", async () => {
-    await env.DB.batch([must(weekStatement(env.DB, snap(5), NOW))]);
-    await env.DB.batch([must(weekStatement(env.DB, snap(9), new Date("2026-10-01T08:00:00Z")))]);
-    await env.DB.batch([must(weekStatement(env.DB, snap(11), new Date("2026-10-06T08:00:00Z")))]);
+    await env.DB.batch([weekStatement(env.DB, snap(5), NOW)!]);
+    await env.DB.batch([weekStatement(env.DB, snap(9), new Date("2026-10-01T08:00:00Z"))!]);
+    await env.DB.batch([weekStatement(env.DB, snap(11), new Date("2026-10-06T08:00:00Z"))!]);
     const { results } = await env.DB.prepare("SELECT week, stars FROM ops_package_weeks ORDER BY week").all();
     expect(results).toEqual([
       { week: "2026-W40", stars: 5 },

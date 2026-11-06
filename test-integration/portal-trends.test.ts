@@ -7,7 +7,6 @@ import type { PortalTrends } from "../src/ops-types/views";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends";
 import { readTrends } from "../src/trends";
-import { must } from "../src/must";
 
 // The trends route's SQL against the D1 the migrations build, and its R2 listing. The
 // series are read at a fixed time in 2030, so nothing another test wrote falls in the
@@ -93,13 +92,13 @@ describe("the trends series", () => {
     const t = await readTrends(env as unknown as Env, NOW, 2);
 
     expect(t.minutes.weeks.map((w) => w.week)).toEqual(["2030-W02", "2030-W03"]);
-    const thisWeek = must(t.minutes.weeks[1]);
+    const thisWeek = t.minutes.weeks[1]!;
     // The 09:00 session: 09:00 to 09:04:40, plus a minute, rounds to 6. The administrator's
     // own merge, two closes and the comment on Monday (below) are four more one-minute
     // sessions, an hour apart. The driver's write is none of them.
     expect(thisWeek).toMatchObject({ start: "2030-01-14", sessions: 5, minutes: 10, decisions: 1 });
 
-    const day = (d: string) => must(t.queue.find((q) => q.day === d));
+    const day = (d: string) => t.queue.find((q) => q.day === d)!;
     expect(t.queue).toHaveLength(14);
     expect(day("2030-01-03")).toMatchObject({ posted: 0, ended: 0, open: 1 });
     expect(day("2030-01-12")).toMatchObject({ posted: 1, ended: 0, open: 2 });
@@ -119,7 +118,7 @@ describe("the trends series", () => {
     ]);
 
     expect(t.backups.error).toBeNull();
-    expect(must(t.backups.slots).daily.filter((s) => s.filled).map((s) => s.key)).toEqual(["2030-01-16"]);
+    expect(t.backups.slots!.daily.filter((s) => s.filled).map((s) => s.key)).toEqual(["2030-01-16"]);
 
     expect(t.ci.repos).toEqual([]);
     expect(t.ci.not_read.length).toBeGreaterThan(0);
@@ -129,7 +128,11 @@ describe("the trends series", () => {
     const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
     const get = async (qs: string) => {
       const ctx = createExecutionContext();
-      const res = (await must(worker.fetch).call(worker, new Request(`https://capsid.test${PORTAL_TRENDS_PATH}${qs}`, { headers: { Cookie: cookie, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
+      const res = (await worker.fetch!(
+        new Request(`https://capsid.test${PORTAL_TRENDS_PATH}${qs}`, { headers: { Cookie: cookie, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" }) as never,
+        { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never,
+        ctx
+      )) as unknown as Response;
       await waitOnExecutionContext(ctx);
       return res;
     };

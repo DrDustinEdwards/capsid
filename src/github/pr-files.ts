@@ -1,7 +1,6 @@
 import type { Env } from "../env";
 import { TEST_FILE } from "../merge-class";
 import { ghFetch } from "./client";
-import { must } from "../must";
 
 // The one reader of a pull request's changed files. The auto-merge tick judges them
 // (src/auto-merge-tick.ts) and block and complete compare them across open pull requests
@@ -92,7 +91,7 @@ export function existingTestEdits(files: readonly PrFileRow[]): string[] {
   const edited: string[] = [];
   for (const f of files) {
     // A rename is a deletion of the old path whichever directory the new one is in.
-    const path = inTestDir(f.previous_filename) ? must(f.previous_filename) : inTestDir(f.filename) ? f.filename : null;
+    const path = inTestDir(f.previous_filename) ? f.previous_filename! : inTestDir(f.filename) ? f.filename : null;
     if (path === null) continue;
     if (f.status === "added") continue;
     const pureAdditions = f.status === "modified" && Number.isInteger(f.deletions) && f.deletions === 0;

@@ -8,7 +8,6 @@ import { PATH_CLASSES } from "../src/merge-class.ts";
 import { judgeUnits, LIFTED_KEY, liftSuspension, SUSPENDED_KEY } from "../src/merge-units.ts";
 import { performPolicyChange, planPolicyChange } from "../src/policy-sign.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // The merge units in the signed policy (docs/design/design-merge-pipeline.md section 7,
 // PR 10; DECIDE 9 of 2026-10-09). Proves: a document naming an unknown class is refused
@@ -25,7 +24,7 @@ async function world(body = SHIPPED) {
   const kv = fakeKv({ seed: { [policyPinKey(AUTO_MERGE_POLICY_PATH)]: JSON.stringify(await policyPin(body)) } });
   return { env: fakeEnv({ DB: db, APP_KV: kv.kv, IMPROVE_SCORE_SECRET: SECRET }), rows, kv };
 }
-const storedBody = (rows: { documents: Array<{ path: string; body?: string | null }> }) => must(must(rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)).body);
+const storedBody = (rows: { documents: Array<{ path: string; body?: string | null }> }) => rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!.body!;
 
 // A unit in the document
 
@@ -76,7 +75,7 @@ const capsidPr = (paths: string[]): PrFacts =>
     changedLines: 40,
     ciConclusion: "success",
     ciNote: "green",
-    ciSteps: must(AUTO_MERGE_REQUIRED_CI.capsid).map((r) => ({ ...r, conclusion: "success" })),
+    ciSteps: AUTO_MERGE_REQUIRED_CI.capsid!.map((r) => ({ ...r, conclusion: "success" })),
     ciStepsProblem: null,
     headRepo: "DrDustinEdwards/capsid",
     prAuthor: "DrDustinEdwards",
@@ -154,9 +153,9 @@ test("lifting a suspension clears it, and only a rollback after the lift suspend
   const env = fakeEnv({ APP_KV: kv.kv, DB: { prepare: () => ({ bind: () => ({}) }), batch: async (s: unknown[]) => (batches.push(s), []) } });
   const done = await liftSuspension(env, "access:admin@example.com", "capsid/docs", "the fix landed", NOW);
   assert.ok(done.ok);
-  assert.deepEqual(JSON.parse(must(kv.store.get(SUSPENDED_KEY))), []);
+  assert.deepEqual(JSON.parse(kv.store.get(SUSPENDED_KEY)!), []);
   assert.equal(batches.length, 1, "the lift was not audited");
-  const lifted = JSON.parse(must(kv.store.get(LIFTED_KEY))) as Record<string, string>;
+  const lifted = JSON.parse(kv.store.get(LIFTED_KEY)!) as Record<string, string>;
   const rollback = (runAt: string) => ({ kind: "rollback" as const, namespace: "capsid", repo: "o/capsid", pr: 4, head_sha: "a".repeat(40), run_id: 1, run_at: runAt, merged_by: "tick" as const, path_class: "docs" });
   assert.deepEqual(judgeUnits([], [rollback("2026-10-10T09:00:00.000Z")], [], NOW, lifted).suspended, [], "the answered rollback suspended the unit again");
   assert.deepEqual(judgeUnits([], [rollback("2026-10-11T13:00:00.000Z")], [], new Date("2026-10-11T14:00:00Z"), lifted).suspended.map((s) => s.unit), ["capsid/docs"]);

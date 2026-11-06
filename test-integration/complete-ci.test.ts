@@ -5,7 +5,6 @@ import { claimJob, completeJob, failAsCaller, postJob } from "../src/jobs";
 import { breakerState } from "../src/job-breaker";
 import { grantAgent } from "../src/agents";
 import { readJob } from "../src/jobs-transition";
-import { must } from "../src/must";
 
 // The CI gate on complete (src/complete-ci.ts) against real D1, with GitHub as a fetch stub.
 
@@ -35,11 +34,11 @@ beforeEach(async () => {
     const pr = /\/pulls\/(\d+)(\/files)?$/.exec(path);
     if (pr) {
       const n = Number(pr[1]);
-      if (pr[2]) return Response.json(must(github.get(n)).files.map((f) => (typeof f === "string" ? { filename: f, status: "modified", additions: 1, deletions: 0, patch: "+x" } : f)));
+      if (pr[2]) return Response.json(github.get(n)!.files.map((f) => (typeof f === "string" ? { filename: f, status: "modified", additions: 1, deletions: 0, patch: "+x" } : f)));
       return Response.json({ merged: false, head: { sha: String(n).padStart(40, "0") }, commits: 1, changed_files: 1 });
     }
     const checks = /\/commits\/0*(\d+)\/check-runs$/.exec(path);
-    if (checks) return Response.json({ check_runs: must(github.get(Number(checks[1]))).checks });
+    if (checks) return Response.json({ check_runs: github.get(Number(checks[1]))!.checks });
     return Response.json([]);
   });
 });
@@ -51,7 +50,7 @@ afterEach(async () => {
 
 async function claimed(title: string, body = "do the thing") {
   const posted = await postJob(jobsEnv(), SEAT, NOW, { namespace: NS, title, body } as Parameters<typeof postJob>[3]);
-  const id = must(posted.job).id;
+  const id = posted.job!.id;
   expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
   return id;
 }

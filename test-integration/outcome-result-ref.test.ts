@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeJob, postJob, resumeJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
 import { reverifySweep } from "../src/outcome-prs";
-import { must } from "../src/must";
 
 // A pull request named only in result_ref is verified against GitHub, whoever completes
 // the job (job_d5262df1dc32). Before the fix, verification read evidence.prs and nothing
@@ -52,7 +51,7 @@ async function outcome(id: string) {
 
 async function claimed(title: string) {
   const posted = await postJob(jobsEnv(), SEAT, NOW, { namespace: NS, title, body: "do the thing", gate_required: true } as Parameters<typeof postJob>[3]);
-  const id = must(posted.job).id;
+  const id = posted.job!.id;
   const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
   expect(claim.ok, claim.refusal).toBe(true);
   return id;

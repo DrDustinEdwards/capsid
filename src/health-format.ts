@@ -1,5 +1,3 @@
-import { must } from "./must";
-
 // THE HEALTH FORMAT every site answers on its health route (docs/health-format.md).
 // Capsid defines it so the watcher reads every site the same way: the family's
 // site-runtime body (status pass, warn or fail, with checks), the older bodies that
@@ -33,7 +31,7 @@ export function healthOf(value: unknown): ParsedHealth {
   const reasons = failingCheckNames(checks);
   const warning = (backup as { warning?: unknown } | null | undefined)?.warning;
   if (typeof warning === "string" && warning) reasons.push(`backup: ${warning}`);
-  let said: HealthStatus | null = typeof status === "string" && Object.hasOwn(STATUS_OF, status) ? must(STATUS_OF[status]) : null;
+  let said: HealthStatus | null = typeof status === "string" && Object.hasOwn(STATUS_OF, status) ? STATUS_OF[status]! : null;
   if (said === null && typeof ok === "boolean") said = ok ? "ok" : "degraded";
   if (said === "ok" && (ok === false || reasons.length > 0)) said = "degraded";
   if (said !== null && said !== "ok" && reasons.length === 0 && ok === false) reasons.push("ok: false");

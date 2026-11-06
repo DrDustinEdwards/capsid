@@ -4,7 +4,6 @@ import { READ_ACTIONS } from "../scope";
 import { hintsFor, READ_VIEW_HINTS } from "../tool-annotations";
 import { type OperationResult, type Operations, type Shape } from "./operations";
 import { toolOutput } from "./outputs";
-import { must } from "../must";
 
 // The served surface (capsid/research/design-mcp-servers.md section 3). Capsid serves 14 whole-job tools
 // on /mcp and /ops/mcp, and Capsid Admin 8 on its own route for the administrator
@@ -135,7 +134,7 @@ function compositeHandler(ops: Operations, spec: CompositeSpec) {
     const fields = chosen.fields;
     const extra = fields ? Object.keys(rest).filter((k) => !fields.includes(k) && rest[k] !== undefined) : [];
     if (extra.length > 0) {
-      return { content: [{ type: "text", text: `${spec.name} action '${action}' does not take ${extra.join(", ")}. It takes ${must(fields).join(", ")}.` }], isError: true };
+      return { content: [{ type: "text", text: `${spec.name} action '${action}' does not take ${extra.join(", ")}. It takes ${fields!.join(", ")}.` }], isError: true };
     }
     return ops.run(chosen.op, { ...rest, ...chosen.inject }, `${spec.name} action '${action}'`);
   };

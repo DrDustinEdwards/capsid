@@ -3,7 +3,6 @@ import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
-import { must } from "./must";
 
 // THE MEMORY OF A ROLLBACK (docs/design/design-merge-pipeline.md section 6, PR 6). Each
 // watcher pass reads, for every DEPLOY_ROSTER repo, its newest completed default-branch push
@@ -103,7 +102,7 @@ export function outcomeFrom(job: Job | undefined, annotations: string[]): Outcom
   }
   if (rollback?.conclusion === "success") {
     const back = said(/rolled back: was (\S+) \(this run's commit \S+\), now ([^.\s]+)/);
-    if (back) return { outcome: "rolled_back", rollback_from: must(back[1]), rollback_to: must(back[2]), detail: "the live gate refused the deploy and it was rolled back" };
+    if (back) return { outcome: "rolled_back", rollback_from: back[1]!, rollback_to: back[2]!, detail: "the live gate refused the deploy and it was rolled back" };
     if (said(/not rolling back/)) return { outcome: "rollback_skipped", rollback_from: null, rollback_to: null, detail: "the live gate refused the deploy and the guard declined to roll back: master and production may disagree" };
     return { outcome: "rollback_skipped", rollback_from: null, rollback_to: null, detail: "the rollback step succeeded but said neither that it rolled back nor that it declined" };
   }

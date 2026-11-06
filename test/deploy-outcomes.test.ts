@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { deployFindings, isLiveGateJob, outcomeFrom, type DeployRow } from "../src/deploy-outcomes.ts";
 import { owningCheck } from "../src/watcher-checks.ts";
-import { must } from "../src/must.ts";
 
 // The memory of a rollback (docs/design/design-merge-pipeline.md section 6, PR 6): what a
 // live gate job's conclusion, its rollback step and its annotations say, and the finding
@@ -52,8 +51,8 @@ const row = (outcome: DeployRow["outcome"]): DeployRow => ({ outcome, rollback_f
 test("a rollback and a failed rollback are findings the deploys check owns; the rest raise none", () => {
   const [rolled] = deployFindings("capsid", row("rolled_back"));
   assert.equal(rolled?.fingerprint, "deploy-rolled-back-capsid");
-  assert.match(must(rolled).title, /^Watcher: capsid deploy aaaaaaa was rolled back/);
-  assert.ok(must(rolled).evidence?.some((e) => e.includes(`production went from ${A} back to ${B}`)));
+  assert.match(rolled!.title, /^Watcher: capsid deploy aaaaaaa was rolled back/);
+  assert.ok(rolled!.evidence?.some((e) => e.includes(`production went from ${A} back to ${B}`)));
   assert.equal(deployFindings("capsid", row("rollback_failed"))[0]?.fingerprint, "deploy-rollback-failed-capsid");
   for (const quiet of ["verified", "rollback_skipped", "unverified"] as const) assert.deepEqual(deployFindings("capsid", row(quiet)), []);
   assert.equal(owningCheck("deploy-rolled-back-capsid"), "deploys");

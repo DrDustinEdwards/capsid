@@ -162,7 +162,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
     return () => {
       alive.current = false;
     };
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount; the preview is requested once for the dialog as it opened
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount (the started ref guards StrictMode): the dialog asks for its preview as it opens
   }, []);
 
   useEffect(() => {
@@ -397,7 +397,7 @@ function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & {
     return () => {
       alive.current = false;
     };
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount (the started ref guards StrictMode); a dependency would preview again
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount (the started ref guards StrictMode): the dialog asks for its preview as it opens; a dependency would preview again
   }, []);
 
   // Every item here is one-way once performed together, so the preview leaves focus on Cancel.

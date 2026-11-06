@@ -18,7 +18,6 @@ import {
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { isVisual, visualDetails, type VisualPr } from "./visual-pr";
 import { closeAsAutoMerged, executeApproval, expireStaleApprovals, readOpenApprovals, type OpenApproval } from "./approval-executor";
-import { must } from "./must";
 
 // The auto-merge tick: read each open pull request's facts from GitHub and D1, judge
 // them with evaluatePolicy (src/auto-merge-policy.ts), and merge or record the refusal.
@@ -409,8 +408,8 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
         }
       } finally {
         for (let k = before; k < outcomes.length; k++) {
-          must(outcomes[k]).head_sha ??= pr.head.sha;
-          if (visual && !must(outcomes[k]).merged) must(outcomes[k]).visual = visualDetails(pr);
+          outcomes[k]!.head_sha ??= pr.head.sha;
+          if (visual && !outcomes[k]!.merged) outcomes[k]!.visual = visualDetails(pr);
         }
       }
     }

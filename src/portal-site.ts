@@ -25,7 +25,6 @@ import { portalGate } from "./portal-auth";
 import { searchConsole } from "./search-console";
 import { MAX_TRAFFIC_DAYS, siteTraffic } from "./site-traffic";
 import { BUILDS_DEFAULT, BUILDS_MAX, buildLogs, listBuilds } from "./workers-builds";
-import { must } from "./must";
 
 // One site's own page in the Portal: its Search and traffic tab and its Deploys tab, read
 // live for one namespace. Four routes, each a door onto a library the chat tools already
@@ -222,7 +221,7 @@ export async function readSiteTraffic(env: Env, namespace: string, days: number,
   // No page view measured is no data, never a vital of zero.
   const webVitals: SiteSource<TrafficWebVitals> =
     vitals.ok && vitals.data.page_views_measured === 0
-      ? none("empty", `No visitor's browser reported web vitals for ${must(site).origin} in the last ${days} day${days === 1 ? "" : "s"}.`)
+      ? none("empty", `No visitor's browser reported web vitals for ${site!.origin} in the last ${days} day${days === 1 ? "" : "s"}.`)
       : vitals;
   return {
     ...base,

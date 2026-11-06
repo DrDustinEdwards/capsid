@@ -1,6 +1,5 @@
 import type { BatchItem, ConfirmRequest } from "../app/ctx";
 import type { OpsAwaitingSeat, OpsFeed } from "../types";
-import { must } from "./must";
 
 // A pull request waiting for you (live.awaiting_seat), and the two existing controls that
 // decide it: approve_pr and pr_close. Pull requests and Needs you build the same requests
@@ -43,7 +42,7 @@ export function closeRequest(a: OpsAwaitingSeat): ConfirmRequest {
 // Several approvals as one confirm: each its own approve_pr, previewed and performed in turn.
 export function approveAllRequest(list: ReadonlyArray<OpsAwaitingSeat & { head_sha: string }>): ConfirmRequest {
   const batch = list.map(approveItem);
-  const first = must(batch[0]);
+  const first = batch[0]!;
   return { action: first.action, params: first.params, title: `Approve ${list.length} pull ${list.length === 1 ? "request" : "requests"}`, batch };
 }
 

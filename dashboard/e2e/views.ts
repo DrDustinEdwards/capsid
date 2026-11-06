@@ -1,6 +1,5 @@
 import { expect, type Page } from "@playwright/test";
 import { VIEWS, placePath, type ViewId } from "../src/app/ctx.ts";
-import { must } from "../src/lib/must.ts";
 
 // Every view the app registers, so a new view is covered without editing a test. The
 // count is asserted where it is used: an empty list would otherwise pass vacuously.
@@ -20,7 +19,7 @@ function urlOf(id: Place): string {
 // loading.
 export async function visit(page: Page, id: Place): Promise<void> {
   const view = id.split("#")[0] as ViewId;
-  const label = must(ALL_VIEWS.find((v) => v.id === view)).label;
+  const label = ALL_VIEWS.find((v) => v.id === view)!.label;
   await page.goto(urlOf(id));
   await expect(page.getByRole("heading", { level: 1, name: label })).toBeVisible();
   await expect(page.locator("main .loading")).toHaveCount(0);

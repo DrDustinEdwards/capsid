@@ -5,7 +5,6 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // One definition, imported. Conventions about the shape of src/ rather than the
 // behavior of any one module: each guard asks whether a fact is still stated once,
@@ -17,9 +16,9 @@ import { must } from "../src/must.ts";
 // scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("every secret compare goes through safeEqual, in every file", () => {
   // The specific compares, still where they belong.
-  const auth = must(sourceFiles().find((f) => f.name === "auth.ts")).text;
+  const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
   assert.ok(auth.includes("await safeEqual(candidate, entry)"));
-  const accessLogin = must(sourceFiles().find((f) => f.name === "access-login.ts")).text;
+  const accessLogin = sourceFiles().find((f) => f.name === "access-login.ts")!.text;
   assert.match(accessLogin, /await safeEqual\(await sha256Hex\(stateCookie\), signIn\.binding\)/);
 
   // And no file anywhere has gone back to a short-circuiting compare of a secret.

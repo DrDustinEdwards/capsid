@@ -6,7 +6,6 @@ import { defaultScopes } from "../src/agents-schema";
 import { buildAdminServer } from "../src/server";
 import type { ClaimsAggregate, ClaimsJob } from "../src/ops-types/claims";
 import type { ClaimsExportPage } from "../src/job-claims-read";
-import { must } from "../src/must";
 
 // The capsid_admin_read_claims tool (Capsid Admin) against a real D1 with
 // migrations/0023 applied: what the admin reads back from rows planted here, what a
@@ -259,7 +258,7 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
     const outcomes = await adminRead<ClaimsExportPage>({ action: "export", table: "job_outcomes", limit: 500 });
     const row = outcomes.rows.find((r) => r.job_id === job);
     expect(row, "the planted outcome is not in the export").toBeTruthy();
-    expect(typeof must(row).rowid).toBe("number");
+    expect(typeof row!.rowid).toBe("number");
   });
 });
 

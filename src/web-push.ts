@@ -10,7 +10,6 @@
 // scripts/vapid-keys.mjs makes one and puts it with wrangler without printing it.
 
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
-import { must } from "./must";
 
 export interface PushSubscriptionKeys {
   endpoint: string;
@@ -108,7 +107,7 @@ export async function encryptPayload(sub: PushSubscriptionKeys, plaintext: Uint8
   let asPublic: Uint8Array;
   if (fixed.privateJwk) {
     asPrivate = await crypto.subtle.importKey("jwk", fixed.privateJwk, ecdh, false, ["deriveBits"]);
-    asPublic = concat(new Uint8Array([4]), fromBase64url(must(fixed.privateJwk.x)), fromBase64url(must(fixed.privateJwk.y)));
+    asPublic = concat(new Uint8Array([4]), fromBase64url(fixed.privateJwk.x!), fromBase64url(fixed.privateJwk.y!));
   } else {
     const pair = (await crypto.subtle.generateKey(ecdh, true, ["deriveBits"])) as CryptoKeyPair;
     asPrivate = pair.privateKey;

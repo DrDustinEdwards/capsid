@@ -2,7 +2,6 @@ import type { Env } from "./env";
 import { encodePath, ghFetch } from "./github/client";
 import { npmVersions, readPackageConfig, type FetchLike } from "./ops-packages";
 import { heading, proseOnly } from "./job-body-check";
-import { must } from "./must";
 
 // The third job body check (src/job-body-check.ts): a body that states a pull request is
 // merged, a version is tagged or a package version is published is checked against GitHub
@@ -176,7 +175,7 @@ export async function checkBodyFacts(namespace: string, body: string, readers: F
     if (!list.ok) return { state: "unchecked", reason: list.reason };
     let repo: string | undefined;
     if (claim.repo) {
-      repo = list.value.find((r) => same(r, must(claim.repo)));
+      repo = list.value.find((r) => same(r, claim.repo!));
       if (!repo) return { state: "unchecked", reason: `${claim.repo} is not a repo ${namespace} maps, so Capsid does not read it` };
     } else if (list.value.length === 1) {
       repo = list.value[0];
@@ -225,7 +224,7 @@ export async function checkBodyFacts(namespace: string, body: string, readers: F
     } else {
       const list = await mapped();
       if (!list.ok) return claim.npm ? { ok: false, reason: list.reason } : null;
-      matches = pkgs.value.filter((p) => p.repo !== null && list.value.some((r) => same(r, must(p.repo))));
+      matches = pkgs.value.filter((p) => p.repo !== null && list.value.some((r) => same(r, p.repo!)));
       if (matches.length !== 1) {
         return claim.npm ? { ok: false, reason: `the claim names no package and ${namespace} has ${matches.length} configured; write it as name@${bare(claim.version)}` } : null;
       }

@@ -5,7 +5,6 @@ import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged
 import { AUTO_MERGE_POLICY_PATH, checkMergePolicyBody, loadMergePolicy, parseMergePolicy } from "./auto-merge-policy";
 import { readRepoFile } from "./github/contents";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { must } from "./must";
 
 // Signing a policy document: the one path that mints the signature the auto-merge and
 // gate policies are verified against. Its constraints:
@@ -107,7 +106,7 @@ async function commitSigned(
   body: string,
   audit: (signature: string | null, sha256: string, bytes: number) => D1PreparedStatement
 ): Promise<{ ok: true; signed: string; signature: string | null; sha256: string } | { ok: false; error: string }> {
-  const signed = await signTaskBody(must(env.IMPROVE_SCORE_SECRET), body);
+  const signed = await signTaskBody(env.IMPROVE_SCORE_SECRET!, body);
   const { signature } = splitSignedTask(signed);
   const sha256 = await sha256Hex(signed);
   // The anti-rollback record is written first: from here on the loaders accept this
@@ -183,7 +182,7 @@ function editPolicy(body: string, to: string, change: PolicyChange, unit: string
   let end = lines.findIndex((l, i) => i > head && l.trim().startsWith("##"));
   if (end < 0) end = lines.length;
   let at = head + 1;
-  for (let i = head + 1; i < end; i++) if (must(lines[i]).trim().startsWith("- unit ")) at = i + 1;
+  for (let i = head + 1; i < end; i++) if (lines[i]!.trim().startsWith("- unit ")) at = i + 1;
   if (at === head + 1) {
     lines.splice(at, 0, "", line);
   } else {

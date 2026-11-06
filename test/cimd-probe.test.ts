@@ -4,7 +4,6 @@ import { test } from "node:test";
 // runs in the live CI job with no npm ci and no build step.
 import { PROBE_CLIENT_PATH, PROBE_REDIRECT, probeClientId, probeDocumentProblem, registrationProblem } from "../scripts/cimd-probe-lib.mjs";
 import { VERIFY_LIVE_CLIENT_PATH, clientDocument } from "../src/oauth-client-docs.ts";
-import { must } from "../src/must.ts";
 
 // verify-live gate 2 (scripts/cimd-probe-lib.mjs): CIMD is on, tightened DCR refuses a
 // registration naming the probe's unlisted redirect (registrationRefusal), and the probe client's
@@ -12,7 +11,7 @@ import { must } from "../src/must.ts";
 // decisions and the document the Worker serves.
 
 const ORIGIN = "https://capsid.example";
-const DOC = must(clientDocument(new URL(probeClientId(ORIGIN))));
+const DOC = clientDocument(new URL(probeClientId(ORIGIN)))!;
 const METADATA = { issuer: ORIGIN, client_id_metadata_document_supported: true, registration_endpoint: `${ORIGIN}/register` };
 const REFUSED = { error: "invalid_redirect_uri" };
 

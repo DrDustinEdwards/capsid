@@ -24,7 +24,6 @@ const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.Sit
 import { Uptime90 } from "./Uptime90";
 import { SiteWorkers } from "./Workers";
 import { SearchAndTraffic, SiteBuilds } from "./SiteTraffic";
-import { must } from "../lib/must";
 
 // ONE SITE'S OWN PAGE (the Portal audit's new map, 2026-11-06), /sites/<namespace>: what was
 // spread over Health's Sites and Deploys tabs, the site drawer, Settings' sites list and
@@ -274,7 +273,7 @@ function Setup({ ns, row, snap }: { ns: string; row: OpsSiteConfig | null; snap:
               <dt>Platform</dt>
               <dd>{row.platform === "vercel" ? "Vercel" : row.platform === "cloudflare" ? "Cloudflare" : none}</dd>
               <dt>Worker script</dt>
-              <dd className="mono">{row.script ?? (snap && cfOk(snap) ? <span className="faint">{must(cfOk(snap)).script}, found from the custom domains</span> : none)}</dd>
+              <dd className="mono">{row.script ?? (snap && cfOk(snap) ? <span className="faint">{cfOk(snap)!.script}, found from the custom domains</span> : none)}</dd>
               <dt>Operator API</dt>
               <dd>{row.operator ? <span className="mono">{row.operator.path}</span> : row.operator_problem ? <St kind="warn">{row.operator_problem}</St> : none}</dd>
               <dt>Revision</dt>

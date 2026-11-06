@@ -16,7 +16,6 @@ import { domainAlerts } from "./domain-expiry";
 import { readVapidKey, sendPush, subscriptionProblem, type PushSubscriptionKeys } from "./web-push";
 import { jsonResponse as json, textResponse as text } from "./http";
 import { HOUR_MS, DAY_MS } from "./time";
-import { must } from "./must";
 
 // PHONE ALERTS (docs/design/design-merge-pipeline.md section 5, PR 7; Dustin's DECIDE 5
 // and 6 of 2026-10-09). Web Push to the devices the administrator turned on in the
@@ -302,7 +301,7 @@ async function emailFallback(env: Env, now: Date, why: string): Promise<PushRepo
   let note = `nothing urgent (${why})`;
   const sent: string[] = [];
   if (due.length > 0) {
-    const subject = due.length === 1 ? `Capsid: ${must(due[0]).title}` : `Capsid: ${due.length} alerts`;
+    const subject = due.length === 1 ? `Capsid: ${due[0]!.title}` : `Capsid: ${due.length} alerts`;
     const text = [
       `${why}, so these came by email (turn a device on in the Portal's Settings).`,
       "",
@@ -310,7 +309,7 @@ async function emailFallback(env: Env, now: Date, why: string): Promise<PushRepo
       ...(urgent.length > due.length ? [`${urgent.length - due.length} more on the next tick.`] : []),
     ].join("\n");
     try {
-      await must(env.EMAIL).send({ from: must(env.ALERT_FROM), to: must(env.ALERT_EMAIL), subject, text });
+      await env.EMAIL!.send({ from: env.ALERT_FROM!, to: env.ALERT_EMAIL!, subject, text });
       for (const u of due) {
         state.sent[u.key] = at;
         sent.push(u.key);
@@ -375,7 +374,7 @@ export async function handlePortalPushPost(request: Request, env: Env, now: Date
     const count = await env.DB.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions WHERE status = 'active'`).first<{ n: number }>();
     const existing = await env.DB.prepare(`SELECT id FROM push_subscriptions WHERE endpoint = ?1 AND status = 'active'`).bind(sub.endpoint).first<{ id: number }>();
     if (!existing && (count?.n ?? 0) >= MAX_DEVICES) return text(`not turned on: ${MAX_DEVICES} devices already have alerts on. Turn one off first.`, 409);
-    const host = new URL(must(sub.endpoint)).hostname;
+    const host = new URL(sub.endpoint!).hostname;
     if (!existing) {
       await env.DB.batch([
         env.DB.prepare(

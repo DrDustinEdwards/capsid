@@ -6,7 +6,6 @@ import { test } from "node:test";
 // runs in the live CI job with no npm ci and no build step.
 import { PROBE_REDIRECT, probeDocumentProblem } from "../scripts/cimd-probe-lib.mjs";
 import { VERIFY_LIVE_CLIENT_PATH, clientDocument, handleClientDocument } from "../src/oauth-client-docs.ts";
-import { must } from "../src/must.ts";
 
 // The verify-live probe's client document served by the Worker at a path that names no
 // branch (job_bf05bc756c5e). It must be one the provider accepts, and say the same as the
@@ -27,7 +26,7 @@ test("PLANT: the served document is one the provider accepts at its own URL", as
 test("it says what the repo's file says, apart from client_id, so the probe is the same client in all but its id", () => {
   const { client_id: _file, ...fileRest } = FILE;
   void _file;
-  const { client_id: _served, ...servedRest } = must(clientDocument(new URL(`${ORIGIN}${VERIFY_LIVE_CLIENT_PATH}`)));
+  const { client_id: _served, ...servedRest } = clientDocument(new URL(`${ORIGIN}${VERIFY_LIVE_CLIENT_PATH}`))!;
   void _served;
   assert.deepEqual(servedRest, fileRest);
 });

@@ -4,7 +4,6 @@ import { buildServer } from "../src/server";
 import { integrityOf } from "../src/truth-report";
 import { capsidStatus } from "../src/status";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { must } from "../src/must";
 
 // test/truth-report.test.ts proves which statements the handler issues; this proves
 // the document lands in a real D1 and improve_status reads its number back. A fake
@@ -47,8 +46,8 @@ describe("lint mode report", () => {
         .bind(path)
         .first<{ body: string; type: string; status: string }>();
       expect(stored, "report mode returned a path and stored nothing there").toBeTruthy();
-      expect(must(stored).type).toBe("reference");
-      expect(integrityOf(must(stored).body)).toBe(payload.integrity);
+      expect(stored!.type).toBe("reference");
+      expect(integrityOf(stored!.body)).toBe(payload.integrity);
 
       // documents_fts is external-content, and the trigger keeps it in step.
       const indexed = await env.DB.prepare(
@@ -97,15 +96,15 @@ describe("lint mode report", () => {
     const status = await capsidStatus(env as never, "capsid");
     const capsid = status.namespaces.find((n) => n.namespace === "capsid");
     expect(capsid, "capsid is on the improve roster and must be in the status report").toBeTruthy();
-    expect(must(capsid).latest_report, "no report was surfaced, though one was just written").toBeTruthy();
-    expect(must(must(capsid).latest_report).path).toMatch(/^capsid\/reports\/lint-\d{4}-\d{2}-\d{2}\.md$/);
-    expect(typeof must(must(capsid).latest_report).integrity).toBe("number");
+    expect(capsid!.latest_report, "no report was surfaced, though one was just written").toBeTruthy();
+    expect(capsid!.latest_report!.path).toMatch(/^capsid\/reports\/lint-\d{4}-\d{2}-\d{2}\.md$/);
+    expect(typeof capsid!.latest_report!.integrity).toBe("number");
   });
 
   it("PLANT: a namespace with no report reports null, which is not an integrity of zero", async () => {
     const status = await capsidStatus(env as never, "germomics");
     const germomics = status.namespaces.find((n) => n.namespace === "germomics");
-    expect(must(germomics).latest_report).toBeNull();
+    expect(germomics!.latest_report).toBeNull();
   });
 
   it("the newest DATE wins, not the most recently rewritten document", async () => {
@@ -117,8 +116,8 @@ describe("lint mode report", () => {
        VALUES ('capsid', 'reports/lint-2020-01-01.md', 'Old', 'integrity: 1%', 'reference', 'published', datetime('now'))`
     ).run();
     const status = await capsidStatus(env as never, "capsid");
-    const capsid = must(status.namespaces.find((n) => n.namespace === "capsid"));
-    expect(must(capsid.latest_report).path).not.toContain("2020-01-01");
-    expect(must(capsid.latest_report).integrity).not.toBe(1);
+    const capsid = status.namespaces.find((n) => n.namespace === "capsid")!;
+    expect(capsid.latest_report!.path).not.toContain("2020-01-01");
+    expect(capsid.latest_report!.integrity).not.toBe(1);
   });
 });

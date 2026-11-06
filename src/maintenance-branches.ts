@@ -4,7 +4,6 @@ import { deletePruneCandidates, readPrunePlan, type PruneCandidate, type PruneKe
 import type { MaintenanceItem } from "./maintenance";
 import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
-import { must } from "./must";
 
 // The daily maintenance pass's branch rules (job_549550d73d4e, piece 3). A merged branch is
 // one capsid_close_pr action delete_branch with merged:true would prune (job_8779278b8e91, src/github/prune.ts): its
@@ -177,7 +176,7 @@ export async function gatherBranchItems(
       pruned += done.deleted.length;
       const why = new Map(old.map((s) => [s.branch, s]));
       for (const c of done.deleted.slice(0, MAX_ITEMS_PER_RULE)) {
-        const s = must(why.get(c.branch));
+        const s = why.get(c.branch)!;
         items.push({
           rule: "branch-pruned",
           namespace,

@@ -4,7 +4,6 @@ import { blockJob, claimJob, completeJob, failAsCaller, failJob, postJob } from 
 import { grantAgent } from "../src/agents";
 import { buildServer } from "../src/server";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { must } from "../src/must";
 
 // Claims apart from verified outcomes, against a real D1 (migrations/0023). What the
 // agent said lands in job_claims in the transition's own batch, before GitHub is read,
@@ -31,7 +30,7 @@ function jobsEnv() {
 async function claimed(title: string, actor = DRIVER) {
   const posted = await postJob(jobsEnv(), grantAgent("write", SEAT), NOW, { namespace: NS, title, body: "do the thing" });
   expect(posted.ok, posted.refusal).toBe(true);
-  const id = must(posted.job).id;
+  const id = posted.job!.id;
   const claim = await claimJob(jobsEnv(), actor, NOW, { id });
   expect(claim.ok, claim.refusal).toBe(true);
   return id;
@@ -225,15 +224,15 @@ describe("skills do not ride on claim", () => {
       "INSERT INTO documents (namespace, path, title, body, type, status) VALUES ('capsid', 'improve/skills/sk-x.md', 'sk-x', 'check the slow query before the fix', 'reference', 'published')"
     ).run();
     const posted = await postJob(jobsEnv(), grantAgent("write", SEAT), NOW, { namespace: NS, title: "Fix the slow query", body: "the slow query in the loader" });
-    const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id: must(posted.job).id });
+    const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
     expect(claim.ok, claim.refusal).toBe(true);
     expect(claim).not.toHaveProperty("offered_skills");
     const offers = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-skills-offered'").first<{ n: number }>();
     expect(offers?.n).toBe(0);
-    const done = await completeJob(jobsEnv(), DRIVER, LATER, must(posted.job).id, { result_summary: "done" });
+    const done = await completeJob(jobsEnv(), DRIVER, LATER, posted.job!.id, { result_summary: "done" });
     expect(done.ok, done.refusal).toBe(true);
     const row = await env.DB.prepare("SELECT skill_ids_offered, skill_ids_used FROM job_outcomes WHERE job_id = ?1")
-      .bind(must(posted.job).id)
+      .bind(posted.job!.id)
       .first<{ skill_ids_offered: string | null; skill_ids_used: string | null }>();
     expect(row).toEqual({ skill_ids_offered: null, skill_ids_used: null });
   });

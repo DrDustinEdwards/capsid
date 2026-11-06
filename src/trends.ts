@@ -7,7 +7,6 @@ import { APP_ROSTER } from "./roster";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendDeployRepo, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types/views";
 import { MINUTE_MS, DAY_MS } from "./time";
-import { must } from "./must";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
 // ruled 2026-10-09: DECIDE 5, the trends route, and DECIDE 6, all eleven visuals). The feed
@@ -84,9 +83,9 @@ export function sessionMinutes(times: number[], mondays: string[]): Map<string, 
   const sorted = [...times].filter(Number.isFinite).sort((a, b) => a - b);
   let i = 0;
   while (i < sorted.length) {
-    const start = must(sorted[i]);
+    const start = sorted[i]!;
     let end = start;
-    while (i + 1 < sorted.length && must(sorted[i + 1]) - end <= SESSION_GAP_MS) end = must(sorted[++i]);
+    while (i + 1 < sorted.length && sorted[i + 1]! - end <= SESSION_GAP_MS) end = sorted[++i]!;
     i++;
     const week = out.get(mondayOf(dayOf(start)));
     if (!week) continue;
@@ -128,16 +127,16 @@ async function readMinutes(db: D1Database, mondays: string[]): Promise<{ weeks: 
   const perWeek = new Map(mondays.map((m) => [m, 0]));
   for (const r of [...decisions.results, ...approvals.results]) {
     const m = mondayOf(r.day);
-    if (perWeek.has(m)) perWeek.set(m, must(perWeek.get(m)) + r.n);
+    if (perWeek.has(m)) perWeek.set(m, perWeek.get(m)! + r.n);
   }
   return {
-    weeks: mondays.map((m) => ({ week: isoWeek(m), start: m, minutes: must(minutes.get(m)).minutes, sessions: must(minutes.get(m)).sessions, decisions: must(perWeek.get(m)) })),
+    weeks: mondays.map((m) => ({ week: isoWeek(m), start: m, minutes: minutes.get(m)!.minutes, sessions: minutes.get(m)!.sessions, decisions: perWeek.get(m)! })),
     truncated,
   };
 }
 
 async function readQueue(db: D1Database, days: string[]): Promise<TrendQueueDay[]> {
-  const from = must(days[0]);
+  const from = days[0]!;
   const [before, posted, ended] = await Promise.all([
     // Open when the window starts: posted before it and not yet ended by then. A job
     // that ended (done, failed, superseded) never moves again, so its updated_at is when.
@@ -228,7 +227,7 @@ function deployStats(rows: ReadonlyArray<{ repo: string; outcome: DeployOutcomeN
       const decided = t.shipped + t.refused;
       const sorted = [...t.restores].sort((a, b) => a - b);
       const mid = sorted.length >> 1;
-      const median = sorted.length === 0 ? null : sorted.length % 2 ? must(sorted[mid]) : Math.round((must(sorted[mid - 1]) + must(sorted[mid])) / 2);
+      const median = sorted.length === 0 ? null : sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
       return {
         repo,
         deploys: decided + t.unverified,
@@ -262,7 +261,7 @@ export function costWeeks(rows: Array<{ day: string; usd: number; n: number }>, 
     w.jobs += r.n;
   }
   return mondays.map((m) => {
-    const w = must(weeks.get(m));
+    const w = weeks.get(m)!;
     return { week: isoWeek(m), start: m, usd: w.jobs ? Math.round(w.usd * 100) / 100 : null, jobs: w.jobs };
   });
 }
@@ -301,7 +300,7 @@ async function readBackups(env: Env, now: Date): Promise<PortalTrends["backups"]
     do {
       const page = await env.MEDIA.list({ prefix: BACKUP_PREFIX, cursor });
       for (const o of page.objects) {
-        if (o.key.endsWith(`/${COMPLETE_MARKER}`)) complete.push(must(o.key.slice(BACKUP_PREFIX.length).split("/")[0]));
+        if (o.key.endsWith(`/${COMPLETE_MARKER}`)) complete.push(o.key.slice(BACKUP_PREFIX.length).split("/")[0]!);
       }
       cursor = page.truncated ? page.cursor : undefined;
     } while (cursor);
@@ -367,7 +366,7 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
   const settled = await Promise.allSettled(APP_ROSTER.map((namespace) => readCiRepo(env, namespace, days)));
   settled.forEach((r, i) => {
     if (r.status === "fulfilled") repos.push(r.value);
-    else notRead.push({ namespace: must(APP_ROSTER[i]), error: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+    else notRead.push({ namespace: APP_ROSTER[i]!, error: r.reason instanceof Error ? r.reason.message : String(r.reason) });
   });
   const out: PortalTrends["ci"] = { read_at: now.toISOString(), repos, not_read: notRead };
   // Only a full read is kept, so a GitHub outage is retried on the next look, not for an hour.

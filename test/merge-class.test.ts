@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { AUTO_MERGE_REQUIRED_CI, evaluatePolicy, type PrFacts } from "../src/auto-merge-policy.ts";
 import { existingTestEdits, type PrFileRow } from "../src/github/pr-files.ts";
 import { mergeClass, pathClassOf, pathClassOfAll } from "../src/merge-class.ts";
-import { must } from "../src/must.ts";
 
 // The merge classes (docs/design/design-merge-pipeline.md section 2, the design's PR 2),
 // report-only. Each class from one field changed on a PR that would otherwise auto-merge,
@@ -149,7 +148,7 @@ test("PLANT: a PR the policy would merge that changes an existing test is class 
   assert.equal(verdict.merge, true, "the fixture should pass the policy");
   const c = mergeClass(facts, verdict);
   assert.equal(c.class, "approve");
-  assert.match(must(c.reasons[0]), /^changes an existing test: test\/a\.test\.ts, test\/b\.test\.ts, test\/c\.test\.ts, and 1 more$/);
+  assert.match(c.reasons[0]!, /^changes an existing test: test\/a\.test\.ts, test\/b\.test\.ts, test\/c\.test\.ts, and 1 more$/);
   assert.equal(c.path_class, "docs");
 });
 
@@ -157,7 +156,7 @@ test("a policy refusal on a PR that changes an existing test is approve with the
   const edits = ["test/a.test.ts"];
   const refused = classOf(pr({ existingTestEdits: edits, changedLines: 5000 }));
   assert.equal(refused.class, "approve");
-  assert.match(must(refused.reasons[0]), /^changes an existing test: test\/a\.test\.ts$/);
+  assert.match(refused.reasons[0]!, /^changes an existing test: test\/a\.test\.ts$/);
   assert.ok(refused.reasons.length > 1);
   assert.equal(classOf(pr({ existingTestEdits: edits, changedPaths: ["src/stripe.ts"] })).class, "typed");
   assert.equal(classOf(pr({ existingTestEdits: edits }), true).class, "wait");

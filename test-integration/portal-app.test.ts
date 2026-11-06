@@ -4,7 +4,6 @@ import worker from "../src/index";
 import { portalSessionCookie } from "../src/portal-auth";
 import { HASHED_ASSET_CACHE } from "../src/portal-app";
 import { PORTAL_HOST } from "../src/portal-host";
-import { must } from "../src/must";
 
 // Capsid Portal through the whole Worker: its pages (the tests' stand-in for the server-rendered
 // build, test/fixtures/portal-pages.ts, which reads the feed as a real page does first) and its
@@ -24,14 +23,14 @@ async function signedFetch(path: string, headers: Record<string, string> = {}): 
   const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
   const ctx = createExecutionContext();
   const request = new Request(`${ORIGIN}${path}`, { headers: { ...headers, Cookie: cookie }, redirect: "manual" });
-  const response = await must(worker.fetch).call(worker, request as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx);
+  const response = await worker.fetch!(request as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx);
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
 
 describe("the Portal's pages and files", () => {
   it("the fixture is really served by the binding, so the refusals below are the gate and not a missing file", async () => {
-    const direct = await must(env.ASSETS).fetch("https://assets.invalid/assets/app-abc123.js");
+    const direct = await env.ASSETS!.fetch("https://assets.invalid/assets/app-abc123.js");
     expect(direct.status).toBe(200);
     expect(await direct.text()).toContain(SCRIPT_MARK);
   });

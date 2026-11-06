@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { backupSlots, ciDays, costWeeks, isoWeek, lastDays, mondayOf, sessionMinutes, timeMs, weekStarts } from "../src/trends.ts";
-import { must } from "../src/must.ts";
 
 // The counting rules behind GET /portal/api/trends, on plain values. The SQL runs against
 // a real D1 in test-integration/portal-trends.test.ts.
@@ -100,7 +99,7 @@ test("PLANT: a backup slot is filled only by a complete run inside it", () => {
   assert.deepEqual(filled(slots.daily), ["2026-10-09", "2026-10-11"]);
   assert.deepEqual(filled(slots.weekly), ["2026-10-05"]);
   assert.deepEqual(filled(slots.monthly), ["2026-08", "2026-10"]);
-  assert.equal(must(slots.monthly[0]).key, "2026-08");
+  assert.equal(slots.monthly[0]!.key, "2026-08");
 });
 
 test("PLANT: a week's cost sums its costed outcomes, and a week with none is null, not zero", () => {

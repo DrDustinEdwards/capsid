@@ -7,7 +7,6 @@ import type { Env } from "../src/env";
 import { opsFeed } from "../src/ops-feed";
 import { OPS_HOOKS_PATH } from "../src/ops-hooks";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { must } from "../src/must";
 
 // The hook receiver through the whole Worker, on real D1 (src/ops-hooks.ts,
 // migrations/0025): who may post, the job a session binds to, the needs_input cycle, a
@@ -86,8 +85,8 @@ interface SessionRow {
 }
 
 const session = (id = SESSION) => env.DB.prepare("SELECT * FROM agent_sessions WHERE session_id = ?1").bind(id).first<SessionRow>();
-const sessionCount = async () => must((await env.DB.prepare("SELECT COUNT(*) AS n FROM agent_sessions").first<{ n: number }>())).n;
-const eventCount = async () => must((await env.DB.prepare("SELECT COUNT(*) AS n FROM session_events").first<{ n: number }>())).n;
+const sessionCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM agent_sessions").first<{ n: number }>())!.n;
+const eventCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM session_events").first<{ n: number }>())!.n;
 
 const start = (id = SESSION) => ({ session_id: id, hook_event_name: "SessionStart", source: "startup", model: "claude-sample-model" });
 const notify = (type: string) => ({ session_id: SESSION, hook_event_name: "Notification", notification_type: type, title: "Sample", message: "Claude needs your permission" });
@@ -157,10 +156,10 @@ describe("what a session records", () => {
     expect((await session())?.last_failure).toBe("rate_limit");
     const event = await env.DB.prepare("SELECT subtype, detail FROM session_events WHERE event = 'StopFailure'").first<{ subtype: string; detail: string }>();
     expect(event?.subtype).toBe("rate_limit");
-    const detail = JSON.parse(must(event).detail) as { error: string };
+    const detail = JSON.parse(event!.detail) as { error: string };
     expect(detail.error.startsWith("API Error: 429")).toBe(true);
     expect(detail.error.length).toBe(300);
-    expect(must(event).detail).not.toContain("never kept");
+    expect(event!.detail).not.toContain("never kept");
     let feed = await opsFeed(env as unknown as Env, new Date());
     expect(feed.live.sessions.find((s) => s.session_id === SESSION)).toMatchObject({ last_failure: "rate_limit", incident: "failure", job_id: DRIVER_JOB });
     await ok(DRIVER_KEY, { session_id: SESSION, hook_event_name: "Stop" });

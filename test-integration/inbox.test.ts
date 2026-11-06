@@ -8,7 +8,6 @@ import { blockJob, claimJob, postJob } from "../src/jobs";
 import { capsidStatus } from "../src/status";
 import type { Inbox } from "../src/inbox";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { must } from "../src/must";
 
 // "What needs Dustin, per app" (job_84e901d8eb71), driven through the whole Worker with the
 // credentials a caller would present: GET /ops/inbox, and the same answer in improve_status.
@@ -35,7 +34,7 @@ async function inboxAs(bearer: string | null): Promise<Response> {
 async function blocked(namespace: string, title: string, reason: string, question = false, command = "Merge it"): Promise<string> {
   const posted = await postJob(jobsEnv(), ADMIN, NOW, { namespace, title, body: "do the thing" });
   expect(posted.ok, posted.refusal).toBe(true);
-  const id = must(posted.job).id;
+  const id = posted.job!.id;
   expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
   const out = question ? await blockJob(jobsEnv(), DRIVER, NOW, id, { reason, question: true }) : await blockJob(jobsEnv(), DRIVER, NOW, id, { reason, command });
   expect(out.ok, out.refusal).toBe(true);

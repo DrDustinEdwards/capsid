@@ -2,7 +2,6 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
-import { must } from "../src/must";
 
 // A delete records the edges it removes, including one added just before its batch.
 // The audit row is the only place a deleted document's edges survive.
@@ -59,7 +58,7 @@ describe("delete records its edges inside the batch", () => {
       "SELECT params FROM audit_log WHERE action = 'delete' AND namespace = 'sample' AND path = 'gone.md'"
     ).first<{ params: string }>();
     expect(audit).not.toBeNull();
-    const recorded = JSON.parse(must(audit).params) as { edges_removed: Array<Record<string, string>> };
+    const recorded = JSON.parse(audit!.params) as { edges_removed: Array<Record<string, string>> };
     expect(recorded.edges_removed).toContainEqual(EDGE);
     expect(recorded.edges_removed).toContainEqual({
       from_ns: "sample",
@@ -95,6 +94,6 @@ describe("delete records its edges inside the batch", () => {
     const audit = await env.DB.prepare(
       "SELECT params FROM audit_log WHERE action = 'delete' AND namespace = 'sample' AND path = 'alone.md'"
     ).first<{ params: string }>();
-    expect(JSON.parse(must(audit).params)).toEqual({ edges_removed: [] });
+    expect(JSON.parse(audit!.params)).toEqual({ edges_removed: [] });
   });
 });

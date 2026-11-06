@@ -1,5 +1,5 @@
 import { parseDocParam } from "../lib/keys";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { Link, useLocation, useSearch } from "../lib/router";
@@ -75,7 +75,12 @@ export function Library() {
   const [draft, setDraft] = useState(q);
   const docNs = doc?.ns ?? null;
   const docPath = doc?.path ?? null;
-  useEffect(() => setDraft(q), [q]);
+  // The address changed: the field follows it. Adjusted while rendering, not in an effect.
+  const [seenQ, setSeenQ] = useState(q);
+  if (seenQ !== q) {
+    setSeenQ(q);
+    setDraft(q);
+  }
   const load = useAnswer<PortalLibrary>(["library", docNs, docPath, q], () => fetchLibrary(docNs !== null && docPath !== null ? { ns: docNs, path: docPath } : q ? { q } : null));
   const submit = (e: FormEvent) => {
     e.preventDefault();

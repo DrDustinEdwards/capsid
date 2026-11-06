@@ -3,7 +3,6 @@ import { ciStatus } from "./github";
 import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import type { JobRow } from "./jobs-schema";
 import { MINUTE_MS } from "./time";
-import { must } from "./must";
 
 // One outcome row per finished job, written once, carrying counts.
 //
@@ -318,7 +317,7 @@ export function parseEvidence(input: EvidenceInput): { evidence: JobEvidence | u
 // order, so the pull request named twice is read and counted once.
 export function namedPrUrls(evidence: JobEvidence | undefined, resultRef: string | null | undefined): string[] {
   const urls: string[] = [];
-  for (const url of [...(evidence?.prs ?? []), ...(parsePrUrl(resultRef) ? [must(resultRef).trim()] : [])]) {
+  for (const url of [...(evidence?.prs ?? []), ...(parsePrUrl(resultRef) ? [resultRef!.trim()] : [])]) {
     if (!urls.includes(url)) urls.push(url);
   }
   return urls;

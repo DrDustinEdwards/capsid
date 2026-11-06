@@ -5,7 +5,6 @@ import { CONTROLS, performControl, previewControl } from "../src/controls.ts";
 import { judgeUnits } from "../src/merge-units.ts";
 import { countsFrom, judgeShutoff, LIFTED_KEY, PAUSED_KEY, planResume, readPaused, resumeNamespace, revertsTick, REVERTS_STAMP_KEY, revertTargets, type AuditEvidence, type OutcomeEvidence } from "../src/merge-safety.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // The auto-merge safety meter and shutoff (src/merge-safety.ts): what a revert names,
 // the weekly counts, the pause, and the resume. The parts that read D1 and GitHub are in
@@ -77,31 +76,31 @@ test("countsFrom counts the last seven days only, and approved leaves out the po
     { action: "approved-merged", namespace: "capsid", params: "{}", at: at(1).replace("T", " ").slice(0, 19) },
   ];
   const [c] = countsFrom(rows, [outcome(null, "verified", 1), outcome(null, "verified", 9), outcome(null, "rolled_back", 2), outcome(null, "rollback_failed", 3)], ["capsid"], NOW);
-  assert.equal(must(c).auto_merged, 2);
-  assert.equal(must(c).approved, 2);
-  assert.equal(must(c).deploys_verified, 1);
-  assert.equal(must(c).rolled_back, 1);
-  assert.equal(must(c).rollback_failed, 1);
-  assert.equal(must(c).bad_auto_7d, 0, "a rollback with no pull request was counted against the tick");
+  assert.equal(c!.auto_merged, 2);
+  assert.equal(c!.approved, 2);
+  assert.equal(c!.deploys_verified, 1);
+  assert.equal(c!.rolled_back, 1);
+  assert.equal(c!.rollback_failed, 1);
+  assert.equal(c!.bad_auto_7d, 0, "a rollback with no pull request was counted against the tick");
 });
 
 test("bad_auto_7d joins a rollback to the tick's merge, adds reverts, and counts one pull request once", () => {
   const rows = [merged(41, 3), merged(42, 3), merged(43, 3), reverted(43, 50, 1), reverted(42, 51, 1)];
   const [c] = countsFrom(rows, [outcome(41, "rolled_back", 2), outcome(43, "rolled_back", 2), outcome(99, "rolled_back", 1)], ["capsid"], NOW);
-  assert.equal(must(c).reverts, 2);
+  assert.equal(c!.reverts, 2);
   // 41 rolled back, 42 reverted, 43 rolled back and reverted: three pull requests. 99 was not the tick's.
-  assert.equal(must(c).bad_auto_7d, 3);
+  assert.equal(c!.bad_auto_7d, 3);
 });
 
 test("a pull request's bad event is its latest after the lift, so a fresh revert of an old rollback counts, once", () => {
   const rows = [merged(41, 20), merged(42, 20), reverted(41, 50, 1)];
   const rolled = [outcome(41, "rolled_back", 18), outcome(42, "rolled_back", 19)];
   const [c] = countsFrom(rows, rolled, ["capsid"], NOW);
-  assert.equal(must(c).bad_auto_7d, 1, "the old rollback of 41 hid its fresh revert");
+  assert.equal(c!.bad_auto_7d, 1, "the old rollback of 41 hid its fresh revert");
   // Neither is a pause on its own: 41 is this week's one event, 42 sits in the 30 days before.
-  assert.deepEqual(judgeShutoff([must(c)], {}, {}, NOW), {});
+  assert.deepEqual(judgeShutoff([c!], {}, {}, NOW), {});
   // After a resume 5 days ago, 42's old rollback is answered, and 41's fresh revert is the one event.
-  const answered = judgeShutoff([must(c)], {}, { capsid: at(5) }, NOW);
+  const answered = judgeShutoff([c!], {}, { capsid: at(5) }, NOW);
   assert.deepEqual(answered, {});
   const withSecond = countsFrom([...rows, reverted(42, 52, 0.5)], rolled, ["capsid"], NOW);
   assert.deepEqual(Object.keys(judgeShutoff(withSecond, {}, { capsid: at(5) }, NOW)), ["capsid"], "a fresh revert of 42 after the lift did not count with 41's");
@@ -118,7 +117,7 @@ test("PLANT: two rollbacks of auto-merged pull requests in 7 days pause the name
   const counts = countsFrom([merged(41, 3), merged(42, 3)], [outcome(41, "rolled_back", 2), outcome(42, "rollback_failed", 1)], ["capsid"], NOW);
   const paused = judgeShutoff(counts, {}, {}, NOW);
   assert.deepEqual(Object.keys(paused), ["capsid"]);
-  assert.match(must(paused.capsid), /2 of the pull requests auto-merge merged were rolled back or reverted in 7 days/);
+  assert.match(paused.capsid!, /2 of the pull requests auto-merge merged were rolled back or reverted in 7 days/);
 });
 
 test("PLANT: one rollback and one revert pause the namespace", () => {
@@ -144,7 +143,7 @@ test("PLANT: a 7-day rate over 3 times a nonzero baseline pauses on one event", 
 
 test("one bad event against a clean baseline does not pause; only the count rule applies there", () => {
   const counts = countsFrom([merged(41, 3), ...Array.from({ length: 10 }, (_, i) => merged(100 + i, 15 + i))], [outcome(41, "rolled_back", 2)], ["capsid"], NOW);
-  assert.equal(must(counts[0]).bad_auto_7d, 1);
+  assert.equal(counts[0]!.bad_auto_7d, 1);
   assert.deepEqual(judgeShutoff(counts, {}, {}, NOW), {});
 });
 
@@ -167,8 +166,8 @@ test("PLANT: a revert of an unattended merge suspends its unit, like a rollback"
   const revert = { kind: "revert" as const, reverted_by: 50, namespace: "capsid", repo: REPO, pr: 41, head_sha: "a".repeat(40), run_id: 0, run_at: at(1), merged_by: "tick" as const, path_class: "docs" };
   const report = judgeUnits([], [revert], [], NOW);
   assert.deepEqual(report.suspended.map((s) => s.unit), ["capsid/docs"]);
-  assert.match(must(report.suspended[0]).reason, /example\/capsid#41 merged unattended and was reverted by example\/capsid#50/);
-  assert.equal(must(report.proposals[0]).kind, "demote");
+  assert.match(report.suspended[0]!.reason, /example\/capsid#41 merged unattended and was reverted by example\/capsid#50/);
+  assert.equal(report.proposals[0]!.kind, "demote");
   // Dustin lifted the suspension after the revert merged: it is answered.
   assert.deepEqual(judgeUnits([], [revert], [], NOW, { "capsid/docs": at(0.5) }).suspended, []);
 });
@@ -195,7 +194,7 @@ test("PLANT: resumeNamespace lifts the pause, records when, and audits once", as
   const done = await resumeNamespace(w.env, "access:admin@example.com", "capsid", "both rollbacks are answered", NOW);
   assert.ok(done.ok);
   assert.deepEqual(await readPaused(w.kv.kv), {});
-  assert.deepEqual(JSON.parse(must(w.kv.store.get(LIFTED_KEY))), { capsid: NOW.toISOString() });
+  assert.deepEqual(JSON.parse(w.kv.store.get(LIFTED_KEY)!), { capsid: NOW.toISOString() });
   assert.deepEqual(auditRows(w.d1), [{ actor: "access:admin@example.com", action: "auto-merge-resumed", namespace: "capsid" }]);
   const again = await resumeNamespace(w.env, "access:admin@example.com", "capsid", "again", NOW);
   assert.equal(again.ok, false);

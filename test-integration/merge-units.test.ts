@@ -2,7 +2,6 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/env";
 import { readUnitEvidence, SUSPENDED_KEY, unitsTick } from "../src/merge-units";
-import { must } from "../src/must";
 
 // The merge units' evidence against a real D1 with migrations/0043 applied: the unit of a
 // rolled-back pull request found through the tick's auto-merged audit row (json_extract)
@@ -37,7 +36,7 @@ describe("merge units against D1", () => {
     expect(evidence.rollbacks[0]).toMatchObject({ pr: 41, merged_by: "tick", path_class: "docs" });
     const report = await unitsTick(env as unknown as Env, NOW);
     expect(report.newly_suspended).toEqual(["capsid/docs"]);
-    expect(JSON.parse(must((await env.APP_KV.get(SUSPENDED_KEY))))[0].unit).toBe("capsid/docs");
+    expect(JSON.parse((await env.APP_KV.get(SUSPENDED_KEY))!)[0].unit).toBe("capsid/docs");
     const audit = await env.DB.prepare("SELECT namespace FROM audit_log WHERE action = 'merge-unit-suspended'").all();
     expect(audit.results.length).toBeGreaterThan(0);
   });

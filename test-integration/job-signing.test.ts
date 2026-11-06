@@ -5,7 +5,6 @@ import { blockJob, claimJob, jobsSummary, listJobs, postJob, resumeJob } from ".
 import { latestResumeNote } from "../src/jobs-mirror";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
-import { must } from "../src/must";
 
 // Signed resume notes and block commands (job_9e602b31888f item 4, OWASP ASI07), against
 // a real D1: the tampering these guard against is a changed row, so only real rows show it.
@@ -36,7 +35,7 @@ let n = 0;
 async function post(): Promise<string> {
   const posted = await postJob(jobsEnv(), ADMIN, NOW, { namespace: "capsid", title: `job ${++n}`, body: "do the thing", gate_required: true });
   expect(posted.ok, posted.refusal).toBe(true);
-  return must(posted.job).id;
+  return posted.job!.id;
 }
 
 async function blockedBy(holder: Agent, command = "git push -u origin feat/x"): Promise<string> {
@@ -56,7 +55,7 @@ async function resumedToQueue(note = "run it from the feature branch"): Promise<
 }
 
 async function job(id: string) {
-  return must((await env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>()));
+  return (await env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>())!;
 }
 
 async function tamperNote(id: string, change: (p: Record<string, unknown>) => void) {

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { must } from "../src/must.ts";
 
 // A suite that is never run reads as coverage it does not give, so this asserts from
 // the unit suite that the integration suite is typed and in the CI workflow. It does
@@ -36,7 +35,7 @@ test("the integration compatibility date is not AHEAD of the deploy date", () =>
   const deployed = bindings.match(/COMPATIBILITY_DATE = "([\d-]+)"/)?.[1];
   assert.ok(deployed, "scripts/bindings.mjs no longer declares COMPATIBILITY_DATE where this test can read it");
   assert.ok(
-    must(integration) <= must(deployed),
+    integration! <= deployed!,
     `the integration suite runs at ${integration}, ahead of the deployed ${deployed}: it would pass on behavior production does not have`
   );
 });

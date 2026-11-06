@@ -14,7 +14,6 @@ import {
   type ReportEdge,
 } from "../src/truth-report.ts";
 import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // The truth report. No repo gate can check a number that lives only in Capsid, so
 // report mode writes a document and the trend is kept as documents.
@@ -56,19 +55,19 @@ test("PLANT: a check that could not run is EXCLUDED from integrity, never counte
   const docs = [doc({ path: "core.md", type: "core", body: "see src/gone.ts" })];
   // repoPaths absent: the tree could not be read.
   const unrun = buildTruthReport({ ...base, docs });
-  const drift = must(unrun.checks.find((c) => c.check === "doc_vs_code_drift"));
+  const drift = unrun.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.equal(drift.subjects, 0, "an unrun check contributes no subjects");
   assert.match(drift.findings[0].detail, /NOT RUN/, "and it says so, rather than reporting zero findings");
 
   // The same store with a readable tree that does NOT contain the path: now the
   // check runs and the finding is real.
   const ran = buildTruthReport({ ...base, docs, repoPaths: new Set(["src/server.ts"]) });
-  const ranDrift = must(ran.checks.find((c) => c.check === "doc_vs_code_drift"));
+  const ranDrift = ran.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.equal(ranDrift.subjects, 1);
   assert.equal(ranDrift.ok, 0);
   assert.match(ranDrift.findings[0].subject, /src\/gone\.ts/);
   assert.ok(
-    must(ran.integrity) < 100,
+    ran.integrity! < 100,
     "a real drift finding must move the number; if it does not, the check is decorative"
   );
 });
@@ -85,7 +84,7 @@ test("a backlog at or under the lint cadence neither finds nor lowers integrity;
 
   const over = buildTruthReport({ ...base, docs: [core, ...episodics(UNCONSOLIDATED_CADENCE + 1)], repoPaths: new Set<string>() });
   assert.deepEqual(over.findings.map((f) => f.check), ["unconsolidated"]);
-  assert.ok(must(over.integrity) < 100, "a real backlog finding must move the number");
+  assert.ok(over.integrity! < 100, "a real backlog finding must move the number");
 });
 
 // The report is an observation of the store, not a member of it.
@@ -107,11 +106,11 @@ test("PLANT: a stored report is not a subject of the next report", () => {
   ];
   const report = buildTruthReport({ ...base, docs, countClaims, repoPaths: new Set(["src/server.ts"]) });
 
-  const contradictions = must(report.checks.find((c) => c.check === "contradictions"));
+  const contradictions = report.checks.find((c) => c.check === "contradictions")!;
   assert.deepEqual(contradictions.findings, [], "a report quoting a contradiction does not re-flag it");
   assert.equal(contradictions.subjects, 1, "and the report is not a subject either");
 
-  const drift = must(report.checks.find((c) => c.check === "doc_vs_code_drift"));
+  const drift = report.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.deepEqual(drift.findings, [], "nor is a path the report merely listed re-attributed to it");
 
   assert.equal(report.documents.archived, 0, "reports are excluded from the scan without being counted as archived");
@@ -128,7 +127,7 @@ test("PLANT: a dotfile that exists is not reported missing", () => {
   ];
   const repoPaths = new Set([".github/workflows/ci.yml", ".claude/settings.local.json"]);
   const report = buildTruthReport({ ...base, docs, repoPaths });
-  const drift = must(report.checks.find((c) => c.check === "doc_vs_code_drift"));
+  const drift = report.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.equal(drift.subjects, 2, "both dotted paths are subjects, with their dots");
   assert.deepEqual(drift.findings, [], "and both resolve, because they exist");
 });
@@ -137,7 +136,7 @@ test("a dotted path that does NOT exist is still drift", () => {
   // The other direction: the dotfile handling must not switch the check off.
   const docs = [doc({ path: "core.md", body: "see .github/workflows/gone.yml" })];
   const report = buildTruthReport({ ...base, docs, repoPaths: new Set([".github/workflows/ci.yml"]) });
-  const drift = must(report.checks.find((c) => c.check === "doc_vs_code_drift"));
+  const drift = report.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.equal(drift.findings.length, 1);
   assert.equal(drift.findings[0].subject, ".github/workflows/gone.yml");
 });
@@ -146,7 +145,7 @@ test("a Capsid document path is not a repo path", () => {
   // Canon documents cite `capsid/conventions.md` and similar store paths.
   const docs = [doc({ path: "core.md", body: "see capsid/conventions.md and germomics/core.md and src/server.ts" })];
   const report = buildTruthReport({ ...base, docs, repoPaths: new Set(["src/server.ts"]) });
-  const drift = must(report.checks.find((c) => c.check === "doc_vs_code_drift"));
+  const drift = report.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.equal(drift.subjects, 1, "only the real repo path is a subject");
   assert.deepEqual(drift.findings, []);
 });
@@ -161,7 +160,7 @@ test("PLANT: an UNPREFIXED document in this namespace is not a repo file", () =>
     doc({ path: "improve/scores.md", type: "reference" }),
   ];
   const report = buildTruthReport({ ...base, docs, repoPaths: new Set(["src/server.ts", "improve/README.md"]) });
-  const drift = must(report.checks.find((c) => c.check === "doc_vs_code_drift"));
+  const drift = report.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.equal(drift.subjects, 0, "a store address is not a repo path, prefixed or not");
   assert.deepEqual(drift.findings, []);
 });
@@ -179,7 +178,7 @@ test("PLANT: another repo's path and a section number are not repo paths", () =>
     }),
   ];
   const report = buildTruthReport({ ...base, docs, repoPaths: new Set(["src/server.ts"]) });
-  const drift = must(report.checks.find((c) => c.check === "doc_vs_code_drift"));
+  const drift = report.checks.find((c) => c.check === "doc_vs_code_drift")!;
   assert.deepEqual(
     drift.findings.map((f) => f.subject),
     ["src/gone.ts"],
@@ -196,7 +195,7 @@ test("a decision older than the threshold is stale, and one inside it is not", (
     doc({ path: "superseded.md", type: "decision", status: "superseded", updated_at: daysAgo(400) }),
   ];
   const report = buildTruthReport({ ...base, docs });
-  const check = must(report.checks.find((c) => c.check === "stale_decisions"));
+  const check = report.checks.find((c) => c.check === "stale_decisions")!;
   assert.equal(check.subjects, 2, "a superseded decision is not held to the freshness rule");
   assert.equal(check.ok, 1);
   assert.equal(check.findings.length, 1);
@@ -214,7 +213,7 @@ test("a spec with an edge in EITHER direction is bound", () => {
     { from_ns: "capsid", from_path: "core.md", type: "references", to_ns: "capsid", to_path: "spec-b.md" },
   ];
   const report = buildTruthReport({ ...base, docs, edges });
-  const check = must(report.checks.find((c) => c.check === "unbound_specs"));
+  const check = report.checks.find((c) => c.check === "unbound_specs")!;
   assert.equal(check.subjects, 3);
   assert.equal(check.ok, 2);
   assert.equal(check.findings.length, 1);
@@ -229,8 +228,8 @@ test("archived documents are counted but held to nothing", () => {
   const report = buildTruthReport({ ...base, docs });
   assert.equal(report.documents.total, 2);
   assert.equal(report.documents.archived, 2);
-  assert.equal(must(report.checks.find((c) => c.check === "stale_decisions")).subjects, 0);
-  assert.equal(must(report.checks.find((c) => c.check === "unbound_specs")).subjects, 0);
+  assert.equal(report.checks.find((c) => c.check === "stale_decisions")!.subjects, 0);
+  assert.equal(report.checks.find((c) => c.check === "unbound_specs")!.subjects, 0);
 });
 
 test("a broken link is counted against the whole edge population", () => {
@@ -244,7 +243,7 @@ test("a broken link is counted against the whole edge population", () => {
     edges,
     danglingEdges: [{ ...edges[1], target_missing: 1 }],
   });
-  const check = must(report.checks.find((c) => c.check === "broken_links"));
+  const check = report.checks.find((c) => c.check === "broken_links")!;
   assert.equal(check.subjects, 2);
   assert.equal(check.ok, 1);
   assert.match(check.findings[0].detail, /target document no longer exists/);
@@ -339,7 +338,7 @@ test("report mode STORES the report, so the trend is a document", async () => {
     // The body it wrote carries the number it returned, taken from the bound params.
     const upsert = recorded.find((r) => /INSERT INTO documents \(namespace, path, title, body/.test(r.sql));
     assert.ok(upsert, "no document upsert was issued at all");
-    const [ns, storedPath, , storedBody, storedType] = must(upsert).params as [string, string, string, string, string];
+    const [ns, storedPath, , storedBody, storedType] = upsert!.params as [string, string, string, string, string];
     assert.equal(ns, "capsid");
     assert.equal(`${ns}/${storedPath}`, payload.stored);
     assert.equal(storedType, "reference");

@@ -1,7 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { runBackup, TABLES } from "../src/backup";
-import { must } from "../src/must";
 
 // THE NIGHTLY DUMP AGAINST A REAL D1, through @dustinedwards/d1-dump.
 //
@@ -32,7 +31,7 @@ describe("the nightly dump on a migrated D1", () => {
     expect(files.filter((f) => f.startsWith("_")).sort()).toEqual(["_complete.json", "_kv.json", "_schema.json"]);
     expect(files.at(-1)).toBe("_complete.json");
 
-    const schema = JSON.parse(await must((await env.MEDIA.get(`${result.json_prefix}_schema.json`))).text()) as {
+    const schema = JSON.parse(await (await env.MEDIA.get(`${result.json_prefix}_schema.json`))!.text()) as {
       schema: Array<{ type: string; name: string }>;
     };
     const tables = schema.schema.filter((e) => e.type === "table").map((e) => e.name);

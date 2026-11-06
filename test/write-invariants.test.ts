@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer, type ToolGrant } from "../src/server.ts";
 import { fakeD1, fakeEnv, type FakeD1Rows, type Recorded } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // The behavioral half of the write-path invariants. test/invariants.test.ts reads the
 // source; this file drives the real tool handlers over a real MCP connection and records
@@ -86,7 +85,7 @@ function connectOptions(opts: FakeOptions) {
               }
             },
           };
-          must(opts.raceAfterPreRead).call(opts, live);
+          opts.raceAfterPreRead!(live);
         }
       : undefined,
   };

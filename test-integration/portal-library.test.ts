@@ -4,7 +4,6 @@ import worker from "../src/index";
 import type { PortalLibrary } from "../src/ops-types/views";
 import { portalSessionCookie } from "../src/portal-auth";
 import { PORTAL_LIBRARY_PATH } from "../src/portal-library";
-import { must } from "../src/must";
 
 // The Library's route through the Worker, against the D1 the migrations build, so the
 // search runs on the real FTS5 table and its triggers. The gate itself (a bearer's 403,
@@ -18,7 +17,11 @@ const NS = "sample-library";
 async function signedGet(query: string): Promise<Response> {
   const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
   const ctx = createExecutionContext();
-  const response = await must(worker.fetch).call(worker, new Request(`${ORIGIN}${PORTAL_LIBRARY_PATH}${query}`, { headers: { Cookie: cookie, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx);
+  const response = await worker.fetch!(
+    new Request(`${ORIGIN}${PORTAL_LIBRARY_PATH}${query}`, { headers: { Cookie: cookie, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" }) as never,
+    { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never,
+    ctx
+  );
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
@@ -29,7 +32,7 @@ async function plant(path: string, type: string, title: string, body: string): P
     .run();
 }
 
-const auditRows = async () => must((await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log").first<{ n: number }>())).n;
+const auditRows = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log").first<{ n: number }>())!.n;
 
 beforeAll(async () => {
   await plant("decisions.md", "decision", "Sample decisions", "We chose the quokka layout for job_0123456789ab.");
@@ -64,7 +67,7 @@ describe("GET /portal/api/library", () => {
     expect(body.kind).toBe("search");
     if (body.kind !== "search") return;
     expect(body.rows.filter((r) => r.namespace === NS)).toHaveLength(5);
-    expect(must(body.rows.find((r) => r.namespace === NS)).snippet).toContain("\u0002quokka\u0003");
+    expect(body.rows.find((r) => r.namespace === NS)!.snippet).toContain("\u0002quokka\u0003");
     // A hyphen is FTS5 syntax; the reader retries it as a phrase rather than failing.
     const hyphen = await signedGet(`?q=${encodeURIComponent("quokka-layout")}`);
     expect(hyphen.status, await hyphen.clone().text()).toBe(200);

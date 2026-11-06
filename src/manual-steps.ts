@@ -1,7 +1,6 @@
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
 import { readStoredSecrets, type StoredSecrets } from "./secret-presence";
-import { must } from "./must";
 
 // DUSTIN'S MANUAL STEPS, DONE ONLY WHEN CAPSID CAN SEE THEM (improvement list item 14).
 // A session that needs a person to click something (approve an npm publish, add an Access
@@ -45,16 +44,16 @@ const GITHUB_ABOUT = /^github\s+about\s+([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:\s+
 /** One check line's form, or kind "unknown" for a line Capsid has no read for. */
 export function parseStep(text: string): ManualStep {
   let m: RegExpMatchArray | null;
-  if ((m = text.match(SECRET))) return { kind: "secret", name: must(m[1]), namespace: must(m[2]).toLowerCase(), text };
-  if ((m = text.match(NPM))) return { kind: "npm", name: must(m[1]), version: must(m[2]), text };
-  if ((m = text.match(GITHUB_ABOUT))) return { kind: "github-about", repo: must(m[1]), homepage: m[2] ?? null, text };
-  if ((m = text.match(ACCESS_APP))) return { kind: "access-app", name: must(m[1]).trim(), text };
+  if ((m = text.match(SECRET))) return { kind: "secret", name: m[1]!, namespace: m[2]!.toLowerCase(), text };
+  if ((m = text.match(NPM))) return { kind: "npm", name: m[1]!, version: m[2]!, text };
+  if ((m = text.match(GITHUB_ABOUT))) return { kind: "github-about", repo: m[1]!, homepage: m[2] ?? null, text };
+  if ((m = text.match(ACCESS_APP))) return { kind: "access-app", name: m[1]!.trim(), text };
   return { kind: "unknown", text };
 }
 
 /** The manual steps a blocked job's summary names, one per distinct check line. */
 export function stepsNamed(summary: string): ManualStep[] {
-  const lines = [...new Set([...summary.matchAll(CHECK_LINE)].map((m) => must(m[1])))];
+  const lines = [...new Set([...summary.matchAll(CHECK_LINE)].map((m) => m[1]!))];
   return lines.map(parseStep);
 }
 

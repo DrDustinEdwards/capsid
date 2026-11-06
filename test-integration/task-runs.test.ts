@@ -1,7 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { readTaskRuns, RUN_RETENTION_DAYS, RUNS_PER_TASK, taskRunStatements } from "../src/task-runs";
-import { must } from "../src/must";
 
 // The run ledger against a real D1 with every migration applied
 // (migrations/0029_task_runs.sql): the insert, the bounded prune, the schema's own
@@ -25,7 +24,7 @@ describe("the run ledger against real D1", () => {
     await write("backup", NOW, "threw", "R2 said no");
 
     const runs = await readTaskRuns(env.DB);
-    const tick = must(runs.get("tick"));
+    const tick = runs.get("tick")!;
     expect(tick.map((r) => r.reason)).toEqual(["tick 6", "tick 5", "tick 4", "tick 3", "tick 2"]);
     expect(runs.get("backup")).toEqual([{ started_at: NOW.toISOString(), finished_at: NOW.toISOString(), outcome: "threw", reason: "R2 said no" }]);
     expect(runs.get("watcher")).toEqual([]);

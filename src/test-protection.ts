@@ -1,5 +1,4 @@
 import { inTestDir, type PrFileRow } from "./github/pr-files";
-import { must } from "./must";
 
 // Narrow test protection on complete (docs/work-queue.md, "CI on complete"; Grok design
 // review 2026-10-23, build step 5). Green CI shows nothing when the change took away the
@@ -61,7 +60,7 @@ export function weakenedTests(rows: readonly PrFileRow[], jobBody: string): stri
       const own = testName(text);
       const below = own ? null : lines.slice(i + 1, i + 4).find((l) => !l.startsWith("-") && testName(l.slice(1)));
       const name = own ?? (below ? testName(below.slice(1)) : null);
-      const isNew = name !== null && (own ? true : must(below).startsWith("+")) && added.has(name) && !removed.has(name);
+      const isNew = name !== null && (own ? true : below!.startsWith("+")) && added.has(name) && !removed.has(name);
       if (!isNew && !named(name ?? f.filename)) found.push(`adds a skip in ${f.filename}: ${text.trim().slice(0, 80)}`);
     });
     for (const name of removed) {

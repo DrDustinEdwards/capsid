@@ -7,7 +7,6 @@ import { mergeResumeTick } from "../src/merge-resume";
 import { readJob } from "../src/jobs-transition";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
-import { must } from "../src/must";
 
 // The stale-jobs step (capsid/decisions.md, 2026-10-03, D1 to D3): a blocked job whose
 // pull requests merged goes back to its holder, or to the queue when the holder cannot
@@ -34,7 +33,7 @@ function driverAgent(actor = "agent:capsid-driver"): Agent {
 async function post(title: string): Promise<string> {
   const posted = await postJob(jobsEnv(), ADMIN, NOW, { namespace: "capsid", title, body: "do the thing", gate_required: true });
   expect(posted.ok, posted.refusal).toBe(true);
-  return must(posted.job).id;
+  return posted.job!.id;
 }
 
 async function blockedBy(holder: Agent, title: string, summaryReason = "waiting on the merge"): Promise<string> {
@@ -66,7 +65,7 @@ describe("autoResumeJob", () => {
   it("returns a blocked job to its holder with a system touch and the note, and does not complete it", async () => {
     const driver = driverAgent();
     const id = await blockedBy(driver, "merged and waiting");
-    const job = must((await readJob(env.DB, id)));
+    const job = (await readJob(env.DB, id))!;
 
     const out = await autoResumeJob(jobsEnv(), LATER, job, NOTE);
     expect(out).toEqual({ resumed: true, to: "holder" });
@@ -88,7 +87,7 @@ describe("autoResumeJob", () => {
     await env.DB.prepare("INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, revoked_at) VALUES (?1, ?2, 'driver', ?3, ?4, 'github:sample', ?5)")
       .bind("agent_revoked1", "capsid-driver", "hash", JSON.stringify(driver.scopes), LATER.toISOString())
       .run();
-    const out = await autoResumeJob(jobsEnv(), LATER, must((await readJob(env.DB, id))), NOTE);
+    const out = await autoResumeJob(jobsEnv(), LATER, (await readJob(env.DB, id))!, NOTE);
     expect(out).toEqual({ resumed: true, to: "queue" });
     const r = await row(id);
     expect(r?.status).toBe("queued");
@@ -97,7 +96,7 @@ describe("autoResumeJob", () => {
 
   it("queues the job when its holder is a shared identity", async () => {
     const id = await blockedBy(ADMIN, "holder shared");
-    const out = await autoResumeJob(jobsEnv(), LATER, must((await readJob(env.DB, id))), NOTE);
+    const out = await autoResumeJob(jobsEnv(), LATER, (await readJob(env.DB, id))!, NOTE);
     expect(out.to).toBe("queue");
     expect((await row(id))?.status).toBe("queued");
   });
@@ -106,7 +105,7 @@ describe("autoResumeJob", () => {
     const driver = driverAgent();
     const id = await blockedBy(driver, "holder busy");
     expect((await claimJob(jobsEnv(), driver, NOW, { id: await post("the driver moved on") })).ok).toBe(true);
-    const out = await autoResumeJob(jobsEnv(), LATER, must((await readJob(env.DB, id))), NOTE);
+    const out = await autoResumeJob(jobsEnv(), LATER, (await readJob(env.DB, id))!, NOTE);
     expect(out.to).toBe("holder");
     expect((await row(id))?.status).toBe("claimed");
   });
@@ -114,7 +113,7 @@ describe("autoResumeJob", () => {
   it("writes nothing when the job moved after it was read", async () => {
     const driver = driverAgent();
     const id = await blockedBy(driver, "moved first");
-    const stale = must((await readJob(env.DB, id)));
+    const stale = (await readJob(env.DB, id))!;
     await env.DB.prepare("UPDATE jobs SET updated_at = '2026-10-08T06:30:00.000Z' WHERE id = ?1").bind(id).run();
     expect(await autoResumeJob(jobsEnv(), LATER, stale, NOTE)).toEqual({ resumed: false, to: "holder" });
     expect((await row(id))?.status).toBe("blocked");
@@ -144,7 +143,7 @@ describe("mergeResumeTick", () => {
     const id = await post("blocks again after the merge");
     expect((await claimJob(jobsEnv(), driver, NOW, { id })).ok).toBe(true);
     expect((await blockJob(jobsEnv(), driver, NOW, id, { reason: "PR https://github.com/example/capsid/pull/9", command: "Merge PR 9" })).ok).toBe(true);
-    await autoResumeJob(jobsEnv(), LATER, must((await readJob(env.DB, id))), NOTE);
+    await autoResumeJob(jobsEnv(), LATER, (await readJob(env.DB, id))!, NOTE);
     expect((await blockJob(jobsEnv(), driver, LATER, id, { reason: "PR https://github.com/example/capsid/pull/9 deployed? no", command: "wrangler deploy" })).ok).toBe(true);
     expect((await mergeResumeTick(jobsEnv(), LATER)).looked).toBe(0);
   });

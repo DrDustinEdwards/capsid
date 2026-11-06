@@ -2,7 +2,6 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
-import { must } from "../src/must";
 
 // write AND restore REPORT `snapshotted` FROM THE SNAPSHOT'S OWN RESULT (audit
 // 2026-09-25, item E1-20, finding F3-8), against real SQLite. The node test in
@@ -72,7 +71,7 @@ describe("snapshotted is read from the batch", () => {
       action: "restore",
       namespace: NS,
       path: "snap-3.md",
-      version_id: must(version).id,
+      version_id: version!.id,
       confirm: true,
     });
     expect(out.snapshotted).toBe(false);

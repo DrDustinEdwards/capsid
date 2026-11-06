@@ -1,6 +1,6 @@
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
@@ -31,11 +31,13 @@ export function Claims() {
   const [jobInput, setJobInput] = useState(job);
   const key = FILTER_KEYS.map((k) => filter[k]).join("\u0000");
 
-  useEffect(() => {
+  // The address changed: the fields follow it. Adjusted while rendering, not in an effect.
+  const [seen, setSeen] = useState({ key, job });
+  if (seen.key !== key || seen.job !== job) {
+    setSeen({ key, job });
     setInput({ ...filter });
     setJobInput(job);
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- `key` is the filter (and `job` the job): resync the inputs only when the address changed
-  }, [key, job]);
+  }
 
   const agg = useAnswer<PortalClaimsAggregate>(["claims", key], () => fetchClaimsAggregate(filter));
   const detail = useAnswer<PortalClaimsJob>(["claims", "job", job], () => fetchClaimsJob(job), { keep: false, enabled: job !== "" });

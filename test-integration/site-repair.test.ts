@@ -8,7 +8,6 @@ import { watchSites } from "../src/site-watch";
 import { handlePortalConvergence } from "../src/portal-convergence";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { PortalConvergence } from "../src/ops-types/views";
-import { must } from "../src/must";
 
 // The site repairs against a real D1 and KV with every migration applied (job_09e5f6cbf782,
 // migrations/0035): the watcher's repair step, its rate limit and its red and green mail,
@@ -191,7 +190,7 @@ describe("the site_repair control", () => {
     const previewed = await previewControl(e, EMAIL, "site_repair", { namespace: "dustinedwards", tool: "sync_pages" }, NOW, "chat");
     expect(previewed.ok).toBe(true);
     const row = await env.DB.prepare("SELECT operator FROM ops_sites WHERE namespace = 'dustinedwards'").first<{ operator: string }>();
-    const narrowed = JSON.parse(must(row).operator);
+    const narrowed = JSON.parse(row!.operator);
     delete narrowed.repairs["pages-drift"];
     await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(JSON.stringify(narrowed)).run();
     try {
@@ -200,7 +199,7 @@ describe("the site_repair control", () => {
       expect(performed.ok ? "" : performed.refusal).toMatch(/sync_pages is not in this site's allowlist/);
       expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'site-repair'").first<{ n: number }>())?.n).toBe(0);
     } finally {
-      await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(must(row).operator).run();
+      await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(row!.operator).run();
     }
   });
 });

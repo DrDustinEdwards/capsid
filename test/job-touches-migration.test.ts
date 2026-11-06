@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { TOUCH_KINDS } from "../src/job-touches.ts";
-import { must } from "../src/must.ts";
 
 // job_touches.kind is a CHECK, and SQLite cannot alter a CHECK, so adding the kind
 // admin_complete is a table rebuild (migrations/0031_job_touches_admin_complete.sql).
@@ -49,15 +48,15 @@ const rows = (db: DatabaseSync) => db.prepare("SELECT * FROM job_touches ORDER B
 test("PLANT: the rebuild keeps every row with its id and every column, and the sequence carries on past the highest id", () => {
   const db = before();
   plant(db);
-  assert.equal(must(db.prepare("SELECT COUNT(*) AS n FROM job_touches").get()).n, PLANTED.length, "the plant did not land");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM job_touches").get()!.n, PLANTED.length, "the plant did not land");
   apply(db, [REBUILD]);
   assert.deepEqual(rows(db), PLANTED);
   // id 7 was the highest, so the next row is 8, not 3 and not 1.
   db.prepare("INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, at) VALUES ('job_cccccccccccc', 'capsid', 'admin_complete', 'agent:seat', 'seat', '2026-10-06T00:00:00.000Z')").run();
-  assert.equal(must(db.prepare("SELECT MAX(id) AS id FROM job_touches").get()).id, 8);
+  assert.equal(db.prepare("SELECT MAX(id) AS id FROM job_touches").get()!.id, 8);
   const sequence = db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'job_touches'").get();
   assert.equal(sequence?.seq, 8);
-  assert.equal(must(db.prepare("SELECT COUNT(*) AS n FROM sqlite_sequence WHERE name = 'job_touches_new'").get()).n, 0, "the scratch table's sequence row was left behind");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_sequence WHERE name = 'job_touches_new'").get()!.n, 0, "the scratch table's sequence row was left behind");
   db.close();
 });
 
@@ -94,7 +93,7 @@ test("admin_complete is refused before the rebuild and accepted after it, and a 
 test("TOUCH_KINDS is the CHECK's list, read from the schema every migration builds, both ways", () => {
   const db = new DatabaseSync(":memory:");
   apply(db, files());
-  const sql = String(must(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'job_touches'").get()).sql);
+  const sql = String(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'job_touches'").get()!.sql);
   const list = /kind TEXT NOT NULL CHECK \(kind IN \(([^)]*)\)\)/.exec(sql);
   assert.ok(list, `no kind CHECK found in: ${sql.slice(0, 200)}`);
   const inSchema = [...list[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);

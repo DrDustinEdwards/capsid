@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bingDay, bingWebmaster, pickBingSite, sumStats } from "../src/bing-webmaster.ts";
 import { fakeEnv } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // Bing Webmaster Tools for a namespace's site (src/bing-webmaster.ts), served as
 // capsid_inspect_repo action bing. The namespace picks the Bing site, only Get methods
@@ -45,7 +44,7 @@ function bingApi(d: Record<string, unknown>) {
   const impl = async (url: string) => {
     const u = new URL(url);
     calls.push(u);
-    const method = must(u.pathname.split("/").pop());
+    const method = u.pathname.split("/").pop()!;
     if (!(method in d)) throw new Error(`unrouted ${method}`);
     return Response.json({ d: d[method] });
   };

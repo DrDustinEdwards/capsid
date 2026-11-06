@@ -3,7 +3,6 @@ import type { InboxItem } from "./ops-types/feed";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
-import { must } from "./must";
 
 // EARNED PROMOTION AND DEMOTION (docs/design/design-merge-pipeline.md section 7, PR 9;
 // Dustin's DECIDE 9 and 10 of 2026-10-09). A unit is (namespace, path class). REPORT-ONLY:
@@ -101,7 +100,7 @@ export function judgeUnits(
   lifted: Readonly<Record<string, string>> = {}
 ): UnitsReport {
   const units = new Map<string, { merged: number[]; bad: number; rollbacks: number }>();
-  const unit = (k: string) => units.get(k) ?? (units.set(k, { merged: [], bad: 0, rollbacks: 0 }), must(units.get(k)));
+  const unit = (k: string) => units.get(k) ?? (units.set(k, { merged: [], bad: 0, rollbacks: 0 }), units.get(k)!);
   for (const a of approvals) {
     if (!a.namespace || !a.path_class) continue;
     const u = unit(unitKey(a.namespace, a.path_class));
@@ -120,7 +119,7 @@ export function judgeUnits(
     unit(k).rollbacks++;
     if (r.merged_by !== "tick") continue;
     // Dustin lifted the suspension after this rollback: it is answered.
-    if (lifted[k] && Date.parse(r.run_at) <= Date.parse(must(lifted[k]))) continue;
+    if (lifted[k] && Date.parse(r.run_at) <= Date.parse(lifted[k]!)) continue;
     if (!nowSuspended.has(k)) nowSuspended.set(k, { unit: k, since: now.toISOString(), reason: `${r.repo}#${r.pr} merged unattended and ${happened(r)}${r.kind === "revert" ? "" : ` (run ${r.run_id})`}` });
     if (!demote.some((d) => d.unit === k)) {
       demote.push({ kind: "demote", unit: k, title: `Remove ${k.replace("/", " ")} from auto: ${r.repo}#${r.pr} merged unattended and ${happened(r)}`, evidence: { approved_merges: 0, span_days: 0, rollbacks: 0, bad_voids: 0 } });
@@ -156,7 +155,7 @@ async function readLifted(kv: KVNamespace): Promise<Record<string, string>> {
 export async function planLift(kv: KVNamespace, rawUnit: string | undefined): Promise<{ ok: true; unit: string; suspension: Suspension } | { ok: false; refusal: string }> {
   const m = /^\s*([a-z0-9-]+)\s*\/\s*([a-z-]+)\s*$/.exec(rawUnit ?? "");
   if (!m) return { ok: false, refusal: `unit_resume needs unit as '<namespace>/<path class>', for example 'capsid/docs'; got '${rawUnit ?? ""}'.` };
-  const unit = unitKey(must(m[1]), must(m[2]));
+  const unit = unitKey(m[1]!, m[2]!);
   const suspension = (await readSuspended(kv)).find((s) => s.unit === unit);
   if (!suspension) return { ok: false, refusal: `${unit} is not suspended, so there is nothing to lift.` };
   return { ok: true, unit, suspension };
@@ -171,7 +170,7 @@ export async function liftSuspension(env: Env, actor: string, rawUnit: string | 
   const lifted = { ...(await readLifted(env.APP_KV)), [plan.unit]: now.toISOString() };
   await env.APP_KV.put(LIFTED_KEY, JSON.stringify(lifted));
   await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify(rest));
-  await env.DB.batch([auditStatement(env.DB, actor, "merge-unit-resumed", must(plan.unit.split("/")[0]), null, { unit: plan.unit, reason, was: plan.suspension })]);
+  await env.DB.batch([auditStatement(env.DB, actor, "merge-unit-resumed", plan.unit.split("/")[0]!, null, { unit: plan.unit, reason, was: plan.suspension })]);
   return { ok: true, summary: `Lifted the suspension of ${plan.unit}. The tick may merge its pull requests unattended again; a new rollback suspends it again.` };
 }
 
@@ -261,7 +260,7 @@ export async function unitsTick(env: Env, now: Date, read: typeof readUnitEviden
   const added = report.suspended.filter((s) => !before.some((b) => b.unit === s.unit));
   if (added.length) {
     await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify(report.suspended));
-    await env.DB.batch(added.map((s) => auditStatement(env.DB, "capsid:merge-units", "merge-unit-suspended", must(s.unit.split("/")[0]), null, s)));
+    await env.DB.batch(added.map((s) => auditStatement(env.DB, "capsid:merge-units", "merge-unit-suspended", s.unit.split("/")[0]!, null, s)));
   }
   const previous = await env.APP_KV.get(REPORT_KEY);
   const stable = (r: UnitsReport) => JSON.stringify({ ...r, generated: "" });
@@ -292,8 +291,8 @@ export async function unitInboxItems(kv: KVNamespace): Promise<Array<{ namespace
   }
   const out: Array<{ namespace: string; item: InboxItem }> = [];
   for (const s of report.suspended ?? []) {
-    out.push({ namespace: must(s.unit.split("/")[0]), item: { title: `${s.unit.replace("/", " ")} is suspended from auto: ${s.reason}`, kind: "proposal", link: null, since: s.since } });
+    out.push({ namespace: s.unit.split("/")[0]!, item: { title: `${s.unit.replace("/", " ")} is suspended from auto: ${s.reason}`, kind: "proposal", link: null, since: s.since } });
   }
-  for (const p of report.proposals ?? []) out.push({ namespace: must(p.unit.split("/")[0]), item: { title: p.title, kind: "proposal", link: null, since: report.generated } });
+  for (const p of report.proposals ?? []) out.push({ namespace: p.unit.split("/")[0]!, item: { title: p.title, kind: "proposal", link: null, since: report.generated } });
   return out;
 }

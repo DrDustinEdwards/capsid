@@ -2,7 +2,6 @@ import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
 import { auditStatement } from "./store-guards";
-import { must } from "./must";
 
 // THE APPROVAL RECORD (docs/design/design-merge-pipeline.md section 3, PR 3; Dustin's
 // DECIDE of 2026-10-09). The `approve_pr` control (src/controls.ts) records that Dustin
@@ -105,7 +104,7 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
   if (undo) {
     const missing = nums.filter((n) => !openBy.has(n));
     if (missing.length) return refused(`${missing.map((n) => `#${n}`).join(", ")} ${missing.length === 1 ? "has" : "have"} no open approval to undo: it was merged, voided or never approved.`);
-    const targets = nums.map((n) => ({ number: n, head_sha: must(openBy.get(n)).head_sha, class: "", path_class: null, open: must(openBy.get(n)) }));
+    const targets = nums.map((n) => ({ number: n, head_sha: openBy.get(n)!.head_sha, class: "", path_class: null, open: openBy.get(n)! }));
     return {
       ok: true,
       repo: full,
@@ -125,7 +124,7 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
   const problems: string[] = [];
   const targets: Target[] = [];
   nums.forEach((n, i) => {
-    const head = must(heads[i]);
+    const head = heads[i]!;
     if (typeof head === "string") return void problems.push(head);
     if (head.merged || head.state !== "open") return void problems.push(`#${n} is ${head.merged ? "merged" : head.state}, not open.`);
     const seen = shas[i];
@@ -144,8 +143,8 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
   if (typed.length && targets.length > 1) {
     return refused(`${typed.map((t) => `#${t.number}`).join(", ")} touches a money path (class typed), which is never batched. Nothing in the batch was approved; approve it alone, with its number typed as confirm.`);
   }
-  if (typed.length && p.confirm !== String(must(typed[0]).number)) {
-    return refused(`#${must(typed[0]).number} touches a money path (class typed): type its number as confirm to approve it.`);
+  if (typed.length && p.confirm !== String(typed[0]!.number)) {
+    return refused(`#${typed[0]!.number} touches a money path (class typed): type its number as confirm to approve it.`);
   }
   const replaced = targets.filter((t) => t.open);
   return {
@@ -157,7 +156,7 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
     targets,
     changes: [
       ...targets.map((t) => `${full}#${t.number} (class ${t.class}): approved at ${t.head_sha.slice(0, 7)}. The executor merges it once CI is green on that sha; a new push, red CI or 7 days voids it.`),
-      ...replaced.map((t) => `${full}#${t.number}: the earlier approval at ${must(t.open).head_sha.slice(0, 7)} -> voided, "replaced".`),
+      ...replaced.map((t) => `${full}#${t.number}: the earlier approval at ${t.open!.head_sha.slice(0, 7)} -> voided, "replaced".`),
       "Nothing is merged now: approve_pr never merges.",
     ],
     audit: [`pr-approved by ${actor}`, ...(replaced.length ? [`pr-approval-voided by ${actor}`] : []), click],
@@ -175,11 +174,11 @@ export async function performApproval(env: Env, actor: string, plan: Extract<App
     voidAt.push(statements.length);
     statements.push(
       env.DB.prepare(`UPDATE pr_approvals SET status = 'voided', closed_at = ?2, close_reason = ?3 WHERE id = ?1 AND status = 'approved' RETURNING id`).bind(
-        must(t.open).id,
+        t.open!.id,
         at,
         plan.undo ? "undone" : "replaced"
       ),
-      auditStatement(env.DB, actor, "pr-approval-voided", plan.namespace, null, { repo: plan.repo, pr: t.number, head_sha: must(t.open).head_sha, close_reason: plan.undo ? "undone" : "replaced" })
+      auditStatement(env.DB, actor, "pr-approval-voided", plan.namespace, null, { repo: plan.repo, pr: t.number, head_sha: t.open!.head_sha, close_reason: plan.undo ? "undone" : "replaced" })
     );
   }
   if (!plan.undo) {

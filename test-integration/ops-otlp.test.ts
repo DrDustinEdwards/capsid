@@ -7,7 +7,6 @@ import { grantAgent } from "../src/agents";
 import { claimJob, completeJob, postJob } from "../src/jobs";
 import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
-import { must } from "../src/must";
 
 // The OTLP receiver through the whole Worker, against a real D1 (migrations/0025):
 // who may send, the upsert's delta and cumulative arithmetic, and the per-job totals
@@ -40,7 +39,7 @@ async function seedAgent(id: string, name: string, key: string, grants: Array<"r
 async function queued(title: string): Promise<string> {
   const posted = await postJob(jobsEnv(), grantAgent("write", "github:sample"), NOW, { namespace: "sample", title, body: "do the thing" });
   expect(posted.ok, posted.refusal).toBe(true);
-  return must(posted.job).id;
+  return posted.job!.id;
 }
 
 // The driver claims it under its own actor, which is what resolveSessionCaller looks up.

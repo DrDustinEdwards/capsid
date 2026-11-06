@@ -217,10 +217,13 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
   const { feed, open } = useApp();
   // Keep the last content while the drawer slides out.
   const [shown, setShown] = useState<Ref | null>(route);
+  if (route && (shown?.type !== route.type || shown.id !== route.id)) setShown(route);
   const panel = useRef<HTMLDialogElement>(null);
   const opener = useRef<Element | null>(null);
   const routed = useRef(route != null);
-  routed.current = route != null;
+  useEffect(() => {
+    routed.current = route != null;
+  });
   const key = route ? `${route.type}:${route.id}` : "";
   useEffect(() => {
     const d = panel.current;
@@ -231,7 +234,6 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
         opener.current = document.activeElement;
         d.showModal();
       }
-      setShown(route);
       d.querySelector<HTMLElement>("[data-close]")?.focus();
     } else if (d.open) {
       d.close();

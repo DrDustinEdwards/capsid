@@ -1,6 +1,5 @@
 import { createContext, useContext } from "react";
 import type { OpsFeed, PortalAction, PortalPerformed } from "../types";
-import { must } from "../lib/must";
 
 // Eleven pages, grouped by what a person is doing (the Portal audit and new map, ruled
 // 2026-11-06): Needs you and Health; Sites, one page for every site and one for each; Pull
@@ -260,7 +259,7 @@ export function placePath(id: string): string {
   if (!isView(page)) return routePath("needs");
   const tabs = PAGE_TABS[page];
   const tab = tabs ? tabOf(tabs, anchor) : null;
-  if (tab) return `${routePath(page)}${tab === must(must(tabs)[0]).id ? "" : `?tab=${tab}`}`;
+  if (tab) return `${routePath(page)}${tab === tabs![0]!.id ? "" : `?tab=${tab}`}`;
   return `${routePath(page)}${anchor ? `#${anchor}` : ""}`;
 }
 

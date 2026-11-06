@@ -10,7 +10,6 @@ import { splitSignedTask, verifySignedBody } from "../src/signed-docs";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
 import { MAX_TITLE } from "../src/limits";
-import { must } from "../src/must";
 
 // The work queue against a real D1. Every property under test is a property of the
 // database, not of a handler:
@@ -96,17 +95,17 @@ describe("the lifecycle", () => {
   it("post, claim, complete, and the row carries what each step recorded", async () => {
     const posted = await post({ title: "post claim complete" });
     expect(posted.ok, posted.refusal).toBe(true);
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     expect(id).toMatch(/^job_[0-9a-f]{12}$/);
-    expect(must(posted.job).status).toBe("queued");
-    expect(must(posted.job).posted_by).toBe(SEAT);
+    expect(posted.job!.status).toBe("queued");
+    expect(posted.job!.posted_by).toBe(SEAT);
 
     const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
     expect(claimed.ok, claimed.refusal).toBe(true);
-    expect(must(claimed.job).id).toBe(id);
-    expect(must(claimed.job).claimed_by).toBe(DRIVER_ACTOR);
+    expect(claimed.job!.id).toBe(id);
+    expect(claimed.job!.claimed_by).toBe(DRIVER_ACTOR);
     // A claim carries no lease: the first claim time is the only clock on it.
-    expect(must(claimed.job).claimed_at).toBe(NOW.toISOString());
+    expect(claimed.job!.claimed_at).toBe(NOW.toISOString());
 
     const done = await completeJob(jobsEnv(), DRIVER, NOW, id, {
       result_summary: "did the thing",
@@ -121,7 +120,7 @@ describe("the lifecycle", () => {
 
   it("every action writes an audit row naming the caller", async () => {
     const posted = await post({ title: "audited" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     await listJobs(jobsEnv(), { namespace: "capsid", id: id });
     await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "s" });
@@ -142,7 +141,7 @@ describe("the lifecycle", () => {
   // guard and the skills check. A guard that refuses ordinary work gets deleted rather
   // than fixed, so each is driven here to a completed row.
   it("a clean summary that mentions tags and parameter names completes: the tag guard is not a wall", async () => {
-    const id = must((await post({ title: "tag guard innocent" })).job).id;
+    const id = (await post({ title: "tag guard innocent" })).job!.id;
     expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
     const summary = "landed it; evidence is in the PR and the result_ref is a document key";
     const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: summary });
@@ -153,7 +152,7 @@ describe("the lifecycle", () => {
   });
 
   it("naming no skills at all completes: most jobs have no recommend step", async () => {
-    const id = must((await post({ title: "no skills named" })).job).id;
+    const id = (await post({ title: "no skills named" })).job!.id;
     expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
     const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "done" });
     expect(done.ok, done.refusal).toBe(true);
@@ -172,8 +171,8 @@ describe("the refusals", () => {
     // The index is partial, so the same title is postable again once the first one
     // is out of the open statuses. A plain unique index would make a recurring job
     // impossible.
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: must(first.job).id });
-    await failJob(jobsEnv(), DRIVER, NOW, must(first.job).id, "gave up");
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: first.job!.id });
+    await failJob(jobsEnv(), DRIVER, NOW, first.job!.id, "gave up");
     const third = await post({ title: "only once" });
     expect(third.ok, third.refusal).toBe(true);
   });
@@ -182,18 +181,18 @@ describe("the refusals", () => {
     // Somebody is waiting on a blocked job, so it is open; a second copy costs a
     // driver run to close and tells the human the same thing twice.
     const first = await post({ title: "waiting on the seat" });
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: must(first.job).id });
-    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, must(first.job).id, {
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: first.job!.id });
+    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, first.job!.id, {
       reason: "needs a merge",
       command: "gh pr merge 1 --squash",
     });
     expect(blocked.ok, blocked.refusal).toBe(true);
-    expect((await row(must(first.job).id))?.status).toBe("blocked");
+    expect((await row(first.job!.id))?.status).toBe("blocked");
 
     const second = await post({ title: "waiting on the seat" });
     expect(second.ok).toBe(false);
     // The refusal names the row, so the reader does not have to look it up.
-    expect(second.refusal).toMatch(new RegExp(`${must(first.job).id} is blocked`));
+    expect(second.refusal).toMatch(new RegExp(`${first.job!.id} is blocked`));
     expect(second.refusal).toMatch(/queued, claimed or blocked/);
   });
 
@@ -201,9 +200,9 @@ describe("the refusals", () => {
     // Widening the index to blocked must not make every title permanent.
     for (const finish of ["fail", "complete"] as const) {
       const posted = await post({ title: `recurs by ${finish}` });
-      await claimJob(jobsEnv(), DRIVER, NOW, { id: must(posted.job).id });
-      if (finish === "fail") await failJob(jobsEnv(), DRIVER, NOW, must(posted.job).id, "gave up");
-      else await completeJob(jobsEnv(), DRIVER, NOW, must(posted.job).id, { result_summary: "done" });
+      await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
+      if (finish === "fail") await failJob(jobsEnv(), DRIVER, NOW, posted.job!.id, "gave up");
+      else await completeJob(jobsEnv(), DRIVER, NOW, posted.job!.id, { result_summary: "done" });
       const again = await post({ title: `recurs by ${finish}` });
       expect(again.ok, `${finish}: ${again.refusal}`).toBe(true);
     }
@@ -214,14 +213,14 @@ describe("the refusals", () => {
     const b = await post({ title: "second" });
     const c = await post({ namespace: "germomics", title: "third on another repo" });
     for (const posted of [a, b, c]) {
-      const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id: must(posted.job).id });
+      const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
       expect(claimed.ok, claimed.refusal).toBe(true);
     }
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE claimed_by = ?1 AND status = 'claimed'").bind(DRIVER_ACTOR).first<{ n: number }>())?.n).toBe(3);
     // Completing one leaves the others held.
-    expect((await completeJob(jobsEnv(), DRIVER, NOW, must(a.job).id, { result_summary: "done" })).ok).toBe(true);
-    expect((await row(must(b.job).id))?.status).toBe("claimed");
-    expect((await row(must(c.job).id))?.status).toBe("claimed");
+    expect((await completeJob(jobsEnv(), DRIVER, NOW, a.job!.id, { result_summary: "done" })).ok).toBe(true);
+    expect((await row(b.job!.id))?.status).toBe("claimed");
+    expect((await row(c.job!.id))?.status).toBe("claimed");
   });
 
   it("an agent and an OAuth session can each hold a claim", async () => {
@@ -232,15 +231,15 @@ describe("the refusals", () => {
       ["held by a session", "github:someone"],
     ] as const) {
       const posted = await post({ title });
-      const claimed = await claimJob(jobsEnv(), grantAgent("write", actor), NOW, { id: must(posted.job).id });
+      const claimed = await claimJob(jobsEnv(), grantAgent("write", actor), NOW, { id: posted.job!.id });
       expect(claimed.ok, `${actor}: ${claimed.refusal}`).toBe(true);
-      expect(must(claimed.job).claimed_by).toBe(actor);
+      expect(claimed.job!.claimed_by).toBe(actor);
     }
   });
 
   it("two drivers racing one job resolve to exactly one winner", async () => {
     const posted = await post({ title: "contested" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     const [one, two] = await Promise.all([
       claimJob(jobsEnv(), DRIVER, NOW, { id }),
       claimJob(jobsEnv(), OTHER, NOW, { id }),
@@ -249,12 +248,12 @@ describe("the refusals", () => {
     expect(winners).toHaveLength(1);
     const stored = await row(id);
     expect(stored?.status).toBe("claimed");
-    expect(stored?.claimed_by).toBe(must(winners[0].job).claimed_by);
+    expect(stored?.claimed_by).toBe(winners[0].job!.claimed_by);
   });
 
   it("a holder is the only caller that can finish the job", async () => {
     const posted = await post({ title: "held" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const stolen = await completeJob(jobsEnv(), OTHER, NOW, id, { result_summary: "not mine" });
     expect(stolen.ok).toBe(false);
@@ -264,7 +263,7 @@ describe("the refusals", () => {
 
   it("complete without a summary and fail without a reason are refused", async () => {
     const posted = await post({ title: "needs words" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     expect((await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "  " })).refusal).toMatch(/needs a result_summary/);
     expect((await failJob(jobsEnv(), DRIVER, NOW, id, "")).refusal).toMatch(/needs a reason/);
@@ -284,7 +283,7 @@ describe("the refusals", () => {
 describe("a claim has no lease", () => {
   it("a claim never expires: the holder finishes it long after the old four-hour lease would have lapsed", async () => {
     const posted = await post({ title: "slow work" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const muchLater = new Date(NOW.getTime() + 30 * 24 * 3_600_000);
     expect((await row(id))?.status).toBe("claimed");
@@ -294,7 +293,7 @@ describe("a claim has no lease", () => {
 
   it("only the seat's release returns a claim to the queue, and the job is claimable again", async () => {
     const posted = await post({ title: "driver died" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const later = new Date(NOW.getTime() + 3_600_000);
     const released = await releaseJob(jobsEnv(), grantAgent("write", SEAT), later, id, "the holder is gone");
@@ -308,7 +307,7 @@ describe("a claim has no lease", () => {
 
   it("a caller cannot finish a job the seat released", async () => {
     const posted = await post({ title: "released from under it" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     await releaseJob(jobsEnv(), grantAgent("write", SEAT), NOW, id, "the holder is gone");
     const late = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished eventually" });
@@ -320,8 +319,8 @@ describe("a claim has no lease", () => {
 describe("blocked", () => {
   it("block records the exact command, and the job stops there", async () => {
     const posted = await post({ title: "needs a push", gate_required: true });
-    const id = must(posted.job).id;
-    expect(must(posted.job).gate_required).toBe(1);
+    const id = posted.job!.id;
+    expect(posted.job!.gate_required).toBe(1);
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, {
       reason: "the change is ready but pushing deploys the Worker",
@@ -340,7 +339,7 @@ describe("blocked", () => {
 describe("resume", () => {
   async function blockedJob(title: string) {
     const posted = await post({ title, gate_required: true });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a human", command: "git push origin main" });
     return id;
@@ -431,7 +430,7 @@ describe("resume", () => {
 
   it("resume refuses a queued job and a done job", async () => {
     const queued = await post({ title: "still queued" });
-    const onQueued = await resumeJob(jobsEnv(), DRIVER, NOW, must(queued.job).id, "approved");
+    const onQueued = await resumeJob(jobsEnv(), DRIVER, NOW, queued.job!.id, "approved");
     expect(onQueued.ok).toBe(false);
     expect(onQueued.refusal).toMatch(/is queued, not blocked/);
 
@@ -467,7 +466,7 @@ describe("resume", () => {
   it("take is not refused for a caller that holds another job: there is no claim limit", async () => {
     const blocked = await blockedJob("the blocked one");
     const other = await post({ title: "something else" });
-    await claimJob(jobsEnv(), OTHER, NOW, { id: must(other.job).id });
+    await claimJob(jobsEnv(), OTHER, NOW, { id: other.job!.id });
     const taken = await resumeJob(jobsEnv(), OTHER, NOW, blocked, "approved", { take: true });
     expect(taken.ok, taken.refusal).toBe(true);
     expect((await row(blocked))?.status).toBe("claimed");
@@ -477,7 +476,7 @@ describe("resume", () => {
   it("a job goes back to a driver that is holding another job: no limit sends it to the queue", async () => {
     const blocked = await blockedJob("waiting for its driver");
     const other = await post({ title: "the driver moved on" });
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: must(other.job).id });
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: other.job!.id });
     const resumed = await resumeJob(jobsEnv(), OTHER, NOW, blocked, "approved");
     expect(resumed.ok, resumed.refusal).toBe(true);
     expect((await row(blocked))?.status).toBe("claimed");
@@ -519,7 +518,7 @@ describe("the resume note", () => {
 
   async function blockedJob(title: string) {
     const posted = await post({ title, gate_required: true });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "two questions for the seat", command: "git push origin feat/x" });
     return id;
@@ -573,7 +572,7 @@ describe("the resume note", () => {
   // reader can tell it from a gate, and the answer is a resume note the driver keeps.
   async function claimedJob(title: string) {
     const posted = await post({ title });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
     return id;
   }
@@ -743,17 +742,17 @@ describe("the resume note", () => {
 
   it("a job never resumed carries no note", async () => {
     const posted = await post({ title: "never resumed" });
-    const claimed = await claimJob(jobsEnv(), agentDriver(), NOW, { id: must(posted.job).id });
+    const claimed = await claimJob(jobsEnv(), agentDriver(), NOW, { id: posted.job!.id });
     expect(claimed.ok, claimed.refusal).toBe(true);
     expect(claimed.resume_note).toBeUndefined();
-    expect((await listJobs(jobsEnv(), { namespace: "capsid", id: must(posted.job).id })).resume_note).toBeUndefined();
+    expect((await listJobs(jobsEnv(), { namespace: "capsid", id: posted.job!.id })).resume_note).toBeUndefined();
   });
 });
 
 describe("the mirrored document", () => {
   it("tracks the row through every transition, and carries the signed prompt", async () => {
     const posted = await post({ title: "mirrored", body: "the full prompt" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     const path = jobDocPath(id);
 
     const readDoc = async () =>
@@ -763,27 +762,27 @@ describe("the mirrored document", () => {
 
     const atPost = await readDoc();
     expect(atPost, `no mirrored document at capsid/${path}`).toBeTruthy();
-    expect(must(atPost).title).toBe("Job: mirrored");
-    expect(must(atPost).body).toContain("status: **queued**");
+    expect(atPost!.title).toBe("Job: mirrored");
+    expect(atPost!.body).toContain("status: **queued**");
 
     // The prompt in the document is the signed body, byte for byte, so a driver that
     // reads the document verifies the same bytes. Checked through the real verifier.
-    const prompt = must(atPost).body.slice(must(atPost).body.indexOf("## The prompt"));
+    const prompt = atPost!.body.slice(atPost!.body.indexOf("## The prompt"));
     const signedPart = prompt.slice(prompt.indexOf("---\n"));
     expect(splitSignedTask(signedPart).body.trim()).toBe("the full prompt");
     const verdict = await verifySignedBody(SECRET, signedPart, "job document");
     expect(verdict.ok, "reason" in verdict ? verdict.reason : "").toBe(true);
 
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    expect(must((await readDoc())).body).toContain("status: **claimed**");
-    expect(must((await readDoc())).body).toContain(DRIVER_ACTOR);
+    expect((await readDoc())!.body).toContain("status: **claimed**");
+    expect((await readDoc())!.body).toContain(DRIVER_ACTOR);
 
     await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "landed" });
     const atDone = await readDoc();
-    expect(must(atDone).body).toContain("status: **done**");
-    expect(must(atDone).body).toContain("landed");
+    expect(atDone!.body).toContain("status: **done**");
+    expect(atDone!.body).toContain("landed");
     // A done job's document is closed, so brief stops carrying it as open work.
-    expect(must(atDone).status).toBe("closed");
+    expect(atDone!.status).toBe("closed");
 
     // Every rewrite snapshotted the one it replaced: three writes, two snapshots.
     const versions = await env.DB.prepare(
@@ -797,7 +796,7 @@ describe("the mirrored document", () => {
   it("PLANT: a failed job's document is closed too, because failed is terminal", async () => {
     // A failed job is as finished as a done one, so its mirror must not stay active.
     const posted = await post({ title: "failed is terminal" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     await failJob(jobsEnv(), DRIVER, NOW, id, "could not reach the thing");
 
@@ -806,15 +805,15 @@ describe("the mirrored document", () => {
     )
       .bind(jobDocPath(id))
       .first<{ body: string; status: string }>();
-    expect(must(doc).body).toContain("status: **failed**");
-    expect(must(doc).status).toBe("closed");
+    expect(doc!.body).toContain("status: **failed**");
+    expect(doc!.status).toBe("closed");
   });
 
   it("a blocked job's document stays active, because blocked is a pause", async () => {
     // A blocked job is waiting for a human and is still open work, so brief must keep
     // carrying it.
     const posted = await post({ title: "blocked is not terminal" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a push", command: "git push origin HEAD" });
 
@@ -823,8 +822,8 @@ describe("the mirrored document", () => {
     )
       .bind(jobDocPath(id))
       .first<{ body: string; status: string }>();
-    expect(must(doc).body).toContain("status: **blocked**");
-    expect(must(doc).status).toBe("active");
+    expect(doc!.body).toContain("status: **blocked**");
+    expect(doc!.status).toBe("active");
   });
 });
 
@@ -835,36 +834,36 @@ describe("list", () => {
     await post({ title: "elsewhere", namespace: "germomics" });
 
     const capsid = await listJobs(jobsEnv(), { namespace: "capsid" });
-    expect(must(capsid.jobs).map((j) => j.title)).toEqual(["high", "low"]);
+    expect(capsid.jobs!.map((j) => j.title)).toEqual(["high", "low"]);
 
     const everything = await listJobs(jobsEnv(), {});
-    expect(must(everything.jobs)).toHaveLength(3);
+    expect(everything.jobs!).toHaveLength(3);
 
     const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid" });
-    expect(must(claimed.job).title).toBe("high");
+    expect(claimed.job!.title).toBe("high");
     const stillQueued = await listJobs(jobsEnv(), { namespace: "capsid", status: "queued" });
-    expect(must(stillQueued.jobs).map((j) => j.title)).toEqual(["low"]);
+    expect(stillQueued.jobs!.map((j) => j.title)).toEqual(["low"]);
   });
 
   it("carries no body, unless one job is named and the body was asked for", async () => {
     // The column list is SQL a fake cannot check.
     const posted = await post({ title: "has a body" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
 
     const listed = await listJobs(jobsEnv(), { namespace: "capsid" });
-    expect(must(listed.jobs).length).toBeGreaterThan(0);
-    for (const job of must(listed.jobs)) expect(job).not.toHaveProperty("body");
+    expect(listed.jobs!.length).toBeGreaterThan(0);
+    for (const job of listed.jobs!) expect(job).not.toHaveProperty("body");
 
     // withBody without an id is ignored: a whole-namespace list never carries bodies.
     const wide = await listJobs(jobsEnv(), { namespace: "capsid" }, { withBody: true });
-    for (const job of must(wide.jobs)) expect(job).not.toHaveProperty("body");
+    for (const job of wide.jobs!) expect(job).not.toHaveProperty("body");
 
     const one = await listJobs(jobsEnv(), { namespace: "capsid", id }, { withBody: true });
-    expect(must(one.jobs)).toHaveLength(1);
-    expect((must(one.jobs)[0] as { body?: string }).body).toContain("capsid-task-signature");
+    expect(one.jobs!).toHaveLength(1);
+    expect((one.jobs![0] as { body?: string }).body).toContain("capsid-task-signature");
 
     const oneNoBody = await listJobs(jobsEnv(), { namespace: "capsid", id });
-    expect(must(oneNoBody.jobs)[0]).not.toHaveProperty("body");
+    expect(oneNoBody.jobs![0]).not.toHaveProperty("body");
   });
 });
 
@@ -878,14 +877,14 @@ describe("the improve_status jobs block", () => {
     const finished = await post({ title: "finished" });
     await post({ title: "elsewhere", namespace: "germomics" });
 
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: must(running.job).id });
-    await claimJob(jobsEnv(), OTHER, NOW, { id: must(stuck.job).id });
-    await blockJob(jobsEnv(), OTHER, NOW, must(stuck.job).id, {
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: running.job!.id });
+    await claimJob(jobsEnv(), OTHER, NOW, { id: stuck.job!.id });
+    await blockJob(jobsEnv(), OTHER, NOW, stuck.job!.id, {
       reason: "the deploy needs confirming",
       command: "npm run deploy",
     });
-    await claimJob(jobsEnv(), OTHER, NOW, { id: must(finished.job).id });
-    await completeJob(jobsEnv(), OTHER, NOW, must(finished.job).id, { result_summary: "done" });
+    await claimJob(jobsEnv(), OTHER, NOW, { id: finished.job!.id });
+    await completeJob(jobsEnv(), OTHER, NOW, finished.job!.id, { result_summary: "done" });
 
     const summary = await jobsSummary(env.DB, "capsid", NOW);
     expect(summary.queued).toBe(1);
@@ -897,7 +896,7 @@ describe("the improve_status jobs block", () => {
 
     // The blocked jobs come back as rows, with the command in them.
     expect(summary.blocked_jobs).toHaveLength(1);
-    expect(summary.blocked_jobs[0].id).toBe(must(stuck.job).id);
+    expect(summary.blocked_jobs[0].id).toBe(stuck.job!.id);
     expect(summary.blocked_jobs[0].title).toBe("stuck");
     expect(String(summary.blocked_jobs[0].waiting_on)).toContain("npm run deploy");
 
@@ -929,12 +928,12 @@ describe("the improve_status jobs block", () => {
 describe("the signature", () => {
   it("a body edited after post is refused at claim, and the job is failed rather than left queued", async () => {
     const posted = await post({ title: "tampered", body: "do the safe thing" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
 
     // The row edited the way a raw D1 splice would: a job body is executable input
     // for a session holding local shell and repo credentials.
     await env.DB.prepare("UPDATE jobs SET body = ?2 WHERE id = ?1")
-      .bind(id, must(posted.job).body.replace("do the safe thing", "do the dangerous thing"))
+      .bind(id, posted.job!.body.replace("do the safe thing", "do the dangerous thing"))
       .run();
 
     const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id });
@@ -953,7 +952,7 @@ describe("the signature", () => {
 
   it("the honest case still claims, so the guard is not refusing everything", async () => {
     const posted = await post({ title: "untampered" });
-    const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id: must(posted.job).id });
+    const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
     expect(claimed.ok, claimed.refusal).toBe(true);
   });
 });
@@ -961,7 +960,7 @@ describe("the signature", () => {
 describe("the retry cap, where the block is written", () => {
   async function blockedAt(corrections: number, title: string) {
     const posted = await post({ title });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid", id });
     await env.DB.prepare("UPDATE jobs SET corrections_count = ?1 WHERE id = ?2").bind(corrections, id).run();
     const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a human", command: "git push -u origin feat/x" });
@@ -1001,7 +1000,7 @@ describe("the retry cap, where resume reads it", () => {
   async function blockedAt(corrections: number, title: string): Promise<string> {
     const posted = await post({ title, gate_required: true });
     expect(posted.ok, posted.refusal).toBe(true);
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     const claimed = await claimJob(jobsEnv(), CLAIMANT, NOW, { id });
     expect(claimed.ok, claimed.refusal).toBe(true);
     await env.DB.prepare("UPDATE jobs SET corrections_count = ?1 WHERE id = ?2").bind(corrections, id).run();
@@ -1119,21 +1118,21 @@ describe("supersede", () => {
   it("supersedes a queued job with no claim, names the replacement, closes the mirror, and writes no outcome", async () => {
     const old = await post({ title: "the first draft" });
     const replacement = await post({ title: "the corrected draft" });
-    const out = await supersedeJob(jobsEnv(), PLAIN_OTHER, NOW, must(old.job).id, {
+    const out = await supersedeJob(jobsEnv(), PLAIN_OTHER, NOW, old.job!.id, {
       reason: "reposted with a corrected body",
-      replaced_by: must(replacement.job).id,
+      replaced_by: replacement.job!.id,
     });
     expect(out.ok, out.refusal).toBe(true);
-    const stored = await row(must(old.job).id);
+    const stored = await row(old.job!.id);
     expect(stored?.status).toBe("superseded");
-    expect(stored?.result_summary).toBe(`Superseded by ${must(replacement.job).id}: reposted with a corrected body`);
+    expect(stored?.result_summary).toBe(`Superseded by ${replacement.job!.id}: reposted with a corrected body`);
     expect(stored?.claimed_by).toBeNull();
-    expect(await outcomeCount(must(old.job).id)).toBe(0);
+    expect(await outcomeCount(old.job!.id)).toBe(0);
 
-    const doc = await mirror(must(old.job).id);
-    expect(must(doc).body).toContain("status: **superseded**");
-    expect(must(doc).status).toBe("closed");
-    expect(await auditActions(must(old.job).id)).toContain("job-superseded");
+    const doc = await mirror(old.job!.id);
+    expect(doc!.body).toContain("status: **superseded**");
+    expect(doc!.status).toBe("closed");
+    expect(await auditActions(old.job!.id)).toContain("job-superseded");
 
     // It holds no title, so the same title can be posted again.
     const again = await post({ title: "the first draft" });
@@ -1142,42 +1141,42 @@ describe("supersede", () => {
 
   it("without replaced_by the summary says so plainly", async () => {
     const old = await post({ title: "withdrawn" });
-    const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, must(old.job).id, { reason: "no longer wanted" });
+    const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "no longer wanted" });
     expect(out.ok, out.refusal).toBe(true);
-    expect((await row(must(old.job).id))?.result_summary).toBe("Superseded: no longer wanted");
+    expect((await row(old.job!.id))?.result_summary).toBe("Superseded: no longer wanted");
   });
 
   it("the holder of a claimed job with no work recorded may supersede it, and the claimant is kept", async () => {
     const old = await post({ title: "claimed then replaced" });
-    const claimed = await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: must(old.job).id });
+    const claimed = await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
     expect(claimed.ok, claimed.refusal).toBe(true);
-    const out = await supersedeJob(jobsEnv(), PLAIN_DRIVER, NOW, must(old.job).id, { reason: "the seat reordered the queue" });
+    const out = await supersedeJob(jobsEnv(), PLAIN_DRIVER, NOW, old.job!.id, { reason: "the seat reordered the queue" });
     expect(out.ok, out.refusal).toBe(true);
-    const stored = await row(must(old.job).id);
+    const stored = await row(old.job!.id);
     expect(stored?.status).toBe("superseded");
     expect(stored?.claimed_by).toBe(DRIVER_ACTOR);
-    expect(await outcomeCount(must(old.job).id)).toBe(0);
-    expect(must((await mirror(must(old.job).id))).status).toBe("closed");
+    expect(await outcomeCount(old.job!.id)).toBe(0);
+    expect((await mirror(old.job!.id))!.status).toBe("closed");
     // The holder is free to claim again: a superseded job is not a held claim.
     const next = await post({ title: "the next one" });
-    const reclaimed = await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: must(next.job).id });
+    const reclaimed = await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: next.job!.id });
     expect(reclaimed.ok, reclaimed.refusal).toBe(true);
   });
 
   it("the seat may supersede a claimed job it does not hold", async () => {
     const old = await post({ title: "seat steps in" });
-    await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: must(old.job).id });
-    const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, must(old.job).id, { reason: "reposted" });
+    await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
+    const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "reposted" });
     expect(out.ok, out.refusal).toBe(true);
   });
 
   it("PLANT: a non-holder that is not the seat is refused on a claimed job", async () => {
     const old = await post({ title: "not yours" });
-    await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: must(old.job).id });
-    const out = await supersedeJob(jobsEnv(), PLAIN_OTHER, NOW, must(old.job).id, { reason: "mine now" });
+    await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
+    const out = await supersedeJob(jobsEnv(), PLAIN_OTHER, NOW, old.job!.id, { reason: "mine now" });
     expect(out.ok).toBe(false);
     expect(out.refusal).toMatch(new RegExp(`is held by ${DRIVER_ACTOR}`));
-    expect((await row(must(old.job).id))?.status).toBe("claimed");
+    expect((await row(old.job!.id))?.status).toBe("claimed");
   });
 
   it("PLANT: a claimed job with a gate hit, a correction or a result_ref is refused, even for the seat", async () => {
@@ -1188,13 +1187,13 @@ describe("supersede", () => {
     ] as const;
     for (const [title, plant] of plants) {
       const old = await post({ title });
-      await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: must(old.job).id });
-      await env.DB.prepare(plant).bind(must(old.job).id).run();
-      const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, must(old.job).id, { reason: "replaced" });
+      await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
+      await env.DB.prepare(plant).bind(old.job!.id).run();
+      const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "replaced" });
       expect(out.ok, `${title} was superseded`).toBe(false);
       expect(out.refusal).toMatch(/has work recorded on it/);
-      expect((await row(must(old.job).id))?.status).toBe("claimed");
-      await failJob(jobsEnv(), PLAIN_DRIVER, NOW, must(old.job).id, "clearing the claim for the next case");
+      expect((await row(old.job!.id))?.status).toBe("claimed");
+      await failJob(jobsEnv(), PLAIN_DRIVER, NOW, old.job!.id, "clearing the claim for the next case");
     }
   });
 
@@ -1203,40 +1202,40 @@ describe("supersede", () => {
     // between the two must still stop the supersede, so the statement (copied from
     // src/jobs.ts) is run against a row the pre-check never saw.
     const old = await post({ title: "raced" });
-    await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: must(old.job).id });
-    await env.DB.prepare("UPDATE jobs SET blocked_count = 1 WHERE id = ?1").bind(must(old.job).id).run();
+    await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
+    await env.DB.prepare("UPDATE jobs SET blocked_count = 1 WHERE id = ?1").bind(old.job!.id).run();
     const won = await env.DB.prepare(
       `UPDATE jobs SET status = 'superseded', result_summary = ?2, updated_at = ?3
        WHERE id = ?1 AND (status = 'queued' OR (status = 'claimed' AND claimed_by = ?4 AND blocked_count = 0
          AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`
     )
-      .bind(must(old.job).id, "Superseded: x", NOW.toISOString(), DRIVER_ACTOR)
+      .bind(old.job!.id, "Superseded: x", NOW.toISOString(), DRIVER_ACTOR)
       .first<{ id: string }>();
     expect(won).toBeNull();
-    expect((await row(must(old.job).id))?.status).toBe("claimed");
+    expect((await row(old.job!.id))?.status).toBe("claimed");
   });
 
   it("refuses a job that is done, failed, blocked or already superseded", async () => {
     const done = await post({ title: "done" });
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: must(done.job).id });
-    await completeJob(jobsEnv(), DRIVER, NOW, must(done.job).id, { result_summary: "landed" });
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: done.job!.id });
+    await completeJob(jobsEnv(), DRIVER, NOW, done.job!.id, { result_summary: "landed" });
 
     const failed = await post({ title: "failed" });
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: must(failed.job).id });
-    await failJob(jobsEnv(), DRIVER, NOW, must(failed.job).id, "could not");
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: failed.job!.id });
+    await failJob(jobsEnv(), DRIVER, NOW, failed.job!.id, "could not");
 
     const blocked = await post({ title: "blocked" });
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: must(blocked.job).id });
-    await blockJob(jobsEnv(), DRIVER, NOW, must(blocked.job).id, { reason: "needs a push", command: "git push origin HEAD" });
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: blocked.job!.id });
+    await blockJob(jobsEnv(), DRIVER, NOW, blocked.job!.id, { reason: "needs a push", command: "git push origin HEAD" });
 
     const twice = await post({ title: "twice" });
-    expect((await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, must(twice.job).id, { reason: "first" })).ok).toBe(true);
+    expect((await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, twice.job!.id, { reason: "first" })).ok).toBe(true);
 
     const cases = [
-      [must(done.job).id, "done"],
-      [must(failed.job).id, "failed"],
-      [must(blocked.job).id, "blocked"],
-      [must(twice.job).id, "superseded"],
+      [done.job!.id, "done"],
+      [failed.job!.id, "failed"],
+      [blocked.job!.id, "blocked"],
+      [twice.job!.id, "superseded"],
     ] as const;
     for (const [id, status] of cases) {
       const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "again" });
@@ -1251,29 +1250,29 @@ describe("supersede", () => {
     const elsewhere = await post({ title: "elsewhere", namespace: "germomics" });
     const cases: Array<[string, RegExp]> = [
       ["job_000000000000", /no job job_000000000000/],
-      [must(elsewhere.job).id, /is in germomics and .* is in capsid/],
-      [must(old.job).id, /cannot be replaced by itself/],
+      [elsewhere.job!.id, /is in germomics and .* is in capsid/],
+      [old.job!.id, /cannot be replaced by itself/],
     ];
     for (const [replaced_by, refusal] of cases) {
-      const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, must(old.job).id, { reason: "replaced", replaced_by });
+      const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "replaced", replaced_by });
       expect(out.ok).toBe(false);
       expect(out.refusal).toMatch(refusal);
     }
-    expect((await row(must(old.job).id))?.status).toBe("queued");
+    expect((await row(old.job!.id))?.status).toBe("queued");
   });
 
   it("a superseded job's old outcome row stays, and is left out of the agent record", async () => {
     // The shape 0020 leaves behind: a job claimed and failed to close it, with an
     // outcome row, then relabelled. The row stays; the record does not count it.
     const old = await post({ title: "claimed and failed to repost" });
-    await claimJob(jobsEnv(), DRIVER, NOW, { id: must(old.job).id });
-    await failJob(jobsEnv(), DRIVER, NOW, must(old.job).id, "Seat repost before any work");
-    expect(await outcomeCount(must(old.job).id)).toBe(1);
+    await claimJob(jobsEnv(), DRIVER, NOW, { id: old.job!.id });
+    await failJob(jobsEnv(), DRIVER, NOW, old.job!.id, "Seat repost before any work");
+    expect(await outcomeCount(old.job!.id)).toBe(1);
     expect((await loadRecordRows(env.DB)).outcomes.length).toBe(1);
 
-    await env.DB.prepare("UPDATE jobs SET status = 'superseded' WHERE id = ?1").bind(must(old.job).id).run();
+    await env.DB.prepare("UPDATE jobs SET status = 'superseded' WHERE id = ?1").bind(old.job!.id).run();
     const after = await loadRecordRows(env.DB);
-    expect(await outcomeCount(must(old.job).id)).toBe(1);
+    expect(await outcomeCount(old.job!.id)).toBe(1);
     expect(after.outcomes.length).toBe(0);
     expect(after.jobs.some((r) => r.status === "failed")).toBe(false);
   });
@@ -1313,7 +1312,7 @@ describe("migrations/0020, the relabel", () => {
     await seed("job_done0000000", "done", "Superseded the old approach and landed");
     await seed("job_queued00000", "queued", "Seat repost");
 
-    for (const query of must(relabel).queries) await env.DB.prepare(query).run();
+    for (const query of relabel!.queries) await env.DB.prepare(query).run();
 
     const { results } = await env.DB.prepare("SELECT id, status FROM jobs ORDER BY id").all<{ id: string; status: string }>();
     const status = Object.fromEntries((results ?? []).map((r) => [r.id, r.status]));
@@ -1351,7 +1350,7 @@ async function actorAudits(actor: string, action: string): Promise<number> {
 
 describe("every transition is one guarded batch", () => {
   it("PLANT: a claim that loses the race between its read and its batch records nothing", async () => {
-    const id = must((await post({ title: "claim race" })).job).id;
+    const id = (await post({ title: "claim race" })).job!.id;
     const racing = racingEnv(async () => {
       const other = await claimJob(jobsEnv(), OTHER, NOW, { id });
       expect(other.ok, other.refusal).toBe(true);
@@ -1364,7 +1363,7 @@ describe("every transition is one guarded batch", () => {
   });
 
   it("PLANT: a claim whose records fail does not move the row, because they are one transaction", async () => {
-    const id = must((await post({ title: "claim atomic" })).job).id;
+    const id = (await post({ title: "claim atomic" })).job!.id;
     const failing = {
       ...jobsEnv(),
       DB: {
@@ -1378,7 +1377,7 @@ describe("every transition is one guarded batch", () => {
   });
 
   it("PLANT: an admin fail that loses the race to the driver's complete records nothing", async () => {
-    const id = must((await post({ title: "admin fail race" })).job).id;
+    const id = (await post({ title: "admin fail race" })).job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const racing = racingEnv(async () => {
       const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished first" });
@@ -1392,7 +1391,7 @@ describe("every transition is one guarded batch", () => {
   });
 
   it("PLANT: a supersede that loses the race to a claim records nothing", async () => {
-    const id = must((await post({ title: "supersede race" })).job).id;
+    const id = (await post({ title: "supersede race" })).job!.id;
     const racing = racingEnv(async () => {
       await claimJob(jobsEnv(), OTHER, NOW, { id });
     });
@@ -1404,7 +1403,7 @@ describe("every transition is one guarded batch", () => {
   });
 
   it("PLANT: a release that loses the race to the holder's complete records nothing", async () => {
-    const id = must((await post({ title: "release race" })).job).id;
+    const id = (await post({ title: "release race" })).job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const racing = racingEnv(async () => {
       const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished first" });
@@ -1431,9 +1430,9 @@ describe("no claim limit and no repo rule", () => {
   });
 
   it("a second claim on the repo of a held job succeeds, through another namespace of the same repo too", async () => {
-    const a = must((await post({ title: "held on capsid" })).job).id;
-    const b = must((await post({ title: "also capsid" })).job).id;
-    const twin = must((await post({ namespace: "capsid-twin", title: "capsid by another name" })).job).id;
+    const a = (await post({ title: "held on capsid" })).job!.id;
+    const b = (await post({ title: "also capsid" })).job!.id;
+    const twin = (await post({ namespace: "capsid-twin", title: "capsid by another name" })).job!.id;
     for (const id of [a, b, twin]) {
       const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id });
       expect(claimed.ok, claimed.refusal).toBe(true);
@@ -1444,7 +1443,7 @@ describe("no claim limit and no repo rule", () => {
   it("an agent scope that still carries max_claims is not limited by it", async () => {
     const limited: Agent = { ...DRIVER, scopes: { ...DRIVER.scopes, max_claims: 1 } as Agent["scopes"] };
     const ids = [];
-    for (const title of ["one", "two", "three", "four", "five", "six"]) ids.push(must((await post({ title })).job).id);
+    for (const title of ["one", "two", "three", "four", "five", "six"]) ids.push((await post({ title })).job!.id);
     for (const id of ids) {
       const claimed = await claimJob(jobsEnv(), limited, NOW, { id });
       expect(claimed.ok, claimed.refusal).toBe(true);
@@ -1469,7 +1468,7 @@ describe("migrations/0045, runner keys bound to a job are revoked", () => {
     await insert("agent_bound0000003", "runner-bound-old", "a".repeat(64), "job_done0000001", "2026-10-09 08:00:00");
     await insert("agent_unbound00001", "sample-unbound", "b".repeat(64), null, null);
 
-    for (const query of must(migration).queries) await env.DB.prepare(query).run();
+    for (const query of migration!.queries) await env.DB.prepare(query).run();
 
     const revoked = async (name: string) => (await env.DB.prepare("SELECT revoked_at FROM agents WHERE name = ?1").bind(name).first<{ revoked_at: string | null }>())?.revoked_at;
     expect(await revoked("runner-bound-live")).not.toBeNull();
@@ -1501,51 +1500,51 @@ describe("edit", () => {
 
   it("a driver is refused, and the job is left as it was", async () => {
     const posted = await post({ title: "driver edit", body: "do the safe thing" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     const out = await editJob(jobsEnv(), PLAIN_DRIVER, LATER, id, { body: "do the other thing" });
     expect(out.ok).toBe(false);
     expect(out.refusal).toMatch(/cannot edit a job/);
-    expect((await row(id))?.body).toBe(must(posted.job).body);
+    expect((await row(id))?.body).toBe(posted.job!.body);
     expect(await versionCount(id)).toBe(0);
     expect(await auditActions(id)).not.toContain("job-edited");
   });
 
   it("a claimed job is refused, even for the seat", async () => {
     const posted = await post({ title: "claimed edit", body: "do the safe thing" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
     const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { body: "do the other thing", priority: 9 });
     expect(out.ok).toBe(false);
     expect(out.refusal).toMatch(/is claimed/);
     const stored = await row(id);
-    expect(stored?.body).toBe(must(posted.job).body);
+    expect(stored?.body).toBe(posted.job!.body);
     expect(stored?.priority).toBe(0);
     expect(await versionCount(id)).toBe(0);
   });
 
   it("the edited body is signed as at post: it verifies, and claim hands it out", async () => {
     const posted = await post({ title: "signed edit", body: "do the first thing" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { body: "do the corrected thing" });
     expect(out.ok, out.refusal).toBe(true);
     const stored = String((await row(id))?.body);
-    expect(stored).not.toBe(must(posted.job).body);
+    expect(stored).not.toBe(posted.job!.body);
     const verdict = await verifySignedBody(SECRET, stored, "job body");
     expect(verdict.ok).toBe(true);
     expect(verdict.ok && verdict.body).toBe("do the corrected thing");
     const claimed = await claimJob(jobsEnv(), DRIVER, LATER, { id });
     expect(claimed.ok, claimed.refusal).toBe(true);
-    expect(must(claimed.job).body).toContain("do the corrected thing");
+    expect(claimed.job!.body).toContain("do the corrected thing");
   });
 
   it("a blocked job may be edited, and resume verifies the new body", async () => {
     const posted = await post({ title: "blocked edit", body: "do the first thing" });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     expect((await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "gate", command: "git push origin x" })).ok).toBe(true);
     const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { body: "do the corrected thing", gate_required: true });
     expect(out.ok, out.refusal).toBe(true);
-    expect(must(out.job).status).toBe("blocked");
+    expect(out.job!.status).toBe("blocked");
     const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, LATER, id, "seat approved the push");
     expect(resumed.ok, resumed.refusal).toBe(true);
     expect((await row(id))?.gate_required).toBe(1);
@@ -1553,7 +1552,7 @@ describe("edit", () => {
 
   it("each edit keeps the version it replaced, readable newest first through jobs list for the id", async () => {
     const posted = await post({ title: "first title", body: "do the first thing", priority: 1 });
-    const id = must(posted.job).id;
+    const id = posted.job!.id;
     expect((await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { title: "second title", priority: 5 })).ok).toBe(true);
     const second = await editJob(jobsEnv(), SEAT_AGENT, at("2026-09-10T12:10:00.000Z"), id, { body: "do the second thing" });
     expect(second.ok, second.refusal).toBe(true);
@@ -1567,24 +1566,24 @@ describe("edit", () => {
     const listed = JSON.parse(result.content[0].text) as { versions?: Array<Record<string, unknown>>; jobs: Array<Record<string, unknown>> };
     expect(listed.jobs[0].title).toBe("second title");
     expect(listed.versions).toHaveLength(2);
-    expect(must(listed.versions)[0]).toMatchObject({ title: "second title", priority: 5, gate_required: 0, body: must(posted.job).body, edited_by: SEAT, edited_at: "2026-09-10T12:10:00.000Z" });
-    expect(must(listed.versions)[1]).toMatchObject({ title: "first title", priority: 1, gate_required: 0, body: must(posted.job).body, edited_by: SEAT, edited_at: LATER.toISOString() });
+    expect(listed.versions![0]).toMatchObject({ title: "second title", priority: 5, gate_required: 0, body: posted.job!.body, edited_by: SEAT, edited_at: "2026-09-10T12:10:00.000Z" });
+    expect(listed.versions![1]).toMatchObject({ title: "first title", priority: 1, gate_required: 0, body: posted.job!.body, edited_by: SEAT, edited_at: LATER.toISOString() });
 
     // The mirror is rewritten with the row, and the edit is audited.
     const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(jobDocPath(id)).first<{ body: string }>();
-    expect(must(doc).body).toContain("second title");
-    expect(must(doc).body).toContain("do the second thing");
+    expect(doc!.body).toContain("second title");
+    expect(doc!.body).toContain("do the second thing");
     expect(await auditActions(id)).toContain("job-edited");
   });
 
   it("a title another open job holds is refused, naming that job", async () => {
     const holder = await post({ title: "taken title" });
     const other = await post({ title: "free title" });
-    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, must(other.job).id, { title: "taken title" });
+    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, other.job!.id, { title: "taken title" });
     expect(out.ok).toBe(false);
-    expect(out.refusal).toContain(must(holder.job).id);
-    expect((await row(must(other.job).id))?.title).toBe("free title");
-    expect(await versionCount(must(other.job).id)).toBe(0);
+    expect(out.refusal).toContain(holder.job!.id);
+    expect((await row(other.job!.id))?.title).toBe("free title");
+    expect(await versionCount(other.job!.id)).toBe(0);
   });
 });
 
@@ -1601,7 +1600,7 @@ describe("park", () => {
   const WHY = "comes back when the keys question is answered";
 
   it("a driver is refused, for park and for unpark, and the job is left as it was", async () => {
-    const id = must((await post({ title: "driver park" })).job).id;
+    const id = (await post({ title: "driver park" })).job!.id;
     const parkOut = await parkJob(jobsEnv(), PLAIN_DRIVER, LATER, id, WHY);
     expect(parkOut.ok).toBe(false);
     expect(parkOut.refusal).toMatch(/cannot park a job/);
@@ -1616,7 +1615,7 @@ describe("park", () => {
   });
 
   it("a reason is required, in one line", async () => {
-    const id = must((await post({ title: "reason park" })).job).id;
+    const id = (await post({ title: "reason park" })).job!.id;
     for (const bad of [undefined, "", "   ", "two\nlines", "x".repeat(301)]) {
       const out = await parkJob(jobsEnv(), SEAT_AGENT, LATER, id, bad);
       expect(out.ok, JSON.stringify(bad)).toBe(false);
@@ -1626,7 +1625,7 @@ describe("park", () => {
   });
 
   it("only a queued job is parked: a claimed job and a blocked job are refused, even for the seat", async () => {
-    const claimedId = must((await post({ title: "claimed park" })).job).id;
+    const claimedId = (await post({ title: "claimed park" })).job!.id;
     expect((await claimJob(jobsEnv(), DRIVER, NOW, { id: claimedId })).ok).toBe(true);
     const claimedOut = await parkJob(jobsEnv(), SEAT_AGENT, LATER, claimedId, WHY);
     expect(claimedOut.ok).toBe(false);
@@ -1641,8 +1640,8 @@ describe("park", () => {
   });
 
   it("a parked job is never claimed, stays listed with its reason, and its mirror and audit row are written", async () => {
-    const parkedId = must((await post({ title: "parked job", priority: 50 })).job).id;
-    const otherId = must((await post({ title: "other job", priority: 1 })).job).id;
+    const parkedId = (await post({ title: "parked job", priority: 50 })).job!.id;
+    const otherId = (await post({ title: "other job", priority: 1 })).job!.id;
     const out = await parkJob(jobsEnv(), SEAT_AGENT, LATER, parkedId, WHY);
     expect(out.ok).toBe(true);
     expect(out.job?.status).toBe("parked");
@@ -1664,7 +1663,7 @@ describe("park", () => {
   });
 
   it("unpark returns the job to queued and clears the reason", async () => {
-    const id = must((await post({ title: "back again" })).job).id;
+    const id = (await post({ title: "back again" })).job!.id;
     expect((await parkJob(jobsEnv(), SEAT_AGENT, LATER, id, WHY)).ok).toBe(true);
     const out = await unparkJob(jobsEnv(), SEAT_AGENT, LATER, id);
     expect(out.ok).toBe(true);
@@ -1678,13 +1677,13 @@ describe("park", () => {
   });
 
   it("a parked job holds no title slot, so unpark is refused, naming the job, when the title was reposted", async () => {
-    const parkedId = must((await post({ title: "same title" })).job).id;
+    const parkedId = (await post({ title: "same title" })).job!.id;
     expect((await parkJob(jobsEnv(), SEAT_AGENT, LATER, parkedId, WHY)).ok).toBe(true);
     const repost = await post({ title: "same title" });
     expect(repost.ok).toBe(true);
     const out = await unparkJob(jobsEnv(), SEAT_AGENT, LATER, parkedId);
     expect(out.ok).toBe(false);
-    expect(out.refusal).toContain(must(repost.job).id);
+    expect(out.refusal).toContain(repost.job!.id);
     expect((await row(parkedId))?.status).toBe("parked");
   });
 });

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { behindBy, gitSpec, latestTag, presetSpec, releaseDecision, rootManifest, sharedCodeView, type ReleaseRead, type SharedConfig } from "../src/shared-code.ts";
-import { must } from "../src/must.ts";
 
 // The Shared code view's rules (job_584b4e7f2824), on what was read rather than on GitHub.
 // Sample data only: example-org repos, namespace "sample".
@@ -53,7 +52,7 @@ test("PLANT: an app pinned two releases behind, one current, one through the old
   );
   assert.equal(view.apps_read, 3, "the read count says how many apps the answer covers");
   assert.deepEqual(view.apps_failed, [{ namespace: "sample-d", error: "its file tree could not be read" }]);
-  const kit = must(view.packages.find((p) => p.name === "Kit"));
+  const kit = view.packages.find((p) => p.name === "Kit")!;
   assert.equal(kit.latest, "v0.10.0");
   assert.deepEqual(
     kit.users.map((u) => [u.namespace, u.pinned, u.behind, u.via_old_name]),
@@ -69,7 +68,7 @@ test("PLANT: an app pinned two releases behind, one current, one through the old
     { namespace: "sample-b", path: "packages/kit", present: false },
   ]);
   assert.equal(kit.local_left, 1);
-  const devkit = must(view.packages.find((p) => p.name === "devkit"));
+  const devkit = view.packages.find((p) => p.name === "devkit")!;
   assert.deepEqual(devkit.users.map((u) => [u.namespace, u.where, u.pinned, u.behind]), [["sample", "renovate", null, null]]);
 });
 
@@ -118,7 +117,7 @@ test("PLANT: the view says untagged, on npm, private, and what was not read", ()
     ])
   );
   const fields = (name: string) => {
-    const p = must(view.packages.find((x) => x.name === name));
+    const p = view.packages.find((x) => x.name === name)!;
     return { version: p.version, untagged: p.untagged, private: p.private, npm_latest: p.npm_latest, npm_note: p.npm_note, manifest_error: p.manifest_error };
   };
   assert.deepEqual(fields("Kit"), { version: "0.11.0", untagged: true, private: false, npm_latest: "0.10.0", npm_note: null, manifest_error: null }, "bumped, not tagged, npm one behind");

@@ -3,7 +3,6 @@ import { resetCapsidDb } from "./reset-db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { blockJob, claimJob, completeAsCaller, completeJob, postJob, resumeJob } from "../src/jobs";
 import { grantAgent } from "../src/agents";
-import { must } from "../src/must";
 
 // The seat completing a blocked job it does not hold (job_85b8ac3e0c7e), the way it can
 // already fail one. The job stays held by the driver that did the work, so the outcome
@@ -67,7 +66,7 @@ async function outcomeCount() {
 
 async function post(title: string, over: Record<string, unknown> = {}) {
   const posted = await postJob(jobsEnv(), SEAT, NOW, { namespace: NS, title, body: "do the thing", gate_required: true, ...over } as Parameters<typeof postJob>[3]);
-  return must(posted.job).id;
+  return posted.job!.id;
 }
 
 // A job the driver holds and then blocks on a gate, which is the state the seat completes.

@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { adminFailJob, claimJob, failAsCaller, postJob, releaseJob } from "../src/jobs";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
-import { must } from "../src/must";
 
 // The seat stepping in on a claimed job whose holder is gone: release it to the queue,
 // or fail it. Against a real D1, because both are one guarded batch keyed on the holder
@@ -37,9 +36,9 @@ function driverAgent(actor = "agent:capsid-driver"): Agent {
 async function claimedJob(holder: Agent, title = "a job whose holder went away"): Promise<string> {
   const posted = await postJob(jobsEnv(), POSTER, NOW, { namespace: "capsid", title, body: "do the thing" });
   expect(posted.ok, posted.refusal).toBe(true);
-  const claimed = await claimJob(jobsEnv(), holder, NOW, { id: must(posted.job).id });
+  const claimed = await claimJob(jobsEnv(), holder, NOW, { id: posted.job!.id });
   expect(claimed.ok, claimed.refusal).toBe(true);
-  return must(posted.job).id;
+  return posted.job!.id;
 }
 
 async function row(id: string) {
@@ -74,7 +73,7 @@ describe("release", () => {
     expect(r?.claimed_by).toBeNull();
     const a = await audit(id, "job-released");
     expect(a?.actor).toBe("agent:seat");
-    expect(JSON.parse(must(a).params)).toMatchObject({ reason: "no driver session is running", held_by: "agent:capsid-driver" });
+    expect(JSON.parse(a!.params)).toMatchObject({ reason: "no driver session is running", held_by: "agent:capsid-driver" });
     // Not an ending, so nothing is attributed to the credential that held it.
     expect(await outcome(id)).toBeNull();
   });
@@ -103,7 +102,7 @@ describe("release", () => {
     expect((await row(own))?.status).toBe("queued");
 
     const posted = await postJob(jobsEnv(), POSTER, NOW, { namespace: "capsid", title: "still queued", body: "b" });
-    const queued = await releaseJob(jobsEnv(), seat, LATER, must(posted.job).id, "x");
+    const queued = await releaseJob(jobsEnv(), seat, LATER, posted.job!.id, "x");
     expect(queued.ok).toBe(false);
     expect(queued.refusal).toMatch(/is queued, not claimed/);
   });

@@ -8,7 +8,6 @@ import type { SystemModel } from "./system-model";
 import type { PackageSnapshot } from "./ops-types/sites";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types/feed";
 import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
-import { must } from "./must";
 
 const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
 
@@ -180,7 +179,7 @@ export function releaseDecision(version: string | null, tags: readonly string[])
   if (existing) return { kind: "tagged", tag: existing };
   const tag = `v${version}`;
   const newest = latestTag(tags);
-  if (newest && cmp(v, must(semver(newest))) < 0) return { kind: "backwards", tag, newest };
+  if (newest && cmp(v, semver(newest)!) < 0) return { kind: "backwards", tag, newest };
   return { kind: "tag", tag, newest };
 }
 
@@ -288,7 +287,7 @@ export function sharedCodeView(
     configured: true,
     error: null,
     apps_read: apps.filter((a) => a.error === null).length,
-    apps_failed: apps.filter((a) => a.error !== null).map((a) => (a.system ? { namespace: a.namespace, system: a.system, error: must(a.error) } : { namespace: a.namespace, error: must(a.error) })),
+    apps_failed: apps.filter((a) => a.error !== null).map((a) => (a.system ? { namespace: a.namespace, system: a.system, error: a.error! } : { namespace: a.namespace, error: a.error! })),
     packages,
   };
 }
@@ -396,7 +395,7 @@ async function readApp(env: Env, target: { namespace: string; name: string; syst
   const locks = new Map<string, Promise<string>>();
   const lockText = (path: string) => {
     if (!locks.has(path)) locks.set(path, rawFile(env, target.repo, path));
-    return must(locks.get(path));
+    return locks.get(path)!;
   };
   try {
     const blobs = await blobPaths(env, target.repo);
@@ -424,7 +423,7 @@ async function readApp(env: Env, target: { namespace: string; name: string; syst
       app.presets.push(...[...text.matchAll(/"(github>[^"]+)"/g)].map((m) => m[1]));
     }
     const workflows = [...blobs].filter((p) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(p)).sort().slice(0, WORKFLOWS_PER_APP);
-    for (const path of workflows) must(app.workflows).push({ path, pins: workflowPins(await rawFile(env, target.repo, path)) });
+    for (const path of workflows) app.workflows!.push({ path, pins: workflowPins(await rawFile(env, target.repo, path)) });
   } catch (err) {
     app.error = err instanceof Error ? err.message : String(err);
   }

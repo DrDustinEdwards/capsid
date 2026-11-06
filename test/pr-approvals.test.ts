@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "../src/auto-merge-tick.ts";
 import { performApproval, planApproval } from "../src/pr-approvals.ts";
 import { fakeKv, withFetch } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // The approval record (docs/design/design-merge-pipeline.md section 3, PR 3): what
 // approve_pr will approve, and what it refuses, from the awaiting-seat set's classes, the
@@ -169,10 +168,10 @@ test("approving again at a new head voids the open approval and writes both rows
     assert.match(summary, /^Approved owner\/repo #41\./);
   });
   const sql = recorded.map((r) => r.sql.replace(/\s+/g, " ").trim());
-  assert.match(must(sql[0]), /^UPDATE pr_approvals SET status = 'voided', .* WHERE id = \?1 AND status = 'approved' RETURNING id$/);
-  assert.deepEqual(must(recorded[0]).params, [7, NOW.toISOString(), "replaced"]);
+  assert.match(sql[0]!, /^UPDATE pr_approvals SET status = 'voided', .* WHERE id = \?1 AND status = 'approved' RETURNING id$/);
+  assert.deepEqual(recorded[0]!.params, [7, NOW.toISOString(), "replaced"]);
   assert.ok(sql.some((s) => s.startsWith("INSERT INTO pr_approvals")), "no approval row was written");
-  const insert = must(recorded.find((r) => r.sql.includes("INSERT INTO pr_approvals")));
+  const insert = recorded.find((r) => r.sql.includes("INSERT INTO pr_approvals"))!;
   // The unit it counts toward (src/merge-units.ts): the namespace and the tick's path class.
   assert.deepEqual(insert.params, ["owner/repo", 41, HEAD_B, "approve", ACTOR, "portal", null, "reviewed the diff", NOW.toISOString(), "capsid", "src-routine"]);
 });
@@ -186,7 +185,7 @@ test("Undo voids the open approval with 'undone', and is refused where there is 
   assert.equal(plan.ok, true);
   if (!plan.ok) return;
   await performApproval(e, ACTOR, plan, null, NOW);
-  assert.deepEqual(must(recorded[0]).params, [7, NOW.toISOString(), "undone"]);
+  assert.deepEqual(recorded[0]!.params, [7, NOW.toISOString(), "undone"]);
   assert.ok(!recorded.some((r) => r.sql.includes("INSERT INTO pr_approvals")), "an undo approved something");
 });
 

@@ -6,7 +6,6 @@ import { AUTO_MERGE_POLICY_PATH, loadMergePolicy } from "../src/auto-merge-polic
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs.ts";
 import { performPolicyFromRepo, planPolicyFromRepo, REPO_POLICY_PATH } from "../src/policy-sign.ts";
 import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // sign_policy_from_repo (src/policy-sign.ts): the stored, signed auto-merge policy written
 // from docs/policy/auto-merge.md on the default branch. Proves: a file that would not load
@@ -16,7 +15,7 @@ import { must } from "../src/must.ts";
 const SECRET = "policy-from-repo-test-secret";
 const ACTOR = "access:admin@example.com";
 const SHIPPED = readFileSync(join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"), "utf8");
-const STORED_VERSION = must(must(/^- version: (\d+)$/m.exec(SHIPPED))[1]);
+const STORED_VERSION = /^- version: (\d+)$/m.exec(SHIPPED)![1]!;
 const NEXT = String(Number(STORED_VERSION) + 1);
 const bumped = (body: string, version = NEXT) => body.replace(/^- version: \d+$/m, `- version: ${version}`);
 const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
@@ -29,7 +28,7 @@ async function world() {
 // The fake's audit row type names four columns; the rows it stores hold them all.
 type AuditRow = { actor: string; action: string; namespace: string; path: string; params: string };
 const auditRows = (rows: { audit_log: unknown[] }) => rows.audit_log as AuditRow[];
-const stored = (rows: { documents: Array<{ path: string; body?: string | null }> }) => must(must(rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)).body);
+const stored = (rows: { documents: Array<{ path: string; body?: string | null }> }) => rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!.body!;
 
 // The file on the default branch, as GitHub answers a contents read. `repo.text` is read on
 // every call, so a test changes the repo between the preview and the perform.
@@ -117,19 +116,19 @@ test("PLANT: the perform snapshots the prior version, writes and signs the file,
     // The prior version is in document_versions, whole.
     const snap = w.rows.versions.filter((v) => v.path === AUTO_MERGE_POLICY_PATH);
     assert.equal(snap.length, 1, "the prior version was not snapshotted exactly once");
-    assert.equal(splitSignedTask(must(snap[0]).body as string).body, SHIPPED);
+    assert.equal(splitSignedTask(snap[0]!.body as string).body, SHIPPED);
     // An audit row names the actor, both hashes and the signature.
     const audit = auditRows(w.rows).filter((a) => a.action === "policy-loaded-from-repo");
     assert.equal(audit.length, 1);
-    assert.equal(must(audit[0]).actor, ACTOR);
-    assert.deepEqual([must(audit[0]).namespace, must(audit[0]).path], ["capsid", AUTO_MERGE_POLICY_PATH]);
+    assert.equal(audit[0]!.actor, ACTOR);
+    assert.deepEqual([audit[0]!.namespace, audit[0]!.path], ["capsid", AUTO_MERGE_POLICY_PATH]);
     assert.deepEqual(
-      (({ from, to, source, old_sha256, new_sha256 }) => ({ from, to, source, old_sha256, new_sha256 }))(JSON.parse(String(must(audit[0]).params))),
+      (({ from, to, source, old_sha256, new_sha256 }) => ({ from, to, source, old_sha256, new_sha256 }))(JSON.parse(String(audit[0]!.params))),
       { from: STORED_VERSION, to: NEXT, source: REPO_POLICY_PATH, old_sha256: plan.oldSha, new_sha256: plan.newSha }
     );
-    assert.equal(JSON.parse(String(must(audit[0]).params)).signature, signature);
+    assert.equal(JSON.parse(String(audit[0]!.params)).signature, signature);
     // The anti-rollback pin moved to the new body, and the Worker loads it.
-    assert.deepEqual(JSON.parse(must(w.kv.puts.at(-1)).value), await policyPin(repo.text));
+    assert.deepEqual(JSON.parse(w.kv.puts.at(-1)!.value), await policyPin(repo.text));
     const loaded = await loadMergePolicy(w.env);
     assert.ok("policy" in loaded, "error" in loaded ? loaded.error : "");
     assert.equal(loaded.policy.version, NEXT);

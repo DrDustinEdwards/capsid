@@ -5,7 +5,6 @@ import { claimJob, failAsCaller, postJob } from "../src/jobs";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { BREAKER_THRESHOLD_KEY, breakerResetKey, breakerState, resetBreaker } from "../src/job-breaker";
-import { must } from "../src/must";
 
 // The queue's circuit breaker (job_9e602b31888f, OWASP ASI08), against a real D1: the
 // breaker is a count over audit_log, so what it counts is only true of the real rows.
@@ -35,7 +34,7 @@ let n = 0;
 async function post(namespace = "capsid"): Promise<string> {
   const posted = await postJob(jobsEnv(), POSTER, new Date(), { namespace, title: `job ${++n}`, body: "do the thing" });
   expect(posted.ok, posted.refusal).toBe(true);
-  return must(posted.job).id;
+  return posted.job!.id;
 }
 
 // A job its holder claimed and then failed: one `job-fail` audit row.
@@ -48,7 +47,7 @@ async function holderFails(driver: Agent, namespace = "capsid"): Promise<void> {
 }
 
 async function status(id: string) {
-  return must((await env.DB.prepare("SELECT status, claimed_by FROM jobs WHERE id = ?1").bind(id).first<{ status: string; claimed_by: string | null }>()));
+  return (await env.DB.prepare("SELECT status, claimed_by FROM jobs WHERE id = ?1").bind(id).first<{ status: string; claimed_by: string | null }>())!;
 }
 
 beforeEach(async () => {
@@ -110,7 +109,7 @@ describe("the queue's circuit breaker", () => {
     expect(reset.ok).toBe(true);
     const audit = await env.DB.prepare("SELECT actor, params FROM audit_log WHERE action = 'job-breaker-reset'").first<{ actor: string; params: string }>();
     expect(audit?.actor).toBe("access:admin@example.com");
-    expect(JSON.parse(must(audit).params)).toMatchObject({ was_open: true, failed: 3, threshold: 3 });
+    expect(JSON.parse(audit!.params)).toMatchObject({ was_open: true, failed: 3, threshold: 3 });
     const state = await breakerState(jobsEnv(), "capsid", later);
     expect(state).toMatchObject({ open: false, failed: 0 });
     expect((await claimJob(jobsEnv(), driver, later, { namespace: "capsid" })).ok).toBe(true);

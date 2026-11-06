@@ -33,7 +33,6 @@ import { performPolicyChange, performPolicyFromRepo } from "./policy-sign";
 import { planApproval, performApproval } from "./pr-approvals";
 import { runSiteRepair } from "./site-repair";
 import { auditStatement } from "./store-guards";
-import { must } from "./must";
 
 // A control's perform (src/controls.ts is the core): the one dispatch to the shared
 // mutators, run once a signed preview token is verified.
@@ -231,7 +230,7 @@ export async function performAction(
         if (!done.ok) return { ok: false, refusal: done.refusal };
         summary = done.summary;
         committed = true;
-        await auditClick(env, actor, source, surface, action, must((params.unit ?? "").split("/")[0]).trim() || null, { unit: params.unit, reason }, click);
+        await auditClick(env, actor, source, surface, action, (params.unit ?? "").split("/")[0]!.trim() || null, { unit: params.unit, reason }, click);
         break;
       }
       case "automerge_resume": {

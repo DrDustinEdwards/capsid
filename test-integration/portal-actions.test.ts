@@ -26,7 +26,6 @@ import { AUTO_MERGE_ALLOWED_PATHS, AUTO_MERGE_POLICY_PATH, AUTO_MERGE_REFUSED_PA
 import { policyPin, policyPinKey, signTaskBody, splitSignedTask } from "../src/signed-docs";
 import { LIFTED_KEY, SUSPENDED_KEY } from "../src/merge-units";
 import { LIFTED_KEY as SAFETY_LIFTED_KEY, PAUSED_KEY } from "../src/merge-safety";
-import { must } from "../src/must";
 
 // The Portal's controls through the whole Worker against a real D1 and KV: every action
 // previewed, checked to have written nothing, then performed from its token, and the
@@ -101,7 +100,7 @@ async function call(path: string, init: { method?: string; body?: unknown } = {}
     redirect: "manual",
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   });
-  const response = await must(worker.fetch).call(worker, request as never, workerEnv() as never, ctx);
+  const response = await worker.fetch!(request as never, workerEnv() as never, ctx);
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
@@ -113,7 +112,7 @@ async function jobsEnv() {
 async function postedJob(title: string): Promise<string> {
   const posted = await postJob(await jobsEnv(), grantAgent("write", "github:DrDustinEdwards"), NOW, { namespace: "capsid", title, body: "do the thing", gate_required: true });
   expect(posted.ok, posted.refusal).toBe(true);
-  return must(posted.job).id;
+  return posted.job!.id;
 }
 
 async function claimedJob(title: string, by = DRIVER): Promise<string> {
@@ -380,7 +379,7 @@ const CASES: Record<string, Case> = {
     },
     after: async () => {
       const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
-      const { signature, body } = splitSignedTask(must(row).body);
+      const { signature, body } = splitSignedTask(row!.body);
       expect(signature).toBeTruthy();
       expect(body).toMatch(/^- version: 8$/m);
       expect(body).toContain("- unit `capsid / tests`");
@@ -402,7 +401,7 @@ const CASES: Record<string, Case> = {
     },
     after: async () => {
       const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(AUTO_MERGE_POLICY_PATH).first<{ body: string }>();
-      const { signature, body } = splitSignedTask(must(row).body);
+      const { signature, body } = splitSignedTask(row!.body);
       expect(signature).toBeTruthy();
       expect(body).toBe(policyText("8"));
       const loaded = await loadMergePolicy(env as unknown as Env);
@@ -420,8 +419,8 @@ const CASES: Record<string, Case> = {
       return { unit: "capsid/docs", reason: "the cause is fixed" };
     },
     after: async () => {
-      expect(JSON.parse(must((await env.APP_KV.get(SUSPENDED_KEY))))).toEqual([]);
-      expect(Object.keys(JSON.parse(must((await env.APP_KV.get(LIFTED_KEY)))))).toEqual(["capsid/docs"]);
+      expect(JSON.parse((await env.APP_KV.get(SUSPENDED_KEY))!)).toEqual([]);
+      expect(Object.keys(JSON.parse((await env.APP_KV.get(LIFTED_KEY))!))).toEqual(["capsid/docs"]);
     },
   },
   automerge_resume: {
@@ -431,8 +430,8 @@ const CASES: Record<string, Case> = {
       return { namespace: "capsid", reason: "both are answered" };
     },
     after: async () => {
-      expect(JSON.parse(must((await env.APP_KV.get(PAUSED_KEY))))).toEqual({});
-      expect(Object.keys(JSON.parse(must((await env.APP_KV.get(SAFETY_LIFTED_KEY)))))).toEqual(["capsid"]);
+      expect(JSON.parse((await env.APP_KV.get(PAUSED_KEY))!)).toEqual({});
+      expect(Object.keys(JSON.parse((await env.APP_KV.get(SAFETY_LIFTED_KEY))!))).toEqual(["capsid"]);
     },
   },
   namespace_add: {
@@ -768,7 +767,7 @@ describe("the Portal's reads", () => {
     expect(body.namespaces.map((n) => n.namespace)).toEqual([...APP_ROSTER]);
     const status = await capsidStatus(workerEnv());
     for (const ns of status.namespaces) {
-      const served = must(body.namespaces.find((n) => n.namespace === ns.namespace));
+      const served = body.namespaces.find((n) => n.namespace === ns.namespace)!;
       expect(served.breaker.open).toBe(ns.breaker?.open ?? false);
       expect(served.jobs.queued).toBe(ns.jobs.queued);
     }
@@ -791,11 +790,11 @@ describe("the Portal's reads", () => {
     expect(all.rows.map((r) => r.path)).toEqual(["c.md", "b.md", "a.md"]);
 
     // The drawer's read: one row by id, with its detail and without its params.
-    const one = (await (await call(`${PORTAL_ACTIVITY_PATH}?id=${must(all.rows[1]).id}`)).json()) as PortalActivity;
-    expect(one.filter.id).toBe(must(all.rows[1]).id);
+    const one = (await (await call(`${PORTAL_ACTIVITY_PATH}?id=${all.rows[1]!.id}`)).json()) as PortalActivity;
+    expect(one.filter.id).toBe(all.rows[1]!.id);
     expect(one.rows.map((r) => r.path)).toEqual(["b.md"]);
-    expect(must(one.rows[0]).detail).toEqual({ reason: null, changes: null, fields: [], withheld: 0, unreadable: false });
-    expect(Object.keys(must(one.rows[0]))).not.toContain("params");
+    expect(one.rows[0]!.detail).toEqual({ reason: null, changes: null, fields: [], withheld: 0, unreadable: false });
+    expect(Object.keys(one.rows[0]!)).not.toContain("params");
   });
 
   it("an activity id that is not a row id is refused with 400, never read as no filter", async () => {

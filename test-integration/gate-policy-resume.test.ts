@@ -5,7 +5,6 @@ import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
 import { GATE_CLASSES, GATE_POLICY_PATH } from "../src/gate-policy";
 import { signTaskBody } from "../src/signed-docs";
-import { must } from "../src/must";
 
 // The gate policy's resume path, against a real D1. Every job is posted, claimed and
 // blocked through the real queue, the policy document is a real signed row, and every
@@ -63,7 +62,7 @@ async function blockedJob(command: string, claimant: Agent = driverAgent()): Pro
     gate_required: true,
   });
   expect(posted.ok, posted.refusal).toBe(true);
-  const id = must(posted.job).id;
+  const id = posted.job!.id;
   const claimed = await claimJob(jobsEnv(), claimant, at("2026-09-12T00:00:00.000Z"), { id });
   expect(claimed.ok, claimed.refusal).toBe(true);
   const blocked = await blockJob(jobsEnv(), claimant, at("2026-09-12T00:00:00.000Z"), id, { reason: "Finished up to the push.", command });

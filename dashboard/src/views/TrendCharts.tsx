@@ -14,7 +14,6 @@ import { useTrends } from "../lib/trends";
 import type { ClaimsAgreement, ClaimsGroup, ClaimsWaitRow, PortalPlan, PortalTrends, SiteSnapshot, TrendCiRepo } from "../types";
 import { errorTotals } from "../ui/charts";
 import { St } from "../ui/icons";
-import { must } from "../lib/must";
 
 // The Portal's charts drawn with Enarratio's primitives (docs/design/design-portal-evaluation.md
 // section 3; ruled 2026-10-09, DECIDE 6 and 7): 1 minutes of Dustin per week (Needs you),
@@ -84,7 +83,7 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
     height: 56 + 4 * 30,
     title: "How much of your time does Capsid take?",
     subtitle: `${now.minutes} min this week, ${change.text}`,
-    alt: `Your time on Capsid per week, ${must(weeks[0]).start} to ${now.start}: ${now.minutes} minutes this week, ${change.text}.`,
+    alt: `Your time on Capsid per week, ${weeks[0]!.start} to ${now.start}: ${now.minutes} minutes this week, ${change.text}.`,
     caption: `An estimate from what you did in Capsid: each stretch of actions with no gap over 5 minutes counts from its first action to its last, plus a minute. Reading the Portal without acting is not counted.${minutes.truncated ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Capsid audit log, your actions" },
   } as const;
@@ -148,7 +147,7 @@ export function WaitingChart() {
   if (!load.data) return <p className="faint wait-none">Where waiting goes could not be read: {load.error}</p>;
   const { rows, classes, shown, allHours } = waitRows(load.data.waits);
   if (!rows.length) return <p className="faint wait-none">No wait ended in the last 14 days.</p>;
-  const top = rows.filter((r) => r.gate === must(rows[0]).gate).reduce((a, r) => a + r.hours, 0);
+  const top = rows.filter((r) => r.gate === rows[0]!.gate).reduce((a, r) => a + r.hours, 0);
   const opts = {
     data: rows,
     x: "gate",
@@ -161,7 +160,7 @@ export function WaitingChart() {
     formatValue: hours,
     height: 56 + shown * 30,
     title: "Where does waiting go?",
-    alt: `Waiting that ended in the last 14 days, by what the job waited for and who answered: ${hours(allHours)} in all, ${hours(top)} of it at ${must(rows[0]).gate.toLowerCase()}.`,
+    alt: `Waiting that ended in the last 14 days, by what the job waited for and who answered: ${hours(allHours)} in all, ${hours(top)} of it at ${rows[0]!.gate.toLowerCase()}.`,
     caption: `Total time between a job stopping at a gate and the gate being answered, last 14 days${classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.${load.data.truncated.includes("waits") ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Claims aggregate, gate waits" },
   } as const;
@@ -179,8 +178,8 @@ export function QueueChart() {
   if (!data) return <p className="faint">The queue's last 14 days could not be read: {error}</p>;
   const days = data.queue;
   if (!days.length) return null;
-  const first = must(days[0]);
-  const last = must(days[days.length - 1]);
+  const first = days[0]!;
+  const last = days[days.length - 1]!;
   const posted = days.reduce((a, d) => a + d.posted, 0);
   const ended = days.reduce((a, d) => a + d.ended, 0);
   const net = posted - ended;
@@ -306,7 +305,7 @@ export function CostChart() {
   if (!data) return <p className="faint">Weekly cost could not be read: {error}</p>;
   const weeks = data.cost.weeks;
   if (!weeks.some((w) => w.usd !== null)) return <p className="faint">No model cost was recorded in these {weeks.length} weeks.</p>;
-  const now = must(weeks[weeks.length - 1]);
+  const now = weeks[weeks.length - 1]!;
   const opts = {
     data: weeks.map((w) => ({ week: w.start, usd: w.usd })),
     x: "week",
@@ -352,7 +351,7 @@ export function MergesChart() {
     seriesDomain: MERGE_KINDS.map((k) => MERGE_NAME[k]),
     layout: "stacked",
     // Labels are the ISO week without its year, so eight fit a phone's width.
-    xLabel: `ISO week, ${must(weeks[0]).week.slice(0, 4)} on`,
+    xLabel: `ISO week, ${weeks[0]!.week.slice(0, 4)} on`,
     yLabel: "Pull requests",
     height: 240,
     title: "How much merges with no human, and is that rising?",
@@ -441,12 +440,12 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
   if (!e.length) return <ChartFrame noData={{ title, reason: "the analytics read returned no hours" }} />;
   const rates = e.map((x) => (x.requests ? (x.errors / x.requests) * 100 : 0));
   const peak = Math.max(...rates);
-  const t0 = ms(must(e[0]).hour);
-  const t1 = ms(must(e[e.length - 1]).hour) + HOUR;
+  const t0 = ms(e[0]!.hour);
+  const t1 = ms(e[e.length - 1]!.hour) + HOUR;
   const inWindow = cf.deploys.filter((d) => ms(d.created_on) >= t0 && ms(d.created_on) <= t1);
   const tot = errorTotals(e);
   const opts = {
-    data: e.map((x, i) => ({ hour: new Date(ms(x.hour)).toISOString(), rate: Math.round(must(rates[i]) * 100) / 100 })),
+    data: e.map((x, i) => ({ hour: new Date(ms(x.hour)).toISOString(), rate: Math.round(rates[i]! * 100) / 100 })),
     x: "hour",
     y: "rate",
     xLabel: null,
@@ -610,7 +609,7 @@ function ciValues(r: TrendCiRepo): (number | null)[] {
 
 function redStreak(r: TrendCiRepo): number {
   let n = 0;
-  for (let i = r.days.length - 1; i >= 0 && must(r.days[i]).state === "red"; i--) n++;
+  for (let i = r.days.length - 1; i >= 0 && r.days[i]!.state === "red"; i--) n++;
   return n;
 }
 

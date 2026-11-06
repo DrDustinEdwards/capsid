@@ -18,7 +18,6 @@ import { readAccessAppNames } from "../src/ops-cloudflare.ts";
 import { npmVersions } from "../src/ops-packages.ts";
 import type { StoredSecrets } from "../src/secret-presence.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
-import { must } from "../src/must.ts";
 
 // Dustin's manual steps as tracked items (improvement list item 14): the "check:" forms, the
 // state each read gives a step, and how a job whose steps are all seen is settled in the
@@ -178,7 +177,7 @@ test("the watcher's step reads every blocked job naming a step and rewrites the 
     prepare: (q: string) => (sql.push(q), { bind: () => ({ all: async () => ({ results: rows }) }) }),
   };
   const report = await checkManualSteps(fakeEnv({ DB: db, APP_KV: kv.kv }), new Date(READ_AT), readers());
-  assert.match(must(sql[0]), /status = 'blocked' AND result_summary LIKE '%check:%'/);
+  assert.match(sql[0]!, /status = 'blocked' AND result_summary LIKE '%check:%'/);
   const cache = parseStepCache(kv.store.get(STALE_STEPS_KEY) ?? null).cache;
   assert.deepEqual(Object.keys(cache).sort(), ["job_a", "job_b", "job_d"], "a job no longer naming a step drops out");
   assert.deepEqual(cache.job_a, { seen: 2, unseen: 0, unread: 0, at: READ_AT });
