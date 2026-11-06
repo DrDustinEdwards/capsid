@@ -137,7 +137,7 @@ function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
  * /health in the family shape: site-runtime's healthResponse (status pass, warn or fail,
  * a check list, no-store, noindex), so the ops audit and every monitor read Capsid as they
  * read the other sites. The store is the fail level, as before: D1 and the FTS probe, so
- * a Worker bound to the wrong database is a 503. The backup, MEDIA, APP_KV, OAUTH_KV and the task
+ * a Worker bound to the wrong database is a 503. The backup, MEDIA, AUDIT_BUCKET, APP_KV, OAUTH_KV and the task
  * ledger warn. The fields the deploy gate and rollback read (sha, dirty, builtAt,
  * schema_version, store) are kept beside the family fields. The watcher still probes
  * itself in-process through healthReport.
@@ -156,13 +156,18 @@ export async function handleHealth(env: Env): Promise<Response> {
     taskCheck(env),
   ];
   if (env.MEDIA) checks.push({ ...r2Check("media", env.MEDIA), level: "warn" });
+  // The tool-call log's copies (area 8, H5): one head of a fixed key, a class B read. Warn,
+  // like MEDIA: the daily copy retries on its next run, and tool-call-log below warns when
+  // rows go uncopied for two days.
+  if (env.AUDIT_BUCKET) checks.push({ ...r2Check("audit_bucket", env.AUDIT_BUCKET), level: "warn" });
   if (env.APP_KV) checks.push({ ...kvCheck("app_kv", env.APP_KV), level: "warn" });
   if (env.OAUTH_KV) checks.push({ ...kvCheck("oauth_kv", env.OAUTH_KV), level: "warn" });
   // The two Durable Objects (area 8, H5), warn: a bound namespace mints an id, and no
   // object is woken. Without RATE_LIMITER the limited routes refuse, and without
   // TOOL_CALL_LOG a tool call goes unlogged; the store still answers, so neither is a 503.
   // Left out: AI_SEARCH, because every read of it is a billed query and the hybrid search
-  // falls back to FTS5 without it; ASSETS, because the Portal's files are the deploy's own.
+  // falls back to FTS5 without it; AI, because every call is billed inference
+  // (.ops-audit.json names it unprobed); ASSETS, because the Portal's files are the deploy's own.
   checks.push(durableObjectCheck("rate_limiter", env.RATE_LIMITER), durableObjectCheck("tool_call_log", env.TOOL_CALL_LOG));
   // What is in the log (area 11, L8), warn: a call started and never finished, a spike in
   // calls, or rows not copied to AUDIT_BUCKET for two days.

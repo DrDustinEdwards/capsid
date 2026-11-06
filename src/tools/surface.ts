@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z, type ZodType } from "zod";
-import { hintsFor } from "../tool-annotations";
+import { READ_ACTIONS } from "../scope";
+import { hintsFor, READ_VIEW_HINTS } from "../tool-annotations";
 import { type OperationResult, type Operations, type Shape } from "./operations";
 import { toolOutput } from "./outputs";
 
@@ -104,15 +105,16 @@ function describe(ops: Operations, spec: CompositeSpec): string {
 // buildServer supplies the hints, so each literal call names its own.
 function compositeConfig(ops: Operations, spec: CompositeSpec) {
   for (const a of Object.values(spec.actions)) if (!ops.has(a.op)) throw new Error(`${spec.name}: no operation '${a.op}'`);
-  // Passthrough, so an argument no action of the tool takes reaches compositeHandler and
-  // is refused there, rather than stripped by the SDK before anyone sees it.
+  // Closed (additionalProperties: false; area 11, T4), so an argument no action of the
+  // tool takes is refused by the SDK, never stripped; one another action takes is
+  // refused by compositeHandler, which names what this action takes.
   const namespaceActions = Object.entries(spec.actions)
     .filter(([, a]) => Object.hasOwn(ops.config(a.op).inputSchema, "namespace") && !(a.inject && Object.hasOwn(a.inject, "namespace")) && (!a.fields || a.fields.includes("namespace")))
     .map(([name]) => name);
   return {
     title: spec.title,
     description: describe(ops, spec),
-    inputSchema: z.object(mergedShape(ops, spec)).passthrough(),
+    inputSchema: z.strictObject(mergedShape(ops, spec)),
     outputSchema: toolOutput(Object.values(spec.actions).map((a) => a.op)),
     annotations: hintsFor(spec.name),
     namespaceActions,
@@ -138,10 +140,43 @@ function compositeHandler(ops: Operations, spec: CompositeSpec) {
   };
 }
 
-// A tool that is one operation, served under its own schema.
+// A tool that is one operation, served under its own schema, closed (area 11, T4) so an
+// argument it does not take is refused rather than stripped.
 function singleConfig(ops: Operations, name: string, title: string, op: string, summary?: string) {
   const config = ops.config(op);
-  return { title, description: summary ? `${summary}\n\n${config.description}` : config.description, inputSchema: config.inputSchema, outputSchema: toolOutput([op]), annotations: hintsFor(name) };
+  return { title, description: summary ? `${summary}\n\n${config.description}` : config.description, inputSchema: z.strictObject(config.inputSchema), outputSchema: toolOutput([op]), annotations: hintsFor(name) };
+}
+
+// What a caller holding only the read grant is served of a tool whose action decides its
+// grant (TOOL_GRANTS "action"): the argument that picks the action, narrowed to the
+// actions that only read (READ_ACTIONS in src/scope.ts), and the arguments those take.
+// The same tool and handler, so no new tool: the caller could never run the other actions
+// (the handler refuses them for want of the write grant), and now cannot ask for them, so
+// the tool it lists is read-only in fact and is annotated so (area 11, T7).
+const READ_VIEWS: Record<string, { key: string; fields: readonly string[] }> = {
+  capsid_work_jobs: { key: "action", fields: ["namespace", "status", "view", "stale", "since", "id"] },
+  capsid_lint_namespace: { key: "mode", fields: ["namespace"] },
+};
+
+function readViewConfig(ops: Operations, name: string, title: string, op: string) {
+  const view = READ_VIEWS[name];
+  const actions = READ_ACTIONS[name];
+  const full = ops.config(op).inputSchema;
+  const own = full[view.key];
+  // Worded as checkScope words a grant refusal, since that is what it is.
+  const choice = z
+    .enum(actions, { error: `'${name}' requires the write grant for any ${view.key} but ${actions.join(", ")}.` })
+    .describe(actions.join(" | ") + ". This caller holds the read grant, so only the actions that read are served.");
+  const shape: Shape = { [view.key]: optional(own) ? choice.optional() : choice };
+  for (const field of view.fields) shape[field] = full[field];
+  const config = ops.config(op);
+  return {
+    title,
+    description: `Served to this caller, which holds the read grant, with ${view.key} ${actions.join(", ")} only; the rest need the write grant.\n\n${config.description}`,
+    inputSchema: z.strictObject(shape),
+    outputSchema: toolOutput([op]),
+    annotations: READ_VIEW_HINTS[name],
+  };
 }
 
 function singleHandler(ops: Operations, name: string, op: string) {
@@ -345,17 +380,19 @@ export const CAPSID_ADMIN_TOOLS = [
   "capsid_admin_set_site_key",
 ] as const;
 
-export function registerCapsidTools(server: McpServer, ops: Operations): void {
+// `readOnly`: the caller holds the read grant and not write, so the tools whose action
+// decides their grant are served as their read view (READ_VIEWS).
+export function registerCapsidTools(server: McpServer, ops: Operations, readOnly: boolean): void {
   server.registerTool("capsid_start_session", singleConfig(ops, "capsid_start_session", "Start a session", "brief"), singleHandler(ops, "capsid_start_session", "brief"));
   server.registerTool("capsid_find_docs", compositeConfig(ops, FIND_DOCS), compositeHandler(ops, FIND_DOCS));
   server.registerTool("capsid_read_doc", compositeConfig(ops, READ_DOC), compositeHandler(ops, READ_DOC));
   server.registerTool("capsid_write_doc", compositeConfig(ops, WRITE_DOC), compositeHandler(ops, WRITE_DOC));
   server.registerTool("capsid_delete_doc", singleConfig(ops, "capsid_delete_doc", "Delete a document", "delete", "Delete one document. Its body is snapshotted to document_versions and its edges are recorded first. Needs the write grant."), singleHandler(ops, "capsid_delete_doc", "delete"));
-  server.registerTool("capsid_lint_namespace", singleConfig(ops, "capsid_lint_namespace", "Lint a namespace", "lint"), singleHandler(ops, "capsid_lint_namespace", "lint"));
+  server.registerTool("capsid_lint_namespace", readOnly ? readViewConfig(ops, "capsid_lint_namespace", "Lint a namespace", "lint") : singleConfig(ops, "capsid_lint_namespace", "Lint a namespace", "lint"), singleHandler(ops, "capsid_lint_namespace", "lint"));
   server.registerTool("capsid_read_repo", compositeConfig(ops, READ_REPO), compositeHandler(ops, READ_REPO));
   server.registerTool("capsid_inspect_repo", compositeConfig(ops, INSPECT_REPO), compositeHandler(ops, INSPECT_REPO));
   server.registerTool("capsid_close_pr", compositeConfig(ops, CLOSE_PR), compositeHandler(ops, CLOSE_PR));
-  server.registerTool("capsid_work_jobs", singleConfig(ops, "capsid_work_jobs", "Work the job queue", "jobs"), singleHandler(ops, "capsid_work_jobs", "jobs"));
+  server.registerTool("capsid_work_jobs", readOnly ? readViewConfig(ops, "capsid_work_jobs", "Work the job queue", "jobs") : singleConfig(ops, "capsid_work_jobs", "Work the job queue", "jobs"), singleHandler(ops, "capsid_work_jobs", "jobs"));
   server.registerTool("capsid_run_improve", compositeConfig(ops, RUN_IMPROVE), compositeHandler(ops, RUN_IMPROVE));
 }
 

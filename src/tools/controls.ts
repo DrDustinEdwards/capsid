@@ -7,7 +7,6 @@ import type { PortalAction } from "../ops-types/portal";
 import { fail, ok, type ToolCtx } from "./docs";
 
 const MAX_PARAM = 1024;
-const MAX_KEY = 64;
 const MAX_TOKEN = 4096;
 const ACCESS_PREFIX = "access:";
 
@@ -31,8 +30,10 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
           .enum(PORTAL_ACTIONS as unknown as [PortalAction, ...PortalAction[]])
           .optional()
           .describe("For preview: the control to preview."),
+        // Closed (area 11, T4): every param some control takes, each a string. Which of
+        // them this control takes is checked by previewControl, which names them.
         params: z
-          .record(bounded(MAX_KEY), bounded(MAX_PARAM))
+          .strictObject(Object.fromEntries([...new Set(CONTROLS.flatMap((c) => c.fields))].sort().map((field) => [field, bounded(MAX_PARAM).optional()])))
           .optional()
           .describe(`For preview: the control's params, each a string (list says which). A reason is at most ${MAX_TITLE} characters.`),
         token: bounded(MAX_TOKEN).optional().describe("For perform: the token the preview returned. Nothing else is read."),

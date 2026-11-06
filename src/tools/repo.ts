@@ -20,7 +20,7 @@ import {
   repoRefs,
   searchCode,
 } from "../github";
-import { bounded, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, MAX_CI_NAME, MAX_PATH, MAX_QUERY, MAX_REF, MAX_REPO_SELECTOR, MAX_SCAN_CAP, MAX_SHA, nsName } from "../limits";
+import { bounded, DEFAULT_SCAN_FILES, DEFAULT_SCAN_RESULTS, gitSha, isoDay, MAX_CI_NAME, MAX_PATH, MAX_QUERY, MAX_REF, MAX_SCAN_CAP, nsName, repoSelector } from "../limits";
 import { fail, ok, type ToolCtx } from "./docs";
 import { tagRelease } from "../github/releases";
 import { siteCheck } from "../site-check";
@@ -80,7 +80,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     "list_repo_tree",
     {
       description: "List a directory in a namespace's GitHub repo. Omit path for the repo root. Live GitHub, briefly cached.",
-      inputSchema: { namespace: nsName, path: bounded(MAX_PATH).optional(), ref: bounded(MAX_REF).optional(), repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
+      inputSchema: { namespace: nsName, path: bounded(MAX_PATH).optional(), ref: bounded(MAX_REF).optional(), repo: repoSelector.optional().describe(REPO_ARG) },
     },
     ({ namespace, path, ref, repo }) => guardedRead("list_repo_tree", namespace, repo, () => listRepoTree(env, namespace, path ?? "", ref, repo))
   );
@@ -98,7 +98,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
           .optional()
           .describe(`Up to ${REPO_BATCH_MAX_FILES} paths, read independently. Alternative to path, not combinable with it.`),
         ref: bounded(MAX_REF).optional(),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+        repo: repoSelector.optional().describe(REPO_ARG),
       },
     },
     ({ namespace, path, paths, ref, repo }) =>
@@ -124,7 +124,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
         max_results: z.number().int().positive().optional().describe(`Cap on returned matches (default ${DEFAULT_SCAN_RESULTS}, max ${MAX_SCAN_CAP}).`),
         max_files: z.number().int().positive().optional().describe(`Cap on files fetched and scanned (default ${DEFAULT_SCAN_FILES}, max ${MAX_SCAN_CAP}). Each file costs one GitHub request; resume a wider sweep with start.`),
         start: z.number().int().nonnegative().optional().describe("Candidate-file offset to resume a truncated scan; pass the previous result's next_start."),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+        repo: repoSelector.optional().describe(REPO_ARG),
       },
     },
     ({ query, namespace, path_prefix, ref, max_results, max_files, start, repo }) =>
@@ -150,10 +150,10 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
         number: z.number().int().positive(),
         action: z.enum(["merge", "close"]),
         merge_method: z.enum(["merge", "squash", "rebase"]).optional(),
-        sha: bounded(MAX_SHA)
+        sha: gitSha
           .optional()
           .describe("For action 'merge': the full head sha you reviewed; the merge is refused if the head moved. Refused for the other actions."),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+        repo: repoSelector.optional().describe(REPO_ARG),
         approved_in: bounded(MAX_APPROVAL_LINK)
           .optional()
           .describe(
@@ -208,7 +208,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       description: `Recent CI workflow runs for a namespace's repo (name, head sha, status, conclusion, timestamps). Optional ref narrows to one branch or head sha; optional run_id returns just that run. For the most recent failed run it also returns the failing jobs and steps and, for a write-grant caller, the failing step's log, up to ${CI_LOG_BUDGET} bytes from its end, with log_region naming the region returned. With run_id, jobs: true returns every job of that run (latest attempt, at most ${CI_JOBS_MAX}) with its steps, conclusions and times, for any run, failed or not; job (a name or id) returns that one job; job with step (a name or number) also returns that step's log, cut to the step by timestamp and capped at ${CI_LOG_BUDGET} bytes from its end. Logs have secrets replaced by [REDACTED:<kind>], counted in log_redactions. A read-only caller gets a note that the log was withheld. REFUSES: a run_id that does not exist on the repo, jobs or job without run_id, step without job, jobs together with job, and a job or step name that is missing or that two entries share.`,
       inputSchema: {
         namespace: nsName,
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+        repo: repoSelector.optional().describe(REPO_ARG),
         limit: z.number().int().positive().optional().describe("How many recent runs to return (default 10, max 20)."),
         ref: bounded(MAX_REF)
           .optional()
@@ -248,7 +248,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
     {
       description:
         "What is in flight in a namespace's repo, in one call: branches (name, head sha, last commit date, ahead/behind the default branch, and the open PR number if the branch has one), tags, and open pull requests. Sets truncated:true when any of the three lists hit its 100-item page. Live GitHub, briefly cached.",
-      inputSchema: { namespace: nsName, repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG) },
+      inputSchema: { namespace: nsName, repo: repoSelector.optional().describe(REPO_ARG) },
     },
     ({ namespace, repo }) => guardedRead("repo_refs", namespace, repo, () => repoRefs(env, namespace, repo))
   );
@@ -262,7 +262,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
         ref: bounded(MAX_REF).optional().describe("Commits on this branch, tag or sha."),
         base: bounded(MAX_REF).optional().describe("Comparison base. Requires head."),
         head: bounded(MAX_REF).optional().describe("Comparison head. Requires base."),
-        sha: bounded(MAX_SHA).optional().describe("One commit, in full."),
+        sha: gitSha.optional().describe("One commit, in full."),
         limit: z
           .number()
           .int()
@@ -270,7 +270,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
           .optional()
           .describe(`How many commits (default ${REPO_HISTORY_DEFAULT_LIMIT}, max ${REPO_HISTORY_MAX_LIMIT}).`),
         patch: z.boolean().optional().describe("Include patch bodies, budgeted. Off by default."),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+        repo: repoSelector.optional().describe(REPO_ARG),
       },
     },
     ({ namespace, ref, base, head, sha, limit, patch, repo }) =>
@@ -292,7 +292,7 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
         merged: z.boolean().optional().describe("Prune the merged branches instead of deleting one: a preview unless confirm is true."),
         confirm: z.boolean().optional().describe("With merged: actually delete the branches the preview lists. Without it nothing is deleted."),
         keep: z.array(bounded(MAX_REF)).max(100).optional().describe("With merged: branch names to leave alone this call even if they would be pruned."),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+        repo: repoSelector.optional().describe(REPO_ARG),
       },
     },
     ({ namespace, branch, force, merged, confirm, keep, repo }) => {
@@ -315,11 +315,11 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       inputSchema: {
         namespace: nsName,
         tag: bounded(64).describe("The version to tag, such as v1.4.0 or 1.4.0-rc.1."),
-        sha: bounded(MAX_SHA).optional().describe("The full commit sha to tag. Not combinable with ref."),
+        sha: gitSha.optional().describe("The full commit sha to tag. Not combinable with ref."),
         ref: bounded(MAX_REF).optional().describe("A branch whose head is tagged. Defaults to the default branch."),
         changelog: bounded(MAX_PATH).optional().describe("The CHANGELOG path for a release's notes. Defaults to CHANGELOG.md."),
         publish_release: z.boolean().describe("Set by the action: true for release, false for tag."),
-        repo: bounded(MAX_REPO_SELECTOR).optional().describe(REPO_ARG),
+        repo: repoSelector.optional().describe(REPO_ARG),
       },
     },
     ({ namespace, tag, sha, ref, changelog, publish_release, repo }) =>
@@ -360,14 +360,14 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       inputSchema: {
         namespace: nsName,
         report: z.enum(SEARCH_REPORTS).optional().describe("performance | inspect | sitemaps. Defaults to performance."),
-        start_date: bounded(10).optional().describe("performance: first day, YYYY-MM-DD. Defaults to 27 days before end_date."),
-        end_date: bounded(10).optional().describe("performance: last day, YYYY-MM-DD. Defaults to 3 days ago."),
+        start_date: isoDay.optional().describe("performance: first day, YYYY-MM-DD. Defaults to 27 days before end_date."),
+        end_date: isoDay.optional().describe("performance: last day, YYYY-MM-DD. Defaults to 3 days ago."),
         dimensions: z.array(z.enum(SEARCH_DIMENSIONS)).min(1).max(3).optional().describe("performance: what to group by, in order. Defaults to [query]."),
         search_type: z.enum(SEARCH_TYPES).optional().describe("performance: which Google results. Defaults to web."),
         query_contains: bounded(200).optional().describe("performance: only queries containing this text."),
         page_contains: bounded(200).optional().describe("performance: only pages whose URL contains this text."),
         row_limit: z.number().int().min(1).max(MAX_ROW_LIMIT).optional().describe(`performance: rows to return, 1 to ${MAX_ROW_LIMIT}. Defaults to 25.`),
-        url: bounded(2048).optional().describe("inspect: the page to inspect, a whole https address on the site."),
+        url: bounded(2048).regex(/^https:\/\//, "an https address").optional().describe("inspect: the page to inspect, a whole https address on the site."),
       },
     },
     async ({ namespace, ...args }) => {
@@ -387,10 +387,10 @@ export function defineRepoOperations(server: McpServer, ctx: ToolCtx): void {
       inputSchema: {
         namespace: nsName,
         report: z.enum(BING_REPORTS).optional().describe("queries | pages | traffic | inspect | sitemaps | crawl_issues. Defaults to queries."),
-        start_date: bounded(10).optional().describe("queries, pages, traffic: first day, YYYY-MM-DD. Defaults to 27 days before end_date."),
-        end_date: bounded(10).optional().describe("queries, pages, traffic: last day, YYYY-MM-DD. Defaults to 3 days ago."),
+        start_date: isoDay.optional().describe("queries, pages, traffic: first day, YYYY-MM-DD. Defaults to 27 days before end_date."),
+        end_date: isoDay.optional().describe("queries, pages, traffic: last day, YYYY-MM-DD. Defaults to 3 days ago."),
         row_limit: z.number().int().min(1).max(MAX_BING_ROWS).optional().describe(`queries, pages, crawl_issues: rows to return, 1 to ${MAX_BING_ROWS}. Defaults to 25.`),
-        url: bounded(2048).optional().describe("inspect: the page to inspect, a whole https address on the site."),
+        url: bounded(2048).regex(/^https:\/\//, "an https address").optional().describe("inspect: the page to inspect, a whole https address on the site."),
       },
     },
     async ({ namespace, ...args }) => {

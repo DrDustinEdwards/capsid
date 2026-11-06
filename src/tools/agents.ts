@@ -26,7 +26,7 @@ export function defineAgentOperations(server: McpServer, ctx: ToolCtx): void {
         archived: z.boolean().optional().describe("For list: true returns the archived agents instead of the live table."),
         kind: bounded(MAX_DOC_TYPE).optional().describe(`For mint: ${AGENT_KINDS.join(" | ")}. Grants nothing by itself.`),
         namespaces: z
-          .array(nsName)
+          .array(z.union([nsName, z.literal("*")]))
           .optional()
           .describe('For mint (required) and update_scopes: the namespaces this agent may reach, or the single entry "*" for every one.'),
         repos: z
@@ -38,7 +38,7 @@ export function defineAgentOperations(server: McpServer, ctx: ToolCtx): void {
         tools: z.array(bounded(64)).optional().describe('Tool names this agent may call, or the single entry "*". Defaults to every tool its grant allows. An entry "tool.action" (for example "capsid_work_jobs.post") narrows that tool to the actions named.'),
         grants: z.array(z.enum(AGENT_GRANTS)).optional().describe(`read, or read and write. A new agent gets read.`),
         flags: z
-          .object(Object.fromEntries(SCOPE_FLAGS.map((flag) => [flag, z.boolean().optional()])))
+          .strictObject(Object.fromEntries(SCOPE_FLAGS.map((flag) => [flag, z.boolean().optional()])))
           .optional()
           .describe(`${SCOPE_FLAGS.join(", ")}. An absent flag is left unchanged. Each defaults to false at mint.`),
       },

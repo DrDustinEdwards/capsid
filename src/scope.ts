@@ -127,8 +127,9 @@ export const SCOPES = mcpScopes("capsid");
 
 // For an "action" tool, the actions that only read; every other action writes. The
 // handlers split the same way where the namespace is known (src/tools/jobs.ts list,
-// src/tools/lint.ts gather).
-const READ_ACTIONS: Record<string, readonly string[]> = {
+// src/tools/lint.ts gather), and a caller holding only the read grant is served the tool
+// with these actions alone (src/tools/surface.ts READ_VIEWS; area 11, T7).
+export const READ_ACTIONS: Record<string, readonly [string, ...string[]]> = {
   capsid_work_jobs: ["list"],
   capsid_lint_namespace: ["gather"],
 };
