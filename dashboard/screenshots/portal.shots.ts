@@ -88,7 +88,7 @@ test("a control's preview open, light", async ({ page }) => {
   await page.getByRole("button", { name: "Mark failed", exact: true }).click();
   const dialog = page.locator("dialog.confirm");
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Reason (required)").pressSequentially("maintenance window");
+  await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("maintenance window");
   await dialog.getByRole("button", { name: "Preview" }).click();
   // The rows it changes are behind Details (e2e/confirm.spec.ts); the shot opens them.
   await dialog.getByText("Details", { exact: true }).click();

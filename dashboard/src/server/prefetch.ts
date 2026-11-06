@@ -84,7 +84,12 @@ function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, d
       const tab = p.get("tab");
       if (tab === "sync") out.push({ key: ["convergence"], path: "/convergence" });
       if (tab === "setup") out.push({ key: ["convergence"], path: "/convergence" }, { key: ["resources"], path: "/resources" });
-      if (tab === "traffic" && site === "capsid") out.push({ key: ["not-found"], path: "/not-found" });
+      const ns = qs({ namespace: site });
+      if (tab === "deploys") out.push({ key: ["workers-builds", site], path: `/workers-builds${ns}` });
+      if (tab === "traffic") {
+        out.push({ key: ["site-search", site], path: `/site-search${ns}` }, { key: ["site-traffic", site], path: `/site-traffic${ns}` });
+        if (site === "capsid") out.push({ key: ["not-found"], path: "/not-found" });
+      }
       break;
     }
     case "projects":

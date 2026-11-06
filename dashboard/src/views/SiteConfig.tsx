@@ -59,7 +59,7 @@ function paramsOf(d: Draft): Record<string, string> {
   return p;
 }
 
-function Field({ id, label, note, children }: { id: string; label: string; note?: string; children: ReactNode }) {
+export function Field({ id, label, note, children }: { id: string; label: string; note?: string; children: ReactNode }) {
   return (
     <div className="f">
       <label htmlFor={id} className="section-title">

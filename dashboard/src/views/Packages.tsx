@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { useApp } from "../app/ctx";
 import { fetchPackageHistory, useAnswer } from "../lib/api";
 import { ago, fmtN, ms } from "../lib/format";
@@ -10,9 +10,13 @@ import { Panel } from "capsomer/react/panel";
 import { areaChart } from "enarratio/lite/area";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { useDemo } from "../lib/router";
-import { Completeness } from "./Completeness";
-import { SharedCode } from "./SharedCode";
-import { PackageForm, type PackageEditing } from "./PackageConfig";
+import type { PackageEditing } from "./PackageConfig";
+
+// The Shared code and Completeness tabs load when opened, and the add and edit form the first
+// time it opens, so Published's first paint carries neither.
+const SharedCode = lazy(() => import("./SharedCode").then((m) => ({ default: m.SharedCode })));
+const Completeness = lazy(() => import("./Completeness").then((m) => ({ default: m.Completeness })));
+const PackageForm = lazy(() => import("./PackageConfig").then((m) => ({ default: m.PackageForm })));
 import { PACKAGE_TABS, tabOf } from "../app/ctx";
 import { NoSnapshot, PageHead } from "./shared";
 
@@ -272,7 +276,17 @@ export function Packages() {
       <PageHead title="Packages" />
       <PageTabs label="Packages" path="/packages" tabs={PACKAGE_TABS} current={tab} />
       <div className="embedded" id={tab}>
-        {tab === "shared" ? <SharedCode /> : tab === "complete" ? <Completeness /> : <Published />}
+        {tab === "shared" ? (
+          <Suspense fallback={null}>
+            <SharedCode />
+          </Suspense>
+        ) : tab === "complete" ? (
+          <Suspense fallback={null}>
+            <Completeness />
+          </Suspense>
+        ) : (
+          <Published />
+        )}
       </div>
     </div>
   );
@@ -292,7 +306,11 @@ function Published() {
           Add package
         </button>
       </div>
-      {editing && <PackageForm key={formKey} editing={editing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <Suspense fallback={null}>
+          <PackageForm key={formKey} editing={editing} onClose={() => setEditing(null)} />
+        </Suspense>
+      )}
       {!rows.length && <div className="callout" role="status">No package is configured yet. Add one to watch its versions, downloads and dependents.</div>}
       {rows.length > 0 && !feed.snapshot && <NoSnapshot />}
       {rows.map((cfg) => (

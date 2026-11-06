@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Empty } from "capsomer/react/empty";
 import { PageHead } from "capsomer/react/page-head";
 import "capsomer/page-head.css";
-import "capsomer/breadcrumb.css";
 import { Panel } from "capsomer/react/panel";
 import { ChartFrame } from "capsomer/react/chart-frame";
 import "capsomer/chart-frame.css";
@@ -20,16 +19,19 @@ import { uptimeOptions } from "../ui/charts";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { trendChart } from "./charts";
 import { Convergence, SiteSecrets } from "./Convergence";
-import { NotFound } from "./NotFound";
-import { SiteForm } from "./SiteConfig";
-import { Uptime90 } from "./Sites";
+// The settings form loads the first time Edit is pressed, so the page's first paint does not carry it.
+const SiteForm = lazy(() => import("./SiteConfig").then((m) => ({ default: m.SiteForm })));
+import { Uptime90 } from "./Uptime90";
 import { SiteWorkers } from "./Workers";
+import { SearchAndTraffic, SiteBuilds } from "./SiteTraffic";
 
 // ONE SITE'S OWN PAGE (the Portal audit's new map, 2026-11-06), /sites/<namespace>: what was
 // spread over Health's Sites and Deploys tabs, the site drawer, Settings' sites list and
 // Packages' Workers tab, in one place. Overview: its probe, uptime and errors. Deploys: what
-// Cloudflare recorded. Search and traffic. Sync and repairs: its operator API, where it opted in.
-// Setup: its row (Edit, Remove), its Worker secrets and what its Workers bind. The tab is in the
+// Cloudflare recorded, and its Workers Builds with their logs. Search and traffic: Search
+// Console, Bing and Cloudflare's edge (views/SiteTraffic.tsx). Sync and repairs: its operator
+// API, where it opted in. Setup: its row (Edit, Remove), its Worker secrets, its operator key
+// (Rotate) and what its Workers bind. The tab is in the
 // address (?tab=), so Back, a bookmark and an alert reach it.
 
 // Chart 9 (error rate with deploy markers) is an Enarratio line chart, in the charts' lazy chunk.
@@ -43,16 +45,10 @@ export function SitePage() {
   const row = feed.live.sites.find((s) => s.namespace === ns) ?? null;
   const snap = feed.snapshot?.sites.find((s) => s.namespace === ns) ?? null;
   const name = row?.name ?? snap?.name ?? ns;
-  const crumbs = [{ label: "Sites", href: "/sites" }, { label: name }];
-  const renderLink = ({ href, className, children }: { href: string; className: string; children: React.ReactNode }) => (
-    <Link href={href} className={className}>
-      {children}
-    </Link>
-  );
   if (!row && !snap) {
     return (
       <div className="page">
-        <PageHead crumbs={crumbs} renderLink={renderLink} title={name} />
+        <PageHead title={name} />
         <Empty kind="no-match" title="No site has this name." action={<Link className="btn" href="/sites">All sites</Link>}>
           No site is configured for the project {ns}. It may have been removed.
         </Empty>
@@ -64,8 +60,6 @@ export function SitePage() {
   return (
     <div className="page">
       <PageHead
-        crumbs={crumbs}
-        renderLink={renderLink}
         title={name}
         lead={
           <span className="site-lead">
@@ -86,9 +80,12 @@ export function SitePage() {
         {tab === "overview" ? (
           <Overview ns={ns} snap={snap} />
         ) : tab === "deploys" ? (
-          <Deploys snap={snap} />
+          <>
+            <Deploys snap={snap} />
+            <SiteBuilds ns={ns} />
+          </>
         ) : tab === "traffic" ? (
-          <Traffic ns={ns} />
+          <SearchAndTraffic ns={ns} />
         ) : tab === "sync" ? (
           <Convergence ns={ns} />
         ) : (
@@ -232,22 +229,20 @@ function Deploys({ snap }: { snap: SiteSnapshot | null }) {
   );
 }
 
-// ---- Search and traffic --------------------------------------------------------------------
-
-function Traffic({ ns }: { ns: string }) {
-  return ns === "capsid" ? <NotFound /> : <Empty kind="nothing-yet" title="No search or traffic read yet." />;
-}
-
 // ---- Setup ---------------------------------------------------------------------------------
 
 function Setup({ ns, row, snap }: { ns: string; row: OpsSiteConfig | null; snap: SiteSnapshot | null }) {
-  const { feed, now } = useApp();
+  const { feed, now, confirm } = useApp();
   const [editing, setEditing] = useState(false);
   const none = <span className="faint">none</span>;
   const at = row ? msSql(row.updated_at) : NaN;
   return (
     <>
-      {editing && row && <SiteForm key={`edit:${row.namespace}`} editing={{ kind: "edit", row }} onClose={() => setEditing(false)} />}
+      {editing && row && (
+        <Suspense fallback={null}>
+          <SiteForm key={`edit:${row.namespace}`} editing={{ kind: "edit", row }} onClose={() => setEditing(false)} />
+        </Suspense>
+      )}
       <Panel
         flush
         title="Settings"
@@ -295,6 +290,16 @@ function Setup({ ns, row, snap }: { ns: string; row: OpsSiteConfig | null; snap:
         )}
       </Panel>
       {row?.operator && <SiteSecrets ns={ns} />}
+      {row?.operator && (
+        <Panel title="Operator key" id="operator-key" src="the key Carrel and the admin tools call the site's operator API with">
+          <div className="toolbar">
+            <button type="button" className="btn" aria-label={`Rotate the operator key of ${row.name}`} onClick={() => confirm({ action: "site_key_rotate", params: { namespace: ns }, title: `Rotate the operator key of ${row.name}` })}>
+              Rotate key
+            </button>
+            <span className="faint note">A new key is minted and set on the site's Worker, then on Carrel. It is never shown.</span>
+          </div>
+        </Panel>
+      )}
       <SiteWorkers scripts={siteScripts(feed, ns)} />
     </>
   );

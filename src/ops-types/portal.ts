@@ -164,6 +164,9 @@ export interface PortalNamespace {
   // Null means no truth report was ever run, which is not an integrity of zero.
   latest_report: { integrity: number | null; generated: string } | null;
   jobs: { queued: number; claimed: number; blocked: number; done_today: number };
+  // The repo mapping the repo tools resolve through, as stored (one entry labeled primary).
+  // Empty when the namespace has no row in the namespaces table or its row does not parse.
+  repos: Array<{ repo: string; label: string }>;
 }
 
 export interface PortalNamespaces {

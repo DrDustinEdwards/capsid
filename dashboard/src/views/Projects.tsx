@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
@@ -8,11 +9,13 @@ import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
 import "capsomer/button.css";
 import { PageHead } from "./shared";
+import { ProjectForm, type ProjectEditing } from "./ProjectConfig";
 
 // PROJECTS (the Portal audit's new map, 2026-11-06; out of Settings): each project's driver,
 // its jobs and the integrity of its latest truth report. A project paused after repeated
 // failures (the queue's circuit breaker, src/job-breaker.ts) is reset one way, so the reset
-// keeps its preview and confirm; Needs you offers the same Reset.
+// keeps its preview and confirm; Needs you offers the same Reset. Add project, and each row's
+// Edit, open the form that registers, remaps or deletes a project (views/ProjectConfig.tsx).
 
 function Driver({ ns }: { ns: string }) {
   const { feed, now } = useApp();
@@ -40,7 +43,7 @@ function Report({ n }: { n: PortalNamespace }) {
   );
 }
 
-function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
+function Row({ n, onChanged, onEdit }: { n: PortalNamespace; onChanged: () => void; onEdit: () => void }) {
   const { confirm } = useApp();
   return (
     <tr data-row="">
@@ -57,6 +60,18 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
           </>
         )}
       </td>
+      <td data-label="Repos">
+        {n.repos.length ? (
+          n.repos.map((r) => (
+            <div key={r.repo}>
+              <span className="mono">{r.repo}</span>
+              {r.label !== "primary" && <span className="faint"> {r.label}</span>}
+            </div>
+          ))
+        ) : (
+          <St kind="nodata">None mapped</St>
+        )}
+      </td>
       <td data-label="Driver">
         <Driver ns={n.namespace} />
       </td>
@@ -70,11 +85,16 @@ function Row({ n, onChanged }: { n: PortalNamespace; onChanged: () => void }) {
         <Report n={n} />
       </td>
       <td className="ctl">
-        {n.breaker.open && (
-          <button type="button" className="btn" aria-label={`Reset ${n.namespace}`} onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Reset ${n.namespace} and hand out its jobs again`, onDone: onChanged })}>
-            Reset
+        <div className="toolbar col">
+          <button type="button" className="btn" aria-label={`Edit ${n.namespace}`} onClick={onEdit}>
+            Edit
           </button>
-        )}
+          {n.breaker.open && (
+            <button type="button" className="btn" aria-label={`Reset ${n.namespace}`} onClick={() => confirm({ action: "reset_breaker", params: { namespace: n.namespace }, title: `Reset ${n.namespace} and hand out its jobs again`, onDone: onChanged })}>
+              Reset
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -87,8 +107,18 @@ function Roster() {
   const load = useAnswer<PortalNamespaces>([LIVE, "namespaces"], fetchNamespaces);
   const read = load.reread;
   const data = load.data;
+  const [editing, setEditing] = useState<ProjectEditing | null>(null);
+  // The form is keyed on what it edits, so switching rows starts a fresh draft.
+  const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.n.namespace}`) : "";
+  const close = () => (setEditing(null), read());
   return (
     <>
+      <div className="toolbar">
+        <button type="button" className="btn primary" onClick={() => setEditing({ kind: "add" })} disabled={editing?.kind === "add"}>
+          Add project
+        </button>
+      </div>
+      {editing && <ProjectForm key={formKey} editing={editing} onClose={close} />}
       {load.error && (
         <div className="callout crit" role="alert">
           Could not read the projects: {load.error}
@@ -119,6 +149,7 @@ function Roster() {
               <thead>
                 <tr>
                   <th>Project</th>
+                  <th>Repos</th>
                   <th>Driver</th>
                   <th>Jobs</th>
                   <th>Integrity</th>
@@ -129,7 +160,7 @@ function Roster() {
               </thead>
               <tbody>
                 {data.namespaces.map((n) => (
-                  <Row key={n.namespace} n={n} onChanged={read} />
+                  <Row key={n.namespace} n={n} onChanged={read} onEdit={() => setEditing({ kind: "edit", n })} />
                 ))}
               </tbody>
             </table>

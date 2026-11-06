@@ -971,12 +971,12 @@ function plan(f: OpsFeed, st: MockState, action: PortalAction, params: Record<st
       const ns = need(params, "namespace", "The namespace");
       const site = st.sites.find((s) => s.namespace === ns);
       if (!site || site.platform !== "cloudflare" || !site.script) throw new Refusal(400, `no key was minted: ${ns}'s site row names no Cloudflare Worker script, so there is no site Worker to set it on.`);
-      const carrel = `SITE_${ns.toUpperCase().replace(/-/g, "_")}_KEY`;
+      const deskSecret = `SITE_${ns.toUpperCase().replace(/-/g, "_")}_KEY`;
       return {
-        summary: `Mint a new operator key for ${ns}'s site API and set it on the site's Worker, then on Carrel.`,
-        done: `Rotated ${ns}'s site key: set on ${site.script} and on carrel-desk. The value is not shown anywhere.`,
+        summary: `Mint a new operator key for ${ns}'s site API and set it on the site's Worker, then on the writing desk.`,
+        done: `Rotated ${ns}'s site key: set on ${site.script} and on sample-desk. The value is not shown anywhere.`,
         changes: [
-          `Mint a new key and set it as CARREL_SITE_KEY on the Worker ${site.script}, then as ${carrel} on carrel-desk, through the Cloudflare API.`,
+          `Mint a new key and set it as SAMPLE_SITE_KEY on the Worker ${site.script}, then as ${deskSecret} on sample-desk, through the Cloudflare API.`,
           "The value is never shown, logged or written to an audit row: the row names each side's script and secret and whether it was set.",
         ],
         apply: () => {},
@@ -1295,6 +1295,7 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
     latest_report: null,
     jobs: { queued: 0, claimed: 0, blocked: 0, done_today: 0 },
     breaker: { open: false, failed: 0, threshold: 3, since: "", reset_at: null },
+    repos: [],
   };
   const since = new Date(now - 24 * H).toISOString().slice(0, 19).replace("T", " ");
   const breaker = (ns: string): PortalNamespace["breaker"] =>
@@ -1303,10 +1304,13 @@ function namespaces(f: OpsFeed, st: MockState): PortalNamespaces {
       : { open: false, failed: 0, threshold: 3, since, reset_at: st.breakerReset.has(ns) ? new Date(now).toISOString() : null };
   return {
     generated: new Date(now).toISOString(),
-    namespaces: f.live.namespaces.map((n) => {
+    // The roster as the mock holds it: the fixture's projects less any deleted, then any added.
+    namespaces: [...new Set([...f.live.namespaces.map((n) => n.name), ...st.projects.keys()])].filter((name) => projectRepos(st, name) !== null).map((name) => {
+      const n = { name };
       const js = f.live.jobs.filter((j) => j.namespace === n.name);
       const count = (s: OpsJob["status"]) => js.filter((j) => j.status === s).length;
-      return { ...empty, ...detail[n.name], namespace: n.name, breaker: breaker(n.name), jobs: { queued: count("queued"), claimed: count("claimed"), blocked: count("blocked"), done_today: count("done") } };
+      const repos = JSON.parse(projectRepos(st, n.name) ?? "[]") as PortalNamespace["repos"];
+      return { ...empty, ...detail[n.name], namespace: n.name, breaker: breaker(n.name), repos, jobs: { queued: count("queued"), claimed: count("claimed"), blocked: count("blocked"), done_today: count("done") } };
     }),
   };
 }
