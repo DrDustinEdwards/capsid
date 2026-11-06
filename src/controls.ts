@@ -71,6 +71,10 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Remove the package ${params.name ?? ""} from the Portal. The watcher stops reading it; its weekly rows are kept.`;
     case "site_repair":
       return `Run ${params.tool ?? ""} on ${ns} through its operator API. It re-derives one of the site's stores from its source and reports whether it converged. Capsid calls only the site's allowlisted repairs; it never merges and never mints.`;
+    case "site_backup":
+      return params.namespace
+        ? `Back up ${params.namespace}'s files now: run its files backup passes through its operator API, the same passes as its nightly cron. Copy only: it writes under files/ in the site's backups bucket and nothing else.`
+        : "Back up every site's files now: run each site's files backup passes through its operator API, at once, the same passes as their nightly crons. Copy only: each writes under files/ in its site's backups bucket and nothing else.";
     case "sign_policy_change":
       return params.change === "demote"
         ? `Write and sign the next version of the auto-merge policy without the merge unit ${params.unit ?? ""}: its pull requests wait for an approval again.`
@@ -114,6 +118,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   package_edit: ["name", "revision", "repo", "formerly"],
   package_remove: ["name", "revision"],
   site_repair: ["namespace", "tool"],
+  site_backup: ["namespace"],
   sign_policy_change: ["change", "unit", "confirm", "reason"],
   // The hash its preview read is bound into the token (Plan.bind), so a caller cannot send one.
   sign_policy_from_repo: ["confirm", "reason"],

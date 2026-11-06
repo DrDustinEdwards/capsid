@@ -3,4 +3,5 @@ import { Projects } from "../views/Projects";
 
 export const loader = viewLoader("projects");
 export const clientLoader = browserLoader;
-export default viewPage(Projects);
+const ProjectsPage = viewPage(Projects);
+export default ProjectsPage;

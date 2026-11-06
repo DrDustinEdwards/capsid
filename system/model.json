@@ -101,7 +101,7 @@
       "description": "Dustin's personal site.",
       "domain": "dustinedwards.info",
       "repos": ["DrDustinEdwards/dustinedwards-info"],
-      "workers": ["dustinedwards", "dustinedwards-watchdog"]
+      "workers": ["dustinedwards"]
     },
     {
       "id": "txasm",
@@ -349,12 +349,12 @@
       "description": "The posts and pages, with every saved version."
     },
     {
-      "id": "website-watchdog",
+      "id": "website-cron",
       "system": "dustinedwards-info",
-      "name": "Watchdog",
+      "name": "Scheduled jobs",
       "kind": "cron",
-      "technology": "Second Worker on a 15-minute cron",
-      "description": "Reads the site's /api/health over a service binding, runs the repair plan and the nightly D1 dump through the operator API, and emails an alert when the state changes."
+      "technology": "Workers cron trigger",
+      "description": "Every minute, due Carrel schedules; every fifteen minutes, the colophon's health snapshot; daily, the zero-result purge, the publication check that mails each new DOI once, and the nightly D1 and media backups."
     },
     {
       "id": "website-kv",
@@ -362,7 +362,7 @@
       "name": "APP_KV",
       "kind": "kv",
       "technology": "Workers KV",
-      "description": "The health snapshot, the drift cache, the Ask cache, the watchdog's alert state and other site state."
+      "description": "The health snapshot, the drift cache, the Ask cache, the DOIs already mailed and other site state."
     },
     {
       "id": "website-media",
@@ -477,20 +477,12 @@
       "description": "The pages a webmention names. The verifier fetches each one."
     },
     {
-      "id": "website-cf-analytics",
-      "system": "dustinedwards-info",
-      "name": "Cloudflare Analytics",
-      "kind": "external",
-      "technology": "GraphQL Analytics API",
-      "description": "The Worker's error rate, which the watchdog reads."
-    },
-    {
       "id": "website-email",
       "system": "dustinedwards-info",
       "name": "Alert email",
       "kind": "external",
       "technology": "Workers send_email binding",
-      "description": "Where the watchdog sends an alert when the site's state changes."
+      "description": "Where the daily publication check mails a new DOI."
     },
     {
       "id": "admin-mcp-worker",
@@ -1391,12 +1383,10 @@
     { "from": "website-worker", "to": "website-openalex", "kind": "reads" },
     { "from": "website-media", "to": "website-media-events", "kind": "writes" },
     { "from": "website-github", "to": "website-worker", "kind": "deploys" },
-    { "from": "website-github", "to": "website-watchdog", "kind": "deploys" },
-    { "from": "website-watchdog", "to": "website-worker", "kind": "watches" },
-    { "from": "website-watchdog", "to": "website-worker", "kind": "writes" },
-    { "from": "website-watchdog", "to": "website-kv", "kind": "writes" },
-    { "from": "website-watchdog", "to": "website-cf-analytics", "kind": "reads" },
-    { "from": "website-watchdog", "to": "website-email", "kind": "writes" },
+    { "from": "website-cron", "to": "website-kv", "kind": "writes" },
+    { "from": "website-cron", "to": "website-db", "kind": "writes" },
+    { "from": "website-cron", "to": "website-backups", "kind": "writes" },
+    { "from": "website-cron", "to": "website-email", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-oauth-kv", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-probe-kv", "kind": "writes" },
     { "from": "admin-mcp-worker", "to": "admin-mcp-rate-limit", "kind": "writes" },

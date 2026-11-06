@@ -209,7 +209,8 @@ An installation requires a Cloudflare account and a GitHub App. The procedure is
 | `npm run check` | Type-check the Worker. |
 | `npm test` | Unit tests. |
 | `npm run test:integration` | Integration tests in workerd. |
-| `npm run lint` | Lint checks, including documentation drift. |
+| `npm run lint` | The shared Oxlint config, type-aware (dashboard included). |
+| `npm run lint:repo` | The repository's own lints: dead exports and documentation drift. |
 | `npm run build:dashboard` | Build the Portal and enforce its size budget. |
 | `npm run test:browser` | Portal browser tests (Playwright). |
 | `npm --prefix dashboard run dev` | Serve the Portal locally against sample data. |

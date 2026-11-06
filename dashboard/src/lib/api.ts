@@ -1,7 +1,7 @@
 import { QueryCache, QueryClient, keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalNotFound, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMergeUnits, PortalSiteSearch, PortalSiteTraffic, PortalWorkersBuilds, PortalBuildLog, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView, ResourcesDoc } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalNotFound, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMergeUnits, PortalSiteSearch, PortalSiteTraffic, PortalWorkersBuilds, PortalBuildLog, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalBackups, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView, ResourcesDoc } from "../types";
 
 // Every URL under the Portal's base on this page (lib/base.ts): /api/... on
 // portal.dustinedwards.info, /demos/api/... on the chart demo.
@@ -29,6 +29,7 @@ const PLAN_URL = `${BASE}/api/plan`;
 const DIGEST_URL = `${BASE}/api/digest`;
 const MAINTENANCE_URL = `${BASE}/api/maintenance`;
 const CONVERGENCE_URL = `${BASE}/api/convergence`;
+const BACKUPS_URL = `${BASE}/api/backups`;
 const SIGN_OUT_URL = `${BASE}/api/sign-out`;
 const PUSH_URL = `${BASE}/api/push`;
 export const APP_URL = `${BASE}/`;
@@ -422,6 +423,11 @@ export function fetchMaintenance(): Promise<Answer<PortalMaintenance>> {
 // GET /portal/api/convergence: each site that opted into its operator API, read live.
 export function fetchConvergence(): Promise<Answer<PortalConvergence>> {
   return get<PortalConvergence>(CONVERGENCE_URL);
+}
+
+// GET /portal/api/backups: every site's backup_status read live, beside its Amazon copy.
+export function fetchBackups(): Promise<Answer<PortalBackups>> {
+  return get<PortalBackups>(BACKUPS_URL);
 }
 
 // GET /portal/api/claims?job=<id>: one job's claims, evaluations and touches. A job

@@ -29,8 +29,10 @@ export const COMPLETE_MARKER = "_complete.json";
 export const SIDECARS = ["_kv.json"];
 export const OPTIONAL_SIDECARS = ["_schema.json", "_holdout-manifests.json"];
 
-// Parsed dump JSON, whose shape is what this checks.
-type Json = any;
+// Parsed dump JSON, whose shape is what this checks: a file's fields are unknown until a check has read them, and a
+// row's columns are the ones the checks below name.
+type Json = { [field: string]: unknown };
+type Row = { id: number; namespace: string; path: string; document_id: number; action: string; updated_at?: unknown; [column: string]: unknown };
 
 function fail(reason: string): never {
   const err = Object.assign(new Error(reason), { invariant: true });
@@ -40,13 +42,13 @@ function fail(reason: string): never {
 function readJson(dumpDir: string, file: string): Json {
   try {
     const bytes = readFileSync(join(dumpDir, file));
-    return JSON.parse((file.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8"));
+    return JSON.parse((file.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8")) as Json;
   } catch (e) {
     fail(`${file} does not parse as JSON: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
-function checkSidecar(dumpDir: string, file: string, field: string, valueOk: (v: Json) => boolean): void {
+function checkSidecar(dumpDir: string, file: string, field: string, valueOk: (v: unknown) => boolean): void {
   const parsed = readJson(dumpDir, file);
   const inner = parsed?.[field];
   if (!inner || typeof inner !== "object" || Array.isArray(inner)) fail(`${file} carries no '${field}' object`);
@@ -86,9 +88,9 @@ export function checkDump(dumpDir: string): DumpSummary {
   if (missing.length > 0) fail(`the dump is missing sidecars: ${missing.join(", ")}`);
   if (unknown.length > 0) fail(`the dump carries sidecars nothing verifies: ${unknown.join(", ")}`);
   // Present is not enough: `{}` exists too.
-  checkSidecar(dumpDir, "_kv.json", "keys", (v) => v === null || typeof v === "string" || (typeof v === "object" && !Array.isArray(v) && typeof v.unreadable === "string"));
+  checkSidecar(dumpDir, "_kv.json", "keys", (v) => v === null || typeof v === "string" || (typeof v === "object" && !Array.isArray(v) && typeof (v as { unreadable?: unknown }).unreadable === "string"));
 
-  const tables: Record<string, Json[]> = {};
+  const tables: Record<string, Row[]> = {};
   let rows = 0;
   for (const file of files.filter((f) => !f.startsWith("_"))) {
     const name = file.replace(/\.json(\.gz)?$/, "");
@@ -98,7 +100,7 @@ export function checkDump(dumpDir: string): DumpSummary {
     // src/backup.ts dumps SELECT *, so every row of a table has the same keys, null
     // columns included.
     const expected = parsed.rows.length > 0 ? Object.keys(parsed.rows[0]).sort().join(",") : "";
-    parsed.rows.forEach((row: Json, i: number) => {
+    parsed.rows.forEach((row: Row | null, i: number) => {
       const keys = Object.keys(row ?? {}).sort().join(",");
       if (keys !== expected) fail(`${file} row ${i} does not carry the columns of row 0 (${keys} against ${expected})`);
     });

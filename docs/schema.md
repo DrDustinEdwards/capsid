@@ -492,7 +492,8 @@ each carrying the row before and after as `params`, then the click row
 only in that audit row and the nightly dump. Its `operator` column (migrations/0035) is
 a site's opt-in to Capsid calling its operator API (docs/portal.md, "Site repairs");
 each call is audited as `site-repair` under the caller (`agent:watcher` or
-`access:<email>`) with the tool and the site's verdict, never the token.
+`access:<email>`) with the tool and the site's verdict, never the token, and each backup
+from Capsid Admin's backups as `site-backup` (docs/portal.md, "Site backups").
 
 `record` is the agent record. It is a different measurement from the counts
 beside it. The flat `prs_opened` and `prs_merged` count what this credential did

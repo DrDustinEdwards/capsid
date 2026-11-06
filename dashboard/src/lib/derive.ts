@@ -85,7 +85,10 @@ export function uptime(ring: string): number | null {
   let up = 0;
   let seen = 0;
   for (const c of ring) {
-    if (c === "1") (up++, seen++);
+    if (c === "1") {
+      up++;
+      seen++;
+    }
     else if (c === "0") seen++;
   }
   return seen ? up / seen : null;

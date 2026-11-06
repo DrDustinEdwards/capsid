@@ -1,3 +1,4 @@
+import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
@@ -8,8 +9,8 @@ import { failingCheckNames } from "./health-format";
 import { healthUrl } from "./ops-sites";
 import { callSignal } from "./call-signal";
 
-// THE WATCHER'S SITE REPAIRS (job_09e5f6cbf782), so a site's own watchdog Worker can be
-// retired later. On each watcher pass, for every site with a health route (ops_sites.health_path):
+// THE WATCHER'S SITE REPAIRS (job_09e5f6cbf782), the one watcher for every site: dustinedwards.info's own
+// watchdog Worker was retired on 2026-11-06 once this covered it. On each watcher pass, for every site with a health route (ops_sites.health_path):
 //   1. Read its health route. Healthy (200, ok, and no alert named in `alerts`): nothing to do.
 //   2. Unhealthy: the failing checks' names, alert checks included. A site with no operator
 //      API is reported as it is. One that opted in (ops_sites.operator) is repaired only when
@@ -18,7 +19,8 @@ import { callSignal } from "./call-signal";
 //      nothing is repaired and it is reported. An alert (site-runtime's `alert: true`, such as
 //      auth-spike) maps to no repair, so it is always reported.
 //   3. Each repair through runSiteRepair (src/site-repair.ts): allowlisted, rate-limited,
-//      audit-logged and one task_runs row each. Then the health is read again.
+//      audit-logged and one task_runs row each. Then the health is read again, and when
+//      every repair converged, up to three more times thirty seconds apart.
 //   4. Still unhealthy, or a repair failed: one finding, site-health-<namespace>, which the
 //      Portal shows under Incidents and which clears when a pass finds the site healthy.
 //   5. Its weekly tools (refresh_citations) once every WEEK_MS, where it opted in.
@@ -34,6 +36,12 @@ const WEEK_MS = 7 * DAY_MS;
 const WEEKLY_PREFIX = "site-weekly:";
 const ALERT_PREFIX = "site-alert:";
 const TEXT_MAX = 300;
+// The settle after a converged repair: three re-reads thirty seconds apart.
+const SETTLE_POLLS = 3;
+const SETTLE_MS = 30_000;
+
+export type Sleep = (ms: number) => Promise<unknown>;
+const realSleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** A finding, in the watcher's terms, without importing the watcher (it imports this). */
 interface SiteFinding {
@@ -96,7 +104,7 @@ export function repairPlan(failing: string[], operator: SiteOperator): { tools: 
 const repairLine = (tool: string, o: RepairOutcome) => (o.ran ? o.line : `${tool} was not run: ${o.refusal}`);
 
 /** One site, one pass. */
-async function watchSite(env: Env, site: OpsSiteConfig & { origin: string }, actor: string, fetchImpl: FetchLike, now: Date): Promise<{ finding: SiteFinding | null; read: boolean; lines: string[]; weekly: SiteFinding[] }> {
+async function watchSite(env: Env, site: OpsSiteConfig & { origin: string }, actor: string, fetchImpl: FetchLike, now: Date, sleep: Sleep): Promise<{ finding: SiteFinding | null; read: boolean; lines: string[]; weekly: SiteFinding[] }> {
   const lines: string[] = [];
   const weekly: SiteFinding[] = [];
   const target = site.operator ? { origin: site.origin, operator: site.operator } : null;
@@ -148,7 +156,15 @@ async function watchSite(env: Env, site: OpsSiteConfig & { origin: string }, act
       lines.push(`${site.namespace}: ${line}`);
       if (!outcome.ran || !outcome.call.ok || outcome.call.converged === false) missed = true;
     }
-    const recheck = await readHealth(fetchImpl, url);
+    let recheck = await readHealth(fetchImpl, url);
+    // Every repair said it converged and the re-read still fails: a store the repair rewrote can list short
+    // for about a minute after (dustinedwards.info's Ask index read 157 then 155 after its own sync_ask), so
+    // it is re-read a few times before it is a finding and a mail. Waiting spends no CPU, and a cron
+    // invocation has fifteen minutes of wall time.
+    for (let poll = 0; !missed && recheck.status !== 0 && !healthy(recheck) && poll < SETTLE_POLLS; poll += 1) {
+      await sleep(SETTLE_MS);
+      recheck = await readHealth(fetchImpl, url);
+    }
     if (!missed && healthy(recheck)) return { finding: null, read: true, lines, weekly };
     evidence.push(
       recheck.status === 0
@@ -171,13 +187,13 @@ function headline(name: string, alerts: string[], repairable: boolean): string {
 }
 
 /** Every site with a health route or an operator API, one pass, then the red and green mail. */
-export async function watchSites(env: Env, config: readonly OpsSiteConfig[], actor: string, fetchImpl: FetchLike, now: Date): Promise<SiteWatchReport> {
+export async function watchSites(env: Env, config: readonly OpsSiteConfig[], actor: string, fetchImpl: FetchLike, now: Date, sleep: Sleep = realSleep): Promise<SiteWatchReport> {
   const findings: SiteFinding[] = [];
   const lines: string[] = [];
   let complete = true;
   for (const site of config) {
     if (!site.origin || (!site.operator && !site.health_path)) continue;
-    const r = await watchSite(env, site as OpsSiteConfig & { origin: string }, actor, fetchImpl, now);
+    const r = await watchSite(env, site as OpsSiteConfig & { origin: string }, actor, fetchImpl, now, sleep);
     findings.push(...r.weekly);
     lines.push(...r.lines);
     if (!r.read) {
@@ -213,21 +229,12 @@ async function mailOnChange(env: Env, namespace: string, name: string, finding: 
   const text = red
     ? [`Changed to unhealthy at ${now.toISOString()}. You will not be mailed again until it recovers.`, "", ...(finding?.evidence ?? []), "", "The finding is open in Capsid Portal, Incidents."].join("\n")
     : [`Healthy again at ${now.toISOString()}${before ? `, after being unhealthy since ${before.since}` : ""}.`].join("\n");
-  let note: string;
-  if (env.EMAIL && env.ALERT_EMAIL && env.ALERT_FROM) {
-    try {
-      await env.EMAIL.send({ from: env.ALERT_FROM, to: env.ALERT_EMAIL, subject, text });
-      note = `${namespace}: mailed "${subject}"`;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logEvent("SITE_ALERT_MAIL_FAILED", { message: `SITE_ALERT_MAIL_FAILED ${namespace}: ${message}` }, { level: "error" });
-      // The state stays, so the next pass sends it again.
-      return [`${namespace}: the "${subject}" mail did not send (${clip(message)}); it is retried next pass`];
-    }
-  } else {
-    note = `${namespace}: "${subject}" was not mailed: no send_email binding (EMAIL, ALERT_EMAIL, ALERT_FROM) is configured`;
-    logEvent("SITE_ALERT_NOT_MAILED", { message: note }, { level: "warn" });
-  }
+  const sent = await sendEmail(env.EMAIL, { from: env.ALERT_FROM ?? "", to: env.ALERT_EMAIL ?? "", subject, text });
+  // A refusal keeps the state, so the next pass sends it again; with nothing configured the change is recorded unmailed.
+  if (!sent.sent && sent.code !== "not_configured") return [`${namespace}: the "${subject}" mail did not send (${clip(sent.error)}); it is retried next pass`];
+  const note = sent.sent
+    ? `${namespace}: mailed "${subject}"`
+    : `${namespace}: "${subject}" was not mailed: no send_email binding (EMAIL, ALERT_EMAIL, ALERT_FROM) is configured`;
   await env.APP_KV.put(key, JSON.stringify({ red, since: now.toISOString() } satisfies AlertState));
   return [note];
 }

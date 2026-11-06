@@ -52,7 +52,7 @@ describe("the route tables are a statement about the Worker that serves them", (
     // digest, the Maintenance list, the convergence view, package
     // history, the completeness board, the 404 counts, the Workers' resources, the Library, the trends,
     // phone alerts, sign-out, the /portal/api/ fallback, the app and the app's files.
-    expect(portalRoutes.length, `Portal routes found: ${portalRoutes.join(", ")}`).toBe(29);
+    expect(portalRoutes.length, `Portal routes found: ${portalRoutes.join(", ")}`).toBe(30);
     for (const path of portalRoutes) {
       for (const method of ["GET", "POST"]) {
         const bearer = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual", headers: { Authorization: `Bearer ${DRIVER_KEY}` } });

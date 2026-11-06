@@ -8,6 +8,9 @@ import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
 import { NoSnapshot } from "./shared";
+import { Spinner } from "capsomer/react/empty";
+import { fetchBackups, useAnswer } from "../lib/api";
+import type { SiteBackupRow } from "../types";
 
 // Chart 10, the retention slots, from GET /portal/api/trends; Enarratio loads with it.
 const BackupSlots = trendChart("BackupSlots");
@@ -140,10 +143,118 @@ export function Backups() {
           </div>
         </Panel>
       </div>
+      <SiteBackups />
       <Suspense fallback={null}>
         <BackupSlots />
       </Suspense>
-      <p className="faint note">The primary panel is Capsid's own store. The Amazon panel is every site's off-account copy, each site's newest complete one, as capsid-backups last reported it.</p>
+      <p className="faint note">The primary panel is Capsid's own store. The sites panel is each site's own backups, read live through its operator API; Back up now runs the site's files passes, as its nightly cron does. The Amazon panel is every site's off-account copy, each site's newest complete one, as capsid-backups last reported it.</p>
     </div>
+  );
+}
+
+// Every site's own backups, read live (GET /portal/api/backups), and Back up now: the
+// site_backup control, previewed and performed like every control.
+function SiteBackups() {
+  const { now, confirm } = useApp();
+  const load = useAnswer(["backups"], fetchBackups);
+  const data = load.data;
+  const backUp = (namespace?: string) =>
+    confirm({ action: "site_backup", params: namespace ? { namespace } : {}, title: namespace ? `Back up ${namespace} now` : "Back up every site now", onDone: load.reread });
+  return (
+    <Panel
+      flush
+      title="Sites"
+      id="site-backups"
+      section="Site backups"
+      src={
+        <>
+          {data ? `read ${ago(ms(data.read_at), now)} · ` : ""}
+          <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
+            {load.loading ? "Reading..." : "Read again"}
+          </button>{" "}
+          <button type="button" className="btn" disabled={!data || data.sites.length === 0} onClick={() => backUp()}>
+            Back up every site now
+          </button>
+        </>
+      }
+    >
+      <div className="body stack-gap">
+        {load.error && (
+          <div className="callout crit" role="alert">
+            Could not read the sites' backups: {load.error}
+          </div>
+        )}
+        {!data ? (
+          !load.error && (
+            <div className="loading" role="status">
+              <Spinner label="Reading each site's backups..." />
+            </div>
+          )
+        ) : (
+          <>
+            {data.not_configured.length > 0 && (
+              <div className="callout">
+                Not checked from here yet (no <span className="mono">backup: true</span> in the operator configuration): {data.not_configured.join(", ")}.
+              </div>
+            )}
+            <table className="list">
+              <thead>
+                <tr>
+                  <th scope="col">Site</th>
+                  <th scope="col">Newest dump</th>
+                  <th scope="col">Files</th>
+                  <th scope="col">Amazon</th>
+                  <th scope="col">
+                    <span className="sr-only">Back up</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.sites.map((s) => (
+                  <SiteRow key={s.namespace} site={s} now={now} backUp={() => backUp(s.namespace)} />
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function Fresh({ at, warning, now }: { at: string | null | undefined; warning?: string; now: number }) {
+  if (!at) return <St kind="crit">None</St>;
+  return (
+    <>
+      {ago(ms(at), now)} {warning ? <St kind="crit">stale</St> : null}
+    </>
+  );
+}
+
+function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; backUp: () => void }) {
+  const st = site.status;
+  const files = Object.entries(st?.files ?? {});
+  return (
+    <tr data-site-backup={site.namespace}>
+      <th scope="row">{site.namespace}</th>
+      <td className="num">{st ? <Fresh at={st.last_ok} warning={st.warning && !files.some(([, f]) => f.warning === st.warning) ? st.warning : undefined} now={now} /> : <St kind="nodata">{site.error ?? "Not read"}</St>}</td>
+      <td>
+        {files.length === 0 ? (
+          <St kind="nodata">None reported</St>
+        ) : (
+          files.map(([name, f]) => (
+            <div key={name}>
+              <span className="mono">{name}</span> <Fresh at={f.last_ok} warning={f.warning} now={now} />
+            </div>
+          ))
+        )}
+      </td>
+      <td className="num">{site.amazon?.newest ? ago(ms(site.amazon.newest), now) : <St kind="nodata">No copy</St>}</td>
+      <td>
+        <button type="button" className="btn" onClick={backUp}>
+          Back up now
+        </button>
+      </td>
+    </tr>
   );
 }

@@ -3,8 +3,7 @@ import { test } from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { deleteBranch } from "../src/github.ts";
-import { fakeD1, fakeEnv, fakeKv, fakeR2, withFetch, type FakeD1Options } from "./fakes.ts";
-import { sourceFiles } from "./source-files.ts";
+import { fakeD1, fakeEnv, fakeKv, withFetch, type FakeD1Options } from "./fakes.ts";
 
 // Audit fixes, one block per finding. Harnesses are the shared ones: fakes.ts for
 // KV/D1/R2/fetch, source-files.ts for source-shape pins where a behavior cannot be
@@ -100,6 +99,7 @@ test("prompts/list passes titles through a character allowlist", async () => {
   await close();
   const description = String(result.prompts[0].description ?? "");
   assert.ok(!description.includes("`"), `a backtick from a stored title reached the client verbatim: ${JSON.stringify(description)}`);
+  // oxlint-disable-next-line no-control-regex -- asserting no control character reached the client is the point
   assert.ok(!/[\u0000-\u001f\u007f]/.test(description), "a control character from a stored title reached the client");
   assert.match(description, /Brief/, "the legible part of the title must survive the filter");
 });

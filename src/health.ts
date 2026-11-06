@@ -12,7 +12,7 @@ export const BACKUP_LAST_OK_KEY = "backup:last-ok";
 // Daily cron is 24h; 26h is that plus a 2h grace so one slow run does not warn.
 export const BACKUP_STALE_HOURS = 26;
 
-async function backupFreshness(
+export async function backupFreshness(
   env: Env
 ): Promise<{ last_ok: string | null; age_hours: number | null; warning?: string }> {
   let lastOk: string | null = null;

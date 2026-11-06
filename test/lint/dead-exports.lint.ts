@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { exportsOfSrc, sourceFiles } from "../source-files.ts";
 
-// The dead-export lint. Run by `npm run lint:dead-exports` (and `npm run lint`), in
+// The dead-export lint. Run by `npm run lint:dead-exports` (and `npm run lint:repo`), in
 // the checks job of .github/workflows/ci.yml; not part of `npm test`. It fails when
 // an export has no caller, which is a review prompt about the code as a whole rather
 // than a behavior of the Worker, so it runs beside the suite instead of inside it.

@@ -52,6 +52,7 @@ import type {
   PortalDigest,
   PortalMaintenance,
   PortalConvergence,
+  PortalBackups,
   ConvergenceSite,
   OpsStaleJob,
   PortalActivityRow,
@@ -68,7 +69,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "site_repair", "sign_policy_change", "sign_policy_from_repo", "unit_resume", "automerge_resume", "namespace_add", "namespace_edit", "namespace_remove", "site_key_rotate"];
+const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "site_repair", "site_backup", "sign_policy_change", "sign_policy_from_repo", "unit_resume", "automerge_resume", "namespace_add", "namespace_edit", "namespace_remove", "site_key_rotate"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["overnight"];
@@ -469,7 +470,7 @@ function validateSite(p: Record<string, string>): SiteFields {
   if (host !== host.toLowerCase()) throw new Refusal(400, `the hostname '${host}' must be lowercase.`);
   if (!host.includes(".")) throw new Refusal(400, `'${host}' is a single-label name; a site needs a public hostname such as example.com.`);
   if (p.platform !== "cloudflare" && p.platform !== "vercel") throw new Refusal(400, `the platform must be one of cloudflare, vercel; got '${p.platform ?? ""}'.`);
-  if (p.health_path && !/^\/[A-Za-z0-9._~\/-]{0,199}$/.test(p.health_path)) {
+  if (p.health_path && !/^\/[A-Za-z0-9._~/-]{0,199}$/.test(p.health_path)) {
     throw new Refusal(400, `the health path '${p.health_path}' must start with / and use only letters, digits and - . _ ~ /, at most 200 characters, with no query or fragment.`);
   }
   if (p.script) {
@@ -843,7 +844,7 @@ function plan(f: OpsFeed, st: MockState, action: PortalAction, params: Record<st
       const tool = need(params, "tool", "The tool");
       const site = f.live.sites.find((s) => s.namespace === ns);
       if (!site?.origin || !site.operator) throw new Refusal(400, `${ns} has no operator API configured, so Capsid may call nothing on it.`);
-      if (tool === "backup_media") throw new Refusal(400, "backup_media is not a repair Capsid may call: it copies the media bucket, and it stays with the site's own watchdog.");
+      if (tool === "backup_media" || tool === "backup_status") throw new Refusal(400, `${tool} is a backup, not a repair: Capsid Admin's backups call it on a site that sets backup: true.`);
       const allowed = [...new Set([...Object.values(site.operator.repairs), ...site.operator.weekly])];
       if (!allowed.includes(tool)) throw new Refusal(400, `${tool} is not in this site's allowlist (${allowed.join(", ")}).`);
       return {
@@ -854,6 +855,17 @@ function plan(f: OpsFeed, st: MockState, action: PortalAction, params: Record<st
           "The site re-derives that store from its source and reports a read-back verdict; the result is shown when it returns, up to a minute.",
         ],
         apply: (st) => void st.repairs.unshift({ namespace: ns, tool, at: now }),
+      };
+    }
+    case "site_backup": {
+      const ns = (params.namespace ?? "").trim();
+      const sites = f.live.sites.filter((s) => s.origin && s.operator?.backup && (!ns || s.namespace === ns));
+      if (sites.length === 0) throw new Refusal(400, ns ? `${ns} does not set backup: true in its operator configuration.` : "no site sets backup: true in its operator configuration, so there is nothing to back up.");
+      return {
+        summary: ns ? `Back up ${ns}'s files now.` : "Back up every site's files now.",
+        done: sites.map((s) => `${s.namespace}: backup_media ran: media complete (3 copied)`).join(". ") + ".",
+        changes: sites.map((s) => `${s.namespace}: POST ${s.origin}${s.operator!.path} with tool backup_media, authorized by ${s.operator!.auth_var}.`),
+        apply: () => undefined,
       };
     }
     // A signed change to the promoted units: the typed version must be the next one.
@@ -1187,6 +1199,22 @@ function digest(f: OpsFeed, since: string): PortalDigest {
     pull_requests_merged: prs.filter((p) => p.merged === true).length,
     totals: { telemetry: { ...none, jobs: 0 }, reported: { ...none, jobs: 0 }, jobs_without_usage: finished.length },
     truncated: [],
+  };
+}
+
+// GET /portal/api/backups: each site that sets backup: true, as the Worker would read it live.
+function backups(st: MockState): PortalBackups {
+  const now = mockNow();
+  const iso = (agoMs: number) => new Date(now - agoMs).toISOString();
+  const fresh = (agoMs: number) => ({ last_ok: iso(agoMs), age_hours: Math.round(agoMs / 360_000) / 10 });
+  return {
+    read_at: new Date(now).toISOString(),
+    capsid: { status: fresh(5 * 3_600_000), amazon: { newest: iso(9 * 3_600_000), bytes: 4_200_000 } },
+    sites: st.sites
+      .filter((s) => s.origin && s.operator?.backup)
+      .map((s) => ({ namespace: s.namespace, origin: s.origin!, status: { ...fresh(7 * 3_600_000), files: { media: fresh(7 * 3_600_000) } }, error: null, amazon: { newest: iso(9 * 3_600_000), bytes: 1_800_000 } })),
+    amazon_report_at: iso(2 * 3_600_000),
+    not_configured: [],
   };
 }
 
@@ -1624,7 +1652,7 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
   return (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname.startsWith("/api/") ? `/portal${url.pathname}` : url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/merge-units", "/portal/api/site-search", "/portal/api/site-traffic", "/portal/api/workers-builds", "/portal/api/build-log", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/not-found", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/merge-units", "/portal/api/site-search", "/portal/api/site-traffic", "/portal/api/workers-builds", "/portal/api/build-log", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/backups", "/portal/api/shared-code", "/portal/api/not-found", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1679,6 +1707,10 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
           const since = isoOrNull(url.searchParams.get("since"));
           if (since === "bad") return refuse(res, 400, "since must be an ISO 8601 time such as 2026-10-04 or 2026-10-04T22:00:00Z.");
           return send(res, 200, digest(feed(nextRefresh, st), since ?? new Date(mockNow() - 86_400_000).toISOString()));
+        }
+        if (path === "/portal/api/backups") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, backups(st));
         }
         if (path === "/portal/api/convergence") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });

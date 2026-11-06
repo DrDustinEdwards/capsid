@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
@@ -29,10 +29,13 @@ export function Activity() {
   const [nsInput, setNsInput] = useState(namespace);
   const [actorInput, setActorInput] = useState(actor);
 
-  useEffect(() => {
+  // The address changed (back, a link): the fields follow it. Adjusted while rendering, not in an effect.
+  const [seen, setSeen] = useState({ namespace, actor });
+  if (seen.namespace !== namespace || seen.actor !== actor) {
+    setSeen({ namespace, actor });
     setNsInput(namespace);
     setActorInput(actor);
-  }, [namespace, actor]);
+  }
 
   const load = useAnswer<PortalActivity>(["activity", namespace, actor], () => fetchActivity({ namespace, actor }));
 

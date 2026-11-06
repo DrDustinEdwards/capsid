@@ -183,6 +183,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   package_edit: "Save changes",
   package_remove: "Remove package",
   site_repair: (p) => `Run ${p.tool ?? "repair"}`,
+  site_backup: (p) => (p.namespace ? `Back up ${p.namespace} now` : "Back up every site now"),
   sign_policy_change: (p) => (p.change === "demote" ? "Sign without the unit" : "Sign and promote"),
   sign_policy_from_repo: "Load from repo and sign",
   unit_resume: "Lift suspension",
@@ -239,8 +240,14 @@ export function parseRoute(path: string): Route {
   let view: ViewId = "needs";
   let site: string | null = null;
   let i = 0;
-  if (isView(segs[0])) (view = segs[0]), (i = 1);
-  if (view === "sites" && segs[1] !== undefined) (site = segs[1]), (i = 2);
+  if (isView(segs[0])) {
+    view = segs[0];
+    i = 1;
+  }
+  if (view === "sites" && segs[1] !== undefined) {
+    site = segs[1];
+    i = 2;
+  }
   const type = segs[i] as DrawerType | undefined;
   const id = segs[i + 1];
   return { view, site, drawer: type && DRAWER_TYPES.includes(type) && id ? { type, id } : null };

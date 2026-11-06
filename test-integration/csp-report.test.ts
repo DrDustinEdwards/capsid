@@ -97,7 +97,7 @@ describe("a report the sink stored before 2026-10-20 is reaped by the backup cro
     ).run();
 
     const ctx = createExecutionContext();
-    await worker.scheduled?.({ cron: BACKUP_CRON, scheduledTime: Date.now(), noRetry() {} } as unknown as ScheduledController, env, ctx);
+    worker.scheduled?.({ cron: BACKUP_CRON, scheduledTime: Date.now(), noRetry() {} } as unknown as ScheduledController, env, ctx);
     await waitOnExecutionContext(ctx);
 
     const after = (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.map((o) => o.key);

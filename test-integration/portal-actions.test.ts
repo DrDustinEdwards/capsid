@@ -49,7 +49,7 @@ function workerEnv(): Env {
   return { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET, DUSTINEDWARDS_OPERATOR_TOKEN: OPERATOR_TOKEN, CF_SECRETS_TOKEN: "sample-secrets-token", CF_ACCOUNT_ID: CF_ACCOUNT } as Env;
 }
 
-// site_repair reaches the site's operator API through the global fetch, and pr_close
+// site_repair and site_backup reach the site's operator API through the global fetch, and pr_close
 // reaches GitHub. Only those routes are answered here; everything else goes on as before.
 const operatorCalls: Array<{ url: string; auth: string | null; body: string }> = [];
 const githubCalls: string[] = [];
@@ -83,6 +83,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (url !== "https://dustinedwards.info/api/operator") return passThrough(input, init);
   operatorCalls.push({ url, auth: new Headers(init?.headers).get("authorization"), body: String(init?.body) });
+  if ((JSON.parse(String(init?.body)) as { tool?: string }).tool === "backup_media") return Response.json({ ok: true, data: { files: [{ name: "images", complete: true, copied: 2 }] } });
   return Response.json({ ok: true, data: { repaired: 1, expected: 14, present: 14, converged: true } });
 }) as typeof fetch;
 
@@ -484,6 +485,21 @@ const CASES: Record<string, Case> = {
       for (const row of await auditRows()) expect(row.params, `${row.action} recorded the key`).not.toContain(secretPuts[0].text);
     },
   },
+  site_backup: {
+    params: async () => {
+      operatorCalls.length = 0;
+      await env.DB.prepare("UPDATE ops_sites SET operator = json_set(operator, '$.backup', json('true')) WHERE namespace = 'dustinedwards'").run();
+      return { namespace: "dustinedwards" };
+    },
+    after: async () => {
+      expect(operatorCalls.map((c) => [c.url, c.auth, JSON.parse(c.body)])).toEqual([["https://dustinedwards.info/api/operator", `Bearer ${OPERATOR_TOKEN}`, { tool: "backup_media", args: {} }]]);
+      const row = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'site-backup' ORDER BY id DESC LIMIT 1").first<{ params: string }>();
+      expect(JSON.parse(row?.params ?? "{}")).toMatchObject({ tool: "backup_media", via: "portal", ok: true });
+      expect(row?.params, "the token reached the audit row").not.toContain(OPERATOR_TOKEN);
+      const run = await env.DB.prepare("SELECT outcome, reason FROM task_runs WHERE task = 'site-backup' ORDER BY id DESC LIMIT 1").first<{ outcome: string; reason: string }>();
+      expect(run).toEqual({ outcome: "ok", reason: "dustinedwards: backup_media ran: images complete (2 copied) (portal)" });
+    },
+  },
   site_repair: {
     params: async () => {
       operatorCalls.length = 0;
@@ -501,9 +517,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-seven actions", () => {
+  it("covers the allow-list, twenty-eight actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(27);
+    expect(Object.keys(CASES).length).toBe(28);
   });
 
   for (const action of PORTAL_ACTIONS) {

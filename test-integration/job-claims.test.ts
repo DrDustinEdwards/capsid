@@ -53,7 +53,7 @@ async function jobRow(id: string) {
 function fakeGitHub() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (/\/repos\/example\/sample\/pulls\/3$/.test(url)) {
+    if (url.endsWith("/repos/example/sample/pulls/3")) {
       return Response.json({ merged: true, commits: 5, changed_files: 8, head: { sha: HEAD } });
     }
     if (/\/repos\/example\/sample\/actions\/runs/.test(url)) {

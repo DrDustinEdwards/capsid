@@ -26,7 +26,7 @@ async function ledger(task: string) {
 
 async function fire(cron: string) {
   const ctx = createExecutionContext();
-  await worker.scheduled?.(controller(cron), env, ctx);
+  worker.scheduled?.(controller(cron), env, ctx);
   await waitOnExecutionContext(ctx);
 }
 

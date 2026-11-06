@@ -180,7 +180,7 @@ function ReadNote({ doc }: { doc: ResourcesDoc }) {
 }
 
 /** The Workers a site owns: its own script, and every Worker its system lists beside it
- *  (system/model.json), such as a site's watchdog or desk. */
+ *  (system/model.json), such as a site's desk. */
 function ownedScripts(doc: ResourcesDoc, scripts: ReadonlyArray<string>): string[] {
   const systems = new Set(doc.workers.filter((w) => scripts.includes(w.script) && w.system).map((w) => w.system));
   return doc.workers.filter((w) => scripts.includes(w.script) || (w.system !== null && systems.has(w.system))).map((w) => w.script);

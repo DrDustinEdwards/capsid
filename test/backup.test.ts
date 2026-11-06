@@ -432,7 +432,7 @@ test("an audit row written after the snapshot batch is not in the dump", async (
   if (!result.ran) return;
 
   const dumped = dumpJson(r2, `${result.json_prefix}audit_log.json.gz`);
-  assert.deepEqual(dumped.rows.map((r: { id: number }) => r.id), [1, 2]);
+  assert.deepEqual(dumped.rows.map((r) => r.id), [1, 2]);
 });
 
 // the streamed table
@@ -472,7 +472,7 @@ test("the streamed versions dump pages past one page and keeps every row in id o
 
   const dumped = dumpJson(r2, `${result.json_prefix}document_versions.json.gz`);
   assert.deepEqual(
-    dumped.rows.map((r: { id: number }) => r.id),
+    dumped.rows.map((r) => r.id),
     Array.from({ length: 250 }, (_, i) => i + 1)
   );
 });
@@ -510,7 +510,7 @@ test("a version written after the snapshot batch is not in the dump", async () =
   if (!result.ran) return;
 
   const dumped = dumpJson(r2, `${result.json_prefix}document_versions.json.gz`);
-  assert.deepEqual(dumped.rows.map((r: { id: number }) => r.id), [1, 2]);
+  assert.deepEqual(dumped.rows.map((r) => r.id), [1, 2]);
 });
 
 test("a failed part aborts the multipart upload and fails the run", async () => {
@@ -572,7 +572,7 @@ test("an unreadable KV pin is recorded as unreadable, not as an unset null", asy
   assert.equal(result.ran, true);
   if (!result.ran) return;
 
-  const dumped = dumpJson(r2, `${result.json_prefix}_kv.json`) as { keys: Record<string, unknown> };
+  const dumped = dumpJson<{ keys: Record<string, unknown> }>(r2, `${result.json_prefix}_kv.json`);
   assert.deepEqual(dumped.keys["backup:last-ok"], { unreadable: "KV get timed out" });
 });
 

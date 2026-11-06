@@ -25,6 +25,7 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "package_edit",
   "package_remove",
   "site_repair",
+  "site_backup",
   "sign_policy_change",
   "sign_policy_from_repo",
   "unit_resume",

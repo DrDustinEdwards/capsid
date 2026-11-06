@@ -22,13 +22,16 @@ on:
       - "test/resolve-ts.mjs"
       - "package-lock.json"
       - ".github/workflows/explorer.yml"
-  # The explorer's own files only. A schema change reaches it at the next daily build: the
-  # live documents keep their old shape until the public build runs again after midnight UTC,
-  # so a deploy on that merge would parse yesterday's documents with today's schemas.
+  # The explorer's own files and the dependencies it installs from the root lock (site-runtime,
+  # Prelum, Capsomer), so a dependency bump ships the same day. A schema change reaches it at the
+  # next daily build: the live documents keep their old shape until the public build runs again
+  # after midnight UTC, so a deploy on that merge would parse yesterday's documents with today's
+  # schemas.
   push:
     branches: [master, main]
     paths:
       - "explorer/**"
+      - "package-lock.json"
       - ".github/workflows/explorer.yml"
   # Hours after the public build, which runs on the first tick of each UTC day (src/public-data.ts).
   schedule:

@@ -136,7 +136,7 @@ function compositeHandler(ops: Operations, spec: CompositeSpec) {
     if (extra.length > 0) {
       return { content: [{ type: "text", text: `${spec.name} action '${action}' does not take ${extra.join(", ")}. It takes ${fields!.join(", ")}.` }], isError: true };
     }
-    return ops.run(chosen.op, { ...rest, ...(chosen.inject ?? {}) }, `${spec.name} action '${action}'`);
+    return ops.run(chosen.op, { ...rest, ...chosen.inject }, `${spec.name} action '${action}'`);
   };
 }
 
@@ -293,7 +293,7 @@ export const MANAGE_NAMESPACES: CompositeSpec = {
 const READ_OPS: CompositeSpec = {
   name: "capsid_admin_read_ops",
   title: "Read operations state",
-  summary: "Operations state across every namespace: the watcher's last pass, Cloudflare Access and Email Routing, Cloudflare Workers Builds status and logs, and the secrets and data model (each Worker's secret names, databases, tables and stores, and who uses them). Read-only, and admin only.",
+  summary: "Operations state across every namespace: the watcher's last pass, Cloudflare Access and Email Routing, Cloudflare Workers Builds status and logs, every site's backups, and the secrets and data model (each Worker's secret names, databases, tables and stores, and who uses them). Read-only, and admin only.",
   actions: {
     snapshot: { op: "ops_snapshot", summary: "The watcher's last pass." },
     access_apps: { op: "cloudflare_config", inject: { action: "access_apps" }, summary: "Access applications." },
@@ -303,6 +303,7 @@ const READ_OPS: CompositeSpec = {
     builds: { op: "workers_builds", summary: "Workers Builds." },
     build_logs: { op: "workers_build_logs", summary: "One build's log." },
     resources: { op: "system_resources", summary: "Each Worker's secret names, databases and stores, and who uses them." },
+    backups: { op: "site_backups", summary: "Every site's backups, read live." },
   },
 };
 

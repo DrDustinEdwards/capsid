@@ -45,7 +45,7 @@ test("every safeEqual, isAdminEmail and adminGrantEmail call is awaited, in ever
       .split("\n")
       .map((line, i) => ({ file: f.name, line: i + 1, text: line.trim() }))
       .flatMap((l) => [...l.text.matchAll(/(\bawait\s+\(?)?\b(safeEqual|isAdminEmail|adminGrantEmail)\(/g)].map((m) => ({ ...l, awaited: Boolean(m[1]) })))
-      .filter((c) => !/^export async function /.test(c.text))
+      .filter((c) => !c.text.startsWith("export async function "))
   );
   assert.ok(calls.length >= 16, `found only ${calls.length} calls`);
   assert.deepEqual(calls.filter((c) => !c.awaited).map((c) => `src/${c.file}:${c.line} ${c.text}`), []);

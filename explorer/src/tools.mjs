@@ -100,7 +100,7 @@ function split(t) {
     const m = para.match(/^((?:"[a-z_]+"(?:, )?)+): ([\s\S]*)$/);
     const named = m ? [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]) : [];
     if (m && named.length && named.every((n) => names.has(n))) for (const n of named) byAction.set(n, m[2]);
-    else if (!/^Actions: /.test(para)) rest.push(para);
+    else if (!para.startsWith("Actions: ")) rest.push(para);
   }
   return { byAction, rest };
 }

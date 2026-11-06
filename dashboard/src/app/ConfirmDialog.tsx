@@ -162,10 +162,12 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
     return () => {
       alive.current = false;
     };
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount (the started ref guards StrictMode): the dialog asks for its preview as it opens
   }, []);
 
   useEffect(() => {
     if (preview) (ONE_WAY.has(req.action) ? cancelRef : doIt).current?.focus();
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- refocus when the preview arrives; a changed action does not move focus
   }, [preview]);
 
   const busy = pending != null;
@@ -395,6 +397,7 @@ function BatchDialog({ req, csrf, onClose, onSignedOut, items }: DialogProps & {
     return () => {
       alive.current = false;
     };
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once on mount (the started ref guards StrictMode): the dialog asks for its preview as it opens; a dependency would preview again
   }, []);
 
   // Every item here is one-way once performed together, so the preview leaves focus on Cancel.

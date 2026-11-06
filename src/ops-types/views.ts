@@ -282,6 +282,36 @@ export interface PortalConvergence {
   sites: ConvergenceSite[];
 }
 
+// GET /portal/api/backups and capsid_admin_read_ops action backups -> PortalBackups
+// (src/site-backup.ts). A site's status is its backup_status as it answered: d1-dump's
+// backupHealth for the newest dump, and one per files pass under files.
+interface BackupFreshness {
+  last_ok: string | null;
+  age_hours: number | null;
+  warning?: string;
+}
+export interface SiteBackupStatus extends BackupFreshness {
+  files?: Record<string, BackupFreshness>;
+}
+interface AmazonCopy {
+  newest: string | null;
+  bytes: number | null;
+}
+export interface SiteBackupRow {
+  namespace: string;
+  origin: string;
+  status: SiteBackupStatus | null;
+  error: string | null;
+  amazon: AmazonCopy | null;
+}
+export interface PortalBackups {
+  read_at: string;
+  capsid: { status: BackupFreshness; amazon: AmazonCopy | null };
+  sites: SiteBackupRow[];
+  amazon_report_at: string | null;
+  not_configured: string[];
+}
+
 // THE OVERNIGHT PLAN AND THE MORNING DIGEST (src/overnight-plan.ts): the `capsid_work_jobs` action list views
 // "plan" and "digest", and the Portal's GET /portal/api/plan and GET /portal/api/digest,
 // which serve the same readers.

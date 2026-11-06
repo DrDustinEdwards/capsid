@@ -393,7 +393,7 @@ async function gateSecurityHeaders(clientId) {
     for (const [label, cls, { url, init, noStore, status, inlineStyles }] of surfaces) {
       let resp;
       try {
-        resp = await request(url, { ...(init ?? {}), headers: { "Cache-Control": "no-cache", ...((init ?? {}).headers ?? {}) } });
+        resp = await request(url, { ...init, headers: { "Cache-Control": "no-cache", ...init?.headers } });
       } catch (err) {
         lost = noAnswer(err);
         break;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { JOB_ACTIONS, JOB_PARAM_NAMES, JOB_STATUSES, OPEN_JOB_STATUSES, jobDocPath, mintJobId, swallowedParamTag } from "../src/jobs-schema.ts";
+import { JOB_ACTIONS, JOB_PARAM_NAMES, OPEN_JOB_STATUSES, jobDocPath, mintJobId, swallowedParamTag } from "../src/jobs-schema.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
