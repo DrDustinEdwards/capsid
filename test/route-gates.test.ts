@@ -131,13 +131,13 @@ const PATH_CONSTANTS: Record<string, string> = {
   PUBLIC_VERSIONS_PATH,
 };
 
-// One entry per dispatch line in defaultHandler: the path it matches and the
-// handler it calls.
+// One entry per dispatch in defaultHandler (the formatter may wrap the return onto the next line): the path it
+// matches and the handler it calls.
 function dispatches(): { path: string; handler: string }[] {
   const body = ROUTES.slice(ROUTES.indexOf("export const defaultHandler"));
   assert.ok(body.length > 0, "defaultHandler not found in src/routes.ts");
   const found: { path: string; handler: string }[] = [];
-  const line = /url\.pathname === ("[^"]+"|[A-Z_]+)[^\n]*?\breturn (\w+)\(/g;
+  const line = /url\.pathname === ("[^"]+"|[A-Z_]+)[^\n]*?(?:\n\s*)?\breturn (\w+)\(/g;
   const resolve = (raw: string): string => {
     if (raw.startsWith('"')) return raw.slice(1, -1);
     assert.ok(
@@ -149,7 +149,7 @@ function dispatches(): { path: string; handler: string }[] {
   for (const m of body.matchAll(line)) found.push({ path: resolve(m[1]), handler: m[2] });
   // A prefix match covers every path under it, so it is a route of its own, named in
   // the tables as the prefix with a trailing `*` ("/portal/*").
-  const prefix = /url\.pathname\.startsWith\(("[^"]+"|[A-Z_]+)\)[^\n]*?\breturn (\w+)\(/g;
+  const prefix = /url\.pathname\.startsWith\(("[^"]+"|[A-Z_]+)\)[^\n]*?(?:\n\s*)?\breturn (\w+)\(/g;
   for (const m of body.matchAll(prefix)) found.push({ path: `${resolve(m[1])}*`, handler: m[2] });
   // A match written any other way (startsWith, a regex, a switch) would be missed by
   // the pattern above, so every mention of the pathname must be one the pattern read.
