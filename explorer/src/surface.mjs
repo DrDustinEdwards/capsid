@@ -60,7 +60,8 @@ export function servedTools() {
   const server = /** @type {any} */ (new Proxy({}, { get: (_t, key) => (key === "registerTool" ? (/** @type {string} */ name, /** @type {any} */ config) => registered.push({ name, config }) : () => undefined) }));
   const ctx = /** @type {any} */ ({ env: {}, db: {}, actor: "", agent: {}, scope: () => null, lastActor: async () => null, ops });
   for (const define of [defineDocOperations, defineLintOperations, defineRepoOperations, defineStatusOperations, defineSystemOperations, defineJobOperations, defineAgentOperations, defineClaimsOperations, defineOpsSnapshotOperations, defineCloudflareOperations, defineControlOperations, defineAdminOperations]) define(server, ctx);
-  registerCapsidTools(server, ops);
+  // As a writer sees it: every action of every tool.
+  registerCapsidTools(server, ops, false);
   registerCapsidAdminTools(server, ops);
   const composites = new Map(COMPOSITES.map((c) => [c.name, c]));
   const admin = new Set(/** @type {readonly string[]} */ (CAPSID_ADMIN_TOOLS));

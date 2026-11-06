@@ -5,7 +5,7 @@ import { bounded, MAX_BODY, MAX_RESUME_NOTE, MAX_TITLE, nsName, resultRef } from
 import { digestSinceFrom, readOvernightDigest, readOvernightPlan } from "../overnight-plan";
 import { readModelLearning } from "../model-learning";
 import { JOB_KINDS } from "../model-routing";
-import { CORRECTION_CAP, JOB_ACTIONS, JOB_STATUSES, isJobStatus } from "../jobs-schema";
+import { CORRECTION_CAP, JOB_ACTIONS, JOB_STATUSES } from "../jobs-schema";
 import { SCOPE_FLAGS } from "../agents-schema";
 import { beginJob, blockJob, claimJob, completeAsCaller, recordAsCaller, editJob, failAsCaller, jobVersions, listJobs, parkJob, postJob, releaseJob, resumeJob, supersedeJob, unparkJob, type JobResult } from "../jobs";
 import { parseEvidence } from "../job-outcomes";
@@ -81,7 +81,7 @@ block and complete act only on a job this caller holds, except as stated above.`
             `For post: the flags the claiming driver must hold (${SCOPE_FLAGS.join(", ")}). The claim refuses an agent without them and leaves the job queued.`
           ),
         min_record: z
-          .object({ prs_merged: z.number().int().nonnegative() })
+          .strictObject({ prs_merged: z.number().int().nonnegative() })
           .optional()
           .describe(
             "For post: the minimum merged pull requests on the claiming agent's record. The claim refuses an agent below it and leaves the job queued."
@@ -92,7 +92,7 @@ block and complete act only on a job this caller holds, except as stated above.`
           .describe(
             `For post: the job's kind (${JOB_KINDS.join(", ")}). Optional: when absent Capsid reads it from the poster and the title. The kind and the job's risk decide the model Capsid recommends; nobody names a model.`
           ),
-        status: bounded(32).optional().describe(`For list: one of ${JOB_STATUSES.join(" | ")}.`),
+        status: z.enum(JOB_STATUSES).optional().describe(`For list: one of ${JOB_STATUSES.join(" | ")}.`),
         view: z
           .enum(["plan", "digest", "models"])
           .optional()
@@ -140,7 +140,7 @@ block and complete act only on a job this caller holds, except as stated above.`
           .describe("For resume: sends the work back to be corrected and spends one correction. A plain resume or an admin resume spends none."),
         evidence: z
           .union([
-            z.object({
+            z.strictObject({
               prs: z.array(resultRef).max(MAX_EVIDENCE_PRS).optional().describe("Pull request URLs this job produced."),
               commits: z.number().int().nonnegative().optional(),
               files_changed: z.number().int().nonnegative().optional(),
@@ -208,9 +208,6 @@ block and complete act only on a job this caller holds, except as stated above.`
             const since = digestSinceFrom(args.since, now);
             if (!since.ok) return fail(since.refusal);
             return ok(await readOvernightDigest(env, { namespace: args.namespace, since: since.since }, now));
-          }
-          if (args.status !== undefined && !isJobStatus(args.status)) {
-            return fail(`'${args.status}' is not a job status. One of: ${JOB_STATUSES.join(", ")}.`);
           }
           // The body only for ONE named job and a caller that could claim it anyway.
           // Asked through ctx.scope, the one shape a handler may use for a grant that

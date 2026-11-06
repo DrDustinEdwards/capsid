@@ -146,7 +146,7 @@ function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminW
     registerCapsidAdminTools(server, ctx.ops);
     return server;
   }
-  registerCapsidTools(server, ctx.ops);
+  registerCapsidTools(server, ctx.ops, !agent.scopes.grants.includes("write"));
 
   // Resources and prompts are raw request handlers, not tool registrations, so they
   // check scope themselves (src/resources.ts).

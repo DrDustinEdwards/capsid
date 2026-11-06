@@ -93,7 +93,17 @@ export const docPath = z.string().superRefine((value, ctx) => {
 // is a visible anomaly. test/limits.test.ts fails if one appears.
 export const bounded = (max: number) => z.string().max(max);
 
-export const nsName = bounded(MAX_NAMESPACE);
+// The fixed shapes a tool argument can declare as a pattern, so a client sees the shape
+// in the schema before it calls (area 11, T4). Each matches every value the store and
+// GitHub hold today; a free-form string (a title, a query, a path) stays unpatterned.
+// A namespace is a lowercase slug, as every registered one is.
+export const nsName = bounded(MAX_NAMESPACE).regex(/^[a-z0-9][a-z0-9-]*$/, "a namespace is a lowercase slug: a-z, 0-9 and '-'");
+// A repo label ("primary", "site-api") or a mapped "owner/name".
+export const repoSelector = bounded(MAX_REPO_SELECTOR).regex(/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)?$/, 'a repo is a label or "owner/name"');
+// A commit sha: hex, abbreviated or full (SHA-1 or SHA-256).
+export const gitSha = bounded(MAX_SHA).regex(/^[0-9a-fA-F]{7,64}$/, "a sha is 7 to 64 hex characters");
+// A calendar day, YYYY-MM-DD.
+export const dayParam = bounded(10).regex(/^\d{4}-\d{2}-\d{2}$/, "a day is YYYY-MM-DD");
 
 // A job's result_ref is where the work landed: a document key inside the store, or
 // a pull request URL outside it. The URL is rendered as a link a human may click, so

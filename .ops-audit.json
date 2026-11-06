@@ -1,0 +1,5 @@
+{
+  "unprobed": {
+    "AI": "Workers AI: every call is billed inference and /health is hit from 10-14 data centers an hour. Only the PR reviewer (src/review.ts) uses it, and a failed review call shows in that review."
+  }
+}

@@ -85,6 +85,17 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   capsid_admin_set_site_key: destructive({ idempotent: false, openWorld: true }),
 };
 
+// A tool whose action decides its grant (capsid_work_jobs, capsid_lint_namespace) is
+// served to a caller holding only the read grant with its read actions alone
+// (src/tools/surface.ts READ_VIEWS), so for that caller it is read-only in fact and says
+// so (area 11, T7). Both views read only this Worker's D1 and KV.
+export const READ_VIEW_HINTS: Record<string, ToolHints> = {
+  // list, with its plan, digest, models and stale views: the queue and the stored plan.
+  capsid_work_jobs: read({ idempotent: true, openWorld: false }),
+  // gather: core.md, the wiki, the unconsolidated documents and their edges.
+  capsid_lint_namespace: read({ idempotent: true, openWorld: false }),
+};
+
 // Object.hasOwn, not a bare index: "constructor" is not a missing tool.
 export function hintsFor(tool: string): ToolHints {
   if (!Object.hasOwn(TOOL_HINTS, tool)) {

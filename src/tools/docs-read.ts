@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { bounded, BRIEF_BUDGET, HISTORY_ROWS, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_GLOB, MAX_QUERY, MAX_ROWS, nsName, SEARCH_ROWS, docPath } from "../limits";
+import { bounded, BRIEF_BUDGET, HISTORY_ROWS, MAX_GLOB, MAX_QUERY, MAX_ROWS, nsName, SEARCH_ROWS, docPath } from "../limits";
 import { ok, fail, type ToolCtx } from "./docs";
 import { surfaceOf } from "./surface";
 import { isConventionsDoc, recordConventionsRead } from "../conventions-read";
@@ -8,6 +8,7 @@ import { describePortfolioDocs, isPortfolioPath, PORTFOLIO_DOCS, portfolioDocume
 import { portfolioOnly } from "../scope";
 import { documentEdges, readDocument, searchDocuments } from "../doc-reads";
 import { hybridSearch } from "../doc-index";
+import { DOC_STATUS_LIST, DOC_TYPE_LIST } from "../doc-meta";
 
 // The document tools that only read: list, read, brief, history, backlinks, find
 // and search. defineDocOperations in ./docs registers them in the published order.
@@ -34,8 +35,8 @@ export function defineListOperation(server: McpServer, ctx: ToolCtx): void {
       description: `List documents with optional namespace, type, and status filters. Returns metadata rows without bodies under \`documents\`: id, namespace, path, title, type, status, tags and timestamps. Bounded to ${MAX_ROWS} rows; when there are more it sets truncated:true with a note.`,
       inputSchema: {
         namespace: nsName.optional(),
-        type: bounded(MAX_DOC_TYPE).optional(),
-        status: bounded(MAX_DOC_STATUS).optional(),
+        type: z.enum(DOC_TYPE_LIST).optional(),
+        status: z.enum(DOC_STATUS_LIST).optional(),
       },
     },
     async ({ namespace, type, status }) => {
@@ -358,7 +359,7 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
       inputSchema: {
         query: bounded(MAX_QUERY),
         namespace: nsName.optional(),
-        type: bounded(MAX_DOC_TYPE).optional(),
+        type: z.enum(DOC_TYPE_LIST).optional(),
         mode: z.enum(["keyword", "hybrid"]).optional(),
         include_retired: z.boolean().optional(),
       },

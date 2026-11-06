@@ -354,8 +354,13 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
   for (const surface of Object.keys(SURFACES) as Surface[]) {
     const caller = readOnlyCaller(surface);
     const unserved = SURFACES[surface].tools.filter((tool) => !toolListed(caller, tool));
+    // Every action as a writer is served it: a tool whose action decides its grant is
+    // served to a read grant with its read actions alone (src/tools/surface.ts READ_VIEWS),
+    // and its write actions must still be refused when asked for by name.
+    const { served: writerTools } = await sweep({ ...grantAgent("write", "opkey:writer000000"), admin: surface === "admin" }, surface, () => []);
+    const everyAction = (tool: ServedTool) => actionsOf(writerTools.find((t) => t.name === tool.name) ?? tool);
     const { served, results } = await sweep(caller, surface, (tools) => [
-      ...tools.flatMap((tool) => actionsOf(tool).map((action) => ({ tool: tool.name, args: argsFor(tool, action) }))),
+      ...tools.flatMap((tool) => everyAction(tool).map((action) => ({ tool: tool.name, args: argsFor(tool, action) }))),
       ...unserved.map((tool) => ({ tool, args: {} as Record<string, unknown> })),
     ]);
     // A read grant is served every tool but those that need write in whole (area 11, T7).
@@ -369,7 +374,7 @@ test("SWEEP: a read-only caller is refused every write by checkScope on both ser
       assert.equal(result.prepared + result.fetched + result.kvReads, 0, `${tool} reached a store or the network before refusing`);
     }
     for (const tool of served) {
-      for (const action of actionsOf(tool)) {
+      for (const action of everyAction(tool)) {
         const label = action === undefined ? tool.name : `${tool.name}.${action}`;
         const result = results.get(label);
         assert.ok(result, `${label} was not called`);

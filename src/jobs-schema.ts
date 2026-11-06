@@ -123,10 +123,6 @@ export function cappedSummary(summary: string | null): string {
   return said ? `${RETRY_CAP_REASON}\n\n${said}` : RETRY_CAP_REASON;
 }
 
-export function isJobStatus(value: unknown): value is JobStatus {
-  return typeof value === "string" && (JOB_STATUSES as readonly string[]).includes(value);
-}
-
 // The scopes a job's work requires (migrations/0009), checked by the same function as
 // an agent's scopes. Flags only: the write grant and the namespace are required of
 // every claim already, so a job has only blast radius left to declare.

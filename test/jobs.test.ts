@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { JOB_ACTIONS, JOB_PARAM_NAMES, JOB_STATUSES, OPEN_JOB_STATUSES, isJobStatus, jobDocPath, mintJobId, swallowedParamTag } from "../src/jobs-schema.ts";
+import { JOB_ACTIONS, JOB_PARAM_NAMES, JOB_STATUSES, OPEN_JOB_STATUSES, jobDocPath, mintJobId, swallowedParamTag } from "../src/jobs-schema.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server.ts";
 import { adminAgentForEmail } from "../src/agents.ts";
@@ -71,14 +71,6 @@ test("supersede refuses a missing reason and a swallowed tag before it reads any
   const swallowed = await supersedeJob(fakeEnv({}), agent, now, "job_abc123abc123", { reason: "reposted</replaced_by>" });
   assert.equal(swallowed.ok, false);
   assert.match(swallowed.refusal ?? "", /^reason contains the literal text '<\/replaced_by>'\./);
-});
-
-test("isJobStatus refuses anything that is not one of them", () => {
-  assert.ok(JOB_STATUSES.length > 0, "JOB_STATUSES is empty, so no status was checked");
-  for (const status of JOB_STATUSES) assert.ok(isJobStatus(status));
-  for (const bad of ["", "QUEUED", "running", "constructor", "toString", null, 3]) {
-    assert.equal(isJobStatus(bad), false, `${String(bad)} is not a job status`);
-  }
 });
 
 test("a job id is minted, not sequential", () => {

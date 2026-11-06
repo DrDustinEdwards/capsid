@@ -5,7 +5,8 @@ import { operationBlocks, sourceFile, sourceFiles, type ToolBlock } from "./sour
 import { servedOperations } from "./served.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer, buildServer } from "../src/server.ts";
-import { adminAgentForEmail } from "../src/agents.ts";
+import { adminAgentForEmail, grantAgent, type Agent } from "../src/agents.ts";
+import { toolListProblems } from "@dustinedwards/site-runtime/mcp-server";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // Tool annotations are derived, not declared.
@@ -84,19 +85,35 @@ const destructiveTool = (tool: string) => isWriteGated(tool) && toolOps(tool, { 
 // The annotations a client receives, read from tools/list rather than from the
 // registration source.
 // Both servers: Capsid and Capsid Admin.
-async function servedAnnotations(): Promise<Map<string, Record<string, unknown> | undefined>> {
-  const out = new Map<string, Record<string, unknown> | undefined>();
-  for (const build of [buildServer, buildAdminServer]) {
-    const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+async function servedTools(caller: Agent = adminAgentForEmail("admin@example.com"), builds = [buildServer, buildAdminServer]): Promise<Array<Record<string, any>>> {
+  const out: Array<Record<string, any>> = [];
+  for (const build of builds) {
+    const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), caller);
     const client = new Client({ name: "tool-annotations", version: "1.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     const { tools } = await client.listTools();
     await client.close();
-    for (const t of tools) out.set(t.name, t.annotations as Record<string, unknown> | undefined);
+    out.push(...tools);
   }
   return out;
 }
+
+async function servedAnnotations(): Promise<Map<string, Record<string, unknown> | undefined>> {
+  return new Map((await servedTools()).map((t) => [t.name, t.annotations as Record<string, unknown> | undefined]));
+}
+
+// The family's live check (site-runtime-ai-audit, area 11) judges tools/list with these
+// rules: T4 wants every input object closed, and T7 wants every tool a read grant lists
+// to be read-only. Run 55 failed both, so the served lists are held to them here.
+test("PLANT: the served tool lists pass the family's tools/list check, and a read grant lists only read-only tools", async () => {
+  const errors = toolListProblems(await servedTools()).filter((p) => p.severity === "error");
+  assert.deepEqual(errors.map((p) => `${p.item} ${p.tool}: ${p.detail}`), []);
+  const read = await servedTools(grantAgent("read", "opkey:readonly0000"), [buildServer]);
+  assert.ok(read.some((t) => t.name === "capsid_work_jobs"), "a read grant is no longer served capsid_work_jobs, so this checks less than it says");
+  assert.deepEqual(toolListProblems(read).filter((p) => p.severity === "error").map((p) => `${p.item} ${p.tool}: ${p.detail}`), []);
+  assert.deepEqual(read.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name), [], "a read grant lists a tool that is not read-only (T7)");
+});
 
 test("PLANT: every served tool carries exactly its hint table entry, and the table names only served tools", async () => {
   const served = await servedAnnotations();
