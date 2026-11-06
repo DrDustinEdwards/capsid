@@ -1,3 +1,4 @@
+import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
@@ -213,21 +214,12 @@ async function mailOnChange(env: Env, namespace: string, name: string, finding: 
   const text = red
     ? [`Changed to unhealthy at ${now.toISOString()}. You will not be mailed again until it recovers.`, "", ...(finding?.evidence ?? []), "", "The finding is open in Capsid Portal, Incidents."].join("\n")
     : [`Healthy again at ${now.toISOString()}${before ? `, after being unhealthy since ${before.since}` : ""}.`].join("\n");
-  let note: string;
-  if (env.EMAIL && env.ALERT_EMAIL && env.ALERT_FROM) {
-    try {
-      await env.EMAIL.send({ from: env.ALERT_FROM, to: env.ALERT_EMAIL, subject, text });
-      note = `${namespace}: mailed "${subject}"`;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logEvent("SITE_ALERT_MAIL_FAILED", { message: `SITE_ALERT_MAIL_FAILED ${namespace}: ${message}` }, { level: "error" });
-      // The state stays, so the next pass sends it again.
-      return [`${namespace}: the "${subject}" mail did not send (${clip(message)}); it is retried next pass`];
-    }
-  } else {
-    note = `${namespace}: "${subject}" was not mailed: no send_email binding (EMAIL, ALERT_EMAIL, ALERT_FROM) is configured`;
-    logEvent("SITE_ALERT_NOT_MAILED", { message: note }, { level: "warn" });
-  }
+  const sent = await sendEmail(env.EMAIL, { from: env.ALERT_FROM ?? "", to: env.ALERT_EMAIL ?? "", subject, text });
+  // A refusal keeps the state, so the next pass sends it again; with nothing configured the change is recorded unmailed.
+  if (!sent.sent && sent.code !== "not_configured") return [`${namespace}: the "${subject}" mail did not send (${clip(sent.error)}); it is retried next pass`];
+  const note = sent.sent
+    ? `${namespace}: mailed "${subject}"`
+    : `${namespace}: "${subject}" was not mailed: no send_email binding (EMAIL, ALERT_EMAIL, ALERT_FROM) is configured`;
   await env.APP_KV.put(key, JSON.stringify({ red, since: now.toISOString() } satisfies AlertState));
   return [note];
 }
