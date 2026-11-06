@@ -418,17 +418,11 @@ export async function failJob(
 // description of the situation. Capsid Portal shows these. blockJob writes this marker
 // and commandFromSummary reads it back, so the format cannot drift between the two.
 export const RESUME_MARKER = "Run this, then send it back in with capsid_work_jobs action 'resume':";
-// What blockJob wrote before the MCP 4 regroup. Summaries already stored carry it, so it
-// is still read; nothing writes it.
-const LEGACY_RESUME_MARKER = "Run this, then send it back in with jobs action 'resume':";
 
 /** Where a summary's resume marker starts and how long it is, or null with none. */
 export function resumeMarkerIn(summary: string): { at: number; length: number } | null {
-  for (const marker of [RESUME_MARKER, LEGACY_RESUME_MARKER]) {
-    const at = summary.indexOf(marker);
-    if (at !== -1) return { at, length: marker.length };
-  }
-  return null;
+  const at = summary.indexOf(RESUME_MARKER);
+  return at === -1 ? null : { at, length: RESUME_MARKER.length };
 }
 
 // A question block (Track A D4): a session that needs an answer rather than a command run

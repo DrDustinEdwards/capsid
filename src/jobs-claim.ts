@@ -170,9 +170,6 @@ export async function postJob(
     blocked_count: 0,
     resumed_count: 0,
     corrections_count: 0,
-    // The review gate was removed with capsid_open_pr (Dustin, 2026-10-31); the column
-    // stays for the rows that carry it.
-    review_required: 0,
     kind: routing.kind,
     model_recommended: routing.model,
     effort_recommended: routing.effort,
@@ -183,9 +180,9 @@ export async function postJob(
 
   const statements = [
     env.DB.prepare(
-      `INSERT INTO jobs (id, namespace, title, body, priority, status, posted_by, gate_required, required_scopes, min_record, review_required, created_at, updated_at,
+      `INSERT INTO jobs (id, namespace, title, body, priority, status, posted_by, gate_required, required_scopes, min_record, created_at, updated_at,
          kind, model_recommended, effort_recommended, routing_reason)
-       VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14, ?15)`
+       VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14)`
     ).bind(
       job.id,
       job.namespace,
@@ -196,7 +193,6 @@ export async function postJob(
       job.gate_required,
       job.required_scopes,
       job.min_record,
-      job.review_required,
       job.created_at,
       routing.kind,
       routing.model,
@@ -245,7 +241,6 @@ const JOB_LIST_COLUMNS = [
   "posted_by",
   "claimed_by",
   "gate_required",
-  "review_required",
   "blocked_count",
   "resumed_count",
   "created_at",

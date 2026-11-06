@@ -181,7 +181,6 @@ function world(opts: { adminEmail?: string; coOwners?: string } = {}): { d1: Fak
         status: "claimed",
         posted_by: "github:sample",
         claimed_by: "agent:capsid-other",
-        lease_expires: "2026-09-28T13:00:00.000Z",
       },
       { id: "job_queued000001", namespace: "capsid", title: "a queued job", body: "lorem", status: "queued", posted_by: "github:sample" },
       { id: "job_parked000001", namespace: "capsid", title: "a parked job", body: "lorem", status: "parked", posted_by: "github:sample", result_summary: "comes back when the design is ruled" },

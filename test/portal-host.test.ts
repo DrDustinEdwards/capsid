@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isSameOriginPath, PORTAL_HOST, portalBase, portalCookiePath, portalHostRequest, publicPortalPath } from "../src/portal-host.ts";
+import { isSameOriginPath, PORTAL_HOST, portalCookiePath, portalHostRequest, publicPortalPath } from "../src/portal-host.ts";
 
 // portal.dustinedwards.info serves the Portal and nothing else (src/portal-host.ts). The
 // Worker asks portalHostRequest first, in src/index.ts before the OAuth provider
@@ -52,11 +52,9 @@ test("PLANT: on the Portal host, a /portal path that would leave the origin is r
   assert.equal(isSameOriginPath("queue"), false);
 });
 
-test("the base, the cookie path and the public path follow the host", () => {
+test("the cookie path and the public path follow the host", () => {
   const p = new URL(`${PORTAL}/portal/`);
   const w = new URL(`${OTHER}/portal/`);
-  assert.equal(portalBase(p), "");
-  assert.equal(portalBase(w), "/portal");
   assert.equal(portalCookiePath(p), "/");
   assert.equal(portalCookiePath(w), "/portal");
   assert.equal(publicPortalPath(p, "/portal/jobs"), "/jobs");

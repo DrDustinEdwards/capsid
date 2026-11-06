@@ -29,11 +29,6 @@ export function isPortalHost(url: URL): boolean {
   return url.hostname === PORTAL_HOST;
 }
 
-/** The Portal's path as the browser sees it: "" on the Portal host, "/portal" elsewhere. */
-export function portalBase(url: URL): string {
-  return isPortalHost(url) ? "" : PORTAL_PATH;
-}
-
 /** Where the Portal's cookies are scoped: the whole Portal host, or /portal elsewhere.
  *  Never a Domain attribute, so no other subdomain of the family can read or set them. */
 export function portalCookiePath(url: URL): string {

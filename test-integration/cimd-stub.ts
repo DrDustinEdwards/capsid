@@ -26,17 +26,12 @@ export function cimdClient(redirects: string[], name = "integration-client"): st
   return url;
 }
 
-// Takes a client's document down, so its id no longer resolves.
-export function withdrawCimdClient(url: string): void {
-  documents.delete(url);
-}
-
-// The document for a URL this module published, or a 404 for one it withdrew, or null
-// for any URL that is not a client document.
+// The document for a URL this module published, or a 404 for any other client URL, or
+// null for any URL that is not a client document.
 export function cimdResponse(url: string): Response | null {
   if (!url.startsWith("https://client.example.com/oauth/")) return null;
   const doc = documents.get(url);
-  // no-store, so the provider's cache cannot keep a withdrawn document alive.
+  // no-store, so the provider's cache never answers for a document this module did not serve.
   if (!doc) return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
   return Response.json(doc, { headers: { "Cache-Control": "no-store" } });
 }

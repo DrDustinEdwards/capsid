@@ -549,8 +549,9 @@ export interface ResumeOptions {
 const DRIVER_SELF_APPROVED: readonly GateClass[] = ["push_branch", "open_pr"];
 
 // A minted agent's actor is `agent:<name>`: one credential, one driver. The admin
-// identity (`access:<email>`, or `github:<login>` from the old console) and a retired
-// operator key (`opkey:<fingerprint>`, on older rows) are shared by whatever sessions connect with them.
+// identity (`access:<email>`, or `github:<login>` from the old console) is shared by whatever
+// sessions connect with it. A retired operator key (`opkey:<fingerprint>`) is left only on older
+// audit_log rows.
 const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
 
 /** Where a resume sends a blocked job: back to `holder` (toQueue null), or to the queue

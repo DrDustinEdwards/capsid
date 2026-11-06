@@ -170,7 +170,7 @@ test("the close is audited as complete-unclaimed, not as the seat's record", asy
 });
 
 test("a claimed job is still its holder's: another caller cannot complete it without a claim", async () => {
-  const { d1, env } = store([job({ status: "claimed", claimed_by: "agent:sample-driver", lease_expires: "2026-10-11T14:00:00.000Z" })]);
+  const { d1, env } = store([job({ status: "claimed", claimed_by: "agent:sample-driver" })]);
   const r = await offline(() => completeAsCaller(env, driver(["sample"], "other-driver"), NOW, ID, withPr));
   assert.equal(r.ok, false);
   assert.equal(d1.rows.jobs[0].status, "claimed");

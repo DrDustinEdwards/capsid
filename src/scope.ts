@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
-import type { AdminWriteObserver } from "./admin-client-audit";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { appendAudit, correlationId, loggedArgs, loggedResult, recordAudit, type AuditEnv } from "@dustinedwards/site-runtime/audit-log";
 import { authorizeCall, mcpScopes, outsideResult, toolScopeChallenge, type McpCaller } from "@dustinedwards/site-runtime/mcp-server";
@@ -257,12 +256,6 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal": "Capsid Portal's page, served from ASSETS only after portalGate admits the administrator's session",
   "/portal/*": "Capsid Portal's files and client routes, served from ASSETS only after portalGate admits the administrator's session",
 };
-
-// The refusal for a gated route, or null. The same checkScope the tools use.
-export function routeRefusal(path: string, agent: Agent): string | null {
-  const requirement = Object.hasOwn(ROUTE_GRANTS, path) ? ROUTE_GRANTS[path] : "admin";
-  return checkScope(agent, { tool: path, ...needFor(requirement) });
-}
 
 export interface ScopeNeed {
   tool: string;
@@ -688,7 +681,7 @@ export function toolListed(agent: Agent, tool: string): boolean {
   return grant === undefined || agent.scopes.grants.includes(grant);
 }
 
-export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, stepUpKv?: KVNamespace, log?: CallLog, icons?: readonly ToolIcon[]): void {
+export function guardRegistrations(server: McpServer, agent: Agent, stepUpKv?: KVNamespace, log?: CallLog, icons?: readonly ToolIcon[]): void {
   const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
     if (!toolListed(agent, name)) return undefined;
@@ -731,14 +724,6 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       if (takesNamespace(action) && namespace === undefined && !agent.benchRun) {
         const missing = namespaceRefusal(agent, name);
         if (missing) return missing;
-      }
-      // Observation only (src/admin-client-audit.ts): after every refusal above, before
-      // the handler, and only for the admin and a requirement that is not a plain read.
-      // "action" tools (capsid_work_jobs, capsid_lint_namespace) are included, so a
-      // capsid_work_jobs action list is recorded too: more
-      // than a write, never less.
-      if (observe && agent.admin && requiredForAction(name, action) !== "read") {
-        return observe({ tool: name, action, namespace }, server.server.getClientVersion()?.name ?? null);
       }
       return null;
     };
