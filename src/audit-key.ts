@@ -1,4 +1,4 @@
-// The tool-call log's signing key (site-runtime audit-log 0.84, AUDIT_SIGNING_KEY), derived from
+// The tool-call log's signing key (site-runtime audit-log 0.85, AUDIT_SIGNING_KEY), derived from
 // COOKIE_ENCRYPTION_KEY under its own label, as the Portal's idle key is (portal-auth.ts), so Capsid
 // holds no second secret. audit-log turns the secret into an Ed25519 seed with HKDF-SHA-256 and its own
 // info label (RFC 5869, 3.2), so this key serves no other use. The Durable Object reads its env when it is
