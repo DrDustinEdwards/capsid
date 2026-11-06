@@ -73,7 +73,7 @@ function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, d
       out.push(trends, { key: ["convergence"], path: "/convergence" }, { key: ["maintenance"], path: "/maintenance" });
       break;
     case "prs":
-      out.push(trends);
+      out.push(trends, { key: [LIVE, "merge-units"], path: "/merge-units" });
       break;
     case "queue":
       out.push(trends, { key: [LIVE, "stale"], path: "/stale" }, { key: [LIVE, "plan"], path: "/plan" });

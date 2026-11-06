@@ -373,7 +373,7 @@ async function liveSessions(db: D1Database, now: Date): Promise<OpsSession[]> {
 async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
   try {
     const loaded = await loadMergePolicy(env);
-    return "error" in loaded ? { loads: false, reason: loaded.error } : { loads: true, version: loaded.policy.version, enabled: loaded.policy.enabled };
+    return "error" in loaded ? { loads: false, reason: loaded.error } : { loads: true, version: loaded.policy.version, enabled: loaded.policy.enabled, units: [...loaded.policy.units] };
   } catch (err) {
     return { loads: false, reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}` };
   }

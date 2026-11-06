@@ -1,7 +1,7 @@
 import { QueryCache, QueryClient, keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalNotFound, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView, ResourcesDoc } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalNotFound, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMergeUnits, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView, ResourcesDoc } from "../types";
 
 // Every URL under the Portal's base on this page (lib/base.ts): /api/... on
 // portal.dustinedwards.info, /demos/api/... on the chart demo.
@@ -20,6 +20,7 @@ const RESOURCES_URL = `${BASE}/api/resources`;
 const LIBRARY_URL = `${BASE}/api/library`;
 const TRENDS_URL = `${BASE}/api/trends`;
 const STALE_URL = `${BASE}/api/stale`;
+const MERGE_UNITS_URL = `${BASE}/api/merge-units`;
 const PLAN_URL = `${BASE}/api/plan`;
 const DIGEST_URL = `${BASE}/api/digest`;
 const MAINTENANCE_URL = `${BASE}/api/maintenance`;
@@ -355,6 +356,12 @@ export function fetchLibrary(args: { q: string } | { ns: string; path: string } 
 // from the reader behind jobs list stale: true.
 export function fetchStale(): Promise<Answer<PortalStale>> {
   return get<PortalStale>(STALE_URL);
+}
+
+// GET /portal/api/merge-units: the suspended merge units and the units tick's proposals
+// (src/portal-merge-units.ts), for the Pull requests page's Merge units panel.
+export function fetchMergeUnits(): Promise<Answer<PortalMergeUnits>> {
+  return get<PortalMergeUnits>(MERGE_UNITS_URL);
 }
 
 // GET /portal/api/trends: the series behind the charts the feed does not carry (minutes

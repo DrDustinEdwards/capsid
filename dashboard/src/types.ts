@@ -60,6 +60,7 @@ export type {
   PortalTrends,
   TrendCiRepo,
   PortalStale,
+  PortalMergeUnits,
   PortalPush,
   PortalPlan,
   PortalDigest,

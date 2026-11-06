@@ -391,3 +391,13 @@ export type PortalPlan = OvernightPlan;
 // GET /portal/api/digest?since= -> PortalDigest: what happened since then, over every
 // namespace. since defaults to the last 24 hours; one that is not an ISO time is a 400.
 export type PortalDigest = OvernightDigest;
+
+// The merge units' state (src/merge-units.ts): those suspended after a rollback of an unattended
+// merge, and the promote and demote proposals of the units tick's last report. The Portal's
+// Merge units panel offers each its control (unit_resume, sign_policy_change).
+export interface PortalMergeUnits {
+  // When the units tick last judged the evidence, or null before its first report.
+  generated: string | null;
+  suspended: Array<{ unit: string; since: string; reason: string }>;
+  proposals: Array<{ kind: "promote" | "demote"; unit: string; title: string }>;
+}

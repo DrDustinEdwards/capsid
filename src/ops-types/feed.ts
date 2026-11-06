@@ -285,7 +285,8 @@ export interface OpsMergeSafety {
   namespaces: OpsMergeSafetyRow[];
 }
 
-type OpsMergePolicy = { loads: true; version: string; enabled: boolean } | { loads: false; reason: string };
+// units: the merge units ('<namespace>/<path class>') the signed policy promotes to auto.
+type OpsMergePolicy = { loads: true; version: string; enabled: boolean; units: string[] } | { loads: false; reason: string };
 
 export interface OpsLive {
   generated: string;

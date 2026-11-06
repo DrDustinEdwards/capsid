@@ -239,6 +239,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/claims": "the Portal's bounded read of claims, evaluations and touches, through the capsid_admin_read_claims tool's readers, gated by portalGate",
   "/portal/api/stale": "the Portal's stale jobs, through the reader behind capsid_work_jobs action list stale: true, gated by portalGate",
   "/portal/api/plan": "the Portal's Tonight plan, through the reader behind capsid_work_jobs action list view plan, over every namespace, gated by portalGate",
+  "/portal/api/merge-units": "the Portal's Merge units panel: the suspended merge units and the units tick's proposals, read from KV, gated by portalGate",
   "/portal/api/digest": "the Portal's since-you-last-looked strip, through the reader behind capsid_work_jobs action list view digest, over every namespace, gated by portalGate",
   "/portal/api/convergence": "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_run_improve action status serves, gated by portalGate",
