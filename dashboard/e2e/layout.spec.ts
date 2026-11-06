@@ -36,7 +36,18 @@ test("at 1024 px and at 390 px, no tab of a site's page scrolls sideways", async
       await expect(page.locator("main .loading")).toHaveCount(0);
       const o = await measure(page);
       // On a phone a wide table may scroll inside its wrapper; the document may not.
-      problems.push(...sideways(width === 1024 ? o : { ...o, root: o.root && { ...o.root, scroll: Math.min(o.root.scroll, o.root.client) }, scrollers: [] }, `${tab.label} at ${width}`));
+      problems.push(
+        ...sideways(
+          width === 1024
+            ? o
+            : {
+                ...o,
+                root: o.root && { ...o.root, scroll: Math.min(o.root.scroll, o.root.client) },
+                scrollers: [],
+              },
+          `${tab.label} at ${width}`,
+        ),
+      );
     }
   }
   expect(problems).toEqual([]);
@@ -70,9 +81,15 @@ test.describe("on a phone", () => {
   for (const v of ALL_VIEWS) {
     test(`${v.label}: the document is no wider than the screen`, async ({ page }) => {
       await visit(page, v.id);
-      const w = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
+      const w = await page.evaluate(() => ({
+        scroll: document.documentElement.scrollWidth,
+        client: document.documentElement.clientWidth,
+      }));
       expect(w.client).toBe(390);
-      expect(w.scroll, `${v.label}: the document is ${w.scroll} px wide at 390`).toBeLessThanOrEqual(w.client);
+      expect(
+        w.scroll,
+        `${v.label}: the document is ${w.scroll} px wide at 390`,
+      ).toBeLessThanOrEqual(w.client);
     });
   }
 });

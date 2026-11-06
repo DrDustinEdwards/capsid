@@ -20,13 +20,20 @@ const MAX_FILE_BYTES = 8_000_000;
  *  (no branch, no file). Any other failure throws. */
 export async function readCodeMap(env: Env, repoFull: string): Promise<unknown> {
   const [owner, repo] = repoFull.split("/");
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/contents/${FILE}?ref=${BRANCH}`, {
-    headers: { Accept: "application/vnd.github.raw+json" },
-  });
+  const resp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/contents/${FILE}?ref=${BRANCH}`,
+    {
+      headers: { Accept: "application/vnd.github.raw+json" },
+    },
+  );
   if (resp.status === 404) return null;
   if (!resp.ok) throw new Error(`code map read failed for ${repoFull} (${resp.status})`);
   const text = await resp.text();
-  if (text.length > MAX_FILE_BYTES) throw new Error(`code map for ${repoFull} is ${text.length} bytes, over ${MAX_FILE_BYTES}`);
+  if (text.length > MAX_FILE_BYTES)
+    throw new Error(`code map for ${repoFull} is ${text.length} bytes, over ${MAX_FILE_BYTES}`);
   return JSON.parse(text);
 }
 
@@ -40,15 +47,22 @@ export async function buildPublicCode(
   model: SystemModel,
   privacy: RepoPrivacy,
   asOf: string,
-  read: (env: Env, repo: string) => Promise<unknown> = readCodeMap
+  read: (env: Env, repo: string) => Promise<unknown> = readCodeMap,
 ): Promise<PublicCode> {
   const maps: PublicCode["maps"] = [];
   for (const { system, repo } of publicRepos(model, privacy)) {
     const raw = await read(env, repo);
     if (raw === null) continue;
     const parsed = CodeMapSchema.safeParse(raw);
-    if (!parsed.success) throw new Error(`code map for ${repo} is invalid: ${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
-    if (parsed.data.repo.toLowerCase() !== repo.toLowerCase()) throw new Error(`code map on ${repo} names ${parsed.data.repo}`);
+    if (!parsed.success)
+      throw new Error(
+        `code map for ${repo} is invalid: ${parsed.error.issues
+          .slice(0, 3)
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join("; ")}`,
+      );
+    if (parsed.data.repo.toLowerCase() !== repo.toLowerCase())
+      throw new Error(`code map on ${repo} names ${parsed.data.repo}`);
     maps.push({ ...parsed.data, repo, system });
   }
   return { version: 1, as_of: asOf, maps };

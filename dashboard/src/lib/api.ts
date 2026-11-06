@@ -1,7 +1,41 @@
-import { QueryCache, QueryClient, keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  QueryCache,
+  QueryClient,
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalNotFound, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMergeUnits, PortalSiteSearch, PortalSiteTraffic, PortalWorkersBuilds, PortalBuildLog, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalBackups, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView, ResourcesDoc } from "../types";
+import type {
+  OpsFeed,
+  PortalActionRequest,
+  PortalActivity,
+  PortalClaimsAggregate,
+  PortalClaimsJob,
+  PortalNamespaces,
+  PortalNotFound,
+  PortalPackageHistory,
+  PortalPerformed,
+  PortalPreview,
+  PortalStale,
+  PortalMergeUnits,
+  PortalSiteSearch,
+  PortalSiteTraffic,
+  PortalWorkersBuilds,
+  PortalBuildLog,
+  PortalPush,
+  PortalPlan,
+  PortalDigest,
+  PortalMaintenance,
+  PortalConvergence,
+  PortalBackups,
+  PortalLibrary,
+  PortalTrends,
+  SharedCodeView,
+  CompletenessView,
+  ResourcesDoc,
+} from "../types";
 
 // Every URL under the Portal's base on this page (lib/base.ts): /api/... on
 // portal.dustinedwards.info, /demos/api/... on the chart demo.
@@ -41,12 +75,19 @@ export const POLL_MS = 60_000;
 // CSRF or cross-site refusal, with its text, so they pass forbidden = false and show
 // that text instead of the signed-out page.
 function sessionEnded(res: Response, forbidden = true): boolean {
-  return res.type === "opaqueredirect" || res.redirected || res.status === 401 || (forbidden && res.status === 403) || (res.status >= 300 && res.status < 400);
+  return (
+    res.type === "opaqueredirect" ||
+    res.redirected ||
+    res.status === 401 ||
+    (forbidden && res.status === 403) ||
+    (res.status >= 300 && res.status < 400)
+  );
 }
 
 async function asFeed(res: Response): Promise<OpsFeed> {
   const type = res.headers.get("content-type") ?? "";
-  if (!type.includes("json")) throw new Error(`The feed answered ${res.status} with ${type || "no content type"}, not JSON`);
+  if (!type.includes("json"))
+    throw new Error(`The feed answered ${res.status} with ${type || "no content type"}, not JSON`);
   return (await res.json()) as OpsFeed;
 }
 
@@ -82,7 +123,14 @@ export function createQueryClient(): QueryClient {
     // staleTime above 0, as TanStack Query's SSR guide says: a read the server made for this page
     // is fresh on hydration, so the page shows it and does not read it again at once. The feed's
     // minute poll, Read again and every action's invalidation read again whatever the age.
-    defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false, staleTime: 60_000 } },
+    defaultOptions: {
+      queries: {
+        retry: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        staleTime: 60_000,
+      },
+    },
   });
 }
 
@@ -104,9 +152,19 @@ type Read<T> = Load<T> & { reread: () => void };
 export function useAnswer<T>(
   key: readonly unknown[],
   read: () => Promise<Answer<T>>,
-  { keep = true, staleTime, enabled = true }: { keep?: boolean; staleTime?: number; enabled?: boolean } = {},
+  {
+    keep = true,
+    staleTime,
+    enabled = true,
+  }: { keep?: boolean; staleTime?: number; enabled?: boolean } = {},
 ): Read<T> {
-  const q = useQuery({ queryKey: key, queryFn: () => ask(read), placeholderData: keep ? keepPreviousData : undefined, enabled, ...(staleTime === undefined ? {} : { staleTime }) });
+  const q = useQuery({
+    queryKey: key,
+    queryFn: () => ask(read),
+    placeholderData: keep ? keepPreviousData : undefined,
+    enabled,
+    ...(staleTime === undefined ? {} : { staleTime }),
+  });
   const { refetch } = q;
   return {
     data: q.data ?? null,
@@ -124,7 +182,12 @@ export function useAnswer<T>(
 const BACKGROUND = { "X-Background": "1" } as const;
 
 async function readFeed(): Promise<OpsFeed> {
-  const res = await fetch(FEED_URL, { credentials: "same-origin", redirect: "manual", cache: "no-store", headers: { accept: "application/json", ...BACKGROUND } });
+  const res = await fetch(FEED_URL, {
+    credentials: "same-origin",
+    redirect: "manual",
+    cache: "no-store",
+    headers: { accept: "application/json", ...BACKGROUND },
+  });
   if (sessionEnded(res)) throw new SignedOut("signed out");
   if (!res.ok) throw new Error(`The feed answered ${res.status}`);
   return asFeed(res);
@@ -140,7 +203,13 @@ export const LIVE = "live";
 // pauses while it is hidden, and reads again when the tab comes back after 5 s or more.
 export function useOpsFeed() {
   const queryClient = useQueryClient();
-  const q = useQuery({ queryKey: FEED_KEY, queryFn: readFeed, refetchInterval: POLL_MS, staleTime: 5000, refetchOnWindowFocus: true });
+  const q = useQuery({
+    queryKey: FEED_KEY,
+    queryFn: readFeed,
+    refetchInterval: POLL_MS,
+    staleTime: 5000,
+    refetchOnWindowFocus: true,
+  });
   const signedOut = useSignedOut();
   const generated = q.data?.live.generated;
   useEffect(() => {
@@ -148,9 +217,15 @@ export function useOpsFeed() {
   }, [q.dataUpdatedAt]);
   useEffect(() => {
     if (generated)
-      void queryClient.refetchQueries({ queryKey: [LIVE], type: "active", stale: true }, { cancelRefetch: false });
+      void queryClient.refetchQueries(
+        { queryKey: [LIVE], type: "active", stale: true },
+        { cancelRefetch: false },
+      );
   }, [generated, queryClient]);
-  const accept = useCallback((feed: OpsFeed) => queryClient.setQueryData(FEED_KEY, feed), [queryClient]);
+  const accept = useCallback(
+    (feed: OpsFeed) => queryClient.setQueryData(FEED_KEY, feed),
+    [queryClient],
+  );
   const signOut = useCallback(() => setSignedOut(true), []);
   return {
     feed: q.data ?? null,
@@ -175,7 +250,12 @@ export type RefreshResult =
 // else Retry-After.
 export async function requestRefresh(): Promise<RefreshResult> {
   try {
-    const res = await fetch(REFRESH_URL, { method: "POST", credentials: "same-origin", redirect: "manual", headers: { "X-Capsid-Ops": "refresh", accept: "application/json" } });
+    const res = await fetch(REFRESH_URL, {
+      method: "POST",
+      credentials: "same-origin",
+      redirect: "manual",
+      headers: { "X-Capsid-Ops": "refresh", accept: "application/json" },
+    });
     if (sessionEnded(res)) return { kind: "signed-out" };
     if (res.status === 429) {
       let allowedAt: number | null = null;
@@ -185,13 +265,17 @@ export async function requestRefresh(): Promise<RefreshResult> {
         if (body.refresh_allowed_at) allowedAt = Date.parse(body.refresh_allowed_at);
       }
       const retry = Number(res.headers.get("retry-after"));
-      if (allowedAt == null && Number.isFinite(retry) && retry > 0) allowedAt = Date.now() + retry * 1000;
+      if (allowedAt == null && Number.isFinite(retry) && retry > 0)
+        allowedAt = Date.now() + retry * 1000;
       return { kind: "limited", allowedAt };
     }
     if (!res.ok) {
       // The Worker says why in plain text; the status alone is no reason.
       const why = (await res.text().catch(() => "")).trim().slice(0, 300);
-      return { kind: "error", message: why ? `${why} (HTTP ${res.status})` : `the server answered HTTP ${res.status}` };
+      return {
+        kind: "error",
+        message: why ? `${why} (HTTP ${res.status})` : `the server answered HTTP ${res.status}`,
+      };
     }
     return { kind: "ok", feed: await asFeed(res), warning: res.headers.get("x-capsid-warning") };
   } catch (e) {
@@ -219,7 +303,11 @@ export async function answer<T>(res: Response, forbidden: boolean): Promise<Answ
   if (res.status === 410) return { kind: "expired", message: await refusalText(res) };
   if (!res.ok) return { kind: "refused", status: res.status, message: await refusalText(res) };
   const type = res.headers.get("content-type") ?? "";
-  if (!type.includes("json")) return { kind: "error", message: `The server answered ${res.status} with ${type || "no content type"}, not JSON` };
+  if (!type.includes("json"))
+    return {
+      kind: "error",
+      message: `The server answered ${res.status} with ${type || "no content type"}, not JSON`,
+    };
   return { kind: "ok", value: (await res.json()) as T };
 }
 
@@ -227,7 +315,12 @@ export async function answer<T>(res: Response, forbidden: boolean): Promise<Answ
 // would otherwise leave the dialog busy, with every button disabled and nothing said.
 const ACTION_TIMEOUT_MS = 20_000;
 
-async function post<T>(url: string, csrf: string, body: unknown, timeoutMs = ACTION_TIMEOUT_MS): Promise<Answer<T>> {
+async function post<T>(
+  url: string,
+  csrf: string,
+  body: unknown,
+  timeoutMs = ACTION_TIMEOUT_MS,
+): Promise<Answer<T>> {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
   try {
@@ -236,14 +329,21 @@ async function post<T>(url: string, csrf: string, body: unknown, timeoutMs = ACT
       credentials: "same-origin",
       redirect: "manual",
       cache: "no-store",
-      headers: { "X-Capsid-CSRF": csrf, "Content-Type": "application/json", accept: "application/json" },
+      headers: {
+        "X-Capsid-CSRF": csrf,
+        "Content-Type": "application/json",
+        accept: "application/json",
+      },
       body: JSON.stringify(body),
       signal: abort.signal,
     });
     return await answer<T>(res, false);
   } catch (e) {
     if (abort.signal.aborted) {
-      return { kind: "error", message: `no answer within ${Math.round(timeoutMs / 1000)} seconds. Check Activity to see whether anything changed before trying again.` };
+      return {
+        kind: "error",
+        message: `no answer within ${Math.round(timeoutMs / 1000)} seconds. Check Activity to see whether anything changed before trying again.`,
+      };
     }
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };
   } finally {
@@ -253,7 +353,12 @@ async function post<T>(url: string, csrf: string, body: unknown, timeoutMs = ACT
 
 async function get<T>(url: string): Promise<Answer<T>> {
   try {
-    const res = await fetch(url, { credentials: "same-origin", redirect: "manual", cache: "no-store", headers: { accept: "application/json" } });
+    const res = await fetch(url, {
+      credentials: "same-origin",
+      redirect: "manual",
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    });
     return await answer<T>(res, true);
   } catch (e) {
     return { kind: "error", message: e instanceof Error ? e.message : String(e) };
@@ -261,7 +366,10 @@ async function get<T>(url: string): Promise<Answer<T>> {
 }
 
 // POST /portal/api/actions/preview: writes nothing; answers what will change and a token.
-export function previewAction(csrf: string, req: PortalActionRequest): Promise<Answer<PortalPreview>> {
+export function previewAction(
+  csrf: string,
+  req: PortalActionRequest,
+): Promise<Answer<PortalPreview>> {
   return post<PortalPreview>(PREVIEW_URL, csrf, req);
 }
 
@@ -273,7 +381,10 @@ export function performAction(csrf: string, token: string): Promise<Answer<Porta
 // A switch has no dialog: its applied reason is the confirmation, so it previews and
 // performs in sequence. A refusal at either step comes back as it is, to be shown
 // beside the switch.
-export async function runAction(csrf: string, req: PortalActionRequest): Promise<Answer<PortalPerformed>> {
+export async function runAction(
+  csrf: string,
+  req: PortalActionRequest,
+): Promise<Answer<PortalPerformed>> {
   const preview = await previewAction(csrf, req);
   if (preview.kind !== "ok") return preview;
   return performAction(csrf, preview.value.token);
@@ -285,7 +396,11 @@ export function fetchNamespaces(): Promise<Answer<PortalNamespaces>> {
 
 // GET /portal/api/activity: the newest audit rows, filtered; or, with id, that one row
 // for the Activity drawer.
-export function fetchActivity(filter: { namespace?: string; actor?: string; id?: string }): Promise<Answer<PortalActivity>> {
+export function fetchActivity(filter: {
+  namespace?: string;
+  actor?: string;
+  id?: string;
+}): Promise<Answer<PortalActivity>> {
   const qs = new URLSearchParams();
   if (filter.id) qs.set("id", filter.id);
   if (filter.namespace) qs.set("namespace", filter.namespace);
@@ -304,7 +419,8 @@ export interface ClaimsQuery {
 // GET /portal/api/claims: the per-agent aggregate, filtered.
 export function fetchClaimsAggregate(filter: ClaimsQuery): Promise<Answer<PortalClaimsAggregate>> {
   const qs = new URLSearchParams();
-  for (const key of ["namespace", "agent", "since", "until"] as const) if (filter[key]) qs.set(key, filter[key]);
+  for (const key of ["namespace", "agent", "since", "until"] as const)
+    if (filter[key]) qs.set(key, filter[key]);
   const s = qs.toString();
   return get<PortalClaimsAggregate>(s ? `${CLAIMS_URL}?${s}` : CLAIMS_URL);
 }
@@ -312,7 +428,9 @@ export function fetchClaimsAggregate(filter: ClaimsQuery): Promise<Answer<Portal
 // GET /portal/api/packages/history?name=: one configured package's daily downloads,
 // joined to its former name's, and its weekly GitHub numbers. Fetched when asked for.
 export function fetchPackageHistory(name: string): Promise<Answer<PortalPackageHistory>> {
-  return get<PortalPackageHistory>(`${PACKAGE_HISTORY_URL}?${new URLSearchParams({ name }).toString()}`);
+  return get<PortalPackageHistory>(
+    `${PACKAGE_HISTORY_URL}?${new URLSearchParams({ name }).toString()}`,
+  );
 }
 
 // GET /portal/api/shared-code: each shared package's newest tag, what each app pins, and
@@ -344,7 +462,10 @@ export function fetchPush(): Promise<Answer<PortalPush>> {
   return get<PortalPush>(PUSH_URL);
 }
 
-export type PushOp = { op: "on"; subscription: PushSubscriptionJSON; label: string } | { op: "off"; id: number } | { op: "test" };
+export type PushOp =
+  | { op: "on"; subscription: PushSubscriptionJSON; label: string }
+  | { op: "off"; id: number }
+  | { op: "test" };
 
 export function postPush(csrf: string, body: PushOp): Promise<Answer<PortalPush>> {
   return post<PortalPush>(PUSH_URL, csrf, body);
@@ -352,7 +473,9 @@ export function postPush(csrf: string, body: PushOp): Promise<Answer<PortalPush>
 
 // GET /portal/api/library: the knowledge store's shelves with no argument, a search with
 // q, or one document with ns and path (src/portal-library.ts). Read-only.
-export function fetchLibrary(args: { q: string } | { ns: string; path: string } | null): Promise<Answer<PortalLibrary>> {
+export function fetchLibrary(
+  args: { q: string } | { ns: string; path: string } | null,
+): Promise<Answer<PortalLibrary>> {
   const qs = args ? `?${new URLSearchParams(args).toString()}` : "";
   return get<PortalLibrary>(`${LIBRARY_URL}${qs}`);
 }
@@ -375,20 +498,34 @@ export function fetchMergeUnits(): Promise<Answer<PortalMergeUnits>> {
 // GET /portal/api/site-search?namespace=: Search Console and Bing Webmaster, the 28 days
 // ending 3 days ago.
 export function fetchSiteSearch(namespace: string): Promise<Answer<PortalSiteSearch>> {
-  return get<PortalSiteSearch>(`${SITE_SEARCH_URL}?${new URLSearchParams({ namespace }).toString()}`);
+  return get<PortalSiteSearch>(
+    `${SITE_SEARCH_URL}?${new URLSearchParams({ namespace }).toString()}`,
+  );
 }
 
 // GET /portal/api/site-traffic?namespace=&days=: 404s, 5xx, web vitals and AI crawlers from
 // Cloudflare over the last `days` (1 to 30; the Worker's default is 7).
-export function fetchSiteTraffic(namespace: string, days?: number): Promise<Answer<PortalSiteTraffic>> {
-  const q = new URLSearchParams({ namespace, ...(days === undefined ? {} : { days: String(days) }) });
+export function fetchSiteTraffic(
+  namespace: string,
+  days?: number,
+): Promise<Answer<PortalSiteTraffic>> {
+  const q = new URLSearchParams({
+    namespace,
+    ...(days === undefined ? {} : { days: String(days) }),
+  });
   return get<PortalSiteTraffic>(`${SITE_TRAFFIC_URL}?${q.toString()}`);
 }
 
 // GET /portal/api/workers-builds?namespace=&limit=: the Workers Builds of the Worker the
 // site row names, newest first (1 to 50; the Worker's default is 10).
-export function fetchWorkersBuilds(namespace: string, limit?: number): Promise<Answer<PortalWorkersBuilds>> {
-  const q = new URLSearchParams({ namespace, ...(limit === undefined ? {} : { limit: String(limit) }) });
+export function fetchWorkersBuilds(
+  namespace: string,
+  limit?: number,
+): Promise<Answer<PortalWorkersBuilds>> {
+  const q = new URLSearchParams({
+    namespace,
+    ...(limit === undefined ? {} : { limit: String(limit) }),
+  });
   return get<PortalWorkersBuilds>(`${WORKERS_BUILDS_URL}?${q.toString()}`);
 }
 
@@ -439,7 +576,9 @@ export function fetchClaimsJob(id: string): Promise<Answer<PortalClaimsJob>> {
 // POST /portal/api/sign-out: the Worker expires the Portal's cookies and answers 204.
 // A session that already ended counts as signed out. Anything else is said, because a
 // sign-out that silently failed leaves the session open on a shared screen.
-export async function signOutRequest(csrf: string): Promise<{ kind: "ok" } | { kind: "error"; message: string }> {
+export async function signOutRequest(
+  csrf: string,
+): Promise<{ kind: "ok" } | { kind: "error"; message: string }> {
   try {
     const res = await fetch(SIGN_OUT_URL, {
       method: "POST",

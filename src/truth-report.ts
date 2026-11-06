@@ -89,11 +89,23 @@ export const UNCONSOLIDATED_CADENCE = 5;
 //
 // The extension must start with a letter, which excludes section numbers such as
 // `2/2.1` and `5a-1/5a-3/1.5`: two slashes and a dot, and not a file.
-const REPO_PATH = /(?<![A-Za-z0-9_./-])(\.?(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z][A-Za-z0-9]{0,4})\b/g;
+const REPO_PATH =
+  /(?<![A-Za-z0-9_./-])(\.?(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z][A-Za-z0-9]{0,4})\b/g;
 
 // Namespace prefixes that mean "a Capsid document", not "a file in the repo".
 // A path starting with one of these is a store address and is skipped.
-const NAMESPACE_PREFIXES = ["capsid/", "germomics/", "foxing/", "foxhound/", "dustinedwards/", "julieedwards/", "txasm/", "bsw/", "claude-skills/", "recova/"];
+const NAMESPACE_PREFIXES = [
+  "capsid/",
+  "germomics/",
+  "foxing/",
+  "foxhound/",
+  "dustinedwards/",
+  "julieedwards/",
+  "txasm/",
+  "bsw/",
+  "claude-skills/",
+  "recova/",
+];
 
 // The stored report's path prefix.
 export const REPORTS_PREFIX = "reports/";
@@ -162,14 +174,17 @@ export function buildTruthReport(input: TruthInput): TruthReport {
   checks[0] = {
     check: "contradictions",
     subjects: standing.length,
-    ok: standing.length - [...contradicting].filter((p) => standing.some((d) => d.path === p)).length,
+    ok:
+      standing.length - [...contradicting].filter((p) => standing.some((d) => d.path === p)).length,
     findings: checks[0].findings,
   };
 
   // 2. Stale decisions: published and untouched in half a year. A state claim is
   //    re-verified before it is acted on, and a reader cannot apply that rule to a
   //    document whose age they cannot see.
-  const decisions = standing.filter((d) => d.type === "decision" && (d.status ?? "published") === "published");
+  const decisions = standing.filter(
+    (d) => d.type === "decision" && (d.status ?? "published") === "published",
+  );
   const staleDecisions = decisions.filter((d) => {
     const stamp = parseStamp(d.updated_at);
     return stamp !== null && daysBetween(now, stamp) > STALE_DECISION_DAYS;
@@ -187,7 +202,9 @@ export function buildTruthReport(input: TruthInput): TruthReport {
 
   // 3. Unbound specs: no typed edge in either direction, so a reader cannot find
   //    from the store whether the work happened.
-  const specs = standing.filter((d) => d.type === "spec" || d.type === "protocol" || d.type === "procedural");
+  const specs = standing.filter(
+    (d) => d.type === "spec" || d.type === "protocol" || d.type === "procedural",
+  );
   const bound = new Set<string>();
   for (const edge of input.edges) {
     if (edge.from_ns === namespace) bound.add(edge.from_path);
@@ -206,7 +223,9 @@ export function buildTruthReport(input: TruthInput): TruthReport {
   });
 
   // 4. Broken links, from gather, counted against the whole edge population.
-  const namespaceEdges = input.edges.filter((e) => e.from_ns === namespace || e.to_ns === namespace);
+  const namespaceEdges = input.edges.filter(
+    (e) => e.from_ns === namespace || e.to_ns === namespace,
+  );
   checks.push({
     check: "broken_links",
     subjects: namespaceEdges.length,
@@ -214,7 +233,9 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     findings: input.danglingEdges.map((e) => ({
       check: "broken_links",
       subject: `${e.from_ns}/${e.from_path} -[${e.type}]-> ${e.to_ns}/${e.to_path}`,
-      detail: e.source_missing ? "the source document no longer exists" : "the target document no longer exists",
+      detail: e.source_missing
+        ? "the source document no longer exists"
+        : "the target document no longer exists",
     })),
   });
 
@@ -266,7 +287,8 @@ export function buildTruthReport(input: TruthInput): TruthReport {
         {
           check: "doc_vs_code_drift",
           subject: namespace,
-          detail: "NOT RUN: the repo tree could not be read, so this check is excluded from integrity rather than counted as clean",
+          detail:
+            "NOT RUN: the repo tree could not be read, so this check is excluded from integrity rather than counted as clean",
         },
       ],
     });
@@ -280,23 +302,24 @@ export function buildTruthReport(input: TruthInput): TruthReport {
     check: "unconsolidated",
     subjects: standing.length,
     ok: overCadence ? standing.length - unconsolidated.length : standing.length,
-    findings:
-      overCadence
-        ? [
-            {
-              check: "unconsolidated",
-              subject: namespace,
-              detail: `${unconsolidated.length} unconsolidated documents, over the consolidation threshold of 5`,
-            },
-          ]
-        : [],
+    findings: overCadence
+      ? [
+          {
+            check: "unconsolidated",
+            subject: namespace,
+            detail: `${unconsolidated.length} unconsolidated documents, over the consolidation threshold of 5`,
+          },
+        ]
+      : [],
   });
 
   // 7 and 8. The rule documents (src/rule-docs.ts): each under its cap, and naming only
   //    tools and actions the Worker serves. The subjects are the rule documents in this
   //    namespace, so a namespace with none has nothing judged here.
   const ruleDocs = standing.filter((d) => ruleDocCap(namespace, d.path) !== null);
-  const problems = ruleDocs.map((d) => ruleDocProblem(namespace, d.path, d.body ?? "")).filter((p): p is RuleDocProblem => p !== null);
+  const problems = ruleDocs
+    .map((d) => ruleDocProblem(namespace, d.path, d.body ?? ""))
+    .filter((p): p is RuleDocProblem => p !== null);
   const oversize = problems.filter((p) => p.oversize);
   checks.push({
     check: "rule_doc_caps",
@@ -356,7 +379,7 @@ export function renderTruthReport(report: TruthReport): string {
   lines.push("");
   lines.push(
     "One number and the checks it is made of. Integrity is subjects in good standing over subjects judged, across every check that had a subject to judge. " +
-      "A check that could not run is excluded rather than counted as clean. Nothing here judges whether a ruling is CORRECT; it counts what a program can count without an opinion."
+      "A check that could not run is excluded rather than counted as clean. Nothing here judges whether a ruling is CORRECT; it counts what a program can count without an opinion.",
   );
   lines.push("");
   lines.push("## Documents");
@@ -364,7 +387,9 @@ export function renderTruthReport(report: TruthReport): string {
   lines.push(`- total: ${report.documents.total}`);
   lines.push(`- archived: ${report.documents.archived}`);
   lines.push(`- unconsolidated: ${report.documents.unconsolidated}`);
-  for (const [type, n] of Object.entries(report.documents.by_type).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+  for (const [type, n] of Object.entries(report.documents.by_type).sort(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  )) {
     lines.push(`- type ${type}: ${n}`);
   }
   lines.push("");
@@ -393,7 +418,9 @@ export function renderTruthReport(report: TruthReport): string {
       lines.push("");
     }
   }
-  lines.push("Generated by `capsid_lint_namespace` mode `report`. The trend is the point: compare this against the previous dated report in this directory.");
+  lines.push(
+    "Generated by `capsid_lint_namespace` mode `report`. The trend is the point: compare this against the previous dated report in this directory.",
+  );
   lines.push("");
   return lines.join("\n");
 }

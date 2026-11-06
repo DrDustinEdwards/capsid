@@ -40,14 +40,22 @@ interface BackupSite {
 }
 
 /** The sites whose operator configuration sets backup: true, in namespace order. */
-export async function backupSites(env: Env, rows?: Awaited<ReturnType<typeof readSiteConfig>>): Promise<BackupSite[]> {
+export async function backupSites(
+  env: Env,
+  rows?: Awaited<ReturnType<typeof readSiteConfig>>,
+): Promise<BackupSite[]> {
   return (rows ?? (await readSiteConfig(env.DB)))
-    .filter((r): r is typeof r & { origin: string; operator: SiteOperator } => !!r.origin && !!r.operator?.backup)
+    .filter(
+      (r): r is typeof r & { origin: string; operator: SiteOperator } =>
+        !!r.origin && !!r.operator?.backup,
+    )
     .map((r) => ({ namespace: r.namespace, origin: r.origin, operator: r.operator }))
     .sort((a, b) => a.namespace.localeCompare(b.namespace));
 }
 
-async function amazonCopies(env: Env): Promise<{ received_at: string | null; sites: OffaccountReport["sites"] } | null> {
+async function amazonCopies(
+  env: Env,
+): Promise<{ received_at: string | null; sites: OffaccountReport["sites"] } | null> {
   try {
     const report = await env.APP_KV.get<OffaccountReport>(OFFACCOUNT_REPORT_KEY, "json");
     return report ? { received_at: report.received_at, sites: report.sites } : null;
@@ -57,13 +65,25 @@ async function amazonCopies(env: Env): Promise<{ received_at: string | null; sit
 }
 
 /** Every site's backup state now, uncached. A site that cannot be read says why; the rest are still read. */
-export async function readSiteBackups(env: Env, fetchImpl: FetchLike = fetch): Promise<PortalBackups> {
+export async function readSiteBackups(
+  env: Env,
+  fetchImpl: FetchLike = fetch,
+): Promise<PortalBackups> {
   const rows = await readSiteConfig(env.DB);
-  const [sites, amazon, capsid] = await Promise.all([backupSites(env, rows), amazonCopies(env), backupFreshness(env)]);
+  const [sites, amazon, capsid] = await Promise.all([
+    backupSites(env, rows),
+    amazonCopies(env),
+    backupFreshness(env),
+  ]);
   const amazonFor = (namespace: string) => {
     const line = isOffaccountSite(namespace) ? amazon?.sites[namespace] : undefined;
     // The report names a run by its id; the answer gives its time, like every other field.
-    return line ? { newest: line.newest ? (parseDumpStamp(line.newest)?.toISOString() ?? null) : null, bytes: line.bytes } : null;
+    return line
+      ? {
+          newest: line.newest ? (parseDumpStamp(line.newest)?.toISOString() ?? null) : null,
+          bytes: line.bytes,
+        }
+      : null;
   };
   const read = await Promise.all(
     sites.map(async (site): Promise<SiteBackupRow> => {
@@ -71,13 +91,24 @@ export async function readSiteBackups(env: Env, fetchImpl: FetchLike = fetch): P
       return {
         namespace: site.namespace,
         origin: site.origin,
-        status: call.ok && call.data && typeof call.data === "object" ? (call.data as SiteBackupStatus) : null,
+        status:
+          call.ok && call.data && typeof call.data === "object"
+            ? (call.data as SiteBackupStatus)
+            : null,
         error: call.error,
         amazon: amazonFor(site.namespace),
       };
-    })
+    }),
   );
-  const unconfigured = rows.filter((r) => r.origin && isOffaccountSite(r.namespace) && r.namespace !== "capsid" && !r.operator?.backup).map((r) => r.namespace);
+  const unconfigured = rows
+    .filter(
+      (r) =>
+        r.origin &&
+        isOffaccountSite(r.namespace) &&
+        r.namespace !== "capsid" &&
+        !r.operator?.backup,
+    )
+    .map((r) => r.namespace);
   return {
     read_at: new Date().toISOString(),
     capsid: { status: capsid, amazon: amazonFor("capsid") },
@@ -94,9 +125,15 @@ export type BackupRun =
 
 function backupLine(call: OperatorCall): string {
   if (!call.ok) return call.error ?? "backup_media failed";
-  const files = (call.data as { files?: Array<{ name?: unknown; complete?: unknown; copied?: unknown }> } | null)?.files;
-  if (!Array.isArray(files)) return `backup_media answered ${call.status} without its files list, so nothing was proven`;
-  const passes = files.map((f) => `${String(f.name)} ${f.complete === true ? "complete" : "goes on next run"}${typeof f.copied === "number" ? ` (${f.copied} copied)` : ""}`);
+  const files = (
+    call.data as { files?: Array<{ name?: unknown; complete?: unknown; copied?: unknown }> } | null
+  )?.files;
+  if (!Array.isArray(files))
+    return `backup_media answered ${call.status} without its files list, so nothing was proven`;
+  const passes = files.map(
+    (f) =>
+      `${String(f.name)} ${f.complete === true ? "complete" : "goes on next run"}${typeof f.copied === "number" ? ` (${f.copied} copied)` : ""}`,
+  );
   return `backup_media ran: ${passes.join(", ") || "no passes"}`;
 }
 
@@ -104,27 +141,63 @@ function backupLine(call: OperatorCall): string {
 export async function backupRefusal(env: Env, namespace: string): Promise<string | null> {
   const row = await readSiteRow(env.DB, namespace);
   if (!row?.origin) return `${namespace} is not a configured site.`;
-  if (!row.operator) return row.operator_problem ?? `${namespace} has no operator API configured, so Capsid may call nothing on it.`;
-  if (!row.operator.backup) return `${namespace} does not set backup: true in its operator configuration.`;
-  if (!tokenSet(env, row.operator)) return `the Capsid Worker secret ${row.operator.auth_var} is not set, so nothing can be called on ${namespace}.`;
+  if (!row.operator)
+    return (
+      row.operator_problem ??
+      `${namespace} has no operator API configured, so Capsid may call nothing on it.`
+    );
+  if (!row.operator.backup)
+    return `${namespace} does not set backup: true in its operator configuration.`;
+  if (!tokenSet(env, row.operator))
+    return `the Capsid Worker secret ${row.operator.auth_var} is not set, so nothing can be called on ${namespace}.`;
   return null;
 }
 
-async function runOne(env: Env, site: BackupSite, args: { actor: string; via: string }, now: Date, fetchImpl: FetchLike): Promise<BackupRun> {
+async function runOne(
+  env: Env,
+  site: BackupSite,
+  args: { actor: string; via: string },
+  now: Date,
+  fetchImpl: FetchLike,
+): Promise<BackupRun> {
   const wait = await takeLimit(env, site.namespace, "backup_media", now, false);
-  if (wait) return { namespace: site.namespace, ran: false, refusal: `backup_media on ${site.namespace} waits: ${wait}` };
+  if (wait)
+    return {
+      namespace: site.namespace,
+      ran: false,
+      refusal: `backup_media on ${site.namespace} waits: ${wait}`,
+    };
   const started = new Date();
   const call = await callOperator(env, site, "backup_media", fetchImpl, { backup: true });
   const line = backupLine(call);
   let recorded = true;
   try {
     await env.DB.batch([
-      auditStatement(env.DB, args.actor, BACKUP_AUDIT_ACTION, site.namespace, null, { tool: "backup_media", via: args.via, status: call.status, ok: call.ok, error: call.error }),
-      ...taskRunStatements(env.DB, "site-backup", started, new Date(), call.ok ? "ok" : "refused", `${site.namespace}: ${line} (${args.via})`),
+      auditStatement(env.DB, args.actor, BACKUP_AUDIT_ACTION, site.namespace, null, {
+        tool: "backup_media",
+        via: args.via,
+        status: call.status,
+        ok: call.ok,
+        error: call.error,
+      }),
+      ...taskRunStatements(
+        env.DB,
+        "site-backup",
+        started,
+        new Date(),
+        call.ok ? "ok" : "refused",
+        `${site.namespace}: ${line} (${args.via})`,
+      ),
     ]);
   } catch (err) {
     recorded = false;
-    logEvent("SITE_BACKUP_NOT_RECORDED", { message: `SITE_BACKUP_NOT_RECORDED ${site.namespace}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "SITE_BACKUP_NOT_RECORDED",
+      {
+        message: `SITE_BACKUP_NOT_RECORDED ${site.namespace}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
   return { namespace: site.namespace, ran: true, call, line, recorded };
 }
@@ -134,7 +207,7 @@ export async function runSiteBackups(
   env: Env,
   args: { namespace?: string; actor: string; via: string },
   now: Date,
-  fetchImpl: FetchLike = fetch
+  fetchImpl: FetchLike = fetch,
 ): Promise<{ ok: true; runs: BackupRun[] } | { ok: false; refusal: string }> {
   const all = await backupSites(env);
   if (args.namespace) {
@@ -142,13 +215,22 @@ export async function runSiteBackups(
     if (refusal) return { ok: false, refusal };
   }
   const targets = args.namespace ? all.filter((s) => s.namespace === args.namespace) : all;
-  if (targets.length === 0) return { ok: false, refusal: "no site sets backup: true in its operator configuration, so there is nothing to back up." };
+  if (targets.length === 0)
+    return {
+      ok: false,
+      refusal:
+        "no site sets backup: true in its operator configuration, so there is nothing to back up.",
+    };
   const runs = await Promise.all(
     targets.map((site) =>
       tokenSet(env, site.operator)
         ? runOne(env, site, args, now, fetchImpl)
-        : Promise.resolve<BackupRun>({ namespace: site.namespace, ran: false, refusal: `the Capsid Worker secret ${site.operator.auth_var} is not set.` })
-    )
+        : Promise.resolve<BackupRun>({
+            namespace: site.namespace,
+            ran: false,
+            refusal: `the Capsid Worker secret ${site.operator.auth_var} is not set.`,
+          }),
+    ),
   );
   return { ok: true, runs };
 }

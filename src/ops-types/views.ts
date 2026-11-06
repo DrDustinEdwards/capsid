@@ -24,7 +24,13 @@ export interface PortalPush {
   generated: string;
   public_key: string | null;
   problem: string | null;
-  devices: { id: number; label: string | null; created_at: string; last_sent_at: string | null; last_status: number | null }[];
+  devices: {
+    id: number;
+    label: string | null;
+    created_at: string;
+    last_sent_at: string | null;
+    last_status: number | null;
+  }[];
   // The daily email digest beside the alerts, so Settings says why it is off.
   digest: DigestState;
   // Present after op "test": each device's push service answer (0 when unreachable).
@@ -87,7 +93,12 @@ interface LibraryDocument extends LibraryEntry {
 }
 
 export type PortalLibrary =
-  | { kind: "shelves"; generated: string; shelves: Record<LibraryShelf, LibraryEntry[]>; truncated: boolean }
+  | {
+      kind: "shelves";
+      generated: string;
+      shelves: Record<LibraryShelf, LibraryEntry[]>;
+      truncated: boolean;
+    }
   | { kind: "search"; generated: string; query: string; rows: LibraryHit[]; truncated: boolean }
   | {
       kind: "document";
@@ -176,14 +187,34 @@ export interface PortalTrends {
   weeks: number;
   minutes: { weeks: TrendMinutesWeek[]; truncated: boolean; note: string };
   queue: TrendQueueDay[];
-  merges: { weeks: TrendMergeWeek[]; rollbacks: Array<{ at: string; repo: string; pr: number | null; outcome: "rolled_back" | "rollback_failed" }> };
+  merges: {
+    weeks: TrendMergeWeek[];
+    rollbacks: Array<{
+      at: string;
+      repo: string;
+      pr: number | null;
+      outcome: "rolled_back" | "rollback_failed";
+    }>;
+  };
   deploys: { repos: TrendDeployRepo[] };
   // Visual 6: model spend per week (a read-only sum over job_outcomes.cost_usd).
   cost: { weeks: TrendCostWeek[] };
   // null slots and runs, with error set, when the bucket could not be listed.
-  backups: { slots: { daily: TrendBackupSlot[]; weekly: TrendBackupSlot[]; monthly: TrendBackupSlot[] } | null; runs: number | null; error: string | null };
+  backups: {
+    slots: {
+      daily: TrendBackupSlot[];
+      weekly: TrendBackupSlot[];
+      monthly: TrendBackupSlot[];
+    } | null;
+    runs: number | null;
+    error: string | null;
+  };
   // Read from GitHub and kept an hour; a repo that could not be read is in not_read.
-  ci: { read_at: string; repos: TrendCiRepo[]; not_read: Array<{ namespace: string; error: string }> };
+  ci: {
+    read_at: string;
+    repos: TrendCiRepo[];
+    not_read: Array<{ namespace: string; error: string }>;
+  };
 }
 
 // GET /portal/api/maintenance -> PortalMaintenance. The daily maintenance pass's list
@@ -266,15 +297,43 @@ export interface ConvergenceSite {
   origin: string;
   read_at: string;
   // Null with `problem` set when the site has no usable operator configuration.
-  operator: { path: string; auth_var: string; secret_set: boolean; repairs: Record<string, string>; weekly: string[] } | null;
+  operator: {
+    path: string;
+    auth_var: string;
+    secret_set: boolean;
+    repairs: Record<string, string>;
+    weekly: string[];
+  } | null;
   problem: string | null;
   // sync_status, as label and text; error says why it was not read.
-  status: { ok: boolean; fields: Array<{ key: string; value: string }>; error: string | null } | null;
-  health: { ok: boolean; http_status: number | null; checks: ConvergenceCheck[]; error: string | null } | null;
+  status: {
+    ok: boolean;
+    fields: Array<{ key: string; value: string }>;
+    error: string | null;
+  } | null;
+  health: {
+    ok: boolean;
+    http_status: number | null;
+    checks: ConvergenceCheck[];
+    error: string | null;
+  } | null;
   // The watcher's last read of the names (read_at), or why there is none.
-  secrets: { state: "ok" | "none" | "error"; script: string | null; rows: SecretPresence[]; reason: string | null; read_at?: string } | null;
+  secrets: {
+    state: "ok" | "none" | "error";
+    script: string | null;
+    rows: SecretPresence[];
+    reason: string | null;
+    read_at?: string;
+  } | null;
   // Newest first.
-  recent: Array<{ at: string; actor: string; tool: string; via: string | null; converged: boolean | null; error: string | null }>;
+  recent: Array<{
+    at: string;
+    actor: string;
+    tool: string;
+    via: string | null;
+    converged: boolean | null;
+    error: string | null;
+  }>;
 }
 
 export interface PortalConvergence {
@@ -409,7 +468,11 @@ export interface OvernightDigest {
   pull_requests_ready: DigestPr[];
   pull_requests_merged: number;
   // Per source, never one added to the other: a job in both would count twice.
-  totals: { telemetry: UsageTotals & { jobs: number }; reported: UsageTotals & { jobs: number }; jobs_without_usage: number };
+  totals: {
+    telemetry: UsageTotals & { jobs: number };
+    reported: UsageTotals & { jobs: number };
+    jobs_without_usage: number;
+  };
   truncated: string[];
 }
 
@@ -495,7 +558,12 @@ export interface PortalSiteSearch {
   bing: SiteSource<BingSearchData>;
 }
 
-export type WebVital = "largestContentfulPaint" | "interactionToNextPaint" | "cumulativeLayoutShift" | "firstContentfulPaint" | "timeToFirstByte";
+export type WebVital =
+  | "largestContentfulPaint"
+  | "interactionToNextPaint"
+  | "cumulativeLayoutShift"
+  | "firstContentfulPaint"
+  | "timeToFirstByte";
 
 export interface TrafficNotFound {
   since: string;

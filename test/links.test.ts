@@ -5,7 +5,9 @@ import { LINK_TYPES, parseLinks } from "../src/links.ts";
 
 test("parseLinks accepts an edge and defaults to_ns to the source namespace", () => {
   const result = parseLinks('[{"type":"references","to_path":"decisions.md"}]', "capsid");
-  assert.deepEqual(result, { edges: [{ type: "references", to_ns: "capsid", to_path: "decisions.md" }] });
+  assert.deepEqual(result, {
+    edges: [{ type: "references", to_ns: "capsid", to_path: "decisions.md" }],
+  });
 });
 
 test("parseLinks keeps an explicit to_ns", () => {
@@ -58,7 +60,10 @@ test("an edge namespace is held to the SAME namespace rule the tools use", () =>
   // That rule is nsName, which bounds length only. This asserts what it does, so it
   // keeps passing if nsName is tightened and fails if it is dropped.
   const tooLong = "n".repeat(MAX_NAMESPACE + 1);
-  const result = parseLinks(JSON.stringify([{ type: "references", to_path: "core.md", to_ns: tooLong }]), "capsid");
+  const result = parseLinks(
+    JSON.stringify([{ type: "references", to_path: "core.md", to_ns: tooLong }]),
+    "capsid",
+  );
   assert.ok("error" in result, "an unbounded namespace was accepted on an edge");
   assert.match(result.error, /is not a namespace name/);
 });
@@ -66,7 +71,12 @@ test("an edge namespace is held to the SAME namespace rule the tools use", () =>
 test("the shapes the live store actually holds still parse", () => {
   // Shapes the live store holds, including the archive/ prefix and a nested path,
   // so the rule cannot tighten past the data.
-  for (const to_path of ["core.md", "archive/session-2026-08-09.md", "parity/PARITY-LEDGER.md", "TASK-brake-followup-3.md"]) {
+  for (const to_path of [
+    "core.md",
+    "archive/session-2026-08-09.md",
+    "parity/PARITY-LEDGER.md",
+    "TASK-brake-followup-3.md",
+  ]) {
     const result = parseLinks(JSON.stringify([{ type: "governs", to_path }]), "capsid");
     assert.ok("edges" in result, `${to_path} was rejected but exists in the live store`);
     assert.equal(result.edges[0].to_path, to_path);
@@ -76,7 +86,9 @@ test("the shapes the live store actually holds still parse", () => {
 test("the link vocabulary is closed, and the error names the whole set", () => {
   const result = parseLinks('[{"type":"mentions","to_path":"core.md"}]', "capsid");
   assert.ok("error" in result);
-  assert.ok(LINK_TYPES.length > 0, "LINK_TYPES is empty, so the error was not checked for any type");
+  assert.ok(
+    LINK_TYPES.length > 0,
+    "LINK_TYPES is empty, so the error was not checked for any type",
+  );
   for (const type of LINK_TYPES) assert.match(result.error, new RegExp(type));
 });
-

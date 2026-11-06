@@ -28,7 +28,10 @@ export function useLocation(): [string, (to: string, opts?: { replace?: boolean 
   const { pathname } = useRouterLocation();
   const base = pageBase(pathname);
   const nav = useNavigate();
-  const navigate = useCallback((to: string, opts?: { replace?: boolean }) => void nav(withBase(base, to), opts), [nav, base]);
+  const navigate = useCallback(
+    (to: string, opts?: { replace?: boolean }) => void nav(withBase(base, to), opts),
+    [nav, base],
+  );
   return [pathname.slice(base.length) || "/", navigate];
 }
 
@@ -38,7 +41,10 @@ export function useSearch(): string {
 }
 
 /** A link to a Portal page, named from the Portal's root. */
-export const Link = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }>(function Link({ href, ...rest }, ref) {
+export const Link = forwardRef<
+  HTMLAnchorElement,
+  AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }
+>(function Link({ href, ...rest }, ref) {
   const base = pageBase(useRouterLocation().pathname);
   return <RouterLink ref={ref} to={withBase(base, href)} {...rest} />;
 });

@@ -23,16 +23,20 @@ export async function handlePortalPackageHistory(
   request: Request,
   env: Env,
   now: Date = new Date(),
-  fetchImpl: FetchLike = (url, init) => fetch(url, init)
+  fetchImpl: FetchLike = (url, init) => fetch(url, init),
 ): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const name = new URL(request.url).searchParams.get("name")?.trim() ?? "";
-  if (!name || name.length > 214) return textResponse("name must be a configured package's npm name.", 400);
+  if (!name || name.length > 214)
+    return textResponse("name must be a configured package's npm name.", 400);
   const cfg = await readPackageRow(env.DB, name);
   if (!cfg) return textResponse(`${name} is not a configured package.`, 404);
   const body = await packageHistory(env, cfg, fetchImpl, now);
-  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }
 
 // The Sites view's 404 panel (area 8, N4): GET /portal/api/not-found. Capsid's own counts,
@@ -41,18 +45,45 @@ export async function handlePortalPackageHistory(
 export const PORTAL_NOT_FOUND_PATH = "/portal/api/not-found";
 const NOT_FOUND_DAYS = 30;
 
-export async function handlePortalNotFound(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalNotFound(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   let body: PortalNotFound;
   try {
-    const all = await notFoundReport(env.DB, { days: NOT_FOUND_DAYS, limit: 500, includeProbes: true, now });
-    const pages = all.filter((e) => e.kind === "page").slice(0, 50).map(({ path, hits, referrers }) => ({ path, hits, referrers }));
-    body = { days: NOT_FOUND_DAYS, generated: now.toISOString(), pages, probes: all.filter((e) => e.kind === "probe").reduce((n, e) => n + e.hits, 0), error: null };
+    const all = await notFoundReport(env.DB, {
+      days: NOT_FOUND_DAYS,
+      limit: 500,
+      includeProbes: true,
+      now,
+    });
+    const pages = all
+      .filter((e) => e.kind === "page")
+      .slice(0, 50)
+      .map(({ path, hits, referrers }) => ({ path, hits, referrers }));
+    body = {
+      days: NOT_FOUND_DAYS,
+      generated: now.toISOString(),
+      pages,
+      probes: all.filter((e) => e.kind === "probe").reduce((n, e) => n + e.hits, 0),
+      error: null,
+    };
   } catch (err) {
-    body = { days: NOT_FOUND_DAYS, generated: now.toISOString(), pages: null, probes: null, error: (err instanceof Error ? err.message : String(err)).slice(0, 200) };
+    body = {
+      days: NOT_FOUND_DAYS,
+      generated: now.toISOString(),
+      pages: null,
+      probes: null,
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+    };
   }
-  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }
 
 // The Shared code view's read: GET /portal/api/shared-code (src/shared-code.ts). Like the
@@ -60,11 +91,18 @@ export async function handlePortalNotFound(request: Request, env: Env, now: Date
 // cache, and reads GitHub only for the configured packages and the configured sites' repos.
 export const PORTAL_SHARED_CODE_PATH = "/portal/api/shared-code";
 
-export async function handlePortalSharedCode(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalSharedCode(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const body = await readSharedCode(env, now);
-  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }
 
 // The Completeness view's read: GET /portal/api/completeness (src/completeness.ts). devkit's
@@ -72,11 +110,18 @@ export async function handlePortalSharedCode(request: Request, env: Env, now: Da
 // cached like the Shared code view above; it reads that one file and nothing else.
 export const PORTAL_COMPLETENESS_PATH = "/portal/api/completeness";
 
-export async function handlePortalCompleteness(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalCompleteness(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const body = await readCompleteness(env, now);
-  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }
 
 // The Workers tab's read: GET /portal/api/resources, the secrets and data model the nightly
@@ -84,9 +129,24 @@ export async function handlePortalCompleteness(request: Request, env: Env, now: 
 // above; it reads one KV value and never calls Cloudflare.
 export const PORTAL_RESOURCES_PATH = "/portal/api/resources";
 
-export async function handlePortalResources(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalResources(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  const body = (await readResources(env)) ?? { version: 1, read_at: null, workers: [], databases: [], kv_namespaces: [], buckets: [], problems: ["The nightly build has not read Cloudflare yet."] };
-  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  const body = (await readResources(env)) ?? {
+    version: 1,
+    read_at: null,
+    workers: [],
+    databases: [],
+    kv_namespaces: [],
+    buckets: [],
+    problems: ["The nightly build has not read Cloudflare yet."],
+  };
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }

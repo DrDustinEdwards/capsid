@@ -49,16 +49,25 @@ export async function issuerKeys(): Promise<KeySource> {
   return keys;
 }
 
-type Caller = { ok: true; pr: number; jobId: string; headSha: string } | { ok: false; response: Response };
+type Caller =
+  | { ok: true; pr: number; jobId: string; headSha: string }
+  | { ok: false; response: Response };
 
 async function caller(request: Request, env: Env): Promise<Caller> {
-  const refuse = (status: number, why: string): Caller => ({ ok: false, response: textResponse(why, status) });
+  const refuse = (status: number, why: string): Caller => ({
+    ok: false,
+    response: textResponse(why, status),
+  });
   const token = /^Bearer (\S+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
   if (!token) return refuse(401, "a GitHub Actions OIDC token is required");
   let claims: Record<string, unknown>;
-  const claim = (name: string) => (typeof claims[name] === "string" ? (claims[name] as string) : "");
+  const claim = (name: string) =>
+    typeof claims[name] === "string" ? (claims[name] as string) : "";
   try {
-    const verdict = await verifyJwt(token, await issuerKeys(), { issuer: ISSUER, audience: AUDIENCE });
+    const verdict = await verifyJwt(token, await issuerKeys(), {
+      issuer: ISSUER,
+      audience: AUDIENCE,
+    });
     if (!verdict.ok) return refuse(401, "the OIDC token does not verify");
     claims = verdict.claims;
   } catch {
@@ -72,7 +81,10 @@ async function caller(request: Request, env: Env): Promise<Caller> {
     !claim("workflow_ref").toLowerCase().startsWith(`${repo}/${WORKFLOW}@`.toLowerCase()) ||
     !pr
   ) {
-    return refuse(403, `only ${WORKFLOW} on a pull request in ${repo} may read the shadow test's job`);
+    return refuse(
+      403,
+      `only ${WORKFLOW} on a pull request in ${repo} may read the shadow test's job`,
+    );
   }
   const [owner, name] = repo.split("/");
   const resp = await ghFetch(env, owner, name, `/repos/${owner}/${name}/pulls/${pr}`);
@@ -91,7 +103,12 @@ export async function handleShadowJob(request: Request, env: Env): Promise<Respo
   const job = (await readJob(env.DB, who.jobId))!;
   const test = await env.APP_KV.get(testKey(who.jobId), "json");
   // The body as its poster wrote it, without the signature frontmatter.
-  return Response.json({ job_id: job.id, title: job.title, body: splitSignedTask(job.body).body, test });
+  return Response.json({
+    job_id: job.id,
+    title: job.title,
+    body: splitSignedTask(job.body).body,
+    test,
+  });
 }
 
 export async function handleShadowResult(request: Request, env: Env): Promise<Response> {
@@ -105,22 +122,43 @@ export async function handleShadowResult(request: Request, env: Env): Promise<Re
   } catch {
     return textResponse("the body is not JSON", 400);
   }
-  const path = typeof r.path === "string" && /^(test|test-integration)\/shadow\.test\.ts$/.test(r.path) ? r.path : null;
-  const test = typeof r.test === "string" && r.test.length > 0 && r.test.length <= MAX_TEST_BYTES ? r.test : null;
-  const result = (v: unknown) => (RESULTS as readonly unknown[]).includes(v) ? (v as (typeof RESULTS)[number]) : null;
+  const path =
+    typeof r.path === "string" && /^(test|test-integration)\/shadow\.test\.ts$/.test(r.path)
+      ? r.path
+      : null;
+  const test =
+    typeof r.test === "string" && r.test.length > 0 && r.test.length <= MAX_TEST_BYTES
+      ? r.test
+      : null;
+  const result = (v: unknown) =>
+    (RESULTS as readonly unknown[]).includes(v) ? (v as (typeof RESULTS)[number]) : null;
   const base = result(r.base);
   const head = result(r.head);
-  if (!path || !test || !base || !head) return textResponse(`path, test, base and head are required; base and head are one of ${RESULTS.join(", ")}`, 400);
+  if (!path || !test || !base || !head)
+    return textResponse(
+      `path, test, base and head are required; base and head are one of ${RESULTS.join(", ")}`,
+      400,
+    );
   // The first test written for a job is the one kept: a later push runs it again rather
   // than asking the model for another.
-  if ((await env.APP_KV.get(testKey(who.jobId))) === null) await env.APP_KV.put(testKey(who.jobId), JSON.stringify({ path, test }), { expirationTtl: TEST_TTL_S });
-  await auditStatement(env.DB, "system:shadow-test", SHADOW_ACTION, NAMESPACE, jobDocPath(who.jobId), {
-    job_id: who.jobId,
-    pr: who.pr,
-    head_sha: who.headSha,
-    path,
-    base,
-    head,
-  }).run();
+  if ((await env.APP_KV.get(testKey(who.jobId))) === null)
+    await env.APP_KV.put(testKey(who.jobId), JSON.stringify({ path, test }), {
+      expirationTtl: TEST_TTL_S,
+    });
+  await auditStatement(
+    env.DB,
+    "system:shadow-test",
+    SHADOW_ACTION,
+    NAMESPACE,
+    jobDocPath(who.jobId),
+    {
+      job_id: who.jobId,
+      pr: who.pr,
+      head_sha: who.headSha,
+      path,
+      base,
+      head,
+    },
+  ).run();
   return Response.json({ ok: true, job_id: who.jobId, base, head });
 }

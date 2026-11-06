@@ -28,18 +28,25 @@ test("PLANT: the tool list is served in registration order", async () => {
   } as unknown as typeof original;
   let server: McpServer;
   try {
-    server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+    server = buildServer(
+      fakeEnv({ APP_KV: fakeKv({}).kv }),
+      adminAgentForEmail("admin@example.com"),
+    );
   } finally {
     McpServer.prototype.registerTool = original;
   }
-  assert.equal(registered.length, CAPSID_TOOLS.length, `the spy saw ${registered.length} registrations`);
+  assert.equal(
+    registered.length,
+    CAPSID_TOOLS.length,
+    `the spy saw ${registered.length} registrations`,
+  );
   const client = await connect(server);
   try {
     const { tools } = await client.listTools();
     assert.deepEqual(
       tools.map((t) => t.name),
       registered,
-      "tools/list is not in registration order"
+      "tools/list is not in registration order",
     );
   } finally {
     await client.close();
@@ -57,7 +64,12 @@ test("PLANT: a read grant is served only the tools it can call, so the list is p
     const all = (await admin.listTools()).tools.map((t) => t.name);
     const read = (await readOnly.listTools()).tools.map((t) => t.name);
     assert.deepEqual(all, [...CAPSID_TOOLS]);
-    assert.deepEqual(read, CAPSID_TOOLS.filter((t) => !["capsid_write_doc", "capsid_delete_doc", "capsid_close_pr"].includes(t)));
+    assert.deepEqual(
+      read,
+      CAPSID_TOOLS.filter(
+        (t) => !["capsid_write_doc", "capsid_delete_doc", "capsid_close_pr"].includes(t),
+      ),
+    );
   } finally {
     await admin.close();
     await readOnly.close();

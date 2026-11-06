@@ -11,7 +11,7 @@ import {
 import {
   signDeleteToken,
   verifyDeleteToken,
-  type DeleteClaims
+  type DeleteClaims,
 } from "../src/namespace-delete-token.ts";
 import { D1_BATCH_STATEMENTS } from "../src/limits.ts";
 import { actionArgFor, defaultActionFor, requiredGrant } from "../src/scope.ts";
@@ -68,10 +68,23 @@ test("the tool is admin, destructive, and its action argument is required with n
   // delete_perform). The tool also registers and updates, so it carries one set of
   // hints for all four: not idempotent, because a register is not.
   assert.equal(requiredGrant("capsid_admin_manage_namespaces"), "admin");
-  assert.deepEqual(hintsFor("capsid_admin_manage_namespaces"), { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+  assert.deepEqual(hintsFor("capsid_admin_manage_namespaces"), {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  });
   assert.equal(actionArgFor("capsid_admin_manage_namespaces"), "action");
-  assert.equal(defaultActionFor("capsid_admin_manage_namespaces"), undefined, "an omitted action must never mean perform");
-  assert.equal(MANAGE_NAMESPACES.defaultAction, undefined, "the served schema gives the action a default, so an omitted one could mean perform");
+  assert.equal(
+    defaultActionFor("capsid_admin_manage_namespaces"),
+    undefined,
+    "an omitted action must never mean perform",
+  );
+  assert.equal(
+    MANAGE_NAMESPACES.defaultAction,
+    undefined,
+    "the served schema gives the action a default, so an omitted one could mean perform",
+  );
   assert.deepEqual(MANAGE_NAMESPACES.actions.delete_perform.inject, { action: "perform" });
   assert.deepEqual(MANAGE_NAMESPACES.actions.delete_preview.inject, { action: "preview" });
 });
@@ -81,13 +94,19 @@ test("an empty registered namespace has no refusal", () => {
 });
 
 test("an unregistered namespace is the only refusal", () => {
-  const refusals = deleteRefusals(plan({ registered: false, on_roster: true }, { jobs_open: 3 }), ALL);
+  const refusals = deleteRefusals(
+    plan({ registered: false, on_roster: true }, { jobs_open: 3 }),
+    ALL,
+  );
   assert.equal(refusals.length, 1);
   assert.match(refusals[0], /namespace not found: sample/);
 });
 
 test("PLANT: an open job refuses whatever cascade and allow_improve_paths say, and names the job", () => {
-  const p = plan({ open_jobs: [{ id: "job_000000000001", status: "blocked", title: "t" }] }, { jobs_open: 1 });
+  const p = plan(
+    { open_jobs: [{ id: "job_000000000001", status: "blocked", title: "t" }] },
+    { jobs_open: 1 },
+  );
   const refusals = deleteRefusals(p, ALL);
   assert.equal(refusals.length, 1);
   assert.match(refusals[0], /job_000000000001 \(blocked, 't'\)/);
@@ -96,7 +115,10 @@ test("PLANT: an open job refuses whatever cascade and allow_improve_paths say, a
 });
 
 test("PLANT: a live agent refuses whatever cascade says, and names the agent", () => {
-  const refusals = deleteRefusals(plan({ live_agents: ["sample-driver"] }, { agents_live: 1 }), ALL);
+  const refusals = deleteRefusals(
+    plan({ live_agents: ["sample-driver"] }, { agents_live: 1 }),
+    ALL,
+  );
   assert.equal(refusals.length, 1);
   assert.match(refusals[0], /sample-driver/);
   assert.match(refusals[0], /revoke/);
@@ -119,7 +141,10 @@ test("archived documents alone need no cascade", () => {
 });
 
 test("PLANT: a signed policy document needs allow_improve_paths", () => {
-  const p = plan({ policy_paths: ["policy/auto-merge.md"] }, { documents_live: 1, policy_documents: 1 });
+  const p = plan(
+    { policy_paths: ["policy/auto-merge.md"] },
+    { documents_live: 1, policy_documents: 1 },
+  );
   const refusals = deleteRefusals(p, { cascade: true, allowImprovePaths: false });
   assert.equal(refusals.length, 1);
   assert.match(refusals[0], /policy\/auto-merge\.md/);
@@ -133,7 +158,11 @@ test("PLANT: a roster namespace is refused whatever the arguments", () => {
 });
 
 test("a refusal names at most twenty and counts the rest", () => {
-  const ids = Array.from({ length: 20 }, (_, i) => ({ id: `job_${String(i).padStart(12, "0")}`, status: "queued", title: "t" }));
+  const ids = Array.from({ length: 20 }, (_, i) => ({
+    id: `job_${String(i).padStart(12, "0")}`,
+    status: "queued",
+    title: "t",
+  }));
   const refusal = deleteRefusals(plan({ open_jobs: ids }, { jobs_open: 25 }), NONE)[0];
   assert.match(refusal, /and 5 more/);
 });
@@ -144,10 +173,21 @@ test("the fingerprint ignores key order and moves with every count", () => {
   assert.equal(planFingerprint(a), planFingerprint(b));
   for (const key of Object.keys(zeroCounts()) as Array<keyof PlanCounts>) {
     const moved = plan({}, { [key]: 1 });
-    assert.notEqual(planFingerprint(moved), planFingerprint(plan()), `${key} does not move the fingerprint`);
+    assert.notEqual(
+      planFingerprint(moved),
+      planFingerprint(plan()),
+      `${key} does not move the fingerprint`,
+    );
   }
-  assert.notEqual(planFingerprint(plan({ ops_site_revision: 2 })), planFingerprint(plan({ ops_site_revision: 3 })));
-  assert.notEqual(planFingerprint(plan({ live_paths_sha256: "1".repeat(64) })), planFingerprint(plan()), "a swapped document would not move the fingerprint");
+  assert.notEqual(
+    planFingerprint(plan({ ops_site_revision: 2 })),
+    planFingerprint(plan({ ops_site_revision: 3 })),
+  );
+  assert.notEqual(
+    planFingerprint(plan({ live_paths_sha256: "1".repeat(64) })),
+    planFingerprint(plan()),
+    "a swapped document would not move the fingerprint",
+  );
 });
 
 // the batch cap
@@ -156,21 +196,40 @@ test("the cap is derived from D1's batch ceiling: six fixed statements plus two 
   assert.equal(D1_BATCH_STATEMENTS, 100);
   assert.equal(NAMESPACE_DELETE_MAX_DOCUMENTS, Math.floor((D1_BATCH_STATEMENTS - 6) / 2));
   assert.equal(NAMESPACE_DELETE_MAX_DOCUMENTS, 47);
-  assert.ok(6 + 2 * NAMESPACE_DELETE_MAX_DOCUMENTS <= D1_BATCH_STATEMENTS, "a batch at the cap does not fit");
-  assert.ok(6 + 2 * (NAMESPACE_DELETE_MAX_DOCUMENTS + 1) > D1_BATCH_STATEMENTS, "the cap is lower than it needs to be");
+  assert.ok(
+    6 + 2 * NAMESPACE_DELETE_MAX_DOCUMENTS <= D1_BATCH_STATEMENTS,
+    "a batch at the cap does not fit",
+  );
+  assert.ok(
+    6 + 2 * (NAMESPACE_DELETE_MAX_DOCUMENTS + 1) > D1_BATCH_STATEMENTS,
+    "the cap is lower than it needs to be",
+  );
 });
 
 test("PLANT: one document over the cap is refused whatever cascade says, with the count, the cap and the advice", () => {
-  const over = deleteRefusals(plan({}, { documents_live: NAMESPACE_DELETE_MAX_DOCUMENTS + 1 }), ALL);
+  const over = deleteRefusals(
+    plan({}, { documents_live: NAMESPACE_DELETE_MAX_DOCUMENTS + 1 }),
+    ALL,
+  );
   assert.equal(over.length, 1);
   assert.match(over[0], new RegExp(`holds ${NAMESPACE_DELETE_MAX_DOCUMENTS + 1} live documents`));
   assert.match(over[0], new RegExp(`at most ${NAMESPACE_DELETE_MAX_DOCUMENTS}`));
-  assert.match(over[0], /delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper/i);
-  assert.deepEqual(deleteRefusals(plan({}, { documents_live: NAMESPACE_DELETE_MAX_DOCUMENTS }), ALL), [], "exactly the cap is refused");
+  assert.match(
+    over[0],
+    /delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper/i,
+  );
+  assert.deepEqual(
+    deleteRefusals(plan({}, { documents_live: NAMESPACE_DELETE_MAX_DOCUMENTS }), ALL),
+    [],
+    "exactly the cap is refused",
+  );
 });
 
 test("the difference names what moved", () => {
-  const diff = fingerprintDifference(planFingerprint(plan({}, { documents_live: 1 })), planFingerprint(plan({ ops_site_revision: 2 }, { documents_live: 2 })));
+  const diff = fingerprintDifference(
+    planFingerprint(plan({}, { documents_live: 1 })),
+    planFingerprint(plan({ ops_site_revision: 2 }, { documents_live: 2 })),
+  );
   assert.deepEqual(diff, ["counts.documents_live 1 -> 2", "ops_site_revision null -> 2"]);
 });
 
@@ -178,7 +237,12 @@ test("the difference names what moved", () => {
 
 const KEY = { COOKIE_ENCRYPTION_KEY: "unit-namespace-delete-key" };
 const NOW = new Date("2026-09-29T12:00:00Z");
-const EXPECT = { actor: "access:admin@example.com", namespace: "sample", cascade: true, allowImprovePaths: false };
+const EXPECT = {
+  actor: "access:admin@example.com",
+  namespace: "sample",
+  cascade: true,
+  allowImprovePaths: false,
+};
 
 function claims(over: Partial<DeleteClaims> = {}): DeleteClaims {
   return {
@@ -201,12 +265,42 @@ test("a token verifies for the caller and the arguments it was signed for", asyn
 
 test("PLANT: every mismatch refuses the token", async () => {
   const cases: Array<[string, Promise<string>, typeof EXPECT, RegExp]> = [
-    ["another key", signDeleteToken({ COOKIE_ENCRYPTION_KEY: "other" }, claims()), EXPECT, /does not verify/],
-    ["another caller", signDeleteToken(KEY, claims({ actor: "agent:sample-driver" })), EXPECT, /another caller/],
-    ["expired", signDeleteToken(KEY, claims({ exp: Math.floor(NOW.getTime() / 1000) })), EXPECT, /expired/],
-    ["another namespace", signDeleteToken(KEY, claims({ namespace: "other" })), EXPECT, /issued for namespace other/],
-    ["another cascade", signDeleteToken(KEY, claims({ cascade: false })), EXPECT, /issued with cascade false/],
-    ["another allow_improve_paths", signDeleteToken(KEY, claims({ allow_improve_paths: true })), EXPECT, /allow_improve_paths true/],
+    [
+      "another key",
+      signDeleteToken({ COOKIE_ENCRYPTION_KEY: "other" }, claims()),
+      EXPECT,
+      /does not verify/,
+    ],
+    [
+      "another caller",
+      signDeleteToken(KEY, claims({ actor: "agent:sample-driver" })),
+      EXPECT,
+      /another caller/,
+    ],
+    [
+      "expired",
+      signDeleteToken(KEY, claims({ exp: Math.floor(NOW.getTime() / 1000) })),
+      EXPECT,
+      /expired/,
+    ],
+    [
+      "another namespace",
+      signDeleteToken(KEY, claims({ namespace: "other" })),
+      EXPECT,
+      /issued for namespace other/,
+    ],
+    [
+      "another cascade",
+      signDeleteToken(KEY, claims({ cascade: false })),
+      EXPECT,
+      /issued with cascade false/,
+    ],
+    [
+      "another allow_improve_paths",
+      signDeleteToken(KEY, claims({ allow_improve_paths: true })),
+      EXPECT,
+      /allow_improve_paths true/,
+    ],
   ];
   for (const [label, token, expect, pattern] of cases) {
     const verified = await verifyDeleteToken(KEY, await token, expect, NOW);
@@ -218,17 +312,32 @@ test("PLANT: every mismatch refuses the token", async () => {
 test("PLANT: a tampered payload or a malformed token is refused", async () => {
   const token = await signDeleteToken(KEY, claims());
   const [payload, sig] = token.split(".");
-  const swapped = Buffer.from(JSON.stringify({ ...claims(), namespace: "other" })).toString("base64url");
+  const swapped = Buffer.from(JSON.stringify({ ...claims(), namespace: "other" })).toString(
+    "base64url",
+  );
   const tampered = await verifyDeleteToken(KEY, `${swapped}.${sig}`, EXPECT, NOW);
   assert.equal(tampered.ok, false);
   assert.match(tampered.ok ? "" : tampered.refusal, /does not verify/);
-  for (const bad of ["", "x", `${payload}.`, `${payload}.${"0".repeat(63)}`, `${payload}.${sig}.x`]) {
+  for (const bad of [
+    "",
+    "x",
+    `${payload}.`,
+    `${payload}.${"0".repeat(63)}`,
+    `${payload}.${sig}.x`,
+  ]) {
     const verified = await verifyDeleteToken(KEY, bad, EXPECT, NOW);
     assert.equal(verified.ok, false, `accepted ${JSON.stringify(bad)}`);
   }
 });
 
 test("with no root secret nothing is signed or checked", async () => {
-  await assert.rejects(() => signDeleteToken({ COOKIE_ENCRYPTION_KEY: "" }, claims()), /COOKIE_ENCRYPTION_KEY is unset/);
-  await assert.rejects(() => verifyDeleteToken({ COOKIE_ENCRYPTION_KEY: "" }, "a.".concat("0".repeat(64)), EXPECT, NOW), /COOKIE_ENCRYPTION_KEY is unset/);
+  await assert.rejects(
+    () => signDeleteToken({ COOKIE_ENCRYPTION_KEY: "" }, claims()),
+    /COOKIE_ENCRYPTION_KEY is unset/,
+  );
+  await assert.rejects(
+    () =>
+      verifyDeleteToken({ COOKIE_ENCRYPTION_KEY: "" }, "a.".concat("0".repeat(64)), EXPECT, NOW),
+    /COOKIE_ENCRYPTION_KEY is unset/,
+  );
 });

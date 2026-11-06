@@ -1,8 +1,25 @@
 import type { Env } from "./env";
 
-import { POLICY_PREFIX, policyPin, policyPinKey, signTaskBody, splitSignedTask } from "./signed-docs";
-import { auditStatement, documentUpsert, isMissingRowAbort, requireBodyUnchanged, snapshotLive } from "./store-guards";
-import { AUTO_MERGE_POLICY_PATH, checkMergePolicyBody, loadMergePolicy, parseMergePolicy } from "./auto-merge-policy";
+import {
+  POLICY_PREFIX,
+  policyPin,
+  policyPinKey,
+  signTaskBody,
+  splitSignedTask,
+} from "./signed-docs";
+import {
+  auditStatement,
+  documentUpsert,
+  isMissingRowAbort,
+  requireBodyUnchanged,
+  snapshotLive,
+} from "./store-guards";
+import {
+  AUTO_MERGE_POLICY_PATH,
+  checkMergePolicyBody,
+  loadMergePolicy,
+  parseMergePolicy,
+} from "./auto-merge-policy";
 import { readRepoFile } from "./github/contents";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
@@ -44,39 +61,63 @@ export async function signPolicyDocument(
   env: Env,
   actor: string,
   namespace: string,
-  path: string
+  path: string,
 ): Promise<PolicySignResult | PolicySignRefusal> {
-  const refuse = (error: string): PolicySignRefusal => ({ ok: false, action: "sign_policy", error });
+  const refuse = (error: string): PolicySignRefusal => ({
+    ok: false,
+    action: "sign_policy",
+    error,
+  });
 
   if (namespace !== POLICY_SIGN_NAMESPACE) {
     return refuse(
-      `sign_policy only signs documents in '${POLICY_SIGN_NAMESPACE}', and this asked for '${namespace}'. The policies this Worker reads live in one namespace.`
+      `sign_policy only signs documents in '${POLICY_SIGN_NAMESPACE}', and this asked for '${namespace}'. The policies this Worker reads live in one namespace.`,
     );
   }
   if (!path.startsWith(POLICY_PREFIX) || path.includes("..")) {
     return refuse(
-      `sign_policy only signs documents under '${POLICY_PREFIX}', and this asked for '${path}'. A signature is authority, so the set of paths that can carry one is fixed.`
+      `sign_policy only signs documents under '${POLICY_PREFIX}', and this asked for '${path}'. A signature is authority, so the set of paths that can carry one is fixed.`,
     );
   }
   if (!env.IMPROVE_SCORE_SECRET) {
-    return refuse("signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so no policy can be signed.");
+    return refuse(
+      "signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so no policy can be signed.",
+    );
   }
 
-  const prior = await env.DB.prepare("SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2")
+  const prior = await env.DB.prepare(
+    "SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2",
+  )
     .bind(namespace, path)
     .first<{ title: string | null; body: string | null }>();
   if (!prior) {
-    return refuse(`no document at ${namespace}/${path}. Write the policy first, read it, then sign it.`);
+    return refuse(
+      `no document at ${namespace}/${path}. Write the policy first, read it, then sign it.`,
+    );
   }
 
   const stored = prior.body ?? "";
   const { signature: existing, body } = splitSignedTask(stored);
   if (body.trim().length === 0) {
-    return refuse(`${namespace}/${path} has an empty body below its frontmatter. An empty policy authorizes nothing and is not signed.`);
+    return refuse(
+      `${namespace}/${path} has an empty body below its frontmatter. An empty policy authorizes nothing and is not signed.`,
+    );
   }
-  const committed = await commitSigned(env, "sign_policy", namespace, path, prior, body, (sig, sha, bytes) =>
-    // The signature and hash, not the body, which the document and snapshot hold.
-    auditStatement(env.DB, actor, "policy-signed", namespace, path, { signature: sig, sha256: sha, bytes, resigned: existing !== null })
+  const committed = await commitSigned(
+    env,
+    "sign_policy",
+    namespace,
+    path,
+    prior,
+    body,
+    (sig, sha, bytes) =>
+      // The signature and hash, not the body, which the document and snapshot hold.
+      auditStatement(env.DB, actor, "policy-signed", namespace, path, {
+        signature: sig,
+        sha256: sha,
+        bytes,
+        resigned: existing !== null,
+      }),
   );
   if (!committed.ok) return refuse(committed.error);
   const { signature, sha256, signed } = committed;
@@ -104,8 +145,11 @@ async function commitSigned(
   path: string,
   prior: { title: string | null; body: string | null },
   body: string,
-  audit: (signature: string | null, sha256: string, bytes: number) => D1PreparedStatement
-): Promise<{ ok: true; signed: string; signature: string | null; sha256: string } | { ok: false; error: string }> {
+  audit: (signature: string | null, sha256: string, bytes: number) => D1PreparedStatement,
+): Promise<
+  | { ok: true; signed: string; signature: string | null; sha256: string }
+  | { ok: false; error: string }
+> {
   const signed = await signTaskBody(env.IMPROVE_SCORE_SECRET!, body);
   const { signature } = splitSignedTask(signed);
   const sha256 = await sha256Hex(signed);
@@ -158,11 +202,21 @@ async function commitSigned(
 type PolicyChange = "promote" | "demote";
 
 export type PolicyChangePlan =
-  | { ok: true; from: string; to: string; unit: string; change: PolicyChange; body: string; prior: { title: string | null; body: string }; changes: string[] }
+  | {
+      ok: true;
+      from: string;
+      to: string;
+      unit: string;
+      change: PolicyChange;
+      body: string;
+      prior: { title: string | null; body: string };
+      changes: string[];
+    }
   | { ok: false; error: string };
 
 const UNITS_SECTION = "## Auto units";
-const UNITS_INTRO = "Merge units promoted to auto by a signed policy change (sign_policy_change), each a namespace and a path class. A unit widens only the namespace's allowed paths; refused paths, money, migrations and workflows still refuse.";
+const UNITS_INTRO =
+  "Merge units promoted to auto by a signed policy change (sign_policy_change), each a namespace and a path class. A unit widens only the namespace's allowed paths; refused paths, money, migrations and workflows still refuse.";
 
 /** `capsid/tests` or `capsid / tests` as the policy writes it, or null. */
 function normalUnit(raw: string | undefined): string | null {
@@ -178,7 +232,8 @@ function editPolicy(body: string, to: string, change: PolicyChange, unit: string
   const line = `- unit \`${unit}\``;
   const head = lines.findIndex((l) => l.trim().toLowerCase() === UNITS_SECTION.toLowerCase());
   if (change === "demote") return lines.filter((l) => l.trim() !== line).join("\n");
-  if (head < 0) return `${lines.join("\n").replace(/\s*$/, "")}\n\n${UNITS_SECTION}\n\n${UNITS_INTRO}\n\n${line}\n`;
+  if (head < 0)
+    return `${lines.join("\n").replace(/\s*$/, "")}\n\n${UNITS_SECTION}\n\n${UNITS_INTRO}\n\n${line}\n`;
   let end = lines.findIndex((l, i) => i > head && l.trim().startsWith("##"));
   if (end < 0) end = lines.length;
   let at = head + 1;
@@ -192,32 +247,61 @@ function editPolicy(body: string, to: string, change: PolicyChange, unit: string
 }
 
 /** What sign_policy_change will write, from the signed policy now. Reads only. */
-export async function planPolicyChange(env: Env, change: string | undefined, rawUnit: string | undefined): Promise<PolicyChangePlan> {
+export async function planPolicyChange(
+  env: Env,
+  change: string | undefined,
+  rawUnit: string | undefined,
+): Promise<PolicyChangePlan> {
   const refuse = (error: string): PolicyChangePlan => ({ ok: false, error });
-  if (change !== "promote" && change !== "demote") return refuse(`sign_policy_change needs change: promote or demote; got '${change ?? ""}'.`);
+  if (change !== "promote" && change !== "demote")
+    return refuse(`sign_policy_change needs change: promote or demote; got '${change ?? ""}'.`);
   const unit = normalUnit(rawUnit);
-  if (!unit) return refuse(`sign_policy_change needs unit as '<namespace>/<path class>', for example 'capsid/tests'; got '${rawUnit ?? ""}'.`);
-  if (!env.IMPROVE_SCORE_SECRET) return refuse("signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so no policy can be signed.");
+  if (!unit)
+    return refuse(
+      `sign_policy_change needs unit as '<namespace>/<path class>', for example 'capsid/tests'; got '${rawUnit ?? ""}'.`,
+    );
+  if (!env.IMPROVE_SCORE_SECRET)
+    return refuse(
+      "signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so no policy can be signed.",
+    );
   // The policy in force must load first: a change is made to a policy the Worker trusts.
   const loaded = await loadMergePolicy(env);
-  if ("error" in loaded) return refuse(`the auto-merge policy in force does not load, so it is not changed: ${loaded.error}`);
+  if ("error" in loaded)
+    return refuse(
+      `the auto-merge policy in force does not load, so it is not changed: ${loaded.error}`,
+    );
   const from = loaded.policy.version;
-  if (!/^[1-9][0-9]{0,5}$/.test(from)) return refuse(`the policy's version is '${from}', not a whole number, so its next version cannot be named.`);
+  if (!/^[1-9][0-9]{0,5}$/.test(from))
+    return refuse(
+      `the policy's version is '${from}', not a whole number, so its next version cannot be named.`,
+    );
   const to = String(Number(from) + 1);
   const listed = loaded.policy.units.includes(unit);
-  if (change === "promote" && listed) return refuse(`${unit} is already promoted to auto in version ${from}.`);
-  if (change === "demote" && !listed) return refuse(`${unit} is not promoted to auto in version ${from}, so there is nothing to remove.`);
-  const prior = await env.DB.prepare("SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2")
+  if (change === "promote" && listed)
+    return refuse(`${unit} is already promoted to auto in version ${from}.`);
+  if (change === "demote" && !listed)
+    return refuse(
+      `${unit} is not promoted to auto in version ${from}, so there is nothing to remove.`,
+    );
+  const prior = await env.DB.prepare(
+    "SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2",
+  )
     .bind(POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH)
     .first<{ title: string | null; body: string | null }>();
-  if (!prior?.body) return refuse(`no document at ${POLICY_SIGN_NAMESPACE}/${AUTO_MERGE_POLICY_PATH}.`);
+  if (!prior?.body)
+    return refuse(`no document at ${POLICY_SIGN_NAMESPACE}/${AUTO_MERGE_POLICY_PATH}.`);
   const body = editPolicy(splitSignedTask(prior.body).body, to, change, unit);
   // Parsed as the loader will parse it: an unknown class, money or a namespace the policy
   // does not cover refuses here, before anything is signed.
   const parsed = parseMergePolicy(body);
   if ("error" in parsed) return refuse(`the edited policy would not load: ${parsed.error}`);
-  if (parsed.policy.version !== to || parsed.policy.units.includes(unit) !== (change === "promote")) {
-    return refuse("the edited policy does not say what the change asked for, so nothing is written. Edit the policy by hand.");
+  if (
+    parsed.policy.version !== to ||
+    parsed.policy.units.includes(unit) !== (change === "promote")
+  ) {
+    return refuse(
+      "the edited policy does not say what the change asked for, so nothing is written. Edit the policy by hand.",
+    );
   }
   return {
     ok: true,
@@ -238,16 +322,55 @@ export async function planPolicyChange(env: Env, change: string | undefined, raw
 }
 
 /** The write: the plan again from the state now, the typed version checked, then signed. */
-export async function performPolicyChange(env: Env, actor: string, change: string | undefined, rawUnit: string | undefined, confirm: string | undefined): Promise<{ ok: true; summary: string } | { ok: false; error: string }> {
+export async function performPolicyChange(
+  env: Env,
+  actor: string,
+  change: string | undefined,
+  rawUnit: string | undefined,
+  confirm: string | undefined,
+): Promise<{ ok: true; summary: string } | { ok: false; error: string }> {
   const plan = await planPolicyChange(env, change, rawUnit);
   if (!plan.ok) return plan;
-  if (!confirm) return { ok: false, error: `sign_policy_change widens or narrows what merges with no human, so it needs the new version number typed as confirm: ${plan.to}.` };
-  if (confirm !== plan.to) return { ok: false, error: `confirm is '${confirm}', but the new version is ${plan.to}. Nothing was signed.` };
-  const committed = await commitSigned(env, "sign_policy_change", POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH, plan.prior, plan.body, (signature, sha256, bytes) =>
-    auditStatement(env.DB, actor, "policy-changed", POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH, { from: plan.from, to: plan.to, change: plan.change, unit: plan.unit, signature, sha256, bytes })
+  if (!confirm)
+    return {
+      ok: false,
+      error: `sign_policy_change widens or narrows what merges with no human, so it needs the new version number typed as confirm: ${plan.to}.`,
+    };
+  if (confirm !== plan.to)
+    return {
+      ok: false,
+      error: `confirm is '${confirm}', but the new version is ${plan.to}. Nothing was signed.`,
+    };
+  const committed = await commitSigned(
+    env,
+    "sign_policy_change",
+    POLICY_SIGN_NAMESPACE,
+    AUTO_MERGE_POLICY_PATH,
+    plan.prior,
+    plan.body,
+    (signature, sha256, bytes) =>
+      auditStatement(
+        env.DB,
+        actor,
+        "policy-changed",
+        POLICY_SIGN_NAMESPACE,
+        AUTO_MERGE_POLICY_PATH,
+        {
+          from: plan.from,
+          to: plan.to,
+          change: plan.change,
+          unit: plan.unit,
+          signature,
+          sha256,
+          bytes,
+        },
+      ),
   );
   if (!committed.ok) return committed;
-  return { ok: true, summary: `Signed auto-merge policy version ${plan.to}: ${plan.unit} ${plan.change === "promote" ? "promoted to auto" : "removed from auto"}.` };
+  return {
+    ok: true,
+    summary: `Signed auto-merge policy version ${plan.to}: ${plan.unit} ${plan.change === "promote" ? "promoted to auto" : "removed from auto"}.`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +418,11 @@ function lineDelta(before: string, after: string): { added: string[]; removed: s
   const a = count(before);
   const b = count(after);
   // The lines of `source` beyond the number `against` has of each.
-  const surplus = (source: string, own: Map<string, number>, against: Map<string, number>): string[] => {
+  const surplus = (
+    source: string,
+    own: Map<string, number>,
+    against: Map<string, number>,
+  ): string[] => {
     const out: string[] = [];
     const seen = new Map<string, number>();
     for (const l of source.split("\n")) {
@@ -311,7 +438,8 @@ function lineDelta(before: string, after: string): { added: string[]; removed: s
 function shownLines(label: "added" | "removed", lines: string[]): string[] {
   const real = lines.filter((l) => l.trim().length > 0);
   const mark = label === "added" ? "+" : "-";
-  const more = real.length > SHOWN_LINES ? [`... and ${real.length - SHOWN_LINES} more ${label} lines.`] : [];
+  const more =
+    real.length > SHOWN_LINES ? [`... and ${real.length - SHOWN_LINES} more ${label} lines.`] : [];
   return [...real.slice(0, SHOWN_LINES).map((l) => `${mark} ${l}`), ...more];
 }
 
@@ -319,40 +447,63 @@ function shownLines(label: "added" | "removed", lines: string[]): string[] {
  *  Reads only. */
 export async function planPolicyFromRepo(env: Env): Promise<RepoPolicyPlan> {
   const refuse = (error: string): RepoPolicyPlan => ({ ok: false, error });
-  if (!env.IMPROVE_SCORE_SECRET) return refuse("signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so no policy can be signed.");
+  if (!env.IMPROVE_SCORE_SECRET)
+    return refuse(
+      "signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so no policy can be signed.",
+    );
   let content: string;
   try {
     // Fresh, not the read cache: the perform compares this read with the preview's.
-    content = (await readRepoFile(env, POLICY_SIGN_NAMESPACE, REPO_POLICY_PATH, undefined, undefined, true)).content;
+    content = (
+      await readRepoFile(env, POLICY_SIGN_NAMESPACE, REPO_POLICY_PATH, undefined, undefined, true)
+    ).content;
   } catch (err) {
-    return refuse(`${REPO_POLICY_PATH} could not be read from the ${POLICY_SIGN_NAMESPACE} repo's default branch, so nothing is signed: ${err instanceof Error ? err.message : String(err)}`);
+    return refuse(
+      `${REPO_POLICY_PATH} could not be read from the ${POLICY_SIGN_NAMESPACE} repo's default branch, so nothing is signed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
   if (splitSignedTask(content).signature !== null || content.startsWith("---\n")) {
-    return refuse(`${REPO_POLICY_PATH} opens with frontmatter. The repo file is the unsigned source, and the signature is added here, so nothing is signed.`);
+    return refuse(
+      `${REPO_POLICY_PATH} opens with frontmatter. The repo file is the unsigned source, and the signature is added here, so nothing is signed.`,
+    );
   }
-  if (content.trim().length === 0) return refuse(`${REPO_POLICY_PATH} is empty. An empty policy authorizes nothing and is not signed.`);
+  if (content.trim().length === 0)
+    return refuse(
+      `${REPO_POLICY_PATH} is empty. An empty policy authorizes nothing and is not signed.`,
+    );
   // The checks the loader makes, so what is signed here is a body the Worker will load.
   const loaded = checkMergePolicyBody(content);
-  if ("error" in loaded) return refuse(`${REPO_POLICY_PATH} would not load, so nothing is signed: ${loaded.error}`);
+  if ("error" in loaded)
+    return refuse(`${REPO_POLICY_PATH} would not load, so nothing is signed: ${loaded.error}`);
   const to = loaded.policy.version;
-  if (!/^[1-9][0-9]{0,5}$/.test(to)) return refuse(`${REPO_POLICY_PATH} says version '${to}', not a whole number, so the version to type as confirm cannot be named.`);
+  if (!/^[1-9][0-9]{0,5}$/.test(to))
+    return refuse(
+      `${REPO_POLICY_PATH} says version '${to}', not a whole number, so the version to type as confirm cannot be named.`,
+    );
 
-  const prior = await env.DB.prepare("SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2")
+  const prior = await env.DB.prepare(
+    "SELECT title, body FROM documents WHERE namespace = ?1 AND path = ?2",
+  )
     .bind(POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH)
     .first<{ title: string | null; body: string | null }>();
   if (!prior?.body) {
-    return refuse(`no document at ${POLICY_SIGN_NAMESPACE}/${AUTO_MERGE_POLICY_PATH} to write over. Write it once with capsid_write_doc (allow_improve_paths), and this control keeps it in step with the repo.`);
+    return refuse(
+      `no document at ${POLICY_SIGN_NAMESPACE}/${AUTO_MERGE_POLICY_PATH} to write over. Write it once with capsid_write_doc (allow_improve_paths), and this control keeps it in step with the repo.`,
+    );
   }
   const stored = splitSignedTask(prior.body).body;
   const storedParsed = parseMergePolicy(stored);
   const from = "policy" in storedParsed ? storedParsed.policy.version : null;
   const oldSha = await sha256Hex(stored);
   const newSha = await sha256Hex(content);
-  if (oldSha === newSha) return refuse(`${REPO_POLICY_PATH} is the policy already stored, so there is nothing to sign.`);
+  if (oldSha === newSha)
+    return refuse(`${REPO_POLICY_PATH} is the policy already stored, so there is nothing to sign.`);
   // Two different documents under one version number would muddle the history. The pin
   // keeps a rollback out of the loaders, but not that.
   if (from !== null && /^[1-9][0-9]{0,5}$/.test(from) && Number(to) <= Number(from)) {
-    return refuse(`${REPO_POLICY_PATH} says version ${to}, and the stored policy is version ${from}. Raise the version in the file before signing it.`);
+    return refuse(
+      `${REPO_POLICY_PATH} says version ${to}, and the stored policy is version ${from}. Raise the version in the file before signing it.`,
+    );
   }
   const { added, removed } = lineDelta(stored, content);
   return {
@@ -378,29 +529,67 @@ export async function planPolicyFromRepo(env: Env): Promise<RepoPolicyPlan> {
 
 /** The write: the file read again and checked against the preview's hash, the typed version
  *  checked, then signed through commitSigned. */
-export async function performPolicyFromRepo(env: Env, actor: string, confirm: string | undefined, previewedSha: string | undefined): Promise<{ ok: true; summary: string } | { ok: false; error: string }> {
-  if (!previewedSha) return { ok: false, error: "sign_policy_from_repo carries the hash its preview read, and this confirmation has none. Nothing was signed. Preview again." };
+export async function performPolicyFromRepo(
+  env: Env,
+  actor: string,
+  confirm: string | undefined,
+  previewedSha: string | undefined,
+): Promise<{ ok: true; summary: string } | { ok: false; error: string }> {
+  if (!previewedSha)
+    return {
+      ok: false,
+      error:
+        "sign_policy_from_repo carries the hash its preview read, and this confirmation has none. Nothing was signed. Preview again.",
+    };
   const plan = await planPolicyFromRepo(env);
   if (!plan.ok) return plan;
   if (plan.newSha !== previewedSha) {
-    return { ok: false, error: `${REPO_POLICY_PATH} changed since the preview (it read ${previewedSha}; it now reads ${plan.newSha}). Nothing was signed. Preview again.` };
+    return {
+      ok: false,
+      error: `${REPO_POLICY_PATH} changed since the preview (it read ${previewedSha}; it now reads ${plan.newSha}). Nothing was signed. Preview again.`,
+    };
   }
-  if (!confirm) return { ok: false, error: `sign_policy_from_repo changes what merges with no human, so it needs the version number typed as confirm: ${plan.to}.` };
-  if (confirm !== plan.to) return { ok: false, error: `confirm is '${confirm}', but the file's version is ${plan.to}. Nothing was signed.` };
-  const committed = await commitSigned(env, "sign_policy_from_repo", POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH, plan.prior, plan.body, (signature, sha256, bytes) =>
-    auditStatement(env.DB, actor, "policy-loaded-from-repo", POLICY_SIGN_NAMESPACE, AUTO_MERGE_POLICY_PATH, {
-      from: plan.from,
-      to: plan.to,
-      source: REPO_POLICY_PATH,
-      old_sha256: plan.oldSha,
-      new_sha256: plan.newSha,
-      added: plan.added.length,
-      removed: plan.removed.length,
-      signature,
-      sha256,
-      bytes,
-    })
+  if (!confirm)
+    return {
+      ok: false,
+      error: `sign_policy_from_repo changes what merges with no human, so it needs the version number typed as confirm: ${plan.to}.`,
+    };
+  if (confirm !== plan.to)
+    return {
+      ok: false,
+      error: `confirm is '${confirm}', but the file's version is ${plan.to}. Nothing was signed.`,
+    };
+  const committed = await commitSigned(
+    env,
+    "sign_policy_from_repo",
+    POLICY_SIGN_NAMESPACE,
+    AUTO_MERGE_POLICY_PATH,
+    plan.prior,
+    plan.body,
+    (signature, sha256, bytes) =>
+      auditStatement(
+        env.DB,
+        actor,
+        "policy-loaded-from-repo",
+        POLICY_SIGN_NAMESPACE,
+        AUTO_MERGE_POLICY_PATH,
+        {
+          from: plan.from,
+          to: plan.to,
+          source: REPO_POLICY_PATH,
+          old_sha256: plan.oldSha,
+          new_sha256: plan.newSha,
+          added: plan.added.length,
+          removed: plan.removed.length,
+          signature,
+          sha256,
+          bytes,
+        },
+      ),
   );
   if (!committed.ok) return committed;
-  return { ok: true, summary: `Signed auto-merge policy version ${plan.to} from ${REPO_POLICY_PATH} (${plan.removed.length} lines removed, ${plan.added.length} added).` };
+  return {
+    ok: true,
+    summary: `Signed auto-merge policy version ${plan.to} from ${REPO_POLICY_PATH} (${plan.removed.length} lines removed, ${plan.added.length} added).`,
+  };
 }

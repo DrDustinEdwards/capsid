@@ -16,7 +16,13 @@ export type AssembleInput =
   | { mode: "replace"; exists: boolean; priorBody: string | null; title: string; body: string }
   | { mode: "append"; exists: boolean; priorBody: string | null; body: string }
   | { mode: "meta"; exists: boolean; priorBody: string | null }
-  | { mode: "patch"; exists: boolean; priorBody: string | null; find: string; replace_with: string };
+  | {
+      mode: "patch";
+      exists: boolean;
+      priorBody: string | null;
+      find: string;
+      replace_with: string;
+    };
 
 export type AssembleResult = { body: string } | { error: string };
 
@@ -35,13 +41,17 @@ export function narrowWrite(req: WriteRequest): AssembleInput | { error: string 
   }
 
   if (!exists) {
-    return { error: `cannot ${mode} a document that does not exist. Create it with mode 'replace' first.` };
+    return {
+      error: `cannot ${mode} a document that does not exist. Create it with mode 'replace' first.`,
+    };
   }
 
   // meta leaves the body byte-identical.
   if (mode === "meta") {
     if (body !== undefined) {
-      return { error: "mode 'meta' changes type, tags, status or title only, and does not take body." };
+      return {
+        error: "mode 'meta' changes type, tags, status or title only, and does not take body.",
+      };
     }
     if (find !== undefined || replace_with !== undefined) {
       return { error: "find and replace_with belong to mode 'patch', not 'meta'." };

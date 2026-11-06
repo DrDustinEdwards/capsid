@@ -25,12 +25,18 @@ function jobsEnv() {
 
 // One call to the capsid_work_jobs tool, as `agent`, through an MCP client on the real
 // server.
-async function jobsTool(agent: Agent, args: Record<string, unknown>): Promise<{ ok: boolean; refusal?: string; job?: Record<string, unknown> }> {
+async function jobsTool(
+  agent: Agent,
+  args: Record<string, unknown>,
+): Promise<{ ok: boolean; refusal?: string; job?: Record<string, unknown> }> {
   const server = buildServer(jobsEnv(), agent);
   const client = new Client({ name: "access-seat", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
-  const result = (await client.callTool({ name: "capsid_work_jobs", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+  const result = (await client.callTool({ name: "capsid_work_jobs", arguments: args })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
   await client.close();
   const text = result.content[0]?.text ?? "";
   try {
@@ -44,7 +50,11 @@ let n = 0;
 // A job posted by the driver, so the seat's own actions are the ones under test.
 async function driverJob(): Promise<string> {
   n += 1;
-  const posted = await postJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid", title: `access seat job ${n}`, body: "Do the sample work." });
+  const posted = await postJob(jobsEnv(), DRIVER, NOW, {
+    namespace: "capsid",
+    title: `access seat job ${n}`,
+    body: "Do the sample work.",
+  });
   if (!posted.ok) throw new Error(`setup post failed: ${JSON.stringify(posted)}`);
   return String((posted as { job: { id: string } }).job.id);
 }
@@ -58,7 +68,10 @@ async function claimedByDriver(): Promise<string> {
 
 async function blockedByDriver(): Promise<string> {
   const id = await claimedByDriver();
-  const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "gate", command: "npm run deploy" });
+  const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, {
+    reason: "gate",
+    command: "npm run deploy",
+  });
   if (!blocked.ok) throw new Error(`setup block failed: ${JSON.stringify(blocked)}`);
   return id;
 }
@@ -66,10 +79,15 @@ async function blockedByDriver(): Promise<string> {
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM jobs").run();
   // jobs post requires a registered namespace.
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
+    .run();
 });
 
-const row = (id: string) => env.DB.prepare("SELECT status, claimed_by, posted_by FROM jobs WHERE id = ?1").bind(id).first<Record<string, string>>();
+const row = (id: string) =>
+  env.DB.prepare("SELECT status, claimed_by, posted_by FROM jobs WHERE id = ?1")
+    .bind(id)
+    .first<Record<string, string>>();
 
 describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
   it("the admin agent speaks access:<email>", () => {
@@ -78,7 +96,12 @@ describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
   });
 
   it("post: the job is recorded as posted by access:<email>", async () => {
-    const result = await jobsTool(SEAT, { action: "post", namespace: "capsid", title: "posted by the access seat", body: "Sample work." });
+    const result = await jobsTool(SEAT, {
+      action: "post",
+      namespace: "capsid",
+      title: "posted by the access seat",
+      body: "Sample work.",
+    });
     expect(result.ok, result.refusal).toBe(true);
     expect((await row(String(result.job?.id)))?.posted_by).toBe(SEAT_ACTOR);
   });
@@ -99,7 +122,12 @@ describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
 
   it("resume with take: the seat takes the claim as access:<email>", async () => {
     const id = await blockedByDriver();
-    const result = await jobsTool(SEAT, { action: "resume", id, reason: "the seat takes it", take: true });
+    const result = await jobsTool(SEAT, {
+      action: "resume",
+      id,
+      reason: "the seat takes it",
+      take: true,
+    });
     expect(result.ok, result.refusal).toBe(true);
     expect((await row(id))?.claimed_by).toBe(SEAT_ACTOR);
   });
@@ -113,7 +141,11 @@ describe(`the seat as ${SEAT_ACTOR}, through the capsid_work_jobs tool`, () => {
 
   it("release: the seat returns the driver's claim to the queue", async () => {
     const id = await claimedByDriver();
-    const result = await jobsTool(SEAT, { action: "release", id, reason: "the driver is not coming back" });
+    const result = await jobsTool(SEAT, {
+      action: "release",
+      id,
+      reason: "the driver is not coming back",
+    });
     expect(result.ok, result.refusal).toBe(true);
     expect((await row(id))?.status).toBe("queued");
   });

@@ -28,7 +28,11 @@ const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/;
  * frontmatter, so any other line is unsigned text sitting beside the signature.
  * verifySignedBody refuses a document that carries one.
  */
-export function splitSignedTask(text: string): { signature: string | null; body: string; strayLines: number } {
+export function splitSignedTask(text: string): {
+  signature: string | null;
+  body: string;
+  strayLines: number;
+} {
   const match = FRONTMATTER.exec(text);
   if (!match) return { signature: null, body: text, strayLines: 0 };
   const lines = match[1].split("\n").map((l) => l.trim());
@@ -57,10 +61,13 @@ export type TaskVerification = { ok: true; body: string } | { ok: false; reason:
 export async function verifySignedBody(
   rootSecret: string | undefined,
   stored: string,
-  what: string
+  what: string,
 ): Promise<TaskVerification> {
   if (!rootSecret) {
-    return { ok: false, reason: `signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so no ${what} can be verified. Refusing rather than executing an unverifiable plan.` };
+    return {
+      ok: false,
+      reason: `signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so no ${what} can be verified. Refusing rather than executing an unverifiable plan.`,
+    };
   }
   const { signature, body, strayLines } = splitSignedTask(stored);
   if (!signature) {
@@ -77,7 +84,7 @@ export async function verifySignedBody(
   }
   const key = await deriveTaskKey(rootSecret);
   const expected = await hmacHex(key, body);
-  if (!await safeEqual(signature.toLowerCase(), expected)) {
+  if (!(await safeEqual(signature.toLowerCase(), expected))) {
     return {
       ok: false,
       reason: `this ${what}'s ${TASK_SIGNATURE_FIELD} does not match its body. It was edited after the Worker wrote it. Refusing to execute it.`,
@@ -115,7 +122,7 @@ export async function readSignedPolicy(
   env: Pick<Env, "DB" | "IMPROVE_SCORE_SECRET" | "APP_KV">,
   path: string,
   what: string,
-  ifAbsent: string
+  ifAbsent: string,
 ): Promise<{ body: string } | { error: string }> {
   const row = await env.DB.prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
     .bind(POLICY_NAMESPACE, path)
@@ -155,7 +162,7 @@ async function checkPolicyPin(
   env: Pick<Env, "APP_KV">,
   path: string,
   what: string,
-  body: string
+  body: string,
 ): Promise<string | null> {
   const current = await policyPin(body);
   const cannot = (step: string, err: unknown) =>

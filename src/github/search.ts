@@ -10,11 +10,45 @@ const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase
 // installation token, even for terms read_repo_file confirms are present: the code
 // search index does not serve App-token requests on private repos.
 const SEARCH_EXCLUDE_DIRS = ["node_modules/", ".git/", "dist/"];
-const SEARCH_EXCLUDE_FILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"]);
+const SEARCH_EXCLUDE_FILES = new Set([
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "bun.lockb",
+]);
 const SEARCH_EXCLUDE_EXTS = new Set([
-  "png", "jpg", "jpeg", "gif", "webp", "ico", "pdf", "zip", "gz", "tgz", "tar", "bz2",
-  "woff", "woff2", "ttf", "otf", "eot", "mp4", "mov", "webm", "mp3", "wav", "wasm",
-  "bin", "exe", "dll", "so", "dylib", "class", "jar", "pyc", "lockb",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "ico",
+  "pdf",
+  "zip",
+  "gz",
+  "tgz",
+  "tar",
+  "bz2",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "eot",
+  "mp4",
+  "mov",
+  "webm",
+  "mp3",
+  "wav",
+  "wasm",
+  "bin",
+  "exe",
+  "dll",
+  "so",
+  "dylib",
+  "class",
+  "jar",
+  "pyc",
+  "lockb",
 ]);
 const SEARCH_BLOB_LIMIT = 200 * 1024; // skip blobs over 200KB
 export const SEARCH_TREE_LIMIT = 5000; // refuse to scan a tree bigger than this whole
@@ -27,27 +61,34 @@ async function searchCandidates(
   env: Env,
   target: { owner: string; repo: string; full: string },
   ref: string,
-  pathPrefix: string
+  pathPrefix: string,
 ): Promise<TreeEntry[]> {
   const { owner, repo, full } = target;
   // GitHub resolves a branch, tag, or sha for the tree sha here. recursive=1
   // returns the whole tree in one call.
-  const treeResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
-  if (!treeResp.ok) throw new Error(`search_code tree fetch failed (${treeResp.status}): ${await treeResp.text()}`);
+  const treeResp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
+  );
+  if (!treeResp.ok)
+    throw new Error(`search_code tree fetch failed (${treeResp.status}): ${await treeResp.text()}`);
   const tree = (await treeResp.json()) as {
     tree: TreeEntry[];
     truncated: boolean;
   };
   if (tree.truncated || tree.tree.length > SEARCH_TREE_LIMIT) {
     throw new Error(
-      `search_code: ${full}@${ref} tree is too large to scan whole (${tree.tree.length} entries, truncated=${tree.truncated}). Narrow it with path_prefix.`
+      `search_code: ${full}@${ref} tree is too large to scan whole (${tree.tree.length} entries, truncated=${tree.truncated}). Narrow it with path_prefix.`,
     );
   }
 
   return tree.tree.filter((e) => {
     if (e.type !== "blob") return false;
     if (pathPrefix && !e.path.startsWith(pathPrefix)) return false;
-    if (SEARCH_EXCLUDE_DIRS.some((d) => e.path.startsWith(d) || e.path.includes(`/${d}`))) return false;
+    if (SEARCH_EXCLUDE_DIRS.some((d) => e.path.startsWith(d) || e.path.includes(`/${d}`)))
+      return false;
     const base = e.path.split("/").pop() ?? e.path;
     if (SEARCH_EXCLUDE_FILES.has(base)) return false;
     const ext = base.includes(".") ? base.slice(base.lastIndexOf(".") + 1).toLowerCase() : "";
@@ -75,7 +116,7 @@ async function scanBlobs(
   target: { owner: string; repo: string },
   candidates: TreeEntry[],
   query: string,
-  limits: { start: number; maxFiles: number; maxResults: number }
+  limits: { start: number; maxFiles: number; maxResults: number },
 ): Promise<BlobScan> {
   const { owner, repo } = target;
   const { start, maxFiles, maxResults } = limits;
@@ -110,7 +151,7 @@ async function scanBlobs(
             `This is NOT an empty result. The scan could not read the repository, so no conclusion about whether "${query}" is present is available. ` +
             (blob.status === 429 || blob.status === 403
               ? "The App installation's rate limit is the usual cause; a full-tree scan costs one request per candidate file. Wait for the window to reset, narrow with path_prefix, or verify against a local checkout."
-              : "Check the App installation's permissions for this repo.")
+              : "Check the App installation's permissions for this repo."),
         );
       }
       unreadable.push(c.path);
@@ -144,10 +185,19 @@ export async function searchCode(
   env: Env,
   namespace: string | undefined,
   query: string,
-  opts: { pathPrefix?: string; ref?: string; repoSelector?: string; maxResults?: number; maxFiles?: number; start?: number } = {}
+  opts: {
+    pathPrefix?: string;
+    ref?: string;
+    repoSelector?: string;
+    maxResults?: number;
+    maxFiles?: number;
+    start?: number;
+  } = {},
 ) {
   if (!namespace) {
-    throw new Error("search_code needs a namespace: it walks one repo's tree. Pass namespace (and optional repo).");
+    throw new Error(
+      "search_code needs a namespace: it walks one repo's tree. Pass namespace (and optional repo).",
+    );
   }
   const target = await resolveRepo(env, namespace, opts.repoSelector);
   const ref = opts.ref || (await getDefaultBranch(env, target.owner, target.repo));
@@ -156,17 +206,29 @@ export async function searchCode(
   // later repo call shares. The tree-size refusal does not cover this: the cost is per
   // file fetched, not per candidate listed. Over the cap it clamps rather than
   // refusing, because the result reports truncation and carries a next_start.
-  const maxResults = Math.min(opts.maxResults && opts.maxResults > 0 ? opts.maxResults : DEFAULT_SCAN_RESULTS, MAX_SCAN_CAP);
-  const maxFiles = Math.min(opts.maxFiles && opts.maxFiles > 0 ? opts.maxFiles : DEFAULT_SCAN_FILES, MAX_SCAN_CAP);
+  const maxResults = Math.min(
+    opts.maxResults && opts.maxResults > 0 ? opts.maxResults : DEFAULT_SCAN_RESULTS,
+    MAX_SCAN_CAP,
+  );
+  const maxFiles = Math.min(
+    opts.maxFiles && opts.maxFiles > 0 ? opts.maxFiles : DEFAULT_SCAN_FILES,
+    MAX_SCAN_CAP,
+  );
   const start = opts.start && opts.start > 0 ? Math.floor(opts.start) : 0;
   const pathPrefix = (opts.pathPrefix ?? "").replace(/^\/+/, "");
 
   const candidates = await searchCandidates(env, target, ref, pathPrefix);
-  const { items, unreadable, filesScanned, index, stoppedAtFileCap } = await scanBlobs(env, target, candidates, query, {
-    start,
-    maxFiles,
-    maxResults,
-  });
+  const { items, unreadable, filesScanned, index, stoppedAtFileCap } = await scanBlobs(
+    env,
+    target,
+    candidates,
+    query,
+    {
+      start,
+      maxFiles,
+      maxResults,
+    },
+  );
 
   const remaining = candidates.length - index;
   const result: {

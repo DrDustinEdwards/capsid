@@ -23,7 +23,9 @@ async function openAdd(page: Page) {
 }
 
 test.describe.serial("the site configuration", () => {
-  test("add a site on Sites: preview, Add site, and its own page shows its settings", async ({ page }) => {
+  test("add a site on Sites: preview, Add site, and its own page shows its settings", async ({
+    page,
+  }) => {
     await openAdd(page);
     await page.getByLabel("Project", { exact: true }).fill(NS);
     await page.getByLabel("Name", { exact: true }).fill("Sample I");
@@ -45,11 +47,17 @@ test.describe.serial("the site configuration", () => {
     await expect(settings(page)).toContainText("/health");
   });
 
-  test("edit on Setup: the form opens filled in, and the change shows with a new revision", async ({ page }) => {
+  test("edit on Setup: the form opens filled in, and the change shows with a new revision", async ({
+    page,
+  }) => {
     await openSetup(page);
-    await settings(page).getByRole("button", { name: `Edit ${NS}` }).click();
+    await settings(page)
+      .getByRole("button", { name: `Edit ${NS}` })
+      .click();
     await expect(page.getByRole("heading", { level: 2, name: `Edit ${NS}` })).toBeVisible();
-    await expect(page.getByLabel("Origin", { exact: true })).toHaveValue("https://sample-i.example.com");
+    await expect(page.getByLabel("Origin", { exact: true })).toHaveValue(
+      "https://sample-i.example.com",
+    );
     await page.getByLabel("Name", { exact: true }).fill("Sample I renamed");
     await page.getByLabel("Platform", { exact: true }).selectOption("vercel");
     await page.getByRole("button", { name: "Preview", exact: true }).click();
@@ -60,7 +68,7 @@ test.describe.serial("the site configuration", () => {
     await expect(page.getByRole("dialog")).toBeHidden();
     await expect(page.getByRole("heading", { level: 1, name: "Sample I renamed" })).toBeVisible();
     await expect(settings(page)).toContainText("Vercel");
-    await expect(settings(page).locator('[data-revision]')).toHaveText("2");
+    await expect(settings(page).locator("[data-revision]")).toHaveText("2");
   });
 
   test("a refusal from the server is shown in the dialog, verbatim", async ({ page }) => {
@@ -69,20 +77,29 @@ test.describe.serial("the site configuration", () => {
     await page.getByLabel("Origin", { exact: true }).fill("http://sample-j.example.com");
     await page.getByRole("button", { name: "Preview", exact: true }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("alert")).toHaveText("the origin must start with https://; got 'http://sample-j.example.com'.");
+    await expect(dialog.getByRole("alert")).toHaveText(
+      "the origin must start with https://; got 'http://sample-j.example.com'.",
+    );
     await expect(dialog.getByRole("button", { name: "Add site", exact: true })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
     // Cancel keeps what was typed.
-    await expect(page.getByLabel("Origin", { exact: true })).toHaveValue("http://sample-j.example.com");
+    await expect(page.getByLabel("Origin", { exact: true })).toHaveValue(
+      "http://sample-j.example.com",
+    );
   });
 
   test("remove on Setup", async ({ page }) => {
     await openSetup(page);
     // Remove is in the edit form's Danger area, not beside Edit (UX audit M9).
     await expect(settings(page).getByRole("button", { name: `Remove ${NS}` })).toHaveCount(0);
-    await settings(page).getByRole("button", { name: `Edit ${NS}` }).click();
-    await page.getByRole("group", { name: "Danger" }).getByRole("button", { name: `Remove ${NS}` }).click();
+    await settings(page)
+      .getByRole("button", { name: `Edit ${NS}` })
+      .click();
+    await page
+      .getByRole("group", { name: "Danger" })
+      .getByRole("button", { name: `Remove ${NS}` })
+      .click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText(`ops_sites: remove ${NS}`);
     await dialog.getByRole("button", { name: "Remove site", exact: true }).click();

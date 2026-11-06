@@ -17,5 +17,8 @@ export function storeAttention(feed: OpsFeed): { title: string; sub: string } | 
   const use = storeUse(feed);
   const s = feed.live.store;
   if (!use?.warn || s.size_bytes === null) return null;
-  return { title: `The D1 store is at ${(use.fraction * 100).toFixed(0)}% of its ${bytes(s.cap_bytes)} cap`, sub: `${bytes(s.size_bytes)} used` };
+  return {
+    title: `The D1 store is at ${(use.fraction * 100).toFixed(0)}% of its ${bytes(s.cap_bytes)} cap`,
+    sub: `${bytes(s.size_bytes)} used`,
+  };
 }

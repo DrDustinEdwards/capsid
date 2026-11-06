@@ -24,24 +24,40 @@ export interface SiteCheckArgs {
 }
 
 export function pathRefusal(label: string, path: string): string | null {
-  return PATH.test(path) && !path.includes("..") ? null : `${label} must be a path on the site, starting with /, such as /about.`;
+  return PATH.test(path) && !path.includes("..")
+    ? null
+    : `${label} must be a path on the site, starting with /, such as /about.`;
 }
 
-export async function siteCheck(env: Env, namespace: string, args: SiteCheckArgs, fetchImpl: FetchLike = fetch, now: Date = new Date()) {
+export async function siteCheck(
+  env: Env,
+  namespace: string,
+  args: SiteCheckArgs,
+  fetchImpl: FetchLike = fetch,
+  now: Date = new Date(),
+) {
   const page = args.page ?? "/";
-  const bad = pathRefusal("page", page) ?? (args.probe !== undefined ? pathRefusal("probe", args.probe) : null);
+  const bad =
+    pathRefusal("page", page) ??
+    (args.probe !== undefined ? pathRefusal("probe", args.probe) : null);
   if (bad) throw new Error(bad);
   const row = await readSiteRow(env.DB, namespace);
   const site = row ? sitesFrom([row])[0] : undefined;
   if (!row || !site) {
-    throw new Error(`${namespace} has no site configured (ops_sites), so there is nothing to check. The admin adds one with capsid_admin_run_controls control site_add.`);
+    throw new Error(
+      `${namespace} has no site configured (ops_sites), so there is nothing to check. The admin adds one with capsid_admin_run_controls control site_add.`,
+    );
   }
 
-  const health = await probeSite(site, fetchImpl, now, site.self ? await healthReport(env) : null, { home: false });
+  const health = await probeSite(site, fetchImpl, now, site.self ? await healthReport(env) : null, {
+    home: false,
+  });
 
   const read = await readPage(fetchImpl, site.origin, page);
   // Graded against the site's registry entry, as the watcher grades it (src/live-checks.ts).
-  const headers = read.headers ? checkSecurityHeaders(read.headers, { site: siteForOrigin(site.origin) }) : [];
+  const headers = read.headers
+    ? checkSecurityHeaders(read.headers, { site: siteForOrigin(site.origin) })
+    : [];
   const pageResult = {
     path: page,
     status: read.status,
@@ -54,7 +70,12 @@ export async function siteCheck(env: Env, namespace: string, args: SiteCheckArgs
   const probePath = args.probe ?? row.operator?.path ?? null;
   let probe: { path: string | null; status: number | null; refused: boolean | null; note: string };
   if (probePath === null) {
-    probe = { path: null, status: null, refused: null, note: "not run: no probe path was named and the site has no operator API configured" };
+    probe = {
+      path: null,
+      status: null,
+      refused: null,
+      note: "not run: no probe path was named and the site has no operator API configured",
+    };
   } else {
     let status: number | null = null;
     let error: string | null = null;
@@ -85,5 +106,12 @@ export async function siteCheck(env: Env, namespace: string, args: SiteCheckArgs
     };
   }
 
-  return { namespace, origin: site.origin, checked_at: now.toISOString(), health, page: pageResult, probe };
+  return {
+    namespace,
+    origin: site.origin,
+    checked_at: now.toISOString(),
+    health,
+    page: pageResult,
+    probe,
+  };
 }

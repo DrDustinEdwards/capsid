@@ -28,7 +28,13 @@ function fakeAssets() {
       const file = FILES[path];
       if (!file) return new Response("", { status: 404 });
       // The router's own caching header, which the handler must replace.
-      return new Response(file.body, { status: 200, headers: { "Content-Type": file.type, "Cache-Control": "public, max-age=0, must-revalidate" } });
+      return new Response(file.body, {
+        status: 200,
+        headers: {
+          "Content-Type": file.type,
+          "Cache-Control": "public, max-age=0, must-revalidate",
+        },
+      });
     },
   };
   return { assets, asked };
@@ -49,7 +55,9 @@ function env(assets: unknown = fakeAssets().assets) {
 }
 
 async function signed(path: string, headers: Record<string, string> = {}): Promise<Request> {
-  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
+  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(
+    ";",
+  )[0];
   return new Request(`https://capsid.example${path}`, { headers: { ...headers, Cookie: cookie } });
 }
 
@@ -59,7 +67,13 @@ function fakeApi() {
   const asked: Array<{ path: string; cookie: string | null }> = [];
   const api = async (request: Request) => {
     asked.push({ path: new URL(request.url).pathname, cookie: request.headers.get("Cookie") });
-    return new Response("{}", { status: 200, headers: { "Content-Type": "application/json", "Set-Cookie": "capsid_portal_csrf=fresh; Path=/portal; Secure; HttpOnly" } });
+    return new Response("{}", {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Set-Cookie": "capsid_portal_csrf=fresh; Path=/portal; Secure; HttpOnly",
+      },
+    });
   };
   return { api, asked };
 }
@@ -68,26 +82,51 @@ test("PLANT: nothing is rendered, read or fetched for a caller the Portal gate r
   const { assets, asked } = fakeAssets();
   const reads = fakeApi();
   for (const path of ["/portal", "/portal/", "/portal/favicon.svg", "/portal/queue"]) {
-    const anonymous = await handlePortalApp(new Request(`https://capsid.example${path}`, { headers: { Accept: "text/html" } }), env(assets), reads.api, NOW);
+    const anonymous = await handlePortalApp(
+      new Request(`https://capsid.example${path}`, { headers: { Accept: "text/html" } }),
+      env(assets),
+      reads.api,
+      NOW,
+    );
     assert.equal(anonymous.status, 302, `${path} served an anonymous reader`);
-    const bearer = await handlePortalApp(new Request(`https://capsid.example${path}`, { headers: { Authorization: "Bearer capsid_x" } }), env(assets), reads.api, NOW);
+    const bearer = await handlePortalApp(
+      new Request(`https://capsid.example${path}`, {
+        headers: { Authorization: "Bearer capsid_x" },
+      }),
+      env(assets),
+      reads.api,
+      NOW,
+    );
     assert.equal(bearer.status, 403, `${path} served a bearer`);
   }
-  assert.deepEqual(asked, [], "the assets binding was asked for a file before the gate admitted anyone");
+  assert.deepEqual(
+    asked,
+    [],
+    "the assets binding was asked for a file before the gate admitted anyone",
+  );
   assert.deepEqual(reads.asked, [], "a page read the API before the gate admitted anyone");
 });
 
 test("a signed-in administrator gets the page rendered with its reads, uncached, its CSP carrying the page's nonce", async () => {
   const reads = fakeApi();
   // As index.ts serves it: through the header layer.
-  const res = withSecurityHeaders(await handlePortalApp(await signed("/portal/queue"), env(), reads.api, NOW));
+  const res = withSecurityHeaders(
+    await handlePortalApp(await signed("/portal/queue"), env(), reads.api, NOW),
+  );
   assert.equal(res.status, 200);
   const html = await res.text();
-  assert.match(html, /data-path="\/queue"/, "the page is named as the browser names it, without /portal");
+  assert.match(
+    html,
+    /data-path="\/queue"/,
+    "the page is named as the browser names it, without /portal",
+  );
   assert.equal(res.headers.get("Cache-Control"), "no-store");
   const nonce = /<script nonce="([^"]+)"/.exec(html)?.[1];
   assert.ok(nonce, "the page's script carries a nonce");
-  assert.ok(res.headers.get("Content-Security-Policy")?.includes(`'nonce-${nonce}'`), "the policy names the page's nonce");
+  assert.ok(
+    res.headers.get("Content-Security-Policy")?.includes(`'nonce-${nonce}'`),
+    "the policy names the page's nonce",
+  );
   // The read went to the Portal's own API with the visitor's session, and its cookie reached the browser.
   assert.equal(reads.asked[0]?.path, "/portal/api/ops");
   assert.match(reads.asked[0]?.cookie ?? "", /capsid_portal/);
@@ -103,15 +142,36 @@ test("each page gets its own nonce", async () => {
 });
 
 test("the hashed files are public on the Portal host and cached for a year; the other files stay behind the gate, uncached", async () => {
-  const js = await portalAsset(new Request("https://portal.dustinedwards.info/assets/app-abc123.js"), env());
+  const js = await portalAsset(
+    new Request("https://portal.dustinedwards.info/assets/app-abc123.js"),
+    env(),
+  );
   assert.equal(js?.status, 200);
   assert.equal(js?.headers.get("Cache-Control"), HASHED_ASSET_CACHE);
-  assert.equal(js?.headers.get("Content-Security-Policy"), null, "the page's CSP is the page's, not every file's");
-  assert.equal(await portalAsset(new Request("https://portal.dustinedwards.info/favicon.svg"), env()), null, "only the hashed files are public");
-  const icon = await handlePortalApp(await signed("/portal/favicon.svg"), env(), fakeApi().api, NOW);
+  assert.equal(
+    js?.headers.get("Content-Security-Policy"),
+    null,
+    "the page's CSP is the page's, not every file's",
+  );
+  assert.equal(
+    await portalAsset(new Request("https://portal.dustinedwards.info/favicon.svg"), env()),
+    null,
+    "only the hashed files are public",
+  );
+  const icon = await handlePortalApp(
+    await signed("/portal/favicon.svg"),
+    env(),
+    fakeApi().api,
+    NOW,
+  );
   assert.equal(icon.status, 200);
   assert.equal(icon.headers.get("Cache-Control"), "no-store");
-  const missing = await handlePortalApp(await signed("/portal/missing.png"), env(), fakeApi().api, NOW);
+  const missing = await handlePortalApp(
+    await signed("/portal/missing.png"),
+    env(),
+    fakeApi().api,
+    NOW,
+  );
   assert.equal(missing.status, 404);
 });
 
@@ -119,6 +179,11 @@ test("with no ASSETS binding the admin is told the dashboard is not deployed; no
   const res = await handlePortalApp(await signed("/portal"), env(null), fakeApi().api, NOW);
   assert.equal(res.status, 503);
   assert.match(await res.text(), /not deployed/);
-  const anonymous = await handlePortalApp(new Request("https://capsid.example/portal"), env(null), fakeApi().api, NOW);
+  const anonymous = await handlePortalApp(
+    new Request("https://capsid.example/portal"),
+    env(null),
+    fakeApi().api,
+    NOW,
+  );
   assert.equal(anonymous.status, 302);
 });

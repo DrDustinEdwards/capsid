@@ -30,19 +30,25 @@ const root = rawRoot && rawRoot.trim() !== "" ? rawRoot : undefined;
 
 const arg = process.argv[2];
 if (arg !== undefined && arg !== "--backup-credential") {
-  console.error(`derive-backup-key: unknown argument '${arg}'. Usage: IMPROVE_SCORE_SECRET=... node scripts/derive-backup-key.mjs`);
+  console.error(
+    `derive-backup-key: unknown argument '${arg}'. Usage: IMPROVE_SCORE_SECRET=... node scripts/derive-backup-key.mjs`,
+  );
   process.exit(1);
 }
 if (!root) {
   console.error(
     "derive-backup-key: IMPROVE_SCORE_SECRET is not set in the environment.\n" +
       "  There is no way to read a Worker secret back. If you do not have the value, generate a new one,\n" +
-      "  set it with `npx wrangler secret put IMPROVE_SCORE_SECRET`, and re-derive this key from it."
+      "  set it with `npx wrangler secret put IMPROVE_SCORE_SECRET`, and re-derive this key from it.",
   );
   process.exit(1);
 }
 
 const backupKey = createHmac("sha256", root).update("capsid-backup-credential:v1").digest("hex");
-console.error("derive-backup-key: derived the backup credential key. Set it as the repo secret BACKUP_CREDENTIAL_KEY");
-console.error("derive-backup-key: on DrDustinEdwards/capsid-backups (the mirror) and DrDustinEdwards/capsid (the restore rehearsal).");
+console.error(
+  "derive-backup-key: derived the backup credential key. Set it as the repo secret BACKUP_CREDENTIAL_KEY",
+);
+console.error(
+  "derive-backup-key: on DrDustinEdwards/capsid-backups (the mirror) and DrDustinEdwards/capsid (the restore rehearsal).",
+);
 process.stdout.write(`${backupKey}\n`);

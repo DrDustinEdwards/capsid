@@ -9,7 +9,10 @@ import vm from "node:vm";
 // Portal itself, so a push can never send the phone to another site.
 
 const SCOPE = "https://portal.example.com/";
-const source = readFileSync(join(import.meta.dirname, "..", "dashboard", "public", "sw.js"), "utf8");
+const source = readFileSync(
+  join(import.meta.dirname, "..", "dashboard", "public", "sw.js"),
+  "utf8",
+);
 
 interface Win {
   url: string;
@@ -30,7 +33,11 @@ async function tap(data: unknown, windows: Win[] = []): Promise<string> {
   const opened: string[] = [];
   const self = {
     registration: { scope: SCOPE },
-    clients: { matchAll: async () => windows, openWindow: async (u: string) => opened.push(u), claim: async () => {} },
+    clients: {
+      matchAll: async () => windows,
+      openWindow: async (u: string) => opened.push(u),
+      claim: async () => {},
+    },
     skipWaiting: () => {},
     addEventListener: (name: string, fn: (event: unknown) => void) => {
       handlers[name] = fn;
@@ -38,7 +45,10 @@ async function tap(data: unknown, windows: Win[] = []): Promise<string> {
   };
   vm.runInNewContext(source, { self, URL });
   let done: Promise<unknown> = Promise.resolve();
-  handlers.notificationclick({ notification: { data, close: () => {} }, waitUntil: (p: Promise<unknown>) => (done = p) });
+  handlers.notificationclick({
+    notification: { data, close: () => {} },
+    waitUntil: (p: Promise<unknown>) => (done = p),
+  });
   await done;
   const moved = windows.flatMap((w) => w.went);
   assert.equal(opened.length + moved.length, 1, "a tap opened or moved more than one page");
@@ -51,7 +61,14 @@ test("an alert's url on the Portal's scope opens as sent", async () => {
 });
 
 test("PLANT: a url off the Portal's scope, or none, opens the Portal itself", async () => {
-  for (const url of ["https://evil.example.com/", "//evil.example.com/x", "javascript:alert(1)", "https://portal.example.com.evil.example.com/", "http://[", 42]) {
+  for (const url of [
+    "https://evil.example.com/",
+    "//evil.example.com/x",
+    "javascript:alert(1)",
+    "https://portal.example.com.evil.example.com/",
+    "http://[",
+    42,
+  ]) {
     assert.equal(await tap({ url }), SCOPE, String(url));
   }
   assert.equal(await tap(null), SCOPE);
@@ -61,7 +78,10 @@ test("PLANT: a url off the Portal's scope, or none, opens the Portal itself", as
 test("an open Portal tab moves to the alert's item and comes forward; no second tab opens", async () => {
   const other = win("https://elsewhere.example.com/");
   const portal = win(`${SCOPE}health`);
-  assert.equal(await tap({ url: `${SCOPE}queue/job/job_1` }, [other, portal]), `${SCOPE}queue/job/job_1`);
+  assert.equal(
+    await tap({ url: `${SCOPE}queue/job/job_1` }, [other, portal]),
+    `${SCOPE}queue/job/job_1`,
+  );
   assert.deepEqual(other.went, [], "a tab off the Portal's scope was moved");
   assert.equal(portal.focused, 1);
 });
@@ -77,7 +97,11 @@ test("a tab that cannot be moved is brought forward as it is", async () => {
   const opened: string[] = [];
   const self = {
     registration: { scope: SCOPE },
-    clients: { matchAll: async () => [portal], openWindow: async (u: string) => opened.push(u), claim: async () => {} },
+    clients: {
+      matchAll: async () => [portal],
+      openWindow: async (u: string) => opened.push(u),
+      claim: async () => {},
+    },
     skipWaiting: () => {},
     addEventListener: (name: string, fn: (event: unknown) => void) => {
       handlers[name] = fn;
@@ -85,7 +109,10 @@ test("a tab that cannot be moved is brought forward as it is", async () => {
   };
   vm.runInNewContext(source, { self, URL });
   let done: Promise<unknown> = Promise.resolve();
-  handlers.notificationclick({ notification: { data: { url: `${SCOPE}prs#auto-merge` }, close: () => {} }, waitUntil: (p: Promise<unknown>) => (done = p) });
+  handlers.notificationclick({
+    notification: { data: { url: `${SCOPE}prs#auto-merge` }, close: () => {} },
+    waitUntil: (p: Promise<unknown>) => (done = p),
+  });
   await done;
   assert.equal(portal.focused, 1);
   assert.deepEqual(opened, []);

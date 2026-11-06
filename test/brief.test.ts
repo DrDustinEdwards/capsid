@@ -15,7 +15,10 @@ async function brief(opts: FakeD1Options) {
   const client = new Client({ name: "brief-test", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-  const result = (await client.callTool({ name: "capsid_start_session", arguments: { namespace: "capsid" } })) as {
+  const result = (await client.callTool({
+    name: "capsid_start_session",
+    arguments: { namespace: "capsid" },
+  })) as {
     content: Array<{ text: string }>;
   };
   await client.close();
@@ -43,12 +46,17 @@ const episodic = (i: number, size: number): DocRow => ({
   created_at: `2026-08-0${i + 1} 00:00:00`,
 });
 
-const auditReads = (reads: Array<{ sql: string }>) => reads.filter((r) => /FROM audit_log/i.test(r.sql)).length;
+const auditReads = (reads: Array<{ sql: string }>) =>
+  reads.filter((r) => /FROM audit_log/i.test(r.sql)).length;
 
 test("a floor over budget with no tasks reports the floor, not a trim of nothing", async () => {
   const each = Math.ceil(BRIEF_BUDGET / 2) + 1000;
   const { out } = await brief({ documents: floor(each) });
-  assert.equal(out.trimmed, undefined, `brief reported a trim it did not make: ${JSON.stringify(out.trimmed)}`);
+  assert.equal(
+    out.trimmed,
+    undefined,
+    `brief reported a trim it did not make: ${JSON.stringify(out.trimmed)}`,
+  );
   assert.deepEqual(out.floor_exceeds_budget, {
     conventions: each,
     core: each,
@@ -62,7 +70,10 @@ test("a floor over budget leaves task bodies whole, because cutting them cannot 
   const { out } = await brief({ documents: [...floor(each), task(0, 500), task(1, 500)] });
   assert.equal(out.trimmed, undefined);
   assert.ok(out.floor_exceeds_budget);
-  assert.deepEqual(out.open_tasks.map((t: { body: string }) => t.body.length), [500, 500]);
+  assert.deepEqual(
+    out.open_tasks.map((t: { body: string }) => t.body.length),
+    [500, 500],
+  );
 });
 
 test("a trim names only sections that had bodies to cut", async () => {
@@ -71,11 +82,16 @@ test("a trim names only sections that had bodies to cut", async () => {
   assert.deepEqual(out.trimmed, ["1 task bodies"]);
   assert.equal(out.floor_exceeds_budget, undefined);
   assert.match(out.open_tasks[0].body, /trimmed for size/);
-  assert.ok(out.approx_chars <= BRIEF_BUDGET, `approx_chars ${out.approx_chars} is over the budget after trimming`);
+  assert.ok(
+    out.approx_chars <= BRIEF_BUDGET,
+    `approx_chars ${out.approx_chars} is over the budget after trimming`,
+  );
 });
 
 test("episodics are cut first, and tasks stay whole when that is enough", async () => {
-  const { out } = await brief({ documents: [...floor(5000), task(0, 100), episodic(0, BRIEF_BUDGET)] });
+  const { out } = await brief({
+    documents: [...floor(5000), task(0, 100), episodic(0, BRIEF_BUDGET)],
+  });
   assert.deepEqual(out.trimmed, ["1 episodic bodies"]);
   assert.equal(out.open_tasks[0].body.length, 100);
 });
@@ -97,29 +113,45 @@ test("provenance costs ONE audit_log query however many documents the brief carr
       { namespace: "capsid", path: "TASK-2.md", actor: "agent:seat" },
       { namespace: "capsid", path: "session-1.md", actor: "agent:other" },
     ],
-    links: [{ from_ns: "capsid", from_path: "core.md", type: "references", to_ns: "capsid", to_path: "decisions.md" }],
+    links: [
+      {
+        from_ns: "capsid",
+        from_path: "core.md",
+        type: "references",
+        to_ns: "capsid",
+        to_path: "decisions.md",
+      },
+    ],
   });
   // The edge reads run in the same Promise.all as the section reads, so a slip there
   // drops core_links silently.
   assert.equal(out.core_links?.outgoing.length, 1, "the outgoing-edge read came back empty");
   assert.equal(auditReads(reads), 1, `brief issued ${auditReads(reads)} audit_log queries`);
-  assert.ok(reads.length <= 8, `brief issued ${reads.length} queries, more than 2 documents, the portfolio list, 4 section reads and 1 provenance`);
+  assert.ok(
+    reads.length <= 8,
+    `brief issued ${reads.length} queries, more than 2 documents, the portfolio list, 4 section reads and 1 provenance`,
+  );
   // And the answer is still right per document: the newest actor wins, and a
   // document with no audit row reads null rather than borrowing a neighbor's.
   assert.equal(out.core.last_actor, "agent:capsid-driver");
   assert.equal(out.conventions.last_actor, null);
-  const byPath = new Map(out.open_tasks.map((t: { path: string; last_actor: string | null }) => [t.path, t.last_actor]));
+  const byPath = new Map(
+    out.open_tasks.map((t: { path: string; last_actor: string | null }) => [t.path, t.last_actor]),
+  );
   assert.equal(byPath.get("TASK-2.md"), "agent:seat");
   assert.equal(byPath.get("TASK-0.md"), null);
-  const ep = new Map(out.recent_episodics.map((t: { path: string; last_actor: string | null }) => [t.path, t.last_actor]));
+  const ep = new Map(
+    out.recent_episodics.map((t: { path: string; last_actor: string | null }) => [
+      t.path,
+      t.last_actor,
+    ]),
+  );
   assert.equal(ep.get("session-1.md"), "agent:other");
 });
 
 test("a namespace with no core.md still resolves provenance for what it has", async () => {
   const { out, reads } = await brief({
-    documents: [
-      { namespace: "capsid", path: "conventions.md", body: "c" },
-    ],
+    documents: [{ namespace: "capsid", path: "conventions.md", body: "c" }],
     auditLog: [{ namespace: "capsid", path: "conventions.md", actor: "agent:seat" }],
   });
   assert.equal(out.core, null);

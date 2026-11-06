@@ -5,4 +5,5 @@ import { recentSitemapUrls, submitIndexNow } from "@drdustinedwards/site-helpers
 import { INDEXNOW_KEY, ORIGIN } from "./src/pages.mjs";
 
 const urls = recentSitemapUrls(readFileSync(new URL("dist/sitemap.xml", import.meta.url), "utf8"));
-if (!(await submitIndexNow({ origin: ORIGIN, key: INDEXNOW_KEY, urls }))) console.log("::warning::IndexNow did not accept the ping");
+if (!(await submitIndexNow({ origin: ORIGIN, key: INDEXNOW_KEY, urls })))
+  console.log("::warning::IndexNow did not accept the ping");

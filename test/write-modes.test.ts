@@ -9,16 +9,27 @@ const existing = { exists: true, priorBody: "# Doc\n\nFirst section.\n" };
 
 test("replace needs both title and body", () => {
   assert.match(
-    (assembleBody({ mode: "replace", exists: false, priorBody: null, body: "x" }) as { error: string }).error,
-    /needs both title and body/
+    (
+      assembleBody({ mode: "replace", exists: false, priorBody: null, body: "x" }) as {
+        error: string;
+      }
+    ).error,
+    /needs both title and body/,
   );
   assert.match(
-    (assembleBody({ mode: "replace", exists: false, priorBody: null, title: "T" }) as { error: string }).error,
-    /needs both title and body/
+    (
+      assembleBody({ mode: "replace", exists: false, priorBody: null, title: "T" }) as {
+        error: string;
+      }
+    ).error,
+    /needs both title and body/,
   );
-  assert.deepEqual(assembleBody({ mode: "replace", exists: false, priorBody: null, title: "T", body: "B" }), {
-    body: "B",
-  });
+  assert.deepEqual(
+    assembleBody({ mode: "replace", exists: false, priorBody: null, title: "T", body: "B" }),
+    {
+      body: "B",
+    },
+  );
 });
 
 test("append, patch and meta refuse a document that does not exist", () => {
@@ -39,11 +50,12 @@ test("meta leaves the body byte-identical", () => {
 test("meta refuses body, find and replace_with", () => {
   assert.match(
     (assembleBody({ ...existing, mode: "meta", body: "x" }) as { error: string }).error,
-    /does not take body/
+    /does not take body/,
   );
   assert.match(
-    (assembleBody({ ...existing, mode: "meta", find: "a", replace_with: "b" }) as { error: string }).error,
-    /belong to mode 'patch'/
+    (assembleBody({ ...existing, mode: "meta", find: "a", replace_with: "b" }) as { error: string })
+      .error,
+    /belong to mode 'patch'/,
   );
 });
 
@@ -85,7 +97,12 @@ test("append rejects patch arguments", () => {
 });
 
 test("patch replaces a unique anchor", () => {
-  const r = assembleBody({ ...existing, mode: "patch", find: "First section.", replace_with: "First section, revised." });
+  const r = assembleBody({
+    ...existing,
+    mode: "patch",
+    find: "First section.",
+    replace_with: "First section, revised.",
+  });
   assert.deepEqual(r, { body: "# Doc\n\nFirst section, revised.\n" });
 });
 
@@ -175,7 +192,11 @@ test("patch treats every $ substitution sequence in replace_with literally", () 
       find: "ANCHOR",
       replace_with: replacement,
     });
-    assert.deepEqual(result, { body: `before ${expected} after` }, `replace_with ${JSON.stringify(replacement)} was rewritten`);
+    assert.deepEqual(
+      result,
+      { body: `before ${expected} after` },
+      `replace_with ${JSON.stringify(replacement)} was rewritten`,
+    );
   }
 });
 
@@ -215,7 +236,13 @@ test("patch keeps a realistic canon fragment byte-exact", () => {
 // it, and refuses a mode/field mismatch.
 
 test("narrowWrite turns a loose wire request into the shape assembly needs", () => {
-  const narrowed = narrowWrite({ mode: "patch", exists: true, priorBody: "hello world", find: "world", replace_with: "there" });
+  const narrowed = narrowWrite({
+    mode: "patch",
+    exists: true,
+    priorBody: "hello world",
+    find: "world",
+    replace_with: "there",
+  });
   assert.ok(!("error" in narrowed));
   assert.equal(narrowed.mode, "patch");
   // The fields are REQUIRED on the narrow type, which is what lets assembly stop
@@ -231,8 +258,14 @@ test("narrowWrite is where a mode/field mismatch is refused, not assembly", () =
   // client can send them; the union only removes the shape after this point.
   const cases: Array<[Parameters<typeof narrowWrite>[0], RegExp]> = [
     [{ mode: "meta", exists: true, priorBody: "x", body: "nope" }, /does not take body/],
-    [{ mode: "append", exists: true, priorBody: "x", body: "a", find: "f" }, /belong to mode 'patch', not 'append'/],
-    [{ mode: "patch", exists: true, priorBody: "x", find: "f", replace_with: "r", body: "b" }, /takes find and replace_with, not body/],
+    [
+      { mode: "append", exists: true, priorBody: "x", body: "a", find: "f" },
+      /belong to mode 'patch', not 'append'/,
+    ],
+    [
+      { mode: "patch", exists: true, priorBody: "x", find: "f", replace_with: "r", body: "b" },
+      /takes find and replace_with, not body/,
+    ],
     [{ mode: "replace", exists: true, priorBody: "x", body: "b" }, /needs both title and body/],
   ];
   for (const [req, expected] of cases) {
@@ -254,4 +287,3 @@ test("error precedence did not move: replace reports its missing title before ex
   assert.ok("error" in append);
   assert.match(append.error, /cannot append a document that does not exist/);
 });
-

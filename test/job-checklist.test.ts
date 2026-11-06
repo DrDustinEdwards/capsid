@@ -25,7 +25,14 @@ test("only DONE WHEN's numbered items count, and only the paths they say they ch
     { n: 2, paths: ["docs/"] },
     { n: 3, paths: [] },
   ]);
-  assert.deepEqual(unchangedItems(checklistItems(BODY), ["docs/work-queue.md"]), ["DONE WHEN item 1 changes `src/job-breaker.ts`"]);
+  assert.deepEqual(unchangedItems(checklistItems(BODY), ["docs/work-queue.md"]), [
+    "DONE WHEN item 1 changes `src/job-breaker.ts`",
+  ]);
   assert.equal(checklistWarning(BODY), null);
-  assert.match(checklistWarning(`DONE WHEN:\n${Array.from({ length: 11 }, (_, i) => `${i + 1}. x`).join("\n")}`) ?? "", /11 numbered items/);
+  assert.match(
+    checklistWarning(
+      `DONE WHEN:\n${Array.from({ length: 11 }, (_, i) => `${i + 1}. x`).join("\n")}`,
+    ) ?? "",
+    /11 numbered items/,
+  );
 });

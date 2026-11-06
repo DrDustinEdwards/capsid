@@ -39,8 +39,16 @@ const usageAmount = z.number().nonnegative();
 // exists to prevent.
 export const claimSchema = z
   .object({
-    prs_opened: z.array(bounded(MAX_CLAIM_URL)).max(MAX_CLAIM_PRS).optional().describe("Pull request URLs this job opened."),
-    prs_merged: z.array(bounded(MAX_CLAIM_URL)).max(MAX_CLAIM_PRS).optional().describe("Pull request URLs this job says are merged."),
+    prs_opened: z
+      .array(bounded(MAX_CLAIM_URL))
+      .max(MAX_CLAIM_PRS)
+      .optional()
+      .describe("Pull request URLs this job opened."),
+    prs_merged: z
+      .array(bounded(MAX_CLAIM_URL))
+      .max(MAX_CLAIM_PRS)
+      .optional()
+      .describe("Pull request URLs this job says are merged."),
     tests: z
       .object({
         run: count.optional(),
@@ -52,7 +60,11 @@ export const claimSchema = z
       .optional()
       .describe("Tests the agent ran, and their result."),
     deploy_state: z.enum(CLAIM_DEPLOY_STATES).optional(),
-    files_touched: z.array(bounded(MAX_CLAIM_PATH)).max(MAX_CLAIM_FILES).optional().describe("Repo-relative paths the agent touched."),
+    files_touched: z
+      .array(bounded(MAX_CLAIM_PATH))
+      .max(MAX_CLAIM_FILES)
+      .optional()
+      .describe("Repo-relative paths the agent touched."),
     usage: z
       .object({
         cost_usd: usageAmount.optional(),
@@ -70,7 +82,7 @@ export const claimSchema = z
       .strict()
       .optional()
       .describe(
-        "What this session used, as the session reports it: cost_usd, active_seconds and tokens {input, output, cache_read, cache_creation}. This session's own total, not a running total across earlier claims on the job. Self-reported, recorded and never used to authorize anything. Telemetry (docs/telemetry.md) stays the measured source; the claims aggregate shows both side by side."
+        "What this session used, as the session reports it: cost_usd, active_seconds and tokens {input, output, cache_read, cache_creation}. This session's own total, not a running total across earlier claims on the job. Self-reported, recorded and never used to authorize anything. Telemetry (docs/telemetry.md) stays the measured source; the claims aggregate shows both side by side.",
       ),
     versions: z
       .object({
@@ -102,7 +114,9 @@ export function parseClaim(input: unknown): { claim: JobClaim | undefined } | { 
     try {
       value = JSON.parse(text);
     } catch {
-      return { error: `claim was sent as a string that is not JSON: ${text.slice(0, 120)}. Nothing was written.` };
+      return {
+        error: `claim was sent as a string that is not JSON: ${text.slice(0, 120)}. Nothing was written.`,
+      };
     }
   }
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -110,8 +124,13 @@ export function parseClaim(input: unknown): { claim: JobClaim | undefined } | { 
   }
   const parsed = claimSchema.safeParse(value);
   if (!parsed.success) {
-    const problems = parsed.error.issues.map((issue) => `claim${issue.path.length ? "." + issue.path.map(String).join(".") : ""}: ${issue.message}`);
-    return { error: `claim was refused, not trimmed: ${problems.join("; ")}. Nothing was written.` };
+    const problems = parsed.error.issues.map(
+      (issue) =>
+        `claim${issue.path.length ? "." + issue.path.map(String).join(".") : ""}: ${issue.message}`,
+    );
+    return {
+      error: `claim was refused, not trimmed: ${problems.join("; ")}. Nothing was written.`,
+    };
   }
   return { claim: parsed.data };
 }
@@ -158,7 +177,8 @@ export function rawJson(raw: ClaimRaw): string {
 export type JobClaimRow = Omit<StoredClaimRow, "id">;
 type ClaimAction = JobClaimRow["action"];
 
-const listColumn = (list: readonly string[] | undefined): string | null => (list === undefined ? null : JSON.stringify([...list]));
+const listColumn = (list: readonly string[] | undefined): string | null =>
+  list === undefined ? null : JSON.stringify([...list]);
 
 /**
  * The job_claims row for one complete, fail or block call. Pure, and built from the
@@ -216,7 +236,7 @@ export function claimStatement(db: D1Database, row: JobClaimRow): D1PreparedStat
       `INSERT INTO job_claims (job_id, action, agent, namespace, raw, prs_opened_urls, prs_merged_urls, prs_opened,
          prs_merged, commits, files_changed, tests_added, tests_run, tests_passed, tests_failed, tests_result,
          deploy_state, files_touched, model_id, client_name, client_version, permission_mode, capsid_sha, recorded_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)`
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)`,
     )
     .bind(
       row.job_id,
@@ -242,14 +262,20 @@ export function claimStatement(db: D1Database, row: JobClaimRow): D1PreparedStat
       row.client_version,
       row.permission_mode,
       row.capsid_sha,
-      row.recorded_at
+      row.recorded_at,
     );
 }
 
 // EVALUATIONS. The worker's own checks, named for OpenTelemetry's
 // gen_ai.evaluation.result event. hidden_tests and scope_respected are in the table's
 // vocabulary for a later evaluator (a model, a human); the worker writes none of them.
-export const WORKER_EVALUATIONS = ["pr_merged", "prs_opened", "commits", "files_changed", "ci_green"] as const;
+export const WORKER_EVALUATIONS = [
+  "pr_merged",
+  "prs_opened",
+  "commits",
+  "files_changed",
+  "ci_green",
+] as const;
 type WorkerEvaluation = (typeof WORKER_EVALUATIONS)[number];
 
 export type Agreement = "agree" | "disagree" | "unclaimed" | "unchecked";
@@ -276,7 +302,8 @@ export function agreementOf(claimed: number | null, verified: number | null): Ag
   return claimed === verified ? "agree" : "disagree";
 }
 
-export const workerEvaluatorId = (buildSha: string | null | undefined) => `capsid@${buildSha ?? "unknown"}`;
+export const workerEvaluatorId = (buildSha: string | null | undefined) =>
+  `capsid@${buildSha ?? "unknown"}`;
 
 // The column holds a JSON array the row builder wrote, or NULL.
 function urlsOf(column: string | null): string[] | null {
@@ -285,7 +312,8 @@ function urlsOf(column: string | null): string[] | null {
   return Array.isArray(parsed) ? parsed.filter((u): u is string => typeof u === "string") : null;
 }
 
-const json = (value: number | null): string | null => (value === null ? null : JSON.stringify(value));
+const json = (value: number | null): string | null =>
+  value === null ? null : JSON.stringify(value);
 
 /**
  * One row per worker check, from the claim row and what verifyEvidence read off
@@ -299,11 +327,17 @@ const json = (value: number | null): string | null => (value === null ? null : J
 export function evaluationRows(
   claim: JobClaimRow,
   verdict: Pick<EvidenceVerdict, "github">,
-  ctx: { evaluator_id: string; now: Date }
+  ctx: { evaluator_id: string; now: Date },
 ): JobEvaluationRow[] {
   const merged = verdict.github?.merged ?? {};
   const read = (url: string) => Object.hasOwn(merged, url);
-  const row = (name: WorkerEvaluation, claimed: number | null, verified: number | null, label: ScoreLabel, explanation: string | null): JobEvaluationRow => ({
+  const row = (
+    name: WorkerEvaluation,
+    claimed: number | null,
+    verified: number | null,
+    label: ScoreLabel,
+    explanation: string | null,
+  ): JobEvaluationRow => ({
     job_id: claim.job_id,
     name,
     score_value: verified,
@@ -318,7 +352,8 @@ export function evaluationRows(
   });
   const unread = (urls: string[]) => urls.filter((u) => !read(u)).length;
   // A count passes when GitHub's number does not contradict the driver's.
-  const countLabel = (claimed: number | null, verified: number | null): ScoreLabel => (agreementOf(claimed, verified) === "disagree" ? "fail" : "pass");
+  const countLabel = (claimed: number | null, verified: number | null): ScoreLabel =>
+    agreementOf(claimed, verified) === "disagree" ? "fail" : "pass";
 
   // pr_merged: the pull requests the claim says are merged, else the ones evidence
   // named. Verified is how many of them GitHub reads as merged, known only when every
@@ -326,7 +361,8 @@ export function evaluationRows(
   const mergedClaim = urlsOf(claim.prs_merged_urls);
   const mergedSet = mergedClaim ?? urlsOf(claim.prs_opened_urls) ?? [];
   const mergedMissing = unread(mergedSet);
-  const mergedVerified = mergedSet.length > 0 && mergedMissing === 0 ? mergedSet.filter((u) => merged[u]).length : null;
+  const mergedVerified =
+    mergedSet.length > 0 && mergedMissing === 0 ? mergedSet.filter((u) => merged[u]).length : null;
   const prMerged = row(
     "pr_merged",
     claim.prs_merged,
@@ -336,7 +372,7 @@ export function evaluationRows(
       ? "no pull request was named, so there was nothing to check"
       : mergedMissing > 0
         ? `${mergedMissing} of ${mergedSet.length} named pull requests could not be read (only evidence.prs and a pull request result_ref are read)`
-        : null
+        : null,
   );
 
   // prs_opened: every pull request the claim names exists on GitHub. Verified is the
@@ -353,16 +389,29 @@ export function evaluationRows(
       ? "no pull request was named, so there was nothing to check"
       : openedMissing > 0
         ? `${openedMissing} of ${openedSet.length} named pull requests could not be read (only evidence.prs and a pull request result_ref are read)`
-        : null
+        : null,
   );
 
   // commits and files_changed: GitHub's sum over every named pull request, known only
   // when every one was read, against the driver's number as sent.
-  const sums = "GitHub's sum is known only when every pull request in evidence.prs and result_ref was read";
+  const sums =
+    "GitHub's sum is known only when every pull request in evidence.prs and result_ref was read";
   const commitsVerified = verdict.github?.commits ?? null;
   const filesVerified = verdict.github?.files_changed ?? null;
-  const commits = row("commits", claim.commits, commitsVerified, countLabel(claim.commits, commitsVerified), commitsVerified === null ? sums : null);
-  const files = row("files_changed", claim.files_changed, filesVerified, countLabel(claim.files_changed, filesVerified), filesVerified === null ? sums : null);
+  const commits = row(
+    "commits",
+    claim.commits,
+    commitsVerified,
+    countLabel(claim.commits, commitsVerified),
+    commitsVerified === null ? sums : null,
+  );
+  const files = row(
+    "files_changed",
+    claim.files_changed,
+    filesVerified,
+    countLabel(claim.files_changed, filesVerified),
+    filesVerified === null ? sums : null,
+  );
 
   // ci_green: no claim field says anything about CI, so the claim is NULL (unclaimed).
   const ciVerified = verdict.github?.ci_green ?? null;
@@ -371,7 +420,9 @@ export function evaluationRows(
     null,
     ciVerified,
     ciVerified === 1 ? "pass" : "fail",
-    ciVerified === null ? "CI on the last named pull request's head was not read, or had not finished" : null
+    ciVerified === null
+      ? "CI on the last named pull request's head was not read, or had not finished"
+      : null,
   );
 
   return [prMerged, prsOpened, commits, files, ci];
@@ -379,13 +430,16 @@ export function evaluationRows(
 
 // claim_id is the claim row this batch inserted. Its id is not known before the batch
 // runs, and the batch is one transaction, so the newest claim for the job is that row.
-export function evaluationStatements(db: D1Database, rows: readonly JobEvaluationRow[]): D1PreparedStatement[] {
+export function evaluationStatements(
+  db: D1Database,
+  rows: readonly JobEvaluationRow[],
+): D1PreparedStatement[] {
   return rows.map((row) =>
     db
       .prepare(
         `INSERT INTO job_evaluations (job_id, claim_id, name, score_value, score_label, claimed, verified, agreement,
            evaluator, evaluator_id, explanation, recorded_at)
-         VALUES (?1, (SELECT MAX(id) FROM job_claims WHERE job_id = ?1), ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+         VALUES (?1, (SELECT MAX(id) FROM job_claims WHERE job_id = ?1), ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
       )
       .bind(
         row.job_id,
@@ -398,7 +452,7 @@ export function evaluationStatements(db: D1Database, rows: readonly JobEvaluatio
         row.evaluator,
         row.evaluator_id,
         row.explanation,
-        row.recorded_at
-      )
+        row.recorded_at,
+      ),
   );
 }

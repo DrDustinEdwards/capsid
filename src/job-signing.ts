@@ -28,7 +28,11 @@ export type SignatureCheck =
 
 function payload(kind: JobTextKind, jobId: string, fields: Record<string, string | null>): string {
   // Keys in a fixed order, so the same fields always produce the same bytes.
-  const ordered = Object.fromEntries(Object.keys(fields).sort().map((k) => [k, fields[k]]));
+  const ordered = Object.fromEntries(
+    Object.keys(fields)
+      .sort()
+      .map((k) => [k, fields[k]]),
+  );
   return `capsid-job-${kind}:v1\n${jobId}\n${JSON.stringify(ordered)}`;
 }
 
@@ -36,7 +40,7 @@ export async function signJobText(
   rootSecret: string | undefined,
   kind: JobTextKind,
   jobId: string,
-  fields: Record<string, string | null>
+  fields: Record<string, string | null>,
 ): Promise<string | null> {
   if (!rootSecret) return null;
   return hmacHex(await deriveTaskKey(rootSecret), payload(kind, jobId, fields));
@@ -47,10 +51,10 @@ export async function checkJobText(
   kind: JobTextKind,
   jobId: string,
   fields: Record<string, string | null>,
-  signature: string | null | undefined
+  signature: string | null | undefined,
 ): Promise<SignatureCheck> {
   if (!signature) return "legacy-unsigned";
   if (!rootSecret) return "unconfigured";
   const expected = await hmacHex(await deriveTaskKey(rootSecret), payload(kind, jobId, fields));
-  return await safeEqual(signature.toLowerCase(), expected) ? "verified" : "mismatch";
+  return (await safeEqual(signature.toLowerCase(), expected)) ? "verified" : "mismatch";
 }

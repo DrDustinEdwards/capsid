@@ -33,7 +33,14 @@ import {
 import { jobAudit, mirrorStatements } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
 import { checkOverlaps, overlapLine, prUrlsIn, type OverlapReport } from "./job-overlaps";
-import { callerIsSeat, correctionsForWork, guardedTransition, readJob, refuse, type JobResult } from "./jobs-transition";
+import {
+  callerIsSeat,
+  correctionsForWork,
+  guardedTransition,
+  readJob,
+  refuse,
+  type JobResult,
+} from "./jobs-transition";
 import { actorKind, touchStatement } from "./job-touches";
 import { ciRefusal } from "./complete-ci";
 import { breakerExemption, type BreakerExemption } from "./fail-exemption";
@@ -44,32 +51,52 @@ import { parsePrUrl } from "./github/client";
 // The transitions a holder makes. complete, fail and block are the same shape: a keyed
 // UPDATE that only fires for the claimed job this caller holds, so a job the seat
 // released back to the queue cannot be completed out from under its new owner.
-function holderRefusal(action: string, id: string, actor: string, current: JobRow | null): JobResult | null {
+function holderRefusal(
+  action: string,
+  id: string,
+  actor: string,
+  current: JobRow | null,
+): JobResult | null {
   if (!current) return refuse(action, `no job ${id}.`);
   if (current.status !== "claimed") {
     return refuse(
       action,
-      `${id} is ${current.status}, not claimed. ${current.status === "queued" ? "It is back in the queue (the seat released it); claim it again." : "It has already been finished."}`
+      `${id} is ${current.status}, not claimed. ${current.status === "queued" ? "It is back in the queue (the seat released it); claim it again." : "It has already been finished."}`,
     );
   }
-  if (current.claimed_by !== actor) return refuse(action, `${id} is held by ${current.claimed_by}, not by ${actor}.`);
+  if (current.claimed_by !== actor)
+    return refuse(action, `${id} is held by ${current.claimed_by}, not by ${actor}.`);
   return null;
 }
 
 // The seat completing a blocked job it does not hold. Null when the job is blocked and
 // held by someone else; otherwise what the job is and what to do instead.
-function seatCloseRefusal(action: string, id: string, seat: string, current: JobRow | null): JobResult | null {
+function seatCloseRefusal(
+  action: string,
+  id: string,
+  seat: string,
+  current: JobRow | null,
+): JobResult | null {
   if (!current) return refuse(action, `no job ${id}.`);
   if (current.status === "blocked") {
     return current.claimed_by === seat
-      ? refuse(action, `${id} is blocked and held by ${seat} itself. A holder resumes its own gate before it completes; the seat's close is for a job another credential blocked.`)
+      ? refuse(
+          action,
+          `${id} is blocked and held by ${seat} itself. A holder resumes its own gate before it completes; the seat's close is for a job another credential blocked.`,
+        )
       : null;
   }
   if (current.status === "queued") {
-    return refuse(action, `${id} is queued: nobody has worked it, so there is nothing to complete. A driver claims it, or the seat supersedes it.`);
+    return refuse(
+      action,
+      `${id} is queued: nobody has worked it, so there is nothing to complete. A driver claims it, or the seat supersedes it.`,
+    );
   }
   if (current.status === "claimed") {
-    return refuse(action, `${id} is claimed by ${current.claimed_by}. Its holder completes it, or the seat releases the claim first. The seat completes a job only once it is blocked.`);
+    return refuse(
+      action,
+      `${id} is claimed by ${current.claimed_by}. Its holder completes it, or the seat releases the claim first. The seat completes a job only once it is blocked.`,
+    );
   }
   return refuse(action, `${id} is already ${current.status}; there is nothing to complete.`);
 }
@@ -78,8 +105,16 @@ function seatCloseRefusal(action: string, id: string, seat: string, current: Job
 function recordRefusal(action: string, id: string, current: JobRow | null): JobResult | null {
   if (!current) return refuse(action, `no job ${id}.`);
   if (current.status === "queued" && current.claimed_by === null) return null;
-  if (current.status === "claimed") return refuse(action, `${id} is claimed by ${current.claimed_by}: its holder completes it. record is for work done on a job nobody claimed.`);
-  if (current.status === "blocked") return refuse(action, `${id} is blocked: the seat completes a blocked job with action complete.`);
+  if (current.status === "claimed")
+    return refuse(
+      action,
+      `${id} is claimed by ${current.claimed_by}: its holder completes it. record is for work done on a job nobody claimed.`,
+    );
+  if (current.status === "blocked")
+    return refuse(
+      action,
+      `${id} is blocked: the seat completes a blocked job with action complete.`,
+    );
   return refuse(action, `${id} is ${current.status}; record is for a queued job.`);
 }
 
@@ -128,7 +163,7 @@ async function holderTransition(
     // The overlap report for the pull request this call named, recorded on the audit row
     // and returned. Its line is already in result_summary.
     overlaps?: OverlapReport | null;
-  }
+  },
 ): Promise<JobResult> {
   const actor = agent.actor;
   const read = await readJob(env.DB, id);
@@ -142,7 +177,11 @@ async function holderTransition(
   // What the row must be for this transition to apply, and who holds it. For a holder's
   // own transition that is the claimed row it holds, as it always was.
   const fromStatus = patch.records ? "queued" : patch.seatCloses ? "blocked" : "claimed";
-  const verb = patch.records ? (patch.recordVerb ?? "record") : patch.seatCloses ? "admin-complete" : action;
+  const verb = patch.records
+    ? (patch.recordVerb ?? "record")
+    : patch.seatCloses
+      ? "admin-complete"
+      : action;
   // The row as the UPDATE below will leave it, computed from the read so the mirror
   // and the outcome can be built before anything is written. The guard at the head of
   // the batch is what keeps the read true when the batch commits.
@@ -177,14 +216,16 @@ async function holderTransition(
   let outcome: { row: JobOutcomeRow; notes: string[] } | undefined;
   // The summary is signed as it is written, so the command a blocked job shows a person
   // can be told apart from one changed afterwards (src/job-signing.ts).
-  const summarySig = patch.result_summary ? await signJobText(env.IMPROVE_SCORE_SECRET, "summary", id, { summary: patch.result_summary }) : null;
+  const summarySig = patch.result_summary
+    ? await signJobText(env.IMPROVE_SCORE_SECRET, "summary", id, { summary: patch.result_summary })
+    : null;
   const statements = [
     requireJobUnchanged(env.DB, id, fromStatus, read.claimed_by, read.updated_at),
     env.DB.prepare(
       `UPDATE jobs SET status = ?2, result_summary = COALESCE(?3, result_summary), result_ref = COALESCE(?4, result_ref),
          summary_sig = CASE WHEN ?3 IS NULL THEN summary_sig ELSE ?8 END,
          updated_at = ?5, blocked_count = blocked_count + ?7, claimed_by = COALESCE(?10, claimed_by)
-       WHERE id = ?1 AND status = ?9 AND claimed_by IS ?6 RETURNING id`
+       WHERE id = ?1 AND status = ?9 AND claimed_by IS ?6 RETURNING id`,
     ).bind(
       id,
       patch.status,
@@ -195,7 +236,7 @@ async function holderTransition(
       patch.bumpBlocked ? 1 : 0,
       summarySig,
       fromStatus,
-      patch.records ? actor : null
+      patch.records ? actor : null,
     ),
     ...(await mirrorStatements(env, job, `job-${verb}`, actor)),
     jobAudit(env.DB, actor, `job-${verb}`, job, {
@@ -231,18 +272,38 @@ async function holderTransition(
     // One evaluation per worker check, the claim and GitHub's value side by side,
     // after the claim row so its claim_id subquery finds it.
     if (claimed) {
-      statements.push(...evaluationStatements(env.DB, evaluationRows(claimed, verdict, { evaluator_id: workerEvaluatorId(env.BUILD_SHA), now })));
+      statements.push(
+        ...evaluationStatements(
+          env.DB,
+          evaluationRows(claimed, verdict, { evaluator_id: workerEvaluatorId(env.BUILD_SHA), now }),
+        ),
+      );
     }
     // Cost, tokens and active time from the job's sessions' telemetry, NULL when none
     // reached Capsid (src/ops-otlp.ts). Points exported after this read stay in
     // session_usage and are not added to the row, which is written once.
-    const row = outcomeFrom(job, verdict, now, await readJobUsage(env.DB, job.id), claimed?.model_id ?? null);
+    const row = outcomeFrom(
+      job,
+      verdict,
+      now,
+      await readJobUsage(env.DB, job.id),
+      claimed?.model_id ?? null,
+    );
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
     // One row per pull request the evidence named, in the same batch as the outcome.
     // Without them the outcome keeps counts with no way back to what they counted, and
     // the merge state recorded at complete time could never be corrected.
-    statements.push(...outcomePrStatements(env.DB, job.id, namedPrUrls(patch.evidence, job.result_ref), verdict.pr_states, now, verdict.pr_identity));
+    statements.push(
+      ...outcomePrStatements(
+        env.DB,
+        job.id,
+        namedPrUrls(patch.evidence, job.result_ref),
+        verdict.pr_states,
+        now,
+        verdict.pr_identity,
+      ),
+    );
   }
   try {
     await env.DB.batch(statements);
@@ -250,8 +311,16 @@ async function holderTransition(
     if (!isMissingRowAbort(err)) throw err;
     // Nothing was written. Say what the row is now, as a lost race would have.
     const current = await readJob(env.DB, id);
-    const gone = patch.seatCloses ? seatCloseRefusal(action, id, actor, current) : holderRefusal(action, id, actor, current);
-    return gone ?? refuse(action, `${id} changed between reading it and recording the ${action}. Nothing was written; try again.`);
+    const gone = patch.seatCloses
+      ? seatCloseRefusal(action, id, actor, current)
+      : holderRefusal(action, id, actor, current);
+    return (
+      gone ??
+      refuse(
+        action,
+        `${id} changed between reading it and recording the ${action}. Nothing was written; try again.`,
+      )
+    );
   }
   return {
     ok: true,
@@ -272,7 +341,7 @@ async function bindPullRequest(
   action: string,
   current: JobRow,
   pr: string,
-  auditAction: "job-ci-bound"
+  auditAction: "job-ci-bound",
 ): Promise<JobRow | JobResult> {
   const notHeld = holderRefusal(action, current.id, agent.actor, current);
   if (notHeld) return notHeld;
@@ -280,37 +349,71 @@ async function bindPullRequest(
   const bound = await guardedTransition(env, current, [
     env.DB.prepare(
       `UPDATE jobs SET result_ref = ?2, updated_at = ?3
-       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 AND result_ref IS NULL RETURNING id`
+       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?4 AND result_ref IS NULL RETURNING id`,
     ).bind(current.id, pr, now.toISOString(), agent.actor),
     ...(await mirrorStatements(env, job, auditAction, agent.actor)),
     jobAudit(env.DB, agent.actor, auditAction, job, { result_ref: pr }),
   ]);
-  if (!bound) return refuse(action, `${current.id} moved between reading it and recording its pull request. Ask again.`);
+  if (!bound)
+    return refuse(
+      action,
+      `${current.id} moved between reading it and recording its pull request. Ask again.`,
+    );
   return job;
 }
 
-type CompleteArgs = { result_summary: string; result_ref?: string; evidence?: JobEvidence; claim?: ClaimInput; raw?: ClaimRaw };
+type CompleteArgs = {
+  result_summary: string;
+  result_ref?: string;
+  evidence?: JobEvidence;
+  claim?: ClaimInput;
+  raw?: ClaimRaw;
+};
 
-export async function completeJob(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
+export async function completeJob(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  args: CompleteArgs,
+): Promise<JobResult> {
   return completeWith(env, agent, now, id, args, false);
 }
 
 // The seat completing a blocked job (src/jobs-seat.ts adminCompleteJob checks who may).
 // The same checks and records as a holder's complete; only the row it applies to differs.
-export async function completeAsSeat(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
+export async function completeAsSeat(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  args: CompleteArgs,
+): Promise<JobResult> {
   return completeWith(env, agent, now, id, args, true);
 }
 
 // The seat recording the outcome of a queued job that was worked without a claim. The
 // same checks, verification and records as a complete.
-export async function recordAsSeat(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
+export async function recordAsSeat(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  args: CompleteArgs,
+): Promise<JobResult> {
   return completeWith(env, agent, now, id, args, true, "record");
 }
 
 // A session completing a queued job it worked without a claim, naming the pull request
 // (src/jobs-seat.ts completeUnclaimed checks who may). The record path, audited as
 // complete-unclaimed so it is not read as the seat recording somebody else's work.
-export async function completeWithoutClaim(env: Env, agent: Agent, now: Date, id: string, args: CompleteArgs): Promise<JobResult> {
+export async function completeWithoutClaim(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  args: CompleteArgs,
+): Promise<JobResult> {
   return completeWith(env, agent, now, id, args, true, "complete-unclaimed");
 }
 
@@ -321,10 +424,13 @@ async function completeWith(
   id: string,
   args: CompleteArgs,
   seatCloses: boolean,
-  records: false | "record" | "complete-unclaimed" = false
+  records: false | "record" | "complete-unclaimed" = false,
 ): Promise<JobResult> {
   if (!args.result_summary?.trim()) {
-    return refuse("complete", "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.");
+    return refuse(
+      "complete",
+      "complete needs a result_summary. A done job with no summary is a job the seat has to reconstruct from the diff.",
+    );
   }
   // Refused before anything else runs, so a claim that cannot be recorded whole
   // leaves no row of any kind.
@@ -335,7 +441,12 @@ async function completeWith(
   // leave a row that records nothing.
   const swallowed = swallowedParamTag(args.result_summary);
   if (swallowed) return refuse("complete", swallowedTagRefusal("result_summary", swallowed));
-  const completeRaw: ClaimRaw = args.raw ?? { evidence: args.evidence, claim: args.claim, result_summary: args.result_summary, result_ref: args.result_ref };
+  const completeRaw: ClaimRaw = args.raw ?? {
+    evidence: args.evidence,
+    claim: args.claim,
+    result_summary: args.result_summary,
+    result_ref: args.result_ref,
+  };
   const held = await readJob(env.DB, id);
   // The CI gate (src/complete-ci.ts): every pull request this complete names, and the one
   // the job is bound to, must show green CI. A refused holder's job is bound to the pull
@@ -343,10 +454,23 @@ async function completeWith(
   // The seat's close writes nothing before it is allowed.
   if (held) {
     const bound = parsePrUrl(held.result_ref) ? [held.result_ref!.trim()] : [];
-    const ci = await ciRefusal(env, held.namespace, [...new Set([...bound, ...namedPrUrls(args.evidence, args.result_ref)])], held.body);
+    const ci = await ciRefusal(
+      env,
+      held.namespace,
+      [...new Set([...bound, ...namedPrUrls(args.evidence, args.result_ref)])],
+      held.body,
+    );
     if (ci) {
       if (!seatCloses && !held.result_ref && ci.pr) {
-        const kept = await bindPullRequest(env, agent, now, "complete", held, ci.pr, "job-ci-bound");
+        const kept = await bindPullRequest(
+          env,
+          agent,
+          now,
+          "complete",
+          held,
+          ci.pr,
+          "job-ci-bound",
+        );
         if (!("status" in kept)) return kept;
       }
       return refuse("complete", `${id} was not completed: ${ci.why}`);
@@ -354,13 +478,21 @@ async function completeWith(
   }
   // Overlap warning (Track A D1): the pull requests this complete names, against every other
   // open one. The line rides in the summary the seat reads; the check cannot fail the call.
-  const overlaps = held ? await checkOverlaps(env, held.namespace, namedPrUrls(args.evidence, args.result_ref ?? held.result_ref)) : null;
+  const overlaps = held
+    ? await checkOverlaps(
+        env,
+        held.namespace,
+        namedPrUrls(args.evidence, args.result_ref ?? held.result_ref),
+      )
+    : null;
   const overlap = overlaps ? overlapLine(overlaps) : null;
   return holderTransition(env, agent, now, "complete", id, {
     status: "done",
-    result_summary: overlap ? `${args.result_summary}
+    result_summary: overlap
+      ? `${args.result_summary}
 
-${overlap}` : args.result_summary,
+${overlap}`
+      : args.result_summary,
     overlaps,
     result_ref: args.result_ref ?? null,
     evidence: args.evidence,
@@ -368,24 +500,24 @@ ${overlap}` : args.result_summary,
     ...(records
       ? { records: true, recordVerb: records }
       : seatCloses
-      ? {
-          seatCloses: true,
-          // The seat ending a blocked job's wait, in the same batch as the audit row. The job
-          // row it is built from still names the driver, so detail.held_by is who did the work.
-          touches: (job: JobRow) => [
-            touchStatement(env.DB, {
-              job_id: job.id,
-              namespace: job.namespace,
-              kind: "admin_complete",
-              actor: agent.actor,
-              actor_kind: actorKind(agent.actor, { seat: true }),
-              detail: { held_by: job.claimed_by, result_ref: job.result_ref },
-              sinceGate: true,
-              at: now.toISOString(),
-            }),
-          ],
-        }
-      : {}),
+        ? {
+            seatCloses: true,
+            // The seat ending a blocked job's wait, in the same batch as the audit row. The job
+            // row it is built from still names the driver, so detail.held_by is who did the work.
+            touches: (job: JobRow) => [
+              touchStatement(env.DB, {
+                job_id: job.id,
+                namespace: job.namespace,
+                kind: "admin_complete",
+                actor: agent.actor,
+                actor_kind: actorKind(agent.actor, { seat: true }),
+                detail: { held_by: job.claimed_by, result_ref: job.result_ref },
+                sinceGate: true,
+                at: now.toISOString(),
+              }),
+            ],
+          }
+        : {}),
   });
 }
 
@@ -395,16 +527,21 @@ export async function failJob(
   now: Date,
   id: string,
   reason: string,
-  said: { claim?: ClaimInput; raw?: ClaimRaw } = {}
+  said: { claim?: ClaimInput; raw?: ClaimRaw } = {},
 ): Promise<JobResult> {
-  if (!reason?.trim()) return refuse("fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
+  if (!reason?.trim())
+    return refuse(
+      "fail",
+      "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.",
+    );
   const failSwallowed = swallowedParamTag(reason);
   if (failSwallowed) return refuse("fail", swallowedTagRefusal("reason", failSwallowed));
   const failClaim = parseClaim(said.claim);
   if ("error" in failClaim) return refuse("fail", failClaim.error);
   const failRaw: ClaimRaw = said.raw ?? { claim: said.claim, reason };
   const held = await readJob(env.DB, id);
-  const breakerExempt = held && held.claimed_by === agent.actor ? await breakerExemption(env, held, reason) : null;
+  const breakerExempt =
+    held && held.claimed_by === agent.actor ? await breakerExemption(env, held, reason) : null;
   return holderTransition(env, agent, now, "fail", id, {
     status: "failed",
     result_summary: reason,
@@ -417,7 +554,8 @@ export async function failJob(
 // is work waiting on a human, and the human needs the command to run, not a
 // description of the situation. Capsid Portal shows these. blockJob writes this marker
 // and commandFromSummary reads it back, so the format cannot drift between the two.
-export const RESUME_MARKER = "Run this, then send it back in with capsid_work_jobs action 'resume':";
+export const RESUME_MARKER =
+  "Run this, then send it back in with capsid_work_jobs action 'resume':";
 
 /** Where a summary's resume marker starts and how long it is, or null with none. */
 export function resumeMarkerIn(summary: string): { at: number; length: number } | null {
@@ -452,35 +590,63 @@ export async function blockJob(
   agent: Agent,
   now: Date,
   id: string,
-  args: { reason: string; command?: string; question?: boolean; claim?: ClaimInput; raw?: ClaimRaw }
+  args: {
+    reason: string;
+    command?: string;
+    question?: boolean;
+    claim?: ClaimInput;
+    raw?: ClaimRaw;
+  },
 ): Promise<JobResult> {
-  if (!args.reason?.trim()) return refuse("block", args.question ? "a question block needs the question as its reason." : "block needs a reason: what gate was hit.");
+  if (!args.reason?.trim())
+    return refuse(
+      "block",
+      args.question
+        ? "a question block needs the question as its reason."
+        : "block needs a reason: what gate was hit.",
+    );
   // The command of a question is the Worker's, never the session's: a question that carried a
   // command would be a gate in disguise, and the seat answers by resuming with a note.
   if (args.question && args.command?.trim()) {
-    return refuse("block", `a question block takes no command: the Worker fixes it as '${QUESTION_COMMAND}'. Send the question as the reason, or drop question: true and block with the command.`);
+    return refuse(
+      "block",
+      `a question block takes no command: the Worker fixes it as '${QUESTION_COMMAND}'. Send the question as the reason, or drop question: true and block with the command.`,
+    );
   }
   const blockClaim = parseClaim(args.claim);
   if ("error" in blockClaim) return refuse("block", blockClaim.error);
-  const blockRaw: ClaimRaw = args.raw ?? { claim: args.claim, reason: args.reason, command: args.command };
+  const blockRaw: ClaimRaw = args.raw ?? {
+    claim: args.claim,
+    reason: args.reason,
+    command: args.command,
+  };
   const command = args.question ? QUESTION_COMMAND : args.command;
   const base = args.question ? `${QUESTION_PREFIX}${args.reason}` : args.reason;
   // Overlap warning (Track A D1): the pull requests this block names, in the job's result_ref
   // or as URLs in the command, against every other open one. The line sits before the resume
   // marker, so commandFromSummary still reads the command and nothing after it.
   const named = await readJob(env.DB, id);
-  const overlaps = named ? await checkOverlaps(env, named.namespace, [...(named.result_ref ? [named.result_ref.trim()] : []), ...prUrlsIn(command)]) : null;
+  const overlaps = named
+    ? await checkOverlaps(env, named.namespace, [
+        ...(named.result_ref ? [named.result_ref.trim()] : []),
+        ...prUrlsIn(command),
+      ])
+    : null;
   const overlap = overlaps ? overlapLine(overlaps) : null;
-  const text = overlap ? `${base}
+  const text = overlap
+    ? `${base}
 
-${overlap}` : base;
+${overlap}`
+    : base;
   const summary = command ? `${text}\n\n${RESUME_MARKER}\n\n    ${command}` : text;
   // The cap is applied where the block is written, so a capped job says so in the one
   // field every reader already looks at: the Portal prints result_summary, the driver
   // reads it to continue, and a human deciding reads it there too. The budget is read
   // before the transition, because the transition is what makes this block count.
   const current = await readJob(env.DB, id);
-  const capped = current !== null && atCorrectionCap(await correctionsForWork(env.DB, current.namespace, current.title));
+  const capped =
+    current !== null &&
+    atCorrectionCap(await correctionsForWork(env.DB, current.namespace, current.title));
   return holderTransition(env, agent, now, "block", id, {
     status: "blocked",
     result_summary: capped ? cappedSummary(summary) : summary,
@@ -496,7 +662,11 @@ ${overlap}` : base;
         kind: "gate",
         actor: agent.actor,
         actor_kind: actorKind(agent.actor, { seat: callerIsSeat(agent) }),
-        detail: { reason: args.reason, command: command ?? null, ...(args.question ? { question: true } : {}) },
+        detail: {
+          reason: args.reason,
+          command: command ?? null,
+          ...(args.question ? { question: true } : {}),
+        },
         sinceGate: false,
         at: now.toISOString(),
       }),

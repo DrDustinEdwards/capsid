@@ -33,10 +33,20 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
         // Closed (area 11, T4): every param some control takes, each a string. Which of
         // them this control takes is checked by previewControl, which names them.
         params: z
-          .strictObject(Object.fromEntries([...new Set(CONTROLS.flatMap((c) => c.fields))].sort().map((field) => [field, bounded(MAX_PARAM).optional()])))
+          .strictObject(
+            Object.fromEntries(
+              [...new Set(CONTROLS.flatMap((c) => c.fields))]
+                .sort()
+                .map((field) => [field, bounded(MAX_PARAM).optional()]),
+            ),
+          )
           .optional()
-          .describe(`For preview: the control's params, each a string (list says which). A reason is at most ${MAX_TITLE} characters.`),
-        token: bounded(MAX_TOKEN).optional().describe("For perform: the token the preview returned. Nothing else is read."),
+          .describe(
+            `For preview: the control's params, each a string (list says which). A reason is at most ${MAX_TITLE} characters.`,
+          ),
+        token: bounded(MAX_TOKEN)
+          .optional()
+          .describe("For perform: the token the preview returned. Nothing else is read."),
       },
     },
     async (args) => {
@@ -45,27 +55,43 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
       // signed in through Access (agent:access:<email>). A minted agent
       // has none and cannot hold a control, whatever its grant.
       if (!ctx.actor.startsWith(ACCESS_PREFIX) || ctx.actor.length === ACCESS_PREFIX.length) {
-        return fail(`controls needs the administrator signed in through Access; ${ctx.actor} is not.`);
+        return fail(
+          `controls needs the administrator signed in through Access; ${ctx.actor} is not.`,
+        );
       }
       const email = ctx.actor.slice(ACCESS_PREFIX.length);
       try {
         if (args.action === "list") {
           return ok({
-            controls: CONTROLS.map((c) => ({ control: c.name, params: c.fields, reason_required: c.reasonRequired })),
+            controls: CONTROLS.map((c) => ({
+              control: c.name,
+              params: c.fields,
+              reason_required: c.reasonRequired,
+            })),
             next: 'Call action "preview" with a control and its params, read the plan, then call action "perform" with the token.',
           });
         }
         if (args.action === "preview") {
-          if (!args.control) return fail('preview needs a control. Call action "list" for the names.');
-          const previewed = await previewControl(env, email, args.control, args.params ?? {}, now, "chat");
+          if (!args.control)
+            return fail('preview needs a control. Call action "list" for the names.');
+          const previewed = await previewControl(
+            env,
+            email,
+            args.control,
+            args.params ?? {},
+            now,
+            "chat",
+          );
           return previewed.ok ? ok(previewed.preview) : fail(previewed.refusal);
         }
         if (!args.token) return fail("perform needs the token a preview returned.");
         const did = await performControl(env, email, args.token, null, now, "chat");
-        return did.ok ? ok({ action: did.action, summary: did.result.summary, warning: did.result.warning }) : fail(did.refusal);
+        return did.ok
+          ? ok({ action: did.action, summary: did.result.summary, warning: did.result.warning })
+          : fail(did.refusal);
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
-    }
+    },
   );
 }

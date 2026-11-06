@@ -19,20 +19,29 @@ const SECRET = "integration-portal-trends-key";
 async function job(id: string, status: string, created: string, updated: string): Promise<void> {
   await env.DB.prepare(
     `INSERT INTO jobs (id, namespace, title, body, status, priority, gate_required, posted_by, created_at, updated_at)
-     VALUES (?1, 'sample', ?2, 'do the thing', ?3, 0, 0, 'github:sample', ?4, ?5)`
+     VALUES (?1, 'sample', ?2, 'do the thing', ?3, 0, 0, 'github:sample', ?4, ?5)`,
   )
     .bind(id, `trends ${id}`, status, created, updated)
     .run();
 }
 
-async function audit(actor: string, action: string, at: string, params: unknown = {}): Promise<void> {
-  await env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params, at) VALUES (?1, ?2, 'sample', NULL, ?3, ?4)")
+async function audit(
+  actor: string,
+  action: string,
+  at: string,
+  params: unknown = {},
+): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO audit_log (actor, action, namespace, path, params, at) VALUES (?1, ?2, 'sample', NULL, ?3, ?4)",
+  )
     .bind(actor, action, JSON.stringify(params), at)
     .run();
 }
 
 async function touch(kind: string, actorKind: string, at: string): Promise<void> {
-  await env.DB.prepare("INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, at) VALUES ('job_000000000001', 'sample', ?1, 'access:admin@example.com', ?2, ?3)")
+  await env.DB.prepare(
+    "INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, at) VALUES ('job_000000000001', 'sample', ?1, 'access:admin@example.com', ?2, ?3)",
+  )
     .bind(kind, actorKind, at)
     .run();
 }
@@ -49,7 +58,12 @@ describe("the trends series", () => {
 
     // Queue: one job open since before the window, one posted and ended inside it, one
     // posted and still queued, one that ended before the window.
-    await job("job_00000000000a", "blocked", "2029-12-01T00:00:00.000Z", "2030-01-10T00:00:00.000Z");
+    await job(
+      "job_00000000000a",
+      "blocked",
+      "2029-12-01T00:00:00.000Z",
+      "2030-01-10T00:00:00.000Z",
+    );
     await job("job_00000000000b", "done", "2030-01-12T08:00:00.000Z", "2030-01-14T08:00:00.000Z");
     await job("job_00000000000c", "queued", "2030-01-15T08:00:00.000Z", "2030-01-15T08:00:00.000Z");
     await job("job_00000000000d", "failed", "2029-12-01T00:00:00.000Z", "2029-12-20T00:00:00.000Z");
@@ -59,26 +73,43 @@ describe("the trends series", () => {
     await audit("system:auto-merge", "auto-merged", "2030-01-14 10:00:00");
     await audit("system:executor", "approved-merged", "2030-01-14 11:00:00");
     // The policy's merge also closed an approval it held: the same merge, counted once.
-    await audit("system:auto-merge", "approved-merged", "2030-01-14 10:00:01", { reason: AUTO_MERGED_APPROVAL_REASON });
-    await audit("access:admin@example.com", "manage_pr", "2030-01-14 12:00:00", { action: "merge", merged: true });
+    await audit("system:auto-merge", "approved-merged", "2030-01-14 10:00:01", {
+      reason: AUTO_MERGED_APPROVAL_REASON,
+    });
+    await audit("access:admin@example.com", "manage_pr", "2030-01-14 12:00:00", {
+      action: "merge",
+      merged: true,
+    });
     await audit("access:admin@example.com", "pr-closed", "2030-01-14 13:00:00");
-    await audit("access:admin@example.com", "manage_pr", "2030-01-14 14:00:00", { action: "close" });
-    await audit("access:admin@example.com", "manage_pr", "2030-01-14 15:00:00", { action: "comment" });
+    await audit("access:admin@example.com", "manage_pr", "2030-01-14 14:00:00", {
+      action: "close",
+    });
+    await audit("access:admin@example.com", "manage_pr", "2030-01-14 15:00:00", {
+      action: "comment",
+    });
     await env.DB.prepare(
-      "INSERT INTO deploy_outcomes (repo, namespace, run_id, head_sha, pr, outcome, run_at, restore_seconds) VALUES ('example-org/sample', 'sample', 7, ?1, 12, 'rolled_back', '2030-01-15T10:00:00.000Z', 90)"
+      "INSERT INTO deploy_outcomes (repo, namespace, run_id, head_sha, pr, outcome, run_at, restore_seconds) VALUES ('example-org/sample', 'sample', 7, ?1, 12, 'rolled_back', '2030-01-15T10:00:00.000Z', 90)",
     )
       .bind("a".repeat(40))
       .run();
     // Three more deploys for the DORA measures: two that shipped and one whose gate could not run.
-    for (const [id, outcome] of [[8, "verified"], [9, "verified"], [10, "unverified"]] as const) {
-      await env.DB.prepare("INSERT INTO deploy_outcomes (repo, namespace, run_id, head_sha, outcome, run_at) VALUES ('example-org/sample', 'sample', ?1, ?2, ?3, '2030-01-14T10:00:00.000Z')")
+    for (const [id, outcome] of [
+      [8, "verified"],
+      [9, "verified"],
+      [10, "unverified"],
+    ] as const) {
+      await env.DB.prepare(
+        "INSERT INTO deploy_outcomes (repo, namespace, run_id, head_sha, outcome, run_at) VALUES ('example-org/sample', 'sample', ?1, ?2, ?3, '2030-01-14T10:00:00.000Z')",
+      )
         .bind(id, "b".repeat(40), outcome)
         .run();
     }
 
     // Cost: two outcomes this week with a cost and one without; none the week before.
     const outcome = (id: string, cost: number | null, at: string) =>
-      env.DB.prepare("INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, result_kind, verified, cost_usd, recorded_at) VALUES (?1, 'agent:sample-driver', 'sample', 0, 0, 'complete', '{}', ?2, ?3)")
+      env.DB.prepare(
+        "INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, result_kind, verified, cost_usd, recorded_at) VALUES (?1, 'agent:sample-driver', 'sample', 0, 0, 'complete', '{}', ?2, ?3)",
+      )
         .bind(id, cost, at)
         .run();
     await outcome("job_0000000000c1", 1.25, "2030-01-14 09:00:00");
@@ -108,9 +139,26 @@ describe("the trends series", () => {
     expect(t.merges.weeks[1]).toMatchObject({ auto: 1, approved: 1, seat: 1, closed: 2 });
     // Deploy frequency, change failure rate (1 refused of 3 decided) and time to restore (F4).
     expect(t.deploys.repos).toEqual([
-      { repo: "example-org/sample", deploys: 4, per_week: 2, shipped: 2, refused: 1, rolled_back: 1, unverified: 1, change_failure_rate: 0.333, restore_median_seconds: 90 },
+      {
+        repo: "example-org/sample",
+        deploys: 4,
+        per_week: 2,
+        shipped: 2,
+        refused: 1,
+        rolled_back: 1,
+        unverified: 1,
+        change_failure_rate: 0.333,
+        restore_median_seconds: 90,
+      },
     ]);
-    expect(t.merges.rollbacks).toEqual([{ at: "2030-01-15T10:00:00.000Z", repo: "example-org/sample", pr: 12, outcome: "rolled_back" }]);
+    expect(t.merges.rollbacks).toEqual([
+      {
+        at: "2030-01-15T10:00:00.000Z",
+        repo: "example-org/sample",
+        pr: 12,
+        outcome: "rolled_back",
+      },
+    ]);
 
     expect(t.cost.weeks.map((w) => [w.week, w.usd, w.jobs])).toEqual([
       ["2030-W02", null, 0],
@@ -118,20 +166,27 @@ describe("the trends series", () => {
     ]);
 
     expect(t.backups.error).toBeNull();
-    expect(t.backups.slots!.daily.filter((s) => s.filled).map((s) => s.key)).toEqual(["2030-01-16"]);
+    expect(t.backups.slots!.daily.filter((s) => s.filled).map((s) => s.key)).toEqual([
+      "2030-01-16",
+    ]);
 
     expect(t.ci.repos).toEqual([]);
     expect(t.ci.not_read.length).toBeGreaterThan(0);
   });
 
   it("answers the admin's session through the Worker, and refuses a bad weeks with 400", async () => {
-    const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
+    const cookie = (
+      await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())
+    ).split(";")[0];
     const get = async (qs: string) => {
       const ctx = createExecutionContext();
       const res = (await worker.fetch!(
-        new Request(`https://capsid.test${PORTAL_TRENDS_PATH}${qs}`, { headers: { Cookie: cookie, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" }) as never,
+        new Request(`https://capsid.test${PORTAL_TRENDS_PATH}${qs}`, {
+          headers: { Cookie: cookie, "Sec-Fetch-Site": "same-origin" },
+          redirect: "manual",
+        }) as never,
         { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never,
-        ctx
+        ctx,
       )) as unknown as Response;
       await waitOnExecutionContext(ctx);
       return res;
@@ -143,6 +198,7 @@ describe("the trends series", () => {
     expect(body.weeks).toBe(4);
     expect(body.minutes.weeks).toHaveLength(4);
     expect(body.minutes.note).toMatch(/estimate/);
-    for (const bad of ["?weeks=0", "?weeks=27", "?weeks=two"]) expect((await get(bad)).status, bad).toBe(400);
+    for (const bad of ["?weeks=0", "?weeks=27", "?weeks=two"])
+      expect((await get(bad)).status, bad).toBe(400);
   });
 });

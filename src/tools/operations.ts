@@ -48,7 +48,8 @@ function withStructure(result: OperationResult): OperationResult {
   } catch {
     parsed = undefined;
   }
-  const structured = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : { text };
+  const structured =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : { text };
   return { ...result, structuredContent: structured };
 }
 
@@ -58,7 +59,7 @@ export class Operations {
   define<S extends Shape>(
     name: string,
     config: { description: string; inputSchema: S },
-    handler: (args: z.infer<z.ZodObject<S>>) => OperationResult | Promise<OperationResult>
+    handler: (args: z.infer<z.ZodObject<S>>) => OperationResult | Promise<OperationResult>,
   ): void {
     if (this.table.has(name)) throw new Error(`operation '${name}' is defined twice`);
     this.table.set(name, { config, handler: handler as OperationHandler });
@@ -82,8 +83,13 @@ export class Operations {
     const op = this.get(name);
     const parsed = z.object(op.config.inputSchema).safeParse(args);
     if (!parsed.success) {
-      const issues = parsed.error.issues.map((i) => `${i.path.join(".") || "(arguments)"}: ${i.message}`).join("; ");
-      return { content: [{ type: "text", text: `invalid arguments for ${label}: ${issues}` }], isError: true };
+      const issues = parsed.error.issues
+        .map((i) => `${i.path.join(".") || "(arguments)"}: ${i.message}`)
+        .join("; ");
+      return {
+        content: [{ type: "text", text: `invalid arguments for ${label}: ${issues}` }],
+        isError: true,
+      };
     }
     return withStructure(await op.handler(parsed.data));
   }

@@ -18,7 +18,11 @@ import { sourceFile } from "./source-files.ts";
 function fakeKv(store: Record<string, string>): KVNamespace {
   return { get: async (k: string) => (k in store ? store[k] : null) } as unknown as KVNamespace;
 }
-const throwingKv = { get: async () => { throw new Error("KV is down"); } } as unknown as KVNamespace;
+const throwingKv = {
+  get: async () => {
+    throw new Error("KV is down");
+  },
+} as unknown as KVNamespace;
 
 // The overview's shape since October 2026 (models/overview.md): frontmatter, MDX chips,
 // a comparison table with a "Model page" row of links and the IDs further down, and
@@ -46,7 +50,9 @@ test("discovers the current models from the overview and collapses dated snapsho
   assert.deepEqual(discoverModels(OVERVIEW), ["fable-9-1", "haiku-9-5"]);
   // The "Model page" row alone still finds them, so a table that drops the ID rows
   // does not read as zero models; a retired model linked elsewhere is not one.
-  const linksOnly = OVERVIEW.split("\n").filter((line) => !line.includes("`")).join("\n");
+  const linksOnly = OVERVIEW.split("\n")
+    .filter((line) => !line.includes("`"))
+    .join("\n");
   assert.deepEqual(discoverModels(linksOnly), ["fable-9-1", "haiku-9-5"]);
 });
 
@@ -61,7 +67,11 @@ test("THE WORKER AND THE REPO SCRIPT AGREE ON WHAT A MODEL ID LOOKS LIKE", () =>
   // the two patterns must not drift.
   const mine = /const MODEL_ID = (\/.+\/g);/.exec(sourceFile("skills-refresh.ts"));
   assert.ok(mine, "src/skills-refresh.ts no longer declares MODEL_ID");
-  assert.equal(mine[1], CLAUDE_SKILLS_MODEL_ID, "the Worker and the claude-skills script disagree about what a model id looks like");
+  assert.equal(
+    mine[1],
+    CLAUDE_SKILLS_MODEL_ID,
+    "the Worker and the claude-skills script disagree about what a model id looks like",
+  );
   // And the Worker finds every family that pattern names.
   const families = ["fable", "mythos", "opus", "sonnet", "haiku"];
   const overview = families.map((f) => `| x | \`claude-${f}-9-9\` |`).join("\n");
@@ -95,7 +105,14 @@ test("a configured day overrides the default", async () => {
 });
 
 test("garbage in the key disables rather than guessing", async () => {
-  for (const raw of ["not json", "[]", '"a string"', '{"dayUtc":9}', '{"dayUtc":"monday"}', '{"dayUtc":1.5}']) {
+  for (const raw of [
+    "not json",
+    "[]",
+    '"a string"',
+    '{"dayUtc":9}',
+    '{"dayUtc":"monday"}',
+    '{"dayUtc":1.5}',
+  ]) {
     const schedule = await readSchedule(fakeKv({ [SCHEDULE_KEY]: raw }));
     assert.equal(schedule.enabled, false, `${raw} should have disabled the run`);
   }

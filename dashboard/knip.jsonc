@@ -5,5 +5,5 @@
   // isbot for the default server entry, which src/entry.server.tsx replaces.
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["src/worker.ts"],
-  "ignoreDependencies": ["@react-router/node", "isbot"]
+  "ignoreDependencies": ["@react-router/node", "isbot"],
 }

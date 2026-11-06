@@ -35,11 +35,15 @@ async function post(over: Record<string, unknown> = {}) {
 }
 
 async function jobRow(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
+    .bind(id)
+    .first<Record<string, unknown>>();
 }
 
 async function outcomeRow(id: string) {
-  return env.DB.prepare("SELECT * FROM job_outcomes WHERE job_id = ?1").bind(id).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM job_outcomes WHERE job_id = ?1")
+    .bind(id)
+    .first<Record<string, unknown>>();
 }
 
 async function outcomeCount(id: string) {
@@ -71,7 +75,7 @@ async function plantOutcome(jobId: string, opened: number, merged: number, verif
   await env.DB.prepare(
     `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
        result_kind, verified, recorded_at)
-     VALUES (?1, ?2, 'capsid', ?3, ?4, 0, 0, 'pr', ?5, '2026-09-01')`
+     VALUES (?1, ?2, 'capsid', ?3, ?4, 0, 0, 'pr', ?5, '2026-09-01')`,
   )
     .bind(jobId, DRIVER_ACTOR, opened, merged, verified)
     .run();
@@ -81,16 +85,21 @@ async function plantOutcome(jobId: string, opened: number, merged: number, verif
 // operator key resolves to a caller without inserting one; without it `status.agents`
 // is [] and the per-credential assertions iterate nothing.
 async function seedAgent(name: string) {
-  await env.DB
-    .prepare(
-      `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at)
-       VALUES (?1, ?2, 'driver', ?3, ?4, 'github:DrDustinEdwards', '2026-09-10 00:00:00')`
-    )
+  await env.DB.prepare(
+    `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at)
+       VALUES (?1, ?2, 'driver', ?3, ?4, 'github:DrDustinEdwards', '2026-09-10 00:00:00')`,
+  )
     .bind(
       `agent_${name.slice(0, 12).padEnd(12, "0")}`,
       name,
       `hash-${name}`,
-      JSON.stringify({ namespaces: ["capsid"], repos: ["DrDustinEdwards/capsid"], tools: "*", grants: ["read", "write"], flags: {} })
+      JSON.stringify({
+        namespaces: ["capsid"],
+        repos: ["DrDustinEdwards/capsid"],
+        tools: "*",
+        grants: ["read", "write"],
+        flags: {},
+      }),
     )
     .run();
 }
@@ -98,7 +107,9 @@ async function seedAgent(name: string) {
 beforeEach(async () => {
   await resetCapsidDb();
   // jobs post requires a registered namespace.
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
+    .run();
 });
 
 describe("job outcomes", () => {
@@ -149,16 +160,28 @@ describe("job outcomes", () => {
     await Promise.all([server.connect(s), client.connect(c)]);
     try {
       const evidence = { tests_added: 3 };
-      for (const [form, sent] of [["object", evidence], ["string", JSON.stringify(evidence)]] as const) {
+      for (const [form, sent] of [
+        ["object", evidence],
+        ["string", JSON.stringify(evidence)],
+      ] as const) {
         const id = (await post({ title: `evidence as ${form}` })).job!.id;
         expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
         const result = (await client.callTool({
           name: "capsid_work_jobs",
-          arguments: { action: "complete", namespace: "capsid", id, result_summary: "done", evidence: sent },
+          arguments: {
+            action: "complete",
+            namespace: "capsid",
+            id,
+            result_summary: "done",
+            evidence: sent,
+          },
         })) as { isError?: boolean; content: Array<{ text: string }> };
         expect(result.isError, `${form}: ${result.content[0]?.text}`).toBeFalsy();
         expect((await jobRow(id))?.status, form).toBe("done");
-        expect((await outcomeRow(id))?.tests_added, `evidence as a JSON ${form} did not reach the outcome row`).toBe(3);
+        expect(
+          (await outcomeRow(id))?.tests_added,
+          `evidence as a JSON ${form} did not reach the outcome row`,
+        ).toBe(3);
       }
     } finally {
       await client.close();
@@ -185,7 +208,9 @@ describe("job outcomes", () => {
     // A day passes while a human runs the command. The duration still measures from
     // the first claim; measuring from the resume would report only the last minutes.
     await resumeJob(jobsEnv(), DRIVER, at("2026-09-11T12:00:00.000Z"), id, "Dustin ran it");
-    await completeJob(jobsEnv(), DRIVER, at("2026-09-11T12:20:00.000Z"), id, { result_summary: "done" });
+    await completeJob(jobsEnv(), DRIVER, at("2026-09-11T12:20:00.000Z"), id, {
+      result_summary: "done",
+    });
 
     const row = await outcomeRow(id);
     expect(row?.duration_minutes).toBe(1460);
@@ -206,7 +231,7 @@ describe("job outcomes", () => {
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_merged, blocked_count, resumed_count,
          result_kind, verified, recorded_at)
        VALUES (?1, 'agent:impostor', 'capsid', 999, 0, 0, 'pr', '{}', '2030-01-01')
-       ON CONFLICT(job_id) DO NOTHING`
+       ON CONFLICT(job_id) DO NOTHING`,
     )
       .bind(id)
       .run();
@@ -247,11 +272,15 @@ describe("job outcomes", () => {
     await env.DB.batch([outcomeStatement(env.DB, row(DRIVER_ACTOR, null))]);
     await env.DB.batch([
       outcomeStatement(env.DB, row("agent:impostor", 999)),
-      env.DB.prepare("INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('test', 'second-batch', 'capsid', NULL, '{}')"),
+      env.DB.prepare(
+        "INSERT INTO audit_log (actor, action, namespace, path, params) VALUES ('test', 'second-batch', 'capsid', NULL, '{}')",
+      ),
     ]);
     expect(await outcomeCount("job_000000000abc")).toBe(1);
     expect((await outcomeRow("job_000000000abc"))?.agent).toBe(DRIVER_ACTOR);
-    const second = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'second-batch'").first<{ n: number }>();
+    const second = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'second-batch'",
+    ).first<{ n: number }>();
     expect(second?.n, "the batch carrying the second outcome was aborted").toBe(1);
   });
 
@@ -290,11 +319,18 @@ describe("job outcomes", () => {
     const OTHER_ACTOR = "agent:driver-dddd";
     const OTHER = grantAgent("write", OTHER_ACTOR);
     await plantOutcome("job_history0001", 2, 2, FULLY_VERIFIED);
-    const posted = await post({ title: "needs a record to take over", min_record: { prs_merged: 2 }, gate_required: true });
+    const posted = await post({
+      title: "needs a record to take over",
+      min_record: { prs_merged: 2 },
+      gate_required: true,
+    });
     const id = posted.job!.id;
     const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id });
     expect(claimed.ok, claimed.refusal).toBe(true);
-    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a human", command: "git push -u origin feat/x" });
+    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, {
+      reason: "needs a human",
+      command: "git push -u origin feat/x",
+    });
     expect(blocked.ok, blocked.refusal).toBe(true);
 
     const refused = await resumeJob(jobsEnv(), OTHER, NOW, id, "I will finish it", { take: true });
@@ -306,7 +342,7 @@ describe("job outcomes", () => {
     await env.DB.prepare(
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
          result_kind, verified, recorded_at)
-       VALUES ('job_history0002', ?1, 'capsid', 2, 2, 0, 0, 'pr', ?2, '2026-09-01')`
+       VALUES ('job_history0002', ?1, 'capsid', 2, 2, 0, 0, 'pr', ?2, '2026-09-01')`,
     )
       .bind(OTHER_ACTOR, FULLY_VERIFIED)
       .run();
@@ -333,7 +369,9 @@ describe("job outcomes", () => {
     } as unknown as Parameters<typeof claimJob>[0];
     const won = await claimJob(counting, DRIVER, NOW, { namespace: "capsid" });
     expect(won.ok, won.refusal).toBe(true);
-    expect(read.length, "the claim issued no statements, so this proves nothing").toBeGreaterThan(0);
+    expect(read.length, "the claim issued no statements, so this proves nothing").toBeGreaterThan(
+      0,
+    );
     expect(read.filter((sql) => /FROM job_outcomes/.test(sql))).toEqual([]);
   });
 
@@ -361,24 +399,26 @@ describe("job outcomes", () => {
   it("PLANT: re-verifying the last pull request marks prs_opened verified, which is what min_record reads", async () => {
     // recordFor requires verified.prs_opened before it counts a merge, so reverify must
     // set it too, or a job merged after GitHub was down never counts toward min_record.
-    await env.DB
-      .prepare(
-        `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
+    await env.DB.prepare(
+      `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
            result_kind, verified, recorded_at)
-         VALUES ('job_unverified', 'agent:capsid-driver', 'capsid', 1, 0, 0, 0, 'pr', ?1, '2026-09-10T12:00:00.000Z')`
-      )
+         VALUES ('job_unverified', 'agent:capsid-driver', 'capsid', 1, 0, 0, 0, 'pr', ?1, '2026-09-10T12:00:00.000Z')`,
+    )
       .bind(JSON.stringify({ prs_opened: false, prs_merged: false }))
       .run();
-    await env.DB
-      .prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at) VALUES ('job_unverified', ?1, NULL, NULL)")
+    await env.DB.prepare(
+      "INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at) VALUES ('job_unverified', ?1, NULL, NULL)",
+    )
       .bind("https://github.com/o/r/pull/9")
       .run();
 
-    await env.DB.batch(reverifyStatements(env.DB, "job_unverified", "https://github.com/o/r/pull/9", true, NOW));
+    await env.DB.batch(
+      reverifyStatements(env.DB, "job_unverified", "https://github.com/o/r/pull/9", true, NOW),
+    );
 
-    const row = await env.DB
-      .prepare("SELECT prs_opened, prs_merged, verified FROM job_outcomes WHERE job_id = 'job_unverified'")
-      .first<{ prs_opened: number; prs_merged: number; verified: string }>();
+    const row = await env.DB.prepare(
+      "SELECT prs_opened, prs_merged, verified FROM job_outcomes WHERE job_id = 'job_unverified'",
+    ).first<{ prs_opened: number; prs_merged: number; verified: string }>();
     const verified = JSON.parse(String(row!.verified)) as Record<string, boolean>;
     expect(row!.prs_merged).toBe(1);
     expect(verified.prs_merged).toBe(true);
@@ -389,26 +429,28 @@ describe("job outcomes", () => {
   it("A JOB WITH AN UNREAD PULL REQUEST LEFT does NOT get prs_opened verified", async () => {
     // The CASE counts unread rows instead of flipping the flag on any successful read:
     // reading one pull request of two proves nothing about the count.
-    await env.DB
-      .prepare(
-        `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
+    await env.DB.prepare(
+      `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, blocked_count, resumed_count,
            result_kind, verified, recorded_at)
-         VALUES ('job_partial', 'agent:capsid-driver', 'capsid', 2, 0, 0, 0, 'pr', ?1, '2026-09-10T12:00:00.000Z')`
-      )
+         VALUES ('job_partial', 'agent:capsid-driver', 'capsid', 2, 0, 0, 0, 'pr', ?1, '2026-09-10T12:00:00.000Z')`,
+    )
       .bind(JSON.stringify({ prs_opened: false, prs_merged: false }))
       .run();
     for (const url of ["https://github.com/o/r/pull/1", "https://github.com/o/r/pull/2"]) {
-      await env.DB
-        .prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at) VALUES ('job_partial', ?1, NULL, NULL)")
+      await env.DB.prepare(
+        "INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at) VALUES ('job_partial', ?1, NULL, NULL)",
+      )
         .bind(url)
         .run();
     }
 
-    await env.DB.batch(reverifyStatements(env.DB, "job_partial", "https://github.com/o/r/pull/1", true, NOW));
+    await env.DB.batch(
+      reverifyStatements(env.DB, "job_partial", "https://github.com/o/r/pull/1", true, NOW),
+    );
 
-    const row = await env.DB
-      .prepare("SELECT verified FROM job_outcomes WHERE job_id = 'job_partial'")
-      .first<{ verified: string }>();
+    const row = await env.DB.prepare(
+      "SELECT verified FROM job_outcomes WHERE job_id = 'job_partial'",
+    ).first<{ verified: string }>();
     const verified = JSON.parse(String(row!.verified)) as Record<string, boolean>;
     expect(verified.prs_merged).toBe(true);
     expect(verified.prs_opened).toBe(false);
@@ -439,12 +481,16 @@ describe("a holder transition commits with every record of it, or not at all", (
     // The transition's own audit row, which names the job id. The mirror's document
     // write carries a second row under the same action, without it.
     const audit = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-complete' AND path = ?1 AND json_extract(params, '$.job_id') = ?2"
+      "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'job-complete' AND path = ?1 AND json_extract(params, '$.job_id') = ?2",
     )
       .bind(`jobs/${id}.md`, id)
       .first<{ n: number }>();
-    const prs = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcome_prs WHERE job_id = ?1").bind(id).first<{ n: number }>();
-    const mirror = await env.DB.prepare("SELECT body, status FROM documents WHERE namespace = ?1 AND path = ?2")
+    const prs = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcome_prs WHERE job_id = ?1")
+      .bind(id)
+      .first<{ n: number }>();
+    const mirror = await env.DB.prepare(
+      "SELECT body, status FROM documents WHERE namespace = ?1 AND path = ?2",
+    )
       .bind(NS, `jobs/${id}.md`)
       .first<{ body: string; status: string }>();
     return { outcomes: await outcomeCount(id), audit: audit?.n ?? 0, prs: prs?.n ?? 0, mirror };
@@ -476,7 +522,7 @@ describe("a holder transition commits with every record of it, or not at all", (
     await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
     const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
       await env.DB.prepare(
-        "UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, updated_at = ?2 WHERE id = ?1"
+        "UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, updated_at = ?2 WHERE id = ?1",
       )
         .bind(id, "2026-09-10T12:30:00.000Z")
         .run();
@@ -507,11 +553,13 @@ describe("a holder transition commits with every record of it, or not at all", (
     // must roll back with it.
     const id = await claimed("record write fails");
     await env.DB.prepare(
-      "CREATE TRIGGER planted_outcome_refusal BEFORE INSERT ON job_outcomes BEGIN SELECT RAISE(ABORT, 'planted'); END"
+      "CREATE TRIGGER planted_outcome_refusal BEFORE INSERT ON job_outcomes BEGIN SELECT RAISE(ABORT, 'planted'); END",
     ).run();
     try {
       await expect(
-        completeJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, { result_summary: "landed" })
+        completeJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, {
+          result_summary: "landed",
+        }),
       ).rejects.toThrow(/planted/);
     } finally {
       await env.DB.prepare("DROP TRIGGER planted_outcome_refusal").run();
@@ -527,19 +575,34 @@ describe("model routing, against the real tables (migrations/0032)", () => {
     expect(posted.ok).toBe(true);
     const id = posted.job!.id;
     const stored = await jobRow(id);
-    expect([stored?.kind, stored?.model_recommended, stored?.effort_recommended]).toEqual(["design", "opus", "high"]);
+    expect([stored?.kind, stored?.model_recommended, stored?.effort_recommended]).toEqual([
+      "design",
+      "opus",
+      "high",
+    ]);
     expect(String(stored?.routing_reason)).toMatch(/design/);
 
     const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
     expect(claim.ok).toBe(true);
     expect(claim.routing).toMatchObject({ model: "opus", effort: "high", kind: "design" });
 
-    const failed = await failJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, "the approach did not work", {
-      claim: { versions: { model_id: "claude-opus-5-5" } },
-    });
+    const failed = await failJob(
+      jobsEnv(),
+      DRIVER,
+      at("2026-09-10T13:00:00.000Z"),
+      id,
+      "the approach did not work",
+      {
+        claim: { versions: { model_id: "claude-opus-5-5" } },
+      },
+    );
     expect(failed.ok).toBe(true);
     const outcome = await outcomeRow(id);
-    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual(["design", "opus", "claude-opus-5-5"]);
+    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual([
+      "design",
+      "opus",
+      "claude-opus-5-5",
+    ]);
   });
 
   it("an outcome with no reported model keeps model_actual NULL, never the chosen one", async () => {
@@ -549,14 +612,22 @@ describe("model routing, against the real tables (migrations/0032)", () => {
     await failJob(jobsEnv(), DRIVER, at("2026-09-10T13:00:00.000Z"), id, "gave up");
     const outcome = await outcomeRow(id);
     // A docs job is on sonnet or, for a share of ids, on the haiku trial arm (src/model-routing.ts TRIAL_ARMS).
-    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual(["docs", posted.job!.model_recommended, null]);
+    expect([outcome?.job_kind, outcome?.model_chosen, outcome?.model_actual]).toEqual([
+      "docs",
+      posted.job!.model_recommended,
+      null,
+    ]);
     expect(["sonnet", "haiku"]).toContain(outcome?.model_chosen);
   });
 
   it("a job row from before routing is routed at its claim and recorded", async () => {
     const posted = await post({ title: "Build X: an old job", body: "x" });
     const id = posted.job!.id;
-    await env.DB.prepare("UPDATE jobs SET kind = NULL, model_recommended = NULL, effort_recommended = NULL, routing_reason = NULL WHERE id = ?1").bind(id).run();
+    await env.DB.prepare(
+      "UPDATE jobs SET kind = NULL, model_recommended = NULL, effort_recommended = NULL, routing_reason = NULL WHERE id = ?1",
+    )
+      .bind(id)
+      .run();
     const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
     expect(claim.routing).toMatchObject({ model: "opusplan", kind: "build" });
     expect((await jobRow(id))?.model_recommended).toBe("opusplan");

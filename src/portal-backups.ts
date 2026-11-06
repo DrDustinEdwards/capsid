@@ -12,8 +12,14 @@ import { readSiteBackups } from "./site-backup";
 
 export const PORTAL_BACKUPS_PATH = "/portal/api/backups";
 
-export async function handlePortalBackups(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalBackups(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  return new Response(JSON.stringify(await readSiteBackups(env)), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  return new Response(JSON.stringify(await readSiteBackups(env)), {
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }

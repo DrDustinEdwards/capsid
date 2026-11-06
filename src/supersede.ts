@@ -51,7 +51,7 @@ export async function supersedePass(env: Env): Promise<SupersedeReport> {
        AND COALESCE(s.status, 'published') NOT IN (SELECT value FROM json_each(?1))
        AND COALESCE(d.status, 'published') NOT IN ('superseded', 'closed')
      ORDER BY d.namespace, d.path
-     LIMIT ?2`
+     LIMIT ?2`,
   )
     .bind(JSON.stringify(LIVE_SOURCE), SUPERSEDE_READ)
     .all<Target>();
@@ -72,11 +72,20 @@ export async function supersedePass(env: Env): Promise<SupersedeReport> {
       snapshotLive(env.DB, t.namespace, t.path),
       env.DB.prepare(
         `UPDATE documents SET status = 'superseded', updated_at = datetime('now')
-         WHERE namespace = ?1 AND path = ?2 AND COALESCE(status, 'published') NOT IN ('superseded', 'closed')`
+         WHERE namespace = ?1 AND path = ?2 AND COALESCE(status, 'published') NOT IN ('superseded', 'closed')`,
       ).bind(t.namespace, t.path),
-      auditStatement(env.DB, SUPERSEDE_ACTOR, "write", t.namespace, t.path, { status: "superseded", prior_status: t.status, superseded_by: by, link: t.type }),
+      auditStatement(env.DB, SUPERSEDE_ACTOR, "write", t.namespace, t.path, {
+        status: "superseded",
+        prior_status: t.status,
+        superseded_by: by,
+        link: t.type,
+      }),
     ]);
     marked.push({ document, by });
   }
-  return { marked, skipped_canon: [...skipped], more: targets.length > SUPERSEDE_MAX || results.length === SUPERSEDE_READ };
+  return {
+    marked,
+    skipped_canon: [...skipped],
+    more: targets.length > SUPERSEDE_MAX || results.length === SUPERSEDE_READ,
+  };
 }

@@ -7,7 +7,9 @@ import { expect, test } from "@playwright/test";
 
 const SIGN_OUT_URL = "**/api/sign-out";
 
-test("Sign out posts with the feed's CSRF value and shows the signed-out page", async ({ page }) => {
+test("Sign out posts with the feed's CSRF value and shows the signed-out page", async ({
+  page,
+}) => {
   const sent: Array<{ method: string; csrf: string | null }> = [];
   await page.route(SIGN_OUT_URL, (route) => {
     const req = route.request();
@@ -26,7 +28,13 @@ test("Sign out posts with the feed's CSRF value and shows the signed-out page", 
 });
 
 test("a refused sign-out is said, and the session stays on screen", async ({ page }) => {
-  await page.route(SIGN_OUT_URL, (route) => route.fulfill({ status: 403, contentType: "text/plain", body: "csrf validation failed: reload Capsid Portal and try again." }));
+  await page.route(SIGN_OUT_URL, (route) =>
+    route.fulfill({
+      status: 403,
+      contentType: "text/plain",
+      body: "csrf validation failed: reload Capsid Portal and try again.",
+    }),
+  );
   await page.goto("");
   await page.getByRole("button", { name: "Your account" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();

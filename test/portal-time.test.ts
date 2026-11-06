@@ -15,7 +15,11 @@ process.env.TZ = "America/Chicago";
 const { ago, ms, portalNow } = await import("../dashboard/src/lib/format.ts");
 
 test("the test really runs behind UTC, so the zone-less cases below mean something", () => {
-  assert.notEqual(Date.parse("2026-09-29T13:00:00"), Date.parse("2026-09-29T13:00:00Z"), "TZ did not take effect");
+  assert.notEqual(
+    Date.parse("2026-09-29T13:00:00"),
+    Date.parse("2026-09-29T13:00:00Z"),
+    "TZ did not take effect",
+  );
 });
 
 test("PLANT: a zone-less server timestamp is read as UTC, in either spelling D1 writes", () => {

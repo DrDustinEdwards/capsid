@@ -73,7 +73,13 @@ export interface SiteSnapshot extends SiteProbe {
 export interface CiObservation {
   namespace: string;
   // Null when the repo's runs could not be read this pass.
-  latest: { head_sha: string; status: string; conclusion: string | null; created_at: string; url: string | null } | null;
+  latest: {
+    head_sha: string;
+    status: string;
+    conclusion: string | null;
+    created_at: string;
+    url: string | null;
+  } | null;
 }
 
 // The Amazon backup copy as the last report had it (src/offaccount.ts). reported_at is
@@ -163,8 +169,16 @@ export interface OpsSnapshot {
 // Cloudflare-hosted host (src/tls-expiry.ts) and the registration per domain
 // (src/domain-expiry.ts). failed names what could not be read, with why.
 export interface ExpirySnapshot {
-  tls: { read_at: string; hosts: Array<{ host: string; expires: string }>; failed: Array<{ host: string; error: string }> } | null;
-  domains: { read_at: string; domains: Array<{ domain: string; expires: string }>; failed: Array<{ domain: string; error: string }> } | null;
+  tls: {
+    read_at: string;
+    hosts: Array<{ host: string; expires: string }>;
+    failed: Array<{ host: string; error: string }>;
+  } | null;
+  domains: {
+    read_at: string;
+    domains: Array<{ domain: string; expires: string }>;
+    failed: Array<{ domain: string; error: string }>;
+  } | null;
 }
 
 // One row of the Portal's package configuration (ops_packages, migrations/0028).
@@ -183,7 +197,10 @@ export interface OpsPackageConfig {
 
 // One part of a package's read: what it said, or why it could not be read. "none" is
 // an answer (no repository configured, no dependents on record), not a failure.
-type PackagePart<T> = ({ state: "ok" } & T) | { state: "none"; reason: string } | { state: "error"; reason: string };
+type PackagePart<T> =
+  | ({ state: "ok" } & T)
+  | { state: "none"; reason: string }
+  | { state: "error"; reason: string };
 
 // What one watcher pass read for one package. Every source is named where it is used
 // (src/ops-packages.ts), with what it counts and what it misses.
@@ -192,15 +209,32 @@ export interface PackageSnapshot {
   registry: "npm";
   at: string;
   // registry.npmjs.org, the abbreviated document.
-  npm: PackagePart<{ latest: string | null; dist_tags: Record<string, string>; versions: number; modified: string | null }>;
+  npm: PackagePart<{
+    latest: string | null;
+    dist_tags: Record<string, string>;
+    versions: number;
+    modified: string | null;
+  }>;
   // api.npmjs.org: the last 7 and 30 days, and per version for the last 7 days only
   // (npm keeps no per-version history). through is the last day npm has counted.
-  downloads: PackagePart<{ last_week: number; last_month: number; through: string | null; by_version_last_week: Record<string, number> }>;
+  downloads: PackagePart<{
+    last_week: number;
+    last_month: number;
+    through: string | null;
+    by_version_last_week: Record<string, number>;
+  }>;
   // deps.dev v3alpha, for the default version: distinct packages that depend on it,
   // directly or through another package. Counts only; no public API lists them.
   dependents: PackagePart<{ version: string; direct: number; indirect: number; total: number }>;
   // The GitHub App's read of the repository.
-  github: PackagePart<{ repo: string; stars: number; open_issues: number; open_prs: number; open_prs_capped: boolean; latest_release: { tag: string; published_at: string | null } | null }>;
+  github: PackagePart<{
+    repo: string;
+    stars: number;
+    open_issues: number;
+    open_prs: number;
+    open_prs_capped: boolean;
+    latest_release: { tag: string; published_at: string | null } | null;
+  }>;
 }
 
 // GET /portal/api/not-found: Capsid's own missing pages over the last `days` UTC days, from
@@ -210,7 +244,11 @@ export interface PackageSnapshot {
 export interface PortalNotFound {
   days: number;
   generated: string;
-  pages: Array<{ path: string; hits: number; referrers: Array<{ host: string; hits: number }> }> | null;
+  pages: Array<{
+    path: string;
+    hits: number;
+    referrers: Array<{ host: string; hits: number }>;
+  }> | null;
   probes: number | null;
   error: string | null;
 }
@@ -230,7 +268,13 @@ export interface PortalPackageHistory {
   last_day: string | null;
   // Why a range could not be read, and anything else a reader should know.
   notes: string[];
-  weeks: Array<{ week: string; stars: number; open_issues: number; open_prs: number; latest_release: string | null }>;
+  weeks: Array<{
+    week: string;
+    stars: number;
+    open_issues: number;
+    open_prs: number;
+    latest_release: string | null;
+  }>;
 }
 
 /** One site's returned 5xx over an hour: the count, and the busiest path and status pairs

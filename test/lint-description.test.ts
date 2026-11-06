@@ -30,7 +30,10 @@ function reportedCheckIds(): string[] {
 
 test("the report pushes every check whatever the input holds", () => {
   const ids = reportedCheckIds();
-  assert.ok(ids.length >= 6, `buildTruthReport returned only ${ids.length} checks: ${ids.join(", ")}`);
+  assert.ok(
+    ids.length >= 6,
+    `buildTruthReport returned only ${ids.length} checks: ${ids.join(", ")}`,
+  );
   assert.equal(new Set(ids).size, ids.length, `duplicate check id: ${ids.join(", ")}`);
 });
 
@@ -38,7 +41,7 @@ test("DERIVED: the lint description names every check the report returns", () =>
   for (const id of reportedCheckIds()) {
     assert.ok(
       LINT_DESCRIPTION.includes(`\`${id}\``),
-      `the lint tool description never names the \`${id}\` check, so a client reading it is told about a report that does not exist`
+      `the lint tool description never names the \`${id}\` check, so a client reading it is told about a report that does not exist`,
     );
   }
 });
@@ -51,14 +54,14 @@ test("DERIVED: the lint description states the number of checks the report runs"
   assert.match(
     LINT_DESCRIPTION,
     new RegExp(`\\b${expected} checks\\b`, "i"),
-    `the description never says "${expected} checks" and the report runs ${count}`
+    `the description never says "${expected} checks" and the report runs ${count}`,
   );
   for (const [i, word] of words.entries()) {
     if (i === count - 1) continue;
     assert.doesNotMatch(
       LINT_DESCRIPTION,
       new RegExp(`\\b${word} checks\\b`, "i"),
-      `the description says "${word} checks" and the report runs ${count}`
+      `the description says "${word} checks" and the report runs ${count}`,
     );
   }
 });
@@ -66,7 +69,10 @@ test("DERIVED: the lint description states the number of checks the report runs"
 // The registration must use the exported constant. Checked against what the server
 // serves.
 test("the served lint description is the exported one", async () => {
-  const server = buildServer(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+  const server = buildServer(
+    fakeEnv({ APP_KV: fakeKv({}).kv }),
+    adminAgentForEmail("admin@example.com"),
+  );
   const client = new Client({ name: "lint-description", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -75,6 +81,6 @@ test("the served lint description is the exported one", async () => {
   assert.equal(
     tools.find((t) => t.name === "capsid_lint_namespace")?.description,
     LINT_DESCRIPTION,
-    "capsid_lint_namespace does not serve LINT_DESCRIPTION, so what clients see is not what this file checks"
+    "capsid_lint_namespace does not serve LINT_DESCRIPTION, so what clients see is not what this file checks",
   );
 });

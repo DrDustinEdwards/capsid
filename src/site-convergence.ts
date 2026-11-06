@@ -35,7 +35,9 @@ export function healthChecks(body: unknown, operator: SiteOperator): Convergence
     const row = c as Record<string, unknown>;
     const name = clip(row.name as string);
     const tool = Object.hasOwn(operator.repairs, name) ? operator.repairs[name] : null;
-    const said = [row.detail, row.message, row.reason].find((v) => typeof v === "string") as string | undefined;
+    const said = [row.detail, row.message, row.reason].find((v) => typeof v === "string") as
+      | string
+      | undefined;
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
     out.push({
       name,
@@ -57,21 +59,42 @@ export function statusFields(data: unknown): Array<{ key: string; value: string 
   const out: Array<{ key: string; value: string }> = [];
   for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
     if (out.length >= STATUS_FIELDS_MAX) break;
-    if (typeof value === "number" || typeof value === "boolean") out.push({ key, value: String(value) });
+    if (typeof value === "number" || typeof value === "boolean")
+      out.push({ key, value: String(value) });
     else if (typeof value === "string") out.push({ key, value: clip(value) });
     else if (key === "divergences" && value && typeof value === "object") {
       const d = value as { known?: unknown; list?: unknown; divergences?: unknown };
-      const list = Array.isArray(d.list) ? d.list : Array.isArray(d.divergences) ? d.divergences : Array.isArray(value) ? (value as unknown[]) : null;
+      const list = Array.isArray(d.list)
+        ? d.list
+        : Array.isArray(d.divergences)
+          ? d.divergences
+          : Array.isArray(value)
+            ? (value as unknown[])
+            : null;
       if (d.known === false) out.push({ key, value: "not known (the record could not be read)" });
-      else if (list) out.push({ key, value: list.length === 0 ? "none" : clip(list.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join("; ")) });
+      else if (list)
+        out.push({
+          key,
+          value:
+            list.length === 0
+              ? "none"
+              : clip(list.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join("; ")),
+        });
     }
   }
   return out;
 }
 
-async function readHealth(fetchImpl: FetchLike, url: string): Promise<{ status: number; body: unknown; error: string | null }> {
+async function readHealth(
+  fetchImpl: FetchLike,
+  url: string,
+): Promise<{ status: number; body: unknown; error: string | null }> {
   try {
-    const res = await fetchImpl(url, { headers: { "user-agent": "capsid", "cache-control": "no-cache" }, redirect: "manual", signal: callSignal(HEALTH_TIMEOUT_MS) });
+    const res = await fetchImpl(url, {
+      headers: { "user-agent": "capsid", "cache-control": "no-cache" },
+      redirect: "manual",
+      signal: callSignal(HEALTH_TIMEOUT_MS),
+    });
     return { status: res.status, body: await res.json().catch(() => null), error: null };
   } catch (err) {
     return { status: 0, body: null, error: clip(err instanceof Error ? err.message : String(err)) };
@@ -79,33 +102,77 @@ async function readHealth(fetchImpl: FetchLike, url: string): Promise<{ status: 
 }
 
 /** One site's view. */
-async function readSiteConvergence(env: Env, site: OpsSiteConfig, fetchImpl: FetchLike, now: Date): Promise<ConvergenceSite> {
-  const base = { namespace: site.namespace, name: site.name, origin: site.origin ?? "", read_at: now.toISOString() };
+async function readSiteConvergence(
+  env: Env,
+  site: OpsSiteConfig,
+  fetchImpl: FetchLike,
+  now: Date,
+): Promise<ConvergenceSite> {
+  const base = {
+    namespace: site.namespace,
+    name: site.name,
+    origin: site.origin ?? "",
+    read_at: now.toISOString(),
+  };
   if (!site.origin || !site.operator) {
-    return { ...base, operator: null, problem: site.operator_problem ?? "no operator API configured", status: null, health: null, secrets: null, recent: [] };
+    return {
+      ...base,
+      operator: null,
+      problem: site.operator_problem ?? "no operator API configured",
+      status: null,
+      health: null,
+      secrets: null,
+      recent: [],
+    };
   }
   const operator = site.operator;
   const secretSet = tokenSet(env, operator);
 
   const status = secretSet
-    ? await callOperator(env, { origin: site.origin, operator }, "sync_status", fetchImpl, { reading: true }).then((c) =>
-        c.ok ? { ok: true as const, fields: statusFields(c.data), error: null } : { ok: false as const, fields: [], error: c.error }
+    ? await callOperator(env, { origin: site.origin, operator }, "sync_status", fetchImpl, {
+        reading: true,
+      }).then((c) =>
+        c.ok
+          ? { ok: true as const, fields: statusFields(c.data), error: null }
+          : { ok: false as const, fields: [], error: c.error },
       )
-    : { ok: false as const, fields: [], error: `the Capsid Worker secret ${operator.auth_var} is not set, so the operator API was not called.` };
+    : {
+        ok: false as const,
+        fields: [],
+        error: `the Capsid Worker secret ${operator.auth_var} is not set, so the operator API was not called.`,
+      };
 
-  const h = site.health_path ? await readHealth(fetchImpl, healthUrl(site.origin, site.health_path)) : null;
+  const h = site.health_path
+    ? await readHealth(fetchImpl, healthUrl(site.origin, site.health_path))
+    : null;
   const health = !h
     ? { ok: false, http_status: null, checks: [], error: "the site has no health route configured" }
-    : { ok: h.status === 200 && (h.body as { ok?: unknown } | null)?.ok === true, http_status: h.status || null, checks: healthChecks(h.body, operator), error: h.error };
+    : {
+        ok: h.status === 200 && (h.body as { ok?: unknown } | null)?.ok === true,
+        http_status: h.status || null,
+        checks: healthChecks(h.body, operator),
+        error: h.error,
+      };
 
   const stored = await readStoredSecrets(env, site.namespace);
   const secrets: ConvergenceSite["secrets"] =
     operator.secrets.length === 0
-      ? { state: "none", script: null, rows: [], reason: "the configuration names no secrets to check" }
-      : stored ?? { state: "none", script: null, rows: [], reason: "the watcher has not read this Worker's secret names yet; it does on its next pass" };
+      ? {
+          state: "none",
+          script: null,
+          rows: [],
+          reason: "the configuration names no secrets to check",
+        }
+      : (stored ?? {
+          state: "none",
+          script: null,
+          rows: [],
+          reason:
+            "the watcher has not read this Worker's secret names yet; it does on its next pass",
+        });
 
   const { results } = await env.DB.prepare(
-    "SELECT actor, params, at FROM audit_log WHERE action = ?1 AND namespace = ?2 ORDER BY id DESC LIMIT ?3"
+    "SELECT actor, params, at FROM audit_log WHERE action = ?1 AND namespace = ?2 ORDER BY id DESC LIMIT ?3",
   )
     .bind(REPAIR_AUDIT_ACTION, site.namespace, RECENT_REPAIRS)
     .all<{ actor: string; params: string | null; at: string }>();
@@ -129,7 +196,13 @@ async function readSiteConvergence(env: Env, site: OpsSiteConfig, fetchImpl: Fet
 
   return {
     ...base,
-    operator: { path: operator.path, auth_var: operator.auth_var, secret_set: secretSet, repairs: operator.repairs, weekly: operator.weekly },
+    operator: {
+      path: operator.path,
+      auth_var: operator.auth_var,
+      secret_set: secretSet,
+      repairs: operator.repairs,
+      weekly: operator.weekly,
+    },
     problem: null,
     status,
     health,
@@ -139,8 +212,14 @@ async function readSiteConvergence(env: Env, site: OpsSiteConfig, fetchImpl: Fet
 }
 
 /** Every site that opted in, or has a stored configuration it cannot use. */
-export async function readConvergence(env: Env, fetchImpl: FetchLike, now: Date): Promise<ConvergenceSite[]> {
-  const config = (await readSiteConfig(env.DB)).filter((c) => c.origin && (c.operator || c.operator_problem));
+export async function readConvergence(
+  env: Env,
+  fetchImpl: FetchLike,
+  now: Date,
+): Promise<ConvergenceSite[]> {
+  const config = (await readSiteConfig(env.DB)).filter(
+    (c) => c.origin && (c.operator || c.operator_problem),
+  );
   const out: ConvergenceSite[] = [];
   for (const site of config) out.push(await readSiteConvergence(env, site, fetchImpl, now));
   return out;

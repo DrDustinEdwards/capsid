@@ -25,7 +25,9 @@ interface Entry {
 }
 
 function sectionsOf(page: HTMLElement): HTMLElement[] {
-  return [...page.querySelectorAll<HTMLElement>("[data-section][id]")].filter((s) => !s.parentElement?.closest("[data-section]"));
+  return [...page.querySelectorAll<HTMLElement>("[data-section][id]")].filter(
+    (s) => !s.parentElement?.closest("[data-section]"),
+  );
 }
 
 function scrollerOf(el: HTMLElement): HTMLElement {
@@ -57,7 +59,8 @@ export function Anchors() {
     }
     // Scrolled to the foot, a last section too short to reach the bar is the current one.
     const sc = scrollerOf(el);
-    if (sc.scrollTop > 0 && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1) cur = sections[sections.length - 1]?.id ?? cur;
+    if (sc.scrollTop > 0 && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1)
+      cur = sections[sections.length - 1]?.id ?? cur;
     setCurrent(cur ?? sections[0]?.id ?? null);
   }, []);
 
@@ -72,7 +75,12 @@ export function Anchors() {
       const content = scroller.scrollHeight - (bar.current?.offsetHeight ?? 0);
       const on = sections.length >= MIN_SECTIONS && content > MIN_SCREENS * scroller.clientHeight;
       const next = on ? sections.map((s) => ({ id: s.id, label: s.dataset.section ?? s.id })) : [];
-      setEntries((prev) => (prev.length === next.length && prev.every((p, i) => p.id === next[i]?.id && p.label === next[i]?.label) ? prev : next));
+      setEntries((prev) =>
+        prev.length === next.length &&
+        prev.every((p, i) => p.id === next[i]?.id && p.label === next[i]?.label)
+          ? prev
+          : next,
+      );
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -82,7 +90,12 @@ export function Anchors() {
     window.addEventListener("resize", measure);
     // A section that appears or goes (a panel with data, a feed update) re-counts too.
     const mo = new MutationObserver(measure);
-    mo.observe(page, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-section", "id", "hidden"] });
+    mo.observe(page, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-section", "id", "hidden"],
+    });
     return () => (ro.disconnect(), mo.disconnect(), window.removeEventListener("resize", measure));
   }, []);
 
@@ -117,7 +130,12 @@ export function Anchors() {
             On this page
           </span>
           {entries.map((x) => (
-            <a key={x.id} href={`#${x.id}`} aria-current={current === x.id ? "location" : undefined} onClick={(e) => jump(e, x.id)}>
+            <a
+              key={x.id}
+              href={`#${x.id}`}
+              aria-current={current === x.id ? "location" : undefined}
+              onClick={(e) => jump(e, x.id)}
+            >
               {x.label}
             </a>
           ))}

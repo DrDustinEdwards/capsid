@@ -71,18 +71,23 @@ test("every tool argument is bounded: no bare z.string() anywhere in src/", () =
       f.text
         .split("\n")
         .map((line, i) => ({ file: f.name, line: i + 1, text: line.trim() }))
-        .filter((l) => !isComment(l.text) && BARE_Z_STRING.test(l.text))
+        .filter((l) => !isComment(l.text) && BARE_Z_STRING.test(l.text)),
     );
   assert.deepEqual(
     offenders.map((o) => `src/${o.file}:${o.line} ${o.text}`),
     [],
-    "an unbounded z.string() is back; use bounded(...) from src/limits.ts"
+    "an unbounded z.string() is back; use bounded(...) from src/limits.ts",
   );
   // Vacuity guards: the scan has to be looking at real schemas, and at the
   // grammar being wired up, or "no offenders" means "nothing was read".
-  const all = sourceFiles().map((f) => f.text).join("\n");
+  const all = sourceFiles()
+    .map((f) => f.text)
+    .join("\n");
   assert.ok(all.includes("bounded(MAX_BODY)"), "the scan matched nothing, so it proves nothing");
-  assert.ok(all.split("docPath").length - 1 >= 8, "docPath is barely used, so the grammar is probably not wired up");
+  assert.ok(
+    all.split("docPath").length - 1 >= 8,
+    "docPath is barely used, so the grammar is probably not wired up",
+  );
 });
 
 // The repo fallthrough's bounds, relative to each other.
@@ -93,7 +98,10 @@ test("the CI log budget is larger than the tail it replaced", () => {
 });
 
 test("the history default limit is below the maximum", () => {
-  assert.ok(REPO_HISTORY_DEFAULT_LIMIT < REPO_HISTORY_MAX_LIMIT, "the default is not below the maximum");
+  assert.ok(
+    REPO_HISTORY_DEFAULT_LIMIT < REPO_HISTORY_MAX_LIMIT,
+    "the default is not below the maximum",
+  );
 });
 
 // result_ref: a document key or a PR URL. `docPath` alone would refuse every URL on
@@ -132,7 +140,10 @@ test("result_ref refuses a non-https scheme, credentials and the path grammar's 
 });
 
 test("the result_ref zod schema carries the same grammar, with the reason", () => {
-  assert.equal(resultRef.safeParse("https://github.com/DrDustinEdwards/capsid-mcp/pull/13").success, true);
+  assert.equal(
+    resultRef.safeParse("https://github.com/DrDustinEdwards/capsid-mcp/pull/13").success,
+    true,
+  );
   const bad = resultRef.safeParse("http://github.com/a/b/pull/1");
   assert.equal(bad.success, false);
   assert.match(bad.error?.issues[0]?.message ?? "", /https/);

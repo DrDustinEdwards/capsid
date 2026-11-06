@@ -16,7 +16,8 @@ const GLYPH = {
   crit: '<path fill="currentColor" fill-rule="evenodd" d="M5 1h6l4 4v6l-4 4H5l-4-4V5zM7.2 4h1.6v5H7.2zM7.2 10.4h1.6V12H7.2z"/>',
   warn: '<path fill="currentColor" fill-rule="evenodd" d="M8 1.2 15.4 14H.6zM7.3 6h1.4v4H7.3zM7.3 11h1.4v1.4H7.3z"/>',
   ok: '<path fill="currentColor" fill-rule="evenodd" d="M8 1a7 7 0 1 0 0 14A7 7 0 1 0 8 1zM3.9 9l3 3 5.2-5.6-1.4-1.4-3.8 4.2-1.6-1.6z"/>',
-  nodata: '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5 8h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  nodata:
+    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5 8h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
 };
 
 // A box is sized from its text before any browser measures it: 13 px text runs about 7.4 px a
@@ -70,21 +71,40 @@ const COLUMN = 1150;
 /** @param {Box[]} boxes @param {Wire[]} wires @param {"TB" | "LR"} rankdir */
 function layout(boxes, wires, rankdir) {
   const g = new dagre.graphlib.Graph({ multigraph: false });
-  g.setGraph({ rankdir, nodesep: rankdir === "TB" ? 24 : 14, ranksep: rankdir === "TB" ? 44 : 64, marginx: 12, marginy: 22 });
+  g.setGraph({
+    rankdir,
+    nodesep: rankdir === "TB" ? 24 : 14,
+    ranksep: rankdir === "TB" ? 44 : 64,
+    marginx: 12,
+    marginy: 22,
+  });
   g.setDefaultEdgeLabel(() => ({}));
   for (const b of boxes) {
-    const chars = Math.max(b.label.length, (b.sub ?? "").length * 0.9, ...b.lines.map((l) => l.text.length + 3));
-    g.setNode(b.id, { width: Math.ceil(chars * CHAR + PAD * 2), height: PAD * 2 + LINE * (1 + b.lines.length + (b.sub ? 1 : 0)) - 4 });
+    const chars = Math.max(
+      b.label.length,
+      (b.sub ?? "").length * 0.9,
+      ...b.lines.map((l) => l.text.length + 3),
+    );
+    g.setNode(b.id, {
+      width: Math.ceil(chars * CHAR + PAD * 2),
+      height: PAD * 2 + LINE * (1 + b.lines.length + (b.sub ? 1 : 0)) - 4,
+    });
   }
   const ids = new Set(boxes.map((b) => b.id));
-  for (const w of wires) if (ids.has(w.from) && ids.has(w.to) && w.from !== w.to) g.setEdge(w.from, w.to);
+  for (const w of wires)
+    if (ids.has(w.from) && ids.has(w.to) && w.from !== w.to) g.setEdge(w.from, w.to);
   dagre.layout(g);
   return g;
 }
 
 /** @param {import("@dagrejs/dagre").graphlib.Graph} g @param {{ id: string, title: string, boxes: Box[], width: number, height: number }} o */
 function draw(g, { id, title, boxes, width, height }) {
-  const edges = g.edges().map((e) => `<path class="code-graph-wire" d="${smooth(g.edge(e).points)}" marker-end="url(#${id}-arrow)"/>`);
+  const edges = g
+    .edges()
+    .map(
+      (e) =>
+        `<path class="code-graph-wire" d="${smooth(g.edge(e).points)}" marker-end="url(#${id}-arrow)"/>`,
+    );
   const nodes = boxes.map((b) => {
     const n = g.node(b.id);
     const x = n.x - n.width / 2;
@@ -95,17 +115,30 @@ function draw(g, { id, title, boxes, width, height }) {
         return `<g class="code-graph-status" data-tone="${line.tone}"><svg x="${(x + PAD).toFixed(1)}" y="${(ty - 11).toFixed(1)}" width="12" height="12" viewBox="0 0 16 16">${GLYPH[line.tone]}</svg><text x="${(x + PAD + 17).toFixed(1)}" y="${ty.toFixed(1)}">${escapeHtml(line.text)}</text></g>`;
       })
       .join("");
-    const sub = b.sub ? `<text class="code-graph-sub" x="${(x + PAD).toFixed(1)}" y="${(y + PAD + LINE + 9).toFixed(1)}">${escapeHtml(b.sub)}</text>` : "";
+    const sub = b.sub
+      ? `<text class="code-graph-sub" x="${(x + PAD).toFixed(1)}" y="${(y + PAD + LINE + 9).toFixed(1)}">${escapeHtml(b.sub)}</text>`
+      : "";
     return `<a href="${escapeHtml(b.href)}" tabindex="-1"><g class="code-graph-box" data-tone="${b.lines[0]?.tone ?? "nodata"}"${b.cycle ? " data-cycle" : ""}>${
-      b.cycle ? `<rect class="code-graph-ring" x="${(x - 5).toFixed(1)}" y="${(y - 5).toFixed(1)}" width="${(n.width + 10).toFixed(1)}" height="${(n.height + 10).toFixed(1)}" rx="10"/>` : ""
+      b.cycle
+        ? `<rect class="code-graph-ring" x="${(x - 5).toFixed(1)}" y="${(y - 5).toFixed(1)}" width="${(n.width + 10).toFixed(1)}" height="${(n.height + 10).toFixed(1)}" rx="10"/>`
+        : ""
     }<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${n.width}" height="${n.height}" rx="6"/><text class="code-graph-name" x="${(x + PAD).toFixed(1)}" y="${(y + PAD + 9).toFixed(1)}">${escapeHtml(b.label)}</text>${sub}${text}${
-      b.cycle ? `<text class="code-graph-cycle" x="${(x + n.width - 2).toFixed(1)}" y="${(y - 8).toFixed(1)}" text-anchor="end">cycle</text>` : ""
+      b.cycle
+        ? `<text class="code-graph-cycle" x="${(x + n.width - 2).toFixed(1)}" y="${(y - 8).toFixed(1)}" text-anchor="end">cycle</text>`
+        : ""
     }</g></a>`;
   });
   // dagre can route a long wire outside the box it reports, so the frame is the extent of
   // everything drawn, not the graph's own width and height.
   let [x0, y0, x1, y1] = [0, 0, width, height];
-  for (const e of g.edges()) for (const p of g.edge(e).points) [x0, y0, x1, y1] = [Math.min(x0, p.x - 8), Math.min(y0, p.y - 8), Math.max(x1, p.x + 8), Math.max(y1, p.y + 8)];
+  for (const e of g.edges())
+    for (const p of g.edge(e).points)
+      [x0, y0, x1, y1] = [
+        Math.min(x0, p.x - 8),
+        Math.min(y0, p.y - 8),
+        Math.max(x1, p.x + 8),
+        Math.max(y1, p.y + 8),
+      ];
   const w = Math.ceil(x1 - x0);
   const h = Math.ceil(y1 - y0);
   // On a phone the drawing keeps its own size and scrolls in a box a keyboard can reach, rather

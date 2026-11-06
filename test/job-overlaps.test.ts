@@ -12,7 +12,7 @@ test("a file changed by the named pull request and by another open one is an ove
       { number: 130, paths: ["src/jobs.ts", "src/x.ts"] },
       { number: 128, paths: ["src/jobs.ts"] },
       { number: 140, paths: ["src/other.ts"] },
-    ]
+    ],
   );
   assert.deepEqual(found, [
     { pr: 134, other: 128, files: ["src/jobs.ts"] },
@@ -34,27 +34,46 @@ test("a rename listed under both names collides with a pull request that edits e
 
 test("a job's own pull requests are not compared with each other, nor with themselves", () => {
   const found = overlapsOf(
-    [{ number: 10, paths: ["a"] }, { number: 11, paths: ["a"] }],
-    [{ number: 10, paths: ["a"] }, { number: 11, paths: ["a"] }]
+    [
+      { number: 10, paths: ["a"] },
+      { number: 11, paths: ["a"] },
+    ],
+    [
+      { number: 10, paths: ["a"] },
+      { number: 11, paths: ["a"] },
+    ],
   );
   assert.deepEqual(found, []);
 });
 
 test("the line names each pair, caps the files shown and says how many more", () => {
-  const line = overlapLine({ overlaps: [{ pr: 265, other: 260, files: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"] }], problem: null });
-  assert.equal(line, "Overlaps: #265 with #260 (a.ts, b.ts, c.ts, +2 more). Merge in PR order, oldest first, and rebase the later.");
+  const line = overlapLine({
+    overlaps: [{ pr: 265, other: 260, files: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"] }],
+    problem: null,
+  });
+  assert.equal(
+    line,
+    "Overlaps: #265 with #260 (a.ts, b.ts, c.ts, +2 more). Merge in PR order, oldest first, and rebase the later.",
+  );
 });
 
 test("a comparison that could not be read says not checked, and a clean one says nothing", () => {
-  assert.equal(overlapLine({ overlaps: [], problem: "#4 files: page 1 returned 502" }), "Overlaps: not checked (#4 files: page 1 returned 502).");
+  assert.equal(
+    overlapLine({ overlaps: [], problem: "#4 files: page 1 returned 502" }),
+    "Overlaps: not checked (#4 files: page 1 returned 502).",
+  );
   assert.equal(overlapLine({ overlaps: [], problem: null }), null);
-  const partial = overlapLine({ overlaps: [{ pr: 2, other: 1, files: ["a"] }], problem: "3 open pull requests were not read" });
+  const partial = overlapLine({
+    overlaps: [{ pr: 2, other: 1, files: ["a"] }],
+    problem: "3 open pull requests were not read",
+  });
   assert.match(partial ?? "", /^Overlaps: #2 with #1 \(a\)\./);
   assert.match(partial ?? "", /Not fully checked \(3 open pull requests were not read\)\.$/);
 });
 
 test("pull request URLs are found in a command, once each", () => {
-  const command = "gh pr merge https://github.com/example/sample/pull/9 --squash; gh pr view https://github.com/example/sample/pull/9";
+  const command =
+    "gh pr merge https://github.com/example/sample/pull/9 --squash; gh pr view https://github.com/example/sample/pull/9";
   assert.deepEqual(prUrlsIn(command), ["https://github.com/example/sample/pull/9"]);
   assert.deepEqual(prUrlsIn("git -C wt push -u origin feat/x"), []);
   assert.deepEqual(prUrlsIn(undefined), []);

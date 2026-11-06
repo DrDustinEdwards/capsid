@@ -15,7 +15,13 @@ const STEP_MS = 3600;
 
 document.documentElement.classList.add("js");
 enhanceHeader(document, {
-  suggest: async (query) => rank(await entriesOf(), query).map(([kind, title, detail, url]) => ({ url, title, kind, detail })),
+  suggest: async (query) =>
+    rank(await entriesOf(), query).map(([kind, title, detail, url]) => ({
+      url,
+      title,
+      kind,
+      detail,
+    })),
 });
 enhanceTheme();
 
@@ -38,7 +44,8 @@ for (const root of document.querySelectorAll("[data-cap='system-map']")) {
 function autoplay(button, current, total, go) {
   if (!button) return { stop() {}, start() {} };
   let timer = 0;
-  const label = () => (button.textContent = timer ? "Pause" : current() >= total ? "Play again" : "Play");
+  const label = () =>
+    (button.textContent = timer ? "Pause" : current() >= total ? "Play again" : "Play");
   const stop = () => {
     clearInterval(timer);
     timer = 0;
@@ -47,10 +54,13 @@ function autoplay(button, current, total, go) {
   const start = () => {
     if (timer) return;
     if (current() >= total) go(1);
-    timer = setInterval(() => {
-      if (current() >= total) return stop();
-      go(current() + 1);
-    }, reduced.matches ? STEP_MS * 1.5 : STEP_MS);
+    timer = setInterval(
+      () => {
+        if (current() >= total) return stop();
+        go(current() + 1);
+      },
+      reduced.matches ? STEP_MS * 1.5 : STEP_MS,
+    );
     label();
   };
   button.hidden = false;
@@ -75,7 +85,12 @@ function player(map, root, host) {
     if (e.detail.id === flow) current = e.detail.step;
   });
   const go = (n) => (root.dataset.flow === flow ? map.step(n) : map.playFlow(flow, n));
-  const play = autoplay(host.parentElement.querySelector("[data-autoplay]"), () => current, total, go);
+  const play = autoplay(
+    host.parentElement.querySelector("[data-autoplay]"),
+    () => current,
+    total,
+    go,
+  );
   root.addEventListener("keydown", () => play.stop());
   const chapters = [...document.querySelectorAll("[data-tour-step]")];
   if (!chapters.length) return;
@@ -89,7 +104,11 @@ function player(map, root, host) {
       for (const e of entries) if (e.isIntersecting) show(Number(e.target.dataset.tourStep));
     },
     // On a narrow screen the drawing covers the top, so the reading line sits lower.
-    { rootMargin: matchMedia("(max-width: 64rem)").matches ? "-70% 0px -28% 0px" : "-45% 0px -45% 0px" }
+    {
+      rootMargin: matchMedia("(max-width: 64rem)").matches
+        ? "-70% 0px -28% 0px"
+        : "-45% 0px -45% 0px",
+    },
   );
   for (const c of chapters) seen.observe(c);
 }
@@ -127,13 +146,17 @@ function flowPage(map, root, host) {
     }
     if (mine !== ticket) return;
     // Focus on a link that is about to be replaced moves to its twin, or to the other one.
-    const rel = document.activeElement?.closest?.("[data-swap]") ? document.activeElement.getAttribute("rel") : null;
+    const rel = document.activeElement?.closest?.("[data-swap]")
+      ? document.activeElement.getAttribute("rel")
+      : null;
     const button = document.querySelector("[data-swap='step'] [data-autoplay]");
     for (const fresh of doc.querySelectorAll("[data-swap]")) {
       // The Play button lives on across steps, so its state and listener stay.
       const twin = fresh.querySelector("[data-autoplay]");
       if (button && twin) twin.replaceWith(button);
-      document.querySelector(`[data-swap="${fresh.dataset.swap}"]`)?.replaceWith(document.adoptNode(fresh));
+      document
+        .querySelector(`[data-swap="${fresh.dataset.swap}"]`)
+        ?.replaceWith(document.adoptNode(fresh));
     }
     document.title = doc.title;
     // The trail names the step too, so it moves with it.
@@ -142,10 +165,18 @@ function flowPage(map, root, host) {
     host.dataset.step = String(n);
     if (push && !play.playing?.()) history.pushState({ step: n }, "", url);
     else history.replaceState({ step: n }, "", url);
-    if (rel) (document.querySelector(`.flow-nav a[rel="${rel}"]`) ?? document.querySelector(".flow-nav a"))?.focus();
+    if (rel)
+      (
+        document.querySelector(`.flow-nav a[rel="${rel}"]`) ?? document.querySelector(".flow-nav a")
+      )?.focus();
   };
   const go = (n) => (root.dataset.flow === flow ? map.step(n) : map.playFlow(flow, n));
-  play = autoplay(document.querySelector("[data-swap='step'] [data-autoplay]"), () => current, total, go);
+  play = autoplay(
+    document.querySelector("[data-swap='step'] [data-autoplay]"),
+    () => current,
+    total,
+    go,
+  );
 
   map.playFlow(flow, current);
   // Whatever stepped (a link, a key, the map's own Back and Next), the map says so here.
@@ -186,16 +217,44 @@ for (const panel of document.querySelectorAll("[data-board]")) {
   const count = panel.querySelector("[data-board-count]");
   const circuits = [...panel.querySelectorAll(".circuit")];
   const reaches = (need, h) =>
-    need === "read" ? (h.read ? "full" : "")
-    : need === "write" ? (h.write ? "full" : "")
-    : need === "admin" ? (h.admin && h.write ? "full" : "")
-    : need === "admin_read" ? (h.admin && h.read ? "full" : "")
-    : need === "action" ? (h.read && h.write ? "full" : h.read || h.write ? "part" : "")
-    : "";
+    need === "read"
+      ? h.read
+        ? "full"
+        : ""
+      : need === "write"
+        ? h.write
+          ? "full"
+          : ""
+        : need === "admin"
+          ? h.admin && h.write
+            ? "full"
+            : ""
+          : need === "admin_read"
+            ? h.admin && h.read
+              ? "full"
+              : ""
+            : need === "action"
+              ? h.read && h.write
+                ? "full"
+                : h.read || h.write
+                  ? "part"
+                  : ""
+              : "";
   const who = (h) =>
-    !h.read && !h.write && !h.admin ? "An agent with no access" : h.admin && h.read && h.write ? "The admin" : h.read && !h.write && !h.admin ? "A read-only agent" : `An agent with ${[h.read && "read", h.write && "write", h.admin && "admin"].filter(Boolean).join(" and ")} access`;
+    !h.read && !h.write && !h.admin
+      ? "An agent with no access"
+      : h.admin && h.read && h.write
+        ? "The admin"
+        : h.read && !h.write && !h.admin
+          ? "A read-only agent"
+          : `An agent with ${[h.read && "read", h.write && "write", h.admin && "admin"].filter(Boolean).join(" and ")} access`;
   const apply = () => {
-    const h = Object.fromEntries([...breakers.querySelectorAll("[data-grant]")].map((b) => [b.dataset.grant, b.getAttribute("aria-pressed") === "true"]));
+    const h = Object.fromEntries(
+      [...breakers.querySelectorAll("[data-grant]")].map((b) => [
+        b.dataset.grant,
+        b.getAttribute("aria-pressed") === "true",
+      ]),
+    );
     let full = 0;
     let part = 0;
     for (const c of circuits) {
@@ -304,7 +363,8 @@ for (const box of document.querySelectorAll("[data-kb-search]")) {
   for (const a of asks) {
     a.addEventListener("click", () => {
       for (const o of asks) o.setAttribute("aria-pressed", String(o === a));
-      for (const el of box.querySelectorAll(".kb-out [data-q]")) el.hidden = el.dataset.q !== a.dataset.ask;
+      for (const el of box.querySelectorAll(".kb-out [data-q]"))
+        el.hidden = el.dataset.q !== a.dataset.ask;
     });
   }
   for (const m of modes) {
@@ -354,14 +414,17 @@ for (const box of document.querySelectorAll("[data-session]")) {
       budgetWords.textContent = `${total} KB of the 40 KB limit.`;
     }
     budgetWords.textContent = `${total} KB of the 40 KB limit. Nothing cut.`;
-    said.textContent = written ? "New session. Your note from last time is there." : "The session has the project's notes. Write a note, then start again.";
+    said.textContent = written
+      ? "New session. Your note from last time is there."
+      : "The session has the project's notes. Write a note, then start again.";
     write.disabled = written;
   };
   start.addEventListener("click", () => void runStart());
   write.addEventListener("click", () => {
     written = true;
     write.disabled = true;
-    said.textContent = "Saved to sample/sessions/2026-10-25.md, and the log records who wrote it. Now start a new session.";
+    said.textContent =
+      "Saved to sample/sessions/2026-10-25.md, and the log records who wrote it. Now start a new session.";
   });
 }
 
@@ -378,7 +441,9 @@ for (const bar of document.querySelectorAll("[data-filter]")) {
     let shown = 0;
     for (const item of items) {
       const kinds = (item.dataset.kinds ?? "").split(" ");
-      const ok = (chip === "all" || kinds.includes(chip)) && words.every((w) => (item.dataset.text ?? item.textContent.toLowerCase()).includes(w));
+      const ok =
+        (chip === "all" || kinds.includes(chip)) &&
+        words.every((w) => (item.dataset.text ?? item.textContent.toLowerCase()).includes(w));
       item.hidden = !ok;
       if (ok) shown++;
     }
@@ -389,7 +454,8 @@ for (const bar of document.querySelectorAll("[data-filter]")) {
   for (const b of bar.querySelectorAll("[data-chip]")) {
     b.addEventListener("click", () => {
       chip = b.dataset.chip;
-      for (const o of bar.querySelectorAll("[data-chip]")) o.setAttribute("aria-pressed", String(o === b));
+      for (const o of bar.querySelectorAll("[data-chip]"))
+        o.setAttribute("aria-pressed", String(o === b));
       apply();
     });
   }
@@ -417,7 +483,10 @@ for (const table of document.querySelectorAll("table[data-sortable]")) {
       };
       const rows = [...body.rows].sort((a, b) => {
         const [x, y] = [key(a), key(b)];
-        const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y));
+        const c =
+          typeof x === "number" && typeof y === "number"
+            ? x - y
+            : String(x).localeCompare(String(y));
         return down ? -c : c;
       });
       body.append(...rows);
@@ -432,12 +501,24 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "t") toggleTheme();
 });
 
-const KIND_RANK = { System: 0, Flow: 1, Tool: 2, Part: 3, Step: 4, Action: 5, Module: 6, Function: 7 };
+const KIND_RANK = {
+  System: 0,
+  Flow: 1,
+  Tool: 2,
+  Part: 3,
+  Step: 4,
+  Action: 5,
+  Module: 6,
+  Function: 7,
+};
 
 // Search: the index is read once, from the explorer itself, and matched as you type, on the
 // search page and in the header's field.
 let index = null;
-const entriesOf = () => (index ??= fetch("/assets/search.json").then((r) => r.json()).then((doc) => doc.entries));
+const entriesOf = () =>
+  (index ??= fetch("/assets/search.json")
+    .then((r) => r.json())
+    .then((doc) => doc.entries));
 
 /** Every entry holding every word of the query, best first. */
 function rank(entries, query) {
@@ -474,8 +555,15 @@ if (field) {
       return;
     }
     const shown = found.slice(0, 60);
-    out.innerHTML = shown.map((e) => `<li><a href="${escape(e[3])}"><span class="search-kind">${escape(e[0])}</span><span class="search-name">${escape(e[1])}</span><span class="search-detail">${escape(e[2])}</span></a></li>`).join("");
-    count.textContent = found.length ? `${found.length} found${found.length > shown.length ? `, the first ${shown.length} shown` : ""}.` : `Nothing matches “${field.value.trim()}”.`;
+    out.innerHTML = shown
+      .map(
+        (e) =>
+          `<li><a href="${escape(e[3])}"><span class="search-kind">${escape(e[0])}</span><span class="search-name">${escape(e[1])}</span><span class="search-detail">${escape(e[2])}</span></a></li>`,
+      )
+      .join("");
+    count.textContent = found.length
+      ? `${found.length} found${found.length > shown.length ? `, the first ${shown.length} shown` : ""}.`
+      : `Nothing matches “${field.value.trim()}”.`;
   };
   field.addEventListener("input", run);
   field.form?.addEventListener("submit", (e) => {
@@ -489,13 +577,17 @@ if (field) {
       entries = all;
       run();
     })
-    .catch(() => (count.textContent = "Search didn't load. Browse the systems, tools or code instead."));
+    .catch(
+      () => (count.textContent = "Search didn't load. Browse the systems, tools or code instead."),
+    );
   field.focus();
 }
 
 // Each section's parts rise into place once, as it first comes into view.
 if (!reduced.matches && "IntersectionObserver" in window) {
-  const parts = document.querySelectorAll("main.wide > section:not(.board) > *, main.wide .poster > li");
+  const parts = document.querySelectorAll(
+    "main.wide > section:not(.board) > *, main.wide .poster > li",
+  );
   const seen = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {
@@ -504,7 +596,7 @@ if (!reduced.matches && "IntersectionObserver" in window) {
         seen.unobserve(e.target);
       }
     },
-    { rootMargin: "0px 0px -8% 0px" }
+    { rootMargin: "0px 0px -8% 0px" },
   );
   for (const [i, el] of [...parts].entries()) {
     const box = el.getBoundingClientRect();

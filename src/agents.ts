@@ -71,7 +71,13 @@ function flagsAll(value: boolean): Record<ScopeFlag, boolean> {
 
 // Every namespace, repo, tool, grant and flag.
 function unrestrictedScopes(): AgentScopes {
-  return { namespaces: "*", repos: "*", tools: "*", grants: [...AGENT_GRANTS], flags: flagsAll(true) };
+  return {
+    namespaces: "*",
+    repos: "*",
+    tools: "*",
+    grants: [...AGENT_GRANTS],
+    flags: flagsAll(true),
+  };
 }
 
 function readEverythingScopes(): AgentScopes {
@@ -140,13 +146,13 @@ async function liveAgentByHash(db: D1Database, hash: string): Promise<AgentRow |
     .bind(hash)
     .first<AgentRow>();
   if (!row) return null;
-  return await safeEqual(row.key_hash, hash) ? row : null;
+  return (await safeEqual(row.key_hash, hash)) ? row : null;
 }
 
 export async function resolveAgent(
   request: Request,
   env: { DB: D1Database },
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<ResolvedAgent | null> {
   const token = bearerToken(request.headers.get("Authorization"));
   if (!token) return null;
@@ -166,8 +172,17 @@ export async function resolveAgent(
 async function touchLastSeen(db: D1Database, agent: Agent): Promise<void> {
   if (!agent.row) return;
   try {
-    await db.prepare("UPDATE agents SET last_seen = datetime('now') WHERE id = ?1").bind(agent.id).run();
+    await db
+      .prepare("UPDATE agents SET last_seen = datetime('now') WHERE id = ?1")
+      .bind(agent.id)
+      .run();
   } catch (err) {
-    logEvent("AGENT_LAST_SEEN_FAILED", { message: `AGENT_LAST_SEEN_FAILED ${agent.id}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "AGENT_LAST_SEEN_FAILED",
+      {
+        message: `AGENT_LAST_SEEN_FAILED ${agent.id}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
 }

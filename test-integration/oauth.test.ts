@@ -23,14 +23,23 @@ describe("discovery", () => {
       const origin = "https://mcp.dustinedwards.info";
       const resource = await SELF.fetch(`${origin}/.well-known/oauth-protected-resource/mcp`);
       expect(resource.status, origin).toBe(200);
-      const resourceDoc = (await resource.json()) as { resource?: string; authorization_servers?: string[] };
+      const resourceDoc = (await resource.json()) as {
+        resource?: string;
+        authorization_servers?: string[];
+      };
       // The audience is pinned to the host's own origin (RFC 8707): a token minted for one
       // host must not be presentable at another.
       expect(resourceDoc.resource).toBe(`${origin}/mcp`);
       expect(resourceDoc.authorization_servers).toEqual([origin]);
       expect((await SELF.fetch(`${origin}/.well-known/oauth-protected-resource`)).status).toBe(404);
-      const challenge = await SELF.fetch(`${origin}/mcp`, { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } });
-      expect(challenge.headers.get("WWW-Authenticate")).toContain(`resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`);
+      const challenge = await SELF.fetch(`${origin}/mcp`, {
+        method: "POST",
+        body: "{}",
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(challenge.headers.get("WWW-Authenticate")).toContain(
+        `resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`,
+      );
     }
 
     const server = await SELF.fetch("https://capsid.test/.well-known/oauth-authorization-server");
@@ -47,7 +56,10 @@ describe("discovery", () => {
     expect(serverDoc.code_challenge_methods_supported).toContain("S256");
     // CIMD for Claude, Claude Code and ChatGPT, and tightened DCR for Grok and Gemini.
     expect(serverDoc.registration_endpoint).toBe("https://capsid.test/register");
-    expect((serverDoc as { client_id_metadata_document_supported?: boolean }).client_id_metadata_document_supported).toBe(true);
+    expect(
+      (serverDoc as { client_id_metadata_document_supported?: boolean })
+        .client_id_metadata_document_supported,
+    ).toBe(true);
   });
 });
 
@@ -58,7 +70,11 @@ describe("tightened dynamic client registration", () => {
     SELF.fetch(`https://${host}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip },
-      body: JSON.stringify({ client_name: "integration-client", redirect_uris: redirects, token_endpoint_auth_method: "none" }),
+      body: JSON.stringify({
+        client_name: "integration-client",
+        redirect_uris: redirects,
+        token_endpoint_auth_method: "none",
+      }),
     });
 
   it("PLANT: an unlisted redirect is refused and writes no client record", async () => {
@@ -73,7 +89,11 @@ describe("tightened dynamic client registration", () => {
     // Five an hour per address: six refusals from one address all answer 400, never 429
     // (run 41245505021 rolled a deploy back when the gate's probes had spent the day's 30).
     for (let i = 0; i < 6; i++) {
-      const response = await register(["https://client.example.com/callback"], "capsid.test", "198.51.100.30");
+      const response = await register(
+        ["https://client.example.com/callback"],
+        "capsid.test",
+        "198.51.100.30",
+      );
       expect(response.status, `refusal ${i + 1}`).toBe(400);
     }
   });
@@ -82,13 +102,24 @@ describe("tightened dynamic client registration", () => {
     const before = await clients();
     const response = await register([GROK], "capsid.test", "198.51.100.21");
     expect(response.status, await response.clone().text()).toBe(201);
-    const registered = (await response.json()) as { client_id: string; redirect_uris: string[]; access_token?: string };
+    const registered = (await response.json()) as {
+      client_id: string;
+      redirect_uris: string[];
+      access_token?: string;
+    };
     expect(registered.redirect_uris).toEqual([GROK]);
     expect(registered.access_token).toBeUndefined();
     expect(await clients()).toBe(before + 1);
 
     const url = new URL("https://capsid.test/authorize");
-    for (const [k, v] of Object.entries({ client_id: registered.client_id, redirect_uri: GROK, response_type: "code", code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", code_challenge_method: "S256", state: "s" })) {
+    for (const [k, v] of Object.entries({
+      client_id: registered.client_id,
+      redirect_uri: GROK,
+      response_type: "code",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+      code_challenge_method: "S256",
+      state: "s",
+    })) {
       url.searchParams.set(k, v);
     }
     const dialog = await SELF.fetch(url.toString(), { redirect: "manual" });
@@ -118,7 +149,7 @@ describe("authorize", () => {
     const html = await response.text();
     // The dialog itself, which a CSP set elsewhere can blank by blocking its inline
     // style and form.
-    expect(html).toContain("method=\"post\"");
+    expect(html).toContain('method="post"');
 
     // The enforced CSP is set by the dialog rather than by src/security-headers.ts.
     const csp = response.headers.get("content-security-policy");
@@ -143,7 +174,9 @@ describe("callback", () => {
   it("PLANT: a callback with no state cookie is refused rather than followed", async () => {
     // The provider's upstream state is bound to the browser that started the flow by its
     // own cookie, so a code arriving without it has nothing to match against.
-    const response = await SELF.fetch("https://capsid.test/callback?code=abc&state=whatever", { redirect: "manual" });
+    const response = await SELF.fetch("https://capsid.test/callback?code=abc&state=whatever", {
+      redirect: "manual",
+    });
     expect(response.status).not.toBe(302);
     expect(await response.text()).toMatch(/sign-in/i);
   });

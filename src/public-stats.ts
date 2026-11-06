@@ -67,7 +67,14 @@ export interface StatsRows {
   /** Open jobs by status, read at the build. */
   open: Array<{ status: string; n: number }>;
   /** job_outcomes in the last 90 days. */
-  outcomes: Array<{ recorded_at: string; duration_minutes: number | null; prs_opened: number | null; prs_merged: number | null; ci_green: number | null; verified: string }>;
+  outcomes: Array<{
+    recorded_at: string;
+    duration_minutes: number | null;
+    prs_opened: number | null;
+    prs_merged: number | null;
+    ci_green: number | null;
+    verified: string;
+  }>;
   /** job_evaluations' agreement in the last 90 days, and when each was recorded. */
   evaluations: Array<{ agreement: string; recorded_at: string }>;
   /** Touches that ended a wait in the last 56 days, and when. */
@@ -123,7 +130,10 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
     });
   const done = rows.finished.filter((r) => r.status === "done");
   const byWeek = weekly(done, (r) => r.updated_at).map((w) => w.length);
-  const failedByWeek = weekly(rows.finished.filter((r) => r.status === "failed"), (r) => r.updated_at).map((w) => w.length);
+  const failedByWeek = weekly(
+    rows.finished.filter((r) => r.status === "failed"),
+    (r) => r.updated_at,
+  ).map((w) => w.length);
 
   const outcomes30 = rows.outcomes.filter((o) => inWindow(o.recorded_at, 30));
   const outcomes90 = rows.outcomes.filter((o) => inWindow(o.recorded_at, 90));
@@ -134,7 +144,9 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
   });
   const opened = mergeRows.reduce((t, o) => t + (o.prs_opened ?? 0), 0);
   const merged = mergeRows.reduce((t, o) => t + (o.prs_merged ?? 0), 0);
-  const ciRows = outcomes90.filter((o) => verifiedFields(o.verified).ci_green === true && o.ci_green !== null);
+  const ciRows = outcomes90.filter(
+    (o) => verifiedFields(o.verified).ci_green === true && o.ci_green !== null,
+  );
 
   const agreement = (evaluations: StatsRows["evaluations"]) => {
     const agree = evaluations.filter((e) => e.agreement === "agree").length;
@@ -151,7 +163,8 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
     }
   }
 
-  const openOf = (status: string) => rows.open.filter((r) => r.status === status).reduce((t, r) => t + r.n, 0);
+  const openOf = (status: string) =>
+    rows.open.filter((r) => r.status === status).reduce((t, r) => t + r.n, 0);
   const sha = rows.sha && /^[0-9a-f]{7,40}$/.test(rows.sha) ? rows.sha.slice(0, 7) : "unknown";
 
   return {
@@ -160,12 +173,15 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
     jobs: {
       completed_7d: done.filter((r) => inWindow(r.updated_at, 7)).length,
       completed_30d: done.filter((r) => inWindow(r.updated_at, 30)).length,
-      failed_30d: rows.finished.filter((r) => r.status === "failed" && inWindow(r.updated_at, 30)).length,
+      failed_30d: rows.finished.filter((r) => r.status === "failed" && inWindow(r.updated_at, 30))
+        .length,
       completed_by_week: byWeek,
       failed_by_week: failedByWeek,
       open: openOf("queued") + openOf("claimed") + openOf("blocked"),
       blocked: openOf("blocked"),
-      median_duration_minutes_30d: median(outcomes30.map((o) => o.duration_minutes).filter((d): d is number => typeof d === "number")),
+      median_duration_minutes_30d: median(
+        outcomes30.map((o) => o.duration_minutes).filter((d): d is number => typeof d === "number"),
+      ),
     },
     verification: {
       evaluations_90d: rows.evaluations.length,
@@ -177,10 +193,17 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
     gates: {
       waits_30d: waits30.length,
       median_wait_minutes_30d: median(waits30.map((w) => w.waited_ms / MINUTE_MS)),
-      share_ended_by_policy_30d: rate(waits30.filter((w) => w.actor_kind === "policy").length, waits30.length),
+      share_ended_by_policy_30d: rate(
+        waits30.filter((w) => w.actor_kind === "policy").length,
+        waits30.length,
+      ),
       waits_by_week: weekly(rows.waits, (w) => w.at).map((w) => w.length),
     },
-    sites: { watched: rows.rings.length, uptime_7d: rate(up, up + down), slots_measured_7d: up + down },
+    sites: {
+      watched: rows.rings.length,
+      uptime_7d: rate(up, up + down),
+      slots_measured_7d: up + down,
+    },
     store: { documents: rows.documents, namespaces: rows.namespaces },
     systems: rows.systems,
     capsid: { sha7: sha },
@@ -188,31 +211,47 @@ export function summarize(rows: StatsRows, now: Date): PublicStats {
 }
 
 /** Reads the rows for summarize. Single-table reads, each bounded by its window. */
-export async function readStatsRows(env: Env, now: Date, systems: StatsRows["systems"]): Promise<StatsRows> {
+export async function readStatsRows(
+  env: Env,
+  now: Date,
+  systems: StatsRows["systems"],
+): Promise<StatsRows> {
   const end = windowEnd(now);
   const endIso = end.toISOString();
   const db = env.DB;
   const finished = await db
-    .prepare("SELECT status, updated_at FROM jobs WHERE status IN ('done', 'failed') AND updated_at >= ?1 AND updated_at < ?2")
+    .prepare(
+      "SELECT status, updated_at FROM jobs WHERE status IN ('done', 'failed') AND updated_at >= ?1 AND updated_at < ?2",
+    )
     .bind(since(end, 56), endIso)
     .all<StatsRows["finished"][number]>();
   const open = await db
-    .prepare("SELECT status, COUNT(*) AS n FROM jobs WHERE status IN ('queued', 'claimed', 'blocked') GROUP BY status")
+    .prepare(
+      "SELECT status, COUNT(*) AS n FROM jobs WHERE status IN ('queued', 'claimed', 'blocked') GROUP BY status",
+    )
     .all<StatsRows["open"][number]>();
   const outcomes = await db
-    .prepare("SELECT recorded_at, duration_minutes, prs_opened, prs_merged, ci_green, verified FROM job_outcomes WHERE recorded_at >= ?1 AND recorded_at < ?2")
+    .prepare(
+      "SELECT recorded_at, duration_minutes, prs_opened, prs_merged, ci_green, verified FROM job_outcomes WHERE recorded_at >= ?1 AND recorded_at < ?2",
+    )
     .bind(since(end, 90), endIso)
     .all<StatsRows["outcomes"][number]>();
   const evaluations = await db
-    .prepare("SELECT agreement, recorded_at FROM job_evaluations WHERE recorded_at >= ?1 AND recorded_at < ?2")
+    .prepare(
+      "SELECT agreement, recorded_at FROM job_evaluations WHERE recorded_at >= ?1 AND recorded_at < ?2",
+    )
     .bind(since(end, 90), endIso)
     .all<StatsRows["evaluations"][number]>();
   const waits = await db
-    .prepare("SELECT actor_kind, waited_ms, at FROM job_touches WHERE waited_ms IS NOT NULL AND at >= ?1 AND at < ?2")
+    .prepare(
+      "SELECT actor_kind, waited_ms, at FROM job_touches WHERE waited_ms IS NOT NULL AND at >= ?1 AND at < ?2",
+    )
     .bind(since(end, 56), endIso)
     .all<StatsRows["waits"][number]>();
   const documents = await db.prepare("SELECT COUNT(*) AS n FROM documents").first<{ n: number }>();
-  const namespaces = await db.prepare("SELECT COUNT(*) AS n FROM namespaces").first<{ n: number }>();
+  const namespaces = await db
+    .prepare("SELECT COUNT(*) AS n FROM namespaces")
+    .first<{ n: number }>();
   const snapshot = await readSnapshot(env);
   return {
     finished: finished.results ?? [],

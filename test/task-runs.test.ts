@@ -24,7 +24,10 @@ function ledgerEnv(opts: { refuse?: string } = {}) {
       return [];
     },
   };
-  const inserts = () => batches.map((b) => b[0]).map((s) => ({ task: s.args[0], outcome: s.args[3], reason: s.args[4] }));
+  const inserts = () =>
+    batches
+      .map((b) => b[0])
+      .map((s) => ({ task: s.args[0], outcome: s.args[3], reason: s.args[4] }));
   return { env: fakeEnv({ DB }), batches, inserts };
 }
 
@@ -37,16 +40,34 @@ function capture(stream: "log" | "error") {
 
 test("a run the judge reports is written once, with an insert and a bounded prune in one batch", async () => {
   const { env, batches, inserts } = ledgerEnv();
-  const value = await runTask(env, "backup", async () => 7, (n) => ({ outcome: "ok", reason: `dumped ${n} tables` }), { tag: "T", rethrow: true });
+  const value = await runTask(
+    env,
+    "backup",
+    async () => 7,
+    (n) => ({ outcome: "ok", reason: `dumped ${n} tables` }),
+    { tag: "T", rethrow: true },
+  );
   assert.equal(value, 7);
   assert.deepEqual(inserts(), [{ task: "backup", outcome: "ok", reason: "dumped 7 tables" }]);
   assert.equal(batches[0].length, 2);
-  assert.match(batches[0][1].sql, /^DELETE FROM task_runs WHERE id IN \(SELECT id FROM task_runs ORDER BY id LIMIT \?1\) AND finished_at < \?2$/);
+  assert.match(
+    batches[0][1].sql,
+    /^DELETE FROM task_runs WHERE id IN \(SELECT id FROM task_runs ORDER BY id LIMIT \?1\) AND finished_at < \?2$/,
+  );
 });
 
 test("a step that was not due records nothing", async () => {
   const { env, batches } = ledgerEnv();
-  assert.equal(await runTask(env, "watcher", async () => "not due", () => null, { tag: "T", rethrow: false }), "not due");
+  assert.equal(
+    await runTask(
+      env,
+      "watcher",
+      async () => "not due",
+      () => null,
+      { tag: "T", rethrow: false },
+    ),
+    "not due",
+  );
   assert.equal(batches.length, 0);
 });
 
@@ -55,14 +76,25 @@ test("PLANT: a throw is recorded as threw with its message and logged with the t
   const errors = capture("error");
   try {
     await assert.rejects(
-      runTask(env, "backup", async () => { throw new Error("R2 said no"); }, () => ({ outcome: "ok", reason: "never" }), { tag: "BACKUP_CRON_THREW", rethrow: true }),
-      /R2 said no/
+      runTask(
+        env,
+        "backup",
+        async () => {
+          throw new Error("R2 said no");
+        },
+        () => ({ outcome: "ok", reason: "never" }),
+        { tag: "BACKUP_CRON_THREW", rethrow: true },
+      ),
+      /R2 said no/,
     );
   } finally {
     errors.restore();
   }
   assert.deepEqual(inserts(), [{ task: "backup", outcome: "threw", reason: "R2 said no" }]);
-  assert.ok(errors.lines.some((l) => JSON.parse(l).message.startsWith("BACKUP_CRON_THREW R2 said no")), errors.lines.join("\n"));
+  assert.ok(
+    errors.lines.some((l) => JSON.parse(l).message.startsWith("BACKUP_CRON_THREW R2 said no")),
+    errors.lines.join("\n"),
+  );
 });
 
 test("PLANT: a tick step's throw is recorded and does not stop the steps after it", async () => {
@@ -70,9 +102,23 @@ test("PLANT: a tick step's throw is recorded and does not stop the steps after i
   const errors = capture("error");
   let after = false;
   try {
-    const value = await runTask(env, "auto-merge", async () => { throw new Error("GitHub 502"); }, () => null, { tag: "AUTO_MERGE_THREW:", rethrow: false });
+    const value = await runTask(
+      env,
+      "auto-merge",
+      async () => {
+        throw new Error("GitHub 502");
+      },
+      () => null,
+      { tag: "AUTO_MERGE_THREW:", rethrow: false },
+    );
     assert.equal(value, null);
-    await runTask(env, "watcher", async () => (after = true), () => ({ outcome: "ok", reason: "pass" }), { tag: "WATCHER_THREW:", rethrow: false });
+    await runTask(
+      env,
+      "watcher",
+      async () => (after = true),
+      () => ({ outcome: "ok", reason: "pass" }),
+      { tag: "WATCHER_THREW:", rethrow: false },
+    );
   } finally {
     errors.restore();
   }
@@ -81,7 +127,9 @@ test("PLANT: a tick step's throw is recorded and does not stop the steps after i
     { task: "auto-merge", outcome: "threw", reason: "GitHub 502" },
     { task: "watcher", outcome: "ok", reason: "pass" },
   ]);
-  assert.ok(errors.lines.some((l) => JSON.parse(l).message.startsWith("AUTO_MERGE_THREW: GitHub 502")));
+  assert.ok(
+    errors.lines.some((l) => JSON.parse(l).message.startsWith("AUTO_MERGE_THREW: GitHub 502")),
+  );
 });
 
 test("PLANT: a ledger that cannot be written never stops the task, and says so in the log", async () => {
@@ -89,19 +137,37 @@ test("PLANT: a ledger that cannot be written never stops the task, and says so i
   const errors = capture("error");
   let value: number | null;
   try {
-    value = await runTask(env, "tick", async () => 1, () => ({ outcome: "ok", reason: "x" }), { tag: "T", rethrow: true });
+    value = await runTask(
+      env,
+      "tick",
+      async () => 1,
+      () => ({ outcome: "ok", reason: "x" }),
+      { tag: "T", rethrow: true },
+    );
   } finally {
     errors.restore();
   }
   assert.equal(value, 1);
-  assert.deepEqual(errors.lines.map((l) => JSON.parse(l)), [
-    { event: "TASK_RUN_UNRECORDED", message: "TASK_RUN_UNRECORDED tick ok: no such table: task_runs" },
-  ]);
+  assert.deepEqual(
+    errors.lines.map((l) => JSON.parse(l)),
+    [
+      {
+        event: "TASK_RUN_UNRECORDED",
+        message: "TASK_RUN_UNRECORDED tick ok: no such table: task_runs",
+      },
+    ],
+  );
 });
 
 test("a reason is kept to one line of at most REASON_MAX characters", async () => {
   const { env, inserts } = ledgerEnv();
-  await runTask(env, "tick", async () => 0, () => ({ outcome: "ok", reason: `a\n  b ${"x".repeat(900)}` }), { tag: "T", rethrow: true });
+  await runTask(
+    env,
+    "tick",
+    async () => 0,
+    () => ({ outcome: "ok", reason: `a\n  b ${"x".repeat(900)}` }),
+    { tag: "T", rethrow: true },
+  );
   const reason = String(inserts()[0].reason);
   assert.equal(reason.length, REASON_MAX);
   assert.ok(reason.startsWith("a b x"));
@@ -116,16 +182,28 @@ const run = (minutesAgo: number, outcome: OpsTaskRun["outcome"] = "ok"): OpsTask
   return { started_at: at, finished_at: at, outcome, reason: "r" };
 };
 const flags = (runs: Partial<Record<TaskId, OpsTaskRun[]>>, cadence = 30) =>
-  Object.fromEntries(taskStates(new Map(Object.entries(runs) as [TaskId, OpsTaskRun[]][]), NOW, cadence).map((t) => [t.id, t.flag]));
+  Object.fromEntries(
+    taskStates(new Map(Object.entries(runs) as [TaskId, OpsTaskRun[]][]), NOW, cadence).map((t) => [
+      t.id,
+      t.flag,
+    ]),
+  );
 
 test("every task is listed, and one with no run is 'never'", () => {
   const states = taskStates(new Map(), NOW, 30);
-  assert.deepEqual(states.map((t) => t.id), TASKS.map((t) => t.id));
+  assert.deepEqual(
+    states.map((t) => t.id),
+    TASKS.map((t) => t.id),
+  );
   assert.ok(states.every((t) => t.flag === "never" && t.recent.length === 0));
 });
 
 test("PLANT: a task whose newest run threw or was refused is failing, whatever came before", () => {
-  const f = flags({ backup: [run(60, "threw"), run(1500)], "auto-merge": [run(5, "refused")], "skills-refresh": [run(60, "skipped")] });
+  const f = flags({
+    backup: [run(60, "threw"), run(1500)],
+    "auto-merge": [run(5, "refused")],
+    "skills-refresh": [run(60, "skipped")],
+  });
   assert.equal(f.backup, "failing");
   assert.equal(f["auto-merge"], "failing");
   assert.equal(f["skills-refresh"], null, "a skip is shown, not flagged");
@@ -134,7 +212,10 @@ test("PLANT: a task whose newest run threw or was refused is failing, whatever c
 test("PLANT: a failure of a task without a period ages out after a day; a periodic one stands until its next run", () => {
   assert.equal(flags({ "doc-index": [run(23 * 60, "refused")] })["doc-index"], "failing");
   assert.equal(flags({ "doc-index": [run(25 * 60, "refused")] })["doc-index"], null);
-  assert.equal(flags({ "skills-refresh": [run(6 * 24 * 60, "threw")] })["skills-refresh"], "failing");
+  assert.equal(
+    flags({ "skills-refresh": [run(6 * 24 * 60, "threw")] })["skills-refresh"],
+    "failing",
+  );
 });
 
 test("PLANT: a periodic task is quiet after twice its period and not before", () => {

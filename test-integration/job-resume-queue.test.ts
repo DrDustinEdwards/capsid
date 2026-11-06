@@ -23,17 +23,38 @@ function seatAgent(): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
   scopes.flags.can_merge = true;
-  return { id: "agent_aaaabbbbcccc", name: "seat", kind: "seat", actor: "agent:seat", scopes, admin: false, row: null };
+  return {
+    id: "agent_aaaabbbbcccc",
+    name: "seat",
+    kind: "seat",
+    actor: "agent:seat",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 function driverAgent(actor = "agent:capsid-driver"): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
-  return { id: `agent_${actor.length}`, name: actor.slice("agent:".length), kind: "driver", actor, scopes, admin: false, row: null };
+  return {
+    id: `agent_${actor.length}`,
+    name: actor.slice("agent:".length),
+    kind: "driver",
+    actor,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 async function post(title: string): Promise<string> {
-  const posted = await postJob(jobsEnv(), ADMIN, NOW, { namespace: "capsid", title, body: "do the thing", gate_required: true });
+  const posted = await postJob(jobsEnv(), ADMIN, NOW, {
+    namespace: "capsid",
+    title,
+    body: "do the thing",
+    gate_required: true,
+  });
   expect(posted.ok, posted.refusal).toBe(true);
   return posted.job!.id;
 }
@@ -41,16 +62,27 @@ async function post(title: string): Promise<string> {
 async function blockedBy(holder: Agent, title: string): Promise<string> {
   const id = await post(title);
   expect((await claimJob(jobsEnv(), holder, NOW, { id })).ok).toBe(true);
-  expect((await blockJob(jobsEnv(), holder, NOW, id, { reason: "waiting on the push", command: "git push -u origin feat/x" })).ok).toBe(true);
+  expect(
+    (
+      await blockJob(jobsEnv(), holder, NOW, id, {
+        reason: "waiting on the push",
+        command: "git push -u origin feat/x",
+      })
+    ).ok,
+  ).toBe(true);
   return id;
 }
 
 async function row(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
+    .bind(id)
+    .first<Record<string, unknown>>();
 }
 
 async function resumedAudit(id: string) {
-  const r = await env.DB.prepare("SELECT params FROM audit_log WHERE action = 'job-resumed' AND params LIKE ?1 ORDER BY id DESC LIMIT 1")
+  const r = await env.DB.prepare(
+    "SELECT params FROM audit_log WHERE action = 'job-resumed' AND params LIKE ?1 ORDER BY id DESC LIMIT 1",
+  )
     .bind(`%${id}%`)
     .first<{ params: string }>();
   return r ? (JSON.parse(r.params) as Record<string, unknown>) : null;
@@ -67,16 +99,23 @@ describe("resume to the queue", () => {
   it("a driver that holds another claim still gets its blocked job back: there is no claim limit", async () => {
     const driver = driverAgent();
     const blocked = await blockedBy(driver, "waiting on its driver");
-    expect((await claimJob(jobsEnv(), driver, NOW, { id: await post("the driver moved on") })).ok).toBe(true);
+    expect(
+      (await claimJob(jobsEnv(), driver, NOW, { id: await post("the driver moved on") })).ok,
+    ).toBe(true);
 
-    const resumed = await resumeJob(jobsEnv(), seatAgent(), LATER, blocked, "push approved", { note: "run it from the feature branch" });
+    const resumed = await resumeJob(jobsEnv(), seatAgent(), LATER, blocked, "push approved", {
+      note: "run it from the feature branch",
+    });
     expect(resumed.ok, resumed.refusal).toBe(true);
     expect(resumed.note).toBeUndefined();
     const r = await row(blocked);
     expect(r?.status).toBe("claimed");
     expect(r?.claimed_by).toBe("agent:capsid-driver");
     expect(r?.resumed_count).toBe(1);
-    expect(await resumedAudit(blocked)).toMatchObject({ approved: "push approved", held_by: "agent:capsid-driver" });
+    expect(await resumedAudit(blocked)).toMatchObject({
+      approved: "push approved",
+      held_by: "agent:capsid-driver",
+    });
   });
 
   it("a job blocked by the shared admin identity goes back to the queue, not to that identity", async () => {
@@ -85,9 +124,15 @@ describe("resume to the queue", () => {
     expect(resumed.ok, resumed.refusal).toBe(true);
     expect((await row(blocked))?.status).toBe("queued");
     expect(resumed.note).toMatch(/shared/);
-    expect(await resumedAudit(blocked)).toMatchObject({ approved: "approved", returned_to: "queued", previous_holder: ADMIN.actor });
+    expect(await resumedAudit(blocked)).toMatchObject({
+      approved: "approved",
+      returned_to: "queued",
+      previous_holder: ADMIN.actor,
+    });
 
-    const next = await claimJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, { id: blocked });
+    const next = await claimJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, {
+      id: blocked,
+    });
     expect(next.ok, next.refusal).toBe(true);
     expect(next.resume_note).toMatchObject({ reason: "approved", by: ADMIN.actor });
     // Measured from the first claim, not from this one.
@@ -107,7 +152,9 @@ describe("resume to the queue", () => {
     const blocked = await blockedBy(driverAgent(), "someone wants to take it");
     // A plain resume, take or not, is the seat's act, so the taker is the seat.
     const taker = seatAgent();
-    expect((await claimJob(jobsEnv(), taker, NOW, { id: await post("the taker is busy") })).ok).toBe(true);
+    expect(
+      (await claimJob(jobsEnv(), taker, NOW, { id: await post("the taker is busy") })).ok,
+    ).toBe(true);
     const taken = await resumeJob(jobsEnv(), taker, LATER, blocked, "approved", { take: true });
     expect(taken.ok, taken.refusal).toBe(true);
     expect((await row(blocked))?.status).toBe("claimed");
@@ -117,7 +164,9 @@ describe("resume to the queue", () => {
   it("the driver's own gate still cannot be cleared by that driver with a plain resume", async () => {
     const driver = driverAgent();
     const blocked = await blockedBy(driver, "self-approval");
-    expect((await claimJob(jobsEnv(), driver, NOW, { id: await post("busy elsewhere") })).ok).toBe(true);
+    expect((await claimJob(jobsEnv(), driver, NOW, { id: await post("busy elsewhere") })).ok).toBe(
+      true,
+    );
     const refused = await resumeJob(jobsEnv(), driver, LATER, blocked, "I approve myself");
     expect(refused.ok).toBe(false);
     expect((await row(blocked))?.status).toBe("blocked");

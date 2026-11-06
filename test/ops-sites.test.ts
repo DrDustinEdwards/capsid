@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { healthPathRefusal, hostnameRefusal, originFrom, siteMapDrift, sitesFrom, validateSite } from "../src/ops-sites.ts";
+import {
+  healthPathRefusal,
+  hostnameRefusal,
+  originFrom,
+  siteMapDrift,
+  sitesFrom,
+  validateSite,
+} from "../src/ops-sites.ts";
 import type { OpsSiteConfig } from "../src/ops-types/sites.ts";
 import { siteMapFindings } from "../src/watcher-detect.ts";
 
@@ -79,7 +86,10 @@ test("PLANT: every origin that is not https:// and a public hostname alone is re
   for (const raw of BAD_ORIGINS) {
     const got = originFrom(raw);
     assert.equal(got.ok, false, `${JSON.stringify(raw)} was accepted`);
-    assert.ok(!got.ok && got.refusal.length > 20, `${JSON.stringify(raw)} was refused with no reason`);
+    assert.ok(
+      !got.ok && got.refusal.length > 20,
+      `${JSON.stringify(raw)} was refused with no reason`,
+    );
   }
 });
 
@@ -93,9 +103,34 @@ test("hostnameRefusal names what is wrong", () => {
 
 // Health paths
 
-const GOOD_PATHS = ["/", "/health", "/api/health", "/v1/status.json", "/_health", "/a~b/c-d", "/health/", "https://health.example.com/health"];
+const GOOD_PATHS = [
+  "/",
+  "/health",
+  "/api/health",
+  "/v1/status.json",
+  "/_health",
+  "/a~b/c-d",
+  "/health/",
+  "https://health.example.com/health",
+];
 // scanner-rule: every health path that could change what the probe fetches is refused
-const BAD_PATHS = ["health", "/health?full=1", "/health#x", "/he alth", "/%2e%2e/admin", "//evil.example.com", "/a//b", "/../admin", "/./health", `/${"a".repeat(200)}`, "", "https://localhost/health", "https://user@example.com/health", "https://example.com/health?x=1", "http://example.com/health"];
+const BAD_PATHS = [
+  "health",
+  "/health?full=1",
+  "/health#x",
+  "/he alth",
+  "/%2e%2e/admin",
+  "//evil.example.com",
+  "/a//b",
+  "/../admin",
+  "/./health",
+  `/${"a".repeat(200)}`,
+  "",
+  "https://localhost/health",
+  "https://user@example.com/health",
+  "https://example.com/health?x=1",
+  "http://example.com/health",
+];
 
 test("PLANT: a health path is a plain absolute path; a query, a fragment, an escape or a dot segment is refused", () => {
   for (const p of GOOD_PATHS) assert.equal(healthPathRefusal(p), null, `${p} was refused`);
@@ -109,17 +144,36 @@ test("PLANT: a health path is a plain absolute path; a query, a fragment, an esc
 // The whole edit
 
 test("a site edit is normalized: a name defaults to the namespace, blank optional fields are null", () => {
-  const got = validateSite({ namespace: "abscissa", origin: "https://abscissa.dustinedwards.info/", platform: "cloudflare" });
+  const got = validateSite({
+    namespace: "abscissa",
+    origin: "https://abscissa.dustinedwards.info/",
+    platform: "cloudflare",
+  });
   assert.deepEqual(got, {
     ok: true,
-    site: { namespace: "abscissa", name: "abscissa", origin: "https://abscissa.dustinedwards.info", health_path: null, platform: "cloudflare", script: null },
+    site: {
+      namespace: "abscissa",
+      name: "abscissa",
+      origin: "https://abscissa.dustinedwards.info",
+      health_path: null,
+      platform: "cloudflare",
+      script: null,
+    },
   });
 });
 
 test("a namespace with no origin serves no site, and then takes no other field", () => {
   assert.deepEqual(validateSite({ namespace: "claude-skills" }), {
     ok: true,
-    site: { namespace: "claude-skills", name: "claude-skills", origin: null, health_path: null, platform: null, script: null, operator: null },
+    site: {
+      namespace: "claude-skills",
+      name: "claude-skills",
+      origin: null,
+      health_path: null,
+      platform: null,
+      script: null,
+      operator: null,
+    },
   });
   for (const extra of [{ platform: "cloudflare" }, { health_path: "/health" }, { script: "x" }]) {
     const got = validateSite({ namespace: "claude-skills", ...extra });
@@ -132,7 +186,10 @@ test("PLANT: the platform, the script and the namespace are checked", () => {
   const refused: Array<[Record<string, string>, RegExp]> = [
     [{ ...base }, /platform must be one of cloudflare, vercel/],
     [{ ...base, platform: "netlify" }, /platform must be one of/],
-    [{ ...base, platform: "vercel", script: "sample" }, /only a Cloudflare site names a Worker script/],
+    [
+      { ...base, platform: "vercel", script: "sample" },
+      /only a Cloudflare site names a Worker script/,
+    ],
     [{ ...base, platform: "cloudflare", script: "Sample Web" }, /not a Worker script name/],
     [{ ...base, namespace: "Sample", platform: "cloudflare" }, /not a namespace name/],
     [{ ...base, namespace: "", platform: "cloudflare" }, /not a namespace name/],
@@ -157,8 +214,22 @@ test("only rows with an origin become probed sites; the script and the self-prob
     row("julieedwards", { platform: "vercel" }),
   ]);
   assert.deepEqual(sites, [
-    { namespace: "capsid", name: "capsid", origin: "https://capsid.example.com", healthPath: "/health", platform: "cloudflare", script: "capsid", self: true },
-    { namespace: "julieedwards", name: "julieedwards", origin: "https://julieedwards.example.com", healthPath: null, platform: "vercel" },
+    {
+      namespace: "capsid",
+      name: "capsid",
+      origin: "https://capsid.example.com",
+      healthPath: "/health",
+      platform: "cloudflare",
+      script: "capsid",
+      self: true,
+    },
+    {
+      namespace: "julieedwards",
+      name: "julieedwards",
+      origin: "https://julieedwards.example.com",
+      healthPath: null,
+      platform: "vercel",
+    },
   ]);
   assert.deepEqual(sitesFrom([]), []);
 });
@@ -166,7 +237,11 @@ test("only rows with an origin become probed sites; the script and the self-prob
 // The site map
 
 test("the site map is compared with the registered namespaces both ways, a no-site row counting as decided", () => {
-  const config = [row("capsid"), row("txasm"), row("claude-skills", { origin: null, platform: null })];
+  const config = [
+    row("capsid"),
+    row("txasm"),
+    row("claude-skills", { origin: null, platform: null }),
+  ];
   const registered = ["capsid", "claude-skills", "txasm"];
   assert.deepEqual(siteMapDrift(registered, config), { unmapped: [], unknown: [] });
   assert.deepEqual(siteMapFindings(siteMapDrift(registered, config)), []);

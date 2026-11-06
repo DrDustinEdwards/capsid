@@ -67,7 +67,10 @@ function text(v: unknown): string | null {
 /** Each field that differs between `before` and `after`, in the order the row has
  *  them. A row with only `after` (an add) lists every field as new; only `before` (a
  *  remove) lists every field as gone. */
-function changesOf(before: Record<string, unknown> | null, after: Record<string, unknown> | null): { changes: AuditChange[]; withheld: number } {
+function changesOf(
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+): { changes: AuditChange[]; withheld: number } {
   const keys = [...new Set([...Object.keys(after ?? {}), ...Object.keys(before ?? {})])];
   const changes: AuditChange[] = [];
   let hidden = 0;
@@ -89,7 +92,13 @@ function changesOf(before: Record<string, unknown> | null, after: Record<string,
 }
 
 export function auditDetail(params: string | null): AuditDetail {
-  const empty: AuditDetail = { reason: null, changes: null, fields: [], withheld: 0, unreadable: false };
+  const empty: AuditDetail = {
+    reason: null,
+    changes: null,
+    fields: [],
+    withheld: 0,
+    unreadable: false,
+  };
   if (params === null || params.trim() === "") return empty;
   let parsed: unknown;
   try {
@@ -100,10 +109,13 @@ export function auditDetail(params: string | null): AuditDetail {
   }
   if (!isObject(parsed)) {
     const value = text(parsed);
-    return value === null || value === "none" ? { ...empty, withheld: value === null ? 1 : 0 } : { ...empty, fields: [{ name: "Recorded", value }] };
+    return value === null || value === "none"
+      ? { ...empty, withheld: value === null ? 1 : 0 }
+      : { ...empty, fields: [{ name: "Recorded", value }] };
   }
 
-  const reason = typeof parsed.reason === "string" && parsed.reason.trim() ? parsed.reason.trim() : null;
+  const reason =
+    typeof parsed.reason === "string" && parsed.reason.trim() ? parsed.reason.trim() : null;
   const before = isObject(parsed.before) ? parsed.before : null;
   const after = isObject(parsed.after) ? parsed.after : null;
   let hidden = 0;

@@ -23,15 +23,25 @@ interface CanonRule {
 
 // test/canon.test.ts checks what these match.
 const CANON_RULES: readonly CanonRule[] = [
-  { namespace: "capsid", pattern: /^conventions(-[a-z0-9]+)*\.md$/, label: "capsid/conventions.md and capsid/conventions-<name>.md" },
+  {
+    namespace: "capsid",
+    pattern: /^conventions(-[a-z0-9]+)*\.md$/,
+    label: "capsid/conventions.md and capsid/conventions-<name>.md",
+  },
   { namespace: "*", pattern: /^core\.md$/, label: "<namespace>/core.md" },
-  { namespace: "*", pattern: /^(decisions|archive\/decisions(-vol-[1-9][0-9]{0,3})?)\.md$/, label: "<namespace>/decisions.md and its archived volumes" },
+  {
+    namespace: "*",
+    pattern: /^(decisions|archive\/decisions(-vol-[1-9][0-9]{0,3})?)\.md$/,
+    label: "<namespace>/decisions.md and its archived volumes",
+  },
 ];
 
 /** Whether a document is canon. Exact strings: documents are keyed by the exact path,
  *  so "Core.md" or "./core.md" is another document, which no reader takes for canon. */
 export function isCanonPath(namespace: string, path: string): boolean {
-  return CANON_RULES.some((r) => (r.namespace === "*" || r.namespace === namespace) && r.pattern.test(path));
+  return CANON_RULES.some(
+    (r) => (r.namespace === "*" || r.namespace === namespace) && r.pattern.test(path),
+  );
 }
 
 /** Whether this caller is refused a change to this document. */
@@ -41,11 +51,19 @@ export function canonGuarded(agent: Agent, namespace: string, path: string): boo
 
 /** The list as capsid_read_status action status serves it, beside protected_paths. */
 export function servedCanonPaths(): Array<{ namespace: string; source: string; label: string }> {
-  return CANON_RULES.map((r) => ({ namespace: r.namespace, source: r.pattern.source, label: r.label }));
+  return CANON_RULES.map((r) => ({
+    namespace: r.namespace,
+    source: r.pattern.source,
+    label: r.label,
+  }));
 }
 
 /** The refusal a guarded caller gets on a canon path. */
-export function canonRefusal(tool: "write" | "restore" | "delete" | "move", namespace: string, path: string): string {
+export function canonRefusal(
+  tool: "write" | "restore" | "delete" | "move",
+  namespace: string,
+  path: string,
+): string {
   return (
     `${namespace}/${path} is canon (src/canon.ts), and a ${tool} of it by a key scoped to some namespaces is refused. Nothing changed. ` +
     "Only the admin, the seat or a portfolio-wide key changes canon: ask Dustin's own session to make the change."

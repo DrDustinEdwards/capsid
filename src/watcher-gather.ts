@@ -9,7 +9,13 @@ import { readLiveConfig, liveChecks, defaultBranchHead } from "./live-checks";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { checkManualSteps, liveStepReaders } from "./manual-steps";
 import { readServerErrors } from "./site-traffic";
-import { cloudflareCredentials, readWebAnalyticsSites, readCloudflare, readSecretNames, readAccessAppNames } from "./ops-cloudflare";
+import {
+  cloudflareCredentials,
+  readWebAnalyticsSites,
+  readCloudflare,
+  readSecretNames,
+  readAccessAppNames,
+} from "./ops-cloudflare";
 import { readPackageConfig, readPackage, npmVersions } from "./ops-packages";
 import { readSiteConfig, type OpsSite, sitesFrom, siteMapDrift } from "./ops-sites";
 import { type SiteProbe, probeSite, readSnapshot } from "./ops-snapshot";
@@ -24,7 +30,30 @@ import { capsidStatus } from "./status";
 import { readRepoMap } from "./unmapped-repos";
 import { type Gathered, type Observed, WATCHER_ACTOR } from "./watcher";
 import type { WatcherCheck } from "./watcher-checks";
-import { type Finding, type DeployVerdict, deployVerdict, healthFindings, statusFindings, BACKUPS_REPO_LABEL, type OffaccountReport, type WorkflowRun, offaccountFindings, offaccountDrillFindings, offaccountCoverageFindings, parseDumpStamp, type CiRun, ciFindings, siteMapFindings, unmappedRepoFindings, repoMapUnreadableFinding, siteDownFindings, liveFinding, finding, siteErrorFindings, siteCpuFindings } from "./watcher-detect";
+import {
+  type Finding,
+  type DeployVerdict,
+  deployVerdict,
+  healthFindings,
+  statusFindings,
+  BACKUPS_REPO_LABEL,
+  type OffaccountReport,
+  type WorkflowRun,
+  offaccountFindings,
+  offaccountDrillFindings,
+  offaccountCoverageFindings,
+  parseDumpStamp,
+  type CiRun,
+  ciFindings,
+  siteMapFindings,
+  unmappedRepoFindings,
+  repoMapUnreadableFinding,
+  siteDownFindings,
+  liveFinding,
+  finding,
+  siteErrorFindings,
+  siteCpuFindings,
+} from "./watcher-detect";
 
 // The watcher's reads (src/watcher.ts runs the pass): every surface it checks, read
 // once per pass and turned into findings by src/watcher-detect.ts.
@@ -37,13 +66,20 @@ async function attempt<T>(what: string, fn: () => Promise<T>): Promise<T | null>
   try {
     return await fn();
   } catch (err) {
-    logEvent("WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "WATCHER_READ_FAILED",
+      {
+        message: `WATCHER_READ_FAILED ${what}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
     return null;
   }
 }
 
 // A run id as an ISO time, or null for none or a name that is not a run id.
-const dumpTime = (run: string | null): string | null => (run ? parseDumpStamp(run)?.toISOString() ?? null : null);
+const dumpTime = (run: string | null): string | null =>
+  run ? (parseDumpStamp(run)?.toISOString() ?? null) : null;
 
 const basename = (path: string): string => path.split("/").filter(Boolean).pop() ?? "";
 
@@ -54,10 +90,20 @@ export function newestMigration(names: string[]): string | null {
   return sql.length ? sql[sql.length - 1] : null;
 }
 
-export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetch = fetch): Promise<Gathered> {
+export async function gatherFindings(
+  env: Env,
+  now: Date,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Gathered> {
   const out: Finding[] = [];
   const ran = new Set<WatcherCheck>();
-  const observed: Observed = { health: null, offaccount: null, ci: [], siteMap: null, probes: null };
+  const observed: Observed = {
+    health: null,
+    offaccount: null,
+    ci: [],
+    siteMap: null,
+    probes: null,
+  };
 
   // No casts on a repo reader's result, so a renamed field fails `npm run check`.
   // attempt() swallows a throw, so a cast would hide a check that never runs.
@@ -72,7 +118,10 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     // open drift finding is not cleared on it.
     let deploy: DeployVerdict | undefined;
     if (head !== null && health.sha && health.sha !== "unknown" && health.sha !== head) {
-      const runs = await attempt("head ci run", async () => (await ciStatus(env, "capsid", undefined, { ref: head, limit: 10 })).runs);
+      const runs = await attempt(
+        "head ci run",
+        async () => (await ciStatus(env, "capsid", undefined, { ref: head, limit: 10 })).runs,
+      );
       deploy = deployVerdict(runs, now);
     }
     if (head !== null && !deploy?.wait) ran.add("master head");
@@ -96,15 +145,27 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // An unreadable report skips the check: "cannot see the copy" is not "the copy is dead".
   // The copy workflow's runs, read through the capsid namespace's "backups" mapping, are
   // evidence only; a failed read leaves them out and the age findings still fire.
-  const report = await attempt("offaccount report", async () => ({ value: await env.APP_KV.get<OffaccountReport>(OFFACCOUNT_REPORT_KEY, "json") }));
-  const copyRuns: WorkflowRun[] | null = await attempt("offaccount runs", async () => (await ciStatus(env, "capsid", BACKUPS_REPO_LABEL, { workflow: "offaccount.yml", limit: 5 })).runs);
+  const report = await attempt("offaccount report", async () => ({
+    value: await env.APP_KV.get<OffaccountReport>(OFFACCOUNT_REPORT_KEY, "json"),
+  }));
+  const copyRuns: WorkflowRun[] | null = await attempt(
+    "offaccount runs",
+    async () =>
+      (await ciStatus(env, "capsid", BACKUPS_REPO_LABEL, { workflow: "offaccount.yml", limit: 5 }))
+        .runs,
+  );
   const lastCopy = copyRuns?.find((r) => r.status === "completed") ?? null;
   if (report) {
     ran.add("offaccount");
     out.push(...offaccountFindings("capsid", OFFACCOUNT_SITES, report.value, lastCopy, now));
   }
   // The restore drill's own runs, so a monthly drill is not pushed out by the nightly ones.
-  const drillRuns: WorkflowRun[] | null = await attempt("offaccount drill", async () => (await ciStatus(env, "capsid", BACKUPS_REPO_LABEL, { workflow: "drill.yml", limit: 10 })).runs);
+  const drillRuns: WorkflowRun[] | null = await attempt(
+    "offaccount drill",
+    async () =>
+      (await ciStatus(env, "capsid", BACKUPS_REPO_LABEL, { workflow: "drill.yml", limit: 10 }))
+        .runs,
+  );
   if (drillRuns) {
     ran.add("offaccount drill");
     out.push(...offaccountDrillFindings("capsid", drillRuns, now));
@@ -114,15 +175,27 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   const resources = await attempt("offaccount coverage", () => readResources(env));
   if (resources) {
     ran.add("offaccount coverage");
-    out.push(...offaccountCoverageFindings("capsid", OFFACCOUNT_SITES.map((s) => OFFACCOUNT_SOURCES[s].database), resources.databases));
+    out.push(
+      ...offaccountCoverageFindings(
+        "capsid",
+        OFFACCOUNT_SITES.map((s) => OFFACCOUNT_SOURCES[s].database),
+        resources.databases,
+      ),
+    );
   }
-  const run = (r: WorkflowRun | null | undefined) => (r ? { at: r.created_at ?? null, conclusion: r.conclusion ?? null, url: r.url ?? null } : null);
+  const run = (r: WorkflowRun | null | undefined) =>
+    r ? { at: r.created_at ?? null, conclusion: r.conclusion ?? null, url: r.url ?? null } : null;
   if (report) {
     observed.offaccount = {
       reported_at: report.value?.received_at ?? null,
-      sites: OFFACCOUNT_SITES.map((site) => ({ site, newest: dumpTime(report.value?.sites[site]?.newest ?? null) })),
+      sites: OFFACCOUNT_SITES.map((site) => ({
+        site,
+        newest: dumpTime(report.value?.sites[site]?.newest ?? null),
+      })),
       last_run: run(lastCopy),
-      last_drill: run(drillRuns?.find((r) => r.status === "completed" && r.conclusion === "success")),
+      last_drill: run(
+        drillRuns?.find((r) => r.status === "completed" && r.conclusion === "success"),
+      ),
     };
   }
 
@@ -131,7 +204,10 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // repo that could not be read must not let the others' pass clear its incident.
   let ciRead = 0;
   for (const namespace of APP_ROSTER) {
-    const runs: CiRun[] | null = await attempt(`ci ${namespace}`, async () => (await ciStatus(env, namespace, undefined, { limit: 5 })).runs);
+    const runs: CiRun[] | null = await attempt(
+      `ci ${namespace}`,
+      async () => (await ciStatus(env, namespace, undefined, { limit: 5 })).runs,
+    );
     if (runs) {
       ciRead++;
       out.push(...ciFindings(namespace, runs, now));
@@ -140,7 +216,13 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     observed.ci.push({
       namespace,
       latest: latest
-        ? { head_sha: latest.head_sha, status: latest.status, conclusion: latest.conclusion, created_at: latest.created_at, url: latest.url ?? null }
+        ? {
+            head_sha: latest.head_sha,
+            status: latest.status,
+            conclusion: latest.conclusion,
+            created_at: latest.created_at,
+            url: latest.url ?? null,
+          }
         : null,
     });
   }
@@ -152,7 +234,9 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   let deploysRead = 0;
   for (const { key, namespace, selector, workflow } of DEPLOY_ROSTER) {
     // Wrapped, since a repo with no deploy yet reads as null and a failed read does too.
-    const read = await attempt(`deploys ${key}`, async () => ({ newest: await readDeployOutcomes(env, namespace, selector, workflow) }));
+    const read = await attempt(`deploys ${key}`, async () => ({
+      newest: await readDeployOutcomes(env, namespace, selector, workflow),
+    }));
     if (!read) continue;
     deploysRead++;
     if (read.newest) out.push(...deployFindings(namespace, read.newest, key));
@@ -178,7 +262,9 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // The configuration against the registered namespaces, both ways.
   const registered = config
     ? await attempt("site map", async () => {
-        const { results } = await env.DB.prepare("SELECT namespace FROM namespaces ORDER BY namespace").all<{ namespace: string }>();
+        const { results } = await env.DB.prepare(
+          "SELECT namespace FROM namespaces ORDER BY namespace",
+        ).all<{ namespace: string }>();
         return (results ?? []).map((r) => r.namespace);
       })
     : null;
@@ -196,7 +282,11 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     out.push(...unmappedRepoFindings(repoMap));
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    logEvent("WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED repo map: ${reason}` }, { level: "error" });
+    logEvent(
+      "WATCHER_READ_FAILED",
+      { message: `WATCHER_READ_FAILED repo map: ${reason}` },
+      { level: "error" },
+    );
     out.push(repoMapUnreadableFinding(reason));
   }
 
@@ -214,7 +304,9 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // absent or unreadable (readSnapshot logs it) has no previous probe to compare; a
   // KV read that throws means the check cannot judge, so it does not count as run and
   // an open site-down job is not cleared on no evidence.
-  const prev = await attempt("previous snapshot", async () => ({ snapshot: await readSnapshot(env) }));
+  const prev = await attempt("previous snapshot", async () => ({
+    snapshot: await readSnapshot(env),
+  }));
   if (probes) {
     observed.probes = probes;
     if (prev) {
@@ -235,13 +327,21 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
         if (!credentials.ok) throw new Error(credentials.reason);
         return readWebAnalyticsSites(fetchImpl, credentials.token, credentials.account);
       };
-      return liveChecks(config, sites, probes, { fetchImpl, head: (namespace) => defaultBranchHead(env, namespace), analytics }, now);
+      return liveChecks(
+        config,
+        sites,
+        probes,
+        { fetchImpl, head: (namespace) => defaultBranchHead(env, namespace), analytics },
+        now,
+      );
     });
     if (live) {
       if (live.ran) ran.add("live checks");
       out.push(...live.findings.map(liveFinding));
       // The count beside the verdict: no findings over zero pages read is not a clean bill.
-      logEvent("WATCHER_LIVE", { message: `WATCHER_LIVE pages ${live.summary.pages_read}/${live.summary.pages_expected} shas ${live.summary.shas_read}/${live.summary.shas_expected} analytics ${live.summary.analytics_read}/${live.summary.analytics_expected} findings ${live.findings.length}` });
+      logEvent("WATCHER_LIVE", {
+        message: `WATCHER_LIVE pages ${live.summary.pages_read}/${live.summary.pages_expected} shas ${live.summary.shas_read}/${live.summary.shas_expected} analytics ${live.summary.analytics_read}/${live.summary.analytics_expected} findings ${live.findings.length}`,
+      });
     }
   }
 
@@ -250,11 +350,18 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // (src/site-watch.ts); then the red and green mail. A site whose health could not be read
   // leaves the check un-run, so its open finding is not cleared on no evidence.
   if (config && config.some((c) => c.origin && (c.operator || c.health_path))) {
-    const repairs = await attempt("site repairs", () => watchSites(env, config, WATCHER_ACTOR, fetchImpl, now));
+    const repairs = await attempt("site repairs", () =>
+      watchSites(env, config, WATCHER_ACTOR, fetchImpl, now),
+    );
     if (repairs) {
       if (repairs.complete) ran.add("site repairs");
-      out.push(...repairs.findings.map((f) => finding(f.namespace, f.fingerprint, f.headline, f.evidence)));
-      if (repairs.lines.length) logEvent("WATCHER_SITE_REPAIRS", { message: `WATCHER_SITE_REPAIRS ${repairs.lines.join(" | ")}` });
+      out.push(
+        ...repairs.findings.map((f) => finding(f.namespace, f.fingerprint, f.headline, f.evidence)),
+      );
+      if (repairs.lines.length)
+        logEvent("WATCHER_SITE_REPAIRS", {
+          message: `WATCHER_SITE_REPAIRS ${repairs.lines.join(" | ")}`,
+        });
     }
   } else if (config) {
     // No site to read: nothing to judge, so nothing open can be stale.
@@ -270,11 +377,23 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
       observed.cloudflare = cf.bySite;
       if (cf.ran) ran.add("cloudflare");
       // Returned 5xx, read apart so a failed edge read leaves the thrown count standing.
-      const serverErrors = cf.ran ? await attempt("cloudflare 5xx", () => readServerErrors(env, sites, fetchImpl, now)) : null;
-      out.push(...siteErrorFindings(sites, cf.bySite, serverErrors), ...siteCpuFindings(sites, cf.bySite));
+      const serverErrors = cf.ran
+        ? await attempt("cloudflare 5xx", () => readServerErrors(env, sites, fetchImpl, now))
+        : null;
+      out.push(
+        ...siteErrorFindings(sites, cf.bySite, serverErrors),
+        ...siteCpuFindings(sites, cf.bySite),
+      );
     } else {
       observed.cloudflare = Object.fromEntries(
-        sites.map((s) => [s.namespace, { state: "error", reason: "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)" } as const])
+        sites.map((s) => [
+          s.namespace,
+          {
+            state: "error",
+            reason:
+              "the Cloudflare read threw this pass (WATCHER_READ_FAILED cloudflare in the log)",
+          } as const,
+        ]),
       );
     }
   }
@@ -283,7 +402,13 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // Portal's convergence view: names only, set or not, read here because no Portal request
   // calls Cloudflare. Each site's read stands alone and stores its own reason on failure.
   for (const site of config ?? []) {
-    if (!site.origin || !site.operator || site.operator.secrets.length === 0 || site.platform !== "cloudflare") continue;
+    if (
+      !site.origin ||
+      !site.operator ||
+      site.operator.secrets.length === 0 ||
+      site.platform !== "cloudflare"
+    )
+      continue;
     const read_at = now.toISOString();
     const expected = site.operator.secrets;
     const cfState = observed.cloudflare?.[site.namespace];
@@ -292,12 +417,33 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
     const stored = !credentials.ok
       ? { state: "error" as const, script, rows: [], reason: credentials.reason, read_at }
       : !script
-        ? { state: "error" as const, script: null, rows: [], reason: "the Worker script is not known: name it on the site's row, or let the Cloudflare read resolve it", read_at }
+        ? {
+            state: "error" as const,
+            script: null,
+            rows: [],
+            reason:
+              "the Worker script is not known: name it on the site's row, or let the Cloudflare read resolve it",
+            read_at,
+          }
         : await readSecretNames(fetchImpl, credentials.token, credentials.account, script).then(
-            (names) => ({ state: "ok" as const, script, rows: secretPresence(expected, names), reason: null, read_at }),
-            (err: unknown) => ({ state: "error" as const, script, rows: [], reason: (err instanceof Error ? err.message : String(err)).slice(0, 300), read_at })
+            (names) => ({
+              state: "ok" as const,
+              script,
+              rows: secretPresence(expected, names),
+              reason: null,
+              read_at,
+            }),
+            (err: unknown) => ({
+              state: "error" as const,
+              script,
+              rows: [],
+              reason: (err instanceof Error ? err.message : String(err)).slice(0, 300),
+              read_at,
+            }),
           );
-    await attempt(`secret names ${site.namespace}`, () => storeSecrets(env, site.namespace, stored));
+    await attempt(`secret names ${site.namespace}`, () =>
+      storeSecrets(env, site.namespace, stored),
+    );
   }
 
   // Agents acting out of their usual pattern, from audit_log (src/anomaly.ts, OWASP item
@@ -322,25 +468,42 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
   // finding 30 and 7 days before it expires. The check counts as run only when every
   // domain was read, so a failed read never clears an open finding.
   if (config) {
-    const domains = [...new Set(config.map((c) => (c.origin ? registrableDomain(c.origin) : null)).filter((d): d is string => d !== null))].sort();
+    const domains = [
+      ...new Set(
+        config
+          .map((c) => (c.origin ? registrableDomain(c.origin) : null))
+          .filter((d): d is string => d !== null),
+      ),
+    ].sort();
     const read = await attempt("domains", () => readExpiries(env.APP_KV, domains, fetchImpl, now));
     if (read) {
-      observed.expiry = { tls: null, ...observed.expiry, domains: { read_at: now.toISOString(), domains: read.expiries, failed: read.failed } };
+      observed.expiry = {
+        tls: null,
+        ...observed.expiry,
+        domains: { read_at: now.toISOString(), domains: read.expiries, failed: read.failed },
+      };
       out.push(...expiryFindings(read.expiries, now));
       if (read.failed.length === 0) ran.add("domains");
-      for (const f of read.failed) logEvent("WATCHER_DOMAIN_UNREAD", { message: `${f.domain}: ${f.error}` }, { level: "warn" });
+      for (const f of read.failed)
+        logEvent(
+          "WATCHER_DOMAIN_UNREAD",
+          { message: `${f.domain}: ${f.error}` },
+          { level: "warn" },
+        );
     }
     // Each Cloudflare-hosted site's TLS certificate (src/tls-expiry.ts): kept in KV for the
     // push, which alerts at 21 and 3 days, and shown in the snapshot. No finding. A host that could not be read keeps
     // its last stored date, so a failed read never drops an expiry the push still needs.
     const tls = await attempt("tls", () => readTlsExpiry(env, config, fetchImpl, now));
     if (tls) {
-      const stored = ((await env.APP_KV.get(TLS_EXPIRY_KEY, "json")) as typeof tls | null)?.hosts ?? [];
+      const stored =
+        ((await env.APP_KV.get(TLS_EXPIRY_KEY, "json")) as typeof tls | null)?.hosts ?? [];
       const kept = stored.filter((h) => tls.failed.some((f) => f.host === h.host));
       const merged = { ...tls, hosts: [...tls.hosts, ...kept] };
       await env.APP_KV.put(TLS_EXPIRY_KEY, JSON.stringify(merged));
       observed.expiry = { domains: null, ...observed.expiry, tls: merged };
-      for (const f of tls.failed) logEvent("WATCHER_TLS_UNREAD", { message: `${f.host}: ${f.error}` }, { level: "warn" });
+      for (const f of tls.failed)
+        logEvent("WATCHER_TLS_UNREAD", { message: `${f.host}: ${f.error}` }, { level: "warn" });
     }
   }
 
@@ -372,10 +535,11 @@ export async function gatherFindings(env: Env, now: Date, fetchImpl: typeof fetc
           if (!credentials.ok) throw new Error(credentials.reason);
           return readAccessAppNames(fetchImpl, credentials.token, credentials.account);
         },
-      })
-    )
+      }),
+    ),
   );
-  if (steps && steps.seen.length > 0) logEvent("WATCHER_STEPS_SEEN", { message: `WATCHER_STEPS_SEEN ${steps.note}` });
+  if (steps && steps.seen.length > 0)
+    logEvent("WATCHER_STEPS_SEEN", { message: `WATCHER_STEPS_SEEN ${steps.note}` });
 
   return { findings: out, ran, observed };
 }

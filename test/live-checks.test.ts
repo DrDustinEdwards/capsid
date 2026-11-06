@@ -32,9 +32,16 @@ import { fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 
 const NOW = new Date("2026-10-04T12:00:00.000Z");
 const BEACON = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "sample"}'></script>`;
-const page = (body: string) => `<!doctype html><html><head><title>Sample</title></head><body>${body}</body></html>`;
+const page = (body: string) =>
+  `<!doctype html><html><head><title>Sample</title></head><body>${body}</body></html>`;
 
-const SITE: OpsSite = { namespace: "sample", name: "Sample", origin: "https://sample.example.com", healthPath: "/health", platform: "cloudflare" };
+const SITE: OpsSite = {
+  namespace: "sample",
+  name: "Sample",
+  origin: "https://sample.example.com",
+  healthPath: "/health",
+  platform: "cloudflare",
+};
 const probe = (over: Partial<SiteProbe> = {}): SiteProbe => ({
   namespace: "sample",
   name: "Sample",
@@ -63,7 +70,7 @@ test("parseLiveConfig reads only '- site' lines, in all three rules, and ignores
       "- site sample headers /",
       "- site sample sha",
       "- an ordinary bullet",
-    ].join("\n")
+    ].join("\n"),
   );
   assert.deepEqual(parsed, {
     rules: [
@@ -97,14 +104,23 @@ test("PLANT: a '- site' line that does not parse refuses the whole document, nam
 });
 
 test("the document is bounded in page rules and in sha rules", () => {
-  const pages = Array.from({ length: MAX_PAGE_RULES + 1 }, (_, i) => `- site sample beacon /p${i}`).join("\n");
+  const pages = Array.from(
+    { length: MAX_PAGE_RULES + 1 },
+    (_, i) => `- site sample beacon /p${i}`,
+  ).join("\n");
   assert.ok("error" in parseLiveConfig(pages));
   const shas = Array.from({ length: MAX_SHA_RULES + 1 }, (_, i) => `- site s${i} sha`).join("\n");
   assert.ok("error" in parseLiveConfig(shas));
-  const analytics = (n: number) => Array.from({ length: n }, (_, i) => `- site s${i} analytics`).join("\n");
+  const analytics = (n: number) =>
+    Array.from({ length: n }, (_, i) => `- site s${i} analytics`).join("\n");
   assert.ok("error" in parseLiveConfig(analytics(MAX_ANALYTICS_RULES + 1)));
   assert.ok("rules" in parseLiveConfig(analytics(MAX_ANALYTICS_RULES)));
-  assert.ok("rules" in parseLiveConfig(Array.from({ length: MAX_PAGE_RULES }, (_, i) => `- site sample beacon /p${i}`).join("\n")));
+  assert.ok(
+    "rules" in
+      parseLiveConfig(
+        Array.from({ length: MAX_PAGE_RULES }, (_, i) => `- site sample beacon /p${i}`).join("\n"),
+      ),
+  );
 });
 
 test("slug: a path as one fingerprint-safe word", () => {
@@ -118,16 +134,37 @@ test("slug: a path as one fingerprint-safe word", () => {
 test("beaconCount counts script tags that load the beacon, in any quoting and for a protocol-relative src", () => {
   assert.equal(beaconCount(page("")), 0);
   assert.equal(beaconCount(page(BEACON)), 1);
-  assert.equal(beaconCount(page(`<script src='https://static.cloudflareinsights.com/beacon.min.js'></script>`)), 1);
-  assert.equal(beaconCount(page(`<SCRIPT DEFER SRC=//static.cloudflareinsights.com/beacon.min.js></SCRIPT>`)), 1);
+  assert.equal(
+    beaconCount(
+      page(`<script src='https://static.cloudflareinsights.com/beacon.min.js'></script>`),
+    ),
+    1,
+  );
+  assert.equal(
+    beaconCount(page(`<SCRIPT DEFER SRC=//static.cloudflareinsights.com/beacon.min.js></SCRIPT>`)),
+    1,
+  );
   assert.equal(beaconCount(page(BEACON + BEACON)), 2);
 });
 
 test("beaconCount does not count other scripts, a mention in text, or a lookalike host", () => {
   assert.equal(beaconCount(page(`<script src="https://example.com/app.js"></script>`)), 0);
-  assert.equal(beaconCount(page(`<p>static.cloudflareinsights.com is where the beacon lives</p>`)), 0);
-  assert.equal(beaconCount(page(`<script src="https://static.cloudflareinsights.com.evil.example/x.js"></script>`)), 0);
-  assert.equal(beaconCount(page(`<script>var u = "https://static.cloudflareinsights.com/beacon.min.js";</script>`)), 0);
+  assert.equal(
+    beaconCount(page(`<p>static.cloudflareinsights.com is where the beacon lives</p>`)),
+    0,
+  );
+  assert.equal(
+    beaconCount(
+      page(`<script src="https://static.cloudflareinsights.com.evil.example/x.js"></script>`),
+    ),
+    0,
+  );
+  assert.equal(
+    beaconCount(
+      page(`<script>var u = "https://static.cloudflareinsights.com/beacon.min.js";</script>`),
+    ),
+    0,
+  );
 });
 
 // findings from one page
@@ -139,14 +176,27 @@ const read = (html: string, csp?: string): Parameters<typeof pageFindings>[2] =>
   problem: null,
   gated: false,
 });
-const beaconRule: Extract<LiveRule, { path: string }> = { namespace: "sample", kind: "beacon", path: "/" };
-const noBeaconRule: Extract<LiveRule, { path: string }> = { namespace: "sample", kind: "nobeacon", path: "/account" };
+const beaconRule: Extract<LiveRule, { path: string }> = {
+  namespace: "sample",
+  kind: "beacon",
+  path: "/",
+};
+const noBeaconRule: Extract<LiveRule, { path: string }> = {
+  namespace: "sample",
+  kind: "nobeacon",
+  path: "/account",
+};
 const prints = (findings: Array<{ fingerprint: string }>) => findings.map((f) => f.fingerprint);
 
 test("a public page with one beacon and a CSP that allows it is clean", () => {
-  const ok = "script-src 'self' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/; connect-src 'self'";
+  const ok =
+    "script-src 'self' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/; connect-src 'self'";
   assert.deepEqual(pageFindings(SITE, beaconRule, read(page(BEACON), ok)), []);
-  assert.deepEqual(pageFindings(SITE, beaconRule, read(page(BEACON))), [], "no CSP at all blocks nothing");
+  assert.deepEqual(
+    pageFindings(SITE, beaconRule, read(page(BEACON))),
+    [],
+    "no CSP at all blocks nothing",
+  );
 });
 
 test("a beacon rule no longer counts beacons: a Worker cannot see the one the edge injects, so none or two is not a finding", () => {
@@ -161,13 +211,19 @@ test("PLANT: a CSP that blocks the beacon's script or its report is a finding", 
     "script-src https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/; connect-src 'none'",
     "default-src 'none'",
   ]) {
-    assert.deepEqual(prints(pageFindings(SITE, beaconRule, read(page(BEACON), policy))), ["live-csp-beacon-sample-root"], policy);
+    assert.deepEqual(
+      prints(pageFindings(SITE, beaconRule, read(page(BEACON), policy))),
+      ["live-csp-beacon-sample-root"],
+      policy,
+    );
   }
 });
 
 test("a page that must carry no beacon is clean without one and a finding with one; its CSP is not judged", () => {
   assert.deepEqual(pageFindings(SITE, noBeaconRule, read(page(""), "default-src 'none'")), []);
-  assert.deepEqual(prints(pageFindings(SITE, noBeaconRule, read(page(BEACON)))), ["live-beacon-present-sample-account"]);
+  assert.deepEqual(prints(pageFindings(SITE, noBeaconRule, read(page(BEACON)))), [
+    "live-beacon-present-sample-account",
+  ]);
 });
 
 test("a page that was not read yields no finding about the beacon: not read is not clean and not dirty", () => {
@@ -178,11 +234,26 @@ test("a page that was not read yields no finding about the beacon: not read is n
 
 // the security headers
 
-const headersRule: Extract<LiveRule, { path: string }> = { namespace: "sample", kind: "headers", path: "/" };
-const GOOD_CSP = "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; report-uri /csp-report; report-to csp";
+const headersRule: Extract<LiveRule, { path: string }> = {
+  namespace: "sample",
+  kind: "headers",
+  path: "/",
+};
+const GOOD_CSP =
+  "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; report-uri /csp-report; report-to csp";
 const goodHeaders = (): Headers =>
-  new Headers({ ...STANDARD_SECURITY_HEADERS, "content-security-policy": GOOD_CSP, "reporting-endpoints": 'csp="https://sample.example.com/csp-report"' });
-const withHeaders = (headers: Headers): Parameters<typeof pageFindings>[2] => ({ status: 200, headers, html: page(""), problem: null, gated: false });
+  new Headers({
+    ...STANDARD_SECURITY_HEADERS,
+    "content-security-policy": GOOD_CSP,
+    "reporting-endpoints": 'csp="https://sample.example.com/csp-report"',
+  });
+const withHeaders = (headers: Headers): Parameters<typeof pageFindings>[2] => ({
+  status: 200,
+  headers,
+  html: page(""),
+  problem: null,
+  gated: false,
+});
 
 test("a page that carries every standard header and an enforced policy is clean under the headers rule", () => {
   assert.deepEqual(pageFindings(SITE, headersRule, withHeaders(goodHeaders())), []);
@@ -193,49 +264,138 @@ test("PLANT: a missing header, a report-only policy and no policy at all each fi
   noFrame.delete("X-Frame-Options");
   const missing = pageFindings(SITE, headersRule, withHeaders(noFrame));
   assert.deepEqual(prints(missing), ["live-headers-sample-root"]);
-  assert.ok(missing[0]?.evidence.some((line) => line.startsWith("X-Frame-Options is present")), "the finding names the header");
+  assert.ok(
+    missing[0]?.evidence.some((line) => line.startsWith("X-Frame-Options is present")),
+    "the finding names the header",
+  );
 
   const reportOnly = goodHeaders();
-  reportOnly.set("content-security-policy-report-only", reportOnly.get("content-security-policy") ?? "");
+  reportOnly.set(
+    "content-security-policy-report-only",
+    reportOnly.get("content-security-policy") ?? "",
+  );
   reportOnly.delete("content-security-policy");
-  assert.deepEqual(prints(pageFindings(SITE, headersRule, withHeaders(reportOnly))), ["live-headers-sample-root"]);
+  assert.deepEqual(prints(pageFindings(SITE, headersRule, withHeaders(reportOnly))), [
+    "live-headers-sample-root",
+  ]);
 
-  assert.deepEqual(prints(pageFindings(SITE, headersRule, withHeaders(new Headers()))), ["live-headers-sample-root"], "a response with none of them");
+  assert.deepEqual(
+    prints(pageFindings(SITE, headersRule, withHeaders(new Headers()))),
+    ["live-headers-sample-root"],
+    "a response with none of them",
+  );
 });
 
 test("the headers rule counts a page read, and a page it cannot read is unread, not clean", async () => {
   const body = "- site sample headers /";
-  const ok = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => new Response(page(""), { headers: { "content-type": "text/html; charset=utf-8", ...Object.fromEntries(goodHeaders()) } }) }), NOW);
+  const ok = await liveChecks(
+    { body },
+    [SITE],
+    [probe()],
+    deps({
+      "/": () =>
+        new Response(page(""), {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            ...Object.fromEntries(goodHeaders()),
+          },
+        }),
+    }),
+    NOW,
+  );
   assert.deepEqual(ok.findings, []);
-  assert.deepEqual(ok.summary, { pages_expected: 1, pages_read: 1, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 });
-  const bare = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => html(page("")) }), NOW);
+  assert.deepEqual(ok.summary, {
+    pages_expected: 1,
+    pages_read: 1,
+    shas_expected: 0,
+    shas_read: 0,
+    analytics_expected: 0,
+    analytics_read: 0,
+  });
+  const bare = await liveChecks(
+    { body },
+    [SITE],
+    [probe()],
+    deps({ "/": () => html(page("")) }),
+    NOW,
+  );
   assert.deepEqual(prints(bare.findings), ["live-headers-sample-root"]);
-  const unread = await liveChecks({ body }, [SITE], [probe()], deps({ "/": () => new Response("no", { status: 500 }) }), NOW);
+  const unread = await liveChecks(
+    { body },
+    [SITE],
+    [probe()],
+    deps({ "/": () => new Response("no", { status: 500 }) }),
+    NOW,
+  );
   assert.deepEqual(prints(unread.findings), ["live-page-unread-sample-root"]);
   assert.equal(unread.ran, false);
 });
 
 // the Web Analytics setting
 
-const ANALYTICS_SITE = { namespace: "sample", name: "Sample", origin: "https://sample.example.com" };
-const wa = (over: Partial<WebAnalyticsSite> = {}): WebAnalyticsSite => ({ host: "sample.example.com", auto_install: true, enabled: true, ...over });
+const ANALYTICS_SITE = {
+  namespace: "sample",
+  name: "Sample",
+  origin: "https://sample.example.com",
+};
+const wa = (over: Partial<WebAnalyticsSite> = {}): WebAnalyticsSite => ({
+  host: "sample.example.com",
+  auto_install: true,
+  enabled: true,
+  ...over,
+});
 
 test("analyticsFinding: automatic setup on is clean; a missing host, auto_install off and a switched-off ruleset each file their own finding", () => {
   assert.equal(analyticsFinding(ANALYTICS_SITE, [wa()]), null);
-  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ enabled: null })]), null, "a ruleset switch Cloudflare does not report is not a finding");
-  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ host: "other.example.com", auto_install: false })])?.fingerprint, "live-analytics-missing-sample");
+  assert.equal(
+    analyticsFinding(ANALYTICS_SITE, [wa({ enabled: null })]),
+    null,
+    "a ruleset switch Cloudflare does not report is not a finding",
+  );
+  assert.equal(
+    analyticsFinding(ANALYTICS_SITE, [wa({ host: "other.example.com", auto_install: false })])
+      ?.fingerprint,
+    "live-analytics-missing-sample",
+  );
   assert.equal(analyticsFinding(ANALYTICS_SITE, [])?.fingerprint, "live-analytics-missing-sample");
-  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ auto_install: false })])?.fingerprint, "live-analytics-off-sample");
-  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ auto_install: null })])?.fingerprint, "live-analytics-off-sample", "an unreported setting is not read as on");
-  assert.equal(analyticsFinding(ANALYTICS_SITE, [wa({ enabled: false })])?.fingerprint, "live-analytics-off-sample");
+  assert.equal(
+    analyticsFinding(ANALYTICS_SITE, [wa({ auto_install: false })])?.fingerprint,
+    "live-analytics-off-sample",
+  );
+  assert.equal(
+    analyticsFinding(ANALYTICS_SITE, [wa({ auto_install: null })])?.fingerprint,
+    "live-analytics-off-sample",
+    "an unreported setting is not read as on",
+  );
+  assert.equal(
+    analyticsFinding(ANALYTICS_SITE, [wa({ enabled: false })])?.fingerprint,
+    "live-analytics-off-sample",
+  );
 });
 
 test("the analytics rule takes no path, and reads the account's list once for any number of sites", async () => {
   assert.ok("error" in parseLiveConfig("- site sample analytics /"));
-  const other: OpsSite = { ...SITE, namespace: "other", name: "Other", origin: "https://other.example.com" };
+  const other: OpsSite = {
+    ...SITE,
+    namespace: "other",
+    name: "Other",
+    origin: "https://other.example.com",
+  };
   let reads = 0;
-  const counting = { ...deps({}), analytics: async () => (reads++, [wa(), wa({ host: "other.example.com", auto_install: false })]) };
-  const out = await liveChecks({ body: "- site sample analytics\n- site other analytics" }, [SITE, other], [probe(), probe({ namespace: "other", name: "Other", origin: other.origin })], counting, NOW);
+  const counting = {
+    ...deps({}),
+    analytics: async () => (
+      reads++,
+      [wa(), wa({ host: "other.example.com", auto_install: false })]
+    ),
+  };
+  const out = await liveChecks(
+    { body: "- site sample analytics\n- site other analytics" },
+    [SITE, other],
+    [probe(), probe({ namespace: "other", name: "Other", origin: other.origin })],
+    counting,
+    NOW,
+  );
   assert.equal(reads, 1);
   assert.deepEqual(prints(out.findings), ["live-analytics-off-other"]);
   assert.equal(out.ran, true);
@@ -246,14 +406,29 @@ test("PLANT: an analytics read that fails is an unread finding for the site and 
   const failing = {
     ...deps({}),
     analytics: async (): Promise<WebAnalyticsSite[]> => {
-      throw new Error("the Web Analytics sites list was refused with 403: CF_OPS_TOKEN lacks Account / Account Settings / Read");
+      throw new Error(
+        "the Web Analytics sites list was refused with 403: CF_OPS_TOKEN lacks Account / Account Settings / Read",
+      );
     },
   };
-  const out = await liveChecks({ body: "- site sample analytics" }, [SITE], [probe()], failing, NOW);
+  const out = await liveChecks(
+    { body: "- site sample analytics" },
+    [SITE],
+    [probe()],
+    failing,
+    NOW,
+  );
   assert.deepEqual(prints(out.findings), ["live-analytics-unread-sample"]);
   assert.match(out.findings[0]?.evidence[0] ?? "", /Account Settings \/ Read/);
   assert.equal(out.ran, false);
-  assert.deepEqual(out.summary, { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 1, analytics_read: 0 });
+  assert.deepEqual(out.summary, {
+    pages_expected: 0,
+    pages_read: 0,
+    shas_expected: 0,
+    shas_read: 0,
+    analytics_expected: 1,
+    analytics_read: 0,
+  });
 });
 
 // the sha
@@ -263,30 +438,78 @@ const HEAD = { sha: "b".repeat(40), committed_at: "2026-10-04T10:00:00.000Z" };
 test("shaFinding: equal, a short prefix either way, and a head inside the grace are clean", () => {
   assert.equal(shaFinding(SITE, HEAD.sha, HEAD, NOW), null);
   assert.equal(shaFinding(SITE, HEAD.sha.slice(0, 7), HEAD, NOW), null);
-  assert.equal(shaFinding(SITE, "a".repeat(40), { sha: HEAD.sha, committed_at: new Date(NOW.getTime() - (DEPLOY_GRACE_MINUTES - 1) * 60_000).toISOString() }, NOW), null);
+  assert.equal(
+    shaFinding(
+      SITE,
+      "a".repeat(40),
+      {
+        sha: HEAD.sha,
+        committed_at: new Date(NOW.getTime() - (DEPLOY_GRACE_MINUTES - 1) * 60_000).toISOString(),
+      },
+      NOW,
+    ),
+    null,
+  );
 });
 
 test("PLANT: a deployed sha that is not the head, past the grace, is a finding naming both; so is a site with no sha to compare", () => {
   const f = shaFinding(SITE, "a".repeat(40), HEAD, NOW);
   assert.equal(f?.fingerprint, `live-sha-drift-sample-${HEAD.sha.slice(0, 7)}`);
-  assert.ok(f?.evidence.some((e) => e.includes("a".repeat(40))) && f.evidence.some((e) => e.includes(HEAD.sha)));
-  assert.equal(shaFinding(SITE, "a".repeat(40), { sha: HEAD.sha, committed_at: new Date(NOW.getTime() - (DEPLOY_GRACE_MINUTES + 1) * 60_000).toISOString() }, NOW)?.fingerprint.startsWith("live-sha-drift"), true);
+  assert.ok(
+    f?.evidence.some((e) => e.includes("a".repeat(40))) &&
+      f.evidence.some((e) => e.includes(HEAD.sha)),
+  );
+  assert.equal(
+    shaFinding(
+      SITE,
+      "a".repeat(40),
+      {
+        sha: HEAD.sha,
+        committed_at: new Date(NOW.getTime() - (DEPLOY_GRACE_MINUTES + 1) * 60_000).toISOString(),
+      },
+      NOW,
+    )?.fingerprint.startsWith("live-sha-drift"),
+    true,
+  );
   assert.equal(shaFinding(SITE, null, HEAD, NOW)?.fingerprint, "live-sha-unreported-sample");
-  assert.equal(shaFinding(SITE, "a".repeat(40), { sha: HEAD.sha, committed_at: null }, NOW), null, "a head with no commit time cannot be judged against a grace");
-  assert.equal(shaFinding(SITE, "abc", HEAD, NOW)?.fingerprint.startsWith("live-sha-drift"), true, "a 3 character sha is not a prefix match");
+  assert.equal(
+    shaFinding(SITE, "a".repeat(40), { sha: HEAD.sha, committed_at: null }, NOW),
+    null,
+    "a head with no commit time cannot be judged against a grace",
+  );
+  assert.equal(
+    shaFinding(SITE, "abc", HEAD, NOW)?.fingerprint.startsWith("live-sha-drift"),
+    true,
+    "a 3 character sha is not a prefix match",
+  );
 });
 
 // reading a page
 
 const html = (body: string, init: ResponseInit = {}, url?: string): Response => {
-  const res = new Response(body, { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, ...init });
+  const res = new Response(body, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8" },
+    ...init,
+  });
   if (url) Object.defineProperty(res, "url", { value: url });
   return res;
 };
-const fetchOf = (res: () => Response | Promise<Response>): FetchLike => async () => res();
+const fetchOf =
+  (res: () => Response | Promise<Response>): FetchLike =>
+  async () =>
+    res();
 
 test("readPage returns the HTML and the headers of a 200 page", async () => {
-  const got = await readPage(fetchOf(() => html(page(BEACON), { headers: { "content-type": "text/html", "content-security-policy": "default-src 'self'" } })), SITE.origin, "/");
+  const got = await readPage(
+    fetchOf(() =>
+      html(page(BEACON), {
+        headers: { "content-type": "text/html", "content-security-policy": "default-src 'self'" },
+      }),
+    ),
+    SITE.origin,
+    "/",
+  );
   assert.equal(got.problem, null);
   assert.equal(got.headers?.get("content-security-policy"), "default-src 'self'");
   assert.equal(beaconCount(got.html ?? ""), 1);
@@ -294,17 +517,41 @@ test("readPage returns the HTML and the headers of a 200 page", async () => {
 
 test("readPage reaches only the site's own origin plus the path, with a timeout", async () => {
   const seen: Array<{ url: string; signal: boolean }> = [];
-  await readPage(async (url, init) => { seen.push({ url, signal: init?.signal instanceof AbortSignal }); return html(page("")); }, "https://sample.example.com", "/a/b");
+  await readPage(
+    async (url, init) => {
+      seen.push({ url, signal: init?.signal instanceof AbortSignal });
+      return html(page(""));
+    },
+    "https://sample.example.com",
+    "/a/b",
+  );
   assert.deepEqual(seen, [{ url: "https://sample.example.com/a/b", signal: true }]);
 });
 
 test("PLANT: a page that cannot be judged says why: an error, a 404, a login redirect, not HTML, too large", async () => {
   const cases: Array<[string, FetchLike, RegExp, boolean]> = [
-    ["throws", async () => { throw new Error("connection refused"); }, /no answer: connection refused/, false],
+    [
+      "throws",
+      async () => {
+        throw new Error("connection refused");
+      },
+      /no answer: connection refused/,
+      false,
+    ],
     ["404", fetchOf(() => html("nope", { status: 404 })), /answered 404/, false],
     ["403", fetchOf(() => html("denied", { status: 403 })), /answered 403/, true],
-    ["redirect off site", fetchOf(() => html(page(""), {}, "https://team.cloudflareaccess.com/login")), /redirected off the site to https:\/\/team\.cloudflareaccess\.com/, true],
-    ["json", fetchOf(() => html("{}", { headers: { "content-type": "application/json" } })), /not HTML/, false],
+    [
+      "redirect off site",
+      fetchOf(() => html(page(""), {}, "https://team.cloudflareaccess.com/login")),
+      /redirected off the site to https:\/\/team\.cloudflareaccess\.com/,
+      true,
+    ],
+    [
+      "json",
+      fetchOf(() => html("{}", { headers: { "content-type": "application/json" } })),
+      /not HTML/,
+      false,
+    ],
     ["huge", fetchOf(() => html("x".repeat(MAX_PAGE_BYTES + 1))), /larger than/, false],
   ];
   for (const [name, impl, why, gated] of cases) {
@@ -317,9 +564,16 @@ test("PLANT: a page that cannot be judged says why: an error, a 404, a login red
 
 // a whole pass
 
-const ANALYTICS_ON: WebAnalyticsSite[] = [{ host: "sample.example.com", auto_install: true, enabled: true }];
-const deps = (pages: Record<string, () => Response>, head = HEAD, analytics: WebAnalyticsSite[] = ANALYTICS_ON) => ({
-  fetchImpl: (async (url: string) => (pages[new URL(url).pathname] ?? (() => html("missing", { status: 404 })))()) as FetchLike,
+const ANALYTICS_ON: WebAnalyticsSite[] = [
+  { host: "sample.example.com", auto_install: true, enabled: true },
+];
+const deps = (
+  pages: Record<string, () => Response>,
+  head = HEAD,
+  analytics: WebAnalyticsSite[] = ANALYTICS_ON,
+) => ({
+  fetchImpl: (async (url: string) =>
+    (pages[new URL(url).pathname] ?? (() => html("missing", { status: 404 })))()) as FetchLike,
   head: async () => head,
   analytics: async () => analytics,
 });
@@ -333,7 +587,18 @@ const CONFIG = [
 
 test("no document: nothing is read and the check does not run", async () => {
   const out = await liveChecks(null, [SITE], [probe()], deps({}), NOW);
-  assert.deepEqual(out, { findings: [], ran: false, summary: { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 } });
+  assert.deepEqual(out, {
+    findings: [],
+    ran: false,
+    summary: {
+      pages_expected: 0,
+      pages_read: 0,
+      shas_expected: 0,
+      shas_read: 0,
+      analytics_expected: 0,
+      analytics_read: 0,
+    },
+  });
 });
 
 test("an invalid document is one finding, and the check does not run", async () => {
@@ -347,12 +612,23 @@ test("a clean pass reads every page and sha, files nothing, and counts what it r
     { body: CONFIG },
     [SITE],
     [probe({ sha: HEAD.sha })],
-    deps({ "/": () => html(page(BEACON)), "/pricing": () => html(page(BEACON)), "/account": () => html(page("")) }),
-    NOW
+    deps({
+      "/": () => html(page(BEACON)),
+      "/pricing": () => html(page(BEACON)),
+      "/account": () => html(page("")),
+    }),
+    NOW,
   );
   assert.deepEqual(out.findings, []);
   assert.equal(out.ran, true);
-  assert.deepEqual(out.summary, { pages_expected: 3, pages_read: 3, shas_expected: 1, shas_read: 1, analytics_expected: 1, analytics_read: 1 });
+  assert.deepEqual(out.summary, {
+    pages_expected: 3,
+    pages_read: 3,
+    shas_expected: 1,
+    shas_read: 1,
+    analytics_expected: 1,
+    analytics_read: 1,
+  });
 });
 
 test("a pass over a dirty site files each finding and still counts every page read", async () => {
@@ -360,8 +636,16 @@ test("a pass over a dirty site files each finding and still counts every page re
     { body: CONFIG },
     [SITE],
     [probe()],
-    deps({ "/": () => html(page("")), "/pricing": () => html(page(BEACON)), "/account": () => html(page(BEACON)) }, HEAD, [{ host: "sample.example.com", auto_install: false, enabled: true }]),
-    NOW
+    deps(
+      {
+        "/": () => html(page("")),
+        "/pricing": () => html(page(BEACON)),
+        "/account": () => html(page(BEACON)),
+      },
+      HEAD,
+      [{ host: "sample.example.com", auto_install: false, enabled: true }],
+    ),
+    NOW,
   );
   assert.deepEqual(prints(out.findings).sort(), [
     "live-analytics-off-sample",
@@ -373,10 +657,23 @@ test("a pass over a dirty site files each finding and still counts every page re
 });
 
 test("an unread public page is its own finding and leaves the check un-run, so nothing is cleared on no evidence", async () => {
-  const out = await liveChecks({ body: "- site sample beacon /" }, [SITE], [probe()], deps({ "/": () => html("oops", { status: 502 }) }), NOW);
+  const out = await liveChecks(
+    { body: "- site sample beacon /" },
+    [SITE],
+    [probe()],
+    deps({ "/": () => html("oops", { status: 502 }) }),
+    NOW,
+  );
   assert.deepEqual(prints(out.findings), ["live-page-unread-sample-root"]);
   assert.equal(out.ran, false);
-  assert.deepEqual(out.summary, { pages_expected: 1, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 });
+  assert.deepEqual(out.summary, {
+    pages_expected: 1,
+    pages_read: 0,
+    shas_expected: 0,
+    shas_read: 0,
+    analytics_expected: 0,
+    analytics_read: 0,
+  });
 });
 
 test("a page that must carry no beacon and answers with a login redirect or 403 passes as read", async () => {
@@ -385,8 +682,11 @@ test("a page that must carry no beacon and answers with a login redirect or 403 
     { body },
     [SITE],
     [probe()],
-    deps({ "/account": () => html(page(""), {}, "https://team.cloudflareaccess.com/login"), "/admin": () => html("no", { status: 403 }) }),
-    NOW
+    deps({
+      "/account": () => html(page(""), {}, "https://team.cloudflareaccess.com/login"),
+      "/admin": () => html("no", { status: 403 }),
+    }),
+    NOW,
   );
   assert.deepEqual(out.findings, []);
   assert.equal(out.ran, true);
@@ -399,8 +699,21 @@ test("a site that is down is the site-down check's finding: its pages are not re
     { body: CONFIG },
     [SITE],
     [probe({ state: "down", sha: null })],
-    { fetchImpl: (async (url: string) => { calls.push(url); return html(page("")); }) as FetchLike, head: async () => { calls.push("head"); return HEAD; }, analytics: async () => { calls.push("analytics"); return ANALYTICS_ON; } },
-    NOW
+    {
+      fetchImpl: (async (url: string) => {
+        calls.push(url);
+        return html(page(""));
+      }) as FetchLike,
+      head: async () => {
+        calls.push("head");
+        return HEAD;
+      },
+      analytics: async () => {
+        calls.push("analytics");
+        return ANALYTICS_ON;
+      },
+    },
+    NOW,
   );
   assert.deepEqual(calls, []);
   assert.deepEqual(out.findings, []);
@@ -408,14 +721,40 @@ test("a site that is down is the site-down check's finding: its pages are not re
 });
 
 test("a rule for a site that is not configured is a finding, since it can never run", async () => {
-  const out = await liveChecks({ body: "- site elsewhere beacon /" }, [SITE], [probe()], deps({}), NOW);
+  const out = await liveChecks(
+    { body: "- site elsewhere beacon /" },
+    [SITE],
+    [probe()],
+    deps({}),
+    NOW,
+  );
   assert.deepEqual(prints(out.findings), ["live-config-unknown-site-elsewhere"]);
 });
 
 test("PLANT: two rules for one unknown site, or one page named twice, file one finding, not two", async () => {
-  const unknown = await liveChecks({ body: "- site elsewhere beacon /\n- site elsewhere nobeacon /account" }, [SITE], [probe()], deps({}), NOW);
+  const unknown = await liveChecks(
+    { body: "- site elsewhere beacon /\n- site elsewhere nobeacon /account" },
+    [SITE],
+    [probe()],
+    deps({}),
+    NOW,
+  );
   assert.deepEqual(prints(unknown.findings), ["live-config-unknown-site-elsewhere"]);
-  const twice = await liveChecks({ body: "- site sample beacon /\n- site sample beacon /" }, [SITE], [probe()], deps({ "/": () => html(page(BEACON), { headers: { "content-type": "text/html", "content-security-policy": "script-src 'self'; connect-src 'self'" } }) }), NOW);
+  const twice = await liveChecks(
+    { body: "- site sample beacon /\n- site sample beacon /" },
+    [SITE],
+    [probe()],
+    deps({
+      "/": () =>
+        html(page(BEACON), {
+          headers: {
+            "content-type": "text/html",
+            "content-security-policy": "script-src 'self'; connect-src 'self'",
+          },
+        }),
+    }),
+    NOW,
+  );
   assert.deepEqual(prints(twice.findings), ["live-csp-beacon-sample-root"]);
   assert.equal(twice.summary.pages_read, 2, "both rules were read; only their finding is one");
 });
@@ -424,7 +763,14 @@ test("PLANT: two rules for one unknown site, or one page named twice, file one f
 
 test("the live checks are a watcher check, and every live-* fingerprint belongs to it", () => {
   assert.ok((WATCHER_CHECKS as readonly string[]).includes("live checks"));
-  for (const fingerprint of ["live-analytics-off-a", "live-headers-a-root", "live-csp-beacon-a-root", "live-sha-drift-a-1234567", "live-config-invalid", "live-page-unread-a-root"]) {
+  for (const fingerprint of [
+    "live-analytics-off-a",
+    "live-headers-a-root",
+    "live-csp-beacon-a-root",
+    "live-sha-drift-a-1234567",
+    "live-config-invalid",
+    "live-page-unread-a-root",
+  ]) {
     assert.equal(owningCheck(fingerprint), "live checks", fingerprint);
   }
 });
@@ -434,11 +780,25 @@ test("the live checks are a watcher check, and every live-* fingerprint belongs 
 // live checks are all that runs here.
 function liveDb(doc: string | null) {
   const rows = [
-    { namespace: "sample", name: "Sample", origin: "https://sample.example.com", health_path: null, platform: "cloudflare", script: null, self_probe: 0, revision: 1, updated_at: "2026-10-04 00:00:00" },
+    {
+      namespace: "sample",
+      name: "Sample",
+      origin: "https://sample.example.com",
+      health_path: null,
+      platform: "cloudflare",
+      script: null,
+      self_probe: 0,
+      revision: 1,
+      updated_at: "2026-10-04 00:00:00",
+    },
   ];
   return {
     prepare: (sql: string) => {
-      if (/FROM ops_sites/i.test(sql)) return { bind: () => ({ all: async () => ({ results: rows }) }), all: async () => ({ results: rows }) };
+      if (/FROM ops_sites/i.test(sql))
+        return {
+          bind: () => ({ all: async () => ({ results: rows }) }),
+          all: async () => ({ results: rows }),
+        };
       if (/FROM documents WHERE namespace = \?1 AND path = \?2/i.test(sql)) {
         return { bind: () => ({ first: async () => (doc === null ? null : { body: doc }) }) };
       }
@@ -452,7 +812,7 @@ async function gather(doc: string | null, pages: Record<string, () => Response>)
   const impl = async (url: string) => {
     requested.push(url);
     const path = new URL(url).pathname;
-    return (pages[path] ?? (() => html(page("")))) ();
+    return (pages[path] ?? (() => html(page(""))))();
   };
   const log: string[] = [];
   const original = { log: console.log, error: console.error };
@@ -461,9 +821,17 @@ async function gather(doc: string | null, pages: Record<string, () => Response>)
   try {
     let result: Awaited<ReturnType<typeof gatherFindings>> | null = null;
     await withFetch({}, async () => {
-      result = await gatherFindings(fakeEnv({ DB: liveDb(doc), APP_KV: fakeKv({}).kv }), NOW, impl as typeof fetch);
+      result = await gatherFindings(
+        fakeEnv({ DB: liveDb(doc), APP_KV: fakeKv({}).kv }),
+        NOW,
+        impl as typeof fetch,
+      );
     });
-    return { gathered: result as unknown as Awaited<ReturnType<typeof gatherFindings>>, requested, log };
+    return {
+      gathered: result as unknown as Awaited<ReturnType<typeof gatherFindings>>,
+      requested,
+      log,
+    };
   } finally {
     console.log = original.log;
     console.error = original.error;
@@ -471,16 +839,30 @@ async function gather(doc: string | null, pages: Record<string, () => Response>)
 }
 
 test("through gatherFindings: a document in the store makes the check run and its findings reach the queue, with the count logged", async () => {
-  const { gathered, requested, log } = await gather("- site sample beacon /\n- site sample nobeacon /account", {
-    "/": () => html(page(BEACON), { headers: { "content-type": "text/html", "content-security-policy": "script-src 'self'; connect-src 'self'" } }),
-    "/account": () => html(page(BEACON)),
-  });
+  const { gathered, requested, log } = await gather(
+    "- site sample beacon /\n- site sample nobeacon /account",
+    {
+      "/": () =>
+        html(page(BEACON), {
+          headers: {
+            "content-type": "text/html",
+            "content-security-policy": "script-src 'self'; connect-src 'self'",
+          },
+        }),
+      "/account": () => html(page(BEACON)),
+    },
+  );
   const fps = gathered.findings.map((f) => f.fingerprint);
   assert.ok(fps.includes("live-csp-beacon-sample-root"), fps.join(", "));
   assert.ok(fps.includes("live-beacon-present-sample-account"), fps.join(", "));
   assert.ok(gathered.ran.has("live checks"));
   assert.ok(requested.includes("https://sample.example.com/account"));
-  assert.ok(log.some((l) => JSON.parse(l).message === "WATCHER_LIVE pages 2/2 shas 0/0 analytics 0/0 findings 2"), log.join(" | "));
+  assert.ok(
+    log.some(
+      (l) => JSON.parse(l).message === "WATCHER_LIVE pages 2/2 shas 0/0 analytics 0/0 findings 2",
+    ),
+    log.join(" | "),
+  );
   const finding = gathered.findings.find((f) => f.fingerprint === "live-csp-beacon-sample-root");
   assert.match(finding?.title ?? "", /^Watcher: .*\[live-csp-beacon-sample-root\]$/);
 });
@@ -494,5 +876,8 @@ test("PLANT: with no live-checks document the pass fetches no page and the check
   // not the site.)
   const toSite = requested.filter((u) => new URL(u).hostname === "sample.example.com");
   assert.ok(toSite.length > 0, "the probe's request was not seen, so this proves nothing");
-  assert.ok(toSite.every((u) => u === "https://sample.example.com/"), toSite.join(", "));
+  assert.ok(
+    toSite.every((u) => u === "https://sample.example.com/"),
+    toSite.join(", "),
+  );
 });

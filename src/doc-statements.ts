@@ -1,4 +1,3 @@
-
 import { normalizeDashes } from "./normalize";
 import { auditStatement, snapshotLive } from "./store-guards";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
@@ -29,7 +28,7 @@ export async function docStatements(
     // Who the audit row names: the job's actor, because audit_log is the one place that
     // answers who did it.
     actor: string;
-  }
+  },
 ): Promise<D1PreparedStatement[]> {
   // Server-side dash normalization, as capsid_write_doc applies.
   const body = normalizeDashes(doc.body, "prose");
@@ -46,16 +45,16 @@ export async function docStatements(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(namespace, path) DO UPDATE SET
            title = ?3, body = excluded.body, type = ?5, tags = ?6, status = ?7,
-           updated_at = datetime('now')`
+           updated_at = datetime('now')`,
       )
-      .bind(doc.namespace, doc.path, title, body, doc.type, doc.tags, doc.status ?? "published")
+      .bind(doc.namespace, doc.path, title, body, doc.type, doc.tags, doc.status ?? "published"),
   );
   statements.push(
     auditStatement(db, doc.actor, doc.action, doc.namespace, doc.path, {
       bytes: body.length,
       sha256: await sha256Hex(body),
       updated: Boolean(doc.prior),
-    })
+    }),
   );
   return statements;
 }
@@ -63,7 +62,7 @@ export async function docStatements(
 export async function priorDoc(
   db: D1Database,
   namespace: string,
-  path: string
+  path: string,
 ): Promise<{ id: number; title: string | null; body: string | null } | null> {
   return db
     .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
@@ -80,7 +79,7 @@ export function systemAudit(
   action: string,
   namespace: string | null,
   params: unknown,
-  actor: string = SYSTEM_ACTOR
+  actor: string = SYSTEM_ACTOR,
 ): D1PreparedStatement {
   return auditStatement(db, actor, action, namespace, null, params);
 }

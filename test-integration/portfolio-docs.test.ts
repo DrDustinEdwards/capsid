@@ -12,7 +12,15 @@ import type { Agent } from "../src/agents";
 function carrelDriver(): Agent {
   const scopes = defaultScopes(["carrel"]);
   scopes.grants = ["read", "write"];
-  return { id: "agent_0123456789ab", name: "carrel-driver", kind: "driver", actor: "agent:carrel-driver", scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name: "carrel-driver",
+    kind: "driver",
+    actor: "agent:carrel-driver",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 async function call(name: string, args: Record<string, unknown>) {
@@ -20,7 +28,10 @@ async function call(name: string, args: Record<string, unknown>) {
   const client = new Client({ name: "t", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
-  const result = (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+  const result = (await client.callTool({ name, arguments: args })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
   await client.close();
   return result;
 }
@@ -31,14 +42,30 @@ const ok = async (name: string, args: Record<string, unknown>) => {
   return JSON.parse(result.content[0].text);
 };
 
-const ALLOWED = ["archive/decisions-vol-7.md", "conventions.md", "core.md", "rulings/remove-improve-loop-2026-10-19.md"];
-const DENIED = ["archive/decisions-notes.md", "decisions-vol-5.md", "decisions.md", "policy/gates.md", "research/plan.md", "rulings-secret/plan.md", "rulings/deeper/nested.md", "decisions-vol-x.md"];
+const ALLOWED = [
+  "archive/decisions-vol-7.md",
+  "conventions.md",
+  "core.md",
+  "rulings/remove-improve-loop-2026-10-19.md",
+];
+const DENIED = [
+  "archive/decisions-notes.md",
+  "decisions-vol-5.md",
+  "decisions.md",
+  "policy/gates.md",
+  "research/plan.md",
+  "rulings-secret/plan.md",
+  "rulings/deeper/nested.md",
+  "decisions-vol-x.md",
+];
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM audit_log").run();
   await env.DB.prepare("DELETE FROM documents").run();
   const doc = (ns: string, path: string) =>
-    env.DB.prepare("INSERT INTO documents (namespace, path, title, body, type, status) VALUES (?1, ?2, ?2, 'the gatepost rule', 'decision', 'published')")
+    env.DB.prepare(
+      "INSERT INTO documents (namespace, path, title, body, type, status) VALUES (?1, ?2, ?2, 'the gatepost rule', 'decision', 'published')",
+    )
       .bind(ns, path)
       .run();
   for (const path of [...ALLOWED, ...DENIED]) await doc("capsid", path);
@@ -52,7 +79,11 @@ describe("portfolio documents", () => {
   });
 
   it("search in capsid returns only portfolio documents, though every capsid document matches", async () => {
-    const out = await ok("capsid_find_docs", { action: "search", namespace: "capsid", query: "gatepost" });
+    const out = await ok("capsid_find_docs", {
+      action: "search",
+      namespace: "capsid",
+      query: "gatepost",
+    });
     expect(out.documents.map((d: { path: string }) => d.path).sort()).toEqual(ALLOWED);
   });
 
@@ -62,7 +93,11 @@ describe("portfolio documents", () => {
   });
 
   it("a read outside the list is refused", async () => {
-    const result = await call("capsid_read_doc", { action: "read", namespace: "capsid", path: "policy/gates.md" });
+    const result = await call("capsid_read_doc", {
+      action: "read",
+      namespace: "capsid",
+      path: "policy/gates.md",
+    });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/not scoped to the 'capsid' namespace/);
   });

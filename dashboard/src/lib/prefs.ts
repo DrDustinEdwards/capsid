@@ -1,7 +1,11 @@
 import { useSyncExternalStore } from "react";
 import { readPref, writePref } from "capsomer/behavior/shell";
 import { SINGLE_KEYS_PREF, setSingleKeys, singleKeysOn } from "capsomer/behavior/shortcuts";
-import { applyStoredTheme, toggleTheme as toggleCapTheme, type ThemeChoice } from "capsomer/behavior/theme-switch";
+import {
+  applyStoredTheme,
+  toggleTheme as toggleCapTheme,
+  type ThemeChoice,
+} from "capsomer/behavior/theme-switch";
 
 // Per-viewer conveniences in localStorage, through Capsomer: the theme (theme-switch), the
 // side menu (admin-shell) and single-key shortcuts (shortcuts). Blocked storage falls back to
@@ -22,7 +26,8 @@ const OLD_SINGLE_KEYS_PREF = "wf-single-keys";
 // Run before first paint.
 export function applySavedTheme(): void {
   applyStoredTheme(THEME_PREF);
-  if (readPref(OLD_SINGLE_KEYS_PREF) === "off" && readPref(SINGLE_KEYS_PREF) === null) setSingleKeys(false);
+  if (readPref(OLD_SINGLE_KEYS_PREF) === "off" && readPref(SINGLE_KEYS_PREF) === null)
+    setSingleKeys(false);
 }
 
 export function toggleTheme(): ThemeChoice {

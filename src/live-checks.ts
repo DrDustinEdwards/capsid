@@ -71,7 +71,8 @@ export function parseLiveConfig(body: string): LiveConfig {
     const where = `line ${index + 1} (${line.slice(0, 80)})`;
     const parts = line.slice("- site".length).trim().split(/\s+/);
     const [namespace, kind, path, ...rest] = parts;
-    if (!namespace || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(namespace)) return { error: `${where}: no site namespace` };
+    if (!namespace || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(namespace))
+      return { error: `${where}: no site namespace` };
     if (kind === "analytics") {
       if (path !== undefined) return { error: `${where}: analytics takes no path` };
       rules.push({ namespace, kind: "analytics" });
@@ -81,19 +82,28 @@ export function parseLiveConfig(body: string): LiveConfig {
       if (path !== undefined) return { error: `${where}: sha takes no path` };
       // Capsid's own deploy is the "master head" check; a second finding about the same
       // thing would be two jobs for one problem.
-      if (namespace === "capsid") return { error: `${where}: capsid's deployed sha is already checked by the master head check` };
+      if (namespace === "capsid")
+        return {
+          error: `${where}: capsid's deployed sha is already checked by the master head check`,
+        };
       rules.push({ namespace, kind: "sha" });
       continue;
     }
-    if (kind !== "beacon" && kind !== "nobeacon" && kind !== "headers") return { error: `${where}: the rule is beacon, nobeacon, headers, analytics or sha` };
+    if (kind !== "beacon" && kind !== "nobeacon" && kind !== "headers")
+      return { error: `${where}: the rule is beacon, nobeacon, headers, analytics or sha` };
     if (path === undefined || rest.length > 0 || !PATH_PATTERN.test(path)) {
-      return { error: `${where}: ${kind} needs one path that starts with / and holds only letters, digits and . _ ~ / % - (no query, no host)` };
+      return {
+        error: `${where}: ${kind} needs one path that starts with / and holds only letters, digits and . _ ~ / % - (no query, no host)`,
+      };
     }
     rules.push({ namespace, kind, path });
   }
-  if (rules.filter((r) => r.kind === "analytics").length > MAX_ANALYTICS_RULES) return { error: `more than ${MAX_ANALYTICS_RULES} analytics rules` };
-  if (rules.filter((r) => r.kind !== "sha" && r.kind !== "analytics").length > MAX_PAGE_RULES) return { error: `more than ${MAX_PAGE_RULES} page rules; each is a fetch inside one pass` };
-  if (rules.filter((r) => r.kind === "sha").length > MAX_SHA_RULES) return { error: `more than ${MAX_SHA_RULES} sha rules; each is a GitHub read inside one pass` };
+  if (rules.filter((r) => r.kind === "analytics").length > MAX_ANALYTICS_RULES)
+    return { error: `more than ${MAX_ANALYTICS_RULES} analytics rules` };
+  if (rules.filter((r) => r.kind !== "sha" && r.kind !== "analytics").length > MAX_PAGE_RULES)
+    return { error: `more than ${MAX_PAGE_RULES} page rules; each is a fetch inside one pass` };
+  if (rules.filter((r) => r.kind === "sha").length > MAX_SHA_RULES)
+    return { error: `more than ${MAX_SHA_RULES} sha rules; each is a GitHub read inside one pass` };
   return { rules };
 }
 
@@ -106,8 +116,10 @@ export function beaconCount(html: string): number {
   return [...html.matchAll(/<script\b[^>]*>/gi)].filter((tag) => BEACON_SRC.test(tag[0])).length;
 }
 
-const BEACON_SRC = new RegExp(`\\bsrc\\s*=\\s*["']?((?:https?:)?//${BEACON_SCRIPT_HOST.replace(/\./g, "\\.")}/[^"'\\s>]*)`, "i");
-
+const BEACON_SRC = new RegExp(
+  `\\bsrc\\s*=\\s*["']?((?:https?:)?//${BEACON_SCRIPT_HOST.replace(/\./g, "\\.")}/[^"'\\s>]*)`,
+  "i",
+);
 
 // FINDINGS.
 
@@ -119,7 +131,12 @@ export interface LiveFinding {
 }
 
 /** A page's path as one fingerprint-safe word: "/" is root, "/a/b" is a-b. */
-export const slug = (path: string): string => path.replace(/^\/+|\/+$/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "root";
+export const slug = (path: string): string =>
+  path
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase() || "root";
 
 export interface PageRead {
   status: number | null;
@@ -136,7 +153,11 @@ export interface PageRead {
 /** The findings one beacon or nobeacon rule produces from one page read. A page that
  *  could not be read yields none about the beacon (not read is not absent); the caller
  *  reports it as unread. */
-export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin">, rule: Extract<LiveRule, { path: string }>, page: PageRead): LiveFinding[] {
+export function pageFindings(
+  site: Pick<OpsSite, "namespace" | "name" | "origin">,
+  rule: Extract<LiveRule, { path: string }>,
+  page: PageRead,
+): LiveFinding[] {
   if (page.problem !== null || page.html === null || page.headers === null) return [];
   const url = `${site.origin}${rule.path}`;
   const where = slug(rule.path);
@@ -145,14 +166,21 @@ export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin"
     // The package's own check, graded against what the site declared in the registry (site-runtime ./sites), so a
     // declared deviation is not a finding and the watcher holds no second copy of either.
     const results = checkSecurityHeaders(page.headers, { site: siteForOrigin(site.origin) });
-    if (results.length === 0) throw new Error("checkSecurityHeaders returned no results, so a pass would mean nothing was checked");
+    if (results.length === 0)
+      throw new Error(
+        "checkSecurityHeaders returned no results, so a pass would mean nothing was checked",
+      );
     const failed = failures(results);
     if (failed.length > 0) {
       out.push({
         namespace: site.namespace,
         fingerprint: `live-headers-${site.namespace}-${where}`,
         headline: `${site.name} is missing security headers on a page that must carry them`,
-        evidence: [`page: ${url}`, `${failed.length} of ${results.length} header checks failed`, ...failed.slice(0, 12).map((r) => `${r.name}: ${r.detail}`)],
+        evidence: [
+          `page: ${url}`,
+          `${failed.length} of ${results.length} header checks failed`,
+          ...failed.slice(0, 12).map((r) => `${r.name}: ${r.detail}`),
+        ],
       });
     }
     return out;
@@ -164,14 +192,23 @@ export function pageFindings(site: Pick<OpsSite, "namespace" | "name" | "origin"
         namespace: site.namespace,
         fingerprint: `live-beacon-present-${site.namespace}-${where}`,
         headline: `${site.name} carries the Web Analytics beacon on a page that must not`,
-        evidence: [`page: ${url}`, `beacon scripts in the delivered HTML: ${count}`, "Conventions 7.9 keeps private and signed-in pages out of analytics. Cache-Control: no-transform stops Cloudflare injecting it."],
+        evidence: [
+          `page: ${url}`,
+          `beacon scripts in the delivered HTML: ${count}`,
+          "Conventions 7.9 keeps private and signed-in pages out of analytics. Cache-Control: no-transform stops Cloudflare injecting it.",
+        ],
       });
     }
     return out;
   }
   // A beacon rule: site-runtime's C15, the beacon's script path prefix and its report to the site itself, graded as
   // if the site declared cloudflareWebAnalytics, so the watcher holds no second CSP parser.
-  const blocked = failures(checkSecurityHeaders(page.headers, { site: siteForOrigin(site.origin), cloudflareWebAnalytics: true })).filter((r) => r.id === "C15");
+  const blocked = failures(
+    checkSecurityHeaders(page.headers, {
+      site: siteForOrigin(site.origin),
+      cloudflareWebAnalytics: true,
+    }),
+  ).filter((r) => r.id === "C15");
   if (blocked.length > 0) {
     out.push({
       namespace: site.namespace,
@@ -189,18 +226,22 @@ export function shaFinding(
   site: Pick<OpsSite, "namespace" | "name">,
   deployed: string | null,
   head: { sha: string; committed_at: string | null },
-  now: Date
+  now: Date,
 ): LiveFinding | null {
   if (deployed === null) {
     return {
       namespace: site.namespace,
       fingerprint: `live-sha-unreported-${site.namespace}`,
       headline: `${site.name} is set to be checked against its default branch but reports no deployed sha`,
-      evidence: ["The site's health route did not report a sha, so the rule in capsid/policy/live-checks.md cannot be judged.", "Either the route does not report one or the rule should go."],
+      evidence: [
+        "The site's health route did not report a sha, so the rule in capsid/policy/live-checks.md cannot be judged.",
+        "Either the route does not report one or the rule should go.",
+      ],
     };
   }
   // A health route may report a short sha; either side may be the prefix.
-  if (deployed.length >= 7 && (head.sha.startsWith(deployed) || deployed.startsWith(head.sha))) return null;
+  if (deployed.length >= 7 && (head.sha.startsWith(deployed) || deployed.startsWith(head.sha)))
+    return null;
   const committed = head.committed_at ? Date.parse(head.committed_at) : Number.NaN;
   if (Number.isNaN(committed)) return null;
   const minutes = (now.getTime() - committed) / MINUTE_MS;
@@ -221,7 +262,10 @@ export function shaFinding(
 /** The Web Analytics finding for one site, or null. A Worker cannot see the beacon the edge
  *  injects, so what is read is the setting that makes Cloudflare inject it: the site's
  *  host has automatic setup on, and its ruleset is not switched off. */
-export function analyticsFinding(site: Pick<OpsSite, "namespace" | "name" | "origin">, sites: readonly WebAnalyticsSite[]): LiveFinding | null {
+export function analyticsFinding(
+  site: Pick<OpsSite, "namespace" | "name" | "origin">,
+  sites: readonly WebAnalyticsSite[],
+): LiveFinding | null {
   const host = new URL(site.origin).hostname.toLowerCase();
   const entry = sites.find((s) => s.host === host);
   if (!entry) {
@@ -229,7 +273,11 @@ export function analyticsFinding(site: Pick<OpsSite, "namespace" | "name" | "ori
       namespace: site.namespace,
       fingerprint: `live-analytics-missing-${site.namespace}`,
       headline: `${site.name}'s host has no Web Analytics site, so no traffic is counted`,
-      evidence: [`host: ${host}`, `${sites.length} Web Analytics sites in the account, none for this host`, "Add the host under Web Analytics in the Cloudflare dashboard, with automatic setup."],
+      evidence: [
+        `host: ${host}`,
+        `${sites.length} Web Analytics sites in the account, none for this host`,
+        "Add the host under Web Analytics in the Cloudflare dashboard, with automatic setup.",
+      ],
     };
   }
   if (entry.auto_install === true && entry.enabled !== false) return null;
@@ -237,7 +285,11 @@ export function analyticsFinding(site: Pick<OpsSite, "namespace" | "name" | "ori
     namespace: site.namespace,
     fingerprint: `live-analytics-off-${site.namespace}`,
     headline: `${site.name}'s Web Analytics automatic setup is off`,
-    evidence: [`host: ${host}`, `auto_install: ${entry.auto_install}, ruleset enabled: ${entry.enabled}`, "Cloudflare injects the beacon only with automatic setup on, so no traffic is counted for this host."],
+    evidence: [
+      `host: ${host}`,
+      `auto_install: ${entry.auto_install}, ruleset enabled: ${entry.enabled}`,
+      "Cloudflare injects the beacon only with automatic setup on, so no traffic is counted for this host.",
+    ],
   };
 }
 
@@ -248,8 +300,18 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 /** One GET of a site's page. A page that cannot be judged says why in `problem`: an
  *  error, a non-2xx answer, a redirect off the site (a login), a body that is not HTML,
  *  or one past the size bound. None of those is evidence about the beacon. */
-export async function readPage(fetchImpl: FetchLike, origin: string, path: string): Promise<PageRead> {
-  const unread = (status: number | null, problem: string, gated = false): PageRead => ({ status, headers: null, html: null, problem, gated });
+export async function readPage(
+  fetchImpl: FetchLike,
+  origin: string,
+  path: string,
+): Promise<PageRead> {
+  const unread = (status: number | null, problem: string, gated = false): PageRead => ({
+    status,
+    headers: null,
+    html: null,
+    problem,
+    gated,
+  });
   let res: Response;
   try {
     res = await fetchImpl(`${origin}${path}`, {
@@ -259,7 +321,10 @@ export async function readPage(fetchImpl: FetchLike, origin: string, path: strin
       signal: callSignal(PAGE_TIMEOUT_MS),
     });
   } catch (err) {
-    return unread(null, `no answer: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`);
+    return unread(
+      null,
+      `no answer: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`,
+    );
   }
   if (res.url) {
     const finalOrigin = new URL(res.url).origin;
@@ -278,16 +343,28 @@ export async function readPage(fetchImpl: FetchLike, origin: string, path: strin
     return unread(res.status, `content-type is ${type || "absent"}, not HTML`);
   }
   const text = await readCapped(res, MAX_PAGE_BYTES);
-  if (text === null) return unread(res.status, `page is larger than ${MAX_PAGE_BYTES} bytes, so a beacon count over it would be a guess`);
+  if (text === null)
+    return unread(
+      res.status,
+      `page is larger than ${MAX_PAGE_BYTES} bytes, so a beacon count over it would be a guess`,
+    );
   return { status: res.status, headers: res.headers, html: text, problem: null, gated: false };
 }
 
 /** The default branch's head sha and when it was committed. */
-export async function defaultBranchHead(env: Env, namespace: string): Promise<{ sha: string; committed_at: string | null }> {
+export async function defaultBranchHead(
+  env: Env,
+  namespace: string,
+): Promise<{ sha: string; committed_at: string | null }> {
   const { owner, repo } = await resolveRepo(env, namespace);
   const branch = await getDefaultBranch(env, owner, repo);
   const sha = await getRefSha(env, owner, repo, branch);
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/commits/${encodeURIComponent(sha)}`);
+  const resp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/commits/${encodeURIComponent(sha)}`,
+  );
   if (!resp.ok) throw new Error(`commit lookup failed for ${sha.slice(0, 7)} (${resp.status})`);
   const body = (await resp.json()) as { commit?: { committer?: { date?: string } | null } };
   return { sha, committed_at: body.commit?.committer?.date ?? null };
@@ -311,11 +388,20 @@ export interface LiveResult {
   summary: LiveSummary;
 }
 
-const NOTHING: LiveSummary = { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 };
+const NOTHING: LiveSummary = {
+  pages_expected: 0,
+  pages_read: 0,
+  shas_expected: 0,
+  shas_read: 0,
+  analytics_expected: 0,
+  analytics_read: 0,
+};
 
 export async function readLiveConfig(db: D1Database): Promise<{ body: string } | null> {
   const row = await db
-    .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2 AND status = 'published'")
+    .prepare(
+      "SELECT body FROM documents WHERE namespace = ?1 AND path = ?2 AND status = 'published'",
+    )
     .bind(LIVE_CHECKS_NAMESPACE, LIVE_CHECKS_PATH)
     .first<{ body: string | null }>();
   return row && row.body !== null ? { body: row.body } : null;
@@ -339,7 +425,7 @@ export async function liveChecks(
   sites: readonly OpsSite[],
   probes: readonly SiteProbe[],
   deps: LiveDeps,
-  now: Date
+  now: Date,
 ): Promise<LiveResult> {
   if (config === null) return { findings: [], ran: false, summary: NOTHING };
   const parsed = parseLiveConfig(config.body);
@@ -350,7 +436,10 @@ export async function liveChecks(
           namespace: LIVE_CHECKS_NAMESPACE,
           fingerprint: "live-config-invalid",
           headline: "capsid/policy/live-checks.md does not parse, so no live check is running",
-          evidence: [parsed.error, "Fix the line named; the check reads the document again every pass."],
+          evidence: [
+            parsed.error,
+            "Fix the line named; the check reads the document again every pass.",
+          ],
         },
       ],
       ran: false,
@@ -361,7 +450,14 @@ export async function liveChecks(
   const bySite = new Map(sites.map((s) => [s.namespace, s]));
   const probeFor = new Map(probes.map((p) => [p.namespace, p]));
   let analyticsRead: Promise<{ sites: WebAnalyticsSite[] } | { problem: string }> | undefined;
-  const summary: LiveSummary = { pages_expected: 0, pages_read: 0, shas_expected: 0, shas_read: 0, analytics_expected: 0, analytics_read: 0 };
+  const summary: LiveSummary = {
+    pages_expected: 0,
+    pages_read: 0,
+    shas_expected: 0,
+    shas_read: 0,
+    analytics_expected: 0,
+    analytics_read: 0,
+  };
 
   for (const rule of parsed.rules) {
     const site = bySite.get(rule.namespace);
@@ -370,19 +466,25 @@ export async function liveChecks(
         namespace: LIVE_CHECKS_NAMESPACE,
         fingerprint: `live-config-unknown-site-${rule.namespace}`,
         headline: `capsid/policy/live-checks.md names a site that is not configured: ${rule.namespace}`,
-        evidence: ["A rule for a site with no origin in Portal Settings never runs.", "Add the site there, or remove its lines."],
+        evidence: [
+          "A rule for a site with no origin in Portal Settings never runs.",
+          "Add the site there, or remove its lines.",
+        ],
       });
       continue;
     }
     const probe = probeFor.get(rule.namespace);
-    const counted = rule.kind === "sha" ? "shas" : rule.kind === "analytics" ? "analytics" : "pages";
+    const counted =
+      rule.kind === "sha" ? "shas" : rule.kind === "analytics" ? "analytics" : "pages";
     summary[`${counted}_expected`] += 1;
     if (!probe || probe.state === "down") continue;
 
     if (rule.kind === "analytics") {
       analyticsRead ??= deps.analytics().then(
         (sites) => ({ sites }),
-        (err: unknown) => ({ problem: (err instanceof Error ? err.message : String(err)).slice(0, 400) })
+        (err: unknown) => ({
+          problem: (err instanceof Error ? err.message : String(err)).slice(0, 400),
+        }),
       );
       const read = await analyticsRead;
       if ("problem" in read) {
@@ -417,14 +519,21 @@ export async function liveChecks(
         namespace: site.namespace,
         fingerprint: `live-page-unread-${site.namespace}-${slug(rule.path)}`,
         headline: `${site.name}'s ${rule.path} could not be read for the live checks`,
-        evidence: [`page: ${site.origin}${rule.path}`, page.problem, "Not read is not clean: the beacon and CSP on this page were not judged."],
+        evidence: [
+          `page: ${site.origin}${rule.path}`,
+          page.problem,
+          "Not read is not clean: the beacon and CSP on this page were not judged.",
+        ],
       });
       continue;
     }
     summary.pages_read += 1;
     findings.push(...pageFindings(site, rule, page));
   }
-  const ran = summary.pages_read === summary.pages_expected && summary.shas_read === summary.shas_expected && summary.analytics_read === summary.analytics_expected;
+  const ran =
+    summary.pages_read === summary.pages_expected &&
+    summary.shas_read === summary.shas_expected &&
+    summary.analytics_read === summary.analytics_expected;
   // One finding per fingerprint: two rules for one unknown site, or the same page named
   // twice, are one problem, and the queue refuses a second job under the same title.
   const unique = [...new Map(findings.map((f) => [f.fingerprint, f])).values()];

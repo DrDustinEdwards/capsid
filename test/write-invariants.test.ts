@@ -38,25 +38,57 @@ const DOC = { namespace: "capsid", path: "doc.md" };
 const VERSION_ID = 42;
 
 function connectOptions(opts: FakeOptions) {
-  const { namespaceExists = true, body = "prior body", updatedAt = "2020-01-01 00:00:00", exists = true } = opts;
+  const {
+    namespaceExists = true,
+    body = "prior body",
+    updatedAt = "2020-01-01 00:00:00",
+    exists = true,
+  } = opts;
   const documents = exists
     ? [
-        { id: 7, ...DOC, title: "Prior title", body, type: "note", status: "published", tags: "a,b", updated_at: updatedAt },
+        {
+          id: 7,
+          ...DOC,
+          title: "Prior title",
+          body,
+          type: "note",
+          status: "published",
+          tags: "a,b",
+          updated_at: updatedAt,
+        },
         // lint finalize only archives episodic and source docs, so the fixture
         // carries one for it to consume.
-        { id: 8, namespace: "capsid", path: "ep.md", title: "An episodic", body: "ep body", type: "episodic", status: "published", tags: null, updated_at: updatedAt },
+        {
+          id: 8,
+          namespace: "capsid",
+          path: "ep.md",
+          title: "An episodic",
+          body: "ep body",
+          type: "episodic",
+          status: "published",
+          tags: null,
+          updated_at: updatedAt,
+        },
       ]
     : [];
   return {
     documents,
     versions: [
-      { id: VERSION_ID, document_id: 7, ...DOC, title: "Old title", body: "old body", snapshot_at: "2026-08-01 00:00:00" },
+      {
+        id: VERSION_ID,
+        document_id: 7,
+        ...DOC,
+        title: "Old title",
+        body: "old body",
+        snapshot_at: "2026-08-01 00:00:00",
+      },
     ],
     namespaces: namespaceExists ? [{ namespace: "capsid", repos: "[]" }] : [],
     failBatchMatching: opts.failBatchMatching,
     raceAfterPreRead: opts.raceAfterPreRead
       ? (rows: FakeD1Rows, target: { namespace: string; path: string }) => {
-          const at = () => rows.documents.find((d) => d.namespace === target.namespace && d.path === target.path);
+          const at = () =>
+            rows.documents.find((d) => d.namespace === target.namespace && d.path === target.path);
           const live: LiveState = {
             get body() {
               return at()?.body ?? null;
@@ -64,7 +96,14 @@ function connectOptions(opts: FakeOptions) {
             set body(value: string | null) {
               const row = at();
               if (row) row.body = value;
-              else rows.documents.push({ id: 7, ...target, title: "Racing title", body: value, updated_at: updatedAt });
+              else
+                rows.documents.push({
+                  id: 7,
+                  ...target,
+                  title: "Racing title",
+                  body: value,
+                  updated_at: updatedAt,
+                });
             },
             get updatedAt() {
               return at()?.updated_at ?? updatedAt;
@@ -78,9 +117,17 @@ function connectOptions(opts: FakeOptions) {
             },
             set exists(value: boolean) {
               if (value && !at()) {
-                rows.documents.push({ id: 7, ...target, title: "Racing title", body: null, updated_at: updatedAt });
+                rows.documents.push({
+                  id: 7,
+                  ...target,
+                  title: "Racing title",
+                  body: null,
+                  updated_at: updatedAt,
+                });
               } else if (!value) {
-                const i = rows.documents.findIndex((d) => d.namespace === target.namespace && d.path === target.path);
+                const i = rows.documents.findIndex(
+                  (d) => d.namespace === target.namespace && d.path === target.path,
+                );
                 if (i !== -1) rows.documents.splice(i, 1);
               }
             },
@@ -101,9 +148,13 @@ async function connect(grant: ToolGrant, opts: FakeOptions = {}) {
 }
 
 const call = async (client: Client, name: string, args: Record<string, unknown>) =>
-  (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+  (await client.callTool({ name, arguments: args })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
 
-const shaOf = async (s: string) => (await import("node:crypto")).createHash("sha256").update(s).digest("hex");
+const shaOf = async (s: string) =>
+  (await import("node:crypto")).createHash("sha256").update(s).digest("hex");
 
 const sqlFor = (recorded: Recorded[]) => recorded.map((r) => r.sql.replace(/\s+/g, " ")).join("\n");
 
@@ -117,11 +168,24 @@ const SNAPSHOT_COPY = /INSERT INTO document_versions \(document_id, namespace, p
 // issue. `label` names the tool and action in a failure. Adding a mutating tool or
 // action without adding it here is the gap the source guard in invariants.test.ts
 // covers from the other side.
-const MUTATORS: Array<{ label: string; tool: string; args: Record<string, unknown>; requires: RegExp[]; refusesUnregisteredWith?: RegExp }> = [
+const MUTATORS: Array<{
+  label: string;
+  tool: string;
+  args: Record<string, unknown>;
+  requires: RegExp[];
+  refusesUnregisteredWith?: RegExp;
+}> = [
   {
     label: "capsid_write_doc.write",
     tool: "capsid_write_doc",
-    args: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true },
+    args: {
+      action: "write",
+      namespace: "capsid",
+      path: "doc.md",
+      title: "New",
+      body: "new body",
+      confirm: true,
+    },
     requires: [SNAPSHOT_COPY, /INSERT INTO audit_log/],
   },
   {
@@ -139,7 +203,13 @@ const MUTATORS: Array<{ label: string; tool: string; args: Record<string, unknow
   {
     label: "capsid_write_doc.move",
     tool: "capsid_write_doc",
-    args: { action: "move", namespace: "capsid", path: "doc.md", new_path: "moved.md", confirm: true },
+    args: {
+      action: "move",
+      namespace: "capsid",
+      path: "doc.md",
+      new_path: "moved.md",
+      confirm: true,
+    },
     // A rename has no body to snapshot; the audit row is the record.
     requires: [/INSERT INTO audit_log/],
   },
@@ -159,7 +229,10 @@ const MUTATORS: Array<{ label: string; tool: string; args: Record<string, unknow
 for (const { label, tool, args, requires } of MUTATORS) {
   test(`${label} issues its snapshot and audit statements`, async () => {
     const { client, recorded, close } = await connect("write");
-    const result = (await client.callTool({ name: tool, arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+    const result = (await client.callTool({ name: tool, arguments: args })) as {
+      isError?: boolean;
+      content: Array<{ text: string }>;
+    };
     await close();
     assert.ok(!result.isError, `${label} returned an error: ${result.content?.[0]?.text}`);
     // Vacuity guard: the handler has to have written something at all.
@@ -180,14 +253,18 @@ for (const { label, tool, args, requires } of MUTATORS) {
     assert.deepEqual(
       direct.map((r) => r.sql.replace(/\s+/g, " ").slice(0, 60)),
       [],
-      `${label} issued statements outside the batch`
+      `${label} issued statements outside the batch`,
     );
   });
 }
 
 test("PLANT: capsid_delete_doc copies title and body to document_versions before the DELETE", async () => {
   const { client, recorded, close } = await connect("write");
-  const result = await call(client, "capsid_delete_doc", { namespace: "capsid", path: "doc.md", confirm: true });
+  const result = await call(client, "capsid_delete_doc", {
+    namespace: "capsid",
+    path: "doc.md",
+    confirm: true,
+  });
   await close();
   assert.ok(!result.isError, `delete returned an error: ${result.content?.[0]?.text}`);
   const statements = recorded.map((r) => r.sql.replace(/\s+/g, " "));
@@ -205,12 +282,19 @@ test("a read-only key cannot reach any mutating tool, and writes nothing", async
     // the protocol refuses it; an action tool is served and refuses the write action by name.
     const result = (await client
       .callTool({ name: tool, arguments: args })
-      .catch((error: unknown) => ({ isError: true, content: [{ text: error instanceof Error ? error.message : String(error) }] }))) as { isError?: boolean; content: Array<{ text: string }> };
+      .catch((error: unknown) => ({
+        isError: true,
+        content: [{ text: error instanceof Error ? error.message : String(error) }],
+      }))) as { isError?: boolean; content: Array<{ text: string }> };
     await close();
     assert.equal(result.isError, true, `${label} did not refuse a read-only key`);
     assert.match(result.content[0].text, /requires the write grant|not found/);
     // The refusal has to come BEFORE any statement, not after the work is done.
-    assert.deepEqual(recorded, [], `${label} wrote ${recorded.length} statement(s) while refusing a read-only key`);
+    assert.deepEqual(
+      recorded,
+      [],
+      `${label} wrote ${recorded.length} statement(s) while refusing a read-only key`,
+    );
   }
 });
 
@@ -218,7 +302,15 @@ test("write refuses when if_match does not describe the stored body", async () =
   const { client, recorded, close } = await connect("write");
   const result = (await client.callTool({
     name: "capsid_write_doc",
-    arguments: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: "0".repeat(64) },
+    arguments: {
+      action: "write",
+      namespace: "capsid",
+      path: "doc.md",
+      title: "New",
+      body: "new body",
+      confirm: true,
+      if_match: "0".repeat(64),
+    },
   })) as { isError?: boolean; content: Array<{ text: string }> };
   await close();
   assert.equal(result.isError, true, "a stale if_match was accepted");
@@ -235,7 +327,15 @@ test("write accepts the if_match it just handed out", async () => {
   const { client, recorded, close } = await connect("write");
   const result = (await client.callTool({
     name: "capsid_write_doc",
-    arguments: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: sha },
+    arguments: {
+      action: "write",
+      namespace: "capsid",
+      path: "doc.md",
+      title: "New",
+      body: "new body",
+      confirm: true,
+      if_match: sha,
+    },
   })) as { isError?: boolean };
   await close();
   assert.ok(!result.isError, "a correct if_match was refused");
@@ -267,7 +367,13 @@ test("mode meta leaves the body byte-identical, wide dash and all", async () => 
   const { client, recorded, close } = await connect("write", { body: dashed });
   const result = (await client.callTool({
     name: "capsid_write_doc",
-    arguments: { action: "write", namespace: "capsid", path: "doc.md", mode: "meta", status: "closed" },
+    arguments: {
+      action: "write",
+      namespace: "capsid",
+      path: "doc.md",
+      mode: "meta",
+      status: "closed",
+    },
   })) as { isError?: boolean; content: Array<{ text: string }> };
   await close();
   assert.ok(!result.isError, `meta write failed: ${result.content?.[0]?.text}`);
@@ -275,7 +381,7 @@ test("mode meta leaves the body byte-identical, wide dash and all", async () => 
   assert.ok(upsert, "meta write issued no upsert");
   assert.ok(
     (upsert.params as unknown[]).includes(dashed),
-    `meta rewrote the body it was told to leave alone: ${JSON.stringify(upsert.params)}`
+    `meta rewrote the body it was told to leave alone: ${JSON.stringify(upsert.params)}`,
   );
   // And the prior metadata is in the audit row, because a version snapshot does not
   // carry type, status or tags.
@@ -293,7 +399,15 @@ async function writeAndRead(opts: Record<string, unknown>, args: Record<string, 
   const { client, close } = await connect("write", opts);
   const result = (await client.callTool({
     name: "capsid_write_doc",
-    arguments: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, ...args },
+    arguments: {
+      action: "write",
+      namespace: "capsid",
+      path: "doc.md",
+      title: "New",
+      body: "new body",
+      confirm: true,
+      ...args,
+    },
   })) as { isError?: boolean; content: Array<{ text: string }> };
   await close();
   return JSON.parse(result.content[0].text) as { concurrency_warning?: string };
@@ -311,21 +425,35 @@ test("overwriting a document touched in the last hour WARNS", async () => {
 test("overwriting an older document does NOT warn", async () => {
   // Without this the warning could fire on every write and the test above would pass.
   assert.equal((await writeAndRead({ updatedAt: recently(61) })).concurrency_warning, undefined);
-  assert.equal((await writeAndRead({ updatedAt: "2020-01-01 00:00:00" })).concurrency_warning, undefined);
+  assert.equal(
+    (await writeAndRead({ updatedAt: "2020-01-01 00:00:00" })).concurrency_warning,
+    undefined,
+  );
 });
 
 test("a guarded write never warns, however recent", async () => {
   const { createHash } = await import("node:crypto");
   const sha = createHash("sha256").update("prior body").digest("hex");
   const out = await writeAndRead({ updatedAt: recently(1) }, { if_match: sha });
-  assert.equal(out.concurrency_warning, undefined, "if_match already guards this write; warning is noise");
+  assert.equal(
+    out.concurrency_warning,
+    undefined,
+    "if_match already guards this write; warning is noise",
+  );
 });
 
 test("the warning NEVER refuses the write", async () => {
   const { client, recorded, close } = await connect("write", { updatedAt: recently(5) });
   const result = (await client.callTool({
     name: "capsid_write_doc",
-    arguments: { action: "write", namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true },
+    arguments: {
+      action: "write",
+      namespace: "capsid",
+      path: "doc.md",
+      title: "New",
+      body: "new body",
+      confirm: true,
+    },
   })) as { isError?: boolean };
   await close();
   assert.ok(!result.isError, "the warning turned into a refusal");
@@ -360,7 +488,12 @@ test("PREDICATE: a body that changes after the pre-read is refused at commit, no
   });
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: sha,
+    namespace: "capsid",
+    path: "doc.md",
+    title: "New",
+    body: "new body",
+    confirm: true,
+    if_match: sha,
   });
   await close();
   assert.equal(result.isError, true, "the racing write was overwritten instead of refused");
@@ -378,7 +511,10 @@ test("PREDICATE: an overwrite with no confirm is refused before any commit", asy
   const { client, recorded, close } = await connect("write", { body: "prior body" });
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "doc.md", title: "New", body: "new body",
+    namespace: "capsid",
+    path: "doc.md",
+    title: "New",
+    body: "new body",
   });
   await close();
   assert.equal(result.isError, true);
@@ -391,7 +527,11 @@ test("PREDICATE: an unguarded update still lands, so the guard is not a blanket 
   const { client, recorded, close } = await connect("write", { body: "prior body" });
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true,
+    namespace: "capsid",
+    path: "doc.md",
+    title: "New",
+    body: "new body",
+    confirm: true,
   });
   await close();
   assert.ok(!result.isError, `an ordinary write was refused: ${result.content?.[0]?.text}`);
@@ -411,7 +551,10 @@ test("CREATE COLLISION: exactly one of two racing creates wins, and the loser is
   });
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "new-doc.md", title: "Loser", body: "the loser body",
+    namespace: "capsid",
+    path: "new-doc.md",
+    title: "Loser",
+    body: "the loser body",
   });
   await close();
   assert.equal(result.isError, true, "the second create silently overwrote the first");
@@ -435,15 +578,34 @@ test("RACE: a confirmed write and restore with no if_match both land over a body
     live.body = "body written by someone else";
   };
   const w = await connect("write", { body: "prior body", raceAfterPreRead: race });
-  const wRes = await call(w.client, "capsid_write_doc", { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true });
+  const wRes = await call(w.client, "capsid_write_doc", {
+    action: "write",
+    namespace: "capsid",
+    path: "doc.md",
+    title: "T",
+    body: "b",
+    confirm: true,
+  });
   await w.close();
-  assert.ok(!wRes.isError, `a plain write was refused by a guard it did not ask for: ${wRes.content?.[0]?.text}`);
+  assert.ok(
+    !wRes.isError,
+    `a plain write was refused by a guard it did not ask for: ${wRes.content?.[0]?.text}`,
+  );
   assert.match(sqlFor(w.recorded), /INSERT INTO documents/);
 
   const r = await connect("write", { body: "prior body", raceAfterPreRead: race });
-  const rRes = await call(r.client, "capsid_write_doc", { action: "restore", namespace: "capsid", path: "doc.md", version_id: VERSION_ID, confirm: true });
+  const rRes = await call(r.client, "capsid_write_doc", {
+    action: "restore",
+    namespace: "capsid",
+    path: "doc.md",
+    version_id: VERSION_ID,
+    confirm: true,
+  });
   await r.close();
-  assert.ok(!rRes.isError, `a plain restore was refused by a guard it did not ask for: ${rRes.content?.[0]?.text}`);
+  assert.ok(
+    !rRes.isError,
+    `a plain restore was refused by a guard it did not ask for: ${rRes.content?.[0]?.text}`,
+  );
   assert.match(sqlFor(r.recorded), /INSERT INTO documents/);
 });
 
@@ -451,7 +613,10 @@ test("CREATE COLLISION: an uncontested create still succeeds", async () => {
   const { client, recorded, close } = await connect("write", { exists: false });
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "new-doc.md", title: "T", body: "b",
+    namespace: "capsid",
+    path: "new-doc.md",
+    title: "T",
+    body: "b",
   });
   await close();
   assert.ok(!result.isError, `an uncontested create was refused: ${result.content?.[0]?.text}`);
@@ -469,7 +634,13 @@ test("restore writes the VERSION body, and snapshots the LIVE one", async () => 
   const { client, recorded, close } = await connect("write");
   const result = (await client.callTool({
     name: "capsid_write_doc",
-    arguments: { action: "restore", namespace: "capsid", path: "doc.md", version_id: 42, confirm: true },
+    arguments: {
+      action: "restore",
+      namespace: "capsid",
+      path: "doc.md",
+      version_id: 42,
+      confirm: true,
+    },
   })) as { isError?: boolean; content: Array<{ text: string }> };
   await close();
   assert.ok(!result.isError, `restore failed: ${result.content?.[0]?.text}`);
@@ -478,15 +649,18 @@ test("restore writes the VERSION body, and snapshots the LIVE one", async () => 
   assert.ok(upsert, "restore issued no upsert into documents");
   assert.ok(
     upsert.params.includes("old body"),
-    `restore did not write the version body. It bound: ${JSON.stringify(upsert.params)}`
+    `restore did not write the version body. It bound: ${JSON.stringify(upsert.params)}`,
   );
   assert.equal(
     upsert.params.includes("prior body"),
     false,
-    `restore wrote the LIVE body back instead of the version body. It bound: ${JSON.stringify(upsert.params)}`
+    `restore wrote the LIVE body back instead of the version body. It bound: ${JSON.stringify(upsert.params)}`,
   );
   // The title travels with the body.
-  assert.ok(upsert.params.includes("Old title"), `restore did not write the version title: ${JSON.stringify(upsert.params)}`);
+  assert.ok(
+    upsert.params.includes("Old title"),
+    `restore did not write the version title: ${JSON.stringify(upsert.params)}`,
+  );
 
   // The snapshot must capture the live row being replaced, or the restore is not itself
   // undoable. The fake does not evaluate INSERT ... SELECT, so that is proven against real
@@ -498,17 +672,32 @@ test("restore writes the VERSION body, and snapshots the LIVE one", async () => 
 
 test("capsid_read_doc versions lists the versions of the document asked for", async () => {
   const { client, close } = await connect("write");
-  const result = await call(client, "capsid_read_doc", { action: "versions", namespace: "capsid", path: "doc.md" });
+  const result = await call(client, "capsid_read_doc", {
+    action: "versions",
+    namespace: "capsid",
+    path: "doc.md",
+  });
   await close();
   assert.ok(!result.isError, `history failed: ${result.content?.[0]?.text}`);
-  const out = JSON.parse(result.content[0].text) as { versions: Array<{ id: number }>; live: unknown };
-  assert.deepEqual(out.versions.map((v) => v.id), [42], "history did not return the document's own snapshot");
+  const out = JSON.parse(result.content[0].text) as {
+    versions: Array<{ id: number }>;
+    live: unknown;
+  };
+  assert.deepEqual(
+    out.versions.map((v) => v.id),
+    [42],
+    "history did not return the document's own snapshot",
+  );
   assert.ok(out.live, "history did not report the live document");
 });
 
 test("capsid_read_doc versions returns nothing for a path with no snapshots", async () => {
   const { client, close } = await connect("write");
-  const result = await call(client, "capsid_read_doc", { action: "versions", namespace: "capsid", path: "ep.md" });
+  const result = await call(client, "capsid_read_doc", {
+    action: "versions",
+    namespace: "capsid",
+    path: "ep.md",
+  });
   await close();
   const out = JSON.parse(result.content[0].text) as { versions: unknown[] };
   assert.deepEqual(out.versions, [], "a document's history leaked another document's snapshots");
@@ -517,15 +706,29 @@ test("capsid_read_doc versions returns nothing for a path with no snapshots", as
 test("fetching a version by id is scoped to its own document", async () => {
   // The same id, asked for under a path it does not belong to.
   const { client, close } = await connect("write");
-  const wrongPath = await call(client, "capsid_read_doc", { action: "versions", namespace: "capsid", path: "ep.md", version_id: 42 });
+  const wrongPath = await call(client, "capsid_read_doc", {
+    action: "versions",
+    namespace: "capsid",
+    path: "ep.md",
+    version_id: 42,
+  });
   await close();
-  assert.equal(wrongPath.isError, true, "a snapshot was readable through a document it does not belong to");
+  assert.equal(
+    wrongPath.isError,
+    true,
+    "a snapshot was readable through a document it does not belong to",
+  );
   assert.match(wrongPath.content[0].text, /no version 42/);
 });
 
 test("fetching a version by id returns that version's body", async () => {
   const { client, close } = await connect("write");
-  const result = await call(client, "capsid_read_doc", { action: "versions", namespace: "capsid", path: "doc.md", version_id: 42 });
+  const result = await call(client, "capsid_read_doc", {
+    action: "versions",
+    namespace: "capsid",
+    path: "doc.md",
+    version_id: 42,
+  });
   await close();
   assert.ok(!result.isError, `history by id failed: ${result.content?.[0]?.text}`);
   const out = JSON.parse(result.content[0].text) as { id: number; body: string; bytes: number };
@@ -541,7 +744,10 @@ test("a version id that does not exist is refused, not silently substituted", as
   const { client, recorded, close } = await connect("write");
   const result = await call(client, "capsid_write_doc", {
     action: "restore",
-    namespace: "capsid", path: "doc.md", version_id: 99, confirm: true,
+    namespace: "capsid",
+    path: "doc.md",
+    version_id: 99,
+    confirm: true,
   });
   await close();
   assert.equal(result.isError, true, "restore accepted a version id that does not exist");
@@ -555,10 +761,17 @@ test("a version belonging to another document is not reachable by id", async () 
   const { client, close } = await connect("write");
   const result = await call(client, "capsid_write_doc", {
     action: "restore",
-    namespace: "capsid", path: "some-other-doc.md", version_id: 42, confirm: true,
+    namespace: "capsid",
+    path: "some-other-doc.md",
+    version_id: 42,
+    confirm: true,
   });
   await close();
-  assert.equal(result.isError, true, "a snapshot was reachable from a document it does not belong to");
+  assert.equal(
+    result.isError,
+    true,
+    "a snapshot was reachable from a document it does not belong to",
+  );
   assert.match(result.content[0].text, /no version 42/);
 });
 
@@ -566,7 +779,9 @@ test("a document that does not exist is not found at a path that does", async ()
   // delete reads the row before it does anything, and a missing row stops it.
   const { client, recorded, close } = await connect("write");
   const result = await call(client, "capsid_delete_doc", {
-    namespace: "capsid", path: "never-existed.md", confirm: true,
+    namespace: "capsid",
+    path: "never-existed.md",
+    confirm: true,
   });
   await close();
   assert.equal(result.isError, true, "delete accepted a path with no document");
@@ -578,7 +793,11 @@ test("restore accepts if_match and refuses a stale one", async () => {
   const stale = await connect("write", { body: "prior body" });
   const staleRes = await call(stale.client, "capsid_write_doc", {
     action: "restore",
-    namespace: "capsid", path: "doc.md", version_id: 42, confirm: true, if_match: "0".repeat(64),
+    namespace: "capsid",
+    path: "doc.md",
+    version_id: 42,
+    confirm: true,
+    if_match: "0".repeat(64),
   });
   await stale.close();
   assert.equal(staleRes.isError, true, "restore accepted a stale if_match");
@@ -589,11 +808,18 @@ test("restore accepts if_match and refuses a stale one", async () => {
   const good = await connect("write", { body: "prior body" });
   const okRes = await call(good.client, "capsid_write_doc", {
     action: "restore",
-    namespace: "capsid", path: "doc.md", version_id: 42, confirm: true, if_match: await shaOf("prior body"),
+    namespace: "capsid",
+    path: "doc.md",
+    version_id: 42,
+    confirm: true,
+    if_match: await shaOf("prior body"),
   });
   await good.close();
   assert.ok(!okRes.isError, `restore refused a correct if_match: ${okRes.content?.[0]?.text}`);
-  assert.match(sqlFor(good.recorded), /INSERT INTO document_versions \(document_id, namespace, path, title, body\)/);
+  assert.match(
+    sqlFor(good.recorded),
+    /INSERT INTO document_versions \(document_id, namespace, path, title, body\)/,
+  );
 });
 
 test("restore refuses at the PREDICATE when the live body changes after its pre-read", async () => {
@@ -605,7 +831,11 @@ test("restore refuses at the PREDICATE when the live body changes after its pre-
   });
   const result = await call(client, "capsid_write_doc", {
     action: "restore",
-    namespace: "capsid", path: "doc.md", version_id: 42, confirm: true, if_match: await shaOf("prior body"),
+    namespace: "capsid",
+    path: "doc.md",
+    version_id: 42,
+    confirm: true,
+    if_match: await shaOf("prior body"),
   });
   await close();
   assert.equal(result.isError, true, "restore committed over a body that changed beneath it");
@@ -623,7 +853,10 @@ test("restore recreating a deleted document refuses a racing create", async () =
   });
   const result = await call(client, "capsid_write_doc", {
     action: "restore",
-    namespace: "capsid", path: "doc.md", version_id: 42, confirm: true,
+    namespace: "capsid",
+    path: "doc.md",
+    version_id: 42,
+    confirm: true,
   });
   await close();
   assert.equal(result.isError, true, "restore overwrote a document created during its flight");
@@ -643,11 +876,18 @@ test("the concurrency warning is read at COMMIT time, not from the pre-read", as
   });
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true,
+    namespace: "capsid",
+    path: "doc.md",
+    title: "New",
+    body: "new body",
+    confirm: true,
   });
   await close();
   const out = JSON.parse(result.content[0].text) as { concurrency_warning?: string };
-  assert.ok(out.concurrency_warning, "the warning was computed from the stale pre-read, not from a fresh read at commit");
+  assert.ok(
+    out.concurrency_warning,
+    "the warning was computed from the stale pre-read, not from a fresh read at commit",
+  );
   assert.match(out.concurrency_warning, /possible concurrent edit/);
   assert.match(out.concurrency_warning, new RegExp(fresh));
 });
@@ -659,13 +899,18 @@ test("the concurrency warning is read at COMMIT time, not from the pre-read", as
 async function connectEliciting(opts: FakeOptions = {}, answer: "accept" | "decline" = "accept") {
   const { recorded, reads, rows, batches, db } = fakeD1(connectOptions(opts));
   const server = buildServer(fakeEnv({ DB: db }), "write", "test:guard");
-  const client = new Client({ name: "eliciting-test", version: "1.0.0" }, { capabilities: { elicitation: {} } });
+  const client = new Client(
+    { name: "eliciting-test", version: "1.0.0" },
+    { capabilities: { elicitation: {} } },
+  );
   // Counted, because a test that silently fell back to the unsupported path would assert
   // nothing: it would be refused with "confirmation required" and never reach the guard.
   const prompts: string[] = [];
   client.setRequestHandler("elicitation/create", async (request) => {
     prompts.push(String(request.params.message));
-    return answer === "accept" ? { action: "accept", content: { confirm: true } } : { action: "decline" };
+    return answer === "accept"
+      ? { action: "accept", content: { confirm: true } }
+      : { action: "decline" };
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -678,10 +923,17 @@ test("an accepted elicitation reaches the commit, so the arm is really reachable
   const { client, recorded, prompts, close } = await connectEliciting({ body: "prior body" });
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "doc.md", title: "New", body: "new body",
+    namespace: "capsid",
+    path: "doc.md",
+    title: "New",
+    body: "new body",
   });
   await close();
-  assert.equal(prompts.length, 1, "no elicitation was requested, so this client is not exercising the elicited arm");
+  assert.equal(
+    prompts.length,
+    1,
+    "no elicitation was requested, so this client is not exercising the elicited arm",
+  );
   assert.match(prompts[0], /Overwrite capsid\/doc\.md\?/);
   assert.ok(!result.isError, `an approved overwrite was refused: ${result.content?.[0]?.text}`);
   assert.match(sqlFor(recorded), /INSERT INTO documents/);
@@ -692,8 +944,16 @@ test("RACE: after an elicitation, write, restore and delete each refuse a body c
   // tools. No call passes confirm or if_match, so the elicited signal is the only thing
   // that can arm the body guard.
   const calls: Array<[string, string, Record<string, unknown>]> = [
-    ["capsid_write_doc.write", "capsid_write_doc", { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
-    ["capsid_write_doc.restore", "capsid_write_doc", { action: "restore", namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
+    [
+      "capsid_write_doc.write",
+      "capsid_write_doc",
+      { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b" },
+    ],
+    [
+      "capsid_write_doc.restore",
+      "capsid_write_doc",
+      { action: "restore", namespace: "capsid", path: "doc.md", version_id: VERSION_ID },
+    ],
     ["capsid_delete_doc", "capsid_delete_doc", { namespace: "capsid", path: "doc.md" }],
   ];
   for (const [label, tool, args] of calls) {
@@ -705,9 +965,21 @@ test("RACE: after an elicitation, write, restore and delete each refuse a body c
     });
     const result = await call(client, tool, args);
     await close();
-    assert.equal(prompts.length, 1, `${label} did not elicit, so the elicited arm was not exercised`);
-    assert.equal(result.isError, true, `${label} landed on a body that changed under an open prompt`);
-    assert.deepEqual(recorded, [], `${label} committed statements after its guard should have fired`);
+    assert.equal(
+      prompts.length,
+      1,
+      `${label} did not elicit, so the elicited arm was not exercised`,
+    );
+    assert.equal(
+      result.isError,
+      true,
+      `${label} landed on a body that changed under an open prompt`,
+    );
+    assert.deepEqual(
+      recorded,
+      [],
+      `${label} committed statements after its guard should have fired`,
+    );
   }
   // The delete refusal says why, since a delete has no if_match to blame.
   const { client, close } = await connectEliciting({
@@ -724,8 +996,16 @@ test("RACE: after an elicitation, write, restore and delete each refuse a body c
 test("RACE: after an elicitation with no race, write, restore and delete each land", async () => {
   // The innocent direction: a body guard that fired on every call would pass the test above.
   const calls: Array<[string, string, Record<string, unknown>]> = [
-    ["capsid_write_doc.write", "capsid_write_doc", { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b" }],
-    ["capsid_write_doc.restore", "capsid_write_doc", { action: "restore", namespace: "capsid", path: "doc.md", version_id: VERSION_ID }],
+    [
+      "capsid_write_doc.write",
+      "capsid_write_doc",
+      { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b" },
+    ],
+    [
+      "capsid_write_doc.restore",
+      "capsid_write_doc",
+      { action: "restore", namespace: "capsid", path: "doc.md", version_id: VERSION_ID },
+    ],
     ["capsid_delete_doc", "capsid_delete_doc", { namespace: "capsid", path: "doc.md" }],
   ];
   for (const [label, tool, args] of calls) {
@@ -748,9 +1028,16 @@ test("RACE: a confirm: true delete lands over a changed body, and is refused whe
       live.body = "body written by someone else";
     },
   });
-  const landed = await call(changed.client, "capsid_delete_doc", { namespace: "capsid", path: "doc.md", confirm: true });
+  const landed = await call(changed.client, "capsid_delete_doc", {
+    namespace: "capsid",
+    path: "doc.md",
+    confirm: true,
+  });
   await changed.close();
-  assert.ok(!landed.isError, `a confirmed delete was refused over a body change: ${landed.content?.[0]?.text}`);
+  assert.ok(
+    !landed.isError,
+    `a confirmed delete was refused over a body change: ${landed.content?.[0]?.text}`,
+  );
   assert.match(sqlFor(changed.recorded), /DELETE FROM documents/);
 
   const removed = await connect("write", {
@@ -759,7 +1046,11 @@ test("RACE: a confirm: true delete lands over a changed body, and is refused whe
       live.exists = false;
     },
   });
-  const refused = await call(removed.client, "capsid_delete_doc", { namespace: "capsid", path: "doc.md", confirm: true });
+  const refused = await call(removed.client, "capsid_delete_doc", {
+    namespace: "capsid",
+    path: "doc.md",
+    confirm: true,
+  });
   await removed.close();
   assert.equal(refused.isError, true, "a delete of a row removed in flight reported success");
   assert.match(refused.content[0].text, /no longer exists/);
@@ -767,10 +1058,16 @@ test("RACE: a confirm: true delete lands over a changed body, and is refused whe
 });
 
 test("a declined elicitation refuses, and writes nothing", async () => {
-  const { client, recorded, prompts, close } = await connectEliciting({ body: "prior body" }, "decline");
+  const { client, recorded, prompts, close } = await connectEliciting(
+    { body: "prior body" },
+    "decline",
+  );
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "doc.md", title: "New", body: "new body",
+    namespace: "capsid",
+    path: "doc.md",
+    title: "New",
+    body: "new body",
   });
   await close();
   assert.equal(prompts.length, 1);
@@ -790,14 +1087,21 @@ test("STALE CONFIRMATION is named as itself, not as an if_match mismatch", async
   });
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "doc.md", title: "New", body: "new body",
+    namespace: "capsid",
+    path: "doc.md",
+    title: "New",
+    body: "new body",
   });
   await close();
   assert.equal(prompts.length, 1, "the elicited arm was not exercised");
   assert.equal(result.isError, true, "a write landed on a body that changed under an open prompt");
   const text = result.content[0].text;
   assert.match(text, /^stale confirmation on capsid\/doc\.md:/, `wrong refusal: ${text}`);
-  assert.doesNotMatch(text, /if_match mismatch/, "a stale confirmation was reported as an if_match mismatch");
+  assert.doesNotMatch(
+    text,
+    /if_match mismatch/,
+    "a stale confirmation was reported as an if_match mismatch",
+  );
   // The clause that says WHY it went stale, which only this arm can produce.
   assert.match(text, /and while the overwrite confirmation was pending/);
   assert.match(text, new RegExp(await shaOf("body written while the prompt was up")));
@@ -816,14 +1120,23 @@ test("IF_MATCH MISMATCH keeps its own wording, and no pending clause", async () 
   });
   const result = await call(client, "capsid_write_doc", {
     action: "write",
-    namespace: "capsid", path: "doc.md", title: "New", body: "new body", confirm: true, if_match: sha,
+    namespace: "capsid",
+    path: "doc.md",
+    title: "New",
+    body: "new body",
+    confirm: true,
+    if_match: sha,
   });
   await close();
   assert.equal(result.isError, true);
   const text = result.content[0].text;
   assert.match(text, /^if_match mismatch on capsid\/doc\.md:/, `wrong refusal: ${text}`);
   assert.doesNotMatch(text, /stale confirmation/);
-  assert.doesNotMatch(text, /overwrite confirmation was pending/, "a caller who sent if_match was told about a prompt that never happened");
+  assert.doesNotMatch(
+    text,
+    /overwrite confirmation was pending/,
+    "a caller who sent if_match was told about a prompt that never happened",
+  );
 });
 
 test("the two refusals are DIFFERENT strings for the same underlying conflict", async () => {
@@ -833,14 +1146,27 @@ test("the two refusals are DIFFERENT strings for the same underlying conflict", 
     live.body = "the racer";
   };
   const stale = await connectEliciting({ body: "prior body", raceAfterPreRead: race });
-  const staleText = (await call(stale.client, "capsid_write_doc", { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b" })).content[0].text;
+  const staleText = (
+    await call(stale.client, "capsid_write_doc", {
+      action: "write",
+      namespace: "capsid",
+      path: "doc.md",
+      title: "T",
+      body: "b",
+    })
+  ).content[0].text;
   await stale.close();
 
   const mismatch = await connectEliciting({ body: "prior body", raceAfterPreRead: race });
   const mismatchText = (
     await call(mismatch.client, "capsid_write_doc", {
       action: "write",
-      namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true, if_match: await shaOf("prior body"),
+      namespace: "capsid",
+      path: "doc.md",
+      title: "T",
+      body: "b",
+      confirm: true,
+      if_match: await shaOf("prior body"),
     })
   ).content[0].text;
   await mismatch.close();
@@ -864,28 +1190,69 @@ async function connectExploding(sql: RegExp) {
 }
 
 const F30_CASES = [
-  { label: "capsid_write_doc.write", tool: "capsid_write_doc", args: { action: "write", namespace: "capsid", path: "doc.md", title: "T", body: "b", confirm: true } },
-  { label: "capsid_write_doc.restore", tool: "capsid_write_doc", args: { action: "restore", namespace: "capsid", path: "doc.md", version_id: 42, confirm: true } },
-  { label: "capsid_delete_doc", tool: "capsid_delete_doc", args: { namespace: "capsid", path: "doc.md", confirm: true } },
-  { label: "capsid_write_doc.move", tool: "capsid_write_doc", args: { action: "move", namespace: "capsid", path: "doc.md", new_path: "moved.md", confirm: true } },
-  { label: "capsid_lint_namespace.finalize", tool: "capsid_lint_namespace", args: { namespace: "capsid", mode: "finalize", consumed: ["ep.md"], confirm: true } },
+  {
+    label: "capsid_write_doc.write",
+    tool: "capsid_write_doc",
+    args: {
+      action: "write",
+      namespace: "capsid",
+      path: "doc.md",
+      title: "T",
+      body: "b",
+      confirm: true,
+    },
+  },
+  {
+    label: "capsid_write_doc.restore",
+    tool: "capsid_write_doc",
+    args: { action: "restore", namespace: "capsid", path: "doc.md", version_id: 42, confirm: true },
+  },
+  {
+    label: "capsid_delete_doc",
+    tool: "capsid_delete_doc",
+    args: { namespace: "capsid", path: "doc.md", confirm: true },
+  },
+  {
+    label: "capsid_write_doc.move",
+    tool: "capsid_write_doc",
+    args: {
+      action: "move",
+      namespace: "capsid",
+      path: "doc.md",
+      new_path: "moved.md",
+      confirm: true,
+    },
+  },
+  {
+    label: "capsid_lint_namespace.finalize",
+    tool: "capsid_lint_namespace",
+    args: { namespace: "capsid", mode: "finalize", consumed: ["ep.md"], confirm: true },
+  },
 ];
 
 for (const { label, tool, args } of F30_CASES) {
   test(`${label} returns a clean failure when the batch throws`, async () => {
-    const { client, close } = await connectExploding(/INSERT INTO document_versions|UPDATE documents|INSERT INTO documents|DELETE FROM documents/);
+    const { client, close } = await connectExploding(
+      /INSERT INTO document_versions|UPDATE documents|INSERT INTO documents|DELETE FROM documents/,
+    );
     let result: { isError?: boolean; content: Array<{ text: string }> };
     try {
       result = (await client.callTool({ name: tool, arguments: args })) as typeof result;
     } catch (err) {
       await close();
-      assert.fail(`${label} threw out of the handler instead of returning a failure: ${err instanceof Error ? err.message : String(err)}`);
+      assert.fail(
+        `${label} threw out of the handler instead of returning a failure: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     await close();
     assert.equal(result.isError, true, `${label} reported success on a failed batch`);
     const text = result.content?.[0]?.text ?? "";
     assert.match(text, /database is locked/, `${label} lost the reason: ${text}`);
-    assert.match(text, /nothing (was written|changed|archived)/i, `${label} did not say the store is unchanged: ${text}`);
+    assert.match(
+      text,
+      /nothing (was written|changed|archived)/i,
+      `${label} did not say the store is unchanged: ${text}`,
+    );
   });
 }
 
@@ -896,17 +1263,35 @@ test("capsid_close_pr close reports success with a warning when the audit insert
   // a transaction. Reporting a failure would invite a retry of a change already made.
   const { db } = fakeD1(connectOptions({}));
   (db as { prepare: unknown }).prepare = ((sql: string) => {
-    const base = { bind: () => base, first: async () => null, all: async () => ({ results: [], meta: { changes: 0 } }), run: async () => ({ meta: { changes: 1 } }) } as Record<string, unknown>;
+    const base = {
+      bind: () => base,
+      first: async () => null,
+      all: async () => ({ results: [], meta: { changes: 0 } }),
+      run: async () => ({ meta: { changes: 1 } }),
+    } as Record<string, unknown>;
     if (/INSERT INTO audit_log/i.test(sql)) {
       base.run = async () => {
         throw new Error("D1_ERROR: no such table: audit_log");
       };
     }
-    if (/FROM namespaces/i.test(sql)) base.first = async () => ({ repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) });
+    if (/FROM namespaces/i.test(sql))
+      base.first = async () => ({ repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) });
     return base;
   }) as never;
 
-  const server = buildServer(fakeEnv({ DB: db, APP_KV: { get: async (k: string) => (k.startsWith("gh:token:") ? "t" : null), put: async () => {}, delete: async () => {}, list: async () => ({ keys: [], list_complete: true }) } }), "write", "test:guard");
+  const server = buildServer(
+    fakeEnv({
+      DB: db,
+      APP_KV: {
+        get: async (k: string) => (k.startsWith("gh:token:") ? "t" : null),
+        put: async () => {},
+        delete: async () => {},
+        list: async () => ({ keys: [], list_complete: true }),
+      },
+    }),
+    "write",
+    "test:guard",
+  );
   const client = new Client({ name: "f17-test", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -916,7 +1301,10 @@ test("capsid_close_pr close reports success with a warning when the audit insert
     const method = (init?.method ?? "GET").toUpperCase();
     const path = new URL(url).pathname;
     if (path === "/repos/o/r/pulls/7" && method === "PATCH") {
-      return new Response(JSON.stringify({ number: 7, state: "closed", html_url: "https://github.com/o/r/pull/7" }), { status: 200 });
+      return new Response(
+        JSON.stringify({ number: 7, state: "closed", html_url: "https://github.com/o/r/pull/7" }),
+        { status: 200 },
+      );
     }
     return new Response("unexpected", { status: 500 });
   }) as typeof fetch;
@@ -926,8 +1314,14 @@ test("capsid_close_pr close reports success with a warning when the audit insert
       name: "capsid_close_pr",
       arguments: { action: "close", namespace: "capsid", number: 7 },
     })) as { isError?: boolean; content: Array<{ text: string }> };
-    assert.ok(!result.isError, `the landed close was reported as a failure: ${result.content?.[0]?.text}`);
-    const payload = JSON.parse(result.content[0].text) as { state?: string; audit_warning?: string };
+    assert.ok(
+      !result.isError,
+      `the landed close was reported as a failure: ${result.content?.[0]?.text}`,
+    );
+    const payload = JSON.parse(result.content[0].text) as {
+      state?: string;
+      audit_warning?: string;
+    };
     // The result still describes what landed, and says the log does not know.
     assert.equal(payload.state, "closed");
     assert.match(payload.audit_warning ?? "", /SUCCEEDED/);
@@ -960,7 +1354,7 @@ test("PLANT: a patch whose find occurs ZERO times is refused by the tool and wri
   assert.equal(
     recorded.filter((r) => /INSERT INTO documents/i.test(r.sql)).length,
     0,
-    "a refused patch still wrote the document"
+    "a refused patch still wrote the document",
   );
 });
 
@@ -981,7 +1375,7 @@ test("PLANT: a patch whose find occurs TWICE is refused by the tool and writes n
   assert.equal(
     recorded.filter((r) => /INSERT INTO documents/i.test(r.sql)).length,
     0,
-    "a refused patch still wrote the document"
+    "a refused patch still wrote the document",
   );
 });
 
@@ -1002,6 +1396,6 @@ test("THE INNOCENT DIRECTION: a patch matching exactly once lands through the to
   assert.ok(insert, "an accepted patch wrote nothing");
   assert.ok(
     insert.params.some((p) => typeof p === "string" && p === "alpha DELTA gamma"),
-    `the stored body was not the patched one: ${JSON.stringify(insert.params)}`
+    `the stored body was not the patched one: ${JSON.stringify(insert.params)}`,
   );
 });

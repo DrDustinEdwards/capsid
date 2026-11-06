@@ -28,10 +28,12 @@ async function callLint(client: Client, args: Record<string, unknown>) {
 
 describe("lint mode report", () => {
   it("stores a real document, and the FTS index picks it up", async () => {
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('capsid', '[]')").run();
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES ('capsid', '[]')",
+    ).run();
     await env.DB.prepare(
       `INSERT OR IGNORE INTO documents (namespace, path, title, body, type, status)
-       VALUES ('capsid', 'a-spec.md', 'A spec', 'nothing points at this', 'spec', 'published')`
+       VALUES ('capsid', 'a-spec.md', 'A spec', 'nothing points at this', 'spec', 'published')`,
     ).run();
 
     const client = await connect();
@@ -42,7 +44,9 @@ describe("lint mode report", () => {
       expect(payload.stored).toMatch(/^capsid\/reports\/lint-\d{4}-\d{2}-\d{2}\.md$/);
 
       const path = payload.stored.slice("capsid/".length);
-      const stored = await env.DB.prepare("SELECT body, type, status FROM documents WHERE namespace = 'capsid' AND path = ?1")
+      const stored = await env.DB.prepare(
+        "SELECT body, type, status FROM documents WHERE namespace = 'capsid' AND path = ?1",
+      )
         .bind(path)
         .first<{ body: string; type: string; status: string }>();
       expect(stored, "report mode returned a path and stored nothing there").toBeTruthy();
@@ -51,13 +55,13 @@ describe("lint mode report", () => {
 
       // documents_fts is external-content, and the trigger keeps it in step.
       const indexed = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM documents_fts WHERE documents_fts MATCH 'integrity'"
+        "SELECT COUNT(*) AS n FROM documents_fts WHERE documents_fts MATCH 'integrity'",
       ).first<{ n: number }>();
       expect(indexed?.n).toBeGreaterThan(0);
 
       // And the audit row landed in the same batch (snapshot invariant, test/write-invariants.test.ts).
       const audit = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'lint_report' AND namespace = 'capsid'"
+        "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'lint_report' AND namespace = 'capsid'",
       ).first<{ n: number }>();
       expect(audit?.n).toBe(1);
     } finally {
@@ -78,15 +82,18 @@ describe("lint mode report", () => {
       expect(first.isError).toBeFalsy();
 
       const reports = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM documents WHERE namespace = 'capsid' AND path LIKE 'reports/lint-%'"
+        "SELECT COUNT(*) AS n FROM documents WHERE namespace = 'capsid' AND path LIKE 'reports/lint-%'",
       ).first<{ n: number }>();
       expect(reports?.n, "one document per namespace per day, not one per invocation").toBe(1);
 
       // The overwrite went through document_versions (the snapshot rule).
       const versions = await env.DB.prepare(
-        "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path LIKE 'reports/lint-%'"
+        "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path LIKE 'reports/lint-%'",
       ).first<{ n: number }>();
-      expect(versions?.n, "the prior report must be snapshotted before it is replaced").toBeGreaterThan(0);
+      expect(
+        versions?.n,
+        "the prior report must be snapshotted before it is replaced",
+      ).toBeGreaterThan(0);
     } finally {
       await client.close();
     }
@@ -96,7 +103,10 @@ describe("lint mode report", () => {
     const status = await capsidStatus(env as never, "capsid");
     const capsid = status.namespaces.find((n) => n.namespace === "capsid");
     expect(capsid, "capsid is on the improve roster and must be in the status report").toBeTruthy();
-    expect(capsid!.latest_report, "no report was surfaced, though one was just written").toBeTruthy();
+    expect(
+      capsid!.latest_report,
+      "no report was surfaced, though one was just written",
+    ).toBeTruthy();
     expect(capsid!.latest_report!.path).toMatch(/^capsid\/reports\/lint-\d{4}-\d{2}-\d{2}\.md$/);
     expect(typeof capsid!.latest_report!.integrity).toBe("number");
   });
@@ -113,7 +123,7 @@ describe("lint mode report", () => {
     // rewritten report, which is not a newer measurement.
     await env.DB.prepare(
       `INSERT OR REPLACE INTO documents (namespace, path, title, body, type, status, updated_at)
-       VALUES ('capsid', 'reports/lint-2020-01-01.md', 'Old', 'integrity: 1%', 'reference', 'published', datetime('now'))`
+       VALUES ('capsid', 'reports/lint-2020-01-01.md', 'Old', 'integrity: 1%', 'reference', 'published', datetime('now'))`,
     ).run();
     const status = await capsidStatus(env as never, "capsid");
     const capsid = status.namespaces.find((n) => n.namespace === "capsid")!;

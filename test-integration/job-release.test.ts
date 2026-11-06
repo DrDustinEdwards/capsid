@@ -23,18 +23,38 @@ function seatAgent(): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
   scopes.flags.can_merge = true;
-  return { id: "agent_aaaabbbbcccc", name: "seat", kind: "seat", actor: "agent:seat", scopes, admin: false, row: null };
+  return {
+    id: "agent_aaaabbbbcccc",
+    name: "seat",
+    kind: "seat",
+    actor: "agent:seat",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 // A roster driver: one namespace, write, and no flags.
 function driverAgent(actor = "agent:capsid-driver"): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
-  return { id: `agent_${actor.length}`, name: actor.slice("agent:".length), kind: "driver", actor, scopes, admin: false, row: null };
+  return {
+    id: `agent_${actor.length}`,
+    name: actor.slice("agent:".length),
+    kind: "driver",
+    actor,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 async function claimedJob(holder: Agent, title = "a job whose holder went away"): Promise<string> {
-  const posted = await postJob(jobsEnv(), POSTER, NOW, { namespace: "capsid", title, body: "do the thing" });
+  const posted = await postJob(jobsEnv(), POSTER, NOW, {
+    namespace: "capsid",
+    title,
+    body: "do the thing",
+  });
   expect(posted.ok, posted.refusal).toBe(true);
   const claimed = await claimJob(jobsEnv(), holder, NOW, { id: posted.job!.id });
   expect(claimed.ok, claimed.refusal).toBe(true);
@@ -42,17 +62,23 @@ async function claimedJob(holder: Agent, title = "a job whose holder went away")
 }
 
 async function row(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
+    .bind(id)
+    .first<Record<string, unknown>>();
 }
 
 async function audit(id: string, action: string) {
-  return env.DB.prepare("SELECT actor, params FROM audit_log WHERE action = ?1 AND params LIKE ?2 ORDER BY id DESC LIMIT 1")
+  return env.DB.prepare(
+    "SELECT actor, params FROM audit_log WHERE action = ?1 AND params LIKE ?2 ORDER BY id DESC LIMIT 1",
+  )
     .bind(action, `%${id}%`)
     .first<{ actor: string; params: string }>();
 }
 
 async function outcome(id: string) {
-  return env.DB.prepare("SELECT agent, result_kind FROM job_outcomes WHERE job_id = ?1").bind(id).first<{ agent: string; result_kind: string }>();
+  return env.DB.prepare("SELECT agent, result_kind FROM job_outcomes WHERE job_id = ?1")
+    .bind(id)
+    .first<{ agent: string; result_kind: string }>();
 }
 
 beforeEach(async () => {
@@ -65,7 +91,13 @@ beforeEach(async () => {
 describe("release", () => {
   it("the seat returns a job another credential holds to the queue, with an audit row and no outcome row", async () => {
     const id = await claimedJob(driverAgent());
-    const released = await releaseJob(jobsEnv(), seatAgent(), LATER, id, "no driver session is running");
+    const released = await releaseJob(
+      jobsEnv(),
+      seatAgent(),
+      LATER,
+      id,
+      "no driver session is running",
+    );
     expect(released.ok, released.refusal).toBe(true);
 
     const r = await row(id);
@@ -73,7 +105,10 @@ describe("release", () => {
     expect(r?.claimed_by).toBeNull();
     const a = await audit(id, "job-released");
     expect(a?.actor).toBe("agent:seat");
-    expect(JSON.parse(a!.params)).toMatchObject({ reason: "no driver session is running", held_by: "agent:capsid-driver" });
+    expect(JSON.parse(a!.params)).toMatchObject({
+      reason: "no driver session is running",
+      held_by: "agent:capsid-driver",
+    });
     // Not an ending, so nothing is attributed to the credential that held it.
     expect(await outcome(id)).toBeNull();
   });
@@ -89,7 +124,13 @@ describe("release", () => {
 
   it("a driver cannot release another driver's job", async () => {
     const id = await claimedJob(driverAgent());
-    const refused = await releaseJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, id, "mine now");
+    const refused = await releaseJob(
+      jobsEnv(),
+      driverAgent("agent:capsid-driver-2"),
+      LATER,
+      id,
+      "mine now",
+    );
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/seat/);
     expect((await row(id))?.claimed_by).toBe("agent:capsid-driver");
@@ -101,7 +142,11 @@ describe("release", () => {
     expect((await releaseJob(jobsEnv(), seat, LATER, own, "x")).ok).toBe(true);
     expect((await row(own))?.status).toBe("queued");
 
-    const posted = await postJob(jobsEnv(), POSTER, NOW, { namespace: "capsid", title: "still queued", body: "b" });
+    const posted = await postJob(jobsEnv(), POSTER, NOW, {
+      namespace: "capsid",
+      title: "still queued",
+      body: "b",
+    });
     const queued = await releaseJob(jobsEnv(), seat, LATER, posted.job!.id, "x");
     expect(queued.ok).toBe(false);
     expect(queued.refusal).toMatch(/is queued, not claimed/);
@@ -109,7 +154,9 @@ describe("release", () => {
 
   it("release needs a reason", async () => {
     const id = await claimedJob(driverAgent());
-    expect((await releaseJob(jobsEnv(), seatAgent(), LATER, id, "  ")).refusal).toMatch(/needs a reason/);
+    expect((await releaseJob(jobsEnv(), seatAgent(), LATER, id, "  ")).refusal).toMatch(
+      /needs a reason/,
+    );
     expect((await row(id))?.status).toBe("claimed");
   });
 });
@@ -126,10 +173,18 @@ describe("the seat fails a job it does not hold", () => {
 
   it("a driver still cannot fail another driver's job", async () => {
     const id = await claimedJob(driverAgent());
-    const refused = await failAsCaller(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, id, "x");
+    const refused = await failAsCaller(
+      jobsEnv(),
+      driverAgent("agent:capsid-driver-2"),
+      LATER,
+      id,
+      "x",
+    );
     expect(refused.ok).toBe(false);
     expect((await row(id))?.status).toBe("claimed");
-    expect((await adminFailJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, id, "x")).ok).toBe(false);
+    expect(
+      (await adminFailJob(jobsEnv(), driverAgent("agent:capsid-driver-2"), LATER, id, "x")).ok,
+    ).toBe(false);
   });
 
   it("the holder failing its own job through the same path is an ordinary fail", async () => {

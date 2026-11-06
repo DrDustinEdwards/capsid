@@ -1,14 +1,31 @@
 import type { Kind } from "../lib/derive";
 import { age, utc, ms, ago } from "../lib/format";
-import type { ClaimsGroup, ClaimsAgreementCounts, JobClaimRow, ClaimsAgreement, JobEvaluationRow, PortalClaimsJob } from "../types";
+import type {
+  ClaimsGroup,
+  ClaimsAgreementCounts,
+  JobClaimRow,
+  ClaimsAgreement,
+  JobEvaluationRow,
+  PortalClaimsJob,
+} from "../types";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
 
-export const AGREEMENTS: readonly ClaimsAgreement[] = ["agree", "disagree", "unclaimed", "unchecked"];
+export const AGREEMENTS: readonly ClaimsAgreement[] = [
+  "agree",
+  "disagree",
+  "unclaimed",
+  "unchecked",
+];
 
 // agree and disagree are findings about the agent; unclaimed means it said nothing, and
 // unchecked means the Worker could not verify what it said. Neither of those is a pass.
-const AGREEMENT_KIND: Record<ClaimsAgreement, Kind> = { agree: "ok", disagree: "crit", unclaimed: "nodata", unchecked: "warn" };
+const AGREEMENT_KIND: Record<ClaimsAgreement, Kind> = {
+  agree: "ok",
+  disagree: "crit",
+  unclaimed: "nodata",
+  unchecked: "warn",
+};
 
 export function None({ what = "none" }: { what?: string }) {
   return <span className="faint">{what}</span>;
@@ -16,12 +33,17 @@ export function None({ what = "none" }: { what?: string }) {
 
 // A wait in milliseconds as "3.2h". Null is no wait measured, never zero.
 export function wait(msValue: number | null) {
-  return msValue === null ? <None what="no wait" /> : <span className="num">{age(0, msValue)}</span>;
+  return msValue === null ? (
+    <None what="no wait" />
+  ) : (
+    <span className="num">{age(0, msValue)}</span>
+  );
 }
 
 export function totals(group: ClaimsGroup): ClaimsAgreementCounts {
   const out: ClaimsAgreementCounts = { agree: 0, disagree: 0, unclaimed: 0, unchecked: 0 };
-  for (const counts of Object.values(group.evaluations)) for (const a of AGREEMENTS) out[a] += counts[a];
+  for (const counts of Object.values(group.evaluations))
+    for (const a of AGREEMENTS) out[a] += counts[a];
   return out;
 }
 
@@ -71,7 +93,13 @@ function stated(c: JobClaimRow): string[] {
 }
 
 function versions(c: JobClaimRow): string {
-  return [c.model_id, c.client_name && `${c.client_name}${c.client_version ? ` ${c.client_version}` : ""}`, c.permission_mode].filter(Boolean).join(" · ");
+  return [
+    c.model_id,
+    c.client_name && `${c.client_name}${c.client_version ? ` ${c.client_version}` : ""}`,
+    c.permission_mode,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function Agreement({ a }: { a: ClaimsAgreement }) {
@@ -125,23 +153,40 @@ function EvaluationRows({ rows }: { rows: JobEvaluationRow[] }) {
 
 export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number }) {
   const { job } = data;
-  const orphans = data.evaluations.filter((e) => e.claim_id === null || !data.claims.some((c) => c.id === e.claim_id));
+  const orphans = data.evaluations.filter(
+    (e) => e.claim_id === null || !data.claims.some((c) => c.id === e.claim_id),
+  );
   return (
     <>
-      <Panel flush title={`Job ${job.id}`} src={`${job.namespace} · ${job.status}${job.claimed_by ? ` · held by ${job.claimed_by}` : ""}`}>
+      <Panel
+        flush
+        title={`Job ${job.id}`}
+        src={`${job.namespace} · ${job.status}${job.claimed_by ? ` · held by ${job.claimed_by}` : ""}`}
+      >
         <div className="body">
           <p>{job.title}</p>
           {data.truncated.length > 0 && (
             <div className="callout warn" role="status">
-              Cut at {data.limit} rows each: {data.truncated.join(", ")}. The tool's export reads every row.
+              Cut at {data.limit} rows each: {data.truncated.join(", ")}. The tool's export reads
+              every row.
             </div>
           )}
-          {data.outcome === null && <p className="faint">No outcome recorded: the job has not completed or failed.</p>}
+          {data.outcome === null && (
+            <p className="faint">No outcome recorded: the job has not completed or failed.</p>
+          )}
         </div>
       </Panel>
-      <Panel flush title="Claim against verified" count={data.claims.length} src="each claim as the agent sent it, and each check the Worker ran on it">
+      <Panel
+        flush
+        title="Claim against verified"
+        count={data.claims.length}
+        src="each claim as the agent sent it, and each check the Worker ran on it"
+      >
         {data.claims.length === 0 ? (
-          <div className="body faint">No claim recorded for this job: it has not reached complete, fail or block since claims were recorded.</div>
+          <div className="body faint">
+            No claim recorded for this job: it has not reached complete, fail or block since claims
+            were recorded.
+          </div>
         ) : (
           data.claims.map((c) => {
             const checks = data.evaluations.filter((e) => e.claim_id === c.id);
@@ -153,10 +198,13 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                   <dl className="kv">
                     <dt>Claim</dt>
                     <dd className="mono">
-                      #{c.id} · {c.action} · {c.agent} · <span title={utc(ms(c.recorded_at))}>{ago(ms(c.recorded_at), now)}</span>
+                      #{c.id} · {c.action} · {c.agent} ·{" "}
+                      <span title={utc(ms(c.recorded_at))}>{ago(ms(c.recorded_at), now)}</span>
                     </dd>
                     <dt>Stated</dt>
-                    <dd className="mono">{said.length ? said.join(" · ") : <None what="no structured claim" />}</dd>
+                    <dd className="mono">
+                      {said.length ? said.join(" · ") : <None what="no structured claim" />}
+                    </dd>
                     <dt>Versions</dt>
                     <dd className="mono">{v || <None what="not stated" />}</dd>
                     <dt>Worker</dt>
@@ -182,7 +230,11 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                     </table>
                   </div>
                 ) : (
-                  <div className="body faint">{c.action === "block" ? "A block is a claim with no check: nothing is verified until the job ends." : "No check recorded for this claim."}</div>
+                  <div className="body faint">
+                    {c.action === "block"
+                      ? "A block is a claim with no check: nothing is verified until the job ends."
+                      : "No check recorded for this claim."}
+                  </div>
                 )}
               </div>
             );
@@ -208,9 +260,16 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
           </div>
         )}
       </Panel>
-      <Panel flush title="Touch log" count={data.touches.length} src="every time a human, or a policy acting for one, touched this job, oldest first">
+      <Panel
+        flush
+        title="Touch log"
+        count={data.touches.length}
+        src="every time a human, or a policy acting for one, touched this job, oldest first"
+      >
         {data.touches.length === 0 ? (
-          <div className="body faint">No touch recorded: nobody gated, resumed, released or reviewed this job.</div>
+          <div className="body faint">
+            No touch recorded: nobody gated, resumed, released or reviewed this job.
+          </div>
         ) : (
           <div className="scroll-x reflow">
             <table className="list cards-below-1100">

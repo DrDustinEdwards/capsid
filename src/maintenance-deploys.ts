@@ -49,7 +49,7 @@ function sameSha(a: string, b: string): boolean {
 function behind(
   site: { namespace: string; script: string; deployed_on: string; live_sha: string | null },
   head: DefaultHead,
-  now: Date
+  now: Date,
 ): MaintenanceItem | null {
   if (site.live_sha && sameSha(site.live_sha, head.sha)) return null;
   const merged = Date.parse(head.committed_at);
@@ -63,16 +63,28 @@ function behind(
   };
 }
 
-export async function gatherDeployItems(readers: DeployReaders, now: Date): Promise<{ items: MaintenanceItem[]; read: Record<string, number> }> {
+export async function gatherDeployItems(
+  readers: DeployReaders,
+  now: Date,
+): Promise<{ items: MaintenanceItem[]; read: Record<string, number> }> {
   const items: MaintenanceItem[] = [];
   const read: Record<string, number> = {};
   let snapshot: OpsSnapshot | null;
   try {
     snapshot = await readers.snapshot();
   } catch (err) {
-    return { items: [notChecked("capsid", `the watcher snapshot: ${err instanceof Error ? err.message : String(err)}`)], read };
+    return {
+      items: [
+        notChecked(
+          "capsid",
+          `the watcher snapshot: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      ],
+      read,
+    };
   }
-  if (!snapshot) return { items: [notChecked("capsid", "the watcher has written no snapshot yet")], read };
+  if (!snapshot)
+    return { items: [notChecked("capsid", "the watcher has written no snapshot yet")], read };
   for (const site of snapshot.sites) {
     const cf = site.cloudflare;
     if (!cf || cf.state === "not-cloudflare") continue;
@@ -89,18 +101,38 @@ export async function gatherDeployItems(readers: DeployReaders, now: Date): Prom
     try {
       head = await readers.defaultHead(site.namespace);
     } catch (err) {
-      items.push(notChecked(site.namespace, `its default branch: ${err instanceof Error ? err.message : String(err)}`));
+      items.push(
+        notChecked(
+          site.namespace,
+          `its default branch: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
       continue;
     }
     read[site.namespace] = 1;
-    const item = behind({ namespace: site.namespace, script: cf.script, deployed_on: newest.created_on, live_sha: site.sha }, head, now);
-    if (item && items.filter((i) => i.rule === "undeployed-merge").length < MAX_ITEMS) items.push(item);
+    const item = behind(
+      {
+        namespace: site.namespace,
+        script: cf.script,
+        deployed_on: newest.created_on,
+        live_sha: site.sha,
+      },
+      head,
+      now,
+    );
+    if (item && items.filter((i) => i.rule === "undeployed-merge").length < MAX_ITEMS)
+      items.push(item);
   }
   return { items, read };
 }
 
 function notChecked(namespace: string, problem: string): MaintenanceItem {
-  return { rule: "deploys-not-checked", namespace, job: null, line: `Deploys in ${namespace} were not checked (${problem}): what is missing is not a clean result.` };
+  return {
+    rule: "deploys-not-checked",
+    namespace,
+    job: null,
+    line: `Deploys in ${namespace} were not checked (${problem}): what is missing is not a clean result.`,
+  };
 }
 
 /** The readers: the watcher's snapshot from APP_KV, and the default branch's head commit
@@ -117,14 +149,23 @@ export function githubDeployReaders(env: Env): DeployReaders {
       }
       const branch = ((await meta.json()) as { default_branch?: string }).default_branch;
       if (!branch) throw new Error("the repository names no default branch");
-      const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`);
+      const resp = await ghFetch(
+        env,
+        owner,
+        repo,
+        `/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`,
+      );
       if (!resp.ok) {
         await resp.body?.cancel();
         throw new Error(`the ${branch} read returned ${resp.status}`);
       }
-      const commit = (await resp.json()) as { sha?: string; commit?: { committer?: { date?: string } } };
+      const commit = (await resp.json()) as {
+        sha?: string;
+        commit?: { committer?: { date?: string } };
+      };
       const date = commit.commit?.committer?.date;
-      if (!commit.sha || !date) throw new Error(`the ${branch} head carries no sha or committer date`);
+      if (!commit.sha || !date)
+        throw new Error(`the ${branch} head carries no sha or committer date`);
       return { repo: full, branch, sha: commit.sha, committed_at: date };
     },
   };

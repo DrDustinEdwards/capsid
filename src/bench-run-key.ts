@@ -35,11 +35,11 @@ export async function runKeyAgent(db: D1Database, hash: string, now: Date): Prom
   const row = await db
     .prepare(
       `SELECT id, task_id, run_key_hash FROM bench_runs
-       WHERE run_key_hash = ?1 AND arm = 'treatment' AND status = 'running' AND started_at > ?2`
+       WHERE run_key_hash = ?1 AND arm = 'treatment' AND status = 'running' AND started_at > ?2`,
     )
     .bind(hash, new Date(now.getTime() - BENCH_STALE_MS).toISOString())
     .first<{ id: string; task_id: string; run_key_hash: string }>();
-  if (!row || !await safeEqual(row.run_key_hash, hash)) return null;
+  if (!row || !(await safeEqual(row.run_key_hash, hash))) return null;
   const { results: jobs } = await db
     .prepare("SELECT id FROM jobs WHERE namespace = ?1 AND title = ?2 LIMIT 2")
     .bind(BENCH_NAMESPACE, runJobTitle(row.task_id, row.id))
@@ -50,7 +50,13 @@ export async function runKeyAgent(db: D1Database, hash: string, now: Date): Prom
     name: `bench-run-${row.id}`,
     kind: "driver",
     actor,
-    scopes: { namespaces: [BENCH_NAMESPACE], repos: [], tools: ["capsid_work_jobs"], grants: ["read", "write"], flags: noFlags() },
+    scopes: {
+      namespaces: [BENCH_NAMESPACE],
+      repos: [],
+      tools: ["capsid_work_jobs"],
+      grants: ["read", "write"],
+      flags: noFlags(),
+    },
     admin: false,
     row: null,
     benchRun: { run: row.id, job: jobs?.length === 1 ? jobs[0].id : null },
@@ -72,12 +78,20 @@ export interface ReproReceipt {
 }
 
 /** The harness's receipt for a run, or null when none was posted. */
-export async function readReproReceipt(db: D1Database, runId: string): Promise<ReproReceipt | null> {
+export async function readReproReceipt(
+  db: D1Database,
+  runId: string,
+): Promise<ReproReceipt | null> {
   const row = await db
-    .prepare("SELECT params FROM audit_log WHERE action = ?1 AND namespace = ?2 AND path = ?3 ORDER BY id LIMIT 1")
+    .prepare(
+      "SELECT params FROM audit_log WHERE action = ?1 AND namespace = ?2 AND path = ?3 ORDER BY id LIMIT 1",
+    )
     .bind(BENCH_REPRO_ACTION, BENCH_NAMESPACE, runId)
     .first<{ params: string }>();
   if (!row) return null;
   const parsed = JSON.parse(row.params) as Partial<ReproReceipt>;
-  return { passed: parsed.passed === true, reason: typeof parsed.reason === "string" ? parsed.reason : "" };
+  return {
+    passed: parsed.passed === true,
+    reason: typeof parsed.reason === "string" ? parsed.reason : "",
+  };
 }

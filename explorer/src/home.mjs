@@ -10,36 +10,65 @@
 
 import { graph, thing, website } from "@drdustinedwards/site-helpers/schema";
 
-import { ORIGIN, SITE, escapeHtml, flowStage, flowsOf, layout, manualHead, minutes, percent, reading, sectionAt, stepPath, stepWords } from "./pages.mjs";
+import {
+  ORIGIN,
+  SITE,
+  escapeHtml,
+  flowStage,
+  flowsOf,
+  layout,
+  manualHead,
+  minutes,
+  percent,
+  reading,
+  sectionAt,
+  stepPath,
+  stepWords,
+} from "./pages.mjs";
 import { toolPath } from "./tools.mjs";
 
-const DESCRIPTION = "Capsid is an open-source MCP server for AI coding agents. It gives them a shared memory, limits what each one can do, and checks their finished work against GitHub.";
+const DESCRIPTION =
+  "Capsid is an open-source MCP server for AI coding agents. It gives them a shared memory, limits what each one can do, and checks their finished work against GitHub.";
 /** The front page's JSON-LD: this site, and the code it is about. A function, because pages.mjs imports this module. */
-const siteData = (AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: "Dustin Edwards", url: SITE }) => graph([
-  website({ origin: ORIGIN, name: "Capsid", description: DESCRIPTION, searchUrl: `${ORIGIN}/search/?q={search_term_string}`, publisher: AUTHOR }),
-  thing("SoftwareSourceCode", {
-    "@id": `${ORIGIN}/#code`,
-    name: "Capsid",
-    description: DESCRIPTION,
-    url: ORIGIN,
-    codeRepository: "https://github.com/DrDustinEdwards/capsid",
-    license: "https://opensource.org/licenses/MIT",
-    programmingLanguage: "TypeScript",
-    runtimePlatform: "Cloudflare Workers",
-    author: AUTHOR,
-  }),
-]);
+const siteData = (
+  AUTHOR = { "@type": "Person", "@id": `${SITE}/#person`, name: "Dustin Edwards", url: SITE },
+) =>
+  graph([
+    website({
+      origin: ORIGIN,
+      name: "Capsid",
+      description: DESCRIPTION,
+      searchUrl: `${ORIGIN}/search/?q={search_term_string}`,
+      publisher: AUTHOR,
+    }),
+    thing("SoftwareSourceCode", {
+      "@id": `${ORIGIN}/#code`,
+      name: "Capsid",
+      description: DESCRIPTION,
+      url: ORIGIN,
+      codeRepository: "https://github.com/DrDustinEdwards/capsid",
+      license: "https://opensource.org/licenses/MIT",
+      programmingLanguage: "TypeScript",
+      runtimePlatform: "Cloudflare Workers",
+      author: AUTHOR,
+    }),
+  ]);
 
 /** The week each bar of a weekly series ends on, labeled as the numbers page does. @param {any} stats */
 export function weekLabels(stats) {
-  return weekEnds(stats).map((d) => d.toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }));
+  return weekEnds(stats).map((d) =>
+    d.toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }),
+  );
 }
 
 /** The last day of each of those weeks, oldest first: the x of the line and area charts, which read dates.
  * @param {any} stats @returns {Date[]} */
 export function weekEnds(stats) {
   const end = Date.parse(`${stats.as_of}T00:00:00Z`) - 86_400_000;
-  return stats.jobs.completed_by_week.map((/** @type {number} */ _c, /** @type {number} */ i, /** @type {number[]} */ all) => new Date(end - (all.length - 1 - i) * 7 * 86_400_000));
+  return stats.jobs.completed_by_week.map(
+    (/** @type {number} */ _c, /** @type {number} */ i, /** @type {number[]} */ all) =>
+      new Date(end - (all.length - 1 - i) * 7 * 86_400_000),
+  );
 }
 
 /**
@@ -51,14 +80,25 @@ function readingsByStep(stats) {
   const { jobs: j, verification: v, gates: g } = stats;
   return {
     posted: [[String(j.completed_30d), "jobs completed, last 30 days"]],
-    claimed: [[String(j.open), "open now"], [String(j.blocked), "waiting on a person"]],
+    claimed: [
+      [String(j.open), "open now"],
+      [String(j.blocked), "waiting on a person"],
+    ],
     worked: [[minutes(j.median_duration_minutes_30d), "median job time, last 30 days"]],
-    blocked: [[String(g.waits_30d), "approval waits, last 30 days"], [minutes(g.median_wait_minutes_30d), "median wait"]],
+    blocked: [
+      [String(g.waits_30d), "approval waits, last 30 days"],
+      [minutes(g.median_wait_minutes_30d), "median wait"],
+    ],
     "pull request": [[percent(v.pr_merge_rate_90d), "of agents' pull requests merged"]],
     merged: [[percent(g.share_ended_by_policy_30d), "of waits the signed policy cleared"]],
     deployed: [[percent(v.ci_green_rate_90d), "of checked jobs with passing CI"]],
     verified: [[stats.capsid.sha7, "the commit running now"]],
-    "claims checked": [[percent(v.agreement_rate_90d), `of ${v.evaluations_90d} claims matched GitHub, last 90 days`]],
+    "claims checked": [
+      [
+        percent(v.agreement_rate_90d),
+        `of ${v.evaluations_90d} claims matched GitHub, last 90 days`,
+      ],
+    ],
   };
 }
 
@@ -79,7 +119,13 @@ const BREAKERS = [
 ];
 
 /** The breaker each tool hangs under: the grant it cannot work without beyond read (src/scope.ts, needFor). */
-const FEEDS = { read: "read", action: "write", write: "write", admin_read: "admin", admin: "admin" };
+const FEEDS = {
+  read: "read",
+  action: "write",
+  write: "write",
+  admin_read: "admin",
+  admin: "admin",
+};
 
 /**
  * Whether a caller holding these grants reaches a tool: "full", "part" (an action tool, some of
@@ -92,7 +138,8 @@ export function reaches(need, held) {
   if (need === "write") return held.write ? "full" : "";
   if (need === "admin") return held.admin && held.write ? "full" : "";
   if (need === "admin_read") return held.admin && held.read ? "full" : "";
-  if (need === "action") return held.read && held.write ? "full" : held.read || held.write ? "part" : "";
+  if (need === "action")
+    return held.read && held.write ? "full" : held.read || held.write ? "part" : "";
   return "";
 }
 
@@ -218,15 +265,22 @@ const BRIEF = [
  * @param {any} model @param {any} stats
  */
 function knowledge(model, stats) {
-  const more = (/** @type {string} */ id, /** @type {string} */ words) => (flowsOf(model).some((f) => f.id === id) ? `<p class="kb-more"><a href="/flows/${id}/">${words}</a></p>` : "");
-  const tag = (/** @type {boolean} */ kw, /** @type {boolean} */ mean) => (kw && mean ? "both" : kw ? "keyword" : "meaning");
+  const more = (/** @type {string} */ id, /** @type {string} */ words) =>
+    flowsOf(model).some((f) => f.id === id)
+      ? `<p class="kb-more"><a href="/flows/${id}/">${words}</a></p>`
+      : "";
+  const tag = (/** @type {boolean} */ kw, /** @type {boolean} */ mean) =>
+    kw && mean ? "both" : kw ? "keyword" : "meaning";
   const results = SEARCHES.map(
-    (x, i) => `<ol class="kb-results" data-q="${i}"${i ? " hidden" : ""}>${x.rows
-      .map(
-        ([title, path, kw, mean, canon]) =>
-          `<li${kw ? " data-kw" : ""}${mean ? " data-mean" : ""}><span class="kb-doc"><span class="kb-title">${escapeHtml(title)}</span><code>${escapeHtml(path)}</code></span><span class="kb-tags">${canon ? `<span class="kb-tag" data-canon>core</span>` : ""}<span class="kb-tag kb-how">${tag(kw, mean)}</span><span class="kb-tag kb-kw">keyword</span></span></li>`
-      )
-      .join("")}</ol><p class="kb-left" data-q="${i}"${i ? " hidden" : ""}>${x.retired ? `Left out ${x.retired} closed or replaced ${x.retired === 1 ? "document" : "documents"}.` : "No closed or replaced documents matched."} Capsid rereads every meaning match from the database first, so it never shows a deleted document.</p><p class="kb-left kb-kwnote" data-q="${i}"${i ? " hidden" : ""}>Keywords alone find ${x.rows.filter((r) => r[2]).length} of ${x.rows.length}. Add meaning to find documents that use other words.</p>`
+    (x, i) =>
+      `<ol class="kb-results" data-q="${i}"${i ? " hidden" : ""}>${x.rows
+        .map(
+          ([title, path, kw, mean, canon]) =>
+            `<li${kw ? " data-kw" : ""}${mean ? " data-mean" : ""}><span class="kb-doc"><span class="kb-title">${escapeHtml(title)}</span><code>${escapeHtml(path)}</code></span><span class="kb-tags">${canon ? `<span class="kb-tag" data-canon>core</span>` : ""}<span class="kb-tag kb-how">${tag(kw, mean)}</span><span class="kb-tag kb-kw">keyword</span></span></li>`,
+        )
+        .join(
+          "",
+        )}</ol><p class="kb-left" data-q="${i}"${i ? " hidden" : ""}>${x.retired ? `Left out ${x.retired} closed or replaced ${x.retired === 1 ? "document" : "documents"}.` : "No closed or replaced documents matched."} Capsid rereads every meaning match from the database first, so it never shows a deleted document.</p><p class="kb-left kb-kwnote" data-q="${i}"${i ? " hidden" : ""}>Keywords alone find ${x.rows.filter((r) => r[2]).length} of ${x.rows.length}. Add meaning to find documents that use other words.</p>`,
   ).join("");
   const total = BRIEF.reduce((n, b) => n + Number(b[2]), 0);
   return `<section class="kb cap-page" id="memory" aria-labelledby="kb-title">
@@ -281,7 +335,9 @@ function board(tools) {
 /** The tour: a chapter a step, the drawing pinned beside them. */
 function tour(/** @type {any} */ model, /** @type {any} */ stats) {
   const core = model.systems.find((/** @type {any} */ s) => s.ring === "core");
-  const flows = flowsOf(model).filter((f) => core && f.steps.every((x) => x.touches.every((p) => p.system === core.id)));
+  const flows = flowsOf(model).filter(
+    (f) => core && f.steps.every((x) => x.touches.every((p) => p.system === core.id)),
+  );
   const life = flows.find((f) => f.id === "job-life") ?? flows[0];
   if (!life) return "";
   const readings = readingsByStep(stats);
@@ -311,13 +367,20 @@ ${kept.length ? `<dl class="readings readings-small">${kept.map(([value, label])
 }
 
 /** What one Worker holds, as the manual's index sets it: each section by number and name, a dotted leader to what it holds. */
-function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {any[]} */ tools, /** @type {any} */ codeIndex) {
+function holds(
+  /** @type {any} */ model,
+  /** @type {any} */ stats,
+  /** @type {any[]} */ tools,
+  /** @type {any} */ codeIndex,
+) {
   const rows = [
     ["/systems/", `${model.systems.length} drawn with their parts`],
     ["/flows/", `${flowsOf(model).length} told step by step`],
     ["/tools/", `${tools.length} served over MCP`],
     ["/numbers/", `${stats.store.documents.toLocaleString("en-US")} documents held`],
-    ...(codeIndex ? [["/code/", `${codeIndex.modules.toLocaleString("en-US")} modules scored`]] : []),
+    ...(codeIndex
+      ? [["/code/", `${codeIndex.modules.toLocaleString("en-US")} modules scored`]]
+      : []),
   ];
   return `<section class="holds cap-page" aria-labelledby="holds-title">
 <h2 id="holds-title">Contents</h2>
@@ -335,7 +398,13 @@ function holds(/** @type {any} */ model, /** @type {any} */ stats, /** @type {an
  * @param {any} codeIndex totals over the code maps (code.mjs, codeTotals), or null
  */
 export function homePage(model, stats, tools, codeIndex) {
-  const body = [hero(stats), knowledge(model, stats), board(tools), tour(model, stats), holds(model, stats, tools, codeIndex)].join("\n");
+  const body = [
+    hero(stats),
+    knowledge(model, stats),
+    board(tools),
+    tour(model, stats),
+    holds(model, stats, tools, codeIndex),
+  ].join("\n");
   return layout({
     title: "Capsid: shared memory and a fact-check for AI coding agents",
     fullTitle: true,

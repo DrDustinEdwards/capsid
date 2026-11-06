@@ -36,25 +36,37 @@ export interface DocumentEdges {
 
 /** One document by namespace and path, or null. Named columns: frontmatter and
  *  publish_at are left out, since nothing in this server reads or writes them. */
-export async function readDocument(db: D1Database, namespace: string, path: string): Promise<DocumentRow | null> {
+export async function readDocument(
+  db: D1Database,
+  namespace: string,
+  path: string,
+): Promise<DocumentRow | null> {
   return db
     .prepare(
       `SELECT id, namespace, path, title, type, status, tags, created_at, updated_at, body
-       FROM documents WHERE namespace = ?1 AND path = ?2`
+       FROM documents WHERE namespace = ?1 AND path = ?2`,
     )
     .bind(namespace, path)
     .first<DocumentRow>();
 }
 
 /** The typed edges declared on a document and the ones pointing at it. */
-export async function documentEdges(db: D1Database, namespace: string, path: string): Promise<DocumentEdges> {
+export async function documentEdges(
+  db: D1Database,
+  namespace: string,
+  path: string,
+): Promise<DocumentEdges> {
   const [outgoing, incoming] = await Promise.all([
     db
-      .prepare("SELECT type, to_ns, to_path FROM document_links WHERE from_ns = ?1 AND from_path = ?2 ORDER BY type, to_ns, to_path")
+      .prepare(
+        "SELECT type, to_ns, to_path FROM document_links WHERE from_ns = ?1 AND from_path = ?2 ORDER BY type, to_ns, to_path",
+      )
       .bind(namespace, path)
       .all<DocumentEdges["outgoing"][number]>(),
     db
-      .prepare("SELECT type, from_ns, from_path FROM document_links WHERE to_ns = ?1 AND to_path = ?2 ORDER BY type, from_ns, from_path")
+      .prepare(
+        "SELECT type, from_ns, from_path FROM document_links WHERE to_ns = ?1 AND to_path = ?2 ORDER BY type, from_ns, from_path",
+      )
       .bind(namespace, path)
       .all<DocumentEdges["incoming"][number]>(),
   ]);
@@ -76,7 +88,11 @@ export interface SearchFilter {
  *  "exactly the limit" from "there are more". Hyphens, quotes and bare AND, OR and NOT
  *  are FTS5 syntax, so a query FTS5 refuses is retried once as a quoted phrase, and plain
  *  text is always a safe input. A second refusal throws. */
-export async function searchDocuments(db: D1Database, query: string, filter: SearchFilter): Promise<SearchRow[]> {
+export async function searchDocuments(
+  db: D1Database,
+  query: string,
+  filter: SearchFilter,
+): Promise<SearchRow[]> {
   const run = (match: string) =>
     db
       .prepare(
@@ -89,9 +105,17 @@ export async function searchDocuments(db: D1Database, query: string, filter: Sea
            AND (?3 IS NULL OR d.type = ?3)
            AND (?4 IS NULL OR d.path IN (SELECT value FROM json_each(?4)))
          ORDER BY bm25(documents_fts)
-         LIMIT ?5`
+         LIMIT ?5`,
       )
-      .bind(match, filter.namespace, filter.type, filter.allowed, SEARCH_ROWS + 1, filter.marks?.open ?? "[", filter.marks?.close ?? "]")
+      .bind(
+        match,
+        filter.namespace,
+        filter.type,
+        filter.allowed,
+        SEARCH_ROWS + 1,
+        filter.marks?.open ?? "[",
+        filter.marks?.close ?? "]",
+      )
       .all<SearchRow>();
   try {
     return (await run(query)).results;

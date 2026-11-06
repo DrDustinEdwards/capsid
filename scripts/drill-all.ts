@@ -45,23 +45,56 @@ const MAX_AGE_HOURS = 26;
 // A drill that runs longer than this is a FAIL line, not a hang of every later site.
 const DRILL_TIMEOUT_MS = 15 * 60_000;
 
-const CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "node_modules", "@dustinedwards", "d1-dump", "dist", "cli.js");
+const CLI = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "node_modules",
+  "@dustinedwards",
+  "d1-dump",
+  "dist",
+  "cli.js",
+);
 
 /** The real drill: d1-dump's CLI on the sqlite backend, as a child process. */
 export function runDrillCli(dir: string, prefix: string): DrillRun {
-  const r = spawnSync(process.execPath, [CLI, "drill", "--dir", dir, "--backend", "sqlite", "--prefix", prefix, "--max-age-hours", "off"], {
-    encoding: "utf8",
-    timeout: DRILL_TIMEOUT_MS,
-  });
-  const killed = r.signal ? `FAIL drill: stopped by ${r.signal} (timeout ${DRILL_TIMEOUT_MS / 60_000} min)\n` : "";
-  return { code: r.status ?? 1, output: `${killed}${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? String(r.error.message) : ""}` };
+  const r = spawnSync(
+    process.execPath,
+    [
+      CLI,
+      "drill",
+      "--dir",
+      dir,
+      "--backend",
+      "sqlite",
+      "--prefix",
+      prefix,
+      "--max-age-hours",
+      "off",
+    ],
+    {
+      encoding: "utf8",
+      timeout: DRILL_TIMEOUT_MS,
+    },
+  );
+  const killed = r.signal
+    ? `FAIL drill: stopped by ${r.signal} (timeout ${DRILL_TIMEOUT_MS / 60_000} min)\n`
+    : "";
+  return {
+    code: r.status ?? 1,
+    output: `${killed}${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? String(r.error.message) : ""}`,
+  };
 }
 
 /** The first failing check of a drill's output, or its first line when none is named. */
 export function firstFailure(output: string): string {
-  const lines = output.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = output
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
   const failed = lines.find((l) => l.startsWith("FAIL "));
-  return (failed ?? lines.find((l) => !l.startsWith("backend:")) ?? "the drill printed nothing").replace(/^FAIL /, "").slice(0, 200);
+  return (failed ?? lines.find((l) => !l.startsWith("backend:")) ?? "the drill printed nothing")
+    .replace(/^FAIL /, "")
+    .slice(0, 200);
 }
 
 async function listAll(bucket: R2Like, prefix: string): Promise<string[]> {
@@ -85,7 +118,7 @@ export async function drillSite(
   {
     now = new Date(),
     runDrill = runDrillCli,
-  }: { now?: Date; runDrill?: (dir: string, prefix: string) => DrillRun | Promise<DrillRun> } = {}
+  }: { now?: Date; runDrill?: (dir: string, prefix: string) => DrillRun | Promise<DrillRun> } = {},
 ): Promise<{ line: string; ok: boolean }> {
   const dir = mkdtempSync(join(tmpdir(), `drill-${site}-`));
   let head = site;
@@ -103,18 +136,33 @@ export async function drillSite(
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, await obj.text());
     }
-    const marker = JSON.parse(readFileSync(join(dir, ...latest.prefix.split("/"), COMPLETE_MARKER), "utf8"));
-    const age = Math.round(((now.getTime() - Date.parse(latest.exported_at)) / 3_600_000) * 10) / 10;
+    const marker = JSON.parse(
+      readFileSync(join(dir, ...latest.prefix.split("/"), COMPLETE_MARKER), "utf8"),
+    );
+    const age =
+      Math.round(((now.getTime() - Date.parse(latest.exported_at)) / 3_600_000) * 10) / 10;
     const tables = Array.isArray(marker.tables) ? marker.tables : [];
-    const rows = tables.reduce((n: number, t: { rows?: unknown } | null) => n + (typeof t?.rows === "number" && Number.isFinite(t.rows) ? t.rows : 0), 0);
+    const rows = tables.reduce(
+      (n: number, t: { rows?: unknown } | null) =>
+        n + (typeof t?.rows === "number" && Number.isFinite(t.rows) ? t.rows : 0),
+      0,
+    );
     const stats = `${head} age_hours=${Number.isNaN(age) ? "unknown" : age.toFixed(1)} tables=${tables.length} rows=${rows}`;
-    if (Number.isNaN(age)) return { line: `${stats} FAIL (dump: exported_at is not a time)`, ok: false };
-    if (age > MAX_AGE_HOURS) return { line: `${stats} FAIL (dump: the newest complete run is over ${MAX_AGE_HOURS}h old)`, ok: false };
+    if (Number.isNaN(age))
+      return { line: `${stats} FAIL (dump: exported_at is not a time)`, ok: false };
+    if (age > MAX_AGE_HOURS)
+      return {
+        line: `${stats} FAIL (dump: the newest complete run is over ${MAX_AGE_HOURS}h old)`,
+        ok: false,
+      };
     const { code, output } = await runDrill(dir, latest.prefix);
     if (code === 0) return { line: `${stats} PASS`, ok: true };
     return { line: `${stats} FAIL (${firstFailure(output)})`, ok: false };
   } catch (err) {
-    return { line: `${head} FAIL (${(err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 200)})`, ok: false };
+    return {
+      line: `${head} FAIL (${(err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 200)})`,
+      ok: false,
+    };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -124,14 +172,20 @@ export async function drillSite(
 export function selectSites(argv: string[], sites: Site[] = SITES): Site[] {
   const wanted: string[] = [];
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] !== "--site") throw new Error(`unknown argument ${argv[i]}; usage: node scripts/drill-all.ts [--site <name>]...`);
+    if (argv[i] !== "--site")
+      throw new Error(
+        `unknown argument ${argv[i]}; usage: node scripts/drill-all.ts [--site <name>]...`,
+      );
     const name = argv[++i];
     if (!name) throw new Error("--site needs a site name");
     wanted.push(name);
   }
   if (wanted.length === 0) return sites;
   const unknown = wanted.filter((w) => !sites.some((s) => s.name === w));
-  if (unknown.length > 0) throw new Error(`unknown site ${unknown.join(", ")}; known: ${sites.map((s) => s.name).join(", ")}`);
+  if (unknown.length > 0)
+    throw new Error(
+      `unknown site ${unknown.join(", ")}; known: ${sites.map((s) => s.name).join(", ")}`,
+    );
   return sites.filter((s) => wanted.includes(s.name));
 }
 
@@ -140,7 +194,14 @@ async function openBucket(site: Site): Promise<{ bucket: R2Like; dispose: () => 
   const { getPlatformProxy } = await import("wrangler");
   const cfgDir = mkdtempSync(join(tmpdir(), `drill-cfg-${site.name}-`));
   const configPath = join(cfgDir, "wrangler.jsonc");
-  writeFileSync(configPath, JSON.stringify({ name: "drill-all", compatibility_date: "2026-01-01", r2_buckets: [{ binding: "BACKUPS", bucket_name: site.bucket, remote: true }] }));
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      name: "drill-all",
+      compatibility_date: "2026-01-01",
+      r2_buckets: [{ binding: "BACKUPS", bucket_name: site.bucket, remote: true }],
+    }),
+  );
   let proxy;
   try {
     proxy = await getPlatformProxy({ configPath, remoteBindings: true, persist: false });
@@ -174,7 +235,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     try {
       opened = await openBucket(site);
     } catch (err) {
-      console.log(`${site.name} FAIL (cannot open ${site.bucket}: ${(err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 160)})`);
+      console.log(
+        `${site.name} FAIL (cannot open ${site.bucket}: ${(err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 160)})`,
+      );
       failed = true;
       continue;
     }
@@ -189,4 +252,5 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   return failed ? 1 : 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) process.exit(await main());
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+  process.exit(await main());

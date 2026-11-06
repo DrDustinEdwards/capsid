@@ -1,4 +1,10 @@
-import { BackupIncomplete, DEFAULT_RETENTION, readDumpJson, runCheckedBackup, type DumpResult } from "@dustinedwards/d1-dump";
+import {
+  BackupIncomplete,
+  DEFAULT_RETENTION,
+  readDumpJson,
+  runCheckedBackup,
+  type DumpResult,
+} from "@dustinedwards/d1-dump";
 import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./security-headers";
@@ -232,7 +238,9 @@ function retryingPuts(bucket: R2Bucket, waitMs: number): R2Bucket {
         return await bucket.put(...args);
       } catch (err) {
         if (attempt >= PUT_ATTEMPTS) throw err;
-        logEvent("BACKUP_PUT_RETRY", { message: `BACKUP_PUT_RETRY ${args[0]} attempt ${attempt}: ${err instanceof Error ? err.message : String(err)}` });
+        logEvent("BACKUP_PUT_RETRY", {
+          message: `BACKUP_PUT_RETRY ${args[0]} attempt ${attempt}: ${err instanceof Error ? err.message : String(err)}`,
+        });
         await new Promise((resolve) => setTimeout(resolve, waitMs * attempt));
       }
     }
@@ -260,7 +268,13 @@ async function listAllKeys(bucket: R2Bucket, prefix: string): Promise<string[]> 
 export async function runBackup(env: Env, putRetryMs = PUT_RETRY_MS): Promise<BackupResult> {
   const held = await env.APP_KV.get(LEASE_KEY);
   if (held !== null) {
-    logEvent("BACKUP_LEASE_HELD", { message: `BACKUP_LEASE_HELD another run holds ${LEASE_KEY} (started ${held}); this run pruned nothing` }, { level: "error" });
+    logEvent(
+      "BACKUP_LEASE_HELD",
+      {
+        message: `BACKUP_LEASE_HELD another run holds ${LEASE_KEY} (started ${held}); this run pruned nothing`,
+      },
+      { level: "error" },
+    );
     return { ran: false, skipped: "lease-held" };
   }
   const now = new Date().toISOString();
@@ -273,7 +287,14 @@ export async function runBackup(env: Env, putRetryMs = PUT_RETRY_MS): Promise<Ba
     // and another run took the key, deleting it would let a third run start.
     const current = await env.APP_KV.get(LEASE_KEY);
     if (current === lease) await env.APP_KV.delete(LEASE_KEY);
-    else logEvent("BACKUP_LEASE_LOST", { message: `BACKUP_LEASE_LOST ${LEASE_KEY} is no longer this run's (now ${current}); left in place` }, { level: "error" });
+    else
+      logEvent(
+        "BACKUP_LEASE_LOST",
+        {
+          message: `BACKUP_LEASE_LOST ${LEASE_KEY} is no longer this run's (now ${current}); left in place`,
+        },
+        { level: "error" },
+      );
   }
 }
 
@@ -310,8 +331,15 @@ type DocRow = { namespace: string; path: string; body: string | null };
 // written. A documents object that cannot be read fails the run.
 async function dumpedDocs(env: Env, dump: DumpResult): Promise<DocRow[]> {
   const docsKey = dump.tables.find((t) => t.name === "documents")?.key;
-  if (!docsKey) throw new Error(`BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
-  const read = await readDumpJson<{ rows: DocRow[] }>(env.MEDIA, docsKey, () => `BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`);
+  if (!docsKey)
+    throw new Error(
+      `BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`,
+    );
+  const read = await readDumpJson<{ rows: DocRow[] }>(
+    env.MEDIA,
+    docsKey,
+    () => `BACKUP_DOCUMENTS_UNREADABLE the dump at ${dump.prefix} has no readable documents object`,
+  );
   return read.rows;
 }
 
@@ -323,7 +351,9 @@ function tablesMismatch(dump: DumpResult): string | null {
   const listed = new Set<string>(TABLES);
   const missing = TABLES.filter((t) => !dumped.has(t));
   const extra = [...dumped].filter((t) => !listed.has(t));
-  return missing.length || extra.length ? `tables-mismatch: missing ${missing.join(",") || "none"}; unlisted ${extra.join(",") || "none"}` : null;
+  return missing.length || extra.length
+    ? `tables-mismatch: missing ${missing.join(",") || "none"}; unlisted ${extra.join(",") || "none"}`
+    : null;
 }
 
 // The preflight, run before anything destructive. The dangerous case is a SELECT that
@@ -334,9 +364,13 @@ function tablesMismatch(dump: DumpResult): string | null {
 // Two probes: a count above zero, and the same pinned FTS probe /health uses, which
 // catches a binding pointed at a different database that has rows. Returns the named
 // reason to refuse, or null.
-async function preflight(env: Env, docs: DocRow[]): Promise<{ fts: string; pruneRefused: string | null }> {
+async function preflight(
+  env: Env,
+  docs: DocRow[],
+): Promise<{ fts: string; pruneRefused: string | null }> {
   const fts = await probeFts(env.DB);
-  const pruneRefused = docs.length === 0 ? "documents-empty" : fts === "ok" ? null : `fts-probe-failed: ${fts}`;
+  const pruneRefused =
+    docs.length === 0 ? "documents-empty" : fts === "ok" ? null : `fts-probe-failed: ${fts}`;
   return { fts, pruneRefused };
 }
 
@@ -349,8 +383,10 @@ async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
       docs.slice(i, i + PUT_CONCURRENCY).map((doc) => {
         const key = `${MARKDOWN_PREFIX}${doc.namespace}/${doc.path}`;
         currentKeys.add(key);
-        return env.MEDIA.put(key, doc.body ?? "", { httpMetadata: { contentType: "text/markdown" } });
-      })
+        return env.MEDIA.put(key, doc.body ?? "", {
+          httpMetadata: { contentType: "text/markdown" },
+        });
+      }),
     );
   }
 
@@ -369,7 +405,7 @@ async function mirrorMarkdown(env: Env, docs: DocRow[]): Promise<number> {
 async function pruneReports(env: Env, now: string): Promise<number> {
   const reportCutoff = cutoffDay(new Date(now), REPORT_RETENTION_DAYS);
   const staleReports = (await listAllKeys(env.MEDIA, REPORT_PREFIX)).filter((key) =>
-    isOlderThan(key, REPORT_PREFIX, reportCutoff)
+    isOlderThan(key, REPORT_PREFIX, reportCutoff),
   );
   if (staleReports.length > 0) await deleteInChunks(env.MEDIA, staleReports);
   return staleReports.length;
@@ -380,16 +416,18 @@ async function pruneReports(env: Env, now: string): Promise<number> {
 // COUNT over the same predicate in the same transaction.
 async function pruneD1(env: Env): Promise<{ versions: number; audit: number }> {
   const pruned = await env.DB.batch<{ n: number }>([
-    env.DB.prepare("SELECT COUNT(*) AS n FROM document_versions WHERE snapshot_at < datetime('now', ?1)").bind(
-      `-${VERSION_RETENTION_DAYS} days`
-    ),
+    env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM document_versions WHERE snapshot_at < datetime('now', ?1)",
+    ).bind(`-${VERSION_RETENTION_DAYS} days`),
     env.DB.prepare("DELETE FROM document_versions WHERE snapshot_at < datetime('now', ?1)").bind(
-      `-${VERSION_RETENTION_DAYS} days`
+      `-${VERSION_RETENTION_DAYS} days`,
     ),
     env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE at < datetime('now', ?1)").bind(
-      `-${AUDIT_RETENTION_DAYS} days`
+      `-${AUDIT_RETENTION_DAYS} days`,
     ),
-    env.DB.prepare("DELETE FROM audit_log WHERE at < datetime('now', ?1)").bind(`-${AUDIT_RETENTION_DAYS} days`),
+    env.DB.prepare("DELETE FROM audit_log WHERE at < datetime('now', ?1)").bind(
+      `-${AUDIT_RETENTION_DAYS} days`,
+    ),
     // The replay cache, appended last so the count/delete pairs above keep the
     // positions their counters read. A jti matters only inside the signature window.
     env.DB.prepare("DELETE FROM improve_jti WHERE seen_at < datetime('now', '-1 day')"),
@@ -416,10 +454,18 @@ export const DAILY_RETENTION_DAYS = 90;
 async function pruneDaily(env: Env, now: Date): Promise<void> {
   try {
     await pruneNotFound(env.DB, { days: DAILY_RETENTION_DAYS, now });
-    await env.DB.prepare("DELETE FROM ops_uptime_daily WHERE day < ?1").bind(cutoffDay(now, DAILY_RETENTION_DAYS - 1)).run();
-    await env.DB.prepare("DELETE FROM portal_session_ends WHERE expires_at < ?1").bind(now.getTime()).run();
+    await env.DB.prepare("DELETE FROM ops_uptime_daily WHERE day < ?1")
+      .bind(cutoffDay(now, DAILY_RETENTION_DAYS - 1))
+      .run();
+    await env.DB.prepare("DELETE FROM portal_session_ends WHERE expires_at < ?1")
+      .bind(now.getTime())
+      .run();
   } catch (err) {
-    logEvent("BACKUP_DAILY_PRUNE_FAILED", { message: `BACKUP_DAILY_PRUNE_FAILED ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "BACKUP_DAILY_PRUNE_FAILED",
+      { message: `BACKUP_DAILY_PRUNE_FAILED ${err instanceof Error ? err.message : String(err)}` },
+      { level: "error" },
+    );
   }
 }
 
@@ -469,11 +515,15 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
   const jsonKeys = dump.keys;
 
   if (pruneRefused !== null) {
-    logEvent("BACKUP_PREFLIGHT_REFUSED", {
-      message:
-        `BACKUP_PREFLIGHT_REFUSED reason=${pruneRefused} documents=${docs.length} fts=${fts} ` +
-        `dumps_written=${jsonKeys.length} prefix=${jsonPrefix}; nothing was written to or deleted from the mirror`,
-    }, { level: "error" });
+    logEvent(
+      "BACKUP_PREFLIGHT_REFUSED",
+      {
+        message:
+          `BACKUP_PREFLIGHT_REFUSED reason=${pruneRefused} documents=${docs.length} fts=${fts} ` +
+          `dumps_written=${jsonKeys.length} prefix=${jsonPrefix}; nothing was written to or deleted from the mirror`,
+      },
+      { level: "error" },
+    );
     return {
       ran: true,
       json_prefix: jsonPrefix,

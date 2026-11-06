@@ -64,7 +64,13 @@ const REASONING = "low";
 
 const VERDICTS = ["APPROVE", "CHANGES", "BLOCK"] as const;
 export type Verdict = (typeof VERDICTS)[number];
-const FINDING_KINDS = ["misread job", "skipped requirement", "weak test", "bug", "security"] as const;
+const FINDING_KINDS = [
+  "misread job",
+  "skipped requirement",
+  "weak test",
+  "bug",
+  "security",
+] as const;
 type FindingKind = (typeof FINDING_KINDS)[number];
 
 export interface Finding {
@@ -75,23 +81,47 @@ export interface Finding {
 }
 
 type ReviewResult =
-  | { status: "reviewed"; verdict: Verdict; summary: string; findings: Finding[]; model: string; head_sha: string }
+  | {
+      status: "reviewed";
+      verdict: Verdict;
+      summary: string;
+      findings: Finding[];
+      model: string;
+      head_sha: string;
+    }
   | { status: "skipped"; reasons: string[]; head_sha: string }
   | { status: "error"; error: string; head_sha: string };
 
 // Path classes nothing in the diff can go wrong in quietly: prose and pictures, tests alone,
 // lockfiles and manifests (routine bumps), and the Portal's stylesheets. A pull request made
 // only of these is skipped to save the cost; anything else, code or config, is reviewed.
-const SKIPPED_CLASSES: ReadonlySet<PathClass> = new Set(["docs", "tests", "deps-other", "dashboard-css"]);
+const SKIPPED_CLASSES: ReadonlySet<PathClass> = new Set([
+  "docs",
+  "tests",
+  "deps-other",
+  "dashboard-css",
+]);
 
 /** Whether a pull request's files are worth a review, and why. */
 export function reviewScope(files: readonly ChangedFile[]): { review: boolean; reasons: string[] } {
   if (files.length === 0) return { review: false, reasons: ["no changed files were read"] };
-  const paths = files.flatMap((f) => (f.previous_filename ? [f.previous_filename, f.filename] : [f.filename]));
+  const paths = files.flatMap((f) =>
+    f.previous_filename ? [f.previous_filename, f.filename] : [f.filename],
+  );
   const reviewed = paths.filter((p) => !SKIPPED_CLASSES.has(pathClassOf(p)));
-  if (reviewed.length === 0) return { review: false, reasons: ["only documents, images, tests, lockfiles or manifests changed"] };
+  if (reviewed.length === 0)
+    return {
+      review: false,
+      reasons: ["only documents, images, tests, lockfiles or manifests changed"],
+    };
   const worth = worthReviewer(files);
-  return { review: true, reasons: worth.level === "worth" ? worth.reasons : [`${reviewed.length} changed file(s) hold code or configuration`] };
+  return {
+    review: true,
+    reasons:
+      worth.level === "worth"
+        ? worth.reasons
+        : [`${reviewed.length} changed file(s) hold code or configuration`],
+  };
 }
 
 export interface ReviewCaller {
@@ -103,12 +133,16 @@ export interface ReviewCaller {
 /** Who a verified token's claims admit: devkit's review.yml, on a pull request, in a
  *  repository Dustin owns. Anything else is refused with the reason. */
 export function reviewCaller(claims: Record<string, unknown>): ReviewCaller | { refusal: string } {
-  const claim = (name: string) => (typeof claims[name] === "string" ? (claims[name] as string) : "");
+  const claim = (name: string) =>
+    typeof claims[name] === "string" ? (claims[name] as string) : "";
   const [owner, repo] = claim("repository").split("/");
   const pr = /^refs\/pull\/(\d+)\/merge$/.exec(claim("ref"))?.[1];
-  if (claim("repository_owner_id") !== REVIEW_OWNER_ID || !owner || !repo) return { refusal: "only a repository Dustin owns may ask for a review" };
-  if (!claim("job_workflow_ref").toLowerCase().startsWith(REVIEW_WORKFLOW)) return { refusal: "only devkit's review.yml may ask for a review" };
-  if (claim("event_name") !== "pull_request" || !pr) return { refusal: "a review is asked for on a pull request only" };
+  if (claim("repository_owner_id") !== REVIEW_OWNER_ID || !owner || !repo)
+    return { refusal: "only a repository Dustin owns may ask for a review" };
+  if (!claim("job_workflow_ref").toLowerCase().startsWith(REVIEW_WORKFLOW))
+    return { refusal: "only devkit's review.yml may ask for a review" };
+  if (claim("event_name") !== "pull_request" || !pr)
+    return { refusal: "a review is asked for on a pull request only" };
   return { owner, repo, pr: Number(pr) };
 }
 
@@ -116,7 +150,10 @@ async function caller(request: Request): Promise<ReviewCaller | Response> {
   const token = /^Bearer (\S+)$/.exec(request.headers.get("Authorization") ?? "")?.[1];
   if (!token) return textResponse("a GitHub Actions OIDC token is required", 401);
   try {
-    const verdict = await verifyJwt(token, await issuerKeys(), { issuer: ISSUER, audience: REVIEW_AUDIENCE });
+    const verdict = await verifyJwt(token, await issuerKeys(), {
+      issuer: ISSUER,
+      audience: REVIEW_AUDIENCE,
+    });
     if (!verdict.ok) return textResponse("the OIDC token does not verify", 401);
     const who = reviewCaller(verdict.claims);
     return "refusal" in who ? textResponse(who.refusal, 403) : who;
@@ -140,8 +177,20 @@ async function ghJson<T>(env: Env, who: ReviewCaller, path: string): Promise<T> 
 }
 
 async function readPull(env: Env, who: ReviewCaller): Promise<Pull> {
-  const p = await ghJson<{ title?: string; body?: string | null; head?: { sha?: string }; base?: { sha?: string }; user?: { login?: string } }>(env, who, `/pulls/${who.pr}`);
-  return { title: p.title ?? "", body: p.body ?? "", head: p.head?.sha ?? "", base: p.base?.sha ?? "", author: p.user?.login ?? "" };
+  const p = await ghJson<{
+    title?: string;
+    body?: string | null;
+    head?: { sha?: string };
+    base?: { sha?: string };
+    user?: { login?: string };
+  }>(env, who, `/pulls/${who.pr}`);
+  return {
+    title: p.title ?? "",
+    body: p.body ?? "",
+    head: p.head?.sha ?? "",
+    base: p.base?.sha ?? "",
+    author: p.user?.login ?? "",
+  };
 }
 
 interface PullFile extends ChangedFile {
@@ -151,7 +200,11 @@ interface PullFile extends ChangedFile {
 async function readFiles(env: Env, who: ReviewCaller): Promise<PullFile[]> {
   const files: PullFile[] = [];
   for (let page = 1; files.length < MAX_FILES; page++) {
-    const batch = await ghJson<PullFile[]>(env, who, `/pulls/${who.pr}/files?per_page=100&page=${page}`);
+    const batch = await ghJson<PullFile[]>(
+      env,
+      who,
+      `/pulls/${who.pr}/files?per_page=100&page=${page}`,
+    );
     files.push(...batch);
     if (batch.length < 100) break;
   }
@@ -160,28 +213,44 @@ async function readFiles(env: Env, who: ReviewCaller): Promise<PullFile[]> {
 
 // CLAUDE.md as it stands at the base. Missing is not an error: not every repository has one.
 async function readRules(env: Env, who: ReviewCaller, base: string): Promise<string> {
-  const resp = await ghFetch(env, who.owner, who.repo, `/repos/${who.owner}/${who.repo}/contents/CLAUDE.md?ref=${base}`, {
-    headers: { Accept: "application/vnd.github.raw+json" },
-  });
+  const resp = await ghFetch(
+    env,
+    who.owner,
+    who.repo,
+    `/repos/${who.owner}/${who.repo}/contents/CLAUDE.md?ref=${base}`,
+    {
+      headers: { Accept: "application/vnd.github.raw+json" },
+    },
+  );
   return resp.ok ? (await resp.text()).slice(0, MAX_CONTEXT_CHARS) : "";
 }
 
 // The Capsid job the description names, when it is a job of a namespace this repository is
 // mapped to. A job of another namespace is not this pull request's to be judged against.
-async function readNamedJob(env: Env, who: ReviewCaller, body: string): Promise<{ id: string; text: string } | null> {
+async function readNamedJob(
+  env: Env,
+  who: ReviewCaller,
+  body: string,
+): Promise<{ id: string; text: string } | null> {
   const id = /\bjob_[0-9a-f]{12}\b/.exec(body)?.[0];
   if (!id) return null;
   const job = await readJob(env.DB, id);
   if (!job) return null;
-  const row = await env.DB.prepare("SELECT repos FROM namespaces WHERE namespace = ?1").bind(job.namespace).first<{ repos: string }>();
+  const row = await env.DB.prepare("SELECT repos FROM namespaces WHERE namespace = ?1")
+    .bind(job.namespace)
+    .first<{ repos: string }>();
   const full = `${who.owner}/${who.repo}`.toLowerCase();
   let mapped = false;
   try {
-    mapped = (JSON.parse(row?.repos ?? "[]") as Array<{ repo?: string }>).some((r) => r.repo?.toLowerCase() === full);
+    mapped = (JSON.parse(row?.repos ?? "[]") as Array<{ repo?: string }>).some(
+      (r) => r.repo?.toLowerCase() === full,
+    );
   } catch {
     mapped = false;
   }
-  return mapped ? { id, text: `${job.title}\n\n${splitSignedTask(job.body).body}`.slice(0, MAX_CONTEXT_CHARS) } : null;
+  return mapped
+    ? { id, text: `${job.title}\n\n${splitSignedTask(job.body).body}`.slice(0, MAX_CONTEXT_CHARS) }
+    : null;
 }
 
 /** The diff as the model reads it: each file's patch under its name, lockfiles left out, cut
@@ -217,11 +286,20 @@ const SYSTEM = [
   UNTRUSTED_DATA_RULE,
 ].join("\n");
 
-function prompt(pull: Pull, rules: string, job: { id: string; text: string } | null, diff: string): string {
+function prompt(
+  pull: Pull,
+  rules: string,
+  job: { id: string; text: string } | null,
+  diff: string,
+): string {
   return [
     `The pull request's title and description:\n${untrusted("pull-request", `${pull.title}\n\n${pull.body}`.slice(0, MAX_CONTEXT_CHARS))}`,
-    job ? `The job it names, ${job.id}:\n${untrusted("job", job.text)}` : "The description names no Capsid job, so judge the change against the description and the rules alone.",
-    rules ? `The repository's rules (CLAUDE.md at the base):\n${untrusted("rules", rules)}` : "The repository has no CLAUDE.md.",
+    job
+      ? `The job it names, ${job.id}:\n${untrusted("job", job.text)}`
+      : "The description names no Capsid job, so judge the change against the description and the rules alone.",
+    rules
+      ? `The repository's rules (CLAUDE.md at the base):\n${untrusted("rules", rules)}`
+      : "The repository has no CLAUDE.md.",
     `The diff:\n${untrusted("diff", diff)}`,
   ].join("\n\n");
 }
@@ -246,8 +324,14 @@ const REPORT_TOOL = {
             properties: {
               kind: { type: "string", enum: [...FINDING_KINDS] },
               file: { type: "string", description: "A path from the diff." },
-              line: { type: ["integer", "null"], description: "The line in the new file, or null." },
-              note: { type: "string", description: "What is wrong and why, in one or two sentences." },
+              line: {
+                type: ["integer", "null"],
+                description: "The line in the new file, or null.",
+              },
+              note: {
+                type: "string",
+                description: "What is wrong and why, in one or two sentences.",
+              },
             },
             required: ["kind", "file", "line", "note"],
           },
@@ -262,12 +346,21 @@ const REPORT_TOOL = {
  *  (its own `tool_calls`, or the OpenAI `choices`), parsed whole. Null when there is none. */
 export function toolArguments(answer: unknown): unknown {
   const a = answer as {
-    tool_calls?: Array<{ name?: string; arguments?: unknown; function?: { name?: string; arguments?: unknown } }>;
-    choices?: Array<{ message?: { tool_calls?: Array<{ function?: { name?: string; arguments?: unknown } }> } }>;
+    tool_calls?: Array<{
+      name?: string;
+      arguments?: unknown;
+      function?: { name?: string; arguments?: unknown };
+    }>;
+    choices?: Array<{
+      message?: { tool_calls?: Array<{ function?: { name?: string; arguments?: unknown } }> };
+    }>;
   } | null;
   const calls = [...(a?.tool_calls ?? []), ...(a?.choices?.[0]?.message?.tool_calls ?? [])];
-  const call = calls.find((c) => ((c as { name?: string }).name ?? c.function?.name) === "report_review");
-  const args = (call as { arguments?: unknown } | undefined)?.arguments ?? call?.function?.arguments;
+  const call = calls.find(
+    (c) => ((c as { name?: string }).name ?? c.function?.name) === "report_review",
+  );
+  const args =
+    (call as { arguments?: unknown } | undefined)?.arguments ?? call?.function?.arguments;
   if (typeof args !== "string") return args ?? null;
   try {
     return JSON.parse(args);
@@ -278,23 +371,33 @@ export function toolArguments(answer: unknown): unknown {
 
 /** Whether the model stopped at max_tokens, which leaves no tool call to read. */
 function ranOut(answer: unknown): boolean {
-  return (answer as { choices?: Array<{ finish_reason?: string }> } | null)?.choices?.[0]?.finish_reason === "length";
+  return (
+    (answer as { choices?: Array<{ finish_reason?: string }> } | null)?.choices?.[0]
+      ?.finish_reason === "length"
+  );
 }
 
 /** The model's answer, held to the shape the check shows: a known verdict, at most five
  *  findings of a known kind on a file the pull request changed. Anything else is null. */
-export function parseVerdict(args: unknown, changed: ReadonlySet<string>): { verdict: Verdict; summary: string; findings: Finding[] } | null {
+export function parseVerdict(
+  args: unknown,
+  changed: ReadonlySet<string>,
+): { verdict: Verdict; summary: string; findings: Finding[] } | null {
   if (!args || typeof args !== "object") return null;
   const raw = args as { verdict?: unknown; summary?: unknown; findings?: unknown };
-  const verdict = typeof raw.verdict === "string" ? (raw.verdict.trim().toUpperCase() as Verdict) : null;
+  const verdict =
+    typeof raw.verdict === "string" ? (raw.verdict.trim().toUpperCase() as Verdict) : null;
   if (!verdict || !VERDICTS.includes(verdict)) return null;
   const findings: Finding[] = [];
-  for (const f of Array.isArray(raw.findings) ? (raw.findings as Array<Record<string, unknown>>) : []) {
+  for (const f of Array.isArray(raw.findings)
+    ? (raw.findings as Array<Record<string, unknown>>)
+    : []) {
     const kind = typeof f?.kind === "string" ? (f.kind.trim().toLowerCase() as FindingKind) : null;
     const file = typeof f?.file === "string" ? f.file.trim().replace(/^[ab]\//, "") : "";
     const note = typeof f?.note === "string" ? f.note.trim().slice(0, 600) : "";
     if (!kind || !FINDING_KINDS.includes(kind) || !changed.has(file) || !note) continue;
-    const line = typeof f.line === "number" && Number.isInteger(f.line) && f.line > 0 ? f.line : null;
+    const line =
+      typeof f.line === "number" && Number.isInteger(f.line) && f.line > 0 ? f.line : null;
     findings.push({ kind, file, line, note });
     if (findings.length === MAX_FINDINGS) break;
   }
@@ -302,9 +405,19 @@ export function parseVerdict(args: unknown, changed: ReadonlySet<string>): { ver
   return { verdict, summary, findings };
 }
 
-async function record(env: Env, who: ReviewCaller, result: ReviewResult, extra: Record<string, unknown>): Promise<void> {
+async function record(
+  env: Env,
+  who: ReviewCaller,
+  result: ReviewResult,
+  extra: Record<string, unknown>,
+): Promise<void> {
   const full = `${who.owner}/${who.repo}`;
-  await auditStatement(env.DB, "system:reviewer", REVIEW_ACTION, null, `${full}#${who.pr}`, { repo: full, pr: who.pr, ...result, ...extra }).run();
+  await auditStatement(env.DB, "system:reviewer", REVIEW_ACTION, null, `${full}#${who.pr}`, {
+    repo: full,
+    pr: who.pr,
+    ...result,
+    ...extra,
+  }).run();
 }
 
 export async function handleReviewRun(request: Request, env: Env): Promise<Response> {
@@ -315,7 +428,10 @@ export async function handleReviewRun(request: Request, env: Env): Promise<Respo
   try {
     pull = await readPull(env, who);
   } catch (err) {
-    return textResponse(`could not read ${full}#${who.pr}: ${err instanceof Error ? err.message : String(err)}`, 502);
+    return textResponse(
+      `could not read ${full}#${who.pr}: ${err instanceof Error ? err.message : String(err)}`,
+      502,
+    );
   }
   const cacheKey = `review:${full.toLowerCase()}:${who.pr}:${pull.head}`;
   const cached = await env.APP_KV.get(cacheKey, "json");
@@ -334,26 +450,54 @@ export async function handleReviewRun(request: Request, env: Env): Promise<Respo
       } else if (!env.AI) {
         result = { status: "error", error: "this Worker has no AI binding", head_sha: pull.head };
       } else {
-        const [rules, job] = await Promise.all([readRules(env, who, pull.base), readNamedJob(env, who, pull.body)]);
+        const [rules, job] = await Promise.all([
+          readRules(env, who, pull.base),
+          readNamedJob(env, who, pull.body),
+        ]);
         const answer = await env.AI.run(
           REVIEW_MODEL,
-          { messages: [{ role: "system", content: SYSTEM }, { role: "user", content: prompt(pull, rules, job, diffText(files)) }], tools: [REPORT_TOOL], tool_choice: "required", reasoning_effort: REASONING, max_tokens: 16_000 },
-          { gateway: { id: REVIEW_GATEWAY, metadata: { app: "capsid-reviewer", repo: full } }, signal: AbortSignal.timeout(MODEL_TIMEOUT_MS) }
+          {
+            messages: [
+              { role: "system", content: SYSTEM },
+              { role: "user", content: prompt(pull, rules, job, diffText(files)) },
+            ],
+            tools: [REPORT_TOOL],
+            tool_choice: "required",
+            reasoning_effort: REASONING,
+            max_tokens: 16_000,
+          },
+          {
+            gateway: { id: REVIEW_GATEWAY, metadata: { app: "capsid-reviewer", repo: full } },
+            signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+          },
         );
         const parsed = parseVerdict(toolArguments(answer), new Set(files.map((f) => f.filename)));
         result = parsed
           ? { status: "reviewed", ...parsed, model: REVIEW_MODEL, head_sha: pull.head }
-          : { status: "error", error: ranOut(answer) ? "the model ran out of room before it answered" : "the model's answer was not a verdict", head_sha: pull.head };
+          : {
+              status: "error",
+              error: ranOut(answer)
+                ? "the model ran out of room before it answered"
+                : "the model's answer was not a verdict",
+              head_sha: pull.head,
+            };
         const usage = (answer as { usage?: unknown } | null)?.usage;
         extra = { job_id: job?.id ?? null, why: scope.reasons, usage: usage ?? null };
       }
     } catch (err) {
-      result = { status: "error", error: err instanceof Error ? err.message.slice(0, 300) : String(err), head_sha: pull.head };
+      result = {
+        status: "error",
+        error: err instanceof Error ? err.message.slice(0, 300) : String(err),
+        head_sha: pull.head,
+      };
     }
   }
   await record(env, who, result, extra);
   // An error is not kept, so the next push or a re-run asks again.
-  if (result.status !== "error") await env.APP_KV.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL_S });
-  logEvent("PR_REVIEW", { message: `PR_REVIEW ${full}#${who.pr} ${result.status}${result.status === "reviewed" ? ` ${result.verdict}` : ""}` });
+  if (result.status !== "error")
+    await env.APP_KV.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL_S });
+  logEvent("PR_REVIEW", {
+    message: `PR_REVIEW ${full}#${who.pr} ${result.status}${result.status === "reviewed" ? ` ${result.verdict}` : ""}`,
+  });
   return Response.json(result);
 }

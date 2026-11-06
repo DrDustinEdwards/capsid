@@ -2,13 +2,9 @@
   "name": "capsid",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "description": "Capsid: a Cloudflare-native MCP server serving a consolidated knowledge base from D1 and R2",
   "license": "MIT",
-  "engines": {
-    "node": ">=26.11.1",
-    "npm": "12.2.1"
-  },
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "node scripts/deploy.mjs",
@@ -34,6 +30,16 @@
     "report:bloat": "devkit-no-bloat",
     "check:conformance": "devkit-conformance"
   },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.33.0",
+    "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.13.1",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.84.0",
+    "@modelcontextprotocol/server": "2.4.0",
+    "agents": "0.32.0",
+    "jose": "6.2.14",
+    "zod": "4.6.7"
+  },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.11",
     "@cloudflare/workers-types": "5.20261030.1",
@@ -50,23 +56,17 @@
     "vitest": "4.1.12",
     "wrangler": "4.156.0"
   },
-  "dependencies": {
-    "@cloudflare/workers-oauth-provider": "1.2.4",
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.33.0",
-    "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.13.1",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.84.0",
-    "@modelcontextprotocol/server": "2.4.0",
-    "agents": "0.32.0",
-    "jose": "6.2.14",
-    "zod": "4.6.7"
-  },
   "overrides": {
-    "undici": "7.30.1",
-    "sharp": "0.35.5",
     "agents": {
       "@modelcontextprotocol/client": "$@modelcontextprotocol/client",
       "@modelcontextprotocol/sdk": "1.32.1"
-    }
+    },
+    "sharp": "0.35.5",
+    "undici": "7.30.1"
+  },
+  "engines": {
+    "node": ">=26.11.1",
+    "npm": "12.2.1"
   },
   "allowScripts": {
     "core-js-pure": false,

@@ -22,4 +22,10 @@ export const PAGE_PRELOADS = preloads([
   { href: "/fonts/inter-latin-wght-normal.woff2", as: "font", type: "font/woff2" },
 ]);
 
-export default staticSite({ site: capsid, headers: TDM_RESERVATION_HEADERS, preload: PAGE_PRELOADS.header, reportPath: null, canonical: false });
+export default staticSite({
+  site: capsid,
+  headers: TDM_RESERVATION_HEADERS,
+  preload: PAGE_PRELOADS.header,
+  reportPath: null,
+  canonical: false,
+});

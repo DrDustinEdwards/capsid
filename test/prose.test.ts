@@ -23,13 +23,15 @@ const BANNED: Array<[RegExp, string]> = [
   // The "it's not X, it's Y" construction, in both contractions and both tenses.
   [
     /\b(?:it's|it is|this isn't|this is not)\s+not\b[^.!?\n]{1,60}?,\s*(?:it's|it is)\b/i,
-    'the "it\'s not X, it\'s Y" construction (state what it is, and stop)',
+    "the \"it's not X, it's Y\" construction (state what it is, and stop)",
   ],
 ];
 
 function scannable(): Array<{ rel: string; text: string }> {
   const files = [{ rel: "README.md", text: readFileSync(join(ROOT, "README.md"), "utf8") }];
-  for (const name of readdirSync(DOCS).filter((f) => f.endsWith(".md")).sort()) {
+  for (const name of readdirSync(DOCS)
+    .filter((f) => f.endsWith(".md"))
+    .sort()) {
     files.push({ rel: `docs/${name}`, text: readFileSync(join(DOCS, name), "utf8") });
   }
   return files;
@@ -43,7 +45,7 @@ test("the prose guard actually read the files it claims to scan", () => {
   assert.ok(files.length >= 10, `expected README.md plus the docs, scanned ${files.length} files`);
   assert.ok(
     files.every((f) => f.text.length > 500),
-    `a scanned file came back nearly empty: ${files.map((f) => `${f.rel}=${f.text.length}`).join(", ")}`
+    `a scanned file came back nearly empty: ${files.map((f) => `${f.rel}=${f.text.length}`).join(", ")}`,
   );
   assert.ok(BANNED.length >= 3, "the banned-phrase list was emptied out");
 });
@@ -59,5 +61,9 @@ test("no mannered prose in README.md or docs/", () => {
       }
     }
   }
-  assert.deepEqual(hits, [], `mannered prose found (capsid/conventions.md, Writing style):\n    ${hits.join("\n    ")}`);
+  assert.deepEqual(
+    hits,
+    [],
+    `mannered prose found (capsid/conventions.md, Writing style):\n    ${hits.join("\n    ")}`,
+  );
 });

@@ -56,7 +56,10 @@ function signedBodyFrom(recorded: Array<{ sql: string; params: unknown[] }>): st
   return String(upsert.params[3]);
 }
 
-function envWith(documents: Array<{ namespace: string; path: string; title: string; body: string }>, secret = SECRET) {
+function envWith(
+  documents: Array<{ namespace: string; path: string; title: string; body: string }>,
+  secret = SECRET,
+) {
   const fake = fakeD1({ documents });
   return { fake, env: fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: secret, APP_KV: fakeKv().kv }) };
 }
@@ -64,14 +67,23 @@ function envWith(documents: Array<{ namespace: string; path: string; title: stri
 // what it refuses to sign
 
 test("sign_policy refuses a namespace other than capsid", async () => {
-  const { env } = envWith([{ namespace: "foxhound", path: "policy/auto-merge.md", title: "p", body: POLICY_BODY }]);
-  const result = await signPolicyDocument(env, "github:DrDustinEdwards", "foxhound", "policy/auto-merge.md");
+  const { env } = envWith([
+    { namespace: "foxhound", path: "policy/auto-merge.md", title: "p", body: POLICY_BODY },
+  ]);
+  const result = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "foxhound",
+    "policy/auto-merge.md",
+  );
   assert.equal(result.ok, false);
   assert.match(result.ok ? "" : result.error, /only signs documents in 'capsid'/);
 });
 
 test("sign_policy refuses any path outside policy/, including a traversal", async () => {
-  const { env } = envWith([{ namespace: "capsid", path: "core.md", title: "core", body: "# core" }]);
+  const { env } = envWith([
+    { namespace: "capsid", path: "core.md", title: "core", body: "# core" },
+  ]);
   for (const path of ["core.md", "improve/scores.md", "decisions.md", "policy/../core.md"]) {
     const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", path);
     assert.equal(result.ok, false, `${path} must not be signable`);
@@ -80,21 +92,41 @@ test("sign_policy refuses any path outside policy/, including a traversal", asyn
 
 test("sign_policy refuses a document that does not exist", async () => {
   const { env } = envWith([]);
-  const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const result = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   assert.equal(result.ok, false);
   assert.match(result.ok ? "" : result.error, /no document at capsid\/policy\/auto-merge\.md/);
 });
 
 test("sign_policy refuses an empty policy, which would otherwise be a valid signature over nothing", async () => {
-  const { env } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: "   \n\n" }]);
-  const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const { env } = envWith([
+    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: "   \n\n" },
+  ]);
+  const result = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   assert.equal(result.ok, false);
   assert.match(result.ok ? "" : result.error, /empty body/);
 });
 
 test("sign_policy refuses when the Worker has no signing secret", async () => {
-  const { env } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }], "");
-  const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const { env } = envWith(
+    [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }],
+    "",
+  );
+  const result = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   assert.equal(result.ok, false);
   assert.match(result.ok ? "" : result.error, /signing is not configured/);
 });
@@ -102,8 +134,15 @@ test("sign_policy refuses when the Worker has no signing secret", async () => {
 // what it produces
 
 test("a signed policy verifies, and the same store then loads it", async () => {
-  const { fake, env } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }]);
-  const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const { fake, env } = envWith([
+    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
+  ]);
+  const result = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   assert.equal(result.ok, true, result.ok ? "" : result.error);
   assert.equal(result.ok && result.resigned, false, "a first signature is not a re-sign");
   assert.match(result.ok ? result.signature : "", /^[0-9a-f]{64}$/);
@@ -116,16 +155,32 @@ test("a signed policy verifies, and the same store then loads it", async () => {
 
   // The verifier that decides whether a pull request may merge accepts this document,
   // fed back in as the stored row.
-  const { env: reloaded } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: written }]);
+  const { env: reloaded } = envWith([
+    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: written },
+  ]);
   const loaded = await loadMergePolicy(reloaded);
-  assert.ok("policy" in loaded, `the signed policy must load: ${"error" in loaded ? loaded.error : ""}`);
+  assert.ok(
+    "policy" in loaded,
+    `the signed policy must load: ${"error" in loaded ? loaded.error : ""}`,
+  );
   assert.equal(loaded.policy.version, "1");
-  assert.equal(loaded.policy.enabled, false, "the shipped policy is disabled, and signing does not enable it");
+  assert.equal(
+    loaded.policy.enabled,
+    false,
+    "the shipped policy is disabled, and signing does not enable it",
+  );
 });
 
 test("signing an already-signed policy replaces the frontmatter rather than nesting it", async () => {
-  const { fake, env } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }]);
-  const first = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const { fake, env } = envWith([
+    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
+  ]);
+  const first = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   assert.equal(first.ok, true);
   const onceSigned = signedBodyFrom(fake.recorded);
 
@@ -133,43 +188,86 @@ test("signing an already-signed policy replaces the frontmatter rather than nest
   const { fake: again, env: envAgain } = envWith([
     { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: onceSigned },
   ]);
-  const second = await signPolicyDocument(envAgain, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const second = await signPolicyDocument(
+    envAgain,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   assert.equal(second.ok, true);
-  assert.equal(second.ok && second.resigned, true, "the second call must report that it replaced a signature");
-  assert.equal(first.ok && second.ok ? second.signature : "", first.ok ? first.signature : "x", "the same bytes must sign the same way");
+  assert.equal(
+    second.ok && second.resigned,
+    true,
+    "the second call must report that it replaced a signature",
+  );
+  assert.equal(
+    first.ok && second.ok ? second.signature : "",
+    first.ok ? first.signature : "x",
+    "the same bytes must sign the same way",
+  );
 
   const twiceSigned = signedBodyFrom(again.recorded);
-  assert.equal(twiceSigned.split("capsid-task-signature").length - 1, 1, "a nested signature would leave two frontmatter lines");
+  assert.equal(
+    twiceSigned.split("capsid-task-signature").length - 1,
+    1,
+    "a nested signature would leave two frontmatter lines",
+  );
   assert.equal(twiceSigned, onceSigned, "re-signing unchanged bytes is a no-op in content");
-  assert.equal(splitSignedTask(twiceSigned).body, POLICY_BODY, "the signed body must be the original bytes, unchanged");
+  assert.equal(
+    splitSignedTask(twiceSigned).body,
+    POLICY_BODY,
+    "the signed body must be the original bytes, unchanged",
+  );
 });
 
 test("signing a tampered policy produces a signature for the tampered bytes, and the old one stops verifying", async () => {
-  const { fake, env } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }]);
-  const first = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const { fake, env } = envWith([
+    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
+  ]);
+  const first = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   const firstSignature = first.ok ? first.signature : "";
 
   const row = fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH);
   assert.ok(row);
   row.body = String(row.body).replace("- enabled: false", "- enabled: true");
   const tampered = await verifySignedBody(SECRET, String(row.body), "merge policy");
-  assert.equal(tampered.ok, false, "an edit after signing must stop verifying, or the signature means nothing");
+  assert.equal(
+    tampered.ok,
+    false,
+    "an edit after signing must stop verifying, or the signature means nothing",
+  );
 
-  const second = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const second = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   assert.equal(second.ok, true);
-  assert.notEqual(second.ok ? second.signature : "", firstSignature, "different bytes must sign differently");
+  assert.notEqual(
+    second.ok ? second.signature : "",
+    firstSignature,
+    "different bytes must sign differently",
+  );
 });
 
 // the write invariants
 
 test("signing snapshots the prior body and writes an audit row, in one batch", async () => {
-  const { fake, env } = envWith([{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }]);
+  const { fake, env } = envWith([
+    { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
+  ]);
   await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
 
   const sqls = fake.recorded.map((r) => r.sql.replace(/\s+/g, " "));
   assert.ok(
     sqls.some((s) => /INSERT INTO document_versions/i.test(s)),
-    "an overwrite that does not snapshot is a write path that skips the invariant"
+    "an overwrite that does not snapshot is a write path that skips the invariant",
   );
   const audit = fake.recorded.find((r) => /INSERT INTO audit_log/i.test(r.sql));
   assert.ok(audit, "signing must be audit-logged");
@@ -182,10 +280,14 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
   assert.equal(
     typeof params.sha256,
     "string",
-    "the audit row records which bytes were blessed, so a reader can check the document against the log"
+    "the audit row records which bytes were blessed, so a reader can check the document against the log",
   );
   assert.equal(Object.hasOwn(params, "body"), false, "the audit row must not copy the policy body");
-  assert.equal(fake.batches.length, 1, "the snapshot, the write and the audit row go in together or not at all");
+  assert.equal(
+    fake.batches.length,
+    1,
+    "the snapshot, the write and the audit row go in together or not at all",
+  );
 });
 
 // admin only
@@ -194,11 +296,23 @@ test("sign_policy is admin only in the scope table, and the refusal says why", (
   // Served as capsid_admin_manage_switches action "sign_policy", an admin tool in
   // TOOL_GRANTS, and enforced by the registrar. The driver's capsid_read_status serves
   // status and the versions model, two reads, so no driver tool can name sign_policy.
-  assert.equal(requiredForAction("capsid_admin_manage_switches", "sign_policy"), "admin", "signing a policy must be gated on admin, not on the write grant");
+  assert.equal(
+    requiredForAction("capsid_admin_manage_switches", "sign_policy"),
+    "admin",
+    "signing a policy must be gated on admin, not on the write grant",
+  );
   const runImprove = COMPOSITES.find((c) => c.name === "capsid_read_status");
   assert.ok(runImprove, "capsid_read_status is not served");
-  assert.deepEqual(Object.keys(runImprove.actions), ["status", "versions"], "the driver's status tool serves an action beyond its two reads");
-  const driver = { ...adminAgentForEmail("admin@example.com"), actor: "agent:capsid-driver", admin: false };
+  assert.deepEqual(
+    Object.keys(runImprove.actions),
+    ["status", "versions"],
+    "the driver's status tool serves an action beyond its two reads",
+  );
+  const driver = {
+    ...adminAgentForEmail("admin@example.com"),
+    actor: "agent:capsid-driver",
+    admin: false,
+  };
   const refusal = checkScope(driver, {
     tool: "capsid_admin_manage_switches",
     action: "sign_policy",
@@ -216,13 +330,22 @@ test("sign_policy is admin only in the scope table, and the refusal says why", (
 // the row by hand, as D1 would.
 
 function pinnedStore(kvOpts: Parameters<typeof fakeKv>[0] = {}) {
-  const fake = fakeD1({ documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY }] });
+  const fake = fakeD1({
+    documents: [
+      { namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: POLICY_BODY },
+    ],
+  });
   const kv = fakeKv(kvOpts);
   const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: kv.kv });
   const row = fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)!;
   // Sign whatever the row holds, and store the signed text the way the upsert would.
   const sign = async (): Promise<string> => {
-    const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+    const result = await signPolicyDocument(
+      env,
+      "github:DrDustinEdwards",
+      "capsid",
+      AUTO_MERGE_POLICY_PATH,
+    );
     assert.equal(result.ok, true, result.ok ? "" : result.error);
     const upserts = fake.recorded.filter((r) => /INSERT INTO documents/i.test(r.sql));
     row.body = String(upserts[upserts.length - 1].params[3]);
@@ -292,7 +415,12 @@ test("a load whose record cannot be read is refused", async () => {
 
 test("sign_policy stores nothing when the record cannot be written", async () => {
   const { env, fake } = pinnedStore({ failPut: true });
-  const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const result = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   assert.equal(result.ok, false);
   assert.match(result.ok ? "" : result.error, /anti-rollback record .* could not be written/);
   assert.deepEqual(fake.recorded, []);

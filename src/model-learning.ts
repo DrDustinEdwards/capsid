@@ -1,4 +1,19 @@
-import { MIN_SAMPLE, RATE_FLOOR, RATE_GAIN, ROUTING_RULES, ROUTING_RULES_VERSION, TRIAL_ARMS, cellsOf, modelAlias, proposeRuleChanges, trialStatus, type Cell, type OutcomeFact, type Proposal, type TrialStatus } from "./model-routing";
+import {
+  MIN_SAMPLE,
+  RATE_FLOOR,
+  RATE_GAIN,
+  ROUTING_RULES,
+  ROUTING_RULES_VERSION,
+  TRIAL_ARMS,
+  cellsOf,
+  modelAlias,
+  proposeRuleChanges,
+  trialStatus,
+  type Cell,
+  type OutcomeFact,
+  type Proposal,
+  type TrialStatus,
+} from "./model-routing";
 import { DAY_MS } from "./time";
 
 // WHAT THE ROUTING LEARNS (capsid/research/design-model-routing.md): per kind and model,
@@ -53,7 +68,9 @@ interface Row {
 function sameModel(r: Row): boolean {
   const actual = modelAlias(r.model_actual);
   if (actual === null || r.model === null) return true;
-  return r.model === "opusplan" ? actual === "opus" || actual === "sonnet" || actual === "opusplan" : actual === r.model;
+  return r.model === "opusplan"
+    ? actual === "opus" || actual === "sonnet" || actual === "opusplan"
+    : actual === r.model;
 }
 
 export async function readModelLearning(db: D1Database, now: Date): Promise<ModelLearning> {
@@ -69,7 +86,7 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
                           WHERE p.job_id = o.job_id AND d.outcome IN ('rolled_back', 'rollback_failed'))) AS undone
        FROM job_outcomes o LEFT JOIN jobs j ON j.id = o.job_id
        WHERE o.job_kind IS NOT NULL AND o.recorded_at >= ?1
-       ORDER BY o.recorded_at DESC LIMIT ?2`
+       ORDER BY o.recorded_at DESC LIMIT ?2`,
     )
     .bind(since, LEARNING_ROWS_MAX + 1)
     .all<Row>();
@@ -77,7 +94,14 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
   const truncated = rows.length > LEARNING_ROWS_MAX;
   const read = truncated ? rows.slice(0, LEARNING_ROWS_MAX) : rows;
   const facts: OutcomeFact[] = read.filter(sameModel).map((r) => ({
-    kind: r.kind, model: r.model, prs_merged: r.prs_merged, ci_green: r.ci_green, corrections: r.corrections, cost_usd: r.cost_usd, tokens: r.tokens, undone: r.undone === 1,
+    kind: r.kind,
+    model: r.model,
+    prs_merged: r.prs_merged,
+    ci_green: r.ci_green,
+    corrections: r.corrections,
+    cost_usd: r.cost_usd,
+    tokens: r.tokens,
+    undone: r.undone === 1,
   }));
   const mismatched = read.length - facts.length;
   const cells = cellsOf(facts);
@@ -92,7 +116,11 @@ export async function readModelLearning(db: D1Database, now: Date): Promise<Mode
     rate_floor: RATE_FLOOR,
     rate_gain: RATE_GAIN,
     rules_version: ROUTING_RULES_VERSION,
-    rules: ROUTING_RULES.map((r) => ({ when: Object.fromEntries(Object.entries(r.when)) as Record<string, string>, model: r.model, effort: r.effort })),
+    rules: ROUTING_RULES.map((r) => ({
+      when: Object.fromEntries(Object.entries(r.when)) as Record<string, string>,
+      model: r.model,
+      effort: r.effort,
+    })),
     trial_arms: TRIAL_ARMS.map((a) => ({ kind: a.kind, model: a.model, percent: a.percent })),
     cells,
     proposals,

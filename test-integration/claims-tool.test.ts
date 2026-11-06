@@ -21,7 +21,15 @@ const AGENT = "agent:sample-driver";
 function driver(): Agent {
   const scopes = defaultScopes(["sample"]);
   scopes.grants = ["read", "write"];
-  return { id: "agent_driver00001", name: "sample-driver", kind: "driver", actor: AGENT, scopes, admin: false, row: null };
+  return {
+    id: "agent_driver00001",
+    name: "sample-driver",
+    kind: "driver",
+    actor: AGENT,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 let seq = 0;
@@ -63,43 +71,43 @@ async function plantJob(ns: string, job: string): Promise<void> {
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by)
-       VALUES (?1, ?2, 'a sample job', 'body', 'done', 'github:sample', ?3)`
+       VALUES (?1, ?2, 'a sample job', 'body', 'done', 'github:sample', ?3)`,
     ).bind(job, ns, AGENT),
     env.DB.prepare(
       `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at)
-       VALUES (?1, 'block', ?2, ?3, '{"reason":"needs a push"}', '2026-09-01T10:00:00.000Z')`
+       VALUES (?1, 'block', ?2, ?3, '{"reason":"needs a push"}', '2026-09-01T10:00:00.000Z')`,
     ).bind(job, AGENT, ns),
     env.DB.prepare(
       `INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at)
-       VALUES (?1, ?2, 'gate', ?3, 'driver', NULL, '{"reason":"needs a push"}', '2026-09-01T10:00:00.000Z')`
+       VALUES (?1, ?2, 'gate', ?3, 'driver', NULL, '{"reason":"needs a push"}', '2026-09-01T10:00:00.000Z')`,
     ).bind(job, ns, AGENT),
     env.DB.prepare(
       `INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, waited_ms, at)
-       VALUES (?1, ?2, 'approval', 'access:admin@example.com', 'human', 1000, '2026-09-01T10:00:01.000Z')`
+       VALUES (?1, ?2, 'approval', 'access:admin@example.com', 'human', 1000, '2026-09-01T10:00:01.000Z')`,
     ).bind(job, ns),
     env.DB.prepare(
       `INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, waited_ms, at)
-       VALUES (?1, ?2, 'note', 'access:admin@example.com', 'human', 3000, '2026-09-01T10:00:03.000Z')`
+       VALUES (?1, ?2, 'note', 'access:admin@example.com', 'human', 3000, '2026-09-01T10:00:03.000Z')`,
     ).bind(job, ns),
     env.DB.prepare(
       `INSERT INTO job_claims (job_id, action, agent, namespace, raw, prs_opened_urls, prs_opened, commits, recorded_at)
-       VALUES (?1, 'complete', ?2, ?3, '{"evidence":{"commits":3}}', '["https://github.com/example/sample/pull/1"]', 1, 3, '2026-09-01T11:00:00.000Z')`
+       VALUES (?1, 'complete', ?2, ?3, '{"evidence":{"commits":3}}', '["https://github.com/example/sample/pull/1"]', 1, 3, '2026-09-01T11:00:00.000Z')`,
     ).bind(job, AGENT, ns),
     env.DB.prepare(
       `INSERT INTO job_evaluations (job_id, claim_id, name, score_value, score_label, claimed, verified, agreement, evaluator, evaluator_id, recorded_at)
-       VALUES (?1, ${claimId}, 'commits', 2, 'pass', '3', '2', 'disagree', 'worker', 'capsid@unknown', '2026-09-01T11:00:00.000Z')`
+       VALUES (?1, ${claimId}, 'commits', 2, 'pass', '3', '2', 'disagree', 'worker', 'capsid@unknown', '2026-09-01T11:00:00.000Z')`,
     ).bind(job),
     env.DB.prepare(
       `INSERT INTO job_evaluations (job_id, claim_id, name, score_value, score_label, claimed, verified, agreement, evaluator, evaluator_id, recorded_at)
-       VALUES (?1, ${claimId}, 'prs_opened', 1, 'pass', '1', '1', 'agree', 'worker', 'capsid@unknown', '2026-09-01T11:00:00.000Z')`
+       VALUES (?1, ${claimId}, 'prs_opened', 1, 'pass', '1', '1', 'agree', 'worker', 'capsid@unknown', '2026-09-01T11:00:00.000Z')`,
     ).bind(job),
     env.DB.prepare(
       `INSERT INTO job_evaluations (job_id, claim_id, name, score_value, score_label, claimed, verified, agreement, evaluator, evaluator_id, recorded_at)
-       VALUES (?1, ${claimId}, 'ci_green', NULL, 'unknown', NULL, NULL, 'unclaimed', 'worker', 'capsid@unknown', '2026-09-01T11:00:00.000Z')`
+       VALUES (?1, ${claimId}, 'ci_green', NULL, 'unknown', NULL, NULL, 'unclaimed', 'worker', 'capsid@unknown', '2026-09-01T11:00:00.000Z')`,
     ).bind(job),
     env.DB.prepare(
       `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, commits, blocked_count, resumed_count, result_kind, verified, recorded_at)
-       VALUES (?1, ?2, ?3, 1, 1, 2, 1, 1, 'pr', '{}', '2026-09-01 11:00:00')`
+       VALUES (?1, ?2, ?3, 1, 1, 2, 1, 1, 'pr', '{}', '2026-09-01 11:00:00')`,
     ).bind(job, AGENT, ns),
   ]);
 }
@@ -134,28 +142,67 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
   it("aggregate: each ended wait is classed by the gate it ended, once, however many agents claimed the job", async () => {
     const { ns, job } = fresh("claims-wait");
     const at = (sec: number) => `2026-09-02T10:00:${String(sec).padStart(2, "0")}.000Z`;
-    const touch = (kind: string, actorKind: string, waited: number | null, detail: string | null, sec: number) =>
+    const touch = (
+      kind: string,
+      actorKind: string,
+      waited: number | null,
+      detail: string | null,
+      sec: number,
+    ) =>
       env.DB.prepare(
-        `INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at) VALUES (?1, ?2, ?3, 'x', ?4, ?5, ?6, ?7)`
+        `INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at) VALUES (?1, ?2, ?3, 'x', ?4, ?5, ?6, ?7)`,
       ).bind(job, ns, kind, actorKind, waited, detail, at(sec));
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?1, ?2, 'a sample job', 'body', 'done', 'github:sample', ?3)`
+        `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?1, ?2, 'a sample job', 'body', 'done', 'github:sample', ?3)`,
       ).bind(job, ns, AGENT),
       // Two agents claimed the job: a join on job_claims would count each wait twice.
-      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'block', ?2, ?3, '{}', ?4)`).bind(job, AGENT, ns, at(0)),
-      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'complete', 'agent:other-driver', ?2, '{}', ?3)`).bind(job, ns, at(9)),
-      touch("gate", "driver", null, JSON.stringify({ reason: "r", command: "git push origin feat/x; gh pr create --fill" }), 1),
+      env.DB.prepare(
+        `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'block', ?2, ?3, '{}', ?4)`,
+      ).bind(job, AGENT, ns, at(0)),
+      env.DB.prepare(
+        `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'complete', 'agent:other-driver', ?2, '{}', ?3)`,
+      ).bind(job, ns, at(9)),
+      touch(
+        "gate",
+        "driver",
+        null,
+        JSON.stringify({ reason: "r", command: "git push origin feat/x; gh pr create --fill" }),
+        1,
+      ),
       touch("approval", "policy", 1000, null, 2),
-      touch("gate", "driver", null, JSON.stringify({ reason: "r", command: "Read capsid/x.md and answer D1" }), 3),
+      touch(
+        "gate",
+        "driver",
+        null,
+        JSON.stringify({ reason: "r", command: "Read capsid/x.md and answer D1" }),
+        3,
+      ),
       touch("approval", "human", 5000, JSON.stringify({ reason: "approved" }), 4),
     ]);
     const out = await adminRead<ClaimsAggregate>({ namespace: ns });
     expect(out.waits).toEqual([
-      { namespace: ns, gate_class: "needs_human", ended_by: "human", waits: 1, waited_ms_total: 5000, waited_ms_median: 5000 },
-      { namespace: ns, gate_class: "push_branch+open_pr", ended_by: "policy", waits: 1, waited_ms_total: 1000, waited_ms_median: 1000 },
+      {
+        namespace: ns,
+        gate_class: "needs_human",
+        ended_by: "human",
+        waits: 1,
+        waited_ms_total: 5000,
+        waited_ms_median: 5000,
+      },
+      {
+        namespace: ns,
+        gate_class: "push_branch+open_pr",
+        ended_by: "policy",
+        waits: 1,
+        waited_ms_total: 1000,
+        waited_ms_median: 1000,
+      },
     ]);
-    const byAgent = await adminRead<ClaimsAggregate>({ namespace: ns, agent: "agent:other-driver" });
+    const byAgent = await adminRead<ClaimsAggregate>({
+      namespace: ns,
+      agent: "agent:other-driver",
+    });
     expect(byAgent.waits.reduce((n, w) => n + w.waits, 0)).toBe(2);
     const nobody = await adminRead<ClaimsAggregate>({ namespace: ns, agent: "agent:someone-else" });
     expect(nobody.waits).toEqual([]);
@@ -165,38 +212,52 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
     const { ns, job } = fresh("claims-usage");
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?1, ?2, 'a sample job', 'body', 'done', 'github:sample', ?3)`
+        `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by) VALUES (?1, ?2, 'a sample job', 'body', 'done', 'github:sample', ?3)`,
       ).bind(job, ns, AGENT),
-      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'block', ?2, ?3, ?4, '2026-09-03T10:00:00.000Z')`).bind(
+      env.DB.prepare(
+        `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'block', ?2, ?3, ?4, '2026-09-03T10:00:00.000Z')`,
+      ).bind(
         job,
         AGENT,
         ns,
-        JSON.stringify({ claim: { usage: { cost_usd: 1.5, active_seconds: 60, tokens: { input: 10 } } } })
-      ),
-      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'complete', ?2, ?3, ?4, '2026-09-03T11:00:00.000Z')`).bind(
-        job,
-        AGENT,
-        ns,
-        JSON.stringify({ claim: { usage: { cost_usd: 0.5 } } })
-      ),
-      // A claim that says nothing about usage is not a reporting row.
-      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'fail', ?2, ?3, ?4, '2026-09-03T12:00:00.000Z')`).bind(
-        job,
-        AGENT,
-        ns,
-        JSON.stringify({ claim: { prs_opened: [] } })
+        JSON.stringify({
+          claim: { usage: { cost_usd: 1.5, active_seconds: 60, tokens: { input: 10 } } },
+        }),
       ),
       env.DB.prepare(
+        `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'complete', ?2, ?3, ?4, '2026-09-03T11:00:00.000Z')`,
+      ).bind(job, AGENT, ns, JSON.stringify({ claim: { usage: { cost_usd: 0.5 } } })),
+      // A claim that says nothing about usage is not a reporting row.
+      env.DB.prepare(
+        `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, 'fail', ?2, ?3, ?4, '2026-09-03T12:00:00.000Z')`,
+      ).bind(job, AGENT, ns, JSON.stringify({ claim: { prs_opened: [] } })),
+      env.DB.prepare(
         `INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, result_kind, verified, recorded_at, cost_usd)
-         VALUES (?1, ?2, ?3, 0, 0, 'none', '{}', '2026-09-03 12:00:00', 9)`
+         VALUES (?1, ?2, ?3, 0, 0, 'none', '{}', '2026-09-03 12:00:00', 9)`,
       ).bind(job, AGENT, ns),
     ]);
     const out = await adminRead<ClaimsAggregate>({ namespace: ns });
     expect(out.usage).toEqual([
       {
         namespace: ns,
-        telemetry: { rows: 1, cost_usd: 9, active_seconds: null, tokens_input: null, tokens_output: null, tokens_cache_read: null, tokens_cache_creation: null },
-        reported: { rows: 2, cost_usd: 2, active_seconds: 60, tokens_input: 10, tokens_output: null, tokens_cache_read: null, tokens_cache_creation: null },
+        telemetry: {
+          rows: 1,
+          cost_usd: 9,
+          active_seconds: null,
+          tokens_input: null,
+          tokens_output: null,
+          tokens_cache_read: null,
+          tokens_cache_creation: null,
+        },
+        reported: {
+          rows: 2,
+          cost_usd: 2,
+          active_seconds: 60,
+          tokens_input: 10,
+          tokens_output: null,
+          tokens_cache_read: null,
+          tokens_cache_creation: null,
+        },
       },
     ]);
   });
@@ -212,7 +273,10 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
     expect(late.groups[0].touches.count).toBe(0);
     expect(late.groups[0].touches.waited_ms_median).toBeNull();
     expect(late.groups[0].evaluations.commits.disagree).toBe(1);
-    const early = await adminRead<ClaimsAggregate>({ namespace: ns, until: "2026-09-01T10:30:00Z" });
+    const early = await adminRead<ClaimsAggregate>({
+      namespace: ns,
+      until: "2026-09-01T10:30:00Z",
+    });
     expect(early.groups[0].claims).toBe(1);
     expect(early.groups[0].evaluations).toEqual({});
     expect(early.groups[0].touches.count).toBe(3);
@@ -227,7 +291,13 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
     const { ns, job } = fresh("claims-job");
     await plantJob(ns, job);
     const out = await adminRead<ClaimsJob>({ action: "job", id: job });
-    expect(out.job).toEqual({ id: job, namespace: ns, title: "a sample job", status: "done", claimed_by: AGENT });
+    expect(out.job).toEqual({
+      id: job,
+      namespace: ns,
+      title: "a sample job",
+      status: "done",
+      claimed_by: AGENT,
+    });
     expect(out.outcome?.job_id).toBe(job);
     expect(out.claims.map((c) => c.action)).toEqual(["block", "complete"]);
     const complete = out.claims[1];
@@ -252,10 +322,19 @@ describe("the capsid_admin_read_claims tool, as the admin", () => {
   it("export: rows as stored with a cursor, the id for the three new tables and the rowid for job_outcomes", async () => {
     const { ns, job } = fresh("claims-exp");
     await plantJob(ns, job);
-    const claims = await adminRead<ClaimsExportPage>({ action: "export", table: "job_claims", after: 0, limit: 1 });
+    const claims = await adminRead<ClaimsExportPage>({
+      action: "export",
+      table: "job_claims",
+      after: 0,
+      limit: 1,
+    });
     expect(claims.rows).toHaveLength(1);
     expect(claims.next_after).toBe(claims.rows[0].id);
-    const outcomes = await adminRead<ClaimsExportPage>({ action: "export", table: "job_outcomes", limit: 500 });
+    const outcomes = await adminRead<ClaimsExportPage>({
+      action: "export",
+      table: "job_outcomes",
+      limit: 500,
+    });
     const row = outcomes.rows.find((r) => r.job_id === job);
     expect(row, "the planted outcome is not in the export").toBeTruthy();
     expect(typeof row!.rowid).toBe("number");
@@ -278,13 +357,22 @@ describe("the capsid_admin_read_claims tool, refused", () => {
     ];
     for (const args of calls) {
       const byDriver = await callAs(driver(), args);
-      expect(byDriver.isError, `a write-grant driver read claims: ${byDriver.content[0].text}`).toBe(true);
-      expect(byDriver.content[0].text).toMatch(/'capsid_admin_read_claims\.[a-z]+' is admin only and agent:sample-driver is not the admin/);
+      expect(
+        byDriver.isError,
+        `a write-grant driver read claims: ${byDriver.content[0].text}`,
+      ).toBe(true);
+      expect(byDriver.content[0].text).toMatch(
+        /'capsid_admin_read_claims\.[a-z]+' is admin only and agent:sample-driver is not the admin/,
+      );
       expect(byDriver.content[0].text).not.toContain(job);
 
       const byReader = await callAs(READ_ONLY, args);
-      expect(byReader.isError, `a read-only caller read claims: ${byReader.content[0].text}`).toBe(true);
-      expect(byReader.content[0].text).toMatch(/'capsid_admin_read_claims\.[a-z]+' is admin only and opkey:readonly0000 is not the admin/);
+      expect(byReader.isError, `a read-only caller read claims: ${byReader.content[0].text}`).toBe(
+        true,
+      );
+      expect(byReader.content[0].text).toMatch(
+        /'capsid_admin_read_claims\.[a-z]+' is admin only and opkey:readonly0000 is not the admin/,
+      );
       expect(byReader.content[0].text).not.toContain(job);
     }
     // The admin reads the same job, so the refusals above were about the caller.
@@ -302,15 +390,25 @@ describe("the export's paging", () => {
     }
     for (const table of ["job_claims", "job_evaluations", "job_touches", "job_outcomes"] as const) {
       const cursor = table === "job_outcomes" ? "rowid" : "id";
-      const { results } = await env.DB.prepare(`SELECT ${cursor} AS k FROM ${table} ORDER BY ${cursor}`).all<{ k: number }>();
+      const { results } = await env.DB.prepare(
+        `SELECT ${cursor} AS k FROM ${table} ORDER BY ${cursor}`,
+      ).all<{ k: number }>();
       const expected = results.map((r) => r.k);
-      expect(expected.length, `${table} has too few rows for paging to prove anything`).toBeGreaterThan(3);
+      expect(
+        expected.length,
+        `${table} has too few rows for paging to prove anything`,
+      ).toBeGreaterThan(3);
 
       const seen: number[] = [];
       let after = 0;
       let pages = 0;
       for (;;) {
-        const page = await adminRead<ClaimsExportPage>({ action: "export", table, after, limit: 3 });
+        const page = await adminRead<ClaimsExportPage>({
+          action: "export",
+          table,
+          after,
+          limit: 3,
+        });
         pages += 1;
         expect(page.rows.length).toBeLessThanOrEqual(3);
         seen.push(...page.rows.map((r) => r[cursor] as number));

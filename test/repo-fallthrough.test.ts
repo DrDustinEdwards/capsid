@@ -24,7 +24,9 @@ function makeEnv(repos: unknown[] | null = ONE_REPO) {
   return fakeEnv({
     DB: {
       prepare: () => ({
-        bind: () => ({ first: async () => (repos === null ? null : { repos: JSON.stringify(repos) }) }),
+        bind: () => ({
+          first: async () => (repos === null ? null : { repos: JSON.stringify(repos) }),
+        }),
       }),
     },
     APP_KV: fakeKv({ seedToken: true }).kv,
@@ -32,7 +34,13 @@ function makeEnv(repos: unknown[] | null = ONE_REPO) {
 }
 
 const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
-const fileBody = (content: string, sha = "s") => ({ type: "file", encoding: "base64", content: b64(content), size: content.length, sha });
+const fileBody = (content: string, sha = "s") => ({
+  type: "file",
+  encoding: "base64",
+  content: b64(content),
+  size: content.length,
+  sha,
+});
 const REPO_META = { body: { default_branch: "main" } };
 
 // repo_refs
@@ -61,8 +69,16 @@ test("repo_refs returns branches, tags and open PRs in one call", async () => {
       "GET /repos/o/r/branches": { body: BRANCHES },
       "GET /repos/o/r/tags": { body: TAGS },
       "GET /repos/o/r/pulls": { body: PULLS },
-      "GET /repos/o/r/compare/main...review%2Fblog-convergence": { body: { ahead_by: 3, behind_by: 1, commits: [{ commit: { committer: { date: "2026-09-05T12:00:00Z" } } }] } },
-      "GET /repos/o/r/compare/main...stale%2Fno-pr": { body: { ahead_by: 0, behind_by: 9, commits: [] } },
+      "GET /repos/o/r/compare/main...review%2Fblog-convergence": {
+        body: {
+          ahead_by: 3,
+          behind_by: 1,
+          commits: [{ commit: { committer: { date: "2026-09-05T12:00:00Z" } } }],
+        },
+      },
+      "GET /repos/o/r/compare/main...stale%2Fno-pr": {
+        body: { ahead_by: 0, behind_by: 9, commits: [] },
+      },
     },
     async () => {
       const out = await repoRefs(makeEnv(), "ns");
@@ -72,7 +88,7 @@ test("repo_refs returns branches, tags and open PRs in one call", async () => {
       assert.equal(out.tags.length, 1);
       assert.equal(out.pull_requests.length, 1);
       assert.equal(out.truncated, false);
-    }
+    },
   );
 });
 
@@ -83,8 +99,16 @@ test("repo_refs reports ahead/behind, and zero for the default branch itself", a
       "GET /repos/o/r/branches": { body: BRANCHES },
       "GET /repos/o/r/tags": { body: TAGS },
       "GET /repos/o/r/pulls": { body: PULLS },
-      "GET /repos/o/r/compare/main...review%2Fblog-convergence": { body: { ahead_by: 3, behind_by: 1, commits: [{ commit: { committer: { date: "2026-09-05T12:00:00Z" } } }] } },
-      "GET /repos/o/r/compare/main...stale%2Fno-pr": { body: { ahead_by: 0, behind_by: 9, commits: [] } },
+      "GET /repos/o/r/compare/main...review%2Fblog-convergence": {
+        body: {
+          ahead_by: 3,
+          behind_by: 1,
+          commits: [{ commit: { committer: { date: "2026-09-05T12:00:00Z" } } }],
+        },
+      },
+      "GET /repos/o/r/compare/main...stale%2Fno-pr": {
+        body: { ahead_by: 0, behind_by: 9, commits: [] },
+      },
     },
     async () => {
       const out = await repoRefs(makeEnv(), "ns");
@@ -97,7 +121,7 @@ test("repo_refs reports ahead/behind, and zero for the default branch itself", a
       assert.equal(review?.ahead_by, 3);
       assert.equal(review?.behind_by, 1);
       assert.equal(review?.committed_date, "2026-09-05T12:00:00Z");
-    }
+    },
   );
 });
 
@@ -108,28 +132,48 @@ test("repo_refs links a branch to its open PR, and leaves branches without one n
       "GET /repos/o/r/branches": { body: BRANCHES },
       "GET /repos/o/r/tags": { body: TAGS },
       "GET /repos/o/r/pulls": { body: PULLS },
-      "GET /repos/o/r/compare/main...review%2Fblog-convergence": { body: { ahead_by: 3, behind_by: 1, commits: [] } },
-      "GET /repos/o/r/compare/main...stale%2Fno-pr": { body: { ahead_by: 0, behind_by: 9, commits: [] } },
+      "GET /repos/o/r/compare/main...review%2Fblog-convergence": {
+        body: { ahead_by: 3, behind_by: 1, commits: [] },
+      },
+      "GET /repos/o/r/compare/main...stale%2Fno-pr": {
+        body: { ahead_by: 0, behind_by: 9, commits: [] },
+      },
     },
     async () => {
       const out = await repoRefs(makeEnv(), "ns");
       assert.equal(out.branches.find((b) => b.name === "review/blog-convergence")?.open_pr, 7);
-      assert.equal(out.branches.find((b) => b.name === "stale/no-pr")?.open_pr, null, "a branch with no PR reported one");
+      assert.equal(
+        out.branches.find((b) => b.name === "stale/no-pr")?.open_pr,
+        null,
+        "a branch with no PR reported one",
+      );
       assert.equal(out.branches.find((b) => b.name === "main")?.open_pr, null);
-    }
+    },
   );
 });
 
 // repo_history, every mode
 
 const COMMIT_ROWS = [
-  { sha: "c1", commit: { message: "first line\n\nand a body paragraph", author: { name: "Dustin", date: "2026-09-05T00:00:00Z" } } },
-  { sha: "c2", commit: { message: "second", author: { name: "Dustin", date: "2026-09-04T00:00:00Z" } } },
+  {
+    sha: "c1",
+    commit: {
+      message: "first line\n\nand a body paragraph",
+      author: { name: "Dustin", date: "2026-09-05T00:00:00Z" },
+    },
+  },
+  {
+    sha: "c2",
+    commit: { message: "second", author: { name: "Dustin", date: "2026-09-04T00:00:00Z" } },
+  },
 ];
 
 test("repo_history ref mode lists commits, subject only", async () => {
   await withFetch({ "GET /repos/o/r/commits": { body: COMMIT_ROWS } }, async () => {
-    const out = (await repoHistory(makeEnv(), "ns", { ref: "main" })) as { mode: string; commits: Array<{ subject: string; sha: string }> };
+    const out = (await repoHistory(makeEnv(), "ns", { ref: "main" })) as {
+      mode: string;
+      commits: Array<{ subject: string; sha: string }>;
+    };
     assert.equal(out.mode, "commits");
     assert.equal(out.commits.length, 2);
     assert.equal(out.commits[0].subject, "first line", "the body leaked into the listing");
@@ -139,9 +183,13 @@ test("repo_history ref mode lists commits, subject only", async () => {
 
 test("repo_history ref mode clamps limit to the maximum", async () => {
   await withFetch({ "GET /repos/o/r/commits": { body: COMMIT_ROWS } }, async () => {
-    const out = (await repoHistory(makeEnv(), "ns", { ref: "main", limit: 9999 })) as { limit: number };
+    const out = (await repoHistory(makeEnv(), "ns", { ref: "main", limit: 9999 })) as {
+      limit: number;
+    };
     assert.equal(out.limit, REPO_HISTORY_MAX_LIMIT);
-    const low = (await repoHistory(makeEnv(), "ns", { ref: "main", limit: 0 })) as { limit: number };
+    const low = (await repoHistory(makeEnv(), "ns", { ref: "main", limit: 0 })) as {
+      limit: number;
+    };
     assert.ok(low.limit >= 1, "limit 0 was not clamped up");
   });
 });
@@ -156,7 +204,15 @@ test("repo_history compare mode reports ahead/behind and changed files", async (
           behind_by: 0,
           total_commits: 2,
           commits: COMMIT_ROWS,
-          files: [{ filename: "src/a.ts", status: "modified", additions: 10, deletions: 2, patch: "@@ hunk @@" }],
+          files: [
+            {
+              filename: "src/a.ts",
+              status: "modified",
+              additions: 10,
+              deletions: 2,
+              patch: "@@ hunk @@",
+            },
+          ],
         },
       },
     },
@@ -164,7 +220,10 @@ test("repo_history compare mode reports ahead/behind and changed files", async (
       const out = (await repoHistory(makeEnv(), "ns", { base: "main", head: "topic" })) as {
         mode: string;
         ahead_by: number;
-        files: { count: number; entries: Array<{ path: string; additions: number; patch?: string }> };
+        files: {
+          count: number;
+          entries: Array<{ path: string; additions: number; patch?: string }>;
+        };
       };
       assert.equal(out.mode, "compare");
       assert.equal(out.ahead_by, 2);
@@ -172,8 +231,12 @@ test("repo_history compare mode reports ahead/behind and changed files", async (
       assert.equal(out.files.entries[0].path, "src/a.ts");
       assert.equal(out.files.entries[0].additions, 10);
       // Patch bodies are OFF unless asked for.
-      assert.equal(out.files.entries[0].patch, undefined, "a patch body was returned without patch:true");
-    }
+      assert.equal(
+        out.files.entries[0].patch,
+        undefined,
+        "a patch body was returned without patch:true",
+      );
+    },
   );
 });
 
@@ -196,8 +259,16 @@ test("repo_history returns patch bodies only with patch:true, and budgets them",
       },
     },
     async () => {
-      const out = (await repoHistory(makeEnv(), "ns", { base: "main", head: "topic", patch: true })) as {
-        files: { patch_truncated: boolean; patch_bytes: number; entries: Array<{ patch?: string }> };
+      const out = (await repoHistory(makeEnv(), "ns", {
+        base: "main",
+        head: "topic",
+        patch: true,
+      })) as {
+        files: {
+          patch_truncated: boolean;
+          patch_bytes: number;
+          entries: Array<{ patch?: string }>;
+        };
       };
       // Two 150KB patches cannot both fit in a 200KB budget, so the second is dropped
       // and the caller is told.
@@ -205,7 +276,7 @@ test("repo_history returns patch bodies only with patch:true, and budgets them",
       assert.ok(out.files.patch_bytes <= 200 * 1024, `spent ${out.files.patch_bytes}`);
       assert.equal(typeof out.files.entries[0].patch, "string");
       assert.equal(out.files.entries[1].patch, undefined);
-    }
+    },
   );
 });
 
@@ -215,7 +286,10 @@ test("repo_history sha mode returns the full message and parents", async () => {
       "GET /repos/o/r/commits/c1": {
         body: {
           sha: "c1",
-          commit: { message: "first line\n\nand a body paragraph", author: { name: "Dustin", date: "2026-09-05T00:00:00Z" } },
+          commit: {
+            message: "first line\n\nand a body paragraph",
+            author: { name: "Dustin", date: "2026-09-05T00:00:00Z" },
+          },
           parents: [{ sha: "c0" }],
           files: [{ filename: "src/a.ts", status: "modified", additions: 1, deletions: 1 }],
         },
@@ -232,17 +306,29 @@ test("repo_history sha mode returns the full message and parents", async () => {
       assert.match(out.commit.message, /body paragraph/);
       assert.deepEqual(out.commit.parents, ["c0"]);
       assert.equal(out.files.count, 1);
-    }
+    },
   );
 });
 
 test("repo_history REFUSES an ambiguous combination rather than picking one", async () => {
   const env = makeEnv();
   await withFetch({}, async () => {
-    await assert.rejects(() => repoHistory(env, "ns", { sha: "c1", ref: "main" }), /different questions/);
-    await assert.rejects(() => repoHistory(env, "ns", { sha: "c1", base: "a", head: "b" }), /different questions/);
-    await assert.rejects(() => repoHistory(env, "ns", { base: "a" }), /base was given without head/);
-    await assert.rejects(() => repoHistory(env, "ns", { head: "b" }), /head was given without base/);
+    await assert.rejects(
+      () => repoHistory(env, "ns", { sha: "c1", ref: "main" }),
+      /different questions/,
+    );
+    await assert.rejects(
+      () => repoHistory(env, "ns", { sha: "c1", base: "a", head: "b" }),
+      /different questions/,
+    );
+    await assert.rejects(
+      () => repoHistory(env, "ns", { base: "a" }),
+      /base was given without head/,
+    );
+    await assert.rejects(
+      () => repoHistory(env, "ns", { head: "b" }),
+      /head was given without base/,
+    );
     await assert.rejects(() => repoHistory(env, "ns", {}), /pass ref for commits/);
   });
 });
@@ -252,7 +338,10 @@ test("repo_history REFUSES an ambiguous combination rather than picking one", as
 test("delete_branch REFUSES the default branch, and force does not lift it", async () => {
   await withFetch({ "GET /repos/o/r": REPO_META }, async () => {
     await assert.rejects(() => deleteBranch(makeEnv(), "ns", "main"), /is the default branch/);
-    await assert.rejects(() => deleteBranch(makeEnv(), "ns", "main", { force: true }), /force does not lift/);
+    await assert.rejects(
+      () => deleteBranch(makeEnv(), "ns", "main", { force: true }),
+      /force does not lift/,
+    );
   });
 });
 
@@ -264,7 +353,7 @@ test("delete_branch REFUSES a branch with an open PR unless forced, and names th
     },
     async () => {
       await assert.rejects(() => deleteBranch(makeEnv(), "ns", "topic"), /open pull request #7/);
-    }
+    },
   );
 });
 
@@ -279,8 +368,11 @@ test("delete_branch deletes a plain branch with no PR", async () => {
       const out = await deleteBranch(makeEnv(), "ns", "topic");
       assert.equal(out.deleted, true);
       assert.equal(out.forced, false);
-      assert.ok(calls.some((c) => c.method === "DELETE"), "no DELETE was issued");
-    }
+      assert.ok(
+        calls.some((c) => c.method === "DELETE"),
+        "no DELETE was issued",
+      );
+    },
   );
 });
 
@@ -293,7 +385,7 @@ test("delete_branch REFUSES a branch that does not exist rather than reporting s
     },
     async () => {
       await assert.rejects(() => deleteBranch(makeEnv(), "ns", "gone"), /does not exist/);
-    }
+    },
   );
 });
 
@@ -322,13 +414,19 @@ test("ci_status filters by branch or by sha, choosing the right query parameter"
     async (calls) => {
       await ciStatus(makeEnv(), "ns", undefined, { ref: "review/blog-convergence" });
       await ciStatus(makeEnv(), "ns", undefined, { ref: "3bcf858" });
-      const [byBranch, bySha] = calls.filter((c) => c.path === "/repos/o/r/actions/runs").map((c) => c.search);
-    // GitHub has separate branch and sha parameters, so the tool decides from the
-    // shape of the ref. Backwards, a valid sha returns an empty run list.
-      assert.match(byBranch, /branch=review%2Fblog-convergence/, `branch query missing: ${byBranch}`);
+      const [byBranch, bySha] = calls
+        .filter((c) => c.path === "/repos/o/r/actions/runs")
+        .map((c) => c.search);
+      // GitHub has separate branch and sha parameters, so the tool decides from the
+      // shape of the ref. Backwards, a valid sha returns an empty run list.
+      assert.match(
+        byBranch,
+        /branch=review%2Fblog-convergence/,
+        `branch query missing: ${byBranch}`,
+      );
       assert.match(bySha, /head_sha=3bcf858/, `sha query missing: ${bySha}`);
       assert.equal(/[?&]branch=3bcf858/.test(bySha), false, "a sha was filtered as a branch");
-    }
+    },
   );
 });
 
@@ -342,22 +440,39 @@ test("ci_status EXPANDS an abbreviated sha before filtering, because GitHub matc
     async (calls) => {
       await ciStatus(makeEnv(), "ns", undefined, { ref: "3bcf858" });
       const runsCall = calls.find((c) => c.path === "/repos/o/r/actions/runs");
-      assert.match(runsCall?.search ?? "", new RegExp(`head_sha=${FULL_SHA}`), `not expanded: ${runsCall?.search}`);
+      assert.match(
+        runsCall?.search ?? "",
+        new RegExp(`head_sha=${FULL_SHA}`),
+        `not expanded: ${runsCall?.search}`,
+      );
       assert.ok(
         calls.some((c) => c.path === "/repos/o/r/commits/3bcf858"),
-        "it did not resolve the abbreviation"
+        "it did not resolve the abbreviation",
       );
-    }
+    },
   );
   // A full sha costs no extra call.
-  await withFetch({ "GET /repos/o/r/actions/runs": { body: { workflow_runs: [] } } }, async (calls) => {
-    await ciStatus(makeEnv(), "ns", undefined, { ref: FULL_SHA });
-    assert.equal(calls.some((c) => c.path.startsWith("/repos/o/r/commits/")), false, "a full sha was resolved anyway");
-  });
+  await withFetch(
+    { "GET /repos/o/r/actions/runs": { body: { workflow_runs: [] } } },
+    async (calls) => {
+      await ciStatus(makeEnv(), "ns", undefined, { ref: FULL_SHA });
+      assert.equal(
+        calls.some((c) => c.path.startsWith("/repos/o/r/commits/")),
+        false,
+        "a full sha was resolved anyway",
+      );
+    },
+  );
   // A ref that resolves to nothing is a named refusal, not an empty run list.
-  await withFetch({ "GET /repos/o/r/commits/deadbee": { status: 404, text: "Not Found" } }, async () => {
-    await assert.rejects(() => ciStatus(makeEnv(), "ns", undefined, { ref: "deadbee" }), /does not resolve to a commit/);
-  });
+  await withFetch(
+    { "GET /repos/o/r/commits/deadbee": { status: 404, text: "Not Found" } },
+    async () => {
+      await assert.rejects(
+        () => ciStatus(makeEnv(), "ns", undefined, { ref: "deadbee" }),
+        /does not resolve to a commit/,
+      );
+    },
+  );
 });
 
 test("ci_status run_id returns just that run, and refuses one that does not exist", async () => {
@@ -370,11 +485,17 @@ test("ci_status run_id returns just that run, and refuses one that does not exis
       };
       assert.equal(out.runs.length, 1);
       assert.equal(out.filter?.run_id, 42);
-    }
+    },
   );
-  await withFetch({ "GET /repos/o/r/actions/runs/99": { status: 404, text: "Not Found" } }, async () => {
-    await assert.rejects(() => ciStatus(makeEnv(), "ns", undefined, { runId: 99 }), /run 99 does not exist/);
-  });
+  await withFetch(
+    { "GET /repos/o/r/actions/runs/99": { status: 404, text: "Not Found" } },
+    async () => {
+      await assert.rejects(
+        () => ciStatus(makeEnv(), "ns", undefined, { runId: 99 }),
+        /run 99 does not exist/,
+      );
+    },
+  );
 });
 
 // A realistic job log: every line timestamped, groups labeled "Run <command>"
@@ -405,13 +526,22 @@ test("ci_status finds the failing step BY TIMESTAMP, since its name is not in th
     {
       "GET /repos/o/r/actions/runs": { body: { workflow_runs: [RUN_ROW()] } },
       "GET /repos/o/r/actions/runs/42/jobs": {
-        body: { jobs: [{ id: 9, name: "Gates, clean checkout", conclusion: "failure", steps: [FAILED_STEP] }] },
+        body: {
+          jobs: [
+            { id: 9, name: "Gates, clean checkout", conclusion: "failure", steps: [FAILED_STEP] },
+          ],
+        },
       },
       "GET /repos/o/r/actions/jobs/9/logs": { text: JOB_LOG },
     },
     async () => {
       const out = (await ciStatus(makeEnv(), "ns", undefined, { logTail: true })) as {
-        failed_run: { log?: string; log_region?: string; failing_step?: string | null; failing_job?: string };
+        failed_run: {
+          log?: string;
+          log_region?: string;
+          failing_step?: string | null;
+          failing_job?: string;
+        };
       };
       const failed = out.failed_run;
       const body = failed.log ?? "";
@@ -420,10 +550,14 @@ test("ci_status finds the failing step BY TIMESTAMP, since its name is not in th
       assert.match(body, /check:floors \.\.\. FAILED/, "the actual failure was not returned");
       // Neither the setup before the step NOR the cleanup after it.
       assert.equal(/setup noise/.test(body), false, "output from before the step leaked in");
-      assert.equal(/orphan processes/.test(body), false, "post-run cleanup leaked in, which is the whole defect");
+      assert.equal(
+        /orphan processes/.test(body),
+        false,
+        "post-run cleanup leaked in, which is the whole defect",
+      );
       assert.equal(/git config --unset-all/.test(body), false, "post-run git plumbing leaked in");
       assert.match(failed.log_region ?? "", /timestamp window/);
-    }
+    },
   );
 });
 
@@ -458,7 +592,9 @@ test("ci_status keeps the failure that lands AFTER the step's truncated complete
     {
       "GET /repos/o/r/actions/runs": { body: { workflow_runs: [RUN_ROW()] } },
       "GET /repos/o/r/actions/runs/42/jobs": {
-        body: { jobs: [{ id: 9, name: "live gate", conclusion: "failure", steps: [SUBSECOND_STEP] }] },
+        body: {
+          jobs: [{ id: 9, name: "live gate", conclusion: "failure", steps: [SUBSECOND_STEP] }],
+        },
       },
       "GET /repos/o/r/actions/jobs/9/logs": { text: SUBSECOND_LOG },
     },
@@ -468,15 +604,27 @@ test("ci_status keeps the failure that lands AFTER the step's truncated complete
       };
       const body = out.failed_run.log ?? "";
       // The error is in the sub-second tail.
-      assert.match(body, /ECONNRESET/, "the uncaught exception was cut off by the truncated upper bound");
+      assert.match(
+        body,
+        /ECONNRESET/,
+        "the uncaught exception was cut off by the truncated upper bound",
+      );
       assert.match(body, /exit code 1/, "the step's own failure marker was cut off");
-      assert.match(body, /PASS {2}2b canary/, "output between the truncated second and the real end was dropped");
+      assert.match(
+        body,
+        /PASS {2}2b canary/,
+        "output between the truncated second and the real end was dropped",
+      );
       // Still bounded on both sides.
       assert.equal(/setup noise/.test(body), false, "output from before the step leaked in");
-      assert.equal(/reap: deleted client/.test(body), false, "the NEXT step leaked in; the widening overshot");
+      assert.equal(
+        /reap: deleted client/.test(body),
+        false,
+        "the NEXT step leaked in; the widening overshot",
+      );
       assert.equal(/orphan processes/.test(body), false, "post-run cleanup leaked in");
       assert.match(out.failed_run.log_region ?? "", /timestamp window/);
-    }
+    },
   );
 });
 
@@ -486,7 +634,16 @@ test("ci_status NAMES the fallback when the step has no usable window", async ()
     {
       "GET /repos/o/r/actions/runs": { body: { workflow_runs: [RUN_ROW()] } },
       "GET /repos/o/r/actions/runs/42/jobs": {
-        body: { jobs: [{ id: 9, name: "verify", conclusion: "failure", steps: [{ name: "Gates", conclusion: "failure" }] }] },
+        body: {
+          jobs: [
+            {
+              id: 9,
+              name: "verify",
+              conclusion: "failure",
+              steps: [{ name: "Gates", conclusion: "failure" }],
+            },
+          ],
+        },
       },
       "GET /repos/o/r/actions/jobs/9/logs": { text: JOB_LOG },
     },
@@ -495,10 +652,14 @@ test("ci_status NAMES the fallback when the step has no usable window", async ()
         failed_run: { log?: string; log_region?: string };
       };
       assert.match(out.failed_run.log_region ?? "", /no usable timestamp window/);
-      assert.match(out.failed_run.log_region ?? "", /cleanup included/, "the fallback did not admit what it returned");
+      assert.match(
+        out.failed_run.log_region ?? "",
+        /cleanup included/,
+        "the fallback did not admit what it returned",
+      );
       // And it really is the whole job, cleanup and all, as it says.
       assert.match(out.failed_run.log ?? "", /orphan processes/);
-    }
+    },
   );
 });
 
@@ -516,14 +677,19 @@ test("ci_status caps the failing step's log at the budget, keeping the END", asy
       "GET /repos/o/r/actions/jobs/9/logs": { text: log },
     },
     async () => {
-      const out = (await ciStatus(makeEnv(), "ns", undefined, { logTail: true })) as { failed_run: { log?: string; log_region?: string } };
+      const out = (await ciStatus(makeEnv(), "ns", undefined, { logTail: true })) as {
+        failed_run: { log?: string; log_region?: string };
+      };
       const body = out.failed_run.log ?? "";
-      assert.ok(body.length <= CI_LOG_BUDGET, `log was ${body.length} bytes, over the ${CI_LOG_BUDGET} budget`);
+      assert.ok(
+        body.length <= CI_LOG_BUDGET,
+        `log was ${body.length} bytes, over the ${CI_LOG_BUDGET} budget`,
+      );
       // From the END, because CI failures print their diagnosis last.
       assert.match(body, new RegExp(marker), "the budget kept the start and dropped the diagnosis");
       assert.match(out.failed_run.log_region ?? "", /last \d+ bytes/);
       assert.match(out.failed_run.log_region ?? "", /timestamp window/);
-    }
+    },
   );
 });
 
@@ -546,7 +712,7 @@ test("read_repo_file batch returns each file's error INDEPENDENTLY", async () =>
       assert.equal((byPath.get("a.md") as { content?: string }).content, "alpha");
       assert.equal((byPath.get("c.md") as { content?: string }).content, "gamma");
       assert.match((byPath.get("gone.md") as { error?: string }).error ?? "", /404/);
-    }
+    },
   );
 });
 
@@ -565,8 +731,14 @@ test("read_repo_file batch rejects a bad path per file without a network call", 
     assert.equal(out.ok, 1);
     assert.equal(out.failed, 2);
     const errs = out.files.filter((f) => "error" in f).map((f) => (f as { error: string }).error);
-    assert.ok(errs.some((e) => /\.\./.test(e)), `no dotdot refusal in ${JSON.stringify(errs)}`);
-    assert.ok(errs.some((e) => /empty segment/.test(e)), `no empty-segment refusal in ${JSON.stringify(errs)}`);
+    assert.ok(
+      errs.some((e) => /\.\./.test(e)),
+      `no dotdot refusal in ${JSON.stringify(errs)}`,
+    );
+    assert.ok(
+      errs.some((e) => /empty segment/.test(e)),
+      `no empty-segment refusal in ${JSON.stringify(errs)}`,
+    );
   });
 });
 

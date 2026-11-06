@@ -26,17 +26,22 @@ test(`no Cloudflare API call uses the legacy KV route /${LEGACY_KV_ROUTE}/ (dead
     scripts: filesUnder("scripts", /\.(mjs|ts)$/),
     src: filesUnder("src", /\.ts$/),
     workflows: filesUnder(".github/workflows", /\.ya?ml$/),
-    test: filesUnder("test", /\.ts$/).filter((f) => !f.path.endsWith("cloudflare-platform.test.ts")),
+    test: filesUnder("test", /\.ts$/).filter(
+      (f) => !f.path.endsWith("cloudflare-platform.test.ts"),
+    ),
   };
   // A moved directory or a wrong extension would scan nothing and pass.
   for (const [name, files] of Object.entries(groups)) {
-    assert.ok(files.length > 0, `the scan found no files under ${name}, so it checks nothing there`);
+    assert.ok(
+      files.length > 0,
+      `the scan found no files under ${name}, so it checks nothing there`,
+    );
   }
   const everywhere = Object.values(groups).flat();
   for (const file of everywhere) {
     assert.ok(
       !file.text.includes(`/${LEGACY_KV_ROUTE}/`),
-      `${file.path} uses the legacy KV namespace REST route, which stops working 2026-10-15; use /storage/kv/namespaces/`
+      `${file.path} uses the legacy KV namespace REST route, which stops working 2026-10-15; use /storage/kv/namespaces/`,
     );
   }
 });
@@ -50,10 +55,17 @@ test("wrangler.jsonc.example and bindings.mjs agree on the compatibility date", 
   const bindings = readFileSync(join(ROOT, "scripts", "bindings.mjs"), "utf8");
   const inBindings = /export const COMPATIBILITY_DATE = "(\d{4}-\d{2}-\d{2})"/.exec(bindings);
   assert.ok(inBindings, "scripts/bindings.mjs no longer exports COMPATIBILITY_DATE");
-  assert.equal(inExample[1], inBindings[1], "the example and bindings.mjs disagree on the compatibility date");
+  assert.equal(
+    inExample[1],
+    inBindings[1],
+    "the example and bindings.mjs disagree on the compatibility date",
+  );
   // The date must stay at or past nodejs_compat's default-on threshold, so the
   // explicit flag in the example stays redundant rather than required.
-  assert.ok(inExample[1] >= "2026-08-04", `compatibility date ${inExample[1]} fell behind the nodejs_compat default threshold`);
+  assert.ok(
+    inExample[1] >= "2026-08-04",
+    `compatibility date ${inExample[1]} fell behind the nodejs_compat default threshold`,
+  );
 });
 
 // the per-invocation CPU ceiling
@@ -64,14 +76,24 @@ test("wrangler.jsonc.example and bindings.mjs agree on limits.cpu_ms", () => {
   // retune of one cannot silently leave the other.
   const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
   const inExample = /"limits":\s*\{\s*"cpu_ms":\s*(\d+)\s*\}/.exec(example);
-  assert.ok(inExample, "wrangler.jsonc.example no longer sets limits.cpu_ms: the runaway guard is gone");
+  assert.ok(
+    inExample,
+    "wrangler.jsonc.example no longer sets limits.cpu_ms: the runaway guard is gone",
+  );
   const bindings = readFileSync(join(ROOT, "scripts", "bindings.mjs"), "utf8");
   const inBindings = /export const LIMITS = \{ cpu_ms: (\d+) \}/.exec(bindings);
   assert.ok(inBindings, "scripts/bindings.mjs no longer exports LIMITS.cpu_ms");
-  assert.equal(Number(inExample[1]), Number(inBindings[1]), "wrangler.jsonc.example and scripts/bindings.mjs disagree on cpu_ms");
+  assert.equal(
+    Number(inExample[1]),
+    Number(inBindings[1]),
+    "wrangler.jsonc.example and scripts/bindings.mjs disagree on cpu_ms",
+  );
   // Sanity floor: the ceiling must clear the largest measured invocation (the
   // 1390ms backup) or the guard kills the backup it exists to protect.
-  assert.ok(Number(inBindings[1]) >= 1390 * 1.5, `cpu_ms ${inBindings[1]} is under the measured backup ceiling plus headroom`);
+  assert.ok(
+    Number(inBindings[1]) >= 1390 * 1.5,
+    `cpu_ms ${inBindings[1]} is under the measured backup ceiling plus headroom`,
+  );
 });
 
 // observability
@@ -79,9 +101,16 @@ test("wrangler.jsonc.example and bindings.mjs agree on limits.cpu_ms", () => {
 test("wrangler.jsonc.example turns on logs and samples traces at a rate between 0 and 1", () => {
   const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
   const block = /^\s*"observability":.*$/m.exec(example)?.[0] ?? "";
-  assert.match(block, /"observability":\s*\{\s*"enabled":\s*true,\s*"head_sampling_rate":\s*1,/, "observability logs are not enabled, every request kept, in wrangler.jsonc.example");
+  assert.match(
+    block,
+    /"observability":\s*\{\s*"enabled":\s*true,\s*"head_sampling_rate":\s*1,/,
+    "observability logs are not enabled, every request kept, in wrangler.jsonc.example",
+  );
   assert.match(block, /"traces":\s*\{\s*"enabled":\s*true/, "observability traces are not enabled");
   const rate = /"traces":\s*\{[^}]*"head_sampling_rate":\s*([0-9.]+)/.exec(block);
   assert.ok(rate, "traces carry no head_sampling_rate, so every invocation would be traced");
-  assert.ok(Number(rate[1]) > 0 && Number(rate[1]) <= 1, `head_sampling_rate ${rate[1]} is outside (0, 1]`);
+  assert.ok(
+    Number(rate[1]) > 0 && Number(rate[1]) <= 1,
+    `head_sampling_rate ${rate[1]} is outside (0, 1]`,
+  );
 });

@@ -19,7 +19,11 @@ const DRIVER = grantAgent("write", DRIVER_ACTOR);
 // with the admin identity and the merge flag taken away.
 function driverOnly(actor: string) {
   const base = grantAgent("write", actor);
-  return { ...base, admin: false, scopes: { ...base.scopes, flags: { ...base.scopes.flags, can_merge: false } } };
+  return {
+    ...base,
+    admin: false,
+    scopes: { ...base.scopes, flags: { ...base.scopes.flags, can_merge: false } },
+  };
 }
 const OTHER = driverOnly("agent:driver-bbbb");
 const HOLDER_B = driverOnly("agent:driver-cccc");
@@ -27,7 +31,13 @@ const SEAT_ACTOR = "access:seat@example.com";
 const SEAT = grantAgent("write", SEAT_ACTOR);
 const NOW = new Date("2026-10-06T12:00:00.000Z");
 const LATER = new Date("2026-10-06T13:00:00.000Z");
-const VERIFIED = { prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: true };
+const VERIFIED = {
+  prs_opened: true,
+  prs_merged: true,
+  commits: true,
+  files_changed: true,
+  ci_green: true,
+};
 
 function jobsEnv() {
   return { ...env, IMPROVE_SCORE_SECRET: SECRET } as unknown as Parameters<typeof postJob>[0];
@@ -39,11 +49,31 @@ function stubGitHub(extra?: (url: string) => Response | null) {
     const special = extra?.(url);
     if (special) return special;
     if (url.includes("/pulls/3")) {
-      return Response.json({ merged: true, commits: 2, changed_files: 3, head: { sha: SHA }, node_id: "PR_node_3", created_at: "2026-10-06T10:00:00Z" });
+      return Response.json({
+        merged: true,
+        commits: 2,
+        changed_files: 3,
+        head: { sha: SHA },
+        node_id: "PR_node_3",
+        created_at: "2026-10-06T10:00:00Z",
+      });
     }
     if (url.includes("/actions/runs")) {
       return Response.json({
-        workflow_runs: [{ id: 1, name: "ci", status: "completed", conclusion: "success", head_sha: SHA, head_branch: "x", event: "pull_request", html_url: "https://github.com/example/sample/actions/runs/1", created_at: "2026-10-06T10:30:00Z", updated_at: "2026-10-06T10:40:00Z" }],
+        workflow_runs: [
+          {
+            id: 1,
+            name: "ci",
+            status: "completed",
+            conclusion: "success",
+            head_sha: SHA,
+            head_branch: "x",
+            event: "pull_request",
+            html_url: "https://github.com/example/sample/actions/runs/1",
+            created_at: "2026-10-06T10:30:00Z",
+            updated_at: "2026-10-06T10:40:00Z",
+          },
+        ],
       });
     }
     return new Response("not stubbed", { status: 404 });
@@ -51,21 +81,45 @@ function stubGitHub(extra?: (url: string) => Response | null) {
 }
 
 async function job(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
+    .bind(id)
+    .first<Record<string, unknown>>();
 }
 async function outcome(id: string) {
-  return env.DB.prepare("SELECT * FROM job_outcomes WHERE job_id = ?1").bind(id).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM job_outcomes WHERE job_id = ?1")
+    .bind(id)
+    .first<Record<string, unknown>>();
 }
 async function touches(id: string) {
-  return (await env.DB.prepare("SELECT kind, actor, actor_kind, waited_ms, detail FROM job_touches WHERE job_id = ?1 ORDER BY id").bind(id).all<{ kind: string; actor: string; actor_kind: string; waited_ms: number | null; detail: string | null }>()).results;
+  return (
+    await env.DB.prepare(
+      "SELECT kind, actor, actor_kind, waited_ms, detail FROM job_touches WHERE job_id = ?1 ORDER BY id",
+    )
+      .bind(id)
+      .all<{
+        kind: string;
+        actor: string;
+        actor_kind: string;
+        waited_ms: number | null;
+        detail: string | null;
+      }>()
+  ).results;
 }
 
 async function outcomeCount() {
-  return (await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes").first<{ n: number }>())?.n ?? 0;
+  return (
+    (await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes").first<{ n: number }>())?.n ?? 0
+  );
 }
 
 async function post(title: string, over: Record<string, unknown> = {}) {
-  const posted = await postJob(jobsEnv(), SEAT, NOW, { namespace: NS, title, body: "do the thing", gate_required: true, ...over } as Parameters<typeof postJob>[3]);
+  const posted = await postJob(jobsEnv(), SEAT, NOW, {
+    namespace: NS,
+    title,
+    body: "do the thing",
+    gate_required: true,
+    ...over,
+  } as Parameters<typeof postJob>[3]);
   return posted.job!.id;
 }
 
@@ -74,14 +128,19 @@ async function blocked(title: string, over: Record<string, unknown> = {}) {
   const id = await post(title, over);
   const claim = await claimJob(jobsEnv(), DRIVER, NOW, { id });
   expect(claim.ok, claim.refusal).toBe(true);
-  const block = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs the seat", command: "git push -u origin feat/x" });
+  const block = await blockJob(jobsEnv(), DRIVER, NOW, id, {
+    reason: "needs the seat",
+    command: "git push -u origin feat/x",
+  });
   expect(block.ok, block.refusal).toBe(true);
   return id;
 }
 
 beforeEach(async () => {
   await resetCapsidDb();
-  await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }])).run();
+  await env.DB.prepare("INSERT OR REPLACE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind(NS, JSON.stringify([{ repo: "example/sample", label: "primary" }]))
+    .run();
   await env.APP_KV.put("gh:token:v3:example/sample", "test-token");
 });
 
@@ -94,7 +153,10 @@ describe("the seat completes a blocked job it does not hold", () => {
   it("REPRODUCED: the outcome stays the driver's, verified through result_ref, and the audit row names the seat", async () => {
     stubGitHub();
     const id = await blocked("seat completes it");
-    const done = await completeAsCaller(jobsEnv(), SEAT, LATER, id, { result_summary: "merged by the seat", result_ref: PR });
+    const done = await completeAsCaller(jobsEnv(), SEAT, LATER, id, {
+      result_summary: "merged by the seat",
+      result_ref: PR,
+    });
     expect(done.ok, done.refusal).toBe(true);
 
     const row = await job(id);
@@ -104,16 +166,38 @@ describe("the seat completes a blocked job it does not hold", () => {
     const out = await outcome(id);
     expect(out?.agent).toBe(DRIVER_ACTOR);
     expect(JSON.parse(String(out?.verified))).toEqual(VERIFIED);
-    expect([out?.prs_opened, out?.prs_merged, out?.commits, out?.files_changed, out?.ci_green]).toEqual([1, 1, 2, 3, 1]);
+    expect([
+      out?.prs_opened,
+      out?.prs_merged,
+      out?.commits,
+      out?.files_changed,
+      out?.ci_green,
+    ]).toEqual([1, 1, 2, 3, 1]);
     expect(await outcomeCount()).toBe(1);
 
-    const audit = await env.DB.prepare("SELECT actor, params FROM audit_log WHERE action = 'job-admin-complete' AND json_extract(params, '$.job_id') = ?1").bind(id).first<{ actor: string; params: string }>();
+    const audit = await env.DB.prepare(
+      "SELECT actor, params FROM audit_log WHERE action = 'job-admin-complete' AND json_extract(params, '$.job_id') = ?1",
+    )
+      .bind(id)
+      .first<{ actor: string; params: string }>();
     expect(audit?.actor).toBe(SEAT_ACTOR);
-    expect(JSON.parse(String(audit?.params))).toMatchObject({ status: "done", held_by: DRIVER_ACTOR, result_ref: PR });
+    expect(JSON.parse(String(audit?.params))).toMatchObject({
+      status: "done",
+      held_by: DRIVER_ACTOR,
+      result_ref: PR,
+    });
     // The claim is the seat's account of the call, recorded under the seat, not the driver.
-    const claim = await env.DB.prepare("SELECT agent FROM job_claims WHERE job_id = ?1 AND action = 'complete'").bind(id).first<{ agent: string }>();
+    const claim = await env.DB.prepare(
+      "SELECT agent FROM job_claims WHERE job_id = ?1 AND action = 'complete'",
+    )
+      .bind(id)
+      .first<{ agent: string }>();
     expect(claim?.agent).toBe(SEAT_ACTOR);
-    const mirror = await env.DB.prepare("SELECT body, status FROM documents WHERE namespace = ?1 AND path = ?2").bind(NS, `jobs/${id}.md`).first<{ body: string; status: string }>();
+    const mirror = await env.DB.prepare(
+      "SELECT body, status FROM documents WHERE namespace = ?1 AND path = ?2",
+    )
+      .bind(NS, `jobs/${id}.md`)
+      .first<{ body: string; status: string }>();
     expect(mirror?.body).toContain("status: **done**");
     expect(mirror?.status).toBe("closed");
   });
@@ -121,7 +205,10 @@ describe("the seat completes a blocked job it does not hold", () => {
   it("REPRODUCED: the close writes one admin_complete touch, which ends the gate's wait and names the holder", async () => {
     stubGitHub();
     const id = await blocked("touch on close");
-    await completeAsCaller(jobsEnv(), SEAT, LATER, id, { result_summary: "merged by the seat", result_ref: PR });
+    await completeAsCaller(jobsEnv(), SEAT, LATER, id, {
+      result_summary: "merged by the seat",
+      result_ref: PR,
+    });
     const rows = await touches(id);
     expect(rows.map((t) => t.kind)).toEqual(["gate", "admin_complete"]);
     const close = rows[1];
@@ -137,7 +224,10 @@ describe("the seat completes a blocked job it does not hold", () => {
     stubGitHub();
     const id = await blocked("seat credential");
     const credential = { ...SEAT, actor: "agent:seat", id: "agent:seat", name: "agent" };
-    await completeAsCaller(jobsEnv(), credential, LATER, id, { result_summary: "merged", result_ref: PR });
+    await completeAsCaller(jobsEnv(), credential, LATER, id, {
+      result_summary: "merged",
+      result_ref: PR,
+    });
     expect((await touches(id)).find((t) => t.kind === "admin_complete")?.actor_kind).toBe("seat");
   });
 
@@ -146,7 +236,10 @@ describe("the seat completes a blocked job it does not hold", () => {
     const id = await blocked("seat takes it");
     const taken = await resumeJob(jobsEnv(), SEAT, NOW, id, "the seat finishes it", { take: true });
     expect(taken.ok, taken.refusal).toBe(true);
-    const done = await completeAsCaller(jobsEnv(), SEAT, LATER, id, { result_summary: "merged", result_ref: PR });
+    const done = await completeAsCaller(jobsEnv(), SEAT, LATER, id, {
+      result_summary: "merged",
+      result_ref: PR,
+    });
     expect(done.ok, done.refusal).toBe(true);
     expect((await outcome(id))?.agent).toBe(SEAT_ACTOR);
   });
@@ -161,28 +254,54 @@ describe("the seat completes a blocked job it does not hold", () => {
     // The claimless close reads the pull request's body, which must name the job.
     stubGitHub((url) =>
       url.includes("/pulls/3")
-        ? Response.json({ merged: true, commits: 2, changed_files: 3, head: { sha: SHA }, node_id: "PR_node_3", created_at: "2026-10-06T10:00:00Z", body: `Closes ${queued}.` })
-        : null
+        ? Response.json({
+            merged: true,
+            commits: 2,
+            changed_files: 3,
+            head: { sha: SHA },
+            node_id: "PR_node_3",
+            created_at: "2026-10-06T10:00:00Z",
+            body: `Closes ${queued}.`,
+          })
+        : null,
     );
-    const refusedQueued = await completeAsCaller(jobsEnv(), SEAT, LATER, queued, { result_summary: "x" });
+    const refusedQueued = await completeAsCaller(jobsEnv(), SEAT, LATER, queued, {
+      result_summary: "x",
+    });
     expect(refusedQueued.ok).toBe(false);
     expect(refusedQueued.refusal).toMatch(/is queued and nobody holds it/);
-    const unclaimed = await completeAsCaller(jobsEnv(), SEAT, LATER, queued, { result_summary: "x", result_ref: PR });
+    const unclaimed = await completeAsCaller(jobsEnv(), SEAT, LATER, queued, {
+      result_summary: "x",
+      result_ref: PR,
+    });
     expect(unclaimed.ok, unclaimed.refusal).toBe(true);
     expect((await outcome(queued))?.agent).toBe(SEAT_ACTOR);
     expect((await touches(queued)).map((t) => t.kind)).toEqual([]);
 
     const held = await post("held");
     await claimJob(jobsEnv(), HOLDER_B, NOW, { id: held });
-    const refusedHeld = await completeAsCaller(jobsEnv(), SEAT, LATER, held, { result_summary: "x", result_ref: PR });
+    const refusedHeld = await completeAsCaller(jobsEnv(), SEAT, LATER, held, {
+      result_summary: "x",
+      result_ref: PR,
+    });
     expect(refusedHeld.ok).toBe(false);
     expect(refusedHeld.refusal).toMatch(/Its holder completes it, or the seat releases/);
     expect((await touches(held)).map((t) => t.kind)).toEqual([]);
     expect((await job(held))?.status).toBe("claimed");
 
     const finished = await blocked("finished");
-    expect((await completeAsCaller(jobsEnv(), SEAT, LATER, finished, { result_summary: "first", result_ref: PR })).ok).toBe(true);
-    const again = await completeAsCaller(jobsEnv(), SEAT, LATER, finished, { result_summary: "second", result_ref: PR });
+    expect(
+      (
+        await completeAsCaller(jobsEnv(), SEAT, LATER, finished, {
+          result_summary: "first",
+          result_ref: PR,
+        })
+      ).ok,
+    ).toBe(true);
+    const again = await completeAsCaller(jobsEnv(), SEAT, LATER, finished, {
+      result_summary: "second",
+      result_ref: PR,
+    });
     expect(again.ok).toBe(false);
     expect(again.refusal).toMatch(/already done/);
     // One for the queued job closed with its pull request, one for the finished job.
@@ -192,10 +311,16 @@ describe("the seat completes a blocked job it does not hold", () => {
   it("refuses a driver, and an empty summary, and writes nothing", async () => {
     stubGitHub();
     const id = await blocked("not for a driver");
-    const byDriver = await completeAsCaller(jobsEnv(), OTHER, LATER, id, { result_summary: "mine now", result_ref: PR });
+    const byDriver = await completeAsCaller(jobsEnv(), OTHER, LATER, id, {
+      result_summary: "mine now",
+      result_ref: PR,
+    });
     expect(byDriver.ok).toBe(false);
     expect(byDriver.refusal).toMatch(/may only complete a job it holds|is blocked, not claimed/);
-    const empty = await completeAsCaller(jobsEnv(), SEAT, LATER, id, { result_summary: "  ", result_ref: PR });
+    const empty = await completeAsCaller(jobsEnv(), SEAT, LATER, id, {
+      result_summary: "  ",
+      result_ref: PR,
+    });
     expect(empty.ok).toBe(false);
     expect(empty.refusal).toMatch(/result_summary/);
     expect((await job(id))?.status).toBe("blocked");
@@ -205,11 +330,21 @@ describe("the seat completes a blocked job it does not hold", () => {
   it("refuses a seat key scoped away from the job's namespace", async () => {
     stubGitHub();
     const id = await blocked("out of scope");
-    const narrow = { ...SEAT, admin: false, scopes: { ...SEAT.scopes, namespaces: ["other"] }, actor: "agent:seat-narrow", id: "agent:seat-narrow", name: "agent" };
+    const narrow = {
+      ...SEAT,
+      admin: false,
+      scopes: { ...SEAT.scopes, namespaces: ["other"] },
+      actor: "agent:seat-narrow",
+      id: "agent:seat-narrow",
+      name: "agent",
+    };
     // A narrow key that still holds the merge flag is the seat for the purpose of the rule,
     // but only inside its own namespaces.
     narrow.scopes = { ...narrow.scopes, flags: { ...narrow.scopes.flags, can_merge: true } };
-    const refused = await completeAsCaller(jobsEnv(), narrow, LATER, id, { result_summary: "x", result_ref: PR });
+    const refused = await completeAsCaller(jobsEnv(), narrow, LATER, id, {
+      result_summary: "x",
+      result_ref: PR,
+    });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/cannot complete .* outside|not in|scope|namespace/i);
     expect((await job(id))?.status).toBe("blocked");
@@ -219,7 +354,10 @@ describe("the seat completes a blocked job it does not hold", () => {
     stubGitHub();
     const id = await post("holder completes");
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    const done = await completeJob(jobsEnv(), DRIVER, LATER, id, { result_summary: "landed", result_ref: PR });
+    const done = await completeJob(jobsEnv(), DRIVER, LATER, id, {
+      result_summary: "landed",
+      result_ref: PR,
+    });
     expect(done.ok, done.refusal).toBe(true);
     expect((await outcome(id))?.agent).toBe(DRIVER_ACTOR);
   });

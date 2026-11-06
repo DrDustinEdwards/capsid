@@ -9,7 +9,10 @@ const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // A repo-relative module path: no leading slash, no "." or ".." segment. $ and brackets are
 // in React Router's route file names (blog.$slug[.md].ts); the explorer escapes them in links.
-const ModulePath = bounded(300).regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._@/+$[\]-]+$/, "a module path is repo-relative");
+const ModulePath = bounded(300).regex(
+  /^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._@/+$[\]-]+$/,
+  "a module path is repo-relative",
+);
 const Line = z.number().int().min(1);
 const Share = z.number().min(0).max(1);
 
@@ -47,7 +50,9 @@ export const CodeMapSchema = z.object({
     mutation: z.literal("stryker").nullable(),
   }),
   // The commit and day the mutation report was measured at, when it is older than the map.
-  mutated: z.object({ sha: bounded(40).regex(/^[0-9a-f]{40}$/), date: bounded(10).regex(DATE) }).optional(),
+  mutated: z
+    .object({ sha: bounded(40).regex(/^[0-9a-f]{40}$/), date: bounded(10).regex(DATE) })
+    .optional(),
   modules: z.array(ModuleSchema).max(5000),
   cycles: z.array(z.array(ModulePath).min(1).max(1000)).max(1000),
 });

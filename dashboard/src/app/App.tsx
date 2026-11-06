@@ -1,15 +1,53 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 import { Spinner } from "capsomer/react/empty";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
 import { Outlet } from "react-router";
 import { Link, useDemo, useLocation, useSearch } from "../lib/router";
-import { APP_URL, POLL_MS, requestRefresh, runAction, signOutRequest, useOpsFeed } from "../lib/api";
+import {
+  APP_URL,
+  POLL_MS,
+  requestRefresh,
+  runAction,
+  signOutRequest,
+  useOpsFeed,
+} from "../lib/api";
 import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
-import { RAIL_PREF, THEME_PREF, readPref, toggleTheme, useSingleKeys, writePref } from "../lib/prefs";
+import {
+  RAIL_PREF,
+  THEME_PREF,
+  readPref,
+  toggleTheme,
+  useSingleKeys,
+  writePref,
+} from "../lib/prefs";
 import { register, setSheetOpener } from "capsomer/behavior/shortcuts";
 import { NavIcon } from "../ui/icons";
-import { AppCtx, VIEWS, parseRoute, placePath, routePath, sitePath, type ConfirmRequest, type Ctx, type Filters, type UndoRequest, type ViewId } from "./ctx";
+import {
+  AppCtx,
+  VIEWS,
+  parseRoute,
+  placePath,
+  routePath,
+  sitePath,
+  type ConfirmRequest,
+  type Ctx,
+  type Filters,
+  type UndoRequest,
+  type ViewId,
+} from "./ctx";
 import { DemoNotice } from "./DemoNotice";
 import type { OpsFeed, PortalPerformed } from "../types";
 import { lasting, withMessage, type Message } from "../lib/messages";
@@ -17,27 +55,42 @@ import { lasting, withMessage, type Message } from "../lib/messages";
 // Loaded the first time a panel opens or Ctrl K is pressed, then kept, so the initial bundle
 // carries neither (the size budget, after Capsomer 0.9.0's header joined the entry).
 const Drawer = lazy(() => import("./Drawer").then((m) => ({ default: m.Drawer })));
-const CommandPalette = lazy(() => import("./CommandMenu").then((m) => ({ default: m.CommandPalette })));
+const CommandPalette = lazy(() =>
+  import("./CommandMenu").then((m) => ({ default: m.CommandPalette })),
+);
 // Loaded on the first control a person opens.
-const ConfirmDialog = lazy(() => import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })));
+const ConfirmDialog = lazy(() =>
+  import("./ConfirmDialog").then((m) => ({ default: m.ConfirmDialog })),
+);
 // Capsomer's "?" sheet, which lists every shortcut registered below. Loaded the first time it
 // is opened, then kept: the initial bundle does not carry it.
-const ShortcutSheet = lazy(() => import("./ShortcutSheet").then((m) => ({ default: m.ShortcutSheet })));
+const ShortcutSheet = lazy(() =>
+  import("./ShortcutSheet").then((m) => ({ default: m.ShortcutSheet })),
+);
 
 // What each view is for, in a line, under its "g" shortcut in the sheet (design D13 moved
 // the views' intro sentences there). Jobs, Pull requests and the rest that need none have none.
 const ABOUT: Partial<Record<ViewId, string>> = {
-  needs: "The home: every decision waiting for you, with its buttons, then every problem worst first.",
-  health: "One line on whether anything is broken, the tiles, then a tab each for problems, backups, CI, scheduled tasks and the Cloudflare resources no site owns.",
-  sites: "Every site in one table: status, uptime, last deploy, errors and backup age. Each site has its own page: overview, deploys, search and traffic, sync and repairs, and setup.",
-  queue: "Every job by state. A blocked job shows what it waits on; open it to answer or resume it. Checks sets what each agent said beside what the Worker verified.",
+  needs:
+    "The home: every decision waiting for you, with its buttons, then every problem worst first.",
+  health:
+    "One line on whether anything is broken, the tiles, then a tab each for problems, backups, CI, scheduled tasks and the Cloudflare resources no site owns.",
+  sites:
+    "Every site in one table: status, uptime, last deploy, errors and backup age. Each site has its own page: overview, deploys, search and traffic, sync and repairs, and setup.",
+  queue:
+    "Every job by state. A blocked job shows what it waits on; open it to answer or resume it. Checks sets what each agent said beside what the Worker verified.",
   prs: "The pull requests waiting for you, with Approve and Close, then auto-merge and those recorded against jobs.",
-  projects: "Each project's driver, its jobs and its integrity, with Reset for one paused after repeated failures.",
+  projects:
+    "Each project's driver, its jobs and its integrity, with Reset for one paused after repeated failures.",
   activity: "The audit log, newest first: who did what, where.",
-  agents: "Every credential and when it was last seen, the archive of revoked ones, and the AI access granted on each server.",
-  packages: "Published: each npm package, added and changed here. Shared: the tag each app pins, who is behind, and the local copies left. Completeness: every shared area on every site.",
-  library: "The knowledge store, read-only: decisions, rulings and research, a search, and each document with its links and jobs.",
-  settings: "Your preferences: the overnight run, phone alerts, the daily digest and this browser's display. Every change is previewed first.",
+  agents:
+    "Every credential and when it was last seen, the archive of revoked ones, and the AI access granted on each server.",
+  packages:
+    "Published: each npm package, added and changed here. Shared: the tag each app pins, who is behind, and the local copies left. Completeness: every shared area on every site.",
+  library:
+    "The knowledge store, read-only: decisions, rulings and research, a search, and each document with its links and jobs.",
+  settings:
+    "Your preferences: the overnight run, phone alerts, the daily digest and this browser's display. Every change is previewed first.",
 };
 
 // The phone tab bar (the Portal UX audit's sitemap, 2026-10): Needs you, Health and Pull
@@ -62,7 +115,6 @@ const GROUPS: Array<{ label?: string; views: ViewId[] }> = [
 const COUNT_TONE: Partial<Record<ViewId, "need" | "crit" | "warn">> = {
   health: "crit",
 };
-
 
 // What each rail count means, for its accessible name and its tooltip.
 const BADGE_NOTE: Partial<Record<ViewId, string>> = {
@@ -99,9 +151,22 @@ function useTick(ms: number): number {
   return useSyncExternalStore(clock.subscribe, clock.read, () => 0);
 }
 
-function Freshness({ feed, nextPollAt, skew }: { feed: OpsFeed | null; nextPollAt: number; skew: number }) {
+function Freshness({
+  feed,
+  nextPollAt,
+  skew,
+}: {
+  feed: OpsFeed | null;
+  nextPollAt: number;
+  skew: number;
+}) {
   const clientNow = useTick(1000);
-  if (!feed) return <div className="fresh" role="status" aria-live="polite">Reading the feed...</div>;
+  if (!feed)
+    return (
+      <div className="fresh" role="status" aria-live="polite">
+        Reading the feed...
+      </div>
+    );
   // Server times against the server's clock; the next poll against the browser's,
   // since the browser schedules it.
   const now = portalNow(clientNow, skew, ms(feed.live.generated));
@@ -117,7 +182,12 @@ function Freshness({ feed, nextPollAt, skew }: { feed: OpsFeed | null; nextPollA
       <span>
         Updated <b>{ago(ms(feed.live.generated), now)}</b>
       </span>
-      <span className="long">· {snap ? `${hasSites(feed) ? "sites from pass" : "watcher pass"} ${ago(ms(snap.pass_at), now)}` : "no watcher pass yet"}</span>
+      <span className="long">
+        ·{" "}
+        {snap
+          ? `${hasSites(feed) ? "sites from pass" : "watcher pass"} ${ago(ms(snap.pass_at), now)}`
+          : "no watcher pass yet"}
+      </span>
     </div>
   );
 }
@@ -180,23 +250,44 @@ export function App() {
   const say = useCallback((msg: string) => {
     setToast({ msg, on: true });
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => setToast((t) => ({ ...t, on: false })), Math.max(2400, msg.length * 70));
+    toastTimer = setTimeout(
+      () => setToast((t) => ({ ...t, on: false })),
+      Math.max(2400, msg.length * 70),
+    );
   }, []);
 
   const confirm = useCallback((r: ConfirmRequest) => setConfirmReq(r), [setConfirmReq]);
 
   // The newest first. Plain results before it go; anything lasting stays.
-  const post = useCallback((m: Omit<Message, "id">) => {
-    const id = nextMessageId++;
-    setMessages((all) => withMessage(all, { ...m, id }));
-  }, [setMessages]);
-  const update = useCallback((id: number, m: Omit<Message, "id">) => setMessages((all) => all.map((x) => (x.id === id ? { ...m, id } : x))), [setMessages]);
-  const fail = useCallback((text: string) => post({ text, warning: null, undo: null, error: null, busy: false, failure: true }), [post]);
+  const post = useCallback(
+    (m: Omit<Message, "id">) => {
+      const id = nextMessageId++;
+      setMessages((all) => withMessage(all, { ...m, id }));
+    },
+    [setMessages],
+  );
+  const update = useCallback(
+    (id: number, m: Omit<Message, "id">) =>
+      setMessages((all) => all.map((x) => (x.id === id ? { ...m, id } : x))),
+    [setMessages],
+  );
+  const fail = useCallback(
+    (text: string) =>
+      post({ text, warning: null, undo: null, error: null, busy: false, failure: true }),
+    [post],
+  );
 
   const performed = useCallback(
     (p: PortalPerformed, undo?: UndoRequest) => {
       accept(p.feed);
-      post({ text: p.summary, warning: p.warning, undo: undo ?? null, error: null, busy: false, failure: false });
+      post({
+        text: p.summary,
+        warning: p.warning,
+        undo: undo ?? null,
+        error: null,
+        busy: false,
+        failure: false,
+      });
     },
     [accept, post],
   );
@@ -215,11 +306,21 @@ export function App() {
       const r = await runAction(csrfRef.current, { action: u.action, params: u.params });
       if (r.kind === "signed-out") return (setMessages([]), signOut());
       if (r.kind !== "ok") {
-        const why = r.kind === "error" ? `Undo could not reach the server: ${r.message}` : `Undo was refused: ${r.message}`;
+        const why =
+          r.kind === "error"
+            ? `Undo could not reach the server: ${r.message}`
+            : `Undo was refused: ${r.message}`;
         return update(m.id, { ...m, busy: false, error: why });
       }
       accept(r.value.feed);
-      const done = { text: `Undone. ${r.value.summary}`, warning: r.value.warning, undo: null, error: null, busy: false, failure: false };
+      const done = {
+        text: `Undone. ${r.value.summary}`,
+        warning: r.value.warning,
+        undo: null,
+        error: null,
+        busy: false,
+        failure: false,
+      };
       // A result that carried a warning keeps it, without its Undo, and the undo's own
       // result arrives beside it; a plain one becomes the undo's result.
       if (m.warning !== null) {
@@ -263,18 +364,25 @@ export function App() {
         window.scrollTo(0, 0);
         return;
       }
-      if (type === "job" || type === "agent" || type === "audit") navigate(routePath(route.view, { type, id }, route.site) + qs);
+      if (type === "job" || type === "agent" || type === "audit")
+        navigate(routePath(route.view, { type, id }, route.site) + qs);
     },
     [navigate, route.view, route.site, qs],
   );
 
-  const closeDrawer = useCallback(() => navigate(routePath(route.view, null, route.site) + qs), [navigate, route.view, route.site, qs]);
+  const closeDrawer = useCallback(
+    () => navigate(routePath(route.view, null, route.site) + qs),
+    [navigate, route.view, route.site, qs],
+  );
 
   const copy = useCallback(
     (text: string) => {
       navigator.clipboard.writeText(text).then(
         () => say("Copied"),
-        (e: unknown) => fail(`Copy failed (${e instanceof Error ? e.message : "no clipboard"}): select the text and copy it.`),
+        (e: unknown) =>
+          fail(
+            `Copy failed (${e instanceof Error ? e.message : "no clipboard"}): select the text and copy it.`,
+          ),
       );
     },
     [say, fail],
@@ -287,13 +395,25 @@ export function App() {
     setSpinning(false);
     if (r.kind === "ok") {
       accept(r.feed);
-      if (r.warning) return post({ text: "Refreshed: a new watcher pass ran.", warning: r.warning, undo: null, error: null, busy: false, failure: false });
+      if (r.warning)
+        return post({
+          text: "Refreshed: a new watcher pass ran.",
+          warning: r.warning,
+          undo: null,
+          error: null,
+          busy: false,
+          failure: false,
+        });
       return say("Refreshed: a new watcher pass ran");
     }
     if (r.kind === "signed-out") return signOut();
     if (r.kind === "limited") {
       const at = r.allowedAt ?? (feed?.refresh_allowed_at ? ms(feed.refresh_allowed_at) : null);
-      return say(at ? `Refresh is rate limited. The next is allowed ${ago(at)} (${utc(at).slice(11)}).` : "Refresh is rate limited. Try again shortly.");
+      return say(
+        at
+          ? `Refresh is rate limited. The next is allowed ${ago(at)} (${utc(at).slice(11)}).`
+          : "Refresh is rate limited. Try again shortly.",
+      );
     }
     fail(`Refresh failed: ${r.message}`);
   }, [accept, feed, say, fail, post, signOut, spinning]);
@@ -333,13 +453,17 @@ export function App() {
   // document order, so the selection is the focused row: no index to go stale when the
   // feed changes, and Enter opens it (onRowActivate). A row that is not in the tab order
   // is made focusable by script only (tabIndex -1).
-  const rows = () => Array.from(mainRef.current?.querySelectorAll<HTMLElement>("[data-row]") ?? []).filter((el) => el.getClientRects().length > 0);
+  const rows = () =>
+    Array.from(mainRef.current?.querySelectorAll<HTMLElement>("[data-row]") ?? []).filter(
+      (el) => el.getClientRects().length > 0,
+    );
   const step = (dir: 1 | -1) => {
     const r = rows();
     if (!r.length) return;
     const cur = document.activeElement?.closest<HTMLElement>("[data-row]");
     const i = cur ? r.indexOf(cur) : -1;
-    const el = r[i < 0 ? (dir === 1 ? 0 : r.length - 1) : Math.max(0, Math.min(r.length - 1, i + dir))];
+    const el =
+      r[i < 0 ? (dir === 1 ? 0 : r.length - 1) : Math.max(0, Math.min(r.length - 1, i + dir))];
     if (!el) return;
     if (!el.hasAttribute("tabindex")) el.tabIndex = -1;
     el.focus({ preventScroll: true });
@@ -358,13 +482,48 @@ export function App() {
     setSheetOpener(() => setHelp(true));
     const a = () => act.current;
     const offs = [
-      register({ key: ["Mod+k", "/"], label: "Open the command menu", group: "General", run: () => setPalette(true) }),
-      ...views.map((v) => register({ key: `g ${v.key}`, label: v.label, about: ABOUT[v.id], group: "Go to", run: () => a().go(v.id) })),
-      register({ key: ["j", "k"], label: "Move through the list on screen", about: "Enter opens the selected row.", group: "This page", run: (e) => a().step(e.key === "j" ? 1 : -1) }),
-      register({ key: "f", label: "Filter the list", group: "This page", when: () => !!document.getElementById("qsearch"), run: () => document.getElementById("qsearch")?.focus() }),
+      register({
+        key: ["Mod+k", "/"],
+        label: "Open the command menu",
+        group: "General",
+        run: () => setPalette(true),
+      }),
+      ...views.map((v) =>
+        register({
+          key: `g ${v.key}`,
+          label: v.label,
+          about: ABOUT[v.id],
+          group: "Go to",
+          run: () => a().go(v.id),
+        }),
+      ),
+      register({
+        key: ["j", "k"],
+        label: "Move through the list on screen",
+        about: "Enter opens the selected row.",
+        group: "This page",
+        run: (e) => a().step(e.key === "j" ? 1 : -1),
+      }),
+      register({
+        key: "f",
+        label: "Filter the list",
+        group: "This page",
+        when: () => !!document.getElementById("qsearch"),
+        run: () => document.getElementById("qsearch")?.focus(),
+      }),
       register({ key: "r", label: "Refresh now", group: "General", run: () => void a().refresh() }),
-      register({ key: "t", label: "Switch light and dark", group: "General", run: () => a().theme() }),
-      register({ key: "[", label: "Collapse or expand the side menu", group: "General", run: () => a().toggleRail() }),
+      register({
+        key: "t",
+        label: "Switch light and dark",
+        group: "General",
+        run: () => a().theme(),
+      }),
+      register({
+        key: "[",
+        label: "Collapse or expand the side menu",
+        group: "General",
+        run: () => a().toggleRail(),
+      }),
     ];
     return () => {
       offs.forEach((off) => off());
@@ -401,8 +560,10 @@ export function App() {
       tip.style.left = `${Math.max(8, Math.min(window.innerWidth - tw - 8, r.left + r.width / 2 - tw / 2))}px`;
       tip.style.top = `${Math.max(8, r.top - th - 8)}px`;
     };
-    const over = (e: MouseEvent) => show((e.target as Element).closest?.<HTMLElement>("[data-tip]"));
-    const focus = (e: FocusEvent) => show(e.target instanceof Element ? e.target.closest<HTMLElement>("[data-tip]") : null);
+    const over = (e: MouseEvent) =>
+      show((e.target as Element).closest?.<HTMLElement>("[data-tip]"));
+    const focus = (e: FocusEvent) =>
+      show(e.target instanceof Element ? e.target.closest<HTMLElement>("[data-tip]") : null);
     const blur = () => tip.classList.remove("on");
     document.addEventListener("mouseover", over);
     document.addEventListener("focusin", focus);
@@ -433,7 +594,19 @@ export function App() {
     },
     [navigate, say],
   );
-  const paletteActions = useMemo(() => ({ go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy, confirm, flip }), [go, open, refresh, theme, copy, confirm, flip, setHelp]);
+  const paletteActions = useMemo(
+    () => ({
+      go,
+      open,
+      refresh: () => void refresh(),
+      theme,
+      help: () => setHelp(true),
+      copy,
+      confirm,
+      flip,
+    }),
+    [go, open, refresh, theme, copy, confirm, flip, setHelp],
+  );
   const [paletteUsed, setPaletteUsed] = useState(false);
   if (palette && !paletteUsed) setPaletteUsed(true);
   const [drawerUsed, setDrawerUsed] = useState(false);
@@ -458,19 +631,35 @@ export function App() {
   // else, so no menu entry counts it (Pull requests' waiting pull requests among them).
   // Health counts the critical problems, session incidents included (derive.ts), leaving
   // out what waits on you.
-  const critCount = feed ? attentionItems(feed, now).filter((x) => x.sev === "crit" && !WAITING_KINDS.has(x.kind)).length : 0;
-  const badge: Partial<Record<ViewId, { n: number; cls: string }>> = c && feed
-    ? {
-        health: { n: critCount, cls: "hot" },
-      }
-    : {};
+  const critCount = feed
+    ? attentionItems(feed, now).filter((x) => x.sev === "crit" && !WAITING_KINDS.has(x.kind)).length
+    : 0;
+  const badge: Partial<Record<ViewId, { n: number; cls: string }>> =
+    c && feed
+      ? {
+          health: { n: critCount, cls: "hot" },
+        }
+      : {};
 
   // The page title names the view, and the open panel's subject before it (WCAG 2.4.2):
   // "Fix the probe · Queue · Capsid Portal".
   const d = route.drawer;
-  const subject = !d ? "" : d.type === "job" ? (feed?.live.jobs.find((j) => j.id === d.id)?.title ?? `Job ${d.id}`) : d.id;
-  const siteName = route.site ? (feed?.live.sites.find((s) => s.namespace === route.site)?.name ?? route.site) : "";
-  const pageTitle = [subject, siteName, VIEWS.find((v) => v.id === route.view)?.label, "Capsid Portal"].filter(Boolean).join(" · ");
+  const subject = !d
+    ? ""
+    : d.type === "job"
+      ? (feed?.live.jobs.find((j) => j.id === d.id)?.title ?? `Job ${d.id}`)
+      : d.id;
+  const siteName = route.site
+    ? (feed?.live.sites.find((s) => s.namespace === route.site)?.name ?? route.site)
+    : "";
+  const pageTitle = [
+    subject,
+    siteName,
+    VIEWS.find((v) => v.id === route.view)?.label,
+    "Capsid Portal",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   useEffect(() => {
     document.title = signedOut ? "Signed out · Capsid Portal" : pageTitle;
   }, [pageTitle, signedOut]);
@@ -495,7 +684,22 @@ export function App() {
   const menu: AdminEntry[] = GROUPS.flatMap((g) => g.views.map((id) => entryFor(id, g.label)));
   const tabEntries = tabs.map((id) => ({ ...entryFor(id), icon: <NavIcon id={id} size={20} /> }));
 
-  const ctx: Ctx | null = feed ? { feed, now, view: route.view, open, go, filters, setFilters, copy, say, confirm, performed, signOut } : null;
+  const ctx: Ctx | null = feed
+    ? {
+        feed,
+        now,
+        view: route.view,
+        open,
+        go,
+        filters,
+        setFilters,
+        copy,
+        say,
+        confirm,
+        performed,
+        signOut,
+      }
+    : null;
 
   let content: ReactNode;
   if (signedOut) {
@@ -533,7 +737,8 @@ export function App() {
       <>
         {error && (
           <div className="banner" role="alert">
-            Could not read the feed: {error}. Showing the last good read from {ago(ms(feed.live.generated), now)}.
+            Could not read the feed: {error}. Showing the last good read from{" "}
+            {ago(ms(feed.live.generated), now)}.
           </div>
         )}
         <Suspense
@@ -565,7 +770,11 @@ export function App() {
       tabs={tabEntries}
       navLabel="Sections"
       onSearch={() => setPalette(true)}
-      inbox={feed ? { count: feed.live.inbox.count, countNote: "waiting on you", href: routePath("needs") } : undefined}
+      inbox={
+        feed
+          ? { count: feed.live.inbox.count, countNote: "waiting on you", href: routePath("needs") }
+          : undefined
+      }
       onHelp={() => setHelp(true)}
       themePrefKey={THEME_PREF}
       account={{
@@ -573,14 +782,23 @@ export function App() {
         name: feed?.user.name ?? "Account",
         initials: feed?.user.initials ?? "A",
         appLabel: "Capsid Portal",
-        appLinks: [{ label: "Portal settings", href: routePath("settings"), current: route.view === "settings" }],
+        appLinks: [
+          {
+            label: "Portal settings",
+            href: routePath("settings"),
+            current: route.view === "settings",
+          },
+        ],
         onSignOut: signedOut ? undefined : () => void leave(),
         signOutDisabled: !feed || leaving,
       }}
       status={
         <>
           {(import.meta.env.DEV || demo) && (
-            <span className="sample" title="Sample data (dev/sample-feed.json): every number here is fake">
+            <span
+              className="sample"
+              title="Sample data (dev/sample-feed.json): every number here is fake"
+            >
               SAMPLE DATA
             </span>
           )}
@@ -620,7 +838,14 @@ export function App() {
       )}
       {paletteUsed && (
         <Suspense fallback={null}>
-          <CommandPalette open={palette} onClose={() => setPalette(false)} feed={feed} views={views} actions={paletteActions} now={now} />
+          <CommandPalette
+            open={palette}
+            onClose={() => setPalette(false)}
+            feed={feed}
+            views={views}
+            actions={paletteActions}
+            now={now}
+          />
         </Suspense>
       )}
       {helpUsed && (
@@ -646,9 +871,18 @@ export function App() {
       <div className={`toast${toast.on ? " on" : ""}`} role="status" aria-live="polite">
         {toast.msg}
       </div>
-      <div className="msg-region" role="status" aria-live="polite" aria-label="Results and failures, until dismissed">
+      <div
+        className="msg-region"
+        role="status"
+        aria-live="polite"
+        aria-label="Results and failures, until dismissed"
+      >
         {messages.map((message) => (
-          <div key={message.id} className={`msg${lasting(message) ? " warn" : ""}`} data-lasting={lasting(message) ? "" : undefined}>
+          <div
+            key={message.id}
+            className={`msg${lasting(message) ? " warn" : ""}`}
+            data-lasting={lasting(message) ? "" : undefined}
+          >
             <span className="grow">
               {message.failure ? <span role="alert">{message.text}</span> : message.text}
               {message.warning && (
@@ -664,7 +898,12 @@ export function App() {
               )}
             </span>
             {message.undo && (
-              <button type="button" className="btn" disabled={message.busy} onClick={() => void undo(message)}>
+              <button
+                type="button"
+                className="btn"
+                disabled={message.busy}
+                onClick={() => void undo(message)}
+              >
                 {message.busy ? "Undoing..." : "Undo"}
               </button>
             )}
@@ -695,7 +934,17 @@ function FreshRing({ frac, stale }: { frac: number; stale: boolean }) {
   return (
     <svg className="ring" viewBox="0 0 16 16" aria-hidden="true">
       <circle cx="8" cy="8" r={r} fill="none" stroke="var(--line-strong)" strokeWidth="2" />
-      <circle cx="8" cy="8" r={r} fill="none" stroke={stale ? "var(--warn)" : "var(--accent)"} strokeWidth="2" strokeDasharray={`${(c * frac).toFixed(2)} ${c.toFixed(2)}`} transform="rotate(-90 8 8)" strokeLinecap="round" />
+      <circle
+        cx="8"
+        cy="8"
+        r={r}
+        fill="none"
+        stroke={stale ? "var(--warn)" : "var(--accent)"}
+        strokeWidth="2"
+        strokeDasharray={`${(c * frac).toFixed(2)} ${c.toFixed(2)}`}
+        transform="rotate(-90 8 8)"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

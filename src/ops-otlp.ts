@@ -82,7 +82,8 @@ function attrMap(list: unknown): Map<string, string> {
     if (typeof item?.key !== "string" || !item.value || typeof item.value !== "object") continue;
     const v = item.value;
     if (typeof v.stringValue === "string") out.set(item.key, v.stringValue);
-    else if (typeof v.intValue === "string" || typeof v.intValue === "number") out.set(item.key, String(v.intValue));
+    else if (typeof v.intValue === "string" || typeof v.intValue === "number")
+      out.set(item.key, String(v.intValue));
     else if (typeof v.doubleValue === "number") out.set(item.key, String(v.doubleValue));
     else if (typeof v.boolValue === "boolean") out.set(item.key, String(v.boolValue));
   }
@@ -100,7 +101,8 @@ export function pointValue(point: Record<string, unknown>): number | null {
   let value: number | null = null;
   if (typeof point.asDouble === "number") value = point.asDouble;
   else if (typeof point.asInt === "number") value = point.asInt;
-  else if (typeof point.asInt === "string" && /^-?[0-9]{1,18}$/.test(point.asInt)) value = Number(point.asInt);
+  else if (typeof point.asInt === "string" && /^-?[0-9]{1,18}$/.test(point.asInt))
+    value = Number(point.asInt);
   if (value === null || !Number.isFinite(value) || value < 0) return null;
   return value;
 }
@@ -112,7 +114,10 @@ function timeOf(point: Record<string, unknown>): bigint {
   return 0n;
 }
 
-const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? (v as Record<string, unknown>[]).filter((x) => x && typeof x === "object") : []);
+const arr = (v: unknown): Record<string, unknown>[] =>
+  Array.isArray(v)
+    ? (v as Record<string, unknown>[]).filter((x) => x && typeof x === "object")
+    : [];
 
 /** The kept points of an ExportMetricsServiceRequest. Throws nothing; a body that is
  *  not the expected shape yields no points. */
@@ -132,7 +137,9 @@ export function parseMetrics(body: unknown): ParsedExport {
         if (typeof name !== "string" || !Object.hasOwn(METRICS, name)) continue;
         const sum = metric.sum as Record<string, unknown> | undefined;
         if (!sum || typeof sum !== "object") {
-          const gaugePoints = arr((metric.gauge as Record<string, unknown> | undefined)?.dataPoints).length;
+          const gaugePoints = arr(
+            (metric.gauge as Record<string, unknown> | undefined)?.dataPoints,
+          ).length;
           for (let i = 0; i < gaugePoints; i += 1) problem(`${name} is not a sum`);
           continue;
         }
@@ -196,12 +203,14 @@ export function parseLogs(body: unknown): ParsedExport {
         // Claude Code names the event in event.name ("api_error") and in the body
         // ("claude_code.api_error"). The body is compared, never kept.
         const bodyName = (record.body as Record<string, unknown> | undefined)?.stringValue;
-        const isApiError = event === "api_error" || event === API_ERROR_METRIC || bodyName === API_ERROR_METRIC;
+        const isApiError =
+          event === "api_error" || event === API_ERROR_METRIC || bodyName === API_ERROR_METRIC;
         if (!isApiError) continue;
         const session = attrs.get("session.id");
         if (!session || !SESSION_SHAPE.test(session)) {
           out.rejected += 1;
-          if (out.problems.length === 0) out.problems.push("api_error record without a usable session.id");
+          if (out.problems.length === 0)
+            out.problems.push("api_error record without a usable session.id");
           continue;
         }
         const status = attrs.get("status_code") ?? "";
@@ -242,11 +251,29 @@ export function aggregate(points: UsagePoint[]): SeriesWrite[] {
     if (p.temporality === "delta") {
       const seen = deltas.get(key);
       if (seen) seen.value += p.value;
-      else deltas.set(key, { session_id: p.session_id, metric: p.metric, kind: p.kind, model: p.model, value: p.value, mode: "add" });
+      else
+        deltas.set(key, {
+          session_id: p.session_id,
+          metric: p.metric,
+          kind: p.kind,
+          model: p.model,
+          value: p.value,
+          mode: "add",
+        });
     } else {
       const seen = latest.get(key);
       if (!seen || p.at >= seen.at) {
-        latest.set(key, { write: { session_id: p.session_id, metric: p.metric, kind: p.kind, model: p.model, value: p.value, mode: "replace" }, at: p.at });
+        latest.set(key, {
+          write: {
+            session_id: p.session_id,
+            metric: p.metric,
+            kind: p.kind,
+            model: p.model,
+            value: p.value,
+            mode: "replace",
+          },
+          at: p.at,
+        });
       }
     }
   }
@@ -260,7 +287,11 @@ export function aggregate(points: UsagePoint[]): SeriesWrite[] {
  * set by whoever configured the exporter, so it is honored only where it agrees with
  * the binding, and a disagreement is reported rather than recorded.
  */
-export function jobForSession(caller: SessionCaller, bound: string | null | undefined, attr: string | null): { job: string | null; mismatch: boolean } {
+export function jobForSession(
+  caller: SessionCaller,
+  bound: string | null | undefined,
+  attr: string | null,
+): { job: string | null; mismatch: boolean } {
   const job = bound ?? caller.job_id;
   return { job, mismatch: attr !== null && attr !== job };
 }
@@ -270,12 +301,19 @@ export function jobForSession(caller: SessionCaller, bound: string | null | unde
 // one that exists (the hook receiver owns every other column).
 // Each statement is one literal at its prepare, so test-integration/query-plans.test.ts
 // can reconstruct and EXPLAIN it.
-function claimSession(db: D1Database, id: string, actor: string, jobId: string | null, namespace: string | null, at: string): D1PreparedStatement {
+function claimSession(
+  db: D1Database,
+  id: string,
+  actor: string,
+  jobId: string | null,
+  namespace: string | null,
+  at: string,
+): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO agent_sessions (session_id, agent, job_id, namespace, started_at, last_event_at, last_event, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?5, 'otlp', ?5)
-       ON CONFLICT(session_id) DO NOTHING`
+       ON CONFLICT(session_id) DO NOTHING`,
     )
     .bind(id, actor, jobId, namespace, at);
 }
@@ -292,7 +330,7 @@ function upsertUsage(
   w: { session_id: string; metric: string; kind: string; model: string; value: number },
   jobId: string | null,
   at: string,
-  actor: string
+  actor: string,
 ): D1PreparedStatement {
   const statement =
     mode === "add"
@@ -304,7 +342,7 @@ function upsertUsage(
              value = session_usage.value + excluded.value,
              job_id = COALESCE(session_usage.job_id, excluded.job_id),
              updated_at = excluded.updated_at
-           RETURNING session_id`
+           RETURNING session_id`,
         )
       : db.prepare(
           `INSERT INTO session_usage (session_id, job_id, metric, kind, model, value, updated_at)
@@ -314,25 +352,39 @@ function upsertUsage(
              value = excluded.value,
              job_id = COALESCE(session_usage.job_id, excluded.job_id),
              updated_at = excluded.updated_at
-           RETURNING session_id`
+           RETURNING session_id`,
         );
   return statement.bind(w.session_id, jobId, w.metric, w.kind, w.model, w.value, at, actor);
 }
 
 /** The request body as text: identity or gzip, at most OTLP_MAX_BYTES either side of
  *  decompression. */
-export async function readOtlpBody(request: Request): Promise<{ ok: true; text: string } | { ok: false; response: Response }> {
+export async function readOtlpBody(
+  request: Request,
+): Promise<{ ok: true; text: string } | { ok: false; response: Response }> {
   const type = (request.headers.get("Content-Type") ?? "").split(";")[0].trim().toLowerCase();
   if (type !== "application/json") {
-    return { ok: false, response: plain("unsupported media type: this receiver takes OTLP/HTTP JSON (OTEL_EXPORTER_OTLP_PROTOCOL=http/json), not protobuf", 415) };
+    return {
+      ok: false,
+      response: plain(
+        "unsupported media type: this receiver takes OTLP/HTTP JSON (OTEL_EXPORTER_OTLP_PROTOCOL=http/json), not protobuf",
+        415,
+      ),
+    };
   }
   const length = Number(request.headers.get("Content-Length") ?? "0");
   if (Number.isFinite(length) && length > OTLP_MAX_BYTES) {
-    return { ok: false, response: plain(`payload too large: the body exceeds ${OTLP_MAX_BYTES} bytes`, 413) };
+    return {
+      ok: false,
+      response: plain(`payload too large: the body exceeds ${OTLP_MAX_BYTES} bytes`, 413),
+    };
   }
   const encoding = (request.headers.get("Content-Encoding") ?? "identity").trim().toLowerCase();
   if (encoding !== "identity" && encoding !== "gzip") {
-    return { ok: false, response: plain(`unsupported content encoding '${encoding}': send gzip or none`, 415) };
+    return {
+      ok: false,
+      response: plain(`unsupported content encoding '${encoding}': send gzip or none`, 415),
+    };
   }
   if (!request.body) return { ok: true, text: "" };
   let stream: ReadableStream<Uint8Array> = request.body;
@@ -347,16 +399,37 @@ export async function readOtlpBody(request: Request): Promise<{ ok: true; text: 
         else controller.enqueue(chunk);
       },
     });
-    stream = request.body.pipeThrough(cap).pipeThrough(new DecompressionStream("gzip") as unknown as TransformStream<Uint8Array, Uint8Array>);
+    stream = request.body
+      .pipeThrough(cap)
+      .pipeThrough(
+        new DecompressionStream("gzip") as unknown as TransformStream<Uint8Array, Uint8Array>,
+      );
   }
   try {
     const read = await readBoundedText({ body: stream }, OTLP_MAX_BYTES);
-    if (!read.ok) return { ok: false, response: plain(`payload too large: the body exceeds ${OTLP_MAX_BYTES} bytes after decompression`, 413) };
+    if (!read.ok)
+      return {
+        ok: false,
+        response: plain(
+          `payload too large: the body exceeds ${OTLP_MAX_BYTES} bytes after decompression`,
+          413,
+        ),
+      };
     return { ok: true, text: read.text };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (/too large/.test(message)) return { ok: false, response: plain(`payload too large: the compressed body exceeds ${OTLP_MAX_BYTES} bytes`, 413) };
-    return { ok: false, response: plain(`bad request: the gzip body does not decompress (${message})`, 400) };
+    if (/too large/.test(message))
+      return {
+        ok: false,
+        response: plain(
+          `payload too large: the compressed body exceeds ${OTLP_MAX_BYTES} bytes`,
+          413,
+        ),
+      };
+    return {
+      ok: false,
+      response: plain(`bad request: the gzip body does not decompress (${message})`, 400),
+    };
   }
 }
 
@@ -365,7 +438,7 @@ export async function recordExport(
   db: D1Database,
   caller: SessionCaller,
   parsed: ParsedExport,
-  now: Date
+  now: Date,
 ): Promise<Response> {
   let rejected = parsed.rejected;
   const problems = [...parsed.problems];
@@ -374,7 +447,8 @@ export async function recordExport(
   // rejected.
   const sessions = [...new Set(parsed.points.map((p) => p.session_id))];
   const kept = new Set(sessions.slice(0, OTLP_MAX_SESSIONS));
-  if (sessions.length > kept.size) problems.push(`more than ${OTLP_MAX_SESSIONS} sessions in one request`);
+  if (sessions.length > kept.size)
+    problems.push(`more than ${OTLP_MAX_SESSIONS} sessions in one request`);
   const points = parsed.points.filter((p) => {
     if (kept.has(p.session_id)) return true;
     rejected += 1;
@@ -388,7 +462,9 @@ export async function recordExport(
   const foreign = new Set<string>();
   if (kept.size > 0) {
     const { results } = await db
-      .prepare("SELECT session_id, agent, job_id FROM agent_sessions WHERE session_id IN (SELECT value FROM json_each(?1))")
+      .prepare(
+        "SELECT session_id, agent, job_id FROM agent_sessions WHERE session_id IN (SELECT value FROM json_each(?1))",
+      )
       .bind(JSON.stringify([...kept]))
       .all<{ session_id: string; agent: string; job_id: string | null }>();
     for (const row of results ?? []) {
@@ -397,7 +473,9 @@ export async function recordExport(
     }
   }
   if (foreign.size > 0) {
-    problems.push(`${foreign.size} session(s) were first reported by another key, so their points were not recorded`);
+    problems.push(
+      `${foreign.size} session(s) were first reported by another key, so their points were not recorded`,
+    );
   }
   const owned = points.filter((p) => {
     if (!foreign.has(p.session_id)) return true;
@@ -411,7 +489,10 @@ export async function recordExport(
     jobOf.set(p.session_id, job);
     if (mismatch) mismatched += 1;
   }
-  if (mismatched > 0) problems.push(`${mismatched} point(s) named a capsid.job_id other than the job this caller is bound to; they were recorded against the bound job`);
+  if (mismatched > 0)
+    problems.push(
+      `${mismatched} point(s) named a capsid.job_id other than the job this caller is bound to; they were recorded against the bound job`,
+    );
 
   let writes = aggregate(owned);
   if (writes.length > OTLP_MAX_SERIES) {
@@ -427,28 +508,44 @@ export async function recordExport(
     try {
       const results = await db.batch([
         ...claims.map((id) => claimSession(db, id, actor, caller.job_id, caller.namespace, at)),
-        ...writes.map((w) => upsertUsage(db, w.mode, w, jobOf.get(w.session_id) ?? null, at, actor)),
+        ...writes.map((w) =>
+          upsertUsage(db, w.mode, w, jobOf.get(w.session_id) ?? null, at, actor),
+        ),
       ]);
       // A series whose upsert returned no row was refused by the ownership condition:
       // another key claimed the session between the read above and this batch.
-      const refused = results.slice(claims.length).filter((r) => (r.results ?? []).length === 0).length;
+      const refused = results
+        .slice(claims.length)
+        .filter((r) => (r.results ?? []).length === 0).length;
       if (refused > 0) {
         rejected += refused;
-        problems.push(`${refused} series belonged to a session another key reported first, so they were not recorded`);
+        problems.push(
+          `${refused} series belonged to a session another key reported first, so they were not recorded`,
+        );
       }
     } catch (err) {
       // Not swallowed (CLAUDE.md, no swallowed error rule): logged, and answered 503 so
       // the exporter retries rather than losing the points.
       const message = err instanceof Error ? err.message : String(err);
-      logEvent("OTLP_WRITE_FAILED", { message: `OTLP_WRITE_FAILED ${caller.agent.actor}: ${message}` }, { level: "error" });
+      logEvent(
+        "OTLP_WRITE_FAILED",
+        { message: `OTLP_WRITE_FAILED ${caller.agent.actor}: ${message}` },
+        { level: "error" },
+      );
       return plain(`service unavailable: the usage could not be written (${message})`, 503);
     }
   }
   if (rejected === 0 && problems.length === 0) return json({});
-  return json({ partialSuccess: { rejectedDataPoints: rejected, errorMessage: problems.join("; ") } });
+  return json({
+    partialSuccess: { rejectedDataPoints: rejected, errorMessage: problems.join("; ") },
+  });
 }
 
-async function handle(request: Request, env: { DB: D1Database }, parse: (body: unknown) => ParsedExport): Promise<Response> {
+async function handle(
+  request: Request,
+  env: { DB: D1Database },
+  parse: (body: unknown) => ParsedExport,
+): Promise<Response> {
   const caller = await resolveSessionCaller(request, env);
   if (caller instanceof Response) return caller;
   const body = await readOtlpBody(request);
@@ -459,7 +556,8 @@ async function handle(request: Request, env: { DB: D1Database }, parse: (body: u
   } catch {
     return plain("bad request: the body is not JSON", 400);
   }
-  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) return plain("bad request: the body is not an OTLP export object", 400);
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
+    return plain("bad request: the body is not an OTLP export object", 400);
   return recordExport(env.DB, caller, parse(decoded), new Date());
 }
 

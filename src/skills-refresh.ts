@@ -15,7 +15,8 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 const DOCS = "https://platform.claude.com/docs/en";
 // The overview moved here in October 2026; the old about-claude/models path answers a 307 to it.
 const OVERVIEW = `${DOCS}/models/overview.md`;
-const guideUrl = (slug: string) => `${DOCS}/build-with-claude/prompt-engineering/prompting-claude-${slug}.md`;
+const guideUrl = (slug: string) =>
+  `${DOCS}/build-with-claude/prompt-engineering/prompting-claude-${slug}.md`;
 
 export const SKILLS_NAMESPACE = "claude-skills";
 export const SKILLS_REFRESH_ACTOR = "agent:skills-refresh";
@@ -39,7 +40,8 @@ const MODEL_PAGE_LINK = /\/models\/((?:fable|mythos|opus|sonnet|haiku)-\d[a-z0-9
 
 export function discoverModels(overview: string): string[] {
   const slugs = new Set<string>();
-  for (const m of overview.matchAll(MODEL_ID)) slugs.add(m[0].replace(/^claude-/, "").replace(DATED_SUFFIX, ""));
+  for (const m of overview.matchAll(MODEL_ID))
+    slugs.add(m[0].replace(/^claude-/, "").replace(DATED_SUFFIX, ""));
   for (const row of overview.matchAll(MODEL_PAGE_ROW)) {
     for (const m of row[0].matchAll(MODEL_PAGE_LINK)) slugs.add(m[1].replace(DATED_SUFFIX, ""));
   }
@@ -66,21 +68,41 @@ export async function readSchedule(kv: KVNamespace): Promise<Schedule> {
       reason: `could not read ${SCHEDULE_KEY}: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-  if (raw === null) return { enabled: true, dayUtc: DEFAULT_DAY_UTC, reason: `${SCHEDULE_KEY} is unset; using the default` };
+  if (raw === null)
+    return {
+      enabled: true,
+      dayUtc: DEFAULT_DAY_UTC,
+      reason: `${SCHEDULE_KEY} is unset; using the default`,
+    };
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { enabled: false, dayUtc: DEFAULT_DAY_UTC, reason: `${SCHEDULE_KEY} does not hold JSON` };
+    return {
+      enabled: false,
+      dayUtc: DEFAULT_DAY_UTC,
+      reason: `${SCHEDULE_KEY} does not hold JSON`,
+    };
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return { enabled: false, dayUtc: DEFAULT_DAY_UTC, reason: `${SCHEDULE_KEY} does not hold an object` };
+    return {
+      enabled: false,
+      dayUtc: DEFAULT_DAY_UTC,
+      reason: `${SCHEDULE_KEY} does not hold an object`,
+    };
   }
   const value = parsed as { enabled?: unknown; dayUtc?: unknown };
   const enabled = value.enabled === undefined ? true : value.enabled === true;
   const day = value.dayUtc;
-  if (day !== undefined && (typeof day !== "number" || !Number.isInteger(day) || day < 0 || day > 6)) {
-    return { enabled: false, dayUtc: DEFAULT_DAY_UTC, reason: `${SCHEDULE_KEY} holds a dayUtc that is not an integer 0-6` };
+  if (
+    day !== undefined &&
+    (typeof day !== "number" || !Number.isInteger(day) || day < 0 || day > 6)
+  ) {
+    return {
+      enabled: false,
+      dayUtc: DEFAULT_DAY_UTC,
+      reason: `${SCHEDULE_KEY} holds a dayUtc that is not an integer 0-6`,
+    };
   }
   return { enabled, dayUtc: day === undefined ? DEFAULT_DAY_UTC : day, reason: null };
 }
@@ -147,7 +169,14 @@ function jobBody(slug: string, url: string): string {
 export const NOT_ITS_DAY = "today is UTC day";
 
 export async function runSkillsRefresh(env: Env, now: Date): Promise<RefreshOutcome> {
-  const empty: RefreshOutcome = { ran: false, skipped: null, checked: 0, changed: [], posted: [], refused: [] };
+  const empty: RefreshOutcome = {
+    ran: false,
+    skipped: null,
+    checked: 0,
+    changed: [],
+    posted: [],
+    refused: [],
+  };
 
   const schedule = await readSchedule(env.APP_KV);
   if (!schedule.enabled) return { ...empty, skipped: schedule.reason ?? "disabled" };
@@ -160,7 +189,8 @@ export async function runSkillsRefresh(env: Env, now: Date): Promise<RefreshOutc
   const slugs = discoverModels(overview.text);
   // Fail closed on a shape change. Reporting "nothing changed" against zero
   // parsed models would quietly retire this cron and say nothing.
-  if (slugs.length === 0) throw new Error(`discovered 0 models in ${OVERVIEW}; the page shape changed`);
+  if (slugs.length === 0)
+    throw new Error(`discovered 0 models in ${OVERVIEW}; the page shape changed`);
 
   const changed: string[] = [];
   const posted: string[] = [];

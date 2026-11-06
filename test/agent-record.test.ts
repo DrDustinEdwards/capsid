@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadAgentRecords, recordFor, recordsFrom, type RecordRows, type RecordSubject } from "../src/agent-record.ts";
+import {
+  loadAgentRecords,
+  recordFor,
+  recordsFrom,
+  type RecordRows,
+  type RecordSubject,
+} from "../src/agent-record.ts";
 
 // The agent record: counts and rates over the outcome rows, tested as a pure function
 // over fixtures, because a denominator that counts the wrong rows still produces a
@@ -8,7 +14,9 @@ import { loadAgentRecords, recordFor, recordsFrom, type RecordRows, type RecordS
 
 const ACTOR = "agent:capsid-driver";
 
-function outcome(overrides: Partial<RecordRows["outcomes"][number]> = {}): RecordRows["outcomes"][number] {
+function outcome(
+  overrides: Partial<RecordRows["outcomes"][number]> = {},
+): RecordRows["outcomes"][number] {
   return {
     agent: ACTOR,
     prs_opened: null,
@@ -17,7 +25,13 @@ function outcome(overrides: Partial<RecordRows["outcomes"][number]> = {}): Recor
     blocked_count: 0,
     resumed_count: 0,
     duration_minutes: null,
-    verified: JSON.stringify({ prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false }),
+    verified: JSON.stringify({
+      prs_opened: false,
+      prs_merged: false,
+      commits: false,
+      files_changed: false,
+      ci_green: false,
+    }),
     ...overrides,
   };
 }
@@ -25,7 +39,13 @@ function outcome(overrides: Partial<RecordRows["outcomes"][number]> = {}): Recor
 // A row the Worker checked.
 function verified(overrides: Partial<RecordRows["outcomes"][number]> = {}) {
   return outcome({
-    verified: JSON.stringify({ prs_opened: true, prs_merged: true, commits: true, files_changed: true, ci_green: true }),
+    verified: JSON.stringify({
+      prs_opened: true,
+      prs_merged: true,
+      commits: true,
+      files_changed: true,
+      ci_green: true,
+    }),
     ...overrides,
   });
 }
@@ -113,10 +133,20 @@ test("the duration is a MEDIAN, so one job left open over a weekend does not mov
   // The mean here is over a thousand minutes. The median says what a job usually took.
   assert.equal(weekend.median_duration_minutes, 28);
   // An odd count takes the middle rather than averaging.
-  const odd = recordFor(ACTOR, { ...EMPTY, outcomes: [outcome({ duration_minutes: 1 }), outcome({ duration_minutes: 5 }), outcome({ duration_minutes: 90 })] });
+  const odd = recordFor(ACTOR, {
+    ...EMPTY,
+    outcomes: [
+      outcome({ duration_minutes: 1 }),
+      outcome({ duration_minutes: 5 }),
+      outcome({ duration_minutes: 90 }),
+    ],
+  });
   assert.equal(odd.median_duration_minutes, 5);
   // A job with no duration is not a job of length zero.
-  const mixed = recordFor(ACTOR, { ...EMPTY, outcomes: [outcome({ duration_minutes: null }), outcome({ duration_minutes: 10 })] });
+  const mixed = recordFor(ACTOR, {
+    ...EMPTY,
+    outcomes: [outcome({ duration_minutes: null }), outcome({ duration_minutes: 10 })],
+  });
   assert.equal(mixed.median_duration_minutes, 10);
 });
 
@@ -138,7 +168,10 @@ test("a corrupt verified column withholds a rate rather than inventing one", () 
   // Fail closed, which for a rate means refusing to compute it. The alternative is a
   // percentage derived from a column nobody can read.
   for (const bad of ["{", "null", "[]", '"true"']) {
-    const record = recordFor(ACTOR, { ...EMPTY, outcomes: [outcome({ prs_opened: 9, prs_merged: 9, verified: bad })] });
+    const record = recordFor(ACTOR, {
+      ...EMPTY,
+      outcomes: [outcome({ prs_opened: 9, prs_merged: 9, verified: bad })],
+    });
     assert.equal(record.prs_opened, 0, `a row with a ${bad} verified column was counted`);
     assert.equal(record.pr_merge_rate, null);
   }
@@ -172,7 +205,7 @@ test("NO COMPOSITE SCORE IS COMPUTED ANYWHERE IN THE RECORD", () => {
   for (const forbidden of ["score", "rating", "trust", "grade", "rank"]) {
     assert.ok(
       !named.some((field) => field.toLowerCase().includes(forbidden)),
-      `the record grew a '${forbidden}' field, which is the composite this design refuses`
+      `the record grew a '${forbidden}' field, which is the composite this design refuses`,
     );
   }
 });
@@ -185,11 +218,19 @@ test("the inventory is read with grouped queries, not one set per credential", a
     const db = {
       prepare: () => {
         prepared += 1;
-        const stmt = { bind: () => stmt, all: async () => ({ results: [] }), first: async () => null };
+        const stmt = {
+          bind: () => stmt,
+          all: async () => ({ results: [] }),
+          first: async () => null,
+        };
         return stmt;
       },
     } as unknown as D1Database;
-    const agents: RecordSubject[] = Array.from({ length: howMany }, (_, i) => ({ name: `driver-${i}`, kind: "driver", namespaces: ["capsid"] }));
+    const agents: RecordSubject[] = Array.from({ length: howMany }, (_, i) => ({
+      name: `driver-${i}`,
+      kind: "driver",
+      namespaces: ["capsid"],
+    }));
     const records = await loadAgentRecords(db, agents);
     assert.equal(Object.keys(records).length, howMany);
     return prepared;
@@ -204,8 +245,17 @@ test("the merge rate counts only rows where both counts were verified", () => {
   const openedOnly = outcome({
     prs_opened: 4,
     prs_merged: 4,
-    verified: JSON.stringify({ prs_opened: true, prs_merged: false, commits: true, files_changed: true, ci_green: true }),
+    verified: JSON.stringify({
+      prs_opened: true,
+      prs_merged: false,
+      commits: true,
+      files_changed: true,
+      ci_green: true,
+    }),
   });
-  const record = recordFor(ACTOR, { ...EMPTY, outcomes: [verified({ prs_opened: 2, prs_merged: 2 }), openedOnly] });
+  const record = recordFor(ACTOR, {
+    ...EMPTY,
+    outcomes: [verified({ prs_opened: 2, prs_merged: 2 }), openedOnly],
+  });
   assert.equal(record.pr_merge_rate, 1, "a row with an unverified merge count lowered the rate");
 });

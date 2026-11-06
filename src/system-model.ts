@@ -27,8 +27,27 @@ const Text = bounded(280).trim().min(1);
 // what people use on the outside.
 const FAMILIES = ["system", "writing", "product", "plumbing", "site"] as const;
 const RINGS = ["core", "shared", "used"] as const;
-const CONTAINER_KINDS = ["worker", "database", "bucket", "kv", "queue", "cron", "package", "site", "external"] as const;
-const RELATIONSHIP_KINDS = ["installs", "publishes-to", "coordinates", "watches", "reads", "writes", "deploys", "serves"] as const;
+const CONTAINER_KINDS = [
+  "worker",
+  "database",
+  "bucket",
+  "kv",
+  "queue",
+  "cron",
+  "package",
+  "site",
+  "external",
+] as const;
+const RELATIONSHIP_KINDS = [
+  "installs",
+  "publishes-to",
+  "coordinates",
+  "watches",
+  "reads",
+  "writes",
+  "deploys",
+  "serves",
+] as const;
 
 const System = z.strictObject({
   id: Id,
@@ -94,13 +113,22 @@ export const SystemModelSchema = z
     flows: z.array(Flow).optional(),
     // Repos Dustin keeps off the map: the drift check skips them, and nothing publishes them.
     // `workers` names the Workers that go with a repo left off, so the drift check skips them too.
-    left_off: z.array(z.strictObject({ repo: bounded(200).regex(REPO), why: bounded(200), workers: z.array(bounded(63).regex(SCRIPT)).max(10).optional() })).optional(),
+    left_off: z
+      .array(
+        z.strictObject({
+          repo: bounded(200).regex(REPO),
+          why: bounded(200),
+          workers: z.array(bounded(63).regex(SCRIPT)).max(10).optional(),
+        }),
+      )
+      .optional(),
   })
   .superRefine((m, ctx) => {
     const ids = new Map<string, string>();
     const claim = (id: string, what: string) => {
       const prior = ids.get(id);
-      if (prior) ctx.addIssue({ code: "custom", message: `id ${id} is used by a ${prior} and a ${what}` });
+      if (prior)
+        ctx.addIssue({ code: "custom", message: `id ${id} is used by a ${prior} and a ${what}` });
       ids.set(id, what);
     };
     for (const s of m.systems) {
@@ -109,25 +137,41 @@ export const SystemModelSchema = z
     }
     for (const c of m.containers) claim(c.id, "container");
     const scripts = new Map<string, string>();
-    for (const owner of [...m.systems.map((x) => ({ id: x.id, workers: x.workers })), ...(m.left_off ?? []).map((l) => ({ id: `left_off ${l.repo}`, workers: l.workers }))]) {
+    for (const owner of [
+      ...m.systems.map((x) => ({ id: x.id, workers: x.workers })),
+      ...(m.left_off ?? []).map((l) => ({ id: `left_off ${l.repo}`, workers: l.workers })),
+    ]) {
       for (const w of owner.workers ?? []) {
         const prior = scripts.get(w);
-        if (prior) ctx.addIssue({ code: "custom", message: `the Worker ${w} is listed by ${prior} and ${owner.id}` });
+        if (prior)
+          ctx.addIssue({
+            code: "custom",
+            message: `the Worker ${w} is listed by ${prior} and ${owner.id}`,
+          });
         scripts.set(w, owner.id);
       }
     }
     const systems = new Set(m.systems.map((s) => s.id));
     const endpoints = new Set([...systems, ...m.containers.map((c) => c.id)]);
     for (const c of m.containers) {
-      if (!systems.has(c.system)) ctx.addIssue({ code: "custom", message: `container ${c.id} names system ${c.system}, which does not exist` });
+      if (!systems.has(c.system))
+        ctx.addIssue({
+          code: "custom",
+          message: `container ${c.id} names system ${c.system}, which does not exist`,
+        });
     }
     const seen = new Set<string>();
     for (const r of m.relationships) {
       for (const end of [r.from, r.to]) {
-        if (!endpoints.has(end)) ctx.addIssue({ code: "custom", message: `relationship ${r.from} ${r.kind} ${r.to} names ${end}, which does not exist` });
+        if (!endpoints.has(end))
+          ctx.addIssue({
+            code: "custom",
+            message: `relationship ${r.from} ${r.kind} ${r.to} names ${end}, which does not exist`,
+          });
       }
       const key = `${r.from} ${r.kind} ${r.to}`;
-      if (seen.has(key)) ctx.addIssue({ code: "custom", message: `relationship ${key} is listed twice` });
+      if (seen.has(key))
+        ctx.addIssue({ code: "custom", message: `relationship ${key} is listed twice` });
       seen.add(key);
     }
     const containerSystem = new Map(m.containers.map((c) => [c.id, c.system]));
@@ -137,15 +181,31 @@ export const SystemModelSchema = z
       f.steps.forEach((step, i) => {
         const where = `flow ${f.id} step ${i + 1}`;
         const key = `${step.from} ${step.kind} ${step.to}`;
-        if (!seen.has(key)) ctx.addIssue({ code: "custom", message: `${where} rides ${key}, which is not a relationship in the model` });
-        if (step.toward !== step.from && step.toward !== step.to) ctx.addIssue({ code: "custom", message: `${where} goes toward ${step.toward}, which is not an end of ${key}` });
+        if (!seen.has(key))
+          ctx.addIssue({
+            code: "custom",
+            message: `${where} rides ${key}, which is not a relationship in the model`,
+          });
+        if (step.toward !== step.from && step.toward !== step.to)
+          ctx.addIssue({
+            code: "custom",
+            message: `${where} goes toward ${step.toward}, which is not an end of ${key}`,
+          });
         // A light is a part the step's work touches (a store written while the Worker
         // serves an agent), so it belongs to a system one of the step's ends belongs to.
         const within = new Set([ownerOf(step.from), ownerOf(step.to)]);
         for (const l of step.lights ?? []) {
           const system = containerSystem.get(l);
-          if (system === undefined) ctx.addIssue({ code: "custom", message: `${where} lights ${l}, which is not a container` });
-          else if (!within.has(system)) ctx.addIssue({ code: "custom", message: `${where} lights ${l}, a part of ${system}, which the step does not run in` });
+          if (system === undefined)
+            ctx.addIssue({
+              code: "custom",
+              message: `${where} lights ${l}, which is not a container`,
+            });
+          else if (!within.has(system))
+            ctx.addIssue({
+              code: "custom",
+              message: `${where} lights ${l}, a part of ${system}, which the step does not run in`,
+            });
         }
       });
     }
@@ -155,10 +215,15 @@ export type SystemModel = z.infer<typeof SystemModelSchema>;
 type ModelSystem = SystemModel["systems"][number];
 
 /** The model, or every problem with it. */
-export function parseSystemModel(raw: unknown): { ok: true; model: SystemModel } | { ok: false; problems: string[] } {
+export function parseSystemModel(
+  raw: unknown,
+): { ok: true; model: SystemModel } | { ok: false; problems: string[] } {
   const parsed = SystemModelSchema.safeParse(raw);
   if (parsed.success) return { ok: true, model: parsed.data };
-  return { ok: false, problems: parsed.error.issues.map((i) => `${i.path.join(".") || "(model)"}: ${i.message}`) };
+  return {
+    ok: false,
+    problems: parsed.error.issues.map((i) => `${i.path.join(".") || "(model)"}: ${i.message}`),
+  };
 }
 
 // The published document. Strict schemas, so a key nobody listed fails the test that
@@ -175,7 +240,9 @@ const PublicSystemOpen = z.strictObject({
   repos: z.array(bounded(512).url()).optional(),
 });
 // A private system is everything a public one is but its repo link.
-const PublicSystemPrivate = PublicSystemOpen.omit({ repos: true }).extend({ private: z.literal(true) });
+const PublicSystemPrivate = PublicSystemOpen.omit({ repos: true }).extend({
+  private: z.literal(true),
+});
 
 export const PublicModelSchema = z.strictObject({
   version: z.literal(1),
@@ -189,7 +256,7 @@ export const PublicModelSchema = z.strictObject({
       kind: z.enum(CONTAINER_KINDS),
       technology: bounded(60),
       description: bounded(280).optional(),
-    })
+    }),
   ),
   relationships: z.array(
     z.strictObject({
@@ -198,7 +265,7 @@ export const PublicModelSchema = z.strictObject({
       to: Id,
       kind: z.enum(RELATIONSHIP_KINDS),
       title: bounded(280).optional(),
-    })
+    }),
   ),
   // Optional so a document built before flows existed still parses; toPublic always writes it.
   flows: z
@@ -214,11 +281,11 @@ export const PublicModelSchema = z.strictObject({
               toward: Id,
               text: bounded(280),
               lights: z.array(Id).max(8).optional(),
-            })
+            }),
           )
           .min(2)
           .max(20),
-      })
+      }),
     )
     .optional(),
   counts: z.strictObject({
@@ -237,7 +304,8 @@ export type PublicModel = z.infer<typeof PublicModelSchema>;
 export type RepoPrivacy = ReadonlyMap<string, boolean>;
 
 /** A relationship's published id, derived from its ends and kind, never copied from text. */
-const relationshipId = (r: { from: string; kind: string; to: string }) => `${r.from}--${r.kind}--${r.to}`;
+const relationshipId = (r: { from: string; kind: string; to: string }) =>
+  `${r.from}--${r.kind}--${r.to}`;
 
 /** Public only when GitHub says every repo the system lists is public. Any other
  *  answer, an unknown repo included, is private. */
@@ -247,8 +315,13 @@ function isPublicSystem(s: ModelSystem, privacy: RepoPrivacy): boolean {
 
 /** Every repo of a public system, with its system: the only repos whose code maps may be
  *  published (design section 2, rule 2). */
-export function publicRepos(model: SystemModel, privacy: RepoPrivacy): Array<{ system: string; repo: string }> {
-  return model.systems.filter((s) => isPublicSystem(s, privacy)).flatMap((s) => s.repos.map((repo) => ({ system: s.id, repo })));
+export function publicRepos(
+  model: SystemModel,
+  privacy: RepoPrivacy,
+): Array<{ system: string; repo: string }> {
+  return model.systems
+    .filter((s) => isPublicSystem(s, privacy))
+    .flatMap((s) => s.repos.map((repo) => ({ system: s.id, repo })));
 }
 
 /**
@@ -265,21 +338,35 @@ export function toPublic(model: SystemModel, privacy: RepoPrivacy, asOf: string)
 
   const systems: PublicModel["systems"] = model.systems.map((s) => {
     const base = { id: s.id, name: s.name, short: s.short, family: s.family, ring: s.ring };
-    const out: PublicModel["systems"][number] = open.has(s.id) ? { ...base, private: false } : { ...base, private: true };
+    const out: PublicModel["systems"][number] = open.has(s.id)
+      ? { ...base, private: false }
+      : { ...base, private: true };
     if (s.description !== undefined) out.description = s.description;
     if (s.domain !== undefined) out.domain = s.domain;
-    if (!out.private && !s.hide_repo_link) out.repos = s.repos.map((r) => `https://github.com/${r}`);
+    if (!out.private && !s.hide_repo_link)
+      out.repos = s.repos.map((r) => `https://github.com/${r}`);
     return out;
   });
 
   const containers: PublicModel["containers"] = model.containers.map((c) => {
-    const out: PublicModel["containers"][number] = { id: c.id, system: c.system, name: c.name, kind: c.kind, technology: c.technology };
+    const out: PublicModel["containers"][number] = {
+      id: c.id,
+      system: c.system,
+      name: c.name,
+      kind: c.kind,
+      technology: c.technology,
+    };
     if (c.description !== undefined) out.description = c.description;
     return out;
   });
 
   const relationships: PublicModel["relationships"] = model.relationships.map((r) => {
-    const out: PublicModel["relationships"][number] = { id: relationshipId(r), from: r.from, to: r.to, kind: r.kind };
+    const out: PublicModel["relationships"][number] = {
+      id: relationshipId(r),
+      from: r.from,
+      to: r.to,
+      kind: r.kind,
+    };
     if (r.title !== undefined) out.title = r.title;
     return out;
   });
@@ -289,7 +376,11 @@ export function toPublic(model: SystemModel, privacy: RepoPrivacy, asOf: string)
       id: f.id,
       name: f.name,
       steps: f.steps.map((step) => {
-        const s: NonNullable<PublicModel["flows"]>[number]["steps"][number] = { relationship: relationshipId(step), toward: step.toward, text: step.text };
+        const s: NonNullable<PublicModel["flows"]>[number]["steps"][number] = {
+          relationship: relationshipId(step),
+          toward: step.toward,
+          text: step.text,
+        };
         if (step.lights?.length) s.lights = [...step.lights];
         return s;
       }),

@@ -77,19 +77,28 @@ const stepName = (step: string[]): string => /^ {6}- name:\s*(.+)$/.exec(step[0]
 
 test("the scan is NOT VACUOUS: it finds every workflow and parses jobs out of each", () => {
   const files = workflowFiles();
-  assert.ok(files.length >= 3, `only ${files.length} workflow files found; the scan is reading the wrong directory`);
+  assert.ok(
+    files.length >= 3,
+    `only ${files.length} workflow files found; the scan is reading the wrong directory`,
+  );
   const parsed = jobs();
-  assert.ok(parsed.length >= files.length, `${parsed.length} jobs parsed from ${files.length} workflows`);
+  assert.ok(
+    parsed.length >= files.length,
+    `${parsed.length} jobs parsed from ${files.length} workflows`,
+  );
   // A file whose shape the parser cannot read fails here rather than counting zero.
   for (const file of files) {
     assert.ok(
       parsed.some((j) => j.workflow === file.name),
-      `no job parsed out of ${file.name}; the guard would pass over it without checking anything`
+      `no job parsed out of ${file.name}; the guard would pass over it without checking anything`,
     );
   }
   // A `uses:` count of zero would make the pin assertion pass vacuously.
   const uses = files.flatMap(({ text }) => [...text.matchAll(/^\s*-?\s*uses:\s*(\S+)/gm)]);
-  assert.ok(uses.length >= 6, `only ${uses.length} action references found across ${files.length} workflows`);
+  assert.ok(
+    uses.length >= 6,
+    `only ${uses.length} action references found across ${files.length} workflows`,
+  );
   // ci.yml's checks job parses into named steps, which the lint scan below reads.
   const named = stepsOf(jobNamed("ci.yml", "checks")).filter((s) => stepName(s) !== "");
   assert.ok(named.length >= 5, `only ${named.length} named steps parsed out of ci.yml:checks`);
@@ -123,14 +132,15 @@ test("every third-party action is pinned by commit sha, never by tag", () => {
   assert.deepEqual(
     offenders,
     [],
-    "an action is referenced by tag. A tag is a moving pointer; pin the commit sha and leave the version in a trailing comment."
+    "an action is referenced by tag. A tag is a moving pointer; pin the commit sha and leave the version in a trailing comment.",
   );
 });
 
 // A job that calls a reusable workflow (a `uses:` of its own) cannot carry
 // timeout-minutes: GitHub refuses the key there, and the called workflow's jobs declare
 // their own (devkit's ai-author.yml and no-bloat.yml do).
-const callsWorkflow = (job: Job): boolean => job.lines.some((l) => /^ {4}uses:\s*\S+\/\.github\/workflows\/\S+\.ya?ml@/.test(l));
+const callsWorkflow = (job: Job): boolean =>
+  job.lines.some((l) => /^ {4}uses:\s*\S+\/\.github\/workflows\/\S+\.ya?ml@/.test(l));
 
 test("every job declares timeout-minutes", () => {
   const offenders = jobs()
@@ -140,7 +150,7 @@ test("every job declares timeout-minutes", () => {
   assert.deepEqual(
     offenders,
     [],
-    "a job has no timeout-minutes and inherits GitHub's 360-minute default. A hung step burns the Actions budget."
+    "a job has no timeout-minutes and inherits GitHub's 360-minute default. A hung step burns the Actions budget.",
   );
 });
 
@@ -152,12 +162,21 @@ test("every job declares timeout-minutes", () => {
 // step refuses the merge.
 
 test("the checks job runs npm run lint and npm run lint:repo, before the Tests step", () => {
-  const steps = stepsOf(jobNamed("ci.yml", "checks")).map((s) => ({ name: stepName(s), text: s.join("\n") }));
+  const steps = stepsOf(jobNamed("ci.yml", "checks")).map((s) => ({
+    name: stepName(s),
+    text: s.join("\n"),
+  }));
   const lint = steps.findIndex((s) => /^\s+run:\s*npm run lint:repo\s*$/m.test(s.text));
   const tests = steps.findIndex((s) => s.name === "Tests");
-  assert.ok(lint >= 0, "no step in ci.yml's checks job runs `npm run lint:repo`; the lints in test/lint/ run nowhere");
+  assert.ok(
+    lint >= 0,
+    "no step in ci.yml's checks job runs `npm run lint:repo`; the lints in test/lint/ run nowhere",
+  );
   const shared = steps.findIndex((s) => /^\s+run:\s*npm run lint\s*$/m.test(s.text));
-  assert.ok(shared >= 0 && shared < tests, "no Lint step before Tests runs the shared `npm run lint`");
+  assert.ok(
+    shared >= 0 && shared < tests,
+    "no Lint step before Tests runs the shared `npm run lint`",
+  );
   assert.ok(tests >= 0, "no Tests step parsed out of ci.yml's checks job");
   assert.ok(lint < tests, "the lint step runs after Tests, so its failure no longer stops a merge");
   assert.doesNotMatch(steps[lint].text, /continue-on-error/, "the lint step must fail the job");
@@ -188,12 +207,20 @@ test("PLANT: the rehearsal masks each minted AWS value before it exports them", 
 test("PLANT: the rehearsal's run prefix reaches a run block only through env, after a character check", () => {
   const text = workflowFiles().find((f) => f.name === "restore-rehearsal.yml")?.text ?? "";
   const runLines = text.split("\n").filter((l) => /^\s+run:/.test(l) || /^\s{10,}\S/.test(l));
-  const interpolated = runLines.filter((l) => /\$\{\{\s*steps\./.test(l) && !/^\s+[A-Z_]+:\s*\$\{\{/.test(l));
+  const interpolated = runLines.filter(
+    (l) => /\$\{\{\s*steps\./.test(l) && !/^\s+[A-Z_]+:\s*\$\{\{/.test(l),
+  );
   assert.deepEqual(interpolated, [], "a step output is interpolated into a shell line");
   const pull = rehearsalStep("Mint a credential and pull the newest dump");
   const checkAt = pull.indexOf("=~ ^[A-Za-z0-9_./-]+$");
   const outputAt = pull.indexOf("run_prefix=");
   assert.ok(checkAt > -1, "the run prefix is not checked against a path character set");
-  assert.ok(checkAt < outputAt, "the run prefix is written to the step output before it is checked");
-  assert.match(rehearsalStep("Check the dump's own invariants"), /RUN_PREFIX: \$\{\{ steps\.pull\.outputs\.run_prefix \}\}/);
+  assert.ok(
+    checkAt < outputAt,
+    "the run prefix is written to the step output before it is checked",
+  );
+  assert.match(
+    rehearsalStep("Check the dump's own invariants"),
+    /RUN_PREFIX: \$\{\{ steps\.pull\.outputs\.run_prefix \}\}/,
+  );
 });

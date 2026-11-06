@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ADMIN_URL, checkAdminExposure, classify, seatKeyPath } from "../scripts/admin-exposure-check.ts";
+import {
+  ADMIN_URL,
+  checkAdminExposure,
+  classify,
+  seatKeyPath,
+} from "../scripts/admin-exposure-check.ts";
 
 // job_e1973c5bcb69: a driver session must not be able to reach Capsid as the admin.
 // The check reads `claude mcp list`, so these tests feed it that output.
@@ -15,7 +20,9 @@ const TODAY = [
   "capsid: https://mcp.dustinedwards.info/ops/mcp (HTTP) - ✔ Connected",
 ].join("\n");
 
-const run = (stdout: string, status: number | null = 0) => () => ({ status, stdout, stderr: "" });
+const run =
+  (stdout: string, status: number | null = 0) =>
+  () => ({ status, stdout, stderr: "" });
 const none = () => false;
 
 test("the admin connector is flagged and the driver's own /ops/mcp is not, with the count of servers read", () => {
@@ -45,7 +52,9 @@ test("today's machine fails: the connector is loaded", () => {
 });
 
 test("a folder with only the driver's server and no seat key passes", () => {
-  const clean = TODAY.split("\n").filter((l) => !l.startsWith("claude.ai Capsid")).join("\n");
+  const clean = TODAY.split("\n")
+    .filter((l) => !l.startsWith("claude.ai Capsid"))
+    .join("\n");
   const r = checkAdminExposure({ cwd: ".", run: run(clean), exists: none });
   assert.equal(r.ok, true);
   assert.equal(r.servers_seen, 3);
@@ -55,7 +64,12 @@ test("a folder with only the driver's server and no seat key passes", () => {
 test("the seat key on disk fails an otherwise clean folder, at the path under ~/.capsid", () => {
   const seen: string[] = [];
   const clean = "capsid: https://mcp.dustinedwards.info/ops/mcp (HTTP) - ✔ Connected";
-  const r = checkAdminExposure({ cwd: ".", run: run(clean), exists: (p: string) => (seen.push(p), true), home: "H" });
+  const r = checkAdminExposure({
+    cwd: ".",
+    run: run(clean),
+    exists: (p: string) => (seen.push(p), true),
+    home: "H",
+  });
   assert.equal(r.ok, false);
   assert.equal(r.seat_key_present, true);
   assert.deepEqual(seen, [seatKeyPath("H")]);
@@ -63,7 +77,11 @@ test("the seat key on disk fails an otherwise clean folder, at the path under ~/
 });
 
 test("it fails closed: a claude that cannot run, exits non-zero, or lists nothing is not a pass", () => {
-  const cannot = checkAdminExposure({ cwd: ".", run: () => ({ status: null, error: new Error("spawn claude ENOENT") }), exists: none });
+  const cannot = checkAdminExposure({
+    cwd: ".",
+    run: () => ({ status: null, error: new Error("spawn claude ENOENT") }),
+    exists: none,
+  });
   assert.equal(cannot.ok, false);
   assert.match(cannot.reasons[0], /could not run: spawn claude ENOENT/);
 
@@ -71,7 +89,11 @@ test("it fails closed: a claude that cannot run, exits non-zero, or lists nothin
   assert.equal(failed.ok, false);
   assert.match(failed.reasons[0], /exited 1/);
 
-  const empty = checkAdminExposure({ cwd: ".", run: run("Checking MCP server health...\n"), exists: none });
+  const empty = checkAdminExposure({
+    cwd: ".",
+    run: run("Checking MCP server health...\n"),
+    exists: none,
+  });
   assert.equal(empty.ok, false);
   assert.equal(empty.servers_seen, 0);
   assert.match(empty.reasons[0], /listed no server/);

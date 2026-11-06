@@ -33,27 +33,57 @@ import { fakeD1, fakeEnv, fakeKv, withFetch } from "./fakes.ts";
 // real ones from the capsid queue, so the kind rules are held to the work they will read.
 
 const DRIVER = "agent:capsid-driver";
-const job = (title: string, over: Record<string, unknown> = {}) => ({ title, namespace: "capsid", posted_by: "access:seat@example.com", ...over });
+const job = (title: string, over: Record<string, unknown> = {}) => ({
+  title,
+  namespace: "capsid",
+  posted_by: "access:seat@example.com",
+  ...over,
+});
 
 // KIND
 
 test("deriveKind reads real queue titles, the watcher by its actor, and a given kind first", () => {
   const expected: Array<[string, string]> = [
-    ["Re-pin git dependencies to the rewritten history (capsomer in the dashboard lockfile), and redeploy capsid", "maintenance"],
-    ["Build D6.2: Capsid defines the health format and the watcher reads it from every site, headers included", "build"],
-    ["Design only: the Portal as the place admin work gets done (gaps, decisions inbox, your-steps inbox, run in cloud, live checks)", "design"],
-    ["Design: shared test helpers, shared contract suites and one reusable CI workflow (test once, where code lives)", "design"],
-    ["Build D3.3: capsid verifies the Access JWT with jose and deletes its hand-rolled verifier", "security"],
-    ["Security hardening from the OWASP agentic mapping: provenance tags, canon write-protection, circuit breaker", "security"],
+    [
+      "Re-pin git dependencies to the rewritten history (capsomer in the dashboard lockfile), and redeploy capsid",
+      "maintenance",
+    ],
+    [
+      "Build D6.2: Capsid defines the health format and the watcher reads it from every site, headers included",
+      "build",
+    ],
+    [
+      "Design only: the Portal as the place admin work gets done (gaps, decisions inbox, your-steps inbox, run in cloud, live checks)",
+      "design",
+    ],
+    [
+      "Design: shared test helpers, shared contract suites and one reusable CI workflow (test once, where code lives)",
+      "design",
+    ],
+    [
+      "Build D3.3: capsid verifies the Access JWT with jose and deletes its hand-rolled verifier",
+      "security",
+    ],
+    [
+      "Security hardening from the OWASP agentic mapping: provenance tags, canon write-protection, circuit breaker",
+      "security",
+    ],
     ["Watcher: the deployed sha is not master head [deploy-drift-5429141]", "watcher"],
     ["Build D2.6: capsid weekly restore rehearsal runs the d1-dump drill", "build"],
     ["Fix the typo in the quickstart", "mechanical"],
-    ["Portal insight build on Capsomer: sessions, estimates, usage, credentials, domains, changelog", "other"],
+    [
+      "Portal insight build on Capsomer: sessions, estimates, usage, credentials, domains, changelog",
+      "other",
+    ],
   ];
   for (const [title, kind] of expected) assert.equal(deriveKind(job(title)).kind, kind, title);
   assert.equal(deriveKind(job("Anything at all", { posted_by: WATCHER_ACTOR })).kind, "watcher");
   assert.deepEqual(deriveKind(job("Build X", { kind: "docs" })), { kind: "docs", source: "given" });
-  assert.equal(deriveKind(job("Build X", { kind: "not-a-kind" })).kind, "build", "an unknown kind is ignored, not stored");
+  assert.equal(
+    deriveKind(job("Build X", { kind: "not-a-kind" })).kind,
+    "build",
+    "an unknown kind is ignored, not stored",
+  );
   assert.ok(expected.length === 10, "the table read ten titles");
 });
 
@@ -74,7 +104,11 @@ test("the expected model for each kind, and the default for a kind no rule names
     mechanical: ["haiku", "low"],
     other: ["opusplan", "medium"],
   };
-  assert.deepEqual(Object.keys(want).sort(), [...JOB_KINDS].sort(), "a kind has no expectation here");
+  assert.deepEqual(
+    Object.keys(want).sort(),
+    [...JOB_KINDS].sort(),
+    "a kind has no expectation here",
+  );
   for (const kind of JOB_KINDS) {
     const r = routeJob(job("x", { kind }));
     assert.deepEqual([r.model, r.effort], want[kind], kind);
@@ -84,14 +118,30 @@ test("the expected model for each kind, and the default for a kind no rule names
 test("PLANT: a routine job that is risky is upgraded to opus, whatever its kind", () => {
   const routine = routeJob(job("Update the changelog", { kind: "docs" }));
   assert.equal(routine.model, "sonnet");
-  assert.equal(routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_touch_protected"] })).model, "opus");
-  assert.equal(routeJob(job("Update the changelog", { kind: "docs", gate_required: true })).model, "opus");
-  assert.equal(routeJob(job("Update the changelog", { kind: "docs", namespace: "foxhound" })).model, "opus");
-  const upgraded = routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_merge"] }));
+  assert.equal(
+    routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_touch_protected"] }))
+      .model,
+    "opus",
+  );
+  assert.equal(
+    routeJob(job("Update the changelog", { kind: "docs", gate_required: true })).model,
+    "opus",
+  );
+  assert.equal(
+    routeJob(job("Update the changelog", { kind: "docs", namespace: "foxhound" })).model,
+    "opus",
+  );
+  const upgraded = routeJob(
+    job("Update the changelog", { kind: "docs", required_flags: ["can_merge"] }),
+  );
   assert.match(upgraded.reason, /requires can_merge/);
   assert.equal(upgraded.risk, "high");
   // A flag that asks for no blast radius does not upgrade.
-  assert.equal(routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_comment_pr"] })).model, "sonnet");
+  assert.equal(
+    routeJob(job("Update the changelog", { kind: "docs", required_flags: ["can_comment_pr"] }))
+      .model,
+    "sonnet",
+  );
 });
 
 test("a pull request's files can raise a job's risk and never lower it", () => {
@@ -99,119 +149,242 @@ test("a pull request's files can raise a job's risk and never lower it", () => {
   assert.equal(routeJob(job("Tidy", { kind: "maintenance", pr_risk: risky })).model, "opus");
   const routine = riskOf([{ filename: "docs/x.md" }]);
   assert.equal(routeJob(job("Tidy", { kind: "maintenance", pr_risk: routine })).model, "sonnet");
-  assert.equal(routeJob(job("Tidy", { kind: "maintenance", required_flags: ["can_merge"], pr_risk: routine })).model, "opus", "a routine PR does not lower a job's own risk");
+  assert.equal(
+    routeJob(job("Tidy", { kind: "maintenance", required_flags: ["can_merge"], pr_risk: routine }))
+      .model,
+    "opus",
+    "a routine PR does not lower a job's own risk",
+  );
 });
 
 test("a job that names its model is routed there, from a line of its own in the body", () => {
-  assert.equal(routeJob(job("Tidy", { kind: "docs", body: "Do it.\nmodel: haiku\nThen stop." })).model, "haiku");
-  assert.equal(routeJob(job("Tidy", { kind: "docs", body: "We tried model: haiku before and it was too thin." })).model, "sonnet", "prose that mentions a model names none");
+  assert.equal(
+    routeJob(job("Tidy", { kind: "docs", body: "Do it.\nmodel: haiku\nThen stop." })).model,
+    "haiku",
+  );
+  assert.equal(
+    routeJob(
+      job("Tidy", { kind: "docs", body: "We tried model: haiku before and it was too thin." }),
+    ).model,
+    "sonnet",
+    "prose that mentions a model names none",
+  );
 });
 
 test("PLANT: a named model never lowers a high-risk job below the risk rule's model (Grok audit 2026-10, J1)", () => {
   for (const asked of ["haiku", "sonnet", "opusplan"]) {
-    const risky = routeJob(job("Tidy", { kind: "docs", required_flags: ["can_merge"], body: `model: ${asked}` }));
+    const risky = routeJob(
+      job("Tidy", { kind: "docs", required_flags: ["can_merge"], body: `model: ${asked}` }),
+    );
     assert.equal(risky.model, "opus", `a job naming ${asked} with a blast-radius flag`);
     assert.match(risky.reason, new RegExp(`not the ${asked} the job names`));
-    const viaPr = routeJob(job("Tidy", { kind: "docs", body: `model: ${asked}`, pr_risk: riskOf([{ filename: "src/billing/a.ts" }]) }));
+    const viaPr = routeJob(
+      job("Tidy", {
+        kind: "docs",
+        body: `model: ${asked}`,
+        pr_risk: riskOf([{ filename: "src/billing/a.ts" }]),
+      }),
+    );
     assert.equal(viaPr.model, "opus", `a job naming ${asked} whose pull request is risky`);
   }
   // Naming the risk rule's model, or naming any model on a routine job, still holds.
-  assert.equal(routeJob(job("Tidy", { kind: "docs", required_flags: ["can_merge"], body: "model: opus" })).reason, "the job names opus");
+  assert.equal(
+    routeJob(job("Tidy", { kind: "docs", required_flags: ["can_merge"], body: "model: opus" }))
+      .reason,
+    "the job names opus",
+  );
   assert.equal(routeJob(job("Tidy", { kind: "design", body: "model: haiku" })).model, "haiku");
 });
 
 test("PLANT: a pull request's files are read to the last page, and a failed read routes as high risk, not routine (Grok audit 2026-10, J2)", async () => {
   const env = fakeEnv({
-    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: JSON.stringify([{ repo: "owner/sample" }]) }) }) }) },
+    DB: {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => ({ repos: JSON.stringify([{ repo: "owner/sample" }]) }),
+        }),
+      }),
+    },
     APP_KV: fakeKv({ seedToken: true }).kv,
   });
   const ref = "https://github.com/owner/sample/pull/7";
-  const page1 = Array.from({ length: 100 }, (_, i) => ({ filename: `docs/page-${i}.md`, status: "modified", additions: 1, deletions: 0 }));
+  const page1 = Array.from({ length: 100 }, (_, i) => ({
+    filename: `docs/page-${i}.md`,
+    status: "modified",
+    additions: 1,
+    deletions: 0,
+  }));
   const paged = (search: URLSearchParams) =>
     search.get("page") === "2"
-      ? { body: [{ filename: "src/billing/refunds.ts", status: "modified", additions: 1, deletions: 0 }] }
-      : { body: page1, headers: { Link: '<https://api.github.com/repositories/1/pulls/7/files?page=2>; rel="next"' } };
-  await withFetch({ "GET /repos/owner/sample/pulls/7/files": (_b, search) => paged(search) }, async (calls) => {
-    const { risk, note } = await pullRequestRisk(env, "sample", ref);
-    assert.equal(calls.length, 2, "both pages were read");
-    assert.equal(risk?.level, "high", "the billing file on page 2 counts");
-    assert.equal(risk?.files_read, 101);
-    assert.equal(note, null);
-  });
-  await withFetch({ "GET /repos/owner/sample/pulls/7/files": { status: 502, body: { message: "bad gateway" } } }, async () => {
-    const { risk, note } = await pullRequestRisk(env, "sample", ref);
-    assert.equal(risk?.level, "high", "an unread pull request is not routine");
-    assert.match(note ?? "", /routed as high risk/);
-    assert.equal(routeJob(job("Tidy", { kind: "docs", pr_risk: risk })).model, "opus");
-  });
-  await withFetch({ "GET /repos/owner/sample/pulls/7/files": { body: [{ filename: "docs/x.md", status: "modified", additions: 1, deletions: 0 }] } }, async () => {
-    const { risk, note } = await pullRequestRisk(env, "sample", ref);
-    assert.equal(risk?.level, "routine");
-    assert.equal(note, null);
-  });
+      ? {
+          body: [
+            { filename: "src/billing/refunds.ts", status: "modified", additions: 1, deletions: 0 },
+          ],
+        }
+      : {
+          body: page1,
+          headers: {
+            Link: '<https://api.github.com/repositories/1/pulls/7/files?page=2>; rel="next"',
+          },
+        };
+  await withFetch(
+    { "GET /repos/owner/sample/pulls/7/files": (_b, search) => paged(search) },
+    async (calls) => {
+      const { risk, note } = await pullRequestRisk(env, "sample", ref);
+      assert.equal(calls.length, 2, "both pages were read");
+      assert.equal(risk?.level, "high", "the billing file on page 2 counts");
+      assert.equal(risk?.files_read, 101);
+      assert.equal(note, null);
+    },
+  );
+  await withFetch(
+    { "GET /repos/owner/sample/pulls/7/files": { status: 502, body: { message: "bad gateway" } } },
+    async () => {
+      const { risk, note } = await pullRequestRisk(env, "sample", ref);
+      assert.equal(risk?.level, "high", "an unread pull request is not routine");
+      assert.match(note ?? "", /routed as high risk/);
+      assert.equal(routeJob(job("Tidy", { kind: "docs", pr_risk: risk })).model, "opus");
+    },
+  );
+  await withFetch(
+    {
+      "GET /repos/owner/sample/pulls/7/files": {
+        body: [{ filename: "docs/x.md", status: "modified", additions: 1, deletions: 0 }],
+      },
+    },
+    async () => {
+      const { risk, note } = await pullRequestRisk(env, "sample", ref);
+      assert.equal(risk?.level, "routine");
+      assert.equal(note, null);
+    },
+  );
 });
 
 test("every kind and the rule list are tied: the last rule is the catch-all, and every rule's model is a known one", () => {
   const last = ROUTING_RULES[ROUTING_RULES.length - 1];
   assert.deepEqual(last?.when, {});
-  for (const rule of ROUTING_RULES) assert.ok((MODELS as readonly string[]).includes(rule.model), rule.model);
-  for (const kind of JOB_KINDS.filter((k) => k !== "other")) assert.ok(ROUTING_RULES.some((r) => r.when.kind === kind), `no rule names ${kind}`);
+  for (const rule of ROUTING_RULES)
+    assert.ok((MODELS as readonly string[]).includes(rule.model), rule.model);
+  for (const kind of JOB_KINDS.filter((k) => k !== "other"))
+    assert.ok(
+      ROUTING_RULES.some((r) => r.when.kind === kind),
+      `no rule names ${kind}`,
+    );
 });
 
 // TRIAL ARMS
 
 // Ids shaped like mintJobId's, and the first of them in and out of the arms.
-const ids = Array.from({ length: 2000 }, (_, i) => `job_${(i * 2654435761 >>> 0).toString(16).padStart(12, "0").slice(-12)}`);
+const ids = Array.from(
+  { length: 2000 },
+  (_, i) => `job_${((i * 2654435761) >>> 0).toString(16).padStart(12, "0").slice(-12)}`,
+);
 const inArm = ids.find((id) => trialBucket(id) < 25)!;
 const outOfArm = ids.find((id) => trialBucket(id) >= 25)!;
 
 test("trial arms: a share of routine watcher, maintenance and docs jobs go to haiku at the rule's effort, the rest stay on the rule", () => {
-  assert.deepEqual(TRIAL_ARMS.map((a) => [a.kind, a.model]).sort(), [["docs", "haiku"], ["maintenance", "haiku"], ["watcher", "haiku"]]);
+  assert.deepEqual(TRIAL_ARMS.map((a) => [a.kind, a.model]).sort(), [
+    ["docs", "haiku"],
+    ["maintenance", "haiku"],
+    ["watcher", "haiku"],
+  ]);
   for (const arm of TRIAL_ARMS) {
     const rule = ROUTING_RULES.find((r) => r.when.kind === arm.kind)!;
-    assert.ok(MODELS.indexOf(arm.model) < MODELS.indexOf(rule.model), `${arm.kind}'s arm is not cheaper than its rule`);
+    assert.ok(
+      MODELS.indexOf(arm.model) < MODELS.indexOf(rule.model),
+      `${arm.kind}'s arm is not cheaper than its rule`,
+    );
     const routes = ids.map((id) => routeJob(job("x", { kind: arm.kind, id })));
     const taken = routes.filter((r) => r.model === arm.model);
-    assert.ok(taken.length / ids.length > (arm.percent - 4) / 100 && taken.length / ids.length < (arm.percent + 4) / 100, `${arm.kind}: ${taken.length} of ${ids.length}`);
+    assert.ok(
+      taken.length / ids.length > (arm.percent - 4) / 100 &&
+        taken.length / ids.length < (arm.percent + 4) / 100,
+      `${arm.kind}: ${taken.length} of ${ids.length}`,
+    );
     for (const r of taken) assert.deepEqual([r.trial, r.effort], [arm.model, rule.effort]);
-    assert.match(taken[0]!.reason, new RegExp(`trial arm: haiku on ${arm.percent} percent of routine ${arm.kind} jobs, measured against ${rule.model}`));
-    for (const r of routes.filter((x) => x.model !== arm.model)) assert.deepEqual([r.model, r.trial], [rule.model, null]);
+    assert.match(
+      taken[0]!.reason,
+      new RegExp(
+        `trial arm: haiku on ${arm.percent} percent of routine ${arm.kind} jobs, measured against ${rule.model}`,
+      ),
+    );
+    for (const r of routes.filter((x) => x.model !== arm.model))
+      assert.deepEqual([r.model, r.trial], [rule.model, null]);
   }
 });
 
 test("trial arms: the same id always routes the same way, and no id takes no arm", () => {
   const first = routeJob(job("x", { kind: "docs", id: inArm }));
   assert.equal(first.model, "haiku");
-  assert.deepEqual(routeJob(job("other title", { kind: "docs", id: inArm, body: "anything" })), { ...first, reason: first.reason });
+  assert.deepEqual(routeJob(job("other title", { kind: "docs", id: inArm, body: "anything" })), {
+    ...first,
+    reason: first.reason,
+  });
   assert.equal(routeJob(job("x", { kind: "docs", id: outOfArm })).model, "sonnet");
   assert.equal(routeJob(job("x", { kind: "docs" })).model, "sonnet");
 });
 
 test("PLANT: a risky job or one that names its model never takes an arm, and kinds without an arm never reach haiku", () => {
-  assert.equal(routeJob(job("x", { kind: "docs", id: inArm, required_flags: ["can_merge"] })).model, "opus");
-  assert.equal(routeJob(job("x", { kind: "maintenance", id: inArm, pr_risk: riskOf([{ filename: "src/billing/a.ts" }]) })).model, "opus");
-  assert.equal(routeJob(job("x", { kind: "watcher", id: inArm, namespace: "foxhound" })).model, "opus");
+  assert.equal(
+    routeJob(job("x", { kind: "docs", id: inArm, required_flags: ["can_merge"] })).model,
+    "opus",
+  );
+  assert.equal(
+    routeJob(
+      job("x", {
+        kind: "maintenance",
+        id: inArm,
+        pr_risk: riskOf([{ filename: "src/billing/a.ts" }]),
+      }),
+    ).model,
+    "opus",
+  );
+  assert.equal(
+    routeJob(job("x", { kind: "watcher", id: inArm, namespace: "foxhound" })).model,
+    "opus",
+  );
   const named = routeJob(job("x", { kind: "docs", id: inArm, body: "model: sonnet" }));
   assert.deepEqual([named.model, named.trial], ["sonnet", null]);
   for (const kind of ["design", "security", "build", "other"] as const) {
-    assert.ok(ids.every((id) => routeJob(job("x", { kind, id })).model !== "haiku"), kind);
+    assert.ok(
+      ids.every((id) => routeJob(job("x", { kind, id })).model !== "haiku"),
+      kind,
+    );
   }
-  assert.ok(ids.every((id) => routeJob(job("x", { kind: "mechanical", id })).trial === null), "mechanical is on haiku already and has no arm");
+  assert.ok(
+    ids.every((id) => routeJob(job("x", { kind: "mechanical", id })).trial === null),
+    "mechanical is on haiku already and has no arm",
+  );
 });
 
 test("trialStatus: collecting below the minimum, then the verdict proposeRuleChanges gives, with cost", () => {
-  const thin = trialStatus(cellsOf([...many(MIN_SAMPLE - 1, 9, "docs", "haiku"), ...many(40, 30, "docs", "sonnet")]));
+  const thin = trialStatus(
+    cellsOf([...many(MIN_SAMPLE - 1, 9, "docs", "haiku"), ...many(40, 30, "docs", "sonnet")]),
+  );
   assert.equal(thin.length, TRIAL_ARMS.length, "one status per arm");
   const docs = thin.find((t) => t.kind === "docs")!;
-  assert.deepEqual([docs.verdict, docs.n, docs.against_n, docs.against], ["collecting", MIN_SAMPLE - 1, 40, "sonnet"]);
+  assert.deepEqual(
+    [docs.verdict, docs.n, docs.against_n, docs.against],
+    ["collecting", MIN_SAMPLE - 1, 40, "sonnet"],
+  );
   assert.equal(thin.find((t) => t.kind === "watcher")!.verdict, "collecting");
 
   const cost = (usd: number) => (f: OutcomeFact) => ({ ...f, cost_usd: usd });
-  const good = trialStatus(cellsOf([...many(12, 10, "docs", "haiku").map(cost(0.1)), ...many(12, 10, "docs", "sonnet").map(cost(1.5))]));
+  const good = trialStatus(
+    cellsOf([
+      ...many(12, 10, "docs", "haiku").map(cost(0.1)),
+      ...many(12, 10, "docs", "sonnet").map(cost(1.5)),
+    ]),
+  );
   const supports = good.find((t) => t.kind === "docs")!;
   assert.equal(supports.verdict, "supports");
-  assert.match(supports.why, /haiku merged green 10\/12 at \$0\.10 a job, sonnet 10\/12 at \$1\.50 a job/);
-  const bad = trialStatus(cellsOf([...many(12, 6, "maintenance", "haiku"), ...many(12, 11, "maintenance", "sonnet")]));
+  assert.match(
+    supports.why,
+    /haiku merged green 10\/12 at \$0\.10 a job, sonnet 10\/12 at \$1\.50 a job/,
+  );
+  const bad = trialStatus(
+    cellsOf([...many(12, 6, "maintenance", "haiku"), ...many(12, 11, "maintenance", "sonnet")]),
+  );
   assert.equal(bad.find((t) => t.kind === "maintenance")!.verdict, "does not support");
 });
 
@@ -222,13 +395,27 @@ test("riskOf: money paths, refused paths, backups, deletions and renames each ra
   assert.equal(riskOf([{ filename: "app/payments/charge.ts" }]).level, "high");
   assert.match(riskOf([{ filename: "migrations/0099_x.sql" }]).reasons.join(" "), /migration/);
   assert.match(riskOf([{ filename: "src/backup.ts" }]).reasons.join(" "), /backup or restore/);
-  assert.match(riskOf([{ filename: "docs/x.md", status: "removed" }]).reasons.join(" "), /is deleted/);
-  assert.equal(riskOf([{ filename: "docs/a.md", deletions: DELETION_LINES_HIGH - 1 }]).level, "routine");
+  assert.match(
+    riskOf([{ filename: "docs/x.md", status: "removed" }]).reasons.join(" "),
+    /is deleted/,
+  );
+  assert.equal(
+    riskOf([{ filename: "docs/a.md", deletions: DELETION_LINES_HIGH - 1 }]).level,
+    "routine",
+  );
   assert.equal(riskOf([{ filename: "docs/a.md", deletions: DELETION_LINES_HIGH }]).level, "high");
-  assert.equal(riskOf([{ filename: "docs/b.md", previous_filename: "src/scope.ts" }]).level, "high", "a rename is judged under both names");
+  assert.equal(
+    riskOf([{ filename: "docs/b.md", previous_filename: "src/scope.ts" }]).level,
+    "high",
+    "a rename is judged under both names",
+  );
   const none = riskOf([]);
   assert.deepEqual([none.level, none.files_read], ["unread", 0], "no files read is not routine");
-  assert.equal(riskOf([{ filename: "a.md" }, { filename: "b.md" }]).files_read, 2, "the count of files read is carried");
+  assert.equal(
+    riskOf([{ filename: "a.md" }, { filename: "b.md" }]).files_read,
+    2,
+    "the count of files read is carried",
+  );
 });
 
 // WORTH A REVIEWER
@@ -248,11 +435,18 @@ test("worthReviewer: what riskOf flags for routing but a reviewer would not read
     [{ filename: "dashboard/src/views/Backups.tsx" }],
   ]) {
     const names = files.map((f) => f.filename).join(", ");
-    assert.equal(riskOf(files).level, "high", `riskOf no longer flags ${names}, so this case shows nothing`);
+    assert.equal(
+      riskOf(files).level,
+      "high",
+      `riskOf no longer flags ${names}, so this case shows nothing`,
+    );
     assert.equal(worth(files), "skip", names);
   }
   // Ordinary code that enforces nothing is skipped by both.
-  assert.equal(worth([{ filename: "dashboard/src/styles.css" }, { filename: "src/limits.ts" }]), "skip");
+  assert.equal(
+    worth([{ filename: "dashboard/src/styles.css" }, { filename: "src/limits.ts" }]),
+    "skip",
+  );
 });
 
 test("worthReviewer: money, judges, guards, migrations, workflows and backup code are each worth a reviewer", () => {
@@ -281,14 +475,23 @@ test("worthReviewer: money, judges, guards, migrations, workflows and backup cod
 });
 
 test("worthReviewer: a rename is judged under both names, and no files is unread, never skip", () => {
-  assert.equal(worth([{ filename: "src/old-scope.ts", previous_filename: "src/scope.ts" }]), "worth");
+  assert.equal(
+    worth([{ filename: "src/old-scope.ts", previous_filename: "src/scope.ts" }]),
+    "worth",
+  );
   const none = worthReviewer([]);
   assert.deepEqual([none.level, none.files_read], ["unread", 0]);
   assert.equal(worthReviewer([{ filename: "a.md" }, { filename: "b.md" }]).files_read, 2);
 });
 
 test("worthReviewer: a test or a document named like a guard is not the guard", () => {
-  for (const filename of ["test/scope.test.ts", "docs/store-guards.md", "test/fixtures/migrations/0001.sql", "src/agents-schema.ts", "src/tools/docs-index.ts"]) {
+  for (const filename of [
+    "test/scope.test.ts",
+    "docs/store-guards.md",
+    "test/fixtures/migrations/0001.sql",
+    "src/agents-schema.ts",
+    "src/tools/docs-index.ts",
+  ]) {
     assert.equal(worth([{ filename }]), "skip", filename);
   }
 });
@@ -297,26 +500,46 @@ test("worthReviewer reaches past riskOf only through the guard sources", () => {
   // Every other reason is one riskOf also gives. The guard sources are not on auto-merge's
   // refused list, so riskOf routes them as routine; a reviewer reading them is the point.
   for (const filename of [
-    "app/payments/charge.ts", "src/scope.ts", "migrations/0040_x.sql", ".github/workflows/ci.yml", "src/backup.ts",
-    "scripts/check-commit-trailers.mjs", "src/jobs-transition.ts",
+    "app/payments/charge.ts",
+    "src/scope.ts",
+    "migrations/0040_x.sql",
+    ".github/workflows/ci.yml",
+    "src/backup.ts",
+    "scripts/check-commit-trailers.mjs",
+    "src/jobs-transition.ts",
   ]) {
     assert.equal(riskOf([{ filename }]).level, "high", filename);
   }
   for (const filename of ["src/store-guards.ts", "src/tools/repo.ts", "src/portal-auth.ts"]) {
-    assert.deepEqual([riskOf([{ filename }]).level, worth([{ filename }])], ["routine", "worth"], filename);
+    assert.deepEqual(
+      [riskOf([{ filename }]).level, worth([{ filename }])],
+      ["routine", "worth"],
+      filename,
+    );
   }
 });
 
 test("riskFromJob: only blast-radius flags, a gate, or a payments namespace make a job high", () => {
   assert.equal(riskFromJob({ namespace: "capsid" }).level, "routine");
-  assert.equal(riskFromJob({ namespace: "capsid", required_flags: ["can_comment_pr"] }).level, "routine");
-  assert.equal(riskFromJob({ namespace: "capsid", required_flags: ["can_touch_protected"] }).level, "high");
+  assert.equal(
+    riskFromJob({ namespace: "capsid", required_flags: ["can_comment_pr"] }).level,
+    "routine",
+  );
+  assert.equal(
+    riskFromJob({ namespace: "capsid", required_flags: ["can_touch_protected"] }).level,
+    "high",
+  );
   assert.equal(riskFromJob({ namespace: "foxhound" }).level, "high");
 });
 
 // LEARNING
 
-const fact = (kind: string, model: string, good: boolean, over: Partial<OutcomeFact> = {}): OutcomeFact => ({
+const fact = (
+  kind: string,
+  model: string,
+  good: boolean,
+  over: Partial<OutcomeFact> = {},
+): OutcomeFact => ({
   kind,
   model,
   prs_merged: good ? 1 : 0,
@@ -326,7 +549,8 @@ const fact = (kind: string, model: string, good: boolean, over: Partial<OutcomeF
   tokens: null,
   ...over,
 });
-const many = (n: number, good: number, kind: string, model: string) => Array.from({ length: n }, (_, i) => fact(kind, model, i < good));
+const many = (n: number, good: number, kind: string, model: string) =>
+  Array.from({ length: n }, (_, i) => fact(kind, model, i < good));
 
 test("modelAlias reduces a reported model id to its alias and keeps an unknown one as reported", () => {
   assert.equal(modelAlias("claude-opus-5-5"), "opus");
@@ -338,27 +562,72 @@ test("modelAlias reduces a reported model id to its alias and keeps an unknown o
 });
 
 test("cellsOf counts per kind and model, skips outcomes with no kind or model, and marks a thin cell", () => {
-  const cells = cellsOf([...many(MIN_SAMPLE, 8, "docs", "sonnet"), fact("docs", "haiku", true), fact("", "opus", true), fact("docs", "", true), { ...fact("docs", "sonnet", true), kind: null }]);
+  const cells = cellsOf([
+    ...many(MIN_SAMPLE, 8, "docs", "sonnet"),
+    fact("docs", "haiku", true),
+    fact("", "opus", true),
+    fact("docs", "", true),
+    { ...fact("docs", "sonnet", true), kind: null },
+  ]);
   assert.equal(cells.length, 2);
   const sonnet = cells.find((c) => c.model === "sonnet");
-  assert.deepEqual([sonnet?.n, sonnet?.merged_green, sonnet?.rate, sonnet?.enough], [MIN_SAMPLE, 8, 0.8, true]);
+  assert.deepEqual(
+    [sonnet?.n, sonnet?.merged_green, sonnet?.rate, sonnet?.enough],
+    [MIN_SAMPLE, 8, 0.8, true],
+  );
   const haiku = cells.find((c) => c.model === "haiku");
-  assert.deepEqual([haiku?.n, haiku?.enough], [1, false], "one outcome is shown and never acted on");
-  assert.equal(cells.reduce((s, c) => s + c.n, 0), MIN_SAMPLE + 1, "the count of outcomes read is the sum of the cells");
+  assert.deepEqual(
+    [haiku?.n, haiku?.enough],
+    [1, false],
+    "one outcome is shown and never acted on",
+  );
+  assert.equal(
+    cells.reduce((s, c) => s + c.n, 0),
+    MIN_SAMPLE + 1,
+    "the count of outcomes read is the sum of the cells",
+  );
 });
 
 test("proposals: a cheaper model that did as well is proposed; a stronger one when the current is under the floor; nothing below the minimum sample", () => {
   // docs is on sonnet; haiku matched it over enough outcomes.
-  const cheaper = proposeRuleChanges(cellsOf([...many(12, 10, "docs", "sonnet"), ...many(12, 10, "docs", "haiku")]));
-  assert.deepEqual(cheaper.map((p) => [p.kind, p.from, p.to]), [["docs", "sonnet", "haiku"]]);
+  const cheaper = proposeRuleChanges(
+    cellsOf([...many(12, 10, "docs", "sonnet"), ...many(12, 10, "docs", "haiku")]),
+  );
+  assert.deepEqual(
+    cheaper.map((p) => [p.kind, p.from, p.to]),
+    [["docs", "sonnet", "haiku"]],
+  );
   // maintenance is on sonnet; it merges green half the time and opus does much better.
-  const stronger = proposeRuleChanges(cellsOf([...many(12, 5, "maintenance", "sonnet"), ...many(12, 11, "maintenance", "opus")]));
-  assert.deepEqual(stronger.map((p) => [p.kind, p.from, p.to]), [["maintenance", "sonnet", "opus"]]);
+  const stronger = proposeRuleChanges(
+    cellsOf([...many(12, 5, "maintenance", "sonnet"), ...many(12, 11, "maintenance", "opus")]),
+  );
+  assert.deepEqual(
+    stronger.map((p) => [p.kind, p.from, p.to]),
+    [["maintenance", "sonnet", "opus"]],
+  );
   // The same shape on too few outcomes proposes nothing: a rate over a small denominator is noise.
-  assert.deepEqual(proposeRuleChanges(cellsOf([...many(MIN_SAMPLE - 1, 10, "docs", "sonnet"), ...many(MIN_SAMPLE - 1, 10, "docs", "haiku")])), []);
+  assert.deepEqual(
+    proposeRuleChanges(
+      cellsOf([
+        ...many(MIN_SAMPLE - 1, 10, "docs", "sonnet"),
+        ...many(MIN_SAMPLE - 1, 10, "docs", "haiku"),
+      ]),
+    ),
+    [],
+  );
   // A cheaper model that did worse is not proposed, and a current rate above the floor does not move.
-  assert.deepEqual(proposeRuleChanges(cellsOf([...many(12, 11, "docs", "sonnet"), ...many(12, 4, "docs", "haiku")])), []);
-  assert.deepEqual(proposeRuleChanges(cellsOf([...many(12, 9, "maintenance", "sonnet"), ...many(12, 12, "maintenance", "opus")])), []);
+  assert.deepEqual(
+    proposeRuleChanges(
+      cellsOf([...many(12, 11, "docs", "sonnet"), ...many(12, 4, "docs", "haiku")]),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    proposeRuleChanges(
+      cellsOf([...many(12, 9, "maintenance", "sonnet"), ...many(12, 12, "maintenance", "opus")]),
+    ),
+    [],
+  );
 });
 
 test("readModelLearning reads the window, states what it read, and proposes nothing from no evidence", async () => {
@@ -368,18 +637,29 @@ test("readModelLearning reads the window, states what it read, and proposes noth
   const db = {
     prepare: (text: string) => {
       sql = text;
-      return { bind: (...args: unknown[]) => ((bound = args), { all: async () => ({ results: rows }) }) };
+      return {
+        bind: (...args: unknown[]) => ((bound = args), { all: async () => ({ results: rows }) }),
+      };
     },
   } as unknown as D1Database;
   const out = await readModelLearning(db, new Date("2026-10-06T12:00:00Z"));
   assert.equal(out.outcomes_read, 24);
   assert.equal(out.proposals.length, 1);
-  assert.equal(out.trials.find((t) => t.kind === "docs")?.verdict, "supports", "the view reports the trial's verdict");
+  assert.equal(
+    out.trials.find((t) => t.kind === "docs")?.verdict,
+    "supports",
+    "the view reports the trial's verdict",
+  );
   assert.deepEqual(out.trial_arms.map((a) => a.kind).sort(), ["docs", "maintenance", "watcher"]);
   assert.match(out.note, /none applied/);
   assert.match(sql, /o\.job_kind IS NOT NULL/);
   assert.match(String(bound[0]), /^2026-07-08/, "the window starts 90 days back");
-  const empty = await readModelLearning({ prepare: () => ({ bind: () => ({ all: async () => ({ results: [] }) }) }) } as unknown as D1Database, new Date());
+  const empty = await readModelLearning(
+    {
+      prepare: () => ({ bind: () => ({ all: async () => ({ results: [] }) }) }),
+    } as unknown as D1Database,
+    new Date(),
+  );
   assert.deepEqual([empty.outcomes_read, empty.proposals.length], [0, 0]);
   assert.match(empty.note, /No routed outcome/);
 });
@@ -387,19 +667,36 @@ test("readModelLearning reads the window, states what it read, and proposes noth
 test("PLANT: a session's self-reported model never moves an outcome into another model's cell (Grok audit 2026-10, C4)", async () => {
   // Twelve docs jobs chosen for sonnet whose sessions all say they ran haiku and merged
   // green: read on the self-report, they would make a haiku cell that proposes a move.
-  const claimedHaiku = many(12, 12, "docs", "sonnet").map((r) => ({ ...r, model_actual: "claude-haiku-5-5" }));
-  const honest = many(12, 10, "docs", "sonnet").map((r) => ({ ...r, model_actual: "claude-sonnet-5-5" }));
+  const claimedHaiku = many(12, 12, "docs", "sonnet").map((r) => ({
+    ...r,
+    model_actual: "claude-haiku-5-5",
+  }));
+  const honest = many(12, 10, "docs", "sonnet").map((r) => ({
+    ...r,
+    model_actual: "claude-sonnet-5-5",
+  }));
   // opusplan runs as Opus and Sonnet, so either report agrees with it.
-  const planned = many(12, 9, "build", "opusplan").map((r, i) => ({ ...r, model_actual: i % 2 ? "claude-sonnet-5-5" : "claude-opus-5-5" }));
+  const planned = many(12, 9, "build", "opusplan").map((r, i) => ({
+    ...r,
+    model_actual: i % 2 ? "claude-sonnet-5-5" : "claude-opus-5-5",
+  }));
   const rows = [...claimedHaiku, ...honest, ...planned];
   let sql = "";
-  const db = { prepare: (text: string) => ((sql = text), { bind: () => ({ all: async () => ({ results: rows }) }) }) } as unknown as D1Database;
+  const db = {
+    prepare: (text: string) => (
+      (sql = text),
+      { bind: () => ({ all: async () => ({ results: rows }) }) }
+    ),
+  } as unknown as D1Database;
   const out = await readModelLearning(db, new Date("2026-10-06T12:00:00Z"));
   // The fake serves the rows as given, so the query is held to reading the chosen model
   // as the cell's model and the reported one beside it.
   assert.match(sql, /o\.model_chosen AS model,/);
   assert.doesNotMatch(sql, /COALESCE\(o\.model_actual/);
-  assert.deepEqual(out.cells.map((c) => `${c.kind}/${c.model}/${c.n}`).sort(), ["build/opusplan/12", "docs/sonnet/12"]);
+  assert.deepEqual(out.cells.map((c) => `${c.kind}/${c.model}/${c.n}`).sort(), [
+    "build/opusplan/12",
+    "docs/sonnet/12",
+  ]);
   assert.equal(out.outcomes_read, 36);
   assert.match(out.note, /12 outcomes were left out/);
 });
@@ -411,18 +708,43 @@ test("post assigns the kind and model at the Worker, and a given kind is validat
   const env = fakeEnv({ DB: d1.db, IMPROVE_SCORE_SECRET: "test-secret" });
   const agent = grantAgent("write", DRIVER);
   const now = new Date("2026-10-06T12:00:00Z");
-  const posted = await postJob(env, agent, now, { namespace: "capsid", title: "Design: the thing", body: "think" });
+  const posted = await postJob(env, agent, now, {
+    namespace: "capsid",
+    title: "Design: the thing",
+    body: "think",
+  });
   assert.equal(posted.ok, true, JSON.stringify(posted));
-  assert.deepEqual([posted.job?.kind, posted.job?.model_recommended, posted.job?.effort_recommended], ["design", "opus", "high"]);
+  assert.deepEqual(
+    [posted.job?.kind, posted.job?.model_recommended, posted.job?.effort_recommended],
+    ["design", "opus", "high"],
+  );
   assert.match(posted.job?.routing_reason ?? "", /design/);
   const insert = d1.recorded.find((r) => /INSERT INTO jobs \(/.test(r.sql));
-  assert.ok(insert && /model_recommended/.test(insert.sql), "the insert did not name the routing columns");
+  assert.ok(
+    insert && /model_recommended/.test(insert.sql),
+    "the insert did not name the routing columns",
+  );
   assert.ok(insert.params.includes("opus"), "the model was not bound");
 
-  const risky = await postJob(env, agent, now, { namespace: "capsid", title: "Update the changelog", body: "x", kind: "docs", required_scopes: { flags: ["can_merge"] } });
-  assert.equal(risky.job?.model_recommended, "opus", "a risky routine job was posted on the cheap model");
+  const risky = await postJob(env, agent, now, {
+    namespace: "capsid",
+    title: "Update the changelog",
+    body: "x",
+    kind: "docs",
+    required_scopes: { flags: ["can_merge"] },
+  });
+  assert.equal(
+    risky.job?.model_recommended,
+    "opus",
+    "a risky routine job was posted on the cheap model",
+  );
 
-  const bad = await postJob(env, agent, now, { namespace: "capsid", title: "Another", body: "x", kind: "nonsense" });
+  const bad = await postJob(env, agent, now, {
+    namespace: "capsid",
+    title: "Another",
+    body: "x",
+    kind: "nonsense",
+  });
   assert.equal(bad.ok, false);
   assert.match(bad.refusal ?? "", /not a job kind/);
 });
@@ -432,24 +754,32 @@ test("claim returns the recommendation with how to follow it, and routes a job p
   const env = fakeEnv({ DB: d1.db, IMPROVE_SCORE_SECRET: "test-secret" });
   const agent = grantAgent("write", DRIVER);
   const now = new Date("2026-10-06T12:00:00Z");
-  const posted = await postJob(env, agent, now, { namespace: "capsid", title: "Build D9: a thing", body: "do it" });
+  const posted = await postJob(env, agent, now, {
+    namespace: "capsid",
+    title: "Build D9: a thing",
+    body: "do it",
+  });
   assert.equal(posted.ok, true, JSON.stringify(posted));
   // The state of a row written before migration 0032: no routing columns set.
   const stored = d1.rows.jobs.find((j) => j.id === posted.job?.id);
   assert.ok(stored, "the posted job is not in the fake");
-  for (const column of ["kind", "model_recommended", "effort_recommended", "routing_reason"]) stored[column] = null;
+  for (const column of ["kind", "model_recommended", "effort_recommended", "routing_reason"])
+    stored[column] = null;
 
   const claimed = await claimJob(env, agent, now, { id: posted.job?.id });
   assert.equal(claimed.ok, true, JSON.stringify(claimed));
   assert.deepEqual(
     [claimed.routing?.model, claimed.routing?.effort, claimed.routing?.kind],
-    ["opusplan", "high", "build"]
+    ["opusplan", "high", "build"],
   );
   assert.match(String(claimed.routing?.deliver), /--model opusplan/);
   assert.match(String(claimed.routing?.deliver), /subagent/);
   assert.equal(claimed.job?.model_recommended, "opusplan");
   const update = d1.recorded.find((r) => /UPDATE jobs SET status = 'claimed'/.test(r.sql));
-  assert.ok(update?.params.includes("opusplan"), "the claim did not record the model it recommended");
+  assert.ok(
+    update?.params.includes("opusplan"),
+    "the claim did not record the model it recommended",
+  );
 });
 
 test("post and claim place a job in the same arm, by its id", async (t) => {
@@ -463,7 +793,12 @@ test("post and claim place a job in the same arm, by its id", async (t) => {
     for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
     return bytes;
   });
-  const posted = await postJob(env, agent, now, { namespace: "capsid", title: "Docs: the routing table", body: "write", kind: "docs" });
+  const posted = await postJob(env, agent, now, {
+    namespace: "capsid",
+    title: "Docs: the routing table",
+    body: "write",
+    kind: "docs",
+  });
   t.mock.restoreAll();
   assert.equal(posted.ok, true, JSON.stringify(posted));
   assert.deepEqual([posted.job?.id, posted.job?.model_recommended], [inArm, "haiku"]);
@@ -476,8 +811,13 @@ test("post and claim place a job in the same arm, by its id", async (t) => {
 // THE WIRING THE TESTS CANNOT SEE FROM INSIDE ONE FILE
 
 test("the migration adds exactly the columns the code reads and writes", () => {
-  const sql = readFileSync(join(import.meta.dirname, "..", "migrations", "0032_job_model_routing.sql"), "utf8");
-  const added = [...sql.matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)].map((m) => `${m[1]}.${m[2]}`).sort();
+  const sql = readFileSync(
+    join(import.meta.dirname, "..", "migrations", "0032_job_model_routing.sql"),
+    "utf8",
+  );
+  const added = [...sql.matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)]
+    .map((m) => `${m[1]}.${m[2]}`)
+    .sort();
   assert.deepEqual(added, [
     "job_outcomes.job_kind",
     "job_outcomes.model_actual",

@@ -4,7 +4,14 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildAdminServer } from "../src/server.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import { adminAgentForEmail, type Agent } from "../src/agents.ts";
-import { OPS_SNAPSHOT_KEY, RING_SLOTS, ringReading, ringSlot, type OpsSnapshot, type SiteSnapshot } from "../src/ops-snapshot.ts";
+import {
+  OPS_SNAPSHOT_KEY,
+  RING_SLOTS,
+  ringReading,
+  ringSlot,
+  type OpsSnapshot,
+  type SiteSnapshot,
+} from "../src/ops-snapshot.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // capsid_admin_read_ops action "snapshot": the watcher's last pass over MCP, admin
@@ -51,13 +58,16 @@ test("slot 0 is the newest slot, and each slot names the half hour it covers", (
   const values = [0, 1, 2, 3].map((slot) => ringReading(SITE, { slot }));
   assert.deepEqual(
     values.map((v) => (typeof v === "string" ? v : v.value)),
-    ["no-pass", "down", "up", "up"]
+    ["no-pass", "down", "up", "up"],
   );
   const newest = values[0];
   assert.ok(typeof newest !== "string");
   assert.equal(newest.from, new Date(SLOT * HALF_HOUR).toISOString());
   assert.equal(newest.to, new Date((SLOT + 1) * HALF_HOUR).toISOString());
-  assert.ok(Date.parse(newest.from) <= NOW.getTime() && NOW.getTime() < Date.parse(newest.to), "slot 0 does not cover the pass");
+  assert.ok(
+    Date.parse(newest.from) <= NOW.getTime() && NOW.getTime() < Date.parse(newest.to),
+    "slot 0 does not cover the pass",
+  );
 });
 
 test("a slot older than the ring's history reads outside-ring, never up", () => {
@@ -76,8 +86,14 @@ test("at reads the slot whose half hour holds that time", () => {
 
 test("REFUSES a slot or time outside the ring, a time after its newest slot, and a non-time", () => {
   assert.match(String(ringReading(SITE, { slot: RING_SLOTS })), /outside it/);
-  assert.match(String(ringReading(SITE, { at: new Date(NOW.getTime() - RING_SLOTS * HALF_HOUR) })), /outside it/);
-  assert.match(String(ringReading(SITE, { at: new Date(NOW.getTime() + 2 * HALF_HOUR) })), /after the newest slot/);
+  assert.match(
+    String(ringReading(SITE, { at: new Date(NOW.getTime() - RING_SLOTS * HALF_HOUR) })),
+    /outside it/,
+  );
+  assert.match(
+    String(ringReading(SITE, { at: new Date(NOW.getTime() + 2 * HALF_HOUR) })),
+    /after the newest slot/,
+  );
   assert.match(String(ringReading(SITE, { at: new Date("not a time") })), /not a time/);
 });
 
@@ -88,13 +104,20 @@ interface ToolResult {
   content: Array<{ text: string }>;
 }
 
-async function connect(caller: Agent, seed: Record<string, string> = { [OPS_SNAPSHOT_KEY]: JSON.stringify(SNAPSHOT) }) {
+async function connect(
+  caller: Agent,
+  seed: Record<string, string> = { [OPS_SNAPSHOT_KEY]: JSON.stringify(SNAPSHOT) },
+) {
   const server = buildAdminServer(fakeEnv({ APP_KV: fakeKv({ seed }).kv }), caller);
   const client = new Client({ name: "ops-snapshot-tool", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
   return {
-    call: (args: Record<string, unknown>) => client.callTool({ name: "capsid_admin_read_ops", arguments: { action: "snapshot", ...args } }) as Promise<ToolResult>,
+    call: (args: Record<string, unknown>) =>
+      client.callTool({
+        name: "capsid_admin_read_ops",
+        arguments: { action: "snapshot", ...args },
+      }) as Promise<ToolResult>,
     close: async () => {
       await client.close();
       await server.close();
@@ -121,7 +144,9 @@ test("the admin reads the whole snapshot, one site, and one ring slot", async ()
     assert.equal(slot.slot, 1);
     assert.equal(slot.pass_at, SNAPSHOT.pass_at);
 
-    const at = parse(await call({ site: "sample", at: new Date(NOW.getTime() - 2 * HALF_HOUR).toISOString() }));
+    const at = parse(
+      await call({ site: "sample", at: new Date(NOW.getTime() - 2 * HALF_HOUR).toISOString() }),
+    );
     assert.equal(at.value, "up");
   } finally {
     await close();
@@ -138,7 +163,11 @@ test("REFUSES slot or at without site, slot with at, and a site the snapshot doe
       [{ site: "missing" }, /holds no site 'missing'. It holds: sample/],
     ] as Array<[Record<string, unknown>, RegExp]>) {
       const result = await call(args);
-      assert.equal(result.isError, true, `${JSON.stringify(args)} answered: ${result.content[0].text}`);
+      assert.equal(
+        result.isError,
+        true,
+        `${JSON.stringify(args)} answered: ${result.content[0].text}`,
+      );
       assert.match(result.content[0].text, why);
     }
   } finally {
@@ -147,7 +176,11 @@ test("REFUSES slot or at without site, slot with at, and a site the snapshot doe
 });
 
 test("an absent or unreadable snapshot is a named error, not an empty result", async () => {
-  const seeds: Record<string, string>[] = [{}, { [OPS_SNAPSHOT_KEY]: JSON.stringify({ ...SNAPSHOT, version: 2 }) }, { [OPS_SNAPSHOT_KEY]: "{not json" }];
+  const seeds: Record<string, string>[] = [
+    {},
+    { [OPS_SNAPSHOT_KEY]: JSON.stringify({ ...SNAPSHOT, version: 2 }) },
+    { [OPS_SNAPSHOT_KEY]: "{not json" },
+  ];
   for (const seed of seeds) {
     const { call, close } = await connect(admin(), seed);
     try {
@@ -178,7 +211,11 @@ test("PLANT: a write-grant driver is refused capsid_admin_read_ops.snapshot by t
       const result = await call(args);
       assert.equal(result.isError, true, `a driver read the snapshot: ${result.content[0].text}`);
       assert.match(result.content[0].text, /admin/i);
-      assert.equal(result.content[0].text.includes("110-"), false, "the refusal carried snapshot data");
+      assert.equal(
+        result.content[0].text.includes("110-"),
+        false,
+        "the refusal carried snapshot data",
+      );
     }
   } finally {
     await close();

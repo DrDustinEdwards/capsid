@@ -46,14 +46,31 @@ function fakeSite(opts: { drift?: string[]; repairs?: boolean } = {}) {
   const impl = async (url: string, init: RequestInit = {}) => {
     if (url === HEALTH) {
       calls.push("health");
-      return Response.json({ ok: drift.length === 0, checks: [{ name: "pages-drift", ok: !drift.includes("pages-drift") }, { name: "media-backup-drift", ok: !drift.includes("media-backup-drift") }] }, { status: drift.length ? 503 : 200 });
+      return Response.json(
+        {
+          ok: drift.length === 0,
+          checks: [
+            { name: "pages-drift", ok: !drift.includes("pages-drift") },
+            { name: "media-backup-drift", ok: !drift.includes("media-backup-drift") },
+          ],
+        },
+        { status: drift.length ? 503 : 200 },
+      );
     }
     if (url === OPERATOR) {
       const tool = JSON.parse(String(init.body)).tool as string;
       calls.push(tool);
-      if (tool === "sync_pages" && opts.repairs !== false) drift = drift.filter((d) => d !== "pages-drift");
+      if (tool === "sync_pages" && opts.repairs !== false)
+        drift = drift.filter((d) => d !== "pages-drift");
       if (tool === "refresh_citations") return Response.json({ ok: true, data: { refreshed: 3 } });
-      return Response.json({ ok: true, data: { expected: 14, present: opts.repairs === false ? 12 : 14, converged: opts.repairs !== false } });
+      return Response.json({
+        ok: true,
+        data: {
+          expected: 14,
+          present: opts.repairs === false ? 12 : 14,
+          converged: opts.repairs !== false,
+        },
+      });
     }
     throw new Error(`unexpected fetch ${url}`);
   };
@@ -83,9 +100,23 @@ describe("the watcher's site repairs", () => {
     expect(report.findings).toEqual([]);
     expect(report.complete).toBe(true);
     expect(mails).toEqual([]);
-    const audit = await env.DB.prepare("SELECT actor, action, params FROM audit_log").all<{ actor: string; action: string; params: string }>();
-    expect(audit.results.map((r) => [r.actor, r.action, JSON.parse(r.params).tool, JSON.parse(r.params).via])).toEqual([["agent:watcher", "site-repair", "sync_pages", "watcher"]]);
-    const runs = await env.DB.prepare("SELECT task, outcome FROM task_runs").all<{ task: string; outcome: string }>();
+    const audit = await env.DB.prepare("SELECT actor, action, params FROM audit_log").all<{
+      actor: string;
+      action: string;
+      params: string;
+    }>();
+    expect(
+      audit.results.map((r) => [
+        r.actor,
+        r.action,
+        JSON.parse(r.params).tool,
+        JSON.parse(r.params).via,
+      ]),
+    ).toEqual([["agent:watcher", "site-repair", "sync_pages", "watcher"]]);
+    const runs = await env.DB.prepare("SELECT task, outcome FROM task_runs").all<{
+      task: string;
+      outcome: string;
+    }>();
     expect(runs.results).toEqual([{ task: "site-repair", outcome: "ok" }]);
   });
 
@@ -97,14 +128,21 @@ describe("the watcher's site repairs", () => {
     expect(site.calls).toEqual(["health"]);
     expect(first.findings.map((f) => f.fingerprint)).toEqual(["site-health-dustinedwards"]);
     expect(first.findings[0].evidence.join(" ")).toMatch(/media-backup-drift maps to no repair/);
-    expect(mails.map((m) => m.subject)).toEqual(["dustinedwards.info is unhealthy and self-repair did not settle it"]);
+    expect(mails.map((m) => m.subject)).toEqual([
+      "dustinedwards.info is unhealthy and self-repair did not settle it",
+    ]);
 
     // Still red next pass: no second mail. Green after: one recovery mail.
     await watchSites(e, await config(), "agent:watcher", site.impl, later(30));
     expect(mails).toHaveLength(1);
     const green = fakeSite({ drift: [] });
-    expect((await watchSites(e, await config(), "agent:watcher", green.impl, later(60))).findings).toEqual([]);
-    expect(mails.map((m) => m.subject)).toEqual(["dustinedwards.info is unhealthy and self-repair did not settle it", "dustinedwards.info recovered"]);
+    expect(
+      (await watchSites(e, await config(), "agent:watcher", green.impl, later(60))).findings,
+    ).toEqual([]);
+    expect(mails.map((m) => m.subject)).toEqual([
+      "dustinedwards.info is unhealthy and self-repair did not settle it",
+      "dustinedwards.info recovered",
+    ]);
   });
 
   it("stops repairing a stuck check after its daily limit, keeps the incident open, and says why", async () => {
@@ -112,9 +150,12 @@ describe("the watcher's site repairs", () => {
     await env.APP_KV.put("site-weekly:dustinedwards:refresh_citations", NOW.toISOString());
     const stuck = fakeSite({ repairs: false });
     let last = null as Awaited<ReturnType<typeof watchSites>> | null;
-    for (let pass = 0; pass < 6; pass++) last = await watchSites(e, await config(), "agent:watcher", stuck.impl, later(pass * 31));
+    for (let pass = 0; pass < 6; pass++)
+      last = await watchSites(e, await config(), "agent:watcher", stuck.impl, later(pass * 31));
     expect(stuck.calls.filter((c) => c === "sync_pages")).toHaveLength(4);
-    expect(last?.findings[0].evidence.join(" ")).toMatch(/the watcher has run it 4 times in the last day/);
+    expect(last?.findings[0].evidence.join(" ")).toMatch(
+      /the watcher has run it 4 times in the last day/,
+    );
   });
 
   it("runs the weekly tool once a week, and says it was not mailed when no binding is set", async () => {
@@ -134,11 +175,21 @@ describe("the watcher's site repairs", () => {
     const calls: string[] = [];
     const spike = async (url: string) => {
       calls.push(url);
-      return Response.json({ status: "warn", ok: true, alerts: ["auth-spike"], checks: [{ name: "db", status: "pass" }, { name: "auth-spike", status: "warn", alert: true }] });
+      return Response.json({
+        status: "warn",
+        ok: true,
+        alerts: ["auth-spike"],
+        checks: [
+          { name: "db", status: "pass" },
+          { name: "auth-spike", status: "warn", alert: true },
+        ],
+      });
     };
     const report = await watchSites(e, plain, "agent:watcher", spike, NOW);
     expect(calls).toEqual([HEALTH]);
-    expect(report.findings.map((f) => [f.fingerprint, f.headline])).toEqual([["site-health-dustinedwards", "dustinedwards.info raised an alert: auth-spike"]]);
+    expect(report.findings.map((f) => [f.fingerprint, f.headline])).toEqual([
+      ["site-health-dustinedwards", "dustinedwards.info raised an alert: auth-spike"],
+    ]);
     expect(report.findings[0].evidence.join(" ")).toMatch(/failing: auth-spike/);
     expect(mails.map((m) => m.subject)).toEqual(["dustinedwards.info raised an alert: auth-spike"]);
   });
@@ -149,7 +200,9 @@ describe("the watcher's site repairs", () => {
     const site = fakeSite();
     const report = await watchSites(e, await config(), "agent:watcher", site.impl, NOW);
     expect(site.calls).toEqual(["health"]);
-    expect(report.findings[0].evidence.join(" ")).toMatch(/DUSTINEDWARDS_OPERATOR_TOKEN is not set/);
+    expect(report.findings[0].evidence.join(" ")).toMatch(
+      /DUSTINEDWARDS_OPERATOR_TOKEN is not set/,
+    );
   });
 });
 
@@ -161,19 +214,36 @@ describe("GET /portal/api/convergence", () => {
     await watchSites(e, await config(), "agent:watcher", site.impl, NOW);
     const status = async (url: string, init?: RequestInit) =>
       url === OPERATOR && JSON.parse(String(init?.body)).tool === "sync_status"
-        ? Response.json({ ok: true, data: { headSha: "abc1234", d1Posts: 42, divergences: { known: true, list: [] } } })
+        ? Response.json({
+            ok: true,
+            data: { headSha: "abc1234", d1Posts: 42, divergences: { known: true, list: [] } },
+          })
         : site.impl(url, init);
-    const session = (await portalSessionCookie({ email: EMAIL }, "integration-site-repair-key", new Date())).split(";")[0];
-    const request = new Request("https://capsid.test/portal/api/convergence", { headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" });
+    const session = (
+      await portalSessionCookie({ email: EMAIL }, "integration-site-repair-key", new Date())
+    ).split(";")[0];
+    const request = new Request("https://capsid.test/portal/api/convergence", {
+      headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" },
+      redirect: "manual",
+    });
     const response = await handlePortalConvergence(request, e, new Date(), status as typeof fetch);
     expect(response.status).toBe(200);
     const body = (await response.json()) as PortalConvergence;
     expect(body.sites.map((s) => s.namespace)).toEqual(["dustinedwards"]);
     const s = body.sites[0];
     expect(s.operator?.secret_set).toBe(true);
-    expect(s.status?.fields).toEqual([{ key: "headSha", value: "abc1234" }, { key: "d1Posts", value: "42" }, { key: "divergences", value: "none" }]);
-    expect(s.health?.checks.map((c) => [c.name, c.ok, c.repair])).toEqual([["pages-drift", true, "sync_pages"], ["media-backup-drift", true, null]]);
-    expect(s.recent.map((r) => [r.tool, r.actor, r.converged])).toEqual([["sync_pages", "agent:watcher", true]]);
+    expect(s.status?.fields).toEqual([
+      { key: "headSha", value: "abc1234" },
+      { key: "d1Posts", value: "42" },
+      { key: "divergences", value: "none" },
+    ]);
+    expect(s.health?.checks.map((c) => [c.name, c.ok, c.repair])).toEqual([
+      ["pages-drift", true, "sync_pages"],
+      ["media-backup-drift", true, null],
+    ]);
+    expect(s.recent.map((r) => [r.tool, r.actor, r.converged])).toEqual([
+      ["sync_pages", "agent:watcher", true],
+    ]);
     expect(Number.isNaN(Date.parse(s.recent[0].at))).toBe(false);
     expect(s.secrets?.state).toBe("none");
     expect(JSON.stringify(body)).not.toContain(TOKEN);
@@ -184,23 +254,58 @@ describe("the site_repair control", () => {
   it("PLANT: refuses backup_media and a tool outside the site's list at preview, and a token for either at perform, writing nothing", async () => {
     const { env: e } = siteEnv();
     for (const tool of ["backup_media", "save_post", "sync_unlisted"]) {
-      const previewed = await previewControl(e, EMAIL, "site_repair", { namespace: "dustinedwards", tool }, NOW, "chat");
+      const previewed = await previewControl(
+        e,
+        EMAIL,
+        "site_repair",
+        { namespace: "dustinedwards", tool },
+        NOW,
+        "chat",
+      );
       expect(previewed.ok, `${tool} was previewed`).toBe(false);
     }
     // A token for a tool the site allows, performed after the site's list dropped it.
-    const previewed = await previewControl(e, EMAIL, "site_repair", { namespace: "dustinedwards", tool: "sync_pages" }, NOW, "chat");
+    const previewed = await previewControl(
+      e,
+      EMAIL,
+      "site_repair",
+      { namespace: "dustinedwards", tool: "sync_pages" },
+      NOW,
+      "chat",
+    );
     expect(previewed.ok).toBe(true);
-    const row = await env.DB.prepare("SELECT operator FROM ops_sites WHERE namespace = 'dustinedwards'").first<{ operator: string }>();
+    const row = await env.DB.prepare(
+      "SELECT operator FROM ops_sites WHERE namespace = 'dustinedwards'",
+    ).first<{ operator: string }>();
     const narrowed = JSON.parse(row!.operator);
     delete narrowed.repairs["pages-drift"];
-    await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(JSON.stringify(narrowed)).run();
+    await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'")
+      .bind(JSON.stringify(narrowed))
+      .run();
     try {
-      const performed = await performControl(e, EMAIL, previewed.ok ? previewed.preview.token : "", null, NOW, "chat");
+      const performed = await performControl(
+        e,
+        EMAIL,
+        previewed.ok ? previewed.preview.token : "",
+        null,
+        NOW,
+        "chat",
+      );
       expect(performed.ok).toBe(false);
-      expect(performed.ok ? "" : performed.refusal).toMatch(/sync_pages is not in this site's allowlist/);
-      expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'site-repair'").first<{ n: number }>())?.n).toBe(0);
+      expect(performed.ok ? "" : performed.refusal).toMatch(
+        /sync_pages is not in this site's allowlist/,
+      );
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'site-repair'",
+          ).first<{ n: number }>()
+        )?.n,
+      ).toBe(0);
     } finally {
-      await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(row!.operator).run();
+      await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'")
+        .bind(row!.operator)
+        .run();
     }
   });
 });
@@ -214,25 +319,69 @@ describe("the backups (check, and back up now)", () => {
       const tool = JSON.parse(String(init.body)).tool as string;
       tools.push(tool);
       return tool === "backup_media"
-        ? Response.json({ ok: true, data: { files: [{ name: "media", complete: true, copied: 3 }] } })
-        : Response.json({ ok: true, data: { last_ok: "2026-10-10T05:00:00.000Z", age_hours: 7, files: { media: { last_ok: "2026-10-10T05:01:00.000Z", age_hours: 7 } } } });
+        ? Response.json({
+            ok: true,
+            data: { files: [{ name: "media", complete: true, copied: 3 }] },
+          })
+        : Response.json({
+            ok: true,
+            data: {
+              last_ok: "2026-10-10T05:00:00.000Z",
+              age_hours: 7,
+              files: { media: { last_ok: "2026-10-10T05:01:00.000Z", age_hours: 7 } },
+            },
+          });
     };
-    expect(await runSiteBackups(e, { actor: EMAIL, via: "chat" }, NOW, impl)).toEqual({ ok: false, refusal: expect.stringMatching(/no site sets backup: true/) });
-    const row = await env.DB.prepare("SELECT operator FROM ops_sites WHERE namespace = 'dustinedwards'").first<{ operator: string }>();
-    await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(JSON.stringify({ ...JSON.parse(row!.operator), backup: true })).run();
+    expect(await runSiteBackups(e, { actor: EMAIL, via: "chat" }, NOW, impl)).toEqual({
+      ok: false,
+      refusal: expect.stringMatching(/no site sets backup: true/),
+    });
+    const row = await env.DB.prepare(
+      "SELECT operator FROM ops_sites WHERE namespace = 'dustinedwards'",
+    ).first<{ operator: string }>();
+    await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'")
+      .bind(JSON.stringify({ ...JSON.parse(row!.operator), backup: true }))
+      .run();
     try {
       const ran = await runSiteBackups(e, { actor: EMAIL, via: "chat" }, NOW, impl);
-      expect(ran.ok && ran.runs.map((r) => (r.ran ? [r.namespace, r.line] : [r.namespace, r.refusal]))).toEqual([["dustinedwards", "backup_media ran: media complete (3 copied)"]]);
-      const again = await runSiteBackups(e, { namespace: "dustinedwards", actor: EMAIL, via: "chat" }, later(1), impl);
+      expect(
+        ran.ok && ran.runs.map((r) => (r.ran ? [r.namespace, r.line] : [r.namespace, r.refusal])),
+      ).toEqual([["dustinedwards", "backup_media ran: media complete (3 copied)"]]);
+      const again = await runSiteBackups(
+        e,
+        { namespace: "dustinedwards", actor: EMAIL, via: "chat" },
+        later(1),
+        impl,
+      );
       expect(again.ok && again.runs[0].ran).toBe(false);
       expect(tools).toEqual(["backup_media"]);
-      expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'site-backup'").first<{ n: number }>())?.n).toBe(1);
-      expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM task_runs WHERE task = 'site-backup'").first<{ n: number }>())?.n).toBe(1);
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'site-backup'",
+          ).first<{ n: number }>()
+        )?.n,
+      ).toBe(1);
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT COUNT(*) AS n FROM task_runs WHERE task = 'site-backup'",
+          ).first<{ n: number }>()
+        )?.n,
+      ).toBe(1);
       const read = await readSiteBackups(e, impl);
-      expect(read.sites.map((s) => [s.namespace, s.status?.age_hours, s.status?.files?.media?.age_hours])).toEqual([["dustinedwards", 7, 7]]);
+      expect(
+        read.sites.map((s) => [
+          s.namespace,
+          s.status?.age_hours,
+          s.status?.files?.media?.age_hours,
+        ]),
+      ).toEqual([["dustinedwards", 7, 7]]);
       expect(JSON.stringify(read)).not.toContain(TOKEN);
     } finally {
-      await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(row!.operator).run();
+      await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'")
+        .bind(row!.operator)
+        .run();
     }
   });
 });

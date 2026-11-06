@@ -10,7 +10,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const [directory, flag] = process.argv.slice(2);
-if (!directory) throw new Error("usage: node explorer/wrangler-config.mjs <assets directory> [--local]");
+if (!directory)
+  throw new Error("usage: node explorer/wrangler-config.mjs <assets directory> [--local]");
 const config = {
   name: "capsid",
   // The Worker is a few lines a compatibility date barely touches. This is a date the workerd
@@ -29,6 +30,8 @@ const config = {
     html_handling: "auto-trailing-slash",
   },
   workers_dev: false,
-  ...(flag === "--local" ? {} : { routes: [{ pattern: "capsid.dustinedwards.info", custom_domain: true }] }),
+  ...(flag === "--local"
+    ? {}
+    : { routes: [{ pattern: "capsid.dustinedwards.info", custom_domain: true }] }),
 };
 process.stdout.write(`${JSON.stringify(config, null, 2)}\n`);

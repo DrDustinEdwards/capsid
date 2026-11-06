@@ -32,7 +32,15 @@ export const OPTIONAL_SIDECARS = ["_schema.json", "_holdout-manifests.json"];
 // Parsed dump JSON, whose shape is what this checks: a file's fields are unknown until a check has read them, and a
 // row's columns are the ones the checks below name.
 type Json = { [field: string]: unknown };
-type Row = { id: number; namespace: string; path: string; document_id: number; action: string; updated_at?: unknown; [column: string]: unknown };
+type Row = {
+  id: number;
+  namespace: string;
+  path: string;
+  document_id: number;
+  action: string;
+  updated_at?: unknown;
+  [column: string]: unknown;
+};
 
 function fail(reason: string): never {
   const err = Object.assign(new Error(reason), { invariant: true });
@@ -48,14 +56,22 @@ function readJson(dumpDir: string, file: string): Json {
   }
 }
 
-function checkSidecar(dumpDir: string, file: string, field: string, valueOk: (v: unknown) => boolean): void {
+function checkSidecar(
+  dumpDir: string,
+  file: string,
+  field: string,
+  valueOk: (v: unknown) => boolean,
+): void {
   const parsed = readJson(dumpDir, file);
   const inner = parsed?.[field];
-  if (!inner || typeof inner !== "object" || Array.isArray(inner)) fail(`${file} carries no '${field}' object`);
+  if (!inner || typeof inner !== "object" || Array.isArray(inner))
+    fail(`${file} carries no '${field}' object`);
   const entries = Object.entries(inner);
-  if (entries.length === 0) fail(`${file} has an empty '${field}' object; the sidecar holds nothing`);
+  if (entries.length === 0)
+    fail(`${file} has an empty '${field}' object; the sidecar holds nothing`);
   const bad = entries.filter(([, v]) => !valueOk(v)).map(([k]) => k);
-  if (bad.length > 0) fail(`${file} has '${field}' entries of the wrong shape: ${bad.slice(0, 5).join(", ")}`);
+  if (bad.length > 0)
+    fail(`${file} has '${field}' entries of the wrong shape: ${bad.slice(0, 5).join(", ")}`);
   if (typeof parsed.exported_at !== "string") fail(`${file} carries no exported_at`);
 }
 
@@ -73,10 +89,13 @@ export interface DumpSummary {
 export function checkDump(dumpDir: string): DumpSummary {
   const files = readdirSync(dumpDir).filter((f) => f.endsWith(".json") || f.endsWith(".json.gz"));
   if (files.length === 0) fail(`${dumpDir} holds no JSON files; the check read nothing`);
-  if (!files.includes(COMPLETE_MARKER)) fail(`${COMPLETE_MARKER} is missing, so this run is not a complete dump`);
+  if (!files.includes(COMPLETE_MARKER))
+    fail(`${COMPLETE_MARKER} is missing, so this run is not a complete dump`);
 
   const marker = readJson(dumpDir, COMPLETE_MARKER);
-  const listed = (Array.isArray(marker.keys) ? marker.keys : []).map((k: unknown) => String(k).split("/").pop()).sort();
+  const listed = (Array.isArray(marker.keys) ? marker.keys : [])
+    .map((k: unknown) => String(k).split("/").pop())
+    .sort();
   const present = files.filter((f) => f !== COMPLETE_MARKER).sort();
   if (listed.join(",") !== present.join(",")) {
     fail(`${COMPLETE_MARKER} lists ${listed.join(", ")} but the dump holds ${present.join(", ")}`);
@@ -88,21 +107,35 @@ export function checkDump(dumpDir: string): DumpSummary {
   if (missing.length > 0) fail(`the dump is missing sidecars: ${missing.join(", ")}`);
   if (unknown.length > 0) fail(`the dump carries sidecars nothing verifies: ${unknown.join(", ")}`);
   // Present is not enough: `{}` exists too.
-  checkSidecar(dumpDir, "_kv.json", "keys", (v) => v === null || typeof v === "string" || (typeof v === "object" && !Array.isArray(v) && typeof (v as { unreadable?: unknown }).unreadable === "string"));
+  checkSidecar(
+    dumpDir,
+    "_kv.json",
+    "keys",
+    (v) =>
+      v === null ||
+      typeof v === "string" ||
+      (typeof v === "object" &&
+        !Array.isArray(v) &&
+        typeof (v as { unreadable?: unknown }).unreadable === "string"),
+  );
 
   const tables: Record<string, Row[]> = {};
   let rows = 0;
   for (const file of files.filter((f) => !f.startsWith("_"))) {
     const name = file.replace(/\.json(\.gz)?$/, "");
     const parsed = readJson(dumpDir, file);
-    if (parsed.table !== name) fail(`${file} says it dumps '${parsed.table}'; refusing to restore shuffled files`);
+    if (parsed.table !== name)
+      fail(`${file} says it dumps '${parsed.table}'; refusing to restore shuffled files`);
     if (!Array.isArray(parsed.rows)) fail(`${file} carries no rows array`);
     // src/backup.ts dumps SELECT *, so every row of a table has the same keys, null
     // columns included.
     const expected = parsed.rows.length > 0 ? Object.keys(parsed.rows[0]).sort().join(",") : "";
     parsed.rows.forEach((row: Row | null, i: number) => {
-      const keys = Object.keys(row ?? {}).sort().join(",");
-      if (keys !== expected) fail(`${file} row ${i} does not carry the columns of row 0 (${keys} against ${expected})`);
+      const keys = Object.keys(row ?? {})
+        .sort()
+        .join(",");
+      if (keys !== expected)
+        fail(`${file} row ${i} does not carry the columns of row 0 (${keys} against ${expected})`);
     });
     tables[name] = parsed.rows;
     rows += parsed.rows.length;
@@ -116,25 +149,43 @@ export function checkDump(dumpDir: string): DumpSummary {
   const audits = tables.audit_log ?? [];
   const docIds = new Set(documents.map((d) => d.id));
   const docKeys = new Set(documents.map((d) => `${d.namespace}\0${d.path}`));
-  const removed = new Set(audits.filter((a) => a.action === "delete" || a.action === "move").map((a) => `${a.namespace}\0${a.path}`));
+  const removed = new Set(
+    audits
+      .filter((a) => a.action === "delete" || a.action === "move")
+      .map((a) => `${a.namespace}\0${a.path}`),
+  );
   const maxId = documents.reduce((m, d) => Math.max(m, d.id), 0);
   // Compared as strings, as the SQL it replaces compared them: both are "YYYY-MM-DD HH:MM:SS".
-  const newest = documents.reduce((m, d) => (String(d.updated_at ?? "") > m ? String(d.updated_at ?? "") : m), "");
+  const newest = documents.reduce(
+    (m, d) => (String(d.updated_at ?? "") > m ? String(d.updated_at ?? "") : m),
+    "",
+  );
 
   const torn: string[] = [];
   for (const v of versions) {
     if (torn.length >= 5) break;
     if (v.document_id > maxId && !removed.has(`${v.namespace}\0${v.path}`)) {
-      torn.push(`document_versions ${v.id} snapshots document ${v.document_id}, above the highest id in the documents file, and its path ${v.namespace}/${v.path} was never deleted or moved`);
+      torn.push(
+        `document_versions ${v.id} snapshots document ${v.document_id}, above the highest id in the documents file, and its path ${v.namespace}/${v.path} was never deleted or moved`,
+      );
     }
   }
   for (const a of audits) {
     if (torn.length >= 5) break;
-    if (a.action === "write" && a.namespace != null && a.path != null && String(a.at ?? "") >= newest && !docKeys.has(`${a.namespace}\0${a.path}`)) {
-      torn.push(`audit_log ${a.id} records a write to ${a.namespace}/${a.path} at ${a.at}, not before the newest document, and that document is not in the dump`);
+    if (
+      a.action === "write" &&
+      a.namespace != null &&
+      a.path != null &&
+      String(a.at ?? "") >= newest &&
+      !docKeys.has(`${a.namespace}\0${a.path}`)
+    ) {
+      torn.push(
+        `audit_log ${a.id} records a write to ${a.namespace}/${a.path} at ${a.at}, not before the newest document, and that document is not in the dump`,
+      );
     }
   }
-  if (torn.length > 0) fail(`the dump is TORN: its tables do not describe one instant. ${torn.join("; ")}`);
+  if (torn.length > 0)
+    fail(`the dump is TORN: its tables do not describe one instant. ${torn.join("; ")}`);
 
   return {
     files: files.length,
@@ -142,11 +193,15 @@ export function checkDump(dumpDir: string): DumpSummary {
     rows,
     documents: documents.length,
     orphanVersions: versions.filter((v) => !docIds.has(v.document_id)).length,
-    orphanAudits: audits.filter((a) => a.namespace != null && a.path != null && !docKeys.has(`${a.namespace}\0${a.path}`)).length,
+    orphanAudits: audits.filter(
+      (a) => a.namespace != null && a.path != null && !docKeys.has(`${a.namespace}\0${a.path}`),
+    ).length,
   };
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop() ?? "");
+const invokedDirectly =
+  process.argv[1] &&
+  import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop() ?? "");
 if (invokedDirectly) {
   const dumpDir = process.argv[2];
   if (!dumpDir) {
@@ -157,7 +212,7 @@ if (invokedDirectly) {
     const s = checkDump(dumpDir);
     console.log(
       `dump invariants PASSED: ${s.files} files, ${s.tables} tables, ${s.rows} rows, ${s.documents} documents, ` +
-        `cross-table consistent (${s.orphanVersions} version and ${s.orphanAudits} audit rows reference documents no longer in the store, all explained by deletions, archiving or the namespace rename)`
+        `cross-table consistent (${s.orphanVersions} version and ${s.orphanAudits} audit rows reference documents no longer in the store, all explained by deletions, archiving or the namespace rename)`,
     );
   } catch (e) {
     console.error(`dump invariants FAILED: ${e instanceof Error ? e.message : String(e)}`);

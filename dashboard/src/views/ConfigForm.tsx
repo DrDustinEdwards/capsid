@@ -8,13 +8,36 @@ import "capsomer/field.css";
 // changes anything: it opens the confirm dialog, which shows what the server will do.
 
 /** The form's ids and its first field, which takes focus when the form opens. */
-export function useConfigForm(): { f: (k: string) => string; first: RefObject<HTMLInputElement | null> } {
+export function useConfigForm(): {
+  f: (k: string) => string;
+  first: RefObject<HTMLInputElement | null>;
+} {
   const id = useId();
   const first = useRef<HTMLInputElement>(null);
   return { f: (k) => `${id}-${k}`, first };
 }
 
-export function ConfigForm({ f, first, title, src, hint, onSubmit, onClose, danger, children }: { f: (k: string) => string; first: RefObject<HTMLInputElement | null>; title: string; src?: string; hint: string | null; onSubmit: () => void; onClose: () => void; danger?: ReactNode; children: ReactNode }) {
+export function ConfigForm({
+  f,
+  first,
+  title,
+  src,
+  hint,
+  onSubmit,
+  onClose,
+  danger,
+  children,
+}: {
+  f: (k: string) => string;
+  first: RefObject<HTMLInputElement | null>;
+  title: string;
+  src?: string;
+  hint: string | null;
+  onSubmit: () => void;
+  onClose: () => void;
+  danger?: ReactNode;
+  children: ReactNode;
+}) {
   const box = useRef<HTMLElement>(null);
   useEffect(() => {
     box.current?.scrollIntoView({ block: "nearest" });
@@ -54,7 +77,17 @@ export function ConfigForm({ f, first, title, src, hint, onSubmit, onClose, dang
   );
 }
 
-export function Field({ id, label, note, children }: { id: string; label: string; note?: string; children: ReactNode }) {
+export function Field({
+  id,
+  label,
+  note,
+  children,
+}: {
+  id: string;
+  label: string;
+  note?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="f">
       <label htmlFor={id} className="section-title">

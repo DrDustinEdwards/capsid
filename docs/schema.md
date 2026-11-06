@@ -28,20 +28,20 @@ A document is a row: namespace, path, title, body, type, status, tags,
 
 ### Types
 
-| type | what it is |
-| --- | --- |
-| `core` | one always-loaded summary per namespace, read first to orient |
-| `concept` | a compiled wiki topic, one subject per document |
-| `decision` | a ruling and the measurement that forced it |
-| `spec` | a design a piece of work is built to |
-| `protocol` | a tested procedure |
-| `procedural` | rules for working in a namespace |
-| `task` | an open piece of work |
-| `reference` | pointers outward: URLs, dashboards, lookup tables |
-| `semantic`, `note`, `post` | compiled knowledge and content |
-| `episodic` | a session record: raw material for the consolidation loop |
-| `source` | raw, un-compiled input, an inbox |
-| `prompt` | a reusable template, with `{{variable}}` placeholders |
+| type                       | what it is                                                    |
+| -------------------------- | ------------------------------------------------------------- |
+| `core`                     | one always-loaded summary per namespace, read first to orient |
+| `concept`                  | a compiled wiki topic, one subject per document               |
+| `decision`                 | a ruling and the measurement that forced it                   |
+| `spec`                     | a design a piece of work is built to                          |
+| `protocol`                 | a tested procedure                                            |
+| `procedural`               | rules for working in a namespace                              |
+| `task`                     | an open piece of work                                         |
+| `reference`                | pointers outward: URLs, dashboards, lookup tables             |
+| `semantic`, `note`, `post` | compiled knowledge and content                                |
+| `episodic`                 | a session record: raw material for the consolidation loop     |
+| `source`                   | raw, un-compiled input, an inbox                              |
+| `prompt`                   | a reusable template, with `{{variable}}` placeholders         |
 
 The write path validates the type. An unknown type is refused rather than stored,
 because a document with an invented type is invisible to every query that names
@@ -179,10 +179,10 @@ verified without reading the document back. Pass that hash as `if_match` on the
 next write to the same document and the server enforces the re-read rule.
 
 A `patch` whose anchor equals its replacement is non-destructive. A match
-  changes nothing and returns the same hash and byte count; a mismatch is a
-  refusal that writes nothing. Use it to prove a moved block byte-exact at its
-  destination, to read a document's current size without touching it, or to
-  confirm an anchor exists exactly once before betting a real patch on it.
+changes nothing and returns the same hash and byte count; a mismatch is a
+refusal that writes nothing. Use it to prove a moved block byte-exact at its
+destination, to read a document's current size without touching it, or to
+confirm an anchor exists exactly once before betting a real patch on it.
 
 A wrong `if_match` is a non-mutating hash oracle. The server
 refuses, writes nothing, and returns the current hash.
@@ -255,17 +255,17 @@ that builds a record or a count from `job_outcomes` leaves out a row whose job i
 superseded (`src/agent-record.ts` and the
 pull request re-verification in `src/outcome-prs.ts`).
 
-| column | what it is |
-| --- | --- |
-| `agent`, `namespace` | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later release clears that column |
-| `prs_opened`, `prs_merged` | GitHub's answer whenever the driver named any pull request |
-| `commits`, `files_changed` | the pull requests' own counts when there are any, the driver's otherwise |
-| `tests_added` | the driver's claim, never verifiable here: "a test was added" is a judgment about a diff, not a property of it |
-| `ci_green` | `1`, `0`, or `NULL` for not checked. A run still going is `NULL`, because "CI has not answered" is not "CI failed" |
-| `blocked_count`, `resumed_count` | how many gates the job hit and how many times a human sent it back, the two numbers the Worker knows first-hand |
-| `duration_minutes` | claimed to recorded. The final working stretch: `resume` does not restart the clock from the first claim, so time spent blocked waiting on a human is excluded |
-| `result_kind` | `pr`, `doc` or `none`, derived from `result_ref` rather than declared |
-| `verified` | a JSON object of booleans saying which of the above this Worker checked itself |
+| column                           | what it is                                                                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent`, `namespace`             | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later release clears that column             |
+| `prs_opened`, `prs_merged`       | GitHub's answer whenever the driver named any pull request                                                                                                     |
+| `commits`, `files_changed`       | the pull requests' own counts when there are any, the driver's otherwise                                                                                       |
+| `tests_added`                    | the driver's claim, never verifiable here: "a test was added" is a judgment about a diff, not a property of it                                                 |
+| `ci_green`                       | `1`, `0`, or `NULL` for not checked. A run still going is `NULL`, because "CI has not answered" is not "CI failed"                                             |
+| `blocked_count`, `resumed_count` | how many gates the job hit and how many times a human sent it back, the two numbers the Worker knows first-hand                                                |
+| `duration_minutes`               | claimed to recorded. The final working stretch: `resume` does not restart the clock from the first claim, so time spent blocked waiting on a human is excluded |
+| `result_kind`                    | `pr`, `doc` or `none`, derived from `result_ref` rather than declared                                                                                          |
+| `verified`                       | a JSON object of booleans saying which of the above this Worker checked itself                                                                                 |
 
 The Worker never stores a count it could check and did not. The driver reports;
 this Worker holds a GitHub App token and can ask. Where a check ran the stored
@@ -297,18 +297,18 @@ four. It is captured before any verification runs, in the same batch as the
 transition. A call refused before the transition writes none, and neither does a
 seat's `fail` of another credential's job, since that agent made no claim.
 
-| column | what it is |
-| --- | --- |
-| `action`, `agent`, `namespace` | the call, the caller, and the job's namespace at the time |
-| `raw` | the claim-bearing arguments exactly as sent: `evidence`, `claim`, `result_summary` or `reason`, `result_ref`, `command` |
-| `prs_opened_urls`, `prs_merged_urls`, `prs_opened`, `prs_merged` | the pull requests the agent says it opened and says are merged, as JSON arrays and their lengths |
-| `commits`, `files_changed`, `tests_added` | the driver's own counts from `evidence`, never GitHub's |
-| `tests_run`, `tests_passed`, `tests_failed`, `tests_result` | the tests the agent says it ran, and their result |
-| `deploy_state` | what the agent says about deployment |
-| `files_touched` | a JSON array of the paths the agent says it touched |
-| `model_id`, `client_name`, `client_version`, `permission_mode` | self-reported, recorded and never used to authorize anything |
-| `raw` `claim.usage` | self-reported cost, active seconds and tokens for the session, kept in `raw` with no column of its own and summed per namespace by the `capsid_admin_read_claims` aggregate beside the telemetry on `job_outcomes`; never used to authorize anything |
-| `capsid_sha` | the Worker's own deployed commit, not the agent's word |
+| column                                                           | what it is                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `action`, `agent`, `namespace`                                   | the call, the caller, and the job's namespace at the time                                                                                                                                                                                            |
+| `raw`                                                            | the claim-bearing arguments exactly as sent: `evidence`, `claim`, `result_summary` or `reason`, `result_ref`, `command`                                                                                                                              |
+| `prs_opened_urls`, `prs_merged_urls`, `prs_opened`, `prs_merged` | the pull requests the agent says it opened and says are merged, as JSON arrays and their lengths                                                                                                                                                     |
+| `commits`, `files_changed`, `tests_added`                        | the driver's own counts from `evidence`, never GitHub's                                                                                                                                                                                              |
+| `tests_run`, `tests_passed`, `tests_failed`, `tests_result`      | the tests the agent says it ran, and their result                                                                                                                                                                                                    |
+| `deploy_state`                                                   | what the agent says about deployment                                                                                                                                                                                                                 |
+| `files_touched`                                                  | a JSON array of the paths the agent says it touched                                                                                                                                                                                                  |
+| `model_id`, `client_name`, `client_version`, `permission_mode`   | self-reported, recorded and never used to authorize anything                                                                                                                                                                                         |
+| `raw` `claim.usage`                                              | self-reported cost, active seconds and tokens for the session, kept in `raw` with no column of its own and summed per namespace by the `capsid_admin_read_claims` aggregate beside the telemetry on `job_outcomes`; never used to authorize anything |
+| `capsid_sha`                                                     | the Worker's own deployed commit, not the agent's word                                                                                                                                                                                               |
 
 `job_evaluations` holds one row per check, named for OpenTelemetry's
 `gen_ai.evaluation.result` event: `name`, `score_value`, `score_label` (`pass`,

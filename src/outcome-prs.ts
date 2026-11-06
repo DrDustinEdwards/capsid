@@ -39,7 +39,7 @@ export function outcomePrStatements(
   urls: readonly string[],
   states: Record<string, boolean> = {},
   now?: Date,
-  identities: Record<string, PrIdentity> = {}
+  identities: Record<string, PrIdentity> = {},
 ): D1PreparedStatement[] {
   // Deduplicated here: a PRIMARY KEY conflict would abort the outcome's whole batch.
   const seen = new Set<string>();
@@ -54,16 +54,26 @@ export function outcomePrStatements(
       db
         .prepare(
           `INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at, pr_node_id, pr_created_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (job_id, pr_url) DO NOTHING`
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (job_id, pr_url) DO NOTHING`,
         )
-        .bind(jobId, trimmed, at ? (states[trimmed] ? 1 : 0) : null, at, identity?.node_id ?? null, identity?.created_at ?? null)
+        .bind(
+          jobId,
+          trimmed,
+          at ? (states[trimmed] ? 1 : 0) : null,
+          at,
+          identity?.node_id ?? null,
+          identity?.created_at ?? null,
+        ),
     );
   }
   return statements;
 }
 
 /** Extract the pull request URLs a finished job referred to, for a row that stored none. */
-export function prUrlsFromJob(job: { result_ref: string | null; result_summary: string | null }): string[] {
+export function prUrlsFromJob(job: {
+  result_ref: string | null;
+  result_summary: string | null;
+}): string[] {
   const found = new Set<string>();
   const pattern = new RegExp(PR_URL_SOURCE, "g");
   for (const text of [job.result_ref ?? "", job.result_summary ?? ""]) {
@@ -100,7 +110,7 @@ function recountStatement(db: D1Database, jobId: string): D1PreparedStatement {
                  THEN json_set(json_set(verified, '$.prs_merged', json('true')), '$.prs_opened', json('true'))
                ELSE json_set(verified, '$.prs_merged', json('true'))
              END
-       WHERE job_id = ?1`
+       WHERE job_id = ?1`,
     )
     .bind(jobId);
 }
@@ -115,7 +125,7 @@ export function reverifyStatements(
   prUrl: string,
   merged: boolean,
   now: Date,
-  pin?: PrIdentity
+  pin?: PrIdentity,
 ): D1PreparedStatement[] {
   return [
     db
@@ -123,9 +133,16 @@ export function reverifyStatements(
         `UPDATE job_outcome_prs
            SET merged = ?3, merge_verified_at = ?4,
                pr_node_id = COALESCE(pr_node_id, ?5), pr_created_at = COALESCE(pr_created_at, ?6)
-         WHERE job_id = ?1 AND pr_url = ?2 AND unverifiable IS NULL`
+         WHERE job_id = ?1 AND pr_url = ?2 AND unverifiable IS NULL`,
       )
-      .bind(jobId, prUrl, merged ? 1 : 0, now.toISOString(), pin?.node_id ?? null, pin?.created_at ?? null),
+      .bind(
+        jobId,
+        prUrl,
+        merged ? 1 : 0,
+        now.toISOString(),
+        pin?.node_id ?? null,
+        pin?.created_at ?? null,
+      ),
     recountStatement(db, jobId),
   ];
 }
@@ -140,13 +157,13 @@ export function unverifiableStatements(
   prUrl: string,
   kind: Unverifiable,
   note: string,
-  now: Date
+  now: Date,
 ): D1PreparedStatement[] {
   return [
     db
       .prepare(
         `UPDATE job_outcome_prs SET unverifiable = ?3, unverifiable_note = ?4, unverifiable_at = ?5
-         WHERE job_id = ?1 AND pr_url = ?2 AND unverifiable IS NULL`
+         WHERE job_id = ?1 AND pr_url = ?2 AND unverifiable IS NULL`,
       )
       .bind(jobId, prUrl, kind, note, now.toISOString()),
     recountStatement(db, jobId),
@@ -157,7 +174,9 @@ export function unverifiableStatements(
 // which is UTC) as milliseconds, or NaN.
 function instant(t: string | null | undefined): number {
   if (!t) return Number.NaN;
-  const iso = /^\d{4}-\d\d-\d\d \d/.test(t) ? `${t.replace(" ", "T")}${/(Z|[+-]\d\d:?\d\d)$/.test(t) ? "" : "Z"}` : t;
+  const iso = /^\d{4}-\d\d-\d\d \d/.test(t)
+    ? `${t.replace(" ", "T")}${/(Z|[+-]\d\d:?\d\d)$/.test(t) ? "" : "Z"}`
+    : t;
   return Date.parse(iso);
 }
 
@@ -168,19 +187,33 @@ async function repoCreatedAt(env: Env, namespace: string, prUrl: string): Promis
   if (!parsed) return null;
   try {
     const resolved = await resolveRepo(env, namespace, `${parsed.owner}/${parsed.repo}`);
-    const resp = await ghFetch(env, resolved.owner, resolved.repo, `/repos/${resolved.owner}/${resolved.repo}`);
+    const resp = await ghFetch(
+      env,
+      resolved.owner,
+      resolved.repo,
+      `/repos/${resolved.owner}/${resolved.repo}`,
+    );
     if (!resp.ok) return null;
     const body = (await resp.json()) as { created_at?: unknown };
     return typeof body.created_at === "string" ? body.created_at : null;
   } catch (err) {
     // A read that could not run leaves the unpinned row as it was, never pinned to a
     // pull request nobody checked; the reason is logged, not swallowed.
-    logEvent("OUTCOME_PRS_REPO_UNREADABLE", { message: `outcome-prs: could not read the repository behind ${prUrl}: ${err instanceof Error ? err.message : String(err)}` }, { level: "warn" });
+    logEvent(
+      "OUTCOME_PRS_REPO_UNREADABLE",
+      {
+        message: `outcome-prs: could not read the repository behind ${prUrl}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "warn" },
+    );
     return null;
   }
 }
 
-type Decision = { kind: "verify"; pin?: PrIdentity } | { kind: "mark"; why: Unverifiable; note: string } | { kind: "leave" };
+type Decision =
+  | { kind: "verify"; pin?: PrIdentity }
+  | { kind: "mark"; why: Unverifiable; note: string }
+  | { kind: "leave" };
 
 /**
  * Whether the pull request GitHub answered with is the one a row named. answered is
@@ -198,7 +231,7 @@ function decide(
   row: { pr_node_id: string | null; named_at: string | null },
   answered: PrIdentity | null,
   repoCreated: string | null,
-  prUrl: string
+  prUrl: string,
 ): Decision {
   if (row.pr_node_id) {
     if (!answered?.node_id) return { kind: "leave" };
@@ -243,27 +276,35 @@ export async function reverifyPr(
   env: Env,
   namespace: string,
   prUrl: string,
-  now: Date
+  now: Date,
 ): Promise<ReverifyOutcome[]> {
   // named_at is when the outcome was recorded, which is when the driver named the pull
   // request; a row the sweep seeded later carries its own, later, recorded_at.
   const rows = await env.DB.prepare(
     `SELECT p.job_id, p.merged, p.pr_node_id, COALESCE(o.recorded_at, p.recorded_at) AS named_at
      FROM job_outcome_prs p LEFT JOIN job_outcomes o ON o.job_id = p.job_id
-     WHERE p.pr_url = ?1 AND p.unverifiable IS NULL`
+     WHERE p.pr_url = ?1 AND p.unverifiable IS NULL`,
   )
     .bind(prUrl)
-    .all<{ job_id: string; merged: number | null; pr_node_id: string | null; named_at: string | null }>();
+    .all<{
+      job_id: string;
+      merged: number | null;
+      pr_node_id: string | null;
+      named_at: string | null;
+    }>();
   const named = rows.results ?? [];
   if (named.length === 0) return [];
 
   // A failed read of the pull request writes no merge state; only a row whose
   // repository was recreated can still be decided, since that needs no pull request.
   const facts = await prFacts(env, namespace, prUrl);
-  const answered: PrIdentity | null = typeof facts === "string" ? null : { node_id: facts.node_id, created_at: facts.created_at };
+  const answered: PrIdentity | null =
+    typeof facts === "string" ? null : { node_id: facts.node_id, created_at: facts.created_at };
 
   // Read once, and only when some row has nothing pinned to compare against.
-  const repoCreated = named.some((r) => !r.pr_node_id) ? await repoCreatedAt(env, namespace, prUrl) : null;
+  const repoCreated = named.some((r) => !r.pr_node_id)
+    ? await repoCreatedAt(env, namespace, prUrl)
+    : null;
 
   const merged = typeof facts !== "string" && facts.merged === true;
   const out: ReverifyOutcome[] = [];
@@ -271,12 +312,19 @@ export async function reverifyPr(
     const decision = decide(row, answered, repoCreated, prUrl);
     if (decision.kind === "leave") continue;
     if (decision.kind === "mark") {
-      await env.DB.batch(unverifiableStatements(env.DB, row.job_id, prUrl, decision.why, decision.note, now));
+      await env.DB.batch(
+        unverifiableStatements(env.DB, row.job_id, prUrl, decision.why, decision.note, now),
+      );
       continue;
     }
     const before = row.merged;
     await env.DB.batch(reverifyStatements(env.DB, row.job_id, prUrl, merged, now, decision.pin));
-    out.push({ job_id: row.job_id, pr_url: prUrl, merged, changed: before === null || before !== (merged ? 1 : 0) });
+    out.push({
+      job_id: row.job_id,
+      pr_url: prUrl,
+      merged,
+      changed: before === null || before !== (merged ? 1 : 0),
+    });
   }
   return out;
 }
@@ -287,7 +335,7 @@ export async function reverifyPr(
 export async function dueForReverify(
   env: Env,
   now: Date,
-  limit = REVERIFY_PER_SWEEP
+  limit = REVERIFY_PER_SWEEP,
 ): Promise<Array<{ job_id: string; pr_url: string; namespace: string }>> {
   const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * DAY_MS).toISOString();
   // A superseded job is skipped here and in the seed: no work was done on it.
@@ -300,7 +348,7 @@ export async function dueForReverify(
        AND o.recorded_at >= ?1
        AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = p.job_id AND j.status = 'superseded')
      ORDER BY p.merge_verified_at IS NOT NULL, p.merge_verified_at ASC
-     LIMIT ?2`
+     LIMIT ?2`,
   )
     .bind(cutoff, limit)
     .all<{ job_id: string; pr_url: string; namespace: string }>();
@@ -331,7 +379,11 @@ const BACKFILL_ACTOR = "system:outcome-backfill";
  * Bounded by `limit` per sweep and by the window, like the rest of the sweep. A row whose
  * pull request GitHub will not answer for is re-read each sweep until it leaves the window.
  */
-async function backfillOutcomes(env: Env, now: Date, limit = REVERIFY_PER_SWEEP): Promise<{ backfilled: number; unread: number }> {
+async function backfillOutcomes(
+  env: Env,
+  now: Date,
+  limit = REVERIFY_PER_SWEEP,
+): Promise<{ backfilled: number; unread: number }> {
   const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * DAY_MS).toISOString();
   const candidates = await env.DB.prepare(
     `SELECT o.job_id, o.namespace, j.result_ref, o.prs_opened, o.prs_merged, o.commits, o.files_changed, o.ci_green, o.verified
@@ -342,17 +394,34 @@ async function backfillOutcomes(env: Env, now: Date, limit = REVERIFY_PER_SWEEP)
        AND j.result_ref LIKE 'https://github.com/%/pull/%'
        AND CASE WHEN json_valid(o.verified) THEN json_extract(o.verified, '$.commits') END = 0
      ORDER BY o.recorded_at DESC
-     LIMIT ?2`
+     LIMIT ?2`,
   )
     .bind(cutoff, limit)
-    .all<{ job_id: string; namespace: string; result_ref: string; prs_opened: number | null; prs_merged: number | null; commits: number | null; files_changed: number | null; ci_green: number | null; verified: string }>();
+    .all<{
+      job_id: string;
+      namespace: string;
+      result_ref: string;
+      prs_opened: number | null;
+      prs_merged: number | null;
+      commits: number | null;
+      files_changed: number | null;
+      ci_green: number | null;
+      verified: string;
+    }>();
 
   let backfilled = 0;
   let unread = 0;
   for (const row of candidates.results ?? []) {
-    const joined = await env.DB.prepare("SELECT pr_url FROM job_outcome_prs WHERE job_id = ?1").bind(row.job_id).all<{ pr_url: string }>();
+    const joined = await env.DB.prepare("SELECT pr_url FROM job_outcome_prs WHERE job_id = ?1")
+      .bind(row.job_id)
+      .all<{ pr_url: string }>();
     const named = (joined.results ?? []).map((r) => r.pr_url);
-    const verdict = await verifyEvidence(env, row.namespace, named.length > 0 ? { prs: named } : undefined, row.result_ref);
+    const verdict = await verifyEvidence(
+      env,
+      row.namespace,
+      named.length > 0 ? { prs: named } : undefined,
+      row.result_ref,
+    );
     if (!verdict.verified.commits) {
       unread += 1;
       continue;
@@ -362,14 +431,43 @@ async function backfillOutcomes(env: Env, now: Date, limit = REVERIFY_PER_SWEEP)
       ...outcomePrStatements(env.DB, row.job_id, urls, verdict.pr_states, now, verdict.pr_identity),
       env.DB.prepare(
         `UPDATE job_outcomes SET prs_opened = ?2, prs_merged = ?3, commits = ?4, files_changed = ?5, ci_green = ?6, verified = ?7
-         WHERE job_id = ?1 AND CASE WHEN json_valid(verified) THEN json_extract(verified, '$.commits') END = 0`
-      ).bind(row.job_id, verdict.prs_opened, verdict.prs_merged, verdict.commits, verdict.files_changed, verdict.ci_green, JSON.stringify(verdict.verified)),
-      auditStatement(env.DB, BACKFILL_ACTOR, "outcome-backfilled", row.namespace, `jobs/${row.job_id}.md`, {
-        job_id: row.job_id,
-        urls,
-        before: { prs_opened: row.prs_opened, prs_merged: row.prs_merged, commits: row.commits, files_changed: row.files_changed, ci_green: row.ci_green, verified: row.verified },
-        after: { prs_opened: verdict.prs_opened, prs_merged: verdict.prs_merged, commits: verdict.commits, files_changed: verdict.files_changed, ci_green: verdict.ci_green, verified: verdict.verified },
-      }),
+         WHERE job_id = ?1 AND CASE WHEN json_valid(verified) THEN json_extract(verified, '$.commits') END = 0`,
+      ).bind(
+        row.job_id,
+        verdict.prs_opened,
+        verdict.prs_merged,
+        verdict.commits,
+        verdict.files_changed,
+        verdict.ci_green,
+        JSON.stringify(verdict.verified),
+      ),
+      auditStatement(
+        env.DB,
+        BACKFILL_ACTOR,
+        "outcome-backfilled",
+        row.namespace,
+        `jobs/${row.job_id}.md`,
+        {
+          job_id: row.job_id,
+          urls,
+          before: {
+            prs_opened: row.prs_opened,
+            prs_merged: row.prs_merged,
+            commits: row.commits,
+            files_changed: row.files_changed,
+            ci_green: row.ci_green,
+            verified: row.verified,
+          },
+          after: {
+            prs_opened: verdict.prs_opened,
+            prs_merged: verdict.prs_merged,
+            commits: verdict.commits,
+            files_changed: verdict.files_changed,
+            ci_green: verdict.ci_green,
+            verified: verdict.verified,
+          },
+        },
+      ),
     ]);
     backfilled += 1;
   }
@@ -381,7 +479,11 @@ async function backfillOutcomes(env: Env, now: Date, limit = REVERIFY_PER_SWEEP)
  * due. Older rows name their pull requests only in result_ref and the summary, so the
  * seed reads those. Every seeded URL is verified against GitHub before it is counted.
  */
-export async function reverifySweep(env: Env, now: Date, limit = REVERIFY_PER_SWEEP): Promise<SweepReport> {
+export async function reverifySweep(
+  env: Env,
+  now: Date,
+  limit = REVERIFY_PER_SWEEP,
+): Promise<SweepReport> {
   const cutoff = new Date(now.getTime() - REVERIFY_WINDOW_DAYS * DAY_MS).toISOString();
   // First, so a row it corrects gets its join rows with merge state before the seed below
   // would give it empty ones.
@@ -394,10 +496,15 @@ export async function reverifySweep(env: Env, now: Date, limit = REVERIFY_PER_SW
        AND o.recorded_at >= ?1
        AND j.status <> 'superseded'
        AND NOT EXISTS (SELECT 1 FROM job_outcome_prs p WHERE p.job_id = o.job_id)
-     LIMIT ?2`
+     LIMIT ?2`,
   )
     .bind(cutoff, limit)
-    .all<{ job_id: string; namespace: string; result_ref: string | null; result_summary: string | null }>();
+    .all<{
+      job_id: string;
+      namespace: string;
+      result_ref: string | null;
+      result_summary: string | null;
+    }>();
 
   let seeded = 0;
   for (const row of unseeded.results ?? []) {

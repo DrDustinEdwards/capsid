@@ -76,7 +76,11 @@ export interface ReleaseReaders {
   tags(repo: string): Promise<string[]>;
   /** The commits on `branch` that touched package.json, newest first, at most `limit`;
    *  complete when fewer came back, so the file's whole history was read. */
-  manifestCommits(repo: string, branch: string, limit: number): Promise<{ shas: string[]; complete: boolean }>;
+  manifestCommits(
+    repo: string,
+    branch: string,
+    limit: number,
+  ): Promise<{ shas: string[]; complete: boolean }>;
   /** The root package.json's version at a commit. */
   versionAt(repo: string, sha: string): Promise<string | null>;
   /** CHANGELOG.md at a commit, or null when there is none. */
@@ -91,7 +95,11 @@ export interface ReleaseReaders {
  * each with the version it carries: the oldest of the leading run that carries it. Null
  * when the newest does not carry it, or the run reaches the end of an incomplete read.
  */
-export function versionCommit(history: ReadonlyArray<{ sha: string; version: string | null }>, version: string, complete: boolean): string | null {
+export function versionCommit(
+  history: ReadonlyArray<{ sha: string; version: string | null }>,
+  version: string,
+  complete: boolean,
+): string | null {
   if (history.length === 0 || history[0].version !== version) return null;
   let i = 0;
   while (i + 1 < history.length && history[i + 1].version === version) i++;
@@ -100,7 +108,10 @@ export function versionCommit(history: ReadonlyArray<{ sha: string; version: str
 }
 
 /** The release-tag rule over every shared package, how many were read, and how many tagged. */
-export async function gatherReleaseItems(env: Env, readers: ReleaseReaders): Promise<{ items: MaintenanceItem[]; read: number; tagged: number }> {
+export async function gatherReleaseItems(
+  env: Env,
+  readers: ReleaseReaders,
+): Promise<{ items: MaintenanceItem[]; read: number; tagged: number }> {
   const items: MaintenanceItem[] = [];
   let read = 0;
   let tagged = 0;
@@ -111,7 +122,16 @@ export async function gatherReleaseItems(env: Env, readers: ReleaseReaders): Pro
     on = (await env.APP_KV.get(RELEASE_TAGS_SWITCH_KEY)) !== "off";
     packages = await readers.packages();
   } catch (err) {
-    return { items: [notChecked("capsid", `the switch or the shared packages could not be read: ${err instanceof Error ? err.message : String(err)}`)], read, tagged };
+    return {
+      items: [
+        notChecked(
+          "capsid",
+          `the switch or the shared packages could not be read: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      ],
+      read,
+      tagged,
+    };
   }
 
   for (const pkg of packages) {
@@ -125,20 +145,41 @@ export async function gatherReleaseItems(env: Env, readers: ReleaseReaders): Pro
       read++;
       if (decision.kind === "tagged") continue;
       if (decision.kind === "not-a-release") {
-        if (decision.version !== null) items.push({ rule: "release-untagged", namespace, job: null, line: `${repo} is at version ${decision.version}, which is not a plain x.y.z release, so the pass does not tag it: tag it by hand if it is one.` });
+        if (decision.version !== null)
+          items.push({
+            rule: "release-untagged",
+            namespace,
+            job: null,
+            line: `${repo} is at version ${decision.version}, which is not a plain x.y.z release, so the pass does not tag it: tag it by hand if it is one.`,
+          });
         continue;
       }
       if (decision.kind === "backwards") {
-        items.push({ rule: "release-backwards", namespace, job: null, line: `${repo} is at version ${head.version} on ${head.branch}, below its newest tag ${decision.newest}, so ${decision.tag} was not made: raise the version past ${decision.newest}.` });
+        items.push({
+          rule: "release-backwards",
+          namespace,
+          job: null,
+          line: `${repo} is at version ${head.version} on ${head.branch}, below its newest tag ${decision.newest}, so ${decision.tag} was not made: raise the version past ${decision.newest}.`,
+        });
         continue;
       }
       tag = decision.tag;
       if (!on) {
-        items.push({ rule: "release-untagged", namespace, job: null, line: `${repo} is at version ${head.version} with no tag; the auto-tag is off (${RELEASE_TAGS_SWITCH_KEY}), so ${tag} was not made.` });
+        items.push({
+          rule: "release-untagged",
+          namespace,
+          job: null,
+          line: `${repo} is at version ${head.version} with no tag; the auto-tag is off (${RELEASE_TAGS_SWITCH_KEY}), so ${tag} was not made.`,
+        });
         continue;
       }
       if (tagged >= RELEASE_TAG_CAP) {
-        items.push({ rule: "release-untagged", namespace, job: null, line: `${repo} is at version ${head.version} with no tag: it waits for the next run (${RELEASE_TAG_CAP} tags are made per run).` });
+        items.push({
+          rule: "release-untagged",
+          namespace,
+          job: null,
+          line: `${repo} is at version ${head.version} with no tag: it waits for the next run (${RELEASE_TAG_CAP} tags are made per run).`,
+        });
         continue;
       }
       const listed = await readers.manifestCommits(repo, head.branch, COMMITS_READ);
@@ -150,20 +191,32 @@ export async function gatherReleaseItems(env: Env, readers: ReleaseReaders): Pro
       }
       const found = versionCommit(history, decision.tag.slice(1), listed.complete);
       if (!found) {
-        items.push({ rule: "release-untagged", namespace, job: null, line: `${repo} is at version ${head.version} with no tag, and the commit that set it was not found in the last ${COMMITS_READ} commits to package.json: tag it by hand.` });
+        items.push({
+          rule: "release-untagged",
+          namespace,
+          job: null,
+          line: `${repo} is at version ${head.version} with no tag, and the commit that set it was not found in the last ${COMMITS_READ} commits to package.json: tag it by hand.`,
+        });
         continue;
       }
       sha = found;
       changelog = await readers.changelog(repo, sha);
     } catch (err) {
-      items.push(notChecked(namespace, `${repo}: ${err instanceof Error ? err.message : String(err)}`));
+      items.push(
+        notChecked(namespace, `${repo}: ${err instanceof Error ? err.message : String(err)}`),
+      );
       continue;
     }
 
     try {
       await readers.tag(repo, tag, sha);
     } catch (err) {
-      items.push(notChecked(namespace, `${repo} ${tag} was not made: ${err instanceof Error ? err.message : String(err)}`));
+      items.push(
+        notChecked(
+          namespace,
+          `${repo} ${tag} was not made: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
       continue;
     }
     tagged++;
@@ -181,15 +234,36 @@ export async function gatherReleaseItems(env: Env, readers: ReleaseReaders): Pro
     // One audit row per tag, written before the next tag. A failed write stops the rule
     // and the pass, as the branch prune's does: the next run finds the tag made and
     // makes no other.
-    await auditStatement(env.DB, SYSTEM_ACTOR, RELEASE_TAG_AUDIT_ACTION, namespace, null, { repo, package: pkg.name, tag, sha, release, release_error: releaseError }).run();
-    const after = release ? ` and its release was published (${release})` : releaseError ? `; its release was not published (${releaseError}): publish it from the tag on GitHub` : ` (no ${CHANGELOG_PATH} section, so no release)`;
-    items.push({ rule: "release-tagged", namespace, job: null, line: `${repo} was tagged ${tag} at ${sha}${after}. Its bump-consumers workflow runs on the tag.` });
+    await auditStatement(env.DB, SYSTEM_ACTOR, RELEASE_TAG_AUDIT_ACTION, namespace, null, {
+      repo,
+      package: pkg.name,
+      tag,
+      sha,
+      release,
+      release_error: releaseError,
+    }).run();
+    const after = release
+      ? ` and its release was published (${release})`
+      : releaseError
+        ? `; its release was not published (${releaseError}): publish it from the tag on GitHub`
+        : ` (no ${CHANGELOG_PATH} section, so no release)`;
+    items.push({
+      rule: "release-tagged",
+      namespace,
+      job: null,
+      line: `${repo} was tagged ${tag} at ${sha}${after}. Its bump-consumers workflow runs on the tag.`,
+    });
   }
   return { items, read, tagged };
 }
 
 function notChecked(namespace: string, problem: string): MaintenanceItem {
-  return { rule: "releases-not-checked", namespace, job: null, line: `Releases were not fully checked (${problem}): what is missing is not a clean result.` };
+  return {
+    rule: "releases-not-checked",
+    namespace,
+    job: null,
+    line: `Releases were not fully checked (${problem}): what is missing is not a clean result.`,
+  };
 }
 
 /** The readers on GitHub, through the App: the package's repo by its own name, since a
@@ -211,7 +285,9 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
   return {
     async packages() {
       const config = await readSharedConfig(env.DB);
-      const { results } = await env.DB.prepare("SELECT namespace, repos FROM namespaces LIMIT 200").all<{ namespace: string; repos: string | null }>();
+      const { results } = await env.DB.prepare(
+        "SELECT namespace, repos FROM namespaces LIMIT 200",
+      ).all<{ namespace: string; repos: string | null }>();
       const owner = new Map<string, string>();
       for (const row of results ?? []) {
         let list: unknown;
@@ -223,10 +299,15 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
         if (!Array.isArray(list)) continue;
         for (const entry of list) {
           const r = (entry as { repo?: unknown })?.repo;
-          if (typeof r === "string" && !owner.has(r.toLowerCase())) owner.set(r.toLowerCase(), row.namespace);
+          if (typeof r === "string" && !owner.has(r.toLowerCase()))
+            owner.set(r.toLowerCase(), row.namespace);
         }
       }
-      return config.map((c) => ({ name: c.name, repo: c.repo, namespace: owner.get(c.repo.toLowerCase()) ?? "capsid" }));
+      return config.map((c) => ({
+        name: c.name,
+        repo: c.repo,
+        namespace: owner.get(c.repo.toLowerCase()) ?? "capsid",
+      }));
     },
     async head(repo) {
       const { owner, name } = split(repo);
@@ -234,10 +315,15 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
       return { version: (await readRootManifest(env, repo, branch)).version, branch };
     },
     async tags(repo) {
-      return ((await getJson(repo, `/tags?per_page=${TAGS_PER_PAGE}`)) as Array<{ name: string }>).map((t) => t.name);
+      return (
+        (await getJson(repo, `/tags?per_page=${TAGS_PER_PAGE}`)) as Array<{ name: string }>
+      ).map((t) => t.name);
     },
     async manifestCommits(repo, branch, limit) {
-      const list = (await getJson(repo, `/commits?sha=${encodeURIComponent(branch)}&path=package.json&per_page=${limit}`)) as Array<{ sha: string }>;
+      const list = (await getJson(
+        repo,
+        `/commits?sha=${encodeURIComponent(branch)}&path=package.json&per_page=${limit}`,
+      )) as Array<{ sha: string }>;
       return { shas: list.map((c) => c.sha), complete: list.length < limit };
     },
     async versionAt(repo, sha) {
@@ -245,7 +331,12 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
     },
     async changelog(repo, sha) {
       const { owner, name } = split(repo);
-      const resp = await ghFetch(env, owner, name, `/repos/${owner}/${name}/contents/${CHANGELOG_PATH}?ref=${encodeURIComponent(sha)}`);
+      const resp = await ghFetch(
+        env,
+        owner,
+        name,
+        `/repos/${owner}/${name}/contents/${CHANGELOG_PATH}?ref=${encodeURIComponent(sha)}`,
+      );
       if (resp.status === 404) {
         await resp.body?.cancel();
         return null;
@@ -255,7 +346,9 @@ export function githubReleaseReaders(env: Env): ReleaseReaders {
         throw new Error(`GitHub answered ${resp.status} for ${repo}'s ${CHANGELOG_PATH}`);
       }
       const data = (await resp.json()) as { content?: unknown; encoding?: unknown };
-      return data.encoding === "base64" && typeof data.content === "string" ? decodeBase64(data.content) : null;
+      return data.encoding === "base64" && typeof data.content === "string"
+        ? decodeBase64(data.content)
+        : null;
     },
     async tag(repo, tag, sha) {
       const { owner, name } = split(repo);
