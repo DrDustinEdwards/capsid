@@ -288,16 +288,6 @@ export interface OpsMergeSafety {
 // units: the merge units ('<namespace>/<path class>') the signed policy promotes to auto.
 type OpsMergePolicy = { loads: true; version: string; enabled: boolean; units: string[] } | { loads: false; reason: string };
 
-// The merge units' state (src/merge-units.ts): those suspended after a rollback of an unattended
-// merge, and the promote and demote proposals of the units tick's last report. The Portal's
-// Merge units panel offers each its control (unit_resume, sign_policy_change).
-export interface OpsMergeUnits {
-  // When the units tick last judged the evidence, or null before its first report.
-  generated: string | null;
-  suspended: Array<{ unit: string; since: string; reason: string }>;
-  proposals: Array<{ kind: "promote" | "demote"; unit: string; title: string }>;
-}
-
 export interface OpsLive {
   generated: string;
   // Every open job, and every job that ended in the last 24 hours.
@@ -312,8 +302,6 @@ export interface OpsLive {
   // Whether the signed auto-merge policy loads as the tick loads it (loadMergePolicy), and
   // if not why, so the Portal's policy panel can say so beside its sign-from-repo button.
   merge_policy: OpsMergePolicy;
-  // The merge units: suspended ones and proposals. One or two KV gets.
-  merge_units: OpsMergeUnits;
   overnight: OpsOvernight;
   // Sessions with no SessionEnd whose last event was in the last 24 hours, newest
   // first, at most 50.

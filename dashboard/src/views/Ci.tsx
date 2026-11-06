@@ -10,7 +10,8 @@ import { Panel } from "capsomer/react/panel";
 import { Empty } from "capsomer/react/empty";
 import { approveRequest, canApprove, closeRequest, prAnchor, prName, prUrl } from "../lib/pr-actions";
 import { NoSnapshot, PageHead } from "./shared";
-import type { OpsAwaitingSeat, OpsMergeUnits } from "../types";
+import type { OpsAwaitingSeat, PortalMergeUnits } from "../types";
+import { LIVE, fetchMergeUnits, useAnswer } from "../lib/api";
 
 function prLabel(url: string): string {
   const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
@@ -251,7 +252,7 @@ export function PullRequests() {
 // suspension is unit_resume, with a reason. docs/autonomy.md, "Earned promotion and demotion".
 type UnitRow = { unit: string; state: "auto" | "suspended" | "promote" | "demote"; why: string };
 
-function unitRows(promoted: readonly string[], units: OpsMergeUnits): UnitRow[] {
+function unitRows(promoted: readonly string[], units: PortalMergeUnits): UnitRow[] {
   const rows = new Map<string, UnitRow>();
   for (const u of promoted) rows.set(u, { unit: u, state: "auto", why: "" });
   for (const p of units.proposals) {
@@ -275,8 +276,17 @@ const UNIT_STATE: Record<UnitRow["state"], { kind: Kind; label: string }> = {
 
 function MergeUnits() {
   const { feed, confirm } = useApp();
-  const { merge_policy: policy, merge_units: units } = feed.live;
-  if (!policy.loads || !units) return null;
+  // Its own read (GET /portal/api/merge-units), again with each feed, so a lift drops its row.
+  const load = useAnswer([LIVE, "merge-units"], fetchMergeUnits);
+  const policy = feed.live.merge_policy;
+  const units = load.data;
+  if (!policy.loads) return null;
+  if (!units)
+    return (
+      <Panel title="Merge units" id="merge-units">
+        <p className={load.error ? "prewrap" : "muted"}>{load.error ? `The merge units could not be read: ${load.error}` : "Reading the merge units..."}</p>
+      </Panel>
+    );
   const rows = unitRows(policy.units, units);
   const next = String(Number(policy.version) + 1);
   const sign = (change: "promote" | "demote", unit: string) =>

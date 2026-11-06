@@ -7,7 +7,7 @@
 //
 // It also mocks the Portal's controls (preview and perform), GET
 // /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims, GET
-// /portal/api/stale, GET /portal/api/maintenance, GET and POST /portal/api/push and POST
+// /portal/api/stale, GET /portal/api/merge-units, GET /portal/api/maintenance, GET and POST /portal/api/push and POST
 // /portal/api/sign-out, with
 // the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
@@ -38,6 +38,7 @@ import type {
   LibraryEntry,
   PortalPackageHistory,
   PortalStale,
+  PortalMergeUnits,
   PortalPush,
   PortalPlan,
   PortalDigest,
@@ -513,12 +514,6 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   out.live.packages = st.packages.map((p) => ({ ...p }));
   out.live.awaiting_seat = out.live.awaiting_seat.filter((a) => !st.closedPrs.has(`${a.repo}#${a.number}`));
   if (st.policy && out.live.merge_policy.loads) out.live.merge_policy = { ...out.live.merge_policy, ...st.policy };
-  const units = out.live.merge_policy.loads ? out.live.merge_policy.units : [];
-  out.live.merge_units = {
-    ...out.live.merge_units,
-    suspended: out.live.merge_units.suspended.filter((u) => !st.unitsLifted.has(u.unit)),
-    proposals: out.live.merge_units.proposals.filter((p) => (p.kind === "promote" ? !units.includes(p.unit) : units.includes(p.unit))),
-  };
   if (out.live.merge_safety) out.live.merge_safety = { ...out.live.merge_safety, namespaces: out.live.merge_safety.namespaces.map((n) => (st.automergeResumed.has(n.namespace) ? { ...n, paused: null } : n)) };
   out.refresh_allowed_at = nextRefresh > mockNow() ? new Date(nextRefresh).toISOString() : null;
   return out;
@@ -585,7 +580,7 @@ function need(params: Record<string, string>, key: string, what: string): string
 
 // What an action would do against the feed as it stands. Throws a Refusal for a
 // request the Worker would refuse.
-function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>): { summary: string; done: string; changes: string[]; apply: (st: MockState) => void } {
+function plan(f: OpsFeed, st: MockState, action: PortalAction, params: Record<string, string>): { summary: string; done: string; changes: string[]; apply: (st: MockState) => void } {
   checkSwitch(action, params);
   const now = new Date(mockNow()).toISOString();
   const job = () => {
@@ -889,7 +884,7 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
     case "unit_resume": {
       const unit = need(params, "unit", "The unit");
       need(params, "reason", "The reason");
-      const s = f.live.merge_units.suspended.find((u) => u.unit === unit);
+      const s = mergeUnits(f, st).suspended.find((u) => u.unit === unit);
       if (!s) throw new Refusal(400, `${unit} is not suspended, so there is nothing to lift.`);
       return {
         summary: `Lift the suspension of the merge unit ${unit}.`,
@@ -912,6 +907,23 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
       };
     }
   }
+}
+
+// GET /portal/api/merge-units: one suspended unit (also proposed for removal) and one ready to
+// promote, as the units tick would report them; a lift or a signed change drops its row.
+function mergeUnits(f: OpsFeed, st: MockState): PortalMergeUnits {
+  const units = f.live.merge_policy.loads ? f.live.merge_policy.units : [];
+  const generated = new Date(Date.parse(f.live.generated) - 30 * 60_000).toISOString();
+  const suspended = [{ unit: "sample-c/docs", since: new Date(Date.parse(f.live.generated) - 30 * 3_600_000).toISOString(), reason: "example-org/sample-c#12 merged unattended and was rolled back (run 4410)" }];
+  const proposals: PortalMergeUnits["proposals"] = [
+    { kind: "demote", unit: "sample-c/docs", title: "Remove sample-c docs from auto: example-org/sample-c#12 merged unattended and was rolled back" },
+    { kind: "promote", unit: "sample-b/tests", title: "Promote sample-b tests to auto: 23 approved over 31 days, 0 rollbacks" },
+  ];
+  return {
+    generated,
+    suspended: suspended.filter((u) => !st.unitsLifted.has(u.unit)),
+    proposals: proposals.filter((p) => (p.kind === "promote" ? !units.includes(p.unit) : units.includes(p.unit))),
+  };
 }
 
 // GET /portal/api/stale, from the feed's own jobs so each row opens a drawer: the first
@@ -1363,7 +1375,7 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
         const a = b.action as PortalAction;
         if (!ACTIONS.includes(a)) throw new Refusal(400, `Unknown action: ${String(b.action)}.`);
         const params = b.params && typeof b.params === "object" ? (b.params as Record<string, string>) : {};
-        const p = plan(f, a, params);
+        const p = plan(f, st, a, params);
         const token = randomUUID();
         const expires = mockNow() + TOKEN_MS;
         st.tokens.set(token, { action: a, params, expires });
@@ -1379,7 +1391,7 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
         throw new Refusal(410, "This confirmation expired. Preview the action again.");
       }
       st.tokens.delete(token);
-      const p = plan(f, t.action, t.params);
+      const p = plan(f, st, t.action, t.params);
       p.apply(st);
       const ns = t.params.namespace ?? f.live.jobs.find((j) => j.id === t.params.id)?.namespace ?? null;
       const { reason, ...named } = t.params;
@@ -1404,7 +1416,7 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
   return (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname.startsWith("/api/") ? `/portal${url.pathname}` : url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/not-found", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/merge-units", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/not-found", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1424,6 +1436,10 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
         if (path === "/portal/api/stale") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, stale(feed(nextRefresh, st)));
+        }
+        if (path === "/portal/api/merge-units") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          return send(res, 200, mergeUnits(feed(nextRefresh, st), st));
         }
         if (path === "/portal/api/plan") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });

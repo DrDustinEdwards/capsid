@@ -51,6 +51,7 @@ import { handlePortalCallback, PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX,
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
 import { handlePortalStale, PORTAL_STALE_PATH } from "./portal-stale";
 import { handlePortalDigest, handlePortalPlan, PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "./portal-overnight";
+import { handlePortalMergeUnits, PORTAL_MERGE_UNITS_PATH } from "./portal-merge-units";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "./portal-maintenance";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "./portal-convergence";
 import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "./push";
@@ -288,6 +289,7 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === PORTAL_CLAIMS_PATH && request.method === "GET") return handlePortalClaims(request, env);
   if (url.pathname === PORTAL_STALE_PATH && request.method === "GET") return handlePortalStale(request, env);
   if (url.pathname === PORTAL_PLAN_PATH && request.method === "GET") return handlePortalPlan(request, env);
+  if (url.pathname === PORTAL_MERGE_UNITS_PATH && request.method === "GET") return handlePortalMergeUnits(request, env);
   if (url.pathname === PORTAL_DIGEST_PATH && request.method === "GET") return handlePortalDigest(request, env);
   if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET") return handlePortalMaintenance(request, env);
   if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET") return handlePortalConvergence(request, env);

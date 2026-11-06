@@ -1780,14 +1780,6 @@
       }
     ],
     "merge_policy": { "loads": true, "version": "7", "enabled": true, "units": ["sample-a/docs", "sample-a/tests", "sample-c/docs"] },
-    "merge_units": {
-      "generated": "2026-09-28T11:30:00.000Z",
-      "suspended": [{ "unit": "sample-c/docs", "since": "2026-09-27T09:00:00.000Z", "reason": "example-org/sample-c#12 merged unattended and was rolled back (run 4410)" }],
-      "proposals": [
-        { "kind": "demote", "unit": "sample-c/docs", "title": "Remove sample-c docs from auto: example-org/sample-c#12 merged unattended and was rolled back" },
-        { "kind": "promote", "unit": "sample-b/tests", "title": "Promote sample-b tests to auto: 23 approved over 31 days, 0 rollbacks" }
-      ]
-    },
     "merge_safety": {
       "generated": "2026-09-28T12:00:00.000Z",
       "namespaces": [
