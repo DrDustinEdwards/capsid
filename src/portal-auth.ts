@@ -169,7 +169,8 @@ export async function logPortalSignOut(email: string): Promise<void> {
  * site-runtime's adminIdle around the Portal's routes, as the sites use withAdminIdle
  * around /admin. The Portal's sign-in is not an Access token on the request, so it
  * passes adminIdle its own session: `id` a server-keyed digest of the session id, so
- * the last-request cookie cannot be made without COOKIE_ENCRYPTION_KEY, and
+ * the last-request cookie cannot be made without COOKIE_ENCRYPTION_KEY (which also keys
+ * its signature, as adminIdle's `secret`), and
  * `signedInAt` the sign-in time. The app's polling fetches send
  * X-Background (BACKGROUND_HEADER), which adminIdle checks but does not count as a
  * request, so an open tab left alone goes idle. With no session it goes straight to
@@ -179,7 +180,10 @@ export async function withPortalIdle(request: Request, env: Env, handle: () => P
   const session = await verifiedSession(request, env);
   if (!session) return handle();
   const id = await hmacHex(env.COOKIE_ENCRYPTION_KEY, `portal-idle.${session.sid}`);
-  const gate = await adminIdle(request, { session: { id, signedInAt: session.at }, now: now.getTime() });
+  // The seen cookie's key, derived from COOKIE_ENCRYPTION_KEY under its own label (HMAC as the
+  // KDF, NIST SP 800-108r1), so the Portal needs no second secret and one key does not serve two uses.
+  const secret = await hmacHex(env.COOKIE_ENCRYPTION_KEY, "admin-idle-secret");
+  const gate = await adminIdle(request, { session: { id, signedInAt: session.at }, now: now.getTime(), secret });
   if (gate.idle) {
     await endPortalSession(env, session.sid, now);
     logEvent(OWASP_EVENTS.sessionExpired, { message: "Portal session ended after an idle hour", app: "portal", reason: "idle", email_key: await emailKey("email", session.email) });
