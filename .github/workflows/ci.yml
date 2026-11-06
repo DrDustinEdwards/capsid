@@ -120,6 +120,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Format check
+        run: npm run format:check
+
       - name: Lint dead exports and doc drift
         run: npm run lint:repo
 
