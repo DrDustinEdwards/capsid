@@ -543,7 +543,7 @@ export function App() {
       app="portal"
       letterhead
       viewSite="https://capsid.dustinedwards.info"
-      page={signedOut ? "Signed out" : VIEWS.find((v) => v.id === route.view)?.label}
+      page={signedOut ? "Signed out" : siteName || VIEWS.find((v) => v.id === route.view)?.label}
       nav={menu}
       tabs={tabEntries}
       navLabel="Sections"

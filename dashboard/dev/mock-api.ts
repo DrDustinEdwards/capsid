@@ -180,8 +180,8 @@ function completeness() {
   return { read: new Date(mockNow() - 5 * 60_000).toISOString(), as_of: new Date(mockNow() - 6 * 3600_000).toISOString(), error: null, finished: false, public_token: true, sites, areas };
 }
 
-// The Workers tab's answer (src/system-resources.ts), in sample names: two Workers of one
-// system sharing a database, a preview-only bucket, one Worker no system lists, and a bucket
+// The resources read (src/system-resources.ts), in sample names: two Workers of one system
+// sharing a database (sample-a is Sample A's own script, so its Setup tab shows both), a preview-only bucket, one Worker no system lists, and a bucket
 // nothing binds.
 function resources() {
   const read_at = new Date(mockNow() - 5 * 3600_000).toISOString();
@@ -190,16 +190,16 @@ function resources() {
     version: 1,
     read_at,
     workers: [
-      { script: "sample-web", system: "sample", error: null, secrets: ["SAMPLE_API_KEY", "SESSION_SECRET"], vars: ["DEPLOY_SHA"], d1: [{ binding: "DB", database: "sample" }], kv: [{ binding: "APP_KV", namespace: "sample-app-kv" }], r2: [{ binding: "MEDIA", bucket: "sample-media" }], ...none, durable_objects: [{ binding: "RATE_LIMITER", class: "RateLimiter", script: null }], previews: [{ binding: "MEDIA", store: "sample-preview-media" }] },
-      { script: "sample-admin", system: "sample", error: null, secrets: ["OPERATOR_TOKEN"], vars: [], d1: [{ binding: "DB", database: "sample" }], kv: [], r2: [], ...none, services: [{ binding: "SITE", service: "sample-web" }] },
+      { script: "sample-a", system: "sample", error: null, secrets: ["SAMPLE_API_KEY", "SESSION_SECRET"], vars: ["DEPLOY_SHA"], d1: [{ binding: "DB", database: "sample" }], kv: [{ binding: "APP_KV", namespace: "sample-app-kv" }], r2: [{ binding: "MEDIA", bucket: "sample-media" }], ...none, durable_objects: [{ binding: "RATE_LIMITER", class: "RateLimiter", script: null }], previews: [{ binding: "MEDIA", store: "sample-preview-media" }] },
+      { script: "sample-admin", system: "sample", error: null, secrets: ["OPERATOR_TOKEN"], vars: [], d1: [{ binding: "DB", database: "sample" }], kv: [], r2: [], ...none, services: [{ binding: "SITE", service: "sample-a" }] },
       { script: "sample-old", system: null, error: null, secrets: [], vars: ["DEPLOY_SHA"], d1: [], kv: [], r2: [], ...none },
     ],
-    databases: [{ name: "sample", tables: ["posts", "posts_fts", "media", "cron_runs"], tables_error: null, used_by: [{ script: "sample-web", system: "sample", binding: "DB" }, { script: "sample-admin", system: "sample", binding: "DB" }] }],
-    kv_namespaces: [{ title: "sample-app-kv", used_by: [{ script: "sample-web", system: "sample", binding: "APP_KV" }] }],
+    databases: [{ name: "sample", tables: ["posts", "posts_fts", "media", "cron_runs"], tables_error: null, used_by: [{ script: "sample-a", system: "sample", binding: "DB" }, { script: "sample-admin", system: "sample", binding: "DB" }] }],
+    kv_namespaces: [{ title: "sample-app-kv", used_by: [{ script: "sample-a", system: "sample", binding: "APP_KV" }] }],
     buckets: [
-      { name: "sample-media", used_by: [{ script: "sample-web", system: "sample", binding: "MEDIA" }] },
+      { name: "sample-media", used_by: [{ script: "sample-a", system: "sample", binding: "MEDIA" }] },
       { name: "sample-old-media", used_by: [] },
-      { name: "sample-preview-media", used_by: [{ script: "sample-web", system: "sample", binding: "MEDIA (preview)" }] },
+      { name: "sample-preview-media", used_by: [{ script: "sample-a", system: "sample", binding: "MEDIA (preview)" }] },
     ],
     problems: [],
   };

@@ -217,6 +217,9 @@ table.brief.workers-stores .st { white-space: normal; }
 .anchors a[aria-current] { color: var(--text); border-bottom-color: var(--accent); }
 :root:has(.anchor-host) { scroll-padding-top: 48px; }
 
+/* a site's own page: its status, address and project under its name */
+.site-lead { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
 /* fleet table */
 .fleet tbody tr { cursor: pointer; }
 .fleet tbody tr:hover { background: var(--raised); }
