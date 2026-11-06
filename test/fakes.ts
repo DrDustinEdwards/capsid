@@ -10,8 +10,22 @@ import { gunzipSync } from "node:zlib";
 import { recordFor, type AgentRecord } from "../src/agent-record.ts";
 import { EXCLUDED as BACKUP_EXCLUDED, TABLES as BACKUP_TABLES } from "../src/backup.ts";
 import { OPEN_JOB_STATUSES, type JobStatus } from "../src/jobs-schema.ts";
-import { REOPEN_QUIET_MS, appendEvidence, type FindingMemory, type FindingRow, type JobEnd } from "../src/watcher-findings.ts";
-import { applyWrite, evalCond, selectRows, sqliteNow, type Row, type TableSpec, type WriteResult } from "./fake-sql.ts";
+import {
+  REOPEN_QUIET_MS,
+  appendEvidence,
+  type FindingMemory,
+  type FindingRow,
+  type JobEnd,
+} from "../src/watcher-findings.ts";
+import {
+  applyWrite,
+  evalCond,
+  selectRows,
+  sqliteNow,
+  type Row,
+  type TableSpec,
+  type WriteResult,
+} from "./fake-sql.ts";
 
 // improve_jti, the replay cache the signed endpoints claim nonces in (migrations/0004,
 // kept when the improve loop's other tables were dropped in 0048). The backup dumps it
@@ -23,14 +37,20 @@ function isLoopTableStatement(sql: string): boolean {
   return /\bimprove_jti\b/i.test(sql);
 }
 
-function loopTableExec(sql: string, params: unknown[], rows: Record<LoopTable, Array<Record<string, unknown>>>): LoopTableAnswer {
+function loopTableExec(
+  sql: string,
+  params: unknown[],
+  rows: Record<LoopTable, Array<Record<string, unknown>>>,
+): LoopTableAnswer {
   const text = sql.replace(/\s+/g, " ").trim();
-  if (/^SELECT \* FROM "?improve_jti"?$/i.test(text)) return { handled: true, results: rows.improve_jti };
+  if (/^SELECT \* FROM "?improve_jti"?$/i.test(text))
+    return { handled: true, results: rows.improve_jti };
   // INSERT ... ON CONFLICT DO NOTHING RETURNING. The database decides who claimed the
   // nonce, so the fake models the uniqueness: a row already present returns nothing.
   if (/^INSERT INTO improve_jti/i.test(text)) {
     const [scope, jti] = params;
-    if (rows.improve_jti.some((r) => r.scope === scope && r.jti === jti)) return { handled: true, results: [] };
+    if (rows.improve_jti.some((r) => r.scope === scope && r.jti === jti))
+      return { handled: true, results: [] };
     rows.improve_jti.push({ scope, jti, seen_at: sqliteNow() });
     return { handled: true, results: [{ jti }] };
   }
@@ -78,7 +98,8 @@ export function fakeKv(opts: FakeKvOptions = {}): FakeKv {
     get: async (key: string, type?: string) => {
       if (opts.failGet) throw new Error("KV get exploded");
       if (opts.corrupt !== undefined) return opts.corrupt;
-      const raw = store.get(key) ?? (seedToken && key.startsWith("gh:token:") ? "test-token" : undefined);
+      const raw =
+        store.get(key) ?? (seedToken && key.startsWith("gh:token:") ? "test-token" : undefined);
       if (raw === undefined) return null;
       return type === "json" ? JSON.parse(raw) : raw;
     },
@@ -96,13 +117,21 @@ export function fakeKv(opts: FakeKvOptions = {}): FakeKv {
       return { keys: all.map((name) => ({ name })), list_complete: true as const };
     },
   } as unknown as KVNamespace;
-  return { store, puts, deleted, keysUnder: (prefix) => [...store.keys()].filter((k) => k.startsWith(prefix)), kv };
+  return {
+    store,
+    puts,
+    deleted,
+    keysUnder: (prefix) => [...store.keys()].filter((k) => k.startsWith(prefix)),
+    kv,
+  };
 }
 
 // R2
 
 /** The JSON a dump table holds, read the way d1-dump writes it: gzip when the key ends in .gz. */
-export function dumpJson<T = { exported_at: string; table: string; rows: Array<Record<string, unknown>> }>(r2: { objects: Map<string, string | Uint8Array> }, key: string): T {
+export function dumpJson<
+  T = { exported_at: string; table: string; rows: Array<Record<string, unknown>> },
+>(r2: { objects: Map<string, string | Uint8Array> }, key: string): T {
   const value = r2.objects.get(key);
   if (value === undefined) throw new Error(`no object ${key}`);
   return JSON.parse(typeof value === "string" ? value : gunzipSync(value).toString("utf8")) as T;
@@ -135,7 +164,8 @@ export function fakeR2(seed: Record<string, string> = {}): FakeR2 {
       return {
         key,
         text: async () => (typeof value === "string" ? value : new TextDecoder().decode(value)),
-        arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+        arrayBuffer: async () =>
+          bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
       };
     },
     list: async ({ prefix }: { prefix?: string }) => {
@@ -162,7 +192,8 @@ export function fakeR2(seed: Record<string, string> = {}): FakeR2 {
         },
         complete: async (parts: Array<{ partNumber: number }>) => {
           const numbers = parts.map((p) => p.partNumber);
-          if (numbers.some((n, i) => n !== i + 1)) throw new Error(`parts out of order: ${numbers.join(",")}`);
+          if (numbers.some((n, i) => n !== i + 1))
+            throw new Error(`parts out of order: ${numbers.join(",")}`);
           const sizes = numbers.map((n) => uploaded.get(n)?.length ?? -1);
           const head = sizes.slice(0, -1);
           if (head.some((s) => s !== head[0] || s < 5 * 1024 * 1024)) {
@@ -329,14 +360,19 @@ function globMatch(pattern: string, value: string): boolean {
 
 function guardFires(sql: string, params: unknown[], rows: FakeD1Rows): boolean {
   const flat = sql.replace(/\s+/g, " ");
-  if (!/INSERT INTO document_versions \(document_id, namespace, path\) SELECT NULL/i.test(flat)) return false;
+  if (!/INSERT INTO document_versions \(document_id, namespace, path\) SELECT NULL/i.test(flat))
+    return false;
   // requireJobUnchanged: fires unless the job still has the status, holder and
   // updated_at the caller read. Matched before the documents lookup below, which
   // would find no document named after the job id and fire every time.
   if (/SELECT NULL, 'jobs', \?1/i.test(flat)) {
     const [id, status, claimedBy, updatedAt] = params;
     return !rows.jobs.some(
-      (j) => j.id === id && j.status === status && (j.claimed_by ?? null) === (claimedBy ?? null) && j.updated_at === updatedAt
+      (j) =>
+        j.id === id &&
+        j.status === status &&
+        (j.claimed_by ?? null) === (claimedBy ?? null) &&
+        j.updated_at === updatedAt,
     );
   }
   const [namespace, path] = params as [string, string];
@@ -382,24 +418,49 @@ const DELETE_AUDIT_EDGES =
 function landDeleteAudit(params: unknown[], rows: FakeD1Rows): WriteResult {
   const [actor, namespace, path] = params as [string, string, string];
   const edges = rows.links
-    .filter((l) => (l.from_ns === namespace && l.from_path === path) || (l.to_ns === namespace && l.to_path === path))
-    .map((l) => ({ from_ns: l.from_ns, from_path: l.from_path, type: l.type, to_ns: l.to_ns, to_path: l.to_path }));
+    .filter(
+      (l) =>
+        (l.from_ns === namespace && l.from_path === path) ||
+        (l.to_ns === namespace && l.to_path === path),
+    )
+    .map((l) => ({
+      from_ns: l.from_ns,
+      from_path: l.from_path,
+      type: l.type,
+      to_ns: l.to_ns,
+      to_path: l.to_path,
+    }));
   const auditParams = JSON.stringify({ edges_removed: edges });
   const id = rows.audit_log.reduce((max, a) => Math.max(max, a.id ?? 0), 0) + 1;
-  (rows.audit_log as Row[]).push({ id, actor, action: "delete", namespace, path, params: auditParams, at: sqliteNow() });
+  (rows.audit_log as Row[]).push({
+    id,
+    actor,
+    action: "delete",
+    namespace,
+    path,
+    params: auditParams,
+    at: sqliteNow(),
+  });
   return { changes: 1, returning: [{ params: auditParams }] };
 }
 
 // touchStatement (src/job-touches.ts): waited_ms is a subquery over the latest gate row
 // for the job, resolved here against rows.job_touches in the same order SQLite reads
 // it (by id), so a gate earlier in the same batch counts.
-const TOUCH_INSERT = /^INSERT INTO job_touches \(job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at\) VALUES/i;
+const TOUCH_INSERT =
+  /^INSERT INTO job_touches \(job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at\) VALUES/i;
 
 function landTouch(params: unknown[], rows: FakeD1Rows): WriteResult {
   const [job_id, namespace, kind, actor, actor_kind, detail, at, sinceGate] = params;
   const gates = rows.job_touches.filter((t) => t.job_id === job_id && t.kind === "gate");
-  const latest = gates.reduce<Record<string, unknown> | null>((best, t) => (!best || Number(t.id) > Number(best.id) ? t : best), null);
-  const waited_ms = sinceGate === 1 && latest ? Math.round(Date.parse(String(at)) - Date.parse(String(latest.at))) : null;
+  const latest = gates.reduce<Record<string, unknown> | null>(
+    (best, t) => (!best || Number(t.id) > Number(best.id) ? t : best),
+    null,
+  );
+  const waited_ms =
+    sinceGate === 1 && latest
+      ? Math.round(Date.parse(String(at)) - Date.parse(String(latest.at)))
+      : null;
   const id = rows.job_touches.reduce((max, t) => Math.max(max, Number(t.id ?? 0)), 0) + 1;
   rows.job_touches.push({ id, job_id, namespace, kind, actor, actor_kind, waited_ms, detail, at });
   return { changes: 1, returning: [] };
@@ -426,7 +487,8 @@ const jobDefaults = (): Row => ({
 });
 
 // The table a SELECT reads, from its first FROM.
-const mainTable = (flat: string): string | undefined => /^SELECT .+? FROM (\w+)/is.exec(flat.trim())?.[1];
+const mainTable = (flat: string): string | undefined =>
+  /^SELECT .+? FROM (\w+)/is.exec(flat.trim())?.[1];
 
 // recordFor's and the skills summary's read of job_outcomes, which excludes outcomes
 // whose job was superseded with a NOT EXISTS subquery. The subquery is resolved here
@@ -454,7 +516,11 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     // Seeded rows are copied, because writes land: a fixture array shared between
     // tests would otherwise carry one test's writes into the next.
     versions: (opts.versions ?? []).map((v) => ({ ...v })),
-    namespaces: (opts.namespaces ?? [{ namespace: "capsid", repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) }]).map((n) => ({ ...n })),
+    namespaces: (
+      opts.namespaces ?? [
+        { namespace: "capsid", repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) },
+      ]
+    ).map((n) => ({ ...n })),
     links: (opts.links ?? []).map((l) => ({ ...l })),
     improve_jti: [],
     audit_log: (opts.auditLog ?? []).map((a) => ({ ...a })),
@@ -473,16 +539,57 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       rows: rows.documents as unknown as Row[],
       unique: [["namespace", "path"]],
       autoId: true,
-      defaults: () => ({ title: null, body: null, type: "note", status: "published", tags: null, frontmatter: null, publish_at: null, created_at: sqliteNow(), updated_at: sqliteNow() }),
+      defaults: () => ({
+        title: null,
+        body: null,
+        type: "note",
+        status: "published",
+        tags: null,
+        frontmatter: null,
+        publish_at: null,
+        created_at: sqliteNow(),
+        updated_at: sqliteNow(),
+      }),
     },
-    document_versions: { rows: rows.versions as unknown as Row[], unique: [], autoId: true, defaults: () => ({ snapshot_at: sqliteNow() }) },
-    document_links: { rows: rows.links, unique: [["from_ns", "from_path", "type", "to_ns", "to_path"]], autoId: true, defaults: () => ({ created_at: sqliteNow() }) },
-    namespaces: { rows: rows.namespaces as Row[], unique: [["namespace"]], defaults: () => ({ repos: null, created_at: sqliteNow() }) },
-    audit_log: { rows: rows.audit_log as Row[], unique: [], autoId: true, defaults: () => ({ at: sqliteNow() }) },
-    agents: { rows: rows.agents, unique: [["id"], ["name"], ["key_hash"]], defaults: () => ({ created_at: sqliteNow(), revoked_at: null, last_seen: null }) },
+    document_versions: {
+      rows: rows.versions as unknown as Row[],
+      unique: [],
+      autoId: true,
+      defaults: () => ({ snapshot_at: sqliteNow() }),
+    },
+    document_links: {
+      rows: rows.links,
+      unique: [["from_ns", "from_path", "type", "to_ns", "to_path"]],
+      autoId: true,
+      defaults: () => ({ created_at: sqliteNow() }),
+    },
+    namespaces: {
+      rows: rows.namespaces as Row[],
+      unique: [["namespace"]],
+      defaults: () => ({ repos: null, created_at: sqliteNow() }),
+    },
+    audit_log: {
+      rows: rows.audit_log as Row[],
+      unique: [],
+      autoId: true,
+      defaults: () => ({ at: sqliteNow() }),
+    },
+    agents: {
+      rows: rows.agents,
+      unique: [["id"], ["name"], ["key_hash"]],
+      defaults: () => ({ created_at: sqliteNow(), revoked_at: null, last_seen: null }),
+    },
     jobs: { rows: rows.jobs, unique: [["id"]], defaults: jobDefaults },
-    job_outcomes: { rows: rows.job_outcomes, unique: [["job_id"]], defaults: () => ({ recorded_at: sqliteNow() }) },
-    job_outcome_prs: { rows: rows.job_outcome_prs as Row[], unique: [["job_id", "pr_url"]], defaults: () => ({ merged: null, merge_verified_at: null, recorded_at: sqliteNow() }) },
+    job_outcomes: {
+      rows: rows.job_outcomes,
+      unique: [["job_id"]],
+      defaults: () => ({ recorded_at: sqliteNow() }),
+    },
+    job_outcome_prs: {
+      rows: rows.job_outcome_prs as Row[],
+      unique: [["job_id", "pr_url"]],
+      defaults: () => ({ merged: null, merge_verified_at: null, recorded_at: sqliteNow() }),
+    },
     job_claims: { rows: rows.job_claims, unique: [], autoId: true, defaults: () => ({}) },
     job_evaluations: { rows: rows.job_evaluations, unique: [], autoId: true, defaults: () => ({}) },
   };
@@ -510,7 +617,12 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     // post every duplicate.
     if (isJobInsert(flat)) {
       const [, namespace, title] = params as [string, string, string];
-      const taken = rows.jobs.some((j) => j.namespace === namespace && j.title === title && OPEN_JOB_STATUSES.includes(j.status as JobStatus));
+      const taken = rows.jobs.some(
+        (j) =>
+          j.namespace === namespace &&
+          j.title === title &&
+          OPEN_JOB_STATUSES.includes(j.status as JobStatus),
+      );
       if (taken) throw new Error("D1_ERROR: UNIQUE constraint failed: jobs.namespace, jobs.title");
     }
     // evaluationStatements (src/job-claims.ts) names its claim with a scalar subquery,
@@ -519,13 +631,22 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     if (claimRef) {
       const jobId = params[Number(claimRef[1]) - 1];
       const ids = rows.job_claims.filter((c) => c.job_id === jobId).map((c) => Number(c.id));
-      const resolved = flat.replace(claimRef[0], ids.length > 0 ? String(Math.max(...ids)) : "NULL");
+      const resolved = flat.replace(
+        claimRef[0],
+        ids.length > 0 ? String(Math.max(...ids)) : "NULL",
+      );
       const landed = applyWrite(tables, resolved, params);
-      if (!landed) throw new Error(`fake D1: unmodelled write. Model it in test/fakes.ts or test/fake-sql.ts: ${flat}`);
+      if (!landed)
+        throw new Error(
+          `fake D1: unmodelled write. Model it in test/fakes.ts or test/fake-sql.ts: ${flat}`,
+        );
       return landed;
     }
     const result = applyWrite(tables, flat, params);
-    if (!result) throw new Error(`fake D1: unmodelled write. Model it in test/fakes.ts or test/fake-sql.ts: ${flat}`);
+    if (!result)
+      throw new Error(
+        `fake D1: unmodelled write. Model it in test/fakes.ts or test/fake-sql.ts: ${flat}`,
+      );
     return result;
   };
   const isWrite = (sql: string) => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql);
@@ -539,14 +660,25 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       let pool = rows.job_outcomes;
       let text = flat;
       if (NOT_SUPERSEDED.test(text)) {
-        pool = pool.filter((o) => !rows.jobs.some((j) => j.id === o.job_id && j.status === "superseded"));
-        text = text.replace(NOT_SUPERSEDED, (_m, keyword: string) => (keyword.toUpperCase() === "WHERE" ? " WHERE 1 = 1" : ""));
+        pool = pool.filter(
+          (o) => !rows.jobs.some((j) => j.id === o.job_id && j.status === "superseded"),
+        );
+        text = text.replace(NOT_SUPERSEDED, (_m, keyword: string) =>
+          keyword.toUpperCase() === "WHERE" ? " WHERE 1 = 1" : "",
+        );
       }
-      return selectRows(pool, text.replace(/ FROM job_outcomes o\b/i, " FROM job_outcomes"), params);
+      return selectRows(
+        pool,
+        text.replace(/ FROM job_outcomes o\b/i, " FROM job_outcomes"),
+        params,
+      );
     }
-    if (main === "jobs" || main === "job_outcome_prs") return selectRows(tables[main].rows, flat, params);
-    if (main === "job_evaluations" || main === "job_touches") return selectRows(rows[main], flat, params);
-    if (main && tables[main] && /^SELECT COUNT\(\*\) AS n FROM/i.test(flat.trim())) return selectRows(tables[main].rows, flat, params);
+    if (main === "jobs" || main === "job_outcome_prs")
+      return selectRows(tables[main].rows, flat, params);
+    if (main === "job_evaluations" || main === "job_touches")
+      return selectRows(rows[main], flat, params);
+    if (main && tables[main] && /^SELECT COUNT\(\*\) AS n FROM/i.test(flat.trim()))
+      return selectRows(tables[main].rows, flat, params);
     return null;
   };
   const recorded: Recorded[] = [];
@@ -579,14 +711,19 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       // id, namespace and path are ALL part of the lookup, deliberately: an id
       // alone would let a caller walk every snapshot in the store.
       const [id, namespace, path] = params as [number, string, string];
-      return rows.versions.find((v) => v.id === id && v.namespace === namespace && v.path === path) ?? null;
+      return (
+        rows.versions.find((v) => v.id === id && v.namespace === namespace && v.path === path) ??
+        null
+      );
     }
     // The agents control plane's keyed UPDATEs (issued through first() for RETURNING),
     // applied so a revoke is visible to the next read. The CAS itself is proven
     // against real SQLite in test-integration.
     if (/^UPDATE agents SET/i.test(flat)) {
       const id = params[0];
-      const row = rows.agents.find((a) => a.id === id && (!/revoked_at IS NULL/i.test(flat) || a.revoked_at == null));
+      const row = rows.agents.find(
+        (a) => a.id === id && (!/revoked_at IS NULL/i.test(flat) || a.revoked_at == null),
+      );
       if (!row) return null;
       if (/SET revoked_at/i.test(flat)) row.revoked_at = "2026-09-11 02:00:00";
       if (/SET scopes/i.test(flat)) row.scopes = params[1];
@@ -632,7 +769,11 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       // The whole WHERE clause applies, including literals such as
       // `namespace = 'capsid'` or `type = 'prompt'` and prompts/get's
       // `path = ?2 OR path = ?2 || '.md'`.
-      const row = (selectRows(tables.documents.rows, flat.replace(/^\s*SELECT .+? FROM /i, "SELECT * FROM "), params)[0] ?? null) as unknown as DocRow | null;
+      const row = (selectRows(
+        tables.documents.rows,
+        flat.replace(/^\s*SELECT .+? FROM /i, "SELECT * FROM "),
+        params,
+      )[0] ?? null) as unknown as DocRow | null;
       const asOk = /SELECT 1 AS ok FROM documents/i.test(flat);
       // The commit-time read of updated_at is not the pre-read, so the race lands
       // between them. The value returned is captured before the hook runs, or the
@@ -656,13 +797,24 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     }
     // auto-merge's read of the PR URLs recorded against one job.
     if (/^SELECT pr_url FROM job_outcome_prs WHERE job_id = \?1$/i.test(flat.trim())) {
-      return rows.job_outcome_prs.filter((r) => r.job_id === params[0]).map((r) => ({ pr_url: r.pr_url }));
+      return rows.job_outcome_prs
+        .filter((r) => r.job_id === params[0])
+        .map((r) => ({ pr_url: r.pr_url }));
     }
     // What @dustinedwards/d1-dump reads to find the tables: every table the
     // migrations create, documents_fts with its shadow tables, and wrangler's
     // excluded tables (the d1_migrations ledger among them), as a deployed database holds them.
-    if (/^SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid$/i.test(flat.trim())) {
-      const table = (name: string) => ({ type: "table", name, tbl_name: name, sql: `CREATE TABLE ${name} (id INTEGER PRIMARY KEY)` });
+    if (
+      /^SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid$/i.test(
+        flat.trim(),
+      )
+    ) {
+      const table = (name: string) => ({
+        type: "table",
+        name,
+        tbl_name: name,
+        sql: `CREATE TABLE ${name} (id INTEGER PRIMARY KEY)`,
+      });
       return [
         ...BACKUP_EXCLUDED.map(table),
         ...BACKUP_TABLES.map(table),
@@ -682,12 +834,21 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     // package writes them.
     const pagedRows = (table: string): Array<{ id?: number }> | null =>
       table === "document_versions" ? rows.versions : table === "audit_log" ? rows.audit_log : null;
-    const maxIdOf = flat.match(/^SELECT MAX\("?id"?\) AS max_id, COUNT\(\*\) AS n FROM "?(\w+)"?$/i);
+    const maxIdOf = flat.match(
+      /^SELECT MAX\("?id"?\) AS max_id, COUNT\(\*\) AS n FROM "?(\w+)"?$/i,
+    );
     const maxIdRows = maxIdOf ? pagedRows(maxIdOf[1]) : null;
     if (maxIdRows) {
-      return [{ max_id: maxIdRows.length ? Math.max(...maxIdRows.map((r) => r.id ?? 0)) : null, n: maxIdRows.length }];
+      return [
+        {
+          max_id: maxIdRows.length ? Math.max(...maxIdRows.map((r) => r.id ?? 0)) : null,
+          n: maxIdRows.length,
+        },
+      ];
     }
-    const pageOf = flat.match(/^SELECT \* FROM "?(\w+)"? WHERE "?id"? > \?1 AND "?id"? <= \?2 ORDER BY "?id"? LIMIT \?3$/i);
+    const pageOf = flat.match(
+      /^SELECT \* FROM "?(\w+)"? WHERE "?id"? > \?1 AND "?id"? <= \?2 ORDER BY "?id"? LIMIT \?3$/i,
+    );
     const pageRows = pageOf ? pagedRows(pageOf[1]) : null;
     if (pageRows) {
       const [after, max, limit] = params as [number, number, number];
@@ -717,7 +878,10 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         repos: n.repos ?? "[]",
         created_at: "2026-01-01 00:00:00",
         unconsolidated: rows.documents.filter(
-          (d) => d.namespace === n.namespace && ["episodic", "source"].includes(String(d.type)) && !String(d.path).startsWith("archive/")
+          (d) =>
+            d.namespace === n.namespace &&
+            ["episodic", "source"].includes(String(d.type)) &&
+            !String(d.path).startsWith("archive/"),
         ).length,
       }));
     }
@@ -736,7 +900,8 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       const [namespace, path] = params as [string, string];
       return rows.links.filter(
         (l) =>
-          (l.from_ns === namespace && l.from_path === path) || (l.to_ns === namespace && l.to_path === path)
+          (l.from_ns === namespace && l.from_path === path) ||
+          (l.to_ns === namespace && l.to_path === path),
       );
     }
     if (/FROM documents_fts/i.test(flat)) {
@@ -744,9 +909,10 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       // One hit by default. ftsRows asks for more so the search tool's page bound
       // can be driven; the LIMIT is honored from its bound param.
       const wanted = opts.ftsRows ?? 1;
-      const limit = /LIMIT \?\d+/.test(flat) && typeof params[params.length - 1] === "number"
-        ? (params[params.length - 1] as number)
-        : Infinity;
+      const limit =
+        /LIMIT \?\d+/.test(flat) && typeof params[params.length - 1] === "number"
+          ? (params[params.length - 1] as number)
+          : Infinity;
       return Array.from({ length: Math.min(wanted, limit) }, (_, i) => ({
         path: i === 0 ? "conventions.md" : `hit-${i}.md`,
       }));
@@ -758,7 +924,11 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       const exact = JSON.parse(exactJson) as string[];
       const globs = JSON.parse(globsJson) as string[];
       return rows.documents
-        .filter((d) => d.namespace === ns && (exact.includes(d.path) || globs.some((g) => globMatch(g, d.path))))
+        .filter(
+          (d) =>
+            d.namespace === ns &&
+            (exact.includes(d.path) || globs.some((g) => globMatch(g, d.path))),
+        )
         .sort((a, b) => a.path.localeCompare(b.path))
         .map((r) => project(flat, r as unknown as Record<string, unknown>));
     }
@@ -766,10 +936,15 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
     // section queries. The LIMIT is honored from its bound param, so a handler that
     // stops asking the database for a bounded page fails here instead of being rescued
     // by the fake returning everything.
-    if (/FROM documents/i.test(flat) && /ORDER BY/i.test(flat) && !/SELECT updated_at/i.test(flat)) {
-      const limit = /LIMIT \?\d+/.test(flat) && typeof params[params.length - 1] === "number"
-        ? (params[params.length - 1] as number)
-        : Infinity;
+    if (
+      /FROM documents/i.test(flat) &&
+      /ORDER BY/i.test(flat) &&
+      !/SELECT updated_at/i.test(flat)
+    ) {
+      const limit =
+        /LIMIT \?\d+/.test(flat) && typeof params[params.length - 1] === "number"
+          ? (params[params.length - 1] as number)
+          : Infinity;
       let out = [...rows.documents];
       if (/path GLOB \?1/i.test(flat)) {
         // SQLite GLOB. Only `*` is implemented; any other GLOB metacharacter matches
@@ -782,7 +957,7 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
           (d) =>
             (ns == null || d.namespace === ns) &&
             (type == null || d.type === type) &&
-            (status == null || d.status === status)
+            (status == null || d.status === status),
         );
       } else if (/namespace > \?1 OR \(namespace = \?1 AND path > \?2\)/i.test(flat)) {
         // resources/list keyset cursor: strictly after the (namespace, path) tuple. A
@@ -798,7 +973,9 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
       }
       // The caller's namespace scope, one bound JSON array (resources/list). Null is the
       // unscoped caller and filters nothing.
-      const jsonNsIn = flat.match(/\(\?(\d+) IS NULL OR namespace IN \(SELECT value FROM json_each\(\?\d+\)\)\)/i);
+      const jsonNsIn = flat.match(
+        /\(\?(\d+) IS NULL OR namespace IN \(SELECT value FROM json_each\(\?\d+\)\)\)/i,
+      );
       if (jsonNsIn) {
         const raw = params[Number(jsonNsIn[1]) - 1];
         if (typeof raw === "string") {
@@ -826,19 +1003,27 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
         const wanted = types[1].split(",").map((t) => t.trim().replace(/'/g, ""));
         out = out.filter((d) => wanted.includes(String(d.type)));
       }
-      if (/path NOT LIKE 'archive\/%'/i.test(flat)) out = out.filter((d) => !d.path.startsWith("archive/"));
-      if (/ORDER BY created_at/i.test(flat)) out.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-      else if (/ORDER BY updated_at/i.test(flat)) out.sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at)));
-      else out.sort((a, b) => a.namespace.localeCompare(b.namespace) || a.path.localeCompare(b.path));
+      if (/path NOT LIKE 'archive\/%'/i.test(flat))
+        out = out.filter((d) => !d.path.startsWith("archive/"));
+      if (/ORDER BY created_at/i.test(flat))
+        out.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+      else if (/ORDER BY updated_at/i.test(flat))
+        out.sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at)));
+      else
+        out.sort((a, b) => a.namespace.localeCompare(b.namespace) || a.path.localeCompare(b.path));
       if (/ORDER BY \w+ DESC/i.test(flat)) out.reverse();
       // Some queries bind their LIMIT and some write it inline; honor both, or a
       // literal one is silently ignored and the fake over-answers.
       const literalLimit = flat.match(/LIMIT (\d+)/i);
-      return out.slice(0, literalLimit ? Number(literalLimit[1]) : limit).map((r) => project(flat, r as unknown as Record<string, unknown>));
+      return out
+        .slice(0, literalLimit ? Number(literalLimit[1]) : limit)
+        .map((r) => project(flat, r as unknown as Record<string, unknown>));
     }
     if (/FROM agents/i.test(flat)) {
       const live = /revoked_at IS NULL/i.test(flat);
-      return rows.agents.filter((a) => !live || a.revoked_at == null).map((a) => project(flat, { ...a }));
+      return rows.agents
+        .filter((a) => !live || a.revoked_at == null)
+        .map((a) => project(flat, { ...a }));
     }
     if (/FROM document_versions WHERE namespace/i.test(flat)) {
       const [namespace, path] = params as [string, string];
@@ -919,7 +1104,11 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
           }
           // dueCounts, when a test sets it, drives the backup prune's counters
           // directly; otherwise a COUNT counts the rows.
-          answers.push(/SELECT COUNT/i.test(s.sql) && opts.dueCounts ? [{ n: opts.dueCounts[countCall++] ?? 0 }] : answerAll(s.sql, s.params));
+          answers.push(
+            /SELECT COUNT/i.test(s.sql) && opts.dueCounts
+              ? [{ n: opts.dueCounts[countCall++] ?? 0 }]
+              : answerAll(s.sql, s.params),
+          );
         }
       } catch (err) {
         restore(saved);
@@ -946,7 +1135,13 @@ export function fakeD1(opts: FakeD1Options = {}): FakeD1 {
 // contentType: the Anthropic SDK's streaming helper needs a text/event-stream
 // response, and `text` alone gets no content type. headers: GitHub signals another
 // page only in a Link header.
-export type RouteSpec = { status?: number; body?: unknown; text?: string; contentType?: string; headers?: Record<string, string> };
+export type RouteSpec = {
+  status?: number;
+  body?: unknown;
+  text?: string;
+  contentType?: string;
+  headers?: Record<string, string>;
+};
 // A function route also receives the query, because routing ignores it and a paged
 // list answers differently per `page=`.
 export type Route = RouteSpec | ((requestBody: unknown, search: URLSearchParams) => RouteSpec);
@@ -965,7 +1160,7 @@ export interface FetchCall {
 // fresh read from a cached one.
 export async function withFetch(
   routes: Record<string, Route>,
-  fn: (calls: FetchCall[]) => Promise<void> | void
+  fn: (calls: FetchCall[]) => Promise<void> | void,
 ): Promise<void> {
   const original = globalThis.fetch;
   const calls: FetchCall[] = [];
@@ -977,7 +1172,12 @@ export async function withFetch(
     const route = routes[`${method} ${parsed.pathname}`];
     if (!route) return new Response(`no route for ${method} ${parsed.pathname}`, { status: 500 });
     const spec = typeof route === "function" ? route(body, parsed.searchParams) : route;
-    const payload = spec.text !== undefined ? spec.text : spec.body === undefined ? "" : JSON.stringify(spec.body);
+    const payload =
+      spec.text !== undefined
+        ? spec.text
+        : spec.body === undefined
+          ? ""
+          : JSON.stringify(spec.body);
     // A JSON route declares its content type: the Anthropic SDK branches on the
     // header and hands back an unparsed body without it.
     const typeHeader = spec.contentType
@@ -1013,7 +1213,10 @@ export function fakeEnv(parts: Record<string, unknown>): never {
 // The Portal's ended sessions (migrations/0055_portal_session_ends.sql) in front of a test's
 // D1 stub: the gate's read and sign-out's write land in `ended`, every other statement goes
 // to `db`. With no `db`, any other statement throws.
-export function withPortalSessionEnds(db?: unknown): { db: D1Database; ended: Map<string, number> } {
+export function withPortalSessionEnds(db?: unknown): {
+  db: D1Database;
+  ended: Map<string, number>;
+} {
   const ended = new Map<string, number>();
   const ends = (sql: string) => {
     const statement = {
@@ -1023,11 +1226,15 @@ export function withPortalSessionEnds(db?: unknown): { db: D1Database; ended: Ma
         return statement;
       },
       async first() {
-        if (!/^SELECT 1 AS ended FROM portal_session_ends WHERE sid = \?1$/.test(sql)) throw new Error(`fake: unmodelled portal_session_ends read: ${sql}`);
+        if (!/^SELECT 1 AS ended FROM portal_session_ends WHERE sid = \?1$/.test(sql))
+          throw new Error(`fake: unmodelled portal_session_ends read: ${sql}`);
         return ended.has(String(statement.params[0])) ? { ended: 1 } : null;
       },
       async run() {
-        if (!sql.startsWith("INSERT OR IGNORE INTO portal_session_ends (sid, ended_at, expires_at)")) throw new Error(`fake: unmodelled portal_session_ends write: ${sql}`);
+        if (
+          !sql.startsWith("INSERT OR IGNORE INTO portal_session_ends (sid, ended_at, expires_at)")
+        )
+          throw new Error(`fake: unmodelled portal_session_ends write: ${sql}`);
         const [sid, at] = statement.params as [string, number];
         if (!ended.has(sid)) ended.set(sid, at);
         return { results: [], meta: { changes: 1 } };
@@ -1051,7 +1258,9 @@ export function withPortalSessionEnds(db?: unknown): { db: D1Database; ended: Ma
 
 // The RateLimiter's stub, counting each key against its first rule. `spent` starts keys at a
 // count; `failing` throws on every call, as an unreachable object does.
-export function fakeRateLimiter(options: { spent?: Record<string, number>; failing?: boolean } = {}) {
+export function fakeRateLimiter(
+  options: { spent?: Record<string, number>; failing?: boolean } = {},
+) {
   const used = new Map(Object.entries(options.spent ?? {}));
   return {
     idFromName: (name: string) => name,
@@ -1060,9 +1269,22 @@ export function fakeRateLimiter(options: { spent?: Record<string, number>; faili
         if (options.failing) throw new Error("the rate limiter is unreachable");
         const [rule] = rules;
         const count = used.get(key) ?? 0;
-        if (count >= rule.limit) return { ok: false, used: count, limit: rule.limit, retryAfterSeconds: rule.windowSeconds, window: rule.windowSeconds };
+        if (count >= rule.limit)
+          return {
+            ok: false,
+            used: count,
+            limit: rule.limit,
+            retryAfterSeconds: rule.windowSeconds,
+            window: rule.windowSeconds,
+          };
         used.set(key, count + 1);
-        return { ok: true, used: count + 1, limit: rule.limit, retryAfterSeconds: 0, window: rule.windowSeconds };
+        return {
+          ok: true,
+          used: count + 1,
+          limit: rule.limit,
+          retryAfterSeconds: 0,
+          window: rule.windowSeconds,
+        };
       },
     }),
   };
@@ -1103,7 +1325,10 @@ export interface FakeFindingMemory {
   writes: string[];
 }
 
-export function fakeFindingMemory(seed: FindingRow[] = [], jobs: Record<string, JobEnd> = {}): FakeFindingMemory {
+export function fakeFindingMemory(
+  seed: FindingRow[] = [],
+  jobs: Record<string, JobEnd> = {},
+): FakeFindingMemory {
   const rows = new Map(seed.map((r) => [r.fingerprint, { ...r }]));
   const writes: string[] = [];
   const guarded = (row: FindingRow, extra: (cur: FindingRow) => boolean = () => true) => {
@@ -1117,7 +1342,8 @@ export function fakeFindingMemory(seed: FindingRow[] = [], jobs: Record<string, 
         const row = rows.get(fp);
         if (row) out.set(fp, { ...row });
       }
-      for (const row of rows.values()) if (row.state !== "cleared") out.set(row.fingerprint, { ...row });
+      for (const row of rows.values())
+        if (row.state !== "cleared") out.set(row.fingerprint, { ...row });
       return out;
     },
     async job(id) {
@@ -1146,7 +1372,13 @@ export function fakeFindingMemory(seed: FindingRow[] = [], jobs: Record<string, 
     async sight(row, f, now) {
       const cur = guarded(row);
       if (!cur) return false;
-      Object.assign(cur, { title: f.title, seen_count: cur.seen_count + 1, last_seen_at: now.toISOString(), evidence: appendEvidence(row.fingerprint, row.evidence, f, now), updated_at: now.toISOString() });
+      Object.assign(cur, {
+        title: f.title,
+        seen_count: cur.seen_count + 1,
+        last_seen_at: now.toISOString(),
+        evidence: appendEvidence(row.fingerprint, row.evidence, f, now),
+        updated_at: now.toISOString(),
+      });
       writes.push(`sight:${row.fingerprint}`);
       return true;
     },
@@ -1171,14 +1403,27 @@ export function fakeFindingMemory(seed: FindingRow[] = [], jobs: Record<string, 
     async dismiss(row, f, now) {
       const cur = guarded(row, (c) => c.state === "open" && c.job_id === row.job_id);
       if (!cur) return false;
-      Object.assign(cur, { state: "dismissed", reopen_after: null, cleared_at: null, seen_count: cur.seen_count + 1, last_seen_at: now.toISOString(), evidence: appendEvidence(row.fingerprint, row.evidence, f, now), updated_at: now.toISOString() });
+      Object.assign(cur, {
+        state: "dismissed",
+        reopen_after: null,
+        cleared_at: null,
+        seen_count: cur.seen_count + 1,
+        last_seen_at: now.toISOString(),
+        evidence: appendEvidence(row.fingerprint, row.evidence, f, now),
+        updated_at: now.toISOString(),
+      });
       writes.push(`dismiss:${row.fingerprint}`);
       return true;
     },
     async clear(row, now) {
       const cur = guarded(row);
       if (!cur) return false;
-      Object.assign(cur, { state: "cleared", cleared_at: now.toISOString(), reopen_after: new Date(now.getTime() + REOPEN_QUIET_MS).toISOString(), updated_at: now.toISOString() });
+      Object.assign(cur, {
+        state: "cleared",
+        cleared_at: now.toISOString(),
+        reopen_after: new Date(now.getTime() + REOPEN_QUIET_MS).toISOString(),
+        updated_at: now.toISOString(),
+      });
       writes.push(`clear:${row.fingerprint}`);
       return true;
     },

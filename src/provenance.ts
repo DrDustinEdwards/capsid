@@ -24,10 +24,16 @@ const MAX_REF = 120;
  *  is escaped with a backslash, so relayed text cannot end its own fence and speak outside
  *  it. `maxText` cuts a long relay, marked, so a block reason stays inside its cap. */
 export function externalFence(source: string, ref: string, text: string, maxText = 4000): string {
-  if (!SOURCE.test(source)) throw new Error(`external fence source '${source}' must be lowercase letters, digits and hyphens`);
+  if (!SOURCE.test(source))
+    throw new Error(
+      `external fence source '${source}' must be lowercase letters, digits and hyphens`,
+    );
   const cleanRef = ref.replace(/\s+/g, " ").trim().slice(0, MAX_REF) || "none";
   const cut = text.length > maxText ? `${text.slice(0, maxText)} [truncated]` : text;
-  const body = cut.replace(/^([ \t]{0,3})(~{3,})/gm, (_match, indent: string, tildes: string) => `${indent}\\${tildes}`);
+  const body = cut.replace(
+    /^([ \t]{0,3})(~{3,})/gm,
+    (_match, indent: string, tildes: string) => `${indent}\\${tildes}`,
+  );
   return `${OPEN} source=${source} ref=${cleanRef}\n${body}\n${FENCE}`;
 }
 
@@ -41,9 +47,11 @@ export function externalFenceProblem(text: string): string | null {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.startsWith(OPEN)) {
-      if (openedAt) return `line ${i + 1} opens an external fence inside the one opened at line ${openedAt}`;
+      if (openedAt)
+        return `line ${i + 1} opens an external fence inside the one opened at line ${openedAt}`;
       const source = /(?:^|\s)source=(\S+)/.exec(line)?.[1];
-      if (!source || !SOURCE.test(source)) return `the external fence at line ${i + 1} has no valid source=<kind> (lowercase letters, digits and hyphens)`;
+      if (!source || !SOURCE.test(source))
+        return `the external fence at line ${i + 1} has no valid source=<kind> (lowercase letters, digits and hyphens)`;
       openedAt = i + 1;
     } else if (openedAt && /^~{3,}\s*$/.test(line)) {
       openedAt = 0;

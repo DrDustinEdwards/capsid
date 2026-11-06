@@ -51,13 +51,24 @@ interface Target {
 }
 
 export type ApprovalPlan =
-  | { ok: true; repo: string; namespace: string; undo: boolean; surface: "portal" | "chat" | "typed"; targets: Target[]; changes: string[]; audit: string[] }
+  | {
+      ok: true;
+      repo: string;
+      namespace: string;
+      undo: boolean;
+      surface: "portal" | "chat" | "typed";
+      targets: Target[];
+      changes: string[];
+      audit: string[];
+    }
   | { ok: false; refusal: string };
 
 function numbers(raw: string | undefined): number[] | string {
   const parts = (raw ?? "").split(/[\s,]+/).filter(Boolean);
-  if (!parts.length) return "approve_pr needs prs: the pull request numbers, comma-separated (\"312,315\").";
-  if (parts.length > MAX_PRS) return `approve_pr takes at most ${MAX_PRS} pull requests at once; got ${parts.length}.`;
+  if (!parts.length)
+    return 'approve_pr needs prs: the pull request numbers, comma-separated ("312,315").';
+  if (parts.length > MAX_PRS)
+    return `approve_pr takes at most ${MAX_PRS} pull requests at once; got ${parts.length}.`;
   const out: number[] = [];
   for (const p of parts) {
     if (!/^[1-9][0-9]{0,9}$/.test(p)) return `'${p}' is not a pull request number.`;
@@ -77,7 +88,12 @@ async function awaitingSet(env: Env): Promise<AwaitingSeat[] | string> {
 }
 
 /** A pull request's head and state, read from GitHub now, never from a cache. */
-async function readHead(env: Env, owner: string, repo: string, number: number): Promise<{ sha: string; state: string; merged: boolean } | string> {
+async function readHead(
+  env: Env,
+  owner: string,
+  repo: string,
+  number: number,
+): Promise<{ sha: string; state: string; merged: boolean } | string> {
   const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}`);
   if (!resp.ok) return `#${number} could not be read from GitHub (${resp.status}).`;
   const pr = (await resp.json()) as { head?: { sha?: string }; state?: string; merged?: boolean };
@@ -86,10 +102,17 @@ async function readHead(env: Env, owner: string, repo: string, number: number): 
 }
 
 /** What approve_pr (or its Undo) will do, from the state now. Reads only. */
-export async function planApproval(env: Env, actor: string, p: ApprovalParams, surface: "portal" | "chat", click: string): Promise<ApprovalPlan> {
+export async function planApproval(
+  env: Env,
+  actor: string,
+  p: ApprovalParams,
+  surface: "portal" | "chat",
+  click: string,
+): Promise<ApprovalPlan> {
   const refused = (refusal: string): ApprovalPlan => ({ ok: false, refusal });
   const undo = p.undo === "true";
-  if (!p.namespace) return refused("approve_pr needs the namespace whose repo holds the pull requests.");
+  if (!p.namespace)
+    return refused("approve_pr needs the namespace whose repo holds the pull requests.");
   const nums = numbers(p.prs);
   if (typeof nums === "string") return refused(nums);
   let owner: string, name: string, full: string;
@@ -98,13 +121,26 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
   } catch (err) {
     return refused(err instanceof Error ? err.message : String(err));
   }
-  const { results } = await env.DB.prepare(`SELECT id, pr, head_sha FROM pr_approvals WHERE repo = ?1 AND status = 'approved'`).bind(full).all<OpenApproval>();
+  const { results } = await env.DB.prepare(
+    `SELECT id, pr, head_sha FROM pr_approvals WHERE repo = ?1 AND status = 'approved'`,
+  )
+    .bind(full)
+    .all<OpenApproval>();
   const openBy = new Map((results ?? []).map((r) => [r.pr, r]));
 
   if (undo) {
     const missing = nums.filter((n) => !openBy.has(n));
-    if (missing.length) return refused(`${missing.map((n) => `#${n}`).join(", ")} ${missing.length === 1 ? "has" : "have"} no open approval to undo: it was merged, voided or never approved.`);
-    const targets = nums.map((n) => ({ number: n, head_sha: openBy.get(n)!.head_sha, class: "", path_class: null, open: openBy.get(n)! }));
+    if (missing.length)
+      return refused(
+        `${missing.map((n) => `#${n}`).join(", ")} ${missing.length === 1 ? "has" : "have"} no open approval to undo: it was merged, voided or never approved.`,
+      );
+    const targets = nums.map((n) => ({
+      number: n,
+      head_sha: openBy.get(n)!.head_sha,
+      class: "",
+      path_class: null,
+      open: openBy.get(n)!,
+    }));
     return {
       ok: true,
       repo: full,
@@ -112,7 +148,10 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
       undo: true,
       surface,
       targets,
-      changes: targets.map((t) => `${full}#${t.number}: the approval at ${t.head_sha.slice(0, 7)} -> voided, "undone". The executor will not merge it.`),
+      changes: targets.map(
+        (t) =>
+          `${full}#${t.number}: the approval at ${t.head_sha.slice(0, 7)} -> voided, "undone". The executor will not merge it.`,
+      ),
       audit: [`pr-approval-voided by ${actor}`, click],
     };
   }
@@ -126,25 +165,54 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
   nums.forEach((n, i) => {
     const head = heads[i]!;
     if (typeof head === "string") return void problems.push(head);
-    if (head.merged || head.state !== "open") return void problems.push(`#${n} is ${head.merged ? "merged" : head.state}, not open.`);
+    if (head.merged || head.state !== "open")
+      return void problems.push(`#${n} is ${head.merged ? "merged" : head.state}, not open.`);
     const seen = shas[i];
     // The head Dustin saw, named by the caller: a push since then is a change nobody approved.
-    if (!seen) return void problems.push(`#${n} needs the head sha you reviewed (shas, in the order of prs). Its head is ${head.sha} now.`);
-    if (!SHA.test(seen) || !head.sha.startsWith(seen)) return void problems.push(`#${n}'s head is ${head.sha}, not ${seen}: something was pushed since you looked. Review it again.`);
+    if (!seen)
+      return void problems.push(
+        `#${n} needs the head sha you reviewed (shas, in the order of prs). Its head is ${head.sha} now.`,
+      );
+    if (!SHA.test(seen) || !head.sha.startsWith(seen))
+      return void problems.push(
+        `#${n}'s head is ${head.sha}, not ${seen}: something was pushed since you looked. Review it again.`,
+      );
     const row = awaiting.find((a) => a.repo === full && a.number === n);
     const cls = row?.class ?? null;
-    if (!row || !cls) return void problems.push(`#${n} has no class: the tick has not classed it into the awaiting-seat set yet, so nothing says what kind of approval it needs.`);
-    if (cls === "seat") return void problems.push(`#${n} is class seat (${(row.class_reasons ?? []).join("; ") || "a step outside a merge"}): it stays with the seat.`);
-    if (cls === "wait") return void problems.push(`#${n} is class wait (${(row.class_reasons ?? []).join("; ") || "CI or draft"}): nobody acts yet.`);
-    targets.push({ number: n, head_sha: head.sha, class: cls, path_class: row.path_class ?? null, open: openBy.get(n) ?? null });
+    if (!row || !cls)
+      return void problems.push(
+        `#${n} has no class: the tick has not classed it into the awaiting-seat set yet, so nothing says what kind of approval it needs.`,
+      );
+    if (cls === "seat")
+      return void problems.push(
+        `#${n} is class seat (${(row.class_reasons ?? []).join("; ") || "a step outside a merge"}): it stays with the seat.`,
+      );
+    if (cls === "wait")
+      return void problems.push(
+        `#${n} is class wait (${(row.class_reasons ?? []).join("; ") || "CI or draft"}): nobody acts yet.`,
+      );
+    targets.push({
+      number: n,
+      head_sha: head.sha,
+      class: cls,
+      path_class: row.path_class ?? null,
+      open: openBy.get(n) ?? null,
+    });
   });
-  if (problems.length) return refused(`${nums.length > 1 ? "Nothing in the batch was approved. " : ""}${problems.join(" ")}`);
+  if (problems.length)
+    return refused(
+      `${nums.length > 1 ? "Nothing in the batch was approved. " : ""}${problems.join(" ")}`,
+    );
   const typed = targets.filter((t) => t.class === "typed");
   if (typed.length && targets.length > 1) {
-    return refused(`${typed.map((t) => `#${t.number}`).join(", ")} touches a money path (class typed), which is never batched. Nothing in the batch was approved; approve it alone, with its number typed as confirm.`);
+    return refused(
+      `${typed.map((t) => `#${t.number}`).join(", ")} touches a money path (class typed), which is never batched. Nothing in the batch was approved; approve it alone, with its number typed as confirm.`,
+    );
   }
   if (typed.length && p.confirm !== String(typed[0]!.number)) {
-    return refused(`#${typed[0]!.number} touches a money path (class typed): type its number as confirm to approve it.`);
+    return refused(
+      `#${typed[0]!.number} touches a money path (class typed): type its number as confirm to approve it.`,
+    );
   }
   const replaced = targets.filter((t) => t.open);
   return {
@@ -155,16 +223,32 @@ export async function planApproval(env: Env, actor: string, p: ApprovalParams, s
     surface: typed.length ? "typed" : surface,
     targets,
     changes: [
-      ...targets.map((t) => `${full}#${t.number} (class ${t.class}): approved at ${t.head_sha.slice(0, 7)}. The executor merges it once CI is green on that sha; a new push, red CI or 7 days voids it.`),
-      ...replaced.map((t) => `${full}#${t.number}: the earlier approval at ${t.open!.head_sha.slice(0, 7)} -> voided, "replaced".`),
+      ...targets.map(
+        (t) =>
+          `${full}#${t.number} (class ${t.class}): approved at ${t.head_sha.slice(0, 7)}. The executor merges it once CI is green on that sha; a new push, red CI or 7 days voids it.`,
+      ),
+      ...replaced.map(
+        (t) =>
+          `${full}#${t.number}: the earlier approval at ${t.open!.head_sha.slice(0, 7)} -> voided, "replaced".`,
+      ),
       "Nothing is merged now: approve_pr never merges.",
     ],
-    audit: [`pr-approved by ${actor}`, ...(replaced.length ? [`pr-approval-voided by ${actor}`] : []), click],
+    audit: [
+      `pr-approved by ${actor}`,
+      ...(replaced.length ? [`pr-approval-voided by ${actor}`] : []),
+      click,
+    ],
   };
 }
 
 /** The writes of a plan, in one batch. Returns the result's one-line summary. */
-export async function performApproval(env: Env, actor: string, plan: Extract<ApprovalPlan, { ok: true }>, reason: string | null, now: Date): Promise<string> {
+export async function performApproval(
+  env: Env,
+  actor: string,
+  plan: Extract<ApprovalPlan, { ok: true }>,
+  reason: string | null,
+  now: Date,
+): Promise<string> {
   const at = now.toISOString();
   const batchId = plan.targets.length > 1 ? crypto.randomUUID() : null;
   const statements: D1PreparedStatement[] = [];
@@ -173,12 +257,15 @@ export async function performApproval(env: Env, actor: string, plan: Extract<App
   for (const t of voids) {
     voidAt.push(statements.length);
     statements.push(
-      env.DB.prepare(`UPDATE pr_approvals SET status = 'voided', closed_at = ?2, close_reason = ?3 WHERE id = ?1 AND status = 'approved' RETURNING id`).bind(
-        t.open!.id,
-        at,
-        plan.undo ? "undone" : "replaced"
-      ),
-      auditStatement(env.DB, actor, "pr-approval-voided", plan.namespace, null, { repo: plan.repo, pr: t.number, head_sha: t.open!.head_sha, close_reason: plan.undo ? "undone" : "replaced" })
+      env.DB.prepare(
+        `UPDATE pr_approvals SET status = 'voided', closed_at = ?2, close_reason = ?3 WHERE id = ?1 AND status = 'approved' RETURNING id`,
+      ).bind(t.open!.id, at, plan.undo ? "undone" : "replaced"),
+      auditStatement(env.DB, actor, "pr-approval-voided", plan.namespace, null, {
+        repo: plan.repo,
+        pr: t.number,
+        head_sha: t.open!.head_sha,
+        close_reason: plan.undo ? "undone" : "replaced",
+      }),
     );
   }
   if (!plan.undo) {
@@ -186,9 +273,28 @@ export async function performApproval(env: Env, actor: string, plan: Extract<App
       statements.push(
         env.DB.prepare(
           `INSERT INTO pr_approvals (repo, pr, head_sha, class, status, approved_by, surface, batch_id, reason, approved_at, namespace, path_class)
-           VALUES (?1, ?2, ?3, ?4, 'approved', ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
-        ).bind(plan.repo, t.number, t.head_sha, t.class, actor, plan.surface, batchId, reason, at, plan.namespace, t.path_class),
-        auditStatement(env.DB, actor, "pr-approved", plan.namespace, null, { repo: plan.repo, pr: t.number, head_sha: t.head_sha, class: t.class, surface: plan.surface, batch_id: batchId })
+           VALUES (?1, ?2, ?3, ?4, 'approved', ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+        ).bind(
+          plan.repo,
+          t.number,
+          t.head_sha,
+          t.class,
+          actor,
+          plan.surface,
+          batchId,
+          reason,
+          at,
+          plan.namespace,
+          t.path_class,
+        ),
+        auditStatement(env.DB, actor, "pr-approved", plan.namespace, null, {
+          repo: plan.repo,
+          pr: t.number,
+          head_sha: t.head_sha,
+          class: t.class,
+          surface: plan.surface,
+          batch_id: batchId,
+        }),
       );
     }
   }
@@ -197,6 +303,7 @@ export async function performApproval(env: Env, actor: string, plan: Extract<App
   // between the preview and now, and the batch's other rows are already written.
   const moved = voidAt.filter((i) => (results[i]?.results?.length ?? 0) > 0).length;
   const nums = plan.targets.map((t) => `#${t.number}`).join(", ");
-  if (plan.undo) return `Undid the approval of ${plan.repo} ${nums}${moved < voids.length ? ` (${voids.length - moved} had already ended)` : ""}.`;
+  if (plan.undo)
+    return `Undid the approval of ${plan.repo} ${nums}${moved < voids.length ? ` (${voids.length - moved} had already ended)` : ""}.`;
   return `Approved ${plan.repo} ${nums}. The executor merges ${plan.targets.length === 1 ? "it" : "each"} once CI is green on the approved sha.`;
 }

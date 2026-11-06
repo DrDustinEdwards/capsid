@@ -43,18 +43,43 @@ export function Backups() {
                 {h.backup.warning && <div className="callout crit">{h.backup.warning}</div>}
                 <dl className="kv">
                   <dt>Last good dump</dt>
-                  <dd className="num">{h.backup.last_ok ? <>{ago(ms(h.backup.last_ok), now)} <When t={ms(h.backup.last_ok)} /></> : <St kind="crit">None recorded</St>}</dd>
+                  <dd className="num">
+                    {h.backup.last_ok ? (
+                      <>
+                        {ago(ms(h.backup.last_ok), now)} <When t={ms(h.backup.last_ok)} />
+                      </>
+                    ) : (
+                      <St kind="crit">None recorded</St>
+                    )}
+                  </dd>
                   <dt>Age</dt>
-                  <dd className="num">{h.backup.age_hours == null ? <St kind="nodata">No data</St> : `${h.backup.age_hours.toFixed(1)}h`}</dd>
+                  <dd className="num">
+                    {h.backup.age_hours == null ? (
+                      <St kind="nodata">No data</St>
+                    ) : (
+                      `${h.backup.age_hours.toFixed(1)}h`
+                    )}
+                  </dd>
                   <dt>State</dt>
-                  <dd>{h.backup.warning || !h.backup.last_ok ? <St kind="crit">Stale</St> : <St kind="ok">Fresh</St>}</dd>
+                  <dd>
+                    {h.backup.warning || !h.backup.last_ok ? (
+                      <St kind="crit">Stale</St>
+                    ) : (
+                      <St kind="ok">Fresh</St>
+                    )}
+                  </dd>
                   <dt>Health</dt>
                   <dd>
-                    {h.status === "ok" ? <St kind="ok">ok</St> : <St kind="warn">degraded</St>} <span className="mono faint">sha {h.sha.slice(0, 7)}{h.dirty ? " (dirty)" : ""}</span>
+                    {h.status === "ok" ? <St kind="ok">ok</St> : <St kind="warn">degraded</St>}{" "}
+                    <span className="mono faint">
+                      sha {h.sha.slice(0, 7)}
+                      {h.dirty ? " (dirty)" : ""}
+                    </span>
                   </dd>
                   <dt>Store</dt>
                   <dd className="mono">
-                    d1 {h.store.d1} · fts {h.store.fts} · media {h.bindings.media} · kv {h.bindings.app_kv}
+                    d1 {h.store.d1} · fts {h.store.fts} · media {h.bindings.media} · kv{" "}
+                    {h.bindings.app_kv}
                   </dd>
                   <dt>Size</dt>
                   <dd className="num" data-store-size="">
@@ -64,7 +89,8 @@ export function Backups() {
                       if (!use || s.size_bytes === null) return <St kind="nodata">Not reported</St>;
                       return (
                         <>
-                          {bytes(s.size_bytes)} of {bytes(s.cap_bytes)} ({(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}%){" "}
+                          {bytes(s.size_bytes)} of {bytes(s.cap_bytes)} (
+                          {(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}%){" "}
                           {use.warn && <St kind="warn">over half the cap</St>}
                         </>
                       );
@@ -81,7 +107,8 @@ export function Backups() {
           <div className="body stack-gap">
             {!o || !os ? (
               <div className="callout">
-                <St kind="nodata">No data</St> The Amazon copy's report was not read on the last pass.
+                <St kind="nodata">No data</St> The Amazon copy's report was not read on the last
+                pass.
               </div>
             ) : (
               <>
@@ -97,7 +124,12 @@ export function Backups() {
                       <dd className="num">
                         {s.newest ? (
                           <>
-                            {ago(ms(s.newest), now)} <When t={ms(s.newest)} /> {now - ms(s.newest) >= OFFACCOUNT_STALE ? <St kind="crit">stale</St> : now - ms(s.newest) >= OFFACCOUNT_LATE ? <St kind="warn">late</St> : null}
+                            {ago(ms(s.newest), now)} <When t={ms(s.newest)} />{" "}
+                            {now - ms(s.newest) >= OFFACCOUNT_STALE ? (
+                              <St kind="crit">stale</St>
+                            ) : now - ms(s.newest) >= OFFACCOUNT_LATE ? (
+                              <St kind="warn">late</St>
+                            ) : null}
                           </>
                         ) : (
                           <St kind="crit">No copy</St>
@@ -106,12 +138,26 @@ export function Backups() {
                     </Fragment>
                   ))}
                   <dt>Report</dt>
-                  <dd className="num">{o.reported_at ? <>{ago(ms(o.reported_at), now)} <When t={ms(o.reported_at)} /></> : <St kind="crit">none yet</St>}</dd>
+                  <dd className="num">
+                    {o.reported_at ? (
+                      <>
+                        {ago(ms(o.reported_at), now)} <When t={ms(o.reported_at)} />
+                      </>
+                    ) : (
+                      <St kind="crit">none yet</St>
+                    )}
+                  </dd>
                   <dt>Last copy run</dt>
                   <dd>
                     {o.last_run ? (
                       <>
-                        {o.last_run.conclusion === "success" ? <St kind="ok">success</St> : o.last_run.conclusion ? <St kind="crit">{o.last_run.conclusion}</St> : <St kind="run">running</St>}{" "}
+                        {o.last_run.conclusion === "success" ? (
+                          <St kind="ok">success</St>
+                        ) : o.last_run.conclusion ? (
+                          <St kind="crit">{o.last_run.conclusion}</St>
+                        ) : (
+                          <St kind="run">running</St>
+                        )}{" "}
                         {o.last_run.url && (
                           <a href={o.last_run.url} target="_blank" rel="noopener noreferrer">
                             run
@@ -126,7 +172,13 @@ export function Backups() {
                   <dd>
                     {o.last_drill ? (
                       <>
-                        {o.last_drill.conclusion === "success" ? <St kind="ok">success</St> : o.last_drill.conclusion ? <St kind="crit">{o.last_drill.conclusion}</St> : <St kind="run">running</St>}{" "}
+                        {o.last_drill.conclusion === "success" ? (
+                          <St kind="ok">success</St>
+                        ) : o.last_drill.conclusion ? (
+                          <St kind="crit">{o.last_drill.conclusion}</St>
+                        ) : (
+                          <St kind="run">running</St>
+                        )}{" "}
                         {o.last_drill.url && (
                           <a href={o.last_drill.url} target="_blank" rel="noopener noreferrer">
                             run
@@ -147,7 +199,12 @@ export function Backups() {
       <Suspense fallback={null}>
         <BackupSlots />
       </Suspense>
-      <p className="faint note">The primary panel is Capsid's own store. The sites panel is each site's own backups, read live through its operator API; Back up now runs the site's files passes, as its nightly cron does. The Amazon panel is every site's off-account copy, each site's newest complete one, as capsid-backups last reported it.</p>
+      <p className="faint note">
+        The primary panel is Capsid's own store. The sites panel is each site's own backups, read
+        live through its operator API; Back up now runs the site's files passes, as its nightly cron
+        does. The Amazon panel is every site's off-account copy, each site's newest complete one, as
+        capsid-backups last reported it.
+      </p>
     </div>
   );
 }
@@ -159,7 +216,12 @@ function SiteBackups() {
   const load = useAnswer(["backups"], fetchBackups);
   const data = load.data;
   const backUp = (namespace?: string) =>
-    confirm({ action: "site_backup", params: namespace ? { namespace } : {}, title: namespace ? `Back up ${namespace} now` : "Back up every site now", onDone: load.reread });
+    confirm({
+      action: "site_backup",
+      params: namespace ? { namespace } : {},
+      title: namespace ? `Back up ${namespace} now` : "Back up every site now",
+      onDone: load.reread,
+    });
   return (
     <Panel
       flush
@@ -172,7 +234,12 @@ function SiteBackups() {
           <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>{" "}
-          <button type="button" className="btn" disabled={!data || data.sites.length === 0} onClick={() => backUp()}>
+          <button
+            type="button"
+            className="btn"
+            disabled={!data || data.sites.length === 0}
+            onClick={() => backUp()}
+          >
             Back up every site now
           </button>
         </>
@@ -194,7 +261,8 @@ function SiteBackups() {
           <>
             {data.not_configured.length > 0 && (
               <div className="callout">
-                Not checked from here yet (no <span className="mono">backup: true</span> in the operator configuration): {data.not_configured.join(", ")}.
+                Not checked from here yet (no <span className="mono">backup: true</span> in the
+                operator configuration): {data.not_configured.join(", ")}.
               </div>
             )}
             <table className="list">
@@ -211,7 +279,12 @@ function SiteBackups() {
               </thead>
               <tbody>
                 {data.sites.map((s) => (
-                  <SiteRow key={s.namespace} site={s} now={now} backUp={() => backUp(s.namespace)} />
+                  <SiteRow
+                    key={s.namespace}
+                    site={s}
+                    now={now}
+                    backUp={() => backUp(s.namespace)}
+                  />
                 ))}
               </tbody>
             </table>
@@ -222,7 +295,15 @@ function SiteBackups() {
   );
 }
 
-function Fresh({ at, warning, now }: { at: string | null | undefined; warning?: string; now: number }) {
+function Fresh({
+  at,
+  warning,
+  now,
+}: {
+  at: string | null | undefined;
+  warning?: string;
+  now: number;
+}) {
   if (!at) return <St kind="crit">None</St>;
   return (
     <>
@@ -237,19 +318,36 @@ function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; back
   return (
     <tr data-site-backup={site.namespace}>
       <th scope="row">{site.namespace}</th>
-      <td className="num">{st ? <Fresh at={st.last_ok} warning={st.warning && !files.some(([, f]) => f.warning === st.warning) ? st.warning : undefined} now={now} /> : <St kind="nodata">{site.error ?? "Not read"}</St>}</td>
+      <td className="num">
+        {st ? (
+          <Fresh
+            at={st.last_ok}
+            warning={
+              st.warning && !files.some(([, f]) => f.warning === st.warning)
+                ? st.warning
+                : undefined
+            }
+            now={now}
+          />
+        ) : (
+          <St kind="nodata">{site.error ?? "Not read"}</St>
+        )}
+      </td>
       <td>
         {files.length === 0 ? (
           <St kind="nodata">None reported</St>
         ) : (
           files.map(([name, f]) => (
             <div key={name}>
-              <span className="mono">{name}</span> <Fresh at={f.last_ok} warning={f.warning} now={now} />
+              <span className="mono">{name}</span>{" "}
+              <Fresh at={f.last_ok} warning={f.warning} now={now} />
             </div>
           ))
         )}
       </td>
-      <td className="num">{site.amazon?.newest ? ago(ms(site.amazon.newest), now) : <St kind="nodata">No copy</St>}</td>
+      <td className="num">
+        {site.amazon?.newest ? ago(ms(site.amazon.newest), now) : <St kind="nodata">No copy</St>}
+      </td>
       <td>
         <button type="button" className="btn" onClick={backUp}>
           Back up now

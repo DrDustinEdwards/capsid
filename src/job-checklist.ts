@@ -39,11 +39,19 @@ export function checklistItems(body: string): ChecklistItem[] {
 /** A warning when DONE WHEN has more numbered items than CHECKLIST_MAX, or null. */
 export function checklistWarning(body: string): string | null {
   const n = checklistItems(body).length;
-  return n > CHECKLIST_MAX ? `DONE WHEN has ${n} numbered items. Keep it to ${CHECKLIST_MAX}, so each one is checked rather than skimmed. Posted anyway.` : null;
+  return n > CHECKLIST_MAX
+    ? `DONE WHEN has ${n} numbered items. Keep it to ${CHECKLIST_MAX}, so each one is checked rather than skimmed. Posted anyway.`
+    : null;
 }
 
 /** The checklist items naming a path no pull request changed, as refusal lines. Pure. */
-export function unchangedItems(items: readonly ChecklistItem[], changed: readonly string[]): string[] {
-  const touched = (path: string) => changed.some((c) => (path.endsWith("/") ? c.startsWith(path) : c === path));
-  return items.flatMap((item) => item.paths.filter((p) => !touched(p)).map((p) => `DONE WHEN item ${item.n} changes \`${p}\``));
+export function unchangedItems(
+  items: readonly ChecklistItem[],
+  changed: readonly string[],
+): string[] {
+  const touched = (path: string) =>
+    changed.some((c) => (path.endsWith("/") ? c.startsWith(path) : c === path));
+  return items.flatMap((item) =>
+    item.paths.filter((p) => !touched(p)).map((p) => `DONE WHEN item ${item.n} changes \`${p}\``),
+  );
 }

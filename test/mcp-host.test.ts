@@ -10,11 +10,37 @@ import { ROUTE_GRANTS, UNGATED_ROUTES } from "../src/scope.ts";
 const at = (host: string, path: string) => hostRefusal(new Request(`https://${host}${path}`));
 
 test("PLANT: the MCP host serves every machine route and nothing else", () => {
-  for (const path of ["/mcp", "/mcp/sse", "/mcp/admin", "/authorize", "/token", "/callback", "/health", "/csp-report", "/ops/mcp", "/ops/hooks", "/ops/otlp/v1/metrics", "/backup/credential", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/mcp", "/oauth/clients/verify-live.json"]) {
+  for (const path of [
+    "/mcp",
+    "/mcp/sse",
+    "/mcp/admin",
+    "/authorize",
+    "/token",
+    "/callback",
+    "/health",
+    "/csp-report",
+    "/ops/mcp",
+    "/ops/hooks",
+    "/ops/otlp/v1/metrics",
+    "/backup/credential",
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-protected-resource/mcp",
+    "/oauth/clients/verify-live.json",
+  ]) {
     assert.equal(servedOnMcpHost(path), true, path);
     assert.equal(at(MCP_HOST, path), null, path);
   }
-  for (const path of ["/", "/portal", "/portal/", "/portal/api/ops", "/console", "/mcpx", "/opsx", "/.well-known/security.txt", "/oauth/clients/other.json"]) {
+  for (const path of [
+    "/",
+    "/portal",
+    "/portal/",
+    "/portal/api/ops",
+    "/console",
+    "/mcpx",
+    "/opsx",
+    "/.well-known/security.txt",
+    "/oauth/clients/other.json",
+  ]) {
     assert.equal(servedOnMcpHost(path), false, path);
     assert.equal(at(MCP_HOST, path)?.status, 404, path);
   }
@@ -41,6 +67,7 @@ test("PLANT: the MCP host serves the probe document at the Worker's path", () =>
 
 test("any other host is untouched (the Portal host, the test hosts)", () => {
   for (const host of ["portal.dustinedwards.info", "capsid.test"]) {
-    for (const path of ["/", "/portal/", "/mcp"]) assert.equal(at(host, path), null, `${host}${path}`);
+    for (const path of ["/", "/portal/", "/mcp"])
+      assert.equal(at(host, path), null, `${host}${path}`);
   }
 });

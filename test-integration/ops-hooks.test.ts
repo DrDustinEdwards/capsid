@@ -28,19 +28,35 @@ const OTHER_SESSION = "5e55a0a1-0000-4000-8000-0000000000b2";
 const HOUR = 3_600_000;
 const iso = (agoMs: number) => new Date(Date.now() - agoMs).toISOString();
 
-async function agentRow(id: string, name: string, kind: string, key: string, grants: string[], extra: { revoked?: boolean; job?: string } = {}) {
+async function agentRow(
+  id: string,
+  name: string,
+  kind: string,
+  key: string,
+  grants: string[],
+  extra: { revoked?: boolean; job?: string } = {},
+) {
   const scopes = defaultScopes(["sample"]);
   scopes.grants = grants as typeof scopes.grants;
   return env.DB.prepare(
     `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, job_id)
-     VALUES (?1, ?2, ?3, ?4, ?5, 'github:sample', ?6, ?7, ?8)`
-  ).bind(id, name, kind, await sha256Hex(key), serializeScopes(scopes), new Date(Date.now() - 60_000).toISOString().slice(0, 19).replace("T", " "), extra.revoked ? "2026-09-01 00:00:00" : null, extra.job ?? null);
+     VALUES (?1, ?2, ?3, ?4, ?5, 'github:sample', ?6, ?7, ?8)`,
+  ).bind(
+    id,
+    name,
+    kind,
+    await sha256Hex(key),
+    serializeScopes(scopes),
+    new Date(Date.now() - 60_000).toISOString().slice(0, 19).replace("T", " "),
+    extra.revoked ? "2026-09-01 00:00:00" : null,
+    extra.job ?? null,
+  );
 }
 
 function job(id: string, status: string, claimedBy: string | null) {
   return env.DB.prepare(
     `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by)
-     VALUES (?1, 'sample', 'a sample job ' || ?1, 'lorem body', ?2, 'github:sample', ?3)`
+     VALUES (?1, 'sample', 'a sample job ' || ?1, 'lorem body', ?2, 'github:sample', ?3)`,
   ).bind(id, status, claimedBy);
 }
 
@@ -50,8 +66,18 @@ beforeEach(async () => {
     await agentRow("agent_hook00000001", "sample-driver", "driver", DRIVER_KEY, ["read", "write"]),
     await agentRow("agent_hook00000002", "sample-ro-driver", "driver", RO_DRIVER_KEY, ["read"]),
     await agentRow("agent_hook00000003", "sample-cron", "cron", CRON_KEY, ["read", "write"]),
-    await agentRow("agent_hook00000004", "sample-revoked-driver", "driver", REVOKED_KEY, ["read", "write"], { revoked: true }),
-    await agentRow("agent_hook00000006", "sample-b-driver", "driver", OTHER_DRIVER_KEY, ["read", "write"]),
+    await agentRow(
+      "agent_hook00000004",
+      "sample-revoked-driver",
+      "driver",
+      REVOKED_KEY,
+      ["read", "write"],
+      { revoked: true },
+    ),
+    await agentRow("agent_hook00000006", "sample-b-driver", "driver", OTHER_DRIVER_KEY, [
+      "read",
+      "write",
+    ]),
     job(DRIVER_JOB, "claimed", "agent:sample-driver"),
     job(SECOND_JOB, "queued", null),
   ]);
@@ -60,7 +86,10 @@ beforeEach(async () => {
 function hook(key: string | null, body: Record<string, unknown> | string): Promise<Response> {
   return SELF.fetch(`${ORIGIN}${OPS_HOOKS_PATH}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(key ? { Authorization: `Bearer ${key}` } : {}),
+    },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
@@ -84,12 +113,26 @@ interface SessionRow {
   end_reason: string | null;
 }
 
-const session = (id = SESSION) => env.DB.prepare("SELECT * FROM agent_sessions WHERE session_id = ?1").bind(id).first<SessionRow>();
-const sessionCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM agent_sessions").first<{ n: number }>())!.n;
-const eventCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM session_events").first<{ n: number }>())!.n;
+const session = (id = SESSION) =>
+  env.DB.prepare("SELECT * FROM agent_sessions WHERE session_id = ?1").bind(id).first<SessionRow>();
+const sessionCount = async () =>
+  (await env.DB.prepare("SELECT COUNT(*) AS n FROM agent_sessions").first<{ n: number }>())!.n;
+const eventCount = async () =>
+  (await env.DB.prepare("SELECT COUNT(*) AS n FROM session_events").first<{ n: number }>())!.n;
 
-const start = (id = SESSION) => ({ session_id: id, hook_event_name: "SessionStart", source: "startup", model: "claude-sample-model" });
-const notify = (type: string) => ({ session_id: SESSION, hook_event_name: "Notification", notification_type: type, title: "Sample", message: "Claude needs your permission" });
+const start = (id = SESSION) => ({
+  session_id: id,
+  hook_event_name: "SessionStart",
+  source: "startup",
+  model: "claude-sample-model",
+});
+const notify = (type: string) => ({
+  session_id: SESSION,
+  hook_event_name: "Notification",
+  notification_type: type,
+  title: "Sample",
+  message: "Claude needs your permission",
+});
 
 describe("who may post hooks", () => {
   it("PLANT: no key, a revoked key, a read-only driver and a non-driver agent are refused, and nothing is written", async () => {
@@ -111,22 +154,36 @@ describe("who may post hooks", () => {
     await ok(DRIVER_KEY, start());
     expect((await session())?.job_id).toBe(DRIVER_JOB);
     await env.DB.batch([
-      env.DB.prepare("UPDATE jobs SET status = 'done', claimed_by = NULL WHERE id = ?1").bind(DRIVER_JOB),
-      env.DB.prepare("UPDATE jobs SET status = 'claimed', claimed_by = 'agent:sample-driver' WHERE id = ?1").bind(SECOND_JOB),
+      env.DB.prepare("UPDATE jobs SET status = 'done', claimed_by = NULL WHERE id = ?1").bind(
+        DRIVER_JOB,
+      ),
+      env.DB.prepare(
+        "UPDATE jobs SET status = 'claimed', claimed_by = 'agent:sample-driver' WHERE id = ?1",
+      ).bind(SECOND_JOB),
     ]);
     await ok(DRIVER_KEY, { session_id: SESSION, hook_event_name: "Stop" });
-    expect((await session())?.job_id, "a session keeps the job it was first bound to").toBe(DRIVER_JOB);
+    expect((await session())?.job_id, "a session keeps the job it was first bound to").toBe(
+      DRIVER_JOB,
+    );
   });
 
   it("a driver holding no job, or two, binds to none", async () => {
-    await env.DB.prepare("UPDATE jobs SET status = 'claimed', claimed_by = 'agent:sample-driver' WHERE id = ?1").bind(SECOND_JOB).run();
+    await env.DB.prepare(
+      "UPDATE jobs SET status = 'claimed', claimed_by = 'agent:sample-driver' WHERE id = ?1",
+    )
+      .bind(SECOND_JOB)
+      .run();
     await ok(DRIVER_KEY, start());
     expect((await session())?.job_id).toBeNull();
   });
 
   it("another key cannot write to a session it did not start", async () => {
     await ok(DRIVER_KEY, start());
-    const response = await hook(OTHER_DRIVER_KEY, { session_id: SESSION, hook_event_name: "SessionEnd", reason: "other" });
+    const response = await hook(OTHER_DRIVER_KEY, {
+      session_id: SESSION,
+      hook_event_name: "SessionEnd",
+      reason: "other",
+    });
     expect(response.status).toBe(409);
     expect((await session())?.ended_at).toBeNull();
     expect(await eventCount()).toBe(1);
@@ -138,9 +195,15 @@ describe("what a session records", () => {
     await ok(DRIVER_KEY, start());
     expect((await session())?.needs_input).toBe(0);
     await ok(DRIVER_KEY, notify("permission_prompt"));
-    expect(await session()).toMatchObject({ needs_input: 1, last_event: "Notification", last_notification_type: "permission_prompt" });
+    expect(await session()).toMatchObject({
+      needs_input: 1,
+      last_event: "Notification",
+      last_notification_type: "permission_prompt",
+    });
     await ok(DRIVER_KEY, notify("auth_success"));
-    expect((await session())?.needs_input, "a Notification that is not about input leaves it").toBe(1);
+    expect((await session())?.needs_input, "a Notification that is not about input leaves it").toBe(
+      1,
+    );
     await ok(DRIVER_KEY, { session_id: SESSION, hook_event_name: "Stop" });
     expect((await session())?.needs_input).toBe(0);
     await ok(DRIVER_KEY, notify("idle_prompt"));
@@ -152,16 +215,28 @@ describe("what a session records", () => {
 
   it("a StopFailure on a rate limit is the session's failure and a feed incident, until a turn ends normally", async () => {
     await ok(DRIVER_KEY, start());
-    await ok(DRIVER_KEY, { session_id: SESSION, hook_event_name: "StopFailure", error: "rate_limit", last_assistant_message: "API Error: 429 " + "x".repeat(600), prompt: "never kept" });
+    await ok(DRIVER_KEY, {
+      session_id: SESSION,
+      hook_event_name: "StopFailure",
+      error: "rate_limit",
+      last_assistant_message: "API Error: 429 " + "x".repeat(600),
+      prompt: "never kept",
+    });
     expect((await session())?.last_failure).toBe("rate_limit");
-    const event = await env.DB.prepare("SELECT subtype, detail FROM session_events WHERE event = 'StopFailure'").first<{ subtype: string; detail: string }>();
+    const event = await env.DB.prepare(
+      "SELECT subtype, detail FROM session_events WHERE event = 'StopFailure'",
+    ).first<{ subtype: string; detail: string }>();
     expect(event?.subtype).toBe("rate_limit");
     const detail = JSON.parse(event!.detail) as { error: string };
     expect(detail.error.startsWith("API Error: 429")).toBe(true);
     expect(detail.error.length).toBe(300);
     expect(event!.detail).not.toContain("never kept");
     let feed = await opsFeed(env as unknown as Env, new Date());
-    expect(feed.live.sessions.find((s) => s.session_id === SESSION)).toMatchObject({ last_failure: "rate_limit", incident: "failure", job_id: DRIVER_JOB });
+    expect(feed.live.sessions.find((s) => s.session_id === SESSION)).toMatchObject({
+      last_failure: "rate_limit",
+      incident: "failure",
+      job_id: DRIVER_JOB,
+    });
     await ok(DRIVER_KEY, { session_id: SESSION, hook_event_name: "Stop" });
     expect((await session())?.last_failure).toBeNull();
     feed = await opsFeed(env as unknown as Env, new Date());
@@ -170,7 +245,11 @@ describe("what a session records", () => {
 
   it("SessionEnd ends the session, and the feed stops listing it", async () => {
     await ok(DRIVER_KEY, start());
-    await ok(DRIVER_KEY, { session_id: SESSION, hook_event_name: "SessionEnd", reason: "prompt_input_exit" });
+    await ok(DRIVER_KEY, {
+      session_id: SESSION,
+      hook_event_name: "SessionEnd",
+      reason: "prompt_input_exit",
+    });
     const row = await session();
     expect(row?.ended_at).not.toBeNull();
     expect(row?.end_reason).toBe("prompt_input_exit");
@@ -187,7 +266,11 @@ describe("what a session records", () => {
   });
 
   it("an event this receiver does not record is refused with 400", async () => {
-    const response = await hook(DRIVER_KEY, { session_id: SESSION, hook_event_name: "PreToolUse", tool_input: { command: "ls" } });
+    const response = await hook(DRIVER_KEY, {
+      session_id: SESSION,
+      hook_event_name: "PreToolUse",
+      tool_input: { command: "ls" },
+    });
     expect(response.status).toBe(400);
     expect(await sessionCount()).toBe(0);
   });
@@ -196,11 +279,15 @@ describe("what a session records", () => {
     const old = iso(40 * 24 * HOUR);
     await env.DB.batch(
       Array.from({ length: 3 }, () =>
-        env.DB.prepare("INSERT INTO session_events (session_id, job_id, agent, event, subtype, detail, at) VALUES ('old-session', NULL, 'agent:sample-driver', 'Stop', NULL, NULL, ?1)").bind(old)
-      )
+        env.DB.prepare(
+          "INSERT INTO session_events (session_id, job_id, agent, event, subtype, detail, at) VALUES ('old-session', NULL, 'agent:sample-driver', 'Stop', NULL, NULL, ?1)",
+        ).bind(old),
+      ),
     );
     await ok(DRIVER_KEY, start());
-    const left = await env.DB.prepare("SELECT session_id FROM session_events").all<{ session_id: string }>();
+    const left = await env.DB.prepare("SELECT session_id FROM session_events").all<{
+      session_id: string;
+    }>();
     expect(left.results.map((r) => r.session_id)).toEqual([SESSION]);
   });
 });
@@ -212,15 +299,27 @@ describe("the feed's live sessions", () => {
     await ok(OTHER_DRIVER_KEY, start(OTHER_SESSION));
     // The driver's session has waited fifteen minutes; a third session went quiet two days ago.
     await env.DB.batch([
-      env.DB.prepare("UPDATE agent_sessions SET last_event_at = ?1 WHERE session_id = ?2").bind(iso(15 * 60_000), SESSION),
+      env.DB.prepare("UPDATE agent_sessions SET last_event_at = ?1 WHERE session_id = ?2").bind(
+        iso(15 * 60_000),
+        SESSION,
+      ),
       env.DB.prepare(
         `INSERT INTO agent_sessions (session_id, agent, started_at, last_event_at, last_event, updated_at)
-         VALUES ('5e55a0a1-0000-4000-8000-0000000000b3', 'agent:sample-driver', ?1, ?1, 'Stop', ?1)`
+         VALUES ('5e55a0a1-0000-4000-8000-0000000000b3', 'agent:sample-driver', ?1, ?1, 'Stop', ?1)`,
       ).bind(iso(48 * HOUR)),
     ]);
     const feed = await opsFeed(env as unknown as Env, new Date());
     expect(feed.live.sessions.map((s) => s.session_id)).toEqual([OTHER_SESSION, SESSION]);
-    expect(feed.live.sessions[1]).toMatchObject({ needs_input: true, incident: "waiting", last_notification_type: "permission_prompt", job_id: DRIVER_JOB });
-    expect(feed.live.sessions[0]).toMatchObject({ needs_input: false, incident: null, job_id: null });
+    expect(feed.live.sessions[1]).toMatchObject({
+      needs_input: true,
+      incident: "waiting",
+      last_notification_type: "permission_prompt",
+      job_id: DRIVER_JOB,
+    });
+    expect(feed.live.sessions[0]).toMatchObject({
+      needs_input: false,
+      incident: null,
+      job_id: null,
+    });
   });
 });

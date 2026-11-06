@@ -9,7 +9,16 @@ import { age, ago, ms } from "../lib/format";
 import { download, toCsv } from "../lib/csv";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { Panel } from "capsomer/react/panel";
-import { byCheck, None, AgreementCounts, totals, counts, wait, JobDetail, AGREEMENTS } from "./ClaimsJob";
+import {
+  byCheck,
+  None,
+  AgreementCounts,
+  totals,
+  counts,
+  wait,
+  JobDetail,
+  AGREEMENTS,
+} from "./ClaimsJob";
 
 // Chart 5, claim against verified per agent, is Enarratio's grouped bar chart, in the same
 // lazy chunk as the Portal's other charts.
@@ -25,7 +34,12 @@ export function Claims() {
   const search = useSearch();
   const [, navigate] = useLocation();
   const params = new URLSearchParams(search);
-  const filter: Filter = { namespace: params.get("namespace") ?? "", agent: params.get("agent") ?? "", since: params.get("since") ?? "", until: params.get("until") ?? "" };
+  const filter: Filter = {
+    namespace: params.get("namespace") ?? "",
+    agent: params.get("agent") ?? "",
+    since: params.get("since") ?? "",
+    until: params.get("until") ?? "",
+  };
   const job = params.get("job") ?? "";
   const [input, setInput] = useState<Filter>(filter);
   const [jobInput, setJobInput] = useState(job);
@@ -40,7 +54,10 @@ export function Claims() {
   }
 
   const agg = useAnswer<PortalClaimsAggregate>(["claims", key], () => fetchClaimsAggregate(filter));
-  const detail = useAnswer<PortalClaimsJob>(["claims", "job", job], () => fetchClaimsJob(job), { keep: false, enabled: job !== "" });
+  const detail = useAnswer<PortalClaimsJob>(["claims", "job", job], () => fetchClaimsJob(job), {
+    keep: false,
+    enabled: job !== "",
+  });
 
   const go = (next: Filter, nextJob: string) => {
     // Checks is Jobs' tab, so the tab stays in the address beside the filter.
@@ -70,7 +87,12 @@ export function Claims() {
         <label className="sr-only" htmlFor="clNs">
           Project
         </label>
-        <select id="clNs" className="search" value={input.namespace} onChange={(e) => setInput({ ...input, namespace: e.target.value })}>
+        <select
+          id="clNs"
+          className="search"
+          value={input.namespace}
+          onChange={(e) => setInput({ ...input, namespace: e.target.value })}
+        >
           <option value="">All projects</option>
           {names.map((n) => (
             <option key={n} value={n}>
@@ -81,20 +103,45 @@ export function Claims() {
         <label className="sr-only" htmlFor="clAgent">
           Agent
         </label>
-        <input id="clAgent" className="search" type="search" placeholder="Agent, e.g. agent:sample-driver" value={input.agent} onChange={(e) => setInput({ ...input, agent: e.target.value })} />
+        <input
+          id="clAgent"
+          className="search"
+          type="search"
+          placeholder="Agent, e.g. agent:sample-driver"
+          value={input.agent}
+          onChange={(e) => setInput({ ...input, agent: e.target.value })}
+        />
         <label className="sr-only" htmlFor="clSince">
           Since
         </label>
-        <input id="clSince" className="search" type="date" title="Since (inclusive)" value={input.since} onChange={(e) => setInput({ ...input, since: e.target.value })} />
+        <input
+          id="clSince"
+          className="search"
+          type="date"
+          title="Since (inclusive)"
+          value={input.since}
+          onChange={(e) => setInput({ ...input, since: e.target.value })}
+        />
         <label className="sr-only" htmlFor="clUntil">
           Before
         </label>
-        <input id="clUntil" className="search" type="date" title="Before (exclusive)" value={input.until} onChange={(e) => setInput({ ...input, until: e.target.value })} />
+        <input
+          id="clUntil"
+          className="search"
+          type="date"
+          title="Before (exclusive)"
+          value={input.until}
+          onChange={(e) => setInput({ ...input, until: e.target.value })}
+        />
         <button type="submit" className="btn">
           Apply
         </button>
         {filtered && (
-          <button type="button" className="btn" onClick={() => go({ namespace: "", agent: "", since: "", until: "" }, job)}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => go({ namespace: "", agent: "", since: "", until: "" }, job)}
+          >
             Clear
           </button>
         )}
@@ -107,7 +154,8 @@ export function Claims() {
       )}
       {data && data.truncated.length > 0 && (
         <div className="callout warn" role="status">
-          This read hit its bound on: {data.truncated.join(", ")}. Narrow the filter, or read every row through the claims tool's export.
+          This read hit its bound on: {data.truncated.join(", ")}. Narrow the filter, or read every
+          row through the claims tool's export.
         </div>
       )}
       {data && <ClaimsExport data={data} />}
@@ -118,10 +166,15 @@ export function Claims() {
         src={
           <>
             {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="btn" disabled={agg.loading} onClick={() => {
+            <button
+              type="button"
+              className="btn"
+              disabled={agg.loading}
+              onClick={() => {
                 agg.reread();
                 if (job) detail.reread();
-              }}>
+              }}
+            >
               {agg.loading ? "Reading..." : "Read again"}
             </button>
           </>
@@ -164,12 +217,22 @@ export function Claims() {
                       <AgreementCounts c={totals(g)} />
                     </td>
                     <td className="mono wrap" data-label="Touches">
-                      {g.touches.count ? `${g.touches.count}: ${counts(g.touches.by_kind)}` : <None />}
-                      {g.touches.count > 0 && <div className="src">{counts(g.touches.by_actor_kind)}</div>}
+                      {g.touches.count ? (
+                        `${g.touches.count}: ${counts(g.touches.by_kind)}`
+                      ) : (
+                        <None />
+                      )}
+                      {g.touches.count > 0 && (
+                        <div className="src">{counts(g.touches.by_actor_kind)}</div>
+                      )}
                     </td>
                     <td data-label="Median wait">
                       {wait(g.touches.waited_ms_median)}
-                      {g.touches.waited_ms_total !== null && <div className="src">total {age(0, g.touches.waited_ms_total)} over {g.touches.waits}</div>}
+                      {g.touches.waited_ms_total !== null && (
+                        <div className="src">
+                          total {age(0, g.touches.waited_ms_total)} over {g.touches.waits}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -177,7 +240,9 @@ export function Claims() {
             </table>
           </div>
         ) : data ? (
-          <div className="body faint">{filtered ? "No claims match these filters." : "No claim has been recorded yet."}</div>
+          <div className="body faint">
+            {filtered ? "No claims match these filters." : "No claim has been recorded yet."}
+          </div>
         ) : (
           <div className="body faint">No read yet.</div>
         )}
@@ -228,7 +293,15 @@ export function Claims() {
         <label className="sr-only" htmlFor="clJob">
           Job id
         </label>
-        <input id="clJob" className="search" type="search" list="clJobs" placeholder="Job id, e.g. job_0123456789ab" value={jobInput} onChange={(e) => setJobInput(e.target.value)} />
+        <input
+          id="clJob"
+          className="search"
+          type="search"
+          list="clJobs"
+          placeholder="Job id, e.g. job_0123456789ab"
+          value={jobInput}
+          onChange={(e) => setJobInput(e.target.value)}
+        />
         <datalist id="clJobs">
           {feed.live.jobs.map((j) => (
             <option key={j.id} value={j.id}>
@@ -271,7 +344,22 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
     download(
       `claims-by-agent-${stamp}${cut}.csv`,
       toCsv(
-        ["agent", "namespace", "jobs", "claims", ...checks.flatMap((c) => [`${c}_agree`, `${c}_disagree`, `${c}_unclaimed`, `${c}_unchecked`]), "touches", "waits", "waited_ms_total", "waited_ms_median"],
+        [
+          "agent",
+          "namespace",
+          "jobs",
+          "claims",
+          ...checks.flatMap((c) => [
+            `${c}_agree`,
+            `${c}_disagree`,
+            `${c}_unclaimed`,
+            `${c}_unchecked`,
+          ]),
+          "touches",
+          "waits",
+          "waited_ms_total",
+          "waited_ms_median",
+        ],
         data.groups.map((g) => [
           g.agent,
           g.namespace,
@@ -291,10 +379,28 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   const waits = () =>
     download(
       `claims-waits-${stamp}${cut}.csv`,
-      toCsv(["namespace", "gate_class", "ended_by", "waits", "waited_ms_total", "waited_ms_median"], data.waits.map((w) => [w.namespace, w.gate_class, w.ended_by, w.waits, w.waited_ms_total, w.waited_ms_median])),
+      toCsv(
+        ["namespace", "gate_class", "ended_by", "waits", "waited_ms_total", "waited_ms_median"],
+        data.waits.map((w) => [
+          w.namespace,
+          w.gate_class,
+          w.ended_by,
+          w.waits,
+          w.waited_ms_total,
+          w.waited_ms_median,
+        ]),
+      ),
     );
   const usage = () => {
-    const cols = ["rows", "cost_usd", "active_seconds", "tokens_input", "tokens_output", "tokens_cache_read", "tokens_cache_creation"] as const;
+    const cols = [
+      "rows",
+      "cost_usd",
+      "active_seconds",
+      "tokens_input",
+      "tokens_output",
+      "tokens_cache_read",
+      "tokens_cache_creation",
+    ] as const;
     download(
       `claims-usage-${stamp}${cut}.csv`,
       toCsv(

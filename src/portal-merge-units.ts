@@ -30,12 +30,18 @@ export async function readMergeUnits(kv: KVNamespace): Promise<PortalMergeUnits>
   return {
     generated: report?.generated ?? null,
     suspended,
-    proposals: (report?.proposals ?? []).filter((p) => p.kind === "demote" || !suspendedUnits.has(p.unit)).map((p) => ({ kind: p.kind, unit: p.unit, title: p.title })),
+    proposals: (report?.proposals ?? [])
+      .filter((p) => p.kind === "demote" || !suspendedUnits.has(p.unit))
+      .map((p) => ({ kind: p.kind, unit: p.unit, title: p.title })),
   };
 }
 
 /** GET /portal/api/merge-units. */
-export async function handlePortalMergeUnits(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalMergeUnits(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   return json(await readMergeUnits(env.APP_KV));

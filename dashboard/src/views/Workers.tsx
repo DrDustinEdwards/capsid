@@ -16,7 +16,12 @@ import { St } from "../ui/icons";
 type Worker = ResourcesDoc["workers"][number];
 type User = ResourcesDoc["databases"][number]["used_by"][number];
 
-const names = (list: string[]) => (list.length ? <span className="mono">{list.join(", ")}</span> : <span className="faint">none</span>);
+const names = (list: string[]) =>
+  list.length ? (
+    <span className="mono">{list.join(", ")}</span>
+  ) : (
+    <span className="faint">none</span>
+  );
 const pairs = (list: Array<{ binding: string; to: string }>) =>
   list.length ? (
     <span className="mono">{list.map((p) => `${p.binding} → ${p.to}`).join(", ")}</span>
@@ -31,11 +36,28 @@ function WorkerPanel({ w }: { w: Worker }) {
     ["D1", pairs(w.d1.map((d) => ({ binding: d.binding, to: d.database }))), w.d1.length],
     ["KV", pairs(w.kv.map((k) => ({ binding: k.binding, to: k.namespace }))), w.kv.length],
     ["R2", pairs(w.r2.map((r) => ({ binding: r.binding, to: r.bucket }))), w.r2.length],
-    ["Durable Objects", pairs(w.durable_objects.map((d) => ({ binding: d.binding, to: d.script ? `${d.class} in ${d.script}` : d.class }))), w.durable_objects.length],
+    [
+      "Durable Objects",
+      pairs(
+        w.durable_objects.map((d) => ({
+          binding: d.binding,
+          to: d.script ? `${d.class} in ${d.script}` : d.class,
+        })),
+      ),
+      w.durable_objects.length,
+    ],
     ["Queues", pairs(w.queues.map((q) => ({ binding: q.binding, to: q.queue }))), w.queues.length],
-    ["Services", pairs(w.services.map((s) => ({ binding: s.binding, to: s.service }))), w.services.length],
+    [
+      "Services",
+      pairs(w.services.map((s) => ({ binding: s.binding, to: s.service }))),
+      w.services.length,
+    ],
     ["Other", pairs(w.other.map((o) => ({ binding: o.binding, to: o.kind }))), w.other.length],
-    ["Previews", pairs(w.previews.map((p) => ({ binding: p.binding, to: p.store }))), w.previews.length],
+    [
+      "Previews",
+      pairs(w.previews.map((p) => ({ binding: p.binding, to: p.store }))),
+      w.previews.length,
+    ],
   ];
   const shown = rows.filter(([label, , n]) => n > 0 || label === "Secrets");
   return (
@@ -44,8 +66,18 @@ function WorkerPanel({ w }: { w: Worker }) {
       title={w.script}
       id={`worker-${w.script}`}
       section={w.script}
-      src={w.system ? <>system <span className="mono">{w.system}</span></> : <St kind="warn">No system lists it</St>}
-      footer={<span className="faint">{`${w.secrets.length} ${w.secrets.length === 1 ? "secret" : "secrets"} · ${w.d1.length + w.kv.length + w.r2.length} ${w.d1.length + w.kv.length + w.r2.length === 1 ? "store" : "stores"}`}</span>}
+      src={
+        w.system ? (
+          <>
+            system <span className="mono">{w.system}</span>
+          </>
+        ) : (
+          <St kind="warn">No system lists it</St>
+        )
+      }
+      footer={
+        <span className="faint">{`${w.secrets.length} ${w.secrets.length === 1 ? "secret" : "secrets"} · ${w.d1.length + w.kv.length + w.r2.length} ${w.d1.length + w.kv.length + w.r2.length === 1 ? "store" : "stores"}`}</span>
+      }
     >
       {w.error ? (
         <p className="shared-none">
@@ -74,24 +106,38 @@ function WorkerPanel({ w }: { w: Worker }) {
 
 const usedBy = (users: User[]) =>
   users.length ? (
-    <span>{[...new Set(users.map((u) => (u.system ? `${u.system} (${u.script})` : u.script)))].join(", ")}</span>
+    <span>
+      {[...new Set(users.map((u) => (u.system ? `${u.system} (${u.script})` : u.script)))].join(
+        ", ",
+      )}
+    </span>
   ) : (
     <St kind="warn">Bound by no Worker</St>
   );
 
 function StoresPanel({ doc }: { doc: ResourcesDoc }) {
-  const unbound = [...doc.databases, ...doc.kv_namespaces, ...doc.buckets].filter((s) => s.used_by.length === 0).length;
+  const unbound = [...doc.databases, ...doc.kv_namespaces, ...doc.buckets].filter(
+    (s) => s.used_by.length === 0,
+  ).length;
   return (
     <Panel
       flush
       title="Stores"
       id="worker-stores"
       section="Stores"
-      src={<>{`${doc.databases.length} D1 · ${doc.kv_namespaces.length} KV · ${doc.buckets.length} R2`}</>}
-      footer={<span className="faint">{unbound ? `${unbound} bound by no Worker` : "Every store is bound"}</span>}
+      src={
+        <>{`${doc.databases.length} D1 · ${doc.kv_namespaces.length} KV · ${doc.buckets.length} R2`}</>
+      }
+      footer={
+        <span className="faint">
+          {unbound ? `${unbound} bound by no Worker` : "Every store is bound"}
+        </span>
+      }
     >
       <table className="brief workers-stores">
-        <caption className="sr-only">Every D1 database, KV namespace and R2 bucket, and who uses it</caption>
+        <caption className="sr-only">
+          Every D1 database, KV namespace and R2 bucket, and who uses it
+        </caption>
         <thead>
           <tr>
             <th>Store</th>
@@ -167,7 +213,8 @@ function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
   if (!doc || !doc.read_at) {
     return (
       <Empty kind="nothing-yet" title="The Workers have not been read yet.">
-        {doc?.problems[0] ?? "The nightly build reads every Worker from Cloudflare after 06:00 UTC."}
+        {doc?.problems[0] ??
+          "The nightly build reads every Worker from Cloudflare after 06:00 UTC."}
       </Empty>
     );
   }
@@ -176,14 +223,20 @@ function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
 
 function ReadNote({ doc }: { doc: ResourcesDoc }) {
   const { now } = useApp();
-  return <p className="faint shared-read">{`Read from Cloudflare ${ago(ms(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>;
+  return (
+    <p className="faint shared-read">{`Read from Cloudflare ${ago(ms(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>
+  );
 }
 
 /** The Workers a site owns: its own script, and every Worker its system lists beside it
  *  (system/model.json), such as a site's desk. */
 function ownedScripts(doc: ResourcesDoc, scripts: ReadonlyArray<string>): string[] {
-  const systems = new Set(doc.workers.filter((w) => scripts.includes(w.script) && w.system).map((w) => w.system));
-  return doc.workers.filter((w) => scripts.includes(w.script) || (w.system !== null && systems.has(w.system))).map((w) => w.script);
+  const systems = new Set(
+    doc.workers.filter((w) => scripts.includes(w.script) && w.system).map((w) => w.system),
+  );
+  return doc.workers
+    .filter((w) => scripts.includes(w.script) || (w.system !== null && systems.has(w.system)))
+    .map((w) => w.script);
 }
 
 /** A site's Setup tab: what each of its Workers binds, and its secret and variable names. */
@@ -198,7 +251,11 @@ export function SiteWorkers({ scripts }: { scripts: ReadonlyArray<string> }) {
     <>
       {workers.length === 0 ? (
         <p className="shared-none">
-          <St kind="nodata">{scripts.length ? `Cloudflare has no Worker named ${scripts.join(" or ")}.` : "No Worker script is known for this site: set one in its settings above."}</St>
+          <St kind="nodata">
+            {scripts.length
+              ? `Cloudflare has no Worker named ${scripts.join(" or ")}.`
+              : "No Worker script is known for this site: set one in its settings above."}
+          </St>
         </p>
       ) : (
         workers.map((w) => <WorkerPanel key={w.script} w={w} />)
@@ -212,7 +269,12 @@ export function SiteWorkers({ scripts }: { scripts: ReadonlyArray<string> }) {
 export function UnownedResources({ siteScripts }: { siteScripts: ReadonlyArray<string> }) {
   const load = useResources();
   const doc = load.data;
-  if (!doc || !doc.read_at) return <div className="embedded"><NotRead load={load} /></div>;
+  if (!doc || !doc.read_at)
+    return (
+      <div className="embedded">
+        <NotRead load={load} />
+      </div>
+    );
   const owned = new Set(ownedScripts(doc, siteScripts));
   const rest = doc.workers.filter((w) => !owned.has(w.script));
   return (
@@ -225,7 +287,9 @@ export function UnownedResources({ siteScripts }: { siteScripts: ReadonlyArray<s
       {rest.map((w) => (
         <WorkerPanel key={w.script} w={w} />
       ))}
-      {rest.length === 0 && <p className="faint">Every Worker belongs to a site; each is on its site's Setup tab.</p>}
+      {rest.length === 0 && (
+        <p className="faint">Every Worker belongs to a site; each is on its site's Setup tab.</p>
+      )}
       <StoresPanel doc={doc} />
       <ReadNote doc={doc} />
     </div>

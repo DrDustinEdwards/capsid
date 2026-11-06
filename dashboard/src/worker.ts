@@ -13,7 +13,11 @@ const handler = createRequestHandler(build as unknown as ServerBuild, "productio
 
 /** A Portal page: `request` names it as the browser does (/health), `read` answers the Portal's
  *  API routes ("/ops"), and `nonce` goes on every script the page renders. */
-export function renderPortalPage(request: Request, read: PortalRead, nonce: string): Promise<Response> {
+export function renderPortalPage(
+  request: Request,
+  read: PortalRead,
+  nonce: string,
+): Promise<Response> {
   const context = new RouterContextProvider();
   context.set(portalServer, { read, nonce });
   return handler(request, context);
@@ -27,6 +31,10 @@ export function demoRead(file: (path: string) => Promise<Response>): PortalRead 
 }
 
 /** A demo page (/demos/...): `file` answers a path in the build's files. */
-export function renderDemoPage(request: Request, file: (path: string) => Promise<Response>, nonce: string): Promise<Response> {
+export function renderDemoPage(
+  request: Request,
+  file: (path: string) => Promise<Response>,
+  nonce: string,
+): Promise<Response> {
   return renderPortalPage(request, demoRead(file), nonce);
 }

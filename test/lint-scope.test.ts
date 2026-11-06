@@ -16,27 +16,65 @@ const OWN_REPO = "example/sample-repo";
 // Edges touching "sample": one inside it, one into "other", which this caller is not
 // scoped to. Both dangle, so each answers a different question about existence.
 const DANGLING = [
-  { from_ns: "sample", from_path: "spec.md", type: "implements", to_ns: "sample", to_path: "gone.md", source_missing: 0, target_missing: 1 },
-  { from_ns: "sample", from_path: "spec.md", type: "cites", to_ns: "other", to_path: "private-plan.md", source_missing: 0, target_missing: 1 },
+  {
+    from_ns: "sample",
+    from_path: "spec.md",
+    type: "implements",
+    to_ns: "sample",
+    to_path: "gone.md",
+    source_missing: 0,
+    target_missing: 1,
+  },
+  {
+    from_ns: "sample",
+    from_path: "spec.md",
+    type: "cites",
+    to_ns: "other",
+    to_path: "private-plan.md",
+    source_missing: 0,
+    target_missing: 1,
+  },
 ];
-const EDGES = DANGLING.map(({ from_ns, from_path, type, to_ns, to_path }) => ({ from_ns, from_path, type, to_ns, to_path }));
-const RULES = [{ namespace: "capsid", path: "conventions.md", title: "Conventions", body: "lorem ipsum rules" }];
+const EDGES = DANGLING.map(({ from_ns, from_path, type, to_ns, to_path }) => ({
+  from_ns,
+  from_path,
+  type,
+  to_ns,
+  to_path,
+}));
+const RULES = [
+  { namespace: "capsid", path: "conventions.md", title: "Conventions", body: "lorem ipsum rules" },
+];
 
 function scopedTo(namespaces: string[], repos: string[] | "*"): Agent {
   const scopes = defaultScopes(namespaces);
   scopes.grants = ["read", "write"];
   scopes.repos = repos;
-  return { id: "agent_lintscope1", name: "lintscope", kind: "session", actor: "agent:lintscope", scopes, admin: false, row: null };
+  return {
+    id: "agent_lintscope1",
+    name: "lintscope",
+    kind: "session",
+    actor: "agent:lintscope",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 async function connect(agent: Agent) {
   const base = fakeD1({
     documents: [{ namespace: "sample", path: "core.md", type: "core", body: "lorem" }],
-    namespaces: [{ namespace: "sample", repos: JSON.stringify([{ repo: OWN_REPO, label: "primary" }]) }],
+    namespaces: [
+      { namespace: "sample", repos: JSON.stringify([{ repo: OWN_REPO, label: "primary" }]) },
+    ],
   });
   const asked: string[] = [];
   const canned = (results: unknown[]) => {
-    const s = { bind: () => s, all: async () => ({ results }), first: async () => results[0] ?? null };
+    const s = {
+      bind: () => s,
+      all: async () => ({ results }),
+      first: async () => results[0] ?? null,
+    };
     return s;
   };
   const db = {
@@ -59,14 +97,21 @@ async function connect(agent: Agent) {
 }
 
 const call = async (client: Client, args: Record<string, unknown>) =>
-  (await client.callTool({ name: "capsid_lint_namespace", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
-const text = (result: { content: Array<{ text: string }> }) => result.content.map((c) => c.text).join("");
+  (await client.callTool({ name: "capsid_lint_namespace", arguments: args })) as {
+    isError?: boolean;
+    content: Array<{ text: string }>;
+  };
+const text = (result: { content: Array<{ text: string }> }) =>
+  result.content.map((c) => c.text).join("");
 
 const treeRoutes = {
   [`GET /repos/${OWN_REPO}`]: { body: { default_branch: "main" } },
-  [`GET /repos/${OWN_REPO}/git/trees/main`]: { body: { truncated: false, tree: [{ path: "README.md", type: "blob" }] } },
+  [`GET /repos/${OWN_REPO}/git/trees/main`]: {
+    body: { truncated: false, tree: [{ path: "README.md", type: "blob" }] },
+  },
 };
-const treeReads = (calls: FetchCall[]) => calls.filter((c) => c.path.includes("/git/trees/")).length;
+const treeReads = (calls: FetchCall[]) =>
+  calls.filter((c) => c.path.includes("/git/trees/")).length;
 
 test("PLANT: gather for a caller scoped to one namespace gets the capsid rules and nothing else outside it", async () => {
   const { client, asked, close } = await connect(scopedTo(["sample"], "*"));
@@ -76,7 +121,11 @@ test("PLANT: gather for a caller scoped to one namespace gets the capsid rules a
     const packet = JSON.parse(text(result));
     // capsid/conventions.md is exempt from the filter: it is
     // the rules every caller's lint runs under.
-    assert.deepEqual(packet.rules, RULES, "the capsid rules were withheld from a caller not scoped to capsid");
+    assert.deepEqual(
+      packet.rules,
+      RULES,
+      "the capsid rules were withheld from a caller not scoped to capsid",
+    );
     assert.equal(packet.rules_withheld, undefined);
     // The exemption is that one path only: no other capsid document is read.
     const capsidReads = asked.filter((sql) => /namespace = 'capsid'/.test(sql));
@@ -85,7 +134,7 @@ test("PLANT: gather for a caller scoped to one namespace gets the capsid rules a
     assert.deepEqual(
       packet.dangling_edges.map((e: { to_ns: string }) => e.to_ns),
       ["sample"],
-      "a dangling edge into an out-of-scope namespace was returned"
+      "a dangling edge into an out-of-scope namespace was returned",
     );
   } finally {
     await close();
@@ -98,11 +147,21 @@ test("PLANT: report for a caller scoped to one namespace persists nothing about 
     await withFetch(treeRoutes, async (calls) => {
       const result = await call(client, { namespace: "sample", mode: "report" });
       assert.ok(!result.isError, text(result));
-      assert.equal(treeReads(calls), 0, "the repo tree was read although the repo is outside the caller's repos axis");
+      assert.equal(
+        treeReads(calls),
+        0,
+        "the repo tree was read although the repo is outside the caller's repos axis",
+      );
     });
     const written = recorded.flatMap((r) => r.params.map(String)).join("\n");
-    assert.ok(written.includes("sample/gone.md"), "the in-scope dangling edge is missing from the stored report; the test is not looking at the report");
-    assert.ok(!written.includes("other/private-plan.md"), "the stored report names a document in a namespace the caller is not scoped to");
+    assert.ok(
+      written.includes("sample/gone.md"),
+      "the in-scope dangling edge is missing from the stored report; the test is not looking at the report",
+    );
+    assert.ok(
+      !written.includes("other/private-plan.md"),
+      "the stored report names a document in a namespace the caller is not scoped to",
+    );
   } finally {
     await close();
   }
@@ -118,10 +177,17 @@ test("THE INNOCENT DIRECTION: an unrestricted caller still gets the rules, every
     await withFetch(treeRoutes, async (calls) => {
       const result = await call(client, { namespace: "sample", mode: "report" });
       assert.ok(!result.isError, text(result));
-      assert.equal(treeReads(calls), 1, "the repo tree was not read for a caller whose repos axis is *");
+      assert.equal(
+        treeReads(calls),
+        1,
+        "the repo tree was not read for a caller whose repos axis is *",
+      );
     });
     const written = recorded.flatMap((r) => r.params.map(String)).join("\n");
-    assert.ok(written.includes("other/private-plan.md"), "an unrestricted caller lost a cross-namespace edge");
+    assert.ok(
+      written.includes("other/private-plan.md"),
+      "an unrestricted caller lost a cross-namespace edge",
+    );
   } finally {
     await close();
   }

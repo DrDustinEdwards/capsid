@@ -23,7 +23,15 @@ function driver(namespace = "capsid"): Agent {
   const name = `${namespace}-driver`;
   const scopes = defaultScopes([namespace]);
   scopes.grants = ["read", "write"];
-  return { id: "agent_0123456789ab", name, kind: "driver", actor: `agent:${name}`, scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name,
+    kind: "driver",
+    actor: `agent:${name}`,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 // A minted seat: can_merge and nothing else. A plain resume is the seat's act, so the
@@ -33,7 +41,15 @@ function mintedSeat(namespace = "capsid"): Agent {
   const scopes = defaultScopes([namespace]);
   scopes.grants = ["read", "write"];
   scopes.flags.can_merge = true;
-  return { id: "agent_0123456789ab", name, kind: "driver", actor: `agent:${name}`, scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name,
+    kind: "driver",
+    actor: `agent:${name}`,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 const SEAT_AGENT = grantAgent("write", SEAT);
@@ -51,7 +67,9 @@ async function post(over: Partial<Parameters<typeof postJob>[3]> = {}) {
 }
 
 async function statusOf(id: string) {
-  const row = await env.DB.prepare("SELECT status FROM jobs WHERE id = ?1").bind(id).first<{ status: string }>();
+  const row = await env.DB.prepare("SELECT status FROM jobs WHERE id = ?1")
+    .bind(id)
+    .first<{ status: string }>();
   return row?.status;
 }
 
@@ -60,7 +78,9 @@ describe("required_scopes on the real queue transitions", () => {
     await env.DB.prepare("DELETE FROM jobs").run();
     await env.DB.prepare("DELETE FROM job_outcomes").run();
     // jobs post requires a registered namespace.
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+      .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
+      .run();
   });
 
   it("PLANT: a job naming a flag is not handed to a driver without it, and STAYS QUEUED", async () => {
@@ -93,7 +113,9 @@ describe("required_scopes on the real queue transitions", () => {
 
     // take: without it the job goes back to the seat that blocked it, and the resumer
     // acquires nothing.
-    const refused = await resumeJob(jobsEnv(), mintedSeat(), NOW, id, "picking it up", { take: true });
+    const refused = await resumeJob(jobsEnv(), mintedSeat(), NOW, id, "picking it up", {
+      take: true,
+    });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/can_touch_protected/);
     expect(await statusOf(id)).toBe("blocked");
@@ -136,7 +158,9 @@ describe("a corrupt job requirement fails closed at the claim", () => {
     await env.DB.prepare("DELETE FROM jobs").run();
     await env.DB.prepare("DELETE FROM job_outcomes").run();
     // jobs post requires a registered namespace.
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+      .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
+      .run();
   });
 
   for (const [field, value] of [
@@ -167,7 +191,9 @@ describe("a corrupt job requirement fails closed at the claim", () => {
     const id = posted.job!.id;
     await claimJob(jobsEnv(), SEAT_AGENT, NOW, { namespace: "capsid" });
     await blockJob(jobsEnv(), SEAT_AGENT, NOW, id, { reason: "needs a push", command: "git push" });
-    await env.DB.prepare("UPDATE jobs SET required_scopes = '{not json' WHERE id = ?1").bind(id).run();
+    await env.DB.prepare("UPDATE jobs SET required_scopes = '{not json' WHERE id = ?1")
+      .bind(id)
+      .run();
 
     const refused = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "picking it up");
     expect(refused.ok).toBe(false);

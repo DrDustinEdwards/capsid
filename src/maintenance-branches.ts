@@ -1,6 +1,12 @@
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
-import { deletePruneCandidates, readPrunePlan, type PruneCandidate, type PruneKept, type PrunePlan } from "./github/prune";
+import {
+  deletePruneCandidates,
+  readPrunePlan,
+  type PruneCandidate,
+  type PruneKept,
+  type PrunePlan,
+} from "./github/prune";
 import type { MaintenanceItem } from "./maintenance";
 import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
@@ -55,19 +61,28 @@ export interface BranchReaders {
   committedAt(plan: PrunePlan, sha: string): Promise<string>;
   /** Delete up to `cap` of the plan's candidates, each tip re-read first, calling
    *  `onDeleted` after each delete and before the next. */
-  prune(plan: PrunePlan, cap: number, onDeleted: (c: PruneCandidate) => Promise<void>): Promise<{ deleted: PruneCandidate[]; skipped: PruneKept[]; remaining: number }>;
+  prune(
+    plan: PrunePlan,
+    cap: number,
+    onDeleted: (c: PruneCandidate) => Promise<void>,
+  ): Promise<{ deleted: PruneCandidate[]; skipped: PruneKept[]; remaining: number }>;
 }
 
 /** The switch and the keep list. A keep list that is not a JSON object of string arrays
  *  throws, so the pass says the branches were not checked rather than prune without it. */
 async function readBranchSettings(kv: KVNamespace): Promise<BranchSettings> {
-  const [switchRaw, keepRaw] = await Promise.all([kv.get(PRUNE_SWITCH_KEY), kv.get(BRANCH_KEEP_KEY)]);
+  const [switchRaw, keepRaw] = await Promise.all([
+    kv.get(PRUNE_SWITCH_KEY),
+    kv.get(BRANCH_KEEP_KEY),
+  ]);
   const keep: Record<string, string[]> = {};
   if (keepRaw) {
     const parsed: unknown = JSON.parse(keepRaw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error(`${BRANCH_KEEP_KEY} is not a JSON object`);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+      throw new Error(`${BRANCH_KEEP_KEY} is not a JSON object`);
     for (const [ns, names] of Object.entries(parsed)) {
-      if (!Array.isArray(names) || names.some((n) => typeof n !== "string")) throw new Error(`${BRANCH_KEEP_KEY}.${ns} is not a list of branch names`);
+      if (!Array.isArray(names) || names.some((n) => typeof n !== "string"))
+        throw new Error(`${BRANCH_KEEP_KEY}.${ns} is not a list of branch names`);
       keep[ns] = names as string[];
     }
   }
@@ -82,7 +97,7 @@ export async function gatherBranchItems(
   env: Env,
   namespaces: readonly string[],
   readers: BranchReaders,
-  now: Date
+  now: Date,
 ): Promise<{ items: MaintenanceItem[]; read: Record<string, number>; pruned: number }> {
   const items: MaintenanceItem[] = [];
   const read: Record<string, number> = {};
@@ -112,7 +127,12 @@ export async function gatherBranchItems(
       // pointed at: the deletion is put back by pushing that sha to the branch name
       // (snapshot invariant, test/write-invariants.test.ts). A failed audit write stops the deletes and the pass.
       const done = await readers.prune(plan, PRUNE_CAP, async (c) => {
-        await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, { repo: plan.repo, branch: c.branch, sha: c.sha, pr: c.pr }).run();
+        await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, {
+          repo: plan.repo,
+          branch: c.branch,
+          sha: c.sha,
+          pr: c.pr,
+        }).run();
       });
       pruned += done.deleted.length;
       prunedHere = done.deleted.length;
@@ -125,14 +145,29 @@ export async function gatherBranchItems(
         });
       }
       for (const s of done.skipped) {
-        items.push({ rule: "branch-merged", namespace, job: null, line: `${plan.repo} branch ${s.branch} is merged and was not pruned: ${s.reason}.` });
+        items.push({
+          rule: "branch-merged",
+          namespace,
+          job: null,
+          line: `${plan.repo} branch ${s.branch} is merged and was not pruned: ${s.reason}.`,
+        });
       }
       if (done.remaining > 0) {
-        items.push({ rule: "branch-merged", namespace, job: null, line: `${done.remaining} more merged branch(es) in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).` });
+        items.push({
+          rule: "branch-merged",
+          namespace,
+          job: null,
+          line: `${done.remaining} more merged branch(es) in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).`,
+        });
       }
     } else if (plan.prune.length > 0) {
       for (const c of plan.prune.slice(0, MAX_ITEMS_PER_RULE)) {
-        items.push({ rule: "branch-merged", namespace, job: null, line: `${plan.repo} branch ${c.branch} is merged (pull request #${c.pr}, tip ${c.sha}): delete it, or keep-list it.` });
+        items.push({
+          rule: "branch-merged",
+          namespace,
+          job: null,
+          line: `${plan.repo} branch ${c.branch} is merged (pull request #${c.pr}, tip ${c.sha}): delete it, or keep-list it.`,
+        });
       }
       items.push({
         rule: "branch-merged",
@@ -145,21 +180,37 @@ export async function gatherBranchItems(
     // Anything else old. A branch with an open pull request is not an orphan, and that is
     // known only when the open list was read in full.
     if (!plan.openComplete) {
-      items.push(notChecked(namespace, `the open pull request list of ${plan.repo} was not read in full, so no branch is listed as stale`));
+      items.push(
+        notChecked(
+          namespace,
+          `the open pull request list of ${plan.repo} was not read in full, so no branch is listed as stale`,
+        ),
+      );
       continue;
     }
     const orphans = plan.kept.filter((k) => k.orphan);
     const reading = orphans.slice(0, AGE_READS_PER_REPO);
     if (orphans.length > reading.length) {
-      items.push(notChecked(namespace, `${orphans.length - reading.length} branch(es) in ${plan.repo} with no open pull request had their age not read`));
+      items.push(
+        notChecked(
+          namespace,
+          `${orphans.length - reading.length} branch(es) in ${plan.repo} with no open pull request had their age not read`,
+        ),
+      );
     }
-    const stale: Array<{ branch: string; reason: string; age: number; sha: string; ms: number }> = [];
+    const stale: Array<{ branch: string; reason: string; age: number; sha: string; ms: number }> =
+      [];
     for (const k of reading) {
       let at: string;
       try {
         at = await readers.committedAt(plan, k.sha);
       } catch (err) {
-        items.push(notChecked(namespace, `the last commit of ${plan.repo} branch ${k.branch}: ${err instanceof Error ? err.message : String(err)}`));
+        items.push(
+          notChecked(
+            namespace,
+            `the last commit of ${plan.repo} branch ${k.branch}: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
         continue;
       }
       const ms = now.getTime() - Date.parse(at);
@@ -170,9 +221,21 @@ export async function gatherBranchItems(
     if (settings.prune && plan.listsComplete) {
       const old = stale.filter((s) => s.ms >= ORPHAN_DAYS * DAY_MS);
       const budget = Math.max(0, PRUNE_CAP - prunedHere);
-      const done = old.length === 0 ? { deleted: [], skipped: [], remaining: 0 } : await readers.prune({ ...plan, prune: old.map((s) => ({ branch: s.branch, sha: s.sha, pr: null })) }, budget, async (c) => {
-        await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, { repo: plan.repo, branch: c.branch, sha: c.sha, pr: null }).run();
-      });
+      const done =
+        old.length === 0
+          ? { deleted: [], skipped: [], remaining: 0 }
+          : await readers.prune(
+              { ...plan, prune: old.map((s) => ({ branch: s.branch, sha: s.sha, pr: null })) },
+              budget,
+              async (c) => {
+                await auditStatement(env.DB, SYSTEM_ACTOR, PRUNE_AUDIT_ACTION, namespace, null, {
+                  repo: plan.repo,
+                  branch: c.branch,
+                  sha: c.sha,
+                  pr: null,
+                }).run();
+              },
+            );
       pruned += done.deleted.length;
       const why = new Map(old.map((s) => [s.branch, s]));
       for (const c of done.deleted.slice(0, MAX_ITEMS_PER_RULE)) {
@@ -184,14 +247,30 @@ export async function gatherBranchItems(
           line: `${plan.repo} branch ${c.branch} was deleted: no open pull request and no commit for ${s.age} days (${s.reason}). Put it back with git push origin ${c.sha}:refs/heads/${c.branch} if it was wanted.`,
         });
       }
-      for (const k of done.skipped) items.push({ rule: "branch-stale", namespace, job: null, line: `${plan.repo} branch ${k.branch} is old and was not pruned: ${k.reason}.` });
+      for (const k of done.skipped)
+        items.push({
+          rule: "branch-stale",
+          namespace,
+          job: null,
+          line: `${plan.repo} branch ${k.branch} is old and was not pruned: ${k.reason}.`,
+        });
       if (done.remaining > 0) {
-        items.push({ rule: "branch-stale", namespace, job: null, line: `${done.remaining} more old branch(es) in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).` });
+        items.push({
+          rule: "branch-stale",
+          namespace,
+          job: null,
+          line: `${done.remaining} more old branch(es) in ${plan.repo} wait for the next run (${PRUNE_CAP} are deleted per repo per run).`,
+        });
       }
       continue;
     }
     for (const s of stale.filter((x) => x.age > STALE_DAYS).slice(0, MAX_ITEMS_PER_RULE)) {
-      items.push({ rule: "branch-stale", namespace, job: null, line: `${plan.repo} branch ${s.branch} has had no commit for ${s.age} days (${s.reason}): delete it, open its pull request, or keep-list it.` });
+      items.push({
+        rule: "branch-stale",
+        namespace,
+        job: null,
+        line: `${plan.repo} branch ${s.branch} has had no commit for ${s.age} days (${s.reason}): delete it, open its pull request, or keep-list it.`,
+      });
     }
   }
   return { items, read, pruned };
@@ -212,7 +291,12 @@ export function githubBranchReaders(env: Env): BranchReaders {
   return {
     plan: (namespace, keep) => readPrunePlan(env, namespace, keep),
     async committedAt(plan, sha) {
-      const resp = await ghFetch(env, plan.owner, plan.name, `/repos/${plan.owner}/${plan.name}/commits/${sha}`);
+      const resp = await ghFetch(
+        env,
+        plan.owner,
+        plan.name,
+        `/repos/${plan.owner}/${plan.name}/commits/${sha}`,
+      );
       if (!resp.ok) {
         await resp.body?.cancel();
         throw new Error(`the commit read returned ${resp.status}`);

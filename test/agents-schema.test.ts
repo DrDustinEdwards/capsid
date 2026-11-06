@@ -24,11 +24,17 @@ import { join } from "node:path";
 // unexpected type resolves to the least privilege there is, not to "no restrictions
 // found, allow everything".
 
-const MIGRATION = readFileSync(join(import.meta.dirname, "..", "migrations", "0008_agents.sql"), "utf8");
+const MIGRATION = readFileSync(
+  join(import.meta.dirname, "..", "migrations", "0008_agents.sql"),
+  "utf8",
+);
 
 test("the migration and the module agree about the kinds a credential can have", () => {
   for (const kind of AGENT_KINDS) {
-    assert.ok(MIGRATION.includes(kind), `migrations/0008_agents.sql never mentions the '${kind}' kind`);
+    assert.ok(
+      MIGRATION.includes(kind),
+      `migrations/0008_agents.sql never mentions the '${kind}' kind`,
+    );
   }
   assert.deepEqual([...AGENT_KINDS], ["session", "driver", "seat", "cron"]);
   assert.ok(isAgentKind("driver"));
@@ -71,16 +77,26 @@ test("an unrecognized grant, flag or list entry is dropped rather than carried",
       grants: ["read", "admin", "write"],
       flags: { can_merge: true, can_fly: true, can_touch_protected: "yes", can_comment_pr: true },
       max_claims: 99,
-    })
+    }),
   );
   assert.deepEqual(scopes.namespaces, ["capsid"], "non-string entries are not namespaces");
   assert.deepEqual(scopes.grants, ["read", "write"], "'admin' is not a grant this system has");
   assert.equal(scopes.flags.can_merge, true);
-  assert.equal(scopes.flags.can_touch_protected, false, "a flag is true only when it is the boolean true");
+  assert.equal(
+    scopes.flags.can_touch_protected,
+    false,
+    "a flag is true only when it is the boolean true",
+  );
   assert.ok(!Object.hasOwn(scopes.flags, "can_fly"), "an invented flag must not survive the parse");
   // A stored row from before can_comment_pr was retired still loads.
-  assert.ok(!Object.hasOwn(scopes.flags, "can_comment_pr"), "a retired flag must not survive the parse");
-  assert.ok(!Object.hasOwn(scopes, "max_claims"), "a stored claim limit from before the limit was removed must not survive the parse");
+  assert.ok(
+    !Object.hasOwn(scopes.flags, "can_comment_pr"),
+    "a retired flag must not survive the parse",
+  );
+  assert.ok(
+    !Object.hasOwn(scopes, "max_claims"),
+    "a stored claim limit from before the limit was removed must not survive the parse",
+  );
 });
 
 test("serialize and parse round-trip without widening", () => {
@@ -94,8 +110,16 @@ test("allowsScope is the one list comparison, and '*' is the only wildcard", () 
   assert.equal(allowsScope("*", "anything"), true);
   assert.equal(allowsScope(["capsid"], "capsid"), true);
   assert.equal(allowsScope(["capsid"], "sample"), false);
-  assert.equal(allowsScope([], "capsid"), false, "an empty list allows nothing, which is what makes the fail-closed parse work");
-  assert.equal(allowsScope(["*"], "capsid"), false, "a list containing the string '*' is a list of one odd name, not a wildcard");
+  assert.equal(
+    allowsScope([], "capsid"),
+    false,
+    "an empty list allows nothing, which is what makes the fail-closed parse work",
+  );
+  assert.equal(
+    allowsScope(["*"], "capsid"),
+    false,
+    "a list containing the string '*' is a list of one odd name, not a wildcard",
+  );
 });
 
 test("ids and keys are minted, not sequential, and a key is not its own hash", () => {
@@ -103,7 +127,11 @@ test("ids and keys are minted, not sequential, and a key is not its own hash", (
   assert.match(id, /^agent_[0-9a-f]{12}$/);
   assert.notEqual(id, mintAgentId());
   const key = mintAgentKey();
-  assert.match(key, /^capsid_agent_[0-9a-f]{64}$/, "32 bytes of entropy, prefixed so a leaked key is greppable");
+  assert.match(
+    key,
+    /^capsid_agent_[0-9a-f]{64}$/,
+    "32 bytes of entropy, prefixed so a leaked key is greppable",
+  );
   assert.notEqual(key, mintAgentKey());
 });
 

@@ -13,7 +13,10 @@ async function brief(namespace: string) {
   const client = new Client({ name: "brief", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
-  const result = (await client.callTool({ name: "capsid_start_session", arguments: { namespace } })) as {
+  const result = (await client.callTool({
+    name: "capsid_start_session",
+    arguments: { namespace },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
@@ -26,7 +29,7 @@ describe("brief provenance", () => {
   it("returns the newest actor per document, and null where there is no audit row", async () => {
     const doc = (ns: string, path: string, type: string) =>
       env.DB.prepare(
-        "INSERT INTO documents (namespace, path, title, body, type, status) VALUES (?1, ?2, 't', 'b', ?3, 'published')"
+        "INSERT INTO documents (namespace, path, title, body, type, status) VALUES (?1, ?2, 't', 'b', ?3, 'published')",
       )
         .bind(ns, path, type)
         .run();
@@ -35,7 +38,9 @@ describe("brief provenance", () => {
     await doc("sample", "TASK-a.md", "task");
     await doc("sample", "TASK-b.md", "task");
     const audit = (ns: string, path: string, actor: string) =>
-      env.DB.prepare("INSERT INTO audit_log (namespace, path, action, actor) VALUES (?1, ?2, 'write', ?3)")
+      env.DB.prepare(
+        "INSERT INTO audit_log (namespace, path, action, actor) VALUES (?1, ?2, 'write', ?3)",
+      )
         .bind(ns, path, actor)
         .run();
     await audit("sample", "core.md", "agent:older");
@@ -47,7 +52,12 @@ describe("brief provenance", () => {
     const out = await brief("sample");
     expect(out.core.last_actor).toBe("agent:newer");
     expect(out.conventions.last_actor).toBeNull();
-    const byPath = Object.fromEntries(out.open_tasks.map((t: { path: string; last_actor: string | null }) => [t.path, t.last_actor]));
+    const byPath = Object.fromEntries(
+      out.open_tasks.map((t: { path: string; last_actor: string | null }) => [
+        t.path,
+        t.last_actor,
+      ]),
+    );
     expect(byPath).toEqual({ "TASK-a.md": null, "TASK-b.md": "agent:seat" });
   });
 });

@@ -1,7 +1,5 @@
 {
-  "files": [
-    "src/**/*.ts"
-  ],
+  "files": ["src/**/*.ts"],
   "baseline": {
     "measured_at": "54191dd",
     "calls": 0,

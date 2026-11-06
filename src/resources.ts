@@ -1,4 +1,9 @@
-import { McpServer, ProtocolError, ProtocolErrorCode, ResourceTemplate } from "@modelcontextprotocol/server";
+import {
+  McpServer,
+  ProtocolError,
+  ProtocolErrorCode,
+  ResourceTemplate,
+} from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
 import { checkScope } from "./scope";
 import { MAX_ROWS } from "./limits";
@@ -19,7 +24,9 @@ export function resourceRefusal(agent: Agent, namespace: string): string | null 
 // A listing filters rather than refusing, which would leak that there is more.
 export function namespaceFilter<T extends { namespace: string }>(agent: Agent, rows: T[]): T[] {
   const visibleNamespaces = agent.scopes.namespaces;
-  return visibleNamespaces === "*" ? rows : rows.filter((row) => visibleNamespaces.includes(row.namespace));
+  return visibleNamespaces === "*"
+    ? rows
+    : rows.filter((row) => visibleNamespaces.includes(row.namespace));
 }
 
 // Stated once, used by the read registration and the list handler below. It spreads
@@ -52,7 +59,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
         .first<{ body: string | null }>();
       if (!row) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `not found: ${uri.href}`);
       return { contents: [{ uri: uri.href, mimeType: "text/markdown", text: row.body ?? "" }] };
-    }
+    },
   );
 
   // resources/list, served directly because the request carries the cursor and the
@@ -69,7 +76,11 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
     // (src/server.ts).
     // The whole scope check, as resources/read makes it, so a caller narrowed away from
     // capsid_read_doc (or a bench run key) lists nothing either (Grok audit 2026-10-21, CA-5).
-    const listRefusal = checkScope(agent, { tool: "capsid_read_doc", action: "read", grant: "read" });
+    const listRefusal = checkScope(agent, {
+      tool: "capsid_read_doc",
+      action: "read",
+      grant: "read",
+    });
     if (listRefusal) throw new ProtocolError(ProtocolErrorCode.InvalidParams, listRefusal);
     if (visibleNamespaces !== "*" && visibleNamespaces.length === 0) return { resources: [] };
     const cursor = request.params?.cursor;
@@ -81,7 +92,10 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
         afterNs = typeof parsed.n === "string" ? parsed.n : "";
         afterPath = typeof parsed.p === "string" ? parsed.p : "";
       } catch {
-        throw new ProtocolError(ProtocolErrorCode.InvalidParams, "invalid resources/list cursor; omit it to start from the beginning");
+        throw new ProtocolError(
+          ProtocolErrorCode.InvalidParams,
+          "invalid resources/list cursor; omit it to start from the beginning",
+        );
       }
     }
     // Filtered in the query, so the LIMIT bounds what this caller can see rather than
@@ -99,7 +113,7 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
          WHERE ((?1 = '' AND ?2 = '') OR (namespace > ?1 OR (namespace = ?1 AND path > ?2)))
            AND (?4 IS NULL OR namespace IN (SELECT value FROM json_each(?4)))
          ORDER BY namespace, path
-         LIMIT ?3`
+         LIMIT ?3`,
       )
       .bind(afterNs, afterPath, MAX_ROWS + 1, visible)
       .all<{ namespace: string; path: string; title: string | null }>();
@@ -117,7 +131,9 @@ export function registerDocumentResources(server: McpServer, agent: Agent, db: D
         title: row.title ?? undefined,
         mimeType: "text/markdown",
       })),
-      ...(more && last ? { nextCursor: base64url(JSON.stringify({ n: last.namespace, p: last.path })) } : {}),
+      ...(more && last
+        ? { nextCursor: base64url(JSON.stringify({ n: last.namespace, p: last.path })) }
+        : {}),
     };
   });
 }

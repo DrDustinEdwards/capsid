@@ -6,9 +6,15 @@
   // The dashboard runs on Knip's defaults (its Vite, React and
   // Playwright plugins find its entries) with `knip --directory dashboard`.
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["src/index.ts", "scripts/*.{mjs,ts}", "test/**/*.ts", "test-integration/**/*.ts", "dashboard/src/types.ts"],
+  "entry": [
+    "src/index.ts",
+    "scripts/*.{mjs,ts}",
+    "test/**/*.ts",
+    "test-integration/**/*.ts",
+    "dashboard/src/types.ts",
+  ],
   "project": ["src/**/*.ts", "scripts/**/*.{mjs,ts}", "test/**/*.ts", "test-integration/**/*.ts"],
   // jscpd is run by devkit-no-bloat (.no-bloat.json), and @modelcontextprotocol/conformance by
   // devkit-conformance (.conformance.json), each through its bin, which Knip does not trace.
-  "ignoreDependencies": ["cloudflare", "jscpd", "@modelcontextprotocol/conformance"]
+  "ignoreDependencies": ["cloudflare", "jscpd", "@modelcontextprotocol/conformance"],
 }

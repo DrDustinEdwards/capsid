@@ -89,7 +89,8 @@ export interface UnitsReport {
   unplaced: string[];
 }
 
-const happened = (r: RollbackEvidence) => (r.kind === "revert" ? `was reverted by ${r.repo}#${r.reverted_by}` : "was rolled back");
+const happened = (r: RollbackEvidence) =>
+  r.kind === "revert" ? `was reverted by ${r.repo}#${r.reverted_by}` : "was rolled back";
 
 /** The proposals and the suspensions, from the evidence. Pure. */
 export function judgeUnits(
@@ -97,10 +98,11 @@ export function judgeUnits(
   rollbacks: readonly RollbackEvidence[],
   suspended: readonly Suspension[],
   now: Date,
-  lifted: Readonly<Record<string, string>> = {}
+  lifted: Readonly<Record<string, string>> = {},
 ): UnitsReport {
   const units = new Map<string, { merged: number[]; bad: number; rollbacks: number }>();
-  const unit = (k: string) => units.get(k) ?? (units.set(k, { merged: [], bad: 0, rollbacks: 0 }), units.get(k)!);
+  const unit = (k: string) =>
+    units.get(k) ?? (units.set(k, { merged: [], bad: 0, rollbacks: 0 }), units.get(k)!);
   for (const a of approvals) {
     if (!a.namespace || !a.path_class) continue;
     const u = unit(unitKey(a.namespace, a.path_class));
@@ -112,7 +114,9 @@ export function judgeUnits(
   const demote: UnitProposal[] = [];
   for (const r of rollbacks) {
     if (!r.path_class) {
-      unplaced.push(`${r.repo} ${r.kind === "revert" ? `revert #${r.reverted_by}` : `run ${r.run_id}`} at ${r.head_sha.slice(0, 7)}: ${r.pr ? `#${r.pr}'s unit is not recorded` : "no pull request is recorded for it"}`);
+      unplaced.push(
+        `${r.repo} ${r.kind === "revert" ? `revert #${r.reverted_by}` : `run ${r.run_id}`} at ${r.head_sha.slice(0, 7)}: ${r.pr ? `#${r.pr}'s unit is not recorded` : "no pull request is recorded for it"}`,
+      );
       continue;
     }
     const k = unitKey(r.namespace, r.path_class);
@@ -120,23 +124,53 @@ export function judgeUnits(
     if (r.merged_by !== "tick") continue;
     // Dustin lifted the suspension after this rollback: it is answered.
     if (lifted[k] && Date.parse(r.run_at) <= Date.parse(lifted[k]!)) continue;
-    if (!nowSuspended.has(k)) nowSuspended.set(k, { unit: k, since: now.toISOString(), reason: `${r.repo}#${r.pr} merged unattended and ${happened(r)}${r.kind === "revert" ? "" : ` (run ${r.run_id})`}` });
+    if (!nowSuspended.has(k))
+      nowSuspended.set(k, {
+        unit: k,
+        since: now.toISOString(),
+        reason: `${r.repo}#${r.pr} merged unattended and ${happened(r)}${r.kind === "revert" ? "" : ` (run ${r.run_id})`}`,
+      });
     if (!demote.some((d) => d.unit === k)) {
-      demote.push({ kind: "demote", unit: k, title: `Remove ${k.replace("/", " ")} from auto: ${r.repo}#${r.pr} merged unattended and ${happened(r)}`, evidence: { approved_merges: 0, span_days: 0, rollbacks: 0, bad_voids: 0 } });
+      demote.push({
+        kind: "demote",
+        unit: k,
+        title: `Remove ${k.replace("/", " ")} from auto: ${r.repo}#${r.pr} merged unattended and ${happened(r)}`,
+        evidence: { approved_merges: 0, span_days: 0, rollbacks: 0, bad_voids: 0 },
+      });
     }
   }
   const promote: UnitProposal[] = [];
   for (const [k, u] of units) {
     const d = demote.find((p) => p.unit === k);
     const span = u.merged.length ? Math.max(...u.merged) - Math.min(...u.merged) : 0;
-    const evidence = { approved_merges: u.merged.length, span_days: Math.floor(span / DAY_MS), rollbacks: u.rollbacks, bad_voids: u.bad };
+    const evidence = {
+      approved_merges: u.merged.length,
+      span_days: Math.floor(span / DAY_MS),
+      rollbacks: u.rollbacks,
+      bad_voids: u.bad,
+    };
     if (d) d.evidence = evidence;
     if (nowSuspended.has(k)) continue;
-    if (u.merged.length >= PROMOTE_MERGES && span >= PROMOTE_SPAN_MS && u.rollbacks === 0 && u.bad <= PROMOTE_MAX_BAD_VOIDS) {
-      promote.push({ kind: "promote", unit: k, title: `Promote ${k.replace("/", " ")} to auto: ${u.merged.length} approved over ${evidence.span_days} days, 0 rollbacks`, evidence });
+    if (
+      u.merged.length >= PROMOTE_MERGES &&
+      span >= PROMOTE_SPAN_MS &&
+      u.rollbacks === 0 &&
+      u.bad <= PROMOTE_MAX_BAD_VOIDS
+    ) {
+      promote.push({
+        kind: "promote",
+        unit: k,
+        title: `Promote ${k.replace("/", " ")} to auto: ${u.merged.length} approved over ${evidence.span_days} days, 0 rollbacks`,
+        evidence,
+      });
     }
   }
-  return { generated: now.toISOString(), proposals: [...demote, ...promote], suspended: [...nowSuspended.values()], unplaced };
+  return {
+    generated: now.toISOString(),
+    proposals: [...demote, ...promote],
+    suspended: [...nowSuspended.values()],
+    unplaced,
+  };
 }
 
 /** The suspended units, as the tick reads them. An unreadable list reads as none
@@ -152,41 +186,74 @@ async function readLifted(kv: KVNamespace): Promise<Record<string, string>> {
 }
 
 /** What lifting a unit's suspension will do, or why it cannot. Reads only. */
-export async function planLift(kv: KVNamespace, rawUnit: string | undefined): Promise<{ ok: true; unit: string; suspension: Suspension } | { ok: false; refusal: string }> {
+export async function planLift(
+  kv: KVNamespace,
+  rawUnit: string | undefined,
+): Promise<{ ok: true; unit: string; suspension: Suspension } | { ok: false; refusal: string }> {
   const m = /^\s*([a-z0-9-]+)\s*\/\s*([a-z-]+)\s*$/.exec(rawUnit ?? "");
-  if (!m) return { ok: false, refusal: `unit_resume needs unit as '<namespace>/<path class>', for example 'capsid/docs'; got '${rawUnit ?? ""}'.` };
+  if (!m)
+    return {
+      ok: false,
+      refusal: `unit_resume needs unit as '<namespace>/<path class>', for example 'capsid/docs'; got '${rawUnit ?? ""}'.`,
+    };
   const unit = unitKey(m[1]!, m[2]!);
   const suspension = (await readSuspended(kv)).find((s) => s.unit === unit);
-  if (!suspension) return { ok: false, refusal: `${unit} is not suspended, so there is nothing to lift.` };
+  if (!suspension)
+    return { ok: false, refusal: `${unit} is not suspended, so there is nothing to lift.` };
   return { ok: true, unit, suspension };
 }
 
 /** Lift a unit's suspension: the tick may merge its pull requests unattended again, and
  *  the rollbacks before now suspend it no more. Audited. */
-export async function liftSuspension(env: Env, actor: string, rawUnit: string | undefined, reason: string, now: Date): Promise<{ ok: true; summary: string } | { ok: false; refusal: string }> {
+export async function liftSuspension(
+  env: Env,
+  actor: string,
+  rawUnit: string | undefined,
+  reason: string,
+  now: Date,
+): Promise<{ ok: true; summary: string } | { ok: false; refusal: string }> {
   const plan = await planLift(env.APP_KV, rawUnit);
   if (!plan.ok) return plan;
   const rest = (await readSuspended(env.APP_KV)).filter((s) => s.unit !== plan.unit);
   const lifted = { ...(await readLifted(env.APP_KV)), [plan.unit]: now.toISOString() };
   await env.APP_KV.put(LIFTED_KEY, JSON.stringify(lifted));
   await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify(rest));
-  await env.DB.batch([auditStatement(env.DB, actor, "merge-unit-resumed", plan.unit.split("/")[0]!, null, { unit: plan.unit, reason, was: plan.suspension })]);
-  return { ok: true, summary: `Lifted the suspension of ${plan.unit}. The tick may merge its pull requests unattended again; a new rollback suspends it again.` };
+  await env.DB.batch([
+    auditStatement(env.DB, actor, "merge-unit-resumed", plan.unit.split("/")[0]!, null, {
+      unit: plan.unit,
+      reason,
+      was: plan.suspension,
+    }),
+  ]);
+  return {
+    ok: true,
+    summary: `Lifted the suspension of ${plan.unit}. The tick may merge its pull requests unattended again; a new rollback suspends it again.`,
+  };
 }
 
 /** The evidence from D1. Reads only. */
-export async function readUnitEvidence(env: Env, now: Date): Promise<{ approvals: ApprovalEvidence[]; rollbacks: RollbackEvidence[] }> {
+export async function readUnitEvidence(
+  env: Env,
+  now: Date,
+): Promise<{ approvals: ApprovalEvidence[]; rollbacks: RollbackEvidence[] }> {
   const since = new Date(now.getTime() - WINDOW_MS).toISOString();
   const approvals = await env.DB.prepare(
-    `SELECT namespace, path_class, status, close_reason, closed_at FROM pr_approvals WHERE approved_at >= ?1 AND namespace IS NOT NULL ORDER BY id LIMIT 2000`
+    `SELECT namespace, path_class, status, close_reason, closed_at FROM pr_approvals WHERE approved_at >= ?1 AND namespace IS NOT NULL ORDER BY id LIMIT 2000`,
   )
     .bind(since)
     .all<ApprovalEvidence>();
   const rolled = await env.DB.prepare(
-    `SELECT namespace, repo, pr, head_sha, run_id, run_at FROM deploy_outcomes WHERE outcome IN ('rolled_back', 'rollback_failed') AND run_at >= ?1 ORDER BY run_at LIMIT 50`
+    `SELECT namespace, repo, pr, head_sha, run_id, run_at FROM deploy_outcomes WHERE outcome IN ('rolled_back', 'rollback_failed') AND run_at >= ?1 ORDER BY run_at LIMIT 50`,
   )
     .bind(since)
-    .all<{ namespace: string; repo: string; pr: number | null; head_sha: string; run_id: number; run_at: string }>();
+    .all<{
+      namespace: string;
+      repo: string;
+      pr: number | null;
+      head_sha: string;
+      run_id: number;
+      run_at: string;
+    }>();
   const rollbacks: RollbackEvidence[] = [];
   for (const r of rolled.results ?? []) {
     let merged_by: RollbackEvidence["merged_by"] = "unknown";
@@ -194,15 +261,20 @@ export async function readUnitEvidence(env: Env, now: Date): Promise<{ approvals
     if (r.pr !== null) {
       // The tick's own record of an unattended merge carries the unit since PR 9.
       const auto = await env.DB.prepare(
-        `SELECT params FROM audit_log WHERE action = 'auto-merged' AND namespace = ?1 AND json_extract(params, '$.repo') = ?2 AND json_extract(params, '$.pr') = ?3 ORDER BY id DESC LIMIT 1`
+        `SELECT params FROM audit_log WHERE action = 'auto-merged' AND namespace = ?1 AND json_extract(params, '$.repo') = ?2 AND json_extract(params, '$.pr') = ?3 ORDER BY id DESC LIMIT 1`,
       )
         .bind(r.namespace, r.repo, r.pr)
         .first<{ params: string }>();
       if (auto) {
         merged_by = "tick";
-        path_class = ((JSON.parse(auto.params) as { path_class?: unknown }).path_class as string | undefined) ?? null;
+        path_class =
+          ((JSON.parse(auto.params) as { path_class?: unknown }).path_class as
+            | string
+            | undefined) ?? null;
       } else {
-        const approved = await env.DB.prepare(`SELECT path_class FROM pr_approvals WHERE repo = ?1 AND pr = ?2 AND status = 'merged' ORDER BY id DESC LIMIT 1`)
+        const approved = await env.DB.prepare(
+          `SELECT path_class FROM pr_approvals WHERE repo = ?1 AND pr = ?2 AND status = 'merged' ORDER BY id DESC LIMIT 1`,
+        )
           .bind(r.repo, r.pr)
           .first<{ path_class: string | null }>();
         if (approved) {
@@ -216,17 +288,30 @@ export async function readUnitEvidence(env: Env, now: Date): Promise<{ approvals
   // The reverts of pull requests the tick merged (src/merge-safety.ts): the audit row
   // carries the unit, so a revert places itself.
   const reverted = await env.DB.prepare(
-    `SELECT namespace, params FROM audit_log WHERE action = 'auto-merge-reverted' AND at >= ?1 ORDER BY id DESC LIMIT 50`
+    `SELECT namespace, params FROM audit_log WHERE action = 'auto-merge-reverted' AND at >= ?1 ORDER BY id DESC LIMIT 50`,
   )
     .bind(since.slice(0, 19).replace("T", " "))
     .all<{ namespace: string; params: string }>();
   for (const row of reverted.results ?? []) {
-    let p: { repo: string; pr: number; reverted_by: number; head_sha?: string | null; path_class?: string | null; merged_at: string };
+    let p: {
+      repo: string;
+      pr: number;
+      reverted_by: number;
+      head_sha?: string | null;
+      path_class?: string | null;
+      merged_at: string;
+    };
     try {
       p = JSON.parse(row.params);
     } catch (err) {
       // One malformed row must not fail the step that suspends units.
-      logEvent("MERGE_UNITS", { message: `MERGE_UNITS skipped an unreadable auto-merge-reverted row: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+      logEvent(
+        "MERGE_UNITS",
+        {
+          message: `MERGE_UNITS skipped an unreadable auto-merge-reverted row: ${err instanceof Error ? err.message : String(err)}`,
+        },
+        { level: "error" },
+      );
       continue;
     }
     rollbacks.push({
@@ -252,7 +337,11 @@ export interface UnitsTickReport {
 }
 
 /** One pass: judge the units, store the report, and suspend a unit a rollback hit. */
-export async function unitsTick(env: Env, now: Date, read: typeof readUnitEvidence = readUnitEvidence): Promise<UnitsTickReport> {
+export async function unitsTick(
+  env: Env,
+  now: Date,
+  read: typeof readUnitEvidence = readUnitEvidence,
+): Promise<UnitsTickReport> {
   const before = await readSuspended(env.APP_KV);
   const lifted = await readLifted(env.APP_KV);
   const evidence = await read(env, now);
@@ -260,7 +349,18 @@ export async function unitsTick(env: Env, now: Date, read: typeof readUnitEviden
   const added = report.suspended.filter((s) => !before.some((b) => b.unit === s.unit));
   if (added.length) {
     await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify(report.suspended));
-    await env.DB.batch(added.map((s) => auditStatement(env.DB, "capsid:merge-units", "merge-unit-suspended", s.unit.split("/")[0]!, null, s)));
+    await env.DB.batch(
+      added.map((s) =>
+        auditStatement(
+          env.DB,
+          "capsid:merge-units",
+          "merge-unit-suspended",
+          s.unit.split("/")[0]!,
+          null,
+          s,
+        ),
+      ),
+    );
   }
   const previous = await env.APP_KV.get(REPORT_KEY);
   const stable = (r: UnitsReport) => JSON.stringify({ ...r, generated: "" });
@@ -280,7 +380,9 @@ export async function unitsTick(env: Env, now: Date, read: typeof readUnitEviden
 }
 
 /** The proposals and suspensions as inbox items, per namespace. */
-export async function unitInboxItems(kv: KVNamespace): Promise<Array<{ namespace: string; item: InboxItem }>> {
+export async function unitInboxItems(
+  kv: KVNamespace,
+): Promise<Array<{ namespace: string; item: InboxItem }>> {
   const raw = await kv.get(REPORT_KEY).catch(() => null);
   if (!raw) return [];
   let report: UnitsReport;
@@ -291,8 +393,20 @@ export async function unitInboxItems(kv: KVNamespace): Promise<Array<{ namespace
   }
   const out: Array<{ namespace: string; item: InboxItem }> = [];
   for (const s of report.suspended ?? []) {
-    out.push({ namespace: s.unit.split("/")[0]!, item: { title: `${s.unit.replace("/", " ")} is suspended from auto: ${s.reason}`, kind: "proposal", link: null, since: s.since } });
+    out.push({
+      namespace: s.unit.split("/")[0]!,
+      item: {
+        title: `${s.unit.replace("/", " ")} is suspended from auto: ${s.reason}`,
+        kind: "proposal",
+        link: null,
+        since: s.since,
+      },
+    });
   }
-  for (const p of report.proposals ?? []) out.push({ namespace: p.unit.split("/")[0]!, item: { title: p.title, kind: "proposal", link: null, since: report.generated } });
+  for (const p of report.proposals ?? [])
+    out.push({
+      namespace: p.unit.split("/")[0]!,
+      item: { title: p.title, kind: "proposal", link: null, since: report.generated },
+    });
   return out;
 }

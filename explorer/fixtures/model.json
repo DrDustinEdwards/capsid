@@ -11,9 +11,7 @@
       "private": false,
       "description": "The invented system in the middle.",
       "domain": "hub.example.com",
-      "repos": [
-        "https://github.com/example/hub"
-      ]
+      "repos": ["https://github.com/example/hub"]
     },
     {
       "id": "kit",
@@ -33,9 +31,7 @@
       "private": false,
       "description": "The invented design system.",
       "domain": "theme.example.com",
-      "repos": [
-        "https://github.com/example/theme"
-      ]
+      "repos": ["https://github.com/example/theme"]
     },
     {
       "id": "desk",
@@ -46,9 +42,7 @@
       "private": false,
       "description": "Where invented writing happens.",
       "domain": "desk.example.com",
-      "repos": [
-        "https://github.com/example/desk"
-      ]
+      "repos": ["https://github.com/example/desk"]
     },
     {
       "id": "site",
@@ -173,9 +167,7 @@
           "relationship": "hub-worker--serves--hub-agents",
           "toward": "hub-worker",
           "text": "Posted: a sample caller posts to the hub.",
-          "lights": [
-            "hub-db"
-          ]
+          "lights": ["hub-db"]
         },
         {
           "relationship": "hub-tick--writes--hub-db",
@@ -193,9 +185,7 @@
           "relationship": "hub-worker--serves--hub-agents",
           "toward": "hub-agents",
           "text": "Asked: a sample caller asks the hub for a page.",
-          "lights": [
-            "hub-db"
-          ]
+          "lights": ["hub-db"]
         },
         {
           "relationship": "hub-worker--writes--hub-db",

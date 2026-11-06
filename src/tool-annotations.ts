@@ -29,10 +29,21 @@ interface Reach {
   openWorld?: boolean;
 }
 
-const reach = (r: Reach) => ({ idempotentHint: r.idempotent ?? false, openWorldHint: r.openWorld ?? true });
+const reach = (r: Reach) => ({
+  idempotentHint: r.idempotent ?? false,
+  openWorldHint: r.openWorld ?? true,
+});
 
-const read = (r: Reach = {}): ToolHints => ({ readOnlyHint: true, destructiveHint: false, ...reach(r) });
-const destructive = (r: Reach = {}): ToolHints => ({ readOnlyHint: false, destructiveHint: true, ...reach(r) });
+const read = (r: Reach = {}): ToolHints => ({
+  readOnlyHint: true,
+  destructiveHint: false,
+  ...reach(r),
+});
+const destructive = (r: Reach = {}): ToolHints => ({
+  readOnlyHint: false,
+  destructiveHint: true,
+  ...reach(r),
+});
 
 export const TOOL_HINTS: Record<string, ToolHints> = {
   // ---- Capsid (11)
@@ -100,7 +111,12 @@ export const READ_VIEW_HINTS: Record<string, ToolHints> = {
 export function hintsFor(tool: string): ToolHints {
   if (!Object.hasOwn(TOOL_HINTS, tool)) {
     // Fail closed: a new tool is under-claimed until the table catches up.
-    return { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
+    return {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    };
   }
   return TOOL_HINTS[tool];
 }

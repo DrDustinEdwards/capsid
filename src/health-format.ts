@@ -5,7 +5,14 @@
 
 type HealthStatus = "ok" | "degraded" | "down";
 
-const STATUS_OF: Record<string, HealthStatus> = { ok: "ok", degraded: "degraded", down: "down", pass: "ok", warn: "degraded", fail: "down" };
+const STATUS_OF: Record<string, HealthStatus> = {
+  ok: "ok",
+  degraded: "degraded",
+  down: "down",
+  pass: "ok",
+  warn: "degraded",
+  fail: "down",
+};
 
 export interface ParsedHealth {
   // Null when the body says nothing about health: no status the format names and no
@@ -26,17 +33,33 @@ const MAX_PROBLEM_CHARS = 200;
  *  A backup warning or `ok: false` under an ok status reads as degraded, so a 200 that
  *  admits a problem is not counted as healthy. Extra fields are ignored. */
 export function healthOf(value: unknown): ParsedHealth {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return { status: null, sha: null, problem: null };
-  const { status, sha, ok, checks, backup } = value as { status?: unknown; sha?: unknown; ok?: unknown; checks?: unknown; backup?: unknown };
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return { status: null, sha: null, problem: null };
+  const { status, sha, ok, checks, backup } = value as {
+    status?: unknown;
+    sha?: unknown;
+    ok?: unknown;
+    checks?: unknown;
+    backup?: unknown;
+  };
   const reasons = failingCheckNames(checks);
   const warning = (backup as { warning?: unknown } | null | undefined)?.warning;
   if (typeof warning === "string" && warning) reasons.push(`backup: ${warning}`);
-  let said: HealthStatus | null = typeof status === "string" && Object.hasOwn(STATUS_OF, status) ? STATUS_OF[status]! : null;
+  let said: HealthStatus | null =
+    typeof status === "string" && Object.hasOwn(STATUS_OF, status) ? STATUS_OF[status]! : null;
   if (said === null && typeof ok === "boolean") said = ok ? "ok" : "degraded";
   if (said === "ok" && (ok === false || reasons.length > 0)) said = "degraded";
-  if (said !== null && said !== "ok" && reasons.length === 0 && ok === false) reasons.push("ok: false");
-  const problem = said === null || said === "ok" || reasons.length === 0 ? null : reasons.join("; ").slice(0, MAX_PROBLEM_CHARS);
-  return { status: said, sha: typeof sha === "string" && sha.length > 0 ? sha.slice(0, MAX_SHA_CHARS) : null, problem };
+  if (said !== null && said !== "ok" && reasons.length === 0 && ok === false)
+    reasons.push("ok: false");
+  const problem =
+    said === null || said === "ok" || reasons.length === 0
+      ? null
+      : reasons.join("; ").slice(0, MAX_PROBLEM_CHARS);
+  return {
+    status: said,
+    sha: typeof sha === "string" && sha.length > 0 ? sha.slice(0, MAX_SHA_CHARS) : null,
+    problem,
+  };
 }
 
 /** healthOf over a body as text. Anything that is not JSON reads as absent. */

@@ -24,7 +24,15 @@ interface Draft {
   script: string;
 }
 
-const BLANK: Draft = { namespace: "", name: "", noSite: false, origin: "", health_path: "", platform: "cloudflare", script: "" };
+const BLANK: Draft = {
+  namespace: "",
+  name: "",
+  noSite: false,
+  origin: "",
+  health_path: "",
+  platform: "cloudflare",
+  script: "",
+};
 
 function draftOf(s: OpsSiteConfig): Draft {
   return {
@@ -58,7 +66,6 @@ function paramsOf(d: Draft): Record<string, string> {
   return p;
 }
 
-
 export type Editing = { kind: "add" } | { kind: "edit"; row: OpsSiteConfig };
 
 export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () => void }) {
@@ -75,12 +82,25 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
 
   const submit = () => {
     if (!d.namespace.trim()) return setHint("Type the namespace this row is for.");
-    if (!d.noSite && !d.origin.trim()) return setHint("Give the site's origin, such as https://example.com, or tick \"Serves no site\".");
+    if (!d.noSite && !d.origin.trim())
+      return setHint(
+        'Give the site\'s origin, such as https://example.com, or tick "Serves no site".',
+      );
     setHint(null);
     const params = paramsOf(d);
     const ns = params.namespace ?? d.namespace;
-    if (editing.kind === "add") return confirm({ action: "site_add", params, title: `Add ${ns}`, onDone: onClose });
-    confirm({ action: "site_edit", params: { ...params, namespace: editing.row.namespace, revision: String(editing.row.revision) }, title: `Change ${editing.row.namespace}`, onDone: onClose });
+    if (editing.kind === "add")
+      return confirm({ action: "site_add", params, title: `Add ${ns}`, onDone: onClose });
+    confirm({
+      action: "site_edit",
+      params: {
+        ...params,
+        namespace: editing.row.namespace,
+        revision: String(editing.row.revision),
+      },
+      title: `Change ${editing.row.namespace}`,
+      onDone: onClose,
+    });
   };
 
   return (
@@ -99,7 +119,17 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
               type="button"
               className="btn danger"
               aria-label={`Remove ${editing.row.namespace}`}
-              onClick={() => confirm({ action: "site_remove", params: { namespace: editing.row.namespace, revision: String(editing.row.revision) }, title: `Remove ${editing.row.namespace}`, onDone: onClose })}
+              onClick={() =>
+                confirm({
+                  action: "site_remove",
+                  params: {
+                    namespace: editing.row.namespace,
+                    revision: String(editing.row.revision),
+                  },
+                  title: `Remove ${editing.row.namespace}`,
+                  onDone: onClose,
+                })
+              }
             >
               Remove
             </button>
@@ -107,41 +137,117 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
         )
       }
     >
-        <Field id={f("ns")} label="Project" note="A registered project (its namespace). One row each.">
-          {adding ? (
-            <>
-              <input ref={first} id={f("ns")} aria-describedby={`${f("ns")}-note`} className="field mono" list={f("nslist")} value={d.namespace} autoComplete="off" spellCheck={false} onChange={(e) => set({ namespace: e.target.value })} />
-              <datalist id={f("nslist")}>
-                {free.map((n) => (
-                  <option key={n} value={n} />
-                ))}
-              </datalist>
-            </>
-          ) : (
-            <input id={f("ns")} aria-describedby={`${f("ns")}-note`} className="field mono" value={d.namespace} readOnly />
-          )}
-        </Field>
-        <Field id={f("name")} label="Name" note="Shown in the Portal. Blank uses the namespace.">
-          <input ref={adding ? undefined : first} id={f("name")} aria-describedby={`${f("name")}-note`} className="field" value={d.name} autoComplete="off" onChange={(e) => set({ name: e.target.value })} />
-        </Field>
-        <label className="check">
-          <input type="checkbox" checked={d.noSite} onChange={(e) => set({ noSite: e.target.checked })} /> Serves no site. The watcher probes nothing for this namespace.
-        </label>
-        <Field id={f("origin")} label="Origin" note="https:// and a hostname only.">
-          <input id={f("origin")} aria-describedby={`${f("origin")}-note`} className="field mono" value={d.noSite ? "" : d.origin} disabled={d.noSite} placeholder="https://example.com" autoComplete="off" spellCheck={false} onChange={(e) => set({ origin: e.target.value })} />
-        </Field>
-        <Field id={f("health")} label="Health path" note="Starts with /. Blank probes the root, which shows liveness only.">
-          <input id={f("health")} aria-describedby={`${f("health")}-note`} className="field mono" value={d.noSite ? "" : d.health_path} disabled={d.noSite} placeholder="/health" autoComplete="off" spellCheck={false} onChange={(e) => set({ health_path: e.target.value })} />
-        </Field>
-        <Field id={f("platform")} label="Platform">
-          <select id={f("platform")} className="field" value={d.platform} disabled={d.noSite} onChange={(e) => set({ platform: e.target.value as Platform })}>
-            <option value="cloudflare">Cloudflare</option>
-            <option value="vercel">Vercel</option>
-          </select>
-        </Field>
-        <Field id={f("script")} label="Worker script" note="Cloudflare only. Blank finds it from the account's custom domains.">
-          <input id={f("script")} aria-describedby={`${f("script")}-note`} className="field mono" value={d.noSite || d.platform !== "cloudflare" ? "" : d.script} disabled={d.noSite || d.platform !== "cloudflare"} autoComplete="off" spellCheck={false} onChange={(e) => set({ script: e.target.value })} />
-        </Field>
+      <Field
+        id={f("ns")}
+        label="Project"
+        note="A registered project (its namespace). One row each."
+      >
+        {adding ? (
+          <>
+            <input
+              ref={first}
+              id={f("ns")}
+              aria-describedby={`${f("ns")}-note`}
+              className="field mono"
+              list={f("nslist")}
+              value={d.namespace}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => set({ namespace: e.target.value })}
+            />
+            <datalist id={f("nslist")}>
+              {free.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          </>
+        ) : (
+          <input
+            id={f("ns")}
+            aria-describedby={`${f("ns")}-note`}
+            className="field mono"
+            value={d.namespace}
+            readOnly
+          />
+        )}
+      </Field>
+      <Field id={f("name")} label="Name" note="Shown in the Portal. Blank uses the namespace.">
+        <input
+          ref={adding ? undefined : first}
+          id={f("name")}
+          aria-describedby={`${f("name")}-note`}
+          className="field"
+          value={d.name}
+          autoComplete="off"
+          onChange={(e) => set({ name: e.target.value })}
+        />
+      </Field>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={d.noSite}
+          onChange={(e) => set({ noSite: e.target.checked })}
+        />{" "}
+        Serves no site. The watcher probes nothing for this namespace.
+      </label>
+      <Field id={f("origin")} label="Origin" note="https:// and a hostname only.">
+        <input
+          id={f("origin")}
+          aria-describedby={`${f("origin")}-note`}
+          className="field mono"
+          value={d.noSite ? "" : d.origin}
+          disabled={d.noSite}
+          placeholder="https://example.com"
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => set({ origin: e.target.value })}
+        />
+      </Field>
+      <Field
+        id={f("health")}
+        label="Health path"
+        note="Starts with /. Blank probes the root, which shows liveness only."
+      >
+        <input
+          id={f("health")}
+          aria-describedby={`${f("health")}-note`}
+          className="field mono"
+          value={d.noSite ? "" : d.health_path}
+          disabled={d.noSite}
+          placeholder="/health"
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => set({ health_path: e.target.value })}
+        />
+      </Field>
+      <Field id={f("platform")} label="Platform">
+        <select
+          id={f("platform")}
+          className="field"
+          value={d.platform}
+          disabled={d.noSite}
+          onChange={(e) => set({ platform: e.target.value as Platform })}
+        >
+          <option value="cloudflare">Cloudflare</option>
+          <option value="vercel">Vercel</option>
+        </select>
+      </Field>
+      <Field
+        id={f("script")}
+        label="Worker script"
+        note="Cloudflare only. Blank finds it from the account's custom domains."
+      >
+        <input
+          id={f("script")}
+          aria-describedby={`${f("script")}-note`}
+          className="field mono"
+          value={d.noSite || d.platform !== "cloudflare" ? "" : d.script}
+          disabled={d.noSite || d.platform !== "cloudflare"}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => set({ script: e.target.value })}
+        />
+      </Field>
     </ConfigForm>
   );
 }
@@ -167,9 +273,13 @@ export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void })
         )}
       </td>
       <td data-label="Health path" className="mono">
-        {s.origin === null ? none : s.health_path ?? <span className="faint">none, root probed</span>}
+        {s.origin === null
+          ? none
+          : (s.health_path ?? <span className="faint">none, root probed</span>)}
       </td>
-      <td data-label="Platform">{s.platform === "vercel" ? "Vercel" : s.platform === "cloudflare" ? "Cloudflare" : none}</td>
+      <td data-label="Platform">
+        {s.platform === "vercel" ? "Vercel" : s.platform === "cloudflare" ? "Cloudflare" : none}
+      </td>
       <td data-label="Worker script" className="mono">
         {s.script ?? none}
       </td>
@@ -188,4 +298,3 @@ export function SiteRow({ s, onEdit }: { s: OpsSiteConfig; onEdit: () => void })
     </tr>
   );
 }
-

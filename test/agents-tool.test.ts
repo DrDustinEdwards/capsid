@@ -26,7 +26,11 @@ async function connect(caller: Agent, rows: Array<Record<string, unknown>> = [])
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
   return {
     d1,
-    call: (args: Record<string, unknown>) => client.callTool({ name: "capsid_admin_manage_agents", arguments: args }) as Promise<ToolResult>,
+    call: (args: Record<string, unknown>) =>
+      client.callTool({
+        name: "capsid_admin_manage_agents",
+        arguments: args,
+      }) as Promise<ToolResult>,
     close: async () => {
       await client.close();
       await server.close();
@@ -60,13 +64,22 @@ async function liveRow(overrides: Record<string, unknown> = {}) {
 
 test("mint returns the key ONCE and stores only its hash", async () => {
   const { d1, call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const result = await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] });
+  const result = await call({
+    action: "mint",
+    name: "capsid-driver",
+    kind: "driver",
+    namespaces: ["capsid"],
+  });
   await close();
   assert.notEqual(result.isError, true, result.content[0].text);
   const body = parse(result);
   const key = String(body.key);
   assert.match(key, /^capsid_agent_[0-9a-f]{64}$/);
-  assert.match(String(body.note ?? ""), /once/i, "the response has to say the key is not recoverable");
+  assert.match(
+    String(body.note ?? ""),
+    /once/i,
+    "the response has to say the key is not recoverable",
+  );
 
   const insert = statements(d1).find((r) => /INSERT INTO agents/i.test(r.sql));
   assert.ok(insert, "mint did not insert the row");
@@ -79,14 +92,25 @@ test("mint returns the key ONCE and stores only its hash", async () => {
   assert.ok(audit, "mint was not audit-logged");
   const params = JSON.stringify(audit.params);
   assert.ok(!params.includes(key), "THE PLAINTEXT KEY REACHED THE AUDIT LOG");
-  assert.match(params, /namespaces/, "the audit row does not record the scopes the agent was minted with");
+  assert.match(
+    params,
+    /namespaces/,
+    "the audit row does not record the scopes the agent was minted with",
+  );
 });
 
 test("a new agent is born with read on its named namespaces and no flags", async () => {
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const body = parse(await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }));
+  const body = parse(
+    await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }),
+  );
   await close();
-  const scopes = body.scopes as { namespaces: string[]; repos: string[] | "*"; grants: string[]; flags: Record<string, boolean> };
+  const scopes = body.scopes as {
+    namespaces: string[];
+    repos: string[] | "*";
+    grants: string[];
+    flags: Record<string, boolean>;
+  };
   assert.deepEqual(scopes.namespaces, ["capsid"]);
   assert.deepEqual(scopes.grants, ["read"]);
   for (const flag of SCOPE_FLAGS) assert.equal(scopes.flags[flag], false);
@@ -97,19 +121,45 @@ test("PLANT: a mint that names no repos gets the NAMESPACE MAPPING, not the wild
   // namespace mapping. Driven through a real MCP
   // capsid_admin_manage_agents call.
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const body = parse(await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }));
+  const body = parse(
+    await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] }),
+  );
   await close();
   const scopes = body.scopes as { repos: string[] | "*" };
-  assert.notEqual(scopes.repos, "*", "an agent minted through the tool was born reaching every repo");
-  assert.deepEqual(scopes.repos, ["owner/repo"], "the derived axis is not the namespace's live mapping");
+  assert.notEqual(
+    scopes.repos,
+    "*",
+    "an agent minted through the tool was born reaching every repo",
+  );
+  assert.deepEqual(
+    scopes.repos,
+    ["owner/repo"],
+    "the derived axis is not the namespace's live mapping",
+  );
 });
 
 test("AN EXPLICIT repos LIST IS STILL EXACTLY WHAT THE CALLER ASKED FOR, wildcard included", async () => {
   // Derivation applies only when the caller named nothing; an admin that means every
   // repo passes the single entry "*".
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const narrow = parse(await call({ action: "mint", name: "one-repo", kind: "session", namespaces: ["capsid"], repos: ["o/other"] }));
-  const wide = parse(await call({ action: "mint", name: "every-repo", kind: "seat", namespaces: ["capsid"], repos: ["*"] }));
+  const narrow = parse(
+    await call({
+      action: "mint",
+      name: "one-repo",
+      kind: "session",
+      namespaces: ["capsid"],
+      repos: ["o/other"],
+    }),
+  );
+  const wide = parse(
+    await call({
+      action: "mint",
+      name: "every-repo",
+      kind: "seat",
+      namespaces: ["capsid"],
+      repos: ["*"],
+    }),
+  );
   await close();
   assert.deepEqual((narrow.scopes as { repos: string[] }).repos, ["o/other"]);
   assert.equal((wide.scopes as { repos: string }).repos, "*");
@@ -117,7 +167,9 @@ test("AN EXPLICIT repos LIST IS STILL EXACTLY WHAT THE CALLER ASKED FOR, wildcar
 
 test("A NAMESPACE SCOPE OF '*' DERIVES '*', because tomorrow's namespace is not in today's mapping", async () => {
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const body = parse(await call({ action: "mint", name: "everything", kind: "seat", namespaces: ["*"] }));
+  const body = parse(
+    await call({ action: "mint", name: "everything", kind: "seat", namespaces: ["*"] }),
+  );
   await close();
   assert.equal((body.scopes as { repos: string }).repos, "*");
 });
@@ -125,9 +177,18 @@ test("A NAMESPACE SCOPE OF '*' DERIVES '*', because tomorrow's namespace is not 
 test("PLANT: a mint for a namespace that maps no repos is REFUSED rather than widened", async () => {
   // Fail closed rather than fall back to the wildcard.
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"), []);
-  const result = await call({ action: "mint", name: "ghost-driver", kind: "driver", namespaces: ["not-registered"] });
+  const result = await call({
+    action: "mint",
+    name: "ghost-driver",
+    kind: "driver",
+    namespaces: ["not-registered"],
+  });
   await close();
-  assert.match(refusalOf(result), /not registered/, `expected a refusal naming the namespace: ${result.content[0].text}`);
+  assert.match(
+    refusalOf(result),
+    /not registered/,
+    `expected a refusal naming the namespace: ${result.content[0].text}`,
+  );
 });
 
 test("A MINTED AGENT CANNOT MINT, REVOKE OR RE-SCOPE ANOTHER", async () => {
@@ -152,8 +213,16 @@ test("A MINTED AGENT CANNOT MINT, REVOKE OR RE-SCOPE ANOTHER", async () => {
     { action: "list" },
   ]) {
     const result = await call(args);
-    assert.equal(result.isError, true, `a minted agent reached capsid_admin_manage_agents action '${args.action}'`);
-    assert.match(result.content[0].text, /admin/i, `the refusal for '${args.action}' does not say what is missing`);
+    assert.equal(
+      result.isError,
+      true,
+      `a minted agent reached capsid_admin_manage_agents action '${args.action}'`,
+    );
+    assert.match(
+      result.content[0].text,
+      /admin/i,
+      `the refusal for '${args.action}' does not say what is missing`,
+    );
   }
   await close();
   assert.equal(d1.recorded.length, 0, "a refused call wrote something");
@@ -170,29 +239,47 @@ test("a read-only caller is never served the agents tool, so the admin check is 
 test("list shows the inventory and last_seen, and never the verifier", async () => {
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"), [
     await liveRow({ last_seen: "2026-09-11 01:30:00" }),
-    await liveRow({ id: "agent_ffffffffffff", name: "retired", key_hash: await sha256Hex("other"), revoked_at: "2026-09-10 00:00:00" }),
+    await liveRow({
+      id: "agent_ffffffffffff",
+      name: "retired",
+      key_hash: await sha256Hex("other"),
+      revoked_at: "2026-09-10 00:00:00",
+    }),
   ]);
   const body = parse(await call({ action: "list" }));
   await close();
   const agents = body.agents as Array<Record<string, unknown>>;
-  assert.equal(agents.length, 2, "list hides revoked agents, which is how a revoked credential becomes invisible instead of accounted for");
+  assert.equal(
+    agents.length,
+    2,
+    "list hides revoked agents, which is how a revoked credential becomes invisible instead of accounted for",
+  );
   const live = agents.find((a) => a.name === "capsid-driver");
   assert.ok(live);
   assert.equal(live.last_seen, "2026-09-11 01:30:00");
   assert.equal(live.revoked_at, null);
   assert.ok(!("key_hash" in live), "list handed out the stored verifier");
-  assert.match(String(live.fingerprint), /^[0-9a-f]{12}$/, "an agent needs a short handle to match against an audit row");
+  assert.match(
+    String(live.fingerprint),
+    /^[0-9a-f]{12}$/,
+    "an agent needs a short handle to match against an audit row",
+  );
 });
 
 test("revoke is a timestamp, not a delete, so the audit rows it wrote still resolve", async () => {
-  const { d1, call, close } = await connect(adminAgentForEmail("admin@example.com"), [await liveRow()]);
+  const { d1, call, close } = await connect(adminAgentForEmail("admin@example.com"), [
+    await liveRow(),
+  ]);
   const result = await call({ action: "revoke", name: "capsid-driver" });
   await close();
   assert.notEqual(result.isError, true, result.content[0].text);
   assert.equal(parse(result).ok, true, refusalOf(result));
   const update = statements(d1).find((r) => /UPDATE agents SET revoked_at/i.test(r.sql));
   assert.ok(update, "revoke did not set revoked_at");
-  assert.ok(!statements(d1).some((r) => /DELETE FROM agents/i.test(r.sql)), "revoke deleted the row");
+  assert.ok(
+    !statements(d1).some((r) => /DELETE FROM agents/i.test(r.sql)),
+    "revoke deleted the row",
+  );
 });
 
 test("revoking or re-scoping an agent that is not there is a refusal, not a silent success", async () => {
@@ -206,8 +293,15 @@ test("revoking or re-scoping an agent that is not there is a refusal, not a sile
 });
 
 test("update_scopes replaces the scopes and records both sides in the audit row", async () => {
-  const { d1, call, close } = await connect(adminAgentForEmail("admin@example.com"), [await liveRow()]);
-  const result = await call({ action: "update_scopes", name: "capsid-driver", grants: ["read", "write"], flags: { can_touch_protected: true } });
+  const { d1, call, close } = await connect(adminAgentForEmail("admin@example.com"), [
+    await liveRow(),
+  ]);
+  const result = await call({
+    action: "update_scopes",
+    name: "capsid-driver",
+    grants: ["read", "write"],
+    flags: { can_touch_protected: true },
+  });
   await close();
   assert.notEqual(result.isError, true, result.content[0].text);
   const body = parse(result);
@@ -215,18 +309,36 @@ test("update_scopes replaces the scopes and records both sides in the audit row"
   const scopes = body.scopes as { grants: string[]; flags: Record<string, boolean> };
   assert.deepEqual(scopes.grants, ["read", "write"]);
   assert.equal(scopes.flags.can_touch_protected, true);
-  assert.equal(scopes.flags.can_merge, false, "an unnamed flag must not be turned on by a call that did not name it");
+  assert.equal(
+    scopes.flags.can_merge,
+    false,
+    "an unnamed flag must not be turned on by a call that did not name it",
+  );
   const audit = statements(d1).find((r) => /INSERT INTO audit_log/i.test(r.sql));
   assert.ok(audit, "update_scopes was not audit-logged");
-  assert.match(JSON.stringify(audit.params), /before/, "the audit row does not record what the scopes were before");
+  assert.match(
+    JSON.stringify(audit.params),
+    /before/,
+    "the audit row does not record what the scopes were before",
+  );
 });
 
 test("mint refuses a kind the table does not have, and a name that is already taken", async () => {
   const { call, close } = await connect(adminAgentForEmail("admin@example.com"), [await liveRow()]);
-  const badKind = await call({ action: "mint", name: "new-one", kind: "superuser", namespaces: ["capsid"] });
+  const badKind = await call({
+    action: "mint",
+    name: "new-one",
+    kind: "superuser",
+    namespaces: ["capsid"],
+  });
   assert.equal(parse(badKind).ok, false);
   assert.match(refusalOf(badKind), /session, driver, seat, cron/);
-  const taken = await call({ action: "mint", name: "capsid-driver", kind: "driver", namespaces: ["capsid"] });
+  const taken = await call({
+    action: "mint",
+    name: "capsid-driver",
+    kind: "driver",
+    namespaces: ["capsid"],
+  });
   assert.equal(parse(taken).ok, false);
   assert.match(refusalOf(taken), /already/i);
   await close();

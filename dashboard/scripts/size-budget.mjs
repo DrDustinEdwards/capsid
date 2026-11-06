@@ -115,10 +115,15 @@ const leaves = routes.filter((r) => r.parentId && !routes.some((c) => c.parentId
 if (leaves.length === 0) fail("the manifest names no page");
 
 const page = (leaf) => {
-  const js = new Set([file(assets.url), file(assets.entry.module), ...assets.entry.imports.map(file)]);
+  const js = new Set([
+    file(assets.url),
+    file(assets.entry.module),
+    ...assets.entry.imports.map(file),
+  ]);
   const css = new Set(assets.entry.css.map(file));
   for (const r of chain(leaf)) {
-    for (const u of [r.module, ...(r.imports ?? []), r.clientLoaderModule].filter(Boolean)) js.add(file(u));
+    for (const u of [r.module, ...(r.imports ?? []), r.clientLoaderModule].filter(Boolean))
+      js.add(file(u));
     for (const u of r.css ?? []) css.add(file(u));
   }
   return { id: leaf.id, js, css };
@@ -143,12 +148,16 @@ for (const f of heaviest.js) {
 }
 const initialGz = gz(heaviest.js);
 rows.push(["initial js", `TOTAL (${heaviest.id})`, null, initialGz, `<= ${fmt(BUDGET.initialJs)}`]);
-if (initialGz > BUDGET.initialJs) problems.push(`initial JS of ${heaviest.id} is ${fmt(initialGz)} gzip, over ${fmt(BUDGET.initialJs)}`);
+if (initialGz > BUDGET.initialJs)
+  problems.push(
+    `initial JS of ${heaviest.id} is ${fmt(initialGz)} gzip, over ${fmt(BUDGET.initialJs)}`,
+  );
 
 for (const f of files.filter((f) => f.endsWith(".js") && !heaviest.js.has(f))) {
   const s = sizeOf(f);
   rows.push(["lazy js", f, s.raw, s.gz, `<= ${fmt(BUDGET.lazyChunk)}`]);
-  if (s.gz > BUDGET.lazyChunk) problems.push(`chunk ${f} is ${fmt(s.gz)} gzip, over ${fmt(BUDGET.lazyChunk)}`);
+  if (s.gz > BUDGET.lazyChunk)
+    problems.push(`chunk ${f} is ${fmt(s.gz)} gzip, over ${fmt(BUDGET.lazyChunk)}`);
 }
 
 const cssGz = gz(heaviestCss.css);
@@ -163,17 +172,30 @@ if (cssGz === 0) fail("no initial CSS found through the manifest");
 rows.push(["css", `TOTAL (${heaviestCss.id})`, null, cssGz, `<= ${fmt(BUDGET.css)}`]);
 rows.push(["lazy css", "TOTAL", null, lazyCssGz, `<= ${fmt(BUDGET.lazyCss)}`]);
 if (cssGz > BUDGET.css) problems.push(`initial CSS is ${fmt(cssGz)} gzip, over ${fmt(BUDGET.css)}`);
-if (lazyCssGz > BUDGET.lazyCss) problems.push(`lazy CSS is ${fmt(lazyCssGz)} gzip, over ${fmt(BUDGET.lazyCss)}`);
+if (lazyCssGz > BUDGET.lazyCss)
+  problems.push(`lazy CSS is ${fmt(lazyCssGz)} gzip, over ${fmt(BUDGET.lazyCss)}`);
 
 let fontRaw = 0;
 for (const f of fonts) fontRaw += sizeOf(f).raw;
 rows.push(["fonts", `${fonts.length} files (not budgeted)`, fontRaw, null, "reported"]);
 
 const w = [10, Math.max(...rows.map((r) => r[1].length)), 10, 10, 12];
-const line = (c) => [c[0].padEnd(w[0]), c[1].padEnd(w[1]), c[2].padStart(w[2]), c[3].padStart(w[3]), c[4].padEnd(w[4])].join("  ");
+const line = (c) =>
+  [
+    c[0].padEnd(w[0]),
+    c[1].padEnd(w[1]),
+    c[2].padStart(w[2]),
+    c[3].padStart(w[3]),
+    c[4].padEnd(w[4]),
+  ].join("  ");
 console.log(line(["kind", "file", "raw", "gzip", "budget"]));
-console.log(line(["-".repeat(w[0]), "-".repeat(w[1]), "-".repeat(w[2]), "-".repeat(w[3]), "-".repeat(w[4])]));
-for (const r of rows) console.log(line([r[0], r[1], r[2] == null ? "" : fmt(r[2]), r[3] == null ? "" : fmt(r[3]), r[4]]));
+console.log(
+  line(["-".repeat(w[0]), "-".repeat(w[1]), "-".repeat(w[2]), "-".repeat(w[3]), "-".repeat(w[4])]),
+);
+for (const r of rows)
+  console.log(
+    line([r[0], r[1], r[2] == null ? "" : fmt(r[2]), r[3] == null ? "" : fmt(r[3]), r[4]]),
+  );
 
 if (problems.length) {
   for (const p of problems) console.error(`size-budget: FAIL: ${p}`);

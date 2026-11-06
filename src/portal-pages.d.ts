@@ -4,8 +4,16 @@
 declare module "capsid-portal-pages" {
   /** A Portal page: `request` names it as the browser does (/health), `read` answers the
    *  Portal's API routes ("/ops"), and `nonce` goes on every script the page renders. */
-  export function renderPortalPage(request: Request, read: (path: string) => Promise<Response>, nonce: string): Promise<Response>;
+  export function renderPortalPage(
+    request: Request,
+    read: (path: string) => Promise<Response>,
+    nonce: string,
+  ): Promise<Response>;
   /** A demo page (/demos/...): `file` answers a path in the build's files, where the sample
    *  answers are (/demos/api/<name>.json). */
-  export function renderDemoPage(request: Request, file: (path: string) => Promise<Response>, nonce: string): Promise<Response>;
+  export function renderDemoPage(
+    request: Request,
+    file: (path: string) => Promise<Response>,
+    nonce: string,
+  ): Promise<Response>;
 }

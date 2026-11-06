@@ -55,7 +55,11 @@ export interface Paused {
  *  `Revert "..."`), "reverts #N" or "revert #N" at the start of the title or of a body line
  *  (same repo only, any letter case), and git's "This reverts commit <sha>" (7 to 40 hex). A mention of
  *  another repo's pull request names none of this repo's. */
-export function revertTargets(title: string, body: string, repo: string): { prs: number[]; shas: string[] } {
+export function revertTargets(
+  title: string,
+  body: string,
+  repo: string,
+): { prs: number[]; shas: string[] } {
   const prs = new Set<number>();
   const shas = new Set<string>();
   const text = `${title ?? ""}\n${body ?? ""}`;
@@ -66,7 +70,8 @@ export function revertTargets(title: string, body: string, repo: string): { prs:
   // (after a list marker at most): "Don't revert #12 here" is prose and names nothing.
   const lead = /^[ \t]*(?:[-*][ \t]+)?reverts?\s+#(\d+)\b/gim;
   for (const m of `${title ?? ""}\n${body ?? ""}`.matchAll(lead)) prs.add(Number(m[1]));
-  for (const m of text.matchAll(/\bThis reverts commit\s+([0-9a-f]{7,40})\b/gi)) shas.add(m[1]!.toLowerCase());
+  for (const m of text.matchAll(/\bThis reverts commit\s+([0-9a-f]{7,40})\b/gi))
+    shas.add(m[1]!.toLowerCase());
   return { prs: [...prs].sort((a, b) => a - b), shas: [...shas] };
 }
 
@@ -86,23 +91,33 @@ interface AutoMergedRow {
 
 /** The auto-merged audit row for a pull request, or for a commit by its sha prefix
  *  (merge_sha or head_sha). The same query shape the merge units use. */
-async function autoMergedBy(env: Env, namespace: string, repo: string, target: { pr: number } | { sha: string }): Promise<AutoMergedRow | null> {
+async function autoMergedBy(
+  env: Env,
+  namespace: string,
+  repo: string,
+  target: { pr: number } | { sha: string },
+): Promise<AutoMergedRow | null> {
   const row =
     "pr" in target
       ? await env.DB.prepare(
-          `SELECT params FROM audit_log WHERE action = 'auto-merged' AND namespace = ?1 AND json_extract(params, '$.repo') = ?2 AND json_extract(params, '$.pr') = ?3 ORDER BY id DESC LIMIT 1`
+          `SELECT params FROM audit_log WHERE action = 'auto-merged' AND namespace = ?1 AND json_extract(params, '$.repo') = ?2 AND json_extract(params, '$.pr') = ?3 ORDER BY id DESC LIMIT 1`,
         )
           .bind(namespace, repo, target.pr)
           .first<{ params: string }>()
       : // The sha is hex by the pattern that found it, so the prefix carries no wildcard.
         await env.DB.prepare(
           `SELECT params FROM audit_log WHERE action = 'auto-merged' AND namespace = ?1 AND json_extract(params, '$.repo') = ?2
-             AND (json_extract(params, '$.merge_sha') LIKE ?3 OR json_extract(params, '$.head_sha') LIKE ?3) ORDER BY id DESC LIMIT 1`
+             AND (json_extract(params, '$.merge_sha') LIKE ?3 OR json_extract(params, '$.head_sha') LIKE ?3) ORDER BY id DESC LIMIT 1`,
         )
           .bind(namespace, repo, `${target.sha}%`)
           .first<{ params: string }>();
   if (!row) return null;
-  const p = JSON.parse(row.params) as { repo: string; pr: number; head_sha?: string | null; path_class?: string | null };
+  const p = JSON.parse(row.params) as {
+    repo: string;
+    pr: number;
+    head_sha?: string | null;
+    path_class?: string | null;
+  };
   return { repo: p.repo, pr: p.pr, head_sha: p.head_sha ?? null, path_class: p.path_class ?? null };
 }
 
@@ -117,7 +132,12 @@ export interface RevertsReport {
 export async function recordReverts(env: Env, namespace: string, now: Date): Promise<string[]> {
   const { owner, repo } = await resolveRepo(env, namespace);
   const full = `${owner}/${repo}`;
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${CLOSED_PRS_READ}`);
+  const resp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${CLOSED_PRS_READ}`,
+  );
   if (!resp.ok) throw new Error(`the closed pull requests of ${full} returned ${resp.status}`);
   const recorded: string[] = [];
   for (const closed of (await resp.json()) as ClosedPr[]) {
@@ -140,7 +160,7 @@ export async function recordReverts(env: Env, namespace: string, now: Date): Pro
       if (row.pr === closed.number) continue;
       const seen = await env.DB.prepare(
         `SELECT 1 AS found FROM audit_log WHERE action = 'auto-merge-reverted' AND namespace = ?1 AND json_extract(params, '$.repo') = ?2
-           AND json_extract(params, '$.pr') = ?3 AND json_extract(params, '$.reverted_by') = ?4 LIMIT 1`
+           AND json_extract(params, '$.pr') = ?3 AND json_extract(params, '$.reverted_by') = ?4 LIMIT 1`,
       )
         .bind(namespace, full, row.pr, closed.number)
         .first<{ found: number }>();
@@ -175,23 +195,36 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
   const since = new Date(now.getTime() - WINDOW_MS).toISOString().replace("T", " ").slice(0, 19);
   const { results } = await env.DB.prepare(
     `SELECT p.job_id AS job_id, p.pr_url AS pr_url, o.namespace AS namespace FROM job_outcome_prs p JOIN job_outcomes o ON o.job_id = p.job_id
-     WHERE p.merged = 1 AND p.recorded_at >= ?1 ORDER BY p.recorded_at DESC LIMIT ?2`
+     WHERE p.merged = 1 AND p.recorded_at >= ?1 ORDER BY p.recorded_at DESC LIMIT ?2`,
   )
     .bind(since, AUDIT_ROWS_LIMIT)
     .all<{ job_id: string; pr_url: string; namespace: string }>();
-  const repos = new Map<string, { owner: string; repo: string; prs: Map<number, Array<{ job_id: string; namespace: string }>> }>();
+  const repos = new Map<
+    string,
+    { owner: string; repo: string; prs: Map<number, Array<{ job_id: string; namespace: string }>> }
+  >();
   for (const row of results ?? []) {
     const ref = parsePrUrl(row.pr_url);
     if (!ref) continue;
     const key = `${ref.owner}/${ref.repo}`.toLowerCase();
-    const entry = repos.get(key) ?? (repos.set(key, { owner: ref.owner, repo: ref.repo, prs: new Map() }), repos.get(key)!);
-    entry.prs.set(ref.number, [...(entry.prs.get(ref.number) ?? []), { job_id: row.job_id, namespace: row.namespace }]);
+    const entry =
+      repos.get(key) ??
+      (repos.set(key, { owner: ref.owner, repo: ref.repo, prs: new Map() }), repos.get(key)!);
+    entry.prs.set(ref.number, [
+      ...(entry.prs.get(ref.number) ?? []),
+      { job_id: row.job_id, namespace: row.namespace },
+    ]);
   }
   const recorded: string[] = [];
   for (const { owner, repo, prs } of [...repos.values()].slice(0, OUTCOME_REPOS_MAX)) {
     const full = `${owner}/${repo}`;
     try {
-      const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${CLOSED_PRS_READ}`);
+      const resp = await ghFetch(
+        env,
+        owner,
+        repo,
+        `/repos/${owner}/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=${CLOSED_PRS_READ}`,
+      );
       if (!resp.ok) throw new Error(`the closed pull requests of ${full} returned ${resp.status}`);
       let shaLookups = 0;
       for (const closed of (await resp.json()) as ClosedPr[]) {
@@ -202,15 +235,22 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
         // brought it in.
         for (const sha of targets.shas) {
           if (shaLookups++ >= SHA_LOOKUPS_MAX) break;
-          const pulls = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/commits/${sha}/pulls`);
-          if (pulls.ok) for (const p of (await pulls.json()) as Array<{ number: number }>) numbers.add(p.number);
+          const pulls = await ghFetch(
+            env,
+            owner,
+            repo,
+            `/repos/${owner}/${repo}/commits/${sha}/pulls`,
+          );
+          if (pulls.ok)
+            for (const p of (await pulls.json()) as Array<{ number: number }>)
+              numbers.add(p.number);
         }
         for (const pr of numbers) {
           if (pr === closed.number) continue;
           for (const job of prs.get(pr) ?? []) {
             const seen = await env.DB.prepare(
               `SELECT 1 AS found FROM audit_log WHERE action = 'job-pr-reverted' AND json_extract(params, '$.job_id') = ?1
-                 AND json_extract(params, '$.pr') = ?2 AND json_extract(params, '$.reverted_by') = ?3 LIMIT 1`
+                 AND json_extract(params, '$.pr') = ?2 AND json_extract(params, '$.reverted_by') = ?3 LIMIT 1`,
             )
               .bind(job.job_id, pr, closed.number)
               .first<{ found: number }>();
@@ -230,7 +270,13 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
         }
       }
     } catch (err) {
-      logEvent("MERGE_SAFETY", { message: `MERGE_SAFETY could not read the reverts of ${full}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+      logEvent(
+        "MERGE_SAFETY",
+        {
+          message: `MERGE_SAFETY could not read the reverts of ${full}: ${err instanceof Error ? err.message : String(err)}`,
+        },
+        { level: "error" },
+      );
     }
   }
   return recorded;
@@ -240,7 +286,11 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
  *  repos of recent job outcomes, at most once in 30 minutes (a KV stamp, like the
  *  watcher's). A policy that does not load, or a GitHub failure for one namespace, is
  *  logged and the rest go on. */
-export async function revertsTick(env: Env, now: Date, policy?: Awaited<ReturnType<typeof loadMergePolicy>>): Promise<RevertsReport> {
+export async function revertsTick(
+  env: Env,
+  now: Date,
+  policy?: Awaited<ReturnType<typeof loadMergePolicy>>,
+): Promise<RevertsReport> {
   const last = await env.APP_KV.get(REVERTS_STAMP_KEY).catch(() => null);
   const due = passDue(last, REVERTS_EVERY_MINUTES, now);
   if (!due.due) return { ran: false, note: due.reason, recorded: [] };
@@ -248,18 +298,32 @@ export async function revertsTick(env: Env, now: Date, policy?: Awaited<ReturnTy
   const loaded = policy ?? (await loadMergePolicy(env));
   if ("error" in loaded) {
     await env.APP_KV.put(REVERTS_STAMP_KEY, now.toISOString());
-    return { ran: true, note: `${outcomes.length} revert(s) of job pull requests recorded; ${loaded.error}`, recorded: outcomes };
+    return {
+      ran: true,
+      note: `${outcomes.length} revert(s) of job pull requests recorded; ${loaded.error}`,
+      recorded: outcomes,
+    };
   }
   const recorded: string[] = [...outcomes];
   for (const namespace of loaded.policy.namespaces) {
     try {
       recorded.push(...(await recordReverts(env, namespace, now)));
     } catch (err) {
-      logEvent("MERGE_SAFETY", { message: `MERGE_SAFETY could not read the reverts of ${namespace}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+      logEvent(
+        "MERGE_SAFETY",
+        {
+          message: `MERGE_SAFETY could not read the reverts of ${namespace}: ${err instanceof Error ? err.message : String(err)}`,
+        },
+        { level: "error" },
+      );
     }
   }
   await env.APP_KV.put(REVERTS_STAMP_KEY, now.toISOString());
-  return { ran: true, note: `${recorded.length} revert(s) recorded (job and auto-merged pull requests)${recorded.length ? `: ${recorded.join(", ")}` : ""}`, recorded };
+  return {
+    ran: true,
+    note: `${recorded.length} revert(s) recorded (job and auto-merged pull requests)${recorded.length ? `: ${recorded.join(", ")}` : ""}`,
+    recorded,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -311,11 +375,29 @@ function paramsOf(row: AuditEvidence): Record<string, unknown> {
 /** The counts per namespace from the evidence. Pure. `namespaces` are listed even with
  *  no event; one seen in the evidence is added. A pull request counts as bad once, at its
  *  first rollback or revert, so one incident is not two. */
-export function countsFrom(audit: readonly AuditEvidence[], outcomes: readonly OutcomeEvidence[], namespaces: readonly string[], now: Date): SafetyCounts[] {
+export function countsFrom(
+  audit: readonly AuditEvidence[],
+  outcomes: readonly OutcomeEvidence[],
+  namespaces: readonly string[],
+  now: Date,
+): SafetyCounts[] {
   const t = now.getTime();
   const out = new Map<string, SafetyCounts>();
   const get = (ns: string): SafetyCounts =>
-    out.get(ns) ?? (out.set(ns, { namespace: ns, auto_merged: 0, approved: 0, deploys_verified: 0, rolled_back: 0, rollback_failed: 0, reverts: 0, bad_auto_7d: 0, bad_at: [], auto_at: [] }), out.get(ns)!);
+    out.get(ns) ??
+    (out.set(ns, {
+      namespace: ns,
+      auto_merged: 0,
+      approved: 0,
+      deploys_verified: 0,
+      rolled_back: 0,
+      rollback_failed: 0,
+      reverts: 0,
+      bad_auto_7d: 0,
+      bad_at: [],
+      auto_at: [],
+    }),
+    out.get(ns)!);
   for (const ns of namespaces) get(ns);
   const inWeek = (ms: number) => ms > t - WEEK_MS && ms <= t;
   const inReach = (ms: number) => ms > t - WEEK_MS - BASELINE_MS && ms <= t;
@@ -353,7 +435,10 @@ export function countsFrom(audit: readonly AuditEvidence[], outcomes: readonly O
       if (p.reason === AUTO_MERGED_APPROVAL_REASON) continue;
       if (inWeek(timeMs(a.at))) c.approved++;
     } else if (a.action === "auto-merge-reverted") {
-      const ms = typeof p.merged_at === "string" && Number.isFinite(Date.parse(p.merged_at)) ? Date.parse(p.merged_at) : timeMs(a.at);
+      const ms =
+        typeof p.merged_at === "string" && Number.isFinite(Date.parse(p.merged_at))
+          ? Date.parse(p.merged_at)
+          : timeMs(a.at);
       if (inWeek(ms)) c.reverts++;
       bad(a.namespace, String(p.repo), typeof p.pr === "number" ? p.pr : null, ms);
     }
@@ -377,16 +462,22 @@ export function countsFrom(audit: readonly AuditEvidence[], outcomes: readonly O
 }
 
 /** The evidence from D1 and the counts from it. Reads only: two statements. */
-async function readSafetyCounts(env: Env, now: Date, namespaces: readonly string[]): Promise<SafetyCounts[]> {
+async function readSafetyCounts(
+  env: Env,
+  now: Date,
+  namespaces: readonly string[],
+): Promise<SafetyCounts[]> {
   const since = new Date(now.getTime() - WINDOW_MS);
   const sqlite = since.toISOString().slice(0, 19).replace("T", " ");
   const [audit, outcomes] = await Promise.all([
     env.DB.prepare(
-      `SELECT action, namespace, params, at FROM audit_log WHERE action IN ('auto-merged', 'approved-merged', 'auto-merge-reverted') AND at >= ?1 ORDER BY id DESC LIMIT ?2`
+      `SELECT action, namespace, params, at FROM audit_log WHERE action IN ('auto-merged', 'approved-merged', 'auto-merge-reverted') AND at >= ?1 ORDER BY id DESC LIMIT ?2`,
     )
       .bind(sqlite, AUDIT_ROWS_LIMIT)
       .all<AuditEvidence>(),
-    env.DB.prepare(`SELECT namespace, repo, pr, outcome, run_at FROM deploy_outcomes WHERE run_at >= ?1 AND outcome IN ('verified', 'rolled_back', 'rollback_failed') ORDER BY run_at LIMIT ?2`)
+    env.DB.prepare(
+      `SELECT namespace, repo, pr, outcome, run_at FROM deploy_outcomes WHERE run_at >= ?1 AND outcome IN ('verified', 'rolled_back', 'rollback_failed') ORDER BY run_at LIMIT ?2`,
+    )
       .bind(since.toISOString(), AUDIT_ROWS_LIMIT)
       .all<OutcomeEvidence>(),
   ]);
@@ -404,7 +495,8 @@ function windowed(c: SafetyCounts, lifted: string | undefined, now: Date) {
   const week = (ms: number) => ms > t - WEEK_MS;
   // One event per pull request: its latest after the lifted time.
   const byPr = new Map<string, number>();
-  for (const e of c.bad_at) if (e.ms > after) byPr.set(e.key, Math.max(byPr.get(e.key) ?? -Infinity, e.ms));
+  for (const e of c.bad_at)
+    if (e.ms > after) byPr.set(e.key, Math.max(byPr.get(e.key) ?? -Infinity, e.ms));
   const latest = [...byPr.values()];
   return {
     bad7: latest.filter(week).length,
@@ -422,20 +514,27 @@ function windowed(c: SafetyCounts, lifted: string | undefined, now: Date) {
  *  first event, and one bad event alone is the merge units' job, not a namespace's, so
  *  only the count rule applies there. Events at or before the namespace's lifted time are
  *  answered and count for nothing. A namespace already paused is not paused again. */
-export function judgeShutoff(counts: readonly SafetyCounts[], paused: Readonly<Record<string, Paused>>, lifted: Readonly<Record<string, string>>, now: Date): Record<string, string> {
+export function judgeShutoff(
+  counts: readonly SafetyCounts[],
+  paused: Readonly<Record<string, Paused>>,
+  lifted: Readonly<Record<string, string>>,
+  now: Date,
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const c of counts) {
     if (paused[c.namespace]) continue;
     const w = windowed(c, lifted[c.namespace], now);
     if (w.bad7 >= PAUSE_BAD_COUNT) {
-      out[c.namespace] = `${w.bad7} of the pull requests auto-merge merged were rolled back or reverted in 7 days`;
+      out[c.namespace] =
+        `${w.bad7} of the pull requests auto-merge merged were rolled back or reverted in 7 days`;
       continue;
     }
     if (w.bad30 >= 1 && w.auto30 >= 1) {
       const rate7 = w.bad7 / Math.max(w.auto7, 1);
       const rate30 = w.bad30 / w.auto30;
       if (rate7 > PAUSE_RATE_FACTOR * rate30) {
-        out[c.namespace] = `${w.bad7} of ${w.auto7} auto-merged pull request(s) rolled back or reverted in 7 days, over ${PAUSE_RATE_FACTOR} times the ${w.bad30} of ${w.auto30} in the 30 days before`;
+        out[c.namespace] =
+          `${w.bad7} of ${w.auto7} auto-merged pull request(s) rolled back or reverted in 7 days, over ${PAUSE_RATE_FACTOR} times the ${w.bad30} of ${w.auto30} in the 30 days before`;
       }
     }
   }
@@ -448,7 +547,8 @@ export async function readPaused(kv: KVNamespace): Promise<Record<string, Paused
   const raw = await kv.get(PAUSED_KEY);
   if (!raw) return {};
   const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${PAUSED_KEY} is not a map of namespaces`);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error(`${PAUSED_KEY} is not a map of namespaces`);
   return parsed as Record<string, Paused>;
 }
 
@@ -457,7 +557,12 @@ async function readLifted(kv: KVNamespace): Promise<Record<string, string>> {
   return raw ? (JSON.parse(raw) as Record<string, string>) : {};
 }
 
-function reportFrom(counts: readonly SafetyCounts[], paused: Readonly<Record<string, Paused>>, lifted: Readonly<Record<string, string>>, now: Date): OpsMergeSafety {
+function reportFrom(
+  counts: readonly SafetyCounts[],
+  paused: Readonly<Record<string, Paused>>,
+  lifted: Readonly<Record<string, string>>,
+  now: Date,
+): OpsMergeSafety {
   const rows: OpsMergeSafetyRow[] = counts
     .map((c) => ({
       namespace: c.namespace,
@@ -482,7 +587,11 @@ export interface SafetyTickReport {
 
 /** One pass: count the week, pause a namespace the counts condemn, store the report.
  *  `namespaces` are those the signed policy covers (empty when it did not load). */
-export async function safetyTick(env: Env, now: Date, namespaces: readonly string[] = []): Promise<SafetyTickReport> {
+export async function safetyTick(
+  env: Env,
+  now: Date,
+  namespaces: readonly string[] = [],
+): Promise<SafetyTickReport> {
   const before = await readPaused(env.APP_KV);
   const lifted = await readLifted(env.APP_KV);
   const counts = await readSafetyCounts(env, now, namespaces);
@@ -494,14 +603,23 @@ export async function safetyTick(env: Env, now: Date, namespaces: readonly strin
     // Read again just before writing and add only the new namespaces to that value, so a
     // resume that landed while the counts were read is not written back over. KV has no
     // compare-and-set: this narrows the window and does not close it.
-    paused = { ...(await readPaused(env.APP_KV)), ...Object.fromEntries(Object.entries(added).map(([ns, reason]) => [ns, { since, reason }])) };
+    paused = {
+      ...(await readPaused(env.APP_KV)),
+      ...Object.fromEntries(Object.entries(added).map(([ns, reason]) => [ns, { since, reason }])),
+    };
     // The pause first: if the audit row then fails, the namespace is held and the next
     // tick finds it already paused and writes no row, which costs a row, not the hold.
     await env.APP_KV.put(PAUSED_KEY, JSON.stringify(paused));
     await env.DB.batch(
       names.map((ns) =>
-        auditStatement(env.DB, ACTOR, "auto-merge-paused", ns, null, { reason: added[ns], since, counts: reportFrom(counts, paused, lifted, now).namespaces.find((r) => r.namespace === ns) })
-      )
+        auditStatement(env.DB, ACTOR, "auto-merge-paused", ns, null, {
+          reason: added[ns],
+          since,
+          counts: reportFrom(counts, paused, lifted, now).namespaces.find(
+            (r) => r.namespace === ns,
+          ),
+        }),
+      ),
     );
   }
   const report = reportFrom(counts, paused, lifted, now);
@@ -535,7 +653,13 @@ export async function mergeSafetyTick(env: Env, now: Date): Promise<MergeSafetyT
   const reverts = await revertsTick(env, now, loaded);
   const safety = await safetyTick(env, now, "policy" in loaded ? loaded.policy.namespaces : []);
   if (!reverts.ran && !safety.ran) return { ran: false, note: safety.note, newly_paused: [] };
-  return { ran: true, note: [reverts.recorded.length ? reverts.note : null, safety.ran ? safety.note : null].filter(Boolean).join("; "), newly_paused: safety.newly_paused };
+  return {
+    ran: true,
+    note: [reverts.recorded.length ? reverts.note : null, safety.ran ? safety.note : null]
+      .filter(Boolean)
+      .join("; "),
+    newly_paused: safety.newly_paused,
+  };
 }
 
 /** The meter as the status tool and the Portal read it, or null before the first pass.
@@ -555,17 +679,34 @@ export async function readSafetyReport(kv: KVNamespace): Promise<OpsMergeSafety 
 // 6. Resume
 
 /** What lifting a namespace's pause will do, or why it cannot. Reads only. */
-export async function planResume(kv: KVNamespace, rawNamespace: string | undefined): Promise<{ ok: true; namespace: string; paused: Paused } | { ok: false; refusal: string }> {
+export async function planResume(
+  kv: KVNamespace,
+  rawNamespace: string | undefined,
+): Promise<{ ok: true; namespace: string; paused: Paused } | { ok: false; refusal: string }> {
   const namespace = (rawNamespace ?? "").trim();
-  if (!/^[a-z0-9-]+$/.test(namespace)) return { ok: false, refusal: `automerge_resume needs a namespace, for example 'capsid'; got '${rawNamespace ?? ""}'.` };
+  if (!/^[a-z0-9-]+$/.test(namespace))
+    return {
+      ok: false,
+      refusal: `automerge_resume needs a namespace, for example 'capsid'; got '${rawNamespace ?? ""}'.`,
+    };
   const paused = (await readPaused(kv))[namespace];
-  if (!paused) return { ok: false, refusal: `auto-merge for ${namespace} is not paused, so there is nothing to lift.` };
+  if (!paused)
+    return {
+      ok: false,
+      refusal: `auto-merge for ${namespace} is not paused, so there is nothing to lift.`,
+    };
   return { ok: true, namespace, paused };
 }
 
 /** Lift a namespace's pause: the tick may merge its pull requests unattended again, and
  *  the rollbacks and reverts before now count against it no more. Audited. */
-export async function resumeNamespace(env: Env, actor: string, rawNamespace: string | undefined, reason: string, now: Date): Promise<{ ok: true; summary: string } | { ok: false; refusal: string }> {
+export async function resumeNamespace(
+  env: Env,
+  actor: string,
+  rawNamespace: string | undefined,
+  reason: string,
+  now: Date,
+): Promise<{ ok: true; summary: string } | { ok: false; refusal: string }> {
   const plan = await planResume(env.APP_KV, rawNamespace);
   if (!plan.ok) return plan;
   const lifted = { ...(await readLifted(env.APP_KV)), [plan.namespace]: now.toISOString() };
@@ -575,6 +716,15 @@ export async function resumeNamespace(env: Env, actor: string, rawNamespace: str
   const rest = await readPaused(env.APP_KV);
   delete rest[plan.namespace];
   await env.APP_KV.put(PAUSED_KEY, JSON.stringify(rest));
-  await env.DB.batch([auditStatement(env.DB, actor, "auto-merge-resumed", plan.namespace, null, { namespace: plan.namespace, reason, was: plan.paused })]);
-  return { ok: true, summary: `Lifted the pause on auto-merge for ${plan.namespace}. The tick may merge its pull requests unattended again; new bad merges pause it again.` };
+  await env.DB.batch([
+    auditStatement(env.DB, actor, "auto-merge-resumed", plan.namespace, null, {
+      namespace: plan.namespace,
+      reason,
+      was: plan.paused,
+    }),
+  ]);
+  return {
+    ok: true,
+    summary: `Lifted the pause on auto-merge for ${plan.namespace}. The tick may merge its pull requests unattended again; new bad merges pause it again.`,
+  };
 }

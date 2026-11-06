@@ -40,7 +40,15 @@ const JOB = {
 function caller(grants: AgentGrant[]): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = grants;
-  return { id: "agent_x", name: "capsid-reader", kind: "session", actor: "agent:capsid-reader", scopes, admin: false, row: null };
+  return {
+    id: "agent_x",
+    name: "capsid-reader",
+    kind: "session",
+    actor: "agent:capsid-reader",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 async function list(agent: Agent, args: Record<string, unknown>) {
@@ -49,20 +57,30 @@ async function list(agent: Agent, args: Record<string, unknown>) {
   const client = new Client({ name: "jobs-list", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(c), server.connect(s)]);
-  const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", namespace: "capsid", ...args } })) as {
+  const result = (await client.callTool({
+    name: "capsid_work_jobs",
+    arguments: { action: "list", namespace: "capsid", ...args },
+  })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
   await client.close();
   await server.close();
   assert.ok(!result.isError, result.content[0].text);
-  return { out: JSON.parse(result.content[0].text) as { jobs: Array<Record<string, unknown>> }, reads: d1.reads };
+  return {
+    out: JSON.parse(result.content[0].text) as { jobs: Array<Record<string, unknown>> },
+    reads: d1.reads,
+  };
 }
 
 test("PLANT: a read-grant caller listing a namespace gets no job body", async () => {
   const { out } = await list(caller(["read"]), {});
   assert.equal(out.jobs.length, 1);
-  assert.equal("body" in out.jobs[0], false, "capsid_work_jobs list handed a read-only caller the signed prompt");
+  assert.equal(
+    "body" in out.jobs[0],
+    false,
+    "capsid_work_jobs list handed a read-only caller the signed prompt",
+  );
   assert.equal(out.jobs[0].id, JOB.id);
   assert.equal(out.jobs[0].title, JOB.title);
 });

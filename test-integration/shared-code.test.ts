@@ -16,9 +16,15 @@ const ORIGIN = "https://capsid.test";
 const SECRET = "integration-portal-cookie-key";
 
 async function signedGet(path: string): Promise<Response> {
-  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
+  const cookie = (
+    await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())
+  ).split(";")[0];
   const ctx = createExecutionContext();
-  const response = await worker.fetch!(new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie }, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx);
+  const response = await worker.fetch!(
+    new Request(`${ORIGIN}${path}`, { headers: { Cookie: cookie }, redirect: "manual" }) as never,
+    { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never,
+    ctx,
+  );
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
@@ -33,10 +39,14 @@ describe("GET /portal/api/shared-code", () => {
     expect(response.status, await response.clone().text()).toBe(200);
     const view = (await response.json()) as SharedCodeView;
     expect(view.configured).toBe(true);
-    expect(view.packages.map((p) => p.name).sort()).toEqual(["Capsomer", "d1-dump", "devkit", "Prelum", "site-api", "site-runtime"].sort());
+    expect(view.packages.map((p) => p.name).sort()).toEqual(
+      ["Capsomer", "d1-dump", "devkit", "Prelum", "site-api", "site-runtime"].sort(),
+    );
     // The apps are every repo the system model lists, each read once.
     const repos = new Set(bundledModel().systems.flatMap((s) => s.repos));
-    expect(view.apps_read + view.apps_failed.length, "every repo in the model was tried").toBe(repos.size);
+    expect(view.apps_read + view.apps_failed.length, "every repo in the model was tried").toBe(
+      repos.size,
+    );
     for (const pkg of view.packages) {
       expect(pkg.latest).toBeNull();
       expect(pkg.tags_error, `${pkg.name} has no tags and no reason`).toBeTruthy();
@@ -45,7 +55,9 @@ describe("GET /portal/api/shared-code", () => {
       expect(pkg.untagged).toBe(false);
       expect(pkg.manifest_error, `${pkg.name} has no version and no reason`).toBeTruthy();
     }
-    expect(view.packages.find((p) => p.name === "site-runtime")?.local_copies).toEqual([{ namespace: "dustinedwards", path: "packages/security-headers", present: null }]);
+    expect(view.packages.find((p) => p.name === "site-runtime")?.local_copies).toEqual([
+      { namespace: "dustinedwards", path: "packages/security-headers", present: null },
+    ]);
   });
 
   it("says the table is missing rather than showing nothing", async () => {

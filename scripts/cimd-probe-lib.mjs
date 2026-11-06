@@ -26,17 +26,21 @@ export const PROBE_REDIRECT = "https://example.com/verify-live-callback";
 // probe's redirect, which is on no allowlist. Returns the problem, or null. A 2xx means
 // the allowlist is open; a missing CIMD flag means no Claude client can sign in.
 export function registrationProblem(metadata, origin, registerStatus, registerBody) {
-  if (!metadata || typeof metadata !== "object") return "the authorization-server metadata is not a JSON object";
+  if (!metadata || typeof metadata !== "object")
+    return "the authorization-server metadata is not a JSON object";
   if (metadata.client_id_metadata_document_supported !== true) {
     return "the metadata does not advertise client_id_metadata_document_supported, so no client can sign in (is global_fetch_strictly_public set?)";
   }
   if (metadata.registration_endpoint !== `${origin}/register`) {
     return `the metadata advertises registration_endpoint ${JSON.stringify(metadata.registration_endpoint)}, expected ${origin}/register (Grok and Gemini register there)`;
   }
-  if (registerStatus >= 200 && registerStatus < 300) return `POST /register answered ${registerStatus} for an unlisted redirect; the DCR allowlist is open`;
-  if (registerStatus !== 400) return `POST /register answered ${registerStatus}, expected 400 invalid_redirect_uri`;
+  if (registerStatus >= 200 && registerStatus < 300)
+    return `POST /register answered ${registerStatus} for an unlisted redirect; the DCR allowlist is open`;
+  if (registerStatus !== 400)
+    return `POST /register answered ${registerStatus}, expected 400 invalid_redirect_uri`;
   const error = registerBody && typeof registerBody === "object" ? registerBody.error : undefined;
-  if (error !== "invalid_redirect_uri") return `POST /register refused with ${JSON.stringify(error)}, expected invalid_redirect_uri`;
+  if (error !== "invalid_redirect_uri")
+    return `POST /register refused with ${JSON.stringify(error)}, expected invalid_redirect_uri`;
   return null;
 }
 
@@ -45,10 +49,15 @@ export function registrationProblem(metadata, origin, registerStatus, registerBo
 // that a document in this repo could fail, plus the redirect the gates use.
 export function probeDocumentProblem(doc, url, redirect) {
   if (!doc || typeof doc !== "object") return "the probe document is not a JSON object";
-  if (doc.client_id !== url) return `the probe document's client_id is ${JSON.stringify(doc.client_id)}, not its own URL ${url}`;
-  if (typeof doc.client_name !== "string" || !doc.client_name.trim()) return "the probe document has no client_name";
-  if (!Array.isArray(doc.redirect_uris) || !doc.redirect_uris.includes(redirect)) return `the probe document does not list the redirect ${redirect}`;
-  if ("client_secret" in doc) return "the probe document carries a client_secret, which CIMD forbids";
-  if (doc.token_endpoint_auth_method !== "none") return `the probe document's token_endpoint_auth_method is ${JSON.stringify(doc.token_endpoint_auth_method)}, expected "none"`;
+  if (doc.client_id !== url)
+    return `the probe document's client_id is ${JSON.stringify(doc.client_id)}, not its own URL ${url}`;
+  if (typeof doc.client_name !== "string" || !doc.client_name.trim())
+    return "the probe document has no client_name";
+  if (!Array.isArray(doc.redirect_uris) || !doc.redirect_uris.includes(redirect))
+    return `the probe document does not list the redirect ${redirect}`;
+  if ("client_secret" in doc)
+    return "the probe document carries a client_secret, which CIMD forbids";
+  if (doc.token_endpoint_auth_method !== "none")
+    return `the probe document's token_endpoint_auth_method is ${JSON.stringify(doc.token_endpoint_auth_method)}, expected "none"`;
   return null;
 }

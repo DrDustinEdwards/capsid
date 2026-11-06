@@ -47,7 +47,8 @@ function siteEnv(rows: SiteRowFixture[]) {
       bind: (...params: unknown[]) => ({
         first: async () => {
           reads.push(sql);
-          if (!/FROM ops_sites WHERE namespace = \?1/.test(sql)) throw new Error(`unexpected statement: ${sql}`);
+          if (!/FROM ops_sites WHERE namespace = \?1/.test(sql))
+            throw new Error(`unexpected statement: ${sql}`);
           return rows.find((r) => r.namespace === params[0]) ?? null;
         },
       }),
@@ -84,10 +85,26 @@ function site(answers: Record<string, Answer>) {
 
 function healthyAnswers(probeStatus: number): Record<string, Answer> {
   return {
-    [`GET ${ORIGIN}/health`]: { status: 200, body: JSON.stringify({ status: "ok", sha: SHA, note: MARKER }), headers: { "Content-Type": "application/json" } },
-    [`GET ${ORIGIN}/`]: { status: 200, body: `<html><body>${MARKER}</body></html>`, headers: SECURITY_HEADERS },
-    [`GET ${ORIGIN}/about`]: { status: 200, body: `<html><body>${MARKER}</body></html>`, headers: SECURITY_HEADERS },
-    [`POST ${ORIGIN}/api/operator`]: { status: probeStatus, body: `{"error":"${MARKER}"}`, headers: { "Content-Type": "application/json" } },
+    [`GET ${ORIGIN}/health`]: {
+      status: 200,
+      body: JSON.stringify({ status: "ok", sha: SHA, note: MARKER }),
+      headers: { "Content-Type": "application/json" },
+    },
+    [`GET ${ORIGIN}/`]: {
+      status: 200,
+      body: `<html><body>${MARKER}</body></html>`,
+      headers: SECURITY_HEADERS,
+    },
+    [`GET ${ORIGIN}/about`]: {
+      status: 200,
+      body: `<html><body>${MARKER}</body></html>`,
+      headers: SECURITY_HEADERS,
+    },
+    [`POST ${ORIGIN}/api/operator`]: {
+      status: probeStatus,
+      body: `{"error":"${MARKER}"}`,
+      headers: { "Content-Type": "application/json" },
+    },
     [`POST ${ORIGIN}/admin`]: { status: probeStatus, body: MARKER },
   };
 }
@@ -95,13 +112,35 @@ function healthyAnswers(probeStatus: number): Record<string, Answer> {
 // Paths
 
 test("PLANT: pathRefusal refuses a path with '..', one not starting with /, and one with a query or a scheme", () => {
-  for (const bad of ["/../etc/passwd", "/a/../b", "/..", "about", "", "https://other.example.net/", "/about?x=1", "/about#top", "/a b", "/@other.example.net"]) {
-    assert.match(pathRefusal("page", bad) ?? "", /page must be a path on the site, starting with \//, `'${bad}' was accepted`);
+  for (const bad of [
+    "/../etc/passwd",
+    "/a/../b",
+    "/..",
+    "about",
+    "",
+    "https://other.example.net/",
+    "/about?x=1",
+    "/about#top",
+    "/a b",
+    "/@other.example.net",
+  ]) {
+    assert.match(
+      pathRefusal("page", bad) ?? "",
+      /page must be a path on the site, starting with \//,
+      `'${bad}' was accepted`,
+    );
   }
 });
 
 test("THE INNOCENT DIRECTION: pathRefusal accepts ordinary site paths", () => {
-  for (const good of ["/", "/about", "/blog/2026/10/a-post", "/api/operator", "/file.v2.json", "/a~b/c_d-e"]) {
+  for (const good of [
+    "/",
+    "/about",
+    "/blog/2026/10/a-post",
+    "/api/operator",
+    "/file.v2.json",
+    "/a~b/c_d-e",
+  ]) {
     assert.equal(pathRefusal("page", good), null, `'${good}' was refused`);
   }
 });
@@ -109,8 +148,14 @@ test("THE INNOCENT DIRECTION: pathRefusal accepts ordinary site paths", () => {
 test("PLANT: siteCheck refuses a bad page or probe before reading the database or fetching", async () => {
   const { env, reads } = siteEnv([ROW]);
   const s = site(healthyAnswers(401));
-  await assert.rejects(() => siteCheck(env, "sample", { page: "/../secret" }, s.impl, NOW), /page must be a path on the site/);
-  await assert.rejects(() => siteCheck(env, "sample", { probe: "admin" }, s.impl, NOW), /probe must be a path on the site/);
+  await assert.rejects(
+    () => siteCheck(env, "sample", { page: "/../secret" }, s.impl, NOW),
+    /page must be a path on the site/,
+  );
+  await assert.rejects(
+    () => siteCheck(env, "sample", { probe: "admin" }, s.impl, NOW),
+    /probe must be a path on the site/,
+  );
   assert.equal(reads.length, 0, "a refused path read the database");
   assert.equal(s.calls.length, 0, "a refused path fetched the site");
 });
@@ -120,14 +165,22 @@ test("PLANT: siteCheck refuses a bad page or probe before reading the database o
 test("PLANT: a namespace with no site row is refused, naming capsid_admin_run_controls, and nothing is fetched", async () => {
   const { env } = siteEnv([]);
   const s = site(healthyAnswers(401));
-  await assert.rejects(() => siteCheck(env, "sample", {}, s.impl, NOW), /sample has no site configured.*capsid_admin_run_controls control site_add/s);
+  await assert.rejects(
+    () => siteCheck(env, "sample", {}, s.impl, NOW),
+    /sample has no site configured.*capsid_admin_run_controls control site_add/s,
+  );
   assert.equal(s.calls.length, 0);
 });
 
 test("PLANT: a row that declares no site (origin null) is refused the same way", async () => {
-  const { env } = siteEnv([{ ...ROW, origin: null, platform: null, health_path: null, script: null, operator: null }]);
+  const { env } = siteEnv([
+    { ...ROW, origin: null, platform: null, health_path: null, script: null, operator: null },
+  ]);
   const s = site(healthyAnswers(401));
-  await assert.rejects(() => siteCheck(env, "sample", {}, s.impl, NOW), /capsid_admin_run_controls/);
+  await assert.rejects(
+    () => siteCheck(env, "sample", {}, s.impl, NOW),
+    /capsid_admin_run_controls/,
+  );
   assert.equal(s.calls.length, 0);
 });
 
@@ -168,15 +221,27 @@ test("the probe sends no credential, and a named probe path overrides the operat
   assert.equal(r.probe.path, "/admin");
   assert.equal(r.probe.refused, true);
   assert.equal(seen.length, 1);
-  assert.equal(Object.keys(seen[0]).some((h) => /authorization|cookie/i.test(h)), false, "the 401 probe carried a credential");
+  assert.equal(
+    Object.keys(seen[0]).some((h) => /authorization|cookie/i.test(h)),
+    false,
+    "the 401 probe carried a credential",
+  );
 });
 
 test("with no probe named and no operator API configured, the probe is not run, and says so", async () => {
   const { env } = siteEnv([{ ...ROW, operator: null }]);
   const s = site(healthyAnswers(401));
   const r = await siteCheck(env, "sample", {}, s.impl, NOW);
-  assert.deepEqual(r.probe, { path: null, status: null, refused: null, note: "not run: no probe path was named and the site has no operator API configured" });
-  assert.equal(s.calls.some((c) => c.method === "POST"), false);
+  assert.deepEqual(r.probe, {
+    path: null,
+    status: null,
+    refused: null,
+    note: "not run: no probe path was named and the site has no operator API configured",
+  });
+  assert.equal(
+    s.calls.some((c) => c.method === "POST"),
+    false,
+  );
 });
 
 test("a probe with no answer reports null, never refused", async () => {
@@ -197,7 +262,11 @@ test("PLANT: only the site's configured origin is fetched, for every read", asyn
   const s = site(healthyAnswers(401));
   // A page path that looks like another host is still a path on the site.
   const answers = healthyAnswers(401);
-  answers[`GET ${ORIGIN}//other.example.net/x`] = { status: 200, body: `<p>${MARKER}</p>`, headers: SECURITY_HEADERS };
+  answers[`GET ${ORIGIN}//other.example.net/x`] = {
+    status: 200,
+    body: `<p>${MARKER}</p>`,
+    headers: SECURITY_HEADERS,
+  };
   const s2 = site(answers);
   await siteCheck(env, "sample", {}, s.impl, NOW);
   await siteCheck(env, "sample", { page: "//other.example.net/x" }, s2.impl, NOW);
@@ -214,7 +283,7 @@ test("THE INNOCENT DIRECTION: the health route, the page and the probe are each 
   const r = await siteCheck(env, "sample", { page: "/about" }, s.impl, NOW);
   assert.deepEqual(
     s.calls.map((c) => `${c.method} ${c.url}`),
-    [`GET ${ORIGIN}/health`, `GET ${ORIGIN}/about`, `POST ${ORIGIN}/api/operator`]
+    [`GET ${ORIGIN}/health`, `GET ${ORIGIN}/about`, `POST ${ORIGIN}/api/operator`],
   );
   assert.equal(r.origin, ORIGIN);
   assert.equal(r.health.state, "ok");
@@ -232,8 +301,15 @@ test("PLANT: no text from any response body appears in the result, OPEN or refus
     const { env } = siteEnv([ROW]);
     const s = site(healthyAnswers(status));
     const r = await siteCheck(env, "sample", {}, s.impl, NOW);
-    assert.ok(s.calls.length >= 3, "the fake site was not read, so the absence of its text proves nothing");
-    assert.doesNotMatch(JSON.stringify(r), new RegExp(MARKER), `body text reached the result (probe ${status})`);
+    assert.ok(
+      s.calls.length >= 3,
+      "the fake site was not read, so the absence of its text proves nothing",
+    );
+    assert.doesNotMatch(
+      JSON.stringify(r),
+      new RegExp(MARKER),
+      `body text reached the result (probe ${status})`,
+    );
   }
 });
 
@@ -241,7 +317,11 @@ test("PLANT: a page that fails, and a health route that fails, still return no b
   const { env } = siteEnv([ROW]);
   const answers = healthyAnswers(401);
   answers[`GET ${ORIGIN}/health`] = { status: 500, body: MARKER };
-  answers[`GET ${ORIGIN}/`] = { status: 503, body: MARKER, headers: { "Content-Type": "text/html" } };
+  answers[`GET ${ORIGIN}/`] = {
+    status: 503,
+    body: MARKER,
+    headers: { "Content-Type": "text/html" },
+  };
   const s = site(answers);
   const r = await siteCheck(env, "sample", {}, s.impl, NOW);
   assert.equal(r.page.status, 503);

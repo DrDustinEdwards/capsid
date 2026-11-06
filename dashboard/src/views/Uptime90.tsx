@@ -9,7 +9,11 @@ import { uptimeStrip, type UptimeSlot } from "enarratio";
 // counts (ops_uptime_daily), drawn as Capsomer's uptime strip in its table-cell form with one
 // slot per UTC month (U4): up when the month met the target, degraded under it, down when no
 // probe answered, the percent beside it. Degraded counts as up: the site answered.
-const MONTH = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+const MONTH = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
 const monthName = (m: string) => MONTH.format(new Date(`${m}-01T00:00:00Z`));
 
 export function Uptime90({ ns }: { ns: string }) {
@@ -46,8 +50,18 @@ export function Uptime90({ ns }: { ns: string }) {
                 const share = s.probes > 0 ? s.up / s.probes : null;
                 const slots: UptimeSlot[] = (s.months ?? []).map((m) => {
                   const r = m.probes > 0 ? m.up / m.probes : null;
-                  const status = r === null ? "unknown" : m.up === 0 ? "down" : r >= u.target ? "up" : "degraded";
-                  return { status, label: `${monthName(m.month)}: ${r === null ? "no probe" : `${pct(r, 2)} of ${m.probes} probes up, ${m.below} of ${m.days} days under target`}` };
+                  const status =
+                    r === null
+                      ? "unknown"
+                      : m.up === 0
+                        ? "down"
+                        : r >= u.target
+                          ? "up"
+                          : "degraded";
+                  return {
+                    status,
+                    label: `${monthName(m.month)}: ${r === null ? "no probe" : `${pct(r, 2)} of ${m.probes} probes up, ${m.below} of ${m.days} days under target`}`,
+                  };
                 });
                 const alt = `Uptime of ${s.namespace} by month: ${(s.months ?? []).map((m) => `${monthName(m.month)} ${m.probes ? pct(m.up / m.probes, 2) : "no data"}`).join(", ")}.`;
                 return (
@@ -60,7 +74,18 @@ export function Uptime90({ ns }: { ns: string }) {
                         <St kind="nodata">No data</St>
                       ) : (
                         <span className="cap-uptime-line">
-                          <span className="cap-uptime-strip" dangerouslySetInnerHTML={{ __html: uptimeStrip({ slots, alt, inline: true, width: 120, height: 18 }) }} />
+                          <span
+                            className="cap-uptime-strip"
+                            dangerouslySetInnerHTML={{
+                              __html: uptimeStrip({
+                                slots,
+                                alt,
+                                inline: true,
+                                width: 120,
+                                height: 18,
+                              }),
+                            }}
+                          />
                           <span className="cap-uptime-pct">
                             <St kind={share >= u.target ? "ok" : "warn"}>{pct(share, 2)}</St>
                           </span>
@@ -75,10 +100,19 @@ export function Uptime90({ ns }: { ns: string }) {
             </tbody>
           </table>
           <ul className="cap-uptime-legend" aria-label="Key">
-            <li><span className="cap-uptime-key" data-key="up" aria-hidden="true"></span>Met target</li>
-            <li><span className="cap-uptime-key" data-key="degraded" aria-hidden="true"></span>Under target</li>
-            <li><span className="cap-uptime-key" data-key="down" aria-hidden="true"></span>Down</li>
-            <li><span className="cap-uptime-key" data-key="nodata" aria-hidden="true"></span>No data</li>
+            <li>
+              <span className="cap-uptime-key" data-key="up" aria-hidden="true"></span>Met target
+            </li>
+            <li>
+              <span className="cap-uptime-key" data-key="degraded" aria-hidden="true"></span>Under
+              target
+            </li>
+            <li>
+              <span className="cap-uptime-key" data-key="down" aria-hidden="true"></span>Down
+            </li>
+            <li>
+              <span className="cap-uptime-key" data-key="nodata" aria-hidden="true"></span>No data
+            </li>
           </ul>
         </div>
       )}

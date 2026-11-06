@@ -47,16 +47,23 @@ const RULES: Rule[] = [
   // is redacted to the end of the text rather than left half-shown.
   {
     kind: "private-key",
-    pattern: /-----BEGIN ([A-Z0-9 ]*?)PRIVATE KEY( BLOCK)?-----[\s\S]*?(?:-----END \1PRIVATE KEY\2-----|$)/g,
+    pattern:
+      /-----BEGIN ([A-Z0-9 ]*?)PRIVATE KEY( BLOCK)?-----[\s\S]*?(?:-----END \1PRIVATE KEY\2-----|$)/g,
   },
   // Header and payload are base64url JSON, so both start with eyJ ('{"').
   { kind: "jwt", pattern: /\beyJ[A-Za-z0-9_-]{5,}\.eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g },
   // Classic (ghp_ personal, gho_ OAuth, ghu_ user-to-server, ghs_ server-to-server,
   // ghr_ refresh) and fine-grained personal access tokens.
-  { kind: "github-token", pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g },
+  {
+    kind: "github-token",
+    pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g,
+  },
   { kind: "slack-token", pattern: /\bxox[abposr]-[A-Za-z0-9-]{10,}/g },
   { kind: "slack-token", pattern: /https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/_-]+/g },
-  { kind: "aws-access-key-id", pattern: /\b(?:AKIA|ASIA|ABIA|ACCA|AGPA|AIDA|AIPA|ANPA|ANVA|AROA)[A-Z0-9]{16}\b/g },
+  {
+    kind: "aws-access-key-id",
+    pattern: /\b(?:AKIA|ASIA|ABIA|ACCA|AGPA|AIDA|AIPA|ANPA|ANVA|AROA)[A-Z0-9]{16}\b/g,
+  },
   // An Authorization header's value, with its scheme kept. The scheme word is never
   // taken as the value, so a header whose value an earlier rule already redacted is
   // left as it is.
@@ -64,7 +71,7 @@ const RULES: Rule[] = [
     kind: "auth",
     pattern: new RegExp(
       String.raw`\b(authorization["']?\s*[:=]\s*["']?)((?:bearer|basic|token|digest)\s+)?(?!(?:bearer|basic|token|digest)\s)(${VALUE})`,
-      "gi"
+      "gi",
     ),
     replace: (_m, lead, scheme) => `${lead}${scheme ?? ""}${marker("auth")}`,
   },
@@ -78,14 +85,18 @@ const RULES: Rule[] = [
   // NAME=value, NAME: value, "name": "value", ?name=value, for a secret-shaped name.
   {
     kind: "assignment",
-    pattern: new RegExp(String.raw`(?<![A-Za-z0-9_.-])(["']?)(${SECRET_NAME})\1(\s*[:=]\s*)(["']?)(${VALUE})`, "gi"),
+    pattern: new RegExp(
+      String.raw`(?<![A-Za-z0-9_.-])(["']?)(${SECRET_NAME})\1(\s*[:=]\s*)(["']?)(${VALUE})`,
+      "gi",
+    ),
     replace: (_m, q1, name, sep, q2) => `${q1}${name}${q1}${sep}${q2}${marker("assignment")}`,
   },
   // A long random-looking run shortly after a word like secret, token, key or password,
   // in forms the assignment rule does not cover ("the token is 3f9a...").
   {
     kind: "high-entropy",
-    pattern: /\b((?:secret|token|key|password|passwd|credential)s?\b[^\n]{0,24}?)([A-Za-z0-9+/_-]{32,}={0,2})/gi,
+    pattern:
+      /\b((?:secret|token|key|password|passwd|credential)s?\b[^\n]{0,24}?)([A-Za-z0-9+/_-]{32,}={0,2})/gi,
     replace: (match, lead, run) => (looksRandom(run) ? `${lead}${marker("high-entropy")}` : match),
   },
 ];

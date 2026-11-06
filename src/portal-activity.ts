@@ -44,10 +44,23 @@ const ROW_ID = /^[1-9][0-9]{0,15}$/;
 
 /** The filter, or why the query string cannot be one. An id that is not a row id is
  *  refused rather than dropped, which would answer with the whole log instead. */
-export function activityFilterFrom(url: URL): { ok: true; filter: ActivityFilter } | { ok: false; refusal: string } {
+export function activityFilterFrom(
+  url: URL,
+): { ok: true; filter: ActivityFilter } | { ok: false; refusal: string } {
   const id = param(url, "id");
-  if (id !== null && !ROW_ID.test(id)) return { ok: false, refusal: `id must be an audit row id, a positive whole number; got ${JSON.stringify(id.slice(0, 40))}.` };
-  return { ok: true, filter: { namespace: param(url, "namespace"), actor: param(url, "actor"), id: id === null ? null : Number(id) } };
+  if (id !== null && !ROW_ID.test(id))
+    return {
+      ok: false,
+      refusal: `id must be an audit row id, a positive whole number; got ${JSON.stringify(id.slice(0, 40))}.`,
+    };
+  return {
+    ok: true,
+    filter: {
+      namespace: param(url, "namespace"),
+      actor: param(url, "actor"),
+      id: id === null ? null : Number(id),
+    },
+  };
 }
 
 // json_valid first: json_extract on a params value that is not JSON would fail the
@@ -77,7 +90,7 @@ export async function loadActivity(db: D1Database, filter: ActivityFilter): Prom
   // autoincrement id is what orders rows as they happened.
   const { results } = await db
     .prepare(
-      `SELECT id, at, actor, action, namespace, path, ${TARGET_SQL} AS target, params FROM audit_log ${clause} ORDER BY id DESC LIMIT ?${binds.length}`
+      `SELECT id, at, actor, action, namespace, path, ${TARGET_SQL} AS target, params FROM audit_log ${clause} ORDER BY id DESC LIMIT ?${binds.length}`,
     )
     .bind(...binds)
     .all<Omit<ActivityRow, "detail"> & { params: string | null }>();

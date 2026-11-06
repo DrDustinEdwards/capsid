@@ -7,7 +7,19 @@ import { When } from "../ui/When";
 import { Danger, jobMeta } from "../views/shared";
 import { useApp, type ConfirmRequest } from "./ctx";
 
-export function Head({ label, title, sub, badge, onClose }: { label: string; title: string; sub: string; badge?: ReactNode; onClose: () => void }) {
+export function Head({
+  label,
+  title,
+  sub,
+  badge,
+  onClose,
+}: {
+  label: string;
+  title: string;
+  sub: string;
+  badge?: ReactNode;
+  onClose: () => void;
+}) {
   return (
     <header>
       <div className="grow">
@@ -43,7 +55,12 @@ function CopyBlock({ id, text, label }: { id: string; text: string; label: strin
 // recorded yet (src/jobs-seat.ts, supersedeJob). The Worker checks again.
 function supersedable(j: OpsJob): boolean {
   if (j.status === "queued") return true;
-  return j.status === "claimed" && j.blocked_count === 0 && j.resumed_count === 0 && j.result_ref === null;
+  return (
+    j.status === "claimed" &&
+    j.blocked_count === 0 &&
+    j.resumed_count === 0 &&
+    j.result_ref === null
+  );
 }
 
 // The controls a job's status allows. Each opens the confirm dialog, which asks for a
@@ -62,12 +79,24 @@ function JobControls({ j }: { j: OpsJob }) {
           <button
             type="button"
             className="btn primary"
-            onClick={() => confirm({ action: "unpark_job", params, title: `Unpark job: ${j.title}`, undo: { action: "park_job", params: { id: j.id, reason: j.parked_reason ?? "parked again", undo: "true" } } })}
+            onClick={() =>
+              confirm({
+                action: "unpark_job",
+                params,
+                title: `Unpark job: ${j.title}`,
+                undo: {
+                  action: "park_job",
+                  params: { id: j.id, reason: j.parked_reason ?? "parked again", undo: "true" },
+                },
+              })
+            }
           >
             Unpark
           </button>
         </div>
-        <p className="faint small">Unpark puts it back in the queue at its priority. The result offers Undo.</p>
+        <p className="faint small">
+          Unpark puts it back in the queue at its priority. The result offers Undo.
+        </p>
       </div>
     );
   }
@@ -76,13 +105,44 @@ function JobControls({ j }: { j: OpsJob }) {
   // One primary action for the state the job is in, the other safe ones under More
   // actions, and Mark failed alone in the Danger area (the UX audit's M9: it sat beside
   // Close as shipped and Resume in a row of up to six).
-  const resume = { action: "resume_job" as const, params, title: `${j.question ? "Answer" : "Resume job"}: ${j.title}` };
+  const resume = {
+    action: "resume_job" as const,
+    params,
+    title: `${j.question ? "Answer" : "Resume job"}: ${j.title}`,
+  };
   const release = { action: "release_job" as const, params, title: `Release job: ${j.title}` };
-  const park = { action: "park_job" as const, params, title: `Park job: ${j.title}`, undo: { action: "unpark_job" as const, params: { id: j.id, undo: "true" } } };
-  const primary = blocked ? { req: resume, label: j.question ? "Answer" : "Resume" } : claimed ? { req: release, label: "Release" } : { req: park, label: "Park" };
+  const park = {
+    action: "park_job" as const,
+    params,
+    title: `Park job: ${j.title}`,
+    undo: { action: "unpark_job" as const, params: { id: j.id, undo: "true" } },
+  };
+  const primary = blocked
+    ? { req: resume, label: j.question ? "Answer" : "Resume" }
+    : claimed
+      ? { req: release, label: "Release" }
+      : { req: park, label: "Park" };
   const more: Array<{ label: string; req: ConfirmRequest }> = [
-    ...(blocked ? [{ label: "Close as shipped", req: { action: "close_shipped" as const, params, title: `Close as shipped: ${j.title}` } }] : []),
-    ...(supersedable(j) ? [{ label: "Supersede", req: { action: "supersede_job" as const, params, title: `Supersede job: ${j.title}` } }] : []),
+    ...(blocked
+      ? [
+          {
+            label: "Close as shipped",
+            req: {
+              action: "close_shipped" as const,
+              params,
+              title: `Close as shipped: ${j.title}`,
+            },
+          },
+        ]
+      : []),
+    ...(supersedable(j)
+      ? [
+          {
+            label: "Supersede",
+            req: { action: "supersede_job" as const, params, title: `Supersede job: ${j.title}` },
+          },
+        ]
+      : []),
   ];
   return (
     <div className="stack-gap" data-job-controls="">
@@ -118,13 +178,23 @@ function JobControls({ j }: { j: OpsJob }) {
             ))}
           </div>
           <p className="faint small">
-            {blocked ? "Close as shipped ends it as done when its work already landed, credited to the driver. " : ""}
-            {supersedable(j) ? "Supersede ends a job replaced before any work was done, with no outcome against anybody." : ""}
+            {blocked
+              ? "Close as shipped ends it as done when its work already landed, credited to the driver. "
+              : ""}
+            {supersedable(j)
+              ? "Supersede ends a job replaced before any work was done, with no outcome against anybody."
+              : ""}
           </p>
         </details>
       )}
       <Danger note="Ends it as failed, against its holder.">
-        <button type="button" className="btn danger" onClick={() => confirm({ action: "fail_job", params, title: `Mark job failed: ${j.title}` })}>
+        <button
+          type="button"
+          className="btn danger"
+          onClick={() =>
+            confirm({ action: "fail_job", params, title: `Mark job failed: ${j.title}` })
+          }
+        >
           Mark failed
         </button>
       </Danger>
@@ -137,7 +207,17 @@ export function AgentControls({ a }: { a: OpsAgent }) {
   if (a.revoked_at) return null;
   return (
     <Danger note="Ends this credential. The preview lists what else it changes.">
-      <button type="button" className="btn danger" onClick={() => confirm({ action: "revoke_agent", params: { name: a.name }, title: `Revoke agent ${a.name}` })}>
+      <button
+        type="button"
+        className="btn danger"
+        onClick={() =>
+          confirm({
+            action: "revoke_agent",
+            params: { name: a.name },
+            title: `Revoke agent ${a.name}`,
+          })
+        }
+      >
         Revoke
       </button>
     </Danger>
@@ -150,7 +230,13 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
   const prs = feed.live.prs.filter((p) => p.job_id === j.id);
   return (
     <>
-      <Head label={`Job · ${j.namespace}`} title={j.title} sub={j.id} badge={<Pill kind={k.kind}>{k.label}</Pill>} onClose={onClose} />
+      <Head
+        label={`Job · ${j.namespace}`}
+        title={j.title}
+        sub={j.id}
+        badge={<Pill kind={k.kind}>{k.label}</Pill>}
+        onClose={onClose}
+      />
       <div className="dbody">
         {j.status === "parked" && (
           <div>
@@ -164,7 +250,10 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <div className="callout warn" data-question="">
               {(j.waits_on ?? "No question was recorded.").replace(/^QUESTION:\s*/, "")}
             </div>
-            <p className="faint small">Answer it with the button below: your reason and note go to its driver as the resume note.</p>
+            <p className="faint small">
+              Answer it with the button below: your reason and note go to its driver as the resume
+              note.
+            </p>
           </div>
         )}
         {j.status === "blocked" && !j.question && (
@@ -177,7 +266,8 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
               <p className="section-title">Run this</p>
               {j.command_signature === "mismatch" ? (
                 <div className="callout crit" data-signature="mismatch">
-                  Withheld. This command's signature does not match, so it was changed after the block wrote it. Do not run anything from this job; tell the seat.
+                  Withheld. This command's signature does not match, so it was changed after the
+                  block wrote it. Do not run anything from this job; tell the seat.
                 </div>
               ) : j.command ? (
                 <>
@@ -197,7 +287,9 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <div>
               <p className="section-title">Or resume it from chat</p>
               <CopyBlock id="resumeText" text={resumeCall(j)} label="Copy for a chat session" />
-              <p className="faint small">Resume it with the button below, or paste this into a chat session.</p>
+              <p className="faint small">
+                Resume it with the button below, or paste this into a chat session.
+              </p>
             </div>
           </>
         )}
@@ -283,7 +375,9 @@ function FragmentPr({ url, merged }: { url: string; merged: boolean | null }) {
         <a href={url} target="_blank" rel="noopener noreferrer">
           {url.replace(/^https:\/\/github\.com\//, "")}
         </a>{" "}
-        <span className="faint">{merged === true ? "merged" : merged === false ? "not merged" : "open"}</span>
+        <span className="faint">
+          {merged === true ? "merged" : merged === false ? "not merged" : "open"}
+        </span>
       </dd>
     </>
   );

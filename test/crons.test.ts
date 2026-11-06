@@ -43,14 +43,22 @@ const HANDLED = [BACKUP_CRON, TICK_CRON, SKILLS_REFRESH_CRON];
 test("every cron the handler dispatches on is declared in the config", () => {
   const declared = declaredCrons();
   const missing = HANDLED.filter((c) => !declared.includes(c));
-  assert.deepEqual(missing, [], `src/index.ts handles crons the config never fires: ${missing.join(", ")}`);
+  assert.deepEqual(
+    missing,
+    [],
+    `src/index.ts handles crons the config never fires: ${missing.join(", ")}`,
+  );
 });
 
 // scanner-rule: conventions-verification, a list in two places is derived both ways. src/index.ts imports agents/mcp and cannot load under node --test, so its constants and branch shape are read as text. test-integration/scheduled.test.ts imports them and fires each cron
 test("every cron the config fires is handled", () => {
   const declared = declaredCrons();
   const unhandled = declared.filter((c) => !HANDLED.includes(c));
-  assert.deepEqual(unhandled, [], `wrangler.jsonc.example fires crons nothing handles: ${unhandled.join(", ")}`);
+  assert.deepEqual(
+    unhandled,
+    [],
+    `wrangler.jsonc.example fires crons nothing handles: ${unhandled.join(", ")}`,
+  );
 });
 
 // That the three expressions are distinct, and that the handler dispatches on

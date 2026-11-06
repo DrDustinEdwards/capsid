@@ -61,7 +61,12 @@ export interface Finding {
   evidence?: string[];
 }
 
-export const finding = (namespace: string, fingerprint: string, headline: string, evidence: string[]): Finding => ({
+export const finding = (
+  namespace: string,
+  fingerprint: string,
+  headline: string,
+  evidence: string[],
+): Finding => ({
   fingerprint,
   namespace,
   title: `Watcher: ${headline} [${fingerprint}]`,
@@ -106,20 +111,37 @@ export type DeployVerdict = { wait: true; reason: string } | { wait: false; evid
  *  run list for that sha, newest first, or null when it could not be read. A failed
  *  or canceled run, no run at all, and an unreadable list all keep the finding. */
 export function deployVerdict(runs: readonly HeadRun[] | null, now: Date): DeployVerdict {
-  if (runs === null) return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run could not be read` };
+  if (runs === null)
+    return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run could not be read` };
   const run = runs
     .filter((r) => r.name === MASTER_CI_WORKFLOW)
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
-  if (!run) return { wait: false, evidence: `no ${MASTER_CI_WORKFLOW} run started for master head` };
-  if (run.status !== "completed") return { wait: true, reason: `master head's ${MASTER_CI_WORKFLOW} run is ${run.status}` };
-  if (run.conclusion !== "success") return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run ended ${run.conclusion ?? "with no conclusion"}` };
+  if (!run)
+    return { wait: false, evidence: `no ${MASTER_CI_WORKFLOW} run started for master head` };
+  if (run.status !== "completed")
+    return { wait: true, reason: `master head's ${MASTER_CI_WORKFLOW} run is ${run.status}` };
+  if (run.conclusion !== "success")
+    return {
+      wait: false,
+      evidence: `master head's ${MASTER_CI_WORKFLOW} run ended ${run.conclusion ?? "with no conclusion"}`,
+    };
   const finished = run.updated_at ? Date.parse(run.updated_at) : Number.NaN;
-  if (Number.isNaN(finished)) return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run succeeded at an unknown time` };
+  if (Number.isNaN(finished))
+    return {
+      wait: false,
+      evidence: `master head's ${MASTER_CI_WORKFLOW} run succeeded at an unknown time`,
+    };
   const minutes = (now.getTime() - finished) / MINUTE_MS;
   if (minutes < DEPLOY_SETTLE_MINUTES) {
-    return { wait: true, reason: `master head's ${MASTER_CI_WORKFLOW} run succeeded ${Math.floor(minutes)} minutes ago, inside the ${DEPLOY_SETTLE_MINUTES} minute settle` };
+    return {
+      wait: true,
+      reason: `master head's ${MASTER_CI_WORKFLOW} run succeeded ${Math.floor(minutes)} minutes ago, inside the ${DEPLOY_SETTLE_MINUTES} minute settle`,
+    };
   }
-  return { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run succeeded ${Math.floor(minutes)} minutes ago` };
+  return {
+    wait: false,
+    evidence: `master head's ${MASTER_CI_WORKFLOW} run succeeded ${Math.floor(minutes)} minutes ago`,
+  };
 }
 
 /** What /health says that should not be true. `masterSha` and `latestMigration` come
@@ -131,7 +153,10 @@ export function healthFindings(
   masterSha: string | null,
   latestMigration: string | null,
   namespace: string,
-  deploy: DeployVerdict = { wait: false, evidence: `master head's ${MASTER_CI_WORKFLOW} run was not read` }
+  deploy: DeployVerdict = {
+    wait: false,
+    evidence: `master head's ${MASTER_CI_WORKFLOW} run was not read`,
+  },
 ): Finding[] {
   const out: Finding[] = [];
   if (health.status !== "ok") {
@@ -140,19 +165,30 @@ export function healthFindings(
         `status: ${health.status}`,
         `store: d1 ${health.store.d1}, fts ${health.store.fts}`,
         "Every read tool errors while a store probe is failing.",
-      ])
+      ]),
     );
   }
   // A sha comparison needs both sides. A null master sha means the repo read failed,
   // and reporting that as drift would be a finding about the watcher, not the deploy.
-  if (masterSha && health.sha && health.sha !== "unknown" && health.sha !== masterSha && !deploy.wait) {
+  if (
+    masterSha &&
+    health.sha &&
+    health.sha !== "unknown" &&
+    health.sha !== masterSha &&
+    !deploy.wait
+  ) {
     out.push(
-      finding(namespace, `deploy-drift-${masterSha.slice(0, 7)}`, "the deployed sha is not master head", [
-        `deployed: ${health.sha}`,
-        `master: ${masterSha}`,
-        deploy.evidence,
-        "A docs-only push whose deploy failed, or a deploy that never ran, looks exactly like this.",
-      ])
+      finding(
+        namespace,
+        `deploy-drift-${masterSha.slice(0, 7)}`,
+        "the deployed sha is not master head",
+        [
+          `deployed: ${health.sha}`,
+          `master: ${masterSha}`,
+          deploy.evidence,
+          "A docs-only push whose deploy failed, or a deploy that never ran, looks exactly like this.",
+        ],
+      ),
     );
   }
   if (health.backup.age_hours !== null && health.backup.age_hours > BACKUP_STALE_HOURS) {
@@ -160,7 +196,7 @@ export function healthFindings(
       finding(namespace, "backup-stale", "the last backup is older than the window", [
         `last ok: ${health.backup.last_ok ?? "never"}`,
         `age: ${health.backup.age_hours.toFixed(1)} hours, the window is ${BACKUP_STALE_HOURS}`,
-      ])
+      ]),
     );
   }
   // A stamp /health cannot parse has no age, so the window check above cannot fire and
@@ -170,7 +206,7 @@ export function healthFindings(
       finding(namespace, "backup-stale", "the last backup's time cannot be read", [
         `last ok: ${health.backup.last_ok}`,
         "/health reports age_hours as null, so the backup's age is unknown.",
-      ])
+      ]),
     );
   }
   if (health.backup.last_ok === null) {
@@ -178,29 +214,45 @@ export function healthFindings(
       finding(namespace, "backup-never", "no backup has ever reported success", [
         "/health reports backup.last_ok as null.",
         "The nightly dump can fail every night with no signal but this key.",
-      ])
+      ]),
     );
   }
   // Ahead is a migration applied before its PR merged, which the merge clears: a digest
   // line, not a job. Behind is a committed migration never applied. Migration names
   // start with a zero-padded number, so the prefix orders them.
   const ahead =
-    latestMigration && health.schema_version && migrationNumber(health.schema_version) > migrationNumber(latestMigration);
+    latestMigration &&
+    health.schema_version &&
+    migrationNumber(health.schema_version) > migrationNumber(latestMigration);
   if (ahead) {
     out.push(
-      finding(namespace, `schema-ahead-${health.schema_version}`, "the live schema is newer than master's newest migration", [
-        `live: ${health.schema_version}`,
-        `newest on master: ${latestMigration}`,
-        "A migration applied before its pull request merged reads like this; the merge clears it.",
-      ])
+      finding(
+        namespace,
+        `schema-ahead-${health.schema_version}`,
+        "the live schema is newer than master's newest migration",
+        [
+          `live: ${health.schema_version}`,
+          `newest on master: ${latestMigration}`,
+          "A migration applied before its pull request merged reads like this; the merge clears it.",
+        ],
+      ),
     );
-  } else if (latestMigration && health.schema_version && health.schema_version !== latestMigration) {
+  } else if (
+    latestMigration &&
+    health.schema_version &&
+    health.schema_version !== latestMigration
+  ) {
     out.push(
-      finding(namespace, `schema-behind-${latestMigration}`, "the live schema is not the newest migration", [
-        `live: ${health.schema_version}`,
-        `newest on master: ${latestMigration}`,
-        "A migration that was committed and never applied reads exactly like this.",
-      ])
+      finding(
+        namespace,
+        `schema-behind-${latestMigration}`,
+        "the live schema is not the newest migration",
+        [
+          `live: ${health.schema_version}`,
+          `newest on master: ${latestMigration}`,
+          "A migration that was committed and never applied reads exactly like this.",
+        ],
+      ),
     );
   }
   return out;
@@ -220,10 +272,15 @@ export function statusFindings(status: StatusReport): Finding[] {
     // said; the watcher files it and nothing more (src/job-breaker.ts).
     if (ns.breaker?.open) {
       out.push(
-        finding(ns.namespace, `breaker-open-${ns.namespace}`, `the queue's circuit breaker for ${ns.namespace} is open`, [
-          `holder fails since ${ns.breaker.since} UTC: ${ns.breaker.failed}, threshold ${ns.breaker.threshold}`,
-          "No job in this namespace is handed out until the seat or Dustin resets it: capsid_admin_manage_switches action breaker_reset, or Reset under Paused after repeated failures on the Portal's Needs you.",
-        ])
+        finding(
+          ns.namespace,
+          `breaker-open-${ns.namespace}`,
+          `the queue's circuit breaker for ${ns.namespace} is open`,
+          [
+            `holder fails since ${ns.breaker.since} UTC: ${ns.breaker.failed}, threshold ${ns.breaker.threshold}`,
+            "No job in this namespace is handed out until the seat or Dustin resets it: capsid_admin_manage_switches action breaker_reset, or Reset under Paused after repeated failures on the Portal's Needs you.",
+          ],
+        ),
       );
     }
   }
@@ -246,7 +303,12 @@ export interface CiRun {
 export function ciFindings(namespace: string, runs: CiRun[], now: Date): Finding[] {
   const latest = runs.find((r) => r.status === "completed");
   if (!latest) return [];
-  if (latest.conclusion === "success" || latest.conclusion === "skipped" || latest.conclusion === "neutral") return [];
+  if (
+    latest.conclusion === "success" ||
+    latest.conclusion === "skipped" ||
+    latest.conclusion === "neutral"
+  )
+    return [];
   const since = Date.parse(latest.created_at);
   if (Number.isNaN(since)) return [];
   const hours = (now.getTime() - since) / HOUR_MS;
@@ -307,24 +369,34 @@ export function offaccountFindings(
   sites: readonly string[],
   report: OffaccountReport | null,
   copyRun: WorkflowRun | null,
-  now: Date
+  now: Date,
 ): Finding[] {
   if (!report) {
     return [
-      finding(namespace, "offaccount-no-report", "no report of the Amazon backup copy has arrived", [
-        "Nothing is stored at POST /backup/offaccount-report.",
-        "capsid-backups' watch.yml has never reported, or APP_KV lost the report; its next run writes it again.",
-      ]),
+      finding(
+        namespace,
+        "offaccount-no-report",
+        "no report of the Amazon backup copy has arrived",
+        [
+          "Nothing is stored at POST /backup/offaccount-report.",
+          "capsid-backups' watch.yml has never reported, or APP_KV lost the report; its next run writes it again.",
+        ],
+      ),
     ];
   }
   const out: Finding[] = [];
   const reportHours = (now.getTime() - Date.parse(report.received_at)) / HOUR_MS;
   if (!(reportHours < OFFACCOUNT_REPORT_STALE_HOURS)) {
     out.push(
-      finding(namespace, "offaccount-report-stale", "the Amazon backup copy's report has stopped arriving", [
-        `last report: ${report.received_at} (${reportHours.toFixed(1)} hours old, the window is ${OFFACCOUNT_REPORT_STALE_HOURS})`,
-        "capsid-backups' watch.yml runs every 6 hours; its schedule, its role or its signing key has stopped working.",
-      ])
+      finding(
+        namespace,
+        "offaccount-report-stale",
+        "the Amazon backup copy's report has stopped arriving",
+        [
+          `last report: ${report.received_at} (${reportHours.toFixed(1)} hours old, the window is ${OFFACCOUNT_REPORT_STALE_HOURS})`,
+          "capsid-backups' watch.yml runs every 6 hours; its schedule, its role or its signing key has stopped working.",
+        ],
+      ),
     );
   }
   const run = copyRun
@@ -336,10 +408,12 @@ export function offaccountFindings(
     const at = newest ? parseDumpStamp(newest) : null;
     if (!line || !at) {
       out.push(
-        finding(namespace, `offaccount-no-copy-${site}`, `the Amazon bucket holds no complete copy of ${site}`, [
-          `report of ${report.received_at}: nothing complete under daily/${site}/`,
-          run,
-        ])
+        finding(
+          namespace,
+          `offaccount-no-copy-${site}`,
+          `the Amazon bucket holds no complete copy of ${site}`,
+          [`report of ${report.received_at}: nothing complete under daily/${site}/`, run],
+        ),
       );
       continue;
     }
@@ -349,14 +423,14 @@ export function offaccountFindings(
         finding(namespace, `offaccount-stale-${site}`, `the Amazon copy of ${site} is stale`, [
           `newest complete copy: ${newest} (${hours.toFixed(1)} hours old, the window is ${OFFACCOUNT_STALE_HOURS})`,
           run,
-        ])
+        ]),
       );
     } else if (hours >= OFFACCOUNT_LATE_HOURS) {
       out.push(
         finding(namespace, `offaccount-late-${site}`, `the Amazon copy of ${site} is late`, [
           `newest complete copy: ${newest} (${hours.toFixed(1)} hours old; a warning from ${OFFACCOUNT_LATE_HOURS}, a job from ${OFFACCOUNT_STALE_HOURS})`,
           run,
-        ])
+        ]),
       );
     }
     // The newest copy against the median of the ones before it.
@@ -366,10 +440,15 @@ export function offaccountFindings(
       const ratio = mid > 0 ? line.bytes / mid : Number.POSITIVE_INFINITY;
       if (ratio < OFFACCOUNT_SIZE_LOW || ratio > OFFACCOUNT_SIZE_HIGH) {
         out.push(
-          finding(namespace, `offaccount-size-${site}`, `the newest Amazon copy of ${site} is an unusual size`, [
-            `${newest}: ${line.bytes} bytes against a median of ${Math.round(mid)} over the ${before.length} copies before it (${ratio.toFixed(2)}x; the bounds are ${OFFACCOUNT_SIZE_LOW}x and ${OFFACCOUNT_SIZE_HIGH}x)`,
-            "A copy far smaller than usual is a gutted dump; far larger, a runaway table or a dump of the wrong thing.",
-          ])
+          finding(
+            namespace,
+            `offaccount-size-${site}`,
+            `the newest Amazon copy of ${site} is an unusual size`,
+            [
+              `${newest}: ${line.bytes} bytes against a median of ${Math.round(mid)} over the ${before.length} copies before it (${ratio.toFixed(2)}x; the bounds are ${OFFACCOUNT_SIZE_LOW}x and ${OFFACCOUNT_SIZE_HIGH}x)`,
+              "A copy far smaller than usual is a gutted dump; far larger, a runaway table or a dump of the wrong thing.",
+            ],
+          ),
         );
       }
     }
@@ -384,31 +463,54 @@ export function offaccountFindings(
 export function offaccountCoverageFindings(
   namespace: string,
   covered: readonly string[],
-  databases: ReadonlyArray<{ name: string; used_by: ReadonlyArray<{ script: string; binding?: string }> }>
+  databases: ReadonlyArray<{
+    name: string;
+    used_by: ReadonlyArray<{ script: string; binding?: string }>;
+  }>,
 ): Finding[] {
   return databases
-    .filter((d) => d.used_by.some((u) => !u.binding?.endsWith(" (preview)")) && !covered.includes(d.name))
+    .filter(
+      (d) => d.used_by.some((u) => !u.binding?.endsWith(" (preview)")) && !covered.includes(d.name),
+    )
     .map((d) =>
-      finding(namespace, `offaccount-uncovered-${d.name}`, `the D1 database ${d.name} has no Amazon copy`, [
-        `bound by ${d.used_by.map((u) => u.script).join(", ")}`,
-        "Its site needs a nightly d1-dump, a row in capsid's OFFACCOUNT_SOURCES, its bucket on the R2 read token, and a line in capsid-backups' workflows.",
-      ])
+      finding(
+        namespace,
+        `offaccount-uncovered-${d.name}`,
+        `the D1 database ${d.name} has no Amazon copy`,
+        [
+          `bound by ${d.used_by.map((u) => u.script).join(", ")}`,
+          "Its site needs a nightly d1-dump, a row in capsid's OFFACCOUNT_SOURCES, its bucket on the R2 read token, and a line in capsid-backups' workflows.",
+        ],
+      ),
     );
 }
 
 /** The newest successful run of capsid-backups' drill.yml, which restores every site's
  *  newest Amazon copy and passes only when all of them do. */
-export function offaccountDrillFindings(namespace: string, drillRuns: WorkflowRun[], now: Date): Finding[] {
+export function offaccountDrillFindings(
+  namespace: string,
+  drillRuns: WorkflowRun[],
+  now: Date,
+): Finding[] {
   const passed = drillRuns.find((r) => r.status === "completed" && r.conclusion === "success");
   const at = passed?.created_at ? Date.parse(passed.created_at) : Number.NaN;
   const days = (now.getTime() - at) / (24 * HOUR_MS);
   if (days < OFFACCOUNT_DRILL_STALE_DAYS) return [];
   const last = drillRuns.find((r) => r.status === "completed");
   return [
-    finding(namespace, "offaccount-drill-stale", "no restore drill from the Amazon copy has passed recently", [
-      passed ? `last passing drill: ${passed.created_at} (${days.toFixed(0)} days ago, the window is ${OFFACCOUNT_DRILL_STALE_DAYS})` : "no passing drill run was returned",
-      last ? `last drill: ${last.created_at ?? "unknown"} concluded ${last.conclusion ?? "none"}${last.url ? ` (${last.url})` : ""}` : "no completed drill run was returned",
-    ]),
+    finding(
+      namespace,
+      "offaccount-drill-stale",
+      "no restore drill from the Amazon copy has passed recently",
+      [
+        passed
+          ? `last passing drill: ${passed.created_at} (${days.toFixed(0)} days ago, the window is ${OFFACCOUNT_DRILL_STALE_DAYS})`
+          : "no passing drill run was returned",
+        last
+          ? `last drill: ${last.created_at ?? "unknown"} concluded ${last.conclusion ?? "none"}${last.url ? ` (${last.url})` : ""}`
+          : "no completed drill run was returned",
+      ],
+    ),
   ];
 }
 
@@ -417,13 +519,27 @@ export function offaccountDrillFindings(namespace: string, drillRuns: WorkflowRu
  *  drift is a new finding. */
 export function siteMapFindings(drift: SiteMapDrift): Finding[] {
   if (drift.unmapped.length === 0 && drift.unknown.length === 0) return [];
-  const names = [...drift.unmapped.map((n) => "add-" + n), ...drift.unknown.map((n) => "drop-" + n)].join("-");
+  const names = [
+    ...drift.unmapped.map((n) => "add-" + n),
+    ...drift.unknown.map((n) => "drop-" + n),
+  ].join("-");
   return [
-    finding("capsid", "site-map-drift-" + names, "the operations site map does not match the registered namespaces", [
-      ...drift.unmapped.map((n) => n + ": registered, but has no row in the Portal's site configuration (Settings: add it as a site, or as serving no site)"),
-      ...drift.unknown.map((n) => n + ": in the Portal's site configuration, but not a registered namespace"),
-      "The Portal shows only configured sites, so an unmapped site is one nobody is watching.",
-    ]),
+    finding(
+      "capsid",
+      "site-map-drift-" + names,
+      "the operations site map does not match the registered namespaces",
+      [
+        ...drift.unmapped.map(
+          (n) =>
+            n +
+            ": registered, but has no row in the Portal's site configuration (Settings: add it as a site, or as serving no site)",
+        ),
+        ...drift.unknown.map(
+          (n) => n + ": in the Portal's site configuration, but not a registered namespace",
+        ),
+        "The Portal shows only configured sites, so an unmapped site is one nobody is watching.",
+      ],
+    ),
   ];
 }
 
@@ -434,15 +550,20 @@ export function siteMapFindings(drift: SiteMapDrift): Finding[] {
 export function unmappedRepoFindings(read: RepoMapRead): Finding[] {
   const covered = `the App's ${read.installations} installation(s) list ${read.installed.length} repos; ${read.mapped.size} are mapped to a namespace; ${read.onPurpose.size} are named unmapped on purpose`;
   return unmappedRepos(read).map((r) =>
-    finding("capsid", `unmapped-repo-${r.full_name.toLowerCase().replace("/", "--")}`, `${r.full_name} is visible to the GitHub App but no namespace maps it`, [
-      `${r.full_name}: ${r.private ? "private" : "public"}, ${r.archived ? "archived" : "not archived"}, last push ${r.pushed_at ?? "unknown"}`,
-      r.suggested
-        ? `likely namespace: ${r.suggested} (from the repo name). Map it with capsid_admin_manage_namespaces action update, adding ${r.full_name} with a label.`
-        : "no registered namespace matches its name. Register one with capsid_admin_manage_namespaces action register, or map it into an existing namespace with action update.",
-      "If it is unmapped on purpose (archived, frozen, or going away), list it in capsid/unmapped-repos.md, one owner/name per line, and this stops.",
-      covered,
-      "This check only proposes. Mapping is the authorization boundary and stays with the seat or Dustin.",
-    ])
+    finding(
+      "capsid",
+      `unmapped-repo-${r.full_name.toLowerCase().replace("/", "--")}`,
+      `${r.full_name} is visible to the GitHub App but no namespace maps it`,
+      [
+        `${r.full_name}: ${r.private ? "private" : "public"}, ${r.archived ? "archived" : "not archived"}, last push ${r.pushed_at ?? "unknown"}`,
+        r.suggested
+          ? `likely namespace: ${r.suggested} (from the repo name). Map it with capsid_admin_manage_namespaces action update, adding ${r.full_name} with a label.`
+          : "no registered namespace matches its name. Register one with capsid_admin_manage_namespaces action register, or map it into an existing namespace with action update.",
+        "If it is unmapped on purpose (archived, frozen, or going away), list it in capsid/unmapped-repos.md, one owner/name per line, and this stops.",
+        covered,
+        "This check only proposes. Mapping is the authorization boundary and stays with the seat or Dustin.",
+      ],
+    ),
   );
 }
 
@@ -450,13 +571,16 @@ export function unmappedRepoFindings(read: RepoMapRead): Finding[] {
  *  closed: this is a finding, and the "repo map" check does not count as run, so an open
  *  unmapped-repo finding is not cleared on no evidence. */
 export function repoMapUnreadableFinding(reason: string): Finding {
-  return finding("capsid", "unmapped-repos-unreadable", "the GitHub App's repository list could not be read, so unmapped repos cannot be found", [
-    reason,
-    "Until this reads, no repo is being checked against the namespace mapping.",
-  ]);
+  return finding(
+    "capsid",
+    "unmapped-repos-unreadable",
+    "the GitHub App's repository list could not be read, so unmapped repos cannot be found",
+    [reason, "Until this reads, no repo is being checked against the namespace mapping."],
+  );
 }
 
-export const liveFinding = (f: LiveFinding): Finding => finding(f.namespace, f.fingerprint, f.headline, f.evidence);
+export const liveFinding = (f: LiveFinding): Finding =>
+  finding(f.namespace, f.fingerprint, f.headline, f.evidence);
 
 /** A site down on two probes in a row: the previous snapshot's ring ended in '0' and
  *  this pass's probe is down too. One failed probe is a blip; a ring that ended in '-'
@@ -472,7 +596,7 @@ export function siteDownFindings(prev: OpsSnapshot | null, probes: SiteProbe[]):
         `site: ${p.origin}`,
         `this probe: ${p.error ?? `answered ${p.http_status ?? "nothing"}`} at ${p.checked_at}`,
         `the previous probe was down too, at ${last.checked_at}`,
-      ])
+      ]),
     );
   }
   return out;
@@ -486,7 +610,10 @@ export const CPU_HOUR_LIMIT_MS = 1_000_000;
 
 /** A site whose Worker used more than CPU_HOUR_LIMIT_MS of CPU time in the most recent
  *  complete hour. A site with no analytics this pass is not judged. */
-export function siteCpuFindings(sites: ReadonlyArray<{ namespace: string; name: string }>, cloudflare: Record<string, SiteCloudflare>): Finding[] {
+export function siteCpuFindings(
+  sites: ReadonlyArray<{ namespace: string; name: string }>,
+  cloudflare: Record<string, SiteCloudflare>,
+): Finding[] {
   const out: Finding[] = [];
   for (const site of sites) {
     const cf = cloudflare[site.namespace];
@@ -494,11 +621,16 @@ export function siteCpuFindings(sites: ReadonlyArray<{ namespace: string; name: 
     const hour = cf.errors24[cf.errors24.length - 1];
     if (hour.cpu_ms <= CPU_HOUR_LIMIT_MS) continue;
     out.push(
-      finding(site.namespace, `site-cpu-${site.namespace}`, `${site.name} used over ${CPU_HOUR_LIMIT_MS.toLocaleString("en-US")} CPU ms in one hour`, [
-        `script: ${cf.script}`,
-        `hour from ${hour.hour}: ${hour.cpu_ms} CPU ms over ${hour.requests} invocations`,
-        "Workers Paid includes 30 million CPU ms a month; each million over costs $0.02. Find what is invoking the Worker.",
-      ])
+      finding(
+        site.namespace,
+        `site-cpu-${site.namespace}`,
+        `${site.name} used over ${CPU_HOUR_LIMIT_MS.toLocaleString("en-US")} CPU ms in one hour`,
+        [
+          `script: ${cf.script}`,
+          `hour from ${hour.hour}: ${hour.cpu_ms} CPU ms over ${hour.requests} invocations`,
+          "Workers Paid includes 30 million CPU ms a month; each million over costs $0.02. Find what is invoking the Worker.",
+        ],
+      ),
     );
   }
   return out;
@@ -520,7 +652,7 @@ export const ERROR_RATE_MIN_REQUESTS = 100;
 export function siteErrorFindings(
   sites: ReadonlyArray<{ namespace: string; name: string }>,
   cloudflare: Record<string, SiteCloudflare>,
-  serverErrors: Record<string, ServerErrors> | null = null
+  serverErrors: Record<string, ServerErrors> | null = null,
 ): Finding[] {
   const out: Finding[] = [];
   for (const site of sites) {
@@ -530,14 +662,24 @@ export function siteErrorFindings(
     const served = serverErrors?.[site.namespace];
     const returned = served?.count;
     const errors = Math.max(hour.errors, returned ?? 0);
-    if (hour.requests < ERROR_RATE_MIN_REQUESTS || errors / hour.requests <= ERROR_RATE_THRESHOLD) continue;
+    if (hour.requests < ERROR_RATE_MIN_REQUESTS || errors / hour.requests <= ERROR_RATE_THRESHOLD)
+      continue;
     out.push(
-      finding(site.namespace, `site-errors-${site.namespace}`, `${site.name} errored on more than ${ERROR_RATE_THRESHOLD * 100} percent of requests`, [
-        `script: ${cf.script}`,
-        `hour from ${hour.hour}: ${errors} errors of ${hour.requests} requests (${((errors / hour.requests) * 100).toFixed(1)} percent)`,
-        `${hour.errors} invocations threw, exceeded their resources or hit an internal error; ${returned === undefined ? "returned 5xx not read this pass" : `${returned} answers were 5xx at the edge (sampled, an estimate)`}.`,
-        ...(served?.top.length ? [`busiest 5xx: ${served.top.map((t) => `${t.status} ${t.path} (${t.hits})`).join(", ")}`] : []),
-      ])
+      finding(
+        site.namespace,
+        `site-errors-${site.namespace}`,
+        `${site.name} errored on more than ${ERROR_RATE_THRESHOLD * 100} percent of requests`,
+        [
+          `script: ${cf.script}`,
+          `hour from ${hour.hour}: ${errors} errors of ${hour.requests} requests (${((errors / hour.requests) * 100).toFixed(1)} percent)`,
+          `${hour.errors} invocations threw, exceeded their resources or hit an internal error; ${returned === undefined ? "returned 5xx not read this pass" : `${returned} answers were 5xx at the edge (sampled, an estimate)`}.`,
+          ...(served?.top.length
+            ? [
+                `busiest 5xx: ${served.top.map((t) => `${t.status} ${t.path} (${t.hits})`).join(", ")}`,
+              ]
+            : []),
+        ],
+      ),
     );
   }
   return out;

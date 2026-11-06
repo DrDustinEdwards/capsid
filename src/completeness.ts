@@ -38,7 +38,10 @@ const CellSchema = z.object({
   reason: Text(2000),
   evidence: z.array(z.unknown()).max(50).optional(),
   clean_days: z.number().int().min(0).optional(),
-  findings: z.array(z.object({ severity: bounded(20), check: Text(200), detail: Text(1000) })).max(500).optional(),
+  findings: z
+    .array(z.object({ severity: bounded(20), check: Text(200), detail: Text(1000) }))
+    .max(500)
+    .optional(),
 });
 
 const BoardSchema = z.object({
@@ -53,9 +56,18 @@ const BoardSchema = z.object({
         name: bounded(200),
         builder: bounded(200),
         verifier: bounded(200).nullable(),
-        lines: z.union([z.object({ prs: z.number().int().min(0), added: z.number().int().min(0), removed: z.number().int().min(0) }), z.object({ error: Text(300) })]).nullable(),
+        lines: z
+          .union([
+            z.object({
+              prs: z.number().int().min(0),
+              added: z.number().int().min(0),
+              removed: z.number().int().min(0),
+            }),
+            z.object({ error: Text(300) }),
+          ])
+          .nullable(),
         cells: z.record(bounded(64), CellSchema),
-      })
+      }),
     )
     .max(50),
 });
@@ -64,7 +76,10 @@ const BoardSchema = z.object({
 function completenessView(raw: unknown, now: Date): CompletenessView {
   const parsed = BoardSchema.safeParse(raw);
   if (!parsed.success) {
-    const issues = parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    const issues = parsed.error.issues
+      .slice(0, 3)
+      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .join("; ");
     return emptyView(now, `devkit's board.json is not the shape Capsid reads (${issues})`);
   }
   const board = parsed.data;
@@ -83,36 +98,70 @@ function completenessView(raw: unknown, now: Date): CompletenessView {
           {
             status: cell.status,
             reason: cell.reason,
-            evidence: (cell.evidence ?? []).filter((url): url is string => Https.safeParse(url).success),
+            evidence: (cell.evidence ?? []).filter(
+              (url): url is string => Https.safeParse(url).success,
+            ),
             clean_days: id === "package" ? null : (cell.clean_days ?? null),
-            errors: (cell.findings ?? []).filter((f) => f.severity === "error").slice(0, MAX_ERRORS_SHOWN).map(({ check, detail }) => ({ check, detail })),
+            errors: (cell.findings ?? [])
+              .filter((f) => f.severity === "error")
+              .slice(0, MAX_ERRORS_SHOWN)
+              .map(({ check, detail }) => ({ check, detail })),
           },
-        ])
+        ]),
       ),
     })),
   };
 }
 
-const emptyView = (now: Date, error: string): CompletenessView => ({ read: now.toISOString(), as_of: null, error, finished: false, public_token: true, sites: [], areas: [] });
+const emptyView = (now: Date, error: string): CompletenessView => ({
+  read: now.toISOString(),
+  as_of: null,
+  error,
+  finished: false,
+  public_token: true,
+  sites: [],
+  areas: [],
+});
 
 /** The view, from the ten minutes' cache unless `fresh`. A board that cannot be read says why. */
-export async function readCompleteness(env: Env, now: Date, fresh = false): Promise<CompletenessView> {
+export async function readCompleteness(
+  env: Env,
+  now: Date,
+  fresh = false,
+): Promise<CompletenessView> {
   if (!fresh) {
     const cached = await env.APP_KV.get(COMPLETENESS_CACHE_KEY);
     if (cached) return JSON.parse(cached) as CompletenessView;
   }
   let raw: unknown;
   try {
-    const resp = await ghFetch(env, OWNER, REPO, `/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}`, { headers: { Accept: "application/vnd.github.raw+json" } });
-    if (resp.status === 404) return emptyView(now, "devkit has no scoreboard yet: its live workflow has not published board.json");
+    const resp = await ghFetch(
+      env,
+      OWNER,
+      REPO,
+      `/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}`,
+      { headers: { Accept: "application/vnd.github.raw+json" } },
+    );
+    if (resp.status === 404)
+      return emptyView(
+        now,
+        "devkit has no scoreboard yet: its live workflow has not published board.json",
+      );
     if (!resp.ok) return emptyView(now, `GitHub answered ${resp.status} for devkit's board.json`);
     const text = await resp.text();
-    if (text.length > MAX_FILE_BYTES) return emptyView(now, `devkit's board.json is ${text.length} bytes, over ${MAX_FILE_BYTES}`);
+    if (text.length > MAX_FILE_BYTES)
+      return emptyView(now, `devkit's board.json is ${text.length} bytes, over ${MAX_FILE_BYTES}`);
     raw = JSON.parse(text);
   } catch (err) {
-    return emptyView(now, `devkit's board.json could not be read: ${err instanceof Error ? err.message : String(err)}`);
+    return emptyView(
+      now,
+      `devkit's board.json could not be read: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
   const view = completenessView(raw, now);
-  if (!view.error) await env.APP_KV.put(COMPLETENESS_CACHE_KEY, JSON.stringify(view), { expirationTtl: CACHE_TTL_SECONDS });
+  if (!view.error)
+    await env.APP_KV.put(COMPLETENESS_CACHE_KEY, JSON.stringify(view), {
+      expirationTtl: CACHE_TTL_SECONDS,
+    });
   return view;
 }

@@ -1,4 +1,11 @@
-import { crawlApp, guardedCrawl, SIGNED_IN_MISSING_PATH, signedInReport, signedInReportResponse, signedInSummary } from "@dustinedwards/site-runtime/signed-in-crawl";
+import {
+  crawlApp,
+  guardedCrawl,
+  SIGNED_IN_MISSING_PATH,
+  signedInReport,
+  signedInReportResponse,
+  signedInSummary,
+} from "@dustinedwards/site-runtime/signed-in-crawl";
 import type { Env } from "./env";
 import { portalSessionCookie } from "./portal-auth";
 import { HOUR_MS } from "./time";
@@ -26,8 +33,14 @@ export type Fetch = (request: Request) => Promise<Response>;
 /** The report. `self` is this Worker's own fetch handler, which serves the Portal. */
 async function buildSignedInReport(env: Env, self: Fetch, now: Date) {
   const portal = await guardedCrawl(async () => {
-    if (!env.ADMIN_EMAIL || !env.COOKIE_ENCRYPTION_KEY) throw new Error("ADMIN_EMAIL or COOKIE_ENCRYPTION_KEY is unset, so no Portal session can be minted");
-    const cookie = (await portalSessionCookie({ email: env.ADMIN_EMAIL }, env.COOKIE_ENCRYPTION_KEY, now, "/")).split(";")[0] ?? "";
+    if (!env.ADMIN_EMAIL || !env.COOKIE_ENCRYPTION_KEY)
+      throw new Error(
+        "ADMIN_EMAIL or COOKIE_ENCRYPTION_KEY is unset, so no Portal session can be minted",
+      );
+    const cookie =
+      (
+        await portalSessionCookie({ email: env.ADMIN_EMAIL }, env.COOKIE_ENCRYPTION_KEY, now, "/")
+      ).split(";")[0] ?? "";
     return crawlApp({
       origin: PORTAL_ORIGIN,
       fetch: self,
@@ -37,11 +50,18 @@ async function buildSignedInReport(env: Env, self: Fetch, now: Date) {
       actions: ["/api/actions/preview", "/api/actions/perform"],
     });
   });
-  return signedInReport({ [PORTAL_ORIGIN]: portal }, { at: now, ref: `capsid ${(env.BUILD_SHA ?? "unknown").slice(0, 12)}` });
+  return signedInReport(
+    { [PORTAL_ORIGIN]: portal },
+    { at: now, ref: `capsid ${(env.BUILD_SHA ?? "unknown").slice(0, 12)}` },
+  );
 }
 
 /** On the tick: a fresh report once an hour, stored in KV. Null when the stored one is still fresh. */
-export async function signedInCrawlTick(env: Env, now: Date, self: Fetch): Promise<{ note: string } | null> {
+export async function signedInCrawlTick(
+  env: Env,
+  now: Date,
+  self: Fetch,
+): Promise<{ note: string } | null> {
   const stored = await env.APP_KV.get(SIGNED_IN_REPORT_KEY);
   const at = stored ? Date.parse((JSON.parse(stored) as { at?: string }).at ?? "") : Number.NaN;
   if (Number.isFinite(at) && now.getTime() - at < REFRESH_MS) return null;

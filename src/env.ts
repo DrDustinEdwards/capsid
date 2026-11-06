@@ -93,7 +93,10 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
 // What the GitHub modules (src/github/) are handed: everything except the credentials
 // that mint backup read access, the Cloudflare read token (it can read Worker code) and
 // the key that signs phone alerts.
-export type RepoEnv = Omit<Env, "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "VAPID_PRIVATE_KEY">;
+export type RepoEnv = Omit<
+  Env,
+  "R2_TEMP_CRED_TOKEN" | "R2_BACKUP_PARENT_ACCESS_KEY_ID" | "CF_OPS_TOKEN" | "VAPID_PRIVATE_KEY"
+>;
 
 // A grant's props: the email Access verified at sign-in. Grants issued before the move
 // to Access carry { id, login, name } from GitHub instead, fail the per-request email

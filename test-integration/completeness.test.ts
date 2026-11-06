@@ -15,9 +15,18 @@ const SECRET = "integration-portal-cookie-key";
 
 describe("GET /portal/api/completeness", () => {
   it("says why the board could not be read, and keeps no answer", async () => {
-    const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
+    const cookie = (
+      await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())
+    ).split(";")[0];
     const ctx = createExecutionContext();
-    const response = (await worker.fetch!(new Request(`${ORIGIN}${PORTAL_COMPLETENESS_PATH}`, { headers: { Cookie: cookie }, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
+    const response = (await worker.fetch!(
+      new Request(`${ORIGIN}${PORTAL_COMPLETENESS_PATH}`, {
+        headers: { Cookie: cookie },
+        redirect: "manual",
+      }) as never,
+      { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never,
+      ctx,
+    )) as unknown as Response;
     await waitOnExecutionContext(ctx);
     expect(response.status, await response.clone().text()).toBe(200);
     const view = (await response.json()) as CompletenessView;

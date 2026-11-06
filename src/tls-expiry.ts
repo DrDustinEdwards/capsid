@@ -39,7 +39,9 @@ interface Pack {
 function covers(entry: string, host: string): boolean {
   const e = entry.toLowerCase();
   if (e === host) return true;
-  return e.startsWith("*.") && host.endsWith(e.slice(1)) && !host.slice(0, -e.length + 1).includes(".");
+  return (
+    e.startsWith("*.") && host.endsWith(e.slice(1)) && !host.slice(0, -e.length + 1).includes(".")
+  );
 }
 
 /** The latest expiry of the active certificates that cover `host`, ISO, or null. */
@@ -57,7 +59,12 @@ function hostExpiry(packs: readonly Pack[], host: string): string | null {
 }
 
 /** Each Cloudflare-hosted origin's certificate expiry, read zone by zone. */
-export async function readTlsExpiry(env: Env, origins: ReadonlyArray<{ origin: string | null; platform: string | null }>, fetchImpl: FetchLike, now: Date): Promise<TlsExpiry> {
+export async function readTlsExpiry(
+  env: Env,
+  origins: ReadonlyArray<{ origin: string | null; platform: string | null }>,
+  fetchImpl: FetchLike,
+  now: Date,
+): Promise<TlsExpiry> {
   const credentials = cloudflareCredentials(env);
   if (!credentials.ok) throw new Error(credentials.reason);
   const byDomain = new Map<string, string[]>();
@@ -71,17 +78,33 @@ export async function readTlsExpiry(env: Env, origins: ReadonlyArray<{ origin: s
   const out: TlsExpiry = { read_at: now.toISOString(), hosts: [], failed: [] };
   for (const [domain, hosts] of [...byDomain].sort(([a], [b]) => a.localeCompare(b))) {
     try {
-      const zones = (await cfGetAll(fetchImpl, credentials.token, `${CF_API}/zones?name=${encodeURIComponent(domain)}`, `zone ${domain}`, 5)) as Array<{ id?: unknown }>;
+      const zones = (await cfGetAll(
+        fetchImpl,
+        credentials.token,
+        `${CF_API}/zones?name=${encodeURIComponent(domain)}`,
+        `zone ${domain}`,
+        5,
+      )) as Array<{ id?: unknown }>;
       const id = zones.find((z) => typeof z.id === "string")?.id as string | undefined;
       if (!id) throw new Error(`no zone named ${domain} in this account`);
-      const packs = (await cfGetAll(fetchImpl, credentials.token, `${CF_API}/zones/${id}/ssl/certificate_packs?status=all`, `certificate packs of ${domain}`, 50)) as Pack[];
+      const packs = (await cfGetAll(
+        fetchImpl,
+        credentials.token,
+        `${CF_API}/zones/${id}/ssl/certificate_packs?status=all`,
+        `certificate packs of ${domain}`,
+        50,
+      )) as Pack[];
       for (const host of hosts) {
         const expires = hostExpiry(packs, host);
         if (expires) out.hosts.push({ host, expires });
         else out.failed.push({ host, error: "no active certificate pack covers it" });
       }
     } catch (err) {
-      for (const host of hosts) out.failed.push({ host, error: (err instanceof Error ? err.message : String(err)).slice(0, 200) });
+      for (const host of hosts)
+        out.failed.push({
+          host,
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+        });
     }
   }
   return out;
@@ -89,7 +112,10 @@ export async function readTlsExpiry(env: Env, origins: ReadonlyArray<{ origin: s
 
 /** The alerts the stored dates stand behind now: 21 days out and 3 days out, each once per
  *  certificate date. */
-export function tlsAlerts(read: TlsExpiry | null, now: Date): Array<{ key: string; title: string; body: string }> {
+export function tlsAlerts(
+  read: TlsExpiry | null,
+  now: Date,
+): Array<{ key: string; title: string; body: string }> {
   const out: Array<{ key: string; title: string; body: string }> = [];
   for (const { host, expires } of read?.hosts ?? []) {
     const days = Math.floor((Date.parse(expires) - now.getTime()) / DAY_MS);
@@ -97,7 +123,10 @@ export function tlsAlerts(read: TlsExpiry | null, now: Date): Array<{ key: strin
     const late = days <= LATE_DAYS;
     out.push({
       key: `tls-${late ? "3d" : "21d"}:${host}:${expires}`,
-      title: days < 0 ? `${host}'s TLS certificate has expired` : `${host}'s TLS certificate expires in ${days} days`,
+      title:
+        days < 0
+          ? `${host}'s TLS certificate has expired`
+          : `${host}'s TLS certificate expires in ${days} days`,
       body: `Cloudflare's certificate packs say it expires at ${expires} (read ${read?.read_at}). Cloudflare renews its own certificates; one this close means renewal is stuck: check the zone's Edge Certificates.`,
     });
   }

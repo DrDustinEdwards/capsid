@@ -1,6 +1,21 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { adminFailJob, blockJob, claimJob, completeJob, editJob, failJob, jobsSummary, listJobs, parkJob, postJob, releaseJob, resumeJob, supersedeJob, unparkJob } from "../src/jobs";
+import {
+  adminFailJob,
+  blockJob,
+  claimJob,
+  completeJob,
+  editJob,
+  failJob,
+  jobsSummary,
+  listJobs,
+  parkJob,
+  postJob,
+  releaseJob,
+  resumeJob,
+  supersedeJob,
+  unparkJob,
+} from "../src/jobs";
 import { capsidStatus } from "../src/status";
 import { grantAgent, type Agent } from "../src/agents";
 import { defaultScopes } from "../src/agents-schema";
@@ -41,12 +56,14 @@ const at = (iso: string) => new Date(iso);
 const NOW = at("2026-09-10T12:00:00.000Z");
 
 async function row(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
+    .bind(id)
+    .first<Record<string, unknown>>();
 }
 
 async function auditActions(id: string): Promise<string[]> {
   const { results } = await env.DB.prepare(
-    "SELECT action FROM audit_log WHERE params LIKE ?1 ORDER BY id ASC"
+    "SELECT action FROM audit_log WHERE params LIKE ?1 ORDER BY id ASC",
   )
     .bind(`%${id}%`)
     .all<{ action: string }>();
@@ -73,7 +90,16 @@ function racingEnv(between: () => Promise<void>) {
   } as unknown as Parameters<typeof postJob>[0];
 }
 
-async function post(over: Partial<{ namespace: string; title: string; body: string; priority: number; gate_required: boolean; kind: string }> = {}) {
+async function post(
+  over: Partial<{
+    namespace: string;
+    title: string;
+    body: string;
+    priority: number;
+    gate_required: boolean;
+    kind: string;
+  }> = {},
+) {
   return postJob(jobsEnv(), grantAgent("write", SEAT), NOW, {
     namespace: "capsid",
     title: "a job",
@@ -87,8 +113,12 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM audit_log").run();
   await env.DB.prepare("DELETE FROM documents WHERE path LIKE 'jobs/%'").run();
   // jobs post requires a registered namespace.
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("germomics", JSON.stringify([{ repo: "example/germomics", label: "primary" }])).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
+    .run();
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind("germomics", JSON.stringify([{ repo: "example/germomics", label: "primary" }]))
+    .run();
 });
 
 describe("the lifecycle", () => {
@@ -134,7 +164,9 @@ describe("the lifecycle", () => {
     const actors = await env.DB.prepare("SELECT DISTINCT actor FROM audit_log WHERE params LIKE ?1")
       .bind(`%${id}%`)
       .all<{ actor: string }>();
-    expect(new Set((actors.results ?? []).map((r) => r.actor))).toEqual(new Set([SEAT, DRIVER_ACTOR]));
+    expect(new Set((actors.results ?? []).map((r) => r.actor))).toEqual(
+      new Set([SEAT, DRIVER_ACTOR]),
+    );
   });
 
   // The innocent direction of two refusals in test/jobs.test.ts: the swallowed-tag
@@ -216,9 +248,19 @@ describe("the refusals", () => {
       const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id: posted.job!.id });
       expect(claimed.ok, claimed.refusal).toBe(true);
     }
-    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE claimed_by = ?1 AND status = 'claimed'").bind(DRIVER_ACTOR).first<{ n: number }>())?.n).toBe(3);
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM jobs WHERE claimed_by = ?1 AND status = 'claimed'",
+        )
+          .bind(DRIVER_ACTOR)
+          .first<{ n: number }>()
+      )?.n,
+    ).toBe(3);
     // Completing one leaves the others held.
-    expect((await completeJob(jobsEnv(), DRIVER, NOW, a.job!.id, { result_summary: "done" })).ok).toBe(true);
+    expect(
+      (await completeJob(jobsEnv(), DRIVER, NOW, a.job!.id, { result_summary: "done" })).ok,
+    ).toBe(true);
     expect((await row(b.job!.id))?.status).toBe("claimed");
     expect((await row(c.job!.id))?.status).toBe("claimed");
   });
@@ -231,7 +273,9 @@ describe("the refusals", () => {
       ["held by a session", "github:someone"],
     ] as const) {
       const posted = await post({ title });
-      const claimed = await claimJob(jobsEnv(), grantAgent("write", actor), NOW, { id: posted.job!.id });
+      const claimed = await claimJob(jobsEnv(), grantAgent("write", actor), NOW, {
+        id: posted.job!.id,
+      });
       expect(claimed.ok, `${actor}: ${claimed.refusal}`).toBe(true);
       expect(claimed.job!.claimed_by).toBe(actor);
     }
@@ -265,18 +309,28 @@ describe("the refusals", () => {
     const posted = await post({ title: "needs words" });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    expect((await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "  " })).refusal).toMatch(/needs a result_summary/);
+    expect(
+      (await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "  " })).refusal,
+    ).toMatch(/needs a result_summary/);
     expect((await failJob(jobsEnv(), DRIVER, NOW, id, "")).refusal).toMatch(/needs a reason/);
     expect((await row(id))?.status).toBe("claimed");
   });
 
   it("post refuses when there is no key to sign with", async () => {
-    const unconfigured = { ...env, IMPROVE_SCORE_SECRET: undefined } as unknown as Parameters<typeof postJob>[0];
-    const result = await postJob(unconfigured, grantAgent("write", SEAT), NOW, { namespace: "capsid", title: "unsignable", body: "x" });
+    const unconfigured = { ...env, IMPROVE_SCORE_SECRET: undefined } as unknown as Parameters<
+      typeof postJob
+    >[0];
+    const result = await postJob(unconfigured, grantAgent("write", SEAT), NOW, {
+      namespace: "capsid",
+      title: "unsignable",
+      body: "x",
+    });
     expect(result.ok).toBe(false);
     expect(result.refusal).toMatch(/IMPROVE_SCORE_SECRET is unset/);
     // Fail closed: nothing queued.
-    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs").first<{ n: number }>())?.n).toBe(0);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs").first<{ n: number }>())?.n).toBe(
+      0,
+    );
   });
 });
 
@@ -287,7 +341,9 @@ describe("a claim has no lease", () => {
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const muchLater = new Date(NOW.getTime() + 30 * 24 * 3_600_000);
     expect((await row(id))?.status).toBe("claimed");
-    const done = await completeJob(jobsEnv(), DRIVER, muchLater, id, { result_summary: "finished eventually" });
+    const done = await completeJob(jobsEnv(), DRIVER, muchLater, id, {
+      result_summary: "finished eventually",
+    });
     expect(done.ok, done.refusal).toBe(true);
   });
 
@@ -296,7 +352,13 @@ describe("a claim has no lease", () => {
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const later = new Date(NOW.getTime() + 3_600_000);
-    const released = await releaseJob(jobsEnv(), grantAgent("write", SEAT), later, id, "the holder is gone");
+    const released = await releaseJob(
+      jobsEnv(),
+      grantAgent("write", SEAT),
+      later,
+      id,
+      "the holder is gone",
+    );
     expect(released.ok, released.refusal).toBe(true);
     const returned = await row(id);
     expect(returned?.status).toBe("queued");
@@ -310,7 +372,9 @@ describe("a claim has no lease", () => {
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     await releaseJob(jobsEnv(), grantAgent("write", SEAT), NOW, id, "the holder is gone");
-    const late = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished eventually" });
+    const late = await completeJob(jobsEnv(), DRIVER, NOW, id, {
+      result_summary: "finished eventually",
+    });
     expect(late.ok).toBe(false);
     expect(late.refusal).toMatch(/is back in the queue/);
   });
@@ -341,7 +405,10 @@ describe("resume", () => {
     const posted = await post({ title, gate_required: true });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a human", command: "git push origin main" });
+    await blockJob(jobsEnv(), DRIVER, NOW, id, {
+      reason: "needs a human",
+      command: "git push origin main",
+    });
     return id;
   }
 
@@ -357,7 +424,10 @@ describe("resume", () => {
     expect(held?.resumed_count).toBe(1);
     expect(held?.blocked_count).toBe(1);
 
-    const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "pushed and verified", result_ref: "abc1234" });
+    const done = await completeJob(jobsEnv(), DRIVER, NOW, id, {
+      result_summary: "pushed and verified",
+      result_ref: "abc1234",
+    });
     expect(done.ok, done.refusal).toBe(true);
     const final = await row(id);
     expect(final?.status).toBe("done");
@@ -368,7 +438,7 @@ describe("resume", () => {
     const id = await blockedJob("approval recorded");
     await resumeJob(jobsEnv(), DRIVER, NOW, id, "seat approved: ff-merge and push master");
     const { results } = await env.DB.prepare(
-      "SELECT params FROM audit_log WHERE action = 'job-resumed' AND params LIKE ?1"
+      "SELECT params FROM audit_log WHERE action = 'job-resumed' AND params LIKE ?1",
     )
       .bind(`%${id}%`)
       .all<{ params: string }>();
@@ -387,7 +457,10 @@ describe("resume", () => {
   it("a job can hit a gate, come back, and hit another, counting each", async () => {
     const id = await blockedJob("two gates");
     await resumeJob(jobsEnv(), DRIVER, NOW, id, "first approval");
-    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "a second gate", command: "npx wrangler deploy" });
+    await blockJob(jobsEnv(), DRIVER, NOW, id, {
+      reason: "a second gate",
+      command: "npx wrangler deploy",
+    });
     let stored = await row(id);
     expect(stored?.status).toBe("blocked");
     expect(stored?.blocked_count).toBe(2);
@@ -448,9 +521,17 @@ describe("resume", () => {
     // the resume must leave no record: only SQLite can show the guard holding.
     const id = await blockedJob("resume race");
     const racing = racingEnv(async () => {
-      await env.DB.prepare("UPDATE jobs SET status = 'failed', updated_at = ?2 WHERE id = ?1").bind(id, "2026-09-10T12:00:01.000Z").run();
+      await env.DB.prepare("UPDATE jobs SET status = 'failed', updated_at = ?2 WHERE id = ?1")
+        .bind(id, "2026-09-10T12:00:01.000Z")
+        .run();
     });
-    const resumed = await resumeJob(racing, grantAgent("write", SEAT), NOW, id, "the human approved it");
+    const resumed = await resumeJob(
+      racing,
+      grantAgent("write", SEAT),
+      NOW,
+      id,
+      "the human approved it",
+    );
     expect(resumed.ok).toBe(false);
     expect((await row(id))?.status).toBe("failed");
     expect(await auditActions(id)).not.toContain("job-resumed");
@@ -513,26 +594,45 @@ describe("the resume note", () => {
   function agentDriver(): Agent {
     const scopes = defaultScopes(["capsid"]);
     scopes.grants = ["read", "write"];
-    return { id: "agent_0123456789ab", name: "capsid-driver", kind: "driver", actor: "agent:capsid-driver", scopes, admin: false, row: null };
+    return {
+      id: "agent_0123456789ab",
+      name: "capsid-driver",
+      kind: "driver",
+      actor: "agent:capsid-driver",
+      scopes,
+      admin: false,
+      row: null,
+    };
   }
 
   async function blockedJob(title: string) {
     const posted = await post({ title, gate_required: true });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "two questions for the seat", command: "git push origin feat/x" });
+    await blockJob(jobsEnv(), DRIVER, NOW, id, {
+      reason: "two questions for the seat",
+      command: "git push origin feat/x",
+    });
     return id;
   }
 
   it("the seat resumes, releases the claim, and a driver's claim carries the seat's note", async () => {
     const id = await blockedJob("note reaches the next claim");
-    const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "answers: use option B; batches 1 and 2 approved");
+    const resumed = await resumeJob(
+      jobsEnv(),
+      SEAT_AGENT,
+      NOW,
+      id,
+      "answers: use option B; batches 1 and 2 approved",
+    );
     expect(resumed.ok, resumed.refusal).toBe(true);
     expect(resumed.resume_note?.reason).toBe("answers: use option B; batches 1 and 2 approved");
     expect(resumed.resume_note?.by).toBe(SEAT);
 
     const later = new Date(NOW.getTime() + 3_600_000);
-    expect((await releaseJob(jobsEnv(), SEAT_AGENT, later, id, "the holder is gone")).ok).toBe(true);
+    expect((await releaseJob(jobsEnv(), SEAT_AGENT, later, id, "the holder is gone")).ok).toBe(
+      true,
+    );
 
     const claimed = await claimJob(jobsEnv(), agentDriver(), later, { namespace: "capsid", id });
     expect(claimed.ok, claimed.refusal).toBe(true);
@@ -554,7 +654,9 @@ describe("the resume note", () => {
   it("the mirrored document carries it, so brief does", async () => {
     const id = await blockedJob("note in the mirror");
     await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "approved the migration");
-    const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1")
+    const doc = await env.DB.prepare(
+      "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
+    )
       .bind(jobDocPath(id))
       .first<{ body: string }>();
     expect(doc?.body).toContain(`last resume, by ${SEAT}`);
@@ -562,7 +664,9 @@ describe("the resume note", () => {
 
     // A later transition reads the note back and keeps the line.
     await listJobs(jobsEnv(), { namespace: "capsid", id: id });
-    const after = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1")
+    const after = await env.DB.prepare(
+      "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
+    )
       .bind(jobDocPath(id))
       .first<{ body: string }>();
     expect(after?.body).toContain("approved the migration");
@@ -576,28 +680,43 @@ describe("the resume note", () => {
     expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
     return id;
   }
-  const blockedRow = async (id: string) => (await jobsSummary(env.DB, "capsid", NOW)).blocked_jobs.find((j) => j.id === id);
+  const blockedRow = async (id: string) =>
+    (await jobsSummary(env.DB, "capsid", NOW)).blocked_jobs.find((j) => j.id === id);
 
   it("a question block asks with the Worker's fixed command, and improve_status marks it a question while a gate is not", async () => {
     const asking = await claimedJob("a question is asked");
-    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, asking, { reason: "Keep the old route or the new one for /health?", question: true });
+    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, asking, {
+      reason: "Keep the old route or the new one for /health?",
+      question: true,
+    });
     expect(blocked.ok, blocked.refusal).toBe(true);
     expect(blocked.job?.status).toBe("blocked");
-    expect(blocked.job?.result_summary).toMatch(/^QUESTION: Keep the old route or the new one for \/health\?/);
+    expect(blocked.job?.result_summary).toMatch(
+      /^QUESTION: Keep the old route or the new one for \/health\?/,
+    );
     expect(blocked.job?.result_summary).toContain("Answer in a resume note");
     expect((await blockedRow(asking))?.question).toBe(true);
 
     const gate = await claimedJob("a gate is hit");
-    await blockJob(jobsEnv(), DRIVER, NOW, gate, { reason: "needs a push", command: "git push origin feat/x" });
+    await blockJob(jobsEnv(), DRIVER, NOW, gate, {
+      reason: "needs a push",
+      command: "git push origin feat/x",
+    });
     expect((await blockedRow(gate))?.question).toBe(false);
   });
 
   it("PLANT: a question block that carries its own command is refused, and the job stays claimed", async () => {
     const id = await claimedJob("a question with a command");
-    const refused = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "which one?", question: true, command: "rm -rf /" });
+    const refused = await blockJob(jobsEnv(), DRIVER, NOW, id, {
+      reason: "which one?",
+      question: true,
+      command: "rm -rf /",
+    });
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/takes no command/);
-    expect((await listJobs(jobsEnv(), { namespace: "capsid", id })).jobs?.[0]?.status).toBe("claimed");
+    expect((await listJobs(jobsEnv(), { namespace: "capsid", id })).jobs?.[0]?.status).toBe(
+      "claimed",
+    );
     const empty = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "  ", question: true });
     expect(empty.ok).toBe(false);
     expect(empty.refusal).toMatch(/needs the question/);
@@ -605,8 +724,13 @@ describe("the resume note", () => {
 
   it("the seat answers with a resume note, and the driver reads it on list and on every later claim", async () => {
     const id = await claimedJob("a question is answered");
-    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "Which route do I keep?", question: true });
-    const answered = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "keep the old route", { note: "Keep /health as it is; add /ready beside it." });
+    await blockJob(jobsEnv(), DRIVER, NOW, id, {
+      reason: "Which route do I keep?",
+      question: true,
+    });
+    const answered = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "keep the old route", {
+      note: "Keep /health as it is; add /ready beside it.",
+    });
     expect(answered.ok, answered.refusal).toBe(true);
     const beat = await listJobs(jobsEnv(), { namespace: "capsid", id: id });
     expect(beat.resume_notes?.map((n) => n.reason)).toEqual(["keep the old route"]);
@@ -615,21 +739,35 @@ describe("the resume note", () => {
     await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "And the metrics path?", question: true });
     await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "leave metrics out");
     const later = await listJobs(jobsEnv(), { namespace: "capsid", id: id });
-    expect(later.resume_notes?.map((n) => n.reason)).toEqual(["leave metrics out", "keep the old route"]);
+    expect(later.resume_notes?.map((n) => n.reason)).toEqual([
+      "leave metrics out",
+      "keep the old route",
+    ]);
   });
 
   // Every resume note, not only the latest (docs/work-queue.md; Track A 2a): an approval
   // given at one resume is still there after the next.
   async function resumedThrice(title: string) {
     const id = await blockedJob(title);
-    for (const reason of ["first ruling: use option B", "second ruling: keep the old route", "third ruling: merge in PR order"]) {
+    for (const reason of [
+      "first ruling: use option B",
+      "second ruling: keep the old route",
+      "third ruling: merge in PR order",
+    ]) {
       const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, reason);
       expect(resumed.ok, resumed.refusal).toBe(true);
-      await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "another question", command: "git push origin feat/x" });
+      await blockJob(jobsEnv(), DRIVER, NOW, id, {
+        reason: "another question",
+        command: "git push origin feat/x",
+      });
     }
     return id;
   }
-  const REASONS = ["third ruling: merge in PR order", "second ruling: keep the old route", "first ruling: use option B"];
+  const REASONS = [
+    "third ruling: merge in PR order",
+    "second ruling: keep the old route",
+    "first ruling: use option B",
+  ];
 
   it("claim and list return every resume note, newest first, with resume_note still the newest", async () => {
     const id = await resumedThrice("every note reaches the next claim");
@@ -655,7 +793,11 @@ describe("the resume note", () => {
 
   it("the mirrored document lists the earlier resumes under the last one", async () => {
     const id = await resumedThrice("every note in the mirror");
-    const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(jobDocPath(id)).first<{ body: string }>();
+    const doc = await env.DB.prepare(
+      "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
+    )
+      .bind(jobDocPath(id))
+      .first<{ body: string }>();
     const body = doc?.body ?? "";
     expect(body).toContain("## Earlier resumes");
     for (const reason of REASONS) expect(body, reason).toContain(reason);
@@ -667,7 +809,11 @@ describe("the resume note", () => {
     const big = (n: number) => `ruling ${n}: ` + "x".repeat(15_000);
     for (let n = 1; n <= 6; n++) {
       await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, `note ${n}`, { note: big(n) });
-      if (n < 6) await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "again", command: "git push origin feat/x" });
+      if (n < 6)
+        await blockJob(jobsEnv(), DRIVER, NOW, id, {
+          reason: "again",
+          command: "git push origin feat/x",
+        });
     }
     const beat = await listJobs(jobsEnv(), { namespace: "capsid", id: id });
     const sent = beat.resume_notes ?? [];
@@ -675,15 +821,19 @@ describe("the resume note", () => {
     expect(sent[0]?.reason).toBe("note 6");
     expect(JSON.stringify(sent).length).toBeLessThanOrEqual(64 * 1024);
     expect(beat.resume_notes_dropped).toBe(6 - sent.length);
-    expect(sent.map((n) => n.reason)).toEqual(["note 6", "note 5", "note 4", "note 3", "note 2"].slice(0, sent.length));
+    expect(sent.map((n) => n.reason)).toEqual(
+      ["note 6", "note 5", "note 4", "note 3", "note 2"].slice(0, sent.length),
+    );
   });
 
   // The full note. reason is bounded at MAX_TITLE; note carries an approval with
   // rulings or a plan in full.
   const LONG_NOTE = [
     "Approved the whole report. The six rulings, in order:",
-    ...Array.from({ length: 6 }, (_, i) =>
-      `${i + 1}. Ruling ${i + 1}: keep the existing route for item ${i + 1}, add a behavior test that fails without the change, and open one pull request per item so each can be reviewed and merged on its own schedule.`
+    ...Array.from(
+      { length: 6 },
+      (_, i) =>
+        `${i + 1}. Ruling ${i + 1}: keep the existing route for item ${i + 1}, add a behavior test that fails without the change, and open one pull request per item so each can be reviewed and merged on its own schedule.`,
     ),
     "",
     "Plan: work the items in the order above. Stop at the first gate and block with the exact command. Do not merge anything; the seat merges.",
@@ -693,9 +843,16 @@ describe("the resume note", () => {
   it("a note longer than a reason reaches resume, claim, list and the mirror in full", async () => {
     expect(LONG_NOTE.length).toBeGreaterThan(MAX_TITLE);
     const id = await blockedJob("full note reaches everyone");
-    const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "approved the report and gave the six rulings", {
-      note: LONG_NOTE,
-    });
+    const resumed = await resumeJob(
+      jobsEnv(),
+      SEAT_AGENT,
+      NOW,
+      id,
+      "approved the report and gave the six rulings",
+      {
+        note: LONG_NOTE,
+      },
+    );
     expect(resumed.ok, resumed.refusal).toBe(true);
     expect(resumed.resume_note?.reason).toBe("approved the report and gave the six rulings");
     expect(resumed.resume_note?.note).toBe(LONG_NOTE);
@@ -704,21 +861,29 @@ describe("the resume note", () => {
     expect(beat.ok, beat.refusal).toBe(true);
     expect(beat.resume_note?.note).toBe(LONG_NOTE);
 
-    expect((await listJobs(jobsEnv(), { namespace: "capsid", id })).resume_note?.note).toBe(LONG_NOTE);
+    expect((await listJobs(jobsEnv(), { namespace: "capsid", id })).resume_note?.note).toBe(
+      LONG_NOTE,
+    );
 
-    const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1")
+    const doc = await env.DB.prepare(
+      "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
+    )
       .bind(jobDocPath(id))
       .first<{ body: string }>();
     expect(doc?.body).toContain(LONG_NOTE);
 
     const later = new Date(NOW.getTime() + 3_600_000);
-    expect((await releaseJob(jobsEnv(), SEAT_AGENT, later, id, "the holder is gone")).ok).toBe(true);
+    expect((await releaseJob(jobsEnv(), SEAT_AGENT, later, id, "the holder is gone")).ok).toBe(
+      true,
+    );
     const claimed = await claimJob(jobsEnv(), agentDriver(), later, { namespace: "capsid", id });
     expect(claimed.ok, claimed.refusal).toBe(true);
     expect(claimed.resume_note?.note).toBe(LONG_NOTE);
 
     // The mirror rewritten by the claim reads the note back from the audit row.
-    const after = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1")
+    const after = await env.DB.prepare(
+      "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
+    )
       .bind(jobDocPath(id))
       .first<{ body: string }>();
     expect(after?.body).toContain(LONG_NOTE);
@@ -728,13 +893,18 @@ describe("the resume note", () => {
     const id = await blockedJob("no note");
     const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "one line is enough");
     expect(resumed.resume_note?.note).toBeUndefined();
-    expect((await listJobs(jobsEnv(), { namespace: "capsid", id: id })).resume_note?.note).toBeUndefined();
+    expect(
+      (await listJobs(jobsEnv(), { namespace: "capsid", id: id })).resume_note?.note,
+    ).toBeUndefined();
   });
 
   it("the newest resume wins", async () => {
     const id = await blockedJob("two resumes");
     await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "first answer");
-    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "a second question", command: "git push origin feat/y" });
+    await blockJob(jobsEnv(), DRIVER, NOW, id, {
+      reason: "a second question",
+      command: "git push origin feat/y",
+    });
     await resumeJob(jobsEnv(), SEAT_AGENT, NOW, id, "second answer");
     const beat = await listJobs(jobsEnv(), { namespace: "capsid", id: id });
     expect(beat.resume_note?.reason).toBe("second answer");
@@ -745,7 +915,9 @@ describe("the resume note", () => {
     const claimed = await claimJob(jobsEnv(), agentDriver(), NOW, { id: posted.job!.id });
     expect(claimed.ok, claimed.refusal).toBe(true);
     expect(claimed.resume_note).toBeUndefined();
-    expect((await listJobs(jobsEnv(), { namespace: "capsid", id: posted.job!.id })).resume_note).toBeUndefined();
+    expect(
+      (await listJobs(jobsEnv(), { namespace: "capsid", id: posted.job!.id })).resume_note,
+    ).toBeUndefined();
   });
 });
 
@@ -756,7 +928,9 @@ describe("the mirrored document", () => {
     const path = jobDocPath(id);
 
     const readDoc = async () =>
-      env.DB.prepare("SELECT title, body, status FROM documents WHERE namespace = 'capsid' AND path = ?1")
+      env.DB.prepare(
+        "SELECT title, body, status FROM documents WHERE namespace = 'capsid' AND path = ?1",
+      )
         .bind(path)
         .first<{ title: string; body: string; status: string }>();
 
@@ -786,7 +960,7 @@ describe("the mirrored document", () => {
 
     // Every rewrite snapshotted the one it replaced: three writes, two snapshots.
     const versions = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path = ?1"
+      "SELECT COUNT(*) AS n FROM document_versions WHERE namespace = 'capsid' AND path = ?1",
     )
       .bind(path)
       .first<{ n: number }>();
@@ -801,7 +975,7 @@ describe("the mirrored document", () => {
     await failJob(jobsEnv(), DRIVER, NOW, id, "could not reach the thing");
 
     const doc = await env.DB.prepare(
-      "SELECT body, status FROM documents WHERE namespace = 'capsid' AND path = ?1"
+      "SELECT body, status FROM documents WHERE namespace = 'capsid' AND path = ?1",
     )
       .bind(jobDocPath(id))
       .first<{ body: string; status: string }>();
@@ -815,10 +989,13 @@ describe("the mirrored document", () => {
     const posted = await post({ title: "blocked is not terminal" });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a push", command: "git push origin HEAD" });
+    await blockJob(jobsEnv(), DRIVER, NOW, id, {
+      reason: "needs a push",
+      command: "git push origin HEAD",
+    });
 
     const doc = await env.DB.prepare(
-      "SELECT body, status FROM documents WHERE namespace = 'capsid' AND path = ?1"
+      "SELECT body, status FROM documents WHERE namespace = 'capsid' AND path = ?1",
     )
       .bind(jobDocPath(id))
       .first<{ body: string; status: string }>();
@@ -909,7 +1086,14 @@ describe("the improve_status jobs block", () => {
   it("a namespace with no jobs reports zeroes, not an absent block", async () => {
     // A missing block and an empty queue are different facts.
     const summary = await jobsSummary(env.DB, "foxing", NOW);
-    expect(summary).toEqual({ queued: 0, claimed: 0, blocked: 0, done_today: 0, blocked_jobs: [], claimed_jobs: [] });
+    expect(summary).toEqual({
+      queued: 0,
+      claimed: 0,
+      blocked: 0,
+      done_today: 0,
+      blocked_jobs: [],
+      claimed_jobs: [],
+    });
   });
 
   it("improve_status carries the block for every namespace it reports", async () => {
@@ -962,8 +1146,13 @@ describe("the retry cap, where the block is written", () => {
     const posted = await post({ title });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { namespace: "capsid", id });
-    await env.DB.prepare("UPDATE jobs SET corrections_count = ?1 WHERE id = ?2").bind(corrections, id).run();
-    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "needs a human", command: "git push -u origin feat/x" });
+    await env.DB.prepare("UPDATE jobs SET corrections_count = ?1 WHERE id = ?2")
+      .bind(corrections, id)
+      .run();
+    const blocked = await blockJob(jobsEnv(), DRIVER, NOW, id, {
+      reason: "needs a human",
+      command: "git push -u origin feat/x",
+    });
     expect(blocked.ok, blocked.refusal).toBe(true);
     return String((await row(id))?.result_summary);
   }
@@ -992,7 +1181,15 @@ describe("the retry cap, where resume reads it", () => {
     const scopes = defaultScopes(["capsid"]);
     scopes.grants = ["read", "write"];
     scopes.flags.can_merge = canMerge;
-    return { id: "agent_aaaabbbbcccc", name, kind: admin || canMerge ? "seat" : "driver", actor: `agent:${name}`, scopes, admin, row: null };
+    return {
+      id: "agent_aaaabbbbcccc",
+      name,
+      kind: admin || canMerge ? "seat" : "driver",
+      actor: `agent:${name}`,
+      scopes,
+      admin,
+      row: null,
+    };
   }
   const CLAIMANT = agentNamed("capsid-driver");
   const OTHER_SEAT = agentNamed("other-seat", false, true);
@@ -1003,8 +1200,13 @@ describe("the retry cap, where resume reads it", () => {
     const id = posted.job!.id;
     const claimed = await claimJob(jobsEnv(), CLAIMANT, NOW, { id });
     expect(claimed.ok, claimed.refusal).toBe(true);
-    await env.DB.prepare("UPDATE jobs SET corrections_count = ?1 WHERE id = ?2").bind(corrections, id).run();
-    const blocked = await blockJob(jobsEnv(), CLAIMANT, NOW, id, { reason: "stopped at the push", command: "git push -u origin feat/x" });
+    await env.DB.prepare("UPDATE jobs SET corrections_count = ?1 WHERE id = ?2")
+      .bind(corrections, id)
+      .run();
+    const blocked = await blockJob(jobsEnv(), CLAIMANT, NOW, id, {
+      reason: "stopped at the push",
+      command: "git push -u origin feat/x",
+    });
     expect(blocked.ok, blocked.refusal).toBe(true);
     return id;
   }
@@ -1012,9 +1214,16 @@ describe("the retry cap, where resume reads it", () => {
   it("the first two corrections are allowed, and each one spends the budget", async () => {
     for (const corrections of [0, 1]) {
       const id = await blockedAt(corrections, `correction ${corrections + 1}`);
-      const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, "fix the review findings", { correction: true });
-      expect(result.ok, `correction ${corrections + 1} refused: ${JSON.stringify(result)}`).toBe(true);
-      expect((await row(id))?.corrections_count, "a correction that does not spend the budget can never reach the cap").toBe(corrections + 1);
+      const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, "fix the review findings", {
+        correction: true,
+      });
+      expect(result.ok, `correction ${corrections + 1} refused: ${JSON.stringify(result)}`).toBe(
+        true,
+      );
+      expect(
+        (await row(id))?.corrections_count,
+        "a correction that does not spend the budget can never reach the cap",
+      ).toBe(corrections + 1);
       await env.DB.prepare("DELETE FROM jobs").run();
     }
   });
@@ -1025,7 +1234,10 @@ describe("the retry cap, where resume reads it", () => {
       const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, `push ${i} ran`);
       expect(result.ok, `plain resume ${i} refused: ${JSON.stringify(result)}`).toBe(true);
       expect((await row(id))?.corrections_count, `plain resume ${i} spent a correction`).toBe(0);
-      const blocked = await blockJob(jobsEnv(), CLAIMANT, NOW, id, { reason: `push ${i + 1}`, command: "git push -u origin feat/x" });
+      const blocked = await blockJob(jobsEnv(), CLAIMANT, NOW, id, {
+        reason: `push ${i + 1}`,
+        command: "git push -u origin feat/x",
+      });
       expect(blocked.ok, blocked.refusal).toBe(true);
     }
   });
@@ -1036,8 +1248,13 @@ describe("the retry cap, where resume reads it", () => {
     const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, "one more go");
     expect(result.ok).toBe(false);
     expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
-    expect(result.refusal, "a refusal that does not say who CAN act leaves the job stuck").toMatch(/admin caller may resume it/);
-    expect(await row(id), "a refused resume must leave the job exactly as it was, budget included").toEqual(before);
+    expect(result.refusal, "a refusal that does not say who CAN act leaves the job stuck").toMatch(
+      /admin caller may resume it/,
+    );
+    expect(
+      await row(id),
+      "a refused resume must leave the job exactly as it was, budget included",
+    ).toEqual(before);
   });
 
   it("PLANT: re-posting the same work does NOT reset the correction budget", async () => {
@@ -1052,7 +1269,9 @@ describe("the retry cap, where resume reads it", () => {
     const result = await resumeJob(jobsEnv(), OTHER_SEAT, NOW, id, "posting it again");
     expect(result.ok, "a fresh row for the same work reset the cap").toBe(false);
     expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
-    expect(result.refusal, "the refusal must say why re-posting did not help").toMatch(/per \(namespace, title\) rather than per row/);
+    expect(result.refusal, "the refusal must say why re-posting did not help").toMatch(
+      /per \(namespace, title\) rather than per row/,
+    );
     expect(await row(id)).toEqual(before);
   });
 
@@ -1067,7 +1286,13 @@ describe("the retry cap, where resume reads it", () => {
 
   it("THE SEAT IS ALSO REFUSED at the cap, because the seat is not the human", async () => {
     const id = await blockedAt(CORRECTION_CAP, "the seat at the cap");
-    const result = await resumeJob(jobsEnv(), agentNamed("seat", false, true), NOW, id, "the seat says go");
+    const result = await resumeJob(
+      jobsEnv(),
+      agentNamed("seat", false, true),
+      NOW,
+      id,
+      "the seat says go",
+    );
     expect(result.ok).toBe(false);
     expect(result.refusal).toMatch(new RegExp(RETRY_CAP_REASON));
     expect((await row(id))?.status).toBe("blocked");
@@ -1077,11 +1302,21 @@ describe("the retry cap, where resume reads it", () => {
     const id = await blockedAt(CORRECTION_CAP, "the admin at the cap");
     // Passed as a correction, so the exemption is what keeps the budget still rather
     // than the absence of a correction.
-    const result = await resumeJob(jobsEnv(), agentNamed("admin", true), NOW, id, "I looked at it and it is fine", { correction: true });
+    const result = await resumeJob(
+      jobsEnv(),
+      agentNamed("admin", true),
+      NOW,
+      id,
+      "I looked at it and it is fine",
+      { correction: true },
+    );
     expect(result.ok, `an admin resume was refused: ${JSON.stringify(result)}`).toBe(true);
     const stored = await row(id);
     expect(stored?.status).toBe("claimed");
-    expect(stored?.corrections_count, "an admin resume must not spend the budget it just cleared").toBe(CORRECTION_CAP);
+    expect(
+      stored?.corrections_count,
+      "an admin resume must not spend the budget it just cleared",
+    ).toBe(CORRECTION_CAP);
   });
 });
 
@@ -1101,7 +1336,9 @@ describe("supersede", () => {
   const SEAT_AGENT = grantAgent("write", SEAT);
 
   async function outcomeCount(id: string): Promise<number> {
-    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE job_id = ?1").bind(id).first<{ n: number }>();
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE job_id = ?1")
+      .bind(id)
+      .first<{ n: number }>();
     return r?.n ?? 0;
   }
 
@@ -1125,7 +1362,9 @@ describe("supersede", () => {
     expect(out.ok, out.refusal).toBe(true);
     const stored = await row(old.job!.id);
     expect(stored?.status).toBe("superseded");
-    expect(stored?.result_summary).toBe(`Superseded by ${replacement.job!.id}: reposted with a corrected body`);
+    expect(stored?.result_summary).toBe(
+      `Superseded by ${replacement.job!.id}: reposted with a corrected body`,
+    );
     expect(stored?.claimed_by).toBeNull();
     expect(await outcomeCount(old.job!.id)).toBe(0);
 
@@ -1141,7 +1380,9 @@ describe("supersede", () => {
 
   it("without replaced_by the summary says so plainly", async () => {
     const old = await post({ title: "withdrawn" });
-    const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "no longer wanted" });
+    const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, {
+      reason: "no longer wanted",
+    });
     expect(out.ok, out.refusal).toBe(true);
     expect((await row(old.job!.id))?.result_summary).toBe("Superseded: no longer wanted");
   });
@@ -1150,7 +1391,9 @@ describe("supersede", () => {
     const old = await post({ title: "claimed then replaced" });
     const claimed = await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
     expect(claimed.ok, claimed.refusal).toBe(true);
-    const out = await supersedeJob(jobsEnv(), PLAIN_DRIVER, NOW, old.job!.id, { reason: "the seat reordered the queue" });
+    const out = await supersedeJob(jobsEnv(), PLAIN_DRIVER, NOW, old.job!.id, {
+      reason: "the seat reordered the queue",
+    });
     expect(out.ok, out.refusal).toBe(true);
     const stored = await row(old.job!.id);
     expect(stored?.status).toBe("superseded");
@@ -1173,7 +1416,9 @@ describe("supersede", () => {
   it("PLANT: a non-holder that is not the seat is refused on a claimed job", async () => {
     const old = await post({ title: "not yours" });
     await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
-    const out = await supersedeJob(jobsEnv(), PLAIN_OTHER, NOW, old.job!.id, { reason: "mine now" });
+    const out = await supersedeJob(jobsEnv(), PLAIN_OTHER, NOW, old.job!.id, {
+      reason: "mine now",
+    });
     expect(out.ok).toBe(false);
     expect(out.refusal).toMatch(new RegExp(`is held by ${DRIVER_ACTOR}`));
     expect((await row(old.job!.id))?.status).toBe("claimed");
@@ -1182,18 +1427,29 @@ describe("supersede", () => {
   it("PLANT: a claimed job with a gate hit, a correction or a result_ref is refused, even for the seat", async () => {
     const plants = [
       ["hit a gate", "UPDATE jobs SET blocked_count = 1 WHERE id = ?1"],
-      ["has a result", "UPDATE jobs SET result_ref = 'https://github.com/example/repo/pull/1' WHERE id = ?1"],
+      [
+        "has a result",
+        "UPDATE jobs SET result_ref = 'https://github.com/example/repo/pull/1' WHERE id = ?1",
+      ],
       ["was corrected", "UPDATE jobs SET corrections_count = 1 WHERE id = ?1"],
     ] as const;
     for (const [title, plant] of plants) {
       const old = await post({ title });
       await claimJob(jobsEnv(), PLAIN_DRIVER, NOW, { id: old.job!.id });
       await env.DB.prepare(plant).bind(old.job!.id).run();
-      const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "replaced" });
+      const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, {
+        reason: "replaced",
+      });
       expect(out.ok, `${title} was superseded`).toBe(false);
       expect(out.refusal).toMatch(/has work recorded on it/);
       expect((await row(old.job!.id))?.status).toBe("claimed");
-      await failJob(jobsEnv(), PLAIN_DRIVER, NOW, old.job!.id, "clearing the claim for the next case");
+      await failJob(
+        jobsEnv(),
+        PLAIN_DRIVER,
+        NOW,
+        old.job!.id,
+        "clearing the claim for the next case",
+      );
     }
   });
 
@@ -1207,7 +1463,7 @@ describe("supersede", () => {
     const won = await env.DB.prepare(
       `UPDATE jobs SET status = 'superseded', result_summary = ?2, updated_at = ?3
        WHERE id = ?1 AND (status = 'queued' OR (status = 'claimed' AND claimed_by = ?4 AND blocked_count = 0
-         AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`
+         AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`,
     )
       .bind(old.job!.id, "Superseded: x", NOW.toISOString(), DRIVER_ACTOR)
       .first<{ id: string }>();
@@ -1226,10 +1482,15 @@ describe("supersede", () => {
 
     const blocked = await post({ title: "blocked" });
     await claimJob(jobsEnv(), DRIVER, NOW, { id: blocked.job!.id });
-    await blockJob(jobsEnv(), DRIVER, NOW, blocked.job!.id, { reason: "needs a push", command: "git push origin HEAD" });
+    await blockJob(jobsEnv(), DRIVER, NOW, blocked.job!.id, {
+      reason: "needs a push",
+      command: "git push origin HEAD",
+    });
 
     const twice = await post({ title: "twice" });
-    expect((await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, twice.job!.id, { reason: "first" })).ok).toBe(true);
+    expect(
+      (await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, twice.job!.id, { reason: "first" })).ok,
+    ).toBe(true);
 
     const cases = [
       [done.job!.id, "done"],
@@ -1254,7 +1515,10 @@ describe("supersede", () => {
       [old.job!.id, /cannot be replaced by itself/],
     ];
     for (const [replaced_by, refusal] of cases) {
-      const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, { reason: "replaced", replaced_by });
+      const out = await supersedeJob(jobsEnv(), SEAT_AGENT, NOW, old.job!.id, {
+        reason: "replaced",
+        replaced_by,
+      });
       expect(out.ok).toBe(false);
       expect(out.refusal).toMatch(refusal);
     }
@@ -1270,7 +1534,9 @@ describe("supersede", () => {
     expect(await outcomeCount(old.job!.id)).toBe(1);
     expect((await loadRecordRows(env.DB)).outcomes.length).toBe(1);
 
-    await env.DB.prepare("UPDATE jobs SET status = 'superseded' WHERE id = ?1").bind(old.job!.id).run();
+    await env.DB.prepare("UPDATE jobs SET status = 'superseded' WHERE id = ?1")
+      .bind(old.job!.id)
+      .run();
     const after = await loadRecordRows(env.DB);
     expect(await outcomeCount(old.job!.id)).toBe(1);
     expect(after.outcomes.length).toBe(0);
@@ -1287,7 +1553,7 @@ describe("migrations/0020, the relabel", () => {
   async function seed(id: string, status: string, summary: string | null, namespace = "capsid") {
     await env.DB.prepare(
       `INSERT INTO jobs (id, namespace, title, body, status, posted_by, result_summary)
-       VALUES (?1, ?2, ?1, 'lorem ipsum', ?3, 'github:example', ?4)`
+       VALUES (?1, ?2, ?1, 'lorem ipsum', ?3, 'github:example', ?4)`,
     )
       .bind(id, namespace, status, summary)
       .run();
@@ -1314,7 +1580,10 @@ describe("migrations/0020, the relabel", () => {
 
     for (const query of relabel!.queries) await env.DB.prepare(query).run();
 
-    const { results } = await env.DB.prepare("SELECT id, status FROM jobs ORDER BY id").all<{ id: string; status: string }>();
+    const { results } = await env.DB.prepare("SELECT id, status FROM jobs ORDER BY id").all<{
+      id: string;
+      status: string;
+    }>();
     const status = Object.fromEntries((results ?? []).map((r) => [r.id, r.status]));
     expect(status).toEqual({
       job_done0000000: "done",
@@ -1342,7 +1611,9 @@ describe("migrations/0020, the relabel", () => {
 // the losing transition left no audit row and no moved row behind.
 
 async function actorAudits(actor: string, action: string): Promise<number> {
-  const found = await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE actor = ?1 AND action = ?2")
+  const found = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM audit_log WHERE actor = ?1 AND action = ?2",
+  )
     .bind(actor, action)
     .first<{ n: number }>();
   return found?.n ?? 0;
@@ -1368,7 +1639,8 @@ describe("every transition is one guarded batch", () => {
       ...jobsEnv(),
       DB: {
         prepare: (sql: string) => env.DB.prepare(sql),
-        batch: (statements: D1PreparedStatement[]) => env.DB.batch([...statements, env.DB.prepare("INSERT INTO no_such_table VALUES (1)")]),
+        batch: (statements: D1PreparedStatement[]) =>
+          env.DB.batch([...statements, env.DB.prepare("INSERT INTO no_such_table VALUES (1)")]),
       },
     } as unknown as Parameters<typeof postJob>[0];
     await expect(claimJob(failing, DRIVER, NOW, { id })).rejects.toThrow(/no_such_table/);
@@ -1380,10 +1652,18 @@ describe("every transition is one guarded batch", () => {
     const id = (await post({ title: "admin fail race" })).job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const racing = racingEnv(async () => {
-      const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished first" });
+      const done = await completeJob(jobsEnv(), DRIVER, NOW, id, {
+        result_summary: "finished first",
+      });
       expect(done.ok, done.refusal).toBe(true);
     });
-    const failed = await adminFailJob(racing, grantAgent("write", SEAT), NOW, id, "driver went away");
+    const failed = await adminFailJob(
+      racing,
+      grantAgent("write", SEAT),
+      NOW,
+      id,
+      "driver went away",
+    );
     expect(failed.ok).toBe(false);
     expect(failed.refusal).toMatch(/changed between reading it and failing it: it is now done/);
     expect((await row(id))?.status).toBe("done");
@@ -1406,10 +1686,18 @@ describe("every transition is one guarded batch", () => {
     const id = (await post({ title: "release race" })).job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const racing = racingEnv(async () => {
-      const done = await completeJob(jobsEnv(), DRIVER, NOW, id, { result_summary: "finished first" });
+      const done = await completeJob(jobsEnv(), DRIVER, NOW, id, {
+        result_summary: "finished first",
+      });
       expect(done.ok, done.refusal).toBe(true);
     });
-    const released = await releaseJob(racing, grantAgent("write", SEAT), NOW, id, "the holder is gone");
+    const released = await releaseJob(
+      racing,
+      grantAgent("write", SEAT),
+      NOW,
+      id,
+      "the holder is gone",
+    );
     expect(released.ok).toBe(false);
     expect((await row(id))?.status).toBe("done");
     expect(await auditActions(id)).not.toContain("job-released");
@@ -1425,14 +1713,17 @@ describe("no claim limit and no repo rule", () => {
       // A second namespace mapped to capsid's repo, spelled with other capitals.
       ["capsid-twin", "Example/Capsid"],
     ]) {
-      await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(ns, JSON.stringify([{ repo, label: "primary" }])).run();
+      await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+        .bind(ns, JSON.stringify([{ repo, label: "primary" }]))
+        .run();
     }
   });
 
   it("a second claim on the repo of a held job succeeds, through another namespace of the same repo too", async () => {
     const a = (await post({ title: "held on capsid" })).job!.id;
     const b = (await post({ title: "also capsid" })).job!.id;
-    const twin = (await post({ namespace: "capsid-twin", title: "capsid by another name" })).job!.id;
+    const twin = (await post({ namespace: "capsid-twin", title: "capsid by another name" })).job!
+      .id;
     for (const id of [a, b, twin]) {
       const claimed = await claimJob(jobsEnv(), DRIVER, NOW, { id });
       expect(claimed.ok, claimed.refusal).toBe(true);
@@ -1441,14 +1732,24 @@ describe("no claim limit and no repo rule", () => {
   });
 
   it("an agent scope that still carries max_claims is not limited by it", async () => {
-    const limited: Agent = { ...DRIVER, scopes: { ...DRIVER.scopes, max_claims: 1 } as Agent["scopes"] };
+    const limited: Agent = {
+      ...DRIVER,
+      scopes: { ...DRIVER.scopes, max_claims: 1 } as Agent["scopes"],
+    };
     const ids = [];
-    for (const title of ["one", "two", "three", "four", "five", "six"]) ids.push((await post({ title })).job!.id);
+    for (const title of ["one", "two", "three", "four", "five", "six"])
+      ids.push((await post({ title })).job!.id);
     for (const id of ids) {
       const claimed = await claimJob(jobsEnv(), limited, NOW, { id });
       expect(claimed.ok, claimed.refusal).toBe(true);
     }
-    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE status = 'claimed'").first<{ n: number }>())?.n).toBe(6);
+    expect(
+      (
+        await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE status = 'claimed'").first<{
+          n: number;
+        }>()
+      )?.n,
+    ).toBe(6);
   });
 });
 
@@ -1457,20 +1758,45 @@ describe("migrations/0045, runner keys bound to a job are revoked", () => {
 
   it("revokes every live key with a job binding and leaves unbound keys alone", async () => {
     expect(migration, "no migration named 0045_no_runner_keys.sql").toBeTruthy();
-    await env.DB.prepare("DELETE FROM agents WHERE name IN ('runner-bound-live', 'runner-bound-old', 'sample-unbound')").run();
-    const insert = (id: string, name: string, hash: string, job: string | null, revoked: string | null) =>
+    await env.DB.prepare(
+      "DELETE FROM agents WHERE name IN ('runner-bound-live', 'runner-bound-old', 'sample-unbound')",
+    ).run();
+    const insert = (
+      id: string,
+      name: string,
+      hash: string,
+      job: string | null,
+      revoked: string | null,
+    ) =>
       env.DB.prepare(
-        "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, job_id) VALUES (?1, ?2, 'session', ?3, '{}', 'test', '2026-10-10 08:00:00', ?4, ?5)"
+        "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, revoked_at, job_id) VALUES (?1, ?2, 'session', ?3, '{}', 'test', '2026-10-10 08:00:00', ?4, ?5)",
       )
         .bind(id, name, hash, revoked, job)
         .run();
-    await insert("agent_bound0000002", "runner-bound-live", "f".repeat(64), "job_queued00001", null);
-    await insert("agent_bound0000003", "runner-bound-old", "a".repeat(64), "job_done0000001", "2026-10-09 08:00:00");
+    await insert(
+      "agent_bound0000002",
+      "runner-bound-live",
+      "f".repeat(64),
+      "job_queued00001",
+      null,
+    );
+    await insert(
+      "agent_bound0000003",
+      "runner-bound-old",
+      "a".repeat(64),
+      "job_done0000001",
+      "2026-10-09 08:00:00",
+    );
     await insert("agent_unbound00001", "sample-unbound", "b".repeat(64), null, null);
 
     for (const query of migration!.queries) await env.DB.prepare(query).run();
 
-    const revoked = async (name: string) => (await env.DB.prepare("SELECT revoked_at FROM agents WHERE name = ?1").bind(name).first<{ revoked_at: string | null }>())?.revoked_at;
+    const revoked = async (name: string) =>
+      (
+        await env.DB.prepare("SELECT revoked_at FROM agents WHERE name = ?1")
+          .bind(name)
+          .first<{ revoked_at: string | null }>()
+      )?.revoked_at;
     expect(await revoked("runner-bound-live")).not.toBeNull();
     expect(await revoked("runner-bound-old")).toBe("2026-10-09 08:00:00");
     expect(await revoked("sample-unbound")).toBeNull();
@@ -1490,7 +1816,9 @@ describe("edit", () => {
   const LATER = at("2026-09-10T12:05:00.000Z");
 
   async function versionCount(id: string): Promise<number> {
-    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_versions WHERE job_id = ?1").bind(id).first<{ n: number }>();
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_versions WHERE job_id = ?1")
+      .bind(id)
+      .first<{ n: number }>();
     return r?.n ?? 0;
   }
 
@@ -1513,7 +1841,10 @@ describe("edit", () => {
     const posted = await post({ title: "claimed edit", body: "do the safe thing" });
     const id = posted.job!.id;
     expect((await claimJob(jobsEnv(), DRIVER, NOW, { id })).ok).toBe(true);
-    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { body: "do the other thing", priority: 9 });
+    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, {
+      body: "do the other thing",
+      priority: 9,
+    });
     expect(out.ok).toBe(false);
     expect(out.refusal).toMatch(/is claimed/);
     const stored = await row(id);
@@ -1541,8 +1872,14 @@ describe("edit", () => {
     const posted = await post({ title: "blocked edit", body: "do the first thing" });
     const id = posted.job!.id;
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
-    expect((await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "gate", command: "git push origin x" })).ok).toBe(true);
-    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { body: "do the corrected thing", gate_required: true });
+    expect(
+      (await blockJob(jobsEnv(), DRIVER, NOW, id, { reason: "gate", command: "git push origin x" }))
+        .ok,
+    ).toBe(true);
+    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, id, {
+      body: "do the corrected thing",
+      gate_required: true,
+    });
     expect(out.ok, out.refusal).toBe(true);
     expect(out.job!.status).toBe("blocked");
     const resumed = await resumeJob(jobsEnv(), SEAT_AGENT, LATER, id, "seat approved the push");
@@ -1553,24 +1890,52 @@ describe("edit", () => {
   it("each edit keeps the version it replaced, readable newest first through jobs list for the id", async () => {
     const posted = await post({ title: "first title", body: "do the first thing", priority: 1 });
     const id = posted.job!.id;
-    expect((await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { title: "second title", priority: 5 })).ok).toBe(true);
-    const second = await editJob(jobsEnv(), SEAT_AGENT, at("2026-09-10T12:10:00.000Z"), id, { body: "do the second thing" });
+    expect(
+      (await editJob(jobsEnv(), SEAT_AGENT, LATER, id, { title: "second title", priority: 5 })).ok,
+    ).toBe(true);
+    const second = await editJob(jobsEnv(), SEAT_AGENT, at("2026-09-10T12:10:00.000Z"), id, {
+      body: "do the second thing",
+    });
     expect(second.ok, second.refusal).toBe(true);
 
     const server = buildServer(jobsEnv(), SEAT_AGENT);
     const client = new Client({ name: "jobs-edit", version: "1.0.0" });
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
-    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", id } })) as { content: Array<{ text: string }> };
+    const result = (await client.callTool({
+      name: "capsid_work_jobs",
+      arguments: { action: "list", id },
+    })) as { content: Array<{ text: string }> };
     await client.close();
-    const listed = JSON.parse(result.content[0].text) as { versions?: Array<Record<string, unknown>>; jobs: Array<Record<string, unknown>> };
+    const listed = JSON.parse(result.content[0].text) as {
+      versions?: Array<Record<string, unknown>>;
+      jobs: Array<Record<string, unknown>>;
+    };
     expect(listed.jobs[0].title).toBe("second title");
     expect(listed.versions).toHaveLength(2);
-    expect(listed.versions![0]).toMatchObject({ title: "second title", priority: 5, gate_required: 0, body: posted.job!.body, edited_by: SEAT, edited_at: "2026-09-10T12:10:00.000Z" });
-    expect(listed.versions![1]).toMatchObject({ title: "first title", priority: 1, gate_required: 0, body: posted.job!.body, edited_by: SEAT, edited_at: LATER.toISOString() });
+    expect(listed.versions![0]).toMatchObject({
+      title: "second title",
+      priority: 5,
+      gate_required: 0,
+      body: posted.job!.body,
+      edited_by: SEAT,
+      edited_at: "2026-09-10T12:10:00.000Z",
+    });
+    expect(listed.versions![1]).toMatchObject({
+      title: "first title",
+      priority: 1,
+      gate_required: 0,
+      body: posted.job!.body,
+      edited_by: SEAT,
+      edited_at: LATER.toISOString(),
+    });
 
     // The mirror is rewritten with the row, and the edit is audited.
-    const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(jobDocPath(id)).first<{ body: string }>();
+    const doc = await env.DB.prepare(
+      "SELECT body FROM documents WHERE namespace = 'capsid' AND path = ?1",
+    )
+      .bind(jobDocPath(id))
+      .first<{ body: string }>();
     expect(doc!.body).toContain("second title");
     expect(doc!.body).toContain("do the second thing");
     expect(await auditActions(id)).toContain("job-edited");
@@ -1579,7 +1944,9 @@ describe("edit", () => {
   it("a title another open job holds is refused, naming that job", async () => {
     const holder = await post({ title: "taken title" });
     const other = await post({ title: "free title" });
-    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, other.job!.id, { title: "taken title" });
+    const out = await editJob(jobsEnv(), SEAT_AGENT, LATER, other.job!.id, {
+      title: "taken title",
+    });
     expect(out.ok).toBe(false);
     expect(out.refusal).toContain(holder.job!.id);
     expect((await row(other.job!.id))?.title).toBe("free title");
@@ -1632,7 +1999,14 @@ describe("park", () => {
     expect(claimedOut.refusal).toMatch(/is claimed/);
     expect((await row(claimedId))?.status).toBe("claimed");
 
-    expect((await blockJob(jobsEnv(), DRIVER, NOW, claimedId, { reason: "needs a push", command: "git push" })).ok).toBe(true);
+    expect(
+      (
+        await blockJob(jobsEnv(), DRIVER, NOW, claimedId, {
+          reason: "needs a push",
+          command: "git push",
+        })
+      ).ok,
+    ).toBe(true);
     const blockedOut = await parkJob(jobsEnv(), SEAT_AGENT, LATER, claimedId, WHY);
     expect(blockedOut.ok).toBe(false);
     expect(blockedOut.refusal).toMatch(/is blocked/);
@@ -1657,7 +2031,11 @@ describe("park", () => {
     const listed = await listJobs(jobsEnv(), { namespace: "capsid", status: "parked" });
     expect(listed.jobs?.map((j) => j.id)).toEqual([parkedId]);
     expect(listed.jobs?.[0]?.result_summary).toBe(WHY);
-    const mirror = await env.DB.prepare("SELECT status FROM documents WHERE namespace = 'capsid' AND path = ?1").bind(jobDocPath(parkedId)).first<{ status: string }>();
+    const mirror = await env.DB.prepare(
+      "SELECT status FROM documents WHERE namespace = 'capsid' AND path = ?1",
+    )
+      .bind(jobDocPath(parkedId))
+      .first<{ status: string }>();
     expect(mirror?.status).toBe("active");
     expect(await auditActions(parkedId)).toContain("job-parked");
   });

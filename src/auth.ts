@@ -9,7 +9,7 @@ export async function hmacHex(secret: string, payload: string): Promise<string> 
     new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
   return toHex(sig);
@@ -66,13 +66,16 @@ export async function isAdminEmail(env: AdminEnv, email: string): Promise<boolea
 export function adminEmailList(env: AdminEnv): string[] {
   const admin = (env.ADMIN_EMAIL ?? "").trim();
   if (!admin) return [];
-  return [admin, ...(env.CO_OWNER_EMAILS ?? "").split(",")].map((raw) => raw.trim()).filter(Boolean);
+  return [admin, ...(env.CO_OWNER_EMAILS ?? "").split(",")]
+    .map((raw) => raw.trim())
+    .filter(Boolean);
 }
 
 // A grant's props on /mcp, checked on every request: only a grant whose email Access
 // verified as an admin (isAdminEmail) passes. A grant from before the move to Access
 // carries a GitHub login and no email, and fails here, so its client signs in again once.
 export async function adminGrantEmail(env: AdminEnv, props: unknown): Promise<string | null> {
-  const email = props && typeof props === "object" ? (props as { email?: unknown }).email : undefined;
+  const email =
+    props && typeof props === "object" ? (props as { email?: unknown }).email : undefined;
   return typeof email === "string" && (await isAdminEmail(env, email)) ? email : null;
 }

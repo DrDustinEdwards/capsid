@@ -24,7 +24,10 @@ async function connect(opts: FakeD1Options) {
 }
 
 const call = async (client: Client, args: Record<string, unknown>) =>
-  (await client.callTool({ name: "capsid_write_doc", arguments: { action: "write", ...args } })) as { isError?: boolean; content: Array<{ text: string }> };
+  (await client.callTool({
+    name: "capsid_write_doc",
+    arguments: { action: "write", ...args },
+  })) as { isError?: boolean; content: Array<{ text: string }> };
 
 // documentUpsert binds (namespace, path, title, body, ...), so the body is params[3].
 function storedBody(recorded: Array<{ sql: string; params: unknown[] }>): string {
@@ -38,7 +41,12 @@ const doc = (body: string): DocRow => ({ namespace: "capsid", path: "doc.md", ti
 test("append normalizes the appended text and leaves a wide dash already stored untouched", async () => {
   const prior = `stored before the normalizer ${EM} left as it is`;
   const { fake, client } = await connect({ documents: [doc(prior)] });
-  const result = await call(client, { namespace: "capsid", path: "doc.md", mode: "append", body: `added ${EM} by the caller` });
+  const result = await call(client, {
+    namespace: "capsid",
+    path: "doc.md",
+    mode: "append",
+    body: `added ${EM} by the caller`,
+  });
   await client.close();
   assert.equal(result.isError, undefined, result.content[0]?.text);
   assert.equal(storedBody(fake.recorded), `${prior}\n\nadded, by the caller`);
@@ -57,12 +65,21 @@ test("patch normalizes replace_with and leaves the rest of the stored body untou
   });
   await client.close();
   assert.equal(result.isError, undefined, result.content[0]?.text);
-  assert.equal(storedBody(fake.recorded), `line one ${EM} stored\nnew, text\nline three ${EM} stored`);
+  assert.equal(
+    storedBody(fake.recorded),
+    `line one ${EM} stored\nnew, text\nline three ${EM} stored`,
+  );
 });
 
 test("replace still normalizes the whole body, because the caller supplied all of it", async () => {
   const { fake, client } = await connect({ documents: [doc("old")] });
-  const result = await call(client, { namespace: "capsid", path: "doc.md", title: `A ${EM} B`, body: `x ${EM} y`, confirm: true });
+  const result = await call(client, {
+    namespace: "capsid",
+    path: "doc.md",
+    title: `A ${EM} B`,
+    body: `x ${EM} y`,
+    confirm: true,
+  });
   await client.close();
   assert.equal(result.isError, undefined, result.content[0]?.text);
   assert.equal(storedBody(fake.recorded), "x, y");
@@ -70,15 +87,33 @@ test("replace still normalizes the whole body, because the caller supplied all o
 
 test("PLANT: sign_policy refuses and writes nothing when the policy changes between its read and its batch", async () => {
   const fake = fakeD1({
-    documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "p", body: "# policy\n\n- version: 1\n" }],
+    documents: [
+      {
+        namespace: "capsid",
+        path: AUTO_MERGE_POLICY_PATH,
+        title: "p",
+        body: "# policy\n\n- version: 1\n",
+      },
+    ],
     raceAfterPreRead: (rows, target) => {
-      const row = rows.documents.find((d) => d.namespace === target.namespace && d.path === target.path);
+      const row = rows.documents.find(
+        (d) => d.namespace === target.namespace && d.path === target.path,
+      );
       assert.ok(row);
       row.body = "# policy\n\n- version: 2\n";
     },
   });
-  const env = fakeEnv({ DB: fake.db, IMPROVE_SCORE_SECRET: "test-improve-secret", APP_KV: fakeKv().kv });
-  const result = await signPolicyDocument(env, "github:DrDustinEdwards", "capsid", AUTO_MERGE_POLICY_PATH);
+  const env = fakeEnv({
+    DB: fake.db,
+    IMPROVE_SCORE_SECRET: "test-improve-secret",
+    APP_KV: fakeKv().kv,
+  });
+  const result = await signPolicyDocument(
+    env,
+    "github:DrDustinEdwards",
+    "capsid",
+    AUTO_MERGE_POLICY_PATH,
+  );
   assert.equal(result.ok, false, "the signer overwrote a policy edit with the signed older body");
   assert.match(result.ok ? "" : result.error, /changed or was removed after sign_policy read it/);
   // The pin was written before the batch aborted, so the refusal must not say nothing was written.
@@ -88,6 +123,6 @@ test("PLANT: sign_policy refuses and writes nothing when the policy changes betw
   assert.equal(
     fake.rows.documents.find((d) => d.path === AUTO_MERGE_POLICY_PATH)?.body,
     "# policy\n\n- version: 2\n",
-    "the newer policy must be left in place"
+    "the newer policy must be left in place",
   );
 });

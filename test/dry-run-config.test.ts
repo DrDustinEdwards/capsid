@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -22,9 +29,19 @@ test("it writes wrangler.dryrun.jsonc and leaves an existing wrangler.jsonc alon
     const run = spawnSync(process.execPath, [SCRIPT], { cwd: dir, encoding: "utf8" });
     assert.equal(run.status, 0, run.stderr);
 
-    assert.equal(readFileSync(join(dir, "wrangler.jsonc"), "utf8"), real, "the real wrangler.jsonc was overwritten");
-    assert.ok(existsSync(join(dir, "wrangler.dryrun.jsonc")), "wrangler.dryrun.jsonc was not written");
-    assert.doesNotMatch(readFileSync(join(dir, "wrangler.dryrun.jsonc"), "utf8"), /YOUR_[A-Z0-9_]+/);
+    assert.equal(
+      readFileSync(join(dir, "wrangler.jsonc"), "utf8"),
+      real,
+      "the real wrangler.jsonc was overwritten",
+    );
+    assert.ok(
+      existsSync(join(dir, "wrangler.dryrun.jsonc")),
+      "wrangler.dryrun.jsonc was not written",
+    );
+    assert.doesNotMatch(
+      readFileSync(join(dir, "wrangler.dryrun.jsonc"), "utf8"),
+      /YOUR_[A-Z0-9_]+/,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -37,9 +54,22 @@ test("the example serves the dashboard with every request reaching the Worker fi
   const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
   const line = example.split("\n").find((l) => l.trim().startsWith('"assets"'));
   assert.ok(line, "wrangler.jsonc.example has no assets block");
-  const assets = JSON.parse(line.trim().replace(/^"assets":\s*/, "").replace(/,$/, "")) as Record<string, unknown>;
-  assert.equal(assets.run_worker_first, true, "run_worker_first must be true, or navigations can be answered with index.html");
-  assert.equal(assets.not_found_handling, "none", "the platform's own fallback would run before the Portal gate");
+  const assets = JSON.parse(
+    line
+      .trim()
+      .replace(/^"assets":\s*/, "")
+      .replace(/,$/, ""),
+  ) as Record<string, unknown>;
+  assert.equal(
+    assets.run_worker_first,
+    true,
+    "run_worker_first must be true, or navigations can be answered with index.html",
+  );
+  assert.equal(
+    assets.not_found_handling,
+    "none",
+    "the platform's own fallback would run before the Portal gate",
+  );
   assert.equal(assets.binding, "ASSETS");
   assert.equal(assets.directory, "./dashboard/build/client");
 });
@@ -50,10 +80,19 @@ test("the dry run drops the assets block, since `npm run types` builds no dashbo
     copyFileSync(join(ROOT, "wrangler.jsonc.example"), join(dir, "wrangler.jsonc.example"));
     const run = spawnSync(process.execPath, [SCRIPT], { cwd: dir, encoding: "utf8" });
     assert.equal(run.status, 0, run.stderr);
-    assert.doesNotMatch(readFileSync(join(dir, "wrangler.dryrun.jsonc"), "utf8"), /"assets"|ASSETS-/);
+    assert.doesNotMatch(
+      readFileSync(join(dir, "wrangler.dryrun.jsonc"), "utf8"),
+      /"assets"|ASSETS-/,
+    );
 
     // A missing marker fails loudly rather than keeping the block.
-    writeFileSync(join(dir, "wrangler.jsonc.example"), readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8").replace("// ASSETS-END", "// gone"));
+    writeFileSync(
+      join(dir, "wrangler.jsonc.example"),
+      readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8").replace(
+        "// ASSETS-END",
+        "// gone",
+      ),
+    );
     const broken = spawnSync(process.execPath, [SCRIPT], { cwd: dir, encoding: "utf8" });
     assert.notEqual(broken.status, 0);
     assert.match(broken.stderr, /ASSETS-BEGIN \/ ASSETS-END/);

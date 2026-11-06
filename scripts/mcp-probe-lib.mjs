@@ -46,7 +46,8 @@ export function rpcMessage(text) {
     if (!line.startsWith("data:")) continue;
     try {
       const parsed = JSON.parse(line.slice(5).trim());
-      if (parsed && typeof parsed === "object" && ("result" in parsed || "error" in parsed)) return parsed;
+      if (parsed && typeof parsed === "object" && ("result" in parsed || "error" in parsed))
+        return parsed;
     } catch {
       // A data line that is not JSON is not the answer; keep reading.
     }
@@ -55,7 +56,11 @@ export function rpcMessage(text) {
 }
 
 function envelope(era) {
-  return { "io.modelcontextprotocol/protocolVersion": era, "io.modelcontextprotocol/clientInfo": CLIENT_INFO, "io.modelcontextprotocol/clientCapabilities": {} };
+  return {
+    "io.modelcontextprotocol/protocolVersion": era,
+    "io.modelcontextprotocol/clientInfo": CLIENT_INFO,
+    "io.modelcontextprotocol/clientCapabilities": {},
+  };
 }
 
 // The requests, in order, for one era. Each names what its answer must show.
@@ -63,16 +68,50 @@ export function eraSteps(era) {
   const modern = era !== "2025-11-25";
   const params = (p = {}) => (modern ? { ...p, _meta: envelope(era) } : p);
   const headers = (method, name) =>
-    modern ? { "mcp-method": method, "mcp-protocol-version": era, ...(name ? { "mcp-name": name } : {}) } : method === "initialize" ? {} : { "mcp-protocol-version": era };
-  const read = { name: READ_TOOL, arguments: { namespace: PROBE_READ.namespace, path: PROBE_READ.path } };
+    modern
+      ? { "mcp-method": method, "mcp-protocol-version": era, ...(name ? { "mcp-name": name } : {}) }
+      : method === "initialize"
+        ? {}
+        : { "mcp-protocol-version": era };
+  const read = {
+    name: READ_TOOL,
+    arguments: { namespace: PROBE_READ.namespace, path: PROBE_READ.path },
+  };
   const steps = modern
-    ? [{ label: "server/discover", method: "server/discover", params: params(), headers: headers("server/discover") }]
+    ? [
+        {
+          label: "server/discover",
+          method: "server/discover",
+          params: params(),
+          headers: headers("server/discover"),
+        },
+      ]
     : [
-        { label: "initialize", method: "initialize", params: { protocolVersion: era, capabilities: {}, clientInfo: CLIENT_INFO }, headers: headers("initialize") },
-        { label: "notifications/initialized", method: "notifications/initialized", notification: true, headers: headers("notifications/initialized") },
+        {
+          label: "initialize",
+          method: "initialize",
+          params: { protocolVersion: era, capabilities: {}, clientInfo: CLIENT_INFO },
+          headers: headers("initialize"),
+        },
+        {
+          label: "notifications/initialized",
+          method: "notifications/initialized",
+          notification: true,
+          headers: headers("notifications/initialized"),
+        },
       ];
-  steps.push({ label: "tools/list", method: "tools/list", params: params(), headers: headers("tools/list") });
-  steps.push({ label: `tools/call ${READ_TOOL}`, method: "tools/call", params: params(read), headers: headers("tools/call", READ_TOOL) });
+  steps.push({
+    label: "tools/list",
+    method: "tools/list",
+    params: params(),
+    headers: headers("tools/list"),
+  });
+  steps.push({
+    label: `tools/call ${READ_TOOL}`,
+    method: "tools/call",
+    params: params(read),
+    headers: headers("tools/call", READ_TOOL),
+  });
   return steps.map((s, i) => ({ ...s, id: s.notification ? undefined : i + 1, era }));
 }
 
@@ -89,31 +128,43 @@ export function stepProblem(step, status, text) {
   if (status === 401 || status === 403) {
     return `${where}: HTTP ${status}. The probe key was refused: is CAPSID_LIVE_PROBE_KEY the live-probe agent's key, and is that agent unrevoked? A deploy that broke key resolution answers this too.`;
   }
-  if (step.notification) return status >= 200 && status < 300 ? null : `${where}: HTTP ${status}, expected 2xx`;
-  if (status !== 200) return `${where}: HTTP ${status}, expected 200${text ? `: ${String(text).slice(0, 160)}` : ""}`;
+  if (step.notification)
+    return status >= 200 && status < 300 ? null : `${where}: HTTP ${status}, expected 2xx`;
+  if (status !== 200)
+    return `${where}: HTTP ${status}, expected 200${text ? `: ${String(text).slice(0, 160)}` : ""}`;
   const message = rpcMessage(text);
   if (!message) return `${where}: the answer is not JSON-RPC: ${String(text).slice(0, 160)}`;
-  if (message.error) return `${where}: JSON-RPC error ${message.error.code}: ${String(message.error.message).slice(0, 200)}`;
+  if (message.error)
+    return `${where}: JSON-RPC error ${message.error.code}: ${String(message.error.message).slice(0, 200)}`;
   const result = message.result;
   if (!result || typeof result !== "object") return `${where}: no result`;
   switch (step.method) {
     case "initialize":
-      if (result.protocolVersion !== step.era) return `${where}: negotiated ${JSON.stringify(result.protocolVersion)}, expected ${step.era}`;
-      if (result.serverInfo?.name !== "capsid") return `${where}: serverInfo.name is ${JSON.stringify(result.serverInfo?.name)}, expected "capsid"`;
+      if (result.protocolVersion !== step.era)
+        return `${where}: negotiated ${JSON.stringify(result.protocolVersion)}, expected ${step.era}`;
+      if (result.serverInfo?.name !== "capsid")
+        return `${where}: serverInfo.name is ${JSON.stringify(result.serverInfo?.name)}, expected "capsid"`;
       return null;
     case "server/discover": {
       const versions = Array.isArray(result.supportedVersions) ? result.supportedVersions : [];
-      if (!versions.includes(step.era)) return `${where}: supportedVersions ${JSON.stringify(versions)} does not include ${step.era}`;
+      if (!versions.includes(step.era))
+        return `${where}: supportedVersions ${JSON.stringify(versions)} does not include ${step.era}`;
       const name = result._meta?.["io.modelcontextprotocol/serverInfo"]?.name;
-      if (name !== "capsid") return `${where}: serverInfo name is ${JSON.stringify(name)}, expected "capsid"`;
+      if (name !== "capsid")
+        return `${where}: serverInfo name is ${JSON.stringify(name)}, expected "capsid"`;
       return null;
     }
     case "tools/list": {
       const tools = Array.isArray(result.tools) ? result.tools : [];
-      if (tools.length !== EXPECTED_TOOLS) return `${where}: ${tools.length} tools, expected ${EXPECTED_TOOLS}`;
-      if (!tools.some((t) => t?.name === READ_TOOL)) return `${where}: no ${READ_TOOL} tool in the list`;
+      if (tools.length !== EXPECTED_TOOLS)
+        return `${where}: ${tools.length} tools, expected ${EXPECTED_TOOLS}`;
+      if (!tools.some((t) => t?.name === READ_TOOL))
+        return `${where}: no ${READ_TOOL} tool in the list`;
       // Claude Code refuses a 2026-07-28 tools/list without its cache fields.
-      if (step.era !== "2025-11-25" && (typeof result.ttlMs !== "number" || typeof result.cacheScope !== "string")) {
+      if (
+        step.era !== "2025-11-25" &&
+        (typeof result.ttlMs !== "number" || typeof result.cacheScope !== "string")
+      ) {
         return `${where}: no ttlMs/cacheScope on a ${step.era} list, which Claude Code refuses`;
       }
       return null;
@@ -132,7 +183,8 @@ export function stepProblem(step, status, text) {
       if (doc?.namespace !== PROBE_READ.namespace || doc?.path !== PROBE_READ.path) {
         return `${where}: did not return ${PROBE_READ.namespace}/${PROBE_READ.path}: ${body.slice(0, 160)}`;
       }
-      if (typeof doc.body !== "string" || !doc.body.includes(PROBE_READ.word)) return `${where}: the document came back without the word "${PROBE_READ.word}"`;
+      if (typeof doc.body !== "string" || !doc.body.includes(PROBE_READ.word))
+        return `${where}: the document came back without the word "${PROBE_READ.word}"`;
       return null;
     }
     default:

@@ -6,7 +6,17 @@ import { type RouteConfig, index, layout, prefix, route } from "@react-router/de
 // capsid Worker: at the root of portal.dustinedwards.info behind the sign-in, and under /demos/
 // with sample data and no sign-in (src/portal-render.ts there). Ids carry the tree's name, since
 // React Router needs one id per route.
-const VIEWS = ["health", "prs", "queue", "projects", "activity", "agents", "packages", "library", "settings"] as const;
+const VIEWS = [
+  "health",
+  "prs",
+  "queue",
+  "projects",
+  "activity",
+  "agents",
+  "packages",
+  "library",
+  "settings",
+] as const;
 
 function pages(tree: "portal" | "demos") {
   return layout("routes/shell.tsx", { id: `${tree}-shell` }, [
@@ -15,7 +25,10 @@ function pages(tree: "portal" | "demos") {
     route("sites", "routes/sites.tsx", { id: `${tree}-sites` }),
     route("sites/:site", "routes/site.tsx", { id: `${tree}-site` }),
     route("sites/:site/:type/:id", "routes/site.tsx", { id: `${tree}-site-drawer` }),
-    ...VIEWS.flatMap((v) => [route(v, `routes/${v}.tsx`, { id: `${tree}-${v}` }), route(`${v}/:type/:id`, `routes/${v}.tsx`, { id: `${tree}-${v}-drawer` })]),
+    ...VIEWS.flatMap((v) => [
+      route(v, `routes/${v}.tsx`, { id: `${tree}-${v}` }),
+      route(`${v}/:type/:id`, `routes/${v}.tsx`, { id: `${tree}-${v}-drawer` }),
+    ]),
   ]);
 }
 

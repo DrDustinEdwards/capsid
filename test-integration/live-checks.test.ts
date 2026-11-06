@@ -8,13 +8,21 @@ import { liveChecks, parseLiveConfig, readLiveConfig } from "../src/live-checks"
 const BODY = "# Live checks\n\n- site sample beacon /\n- site sample nobeacon /account\n";
 
 async function put(status: string, body: string): Promise<void> {
-  await env.DB.prepare("DELETE FROM documents WHERE namespace = 'capsid' AND path = 'policy/live-checks.md'").run();
-  await env.DB.prepare("INSERT INTO documents (namespace, path, title, body, status) VALUES ('capsid', 'policy/live-checks.md', 'Live checks', ?1, ?2)").bind(body, status).run();
+  await env.DB.prepare(
+    "DELETE FROM documents WHERE namespace = 'capsid' AND path = 'policy/live-checks.md'",
+  ).run();
+  await env.DB.prepare(
+    "INSERT INTO documents (namespace, path, title, body, status) VALUES ('capsid', 'policy/live-checks.md', 'Live checks', ?1, ?2)",
+  )
+    .bind(body, status)
+    .run();
 }
 
 describe("readLiveConfig", () => {
   it("is null with no document, and null for one that is not published", async () => {
-    await env.DB.prepare("DELETE FROM documents WHERE namespace = 'capsid' AND path = 'policy/live-checks.md'").run();
+    await env.DB.prepare(
+      "DELETE FROM documents WHERE namespace = 'capsid' AND path = 'policy/live-checks.md'",
+    ).run();
     expect(await readLiveConfig(env.DB)).toBeNull();
     await put("draft", BODY);
     expect(await readLiveConfig(env.DB)).toBeNull();
@@ -30,7 +38,23 @@ describe("readLiveConfig", () => {
         { namespace: "sample", kind: "nobeacon", path: "/account" },
       ],
     });
-    const out = await liveChecks(config, [], [], { fetchImpl: async () => { throw new Error("fetched"); }, head: async () => { throw new Error("read"); }, analytics: async () => { throw new Error("analytics"); } }, new Date());
+    const out = await liveChecks(
+      config,
+      [],
+      [],
+      {
+        fetchImpl: async () => {
+          throw new Error("fetched");
+        },
+        head: async () => {
+          throw new Error("read");
+        },
+        analytics: async () => {
+          throw new Error("analytics");
+        },
+      },
+      new Date(),
+    );
     expect(out.findings.map((f) => f.fingerprint)).toEqual(["live-config-unknown-site-sample"]);
   });
 });

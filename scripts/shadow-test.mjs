@@ -25,12 +25,15 @@ const MAX_TURNS = "40";
 
 function summary(line) {
   console.log(line);
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Shadow test\n\n${line}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY)
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Shadow test\n\n${line}\n`);
 }
 
 async function oidcToken() {
   const url = `${process.env.ACTIONS_ID_TOKEN_REQUEST_URL}&audience=capsid-shadow`;
-  const resp = await fetch(url, { headers: { Authorization: `bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` } });
+  const resp = await fetch(url, {
+    headers: { Authorization: `bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+  });
   if (!resp.ok) throw new Error(`the OIDC token request answered ${resp.status}`);
   return (await resp.json()).value;
 }
@@ -65,7 +68,8 @@ function prompt(job, base) {
 
 async function main() {
   const base = process.argv[2];
-  if (!/^[0-9a-f]{40}$/.test(base ?? "")) throw new Error("usage: node scripts/shadow-test.mjs <base-sha>");
+  if (!/^[0-9a-f]{40}$/.test(base ?? ""))
+    throw new Error("usage: node scripts/shadow-test.mjs <base-sha>");
   const token = await oidcToken();
   const auth = { Authorization: `Bearer ${token}` };
   const read = await fetch(`${CAPSID}/shadow/job`, { headers: auth });
@@ -80,19 +84,41 @@ async function main() {
 
   let written = job.test;
   if (!written) {
-    if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) return summary("Not run: the repository secret CLAUDE_CODE_OAUTH_TOKEN is not set.");
+    if (!process.env.CLAUDE_CODE_OAUTH_TOKEN)
+      return summary("Not run: the repository secret CLAUDE_CODE_OAUTH_TOKEN is not set.");
     // --restricted keeps the file tools inside the base directory, so the head's checkout
     // (the diff) cannot be read, and with dontAsk any call not allowed here is denied, so
     // the only commands the model runs are the two test runs (code.claude.com/docs/en/cli-reference).
-    const allowed = ["Read", "Glob", "Grep", "Write", "Edit", `Bash(npx vitest run ${PATHS[0]})`, `Bash(node --import ./test/resolve-ts.mjs --test ${PATHS[1]})`].join(",");
-    const args = ["-p", prompt(job, base), "--restricted", "--tools", "Read,Glob,Grep,Write,Edit,Bash", "--allowedTools", allowed, "--permission-mode", "dontAsk"];
+    const allowed = [
+      "Read",
+      "Glob",
+      "Grep",
+      "Write",
+      "Edit",
+      `Bash(npx vitest run ${PATHS[0]})`,
+      `Bash(node --import ./test/resolve-ts.mjs --test ${PATHS[1]})`,
+    ].join(",");
+    const args = [
+      "-p",
+      prompt(job, base),
+      "--restricted",
+      "--tools",
+      "Read,Glob,Grep,Write,Edit,Bash",
+      "--allowedTools",
+      allowed,
+      "--permission-mode",
+      "dontAsk",
+    ];
     spawnSync("claude", [...args, "--max-turns", MAX_TURNS, "--output-format", "json"], {
       cwd: baseDir,
       stdio: ["ignore", "ignore", "inherit"],
       timeout: 25 * 60 * 1000,
     });
     const found = PATHS.filter((p) => existsSync(path.join(baseDir, p)));
-    if (found.length !== 1) return summary(`No test came back: the model wrote ${found.length === 0 ? "no test file" : "both test files"}.`);
+    if (found.length !== 1)
+      return summary(
+        `No test came back: the model wrote ${found.length === 0 ? "no test file" : "both test files"}.`,
+      );
     written = { path: found[0], test: readFileSync(path.join(baseDir, found[0]), "utf8") };
   } else {
     writeFileSync(path.join(baseDir, written.path), written.test);
@@ -106,7 +132,9 @@ async function main() {
     headers: { ...auth, "Content-Type": "application/json" },
     body: JSON.stringify({ path: written.path, test: written.test, base: onBase, head: onHead }),
   });
-  summary(`${job.job_id}: ${written.path} ${onBase} on the base and ${onHead} on the head${job.test ? " (the test kept from an earlier push)" : ""}. Capsid answered ${sent.status}.`);
+  summary(
+    `${job.job_id}: ${written.path} ${onBase} on the base and ${onHead} on the head${job.test ? " (the test kept from an earlier push)" : ""}. Capsid answered ${sent.status}.`,
+  );
 }
 
 main().catch((err) => summary(`Not finished: ${err instanceof Error ? err.message : String(err)}`));

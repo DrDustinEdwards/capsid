@@ -8,7 +8,13 @@ import { BENCH_ENABLED_KEY } from "../src/bench";
 // tasks with no registration.
 
 async function hmacHex(key: string, message: string): Promise<string> {
-  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const k = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
   const sig = await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -18,7 +24,14 @@ async function post(path: string, body: Record<string, unknown>) {
   const ts = new Date().toISOString().replace(/\.\d+Z$/, "Z");
   return SELF.fetch(`https://capsid.test${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Bench-Timestamp": ts, "X-Bench-Signature": await hmacHex("integration-bench-secret-not-a-real-one", `${ts}.${text}`) },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Bench-Timestamp": ts,
+      "X-Bench-Signature": await hmacHex(
+        "integration-bench-secret-not-a-real-one",
+        `${ts}.${text}`,
+      ),
+    },
     body: text,
   });
 }
@@ -27,22 +40,37 @@ let n = 0;
 async function registerTask(split: string): Promise<string> {
   const task_id = `sample__draw-${++n}`;
   const response = await post("/bench/tasks", {
-    task: { task_id, source: "swe-rebench", split, repo: "sample/repo", issue_created_at: "2026-07-15T00:00:00Z", fail_to_pass_count: 2, pass_to_pass_count: 3 },
+    task: {
+      task_id,
+      source: "swe-rebench",
+      split,
+      repo: "sample/repo",
+      issue_created_at: "2026-07-15T00:00:00Z",
+      fail_to_pass_count: 2,
+      pass_to_pass_count: 3,
+    },
   });
   expect(response.status, await response.clone().text()).toBe(200);
   return task_id;
 }
 
 const REG = { registration_sha256: "a".repeat(64), frame_sha256: "b".repeat(64), seed: "20261019" };
-const draw = (from: number, tasks: string[], registration = REG) => post("/bench/draw", { registration, from, tasks });
-const start = (task_id: string, arm = "baseline") => post("/bench/start", { task_id, arm, gh_run: "123.1" });
+const draw = (from: number, tasks: string[], registration = REG) =>
+  post("/bench/draw", { registration, from, tasks });
+const start = (task_id: string, arm = "baseline") =>
+  post("/bench/start", { task_id, arm, gh_run: "123.1" });
 
 describe("the registration lock", () => {
   it("starts a pilot or excluded task before the registration and refuses a full task until it is on the recorded draw", async () => {
     await env.APP_KV.put(BENCH_ENABLED_KEY, "on");
     const pilot = await registerTask("pilot");
     const excluded = await registerTask("excluded");
-    const [a, b, c, off] = [await registerTask("full"), await registerTask("full"), await registerTask("full"), await registerTask("full")];
+    const [a, b, c, off] = [
+      await registerTask("full"),
+      await registerTask("full"),
+      await registerTask("full"),
+      await registerTask("full"),
+    ];
     expect((await start(pilot)).status).toBe(200);
     expect((await start(excluded)).status).toBe(200);
     const early = await start(a);
@@ -77,8 +105,12 @@ describe("the registration lock", () => {
     expect((await start(excluded)).status).toBe(409);
 
     // Once a drawn task has a model run, the draw cannot shrink and the registration stays.
-    await expect(env.DB.prepare("DELETE FROM bench_draw WHERE task_id = ?1").bind(b).run()).rejects.toThrow(/cannot shrink/);
+    await expect(
+      env.DB.prepare("DELETE FROM bench_draw WHERE task_id = ?1").bind(b).run(),
+    ).rejects.toThrow(/cannot shrink/);
     await expect(env.DB.prepare("DELETE FROM bench_registration").run()).rejects.toThrow(/frozen/);
-    await expect(env.DB.prepare("UPDATE bench_draw SET task_id = ?1 WHERE position = 1").bind(off).run()).rejects.toThrow(/insert-only/);
+    await expect(
+      env.DB.prepare("UPDATE bench_draw SET task_id = ?1 WHERE position = 1").bind(off).run(),
+    ).rejects.toThrow(/insert-only/);
   });
 });

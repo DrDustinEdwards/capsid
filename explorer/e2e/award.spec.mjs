@@ -27,7 +27,8 @@ const INPUT_BUDGET_MS = 100;
 // The network opens on the hexagons, and a phone on the plain map (Capsomer's system map): a system is the one shown.
 const HEX = ".cap-system-map-hex:not([hidden])";
 const PLAIN = ".cap-system-map-network:not([hidden])";
-const system = (/** @type {string} */ id) => `${HEX} a.cap-system-map-cell[data-id="${id}"], ${PLAIN} .cap-system-map-card[data-id="${id}"]`;
+const system = (/** @type {string} */ id) =>
+  `${HEX} a.cap-system-map-cell[data-id="${id}"], ${PLAIN} .cap-system-map-card[data-id="${id}"]`;
 const LINKS = `${HEX} a.cap-system-map-cell, ${PLAIN} .cap-system-map-card-name a`;
 
 /** @param {import("@playwright/test").Page} page @param {string} [path] */
@@ -55,10 +56,20 @@ function warn(text) {
   test.info().annotations.push({ type: "warning", description: text });
 }
 
-test("keyboard: every system in the model, and no other, is a hexagon and a card whose link Tab reaches, with script and without", async ({ page, browser }) => {
+test("keyboard: every system in the model, and no other, is a hexagon and a card whose link Tab reaches, with script and without", async ({
+  page,
+  browser,
+}) => {
   const linked = async (/** @type {import("@playwright/test").Page} */ p) => {
-    const cards = await p.$$eval(".cap-system-map-card[data-id]", (els) => els.filter((e) => e.querySelector(".cap-system-map-card-name a[href]")).map((e) => /** @type {HTMLElement} */ (e).dataset.id ?? "").sort());
-    const cells = await p.$$eval("a.cap-system-map-cell[data-id][href]", (els) => els.map((e) => /** @type {HTMLElement} */ (e).dataset.id ?? "").sort());
+    const cards = await p.$$eval(".cap-system-map-card[data-id]", (els) =>
+      els
+        .filter((e) => e.querySelector(".cap-system-map-card-name a[href]"))
+        .map((e) => /** @type {HTMLElement} */ (e).dataset.id ?? "")
+        .sort(),
+    );
+    const cells = await p.$$eval("a.cap-system-map-cell[data-id][href]", (els) =>
+      els.map((e) => /** @type {HTMLElement} */ (e).dataset.id ?? "").sort(),
+    );
     return { cards, cells };
   };
   await open(page);
@@ -68,7 +79,7 @@ test("keyboard: every system in the model, and no other, is a hexagon and a card
   /** @type {Set<string>} */
   const seen = new Set();
   for (let i = 0; i < IDS.length; i++) {
-    seen.add(await page.locator(".cap-system-map").getAttribute("data-lit") ?? "");
+    seen.add((await page.locator(".cap-system-map").getAttribute("data-lit")) ?? "");
     await page.keyboard.press("Tab");
   }
   expect([...seen].sort()).toEqual(IDS);
@@ -80,20 +91,32 @@ test("keyboard: every system in the model, and no other, is a hexagon and a card
   await context.close();
 });
 
-test("layout shift: lighting each system moves nothing, and stepping a flow moves nothing on the page", async ({ page }) => {
+test("layout shift: lighting each system moves nothing, and stepping a flow moves nothing on the page", async ({
+  page,
+}) => {
   /** The map and the step heading by their place in the document, which must not move by a pixel. */
   const place = (/** @type {string[]} */ selectors) =>
-    page.evaluate((sels) => sels.map((s) => Math.round((document.querySelector(s)?.getBoundingClientRect().top ?? NaN) + scrollY)), selectors);
+    page.evaluate(
+      (sels) =>
+        sels.map((s) =>
+          Math.round((document.querySelector(s)?.getBoundingClientRect().top ?? NaN) + scrollY),
+        ),
+      selectors,
+    );
   /** With `strict` every shift counts, input-driven ones included; without, only the ones CLS counts. */
   const observe = (strict = true) =>
     page.evaluate((strict) => {
       const w = /** @type {Window & { __shift?: number }} */ (window);
       w.__shift = 0;
       new PerformanceObserver((list) => {
-        for (const e of /** @type {Array<PerformanceEntry & { value: number, hadRecentInput: boolean }>} */ (list.getEntries())) if (strict || !e.hadRecentInput) w.__shift = (w.__shift ?? 0) + e.value;
+        for (const e of /** @type {Array<PerformanceEntry & { value: number, hadRecentInput: boolean }>} */ (
+          list.getEntries()
+        ))
+          if (strict || !e.hadRecentInput) w.__shift = (w.__shift ?? 0) + e.value;
       }).observe({ type: "layout-shift" });
     }, strict);
-  const shift = () => page.evaluate(() => /** @type {Window & { __shift?: number }} */ (window).__shift ?? -1);
+  const shift = () =>
+    page.evaluate(() => /** @type {Window & { __shift?: number }} */ (window).__shift ?? -1);
   const settle = () => page.waitForTimeout(400);
 
   await open(page);
@@ -126,17 +149,28 @@ test("layout shift: lighting each system moves nothing, and stepping a flow move
   expect(drift, "the map or the step heading moved while stepping").toBe(0);
 });
 
-test("INP proxy: under 4x CPU throttling lighting each system by focus is handled under 100 ms", async ({ page }) => {
+test("INP proxy: under 4x CPU throttling lighting each system by focus is handled under 100 ms", async ({
+  page,
+}) => {
   await open(page);
   await page.evaluate(() => {
-    const w = /** @type {Window & { __events?: Array<{ duration: number, work: number }> }} */ (window);
+    const w = /** @type {Window & { __events?: Array<{ duration: number, work: number }> }} */ (
+      window
+    );
     w.__events = [];
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
         const e = /** @type {PerformanceEventTiming & { interactionId?: number }} */ (entry);
-        if (e.interactionId) w.__events?.push({ duration: e.duration, work: e.processingEnd - e.startTime });
+        if (e.interactionId)
+          w.__events?.push({ duration: e.duration, work: e.processingEnd - e.startTime });
       }
-    }).observe(/** @type {PerformanceObserverInit} */ ({ type: "event", durationThreshold: 16, buffered: true }));
+    }).observe(
+      /** @type {PerformanceObserverInit} */ ({
+        type: "event",
+        durationThreshold: 16,
+        buffered: true,
+      }),
+    );
   });
   await throttled(page, async () => {
     // Each key waits for the last one's transition, as a reader's does.
@@ -147,12 +181,21 @@ test("INP proxy: under 4x CPU throttling lighting each system by focus is handle
     }
   });
   await page.waitForTimeout(500);
-  const events = await page.evaluate(() => /** @type {Window & { __events?: Array<{ duration: number, work: number }> }} */ (window).__events ?? []);
+  const events = await page.evaluate(
+    () =>
+      /** @type {Window & { __events?: Array<{ duration: number, work: number }> }} */ (window)
+        .__events ?? [],
+  );
   // Event Timing reports nothing under 16 ms, and under 4x throttling a click paints for longer,
   // so an empty list is an observer that saw nothing, not a fast page.
   expect(events.length, "no interaction was measured").toBeGreaterThan(0);
   const work = Math.max(...events.map((e) => e.work));
   const whole = Math.max(...events.map((e) => e.duration));
-  expect(work, `slowest input delay plus handling over ${events.length} interactions`).toBeLessThan(INPUT_BUDGET_MS);
-  if (whole >= INPUT_BUDGET_MS) warn(`slowest interaction to its next paint ${Math.round(whole)} ms, over ${INPUT_BUDGET_MS} ms (software paint in a GPU-less runner; a real phone is the release's check)`);
+  expect(work, `slowest input delay plus handling over ${events.length} interactions`).toBeLessThan(
+    INPUT_BUDGET_MS,
+  );
+  if (whole >= INPUT_BUDGET_MS)
+    warn(
+      `slowest interaction to its next paint ${Math.round(whole)} ms, over ${INPUT_BUDGET_MS} ms (software paint in a GPU-less runner; a real phone is the release's check)`,
+    );
 });

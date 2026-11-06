@@ -11,7 +11,10 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 const KEY = "capsid_agent_" + "a".repeat(64);
 
-async function envWithAgent(overrides: Record<string, unknown> = {}, rowOverrides: Record<string, unknown> = {}) {
+async function envWithAgent(
+  overrides: Record<string, unknown> = {},
+  rowOverrides: Record<string, unknown> = {},
+) {
   const key_hash = await sha256Hex(KEY);
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
@@ -34,7 +37,8 @@ async function envWithAgent(overrides: Record<string, unknown> = {}, rowOverride
   return { d1, env: fakeEnv({ DB: d1.db, ...overrides }) };
 }
 
-const bearer = (key: string) => new Request("https://capsid.example/ops/mcp", { headers: { Authorization: `Bearer ${key}` } });
+const bearer = (key: string) =>
+  new Request("https://capsid.example/ops/mcp", { headers: { Authorization: `Bearer ${key}` } });
 
 test("a minted key resolves to its agent row, with that row's scopes and audit identity", async () => {
   const { env } = await envWithAgent();
@@ -45,7 +49,11 @@ test("a minted key resolves to its agent row, with that row's scopes and audit i
   assert.equal(resolved.agent.id, "agent_0123456789ab");
   assert.equal(resolved.agent.actor, "agent:capsid-driver", "the audit actor is the agent name");
   assert.deepEqual(resolved.agent.scopes.namespaces, ["capsid"]);
-  assert.equal(resolved.agent.admin, false, "a minted agent is never admin: it cannot mint another");
+  assert.equal(
+    resolved.agent.admin,
+    false,
+    "a minted agent is never admin: it cannot mint another",
+  );
   for (const flag of SCOPE_FLAGS) assert.equal(resolved.agent.scopes.flags[flag], false);
 });
 
@@ -63,7 +71,11 @@ test("no bearer, or a bearer nothing knows, resolves to nothing at all", async (
 test("an OAuth admin session is the synthetic agent named admin, holding every scope", () => {
   const agent = adminAgentForEmail("admin@example.com");
   assert.equal(agent.name, "admin");
-  assert.equal(agent.actor, "access:admin@example.com", "the email is more specific than the synthetic name, so the audit row keeps it");
+  assert.equal(
+    agent.actor,
+    "access:admin@example.com",
+    "the email is more specific than the synthetic name, so the audit row keeps it",
+  );
   assert.equal(agent.scopes.namespaces, "*");
   assert.equal(agent.scopes.tools, "*");
   assert.deepEqual(agent.scopes.grants, ["read", "write"]);
@@ -79,7 +91,11 @@ test("resolving touches last_seen, and does it off the answer rather than inside
   await resolved.touch();
   const update = d1.recorded.find((r) => /UPDATE agents SET last_seen/i.test(r.sql));
   assert.ok(update, "touch() did not update last_seen");
-  assert.equal(update.params[0], "agent_0123456789ab", "last_seen was written against the wrong row");
+  assert.equal(
+    update.params[0],
+    "agent_0123456789ab",
+    "last_seen was written against the wrong row",
+  );
 });
 
 test("the legacy grant vocabulary still builds a caller, which is what keeps the tests and the fallback honest", () => {

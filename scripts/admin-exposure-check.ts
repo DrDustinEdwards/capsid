@@ -28,7 +28,8 @@ export const ADMIN_URL = /https:\/\/mcp\.dustinedwards\.info\/mcp(?![A-Za-z0-9_.
 // `claude mcp list` prints one `name: target - status` line per server.
 const SERVER_LINE = /^(.+?): (.+?) - \S/;
 
-export const seatKeyPath = (home: string = homedir()): string => join(home, ".capsid", "agent-seat.key");
+export const seatKeyPath = (home: string = homedir()): string =>
+  join(home, ".capsid", "agent-seat.key");
 
 /** `text` is the stdout of `claude mcp list`. */
 export function classify(text: string): { servers_seen: number; admin_servers: string[] } {
@@ -49,7 +50,8 @@ type Run = { status: number | null; stdout?: string | null; stderr?: string | nu
 
 export function checkAdminExposure({
   cwd,
-  run = (dir) => spawnSync("claude", ["mcp", "list"], { cwd: dir, encoding: "utf8", timeout: 120_000 }),
+  run = (dir) =>
+    spawnSync("claude", ["mcp", "list"], { cwd: dir, encoding: "utf8", timeout: 120_000 }),
   exists = existsSync,
   home = homedir(),
 }: {
@@ -57,7 +59,13 @@ export function checkAdminExposure({
   run?: (cwd: string) => Run;
   exists?: (path: string) => boolean;
   home?: string;
-}): { ok: boolean; servers_seen: number; admin_servers: string[]; seat_key_present: boolean; reasons: string[] } {
+}): {
+  ok: boolean;
+  servers_seen: number;
+  admin_servers: string[];
+  seat_key_present: boolean;
+  reasons: string[];
+} {
   const reasons: string[] = [];
   const res = run(cwd);
   let servers_seen = 0;
@@ -66,8 +74,10 @@ export function checkAdminExposure({
   else if (res.status !== 0) reasons.push(`claude mcp list exited ${res.status}`);
   else {
     ({ servers_seen, admin_servers } = classify(res.stdout ?? ""));
-    if (servers_seen === 0) reasons.push("claude mcp list listed no server, so nothing was checked");
-    if (admin_servers.length > 0) reasons.push(`the admin connector is loaded: ${admin_servers.join(", ")}`);
+    if (servers_seen === 0)
+      reasons.push("claude mcp list listed no server, so nothing was checked");
+    if (admin_servers.length > 0)
+      reasons.push(`the admin connector is loaded: ${admin_servers.join(", ")}`);
   }
   const seat_key_present = exists(seatKeyPath(home));
   if (seat_key_present) reasons.push("agent-seat.key is on disk");

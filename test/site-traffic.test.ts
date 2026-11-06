@@ -25,7 +25,8 @@ const siteDb = () => ({
   prepare: (sql: string) => ({
     bind: (...params: unknown[]) => ({
       first: async () => {
-        if (!/FROM ops_sites WHERE namespace = \?1/.test(sql)) throw new Error(`unexpected statement: ${sql}`);
+        if (!/FROM ops_sites WHERE namespace = \?1/.test(sql))
+          throw new Error(`unexpected statement: ${sql}`);
         return params[0] === ROW.namespace ? ROW : null;
       },
     }),
@@ -33,7 +34,10 @@ const siteDb = () => ({
 });
 
 test("not_found asks for the namespace's own host only and lists scanners' probes after real pages", async () => {
-  const calls: Array<{ url: string; body: { query: string; params: Record<string, unknown>; scope: unknown } }> = [];
+  const calls: Array<{
+    url: string;
+    body: { query: string; params: Record<string, unknown>; scope: unknown };
+  }> = [];
   const impl = async (url: string, init?: RequestInit) => {
     calls.push({ url, body: JSON.parse(String(init?.body)) });
     return Response.json({
@@ -44,19 +48,32 @@ test("not_found asks for the namespace's own host only and lists scanners' probe
       ],
     });
   };
-  const env = fakeEnv({ DB: siteDb(), CF_OPS_TOKEN: "fake-token", CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef" });
+  const env = fakeEnv({
+    DB: siteDb(),
+    CF_OPS_TOKEN: "fake-token",
+    CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+  });
   const r = await siteTraffic(env, "sample", { days: 3 }, impl, NOW);
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://api.cloudflare.com/client/v4/analytics/sql");
-  assert.deepEqual(calls[0].body.params, { start: "2026-10-22T12:00:00.000Z", host: "sample.example.com" });
+  assert.deepEqual(calls[0].body.params, {
+    start: "2026-10-22T12:00:00.000Z",
+    host: "sample.example.com",
+  });
   assert.deepEqual(calls[0].body.scope, { accountTag: "0123456789abcdef0123456789abcdef" });
   assert.match(calls[0].body.query, /edgeResponseStatus = 404/);
 
   assert.ok("paths" in r);
-  assert.deepEqual(r.paths.map((p) => p.path), ["/old-post", "/gone", "/wp-login.php"]);
+  assert.deepEqual(
+    r.paths.map((p) => p.path),
+    ["/old-post", "/gone", "/wp-login.php"],
+  );
   assert.equal(r.probes, 1);
-  await assert.rejects(() => siteTraffic(env, "sample", { days: 31 }, impl, NOW), /days must be a whole number from 1 to 30/);
+  await assert.rejects(
+    () => siteTraffic(env, "sample", { days: 31 }, impl, NOW),
+    /days must be a whole number from 1 to 30/,
+  );
 });
 
 test("ai_crawlers names each crawler by Prelum's lists, the longest name first, with hits by status", async () => {
@@ -70,7 +87,11 @@ test("ai_crawlers names each crawler by Prelum's lists, the longest name first, 
         { ua: "Mozilla/5.0 (Windows NT 10.0) Chrome/140", status: 200, hits: 900 },
       ],
     });
-  const env = fakeEnv({ DB: siteDb(), CF_OPS_TOKEN: "fake-token", CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef" });
+  const env = fakeEnv({
+    DB: siteDb(),
+    CF_OPS_TOKEN: "fake-token",
+    CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+  });
   const r = await siteTraffic(env, "sample", { report: "ai_crawlers" }, impl, NOW);
   assert.ok("crawlers" in r);
   assert.deepEqual(r.crawlers, [
@@ -84,11 +105,23 @@ test("server_errors lists 5xx by path and status, and fits capsid_inspect_repo's
   const impl = async (_url: string, init?: RequestInit) =>
     String(init?.body).includes("toStartOfHour")
       ? Response.json({ data: [{ hour: "2026-10-31 14:00:00", status: 503, hits: 11 }] })
-      : Response.json({ data: [{ path: "/feed", status: 503, hits: 9 }, { path: "/", status: 500, hits: 2 }] });
-  const env = fakeEnv({ DB: siteDb(), CF_OPS_TOKEN: "fake-token", CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef" });
+      : Response.json({
+          data: [
+            { path: "/feed", status: 503, hits: 9 },
+            { path: "/", status: 500, hits: 2 },
+          ],
+        });
+  const env = fakeEnv({
+    DB: siteDb(),
+    CF_OPS_TOKEN: "fake-token",
+    CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+  });
   const r = await siteTraffic(env, "sample", { report: "server_errors", days: 1 }, impl, NOW);
   assert.ok("failures" in r);
-  assert.deepEqual(r.failures, [{ path: "/feed", status: 503, hits: 9 }, { path: "/", status: 500, hits: 2 }]);
+  assert.deepEqual(r.failures, [
+    { path: "/feed", status: 503, hits: 9 },
+    { path: "/", status: 500, hits: 2 },
+  ]);
   assert.deepEqual(r.hours, [{ hour: "2026-10-31 14:00:00", status: 503, hits: 11 }]);
   // REPLAY (2026-10-31): the rows were first named `errors`, which site_audit serves as a number,
   // so the SDK refused every server_errors answer as invalid structured content.

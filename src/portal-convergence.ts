@@ -15,9 +15,19 @@ import { readConvergence } from "./site-convergence";
 export const PORTAL_CONVERGENCE_PATH = "/portal/api/convergence";
 
 /** GET /portal/api/convergence: every opted-in site's convergence, read now. */
-export async function handlePortalConvergence(request: Request, env: Env, now: Date = new Date(), fetchImpl: typeof fetch = fetch): Promise<Response> {
+export async function handlePortalConvergence(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
-  const body: PortalConvergence = { generated: now.toISOString(), sites: await readConvergence(env, fetchImpl, now) };
-  return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  const body: PortalConvergence = {
+    generated: now.toISOString(),
+    sites: await readConvergence(env, fetchImpl, now),
+  };
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }

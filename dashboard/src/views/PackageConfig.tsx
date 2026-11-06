@@ -25,16 +25,36 @@ function paramsOf(d: Draft): Record<string, string> {
   return p;
 }
 
-export function PackageForm({ editing, onClose }: { editing: PackageEditing; onClose: () => void }) {
+export function PackageForm({
+  editing,
+  onClose,
+}: {
+  editing: PackageEditing;
+  onClose: () => void;
+}) {
   const { confirm } = useApp();
   const { f, first } = useConfigForm();
   const adding = editing.kind === "add";
-  const [d, setD] = useState<Draft>(adding ? { name: "", repo: "", formerly: "" } : { name: editing.row.name, repo: editing.row.repo ?? "", formerly: editing.row.formerly ?? "" });
+  const [d, setD] = useState<Draft>(
+    adding
+      ? { name: "", repo: "", formerly: "" }
+      : {
+          name: editing.row.name,
+          repo: editing.row.repo ?? "",
+          formerly: editing.row.formerly ?? "",
+        },
+  );
   const [hint, setHint] = useState<string | null>(null);
   const submit = () => {
     if (!d.name.trim()) return setHint("Type the package's npm name.");
     setHint(null);
-    if (editing.kind === "add") return confirm({ action: "package_add", params: paramsOf(d), title: `Add ${d.name.trim()}`, onDone: onClose });
+    if (editing.kind === "add")
+      return confirm({
+        action: "package_add",
+        params: paramsOf(d),
+        title: `Add ${d.name.trim()}`,
+        onDone: onClose,
+      });
     confirm({
       action: "package_edit",
       params: { ...paramsOf(d), name: editing.row.name, revision: String(editing.row.revision) },
@@ -58,7 +78,14 @@ export function PackageForm({ editing, onClose }: { editing: PackageEditing; onC
               type="button"
               className="btn danger"
               aria-label={`Remove ${editing.row.name}`}
-              onClick={() => confirm({ action: "package_remove", params: { name: editing.row.name, revision: String(editing.row.revision) }, title: `Remove ${editing.row.name}`, onDone: onClose })}
+              onClick={() =>
+                confirm({
+                  action: "package_remove",
+                  params: { name: editing.row.name, revision: String(editing.row.revision) },
+                  title: `Remove ${editing.row.name}`,
+                  onDone: onClose,
+                })
+              }
             >
               Remove
             </button>
@@ -67,13 +94,43 @@ export function PackageForm({ editing, onClose }: { editing: PackageEditing; onC
       }
     >
       <Field id={f("name")} label="npm name">
-        <input ref={first} id={f("name")} className="field mono" value={d.name} readOnly={!adding} autoComplete="off" spellCheck={false} onChange={(e) => setD({ ...d, name: e.target.value })} />
+        <input
+          ref={first}
+          id={f("name")}
+          className="field mono"
+          value={d.name}
+          readOnly={!adding}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setD({ ...d, name: e.target.value })}
+        />
       </Field>
       <Field id={f("repo")} label="GitHub repository">
-        <input id={f("repo")} className="field mono" value={d.repo} placeholder="owner/name" autoComplete="off" spellCheck={false} onChange={(e) => setD({ ...d, repo: e.target.value })} />
+        <input
+          id={f("repo")}
+          className="field mono"
+          value={d.repo}
+          placeholder="owner/name"
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setD({ ...d, repo: e.target.value })}
+        />
       </Field>
-      <Field id={f("formerly")} label="Formerly" note="Its download history is shown joined to this one.">
-        <input id={f("formerly")} aria-describedby={`${f("formerly")}-note`} className="field mono" value={d.formerly} placeholder="an earlier npm name" autoComplete="off" spellCheck={false} onChange={(e) => setD({ ...d, formerly: e.target.value })} />
+      <Field
+        id={f("formerly")}
+        label="Formerly"
+        note="Its download history is shown joined to this one."
+      >
+        <input
+          id={f("formerly")}
+          aria-describedby={`${f("formerly")}-note`}
+          className="field mono"
+          value={d.formerly}
+          placeholder="an earlier npm name"
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setD({ ...d, formerly: e.target.value })}
+        />
       </Field>
     </ConfigForm>
   );

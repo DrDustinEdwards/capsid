@@ -21,7 +21,12 @@ import {
   type PrFacts,
 } from "../src/auto-merge-policy.ts";
 import { FILES_LIMIT } from "../src/github/pr-files.ts";
-import { AWAITING_SEAT_KEY, autoMergeTick, declineParams, mergeParams } from "../src/auto-merge-tick.ts";
+import {
+  AWAITING_SEAT_KEY,
+  autoMergeTick,
+  declineParams,
+  mergeParams,
+} from "../src/auto-merge-tick.ts";
 import { SUSPENDED_KEY } from "../src/merge-units.ts";
 import { PAUSED_KEY } from "../src/merge-safety.ts";
 import { APP_ROSTER, ROSTER, onRoster } from "../src/roster.ts";
@@ -79,7 +84,7 @@ test("the unmodified green PR merges, and passes every check the code enforces",
   assert.deepEqual(
     verdict.merge ? [...verdict.passed].sort() : [],
     [...POLICY_CHECKS].sort(),
-    "the merging path must report every check as passed, or the audit row understates what was verified"
+    "the merging path must report every check as passed, or the audit row understates what was verified",
   );
 });
 
@@ -95,11 +100,29 @@ test("body_names_job: a PR body with no job id never merges", () => {
 // stands in for the job trace. Without one, a job-less PR still waits for a person.
 test("PLANT: v10: a job-less PR merges only in a promoted unit, and every other check still applies", () => {
   const unit = { unit: "capsid / docs" };
-  const earned = evaluatePolicy(greenPr({ body: "from a project thread", jobId: null, jobStatus: null, jobPrUrls: [] }), ALLOWED_AUTHORS, unit);
+  const earned = evaluatePolicy(
+    greenPr({ body: "from a project thread", jobId: null, jobStatus: null, jobPrUrls: [] }),
+    ALLOWED_AUTHORS,
+    unit,
+  );
   assert.equal(earned.merge, true, earned.merge ? "" : earned.why);
-  const red = evaluatePolicy(greenPr({ body: "from a project thread", jobId: null, jobStatus: null, jobPrUrls: [], ciConclusion: "failure" }), ALLOWED_AUTHORS, unit);
+  const red = evaluatePolicy(
+    greenPr({
+      body: "from a project thread",
+      jobId: null,
+      jobStatus: null,
+      jobPrUrls: [],
+      ciConclusion: "failure",
+    }),
+    ALLOWED_AUTHORS,
+    unit,
+  );
   assert.equal(red.merge === false && red.failed, "ci_green");
-  const unearned = evaluatePolicy(greenPr({ body: "from a project thread", jobId: null, jobStatus: null, jobPrUrls: [] }), ALLOWED_AUTHORS, null);
+  const unearned = evaluatePolicy(
+    greenPr({ body: "from a project thread", jobId: null, jobStatus: null, jobPrUrls: [] }),
+    ALLOWED_AUTHORS,
+    null,
+  );
   assert.equal(unearned.merge === false && unearned.failed, "body_names_job");
 });
 
@@ -108,7 +131,12 @@ test("PLANT: v10: a job-less PR merges only in a promoted unit, and every other 
 // login, not a minted driver. author_is_driver is gone; every other check still judges.
 
 test("v7: a PR from a job completed without a claim passes every check", () => {
-  for (const jobClaimedBy of ["access:dustin@example.com", "agent:seat", "opkey:9f2c1a", "github:DrDustinEdwards"]) {
+  for (const jobClaimedBy of [
+    "access:dustin@example.com",
+    "agent:seat",
+    "opkey:9f2c1a",
+    "github:DrDustinEdwards",
+  ]) {
     const verdict = evaluate(greenPr({ jobClaimedBy }));
     assert.equal(verdict.merge, true, `${jobClaimedBy}: ${verdict.merge ? "" : verdict.why}`);
     assert.deepEqual(verdict.merge ? [...verdict.passed].sort() : [], [...POLICY_CHECKS].sort());
@@ -132,7 +160,10 @@ test("size_within_cap: a 1,001-line PR never merges, and a 1,000-line one does",
   const over = evaluate(greenPr({ changedLines: 1001 }));
   assert.equal(over.merge, false);
   assert.equal(over.merge === false && over.failed, "size_within_cap");
-  assert.match(over.merge === false ? over.why : "", /over the size cap: 1001 changed lines, more than 1000/);
+  assert.match(
+    over.merge === false ? over.why : "",
+    /over the size cap: 1001 changed lines, more than 1000/,
+  );
   const at = evaluate(greenPr({ changedLines: 1000 }));
   assert.equal(at.merge, true, at.merge ? "" : at.why);
 });
@@ -155,14 +186,21 @@ test("job_handed_on: a job that has not handed a PR on never merges", () => {
     assert.equal(verdict.merge, false, `a ${jobStatus} job's PR merged`);
     assert.equal(verdict.merge === false && verdict.failed, "job_handed_on");
   }
-  assert.equal(evaluate(greenPr({ jobStatus: "blocked" })).merge, true, "a blocked job that recorded its PR is handed on");
+  assert.equal(
+    evaluate(greenPr({ jobStatus: "blocked" })).merge,
+    true,
+    "a blocked job that recorded its PR is handed on",
+  );
 });
 
 test("pr_recorded_for_job: a PR the job's holder never recorded never merges", () => {
   const cases: Array<[string, string[]]> = [
     ["no record at all", []],
     ["another PR in the same repo", ["https://github.com/DrDustinEdwards/capsid-mcp/pull/22"]],
-    ["a PR number that only starts the same", ["https://github.com/DrDustinEdwards/capsid-mcp/pull/234"]],
+    [
+      "a PR number that only starts the same",
+      ["https://github.com/DrDustinEdwards/capsid-mcp/pull/234"],
+    ],
     ["the same number in another repo", ["https://github.com/DrDustinEdwards/foxhound/pull/23"]],
     ["a document key", ["capsid/notes/done.md"]],
   ];
@@ -172,7 +210,11 @@ test("pr_recorded_for_job: a PR the job's holder never recorded never merges", (
     assert.equal(verdict.merge === false && verdict.failed, "pr_recorded_for_job", label);
   }
   // The same URL in another case, or with a trailing slash, is still this PR.
-  assert.equal(evaluate(greenPr({ jobPrUrls: ["https://github.com/drdustinedwards/capsid-mcp/pull/23/"] })).merge, true);
+  assert.equal(
+    evaluate(greenPr({ jobPrUrls: ["https://github.com/drdustinedwards/capsid-mcp/pull/23/"] }))
+      .merge,
+    true,
+  );
 });
 
 // who opened the PR
@@ -210,9 +252,14 @@ test("paths_not_refused: src/jobs.ts and src/outcome-prs.ts refuse, since they w
 });
 
 test("paths_not_refused: the job modules src/jobs.ts re-exports refuse like src/jobs.ts", () => {
-  const modules = ["claim", "holder", "seat", "mirror", "transition"].map((part) => `src/jobs-${part}.ts`);
+  const modules = ["claim", "holder", "seat", "mirror", "transition"].map(
+    (part) => `src/jobs-${part}.ts`,
+  );
   for (const path of modules) {
-    assert.ok(existsSync(join(import.meta.dirname, "..", path)), `${path} does not exist; the refused pattern names a module that is gone`);
+    assert.ok(
+      existsSync(join(import.meta.dirname, "..", path)),
+      `${path} does not exist; the refused pattern names a module that is gone`,
+    );
     const verdict = evaluate(greenPr({ changedPaths: ["docs/schema.md", path] }));
     assert.equal(verdict.merge, false, `${path} merged`);
     assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", path);
@@ -224,22 +271,48 @@ test("ci_green: the capsid run must show the one merged typecheck step, not the 
   const merged = "Typecheck src, tests, integration tests and the copied scorer script";
   assert.deepEqual(
     CAPSID_CI.map((r) => r.step),
-    [merged, "Lint dead exports and doc drift", "Tests", "Integration tests"]
+    [merged, "Lint dead exports and doc drift", "Tests", "Integration tests"],
   );
   // A run carrying the four old step names and not the merged one did not run the
   // required step.
-  const old = ["Typecheck", "Typecheck tests", "Typecheck integration tests", "Typecheck the copied scorer script", "Tests", "Integration tests"];
-  const verdict = evaluate(greenPr({ ciSteps: old.map((step) => ({ workflow: ".github/workflows/ci.yml", job: "checks", step, conclusion: "success" })) }));
+  const old = [
+    "Typecheck",
+    "Typecheck tests",
+    "Typecheck integration tests",
+    "Typecheck the copied scorer script",
+    "Tests",
+    "Integration tests",
+  ];
+  const verdict = evaluate(
+    greenPr({
+      ciSteps: old.map((step) => ({
+        workflow: ".github/workflows/ci.yml",
+        job: "checks",
+        step,
+        conclusion: "success",
+      })),
+    }),
+  );
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
   assert.match(verdict.merge === false ? verdict.why : "", new RegExp(`checks / ${merged}`));
 });
 
 test("the merged typecheck step in ci.yml runs all four configs", () => {
-  const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
-  const step = /- name: Typecheck src, tests, integration tests and the copied scorer script\n([\s\S]*?)\n\n/.exec(workflow);
+  const workflow = readFileSync(
+    join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"),
+    "utf8",
+  );
+  const step =
+    /- name: Typecheck src, tests, integration tests and the copied scorer script\n([\s\S]*?)\n\n/.exec(
+      workflow,
+    );
   assert.ok(step, "ci.yml has no merged typecheck step");
   for (const script of ["check", "check:test", "check:integration", "check:scripts"]) {
-    assert.match(step[1], new RegExp(`npm run ${script}( |\\|)`), `the merged step does not run ${script}`);
+    assert.match(
+      step[1],
+      new RegExp(`npm run ${script}( |\\|)`),
+      `the merged step does not run ${script}`,
+    );
   }
   // No separate typecheck step is left beside it.
   assert.equal([...workflow.matchAll(/- name: Typecheck/g)].length, 1);
@@ -258,7 +331,9 @@ test("ci_green: a failing head sha never merges", () => {
 });
 
 test("ci_green: a PR nothing has reported on never merges", () => {
-  const verdict = evaluate(greenPr({ ciConclusion: null, ciNote: "no check run has reported on this commit" }));
+  const verdict = evaluate(
+    greenPr({ ciConclusion: null, ciNote: "no check run has reported on this commit" }),
+  );
   assert.equal(verdict.merge, false);
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
 });
@@ -300,7 +375,10 @@ test("paths_not_refused: every path the ruling names refuses on its own", () => 
     const verdict = evaluate(greenPr({ changedPaths: ["src/limits.ts", path] }));
     assert.equal(verdict.merge, false, `${path} must not merge`);
     assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", `${path}`);
-    assert.match(verdict.merge === false ? verdict.why : "", new RegExp(path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")));
+    assert.match(
+      verdict.merge === false ? verdict.why : "",
+      new RegExp(path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")),
+    );
   }
 });
 
@@ -323,23 +401,32 @@ test("PLANT: install, build and deploy glue is refused in a namespace with no al
     ".gitmodules",
   ];
   const merged = glue.filter((path) => {
-    const verdict = evaluate(greenPr({ namespace: "dustinedwards", changedPaths: ["app/routes/home.tsx", path] }));
+    const verdict = evaluate(
+      greenPr({ namespace: "dustinedwards", changedPaths: ["app/routes/home.tsx", path] }),
+    );
     return verdict.merge || verdict.failed !== "paths_not_refused";
   });
   assert.deepEqual(merged, [], "these passed paths_not_refused");
   // Lockfiles, nested too, are the lockfile check's, and bun's text lockfile with them.
   for (const path of ["bun.lock", "mcp/bun.lock", "mcp/yarn.lock"]) {
-    const verdict = evaluate(greenPr({ namespace: "dustinedwards", changedPaths: ["app/routes/home.tsx", path] }));
+    const verdict = evaluate(
+      greenPr({ namespace: "dustinedwards", changedPaths: ["app/routes/home.tsx", path] }),
+    );
     assert.equal(verdict.merge === false && verdict.failed, "no_migration_workflow_lockfile", path);
   }
-  const plain = evaluate(greenPr({ namespace: "dustinedwards", changedPaths: ["app/routes/home.tsx", "docs/notes.md"] }));
+  const plain = evaluate(
+    greenPr({ namespace: "dustinedwards", changedPaths: ["app/routes/home.tsx", "docs/notes.md"] }),
+  );
   assert.ok(plain.passed.includes("paths_not_refused"), "the refusal has become a blanket refusal");
 });
 
 test("paths_not_refused: the two auto-merge modules refuse like the file they were split from", () => {
   const modules = ["src/auto-merge-policy.ts", "src/auto-merge-tick.ts"];
   for (const path of modules) {
-    assert.ok(existsSync(join(import.meta.dirname, "..", path)), `${path} does not exist; the refused pattern names a module that is gone`);
+    assert.ok(
+      existsSync(join(import.meta.dirname, "..", path)),
+      `${path} does not exist; the refused pattern names a module that is gone`,
+    );
     const verdict = evaluate(greenPr({ changedPaths: ["docs/schema.md", path] }));
     assert.equal(verdict.merge, false, `${path} merged`);
     assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", path);
@@ -351,21 +438,50 @@ test("paths_not_refused: every pattern in the list matches at least one path abo
   // A pattern nothing matches is a refusal nobody has observed. Count stated: the
   // list has 35 entries today, and each must be exercised.
   const samples = [
-    "src/gate-policy.ts", "src/auto-merge.ts", "src/policy-sign.ts", "src/protected-paths.ts",
-    "src/scope.ts", "src/signed-docs.ts", "src/auth.ts", "src/encoding.ts", "src/github/client.ts",
-    "migrations/0016_next.sql", "wrangler.jsonc", ".dev.vars", ".env",
-    "package.json", "tsconfig.test.json", "vitest.config.ts", "scripts/test-budget.mjs", "scripts/verify-live.mjs",
+    "src/gate-policy.ts",
+    "src/auto-merge.ts",
+    "src/policy-sign.ts",
+    "src/protected-paths.ts",
+    "src/scope.ts",
+    "src/signed-docs.ts",
+    "src/auth.ts",
+    "src/encoding.ts",
+    "src/github/client.ts",
+    "migrations/0016_next.sql",
+    "wrangler.jsonc",
+    ".dev.vars",
+    ".env",
+    "package.json",
+    "tsconfig.test.json",
+    "vitest.config.ts",
+    "scripts/test-budget.mjs",
+    "scripts/verify-live.mjs",
     // dustinedwards-info's judge files, on the same list.
-    ".github/workflows/ci.yml", "scripts/check-all.mjs", "scripts/lib/slop.mjs", ".aislop/allow.txt",
-    "workers/og/index.ts", "package-lock.json",
+    ".github/workflows/ci.yml",
+    "scripts/check-all.mjs",
+    "scripts/lib/slop.mjs",
+    ".aislop/allow.txt",
+    "workers/og/index.ts",
+    "package-lock.json",
     // Install, build and deploy glue (Grok audit 2026-10, U2).
-    "scripts/ship.mjs", ".github/dependabot.yml", "mcp/package.json", ".yarnrc.yml", ".npmrc",
-    "Dockerfile", "Makefile", ".husky/pre-commit", ".gitmodules",
+    "scripts/ship.mjs",
+    ".github/dependabot.yml",
+    "mcp/package.json",
+    ".yarnrc.yml",
+    ".npmrc",
+    "Dockerfile",
+    "Makefile",
+    ".husky/pre-commit",
+    ".gitmodules",
     // The writers of the records pr_recorded_for_job reads.
-    "src/jobs.ts", "src/outcome-prs.ts",
+    "src/jobs.ts",
+    "src/outcome-prs.ts",
   ];
   for (const { pattern } of AUTO_MERGE_REFUSED_PATHS) {
-    assert.ok(samples.some((s) => pattern.test(s)), `${pattern.source} matches no sample`);
+    assert.ok(
+      samples.some((s) => pattern.test(s)),
+      `${pattern.source} matches no sample`,
+    );
   }
   for (const path of samples) {
     const verdict = evaluate(greenPr({ changedPaths: [path] }));
@@ -389,16 +505,26 @@ test("paths_not_refused: the sources the checks read their answers from refuse o
     assert.equal(verdict.merge === false && verdict.failed, "paths_not_refused", path);
     // Alongside an innocent path, so the refusal is the path and not the count.
     const mixed = evaluate(greenPr({ changedPaths: ["src/limits.ts", path] }));
-    assert.equal(mixed.merge === false && mixed.failed, "paths_not_refused", `${path} beside src/limits.ts`);
+    assert.equal(
+      mixed.merge === false && mixed.failed,
+      "paths_not_refused",
+      `${path} beside src/limits.ts`,
+    );
   }
 });
 
 test("paths_not_refused: similar-looking paths that are ordinary code are not refused", () => {
   for (const path of [
-    "src/tick.ts", "docs/policy/auto-merge.md", "test/auto-merge.test.ts",
+    "src/tick.ts",
+    "docs/policy/auto-merge.md",
+    "test/auto-merge.test.ts",
     "src/environment.ts",
     // Near-misses of the refused patterns, each a real file this repo carries.
-    "src/github/refs.ts", "src/signed-requests.ts", "src/jobs-schema.ts", "src/agents-schema.ts", "src/limits.ts",
+    "src/github/refs.ts",
+    "src/signed-requests.ts",
+    "src/jobs-schema.ts",
+    "src/agents-schema.ts",
+    "src/limits.ts",
     "test/jobs.test.ts",
   ]) {
     assert.ok(passesRefusedPaths([path]), `${path} was refused`);
@@ -415,15 +541,24 @@ test("paths_not_refused: an incomplete file list is refused before any path is j
 // capsid's allowed paths (D6 of 2026-10-03, policy version 6)
 
 test("paths_allowed_for_namespace: a capsid docs-only PR is eligible", () => {
-  const verdict = evaluate(greenPr({ changedPaths: ["docs/autonomy.md", "docs/research/notes.md", "docs/img/flow.svg"] }));
+  const verdict = evaluate(
+    greenPr({ changedPaths: ["docs/autonomy.md", "docs/research/notes.md", "docs/img/flow.svg"] }),
+  );
   assert.equal(verdict.merge, true, verdict.merge ? "" : verdict.why);
 });
 
 test("paths_allowed_for_namespace: a capsid PR touching docs/policy/ is declined, in any letter case", () => {
-  for (const path of ["docs/policy/auto-merge.md", "docs/policy/gates.md", "docs/Policy/auto-merge.md"]) {
+  for (const path of [
+    "docs/policy/auto-merge.md",
+    "docs/policy/gates.md",
+    "docs/Policy/auto-merge.md",
+  ]) {
     const verdict = evaluate(greenPr({ changedPaths: ["docs/autonomy.md", path] }));
     assert.equal(verdict.merge === false && verdict.failed, "paths_allowed_for_namespace", path);
-    assert.match(verdict.merge === false ? verdict.why : "", new RegExp(path.replace(/[./]/g, "\\$&")));
+    assert.match(
+      verdict.merge === false ? verdict.why : "",
+      new RegExp(path.replace(/[./]/g, "\\$&")),
+    );
   }
 });
 
@@ -441,12 +576,21 @@ test("paths_allowed_for_namespace: a mixed docs plus src capsid PR is declined, 
 });
 
 test("paths_allowed_for_namespace: a capsid dashboard CSS-only PR is eligible", () => {
-  const verdict = evaluate(greenPr({ changedPaths: ["dashboard/src/styles.css", "dashboard/src/views/queue.module.css"] }));
+  const verdict = evaluate(
+    greenPr({ changedPaths: ["dashboard/src/styles.css", "dashboard/src/views/queue.module.css"] }),
+  );
   assert.equal(verdict.merge, true, verdict.merge ? "" : verdict.why);
 });
 
 test("paths_allowed_for_namespace: a capsid dashboard .tsx, script or test PR is declined", () => {
-  for (const path of ["dashboard/src/App.tsx", "dashboard/src/api.ts", "dashboard/index.html", "test/limits.test.ts", "dashboard/src/styles.css.ts", "CLAUDE.md"]) {
+  for (const path of [
+    "dashboard/src/App.tsx",
+    "dashboard/src/api.ts",
+    "dashboard/index.html",
+    "test/limits.test.ts",
+    "dashboard/src/styles.css.ts",
+    "CLAUDE.md",
+  ]) {
     const verdict = evaluate(greenPr({ changedPaths: ["dashboard/src/styles.css", path] }));
     assert.equal(verdict.merge === false && verdict.failed, "paths_allowed_for_namespace", path);
   }
@@ -459,8 +603,13 @@ test("paths_allowed_for_namespace: a capsid PR that changes no file is declined"
 
 test("paths_allowed_for_namespace: a namespace with no limit is not held to capsid's", () => {
   assert.equal(Object.hasOwn(AUTO_MERGE_ALLOWED_PATHS, "dustinedwards"), false);
-  const verdict = evaluate(greenPr({ namespace: "dustinedwards", changedPaths: ["src/limits.ts"] }));
-  assert.ok(verdict.passed.includes("paths_allowed_for_namespace"), verdict.merge ? "" : verdict.why);
+  const verdict = evaluate(
+    greenPr({ namespace: "dustinedwards", changedPaths: ["src/limits.ts"] }),
+  );
+  assert.ok(
+    verdict.passed.includes("paths_allowed_for_namespace"),
+    verdict.merge ? "" : verdict.why,
+  );
 });
 
 test("paths_not_money: a billing surface never merges", () => {
@@ -480,14 +629,21 @@ test("no_migration_workflow_lockfile: a workflow and a lockfile refuse on their 
 
   // On both lists, and the refused list sees them first. Each stays refused if the
   // other check is the one that changes, which is why the overlap is deliberate.
-  for (const path of ["migrations/0012_skills.sql", ".github/workflows/ci.yml", "package-lock.json"]) {
+  for (const path of [
+    "migrations/0012_skills.sql",
+    ".github/workflows/ci.yml",
+    "package-lock.json",
+  ]) {
     const both = evaluate(greenPr({ changedPaths: [path] }));
     assert.equal(both.merge === false && both.failed, "paths_not_refused", path);
   }
 });
 
 test("ci_green: a run that lacks the integration suite never merges", () => {
-  const ciSteps = CAPSID_CI.filter((r) => r.step !== "Integration tests").map((r) => ({ ...r, conclusion: "success" }));
+  const ciSteps = CAPSID_CI.filter((r) => r.step !== "Integration tests").map((r) => ({
+    ...r,
+    conclusion: "success",
+  }));
   const verdict = evaluate(greenPr({ ciSteps }));
   assert.equal(verdict.merge, false);
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
@@ -499,11 +655,22 @@ test("ci_green: each required step, skipped or missing, refuses on its own", () 
   for (const required of CAPSID_CI) {
     for (const conclusion of ["skipped", "failure", null, "absent"]) {
       const ciSteps = CAPSID_CI.flatMap((r) =>
-        r !== required ? [{ ...r, conclusion: "success" }] : conclusion === "absent" ? [] : [{ ...r, conclusion }]
+        r !== required
+          ? [{ ...r, conclusion: "success" }]
+          : conclusion === "absent"
+            ? []
+            : [{ ...r, conclusion }],
       );
       const verdict = evaluate(greenPr({ ciSteps }));
-      assert.equal(verdict.merge === false && verdict.failed, "ci_green", `${required.step} ${conclusion}`);
-      assert.ok(verdict.merge === false && verdict.why.includes(requiredCiLabel(required)), `${required.step} ${conclusion}`);
+      assert.equal(
+        verdict.merge === false && verdict.failed,
+        "ci_green",
+        `${required.step} ${conclusion}`,
+      );
+      assert.ok(
+        verdict.merge === false && verdict.why.includes(requiredCiLabel(required)),
+        `${required.step} ${conclusion}`,
+      );
     }
   }
 });
@@ -513,7 +680,10 @@ test("ci_green: each required step, skipped or missing, refuses on its own", () 
 test("ci_green: carrel and capsomer hold the steps their workflows run, and a rename refuses", () => {
   assert.equal(AUTO_MERGE_REQUIRED_CI.carrel.length, 10, "carrel: 7 steps of check and 3 of gates");
   assert.equal(AUTO_MERGE_REQUIRED_CI.capsomer.length, 7, "capsomer: 7 blocking steps of check");
-  assert.deepEqual([...new Set(AUTO_MERGE_REQUIRED_CI.carrel.map((r) => r.job))].sort(), ["check", "gates"]);
+  assert.deepEqual([...new Set(AUTO_MERGE_REQUIRED_CI.carrel.map((r) => r.job))].sort(), [
+    "check",
+    "gates",
+  ]);
   assert.deepEqual([...new Set(AUTO_MERGE_REQUIRED_CI.capsomer.map((r) => r.job))], ["check"]);
   for (const namespace of ["carrel", "capsomer"]) {
     const required = AUTO_MERGE_REQUIRED_CI[namespace];
@@ -523,14 +693,25 @@ test("ci_green: carrel and capsomer hold the steps their workflows run, and a re
     for (const step of required) {
       // A renamed step, a skipped one and a missing one each leave the required name unproven.
       const variants = [
-        required.map((r) => ({ ...r, step: r === step ? `${r.step} (renamed)` : r.step, conclusion: "success" })),
+        required.map((r) => ({
+          ...r,
+          step: r === step ? `${r.step} (renamed)` : r.step,
+          conclusion: "success",
+        })),
         required.map((r) => ({ ...r, conclusion: r === step ? "skipped" : "success" })),
         required.filter((r) => r !== step).map((r) => ({ ...r, conclusion: "success" })),
       ];
       for (const ciSteps of variants) {
         const verdict = evaluate(greenPr({ namespace, ciSteps }));
-        assert.equal(verdict.merge === false && verdict.failed, "ci_green", `${namespace} ${requiredCiLabel(step)}`);
-        assert.ok(verdict.merge === false && verdict.why.includes(requiredCiLabel(step)), `${namespace} ${requiredCiLabel(step)}`);
+        assert.equal(
+          verdict.merge === false && verdict.failed,
+          "ci_green",
+          `${namespace} ${requiredCiLabel(step)}`,
+        );
+        assert.ok(
+          verdict.merge === false && verdict.why.includes(requiredCiLabel(step)),
+          `${namespace} ${requiredCiLabel(step)}`,
+        );
       }
     }
   }
@@ -547,11 +728,15 @@ test("ci_green: carrel's two jobs both name an install step, and one job's does 
 
 test("ci_green: a same-named step in another job or workflow does not count", () => {
   const ciSteps = CAPSID_CI.map((r) =>
-    r.step === "Tests" ? { ...r, job: "score", conclusion: "success" } : { ...r, conclusion: "success" }
+    r.step === "Tests"
+      ? { ...r, job: "score", conclusion: "success" }
+      : { ...r, conclusion: "success" },
   );
   assert.equal(evaluate(greenPr({ ciSteps })).merge, false);
   const other = CAPSID_CI.map((r) =>
-    r.step === "Tests" ? { ...r, workflow: ".github/workflows/other.yml", conclusion: "success" } : { ...r, conclusion: "success" }
+    r.step === "Tests"
+      ? { ...r, workflow: ".github/workflows/other.yml", conclusion: "success" }
+      : { ...r, conclusion: "success" },
   );
   assert.equal(evaluate(greenPr({ ciSteps: other })).merge, false);
 });
@@ -573,7 +758,10 @@ test("ci_green: a namespace with no required steps refuses instead of passing on
 });
 
 test("ci_green: one namespace's green steps do not satisfy another's", () => {
-  const asDustinedwards = AUTO_MERGE_REQUIRED_CI.dustinedwards.map((r) => ({ ...r, conclusion: "success" }));
+  const asDustinedwards = AUTO_MERGE_REQUIRED_CI.dustinedwards.map((r) => ({
+    ...r,
+    conclusion: "success",
+  }));
   // capsid's PR, dustinedwards' steps all green: the job name differs, so none of
   // capsid's three are shown to have run.
   const wrong = evaluate(greenPr({ ciSteps: asDustinedwards }));
@@ -587,7 +775,9 @@ test("ci_green: one namespace's green steps do not satisfy another's", () => {
 });
 
 test("ci_green: steps that could not be read never merge", () => {
-  const verdict = evaluate(greenPr({ ciSteps: [], ciStepsProblem: "the workflow run list returned 403" }));
+  const verdict = evaluate(
+    greenPr({ ciSteps: [], ciStepsProblem: "the workflow run list returned 403" }),
+  );
   assert.equal(verdict.merge === false && verdict.failed, "ci_green");
   assert.match(verdict.merge === false ? verdict.why : "", /403/);
 });
@@ -599,8 +789,14 @@ test("a failing check reports only the checks that actually passed before it", (
   // claimed a later check passed would be claiming a check that never ran.
   assert.equal(POLICY_CHECKS[POLICY_CHECKS.length - 1], "ci_green");
   assert.deepEqual(verdict.merge === false ? verdict.passed : [], POLICY_CHECKS.slice(0, -1));
-  const early = evaluate(greenPr({ changedPaths: ["src/gate-policy.ts"], ciConclusion: "failure" }));
-  assert.deepEqual(early.merge === false ? early.passed : null, [], "the never-list is checked first");
+  const early = evaluate(
+    greenPr({ changedPaths: ["src/gate-policy.ts"], ciConclusion: "failure" }),
+  );
+  assert.deepEqual(
+    early.merge === false ? early.passed : null,
+    [],
+    "the never-list is checked first",
+  );
 });
 
 // the job id in a PR body
@@ -616,16 +812,25 @@ test("jobIdFromBody finds the id in prose and refuses a malformed one", () => {
 
 test("ciVerdict calls no checks, pending checks and a failure all not-green", () => {
   assert.equal(ciVerdict([]).conclusion, null);
-  assert.equal(ciVerdict([{ name: "checks", status: "in_progress", conclusion: null }]).conclusion, "pending");
-  assert.equal(ciVerdict([{ name: "checks", status: "completed", conclusion: "failure" }]).conclusion, "failure");
-  assert.equal(ciVerdict([{ name: "checks", status: "completed", conclusion: "success" }]).conclusion, "success");
+  assert.equal(
+    ciVerdict([{ name: "checks", status: "in_progress", conclusion: null }]).conclusion,
+    "pending",
+  );
+  assert.equal(
+    ciVerdict([{ name: "checks", status: "completed", conclusion: "failure" }]).conclusion,
+    "failure",
+  );
+  assert.equal(
+    ciVerdict([{ name: "checks", status: "completed", conclusion: "success" }]).conclusion,
+    "success",
+  );
   assert.equal(
     ciVerdict([
       { name: "checks", status: "completed", conclusion: "success" },
       { name: "deploy", status: "completed", conclusion: "failure" },
     ]).conclusion,
     "failure",
-    "one red check among green ones is still red"
+    "one red check among green ones is still red",
   );
 });
 
@@ -682,13 +887,17 @@ test("parseMergePolicy refuses a policy with no version, no switch or no namespa
 });
 
 test("parseMergePolicy refuses a namespace that is not on the roster", () => {
-  const parsed = parseMergePolicy(GOOD_POLICY.replace("- namespaces: capsid", "- namespaces: capsid, julieedwards"));
+  const parsed = parseMergePolicy(
+    GOOD_POLICY.replace("- namespaces: capsid", "- namespaces: capsid, julieedwards"),
+  );
   assert.ok("error" in parsed);
   assert.match(parsed.error, /julieedwards/);
 });
 
 test("parseMergePolicy accepts carrel and capsomer, which are on the roster for auto-merge only", () => {
-  const parsed = parseMergePolicy(GOOD_POLICY.replace("- namespaces: capsid", "- namespaces: capsid, carrel, capsomer"));
+  const parsed = parseMergePolicy(
+    GOOD_POLICY.replace("- namespaces: capsid", "- namespaces: capsid, carrel, capsomer"),
+  );
   assert.ok("policy" in parsed, "error" in parsed ? parsed.error : "");
   assert.deepEqual(parsed.policy.namespaces, ["capsid", "carrel", "capsomer"]);
 });
@@ -696,20 +905,29 @@ test("parseMergePolicy accepts carrel and capsomer, which are on the roster for 
 test("carrel and capsomer are on the roster but not the app roster", () => {
   for (const ns of ["carrel", "capsomer"]) {
     assert.ok(onRoster(ns), `${ns} must be on the roster`);
-    assert.ok(!(APP_ROSTER as readonly string[]).includes(ns), `${ns} must not be on the app roster`);
+    assert.ok(
+      !(APP_ROSTER as readonly string[]).includes(ns),
+      `${ns} must not be on the app roster`,
+    );
   }
   assert.ok(ROSTER.length > APP_ROSTER.length, "the roster counts what it names");
 });
 
 async function envWithPolicy(body: string | null) {
   const { db } = fakeD1({
-    documents: body === null ? [] : [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "policy", body }],
+    documents:
+      body === null
+        ? []
+        : [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "policy", body }],
   });
   return fakeEnv({ DB: db, IMPROVE_SCORE_SECRET: SECRET, APP_KV: fakeKv().kv });
 }
 
 test("loadMergePolicy refuses a policy that is absent, unsigned, or edited after signing", async () => {
-  assert.match(((await loadMergePolicy(await envWithPolicy(null))) as { error: string }).error, /no merge policy/);
+  assert.match(
+    ((await loadMergePolicy(await envWithPolicy(null))) as { error: string }).error,
+    /no merge policy/,
+  );
 
   const unsigned = await loadMergePolicy(await envWithPolicy(GOOD_POLICY));
   assert.ok("error" in unsigned);
@@ -725,17 +943,35 @@ test("loadMergePolicy refuses a policy that is absent, unsigned, or edited after
 test("PLANT: a field added to the frontmatter of a signed policy does not change what loadMergePolicy reads", async () => {
   // The signature covers the body below the frontmatter only, and the parser returns
   // the first `- <name>:` line it sees, so a frontmatter line must not be read.
-  const signed = await signTaskBody(SECRET, GOOD_POLICY.replace("- enabled: true", "- enabled: false"));
+  const signed = await signTaskBody(
+    SECRET,
+    GOOD_POLICY.replace("- enabled: true", "- enabled: false"),
+  );
   const inject = (line: string) => signed.replace(/^---\n/, `---\n${line}\n`);
 
   for (const plant of ["- enabled: true", "- namespaces: capsid, dustinedwards", "- version: 99"]) {
     const loaded = await loadMergePolicy(await envWithPolicy(inject(plant)));
     if ("policy" in loaded) {
-      assert.equal(loaded.policy.enabled, false, `'${plant}' in the frontmatter enabled a policy signed as disabled`);
-      assert.deepEqual(loaded.policy.namespaces, ["capsid"], `'${plant}' in the frontmatter widened the signed namespaces`);
-      assert.equal(loaded.policy.version, "1", `'${plant}' in the frontmatter replaced the signed version`);
+      assert.equal(
+        loaded.policy.enabled,
+        false,
+        `'${plant}' in the frontmatter enabled a policy signed as disabled`,
+      );
+      assert.deepEqual(
+        loaded.policy.namespaces,
+        ["capsid"],
+        `'${plant}' in the frontmatter widened the signed namespaces`,
+      );
+      assert.equal(
+        loaded.policy.version,
+        "1",
+        `'${plant}' in the frontmatter replaced the signed version`,
+      );
     }
-    assert.ok("error" in loaded, `a policy with '${plant}' added to its frontmatter must be refused`);
+    assert.ok(
+      "error" in loaded,
+      `a policy with '${plant}' added to its frontmatter must be refused`,
+    );
     assert.match(loaded.error, /besides the capsid-task-signature line/);
   }
 });
@@ -754,7 +990,8 @@ test("loadMergePolicy accepts the signed policy and refuses one that names fewer
 });
 
 test("loadMergePolicy refuses a signed policy whose refused paths or required steps differ from the code, in either direction", async () => {
-  const load = async (body: string) => loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, body)));
+  const load = async (body: string) =>
+    loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, body)));
   const migrations = AUTO_MERGE_REFUSED_PATHS.find((p) => p.pattern.source.includes("migrations"))!;
   const migrationLine = `- path \`${migrations.pattern.source}\` ${migrations.why}\n`;
 
@@ -764,11 +1001,15 @@ test("loadMergePolicy refuses a signed policy whose refused paths or required st
   assert.match(dropped.error, /refused paths does not list .*migrations/);
 
   // Added to the document without code behind it.
-  const added = await load(GOOD_POLICY.replace(migrationLine, `${migrationLine}- path \`^docs/\` docs\n`));
+  const added = await load(
+    GOOD_POLICY.replace(migrationLine, `${migrationLine}- path \`^docs/\` docs\n`),
+  );
   assert.ok("error" in added);
   assert.match(added.error, /lists \^docs\/, which this Worker does not enforce/);
 
-  const noIntegration = await load(GOOD_POLICY.replace("- step `.github/workflows/ci.yml / checks / Integration tests`\n", ""));
+  const noIntegration = await load(
+    GOOD_POLICY.replace("- step `.github/workflows/ci.yml / checks / Integration tests`\n", ""),
+  );
   assert.ok("error" in noIntegration);
   assert.match(noIntegration.error, /required CI steps does not list .*Integration tests/);
 
@@ -777,7 +1018,8 @@ test("loadMergePolicy refuses a signed policy whose refused paths or required st
 });
 
 test("loadMergePolicy refuses a signed policy whose allowed paths differ from the code, in either direction", async () => {
-  const load = async (body: string) => loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, body)));
+  const load = async (body: string) =>
+    loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, body)));
   const css = AUTO_MERGE_ALLOWED_PATHS.capsid.find((p) => p.pattern.source.includes("css"))!;
   const cssLine = `- allow \`${css.pattern.source}\` ${css.why}\n`;
 
@@ -789,10 +1031,15 @@ test("loadMergePolicy refuses a signed policy whose allowed paths differ from th
 
   const added = await load(GOOD_POLICY.replace(cssLine, () => `${cssLine}- allow \`^src/\` src\n`));
   assert.ok("error" in added);
-  assert.match(added.error, /allowed paths lists capsid \/ \^src\/, which this Worker does not enforce/);
+  assert.match(
+    added.error,
+    /allowed paths lists capsid \/ \^src\/, which this Worker does not enforce/,
+  );
 
   // The whole section gone would leave capsid unlimited, so it refuses too.
-  const noSection = GOOD_POLICY.split("\n").filter((l) => !l.startsWith("- allow ") && !l.startsWith("## Allowed paths")).join("\n");
+  const noSection = GOOD_POLICY.split("\n")
+    .filter((l) => !l.startsWith("- allow ") && !l.startsWith("## Allowed paths"))
+    .join("\n");
   const unlimited = await load(noSection);
   assert.ok("error" in unlimited, "a policy that dropped capsid's limit loaded");
 });
@@ -801,19 +1048,29 @@ test("parseMergePolicy files each allowed path under its namespace, and refuses 
   const parsed = parseMergePolicy(GOOD_POLICY);
   assert.ok("policy" in parsed);
   assert.deepEqual(parsed.policy.allowedPaths, namespacedAllowedPaths());
-  const orphan = parseMergePolicy(GOOD_POLICY.replace("## Allowed paths, capsid", "## Allowed paths"));
+  const orphan = parseMergePolicy(
+    GOOD_POLICY.replace("## Allowed paths, capsid", "## Allowed paths"),
+  );
   assert.ok("error" in orphan);
   assert.match(orphan.error, /allowed path .* under no namespace heading/);
   // An allow line after an unrelated heading is not filed under the last namespace.
-  const trailing = parseMergePolicy(`${GOOD_POLICY}\n## What a merge means\n\n- allow \`^src/\` smuggled\n`);
+  const trailing = parseMergePolicy(
+    `${GOOD_POLICY}\n## What a merge means\n\n- allow \`^src/\` smuggled\n`,
+  );
   assert.ok("error" in trailing);
 });
 
 test("parseMergePolicy files each step under its own namespace heading", () => {
   const parsed = parseMergePolicy(GOOD_POLICY);
   assert.ok("policy" in parsed);
-  assert.ok(parsed.policy.requiredCi.includes("capsid / .github/workflows/ci.yml / checks / Tests"));
-  assert.ok(parsed.policy.requiredCi.includes("dustinedwards / .github/workflows/ci.yml / Gates, clean checkout / Gates"));
+  assert.ok(
+    parsed.policy.requiredCi.includes("capsid / .github/workflows/ci.yml / checks / Tests"),
+  );
+  assert.ok(
+    parsed.policy.requiredCi.includes(
+      "dustinedwards / .github/workflows/ci.yml / Gates, clean checkout / Gates",
+    ),
+  );
 });
 
 test("parseMergePolicy refuses a required step written under no namespace heading", () => {
@@ -848,7 +1105,9 @@ test("parseMergePolicy reads the author allowlist, and refuses a document withou
   assert.deepEqual(parsed.policy.authors, ALLOWED_AUTHORS);
 
   // No author lines, and a heading with nothing under it: both fail closed with a reason.
-  const noAuthors = GOOD_POLICY.split("\n").filter((l) => !l.startsWith("- author ")).join("\n");
+  const noAuthors = GOOD_POLICY.split("\n")
+    .filter((l) => !l.startsWith("- author "))
+    .join("\n");
   for (const body of [noAuthors, noAuthors.replace("## Allowed PR authors\n\n", "")]) {
     const refused = parseMergePolicy(body);
     assert.ok("error" in refused, "a policy with no author allowlist must not parse");
@@ -857,7 +1116,9 @@ test("parseMergePolicy reads the author allowlist, and refuses a document withou
 });
 
 test("loadMergePolicy refuses a signed document with no author allowlist", async () => {
-  const noAuthors = GOOD_POLICY.split("\n").filter((l) => !l.startsWith("- author ")).join("\n");
+  const noAuthors = GOOD_POLICY.split("\n")
+    .filter((l) => !l.startsWith("- author "))
+    .join("\n");
   const loaded = await loadMergePolicy(await envWithPolicy(await signTaskBody(SECRET, noAuthors)));
   assert.ok("error" in loaded, "a signed policy with no allowlist loaded");
   assert.match(loaded.error, /no PR author/);
@@ -866,15 +1127,24 @@ test("loadMergePolicy refuses a signed document with no author allowlist", async
 // the document that ships
 
 test("the shipped policy document names exactly the checks the code enforces", () => {
-  const shipped = readFileSync(join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"), "utf8");
+  const shipped = readFileSync(
+    join(import.meta.dirname, "..", "docs", "policy", "auto-merge.md"),
+    "utf8",
+  );
   const parsed = parseMergePolicy(shipped);
-  assert.ok("policy" in parsed, `the shipped policy must parse: ${"error" in parsed ? parsed.error : ""}`);
+  assert.ok(
+    "policy" in parsed,
+    `the shipped policy must parse: ${"error" in parsed ? parsed.error : ""}`,
+  );
   assert.deepEqual(
     [...parsed.policy.checks].sort(),
     [...POLICY_CHECKS].sort(),
-    "the shipped document and the code must name the same checks, in both directions"
+    "the shipped document and the code must name the same checks, in both directions",
   );
-  assert.deepEqual(parsed.policy.refusedPaths, AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source));
+  assert.deepEqual(
+    parsed.policy.refusedPaths,
+    AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source),
+  );
   assert.deepEqual(parsed.policy.requiredCi, namespacedCiLabels());
   assert.equal(parsed.policy.enabled, true);
   // capsid is covered for docs and dashboard CSS only (D6 of 2026-10-03, version 6).
@@ -885,7 +1155,10 @@ test("the shipped policy document names exactly the checks the code enforces", (
   assert.equal(parsed.policy.version, "10");
   // The cap is a number in the code; the document states the same one in its check.
   const capLine = shipped.split("\n").find((l) => l.startsWith("- `size_within_cap`"));
-  assert.match(capLine ?? "", new RegExp(`at most ${AUTO_MERGE_SIZE_CAP.toLocaleString("en-US")} lines`));
+  assert.match(
+    capLine ?? "",
+    new RegExp(`at most ${AUTO_MERGE_SIZE_CAP.toLocaleString("en-US")} lines`),
+  );
   // The two allowed logins, exactly as GitHub reports them, and no others.
   assert.deepEqual(parsed.policy.authors, ["DrDustinEdwards", "capsid-repo-access[bot]"]);
 });
@@ -896,7 +1169,10 @@ test("every required CI step is a step the CI workflow actually has", () => {
   //
   // Capsid only: this repo does not hold dustinedwards-info's workflow, so nothing here
   // catches a rename of the dustinedwards steps.
-  const workflow = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
+  const workflow = readFileSync(
+    join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"),
+    "utf8",
+  );
   const stepNames = [...workflow.matchAll(/^\s+- name: (.+)$/gm)].map((m) => m[1].trim());
   assert.match(workflow, /^  checks:\n    name: checks$/m);
   for (const r of CAPSID_CI) {
@@ -911,7 +1187,12 @@ test("the decline audit row names the policy version, the PR, the failing check 
   const facts = greenPr({ ciConclusion: "failure", ciNote: "checks=failure" });
   const verdict = evaluate(facts);
   assert.equal(verdict.merge, false);
-  const row = declineParams("1", facts, verdict as Extract<typeof verdict, { merge: false }>, new Date("2026-09-12T03:00:00Z"));
+  const row = declineParams(
+    "1",
+    facts,
+    verdict as Extract<typeof verdict, { merge: false }>,
+    new Date("2026-09-12T03:00:00Z"),
+  );
   assert.deepEqual(row, {
     policy_version: "1",
     repo: "DrDustinEdwards/capsid-mcp",
@@ -940,7 +1221,13 @@ test("the merge audit row names the policy version, the job, the driver and both
   const facts = greenPr();
   const verdict = evaluate(facts);
   assert.equal(verdict.merge, true);
-  const row = mergeParams("1", facts, verdict.merge ? verdict.passed : [], "f852780aabbccddeeff0011223344556677889900", new Date("2026-09-12T03:00:00Z"));
+  const row = mergeParams(
+    "1",
+    facts,
+    verdict.merge ? verdict.passed : [],
+    "f852780aabbccddeeff0011223344556677889900",
+    new Date("2026-09-12T03:00:00Z"),
+  );
   assert.deepEqual(row, {
     policy_version: "1",
     path_class: null,
@@ -962,26 +1249,47 @@ test("the merge audit row names the policy version, the job, the driver and both
 // loadMergePolicy, ignored `enabled: false`, or merged regardless of the verdict would
 // leave the tests above green.
 
-const NS_ROW = [{ namespace: "capsid", repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]) }];
+const NS_ROW = [
+  {
+    namespace: "capsid",
+    repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]),
+  },
+];
 
 async function tickEnv(policyBody: string | null, over: Record<string, unknown> = {}) {
   const { db } = fakeD1({
     namespaces: NS_ROW,
-    documents: policyBody === null ? [] : [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "policy", body: policyBody }],
+    documents:
+      policyBody === null
+        ? []
+        : [
+            {
+              namespace: "capsid",
+              path: AUTO_MERGE_POLICY_PATH,
+              title: "policy",
+              body: policyBody,
+            },
+          ],
     ...over,
   });
   return fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv, IMPROVE_SCORE_SECRET: SECRET });
 }
 
 test("PLANT: a disabled policy makes the tick reach GitHub not once", async () => {
-  const env = await tickEnv(await signTaskBody(SECRET, GOOD_POLICY.replace("- enabled: true", "- enabled: false")));
+  const env = await tickEnv(
+    await signTaskBody(SECRET, GOOD_POLICY.replace("- enabled: true", "- enabled: false")),
+  );
   await withFetch({}, async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-13T12:00:00Z"));
     assert.equal(report.ran, false, "a disabled policy ran the tick");
     assert.match(report.note, /disabled/);
     assert.equal(report.outcomes.length, 0);
     // Nothing was even looked at: `enabled` is read before any repo is resolved.
-    assert.equal(calls.length, 0, `a disabled policy still called GitHub: ${JSON.stringify(calls)}`);
+    assert.equal(
+      calls.length,
+      0,
+      `a disabled policy still called GitHub: ${JSON.stringify(calls)}`,
+    );
   });
 });
 
@@ -991,7 +1299,11 @@ test("PLANT: an unsigned policy makes the tick reach GitHub not once", async () 
     const report = await autoMergeTick(env, new Date("2026-09-13T12:00:00Z"));
     assert.equal(report.ran, false, "an unsigned policy ran the tick");
     assert.match(report.note, /carries no capsid-task-signature/);
-    assert.equal(calls.length, 0, `an unsigned policy still called GitHub: ${JSON.stringify(calls)}`);
+    assert.equal(
+      calls.length,
+      0,
+      `an unsigned policy still called GitHub: ${JSON.stringify(calls)}`,
+    );
   });
 });
 
@@ -1012,7 +1324,11 @@ const HEAD_SHA = "bfae8ca9012345678901234567890123456789ab";
 
 const PR_URL = "https://github.com/DrDustinEdwards/capsid/pull/23";
 
-function tickRoutes(changedFiles: string[], headRepo: string | null = "DrDustinEdwards/capsid", author: string | null = "DrDustinEdwards") {
+function tickRoutes(
+  changedFiles: string[],
+  headRepo: string | null = "DrDustinEdwards/capsid",
+  author: string | null = "DrDustinEdwards",
+) {
   return {
     [`GET ${OWNER}`]: { body: { default_branch: "master" } },
     [`GET ${OWNER}/pulls`]: {
@@ -1026,7 +1342,14 @@ function tickRoutes(changedFiles: string[], headRepo: string | null = "DrDustinE
         },
       ],
     },
-    [`GET ${OWNER}/pulls/23/files`]: { body: changedFiles.map((filename) => ({ filename, status: "modified", additions: 1, deletions: 0 })) },
+    [`GET ${OWNER}/pulls/23/files`]: {
+      body: changedFiles.map((filename) => ({
+        filename,
+        status: "modified",
+        additions: 1,
+        deletions: 0,
+      })),
+    },
     [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: {
       body: { check_runs: [{ name: "test", status: "completed", conclusion: "success" }] },
     },
@@ -1056,7 +1379,13 @@ function ciRunRoutes(steps: string[]) {
     [`GET ${OWNER}/actions/runs/950/jobs`]: {
       body: {
         jobs: [
-          { name: "checks", steps: [{ name: "Install dependencies", conclusion: "success" }, ...steps.map((name) => ({ name, conclusion: "success" }))] },
+          {
+            name: "checks",
+            steps: [
+              { name: "Install dependencies", conclusion: "success" },
+              ...steps.map((name) => ({ name, conclusion: "success" })),
+            ],
+          },
           { name: "deploy", steps: [{ name: "Deploy", conclusion: "skipped" }] },
         ],
       },
@@ -1068,7 +1397,7 @@ function ciRunRoutes(steps: string[]) {
 async function enabledEnv(
   claimedBy = "agent:capsid-driver",
   job: { status?: string; result_ref?: string | null } = {},
-  jobOutcomePrs: Array<{ job_id: string; pr_url: string }> = []
+  jobOutcomePrs: Array<{ job_id: string; pr_url: string }> = [],
 ) {
   return tickEnv(await signTaskBody(SECRET, GOOD_POLICY), {
     jobs: [
@@ -1094,7 +1423,11 @@ test("PLANT: an enabled policy merges a green PR, through the tick and not throu
     const report = await autoMergeTick(env, new Date("2026-09-13T12:00:00Z"));
     assert.equal(report.ran, true, report.note);
     assert.equal(report.outcomes.length, 1);
-    assert.equal(report.outcomes[0].merged, true, `the green PR was not merged: ${report.outcomes[0].why}`);
+    assert.equal(
+      report.outcomes[0].merged,
+      true,
+      `the green PR was not merged: ${report.outcomes[0].why}`,
+    );
     const merges = calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge"));
     assert.equal(merges.length, 1, "the tick reported a merge it never issued");
   });
@@ -1122,13 +1455,22 @@ test("PLANT: an enabled policy DECLINES a protected-path PR and issues no merge"
 
 async function tickPlant(files: string[], opts: { claimedBy?: string; steps?: string[] } = {}) {
   const env = await enabledEnv(opts.claimedBy);
-  const routes = { ...tickRoutes(files), ...ciRunRoutes(opts.steps ?? CAPSID_CI.map((r) => r.step)) };
-  let out: { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null = null;
+  const routes = {
+    ...tickRoutes(files),
+    ...ciRunRoutes(opts.steps ?? CAPSID_CI.map((r) => r.step)),
+  };
+  let out: {
+    outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number];
+    merges: number;
+  } | null = null;
   await withFetch(routes as never, async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-17T14:00:00Z"));
     assert.equal(report.ran, true, report.note);
     assert.equal(report.outcomes.length, 1);
-    out = { outcome: report.outcomes[0], merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length };
+    out = {
+      outcome: report.outcomes[0],
+      merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length,
+    };
   });
   return out!;
 }
@@ -1158,7 +1500,9 @@ test("PLANT v6: a capsid PR that moves a source file into docs/ is declined by t
   // The old name counts as touched, so a rename out of src/ deletes code outside the limit.
   const routes = {
     ...tickRoutes([]),
-    [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "docs/limits.md", previous_filename: "src/limits.ts", status: "renamed" }] },
+    [`GET ${OWNER}/pulls/23/files`]: {
+      body: [{ filename: "docs/limits.md", previous_filename: "src/limits.ts", status: "renamed" }],
+    },
   };
   const { outcome, merges } = await tickWith(await enabledEnv(), routes);
   assert.equal(merges, 0);
@@ -1174,7 +1518,10 @@ test("PLANT v2: a PR touching src/gate-policy.ts is refused by the tick", async 
 });
 
 test("PLANT v2: a PR touching migrations/ is refused by the tick", async () => {
-  const { outcome, merges } = await tickPlant(["src/limits.ts", "migrations/0016_outcome_notes.sql"]);
+  const { outcome, merges } = await tickPlant([
+    "src/limits.ts",
+    "migrations/0016_outcome_notes.sql",
+  ]);
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "paths_not_refused");
 });
@@ -1189,14 +1536,19 @@ test("PLANT v2: a PR whose CI lacks the integration suite is refused by the tick
 
 test("PLANT v7: a PR from a job completed without a claim is merged by the tick", async () => {
   // Version 2 to 6 refused it as author_is_driver: the holder was not a minted driver.
-  const { outcome, merges } = await tickPlant(["docs/schema.md"], { claimedBy: "access:dustin@example.com" });
+  const { outcome, merges } = await tickPlant(["docs/schema.md"], {
+    claimedBy: "access:dustin@example.com",
+  });
   assert.equal(outcome.merged, true, outcome.why ?? "");
   assert.equal(merges, 1);
   assert.deepEqual(outcome.passed, [...POLICY_CHECKS]);
 });
 
 test("PLANT v7: a PR whose files GitHub reports without line counts is declined by the tick, not counted as zero", async () => {
-  const routes = { ...tickRoutes([]), [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "docs/autonomy.md" }] } };
+  const routes = {
+    ...tickRoutes([]),
+    [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "docs/autonomy.md" }] },
+  };
   const { outcome, merges } = await tickWith(await enabledEnv(), routes);
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "size_within_cap");
@@ -1217,7 +1569,10 @@ test("PLANT v7: a 1,001-line PR is declined by the tick and held as approve", as
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "size_within_cap");
   assert.equal(outcome.merge_class?.class, "approve");
-  assert.equal(outcome.merge_class?.reasons[0], "over the size cap: 1001 changed lines, more than 1000");
+  assert.equal(
+    outcome.merge_class?.reasons[0],
+    "over the size cap: 1001 changed lines, more than 1000",
+  );
 });
 
 // the PR itself, through the tick
@@ -1225,33 +1580,51 @@ test("PLANT v7: a 1,001-line PR is declined by the tick and held as approve", as
 // Each plant below names a finished driver job with green CI and src/-only changes, so
 // the refusal can only come from a fact about the PR itself.
 
-async function tickWith(env: Awaited<ReturnType<typeof enabledEnv>>, routes: Record<string, unknown>) {
-  let out: { outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number]; merges: number } | null = null;
+async function tickWith(
+  env: Awaited<ReturnType<typeof enabledEnv>>,
+  routes: Record<string, unknown>,
+) {
+  let out: {
+    outcome: Awaited<ReturnType<typeof autoMergeTick>>["outcomes"][number];
+    merges: number;
+  } | null = null;
   await withFetch(routes as never, async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
     assert.equal(report.ran, true, report.note);
     assert.equal(report.outcomes.length, 1);
-    out = { outcome: report.outcomes[0], merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length };
+    out = {
+      outcome: report.outcomes[0],
+      merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length,
+    };
   });
   return out!;
 }
 
 test("PLANT v5: a same-repo PR opened by an account off the allowlist is refused by the tick", async () => {
   // Everything else passes: the job is done, recorded this PR, and CI is green.
-  const { outcome, merges } = await tickWith(await enabledEnv(), tickRoutes(["docs/schema.md"], "DrDustinEdwards/capsid", "someone-else"));
+  const { outcome, merges } = await tickWith(
+    await enabledEnv(),
+    tickRoutes(["docs/schema.md"], "DrDustinEdwards/capsid", "someone-else"),
+  );
   assert.equal(merges, 0, "a PR by an account off the allowlist was auto-merged");
   assert.equal(outcome.failed, "pr_author_allowed");
   assert.match(outcome.why ?? "", /someone-else/);
 });
 
 test("PLANT v5: a PR GitHub reports no author for is refused by the tick", async () => {
-  const { outcome, merges } = await tickWith(await enabledEnv(), tickRoutes(["docs/schema.md"], "DrDustinEdwards/capsid", null));
+  const { outcome, merges } = await tickWith(
+    await enabledEnv(),
+    tickRoutes(["docs/schema.md"], "DrDustinEdwards/capsid", null),
+  );
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "pr_author_allowed");
 });
 
 test("PLANT v5: a PR opened by the App's bot account is merged by the tick", async () => {
-  const { outcome, merges } = await tickWith(await enabledEnv(), tickRoutes(["docs/schema.md"], "DrDustinEdwards/capsid", "capsid-repo-access[bot]"));
+  const { outcome, merges } = await tickWith(
+    await enabledEnv(),
+    tickRoutes(["docs/schema.md"], "DrDustinEdwards/capsid", "capsid-repo-access[bot]"),
+  );
   assert.equal(outcome.merged, true, outcome.why ?? "");
   assert.equal(merges, 1);
 });
@@ -1284,7 +1657,17 @@ test("PLANT: a PR that renames a refused file to an ordinary path is refused by 
 test("PLANT: a PR that renames an ordinary file to another ordinary path is still merged by the tick", async () => {
   const routes = {
     ...tickRoutes([]),
-    [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "docs/new-name.md", previous_filename: "docs/old-name.md", status: "renamed", additions: 0, deletions: 0 }] },
+    [`GET ${OWNER}/pulls/23/files`]: {
+      body: [
+        {
+          filename: "docs/new-name.md",
+          previous_filename: "docs/old-name.md",
+          status: "renamed",
+          additions: 0,
+          deletions: 0,
+        },
+      ],
+    },
   };
   const { outcome, merges } = await tickWith(await enabledEnv(), routes);
   assert.equal(outcome.merged, true, outcome.why ?? "");
@@ -1293,7 +1676,10 @@ test("PLANT: a PR that renames an ordinary file to another ordinary path is stil
 
 test("PLANT F2-1: a fork PR naming a done driver job is refused by the tick", async () => {
   // The job even records this PR's URL; the head is still on a fork.
-  const { outcome, merges } = await tickWith(await enabledEnv(), tickRoutes(["docs/schema.md"], "attacker/capsid"));
+  const { outcome, merges } = await tickWith(
+    await enabledEnv(),
+    tickRoutes(["docs/schema.md"], "attacker/capsid"),
+  );
   assert.equal(merges, 0, "a fork PR was auto-merged");
   assert.equal(outcome.failed, "head_in_base_repo");
   assert.match(outcome.why ?? "", /attacker\/capsid/);
@@ -1302,22 +1688,29 @@ test("PLANT F2-1: a fork PR naming a done driver job is refused by the tick", as
 test("PLANT F2-1: a same-repo PR naming a done driver job that never recorded it is refused by the tick", async () => {
   // The driver's job is done and names ANOTHER PR, which is what a finished job whose
   // id somebody copied into their own PR body looks like.
-  const env = await enabledEnv("agent:capsid-driver", { result_ref: "https://github.com/DrDustinEdwards/capsid/pull/22" }, [
-    { job_id: "job_4c0ecc28548b", pr_url: "https://github.com/DrDustinEdwards/capsid/pull/22" },
-  ]);
+  const env = await enabledEnv(
+    "agent:capsid-driver",
+    { result_ref: "https://github.com/DrDustinEdwards/capsid/pull/22" },
+    [{ job_id: "job_4c0ecc28548b", pr_url: "https://github.com/DrDustinEdwards/capsid/pull/22" }],
+  );
   const { outcome, merges } = await tickWith(env, tickRoutes(["docs/schema.md"]));
   assert.equal(merges, 0, "a PR the job never recorded was auto-merged");
   assert.equal(outcome.failed, "pr_recorded_for_job");
 });
 
 test("PLANT F2-1: a PR naming a driver job still claimed is refused by the tick", async () => {
-  const { outcome, merges } = await tickWith(await enabledEnv("agent:capsid-driver", { status: "claimed", result_ref: null }), tickRoutes(["docs/schema.md"]));
+  const { outcome, merges } = await tickWith(
+    await enabledEnv("agent:capsid-driver", { status: "claimed", result_ref: null }),
+    tickRoutes(["docs/schema.md"]),
+  );
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "job_handed_on");
 });
 
 test("F2-1: a PR recorded only in job_outcome_prs, from evidence.prs, still merges", async () => {
-  const env = await enabledEnv("agent:capsid-driver", { result_ref: "capsid/notes/done.md" }, [{ job_id: "job_4c0ecc28548b", pr_url: PR_URL }]);
+  const env = await enabledEnv("agent:capsid-driver", { result_ref: "capsid/notes/done.md" }, [
+    { job_id: "job_4c0ecc28548b", pr_url: PR_URL },
+  ]);
   const { outcome, merges } = await tickWith(env, tickRoutes(["docs/schema.md"]));
   assert.equal(outcome.merged, true, outcome.why ?? "");
   assert.equal(merges, 1);
@@ -1326,7 +1719,10 @@ test("F2-1: a PR recorded only in job_outcome_prs, from evidence.prs, still merg
 
 test("the tick refuses when the Actions run list cannot be read", async () => {
   const env = await enabledEnv();
-  const routes = { ...tickRoutes(["docs/schema.md"]), [`GET ${OWNER}/actions/runs`]: { status: 403, text: "Resource not accessible by integration" } };
+  const routes = {
+    ...tickRoutes(["docs/schema.md"]),
+    [`GET ${OWNER}/actions/runs`]: { status: 403, text: "Resource not accessible by integration" },
+  };
   await withFetch(routes as never, async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-17T14:00:00Z"));
     assert.equal(report.outcomes[0].failed, "ci_green");
@@ -1343,8 +1739,23 @@ test("the tick refuses when the Actions run list cannot be read", async () => {
 async function pinnedEnv() {
   const d1 = fakeD1({
     namespaces: NS_ROW,
-    documents: [{ namespace: "capsid", path: AUTO_MERGE_POLICY_PATH, title: "policy", body: await signTaskBody(SECRET, GOOD_POLICY) }],
-    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
+    documents: [
+      {
+        namespace: "capsid",
+        path: AUTO_MERGE_POLICY_PATH,
+        title: "policy",
+        body: await signTaskBody(SECRET, GOOD_POLICY),
+      },
+    ],
+    jobs: [
+      {
+        id: "job_4c0ecc28548b",
+        namespace: "capsid",
+        claimed_by: "agent:capsid-driver",
+        status: "done",
+        result_ref: PR_URL,
+      },
+    ],
     agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
   });
   const kv = fakeKv({ seedToken: true });
@@ -1366,7 +1777,10 @@ test("a head that moved before the merge (GitHub 409) is reported not merged, au
   const { d1, kv, env } = await pinnedEnv();
   const routes = {
     ...tickRoutes(["docs/schema.md"]),
-    [`PUT ${OWNER}/pulls/23/merge`]: { status: 409, body: { message: "Head branch was modified. Review and try the merge again." } },
+    [`PUT ${OWNER}/pulls/23/merge`]: {
+      status: 409,
+      body: { message: "Head branch was modified. Review and try the merge again." },
+    },
   };
   await withFetch(routes as never, async () => {
     const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
@@ -1421,34 +1835,59 @@ function paged<T>(rows: T[], wrap: (page: T[]) => unknown = (page) => page) {
     const more = page * perPage < rows.length;
     return {
       body: wrap(slice),
-      ...(more ? { headers: { Link: `<https://api.github.com/repositories/1/x?per_page=${perPage}&page=${page + 1}>; rel="next"` } } : {}),
+      ...(more
+        ? {
+            headers: {
+              Link: `<https://api.github.com/repositories/1/x?per_page=${perPage}&page=${page + 1}>; rel="next"`,
+            },
+          }
+        : {}),
     };
   };
 }
 
-function pagedRoutes(files: string[], runs: Array<{ name: string; status: string; conclusion: string | null }>) {
+function pagedRoutes(
+  files: string[],
+  runs: Array<{ name: string; status: string; conclusion: string | null }>,
+) {
   return {
     ...tickRoutes([]),
-    [`GET ${OWNER}/pulls/23/files`]: paged(files.map((filename) => ({ filename, additions: 1, deletions: 0 }))),
-    [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: paged(runs, (page) => ({ total_count: runs.length, check_runs: page })),
+    [`GET ${OWNER}/pulls/23/files`]: paged(
+      files.map((filename) => ({ filename, additions: 1, deletions: 0 })),
+    ),
+    [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: paged(runs, (page) => ({
+      total_count: runs.length,
+      check_runs: page,
+    })),
   };
 }
 
-const safeFiles = (n: number) => Array.from({ length: n }, (_, i) => `docs/page-${String(i).padStart(4, "0")}.md`);
-const green = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `check-${i}`, status: "completed", conclusion: "success" }));
+const safeFiles = (n: number) =>
+  Array.from({ length: n }, (_, i) => `docs/page-${String(i).padStart(4, "0")}.md`);
+const green = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    name: `check-${i}`,
+    status: "completed",
+    conclusion: "success",
+  }));
 
 async function tickOnce(routes: Record<string, unknown>) {
   const env = await enabledEnv();
   let result: { report: Awaited<ReturnType<typeof autoMergeTick>>; merges: number } | null = null;
   await withFetch(routes as never, async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-17T12:00:00Z"));
-    result = { report, merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length };
+    result = {
+      report,
+      merges: calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge")).length,
+    };
   });
   return result!;
 }
 
 test("PLANT: a protected path on the SECOND page of files is seen, and the PR is not merged", async () => {
-  const { report, merges } = await tickOnce(pagedRoutes([...safeFiles(100), "migrations/0099_planted.sql"], green(1)));
+  const { report, merges } = await tickOnce(
+    pagedRoutes([...safeFiles(100), "migrations/0099_planted.sql"], green(1)),
+  );
   assert.equal(report.outcomes.length, 1);
   assert.equal(merges, 0, "a PR whose 101st file is a migration was auto-merged");
   assert.equal(report.outcomes[0].merged, false);
@@ -1503,7 +1942,12 @@ function twoPrRoutes(mergeRoute: unknown) {
     [`GET ${OWNER}/pulls`]: {
       body: [
         ...(base[`GET ${OWNER}/pulls`] as { body: unknown[] }).body,
-        { number: 30, body: "A human's change, no job here.", head: { sha: NO_JOB_SHA, repo: { full_name: "DrDustinEdwards/capsid" } }, base: { ref: "master" } },
+        {
+          number: 30,
+          body: "A human's change, no job here.",
+          head: { sha: NO_JOB_SHA, repo: { full_name: "DrDustinEdwards/capsid" } },
+          base: { ref: "master" },
+        },
       ],
     },
     [`PUT ${OWNER}/pulls/23/merge`]: mergeRoute,
@@ -1513,9 +1957,12 @@ function twoPrRoutes(mergeRoute: unknown) {
 test("PLANT F3-6: a merge GitHub refuses with 405 is audited as failed, and the tick goes on to the next PR and writes the awaiting set", async () => {
   const { d1, kv, env } = await pinnedEnv();
   let report: Awaited<ReturnType<typeof autoMergeTick>> | null = null;
-  await withFetch(twoPrRoutes({ status: 405, body: { message: "Pull Request is not mergeable" } }) as never, async () => {
-    report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
-  });
+  await withFetch(
+    twoPrRoutes({ status: 405, body: { message: "Pull Request is not mergeable" } }) as never,
+    async () => {
+      report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
+    },
+  );
   const out = report!;
   assert.equal(out.ran, true, out.note);
   assert.equal(out.outcomes.length, 2, "the throw on PR 23 stopped the tick before PR 30");
@@ -1523,28 +1970,49 @@ test("PLANT F3-6: a merge GitHub refuses with 405 is audited as failed, and the 
   assert.equal(first?.merged, false);
   assert.equal(first?.failed, "error");
   assert.match(first?.why ?? "", /405/);
-  const actions = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql)).map((r) => r.params[1]);
-  assert.ok(actions.includes("auto-merge-failed"), `no failure audit row: ${JSON.stringify(actions)}`);
-  const awaiting = JSON.parse((await kv.kv.get(AWAITING_SEAT_KEY)) as string) as Array<{ number: number; failed: string }>;
-  assert.deepEqual(awaiting.map((a) => [a.number, a.failed]).sort(), [[23, "error"], [30, "body_names_job"]]);
+  const actions = d1.recorded
+    .filter((r) => /INSERT INTO audit_log/.test(r.sql))
+    .map((r) => r.params[1]);
+  assert.ok(
+    actions.includes("auto-merge-failed"),
+    `no failure audit row: ${JSON.stringify(actions)}`,
+  );
+  const awaiting = JSON.parse((await kv.kv.get(AWAITING_SEAT_KEY)) as string) as Array<{
+    number: number;
+    failed: string;
+  }>;
+  assert.deepEqual(awaiting.map((a) => [a.number, a.failed]).sort(), [
+    [23, "error"],
+    [30, "body_names_job"],
+  ]);
 });
 
 test("PLANT F7-1: a PR whose body names no job is declined without reading its files, checks or CI runs", async () => {
   const { d1, env } = await pinnedEnv();
   let calls: Array<{ method: string; path: string; search?: string }> = [];
   let report: Awaited<ReturnType<typeof autoMergeTick>> | null = null;
-  await withFetch(twoPrRoutes({ body: { sha: "merged00000000000000000000000000000000000" } }) as never, async (c) => {
-    report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
-    calls = c;
-  });
+  await withFetch(
+    twoPrRoutes({ body: { sha: "merged00000000000000000000000000000000000" } }) as never,
+    async (c) => {
+      report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
+      calls = c;
+    },
+  );
   const skipped = report!.outcomes.find((o) => o.number === 30);
   assert.equal(skipped?.merged, false);
   assert.equal(skipped?.failed, "body_names_job");
-  const aboutPr30 = calls.filter((c) => c.path.includes("/pulls/30") || c.path.includes(NO_JOB_SHA) || (c.search ?? "").includes(NO_JOB_SHA));
+  const aboutPr30 = calls.filter(
+    (c) =>
+      c.path.includes("/pulls/30") ||
+      c.path.includes(NO_JOB_SHA) ||
+      (c.search ?? "").includes(NO_JOB_SHA),
+  );
   assert.deepEqual(aboutPr30, [], "the tick read GitHub for a PR that names no job");
   // The PR that names a job is still judged and merged, so the skip is not a wall.
   assert.equal(report!.outcomes.find((o) => o.number === 23)?.merged, true);
-  const declined = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "auto-merge-declined");
+  const declined = d1.recorded.filter(
+    (r) => /INSERT INTO audit_log/.test(r.sql) && r.params[1] === "auto-merge-declined",
+  );
   assert.equal(declined.length, 1);
   assert.equal(JSON.parse(String(declined[0].params[4])).head_sha, NO_JOB_SHA);
 });
@@ -1563,7 +2031,11 @@ function declineRows(d1: { recorded: Array<{ sql: string; params: unknown[] }> }
     .map((r) => JSON.parse(String(r.params[4])) as { head_sha: string; failed: string });
 }
 
-async function tickAt(env: Awaited<ReturnType<typeof pinnedEnv>>["env"], routes: unknown, minute: number) {
+async function tickAt(
+  env: Awaited<ReturnType<typeof pinnedEnv>>["env"],
+  routes: unknown,
+  minute: number,
+) {
   let out: Awaited<ReturnType<typeof autoMergeTick>> | null = null;
   await withFetch(routes as never, async () => {
     out = await autoMergeTick(env, new Date(Date.UTC(2026, 9, 4, 12, minute)));
@@ -1577,8 +2049,11 @@ function movedHeadRoutes(files: string[]) {
   const prs = routes[`GET ${OWNER}/pulls`] as { body: Array<{ head: { sha: string } }> };
   return {
     ...routes,
-    [`GET ${OWNER}/pulls`]: { body: [{ ...prs.body[0], head: { ...prs.body[0].head, sha: NEW_SHA } }] },
-    [`GET ${OWNER}/commits/${NEW_SHA}/check-runs`]: routes[`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`],
+    [`GET ${OWNER}/pulls`]: {
+      body: [{ ...prs.body[0], head: { ...prs.body[0].head, sha: NEW_SHA } }],
+    },
+    [`GET ${OWNER}/commits/${NEW_SHA}/check-runs`]:
+      routes[`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`],
   };
 }
 
@@ -1608,24 +2083,44 @@ test("PLANT: a new head sha for the same PR and reason writes a second row", asy
   const { d1, env } = await pinnedEnv();
   const first = await tickAt(env, tickRoutes(PROTECTED), 0);
   const second = await tickAt(env, movedHeadRoutes(PROTECTED), 5);
-  assert.equal(first.outcomes[0].failed, second.outcomes[0].failed, "the reason moved too, so this does not isolate the head");
+  assert.equal(
+    first.outcomes[0].failed,
+    second.outcomes[0].failed,
+    "the reason moved too, so this does not isolate the head",
+  );
   const rows = declineRows(d1);
-  assert.deepEqual(rows.map((r) => r.head_sha), [HEAD_SHA, NEW_SHA]);
+  assert.deepEqual(
+    rows.map((r) => r.head_sha),
+    [HEAD_SHA, NEW_SHA],
+  );
 });
 
 test("a PR with no job in its body is logged once, then again only when its head moves", async () => {
   const { d1, env } = await pinnedEnv();
   const noJob = (sha: string) => {
-    const routes = twoPrRoutes({ body: { sha: "merged00000000000000000000000000000000000" } }) as unknown as Record<string, { body: unknown }>;
-    const list = routes[`GET ${OWNER}/pulls`].body as Array<{ number: number; head: { sha: string } }>;
-    return { ...routes, [`GET ${OWNER}/pulls`]: { body: list.map((p) => (p.number === 30 ? { ...p, head: { ...p.head, sha } } : p)) } };
+    const routes = twoPrRoutes({
+      body: { sha: "merged00000000000000000000000000000000000" },
+    }) as unknown as Record<string, { body: unknown }>;
+    const list = routes[`GET ${OWNER}/pulls`].body as Array<{
+      number: number;
+      head: { sha: string };
+    }>;
+    return {
+      ...routes,
+      [`GET ${OWNER}/pulls`]: {
+        body: list.map((p) => (p.number === 30 ? { ...p, head: { ...p.head, sha } } : p)),
+      },
+    };
   };
   await tickAt(env, noJob(NO_JOB_SHA), 0);
   await tickAt(env, noJob(NO_JOB_SHA), 5);
   const bodyDeclines = () => declineRows(d1).filter((r) => r.failed === "body_names_job");
   assert.equal(bodyDeclines().length, 1);
   await tickAt(env, noJob(NEW_SHA), 10);
-  assert.deepEqual(bodyDeclines().map((r) => r.head_sha), [NO_JOB_SHA, NEW_SHA]);
+  assert.deepEqual(
+    bodyDeclines().map((r) => r.head_sha),
+    [NO_JOB_SHA, NEW_SHA],
+  );
 });
 
 test("a merge is still logged, whatever was declined before it", async () => {
@@ -1633,7 +2128,9 @@ test("a merge is still logged, whatever was declined before it", async () => {
   await tickAt(env, tickRoutes(PROTECTED), 0);
   const merged = await tickAt(env, tickRoutes(["docs/schema.md"]), 5);
   assert.equal(merged.outcomes[0].merged, true, merged.outcomes[0].why ?? "");
-  const actions = d1.recorded.filter((r) => /INSERT INTO audit_log/.test(r.sql)).map((r) => r.params[1]);
+  const actions = d1.recorded
+    .filter((r) => /INSERT INTO audit_log/.test(r.sql))
+    .map((r) => r.params[1]);
   assert.deepEqual(actions, ["auto-merge-declined", "auto-merged"]);
 });
 
@@ -1654,9 +2151,24 @@ test("a KV read that fails still logs the decline", async () => {
 // The approvals live in pr_approvals (migrations/0037), which the fake D1 does not model:
 // they are answered here, and each state move the executor batches is applied to them.
 
-type ApprovalRow = { id: number; repo: string; pr: number; head_sha: string; class: string; status: string; approved_by: string; surface: string; batch_id: string | null; approved_at: string };
+type ApprovalRow = {
+  id: number;
+  repo: string;
+  pr: number;
+  head_sha: string;
+  class: string;
+  status: string;
+  approved_by: string;
+  surface: string;
+  batch_id: string | null;
+  approved_at: string;
+};
 
-function withApprovals(env: Awaited<ReturnType<typeof enabledEnv>>, rows: ApprovalRow[], opts: { missingTable?: boolean } = {}) {
+function withApprovals(
+  env: Awaited<ReturnType<typeof enabledEnv>>,
+  rows: ApprovalRow[],
+  opts: { missingTable?: boolean } = {},
+) {
   const db = (env as unknown as { DB: D1Database }).DB;
   const moves: Array<{ id: unknown; status: unknown; reason: unknown; merge_sha: unknown }> = [];
   const own = (sql: string) => /pr_approvals/.test(sql);
@@ -1670,7 +2182,11 @@ function withApprovals(env: Awaited<ReturnType<typeof enabledEnv>>, rows: Approv
         return s;
       },
       async all() {
-        if (/^\s*SELECT/i.test(sql)) return { results: rows.filter((r) => r.status === "approved" && r.repo === s.params[0]), meta: {} };
+        if (/^\s*SELECT/i.test(sql))
+          return {
+            results: rows.filter((r) => r.status === "approved" && r.repo === s.params[0]),
+            meta: {},
+          };
         return { results: [], meta: {} };
       },
     };
@@ -1690,7 +2206,12 @@ function withApprovals(env: Awaited<ReturnType<typeof enabledEnv>>, rows: Approv
             const row = rows.find((r) => r.id === s.params[0] && r.status === "approved");
             if (row) {
               row.status = String(s.params[1]);
-              moves.push({ id: row.id, status: s.params[1], reason: s.params[3], merge_sha: s.params[4] });
+              moves.push({
+                id: row.id,
+                status: s.params[1],
+                reason: s.params[3],
+                merge_sha: s.params[4],
+              });
             }
             out.push({ results: row ? [{ id: row.id }] : [], meta: { changes: row ? 1 : 0 } });
           }
@@ -1726,12 +2247,22 @@ test("PLANT: an approved PR the policy leaves open merges on the approval, pinne
   await withFetch(tickRoutes(SRC), async (calls) => {
     const report = await autoMergeTick(env, new Date("2026-09-25T12:00:00Z"));
     assert.equal(report.outcomes[0].merged, true, report.outcomes[0].why ?? "");
-    assert.match(report.outcomes[0].why ?? "", /merged on the approval of access:admin@example\.com \(portal\)/);
+    assert.match(
+      report.outcomes[0].why ?? "",
+      /merged on the approval of access:admin@example\.com \(portal\)/,
+    );
     const merges = calls.filter((c) => c.method === "PUT" && c.path.endsWith("/merge"));
     assert.equal(merges.length, 1);
     assert.deepEqual(merges[0].body, { merge_method: "merge", sha: HEAD_SHA });
   });
-  assert.deepEqual(moves, [{ id: 1, status: "merged", reason: `merged on the approval of access:admin@example.com (portal) at ${HEAD_SHA.slice(0, 7)}`, merge_sha: "merged00000000000000000000000000000000000" }]);
+  assert.deepEqual(moves, [
+    {
+      id: 1,
+      status: "merged",
+      reason: `merged on the approval of access:admin@example.com (portal) at ${HEAD_SHA.slice(0, 7)}`,
+      merge_sha: "merged00000000000000000000000000000000000",
+    },
+  ]);
 });
 
 test("the same PR with no approval is declined by the policy and not merged", async () => {
@@ -1742,7 +2273,9 @@ test("the same PR with no approval is declined by the policy and not merged", as
 });
 
 test("a new push voids the approval and nothing merges", async () => {
-  const { env, moves } = withApprovals(await enabledEnv(), [approval({ head_sha: "f".repeat(40) })]);
+  const { env, moves } = withApprovals(await enabledEnv(), [
+    approval({ head_sha: "f".repeat(40) }),
+  ]);
   const { outcome, merges } = await tickWith(env, tickRoutes(SRC));
   assert.equal(merges, 0);
   assert.equal(outcome.merged, false);
@@ -1751,26 +2284,44 @@ test("a new push voids the approval and nothing merges", async () => {
 });
 
 test("an approval 7 days old expires and nothing merges", async () => {
-  const { env, moves } = withApprovals(await enabledEnv(), [approval({ approved_at: "2026-09-18T11:00:00.000Z" })]);
+  const { env, moves } = withApprovals(await enabledEnv(), [
+    approval({ approved_at: "2026-09-18T11:00:00.000Z" }),
+  ]);
   const { merges } = await tickWith(env, tickRoutes(SRC));
   assert.equal(merges, 0);
   assert.equal(moves[0]?.status, "expired");
 });
 
 test("red CI voids the approval; CI still running waits and leaves it open", async () => {
-  const red = { ...tickRoutes(SRC), [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: { body: { check_runs: [{ name: "test", status: "completed", conclusion: "failure" }] } } };
+  const red = {
+    ...tickRoutes(SRC),
+    [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: {
+      body: { check_runs: [{ name: "test", status: "completed", conclusion: "failure" }] },
+    },
+  };
   const a = withApprovals(await enabledEnv(), [approval()]);
   assert.equal((await tickWith(a.env, red)).merges, 0);
   assert.equal(a.moves[0]?.status, "voided");
   assert.match(String(a.moves[0]?.reason), /^CI red: /);
-  const running = { ...tickRoutes(SRC), [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: { body: { check_runs: [{ name: "test", status: "in_progress", conclusion: null }] } } };
+  const running = {
+    ...tickRoutes(SRC),
+    [`GET ${OWNER}/commits/${HEAD_SHA}/check-runs`]: {
+      body: { check_runs: [{ name: "test", status: "in_progress", conclusion: null }] },
+    },
+  };
   const b = withApprovals(await enabledEnv(), [approval()]);
   assert.equal((await tickWith(b.env, running)).merges, 0);
   assert.deepEqual(b.moves, [], "an approval was moved while CI was still running");
 });
 
 test("a 409 from GitHub voids the approval as head moved", async () => {
-  const routes = { ...tickRoutes(SRC), [`PUT ${OWNER}/pulls/23/merge`]: { status: 409, body: { message: "Head branch was modified." } } };
+  const routes = {
+    ...tickRoutes(SRC),
+    [`PUT ${OWNER}/pulls/23/merge`]: {
+      status: 409,
+      body: { message: "Head branch was modified." },
+    },
+  };
   const { env, moves } = withApprovals(await enabledEnv(), [approval()]);
   const { outcome } = await tickWith(env, routes);
   assert.equal(outcome.merged, false);
@@ -1798,12 +2349,16 @@ test("with the approvals table missing the tick runs as the policy alone", async
 
 async function suspendedTick(files: string[], suspended: string | null) {
   const env = await enabledEnv();
-  if (suspended !== null) await (env as unknown as { APP_KV: KVNamespace }).APP_KV.put(SUSPENDED_KEY, suspended);
+  if (suspended !== null)
+    await (env as unknown as { APP_KV: KVNamespace }).APP_KV.put(SUSPENDED_KEY, suspended);
   return tickWith(env, tickRoutes(files));
 }
 
 test("PLANT: a suspended unit holds back a PR the policy would merge, as class approve", async () => {
-  const { outcome, merges } = await suspendedTick(["docs/autonomy.md"], JSON.stringify([{ unit: "capsid/docs", since: "2026-09-24T00:00:00Z", reason: "rolled back" }]));
+  const { outcome, merges } = await suspendedTick(
+    ["docs/autonomy.md"],
+    JSON.stringify([{ unit: "capsid/docs", since: "2026-09-24T00:00:00Z", reason: "rolled back" }]),
+  );
   assert.equal(merges, 0, "a PR in a suspended unit was merged unattended");
   assert.equal(outcome.merged, false);
   assert.equal(outcome.failed, "unit_suspended");
@@ -1812,7 +2367,12 @@ test("PLANT: a suspended unit holds back a PR the policy would merge, as class a
 });
 
 test("a suspension of another unit leaves the PR to merge", async () => {
-  const { outcome, merges } = await suspendedTick(["docs/autonomy.md"], JSON.stringify([{ unit: "capsid/dashboard-css", since: "2026-09-24T00:00:00Z", reason: "rolled back" }]));
+  const { outcome, merges } = await suspendedTick(
+    ["docs/autonomy.md"],
+    JSON.stringify([
+      { unit: "capsid/dashboard-css", since: "2026-09-24T00:00:00Z", reason: "rolled back" },
+    ]),
+  );
   assert.equal(merges, 1);
   assert.equal(outcome.merged, true, outcome.why ?? "");
 });
@@ -1825,7 +2385,20 @@ test("a suspension list that cannot be read holds every unit back this tick", as
 });
 
 test("the merge audit row carries the PR's path class, so a rollback can find its unit", () => {
-  const params = mergeParams("6", { repo: "o/r", number: 1, headSha: "a".repeat(40), jobId: "job_x", jobClaimedBy: "agent:d" } as never, [], "b".repeat(40), new Date("2026-10-11T00:00:00Z"), "docs");
+  const params = mergeParams(
+    "6",
+    {
+      repo: "o/r",
+      number: 1,
+      headSha: "a".repeat(40),
+      jobId: "job_x",
+      jobClaimedBy: "agent:d",
+    } as never,
+    [],
+    "b".repeat(40),
+    new Date("2026-10-11T00:00:00Z"),
+    "docs",
+  );
   assert.equal(params.path_class, "docs");
 });
 
@@ -1836,7 +2409,15 @@ test("the merge audit row carries the PR's path class, so a rollback can find it
 async function unitTick(files: string[], units: string[]) {
   const policy = `${GOOD_POLICY}\n\n## Auto units\n\n${units.map((u) => `- unit \`${u}\``).join("\n")}\n`;
   const env = await tickEnv(await signTaskBody(SECRET, policy), {
-    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
+    jobs: [
+      {
+        id: "job_4c0ecc28548b",
+        namespace: "capsid",
+        claimed_by: "agent:capsid-driver",
+        status: "done",
+        result_ref: PR_URL,
+      },
+    ],
     agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
   });
   return tickWith(env, tickRoutes(files));
@@ -1854,10 +2435,23 @@ test("PLANT: a promoted unit merges what v7 held back; another unit's promotion 
 test("a promoted unit is still held back by a suspension", async () => {
   const policy = `${GOOD_POLICY}\n\n## Auto units\n\n- unit \`capsid / tests\`\n`;
   const env = await tickEnv(await signTaskBody(SECRET, policy), {
-    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
+    jobs: [
+      {
+        id: "job_4c0ecc28548b",
+        namespace: "capsid",
+        claimed_by: "agent:capsid-driver",
+        status: "done",
+        result_ref: PR_URL,
+      },
+    ],
     agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
   });
-  await (env as unknown as { APP_KV: KVNamespace }).APP_KV.put(SUSPENDED_KEY, JSON.stringify([{ unit: "capsid/tests", since: "2026-09-24T00:00:00Z", reason: "rolled back" }]));
+  await (env as unknown as { APP_KV: KVNamespace }).APP_KV.put(
+    SUSPENDED_KEY,
+    JSON.stringify([
+      { unit: "capsid/tests", since: "2026-09-24T00:00:00Z", reason: "rolled back" },
+    ]),
+  );
   const { outcome, merges } = await tickWith(env, tickRoutes(["test/jobs.test.ts"]));
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "unit_suspended");
@@ -1870,10 +2464,21 @@ test("a promoted unit is still held back by a suspension", async () => {
 async function testFilesTick(files: Array<Record<string, unknown>>) {
   const policy = `${GOOD_POLICY}\n\n## Auto units\n\n- unit \`capsid / tests\`\n`;
   const env = await tickEnv(await signTaskBody(SECRET, policy), {
-    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
+    jobs: [
+      {
+        id: "job_4c0ecc28548b",
+        namespace: "capsid",
+        claimed_by: "agent:capsid-driver",
+        status: "done",
+        result_ref: PR_URL,
+      },
+    ],
     agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
   });
-  return tickWith(env, { ...tickRoutes(["test/x.test.ts"]), [`GET ${OWNER}/pulls/23/files`]: { body: files } });
+  return tickWith(env, {
+    ...tickRoutes(["test/x.test.ts"]),
+    [`GET ${OWNER}/pulls/23/files`]: { body: files },
+  });
 }
 
 test("PLANT: a PR that only adds tests (a new file, and added lines in an old one) merges in a promoted tests unit", async () => {
@@ -1887,25 +2492,42 @@ test("PLANT: a PR that only adds tests (a new file, and added lines in an old on
 });
 
 test("PLANT: a one-line edit of an existing test is held as class approve, though the unit is promoted", async () => {
-  const { outcome, merges } = await testFilesTick([{ filename: "test/old.test.ts", status: "modified", additions: 1, deletions: 1 }]);
+  const { outcome, merges } = await testFilesTick([
+    { filename: "test/old.test.ts", status: "modified", additions: 1, deletions: 1 },
+  ]);
   assert.equal(merges, 0, "an edited existing test was merged unattended");
   assert.equal(outcome.failed, "changes_existing_test");
   assert.equal(outcome.merge_class?.class, "approve");
-  assert.match(outcome.merge_class?.reasons[0] ?? "", /^changes an existing test: test\/old\.test\.ts/);
+  assert.match(
+    outcome.merge_class?.reasons[0] ?? "",
+    /^changes an existing test: test\/old\.test\.ts/,
+  );
 });
 
 test("PLANT: a deleted test and a renamed test are held", async () => {
-  const removed = await testFilesTick([{ filename: "test/gone.test.ts", status: "removed", additions: 0, deletions: 30 }]);
+  const removed = await testFilesTick([
+    { filename: "test/gone.test.ts", status: "removed", additions: 0, deletions: 30 },
+  ]);
   assert.equal(removed.merges, 0, "a deleted test was merged unattended");
   assert.equal(removed.outcome.failed, "changes_existing_test");
-  const renamed = await testFilesTick([{ filename: "test/new-name.test.ts", previous_filename: "test/old-name.test.ts", status: "renamed", additions: 0, deletions: 0 }]);
+  const renamed = await testFilesTick([
+    {
+      filename: "test/new-name.test.ts",
+      previous_filename: "test/old-name.test.ts",
+      status: "renamed",
+      additions: 0,
+      deletions: 0,
+    },
+  ]);
   assert.equal(renamed.merges, 0, "a renamed test was merged unattended");
   assert.equal(renamed.outcome.failed, "changes_existing_test");
   assert.match(renamed.outcome.merge_class?.reasons[0] ?? "", /test\/old-name\.test\.ts/);
 });
 
 test("a test file GitHub reports with no status is held, not read as an addition", async () => {
-  const { outcome, merges } = await testFilesTick([{ filename: "test/old.test.ts", additions: 3, deletions: 0 }]);
+  const { outcome, merges } = await testFilesTick([
+    { filename: "test/old.test.ts", additions: 3, deletions: 0 },
+  ]);
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "changes_existing_test");
 });
@@ -1915,12 +2537,20 @@ test("a test file GitHub reports with no status is held, not read as an addition
 
 async function pausedTick(paused: string | null) {
   const env = await enabledEnv();
-  if (paused !== null) await (env as unknown as { APP_KV: KVNamespace }).APP_KV.put(PAUSED_KEY, paused);
+  if (paused !== null)
+    await (env as unknown as { APP_KV: KVNamespace }).APP_KV.put(PAUSED_KEY, paused);
   return tickWith(env, tickRoutes(["docs/autonomy.md"]));
 }
 
 test("PLANT: a paused namespace holds a PR the policy would merge, as class approve", async () => {
-  const { outcome, merges } = await pausedTick(JSON.stringify({ capsid: { since: "2026-09-24T00:00:00Z", reason: "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days" } }));
+  const { outcome, merges } = await pausedTick(
+    JSON.stringify({
+      capsid: {
+        since: "2026-09-24T00:00:00Z",
+        reason: "2 of the pull requests auto-merge merged were rolled back or reverted in 7 days",
+      },
+    }),
+  );
   assert.equal(merges, 0, "a PR in a paused namespace was merged unattended");
   assert.equal(outcome.failed, "namespace_paused");
   assert.equal(outcome.merge_class?.class, "approve");
@@ -1928,7 +2558,9 @@ test("PLANT: a paused namespace holds a PR the policy would merge, as class appr
 });
 
 test("another namespace's pause leaves the PR to merge", async () => {
-  const { outcome, merges } = await pausedTick(JSON.stringify({ carrel: { since: "2026-09-24T00:00:00Z", reason: "rolled back" } }));
+  const { outcome, merges } = await pausedTick(
+    JSON.stringify({ carrel: { since: "2026-09-24T00:00:00Z", reason: "rolled back" } }),
+  );
   assert.equal(merges, 1);
   assert.equal(outcome.merged, true, outcome.why ?? "");
 });
@@ -1942,7 +2574,10 @@ test("a pause list that cannot be read holds every namespace this tick", async (
 
 test("Dustin's approval still merges a PR in a paused namespace, and one that changes an existing test", async () => {
   const paused = await enabledEnv();
-  await (paused as unknown as { APP_KV: KVNamespace }).APP_KV.put(PAUSED_KEY, JSON.stringify({ capsid: { since: "2026-09-24T00:00:00Z", reason: "rolled back" } }));
+  await (paused as unknown as { APP_KV: KVNamespace }).APP_KV.put(
+    PAUSED_KEY,
+    JSON.stringify({ capsid: { since: "2026-09-24T00:00:00Z", reason: "rolled back" } }),
+  );
   const a = withApprovals(paused, [approval()]);
   await withFetch(tickRoutes(["docs/autonomy.md"]), async (calls) => {
     const report = await autoMergeTick(a.env, new Date("2026-09-25T12:00:00Z"));
@@ -1952,11 +2587,24 @@ test("Dustin's approval still merges a PR in a paused namespace, and one that ch
   assert.equal(a.moves.length, 1);
   const policy = `${GOOD_POLICY}\n\n## Auto units\n\n- unit \`capsid / tests\`\n`;
   const env = await tickEnv(await signTaskBody(SECRET, policy), {
-    jobs: [{ id: "job_4c0ecc28548b", namespace: "capsid", claimed_by: "agent:capsid-driver", status: "done", result_ref: PR_URL }],
+    jobs: [
+      {
+        id: "job_4c0ecc28548b",
+        namespace: "capsid",
+        claimed_by: "agent:capsid-driver",
+        status: "done",
+        result_ref: PR_URL,
+      },
+    ],
     agents: [{ name: "capsid-driver", kind: "driver", revoked_at: null }],
   });
   const b = withApprovals(env, [approval()]);
-  const routes = { ...tickRoutes(["test/x.test.ts"]), [`GET ${OWNER}/pulls/23/files`]: { body: [{ filename: "test/x.test.ts", status: "modified", additions: 1, deletions: 1 }] } };
+  const routes = {
+    ...tickRoutes(["test/x.test.ts"]),
+    [`GET ${OWNER}/pulls/23/files`]: {
+      body: [{ filename: "test/x.test.ts", status: "modified", additions: 1, deletions: 1 }],
+    },
+  };
   await withFetch(routes, async (calls) => {
     const report = await autoMergeTick(b.env, new Date("2026-09-25T12:00:00Z"));
     assert.equal(report.outcomes[0].merged, true, report.outcomes[0].why ?? "");
@@ -1971,15 +2619,29 @@ test("Dustin's approval still merges a PR in a paused namespace, and one that ch
 function visualRoutes(body: string) {
   const routes = tickRoutes(["docs/autonomy.md"]);
   const [pr] = routes[`GET ${OWNER}/pulls`].body;
-  return { ...routes, [`GET ${OWNER}/pulls`]: { body: [{ ...pr, title: "New header", body, labels: [{ name: "visual" }] }] } };
+  return {
+    ...routes,
+    [`GET ${OWNER}/pulls`]: {
+      body: [{ ...pr, title: "New header", body, labels: [{ name: "visual" }] }],
+    },
+  };
 }
 
 test("PLANT: a visual PR the policy would merge is held for Dustin's look, with its preview and screenshots", async () => {
-  const { outcome, merges } = await tickWith(await enabledEnv(), visualRoutes("Closes job_4c0ecc28548b.\n\nPreview: https://pr-23.sample.workers.dev/\n\n![after](https://example.com/after.png)"));
+  const { outcome, merges } = await tickWith(
+    await enabledEnv(),
+    visualRoutes(
+      "Closes job_4c0ecc28548b.\n\nPreview: https://pr-23.sample.workers.dev/\n\n![after](https://example.com/after.png)",
+    ),
+  );
   assert.equal(merges, 0, "a visual PR was merged unattended");
   assert.equal(outcome.failed, "visual_awaits_look");
   assert.equal(outcome.merge_class?.class, "approve");
-  assert.deepEqual(outcome.visual, { title: "New header", preview: "https://pr-23.sample.workers.dev/", shots: ["https://example.com/after.png"] });
+  assert.deepEqual(outcome.visual, {
+    title: "New header",
+    preview: "https://pr-23.sample.workers.dev/",
+    shots: ["https://example.com/after.png"],
+  });
 });
 
 test("PLANT: a draft PR the policy would merge is held as class wait and never sent to the merge API", async () => {
@@ -1996,7 +2658,10 @@ test("PLANT: a draft PR the policy would merge is held as class wait and never s
 });
 
 test("a visual PR whose body names no job is still judged and waits for Dustin as class approve", async () => {
-  const { outcome, merges } = await tickWith(await enabledEnv(), visualRoutes("A redesign, no job here."));
+  const { outcome, merges } = await tickWith(
+    await enabledEnv(),
+    visualRoutes("A redesign, no job here."),
+  );
   assert.equal(merges, 0);
   assert.equal(outcome.failed, "body_names_job");
   assert.equal(outcome.merge_class?.class, "approve");

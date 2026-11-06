@@ -10,7 +10,10 @@ import type { OpsFeed } from "../src/ops-types/feed.ts";
 // stands for: a switch in Settings' Automation panel, or the confirm dialog.
 const { stopCommands } = await import("../dashboard/src/lib/stops.ts");
 
-const SAMPLE = readFileSync(join(import.meta.dirname, "..", "dashboard", "dev", "sample-feed.json"), "utf8");
+const SAMPLE = readFileSync(
+  join(import.meta.dirname, "..", "dashboard", "dev", "sample-feed.json"),
+  "utf8",
+);
 const feed = (): OpsFeed => JSON.parse(SAMPLE) as OpsFeed;
 
 function run(f: OpsFeed) {
@@ -37,7 +40,9 @@ test("PLANT: each stop runs its own control: a switch is pressed, a revoke previ
   f.live.overnight.mode = "subscription";
   const { list, calls } = run(f);
   for (const c of list) c.run();
-  const live = f.live.agents.filter((a) => !a.revoked_at).map((a) => `confirm revoke_agent ${JSON.stringify({ name: a.name })}`);
+  const live = f.live.agents
+    .filter((a) => !a.revoked_at)
+    .map((a) => `confirm revoke_agent ${JSON.stringify({ name: a.name })}`);
   assert.deepEqual(calls, ["flip sw-overnight", ...live]);
   assert.ok(list.every((c) => c.group === "Stop"));
 });

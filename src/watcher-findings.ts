@@ -75,7 +75,12 @@ export interface EvidenceEntry {
 /** The row's evidence with this sighting appended, newest last, the newest
  *  MAX_EVIDENCE kept. Evidence this Worker wrote that does not parse is a defect to
  *  see: it is logged and replaced, never silently dropped. */
-export function appendEvidence(fingerprint: string, existing: string | null, f: Sighted, now: Date): string {
+export function appendEvidence(
+  fingerprint: string,
+  existing: string | null,
+  f: Sighted,
+  now: Date,
+): string {
   let list: EvidenceEntry[] = [];
   if (existing) {
     try {
@@ -83,10 +88,18 @@ export function appendEvidence(fingerprint: string, existing: string | null, f: 
       if (!Array.isArray(parsed)) throw new Error("not an array");
       list = parsed as EvidenceEntry[];
     } catch (err) {
-      logEvent("WATCHER_EVIDENCE_UNREADABLE", { message: `WATCHER_EVIDENCE_UNREADABLE ${fingerprint}: ${err instanceof Error ? err.message : String(err)}; starting it again` }, { level: "error" });
+      logEvent(
+        "WATCHER_EVIDENCE_UNREADABLE",
+        {
+          message: `WATCHER_EVIDENCE_UNREADABLE ${fingerprint}: ${err instanceof Error ? err.message : String(err)}; starting it again`,
+        },
+        { level: "error" },
+      );
     }
   }
-  const lines = (f.evidence ?? []).slice(0, MAX_EVIDENCE_LINES).map((line) => line.slice(0, MAX_EVIDENCE_LINE));
+  const lines = (f.evidence ?? [])
+    .slice(0, MAX_EVIDENCE_LINES)
+    .map((line) => line.slice(0, MAX_EVIDENCE_LINE));
   list.push({ at: now.toISOString(), lines });
   return JSON.stringify(list.slice(-MAX_EVIDENCE));
 }
@@ -99,7 +112,9 @@ export interface JobEnd {
 }
 
 const clearedByWatcher = (job: JobEnd) =>
-  job.status === "failed" && (job.result_summary === CLEARED_SUMMARY || (job.result_summary?.startsWith(`${CLEARED_SUMMARY}: `) ?? false));
+  job.status === "failed" &&
+  (job.result_summary === CLEARED_SUMMARY ||
+    (job.result_summary?.startsWith(`${CLEARED_SUMMARY}: `) ?? false));
 
 export type SightingVerdict =
   // Its job is open and the row knows it: count the sighting.
@@ -117,8 +132,16 @@ export type SightingVerdict =
 /** What one sighting does, from the row (null when there is none), the open job the
  *  queue holds for this fingerprint, and, for an 'open' row whose job is no longer
  *  open, how that job ended. Pure: the pass does the reads and the writes. */
-export function onSighting(row: FindingRow | null, openJobId: string | null, rowJob: JobEnd | null, now: Date): SightingVerdict {
-  if (openJobId) return row?.state === "open" && row.job_id === openJobId ? { do: "bump" } : { do: "adopt", jobId: openJobId };
+export function onSighting(
+  row: FindingRow | null,
+  openJobId: string | null,
+  rowJob: JobEnd | null,
+  now: Date,
+): SightingVerdict {
+  if (openJobId)
+    return row?.state === "open" && row.job_id === openJobId
+      ? { do: "bump" }
+      : { do: "adopt", jobId: openJobId };
   if (!row) return { do: "post" };
 
   if (row.state === "open") {
@@ -135,17 +158,25 @@ export function onSighting(row: FindingRow | null, openJobId: string | null, row
     return { do: "dismiss" };
   }
 
-  if (row.state === "dismissed") return { do: "quiet", why: "dismissed, and it has not cleared since" };
+  if (row.state === "dismissed")
+    return { do: "quiet", why: "dismissed, and it has not cleared since" };
 
   // cleared
   const reopen = row.reopen_after ? Date.parse(row.reopen_after) : Number.NaN;
   // A cleared row with no usable reopen_after is filed rather than muted: a watcher
   // that goes quiet on a corrupt stamp reads as health.
   if (Number.isNaN(reopen)) {
-    logEvent("WATCHER_REOPEN_UNREADABLE", { message: `WATCHER_REOPEN_UNREADABLE ${row.fingerprint}: reopen_after '${row.reopen_after}'; filing it` }, { level: "error" });
+    logEvent(
+      "WATCHER_REOPEN_UNREADABLE",
+      {
+        message: `WATCHER_REOPEN_UNREADABLE ${row.fingerprint}: reopen_after '${row.reopen_after}'; filing it`,
+      },
+      { level: "error" },
+    );
     return { do: "post" };
   }
-  if (now.getTime() < reopen) return { do: "quiet", why: `cleared at ${row.cleared_at}, quiet until ${row.reopen_after}` };
+  if (now.getTime() < reopen)
+    return { do: "quiet", why: `cleared at ${row.cleared_at}, quiet until ${row.reopen_after}` };
   return { do: "post" };
 }
 
@@ -179,7 +210,10 @@ export function d1FindingMemory(env: Env): FindingMemory {
       const rows = new Map<string, FindingRow>();
       // Keyed reads for what was seen: the primary key, one row each.
       for (const fp of fingerprints) {
-        const row = await db.prepare("SELECT * FROM watcher_findings WHERE fingerprint = ?1").bind(fp).first<FindingRow>();
+        const row = await db
+          .prepare("SELECT * FROM watcher_findings WHERE fingerprint = ?1")
+          .bind(fp)
+          .first<FindingRow>();
         if (row) rows.set(fp, row);
       }
       // The rows a pass may clear, over the (state, namespace) index.
@@ -191,7 +225,10 @@ export function d1FindingMemory(env: Env): FindingMemory {
     },
 
     async job(id) {
-      return db.prepare("SELECT status, result_summary, updated_at FROM jobs WHERE id = ?1").bind(id).first<JobEnd>();
+      return db
+        .prepare("SELECT status, result_summary, updated_at FROM jobs WHERE id = ?1")
+        .bind(id)
+        .first<JobEnd>();
     },
 
     async insert(f, state, jobId, now) {
@@ -200,9 +237,17 @@ export function d1FindingMemory(env: Env): FindingMemory {
         .prepare(
           `INSERT INTO watcher_findings (fingerprint, namespace, title, state, job_id, first_seen_at, last_seen_at, seen_count, evidence, updated_at)
            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1, ?7, ?6)
-           ON CONFLICT (fingerprint) DO NOTHING RETURNING fingerprint`
+           ON CONFLICT (fingerprint) DO NOTHING RETURNING fingerprint`,
         )
-        .bind(f.fingerprint, f.namespace, f.title, state, jobId, iso, appendEvidence(f.fingerprint, null, f, now))
+        .bind(
+          f.fingerprint,
+          f.namespace,
+          f.title,
+          state,
+          jobId,
+          iso,
+          appendEvidence(f.fingerprint, null, f, now),
+        )
         .first<{ fingerprint: string }>();
       return won !== null;
     },
@@ -212,9 +257,15 @@ export function d1FindingMemory(env: Env): FindingMemory {
       const won = await db
         .prepare(
           `UPDATE watcher_findings SET title = ?3, seen_count = seen_count + 1, last_seen_at = ?4, evidence = ?5, updated_at = ?4
-           WHERE fingerprint = ?1 AND state = ?2 RETURNING fingerprint`
+           WHERE fingerprint = ?1 AND state = ?2 RETURNING fingerprint`,
         )
-        .bind(row.fingerprint, row.state, f.title, iso, appendEvidence(row.fingerprint, row.evidence, f, now))
+        .bind(
+          row.fingerprint,
+          row.state,
+          f.title,
+          iso,
+          appendEvidence(row.fingerprint, row.evidence, f, now),
+        )
         .first<{ fingerprint: string }>();
       return won !== null;
     },
@@ -225,9 +276,17 @@ export function d1FindingMemory(env: Env): FindingMemory {
         .prepare(
           `UPDATE watcher_findings SET state = 'open', job_id = ?3, title = ?4, namespace = ?5, cleared_at = NULL, reopen_after = NULL,
                   seen_count = seen_count + 1, last_seen_at = ?6, evidence = ?7, updated_at = ?6
-           WHERE fingerprint = ?1 AND state = ?2 RETURNING fingerprint`
+           WHERE fingerprint = ?1 AND state = ?2 RETURNING fingerprint`,
         )
-        .bind(row.fingerprint, row.state, jobId, f.title, f.namespace, iso, appendEvidence(row.fingerprint, row.evidence, f, now))
+        .bind(
+          row.fingerprint,
+          row.state,
+          jobId,
+          f.title,
+          f.namespace,
+          iso,
+          appendEvidence(row.fingerprint, row.evidence, f, now),
+        )
         .first<{ fingerprint: string }>();
       return won !== null;
     },
@@ -240,9 +299,14 @@ export function d1FindingMemory(env: Env): FindingMemory {
         .prepare(
           `UPDATE watcher_findings SET state = 'dismissed', reopen_after = NULL, cleared_at = NULL,
                   seen_count = seen_count + 1, last_seen_at = ?3, evidence = ?4, updated_at = ?3
-           WHERE fingerprint = ?1 AND state = 'open' AND job_id = ?2 RETURNING fingerprint`
+           WHERE fingerprint = ?1 AND state = 'open' AND job_id = ?2 RETURNING fingerprint`,
         )
-        .bind(row.fingerprint, row.job_id, iso, appendEvidence(row.fingerprint, row.evidence, f, now))
+        .bind(
+          row.fingerprint,
+          row.job_id,
+          iso,
+          appendEvidence(row.fingerprint, row.evidence, f, now),
+        )
         .first<{ fingerprint: string }>();
       return won !== null;
     },
@@ -252,7 +316,7 @@ export function d1FindingMemory(env: Env): FindingMemory {
       const won = await db
         .prepare(
           `UPDATE watcher_findings SET state = 'cleared', cleared_at = ?3, reopen_after = ?4, updated_at = ?3
-           WHERE fingerprint = ?1 AND state = ?2 RETURNING fingerprint`
+           WHERE fingerprint = ?1 AND state = ?2 RETURNING fingerprint`,
         )
         .bind(row.fingerprint, row.state, iso, reopenAfter(now))
         .first<{ fingerprint: string }>();

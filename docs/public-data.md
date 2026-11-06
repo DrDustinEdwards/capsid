@@ -35,19 +35,19 @@ The model is written by hand, so the daily maintenance pass compares it with wha
 
 `src/public-stats.ts` computes them in the same daily build. Every window is whole UTC days ending at midnight, so a day's activity appears only the next day and nothing in the document says when anything happened. A rate or median over fewer than ten rows (`FLOOR`) is null. The only strings are `as_of` (a date) and `capsid.sha7` (already public on /health).
 
-| Field | From | Why it cannot leak |
-| --- | --- | --- |
-| `jobs.completed_7d`, `completed_30d`, `failed_30d`, `completed_by_week` (8 whole weeks, oldest first) | `jobs` by status and `updated_at` | counts across every namespace and agent |
-| `jobs.failed_by_week`, `gates.waits_by_week` (the same 8 weeks) | `jobs` by status, `job_touches` that ended a wait | counts across every namespace, agent and command |
-| `verification.agreement_by_week` (the same 8 weeks) | `job_evaluations` by `recorded_at` | a rate per week, null for a week under ten |
-| `jobs.open`, `jobs.blocked` | `jobs` by status, read once a day (answer 5) | one daily count, attributable to nothing |
-| `jobs.median_duration_minutes_30d` | `job_outcomes.duration_minutes` | a median, null under ten |
-| `verification.evaluations_90d`, `agreement_rate_90d` | `job_evaluations.agreement`: agree over agree plus disagree | a count and a rate over every agent |
-| `verification.pr_merge_rate_90d`, `ci_green_rate_90d` | `job_outcomes`, verified fields only, as `src/agent-record.ts` reads them | rates over every agent, null under ten |
-| `gates.waits_30d`, `median_wait_minutes_30d`, `share_ended_by_policy_30d` | `job_touches` that ended a wait | no command, class or actor |
-| `sites.watched`, `uptime_7d`, `slots_measured_7d` | the watcher snapshot's half-hour rings, measured slots only | one number across sites, no site or error text |
-| `store.documents`, `store.namespaces` | row counts | no names |
-| `systems.public`, `systems.private` | the filtered model's counts | counts |
+| Field                                                                                                 | From                                                                      | Why it cannot leak                               |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------ |
+| `jobs.completed_7d`, `completed_30d`, `failed_30d`, `completed_by_week` (8 whole weeks, oldest first) | `jobs` by status and `updated_at`                                         | counts across every namespace and agent          |
+| `jobs.failed_by_week`, `gates.waits_by_week` (the same 8 weeks)                                       | `jobs` by status, `job_touches` that ended a wait                         | counts across every namespace, agent and command |
+| `verification.agreement_by_week` (the same 8 weeks)                                                   | `job_evaluations` by `recorded_at`                                        | a rate per week, null for a week under ten       |
+| `jobs.open`, `jobs.blocked`                                                                           | `jobs` by status, read once a day (answer 5)                              | one daily count, attributable to nothing         |
+| `jobs.median_duration_minutes_30d`                                                                    | `job_outcomes.duration_minutes`                                           | a median, null under ten                         |
+| `verification.evaluations_90d`, `agreement_rate_90d`                                                  | `job_evaluations.agreement`: agree over agree plus disagree               | a count and a rate over every agent              |
+| `verification.pr_merge_rate_90d`, `ci_green_rate_90d`                                                 | `job_outcomes`, verified fields only, as `src/agent-record.ts` reads them | rates over every agent, null under ten           |
+| `gates.waits_30d`, `median_wait_minutes_30d`, `share_ended_by_policy_30d`                             | `job_touches` that ended a wait                                           | no command, class or actor                       |
+| `sites.watched`, `uptime_7d`, `slots_measured_7d`                                                     | the watcher snapshot's half-hour rings, measured slots only               | one number across sites, no site or error text   |
+| `store.documents`, `store.namespaces`                                                                 | row counts                                                                | no names                                         |
+| `systems.public`, `systems.private`                                                                   | the filtered model's counts                                               | counts                                           |
 
 The three weekly series are optional in the schema only so a document written before them (2026-10-23) still parses.
 

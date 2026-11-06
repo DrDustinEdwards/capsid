@@ -30,8 +30,10 @@ export async function readNamedPrs(
   env: Env,
   namespace: string,
   urls: readonly string[],
-  jobBody: string
-): Promise<{ refusal: { pr: string; why: string } } | { changed: string[]; unread: boolean } | null> {
+  jobBody: string,
+): Promise<
+  { refusal: { pr: string; why: string } } | { changed: string[]; unread: boolean } | null
+> {
   if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_PRIVATE_KEY) return null;
   const changed: string[] = [];
   let unread = false;
@@ -46,7 +48,12 @@ export async function readNamedPrs(
 
 /** Why complete is refused on CI, on a test taken away, or on a DONE WHEN item no pull
  *  request changed, with the pull request to bind the job to (null when none is named), or null. */
-export async function ciRefusal(env: Env, namespace: string, urls: readonly string[], jobBody: string): Promise<{ pr: string | null; why: string } | null> {
+export async function ciRefusal(
+  env: Env,
+  namespace: string,
+  urls: readonly string[],
+  jobBody: string,
+): Promise<{ pr: string | null; why: string } | null> {
   const read = await readNamedPrs(env, namespace, urls, jobBody);
   if (read === null) return null;
   if ("refusal" in read) return read.refusal;
@@ -63,7 +70,12 @@ export async function ciRefusal(env: Env, namespace: string, urls: readonly stri
 }
 
 // A refusal, the paths the pull request changes when it passes, or null when it could not be read.
-async function notGreen(env: Env, namespace: string, url: string, jobBody: string): Promise<string | string[] | null> {
+async function notGreen(
+  env: Env,
+  namespace: string,
+  url: string,
+  jobBody: string,
+): Promise<string | string[] | null> {
   const parsed = parsePrUrl(url);
   if (!parsed) return [];
   try {
@@ -76,24 +88,31 @@ async function notGreen(env: Env, namespace: string, url: string, jobBody: strin
   const sha = facts.head_sha.slice(0, 7);
   const [owner, repo] = facts.repo.split("/");
   const checks = await readCheckRuns(env, owner, repo, facts.head_sha, CHECKS_MAX_PAGES);
-  if (checks.problem) return `${url}: the check runs on ${sha} could not be read whole (${checks.problem}), so its CI is not shown green. ${AGAIN}`;
+  if (checks.problem)
+    return `${url}: the check runs on ${sha} could not be read whole (${checks.problem}), so its CI is not shown green. ${AGAIN}`;
   // The shadow test records and never judges (src/shadow.ts), so complete does not wait on it.
   const judged = checks.items.filter((c) => c.name !== "shadow-test");
   if (judged.length > 0) {
     const verdict = ciVerdict(judged);
-    if (verdict.conclusion === "pending") return `${url}: CI on ${sha} has not finished (${verdict.note}). The job stays claimed. ${AGAIN}`;
-    if (verdict.conclusion === "failure") return `${url}: CI on ${sha} failed (${verdict.note}). ${OR_FAIL}`;
+    if (verdict.conclusion === "pending")
+      return `${url}: CI on ${sha} has not finished (${verdict.note}). The job stays claimed. ${AGAIN}`;
+    if (verdict.conclusion === "failure")
+      return `${url}: CI on ${sha} failed (${verdict.note}). ${OR_FAIL}`;
   }
   // A job that opts into the test on the base (scripts/test-on-base.mjs) needs its run to
   // have passed; running or failed, the verdict above already answered.
-  if (TEST_ON_BASE.test(proseOnly(jobBody)) && !checks.items.some((c) => c.name === "test-on-base" && c.conclusion === "success")) {
+  if (
+    TEST_ON_BASE.test(proseOnly(jobBody)) &&
+    !checks.items.some((c) => c.name === "test-on-base" && c.conclusion === "success")
+  ) {
     return (
       `${url}: the job asks for its tests to be run on the base, and no test-on-base check passed on ${sha}. ` +
       `Label the pull request test-on-base (the workflow runs in this repository only), then complete again; or call fail with the reason.`
     );
   }
   const files = await readPrFiles(env, owner, repo, parsed.number);
-  if (files.problem) return `${url}: its file list could not be read whole (${files.problem}), so its tests are not shown kept. ${AGAIN}`;
+  if (files.problem)
+    return `${url}: its file list could not be read whole (${files.problem}), so its tests are not shown kept. ${AGAIN}`;
   const weakened = weakenedTests(files.rows, jobBody);
   if (weakened.length > 0) {
     return (

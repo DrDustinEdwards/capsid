@@ -47,12 +47,18 @@ const sql = extractStatements(path.join(import.meta.dirname, "src"));
 const srcDir = path.join(import.meta.dirname, "src");
 const prepareFiles = readdirSync(srcDir, { recursive: true })
   .map((f) => String(f).split(path.sep).join("/"))
-  .filter((f) => f.endsWith(".ts") && readFileSync(path.join(srcDir, f), "utf8").includes(".prepare("));
+  .filter(
+    (f) => f.endsWith(".ts") && readFileSync(path.join(srcDir, f), "utf8").includes(".prepare("),
+  );
 
 export default defineConfig({
   // The Portal's pages are the dashboard's build (src/portal-pages.d.ts); this layer tests the
   // Worker around them with the tests' stand-in.
-  resolve: { alias: { "capsid-portal-pages": path.join(import.meta.dirname, "test", "fixtures", "portal-pages.ts") } },
+  resolve: {
+    alias: {
+      "capsid-portal-pages": path.join(import.meta.dirname, "test", "fixtures", "portal-pages.ts"),
+    },
+  },
   plugins: [
     cloudflareTest({
       main: "./src/index.ts",

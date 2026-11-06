@@ -18,7 +18,9 @@ test("a verified command is shown with its Copy button and no warning", async ({
   await expect(drawer.locator("[data-signature]")).toHaveCount(0);
 });
 
-test("a command written before signing is shown, with an Unsigned note under it", async ({ page }) => {
+test("a command written before signing is shown, with an Unsigned note under it", async ({
+  page,
+}) => {
   const drawer = await openJob(page, "job_15e10168e61c");
   await expect(drawer.getByRole("button", { name: "Copy command" })).toBeVisible();
   await expect(drawer.locator('[data-signature="legacy-unsigned"]')).toContainText("Unsigned");

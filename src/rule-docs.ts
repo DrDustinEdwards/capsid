@@ -52,24 +52,34 @@ const SERVED: ReadonlyMap<string, ReadonlySet<string> | null> = (() => {
 
 // Every action some served tool takes. An old tool name that is still an action somewhere
 // (delete_branch) is not stale when it stands alone.
-const SERVED_ACTIONS: ReadonlySet<string> = new Set([...SERVED.values()].flatMap((a) => (a ? [...a] : [])));
+const SERVED_ACTIONS: ReadonlySet<string> = new Set(
+  [...SERVED.values()].flatMap((a) => (a ? [...a] : [])),
+);
 
 // Old names with an underscore are not words, so outside backticks they still name the old
 // tool. rewriteProse reads only backtick spans and calls; this reads the rest. open_pr is
 // excluded for the reason rewriteProse gives (it is also a gate class). A name followed by
 // "(" is a call, which rewriteProse already reads.
-const BARE_OLD = OLD_TOOLS.filter((name) => name.includes("_") && name !== "open_pr" && !SERVED_ACTIONS.has(name));
+const BARE_OLD = OLD_TOOLS.filter(
+  (name) => name.includes("_") && name !== "open_pr" && !SERVED_ACTIONS.has(name),
+);
 const BARE_OLD_RE = new RegExp(`(?<![\\w./-])(${BARE_OLD.join("|")})(?![\\w(-])`, "g");
 
 // An old tool name as a whole word, to say which names a line rewriteProse rewrote held.
 // Inside capsid_work_jobs, "jobs" follows an underscore and is not a match.
-const OLD_WORD = new RegExp(`(?<![\\w-])(${OLD_TOOLS.slice().sort((a, b) => b.length - a.length).join("|")})(?![\\w-])`, "g");
+const OLD_WORD = new RegExp(
+  `(?<![\\w-])(${OLD_TOOLS.slice()
+    .sort((a, b) => b.length - a.length)
+    .join("|")})(?![\\w-])`,
+  "g",
+);
 
 // A capsid_* name where the text says it is a tool: a call, a dotted action, an action
 // after it, the word tool after it, or "call" before it. A capsid_* field, column or
 // cookie (capsid_sha, capsid_portal_csrf) is not a tool and is not read. A Capsid Admin
 // name is a tool wherever it appears.
-const CAPSID_NAME = /(?<![\w-])(capsid_[a-z][a-z_]*[a-z])(?![\w-])`?(?:(\()|\.([a-z_]+)\b|\s+\(?actions?\s+[`"]([a-z_]+)[`"]|\s+(?:\(?actions?|tools?)\b)?/g;
+const CAPSID_NAME =
+  /(?<![\w-])(capsid_[a-z][a-z_]*[a-z])(?![\w-])`?(?:(\()|\.([a-z_]+)\b|\s+\(?actions?\s+[`"]([a-z_]+)[`"]|\s+(?:\(?actions?|tools?)\b)?/g;
 const CALL_BEFORE = /\b(call|calls|calling|called|tool|tools|use|ask)\s+`?$/i;
 
 /** One stale reference: the line it is on and the name it uses. */
@@ -96,9 +106,11 @@ export function staleToolNames(text: string): StaleName[] {
   for (const c of prose.changes) {
     const lost = multiset([...c.before.matchAll(OLD_WORD)].map((m) => m[1]));
     for (const m of c.after.matchAll(OLD_WORD)) lost.set(m[1], (lost.get(m[1]) ?? 0) - 1);
-    for (const [name, n] of lost) for (let k = 0; k < n; k++) found.push({ line: c.line, text: name });
+    for (const [name, n] of lost)
+      for (let k = 0; k < n; k++) found.push({ line: c.line, text: name });
   }
-  for (const u of prose.unmapped) found.push({ line: u.line, text: [...u.text.matchAll(OLD_WORD)][0]?.[1] ?? u.text.trim() });
+  for (const u of prose.unmapped)
+    found.push({ line: u.line, text: [...u.text.matchAll(OLD_WORD)][0]?.[1] ?? u.text.trim() });
   let fenced = false;
   text.split("\n").forEach((raw, i) => {
     if (/^\s*(```|~~~)/.test(raw)) {
@@ -112,14 +124,19 @@ export function staleToolNames(text: string): StaleName[] {
     // capsid_* names: the tool must be served, and an action given must be one of its own.
     for (const m of raw.matchAll(CAPSID_NAME)) {
       const [whole, tool, called, dotted, named] = m;
-      const said = whole.slice(tool.length).replace(/^`/, "").length > 0 || called !== undefined || CALL_BEFORE.test(raw.slice(0, m.index)) || tool.startsWith("capsid_admin_");
+      const said =
+        whole.slice(tool.length).replace(/^`/, "").length > 0 ||
+        called !== undefined ||
+        CALL_BEFORE.test(raw.slice(0, m.index)) ||
+        tool.startsWith("capsid_admin_");
       if (!SERVED.has(tool)) {
         if (said) found.push({ line, text: tool });
         continue;
       }
       const action = dotted ?? named;
       const actions = SERVED.get(tool);
-      if (action !== undefined && actions && !actions.has(action)) found.push({ line, text: `${tool} action ${action}` });
+      if (action !== undefined && actions && !actions.has(action))
+        found.push({ line, text: `${tool} action ${action}` });
     }
   });
   return found.sort((a, b) => a.line - b.line);
@@ -127,7 +144,10 @@ export function staleToolNames(text: string): StaleName[] {
 
 /** The stale names as one clause: the count and the first five. */
 export function staleSummary(stale: readonly StaleName[]): string {
-  return `${stale.length} tool(s) or action(s) the Worker does not serve: ${stale.slice(0, 5).map((s) => `line ${s.line} "${s.text}"`).join("; ")}`;
+  return `${stale.length} tool(s) or action(s) the Worker does not serve: ${stale
+    .slice(0, 5)
+    .map((s) => `line ${s.line} "${s.text}"`)
+    .join("; ")}`;
 }
 
 /** What is wrong with one rule document, or null when it is not one or nothing is. */
@@ -140,7 +160,11 @@ export interface RuleDocProblem {
   stale: StaleName[];
 }
 
-export function ruleDocProblem(namespace: string, path: string, body: string): RuleDocProblem | null {
+export function ruleDocProblem(
+  namespace: string,
+  path: string,
+  body: string,
+): RuleDocProblem | null {
   const cap = ruleDocCap(namespace, path);
   if (cap === null) return null;
   const bytes = byteLength(body);
@@ -161,13 +185,25 @@ function describeRuleDocProblem(p: RuleDocProblem): string {
  *  stored body, or naming a stale tool the stored body did not. A write that cuts an
  *  over-cap document, or leaves an existing stale name alone, passes, so a violating
  *  document can be fixed in steps. Null when the write may go ahead. */
-export function ruleDocWriteRefusal(namespace: string, path: string, before: string | null, after: string): string | null {
+export function ruleDocWriteRefusal(
+  namespace: string,
+  path: string,
+  before: string | null,
+  after: string,
+): string | null {
   const problem = ruleDocProblem(namespace, path, after);
   if (!problem) return null;
   const reasons: string[] = [];
   if (problem.oversize && (before === null || byteLength(after) > byteLength(before))) {
-    const next = path === "core.md" ? "Rewrite it shorter: current facts only." : DECISIONS.test(path) ? "Fold rulings into the rules they changed, or move settled ones to archive/." : "Cut it, or split it by subject.";
-    reasons.push(`it would be ${problem.bytes} bytes, over the ${problem.cap}-byte cap for this rule document${before === null ? "" : ` and larger than the ${byteLength(before)} bytes stored`}. ${next}`);
+    const next =
+      path === "core.md"
+        ? "Rewrite it shorter: current facts only."
+        : DECISIONS.test(path)
+          ? "Fold rulings into the rules they changed, or move settled ones to archive/."
+          : "Cut it, or split it by subject.";
+    reasons.push(
+      `it would be ${problem.bytes} bytes, over the ${problem.cap}-byte cap for this rule document${before === null ? "" : ` and larger than the ${byteLength(before)} bytes stored`}. ${next}`,
+    );
   }
   const had = multiset(before === null ? [] : staleToolNames(before).map((s) => s.text));
   const added: StaleName[] = [];
@@ -179,7 +215,7 @@ export function ruleDocWriteRefusal(namespace: string, path: string, before: str
   if (added.length > 0) {
     reasons.push(
       `it would name ${staleSummary(added)}. ` +
-        `Use the served names (capsid_find_docs, capsid_work_jobs action post, and so on; tools/list has them all).`
+        `Use the served names (capsid_find_docs, capsid_work_jobs action post, and so on; tools/list has them all).`,
     );
   }
   if (reasons.length === 0) return null;
@@ -190,22 +226,52 @@ export function ruleDocWriteRefusal(namespace: string, path: string, before: str
  *  over its cap or naming a stale tool, in every namespace, and how many were read.
  *  ruleDocCap alone decides which documents those are: every path is listed, and only the
  *  rule documents' bodies are read. A failed read is one rule-docs-not-checked item. */
-export async function gatherRuleDocItems(db: D1Database): Promise<{ items: OpsMaintenanceItem[]; read: number }> {
+export async function gatherRuleDocItems(
+  db: D1Database,
+): Promise<{ items: OpsMaintenanceItem[]; read: number }> {
   try {
-    const paths = await db.prepare("SELECT namespace, path FROM documents ORDER BY namespace, path").all<{ namespace: string; path: string }>();
+    const paths = await db
+      .prepare("SELECT namespace, path FROM documents ORDER BY namespace, path")
+      .all<{ namespace: string; path: string }>();
     const rule = (paths.results ?? []).filter((r) => ruleDocCap(r.namespace, r.path) !== null);
     const items: OpsMaintenanceItem[] = [];
     // One statement per document, in one batch: never one placeholder per row in a single
     // query (conventions 8.2).
-    const bodies = rule.length === 0 ? [] : await db.batch(rule.map((r) => db.prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2").bind(r.namespace, r.path)));
+    const bodies =
+      rule.length === 0
+        ? []
+        : await db.batch(
+            rule.map((r) =>
+              db
+                .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
+                .bind(r.namespace, r.path),
+            ),
+          );
     rule.forEach((r, i) => {
-      const body = ((bodies[i]?.results ?? [])[0] as { body: string | null } | undefined)?.body ?? "";
+      const body =
+        ((bodies[i]?.results ?? [])[0] as { body: string | null } | undefined)?.body ?? "";
       const problem = ruleDocProblem(r.namespace, r.path, body);
-      if (problem) items.push({ rule: "rule-doc", namespace: r.namespace, job: null, line: `${describeRuleDocProblem(problem)}. Cut it or fix the names.` });
+      if (problem)
+        items.push({
+          rule: "rule-doc",
+          namespace: r.namespace,
+          job: null,
+          line: `${describeRuleDocProblem(problem)}. Cut it or fix the names.`,
+        });
     });
     return { items, read: rule.length };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { items: [{ rule: "rule-docs-not-checked", namespace: "capsid", job: null, line: `The rule documents could not be read: ${message}` }], read: 0 };
+    return {
+      items: [
+        {
+          rule: "rule-docs-not-checked",
+          namespace: "capsid",
+          job: null,
+          line: `The rule documents could not be read: ${message}`,
+        },
+      ],
+      read: 0,
+    };
   }
 }

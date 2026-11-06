@@ -30,17 +30,40 @@ export function Deploys() {
     <div className="embedded">
       <div className="toolbar">
         {RANGES.map((r) => (
-          <button key={r} type="button" className="chip" aria-pressed={filters.range === r} onClick={() => setFilters({ range: r })}>
+          <button
+            key={r}
+            type="button"
+            className="chip"
+            aria-pressed={filters.range === r}
+            onClick={() => setFilters({ range: r })}
+          >
             {r}
           </button>
         ))}
         <span className="faint ml6">range</span>
       </div>
-      <TimelinePanel title="Timeline" id="timeline" section="Timeline" days={days} src={days > 7 ? "the probe ring holds 7 days; older downtime is not shown" : "deploys and probe failures"} />
+      <TimelinePanel
+        title="Timeline"
+        id="timeline"
+        section="Timeline"
+        days={days}
+        src={
+          days > 7
+            ? "the probe ring holds 7 days; older downtime is not shown"
+            : "deploys and probe failures"
+        }
+      />
       {snap ? (
         <>
           <NsChips list={snap.sites.map((s) => s.namespace)} />
-          <Panel flush title="Every deploy" id="every-deploy" section="Every deploy" count={list.length} src="at most 10 per site, newest first">
+          <Panel
+            flush
+            title="Every deploy"
+            id="every-deploy"
+            section="Every deploy"
+            count={list.length}
+            src="at most 10 per site, newest first"
+          >
             <div className="scroll-x">
               <table className="list">
                 <thead>
@@ -55,14 +78,26 @@ export function Deploys() {
                 </thead>
                 <tbody>
                   {list.map(({ s, d }) => (
-                    <tr key={`${siteKey(s)}-${d.id}`} className="click" data-row="" data-open={`site:${siteKey(s)}`} tabIndex={0}>
+                    <tr
+                      key={`${siteKey(s)}-${d.id}`}
+                      className="click"
+                      data-row=""
+                      data-open={`site:${siteKey(s)}`}
+                      tabIndex={0}
+                    >
                       <td className="num" title={utc(ms(d.created_on))}>
                         {ago(ms(d.created_on), now)}
                       </td>
                       <td>
                         <b>{s.name}</b>
                       </td>
-                      <td className="mono">{d.version_id ? shortId(d.version_id) : <span className="faint">none recorded</span>}</td>
+                      <td className="mono">
+                        {d.version_id ? (
+                          shortId(d.version_id)
+                        ) : (
+                          <span className="faint">none recorded</span>
+                        )}
+                      </td>
                       <td className="muted">{d.message ?? ""}</td>
                       <td className="muted">{d.triggered_by ?? ""}</td>
                       <td className="muted">{d.author_email ?? ""}</td>
@@ -89,7 +124,13 @@ export function Deploys() {
             </div>
           </Panel>
           {missing.length > 0 && (
-            <Panel flush title="Sites with no deploy data" id="no-deploy-data" section="No deploy data" count={missing.length}>
+            <Panel
+              flush
+              title="Sites with no deploy data"
+              id="no-deploy-data"
+              section="No deploy data"
+              count={missing.length}
+            >
               <div className="scroll-x">
                 <table className="list">
                   <tbody>

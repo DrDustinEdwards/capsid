@@ -30,7 +30,11 @@ export function parseOnPurpose(body: string | null): Set<string> {
   const out = new Set<string>();
   for (const raw of (body ?? "").split("\n")) {
     const line = raw.replace(/#.*/, "").trim().toLowerCase();
-    if (/^[a-z0-9._-]+\/[a-z0-9._-]+$/.test(line) && line.split("/").every((part) => part !== "." && part !== "..")) out.add(line);
+    if (
+      /^[a-z0-9._-]+\/[a-z0-9._-]+$/.test(line) &&
+      line.split("/").every((part) => part !== "." && part !== "..")
+    )
+      out.add(line);
   }
   return out;
 }
@@ -40,14 +44,20 @@ export function parseOnPurpose(body: string | null): Set<string> {
 export function suggestNamespace(fullName: string, namespaces: string[]): string | null {
   const name = (fullName.split("/")[1] ?? "").toLowerCase();
   if (namespaces.includes(name)) return name;
-  const prefixed = namespaces.filter((ns) => name.startsWith(`${ns}-`)).sort((a, b) => b.length - a.length);
+  const prefixed = namespaces
+    .filter((ns) => name.startsWith(`${ns}-`))
+    .sort((a, b) => b.length - a.length);
   return prefixed[0] ?? null;
 }
 
 /** Installed repos that no namespace maps and the on-purpose list does not name. */
 export function unmappedRepos(read: RepoMapRead): UnmappedRepo[] {
   return read.installed
-    .filter((r) => !read.mapped.has(r.full_name.toLowerCase()) && !read.onPurpose.has(r.full_name.toLowerCase()))
+    .filter(
+      (r) =>
+        !read.mapped.has(r.full_name.toLowerCase()) &&
+        !read.onPurpose.has(r.full_name.toLowerCase()),
+    )
     .map((r) => ({ ...r, suggested: suggestNamespace(r.full_name, read.namespaces) }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 }
@@ -58,9 +68,13 @@ export function unmappedRepos(read: RepoMapRead): UnmappedRepo[] {
 export async function readRepoMap(env: Env): Promise<RepoMapRead> {
   const { repos, installations } = await listInstalledRepos(env);
   if (repos.length === 0) {
-    throw new Error(`the App's ${installations} installation(s) list no repositories at all, which is not believable`);
+    throw new Error(
+      `the App's ${installations} installation(s) list no repositories at all, which is not believable`,
+    );
   }
-  const { results } = await env.DB.prepare("SELECT namespace, repos FROM namespaces ORDER BY namespace").all<{ namespace: string; repos: string | null }>();
+  const { results } = await env.DB.prepare(
+    "SELECT namespace, repos FROM namespaces ORDER BY namespace",
+  ).all<{ namespace: string; repos: string | null }>();
   const mapped = new Set<string>();
   const namespaces: string[] = [];
   for (const row of results ?? []) {
@@ -69,9 +83,12 @@ export async function readRepoMap(env: Env): Promise<RepoMapRead> {
     try {
       list = JSON.parse(row.repos || "[]");
     } catch {
-      throw new Error(`namespace ${row.namespace} has a corrupt repos mapping, so what is unmapped cannot be judged`);
+      throw new Error(
+        `namespace ${row.namespace} has a corrupt repos mapping, so what is unmapped cannot be judged`,
+      );
     }
-    if (!Array.isArray(list)) throw new Error(`namespace ${row.namespace} has a corrupt repos mapping (not an array)`);
+    if (!Array.isArray(list))
+      throw new Error(`namespace ${row.namespace} has a corrupt repos mapping (not an array)`);
     for (const entry of list as Array<{ repo?: unknown }>) {
       if (typeof entry?.repo === "string") mapped.add(entry.repo.toLowerCase());
     }
@@ -79,5 +96,11 @@ export async function readRepoMap(env: Env): Promise<RepoMapRead> {
   const doc = await env.DB.prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
     .bind(UNMAPPED_ON_PURPOSE_NS, UNMAPPED_ON_PURPOSE_PATH)
     .first<{ body: string | null }>();
-  return { installed: repos, installations, mapped, onPurpose: parseOnPurpose(doc?.body ?? null), namespaces };
+  return {
+    installed: repos,
+    installations,
+    mapped,
+    onPurpose: parseOnPurpose(doc?.body ?? null),
+    namespaces,
+  };
 }

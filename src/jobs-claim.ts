@@ -64,20 +64,26 @@ function openMeans(): string {
 async function duplicateRefusal(env: Env, namespace: string, title: string): Promise<string> {
   const placeholders = OPEN_JOB_STATUSES.map((_, i) => `?${i + 3}`).join(", ");
   const holder = await env.DB.prepare(
-    `SELECT id, status FROM jobs WHERE namespace = ?1 AND title = ?2 AND status IN (${placeholders}) LIMIT 1`
+    `SELECT id, status FROM jobs WHERE namespace = ?1 AND title = ?2 AND status IN (${placeholders}) LIMIT 1`,
   )
     .bind(namespace, title, ...OPEN_JOB_STATUSES)
     .first<{ id: string; status: string }>()
     .catch(() => null);
   const named = holder ? `: ${holder.id} is ${holder.status}` : "";
-  const waiting = holder?.status === "blocked" ? " That one is blocked, which means somebody is already waiting on it." : "";
+  const waiting =
+    holder?.status === "blocked"
+      ? " That one is blocked, which means somebody is already waiting on it."
+      : "";
   return `${namespace} already has an open job titled '${title}'${named}. Finish or fail that one first, or post this under a different title. Open means ${openMeans()}.${waiting}`;
 }
 
 /** The body checks and the signature, shared by post and edit so an edited body is
  *  refused for what post refuses and signed exactly as post signs it. Returns the
  *  stored (signed) text, or the problem to refuse with. */
-export async function signedJobBody(env: Env, body: string): Promise<{ ok: true; signed: string } | { ok: false; problem: string }> {
+export async function signedJobBody(
+  env: Env,
+  body: string,
+): Promise<{ ok: true; signed: string } | { ok: false; problem: string }> {
   if (!env.IMPROVE_SCORE_SECRET) {
     return {
       ok: false,
@@ -85,7 +91,11 @@ export async function signedJobBody(env: Env, body: string): Promise<{ ok: true;
         "job signing is not configured on this Worker (IMPROVE_SCORE_SECRET is unset), so this job could not be signed and no driver would execute it. Refusing rather than queueing work nothing can verify.",
     };
   }
-  if (!body.trim()) return { ok: false, problem: "a job needs a body. The body is the prompt the driver executes." };
+  if (!body.trim())
+    return {
+      ok: false,
+      problem: "a job needs a body. The body is the prompt the driver executes.",
+    };
   // A body is the prompt a driver executes, so a malformed post is worse here than
   // anywhere else: the swallowed text is signed along with everything else and the
   // driver runs whatever survived.
@@ -94,7 +104,11 @@ export async function signedJobBody(env: Env, body: string): Promise<{ ok: true;
   // An external fence is how relayed text is told from instruction (src/provenance.ts), so
   // a body whose fence is unlabelled or never closes is refused rather than signed.
   const fenceProblem = externalFenceProblem(body);
-  if (fenceProblem) return { ok: false, problem: `the body has a malformed external fence: ${fenceProblem}. Nothing was written.` };
+  if (fenceProblem)
+    return {
+      ok: false,
+      problem: `the body has a malformed external fence: ${fenceProblem}. Nothing was written.`,
+    };
   return { ok: true, signed: await signTaskBody(env.IMPROVE_SCORE_SECRET, body) };
 }
 
@@ -112,26 +126,35 @@ export async function postJob(
     min_record?: MinRecord;
     // Optional: when absent Capsid reads it from the title and the poster (src/model-routing.ts).
     kind?: string;
-  }
+  },
 ): Promise<JobResult> {
   const actor = agent.actor;
   const title = args.title.trim();
-  if (!title) return refuse("post", "a job needs a title: it is how the queue refuses a duplicate while one is still open.");
+  if (!title)
+    return refuse(
+      "post",
+      "a job needs a title: it is how the queue refuses a duplicate while one is still open.",
+    );
   const signedBody = await signedJobBody(env, args.body);
   if (!signedBody.ok) return refuse("post", signedBody.problem);
   // A registered namespace, as write requires for a document. Otherwise a caller
   // scoped to * could post into a namespace that does not exist, and the mirror
   // document would land where write refuses the same path.
-  const registered = await env.DB.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(args.namespace).first();
+  const registered = await env.DB.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1")
+    .bind(args.namespace)
+    .first();
   if (!registered) {
     return refuse(
       "post",
-      `unknown namespace '${args.namespace}'. Nothing was written. A job and its mirror document live in a registered namespace; check the spelling against capsid_find_docs action namespaces, or have the admin create it with capsid_admin_manage_namespaces action register.`
+      `unknown namespace '${args.namespace}'. Nothing was written. A job and its mirror document live in a registered namespace; check the spelling against capsid_find_docs action namespaces, or have the admin create it with capsid_admin_manage_namespaces action register.`,
     );
   }
 
   if (args.kind !== undefined && !isJobKind(args.kind)) {
-    return refuse("post", `'${args.kind}' is not a job kind. One of: ${JOB_KINDS.join(", ")}, or leave it out and Capsid reads it from the title.`);
+    return refuse(
+      "post",
+      `'${args.kind}' is not a job kind. One of: ${JOB_KINDS.join(", ")}, or leave it out and Capsid reads it from the title.`,
+    );
   }
   // The model is assigned here, by the Worker, from the kind and the risk the job states
   // about itself. Nobody types it.
@@ -163,7 +186,9 @@ export async function postJob(
     // NULL when nothing was asked for, rather than an empty requirement object. The
     // column means "this job needs something unusual", and empty JSON would read as a
     // requirement nobody can see.
-    required_scopes: args.required_scopes?.flags?.length ? serializeRequiredScopes(args.required_scopes) : null,
+    required_scopes: args.required_scopes?.flags?.length
+      ? serializeRequiredScopes(args.required_scopes)
+      : null,
     // A bar of zero is no bar, so it is stored as NULL rather than as a requirement
     // every agent trivially meets.
     min_record: args.min_record?.prs_merged ? serializeMinRecord(args.min_record) : null,
@@ -182,7 +207,7 @@ export async function postJob(
     env.DB.prepare(
       `INSERT INTO jobs (id, namespace, title, body, priority, status, posted_by, gate_required, required_scopes, min_record, created_at, updated_at,
          kind, model_recommended, effort_recommended, routing_reason)
-       VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14)`
+       VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14)`,
     ).bind(
       job.id,
       job.namespace,
@@ -197,7 +222,7 @@ export async function postJob(
       routing.kind,
       routing.model,
       routing.effort,
-      routing.reason
+      routing.reason,
     ),
     ...(await mirrorStatements(env, job, "job-posted", actor)),
     jobAudit(env.DB, actor, "job-posted", job, {
@@ -258,7 +283,7 @@ export type JobListRow = Pick<JobRow, (typeof JOB_LIST_COLUMNS)[number]>;
 export async function listJobs(
   env: Env,
   args: { namespace?: string; status?: JobStatus; id?: string },
-  opts: { withBody?: boolean } = {}
+  opts: { withBody?: boolean } = {},
 ): Promise<JobResult> {
   const where: string[] = [];
   const binds: unknown[] = [];
@@ -278,7 +303,7 @@ export async function listJobs(
   binds.push(JOBS_ROWS_MAX + 1);
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const { results } = await env.DB.prepare(
-    `SELECT ${[...JOB_LIST_COLUMNS, ...(withBody ? ["body"] : [])].join(", ")} FROM jobs ${clause} ORDER BY priority DESC, created_at ASC LIMIT ?${binds.length}`
+    `SELECT ${[...JOB_LIST_COLUMNS, ...(withBody ? ["body"] : [])].join(", ")} FROM jobs ${clause} ORDER BY priority DESC, created_at ASC LIMIT ?${binds.length}`,
   )
     .bind(...binds)
     .all<JobListRow>();
@@ -300,7 +325,12 @@ export async function listJobs(
     ...(listNotes && listNotes.notes.length > 0 ? { resume_notes: listNotes.notes } : {}),
     ...(listNotes && listNotes.dropped > 0 ? { resume_notes_dropped: listNotes.dropped } : {}),
     jobs: truncated ? rows.slice(0, JOBS_ROWS_MAX) : rows,
-    ...(truncated ? { truncated: true, note: `more than ${JOBS_ROWS_MAX} jobs match; narrow by namespace or status.` } : {}),
+    ...(truncated
+      ? {
+          truncated: true,
+          note: `more than ${JOBS_ROWS_MAX} jobs match; narrow by namespace or status.`,
+        }
+      : {}),
   };
 }
 
@@ -315,8 +345,7 @@ function deliveryOf(routing: Routing) {
     reason: routing.reason,
     trial: routing.trial,
     rules_version: routing.rules_version,
-    deliver:
-      `A scheduled or cloud launch starts on --model ${routing.model}. An interactive driver keeps its own session for coordination and does the job's work in a subagent on model ${routing.model} (the Agent tool's model parameter), at effort ${routing.effort}.`,
+    deliver: `A scheduled or cloud launch starts on --model ${routing.model}. An interactive driver keeps its own session for coordination and does the job's work in a subagent on model ${routing.model} (the Agent tool's model parameter), at effort ${routing.effort}.`,
   };
 }
 
@@ -327,7 +356,7 @@ export async function claimJob(
   env: Env,
   agent: Agent,
   now: Date,
-  args: { namespace?: string; id?: string }
+  args: { namespace?: string; id?: string },
 ): Promise<JobResult> {
   const actor = agent.actor;
   const badActor = actorShapeRefusal("claim", actor);
@@ -340,12 +369,16 @@ export async function claimJob(
     candidate = await readJob(env.DB, args.id);
     if (!candidate) return refuse("claim", `no job ${args.id}.`);
     if (candidate.status !== "queued") {
-      return refuse("claim", `${args.id} is ${candidate.status}, not queued${candidate.claimed_by ? ` (held by ${candidate.claimed_by})` : ""}.`);
+      return refuse(
+        "claim",
+        `${args.id} is ${candidate.status}, not queued${candidate.claimed_by ? ` (held by ${candidate.claimed_by})` : ""}.`,
+      );
     }
   } else {
-    if (!args.namespace) return refuse("claim", "claim needs a namespace to pick from, or an id to claim.");
+    if (!args.namespace)
+      return refuse("claim", "claim needs a namespace to pick from, or an id to claim.");
     candidate = await env.DB.prepare(
-      "SELECT * FROM jobs WHERE namespace = ?1 AND status = 'queued' ORDER BY priority DESC, created_at ASC LIMIT 1"
+      "SELECT * FROM jobs WHERE namespace = ?1 AND status = 'queued' ORDER BY priority DESC, created_at ASC LIMIT 1",
     )
       .bind(args.namespace)
       .first<JobRow>();
@@ -356,7 +389,8 @@ export async function claimJob(
   // (src/job-breaker.ts). Checked before anything else touches the candidate, so an
   // open breaker leaves the queue exactly as it was.
   const breaker = await breakerState(env, candidate.namespace, now);
-  if (breaker.open) return refuse("claim", `${actor} cannot claim ${candidate.id}: ${breakerRefusal(breaker)}`);
+  if (breaker.open)
+    return refuse("claim", `${actor} cannot claim ${candidate.id}: ${breakerRefusal(breaker)}`);
 
   // What the job needs of the driver is checked before the job is taken. A claim
   // that took the job and then refused would park it on a driver that cannot do it.
@@ -370,8 +404,18 @@ export async function claimJob(
   const corrupt = corruptRequirement(candidate);
   if (corrupt) {
     const reason = `${candidate.id} has a corrupt requirement: ${corrupt}. A requirement that cannot be read is not the same as none, so it was not handed out.`;
-    const marked = await markJobFailed(env, candidate, "queued", reason, "job-requirement-corrupt", actor, { reason: corrupt }, now);
-    if (!marked.failed) return movedBeforeFailing("claim", candidate.id, marked.current, "has a corrupt requirement");
+    const marked = await markJobFailed(
+      env,
+      candidate,
+      "queued",
+      reason,
+      "job-requirement-corrupt",
+      actor,
+      { reason: corrupt },
+      now,
+    );
+    if (!marked.failed)
+      return movedBeforeFailing("claim", candidate.id, marked.current, "has a corrupt requirement");
     return refuse("claim", `${reason} It has been marked failed.`);
   }
 
@@ -379,7 +423,7 @@ export async function claimJob(
   if (missing) {
     return refuse(
       "claim",
-      `${actor} cannot claim ${candidate.id} ('${candidate.title}'): ${missing} The job stays queued for a driver that can do it.`
+      `${actor} cannot claim ${candidate.id} ('${candidate.title}'): ${missing} The job stays queued for a driver that can do it.`,
     );
   }
 
@@ -387,7 +431,10 @@ export async function claimJob(
   // before the job is taken, so it stays queued for a driver that meets the bar.
   const shortfall = await recordShortfall(env.DB, actor, candidate);
   if (shortfall) {
-    return refuse("claim", `${actor} cannot claim ${candidate.id} ('${candidate.title}'): ${shortfall} The job stays queued for a driver that can do it.`);
+    return refuse(
+      "claim",
+      `${actor} cannot claim ${candidate.id} ('${candidate.title}'): ${shortfall} The job stays queued for a driver that can do it.`,
+    );
   }
 
   // The signature is checked before the job is handed over, not by the driver after
@@ -403,9 +450,27 @@ export async function claimJob(
   // and this Worker's signature is what proves it went through `post`.
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, candidate.body, "job body");
   if (!verdict.ok) {
-    const marked = await markJobFailed(env, candidate, "queued", verdict.reason, "job-signature-refused", actor, { reason: verdict.reason }, now);
-    if (!marked.failed) return movedBeforeFailing("claim", candidate.id, marked.current, "failed its signature check");
-    return refuse("claim", `${candidate.id} failed its signature check and has been marked failed: ${verdict.reason}`);
+    const marked = await markJobFailed(
+      env,
+      candidate,
+      "queued",
+      verdict.reason,
+      "job-signature-refused",
+      actor,
+      { reason: verdict.reason },
+      now,
+    );
+    if (!marked.failed)
+      return movedBeforeFailing(
+        "claim",
+        candidate.id,
+        marked.current,
+        "failed its signature check",
+      );
+    return refuse(
+      "claim",
+      `${candidate.id} failed its signature check and has been marked failed: ${verdict.reason}`,
+    );
   }
 
   // The approval a resume handed on is checked the same way, before the job is taken: a note
@@ -415,9 +480,27 @@ export async function claimJob(
   const claimNote = claimNotes.notes[0] ?? null;
   if (claimNote?.signature === "mismatch") {
     const reason = `its last resume note's signature does not match: the approval was changed after ${claimNote.by} wrote it at ${claimNote.at}.`;
-    const marked = await markJobFailed(env, candidate, "queued", reason, "job-resume-note-refused", actor, { reason }, now);
-    if (!marked.failed) return movedBeforeFailing("claim", candidate.id, marked.current, "carries a resume note that failed its signature check");
-    return refuse("claim", `${candidate.id} was not handed out and has been marked failed: ${reason}`);
+    const marked = await markJobFailed(
+      env,
+      candidate,
+      "queued",
+      reason,
+      "job-resume-note-refused",
+      actor,
+      { reason },
+      now,
+    );
+    if (!marked.failed)
+      return movedBeforeFailing(
+        "claim",
+        candidate.id,
+        marked.current,
+        "carries a resume note that failed its signature check",
+      );
+    return refuse(
+      "claim",
+      `${candidate.id} was not handed out and has been marked failed: ${reason}`,
+    );
   }
 
   // The model for this job, assigned at post and settled again here: a job posted before
@@ -458,13 +541,24 @@ export async function claimJob(
     env.DB.prepare(
       `UPDATE jobs SET status = 'claimed', claimed_by = ?2, claimed_at = COALESCE(claimed_at, ?3), updated_at = ?3,
          kind = ?4, model_recommended = ?5, effort_recommended = ?6, routing_reason = ?7
-       WHERE id = ?1 AND status = 'queued' RETURNING id`
-    ).bind(candidate.id, holder, now.toISOString(), routing.kind, routing.model, routing.effort, routing.reason),
+       WHERE id = ?1 AND status = 'queued' RETURNING id`,
+    ).bind(
+      candidate.id,
+      holder,
+      now.toISOString(),
+      routing.kind,
+      routing.model,
+      routing.effort,
+      routing.reason,
+    ),
     ...(await mirrorStatements(env, claimed, "job-claimed", actor)),
     jobAudit(env.DB, actor, "job-claimed", claimed, {}),
   ]);
   if (!won) {
-    return refuse("claim", `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`);
+    return refuse(
+      "claim",
+      `${candidate.id} was claimed by someone else between reading it and taking it. Ask again.`,
+    );
   }
   const startedOn = startedNotice(candidate);
   // A job that went back to the queue after a resume reaches its next driver here, so

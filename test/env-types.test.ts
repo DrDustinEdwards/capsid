@@ -12,7 +12,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // and compared in both directions. The count read is asserted so an empty parse cannot
 // pass for "they agree".
 
-const TYPES = { d1_databases: "D1Database", kv_namespaces: "KVNamespace", r2_buckets: "R2Bucket", ai_search_namespaces: "AiSearchNamespace" } as const;
+const TYPES = {
+  d1_databases: "D1Database",
+  kv_namespaces: "KVNamespace",
+  r2_buckets: "R2Bucket",
+  ai_search_namespaces: "AiSearchNamespace",
+} as const;
 
 function exampleBindings(): Map<string, string> {
   const text = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
@@ -21,7 +26,8 @@ function exampleBindings(): Map<string, string> {
   const config = JSON.parse(json.replace(/,(\s*[}\]])/g, "$1")) as Record<string, unknown>;
   const found = new Map<string, string>();
   for (const [key, type] of Object.entries(TYPES)) {
-    for (const entry of (config[key] ?? []) as Array<{ binding: string }>) found.set(entry.binding, type);
+    for (const entry of (config[key] ?? []) as Array<{ binding: string }>)
+      found.set(entry.binding, type);
   }
   const objects = (config.durable_objects ?? {}) as { bindings?: Array<{ name: string }> };
   for (const entry of objects.bindings ?? []) found.set(entry.name, "DurableObjectNamespace");
@@ -38,7 +44,10 @@ function generatedBindings(): Map<string, string> {
   for (const line of body.split("\n")) {
     const m = /^\s*(\w+): (.+?)(?: \/\*.*\*\/)?;$/.exec(line);
     if (!m) continue;
-    found.set(m[1], [...Object.values(TYPES), "DurableObjectNamespace", "Ai"].includes(m[2]) ? m[2] : "var");
+    found.set(
+      m[1],
+      [...Object.values(TYPES), "DurableObjectNamespace", "Ai"].includes(m[2]) ? m[2] : "var",
+    );
   }
   return found;
 }
@@ -47,5 +56,9 @@ test("worker-configuration.d.ts declares exactly the bindings and vars wrangler.
   const example = exampleBindings();
   const generated = generatedBindings();
   assert.ok(example.size >= 6, `read only ${example.size} bindings from the example`);
-  assert.deepEqual([...generated].sort(), [...example].sort(), "run `npm run types` and commit worker-configuration.d.ts");
+  assert.deepEqual(
+    [...generated].sort(),
+    [...example].sort(),
+    "run `npm run types` and commit worker-configuration.d.ts",
+  );
 });

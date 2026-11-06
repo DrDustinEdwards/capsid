@@ -10,7 +10,11 @@ import type { Env, Props } from "./env";
 import { ADMIN_SERVER_INFO, buildAdminServer, buildServer, SERVER_INFO } from "./server";
 import { ADMIN_MCP_ROUTE, mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
 import { audienceRefusal, mcpOriginRefusal } from "@dustinedwards/site-runtime/mcp-server";
-import { DCR_CALLBACKS, registrationLimited, registrationRefusal } from "@dustinedwards/site-runtime/mcp-login";
+import {
+  DCR_CALLBACKS,
+  registrationLimited,
+  registrationRefusal,
+} from "@dustinedwards/site-runtime/mcp-login";
 import { runTick } from "./tick";
 import { NOT_ITS_DAY, runSkillsRefresh } from "./skills-refresh";
 import { runTask, type TaskResult } from "./task-runs";
@@ -42,7 +46,10 @@ export const SKILLS_REFRESH_CRON = "30 9 * * *";
 
 // What the OAuth provider hands its API handler: the grant's props, and what it verified
 // about the token, its scopes among them.
-type ApiContext = ExecutionContext & { props?: Props; auth?: { scope?: string[]; clientId?: string; audience?: string } };
+type ApiContext = ExecutionContext & {
+  props?: Props;
+  auth?: { scope?: string[]; clientId?: string; audience?: string };
+};
 
 const apiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -61,7 +68,11 @@ const apiHandler = {
         status: 403,
       });
     }
-    const limited = await mcpRateLimited(env, `access:${email}`, adminRoute ? ADMIN_SERVER_INFO : SERVER_INFO);
+    const limited = await mcpRateLimited(
+      env,
+      `access:${email}`,
+      adminRoute ? ADMIN_SERVER_INFO : SERVER_INFO,
+    );
     if (limited) return limited;
     // The admin agent holds every scope the token does: every namespace, tool and flag,
     // and the write grant only when the consent page's box was ticked (capsid.write). A
@@ -73,11 +84,14 @@ const apiHandler = {
     const clientId = auth?.clientId;
     // Only Capsid Admin serves step-up actions, so only its route reads the clock. A KV
     // failure leaves it undefined, which falls back to the sign-in time alone (src/scope.ts STEP_UP).
-    if (adminRoute && signedInAt !== null) admin.lastStepUpAt = await readLastStepUp(env.APP_KV, admin.actor, signedInAt);
+    if (adminRoute && signedInAt !== null)
+      admin.lastStepUpAt = await readLastStepUp(env.APP_KV, admin.actor, signedInAt);
     // Capsid Admin on its own route: the eight administrator tools, never on /mcp. Only the administrator's grant
     // reaches this handler at all, and the step-up in src/scope.ts guards its risky actions.
     if (adminRoute) {
-      return serveMcp(request, env, ctx, ADMIN_MCP_ROUTE, () => buildAdminServer(env, admin, "", clientId));
+      return serveMcp(request, env, ctx, ADMIN_MCP_ROUTE, () =>
+        buildAdminServer(env, admin, "", clientId),
+      );
     }
     return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, admin, "", clientId));
   },
@@ -92,7 +106,11 @@ function withCacheDefault(response: Response, pathname: string): Response {
   // Headers on an already-constructed Response can be immutable, so rebuild.
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", "no-store");
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 // The RFC 8707 resource is per host. workers-oauth-provider binds every access token to
@@ -115,7 +133,11 @@ function dcrAllowlist(env: Env): string {
 async function registrationWouldBeRefused(request: Request, env: Env): Promise<boolean> {
   try {
     const metadata = (await request.clone().json()) as Record<string, unknown>;
-    return metadata !== null && typeof metadata === "object" && registrationRefusal(dcrAllowlist(env), metadata) !== null;
+    return (
+      metadata !== null &&
+      typeof metadata === "object" &&
+      registrationRefusal(dcrAllowlist(env), metadata) !== null
+    );
   } catch {
     return false;
   }
@@ -147,10 +169,18 @@ function providerFor(env: Env): OAuthProvider<Env> {
     // nothing, since the consent page and Access still decide. Remove when both sign in by
     // CIMD, at the latest when the specification removes DCR.
     clientRegistrationEndpoint: "/register",
-    clientRegistrationCallback: ({ clientMetadata }: { clientMetadata: Record<string, unknown> }) => {
+    clientRegistrationCallback: ({
+      clientMetadata,
+    }: {
+      clientMetadata: Record<string, unknown>;
+    }) => {
       const why = registrationRefusal(allowed, clientMetadata);
       if (!why) return undefined;
-      logEvent("DCR_REDIRECT_REFUSED", { message: `DCR_REDIRECT_REFUSED ${why}` }, { level: "error" });
+      logEvent(
+        "DCR_REDIRECT_REFUSED",
+        { message: `DCR_REDIRECT_REFUSED ${why}` },
+        { level: "error" },
+      );
       return { code: "invalid_redirect_uri", description: why };
     },
   });
@@ -166,9 +196,18 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   // handler. Behind the provider, /mcp on the Portal host was the MCP endpoint, and
   // live gate 7 rolled #218's deploy back (run 36863432268).
   const { hostname, pathname: asked } = new URL(original.url);
-  const secured = (response: Response, path: string) => withSecurityHeaders(withCacheDefault(response, path), hostname);
+  const secured = (response: Response, path: string) =>
+    withSecurityHeaders(withCacheDefault(response, path), hostname);
   // security.txt on both hosts, before the Portal's sign-in and the MCP host's path list.
-  if (asked === SECURITY_TXT_PATH) return secured(securityTxtResponse({ origin: `https://${hostname}`, contact: "security@dustinedwards.info", expires: SECURITY_TXT_EXPIRES }), asked);
+  if (asked === SECURITY_TXT_PATH)
+    return secured(
+      securityTxtResponse({
+        origin: `https://${hostname}`,
+        contact: "security@dustinedwards.info",
+        expires: SECURITY_TXT_EXPIRES,
+      }),
+      asked,
+    );
   // The admin list, hashed with a fresh salt, for the daily Access drift check
   // (.github/workflows/access-drift.yml). The Portal signs people in through Access for
   // SaaS, so no Access application stands in front of it: this one path on the Portal host
@@ -176,12 +215,17 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   // adminListResponse answers only a GET carrying that application's verified Access token
   // from a service token, and 404 to everything else, so it runs before the Portal's sign-in.
   if (asked === ADMIN_LIST_PATH && isPortalHost(new URL(original.url))) {
-    const list = await adminListResponse(original, { ACCESS_TEAM_DOMAIN: env.ACCESS_TEAM_DOMAIN, ACCESS_AUD: env.ACCESS_DRIFT_AUD }, { admins: adminEmailList(env) });
+    const list = await adminListResponse(
+      original,
+      { ACCESS_TEAM_DOMAIN: env.ACCESS_TEAM_DOMAIN, ACCESS_AUD: env.ACCESS_DRIFT_AUD },
+      { admins: adminEmailList(env) },
+    );
     return secured(list, asked);
   }
   // The Portal's chart demo (src/portal-demo.ts): sample data, no sign-in, nothing written. Before the
   // Portal host's rewrite and its gate, which every other path on that host goes through.
-  if (isDemoRequest(new URL(original.url))) return secured(await handlePortalDemo(original, env), asked);
+  if (isDemoRequest(new URL(original.url)))
+    return secured(await handlePortalDemo(original, env), asked);
   // The Portal's hashed build files, which the demo's pages load too (src/portal-app.ts).
   const asset = await portalAsset(original, env);
   if (asset) return secured(asset, asked);
@@ -199,12 +243,19 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
     const foreign = mcpOriginRefusal(request, ["https://claude.ai"]);
     if (foreign) return secured(foreign, pathname);
   }
-  if (pathname === "/register" && request.method === "POST" && !(await registrationWouldBeRefused(request, env))) {
+  if (
+    pathname === "/register" &&
+    request.method === "POST" &&
+    !(await registrationWouldBeRefused(request, env))
+  ) {
     const limited = await registrationLimited(request, env.OAUTH_KV);
     if (limited) return secured(limited, pathname);
   }
   const response = await providerFor(env).fetch(request, env, ctx);
-  return secured(pathname.startsWith(PRM_PATH) ? await withEveryScope(response) : response, pathname);
+  return secured(
+    pathname.startsWith(PRM_PATH) ? await withEveryScope(response) : response,
+    pathname,
+  );
 }
 
 // The protected resource metadata lists every scope the resource takes (area 11, A1), read
@@ -214,11 +265,15 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
 const PRM_PATH = "/.well-known/oauth-protected-resource";
 
 async function withEveryScope(response: Response): Promise<Response> {
-  if (!response.ok || !response.headers.get("Content-Type")?.includes("application/json")) return response;
+  if (!response.ok || !response.headers.get("Content-Type")?.includes("application/json"))
+    return response;
   const metadata = (await response.json()) as Record<string, unknown>;
   const headers = new Headers(response.headers);
   headers.delete("Content-Length");
-  return Response.json({ ...metadata, scopes_supported: SCOPES.all }, { status: response.status, headers });
+  return Response.json(
+    { ...metadata, scopes_supported: SCOPES.all },
+    { status: response.status, headers },
+  );
 }
 
 // Every request writes one `request` line (site-runtime withRequestLog: cf-ray, method, path
@@ -233,7 +288,7 @@ export default {
       countNotFound(env.DB, request, response, ctx);
       return response;
     },
-    { sha: (env: Env) => env.BUILD_SHA }
+    { sha: (env: Env) => env.BUILD_SHA },
   ),
   // Dispatch on controller.cron, not the clock: 09:00 UTC matches all three
   // expressions and Cloudflare delivers once per expression. Each branch is its own
@@ -246,7 +301,11 @@ export default {
     // trigger added in the dashboard, or one renamed here and not there) would run nothing
     // silently, so it is logged as an error (area 8, C2).
     if (cron !== BACKUP_CRON && cron !== TICK_CRON && cron !== SKILLS_REFRESH_CRON) {
-      logEvent("CRON_KEY_UNKNOWN", { message: `CRON_KEY_UNKNOWN ${cron} has no task here; nothing ran` }, { level: "error" });
+      logEvent(
+        "CRON_KEY_UNKNOWN",
+        { message: `CRON_KEY_UNKNOWN ${cron} has no task here; nothing ran` },
+        { level: "error" },
+      );
     }
 
     if (cron === BACKUP_CRON) {
@@ -257,20 +316,31 @@ export default {
           () => runBackup(env),
           (result): TaskResult => {
             if (!result.ran) {
-              logEvent("BACKUP_CRON_SKIPPED", { message: `BACKUP_CRON_SKIPPED ${result.skipped}` }, { level: "error" });
+              logEvent(
+                "BACKUP_CRON_SKIPPED",
+                { message: `BACKUP_CRON_SKIPPED ${result.skipped}` },
+                { level: "error" },
+              );
               return { outcome: "skipped", reason: `skipped: ${result.skipped}` };
             }
             if (result.prune_refused !== null) {
-              logEvent("BACKUP_CRON_REFUSED_PRUNE", { message: `BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}` }, { level: "error" });
-              return { outcome: "refused", reason: `wrote ${result.json_keys.length} dump objects, and the prune refused: ${result.prune_refused}` };
+              logEvent(
+                "BACKUP_CRON_REFUSED_PRUNE",
+                { message: `BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}` },
+                { level: "error" },
+              );
+              return {
+                outcome: "refused",
+                reason: `wrote ${result.json_keys.length} dump objects, and the prune refused: ${result.prune_refused}`,
+              };
             }
             return {
               outcome: "ok",
               reason: `wrote ${result.json_keys.length} dump objects (${result.documents} documents); pruned ${result.json_backups_pruned} dumps (${result.json_backups_locked} locked), ${result.versions_pruned} versions, ${result.audit_pruned} audit rows`,
             };
           },
-          { tag: "BACKUP_CRON_THREW", rethrow: true }
-        )
+          { tag: "BACKUP_CRON_THREW", rethrow: true },
+        ),
       );
       // The tool-call log's daily copy to AUDIT_BUCKET and the 90-day prune of copied rows
       // (area 11, L6-L7). Its own task, so a failed write cannot stop the backup; it throws,
@@ -280,9 +350,12 @@ export default {
           env,
           "tool-call-log-export",
           () => exportAuditLog(env, env.AUDIT_BUCKET),
-          (done): TaskResult => ({ outcome: "ok", reason: `copied ${done.exported} rows in ${done.objects.length} objects; pruned ${done.pruned}` }),
-          { tag: "TOOL_CALL_LOG_EXPORT_THREW", rethrow: true }
-        )
+          (done): TaskResult => ({
+            outcome: "ok",
+            reason: `copied ${done.exported} rows in ${done.objects.length} objects; pruned ${done.pruned}`,
+          }),
+          { tag: "TOOL_CALL_LOG_EXPORT_THREW", rethrow: true },
+        ),
       );
       // Its own task, so a throw here cannot stop the backup (design-hybrid-search 3.4).
       ctx.waitUntil(
@@ -293,10 +366,13 @@ export default {
           (report): TaskResult => {
             if (report.marked.length === 0) return null;
             const line = report.marked.map((m) => `${m.document} by ${m.by}`).join("; ");
-            return { outcome: "ok", reason: `marked ${report.marked.length} superseded${report.more ? " (more next pass)" : ""}: ${line}` };
+            return {
+              outcome: "ok",
+              reason: `marked ${report.marked.length} superseded${report.more ? " (more next pass)" : ""}: ${line}`,
+            };
           },
-          { tag: "SUPERSEDE_PASS_THREW", rethrow: true }
-        )
+          { tag: "SUPERSEDE_PASS_THREW", rethrow: true },
+        ),
       );
     }
 
@@ -308,9 +384,12 @@ export default {
           // The tick's signed-in crawl asks serve() for the Portal's pages in-process (src/signed-in-crawl.ts), past the
           // request log and the 404 count, so a crawl is never recorded as a visit.
           () => runTick(env, new Date(), (request) => serve(request, env, ctx)),
-          (): TaskResult => ({ outcome: "ok", reason: "the tick's steps ran; each records its own run" }),
-          { tag: "TICK_THREW", rethrow: true }
-        )
+          (): TaskResult => ({
+            outcome: "ok",
+            reason: "the tick's steps ran; each records its own run",
+          }),
+          { tag: "TICK_THREW", rethrow: true },
+        ),
       );
     }
 
@@ -322,19 +401,34 @@ export default {
           () => runSkillsRefresh(env, new Date()),
           (outcome): TaskResult => {
             if (!outcome.ran) {
-              logEvent("SKILLS_REFRESH_SKIPPED", { message: `SKILLS_REFRESH_SKIPPED ${outcome.skipped}` });
+              logEvent("SKILLS_REFRESH_SKIPPED", {
+                message: `SKILLS_REFRESH_SKIPPED ${outcome.skipped}`,
+              });
               // Not its day of the week is not a run; switched off is a skip worth showing.
-              return outcome.skipped?.startsWith(NOT_ITS_DAY) ? null : { outcome: "skipped", reason: `skipped: ${outcome.skipped ?? "no reason given"}` };
+              return outcome.skipped?.startsWith(NOT_ITS_DAY)
+                ? null
+                : {
+                    outcome: "skipped",
+                    reason: `skipped: ${outcome.skipped ?? "no reason given"}`,
+                  };
             }
             const line = `checked=${outcome.checked} changed=${outcome.changed.join(",") || "none"} posted=${outcome.posted.join(",") || "none"}`;
             logEvent("SKILLS_REFRESH", { message: `SKILLS_REFRESH ${line}` });
-            for (const r of outcome.refused) logEvent("SKILLS_REFRESH_REFUSED", { message: `SKILLS_REFRESH_REFUSED ${r.slug}: ${r.reason}` }, { level: "error" });
+            for (const r of outcome.refused)
+              logEvent(
+                "SKILLS_REFRESH_REFUSED",
+                { message: `SKILLS_REFRESH_REFUSED ${r.slug}: ${r.reason}` },
+                { level: "error" },
+              );
             return outcome.refused.length > 0
-              ? { outcome: "refused", reason: `${line}; refused ${outcome.refused.map((r) => `${r.slug}: ${r.reason}`).join("; ")}` }
+              ? {
+                  outcome: "refused",
+                  reason: `${line}; refused ${outcome.refused.map((r) => `${r.slug}: ${r.reason}`).join("; ")}`,
+                }
               : { outcome: "ok", reason: line };
           },
-          { tag: "SKILLS_REFRESH_THREW", rethrow: true }
-        )
+          { tag: "SKILLS_REFRESH_THREW", rethrow: true },
+        ),
       );
     }
   },

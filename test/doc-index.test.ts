@@ -3,7 +3,17 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { CURSOR_KEY, HYBRID_MONTHLY_CAP, aiSearchUsage, INDEX_BATCH, INDEX_INSTANCE, docIndexTick, hybridSearch, indexKey, isCanon } from "../src/doc-index.ts";
+import {
+  CURSOR_KEY,
+  HYBRID_MONTHLY_CAP,
+  aiSearchUsage,
+  INDEX_BATCH,
+  INDEX_INSTANCE,
+  docIndexTick,
+  hybridSearch,
+  indexKey,
+  isCanon,
+} from "../src/doc-index.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 
 // The meaning index is fed from D1 by a watermark, so these run the real migrations
@@ -30,13 +40,32 @@ function d1(db: DatabaseSync): D1Database {
 
 function fresh(): { raw: DatabaseSync; db: D1Database } {
   const raw = new DatabaseSync(":memory:");
-  for (const name of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
+  for (const name of readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith(".sql"))
+    .sort())
+    raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
   return { raw, db: d1(raw) };
 }
 
-function put(raw: DatabaseSync, namespace: string, path: string, body: string, updated_at = "2026-10-15 10:00:00"): number {
-  raw.prepare("INSERT INTO documents (namespace, path, title, body, updated_at) VALUES (?, ?, ?, ?, ?)").run(namespace, path, path, body, updated_at);
-  return Number((raw.prepare("SELECT id FROM documents WHERE namespace = ? AND path = ?").get(namespace, path) as { id: number }).id);
+function put(
+  raw: DatabaseSync,
+  namespace: string,
+  path: string,
+  body: string,
+  updated_at = "2026-10-15 10:00:00",
+): number {
+  raw
+    .prepare(
+      "INSERT INTO documents (namespace, path, title, body, updated_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .run(namespace, path, path, body, updated_at);
+  return Number(
+    (
+      raw
+        .prepare("SELECT id FROM documents WHERE namespace = ? AND path = ?")
+        .get(namespace, path) as { id: number }
+    ).id,
+  );
 }
 
 interface FakeItem {
@@ -46,7 +75,13 @@ interface FakeItem {
   metadata: Record<string, unknown>;
 }
 
-function fakeSearch(opts: { exists?: boolean; refuse?: (key: string) => boolean; search?: (request: AiSearchSearchRequest) => AiSearchSearchResponse["chunks"] } = {}) {
+function fakeSearch(
+  opts: {
+    exists?: boolean;
+    refuse?: (key: string) => boolean;
+    search?: (request: AiSearchSearchRequest) => AiSearchSearchResponse["chunks"];
+  } = {},
+) {
   const items = new Map<string, FakeItem>();
   const created: unknown[] = [];
   let next = 1;
@@ -64,7 +99,8 @@ function fakeSearch(opts: { exists?: boolean; refuse?: (key: string) => boolean;
       upload: async (key: string, content: string, o?: { metadata?: Record<string, unknown> }) => {
         if (opts.refuse?.(key)) throw new Error("refused");
         // The live index refused a number and a boolean (2026-10-15).
-        if (Object.values(o?.metadata ?? {}).some((v) => typeof v !== "string")) throw new Error("invalid_metadata_format");
+        if (Object.values(o?.metadata ?? {}).some((v) => typeof v !== "string"))
+          throw new Error("invalid_metadata_format");
         const prior = [...items.values()].find((i) => i.key === key);
         const id = prior?.id ?? `item-${next++}`;
         items.set(id, { id, key, content, metadata: o?.metadata ?? {} });
@@ -76,7 +112,11 @@ function fakeSearch(opts: { exists?: boolean; refuse?: (key: string) => boolean;
         const all = [...items.values()];
         const size = p.per_page ?? 20;
         const start = ((p.page ?? 1) - 1) * size;
-        return { result: all.slice(start, start + size).map((i) => ({ id: i.id, key: i.key, status: "completed", metadata: i.metadata })) };
+        return {
+          result: all
+            .slice(start, start + size)
+            .map((i) => ({ id: i.id, key: i.key, status: "completed", metadata: i.metadata })),
+        };
       },
       delete: async (id: string) => {
         items.delete(id);
@@ -111,13 +151,25 @@ test("first tick creates a hybrid instance with the five metadata fields and sen
   const kv = fakeKv({});
   const report = await docIndexTick(fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns }), DAY1);
   assert.equal(search.created.length, 1);
-  const config = search.created[0] as { index_method: unknown; custom_metadata: Array<{ field_name: string }> };
+  const config = search.created[0] as {
+    index_method: unknown;
+    custom_metadata: Array<{ field_name: string }>;
+  };
   assert.deepEqual(config.index_method, { vector: true, keyword: true });
-  assert.deepEqual(config.custom_metadata.map((m) => m.field_name), ["namespace", "type", "status", "doc_id", "canon"]);
+  assert.deepEqual(
+    config.custom_metadata.map((m) => m.field_name),
+    ["namespace", "type", "status", "doc_id", "canon"],
+  );
   assert.deepEqual(search.keys(), ["capsid/rulings/testing.md", "sample/notes/backup.md"]);
   const ruling = [...search.items.values()].find((i) => i.key === "capsid/rulings/testing.md");
   assert.equal(ruling?.content, "# rulings/testing.md\n\nTested once where code lives.");
-  assert.deepEqual(ruling?.metadata, { namespace: "capsid", type: "note", status: "published", doc_id: "1", canon: "true" });
+  assert.deepEqual(ruling?.metadata, {
+    namespace: "capsid",
+    type: "note",
+    status: "published",
+    doc_id: "1",
+    canon: "true",
+  });
   assert.equal(report.sent, 2);
 
   // Nothing changed: no upload, no run recorded, and an existing instance is not re-created.
@@ -134,11 +186,21 @@ test("an edit is sent on the next tick, and two writes in the same second are bo
   await docIndexTick(env, DAY1);
   put(raw, "sample", "b.md", "two", "2026-10-15 11:00:00");
   put(raw, "sample", "c.md", "three", "2026-10-15 11:00:00");
-  raw.prepare("UPDATE documents SET body = 'one, edited', updated_at = '2026-10-15 11:00:00' WHERE path = 'a.md'").run();
+  raw
+    .prepare(
+      "UPDATE documents SET body = 'one, edited', updated_at = '2026-10-15 11:00:00' WHERE path = 'a.md'",
+    )
+    .run();
   const report = await docIndexTick(env, DAY1);
   assert.equal(report.sent, 3);
-  assert.equal([...search.items.values()].find((i) => i.key === "sample/a.md")?.content, "# a.md\n\none, edited");
-  assert.deepEqual(JSON.parse(kv.store.get(CURSOR_KEY) ?? "{}"), { updated_at: "2026-10-15 11:00:00", id: 3 });
+  assert.equal(
+    [...search.items.values()].find((i) => i.key === "sample/a.md")?.content,
+    "# a.md\n\none, edited",
+  );
+  assert.deepEqual(JSON.parse(kv.store.get(CURSOR_KEY) ?? "{}"), {
+    updated_at: "2026-10-15 11:00:00",
+    id: 3,
+  });
 });
 
 test("a backfill larger than one batch goes a batch per tick", async () => {
@@ -177,10 +239,19 @@ test("PLANT: the daily reconcile removes the items of a deleted and a moved docu
   const env = fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: search.ns });
   await docIndexTick(env, DAY1);
   raw.prepare("DELETE FROM documents WHERE path = 'gone.md'").run();
-  raw.prepare("UPDATE documents SET path = 'new.md', updated_at = '2026-10-16 01:00:00' WHERE id = ?").run(moved);
+  raw
+    .prepare(
+      "UPDATE documents SET path = 'new.md', updated_at = '2026-10-16 01:00:00' WHERE id = ?",
+    )
+    .run(moved);
   // Same day: the move is sent, but the reconcile already ran, so the old items stay.
   await docIndexTick(env, DAY1);
-  assert.deepEqual(search.keys(), ["sample/gone.md", "sample/keep.md", "sample/new.md", "sample/old.md"]);
+  assert.deepEqual(search.keys(), [
+    "sample/gone.md",
+    "sample/keep.md",
+    "sample/new.md",
+    "sample/old.md",
+  ]);
   const report = await docIndexTick(env, DAY2);
   assert.equal(report.deleted, 2);
   assert.deepEqual(search.keys(), ["sample/keep.md", "sample/new.md"]);
@@ -202,7 +273,12 @@ test("canon is the conventions, decisions, rulings and every core.md; keys alway
 
 // Hybrid search
 
-const chunk = (doc_id: number, text: string, score: number, ranks: { keyword_rank?: number; vector_rank?: number } = { vector_rank: 1 }) => ({
+const chunk = (
+  doc_id: number,
+  text: string,
+  score: number,
+  ranks: { keyword_rank?: number; vector_rank?: number } = { vector_rank: 1 },
+) => ({
   id: `c${doc_id}-${score}`,
   type: "text",
   score,
@@ -236,23 +312,60 @@ test("hybrid search keeps the index's order and reads every hit back from D1 wit
   const kv = fakeKv({ seed: { ...READY } });
   const env = fakeEnv({ DB: db, APP_KV: kv.kv, AI_SEARCH: search.ns });
 
-  const rows = await hybridSearch(env, "what about beta", { namespace: "sample", type: null, allowed: null }, DAY1);
+  const rows = await hybridSearch(
+    env,
+    "what about beta",
+    { namespace: "sample", type: null, allowed: null },
+    DAY1,
+  );
   assert.ok(Array.isArray(rows));
-  assert.deepEqual(rows.map((r) => r.path), ["b.md", "a.md"], "the deleted document and the other namespace's are dropped, the order kept");
+  assert.deepEqual(
+    rows.map((r) => r.path),
+    ["b.md", "a.md"],
+    "the deleted document and the other namespace's are dropped, the order kept",
+  );
   assert.equal(rows[0].snippet, "beta best chunk", "the best chunk is the snippet");
-  assert.deepEqual(rows.map((r) => r.match), ["both", "keyword"], "a document's chunks add up to how it matched");
+  assert.deepEqual(
+    rows.map((r) => r.match),
+    ["both", "keyword"],
+    "a document's chunks add up to how it matched",
+  );
   const seen = requests.at(-1);
   const retrieval = seen?.ai_search_options?.retrieval;
   assert.equal(retrieval?.retrieval_type, "hybrid");
-  assert.equal(retrieval?.return_on_failure, false, "a failure throws, so the caller falls back instead of seeing nothing");
-  assert.deepEqual(retrieval?.filters, { namespace: { $eq: "sample" }, status: { $nin: ["closed", "superseded"] } });
+  assert.equal(
+    retrieval?.return_on_failure,
+    false,
+    "a failure throws, so the caller falls back instead of seeing nothing",
+  );
+  assert.deepEqual(retrieval?.filters, {
+    namespace: { $eq: "sample" },
+    status: { $nin: ["closed", "superseded"] },
+  });
   assert.deepEqual(retrieval?.boost_by, [{ field: "canon", direction: "desc" }]);
-  assert.deepEqual(seen?.ai_search_options?.reranking, { enabled: true, model: "@cf/baai/bge-reranker-base", match_threshold: 0 }, "reranking reorders and drops nothing");
+  assert.deepEqual(
+    seen?.ai_search_options?.reranking,
+    { enabled: true, model: "@cf/baai/bge-reranker-base", match_threshold: 0 },
+    "reranking reorders and drops nothing",
+  );
   assert.equal(await kv.kv.get("doc-index:queries:2026-10"), "1", "the query is counted");
-  assert.deepEqual(await aiSearchUsage(env, DAY1), { month: "2026-10", hybrid: 1, cap: HYBRID_MONTHLY_CAP }, "and reported for /health");
+  assert.deepEqual(
+    await aiSearchUsage(env, DAY1),
+    { month: "2026-10", hybrid: 1, cap: HYBRID_MONTHLY_CAP },
+    "and reported for /health",
+  );
 
-  const limited = await hybridSearch(env, "what about beta", { namespace: null, type: null, allowed: JSON.stringify(["a.md"]) }, DAY1);
-  assert.deepEqual(Array.isArray(limited) && limited.map((r) => r.path), ["a.md"], "a path limit holds even when the index returns more");
+  const limited = await hybridSearch(
+    env,
+    "what about beta",
+    { namespace: null, type: null, allowed: JSON.stringify(["a.md"]) },
+    DAY1,
+  );
+  assert.deepEqual(
+    Array.isArray(limited) && limited.map((r) => r.path),
+    ["a.md"],
+    "a path limit holds even when the index returns more",
+  );
 });
 
 test("hybrid search says why instead of answering when the index cannot, so the caller falls back", async () => {
@@ -264,11 +377,49 @@ test("hybrid search says why instead of answering when the index cannot, so the 
     },
   });
   const filter = { namespace: null, type: null, allowed: null };
-  assert.equal(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv }), "q", filter, DAY1), "AI_SEARCH is not bound");
-  assert.equal(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: failing.ns }), "q", filter, DAY1), "the search index is not built yet");
-  const capped = fakeKv({ seed: { ...READY, "doc-index:queries:2026-10": String(HYBRID_MONTHLY_CAP) } });
-  assert.match(String(await hybridSearch(fakeEnv({ DB: db, APP_KV: capped.kv, AI_SEARCH: failing.ns }), "q", filter, DAY1)), /hybrid queries are used/);
-  assert.match(String(await hybridSearch(fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv, AI_SEARCH: failing.ns }), "q", filter, DAY1)), /^the search index did not answer$/);
+  assert.equal(
+    await hybridSearch(
+      fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv }),
+      "q",
+      filter,
+      DAY1,
+    ),
+    "AI_SEARCH is not bound",
+  );
+  assert.equal(
+    await hybridSearch(
+      fakeEnv({ DB: db, APP_KV: fakeKv({}).kv, AI_SEARCH: failing.ns }),
+      "q",
+      filter,
+      DAY1,
+    ),
+    "the search index is not built yet",
+  );
+  const capped = fakeKv({
+    seed: { ...READY, "doc-index:queries:2026-10": String(HYBRID_MONTHLY_CAP) },
+  });
+  assert.match(
+    String(
+      await hybridSearch(
+        fakeEnv({ DB: db, APP_KV: capped.kv, AI_SEARCH: failing.ns }),
+        "q",
+        filter,
+        DAY1,
+      ),
+    ),
+    /hybrid queries are used/,
+  );
+  assert.match(
+    String(
+      await hybridSearch(
+        fakeEnv({ DB: db, APP_KV: fakeKv({ seed: { ...READY } }).kv, AI_SEARCH: failing.ns }),
+        "q",
+        filter,
+        DAY1,
+      ),
+    ),
+    /^the search index did not answer$/,
+  );
 });
 
 test("when the index refuses every document the cursor stays, reconcile waits, and the note names the refusal", async () => {
@@ -282,8 +433,16 @@ test("when the index refuses every document the cursor stays, reconcile waits, a
   assert.equal(report.sent, 0);
   assert.equal(report.failed, 2);
   assert.match(report.note, /first refusal: refused/);
-  assert.equal(await kv.kv.get(CURSOR_KEY), null, "the cursor did not move past rows nothing accepted");
-  assert.equal(await kv.kv.get("doc-index:reconciled"), null, "no reconcile while everything is refused");
+  assert.equal(
+    await kv.kv.get(CURSOR_KEY),
+    null,
+    "the cursor did not move past rows nothing accepted",
+  );
+  assert.equal(
+    await kv.kv.get("doc-index:reconciled"),
+    null,
+    "no reconcile while everything is refused",
+  );
 });
 
 test("retired documents are hidden unless asked for, in the index's filter and again in D1", async () => {
@@ -306,5 +465,9 @@ test("retired documents are hidden unless asked for, in the index's filter and a
   assert.deepEqual(Array.isArray(hidden) && hidden.map((r) => r.path), ["live.md"]);
   const shown = await hybridSearch(env, "q", { ...filter, includeRetired: true }, DAY1);
   assert.deepEqual(Array.isArray(shown) && shown.map((r) => r.path), ["old.md", "live.md"]);
-  assert.equal(requests.at(-1)?.ai_search_options?.retrieval?.filters, undefined, "include_retired drops the status filter");
+  assert.equal(
+    requests.at(-1)?.ai_search_options?.retrieval?.filters,
+    undefined,
+    "include_retired drops the status filter",
+  );
 });

@@ -72,7 +72,10 @@ const PAGE_TABS: Partial<Record<(typeof VIEWS)[number]["id"], ReadonlyArray<{ id
 };
 
 /** The tab a page's ?tab= names, when the page has it; else null. */
-export function tabOf<T extends { id: string }>(tabs: ReadonlyArray<T>, name: string | null | undefined): T["id"] | null {
+export function tabOf<T extends { id: string }>(
+  tabs: ReadonlyArray<T>,
+  name: string | null | undefined,
+): T["id"] | null {
   return name && tabs.some((t) => t.id === name) ? name : null;
 }
 
@@ -153,18 +156,36 @@ export interface UndoRequest {
   focus?: string;
 }
 
-export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "pr_close", "unit_resume", "automerge_resume"]);
+export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>([
+  "resume_job",
+  "release_job",
+  "fail_job",
+  "close_shipped",
+  "supersede_job",
+  "park_job",
+  "pr_close",
+  "unit_resume",
+  "automerge_resume",
+]);
 
 // The actions whose dialog also offers an optional note under the reason: resume_job's
 // is the full approval, which the driver reads as resume_note.note.
 export const TAKES_NOTE: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job"]);
 
 // The actions whose dialog asks for the version number typed before the preview (confirm).
-export const TYPED_CONFIRM: ReadonlySet<PortalAction> = new Set<PortalAction>(["sign_policy_from_repo", "sign_policy_change"]);
+export const TYPED_CONFIRM: ReadonlySet<PortalAction> = new Set<PortalAction>([
+  "sign_policy_from_repo",
+  "sign_policy_change",
+]);
 
 // The confirm dialog's perform button, named for what it does (audit DECIDE 11).
 const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) => string)> = {
-  overnight: (p) => (p.value === "off" ? "Turn off" : p.value === "subscription" ? "Run on subscription" : "Run on API key"),
+  overnight: (p) =>
+    p.value === "off"
+      ? "Turn off"
+      : p.value === "subscription"
+        ? "Run on subscription"
+        : "Run on API key",
   resume_job: "Resume job",
   release_job: "Release job",
   fail_job: "Mark failed",
@@ -200,10 +221,28 @@ export function performLabel(action: PortalAction, params: Record<string, string
 }
 
 // One-way actions: once the preview arrives, focus goes to Cancel, not to perform.
-export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job", "close_shipped", "supersede_job", "pr_close", "namespace_remove", "site_key_rotate"]);
+export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>([
+  "revoke_agent",
+  "fail_job",
+  "site_remove",
+  "package_remove",
+  "reset_breaker",
+  "release_job",
+  "close_shipped",
+  "supersede_job",
+  "pr_close",
+  "namespace_remove",
+  "site_key_rotate",
+]);
 
 // Destructive actions: the perform button is the danger style and sits apart from Cancel.
-export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "namespace_remove"]);
+export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>([
+  "revoke_agent",
+  "fail_job",
+  "site_remove",
+  "package_remove",
+  "namespace_remove",
+]);
 
 export const AppCtx = createContext<Ctx | null>(null);
 
@@ -229,14 +268,17 @@ export interface Route {
 export const DRAWER_TYPES: readonly DrawerType[] = ["job", "agent", "audit"];
 
 export function parseRoute(path: string): Route {
-  const segs = path.split("/").filter(Boolean).map((s) => {
-    try {
-      return decodeURIComponent(s);
-    } catch {
-      // A malformed escape: keep the raw segment so the route still resolves.
-      return s;
-    }
-  });
+  const segs = path
+    .split("/")
+    .filter(Boolean)
+    .map((s) => {
+      try {
+        return decodeURIComponent(s);
+      } catch {
+        // A malformed escape: keep the raw segment so the route still resolves.
+        return s;
+      }
+    });
   let view: ViewId = "needs";
   let site: string | null = null;
   let i = 0;
@@ -269,8 +311,13 @@ export function sitePath(namespace: string, tab?: SiteTab): string {
   return `/sites/${encodeURIComponent(namespace)}${tab && tab !== SITE_TABS[0].id ? `?tab=${tab}` : ""}`;
 }
 
-export function routePath(view: ViewId, drawer?: { type: DrawerType; id: string } | null, site?: string | null): string {
+export function routePath(
+  view: ViewId,
+  drawer?: { type: DrawerType; id: string } | null,
+  site?: string | null,
+): string {
   const page = site && view === "sites" ? sitePath(site) : view === "needs" ? "/" : `/${view}`;
-  if (drawer) return `${page === "/" ? "/needs" : page}/${drawer.type}/${encodeURIComponent(drawer.id)}`;
+  if (drawer)
+    return `${page === "/" ? "/needs" : page}/${drawer.type}/${encodeURIComponent(drawer.id)}`;
   return page;
 }

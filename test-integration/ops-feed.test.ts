@@ -21,12 +21,28 @@ const sqlite = (ms: number) => ago(ms).toISOString().slice(0, 19).replace("T", "
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-async function seedJob(id: string, over: { title?: string; status?: string; posted_by?: string; updated_at?: string; result_summary?: string | null }) {
+async function seedJob(
+  id: string,
+  over: {
+    title?: string;
+    status?: string;
+    posted_by?: string;
+    updated_at?: string;
+    result_summary?: string | null;
+  },
+) {
   await env.DB.prepare(
     `INSERT INTO jobs (id, namespace, title, body, status, posted_by, result_summary, created_at, updated_at)
-     VALUES (?1, 'sample', ?2, 'lorem body', ?3, ?4, ?5, ?6, ?6)`
+     VALUES (?1, 'sample', ?2, 'lorem body', ?3, ?4, ?5, ?6, ?6)`,
   )
-    .bind(id, over.title ?? `a job ${id}`, over.status ?? "queued", over.posted_by ?? "github:sample", over.result_summary ?? null, over.updated_at ?? iso(HOUR))
+    .bind(
+      id,
+      over.title ?? `a job ${id}`,
+      over.status ?? "queued",
+      over.posted_by ?? "github:sample",
+      over.result_summary ?? null,
+      over.updated_at ?? iso(HOUR),
+    )
     .run();
 }
 
@@ -43,15 +59,26 @@ beforeEach(async () => {
   });
   // Ended inside the last day, once in each timestamp form the jobs table holds.
   await seedJob("job_00000000000c", { status: "done", updated_at: iso(2 * HOUR) });
-  await seedJob("job_00000000000d", { status: "failed", updated_at: sqlite(3 * HOUR), posted_by: WATCHER_ACTOR, title: "Watcher: CI red [ci-red-abc1234]" });
+  await seedJob("job_00000000000d", {
+    status: "failed",
+    updated_at: sqlite(3 * HOUR),
+    posted_by: WATCHER_ACTOR,
+    title: "Watcher: CI red [ci-red-abc1234]",
+  });
   // Ended before it: left out, in both forms.
   await seedJob("job_00000000000e", { status: "done", updated_at: iso(3 * DAY) });
   await seedJob("job_00000000000f", { status: "superseded", updated_at: sqlite(2 * DAY) });
 
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, recorded_at) VALUES ('job_00000000000c', 'https://github.com/example/sample/pull/1', 1, ?1)").bind(sqlite(DAY)),
-    env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, recorded_at) VALUES ('job_00000000000c', 'https://github.com/example/sample/pull/2', NULL, ?1)").bind(sqlite(2 * HOUR)),
-    env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, recorded_at) VALUES ('job_00000000000e', 'https://github.com/example/sample/pull/0', 0, ?1)").bind(sqlite(10 * DAY)),
+    env.DB.prepare(
+      "INSERT INTO job_outcome_prs (job_id, pr_url, merged, recorded_at) VALUES ('job_00000000000c', 'https://github.com/example/sample/pull/1', 1, ?1)",
+    ).bind(sqlite(DAY)),
+    env.DB.prepare(
+      "INSERT INTO job_outcome_prs (job_id, pr_url, merged, recorded_at) VALUES ('job_00000000000c', 'https://github.com/example/sample/pull/2', NULL, ?1)",
+    ).bind(sqlite(2 * HOUR)),
+    env.DB.prepare(
+      "INSERT INTO job_outcome_prs (job_id, pr_url, merged, recorded_at) VALUES ('job_00000000000e', 'https://github.com/example/sample/pull/0', 0, ?1)",
+    ).bind(sqlite(10 * DAY)),
   ]);
 });
 
@@ -60,7 +87,11 @@ function counted(): { env: Env; reads: { d1: string[]; kv: string[] } } {
   const reads = { d1: [] as string[], kv: [] as string[] };
   const db = new Proxy(env.DB, {
     get(target, prop) {
-      if (prop === "prepare") return (sql: string) => (reads.d1.push(sql.replace(/\s+/g, " ").slice(0, 60)), target.prepare(sql));
+      if (prop === "prepare")
+        return (sql: string) => (
+          reads.d1.push(sql.replace(/\s+/g, " ").slice(0, 60)),
+          target.prepare(sql)
+        );
       const value = Reflect.get(target, prop);
       return typeof value === "function" ? value.bind(target) : value;
     },
@@ -100,15 +131,26 @@ describe("the feed against real D1", () => {
 
   it("lists every open job and every job that ended in the last day, and nothing older", async () => {
     const feed = await opsFeed(env as unknown as Env, NOW);
-    expect(feed.live.jobs.map((j) => j.id).sort()).toEqual(["job_00000000000a", "job_00000000000b", "job_00000000000c", "job_00000000000d"]);
+    expect(feed.live.jobs.map((j) => j.id).sort()).toEqual([
+      "job_00000000000a",
+      "job_00000000000b",
+      "job_00000000000c",
+      "job_00000000000d",
+    ]);
     const blocked = feed.live.jobs.find((j) => j.id === "job_00000000000b")!;
     expect(blocked.waits_on).toBe("waiting on the push");
     expect(blocked.command).toBe("git push -u origin feat/x");
     // Needs you reads the same inbox GET /ops/inbox answers with: the blocked job is in it.
-    expect(feed.live.inbox.apps.flatMap((a) => a.items).map((i) => i.title)).toContain(blocked.title);
+    expect(feed.live.inbox.apps.flatMap((a) => a.items).map((i) => i.title)).toContain(
+      blocked.title,
+    );
     expect(feed.live.inbox.count).toBe(feed.live.inbox.apps.reduce((n, a) => n + a.count, 0));
     const finding = feed.live.jobs.find((j) => j.id === "job_00000000000d")!;
-    expect(finding.finding).toEqual({ fingerprint: "ci-red-abc1234", seen_count: null, last_seen: null });
+    expect(finding.finding).toEqual({
+      fingerprint: "ci-red-abc1234",
+      seen_count: null,
+      last_seen: null,
+    });
     expect(finding.updated_at, "a datetime('now') value is handed over as ISO").toMatch(/T.*Z$/);
   });
 
@@ -116,13 +158,22 @@ describe("the feed against real D1", () => {
     await env.DB.prepare("DELETE FROM watcher_findings").run();
     await env.DB.prepare(
       `INSERT INTO watcher_findings (fingerprint, namespace, title, state, job_id, first_seen_at, last_seen_at, seen_count, evidence, updated_at)
-       VALUES ('ci-red-abc1234', 'sample', 'Watcher: CI red [ci-red-abc1234]', 'open', 'job_00000000000d', ?1, ?2, 7, '[]', ?2)`
+       VALUES ('ci-red-abc1234', 'sample', 'Watcher: CI red [ci-red-abc1234]', 'open', 'job_00000000000d', ?1, ?2, 7, '[]', ?2)`,
     )
       .bind(iso(DAY), iso(HOUR))
       .run();
     const feed = await opsFeed(env as unknown as Env, NOW);
-    expect(feed.live.jobs.map((j) => j.id).sort(), "the join multiplied or dropped a job").toEqual(["job_00000000000a", "job_00000000000b", "job_00000000000c", "job_00000000000d"]);
-    expect(feed.live.jobs.find((j) => j.id === "job_00000000000d")!.finding).toEqual({ fingerprint: "ci-red-abc1234", seen_count: 7, last_seen: iso(HOUR) });
+    expect(feed.live.jobs.map((j) => j.id).sort(), "the join multiplied or dropped a job").toEqual([
+      "job_00000000000a",
+      "job_00000000000b",
+      "job_00000000000c",
+      "job_00000000000d",
+    ]);
+    expect(feed.live.jobs.find((j) => j.id === "job_00000000000d")!.finding).toEqual({
+      fingerprint: "ci-red-abc1234",
+      seen_count: 7,
+      last_seen: iso(HOUR),
+    });
     await env.DB.prepare("DELETE FROM watcher_findings").run();
   });
 
@@ -143,11 +194,17 @@ describe("the feed against real D1", () => {
 });
 
 async function signedFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
+  const cookie = (
+    await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())
+  ).split(";")[0];
   const headers = new Headers(init.headers);
   headers.set("Cookie", cookie);
   const ctx = createExecutionContext();
-  const response = await worker.fetch!(new Request(`${ORIGIN}${path}`, { ...init, headers, redirect: "manual" }) as never, { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx);
+  const response = await worker.fetch!(
+    new Request(`${ORIGIN}${path}`, { ...init, headers, redirect: "manual" }) as never,
+    { ...env, COOKIE_ENCRYPTION_KEY: SECRET } as never,
+    ctx,
+  );
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
@@ -164,10 +221,20 @@ describe("the feed's routes through the Worker", () => {
   });
 
   it("refuses a bearer with 403 and sends an anonymous caller to sign in", async () => {
-    for (const [path, method] of [[OPS_FEED_PATH, "GET"], [OPS_REFRESH_PATH, "POST"]] as const) {
-      const bearer = await SELF.fetch(`${ORIGIN}${path}`, { method, headers: { Authorization: "Bearer capsid_agent_x", "X-Capsid-Ops": "refresh" } });
+    for (const [path, method] of [
+      [OPS_FEED_PATH, "GET"],
+      [OPS_REFRESH_PATH, "POST"],
+    ] as const) {
+      const bearer = await SELF.fetch(`${ORIGIN}${path}`, {
+        method,
+        headers: { Authorization: "Bearer capsid_agent_x", "X-Capsid-Ops": "refresh" },
+      });
       expect(bearer.status, path).toBe(403);
-      const anonymous = await SELF.fetch(`${ORIGIN}${path}`, { method, headers: { "X-Capsid-Ops": "refresh" }, redirect: "manual" });
+      const anonymous = await SELF.fetch(`${ORIGIN}${path}`, {
+        method,
+        headers: { "X-Capsid-Ops": "refresh" },
+        redirect: "manual",
+      });
       expect(anonymous.status, path).toBe(302);
     }
   });

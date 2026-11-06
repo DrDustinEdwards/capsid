@@ -4,10 +4,10 @@ Every caller resolves to an agent: a name, a set of scopes, and its own audit id
 
 Scopes are five axes. `namespaces` and `repos` are a list or `*`. `tools` is an allow list or `*`. `grants` is read, or read and write. `flags` are the blast radius:
 
-| flag | what it gates |
-| --- | --- |
-| `can_merge` | merging a pull request, which can trigger a deploy on a repo that deploys on push. CLOSING one needs it too, since 2026-09-16: close deletes the head branch, which is the same destruction. So does `capsid_close_pr` action `delete_branch` with `force: true`, since 2026-09-25, because force lifts its open-PR refusal. So do `capsid_close_pr` actions `tag` and `release`, since 2026-10-10, because a tag or a release can start a deploy as a merge can. |
-| `can_touch_protected` | writing or deleting an autonomy policy document (`allow_improve_paths`), which decides what this Worker may do without a human |
+| flag                  | what it gates                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `can_merge`           | merging a pull request, which can trigger a deploy on a repo that deploys on push. CLOSING one needs it too, since 2026-09-16: close deletes the head branch, which is the same destruction. So does `capsid_close_pr` action `delete_branch` with `force: true`, since 2026-09-25, because force lifts its open-PR refusal. So do `capsid_close_pr` actions `tag` and `release`, since 2026-10-10, because a tag or a release can start a deploy as a merge can. |
+| `can_touch_protected` | writing or deleting an autonomy policy document (`allow_improve_paths`), which decides what this Worker may do without a human                                                                                                                                                                                                                                                                                                                                    |
 
 Five flags were retired on 2026-10-31 with the tools they gated (`capsid_change_repo`, `capsid_open_pr` and `capsid_run_ci`): `can_direct_write`, `can_dispatch`, `can_write_workflows`, `money_paths` and `can_comment_pr`. A stored agent row or queued job that names one still loads, and the flag is ignored.
 
@@ -35,15 +35,15 @@ After all three, a remap gains a driver nothing: the repos axis refuses independ
 
 Roles are few and separated. Each one is a single capability, not a bundle. `ROLES` in `scripts/roles.ts` holds every row below that is not a driver or the seat. The admin mints each one, drivers and the seat included, with `capsid_admin_manage_agents` action `mint`, passing the row's fields (`docs/bootstrap.md`). A test fails the build if any role names a second blast-radius flag.
 
-| role | reads | writes | flag |
-| --- | --- | --- | --- |
-| `<ns>-driver` | its own namespace | its own namespace, pull requests only | none by default; two exceptions below |
-| `auditor` | every namespace and repo | nothing at all | none |
-| `watcher` | every namespace | `capsid_work_jobs.post`, and no other job action | none |
-| `seat` | every namespace | every namespace | `can_merge` |
-| `site-seat` | `dustinedwards` | `dustinedwards` | `can_merge` |
-| `live-probe` | `capsid`, through the `capsid_read_doc` tool only | nothing at all | none |
-| `live-check` | `capsid`, through the `capsid_read_doc` tool only; devkit's daily AI and MCP check, its key the `MCP_TEST_GRANT_MCP_DUSTINEDWARDS_INFO` secret there | nothing at all | none |
+| role          | reads                                                                                                                                                | writes                                           | flag                                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------- |
+| `<ns>-driver` | its own namespace                                                                                                                                    | its own namespace, pull requests only            | none by default; two exceptions below |
+| `auditor`     | every namespace and repo                                                                                                                             | nothing at all                                   | none                                  |
+| `watcher`     | every namespace                                                                                                                                      | `capsid_work_jobs.post`, and no other job action | none                                  |
+| `seat`        | every namespace                                                                                                                                      | every namespace                                  | `can_merge`                           |
+| `site-seat`   | `dustinedwards`                                                                                                                                      | `dustinedwards`                                  | `can_merge`                           |
+| `live-probe`  | `capsid`, through the `capsid_read_doc` tool only                                                                                                    | nothing at all                                   | none                                  |
+| `live-check`  | `capsid`, through the `capsid_read_doc` tool only; devkit's daily AI and MCP check, its key the `MCP_TEST_GRANT_MCP_DUSTINEDWARDS_INFO` secret there | nothing at all                                   | none                                  |
 
 **A project driver holds no blast-radius flag by default, and two of them hold one.** Granted by the seat on 2026-09-11: `capsid-driver` and `claude-skills-driver` hold `can_touch_protected`. Every other driver holds none, and `capsid_read_status` action `status` and Capsid Portal list the flags each one actually has, so the inventory is the answer rather than this paragraph. Widening one is `capsid_admin_manage_agents` action `update_scopes`, which is admin only and audit-logged with the scopes before and after.
 

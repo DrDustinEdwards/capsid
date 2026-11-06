@@ -6,7 +6,11 @@ import { ErrorBoundary } from "../app/ErrorBoundary";
 // refuses says why in its own place (capsomer/react/chart-frame).
 export function ChartSlot({ children }: { children: ReactNode }) {
   return (
-    <ErrorBoundary fallback={<p className="faint">This chart could not be loaded. Reload the page to try again.</p>}>
+    <ErrorBoundary
+      fallback={
+        <p className="faint">This chart could not be loaded. Reload the page to try again.</p>
+      }
+    >
       <Suspense fallback={null}>{children}</Suspense>
     </ErrorBoundary>
   );

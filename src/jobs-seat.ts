@@ -18,7 +18,14 @@ import { verifySignedBody } from "./signed-docs";
 import { outcomeFrom, outcomeStatement, readJobUsage, verifyEvidence } from "./job-outcomes";
 import { jobAudit, mirrorStatements, resumeNoteFields, type ResumeNote } from "./jobs-mirror";
 import { signJobText } from "./job-signing";
-import { commandFromSummary, completeAsSeat, completeJob, completeWithoutClaim, failJob, recordAsSeat } from "./jobs-holder";
+import {
+  commandFromSummary,
+  completeAsSeat,
+  completeJob,
+  completeWithoutClaim,
+  failJob,
+  recordAsSeat,
+} from "./jobs-holder";
 import { actorKind, touchStatement } from "./job-touches";
 import type { ClaimInput, ClaimRaw } from "./job-claims";
 import { readReproReceipt } from "./bench-run-key";
@@ -62,31 +69,48 @@ export async function adminFailJob(
   now: Date,
   id: string,
   reason: string,
-  opts: { extra?: D1PreparedStatement[]; outcome?: boolean } = {}
+  opts: { extra?: D1PreparedStatement[]; outcome?: boolean } = {},
 ): Promise<JobResult> {
   if (!callerIsSeat(agent)) {
     return refuse(
       "admin-fail",
-      `${agent.actor} may only fail a job it holds. Failing somebody else's job is the seat's act, and this caller holds neither the admin identity nor can_merge.`
+      `${agent.actor} may only fail a job it holds. Failing somebody else's job is the seat's act, and this caller holds neither the admin identity nor can_merge.`,
     );
   }
-  if (!reason?.trim()) return refuse("admin-fail", "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.");
+  if (!reason?.trim())
+    return refuse(
+      "admin-fail",
+      "fail needs a reason. A failed job with no reason is one nobody can retry or rule on.",
+    );
   const current = await readJob(env.DB, id);
   if (!current) return refuse("admin-fail", `no job ${id}.`);
   // The job's own namespace, since a seat key may be scoped narrower than the admin.
   const outside = outsideJobNamespace(agent, current.namespace);
-  if (outside) return refuse("admin-fail", `${agent.actor} cannot fail ${id} ('${current.title}'): ${outside}`);
+  if (outside)
+    return refuse(
+      "admin-fail",
+      `${agent.actor} cannot fail ${id} ('${current.title}'): ${outside}`,
+    );
   if (current.status !== "queued" && current.status !== "claimed" && current.status !== "blocked") {
     return refuse("admin-fail", `${id} is already ${current.status}; there is nothing to fail.`);
   }
-  const job: JobRow = { ...current, status: "failed", result_summary: reason, updated_at: now.toISOString() };
+  const job: JobRow = {
+    ...current,
+    status: "failed",
+    result_summary: reason,
+    updated_at: now.toISOString(),
+  };
   const statements = [
     env.DB.prepare(
       `UPDATE jobs SET status = 'failed', result_summary = ?3, summary_sig = NULL, updated_at = ?2
-       WHERE id = ?1 AND status IN ('queued', 'claimed', 'blocked') RETURNING id`
+       WHERE id = ?1 AND status IN ('queued', 'claimed', 'blocked') RETURNING id`,
     ).bind(id, now.toISOString(), reason),
     ...(await mirrorStatements(env, job, "job-admin-fail", agent.actor)),
-    jobAudit(env.DB, agent.actor, "job-admin-fail", job, { status: job.status, reason, held_by: job.claimed_by }),
+    jobAudit(env.DB, agent.actor, "job-admin-fail", job, {
+      status: job.status,
+      reason,
+      held_by: job.claimed_by,
+    }),
     // The seat ending a job is a touch, and ends a gate's wait when the job is blocked;
     // a gate a resume already answered is not this touch's wait.
     touchStatement(env.DB, {
@@ -108,13 +132,15 @@ export async function adminFailJob(
   // job. No evidence argument either: the seat did not do the work.
   if (job.claimed_by && opts.outcome !== false) {
     const verdict = await verifyEvidence(env, job.namespace, undefined);
-    statements.push(outcomeStatement(env.DB, outcomeFrom(job, verdict, now, await readJobUsage(env.DB, job.id))));
+    statements.push(
+      outcomeStatement(env.DB, outcomeFrom(job, verdict, now, await readJobUsage(env.DB, job.id))),
+    );
   }
   if (!(await guardedTransition(env, current, [...statements, ...(opts.extra ?? [])]))) {
     const moved = await readJob(env.DB, id);
     return refuse(
       "admin-fail",
-      `${id} changed between reading it and failing it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}. Nothing was written; look again before failing it.`
+      `${id} changed between reading it and failing it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}. Nothing was written; look again before failing it.`,
     );
   }
   return { ok: true, action: "admin-fail", job };
@@ -132,18 +158,19 @@ export async function failAsCaller(
   now: Date,
   id: string,
   reason: string,
-  said: { claim?: ClaimInput; raw?: ClaimRaw } = {}
+  said: { claim?: ClaimInput; raw?: ClaimRaw } = {},
 ): Promise<JobResult> {
   const current = await readJob(env.DB, id);
   if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) {
     // A claim is the holder's account of its own work. The seat failing a job it does
     // not hold has none to give, and one sent anyway is refused rather than dropped, so
     // nobody reads a silence as a recorded claim.
-    const sent = typeof said.claim === "string" ? said.claim.trim() !== "" : said.claim !== undefined;
+    const sent =
+      typeof said.claim === "string" ? said.claim.trim() !== "" : said.claim !== undefined;
     if (sent) {
       return refuse(
         "fail",
-        `${id} is held by ${current.claimed_by ?? "nobody"}, so this is the seat's fail and takes no claim: a claim is the holder's account of its own work. Send it without claim.`
+        `${id} is held by ${current.claimed_by ?? "nobody"}, so this is the seat's fail and takes no claim: a claim is the holder's account of its own work. Send it without claim.`,
       );
     }
     return adminFailJob(env, agent, now, id, reason);
@@ -167,19 +194,23 @@ async function adminCompleteJob(
   agent: Agent,
   now: Date,
   id: string,
-  args: Parameters<typeof completeJob>[4]
+  args: Parameters<typeof completeJob>[4],
 ): Promise<JobResult> {
   if (!callerIsSeat(agent)) {
     return refuse(
       "complete",
-      `${agent.actor} may only complete a job it holds. Completing somebody else's blocked job is the seat's act, and this caller holds neither the admin identity nor can_merge.`
+      `${agent.actor} may only complete a job it holds. Completing somebody else's blocked job is the seat's act, and this caller holds neither the admin identity nor can_merge.`,
     );
   }
   const current = await readJob(env.DB, id);
   if (!current) return refuse("complete", `no job ${id}.`);
   // The job's own namespace, since a seat key may be scoped narrower than the admin.
   const outside = outsideJobNamespace(agent, current.namespace);
-  if (outside) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}'): ${outside}`);
+  if (outside)
+    return refuse(
+      "complete",
+      `${agent.actor} cannot complete ${id} ('${current.title}'): ${outside}`,
+    );
   return completeAsSeat(env, agent, now, id, args);
 }
 
@@ -187,14 +218,24 @@ async function adminCompleteJob(
 // queued job without a claim. The seat only, as for completing a job
 // somebody else blocked, because an outcome credits work and a driver could otherwise
 // record work it did not do. The evidence is verified against GitHub as for a complete.
-export async function recordAsCaller(env: Env, agent: Agent, now: Date, id: string, args: Parameters<typeof completeJob>[4]): Promise<JobResult> {
+export async function recordAsCaller(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  args: Parameters<typeof completeJob>[4],
+): Promise<JobResult> {
   if (!callerIsSeat(agent)) {
-    return refuse("record", `${agent.actor} may not record an outcome without a claim. That is the seat's act (the admin identity or can_merge); a driver claims the job and completes it.`);
+    return refuse(
+      "record",
+      `${agent.actor} may not record an outcome without a claim. That is the seat's act (the admin identity or can_merge); a driver claims the job and completes it.`,
+    );
   }
   const current = await readJob(env.DB, id);
   if (!current) return refuse("record", `no job ${id}.`);
   const outside = outsideJobNamespace(agent, current.namespace);
-  if (outside) return refuse("record", `${agent.actor} cannot record ${id} ('${current.title}'): ${outside}`);
+  if (outside)
+    return refuse("record", `${agent.actor} cannot record ${id} ('${current.title}'): ${outside}`);
   return recordAsSeat(env, agent, now, id, args);
 }
 
@@ -214,16 +255,30 @@ export async function recordAsCaller(env: Env, agent: Agent, now: Date, id: stri
 // request's body must name this job id, as auto-merge's body_names_job asks: otherwise any
 // pull request on a mapped repo would close any queued job (Grok audit 2026-10-21, CA-3).
 // GitHub unreachable refuses, since nothing then shows the pull request is this job's.
-async function completeUnclaimed(env: Env, agent: Agent, now: Date, current: JobRow, args: Parameters<typeof completeJob>[4]): Promise<JobResult> {
+async function completeUnclaimed(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  current: JobRow,
+  args: Parameters<typeof completeJob>[4],
+): Promise<JobResult> {
   const id = current.id;
   const outside = outsideJobNamespace(agent, current.namespace);
-  if (outside) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}'): ${outside}`);
-  const refs = [args.result_ref, ...(args.evidence?.prs ?? [])].filter((ref): ref is string => Boolean(ref));
-  const prs = refs.map((ref) => ({ ref, pr: parsePrUrl(ref) })).filter((p): p is { ref: string; pr: PrUrl } => p.pr !== null);
+  if (outside)
+    return refuse(
+      "complete",
+      `${agent.actor} cannot complete ${id} ('${current.title}'): ${outside}`,
+    );
+  const refs = [args.result_ref, ...(args.evidence?.prs ?? [])].filter((ref): ref is string =>
+    Boolean(ref),
+  );
+  const prs = refs
+    .map((ref) => ({ ref, pr: parsePrUrl(ref) }))
+    .filter((p): p is { ref: string; pr: PrUrl } => p.pr !== null);
   if (prs.length === 0) {
     return refuse(
       "complete",
-      `${id} is queued and nobody holds it. A job worked without a claim is completed by naming its pull request (a pull request URL in result_ref or evidence.prs): the pull request is the claim. Nothing was written.`
+      `${id} is queued and nobody holds it. A job worked without a claim is completed by naming its pull request (a pull request URL in result_ref or evidence.prs): the pull request is the claim. Nothing was written.`,
     );
   }
   let named = false;
@@ -232,25 +287,42 @@ async function completeUnclaimed(env: Env, agent: Agent, now: Date, current: Job
     try {
       mapped = await resolveRepo(env, current.namespace, `${pr.owner}/${pr.repo}`);
     } catch {
-      return refuse("complete", `${ref} is not on a repo mapped to ${current.namespace}, so it is not shown to be ${id}'s work. Nothing was written.`);
+      return refuse(
+        "complete",
+        `${ref} is not on a repo mapped to ${current.namespace}, so it is not shown to be ${id}'s work. Nothing was written.`,
+      );
     }
     if (!named) named = await prBodyNames(env, mapped.owner, mapped.repo, pr.number, id);
   }
   if (!named) {
     return refuse(
       "complete",
-      `none of the named pull requests has ${id} in its description (or GitHub could not be read), so none is shown to be this job's work. Put the job id in the pull request body and complete again. Nothing was written.`
+      `none of the named pull requests has ${id} in its description (or GitHub could not be read), so none is shown to be this job's work. Put the job id in the pull request body and complete again. Nothing was written.`,
     );
   }
   const missing = missingForJob(agent, current.namespace, current.required_scopes);
-  if (missing) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}') without a claim: ${missing} A claim would have refused it too. Nothing was written.`);
+  if (missing)
+    return refuse(
+      "complete",
+      `${agent.actor} cannot complete ${id} ('${current.title}') without a claim: ${missing} A claim would have refused it too. Nothing was written.`,
+    );
   const shortfall = await recordShortfall(env.DB, agent.actor, current);
-  if (shortfall) return refuse("complete", `${agent.actor} cannot complete ${id} ('${current.title}') without a claim: ${shortfall} A claim would have refused it too. Nothing was written.`);
+  if (shortfall)
+    return refuse(
+      "complete",
+      `${agent.actor} cannot complete ${id} ('${current.title}') without a claim: ${shortfall} A claim would have refused it too. Nothing was written.`,
+    );
   return completeWithoutClaim(env, agent, now, id, args);
 }
 
 // Whether the pull request's body names the job id. A failed read is false.
-async function prBodyNames(env: Env, owner: string, repo: string, number: number, id: string): Promise<boolean> {
+async function prBodyNames(
+  env: Env,
+  owner: string,
+  repo: string,
+  number: number,
+  id: string,
+): Promise<boolean> {
   try {
     const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${number}`);
     if (!resp.ok) return false;
@@ -270,7 +342,7 @@ export async function completeAsCaller(
   agent: Agent,
   now: Date,
   id: string,
-  args: Parameters<typeof completeJob>[4]
+  args: Parameters<typeof completeJob>[4],
 ): Promise<JobResult> {
   // An argument completeJob refuses before it reads anything is refused the same way here.
   if (!args.result_summary?.trim()) return completeJob(env, agent, now, id, args);
@@ -284,19 +356,21 @@ export async function completeAsCaller(
     const missing = !receipt
       ? "the harness has no check of a reproduction test for this run (name the test with bench-repro before phase one ends)"
       : receipt.passed
-      ? null
-      : `the harness's check of your reproduction test did not pass: ${receipt.reason}`;
+        ? null
+        : `the harness's check of your reproduction test did not pass: ${receipt.reason}`;
     if (missing) {
       return refuse(
         "complete",
         `${id} was not completed: ${missing}. A bench run completes its job only when the harness saw its test fail on the base and pass on its diff. ` +
-          `Call fail with the reason instead; "not done, here's why" is a good outcome.`
+          `Call fail with the reason instead; "not done, here's why" is a good outcome.`,
       );
     }
   }
   const current = await readJob(env.DB, id);
-  if (current && current.status === "queued" && current.claimed_by === null) return completeUnclaimed(env, agent, now, current, args);
-  if (current && current.claimed_by !== agent.actor && callerIsSeat(agent)) return adminCompleteJob(env, agent, now, id, args);
+  if (current && current.status === "queued" && current.claimed_by === null)
+    return completeUnclaimed(env, agent, now, current, args);
+  if (current && current.claimed_by !== agent.actor && callerIsSeat(agent))
+    return adminCompleteJob(env, agent, now, id, args);
   return completeJob(env, agent, now, id, args);
 }
 
@@ -312,33 +386,51 @@ export async function completeAsCaller(
 // claimed_at is kept, so the job's duration runs from its first claim. The UPDATE is
 // keyed on the holder read, so a claim that changed hands in between is not released
 // out from under the new holder.
-export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, reason: string): Promise<JobResult> {
+export async function releaseJob(
+  env: Env,
+  agent: Agent,
+  now: Date,
+  id: string,
+  reason: string,
+): Promise<JobResult> {
   if (!callerIsSeat(agent)) {
     return refuse(
       "release",
-      `${agent.actor} cannot release a job. Releasing a claim is the seat's act, and this caller holds neither the admin identity nor can_merge.`
+      `${agent.actor} cannot release a job. Releasing a claim is the seat's act, and this caller holds neither the admin identity nor can_merge.`,
     );
   }
   if (!reason?.trim()) {
-    return refuse("release", "release needs a reason: why the holder is not coming back. It is recorded in the audit row.");
+    return refuse(
+      "release",
+      "release needs a reason: why the holder is not coming back. It is recorded in the audit row.",
+    );
   }
   const swallowed = swallowedParamTag(reason);
   if (swallowed) return refuse("release", swallowedTagRefusal("reason", swallowed));
   const current = await readJob(env.DB, id);
   if (!current) return refuse("release", `no job ${id}.`);
   const outside = outsideJobNamespace(agent, current.namespace);
-  if (outside) return refuse("release", `${agent.actor} cannot release ${id} ('${current.title}'): ${outside}`);
+  if (outside)
+    return refuse(
+      "release",
+      `${agent.actor} cannot release ${id} ('${current.title}'): ${outside}`,
+    );
   if (current.status !== "claimed") {
     return refuse(
       "release",
-      `${id} is ${current.status}, not claimed. Release returns a claimed job to the queue; a blocked job is resumed, a queued one is already free, and a finished one is not reopened.`
+      `${id} is ${current.status}, not claimed. Release returns a claimed job to the queue; a blocked job is resumed, a queued one is already free, and a finished one is not reopened.`,
     );
   }
-  const job: JobRow = { ...current, status: "queued", claimed_by: null, updated_at: now.toISOString() };
+  const job: JobRow = {
+    ...current,
+    status: "queued",
+    claimed_by: null,
+    updated_at: now.toISOString(),
+  };
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
       `UPDATE jobs SET status = 'queued', claimed_by = NULL, updated_at = ?2
-       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?3 RETURNING id`
+       WHERE id = ?1 AND status = 'claimed' AND claimed_by = ?3 RETURNING id`,
     ).bind(id, now.toISOString(), current.claimed_by),
     ...(await mirrorStatements(env, job, "job-released", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-released", job, { reason, held_by: current.claimed_by }),
@@ -357,7 +449,7 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
     const moved = await readJob(env.DB, id);
     return refuse(
       "release",
-      `${id} changed between reading it and releasing it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}. Nothing was written.`
+      `${id} changed between reading it and releasing it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}. Nothing was written.`,
     );
   }
   return { ok: true, action: "release", job };
@@ -383,9 +475,14 @@ export async function releaseJob(env: Env, agent: Agent, now: Date, id: string, 
 /** Why a job's row shows work was done on it, or null. */
 export function workRecorded(job: JobRow): string | null {
   const done: string[] = [];
-  if (job.blocked_count > 0) done.push(`it has hit a gate ${job.blocked_count} time${job.blocked_count === 1 ? "" : "s"}`);
-  if (job.resumed_count > 0) done.push(`it has been resumed ${job.resumed_count} time${job.resumed_count === 1 ? "" : "s"}`);
-  if (job.corrections_count > 0) done.push(`it has been sent back for correction ${job.corrections_count} time${job.corrections_count === 1 ? "" : "s"}`);
+  if (job.blocked_count > 0)
+    done.push(`it has hit a gate ${job.blocked_count} time${job.blocked_count === 1 ? "" : "s"}`);
+  if (job.resumed_count > 0)
+    done.push(`it has been resumed ${job.resumed_count} time${job.resumed_count === 1 ? "" : "s"}`);
+  if (job.corrections_count > 0)
+    done.push(
+      `it has been sent back for correction ${job.corrections_count} time${job.corrections_count === 1 ? "" : "s"}`,
+    );
   if (job.result_ref) done.push(`it records a result_ref (${job.result_ref})`);
   return done.length ? done.join(", ") : null;
 }
@@ -398,11 +495,14 @@ export async function supersedeJob(
   now: Date,
   id: string,
   args: { reason: string; replaced_by?: string },
-  extra: D1PreparedStatement[] = []
+  extra: D1PreparedStatement[] = [],
 ): Promise<JobResult> {
   const reason = args.reason?.trim();
   if (!reason) {
-    return refuse("supersede", "supersede needs a reason: what replaced this job, or why it was withdrawn.");
+    return refuse(
+      "supersede",
+      "supersede needs a reason: what replaced this job, or why it was withdrawn.",
+    );
   }
   const swallowed = swallowedParamTag(args.reason);
   if (swallowed) return refuse("supersede", swallowedTagRefusal("reason", swallowed));
@@ -412,7 +512,11 @@ export async function supersedeJob(
   // The job's own namespace, asked here for the reason resume asks it: the tool's
   // check saw only the namespace argument, which an id-based call may omit.
   const outside = outsideJobNamespace(agent, current.namespace);
-  if (outside) return refuse("supersede", `${agent.actor} cannot supersede ${id} ('${current.title}'): ${outside}`);
+  if (outside)
+    return refuse(
+      "supersede",
+      `${agent.actor} cannot supersede ${id} ('${current.title}'): ${outside}`,
+    );
 
   const replacedBy = args.replaced_by?.trim() || null;
   if (replacedBy) {
@@ -420,11 +524,15 @@ export async function supersedeJob(
     const replacement = await env.DB.prepare("SELECT id, namespace FROM jobs WHERE id = ?1")
       .bind(replacedBy)
       .first<{ id: string; namespace: string }>();
-    if (!replacement) return refuse("supersede", `no job ${replacedBy}. replaced_by names the job that replaces this one, and it must exist.`);
+    if (!replacement)
+      return refuse(
+        "supersede",
+        `no job ${replacedBy}. replaced_by names the job that replaces this one, and it must exist.`,
+      );
     if (replacement.namespace !== current.namespace) {
       return refuse(
         "supersede",
-        `${replacedBy} is in ${replacement.namespace} and ${id} is in ${current.namespace}. A job is replaced by work in its own namespace.`
+        `${replacedBy} is in ${replacement.namespace} and ${id} is in ${current.namespace}. A job is replaced by work in its own namespace.`,
       );
     }
   }
@@ -432,7 +540,7 @@ export async function supersedeJob(
   if (current.status !== "queued" && current.status !== "claimed") {
     return refuse(
       "supersede",
-      `${id} is ${current.status}. Supersede closes a queued job, or a claimed one with no work recorded; ${current.status === "blocked" ? "a blocked job has hit a gate, so it is failed instead" : "a finished job is not rewritten"}.`
+      `${id} is ${current.status}. Supersede closes a queued job, or a claimed one with no work recorded; ${current.status === "blocked" ? "a blocked job has hit a gate, so it is failed instead" : "a finished job is not rewritten"}.`,
     );
   }
   if (current.status === "claimed") {
@@ -440,24 +548,33 @@ export async function supersedeJob(
     if (current.claimed_by !== agent.actor && !isSeat) {
       return refuse(
         "supersede",
-        `${id} is held by ${current.claimed_by}, not by ${agent.actor}. Superseding a job somebody else holds is the seat's act, and this caller holds neither the admin identity nor can_merge.`
+        `${id} is held by ${current.claimed_by}, not by ${agent.actor}. Superseding a job somebody else holds is the seat's act, and this caller holds neither the admin identity nor can_merge.`,
       );
     }
     const work = workRecorded(current);
-    if (work) return refuse("supersede", `${id} has work recorded on it: ${work}. Fail it instead; supersede is for a job replaced before any work was done.`);
+    if (work)
+      return refuse(
+        "supersede",
+        `${id} has work recorded on it: ${work}. Fail it instead; supersede is for a job replaced before any work was done.`,
+      );
   }
 
   const summary = replacedBy ? `Superseded by ${replacedBy}: ${reason}` : `Superseded: ${reason}`;
   // ?4 is the holder read above, so a claim that went to another driver between the
   // read and this write is not superseded out from under the new one.
-  const job: JobRow = { ...current, status: "superseded", result_summary: summary, updated_at: now.toISOString() };
+  const job: JobRow = {
+    ...current,
+    status: "superseded",
+    result_summary: summary,
+    updated_at: now.toISOString(),
+  };
   // The guard makes the mirror and audit row commit only with the UPDATE: a row that
   // changed since the read (a gate hit, a claim) aborts all three.
   const won = await guardedTransition(env, current, [
     env.DB.prepare(
       `UPDATE jobs SET status = 'superseded', result_summary = ?2, summary_sig = NULL, updated_at = ?3
        WHERE id = ?1 AND (status = 'queued' OR (status = 'claimed' AND claimed_by = ?4 AND blocked_count = 0
-         AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`
+         AND resumed_count = 0 AND corrections_count = 0 AND result_ref IS NULL)) RETURNING id`,
     ).bind(id, summary, now.toISOString(), current.claimed_by),
     ...(await mirrorStatements(env, job, "job-superseded", agent.actor)),
     jobAudit(env.DB, agent.actor, "job-superseded", job, {
@@ -472,7 +589,12 @@ export async function supersedeJob(
       kind: "supersede",
       actor: agent.actor,
       actor_kind: actorKind(agent.actor, { seat: callerIsSeat(agent) }),
-      detail: { reason, replaced_by: replacedBy, from: current.status, held_by: current.claimed_by },
+      detail: {
+        reason,
+        replaced_by: replacedBy,
+        from: current.status,
+        held_by: current.claimed_by,
+      },
       sinceGate: false, // only a queued or claimed job is superseded, so no gate is open
       at: now.toISOString(),
     }),
@@ -483,7 +605,7 @@ export async function supersedeJob(
     const work = moved ? workRecorded(moved) : null;
     return refuse(
       "supersede",
-      `${id} changed between reading it and superseding it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}${work ? `, and ${work}` : ""}. Nothing was written.`
+      `${id} changed between reading it and superseding it: it is now ${moved?.status ?? "gone"}${moved?.claimed_by ? `, held by ${moved.claimed_by}` : ""}${work ? `, and ${work}` : ""}. Nothing was written.`,
     );
   }
   return { ok: true, action: "supersede", job };
@@ -558,7 +680,12 @@ const isMintedActor = (actor: string): boolean => actor.startsWith("agent:");
  *  with the reason, when the holder cannot act on it. With take the resumer acquires the
  *  job, so it never goes to the queue. resumeJob acts on it and the Portal's preview
  *  (src/controls.ts) states it, so the two agree. */
-export async function resumeDestination(env: Env, holder: string, job: JobRow, take: boolean): Promise<{ toQueue: string | null }> {
+export async function resumeDestination(
+  env: Env,
+  holder: string,
+  job: JobRow,
+  take: boolean,
+): Promise<{ toQueue: string | null }> {
   const id = job.id;
   const db = env.DB;
   const toQueue: string | null = take
@@ -576,7 +703,9 @@ async function isRevokedActor(db: D1Database, actor: string): Promise<boolean> {
   if (!actor.startsWith("agent:")) return false;
   // An archived agent is a revoked one (src/agents-archive.ts).
   const row = await db
-    .prepare("SELECT revoked_at FROM agents WHERE name = ?1 UNION ALL SELECT revoked_at FROM agents_archive WHERE name = ?1")
+    .prepare(
+      "SELECT revoked_at FROM agents WHERE name = ?1 UNION ALL SELECT revoked_at FROM agents_archive WHERE name = ?1",
+    )
     .bind(actor.slice("agent:".length))
     .first<{ revoked_at: string | null }>();
   return row?.revoked_at != null;
@@ -596,10 +725,14 @@ async function jobBranchHead(env: Env, job: JobRow): Promise<{ repo: string; sha
     if (pr) byKey.set(`${pr.owner}/${pr.repo}#${pr.number}`.toLowerCase(), pr);
   }
   if (byKey.size === 0) {
-    throw new Error(`${job.id} records no pull request, so there is no branch head to read the migration at`);
+    throw new Error(
+      `${job.id} records no pull request, so there is no branch head to read the migration at`,
+    );
   }
   if (byKey.size > 1) {
-    throw new Error(`${job.id} records more than one pull request (${[...byKey.keys()].join(", ")}), so which head runs the migration is not known`);
+    throw new Error(
+      `${job.id} records more than one pull request (${[...byKey.keys()].join(", ")}), so which head runs the migration is not known`,
+    );
   }
   const [pr] = [...byKey.values()];
   // resolveRepo refuses a repo the namespace does not map, before GitHub is asked.
@@ -607,7 +740,8 @@ async function jobBranchHead(env: Env, job: JobRow): Promise<{ repo: string; sha
   const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${pr.number}`);
   if (!resp.ok) throw new Error(`reading pull request #${pr.number} failed (${resp.status})`);
   const sha = ((await resp.json()) as { head?: { sha?: string } }).head?.sha ?? "";
-  if (!/^[0-9a-f]{40}$/i.test(sha)) throw new Error(`pull request #${pr.number} reported no head commit`);
+  if (!/^[0-9a-f]{40}$/i.test(sha))
+    throw new Error(`pull request #${pr.number} reported no head commit`);
   return { repo: full, sha };
 }
 
@@ -617,7 +751,7 @@ export async function resumeJob(
   now: Date,
   id: string,
   reason: string,
-  opts: ResumeOptions = {}
+  opts: ResumeOptions = {},
 ): Promise<JobResult> {
   const { approvedByPolicy, take = false, correction = false } = opts;
   // A blank note is no note, so resume_note does not carry an empty block.
@@ -626,7 +760,10 @@ export async function resumeJob(
   const badActor = actorShapeRefusal("resume", actor);
   if (badActor) return badActor;
   if (!reason?.trim()) {
-    return refuse("resume", "resume needs a reason: what the human approved. A job that came back off a gate with no record of who cleared it is a gate that did not happen.");
+    return refuse(
+      "resume",
+      "resume needs a reason: what the human approved. A job that came back off a gate with no record of who cleared it is a gate that did not happen.",
+    );
   }
 
   const current = await readJob(env.DB, id);
@@ -634,7 +771,7 @@ export async function resumeJob(
   if (current.status !== "blocked") {
     return refuse(
       "resume",
-      `${id} is ${current.status}, not blocked. Resume is how a job comes back off a gate; a queued job is claimed and a done or failed one is finished.`
+      `${id} is ${current.status}, not blocked. Resume is how a job comes back off a gate; a queued job is claimed and a done or failed one is finished.`,
     );
   }
 
@@ -648,7 +785,7 @@ export async function resumeJob(
       "resume",
       `${actor} ${own ? `blocked ${id} and cannot approve its own gate` : `cannot approve ${id}'s gate`} with a plain resume: that is the seat's act. ` +
         `The seat (admin or can_merge) resumes it once the command is approved, ` +
-        `or, for a branch push or a pull request only, the driver that blocked it resumes with approved_by_policy. It stays blocked.`
+        `or, for a branch push or a pull request only, the driver that blocked it resumes with approved_by_policy. It stays blocked.`,
     );
   }
 
@@ -665,24 +802,36 @@ export async function resumeJob(
   // claimant passed these checks at its claim, and the resumer is not taking anything.
   const corrupt = corruptRequirement(current);
   if (corrupt) {
-    return refuse("resume", `${id} has a corrupt requirement: ${corrupt}. It stays blocked; a requirement that cannot be read is not the same as none.`);
+    return refuse(
+      "resume",
+      `${id} has a corrupt requirement: ${corrupt}. It stays blocked; a requirement that cannot be read is not the same as none.`,
+    );
   }
   // The namespace is asked either way. A resume that returns the job to its own
   // claimant still moves a job, so a caller that cannot write the job's namespace may
   // not do it; only the job's flags are left to the claimant it goes back to.
   const outside = outsideJobNamespace(agent, current.namespace);
   if (outside) {
-    return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${outside} It stays blocked.`);
+    return refuse(
+      "resume",
+      `${actor} cannot resume ${id} ('${current.title}'): ${outside} It stays blocked.`,
+    );
   }
   if (acquiring) {
     const missing = missingForJob(agent, current.namespace, current.required_scopes);
     if (missing) {
-      return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${missing} It stays blocked for a driver that can finish it.`);
+      return refuse(
+        "resume",
+        `${actor} cannot resume ${id} ('${current.title}'): ${missing} It stays blocked for a driver that can finish it.`,
+      );
     }
     // And the record question, on the same reasoning.
     const resumeShortfall = await recordShortfall(env.DB, actor, current);
     if (resumeShortfall) {
-      return refuse("resume", `${actor} cannot resume ${id} ('${current.title}'): ${resumeShortfall} It stays blocked for a driver that can finish it.`);
+      return refuse(
+        "resume",
+        `${actor} cannot resume ${id} ('${current.title}'): ${resumeShortfall} It stays blocked for a driver that can finish it.`,
+      );
     }
   }
 
@@ -697,15 +846,28 @@ export async function resumeJob(
       `the work titled '${current.title}' has been corrected ${spentOnWork} times across every job posted for it, which is the cap of ${CORRECTION_CAP}: ${RETRY_CAP_REASON}. ` +
         `The count is per (namespace, title) rather than per row, so failing this job and posting it again does not reset it. ` +
         `Every resume so far was defensible on its own, which is why the ceiling is counted rather than argued. ` +
-        `An admin caller may resume it; a driver or the seat may not.`
+        `An admin caller may resume it; a driver or the seat may not.`,
     );
   }
 
   const verdict = await verifySignedBody(env.IMPROVE_SCORE_SECRET, current.body, "job body");
   if (!verdict.ok) {
-    const marked = await markJobFailed(env, current, "blocked", verdict.reason, "job-signature-refused", actor, { reason: verdict.reason, at: "resume" }, now);
-    if (!marked.failed) return movedBeforeFailing("resume", id, marked.current, "failed its signature check");
-    return refuse("resume", `${id} failed its signature check and has been marked failed: ${verdict.reason}`);
+    const marked = await markJobFailed(
+      env,
+      current,
+      "blocked",
+      verdict.reason,
+      "job-signature-refused",
+      actor,
+      { reason: verdict.reason, at: "resume" },
+      now,
+    );
+    if (!marked.failed)
+      return movedBeforeFailing("resume", id, marked.current, "failed its signature check");
+    return refuse(
+      "resume",
+      `${id} failed its signature check and has been marked failed: ${verdict.reason}`,
+    );
   }
 
   // The policy check runs before the claim is given, so a refusal leaves the job
@@ -727,7 +889,7 @@ export async function resumeJob(
         "resume",
         `${id} cannot be approved by ${agent.actor} on the gate policy alone. A driver may approve only a job it blocked itself, ` +
           `and ${id} was blocked by ${current.claimed_by ?? "nobody on record"}. Approving somebody else's blocked command is the seat's act, ` +
-          `and this caller holds neither the admin identity nor can_merge.`
+          `and this caller holds neither the admin identity nor can_merge.`,
       );
     }
     const command = commandFromSummary(current.result_summary);
@@ -737,12 +899,13 @@ export async function resumeJob(
     // refuses it for its own reason.
     if (!isSeat && command) {
       const match = classifyCommand(command);
-      const beyond = "klasses" in match ? match.klasses.filter((k) => !DRIVER_SELF_APPROVED.includes(k)) : [];
+      const beyond =
+        "klasses" in match ? match.klasses.filter((k) => !DRIVER_SELF_APPROVED.includes(k)) : [];
       if (beyond.length > 0) {
         return refuse(
           "resume",
           `${id} is not pre-approved for a driver: it matched ${beyond.join(", ")}, which a driver may not approve for itself. ` +
-            `A driver approves only ${DRIVER_SELF_APPROVED.join(" and ")}. It stays blocked for the human.`
+            `A driver approves only ${DRIVER_SELF_APPROVED.join(" and ")}. It stays blocked for the human.`,
         );
       }
     }
@@ -766,7 +929,10 @@ export async function resumeJob(
     // it too. Unreachable unless the two classifications disagree, which is the case
     // this line exists for.
     if (!isSeat && verdict.klasses.some((k) => !DRIVER_SELF_APPROVED.includes(k))) {
-      return refuse("resume", `${id} is not pre-approved for a driver: it matched ${verdict.klass}. It stays blocked for the human.`);
+      return refuse(
+        "resume",
+        `${id} is not pre-approved for a driver: it matched ${verdict.klass}. It stays blocked for the human.`,
+      );
     }
     policyMatch = { klass: verdict.klass, detail: verdict.detail, version: verdict.policyVersion };
   }
@@ -790,13 +956,20 @@ export async function resumeJob(
   };
   // Signed with the job body's key, over the approval, the full note and who gave it,
   // bound to this job (src/job-signing.ts); latestResumeNote checks it on every read.
-  const noteSig = await signJobText(env.IMPROVE_SCORE_SECRET, "resume-note", id, resumeNoteFields(reason, fullNote ?? null, actor));
+  const noteSig = await signJobText(
+    env.IMPROVE_SCORE_SECRET,
+    "resume-note",
+    id,
+    resumeNoteFields(reason, fullNote ?? null, actor),
+  );
   const resumeNote: ResumeNote = {
     reason,
     ...(fullNote ? { note: fullNote } : {}),
     by: actor,
     at: now.toISOString(),
-    ...(policyMatch ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass } : {}),
+    ...(policyMatch
+      ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass }
+      : {}),
     ...(spend ? { correction: true as const } : {}),
     signature: noteSig ? "verified" : "unconfigured",
   };
@@ -807,7 +980,10 @@ export async function resumeJob(
   // or pull request on the policy is the policy's approval, not a person's. The note, when
   // there is one, is a row of its own, so a count of approvals is not a count of notes.
   const touchKind = correction ? "correction" : policyMatch || isSeat ? "approval" : "resume";
-  const touchActorKind = actorKind(actor, { policy: policyMatch !== null && !isSeat, seat: isSeat });
+  const touchActorKind = actorKind(actor, {
+    policy: policyMatch !== null && !isSeat,
+    seat: isSeat,
+  });
   const touches = [
     touchStatement(env.DB, {
       job_id: id,
@@ -818,7 +994,9 @@ export async function resumeJob(
       detail: {
         reason,
         command: commandFromSummary(current.result_summary),
-        ...(policyMatch ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass } : {}),
+        ...(policyMatch
+          ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass }
+          : {}),
         ...(take ? { taken: true } : {}),
         ...(toQueue ? { returned_to: "queued" } : {}),
       },
@@ -847,7 +1025,7 @@ export async function resumeJob(
     env.DB.prepare(
       `UPDATE jobs SET status = ?5, claimed_by = ?2,
          resumed_count = resumed_count + 1, corrections_count = corrections_count + ?4, updated_at = ?3
-       WHERE id = ?1 AND status = 'blocked' RETURNING id`
+       WHERE id = ?1 AND status = 'blocked' RETURNING id`,
     ).bind(id, job.claimed_by, now.toISOString(), spend, job.status),
     ...(await mirrorStatements(env, job, "job-resumed", actor, resumeNote)),
     jobAudit(env.DB, actor, "job-resumed", job, {
@@ -865,15 +1043,28 @@ export async function resumeJob(
       // cannot be checked against the policy afterwards; one naming the class and what
       // it matched can.
       ...(policyMatch
-        ? { approved_by_policy: policyMatch.version, policy_class: policyMatch.klass, policy_detail: policyMatch.detail }
+        ? {
+            approved_by_policy: policyMatch.version,
+            policy_class: policyMatch.klass,
+            policy_detail: policyMatch.detail,
+          }
         : {}),
     }),
     ...touches,
   ]);
   if (!won) {
-    return refuse("resume", `${id} left blocked between reading it and resuming it. Nothing was written; ask again.`);
+    return refuse(
+      "resume",
+      `${id} left blocked between reading it and resuming it. Nothing was written; ask again.`,
+    );
   }
-  return { ok: true, action: "resume", job, resume_note: resumeNote, ...(toQueue ? { note: toQueue } : {}) };
+  return {
+    ok: true,
+    action: "resume",
+    job,
+    resume_note: resumeNote,
+    ...(toQueue ? { note: toQueue } : {}),
+  };
 }
 
 /** The actor that returns a blocked job whose pull requests have all merged
@@ -886,7 +1077,12 @@ export const MERGE_RESUME_ACTOR = "system:merge-resume";
  *  merged. Never completes, never takes the claim, never approves a gate command; the
  *  holder's own claim still finishes the job. Returns false when the job moved between
  *  the caller's read and this write, in which case nothing was written. */
-export async function autoResumeJob(env: Env, now: Date, job: JobRow, note: string): Promise<{ resumed: boolean; to: "holder" | "queue" }> {
+export async function autoResumeJob(
+  env: Env,
+  now: Date,
+  job: JobRow,
+  note: string,
+): Promise<{ resumed: boolean; to: "holder" | "queue" }> {
   const holder = job.claimed_by;
   if (job.status !== "blocked" || !holder) return { resumed: false, to: "holder" };
   // Without take, a holder that cannot take the job back already yields toQueue.
@@ -900,7 +1096,12 @@ export async function autoResumeJob(env: Env, now: Date, job: JobRow, note: stri
     resumed_count: job.resumed_count + 1,
     updated_at: now.toISOString(),
   };
-  const noteSig = await signJobText(env.IMPROVE_SCORE_SECRET, "resume-note", job.id, resumeNoteFields(reason, note, MERGE_RESUME_ACTOR));
+  const noteSig = await signJobText(
+    env.IMPROVE_SCORE_SECRET,
+    "resume-note",
+    job.id,
+    resumeNoteFields(reason, note, MERGE_RESUME_ACTOR),
+  );
   const resumeNote: ResumeNote = {
     reason,
     note,
@@ -913,7 +1114,7 @@ export async function autoResumeJob(env: Env, now: Date, job: JobRow, note: stri
     env.DB.prepare(
       `UPDATE jobs SET status = ?5, claimed_by = ?2,
          resumed_count = resumed_count + 1, corrections_count = corrections_count + ?4, updated_at = ?3
-       WHERE id = ?1 AND status = 'blocked' RETURNING id`
+       WHERE id = ?1 AND status = 'blocked' RETURNING id`,
     ).bind(job.id, next.claimed_by, now.toISOString(), 0, next.status),
     ...(await mirrorStatements(env, next, "job-resumed", MERGE_RESUME_ACTOR, resumeNote)),
     jobAudit(env.DB, MERGE_RESUME_ACTOR, "job-resumed", next, {

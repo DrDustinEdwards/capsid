@@ -15,5 +15,11 @@
   "timeoutMS": 15000,
   "tempDirName": ".stryker-tmp",
   "cleanTempDir": true,
-  "ignorePatterns": ["dashboard/node_modules", "dashboard/dist", "dashboard/screenshots", "test-integration", "reports"]
+  "ignorePatterns": [
+    "dashboard/node_modules",
+    "dashboard/dist",
+    "dashboard/screenshots",
+    "test-integration",
+    "reports"
+  ]
 }

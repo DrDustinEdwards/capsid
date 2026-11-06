@@ -40,7 +40,14 @@ const DEFAULT_WINDOW_DAYS = 28;
 const MAX_WINDOW_DAYS = 500;
 
 export const SEARCH_REPORTS = ["performance", "inspect", "sitemaps"] as const;
-export const SEARCH_DIMENSIONS = ["query", "page", "date", "country", "device", "searchAppearance"] as const;
+export const SEARCH_DIMENSIONS = [
+  "query",
+  "page",
+  "date",
+  "country",
+  "device",
+  "searchAppearance",
+] as const;
 export const SEARCH_TYPES = ["web", "image", "video", "news", "discover", "googleNews"] as const;
 export const MAX_ROW_LIMIT = 1000;
 
@@ -72,11 +79,15 @@ function parseServiceAccountKey(raw: string | undefined): ServiceAccountKey {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error("GSC_SERVICE_ACCOUNT_KEY is not JSON. Paste the whole key file Google Cloud downloaded.");
+    throw new Error(
+      "GSC_SERVICE_ACCOUNT_KEY is not JSON. Paste the whole key file Google Cloud downloaded.",
+    );
   }
   const key = parsed as Partial<ServiceAccountKey>;
   if (typeof key.client_email !== "string" || typeof key.private_key !== "string") {
-    throw new Error("GSC_SERVICE_ACCOUNT_KEY has no client_email or private_key. Paste the whole key file Google Cloud downloaded.");
+    throw new Error(
+      "GSC_SERVICE_ACCOUNT_KEY has no client_email or private_key. Paste the whole key file Google Cloud downloaded.",
+    );
   }
   return { client_email: key.client_email, private_key: key.private_key };
 }
@@ -88,35 +99,74 @@ export function resetSearchConsoleToken(): void {
   cachedToken = null;
 }
 
-async function accessToken(key: ServiceAccountKey, fetchImpl: FetchLike, now: Date): Promise<string> {
+async function accessToken(
+  key: ServiceAccountKey,
+  fetchImpl: FetchLike,
+  now: Date,
+): Promise<string> {
   const nowMs = now.getTime();
-  if (cachedToken && cachedToken.email === key.client_email && cachedToken.expiresAt - MINUTE_MS > nowMs) return cachedToken.token;
+  if (
+    cachedToken &&
+    cachedToken.email === key.client_email &&
+    cachedToken.expiresAt - MINUTE_MS > nowMs
+  )
+    return cachedToken.token;
   const iat = Math.floor(nowMs / 1000);
   // The RS256 assertion, signed with WebCrypto: a PKCS#8 PEM is base64 between its armor lines.
   const der = fromBase64(key.private_key.replace(/-----[A-Z ]+-----/g, ""));
-  const signer = await crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const signer = await crypto.subtle.importKey(
+    "pkcs8",
+    der,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
   const part = (value: object) => base64url(JSON.stringify(value));
   const unsigned = `${part({ alg: "RS256", typ: "JWT" })}.${part({ scope: SCOPE, iss: key.client_email, aud: TOKEN_URL, iat, exp: iat + 3600 })}`;
   const assertion = `${unsigned}.${base64url(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", signer, new TextEncoder().encode(unsigned)))}`;
   const resp = await fetchImpl(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }).toString(),
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }).toString(),
     signal: callSignal(TIMEOUT_MS),
   });
-  const body = (await resp.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: string; error_description?: string };
+  const body = (await resp.json().catch(() => ({}))) as {
+    access_token?: string;
+    expires_in?: number;
+    error?: string;
+    error_description?: string;
+  };
   if (!resp.ok || !body.access_token) {
-    const why = [body.error, body.error_description].filter(Boolean).join(": ").slice(0, 200) || `status ${resp.status}`;
-    throw new Error(`Google refused the service account's sign-in (${why}). Check that GSC_SERVICE_ACCOUNT_KEY is a current key.`);
+    const why =
+      [body.error, body.error_description].filter(Boolean).join(": ").slice(0, 200) ||
+      `status ${resp.status}`;
+    throw new Error(
+      `Google refused the service account's sign-in (${why}). Check that GSC_SERVICE_ACCOUNT_KEY is a current key.`,
+    );
   }
-  cachedToken = { email: key.client_email, token: body.access_token, expiresAt: nowMs + (body.expires_in ?? 3600) * 1000 };
+  cachedToken = {
+    email: key.client_email,
+    token: body.access_token,
+    expiresAt: nowMs + (body.expires_in ?? 3600) * 1000,
+  };
   return body.access_token;
 }
 
-async function google(fetchImpl: FetchLike, token: string, url: string, body?: unknown): Promise<unknown> {
+async function google(
+  fetchImpl: FetchLike,
+  token: string,
+  url: string,
+  body?: unknown,
+): Promise<unknown> {
   const resp = await fetchImpl(url, {
     method: body === undefined ? "GET" : "POST",
-    headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: callSignal(TIMEOUT_MS),
   });
@@ -124,7 +174,9 @@ async function google(fetchImpl: FetchLike, token: string, url: string, body?: u
   if (!resp.ok) {
     const why = (parsed?.error?.message ?? "").slice(0, 300) || `status ${resp.status}`;
     if (resp.status === 403 && /has not been used|is disabled/i.test(why)) {
-      throw new Error(`Google Search Console API is not enabled on the service account's Google Cloud project: ${why}`);
+      throw new Error(
+        `Google Search Console API is not enabled on the service account's Google Cloud project: ${why}`,
+      );
     }
     throw new Error(`Search Console answered ${resp.status}: ${why}`);
   }
@@ -134,9 +186,14 @@ async function google(fetchImpl: FetchLike, token: string, url: string, body?: u
 // The property that covers a host: a Domain property for the host or a parent domain
 // (the longest match), else the URL-prefix property for the origin. Unverified entries
 // are skipped. Pure, for the tests.
-export function pickProperty(origin: string, entries: Array<{ siteUrl?: string; permissionLevel?: string }>): string | null {
+export function pickProperty(
+  origin: string,
+  entries: Array<{ siteUrl?: string; permissionLevel?: string }>,
+): string | null {
   const host = new URL(origin).hostname.toLowerCase();
-  const usable = entries.filter((e) => typeof e.siteUrl === "string" && e.permissionLevel !== "siteUnverifiedUser").map((e) => e.siteUrl as string);
+  const usable = entries
+    .filter((e) => typeof e.siteUrl === "string" && e.permissionLevel !== "siteUnverifiedUser")
+    .map((e) => e.siteUrl as string);
   const domains = usable
     .filter((u) => u.startsWith("sc-domain:"))
     .map((u) => ({ u, d: u.slice("sc-domain:".length).toLowerCase() }))
@@ -153,24 +210,46 @@ function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * DAY_MS);
 }
 
-export function dateWindow(args: Pick<SearchConsoleArgs, "start_date" | "end_date">, now: Date): { start: string; end: string } {
-  for (const [label, v] of [["start_date", args.start_date], ["end_date", args.end_date]] as const) {
-    if (v !== undefined && (!DATE.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`)))) throw new Error(`${label} must be a date written YYYY-MM-DD.`);
+export function dateWindow(
+  args: Pick<SearchConsoleArgs, "start_date" | "end_date">,
+  now: Date,
+): { start: string; end: string } {
+  for (const [label, v] of [
+    ["start_date", args.start_date],
+    ["end_date", args.end_date],
+  ] as const) {
+    if (v !== undefined && (!DATE.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))))
+      throw new Error(`${label} must be a date written YYYY-MM-DD.`);
   }
   const end = args.end_date ?? isoDay(addDays(now, -DEFAULT_LAG_DAYS)) ?? "";
-  const start = args.start_date ?? isoDay(addDays(new Date(`${end}T00:00:00Z`), -(DEFAULT_WINDOW_DAYS - 1))) ?? "";
+  const start =
+    args.start_date ??
+    isoDay(addDays(new Date(`${end}T00:00:00Z`), -(DEFAULT_WINDOW_DAYS - 1))) ??
+    "";
   if (start > end) throw new Error(`start_date ${start} is after end_date ${end}.`);
   const span = (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / DAY_MS;
-  if (span > MAX_WINDOW_DAYS) throw new Error(`The window is ${span + 1} days; Search Console keeps about 16 months, so ask for ${MAX_WINDOW_DAYS + 1} days or fewer.`);
+  if (span > MAX_WINDOW_DAYS)
+    throw new Error(
+      `The window is ${span + 1} days; Search Console keeps about 16 months, so ask for ${MAX_WINDOW_DAYS + 1} days or fewer.`,
+    );
   return { start, end };
 }
 
-const round = (n: unknown, places: number): number | null => (typeof n === "number" ? Number(n.toFixed(places)) : null);
+const round = (n: unknown, places: number): number | null =>
+  typeof n === "number" ? Number(n.toFixed(places)) : null;
 
-export async function searchConsole(env: Env, namespace: string, args: SearchConsoleArgs, fetchImpl: FetchLike = fetch, now: Date = new Date()) {
+export async function searchConsole(
+  env: Env,
+  namespace: string,
+  args: SearchConsoleArgs,
+  fetchImpl: FetchLike = fetch,
+  now: Date = new Date(),
+) {
   const report: SearchReport = args.report ?? "performance";
-  if (report !== "inspect" && args.url !== undefined) throw new Error(`url is for report inspect; report ${report} does not take it.`);
-  if (report === "inspect" && !args.url) throw new Error("report inspect needs url, the page to inspect.");
+  if (report !== "inspect" && args.url !== undefined)
+    throw new Error(`url is for report inspect; report ${report} does not take it.`);
+  if (report === "inspect" && !args.url)
+    throw new Error("report inspect needs url, the page to inspect.");
 
   const site = await reportSite(env, namespace, "Search Console property");
 
@@ -180,18 +259,22 @@ export async function searchConsole(env: Env, namespace: string, args: SearchCon
 
   const key = parseServiceAccountKey(env.GSC_SERVICE_ACCOUNT_KEY);
   const token = await accessToken(key, fetchImpl, now);
-  const sites = (await google(fetchImpl, token, `${WEBMASTERS}/sites`)) as { siteEntry?: Array<{ siteUrl?: string; permissionLevel?: string }> } | null;
+  const sites = (await google(fetchImpl, token, `${WEBMASTERS}/sites`)) as {
+    siteEntry?: Array<{ siteUrl?: string; permissionLevel?: string }>;
+  } | null;
   const property = pickProperty(site.origin, sites?.siteEntry ?? []);
   if (!property) {
     throw new Error(
-      `The service account (${key.client_email}) cannot read a Search Console property for ${site.origin}. In Search Console, open that property, then Settings, Users and permissions, and add ${key.client_email} as a Full user.`
+      `The service account (${key.client_email}) cannot read a Search Console property for ${site.origin}. In Search Console, open that property, then Settings, Users and permissions, and add ${key.client_email} as a Full user.`,
     );
   }
   const base = { namespace, origin: site.origin, property, report };
   const encoded = encodeURIComponent(property);
 
   if (report === "sitemaps") {
-    const res = (await google(fetchImpl, token, `${WEBMASTERS}/sites/${encoded}/sitemaps`)) as { sitemap?: Array<Record<string, unknown>> } | null;
+    const res = (await google(fetchImpl, token, `${WEBMASTERS}/sites/${encoded}/sitemaps`)) as {
+      sitemap?: Array<Record<string, unknown>>;
+    } | null;
     const sitemaps = (res?.sitemap ?? []).map((s) => ({
       path: s.path ?? null,
       last_submitted: s.lastSubmitted ?? null,
@@ -199,14 +282,27 @@ export async function searchConsole(env: Env, namespace: string, args: SearchCon
       pending: s.isPending ?? null,
       errors: Number(s.errors ?? 0),
       warnings: Number(s.warnings ?? 0),
-      contents: Array.isArray(s.contents) ? s.contents.map((c: Record<string, unknown>) => ({ type: c.type ?? null, submitted: Number(c.submitted ?? 0) })) : [],
+      contents: Array.isArray(s.contents)
+        ? s.contents.map((c: Record<string, unknown>) => ({
+            type: c.type ?? null,
+            submitted: Number(c.submitted ?? 0),
+          }))
+        : [],
     }));
     return { ...base, sitemaps };
   }
 
   if (report === "inspect") {
-    const res = (await google(fetchImpl, token, INSPECT_URL, { inspectionUrl: inspectUrl, siteUrl: property })) as {
-      inspectionResult?: { inspectionResultLink?: string; indexStatusResult?: Record<string, unknown>; mobileUsabilityResult?: { verdict?: string }; richResultsResult?: { verdict?: string } };
+    const res = (await google(fetchImpl, token, INSPECT_URL, {
+      inspectionUrl: inspectUrl,
+      siteUrl: property,
+    })) as {
+      inspectionResult?: {
+        inspectionResultLink?: string;
+        indexStatusResult?: Record<string, unknown>;
+        mobileUsabilityResult?: { verdict?: string };
+        richResultsResult?: { verdict?: string };
+      };
     } | null;
     const r = res?.inspectionResult ?? {};
     const idx = r.indexStatusResult ?? {};
@@ -233,8 +329,12 @@ export async function searchConsole(env: Env, namespace: string, args: SearchCon
   const dimensions = args.dimensions ?? ["query"];
   const rowLimit = args.row_limit ?? 25;
   const filters = [
-    ...(args.query_contains ? [{ dimension: "query", operator: "contains", expression: args.query_contains }] : []),
-    ...(args.page_contains ? [{ dimension: "page", operator: "contains", expression: args.page_contains }] : []),
+    ...(args.query_contains
+      ? [{ dimension: "query", operator: "contains", expression: args.query_contains }]
+      : []),
+    ...(args.page_contains
+      ? [{ dimension: "page", operator: "contains", expression: args.page_contains }]
+      : []),
   ];
   const request = {
     startDate: start,
@@ -245,8 +345,19 @@ export async function searchConsole(env: Env, namespace: string, args: SearchCon
     dataState: "final",
     ...(filters.length > 0 ? { dimensionFilterGroups: [{ groupType: "and", filters }] } : {}),
   };
-  const res = (await google(fetchImpl, token, `${WEBMASTERS}/sites/${encoded}/searchAnalytics/query`, request)) as {
-    rows?: Array<{ keys?: string[]; clicks?: number; impressions?: number; ctr?: number; position?: number }>;
+  const res = (await google(
+    fetchImpl,
+    token,
+    `${WEBMASTERS}/sites/${encoded}/searchAnalytics/query`,
+    request,
+  )) as {
+    rows?: Array<{
+      keys?: string[];
+      clicks?: number;
+      impressions?: number;
+      ctr?: number;
+      position?: number;
+    }>;
   } | null;
   const rows = (res?.rows ?? []).map((r) => ({
     ...Object.fromEntries(dimensions.map((d, i) => [d, r.keys?.[i] ?? null])),

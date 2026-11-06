@@ -53,7 +53,8 @@ const utf8 = (s: string) => new TextEncoder().encode(s);
 /** Why a subscription cannot be stored, or null. Checked at subscribe time, before any
  *  row is written, and again before each send. */
 export function subscriptionProblem(sub: Partial<PushSubscriptionKeys>): string | null {
-  if (typeof sub.endpoint !== "string" || sub.endpoint.length > 1024) return "the subscription has no endpoint.";
+  if (typeof sub.endpoint !== "string" || sub.endpoint.length > 1024)
+    return "the subscription has no endpoint.";
   let url: URL;
   try {
     url = new URL(sub.endpoint);
@@ -61,10 +62,13 @@ export function subscriptionProblem(sub: Partial<PushSubscriptionKeys>): string 
     return "the subscription's endpoint is not a URL.";
   }
   if (url.protocol !== "https:") return "the subscription's endpoint is not https.";
-  if (!PUSH_HOSTS.some((h) => h.test(url.hostname))) return `the subscription's endpoint is on ${url.hostname}, which is not a known push service.`;
+  if (!PUSH_HOSTS.some((h) => h.test(url.hostname)))
+    return `the subscription's endpoint is on ${url.hostname}, which is not a known push service.`;
   try {
-    if (typeof sub.p256dh !== "string" || fromBase64url(sub.p256dh).length !== 65) return "the subscription's p256dh key is not a 65-byte P-256 point.";
-    if (typeof sub.auth !== "string" || fromBase64url(sub.auth).length !== 16) return "the subscription's auth secret is not 16 bytes.";
+    if (typeof sub.p256dh !== "string" || fromBase64url(sub.p256dh).length !== 65)
+      return "the subscription's p256dh key is not a 65-byte P-256 point.";
+    if (typeof sub.auth !== "string" || fromBase64url(sub.auth).length !== 16)
+      return "the subscription's auth secret is not 16 bytes.";
   } catch {
     return "the subscription's keys are not base64url.";
   }
@@ -73,22 +77,34 @@ export function subscriptionProblem(sub: Partial<PushSubscriptionKeys>): string 
 
 /** The VAPID key from its secret, or why it cannot be used. */
 export function readVapidKey(secret: string | undefined): VapidKey | string {
-  if (!secret) return "VAPID_PRIVATE_KEY is not set, so no push can be signed (docs/portal.md, \"Phone alerts\").";
+  if (!secret)
+    return 'VAPID_PRIVATE_KEY is not set, so no push can be signed (docs/portal.md, "Phone alerts").';
   let jwk: JsonWebKey;
   try {
     jwk = JSON.parse(secret) as JsonWebKey;
   } catch {
     return "VAPID_PRIVATE_KEY is not JSON: it must be a P-256 private key as a JWK.";
   }
-  if (jwk.kty !== "EC" || jwk.crv !== "P-256" || !jwk.d || !jwk.x || !jwk.y) return "VAPID_PRIVATE_KEY is not a P-256 private key as a JWK (kty EC, crv P-256, d, x and y).";
+  if (jwk.kty !== "EC" || jwk.crv !== "P-256" || !jwk.d || !jwk.x || !jwk.y)
+    return "VAPID_PRIVATE_KEY is not a P-256 private key as a JWK (kty EC, crv P-256, d, x and y).";
   const point = concat(new Uint8Array([4]), fromBase64url(jwk.x), fromBase64url(jwk.y));
   if (point.length !== 65) return "VAPID_PRIVATE_KEY's x and y are not 32 bytes each.";
-  return { jwk: { kty: "EC", crv: "P-256", d: jwk.d, x: jwk.x, y: jwk.y }, publicKey: base64url(point) };
+  return {
+    jwk: { kty: "EC", crv: "P-256", d: jwk.d, x: jwk.x, y: jwk.y },
+    publicKey: base64url(point),
+  };
 }
 
-async function hkdf(salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, bytes: number): Promise<Uint8Array> {
+async function hkdf(
+  salt: Uint8Array,
+  ikm: Uint8Array,
+  info: Uint8Array,
+  bytes: number,
+): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
-  return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info }, key, bytes * 8));
+  return new Uint8Array(
+    await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info }, key, bytes * 8),
+  );
 }
 
 /** The sender's half of one message: a fresh ECDH key pair and salt, or fixed ones in a
@@ -99,7 +115,11 @@ export interface Ephemeral {
 }
 
 /** RFC 8291: the aes128gcm body for one subscription, a single record. */
-export async function encryptPayload(sub: PushSubscriptionKeys, plaintext: Uint8Array, fixed: Ephemeral = {}): Promise<Uint8Array> {
+export async function encryptPayload(
+  sub: PushSubscriptionKeys,
+  plaintext: Uint8Array,
+  fixed: Ephemeral = {},
+): Promise<Uint8Array> {
   const uaPublic = fromBase64url(sub.p256dh);
   const authSecret = fromBase64url(sub.auth);
   const ecdh = { name: "ECDH", namedCurve: "P-256" } as const;
@@ -107,25 +127,45 @@ export async function encryptPayload(sub: PushSubscriptionKeys, plaintext: Uint8
   let asPublic: Uint8Array;
   if (fixed.privateJwk) {
     asPrivate = await crypto.subtle.importKey("jwk", fixed.privateJwk, ecdh, false, ["deriveBits"]);
-    asPublic = concat(new Uint8Array([4]), fromBase64url(fixed.privateJwk.x!), fromBase64url(fixed.privateJwk.y!));
+    asPublic = concat(
+      new Uint8Array([4]),
+      fromBase64url(fixed.privateJwk.x!),
+      fromBase64url(fixed.privateJwk.y!),
+    );
   } else {
     const pair = (await crypto.subtle.generateKey(ecdh, true, ["deriveBits"])) as CryptoKeyPair;
     asPrivate = pair.privateKey;
-    asPublic = new Uint8Array((await crypto.subtle.exportKey("raw", pair.publicKey)) as ArrayBuffer);
+    asPublic = new Uint8Array(
+      (await crypto.subtle.exportKey("raw", pair.publicKey)) as ArrayBuffer,
+    );
   }
   const uaKey = await crypto.subtle.importKey("raw", uaPublic, ecdh, false, []);
   // The standard member is `public`; workers-types spells it `$public` only because the
   // word is reserved in its generator, and workerd reads `public`.
   const derive = { name: "ECDH", public: uaKey } as unknown as SubtleCryptoDeriveKeyAlgorithm;
   const shared = new Uint8Array(await crypto.subtle.deriveBits(derive, asPrivate, 256));
-  const ikm = await hkdf(authSecret, shared, concat(utf8("WebPush: info\0"), uaPublic, asPublic), 32);
+  const ikm = await hkdf(
+    authSecret,
+    shared,
+    concat(utf8("WebPush: info\0"), uaPublic, asPublic),
+    32,
+  );
   const salt = fixed.salt ?? crypto.getRandomValues(new Uint8Array(16));
   const cek = await hkdf(salt, ikm, utf8("Content-Encoding: aes128gcm\0"), 16);
   const nonce = await hkdf(salt, ikm, utf8("Content-Encoding: nonce\0"), 12);
   // One record, so the delimiter is 2 (the last record) and no padding follows it.
-  if (plaintext.length + 1 + 16 > RECORD_SIZE) throw new Error(`a push payload of ${plaintext.length} bytes does not fit one ${RECORD_SIZE}-byte record`);
+  if (plaintext.length + 1 + 16 > RECORD_SIZE)
+    throw new Error(
+      `a push payload of ${plaintext.length} bytes does not fit one ${RECORD_SIZE}-byte record`,
+    );
   const key = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["encrypt"]);
-  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, concat(plaintext, new Uint8Array([2]))));
+  const sealed = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: nonce },
+      key,
+      concat(plaintext, new Uint8Array([2])),
+    ),
+  );
   const header = new Uint8Array(16 + 4 + 1);
   header.set(salt, 0);
   new DataView(header.buffer).setUint32(16, RECORD_SIZE);
@@ -134,12 +174,33 @@ export async function encryptPayload(sub: PushSubscriptionKeys, plaintext: Uint8
 }
 
 /** RFC 8292: the Authorization header's JWT for one push service origin. */
-export async function vapidJwt(vapid: VapidKey, audience: string, subject: string, now: Date): Promise<string> {
+export async function vapidJwt(
+  vapid: VapidKey,
+  audience: string,
+  subject: string,
+  now: Date,
+): Promise<string> {
   const header = base64url(utf8(JSON.stringify({ typ: "JWT", alg: "ES256" })));
-  const claims = base64url(utf8(JSON.stringify({ aud: audience, exp: Math.floor(now.getTime() / 1000) + JWT_LIFETIME_SECONDS, sub: subject })));
-  const key = await crypto.subtle.importKey("jwk", vapid.jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const claims = base64url(
+    utf8(
+      JSON.stringify({
+        aud: audience,
+        exp: Math.floor(now.getTime() / 1000) + JWT_LIFETIME_SECONDS,
+        sub: subject,
+      }),
+    ),
+  );
+  const key = await crypto.subtle.importKey(
+    "jwk",
+    vapid.jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"],
+  );
   // WebCrypto's ECDSA signature is r || s, which is JWS's ES256 form already.
-  const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, utf8(`${header}.${claims}`)));
+  const sig = new Uint8Array(
+    await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, utf8(`${header}.${claims}`)),
+  );
   return `${header}.${claims}.${base64url(sig)}`;
 }
 
@@ -157,7 +218,7 @@ export async function sendPush(
   sub: PushSubscriptionKeys,
   payload: unknown,
   now: Date,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
 ): Promise<PushSent> {
   const problem = subscriptionProblem(sub);
   if (problem) return { status: 0, gone: true };

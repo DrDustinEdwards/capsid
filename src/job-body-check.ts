@@ -66,13 +66,20 @@ export function placeholderRefusal(field: string, text: string): string | null {
 
 /** The refusal for an unfilled placeholder in a job's title or body, or null. */
 export function jobTextRefusal(title: string | undefined, body: string | undefined): string | null {
-  return (title === undefined ? null : placeholderRefusal("title", title)) ?? (body === undefined ? null : placeholderRefusal("body", body));
+  return (
+    (title === undefined ? null : placeholderRefusal("title", title)) ??
+    (body === undefined ? null : placeholderRefusal("body", body))
+  );
 }
 
 // The five headed parts. DECIDED and RULES are alternatives for the fifth.
 // A heading is the keyword at the start of a line, optionally behind a markdown heading
 // marker or bold, and followed by a delimiter, so "DO NOT touch" and "GOALS" are prose.
-export const heading = (words: string) => new RegExp(`^[ \\t]*(?:#{1,6}[ \\t]+)?\\*{0,2}(?:${words})(?=\\*{0,2}(?:[:.,(]|[ \\t]*$)|[ \\t]+\\()`, "m");
+export const heading = (words: string) =>
+  new RegExp(
+    `^[ \\t]*(?:#{1,6}[ \\t]+)?\\*{0,2}(?:${words})(?=\\*{0,2}(?:[:.,(]|[ \\t]*$)|[ \\t]+\\()`,
+    "m",
+  );
 const PARTS: Array<{ name: string; heading: RegExp }> = [
   { name: "GOAL", heading: heading("GOAL") },
   { name: "DO", heading: heading("DO") },

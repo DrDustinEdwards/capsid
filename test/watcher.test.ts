@@ -6,7 +6,14 @@ import { ROLES } from "../scripts/roles.ts";
 import { allowsToolAction } from "../src/agents-schema.ts";
 import { checkScope } from "../src/scope.ts";
 import { fakeFindingMemory } from "./fakes.ts";
-import { MAX_EVIDENCE, REOPEN_QUIET_MS, appendEvidence, onSighting, type EvidenceEntry, type FindingRow } from "../src/watcher-findings.ts";
+import {
+  MAX_EVIDENCE,
+  REOPEN_QUIET_MS,
+  appendEvidence,
+  onSighting,
+  type EvidenceEntry,
+  type FindingRow,
+} from "../src/watcher-findings.ts";
 import {
   DEFAULT_CADENCE_MINUTES,
   MAX_FINDINGS_PER_PASS,
@@ -21,8 +28,14 @@ import { WATCHER_CHECKS, owningCheck, type WatcherCheck } from "../src/watcher-c
 import {
   DEPLOY_SETTLE_MINUTES,
   MASTER_CI_WORKFLOW,
-  deployVerdict, ciFindings, healthFindings, statusFindings,
-  offaccountFindings, offaccountDrillFindings, offaccountCoverageFindings, type Finding
+  deployVerdict,
+  ciFindings,
+  healthFindings,
+  statusFindings,
+  offaccountFindings,
+  offaccountDrillFindings,
+  offaccountCoverageFindings,
+  type Finding,
 } from "../src/watcher-detect.ts";
 import { CI_RED_HOURS } from "../src/watcher-detect.ts";
 
@@ -55,30 +68,66 @@ test("the in-Worker watcher is the SAME authority as the mintable role, not a co
   assert.ok(role);
   const agent = watcherAgent();
   assert.deepEqual(agent.scopes.tools, role.tools);
-  assert.deepEqual(Object.entries(agent.scopes.flags).filter(([, on]) => on), [], "the watcher must hold no flag");
+  assert.deepEqual(
+    Object.entries(agent.scopes.flags).filter(([, on]) => on),
+    [],
+    "the watcher must hold no flag",
+  );
   assert.equal(agent.actor, WATCHER_ACTOR);
 });
 
 test("the watcher can post a job and cannot claim, complete or resume one", () => {
   const agent = watcherAgent();
-  assert.equal(checkScope(agent, { tool: "capsid_work_jobs", action: "post", namespace: "capsid", grant: "write" }), null);
+  assert.equal(
+    checkScope(agent, {
+      tool: "capsid_work_jobs",
+      action: "post",
+      namespace: "capsid",
+      grant: "write",
+    }),
+    null,
+  );
   for (const action of ["claim", "complete", "fail", "block", "resume"]) {
     assert.match(
-      String(checkScope(agent, { tool: "capsid_work_jobs", action, namespace: "capsid", grant: "write" })),
+      String(
+        checkScope(agent, {
+          tool: "capsid_work_jobs",
+          action,
+          namespace: "capsid",
+          grant: "write",
+        }),
+      ),
       new RegExp(`'capsid_work_jobs\\.${action}'`),
-      `the watcher was allowed to ${action} a job`
+      `the watcher was allowed to ${action} a job`,
     );
   }
   // And nothing outside the queue at all.
-  assert.match(String(checkScope(agent, { tool: "capsid_write_doc", namespace: "capsid", grant: "write" })), /not scoped to the 'capsid_write_doc' tool/);
-  assert.match(String(checkScope(agent, { tool: "capsid_close_pr", action: "merge", namespace: "capsid", grant: "write" })), /not scoped to the 'capsid_close_pr\.merge' tool/);
+  assert.match(
+    String(checkScope(agent, { tool: "capsid_write_doc", namespace: "capsid", grant: "write" })),
+    /not scoped to the 'capsid_write_doc' tool/,
+  );
+  assert.match(
+    String(
+      checkScope(agent, {
+        tool: "capsid_close_pr",
+        action: "merge",
+        namespace: "capsid",
+        grant: "write",
+      }),
+    ),
+    /not scoped to the 'capsid_close_pr\.merge' tool/,
+  );
 });
 
 // the cadence
 
 test("a pass is due on the first run, not due inside the cadence, and due after it", () => {
   assert.equal(passDue(null, 30, NOW).due, true);
-  assert.equal(passDue(hoursAgo(0.25), 30, NOW).due, false, "15 minutes into a 30 minute cadence is not due");
+  assert.equal(
+    passDue(hoursAgo(0.25), 30, NOW).due,
+    false,
+    "15 minutes into a 30 minute cadence is not due",
+  );
   assert.equal(passDue(hoursAgo(1), 30, NOW).due, true);
 });
 
@@ -93,29 +142,57 @@ test("a corrupt stamp RUNS the pass rather than blocking it forever", () => {
 test("A HEALTHY SURFACE PRODUCES NO FINDING AT ALL", () => {
   // The innocent case first: every assertion below depends on it.
   assert.deepEqual(healthFindings(HEALTHY, HEALTHY.sha, HEALTHY.schema_version, "capsid"), []);
-  assert.deepEqual(ciFindings("capsid", [{ head_sha: "abc1234", status: "completed", conclusion: "success", created_at: hoursAgo(9) }], NOW), []);
   assert.deepEqual(
-    statusFindings(
-      {
-        budget: { month: "2026-09", caps: { actions_minutes_month: 300, model_usd_month: 50 }, spend: { ci_minutes: 10, cost_usd: 1 }, exceeded: false, reason: null },
-        namespaces: [{ namespace: "capsid", paused: null }],
-      } as never
+    ciFindings(
+      "capsid",
+      [
+        {
+          head_sha: "abc1234",
+          status: "completed",
+          conclusion: "success",
+          created_at: hoursAgo(9),
+        },
+      ],
+      NOW,
     ),
-    []
+    [],
+  );
+  assert.deepEqual(
+    statusFindings({
+      budget: {
+        month: "2026-09",
+        caps: { actions_minutes_month: 300, model_usd_month: 50 },
+        spend: { ci_minutes: 10, cost_usd: 1 },
+        exceeded: false,
+        reason: null,
+      },
+      namespaces: [{ namespace: "capsid", paused: null }],
+    } as never),
+    [],
   );
 });
 
 // each check, once
 
 test("a degraded store is a finding", () => {
-  const found = healthFindings({ ...HEALTHY, status: "degraded", store: { d1: "error", fts: "ok" } }, HEALTHY.sha, HEALTHY.schema_version, "capsid");
+  const found = healthFindings(
+    { ...HEALTHY, status: "degraded", store: { d1: "error", fts: "ok" } },
+    HEALTHY.sha,
+    HEALTHY.schema_version,
+    "capsid",
+  );
   assert.equal(found.length, 1);
   assert.equal(found[0].fingerprint, "health-degraded");
   assert.match(found[0].body, /d1 error/, "a finding with no evidence is a rumour");
 });
 
 test("a deployed sha that is not master head is a finding", () => {
-  const found = healthFindings(HEALTHY, "0360787aaaabbbbccccddddeeeeffff0011223344", HEALTHY.schema_version, "capsid");
+  const found = healthFindings(
+    HEALTHY,
+    "0360787aaaabbbbccccddddeeeeffff0011223344",
+    HEALTHY.schema_version,
+    "capsid",
+  );
   assert.equal(found.length, 1);
   assert.match(found[0].fingerprint, /^deploy-drift-0360787$/);
   assert.match(found[0].body, /deployed: 1d6912e/);
@@ -134,9 +211,16 @@ const ciRun = (status: string, conclusion: string | null, endedMinutesAgo = 60, 
 const DRIFTED = "0360787aaaabbbbccccddddeeeeffff0011223344";
 
 test("the workflow the drift check waits for is the one that deploys master", () => {
-  const ci = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
+  const ci = readFileSync(
+    join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"),
+    "utf8",
+  );
   assert.equal(/^name: (.+)$/m.exec(ci)?.[1], MASTER_CI_WORKFLOW);
-  assert.match(ci, /^  deploy:$/m, "ci.yml no longer holds the deploy job, so its run says nothing about the deploy");
+  assert.match(
+    ci,
+    /^  deploy:$/m,
+    "ci.yml no longer holds the deploy job, so its run says nothing about the deploy",
+  );
 });
 
 test("master head's CI run queued, in progress, or green inside the settle window posts no drift finding", () => {
@@ -145,11 +229,18 @@ test("master head's CI run queued, in progress, or green inside the settle windo
     [ciRun("in_progress", null)],
     [ciRun("completed", "success", DEPLOY_SETTLE_MINUTES - 1)],
     // A re-run in flight after a red run: the newest run decides.
-    [{ ...ciRun("completed", "failure", 30) }, { ...ciRun("in_progress", null), created_at: minutesAgo(2) }],
+    [
+      { ...ciRun("completed", "failure", 30) },
+      { ...ciRun("in_progress", null), created_at: minutesAgo(2) },
+    ],
   ]) {
     const verdict = deployVerdict(runs, NOW);
     assert.equal(verdict.wait, true, JSON.stringify(runs));
-    assert.deepEqual(healthFindings(HEALTHY, DRIFTED, HEALTHY.schema_version, "capsid", verdict), [], JSON.stringify(runs));
+    assert.deepEqual(
+      healthFindings(HEALTHY, DRIFTED, HEALTHY.schema_version, "capsid", verdict),
+      [],
+      JSON.stringify(runs),
+    );
   }
 });
 
@@ -167,61 +258,132 @@ test("master head's CI run failed, canceled, never started, unreadable or long g
     const verdict = deployVerdict(runs, NOW);
     assert.equal(verdict.wait, false, JSON.stringify(runs));
     const found = healthFindings(HEALTHY, DRIFTED, HEALTHY.schema_version, "capsid", verdict);
-    assert.deepEqual(found.map((f) => f.fingerprint), ["deploy-drift-0360787"], JSON.stringify(runs));
+    assert.deepEqual(
+      found.map((f) => f.fingerprint),
+      ["deploy-drift-0360787"],
+      JSON.stringify(runs),
+    );
     assert.match(found[0].body, evidence);
   }
 });
 
 test("an UNKNOWN master sha is not drift, because that is a finding about the watcher", () => {
   assert.deepEqual(healthFindings(HEALTHY, null, HEALTHY.schema_version, "capsid"), []);
-  assert.deepEqual(healthFindings({ ...HEALTHY, sha: "unknown" }, "0360787", HEALTHY.schema_version, "capsid"), []);
+  assert.deepEqual(
+    healthFindings({ ...HEALTHY, sha: "unknown" }, "0360787", HEALTHY.schema_version, "capsid"),
+    [],
+  );
 });
 
 test("a backup older than the window, and one that never ran, are different findings", () => {
-  const stale = healthFindings({ ...HEALTHY, backup: { last_ok: hoursAgo(30), age_hours: 30 } }, HEALTHY.sha, HEALTHY.schema_version, "capsid");
-  assert.deepEqual(stale.map((f) => f.fingerprint), ["backup-stale"]);
-  const never = healthFindings({ ...HEALTHY, backup: { last_ok: null, age_hours: null } }, HEALTHY.sha, HEALTHY.schema_version, "capsid");
-  assert.deepEqual(never.map((f) => f.fingerprint), ["backup-never"]);
+  const stale = healthFindings(
+    { ...HEALTHY, backup: { last_ok: hoursAgo(30), age_hours: 30 } },
+    HEALTHY.sha,
+    HEALTHY.schema_version,
+    "capsid",
+  );
+  assert.deepEqual(
+    stale.map((f) => f.fingerprint),
+    ["backup-stale"],
+  );
+  const never = healthFindings(
+    { ...HEALTHY, backup: { last_ok: null, age_hours: null } },
+    HEALTHY.sha,
+    HEALTHY.schema_version,
+    "capsid",
+  );
+  assert.deepEqual(
+    never.map((f) => f.fingerprint),
+    ["backup-never"],
+  );
 });
 
 test("PLANT: an unparseable backup stamp is a backup-stale finding", () => {
   // /health keeps last_ok and sets age_hours null, so neither the window nor the never check fires.
-  const found = healthFindings({ ...HEALTHY, backup: { last_ok: "not-a-time", age_hours: null } }, HEALTHY.sha, HEALTHY.schema_version, "capsid");
-  assert.deepEqual(found.map((f) => f.fingerprint), ["backup-stale"]);
+  const found = healthFindings(
+    { ...HEALTHY, backup: { last_ok: "not-a-time", age_hours: null } },
+    HEALTHY.sha,
+    HEALTHY.schema_version,
+    "capsid",
+  );
+  assert.deepEqual(
+    found.map((f) => f.fingerprint),
+    ["backup-stale"],
+  );
 });
 
 test("a live schema behind the newest migration is a finding", () => {
   const found = healthFindings(HEALTHY, HEALTHY.sha, "0017_something_new.sql", "capsid");
-  assert.deepEqual(found.map((f) => f.fingerprint), ["schema-behind-0017_something_new.sql"]);
+  assert.deepEqual(
+    found.map((f) => f.fingerprint),
+    ["schema-behind-0017_something_new.sql"],
+  );
 });
 
 test("a live schema ahead of master is its own finding, not a behind one", () => {
-  const found = healthFindings({ ...HEALTHY, schema_version: "0018_applied_early.sql" }, HEALTHY.sha, "0017_something_new.sql", "capsid");
-  assert.deepEqual(found.map((f) => f.fingerprint), ["schema-ahead-0018_applied_early.sql"]);
+  const found = healthFindings(
+    { ...HEALTHY, schema_version: "0018_applied_early.sql" },
+    HEALTHY.sha,
+    "0017_something_new.sql",
+    "capsid",
+  );
+  assert.deepEqual(
+    found.map((f) => f.fingerprint),
+    ["schema-ahead-0018_applied_early.sql"],
+  );
 });
 
 test("an OPEN queue breaker is a finding the status check owns, and a closed one is not", () => {
   const report = (open: boolean) =>
-    statusFindings(
-      {
-        namespaces: [{ namespace: "sample", breaker: { namespace: "sample", open, failed: open ? 3 : 2, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
-      } as never
-    );
+    statusFindings({
+      namespaces: [
+        {
+          namespace: "sample",
+          breaker: {
+            namespace: "sample",
+            open,
+            failed: open ? 3 : 2,
+            threshold: 3,
+            since: "2026-09-29 06:00:00",
+            reset_at: null,
+          },
+        },
+      ],
+    } as never);
   const found = report(true);
-  assert.deepEqual(found.map((f) => f.fingerprint), ["breaker-open-sample"]);
+  assert.deepEqual(
+    found.map((f) => f.fingerprint),
+    ["breaker-open-sample"],
+  );
   assert.equal(owningCheck("breaker-open-sample"), "status");
   assert.match(found[0].body, /3, threshold 3/);
   assert.deepEqual(report(false), []);
 });
 
 test("CI red for longer than a flake is a finding, and a fresh red is not", () => {
-  const red = (hours: number) => [{ head_sha: "deadbee1234", status: "completed", conclusion: "failure", created_at: hoursAgo(hours) }];
-  assert.deepEqual(ciFindings("capsid", red(CI_RED_HOURS + 1), NOW).map((f) => f.fingerprint), ["ci-red-capsid"]);
-  assert.deepEqual(ciFindings("capsid", red(CI_RED_HOURS - 1), NOW), [], "a red run somebody is already fixing is not a finding");
+  const red = (hours: number) => [
+    {
+      head_sha: "deadbee1234",
+      status: "completed",
+      conclusion: "failure",
+      created_at: hoursAgo(hours),
+    },
+  ];
+  assert.deepEqual(
+    ciFindings("capsid", red(CI_RED_HOURS + 1), NOW).map((f) => f.fingerprint),
+    ["ci-red-capsid"],
+  );
+  assert.deepEqual(
+    ciFindings("capsid", red(CI_RED_HOURS - 1), NOW),
+    [],
+    "a red run somebody is already fixing is not a finding",
+  );
 });
 
 test("a run still in flight is not an answer either way", () => {
-  const inFlight = [{ head_sha: "deadbee1234", status: "in_progress", conclusion: null, created_at: hoursAgo(9) }];
+  const inFlight = [
+    { head_sha: "deadbee1234", status: "in_progress", conclusion: null, created_at: hoursAgo(9) },
+  ];
   assert.deepEqual(ciFindings("capsid", inFlight, NOW), []);
 });
 
@@ -268,7 +430,13 @@ test("EACH FINDING POSTS EXACTLY ONCE, and a second pass posts nothing", async (
 });
 
 test("A CLEARED FINDING CLOSES ITS JOB, and a finding still being found does not", async () => {
-  const h = harness([fakeFinding("still-broken")], new Map([["still-broken", "job_1"], ["went-away", "job_2"]]));
+  const h = harness(
+    [fakeFinding("still-broken")],
+    new Map([
+      ["still-broken", "job_1"],
+      ["went-away", "job_2"],
+    ]),
+  );
   const result = await runPass(h.readers, NOW);
   assert.deepEqual(result.cleared, ["went-away"]);
   assert.deepEqual(h.cleared, ["job_2"], "a finding that is still being found must keep its job");
@@ -277,11 +445,18 @@ test("A CLEARED FINDING CLOSES ITS JOB, and a finding still being found does not
 test("A FAILED READ DOES NOT CLEAR THE JOBS ITS CHECK OWNS", async () => {
   // The status and roster CI reads failed this pass, so their findings are
   // absent. That says nothing about whether the problems went away.
-  const open = new Map([["ci-red-abc1234", "job_1"], ["breaker-open-sample", "job_2"], ["backup-stale", "job_3"]]);
+  const open = new Map([
+    ["ci-red-abc1234", "job_1"],
+    ["breaker-open-sample", "job_2"],
+    ["backup-stale", "job_3"],
+  ]);
   const cleared: string[] = [];
   const result = await runPass(
     {
-      findings: async () => ({ findings: [], ran: new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "status")) }),
+      findings: async () => ({
+        findings: [],
+        ran: new Set(WATCHER_CHECKS.filter((c) => c !== "ci" && c !== "status")),
+      }),
       open: async () => open,
       clear: async (id) => {
         cleared.push(id);
@@ -290,7 +465,7 @@ test("A FAILED READ DOES NOT CLEAR THE JOBS ITS CHECK OWNS", async () => {
       post: async () => ({ ok: true as const, jobId: "job_new" }),
       memory: fakeFindingMemory().memory,
     },
-    NOW
+    NOW,
   );
   assert.deepEqual(result.cleared, ["backup-stale"], "only a job whose check ran may be cleared");
   assert.deepEqual(cleared, ["job_3"]);
@@ -299,24 +474,83 @@ test("A FAILED READ DOES NOT CLEAR THE JOBS ITS CHECK OWNS", async () => {
 test("every fingerprint the checks produce has an owning check", () => {
   const stale = new Date(NOW.getTime() - 999 * 3_600_000);
   const all: Finding[] = [
-    ...healthFindings({ ...HEALTHY, status: "degraded", backup: { last_ok: null, age_hours: 99 } }, "0360787", "0099_x.sql", "capsid"),
-    ...ciFindings("germomics", [{ head_sha: "feedface99", status: "completed", conclusion: "failure", created_at: hoursAgo(9) }], NOW),
-    ...statusFindings(
-      {
-        namespaces: [{ namespace: "sample", breaker: { namespace: "sample", open: true, failed: 3, threshold: 3, since: "2026-09-29 06:00:00", reset_at: null } }],
-      } as never
+    ...healthFindings(
+      { ...HEALTHY, status: "degraded", backup: { last_ok: null, age_hours: 99 } },
+      "0360787",
+      "0099_x.sql",
+      "capsid",
     ),
+    ...ciFindings(
+      "germomics",
+      [
+        {
+          head_sha: "feedface99",
+          status: "completed",
+          conclusion: "failure",
+          created_at: hoursAgo(9),
+        },
+      ],
+      NOW,
+    ),
+    ...statusFindings({
+      namespaces: [
+        {
+          namespace: "sample",
+          breaker: {
+            namespace: "sample",
+            open: true,
+            failed: 3,
+            threshold: 3,
+            since: "2026-09-29 06:00:00",
+            reset_at: null,
+          },
+        },
+      ],
+    } as never),
     ...offaccountFindings("capsid", ["lorem"], null, null, NOW),
-    ...offaccountFindings("capsid", ["lorem", "ipsum", "dolor"], { received_at: stale.toISOString(), sites: {
-      lorem: { newest: null, bytes: null, recent_bytes: [], weekly: null, monthly: null },
-      ipsum: { newest: "2026-01-01T09-00-00-000Z", bytes: 1, recent_bytes: [1, 100, 100, 100], weekly: null, monthly: null },
-      dolor: { newest: new Date(NOW.getTime() - 31 * 3_600_000).toISOString().replace(/[:.]/g, "-"), bytes: 1, recent_bytes: [1], weekly: null, monthly: null },
-    } }, null, NOW),
+    ...offaccountFindings(
+      "capsid",
+      ["lorem", "ipsum", "dolor"],
+      {
+        received_at: stale.toISOString(),
+        sites: {
+          lorem: { newest: null, bytes: null, recent_bytes: [], weekly: null, monthly: null },
+          ipsum: {
+            newest: "2026-01-01T09-00-00-000Z",
+            bytes: 1,
+            recent_bytes: [1, 100, 100, 100],
+            weekly: null,
+            monthly: null,
+          },
+          dolor: {
+            newest: new Date(NOW.getTime() - 31 * 3_600_000).toISOString().replace(/[:.]/g, "-"),
+            bytes: 1,
+            recent_bytes: [1],
+            weekly: null,
+            monthly: null,
+          },
+        },
+      },
+      null,
+      NOW,
+    ),
     ...offaccountDrillFindings("capsid", [], NOW),
-    ...offaccountCoverageFindings("capsid", [], [{ name: "lorem", used_by: [{ script: "lorem" }] }]),
+    ...offaccountCoverageFindings(
+      "capsid",
+      [],
+      [{ name: "lorem", used_by: [{ script: "lorem" }] }],
+    ),
   ];
-  assert.equal(all.length, 15, `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`);
-  for (const f of all) assert.ok(owningCheck(f.fingerprint), `${f.fingerprint} has no owning check, so a failed read would clear it`);
+  assert.equal(
+    all.length,
+    15,
+    `the scan produced ${all.length} findings: ${all.map((f) => f.fingerprint).join(", ")}`,
+  );
+  for (const f of all)
+    assert.ok(
+      owningCheck(f.fingerprint),
+      `${f.fingerprint} has no owning check, so a failed read would clear it`,
+    );
 });
 
 test("A HEALTHY PASS POSTS NOTHING AND CLOSES NOTHING", async () => {
@@ -343,7 +577,7 @@ test("clearing runs BEFORE posting, so a finding that flickers is not refused as
       },
       memory: fakeFindingMemory().memory,
     },
-    NOW
+    NOW,
   );
   assert.deepEqual(order, ["clear:job_a", "post:b"]);
 });
@@ -359,18 +593,27 @@ test("a refused post is logged and does not stop the rest of the pass", async ()
   const posted: string[] = [];
   const result = await runPass(
     {
-      findings: async () => ({ findings: [fakeFinding("first"), fakeFinding("second")], ran: new Set(WATCHER_CHECKS) }),
+      findings: async () => ({
+        findings: [fakeFinding("first"), fakeFinding("second")],
+        ran: new Set(WATCHER_CHECKS),
+      }),
       open: async () => new Map(),
       clear: async () => true,
       post: async (f) => {
         posted.push(f.fingerprint);
-        return f.fingerprint === "first" ? { ok: false as const, refusal: "a duplicate is already open" } : { ok: true as const, jobId: "job_second" };
+        return f.fingerprint === "first"
+          ? { ok: false as const, refusal: "a duplicate is already open" }
+          : { ok: true as const, jobId: "job_second" };
       },
       memory: fakeFindingMemory().memory,
     },
-    NOW
+    NOW,
   );
-  assert.deepEqual(posted, ["first", "second"], "a refusal on one finding must not abandon the others");
+  assert.deepEqual(
+    posted,
+    ["first", "second"],
+    "a refusal on one finding must not abandon the others",
+  );
   assert.deepEqual(result.posted, ["second"], "only what actually posted is reported as posted");
 });
 
@@ -401,52 +644,153 @@ function findingRow(fingerprint: string, over: Partial<FindingRow> = {}): Findin
 
 test("a sighting's verdict, for every state a row can be in", () => {
   const superseded = { status: "superseded", result_summary: "withdrawn", updated_at: hoursAgo(1) };
-  const clearedBy = (hours: number) => ({ status: "failed", result_summary: "cleared", updated_at: hoursAgo(hours) });
-  const cases: Array<[string, ReturnType<typeof onSighting>["do"], ReturnType<typeof onSighting>]> = [
-    ["no row, no job", "post", onSighting(null, null, null, NOW)],
-    ["its job open", "bump", onSighting(findingRow("a"), "job_1", null, NOW)],
-    ["an open job with no row (posted before the table)", "adopt", onSighting(null, "job_9", null, NOW)],
-    ["an open job on a cleared row", "adopt", onSighting(findingRow("a", { state: "cleared", job_id: null }), "job_9", null, NOW)],
-    ["an open row whose job a person superseded", "dismiss", onSighting(findingRow("a"), null, superseded, NOW)],
-    ["an open row whose job was done", "dismiss", onSighting(findingRow("a"), null, { status: "done", result_summary: "fixed", updated_at: hoursAgo(1) }, NOW)],
-    ["an open row whose job is gone", "dismiss", onSighting(findingRow("a"), null, null, NOW)],
-    ["an open row the watcher cleared an hour ago", "quiet", onSighting(findingRow("a"), null, clearedBy(1), NOW)],
-    ["an open row the watcher cleared seven hours ago", "post", onSighting(findingRow("a"), null, clearedBy(7), NOW)],
-    ["an open row with no job (a refused post)", "post", onSighting(findingRow("a", { job_id: null }), null, null, NOW)],
-    ["dismissed", "quiet", onSighting(findingRow("a", { state: "dismissed" }), null, null, NOW)],
-    ["cleared, inside the quiet period", "quiet", onSighting(findingRow("a", { state: "cleared", reopen_after: later(1).toISOString() }), null, null, NOW)],
-    ["cleared, past the quiet period", "post", onSighting(findingRow("a", { state: "cleared", reopen_after: hoursAgo(1) }), null, null, NOW)],
-    ["cleared, reopen_after exactly now", "post", onSighting(findingRow("a", { state: "cleared", reopen_after: NOW.toISOString() }), null, null, NOW)],
-    ["cleared, reopen_after unreadable", "post", onSighting(findingRow("a", { state: "cleared", reopen_after: "garbage" }), null, null, NOW)],
-  ];
+  const clearedBy = (hours: number) => ({
+    status: "failed",
+    result_summary: "cleared",
+    updated_at: hoursAgo(hours),
+  });
+  const cases: Array<[string, ReturnType<typeof onSighting>["do"], ReturnType<typeof onSighting>]> =
+    [
+      ["no row, no job", "post", onSighting(null, null, null, NOW)],
+      ["its job open", "bump", onSighting(findingRow("a"), "job_1", null, NOW)],
+      [
+        "an open job with no row (posted before the table)",
+        "adopt",
+        onSighting(null, "job_9", null, NOW),
+      ],
+      [
+        "an open job on a cleared row",
+        "adopt",
+        onSighting(findingRow("a", { state: "cleared", job_id: null }), "job_9", null, NOW),
+      ],
+      [
+        "an open row whose job a person superseded",
+        "dismiss",
+        onSighting(findingRow("a"), null, superseded, NOW),
+      ],
+      [
+        "an open row whose job was done",
+        "dismiss",
+        onSighting(
+          findingRow("a"),
+          null,
+          { status: "done", result_summary: "fixed", updated_at: hoursAgo(1) },
+          NOW,
+        ),
+      ],
+      ["an open row whose job is gone", "dismiss", onSighting(findingRow("a"), null, null, NOW)],
+      [
+        "an open row the watcher cleared an hour ago",
+        "quiet",
+        onSighting(findingRow("a"), null, clearedBy(1), NOW),
+      ],
+      [
+        "an open row the watcher cleared seven hours ago",
+        "post",
+        onSighting(findingRow("a"), null, clearedBy(7), NOW),
+      ],
+      [
+        "an open row with no job (a refused post)",
+        "post",
+        onSighting(findingRow("a", { job_id: null }), null, null, NOW),
+      ],
+      ["dismissed", "quiet", onSighting(findingRow("a", { state: "dismissed" }), null, null, NOW)],
+      [
+        "cleared, inside the quiet period",
+        "quiet",
+        onSighting(
+          findingRow("a", { state: "cleared", reopen_after: later(1).toISOString() }),
+          null,
+          null,
+          NOW,
+        ),
+      ],
+      [
+        "cleared, past the quiet period",
+        "post",
+        onSighting(
+          findingRow("a", { state: "cleared", reopen_after: hoursAgo(1) }),
+          null,
+          null,
+          NOW,
+        ),
+      ],
+      [
+        "cleared, reopen_after exactly now",
+        "post",
+        onSighting(
+          findingRow("a", { state: "cleared", reopen_after: NOW.toISOString() }),
+          null,
+          null,
+          NOW,
+        ),
+      ],
+      [
+        "cleared, reopen_after unreadable",
+        "post",
+        onSighting(findingRow("a", { state: "cleared", reopen_after: "garbage" }), null, null, NOW),
+      ],
+    ];
   for (const [name, want, got] of cases) assert.equal(got.do, want, name);
   assert.equal(cases.length, 15);
 });
 
 test("evidence keeps the newest MAX_EVIDENCE sightings, newest last, and restarts on a value that does not parse", () => {
   let evidence: string | null = null;
-  for (let i = 0; i < MAX_EVIDENCE + 5; i++) evidence = appendEvidence("fp", evidence, { ...fakeFinding("fp"), evidence: [`sighting ${i}`] }, later(i));
+  for (let i = 0; i < MAX_EVIDENCE + 5; i++)
+    evidence = appendEvidence(
+      "fp",
+      evidence,
+      { ...fakeFinding("fp"), evidence: [`sighting ${i}`] },
+      later(i),
+    );
   const list = JSON.parse(evidence as string) as EvidenceEntry[];
   assert.equal(list.length, MAX_EVIDENCE);
   assert.deepEqual(list[list.length - 1].lines, [`sighting ${MAX_EVIDENCE + 4}`]);
   assert.deepEqual(list[0].lines, ["sighting 5"]);
-  const fresh = JSON.parse(appendEvidence("fp", "{not json", { ...fakeFinding("fp"), evidence: ["x".repeat(1000)] }, NOW)) as EvidenceEntry[];
+  const fresh = JSON.parse(
+    appendEvidence("fp", "{not json", { ...fakeFinding("fp"), evidence: ["x".repeat(1000)] }, NOW),
+  ) as EvidenceEntry[];
   assert.equal(fresh.length, 1);
   assert.equal(fresh[0].lines[0].length, 300, "one evidence line is bounded");
 });
 
 test("ci-red is one incident per namespace: a new head sha is the same finding, and the sha is its evidence", () => {
-  const red = (sha: string) => [{ head_sha: sha, status: "completed", conclusion: "failure", created_at: hoursAgo(CI_RED_HOURS + 1) }];
+  const red = (sha: string) => [
+    {
+      head_sha: sha,
+      status: "completed",
+      conclusion: "failure",
+      created_at: hoursAgo(CI_RED_HOURS + 1),
+    },
+  ];
   const [a] = ciFindings("sample", red("aaaaaaa1111111"), NOW);
   const [b] = ciFindings("sample", red("bbbbbbb2222222"), NOW);
   assert.equal(a.fingerprint, "ci-red-sample");
   assert.equal(a.fingerprint, b.fingerprint);
-  assert.equal(a.title, b.title, "the title is the queue's duplicate key, so it must not move with the sha either");
-  assert.ok(b.evidence?.includes("head sha: bbbbbbb2222222"), `the sha is not in the evidence: ${b.evidence?.join("; ")}`);
-  assert.notEqual(ciFindings("capsid", red("aaaaaaa1111111"), NOW)[0].fingerprint, a.fingerprint, "two namespaces' red branches are two incidents");
+  assert.equal(
+    a.title,
+    b.title,
+    "the title is the queue's duplicate key, so it must not move with the sha either",
+  );
+  assert.ok(
+    b.evidence?.includes("head sha: bbbbbbb2222222"),
+    `the sha is not in the evidence: ${b.evidence?.join("; ")}`,
+  );
+  assert.notEqual(
+    ciFindings("capsid", red("aaaaaaa1111111"), NOW)[0].fingerprint,
+    a.fingerprint,
+    "two namespaces' red branches are two incidents",
+  );
 });
 
-function memoryPass(found: Finding[], open: Map<string, string>, memory: ReturnType<typeof fakeFindingMemory>, now: Date, ran: ReadonlySet<WatcherCheck> = new Set(WATCHER_CHECKS)) {
+function memoryPass(
+  found: Finding[],
+  open: Map<string, string>,
+  memory: ReturnType<typeof fakeFindingMemory>,
+  now: Date,
+  ran: ReadonlySet<WatcherCheck> = new Set(WATCHER_CHECKS),
+) {
   const posted: string[] = [];
   const closed: string[] = [];
   const result = runPass(
@@ -463,14 +807,16 @@ function memoryPass(found: Finding[], open: Map<string, string>, memory: ReturnT
       },
       memory: memory.memory,
     },
-    now
+    now,
   );
   return { result, posted, closed };
 }
 
 test("A FINDING A PERSON ENDED IS NOT FILED AGAIN until it has cleared and stayed quiet", async () => {
   const fp = "site-map-drift-add-sample";
-  const mem = fakeFindingMemory([findingRow(fp, { job_id: "job_1" })], { job_1: { status: "superseded", result_summary: "withdrawn", updated_at: hoursAgo(1) } });
+  const mem = fakeFindingMemory([findingRow(fp, { job_id: "job_1" })], {
+    job_1: { status: "superseded", result_summary: "withdrawn", updated_at: hoursAgo(1) },
+  });
 
   // Still seen after the seat superseded its job: dismissed, not posted.
   const one = memoryPass([fakeFinding(fp)], new Map(), mem, NOW);
@@ -480,19 +826,30 @@ test("A FINDING A PERSON ENDED IS NOT FILED AGAIN until it has cleared and staye
   assert.equal(mem.rows.get(fp)?.seen_count, 4, "the sighting is counted");
 
   // Seen again: still dismissed, still not posted.
-  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, later(1)).result).posted, []);
+  assert.deepEqual(
+    (await memoryPass([fakeFinding(fp)], new Map(), mem, later(1)).result).posted,
+    [],
+  );
 
   // The drift is fixed: cleared, quiet for six hours from now.
   await memoryPass([], new Map(), mem, later(2)).result;
   assert.equal(mem.rows.get(fp)?.state, "cleared");
-  assert.equal(mem.rows.get(fp)?.reopen_after, new Date(later(2).getTime() + REOPEN_QUIET_MS).toISOString());
+  assert.equal(
+    mem.rows.get(fp)?.reopen_after,
+    new Date(later(2).getTime() + REOPEN_QUIET_MS).toISOString(),
+  );
 
   // It flaps back inside the quiet period: counted, not posted.
-  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, later(3)).result).posted, []);
+  assert.deepEqual(
+    (await memoryPass([fakeFinding(fp)], new Map(), mem, later(3)).result).posted,
+    [],
+  );
   assert.equal(mem.rows.get(fp)?.state, "cleared");
 
   // Seen after the quiet period: a recurrence, filed once, and the row is open on the new job.
-  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, later(9)).result).posted, [fp]);
+  assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, later(9)).result).posted, [
+    fp,
+  ]);
   assert.equal(mem.rows.get(fp)?.state, "open");
   assert.equal(mem.rows.get(fp)?.job_id, `job_new_${fp}`);
   assert.equal(mem.rows.get(fp)?.reopen_after, null);
@@ -500,24 +857,44 @@ test("A FINDING A PERSON ENDED IS NOT FILED AGAIN until it has cleared and staye
 
 test("a cleared row is not cleared again each pass, so its quiet period does not slide forever", async () => {
   const fp = "backup-stale";
-  const mem = fakeFindingMemory([findingRow(fp, { state: "cleared", cleared_at: hoursAgo(7), reopen_after: hoursAgo(1) })]);
+  const mem = fakeFindingMemory([
+    findingRow(fp, { state: "cleared", cleared_at: hoursAgo(7), reopen_after: hoursAgo(1) }),
+  ]);
   await memoryPass([], new Map(), mem, NOW).result;
   assert.deepEqual(mem.writes, [], "a cleared row that is still clear was written");
   assert.deepEqual((await memoryPass([fakeFinding(fp)], new Map(), mem, NOW).result).posted, [fp]);
 });
 
 test("a finding whose check did not run is neither cleared nor dismissed", async () => {
-  const mem = fakeFindingMemory([findingRow("ci-red-sample", { state: "dismissed" }), findingRow("backup-stale", { job_id: "job_2" })]);
-  const pass = memoryPass([], new Map([["backup-stale", "job_2"]]), mem, NOW, new Set(WATCHER_CHECKS.filter((c) => c !== "ci")));
+  const mem = fakeFindingMemory([
+    findingRow("ci-red-sample", { state: "dismissed" }),
+    findingRow("backup-stale", { job_id: "job_2" }),
+  ]);
+  const pass = memoryPass(
+    [],
+    new Map([["backup-stale", "job_2"]]),
+    mem,
+    NOW,
+    new Set(WATCHER_CHECKS.filter((c) => c !== "ci")),
+  );
   await pass.result;
-  assert.equal(mem.rows.get("ci-red-sample")?.state, "dismissed", "a failed CI read cleared a dismissed incident");
+  assert.equal(
+    mem.rows.get("ci-red-sample")?.state,
+    "dismissed",
+    "a failed CI read cleared a dismissed incident",
+  );
   assert.equal(mem.rows.get("backup-stale")?.state, "cleared");
   assert.deepEqual(pass.closed, ["job_2"]);
 });
 
 test("an open job with no row, posted before the table existed, is adopted rather than filed again", async () => {
   const mem = fakeFindingMemory();
-  const pass = memoryPass([fakeFinding("backup-stale")], new Map([["backup-stale", "job_legacy"]]), mem, NOW);
+  const pass = memoryPass(
+    [fakeFinding("backup-stale")],
+    new Map([["backup-stale", "job_legacy"]]),
+    mem,
+    NOW,
+  );
   assert.deepEqual((await pass.result).posted, []);
   assert.equal(mem.rows.get("backup-stale")?.state, "open");
   assert.equal(mem.rows.get("backup-stale")?.job_id, "job_legacy");
@@ -526,14 +903,24 @@ test("an open job with no row, posted before the table existed, is adopted rathe
 test("the bound counts posts, so findings already open do not use it up", async () => {
   const already = Array.from({ length: MAX_FINDINGS_PER_PASS }, (_, i) => fakeFinding(`old-${i}`));
   const open = new Map(already.map((f, i) => [f.fingerprint, `job_${i}`]));
-  const pass = memoryPass([...already, fakeFinding("new-a"), fakeFinding("new-b")], open, fakeFindingMemory(), NOW);
+  const pass = memoryPass(
+    [...already, fakeFinding("new-a"), fakeFinding("new-b")],
+    open,
+    fakeFindingMemory(),
+    NOW,
+  );
   assert.deepEqual((await pass.result).posted, ["new-a", "new-b"]);
 });
 
 test("the fingerprint round-trips through the title, which is what deduplicates", () => {
   // The title is the dedup key, so a fingerprint that cannot be read back out of it
   // would post the same finding every pass.
-  const f = healthFindings({ ...HEALTHY, status: "degraded" }, HEALTHY.sha, HEALTHY.schema_version, "capsid")[0];
+  const f = healthFindings(
+    { ...HEALTHY, status: "degraded" },
+    HEALTHY.sha,
+    HEALTHY.schema_version,
+    "capsid",
+  )[0];
   const match = /\[([^\]]+)\]\s*$/.exec(f.title);
   assert.ok(match, `no fingerprint in '${f.title}'`);
   assert.equal(match[1], f.fingerprint);
@@ -541,10 +928,29 @@ test("the fingerprint round-trips through the title, which is what deduplicates"
 
 test("DERIVED: every finding this module can produce carries a readable fingerprint", () => {
   const all: Finding[] = [
-    ...healthFindings({ ...HEALTHY, status: "degraded", backup: { last_ok: null, age_hours: null } }, "0360787", "0099_x.sql", "capsid"),
-    ...ciFindings("germomics", [{ head_sha: "feedface99", status: "completed", conclusion: "failure", created_at: hoursAgo(9) }], NOW),
+    ...healthFindings(
+      { ...HEALTHY, status: "degraded", backup: { last_ok: null, age_hours: null } },
+      "0360787",
+      "0099_x.sql",
+      "capsid",
+    ),
+    ...ciFindings(
+      "germomics",
+      [
+        {
+          head_sha: "feedface99",
+          status: "completed",
+          conclusion: "failure",
+          created_at: hoursAgo(9),
+        },
+      ],
+      NOW,
+    ),
   ];
-  assert.ok(all.length >= 5, `the scan produced only ${all.length} findings; it is reading nothing`);
+  assert.ok(
+    all.length >= 5,
+    `the scan produced only ${all.length} findings; it is reading nothing`,
+  );
   for (const f of all) {
     const match = /\[([^\]]+)\]\s*$/.exec(f.title);
     assert.ok(match, `no fingerprint in '${f.title}'`);
@@ -566,25 +972,36 @@ test("allowsToolAction is what makes the watcher's narrowing real", () => {
 test("an unset, unusable or unreadable cadence falls back to the default", async () => {
   const env = (get: () => Promise<string | null>) => ({ APP_KV: { get } }) as never;
   assert.equal(await cadenceMinutes(env(async () => null)), DEFAULT_CADENCE_MINUTES);
-  assert.equal(await cadenceMinutes(env(async () => "0")), DEFAULT_CADENCE_MINUTES, "zero would run every check on every tick");
+  assert.equal(
+    await cadenceMinutes(env(async () => "0")),
+    DEFAULT_CADENCE_MINUTES,
+    "zero would run every check on every tick",
+  );
   assert.equal(await cadenceMinutes(env(async () => "-5")), DEFAULT_CADENCE_MINUTES);
   assert.equal(await cadenceMinutes(env(async () => "not a number")), DEFAULT_CADENCE_MINUTES);
   assert.equal(
     await cadenceMinutes(
       env(async () => {
         throw new Error("KV is down");
-      })
+      }),
     ),
     DEFAULT_CADENCE_MINUTES,
-    "an unreadable store must fall back to the safe value, not to whatever was last in memory"
+    "an unreadable store must fall back to the safe value, not to whatever was last in memory",
   );
   // And a usable value IS obeyed, so the fallback is a floor rather than a ceiling.
   assert.equal(await cadenceMinutes(env(async () => "120")), 120);
-  assert.equal(await cadenceMinutes(env(async () => "7.9")), 7, "a fractional cadence floors rather than being refused");
+  assert.equal(
+    await cadenceMinutes(env(async () => "7.9")),
+    7,
+    "a fractional cadence floors rather than being refused",
+  );
 });
 
 test("newestMigration takes the last by name, and ignores what is not a migration", () => {
-  assert.equal(newestMigration(["0001_init.sql", "0016_jobs_retry_cap.sql", "0002_links.sql"]), "0016_jobs_retry_cap.sql");
+  assert.equal(
+    newestMigration(["0001_init.sql", "0016_jobs_retry_cap.sql", "0002_links.sql"]),
+    "0016_jobs_retry_cap.sql",
+  );
   assert.equal(newestMigration(["README.md"]), null);
   assert.equal(newestMigration([]), null);
 });

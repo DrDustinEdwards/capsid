@@ -20,7 +20,8 @@ function credentialViolations(text: string): string[] {
   if (/authorization/i.test(text)) out.push("names an Authorization value");
   if (/bearer\s/i.test(text)) out.push("carries a Bearer value");
   // Key-shaped: a long unbroken run of key characters, the way a minted key or a token reads.
-  if (/[A-Za-z0-9_\-+/=.]{32,}/.test(text.replace(/https:\/\/[^"\s]+/g, ""))) out.push("carries a key-shaped string");
+  if (/[A-Za-z0-9_\-+/=.]{32,}/.test(text.replace(/https:\/\/[^"\s]+/g, "")))
+    out.push("carries a key-shaped string");
   return out;
 }
 
@@ -34,10 +35,25 @@ test("the committed .mcp.json points the capsid server at /ops/mcp", () => {
 });
 
 test("a keyed config is refused, each way a key can arrive", () => {
-  const keyed = (server: object) => JSON.stringify({ mcpServers: { capsid: { type: "http", url: "https://mcp.dustinedwards.info/ops/mcp", ...server } } });
-  assert.ok(credentialViolations(keyed({ headers: { Authorization: "Bearer abc" } })).includes("names an Authorization value"));
-  assert.ok(credentialViolations(keyed({ headers: { "X-Key": "x" } })).includes("capsid: carries headers"));
+  const keyed = (server: object) =>
+    JSON.stringify({
+      mcpServers: {
+        capsid: { type: "http", url: "https://mcp.dustinedwards.info/ops/mcp", ...server },
+      },
+    });
+  assert.ok(
+    credentialViolations(keyed({ headers: { Authorization: "Bearer abc" } })).includes(
+      "names an Authorization value",
+    ),
+  );
+  assert.ok(
+    credentialViolations(keyed({ headers: { "X-Key": "x" } })).includes("capsid: carries headers"),
+  );
   assert.ok(credentialViolations(keyed({ env: { K: "v" } })).includes("capsid: carries env"));
   assert.ok(credentialViolations(keyed({ note: "bearer abc" })).includes("carries a Bearer value"));
-  assert.ok(credentialViolations(keyed({ note: "cap_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6" })).includes("carries a key-shaped string"));
+  assert.ok(
+    credentialViolations(keyed({ note: "cap_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6" })).includes(
+      "carries a key-shaped string",
+    ),
+  );
 });

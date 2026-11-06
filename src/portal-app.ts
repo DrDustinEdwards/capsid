@@ -43,7 +43,12 @@ function fetchAsset(assets: Fetcher, path: string, method: string): Promise<Resp
 
 /** A build file answered to a visitor, with `set` on its headers. A redirect from the assets
  *  router is not followed or forwarded: a file has one address, so it is a 404. */
-export async function serveFile(assets: Fetcher, path: string, method: string, set: Record<string, string>): Promise<Response> {
+export async function serveFile(
+  assets: Fetcher,
+  path: string,
+  method: string,
+  set: Record<string, string>,
+): Promise<Response> {
   const response = await fetchAsset(assets, path, method);
   if (response.status >= 300 && response.status < 400) {
     await response.body?.cancel();
@@ -51,17 +56,28 @@ export async function serveFile(assets: Fetcher, path: string, method: string, s
   }
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(set)) headers.set(name, value);
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 /** The response a page leaves with: never cached, and its policy carrying the page's nonce. */
-export function pageHeaders(response: Response, csp: { policy: string; reportOnly: string }): Response {
+export function pageHeaders(
+  response: Response,
+  csp: { policy: string; reportOnly: string },
+): Response {
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", "no-store");
   // Referrer-Policy, X-Frame-Options and the rest come from withSecurityHeaders (src/security-headers.ts).
   headers.set("Content-Security-Policy", csp.policy);
   headers.set("Content-Security-Policy-Report-Only", csp.reportOnly);
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 /** On the Portal host, a hashed build file, served to anyone (the demo's pages load the same
@@ -69,7 +85,10 @@ export function pageHeaders(response: Response, csp: { policy: string; reportOnl
 export async function portalAsset(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
   if (!isPortalHost(url) || !url.pathname.startsWith(HASHED_ASSET_PREFIX)) return null;
-  if (request.method !== "GET" && request.method !== "HEAD") return text("method not allowed: the Portal's files are read with GET.", 405, { Allow: "GET, HEAD" });
+  if (request.method !== "GET" && request.method !== "HEAD")
+    return text("method not allowed: the Portal's files are read with GET.", 405, {
+      Allow: "GET, HEAD",
+    });
   if (!env.ASSETS) return text("not found", 404);
   const response = await serveFile(env.ASSETS, url.pathname, request.method, {});
   response.headers.set("Cache-Control", response.ok ? HASHED_ASSET_CACHE : "no-store");
@@ -79,12 +98,21 @@ export async function portalAsset(request: Request, env: Env): Promise<Response 
 /** One of the Portal's API routes (/portal/api/<path>), answered in this Worker. */
 export type PortalApi = (request: Request) => Promise<Response>;
 
-export async function handlePortalApp(request: Request, env: Env, api: PortalApi, now: Date = new Date(), render = renderPortalPage): Promise<Response> {
+export async function handlePortalApp(
+  request: Request,
+  env: Env,
+  api: PortalApi,
+  now: Date = new Date(),
+  render = renderPortalPage,
+): Promise<Response> {
   const url = new URL(request.url);
   const gate = await portalGate(request, env, now, url.pathname);
   if (!gate.ok) return gate.response;
   if (!env.ASSETS) return text(NOT_DEPLOYED, 503);
-  if (request.method !== "GET" && request.method !== "HEAD") return text("method not allowed: the Portal's pages are read with GET.", 405, { Allow: "GET, HEAD" });
+  if (request.method !== "GET" && request.method !== "HEAD")
+    return text("method not allowed: the Portal's pages are read with GET.", 405, {
+      Allow: "GET, HEAD",
+    });
 
   const inner = url.pathname.slice(PORTAL_PATH.length) || "/";
   if (isFile(inner)) {
@@ -94,14 +122,19 @@ export async function handlePortalApp(request: Request, env: Env, api: PortalApi
   // The page, named as the browser on the Portal host names it (/health), with the visitor's
   // headers, so its reads carry the same session. The pages are written from the Portal's root
   // (dashboard/src/routes.ts), so the internal /portal prefix goes on every host.
-  const page = new Request(new URL(inner + url.search, url.origin), { method: request.method, headers: request.headers });
+  const page = new Request(new URL(inner + url.search, url.origin), {
+    method: request.method,
+    headers: request.headers,
+  });
   // A read's cookies reach the browser with the page: the feed mints the CSRF cookie on a
   // session's first read (src/ops-feed.ts), and the page carries that read's value.
   const cookies: string[] = [];
   const read = async (path: string) => {
     const headers = new Headers(request.headers);
     headers.set("Accept", "application/json");
-    const response = await api(new Request(new URL(`${PORTAL_PATH}/api${path}`, url.origin), { headers }));
+    const response = await api(
+      new Request(new URL(`${PORTAL_PATH}/api${path}`, url.origin), { headers }),
+    );
     cookies.push(...response.headers.getSetCookie());
     return response;
   };

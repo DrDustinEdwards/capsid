@@ -3,7 +3,14 @@ import { test } from "node:test";
 import type { InstalledRepo } from "../src/github/client.ts";
 import { buildPublicCode } from "../src/public-code.ts";
 import { PublicCodeSchema } from "../src/public-code-schema.ts";
-import { PUBLIC_BUILD_LAST_KEY, PUBLIC_CODE_KEY, PUBLIC_DOCS, PUBLIC_MODEL_KEY, publicBuildTick, type PublicBuildReaders } from "../src/public-data.ts";
+import {
+  PUBLIC_BUILD_LAST_KEY,
+  PUBLIC_CODE_KEY,
+  PUBLIC_DOCS,
+  PUBLIC_MODEL_KEY,
+  publicBuildTick,
+  type PublicBuildReaders,
+} from "../src/public-data.ts";
 import { bundledModel } from "../src/public-data.ts";
 import type { StatsRows } from "../src/public-stats.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
@@ -13,7 +20,20 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 
 const NOW = new Date("2026-10-17T00:05:00Z");
 const PRIVATE_REPOS = new Set(["germomics", "foxing", "foxhound", "txasm", "julieedwards-info"]);
-const ALL = ["capsid", "capsomer", "site-runtime", "d1-dump", "devkit", "site-api", "prelum", "carrel", "enarratio", "dustinedwards-info", "claude-skills", ...PRIVATE_REPOS];
+const ALL = [
+  "capsid",
+  "capsomer",
+  "site-runtime",
+  "d1-dump",
+  "devkit",
+  "site-api",
+  "prelum",
+  "carrel",
+  "enarratio",
+  "dustinedwards-info",
+  "claude-skills",
+  ...PRIVATE_REPOS,
+];
 const privacy = new Map(ALL.map((n) => [`drdustinedwards/${n}`, PRIVATE_REPOS.has(n)] as const));
 const env = fakeEnv({});
 
@@ -25,7 +45,23 @@ function sampleMap(repo = "DrDustinEdwards/d1-dump"): Record<string, unknown> {
     date: "2026-10-17",
     tools: { typescript: "5.9.3", coverage: "istanbul", mutation: null },
     modules: [
-      { path: "src/cli.ts", loc: 40, imports: ["src/run.ts"], functions: [{ name: "main", line: 3, end: 30, cc: 14, coverage: 0, crap: 210, mutants: null, score: null }] },
+      {
+        path: "src/cli.ts",
+        loc: 40,
+        imports: ["src/run.ts"],
+        functions: [
+          {
+            name: "main",
+            line: 3,
+            end: 30,
+            cc: 14,
+            coverage: 0,
+            crap: 210,
+            mutants: null,
+            score: null,
+          },
+        ],
+      },
       { path: "src/run.ts", loc: 12, imports: [], functions: [] },
     ],
     cycles: [],
@@ -44,8 +80,12 @@ function only(maps: Record<string, unknown>) {
 test("only a public system's repos are read, and a repo with no map is left out", async () => {
   const { reads, read } = only({ "DrDustinEdwards/d1-dump": sampleMap() });
   const doc = await buildPublicCode(env, bundledModel(), privacy, "2026-10-17", read);
-  assert.deepEqual(doc.maps.map((m) => [m.system, m.repo]), [["d1-dump", "DrDustinEdwards/d1-dump"]]);
-  for (const r of PRIVATE_REPOS) assert.ok(!reads.includes(`DrDustinEdwards/${r}`), `the private repo ${r} was read`);
+  assert.deepEqual(
+    doc.maps.map((m) => [m.system, m.repo]),
+    [["d1-dump", "DrDustinEdwards/d1-dump"]],
+  );
+  for (const r of PRIVATE_REPOS)
+    assert.ok(!reads.includes(`DrDustinEdwards/${r}`), `the private repo ${r} was read`);
   assert.ok(reads.includes("DrDustinEdwards/capsid"));
   PublicCodeSchema.parse(doc);
 });
@@ -66,48 +106,135 @@ test("a stale function and an older mutation run reach the document; a bad mutat
   const m = sampleMap();
   m.tools = { typescript: "5.9.3", coverage: "istanbul", mutation: "stryker" };
   m.mutated = { sha: "b".repeat(40), date: "2026-10-12" };
-  const fn = ((m.modules as Array<Record<string, unknown>>)[0].functions as Array<Record<string, unknown>>)[0];
+  const fn = (
+    (m.modules as Array<Record<string, unknown>>)[0].functions as Array<Record<string, unknown>>
+  )[0];
   fn.stale = true;
-  const doc = await buildPublicCode(env, bundledModel(), privacy, "2026-10-17", only({ "DrDustinEdwards/d1-dump": m }).read);
+  const doc = await buildPublicCode(
+    env,
+    bundledModel(),
+    privacy,
+    "2026-10-17",
+    only({ "DrDustinEdwards/d1-dump": m }).read,
+  );
   assert.deepEqual(doc.maps[0].mutated, { sha: "b".repeat(40), date: "2026-10-12" });
   assert.equal(doc.maps[0].modules[0].functions[0].stale, true);
   PublicCodeSchema.parse(doc);
   const bad = { ...m, mutated: { sha: "main", date: "2026-10-12" } };
-  await assert.rejects(buildPublicCode(env, bundledModel(), privacy, "2026-10-17", only({ "DrDustinEdwards/d1-dump": bad }).read), /invalid/);
+  await assert.rejects(
+    buildPublicCode(
+      env,
+      bundledModel(),
+      privacy,
+      "2026-10-17",
+      only({ "DrDustinEdwards/d1-dump": bad }).read,
+    ),
+    /invalid/,
+  );
 });
 
 test("a map that fails the schema, names another repo, or climbs out of the repo throws", async () => {
-  const bad = (m: Record<string, unknown>) => buildPublicCode(env, bundledModel(), privacy, "2026-10-17", only({ "DrDustinEdwards/d1-dump": m }).read);
-  await assert.rejects(bad({ ...sampleMap(), sha: "main" }), /code map for DrDustinEdwards\/d1-dump is invalid/);
-  await assert.rejects(bad(sampleMap("DrDustinEdwards/germomics")), /names DrDustinEdwards\/germomics/);
-  await assert.rejects(bad({ ...sampleMap(), modules: [{ path: "../secrets.ts", loc: 1, imports: [], functions: [] }] }), /invalid/);
-  await assert.rejects(bad({ ...sampleMap(), modules: [{ path: "/etc/passwd", loc: 1, imports: [], functions: [] }] }), /invalid/);
+  const bad = (m: Record<string, unknown>) =>
+    buildPublicCode(
+      env,
+      bundledModel(),
+      privacy,
+      "2026-10-17",
+      only({ "DrDustinEdwards/d1-dump": m }).read,
+    );
+  await assert.rejects(
+    bad({ ...sampleMap(), sha: "main" }),
+    /code map for DrDustinEdwards\/d1-dump is invalid/,
+  );
+  await assert.rejects(
+    bad(sampleMap("DrDustinEdwards/germomics")),
+    /names DrDustinEdwards\/germomics/,
+  );
+  await assert.rejects(
+    bad({
+      ...sampleMap(),
+      modules: [{ path: "../secrets.ts", loc: 1, imports: [], functions: [] }],
+    }),
+    /invalid/,
+  );
+  await assert.rejects(
+    bad({ ...sampleMap(), modules: [{ path: "/etc/passwd", loc: 1, imports: [], functions: [] }] }),
+    /invalid/,
+  );
 });
 
 test("a framework's route file names are module paths: $ for a parameter, brackets for a literal dot", async () => {
   // React Router's flat routes, as dustinedwards-info names them.
-  const paths = ["app/routes/blog.$slug.tsx", "app/routes/blog.$slug[.md].ts", "app/routes/api.carrel.v1.$.ts"];
-  const map = { ...sampleMap(), modules: paths.map((path) => ({ path, loc: 1, imports: paths.filter((p) => p !== path), functions: [] })) };
-  const doc = await buildPublicCode(env, bundledModel(), privacy, "2026-10-17", only({ "DrDustinEdwards/d1-dump": map }).read);
-  assert.deepEqual(doc.maps.find((m) => m.repo === "DrDustinEdwards/d1-dump")?.modules.map((m) => m.path), paths);
+  const paths = [
+    "app/routes/blog.$slug.tsx",
+    "app/routes/blog.$slug[.md].ts",
+    "app/routes/api.carrel.v1.$.ts",
+  ];
+  const map = {
+    ...sampleMap(),
+    modules: paths.map((path) => ({
+      path,
+      loc: 1,
+      imports: paths.filter((p) => p !== path),
+      functions: [],
+    })),
+  };
+  const doc = await buildPublicCode(
+    env,
+    bundledModel(),
+    privacy,
+    "2026-10-17",
+    only({ "DrDustinEdwards/d1-dump": map }).read,
+  );
+  assert.deepEqual(
+    doc.maps.find((m) => m.repo === "DrDustinEdwards/d1-dump")?.modules.map((m) => m.path),
+    paths,
+  );
 });
 
 test("a broken map keeps the last code document and is reported, and the model is still built", async () => {
   const kv = fakeKv({ seed: { [PUBLIC_CODE_KEY]: "last code" } });
   const readers: PublicBuildReaders = {
-    listRepos: async () => ({ repos: ALL.map((n): InstalledRepo => ({ full_name: `DrDustinEdwards/${n}`, private: PRIVATE_REPOS.has(n), archived: false, pushed_at: null })) }),
-    statsRows: async (_e, _n, systems): Promise<StatsRows> => ({ finished: [], open: [], outcomes: [], evaluations: [], waits: [], rings: [], documents: 0, namespaces: 0, systems, sha: undefined }),
+    listRepos: async () => ({
+      repos: ALL.map((n): InstalledRepo => ({
+        full_name: `DrDustinEdwards/${n}`,
+        private: PRIVATE_REPOS.has(n),
+        archived: false,
+        pushed_at: null,
+      })),
+    }),
+    statsRows: async (_e, _n, systems): Promise<StatsRows> => ({
+      finished: [],
+      open: [],
+      outcomes: [],
+      evaluations: [],
+      waits: [],
+      rings: [],
+      documents: 0,
+      namespaces: 0,
+      systems,
+      sha: undefined,
+    }),
     codeMap: async (_e, repo) => (repo === "DrDustinEdwards/d1-dump" ? { version: 2 } : null),
   };
   const report = await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), NOW, readers);
   assert.ok(report.ran && "codeFailed" in report, report.note);
-  assert.match(report.note, /code maps kept from the last build: code map for DrDustinEdwards\/d1-dump is invalid/);
+  assert.match(
+    report.note,
+    /code maps kept from the last build: code map for DrDustinEdwards\/d1-dump is invalid/,
+  );
   assert.equal(kv.store.get(PUBLIC_CODE_KEY), "last code");
   assert.ok(kv.store.has(PUBLIC_MODEL_KEY));
-  assert.ok(kv.store.has(PUBLIC_BUILD_LAST_KEY), "a broken code map left the day unstamped, so it would retry every tick");
+  assert.ok(
+    kv.store.has(PUBLIC_BUILD_LAST_KEY),
+    "a broken code map left the day unstamped, so it would retry every tick",
+  );
 
   const good = fakeKv();
-  const ok = await publicBuildTick(fakeEnv({ APP_KV: good.kv }), NOW, { ...readers, codeMap: async (_e, repo) => (repo === "DrDustinEdwards/d1-dump" ? sampleMap() : null) });
+  const ok = await publicBuildTick(fakeEnv({ APP_KV: good.kv }), NOW, {
+    ...readers,
+    codeMap: async (_e, repo) => (repo === "DrDustinEdwards/d1-dump" ? sampleMap() : null),
+  });
   assert.ok(ok.ran && !("codeFailed" in ok));
   assert.match(ok.note, /1 code map\(s\) \(d1-dump\)/);
   const doc = PublicCodeSchema.parse(JSON.parse(good.store.get(PUBLIC_CODE_KEY) ?? "null"));
@@ -122,9 +249,27 @@ test("later the same day the code maps alone are rebuilt hourly, and the model i
   const readers: PublicBuildReaders = {
     listRepos: async () => {
       listed++;
-      return { repos: ALL.map((n): InstalledRepo => ({ full_name: `DrDustinEdwards/${n}`, private: PRIVATE_REPOS.has(n), archived: false, pushed_at: null })) };
+      return {
+        repos: ALL.map((n): InstalledRepo => ({
+          full_name: `DrDustinEdwards/${n}`,
+          private: PRIVATE_REPOS.has(n),
+          archived: false,
+          pushed_at: null,
+        })),
+      };
     },
-    statsRows: async (_e, _n, systems): Promise<StatsRows> => ({ finished: [], open: [], outcomes: [], evaluations: [], waits: [], rings: [], documents: 0, namespaces: 0, systems, sha: undefined }),
+    statsRows: async (_e, _n, systems): Promise<StatsRows> => ({
+      finished: [],
+      open: [],
+      outcomes: [],
+      evaluations: [],
+      waits: [],
+      rings: [],
+      documents: 0,
+      namespaces: 0,
+      systems,
+      sha: undefined,
+    }),
     codeMap: async (_e, repo) => (repo === "DrDustinEdwards/d1-dump" ? map : null),
   };
   const at = (min: number) => new Date(NOW.getTime() + min * 60_000);
@@ -132,17 +277,35 @@ test("later the same day the code maps alone are rebuilt hourly, and the model i
   const model = kv.store.get(PUBLIC_MODEL_KEY);
   map = { ...sampleMap(), sha: "c".repeat(40) };
 
-  assert.equal((await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(59), readers)).ran, false, "rebuilt within the hour");
+  assert.equal(
+    (await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(59), readers)).ran,
+    false,
+    "rebuilt within the hour",
+  );
   const later = await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(60), readers);
   assert.ok(later.ran && !("codeFailed" in later), later.note);
   assert.match(later.note, /^code maps only/);
-  assert.equal(PublicCodeSchema.parse(JSON.parse(kv.store.get(PUBLIC_CODE_KEY) ?? "null")).maps[0].sha, "c".repeat(40));
+  assert.equal(
+    PublicCodeSchema.parse(JSON.parse(kv.store.get(PUBLIC_CODE_KEY) ?? "null")).maps[0].sha,
+    "c".repeat(40),
+  );
   assert.equal(kv.store.get(PUBLIC_MODEL_KEY), model);
-  assert.equal(listed, 2, "the hourly rebuild must read visibility again, so a repo made private drops out");
+  assert.equal(
+    listed,
+    2,
+    "the hourly rebuild must read visibility again, so a repo made private drops out",
+  );
 
   map = { version: 2 };
   const broken = await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(120), readers);
   assert.ok(broken.ran && "codeFailed" in broken);
-  assert.equal(PublicCodeSchema.parse(JSON.parse(kv.store.get(PUBLIC_CODE_KEY) ?? "null")).maps[0].sha, "c".repeat(40));
-  assert.equal((await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(125), readers)).ran, false, "a broken map retried every tick");
+  assert.equal(
+    PublicCodeSchema.parse(JSON.parse(kv.store.get(PUBLIC_CODE_KEY) ?? "null")).maps[0].sha,
+    "c".repeat(40),
+  );
+  assert.equal(
+    (await publicBuildTick(fakeEnv({ APP_KV: kv.kv }), at(125), readers)).ran,
+    false,
+    "a broken map retried every tick",
+  );
 });

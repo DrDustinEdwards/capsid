@@ -40,7 +40,12 @@ function AllSites() {
   return (
     <div className="embedded">
       <div className="toolbar">
-        <button type="button" className="btn primary" onClick={() => setEditing({ kind: "add" })} disabled={editing?.kind === "add"}>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() => setEditing({ kind: "add" })}
+          disabled={editing?.kind === "add"}
+        >
           Add site
         </button>
         {snap && <NsChips list={snap.sites.map((s) => s.namespace)} />}
@@ -54,7 +59,11 @@ function AllSites() {
         <NoSnapshot />
       ) : (
         <Panel flush title="Every site" count={snap.sites.length}>
-          {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No site in the project {ns}.</FilterEmpty> : <FleetTable sites={list} />}
+          {emptied ? (
+            <FilterEmpty onShowAll={() => setNs("all")}>No site in the project {ns}.</FilterEmpty>
+          ) : (
+            <FleetTable sites={list} />
+          )}
         </Panel>
       )}
       {waiting.length > 0 && (
@@ -90,7 +99,11 @@ function AllSites() {
               </thead>
               <tbody>
                 {noSite.map((s) => (
-                  <SiteRow key={s.namespace} s={s} onEdit={() => setEditing({ kind: "edit", row: s })} />
+                  <SiteRow
+                    key={s.namespace}
+                    s={s}
+                    onEdit={() => setEditing({ kind: "edit", row: s })}
+                  />
                 ))}
               </tbody>
             </table>

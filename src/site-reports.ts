@@ -9,7 +9,9 @@ export async function reportSite(env: Env, namespace: string, what: string) {
   const row = await readSiteRow(env.DB, namespace);
   const site = row ? sitesFrom([row])[0] : undefined;
   if (!row || !site) {
-    throw new Error(`${namespace} has no site configured (ops_sites), so it has no ${what}. The admin adds one with capsid_admin_run_controls control site_add.`);
+    throw new Error(
+      `${namespace} has no site configured (ops_sites), so it has no ${what}. The admin adds one with capsid_admin_run_controls control site_add.`,
+    );
   }
   return site;
 }

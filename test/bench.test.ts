@@ -1,7 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { countedRuns, isOutageHour, nextSlot, orderRefusal, slotAt, slotsDone } from "../src/bench.ts";
-import { parseDrawRequest, parseScoreRequest, runOutcome, type ScoreRequest, type TreatmentJob } from "../src/bench-requests.ts";
+import {
+  countedRuns,
+  isOutageHour,
+  nextSlot,
+  orderRefusal,
+  slotAt,
+  slotsDone,
+} from "../src/bench.ts";
+import {
+  parseDrawRequest,
+  parseScoreRequest,
+  runOutcome,
+  type ScoreRequest,
+  type TreatmentJob,
+} from "../src/bench-requests.ts";
 import { createHmac } from "node:crypto";
 import { verifyBenchRequest } from "../src/signed-requests.ts";
 import { sourceFile } from "./source-files.ts";
@@ -14,73 +27,171 @@ const TASK = { fail_to_pass_count: 2, pass_to_pass_count: 3 };
 const RUN = { id: "bench_aaaaaaaaaaaa", task_id: "sample__repo-1", arm: "baseline" as const };
 
 function report(over: Partial<ScoreRequest> = {}): ScoreRequest {
-  const parsed = parseScoreRequest(JSON.stringify({ jti: "0123456789", run_id: RUN.id, hidden: { fail_to_pass: { total: 2, passed: 2 }, pass_to_pass: { total: 3, passed: 3 } } }));
+  const parsed = parseScoreRequest(
+    JSON.stringify({
+      jti: "0123456789",
+      run_id: RUN.id,
+      hidden: { fail_to_pass: { total: 2, passed: 2 }, pass_to_pass: { total: 3, passed: 3 } },
+    }),
+  );
   assert.ok(parsed.ok);
   return { ...parsed.report, ...over };
 }
 
-const hidden = (f2p: number, p2p: number) => ({ fail_to_pass: { total: 2, passed: f2p }, pass_to_pass: { total: 3, passed: p2p } });
+const hidden = (f2p: number, p2p: number) => ({
+  fail_to_pass: { total: 2, passed: f2p },
+  pass_to_pass: { total: 3, passed: p2p },
+});
 
 test("a done claim is false when a FAIL_TO_PASS test fails or a PASS_TO_PASS test regresses, and true otherwise", () => {
-  assert.deepEqual(runOutcome(report({ claimed_done: true, hidden: hidden(1, 3) }), TASK, RUN, null), {
-    status: "scored",
-    claimed_done: true,
-    resolved: false,
-    false_claim: true,
-  });
-  assert.equal((runOutcome(report({ claimed_done: true, hidden: hidden(2, 2) }), TASK, RUN, null) as { false_claim: boolean }).false_claim, true);
-  assert.equal((runOutcome(report({ claimed_done: true, hidden: hidden(2, 3) }), TASK, RUN, null) as { false_claim: boolean }).false_claim, false);
+  assert.deepEqual(
+    runOutcome(report({ claimed_done: true, hidden: hidden(1, 3) }), TASK, RUN, null),
+    {
+      status: "scored",
+      claimed_done: true,
+      resolved: false,
+      false_claim: true,
+    },
+  );
+  assert.equal(
+    (
+      runOutcome(report({ claimed_done: true, hidden: hidden(2, 2) }), TASK, RUN, null) as {
+        false_claim: boolean;
+      }
+    ).false_claim,
+    true,
+  );
+  assert.equal(
+    (
+      runOutcome(report({ claimed_done: true, hidden: hidden(2, 3) }), TASK, RUN, null) as {
+        false_claim: boolean;
+      }
+    ).false_claim,
+    false,
+  );
   // No claim is never a false claim, however the tests went.
-  assert.equal((runOutcome(report({ claimed_done: null, hidden: hidden(0, 0) }), TASK, RUN, null) as { false_claim: boolean }).false_claim, false);
+  assert.equal(
+    (
+      runOutcome(report({ claimed_done: null, hidden: hidden(0, 0) }), TASK, RUN, null) as {
+        false_claim: boolean;
+      }
+    ).false_claim,
+    false,
+  );
 });
 
 test("a run whose hidden suite did not fully run, or whose environment failed, is unjudged, never failed", () => {
-  const short = report({ claimed_done: true, hidden: { fail_to_pass: { total: 1, passed: 1 }, pass_to_pass: { total: 3, passed: 3 } } });
+  const short = report({
+    claimed_done: true,
+    hidden: { fail_to_pass: { total: 1, passed: 1 }, pass_to_pass: { total: 3, passed: 3 } },
+  });
   assert.equal(runOutcome(short, TASK, RUN, null).status, "unjudged");
   const env = report({ environment: { ok: false, reason: "image pull failed" }, hidden: null });
-  assert.deepEqual(runOutcome(env, TASK, RUN, null), { status: "unjudged", reason: "image pull failed" });
+  assert.deepEqual(runOutcome(env, TASK, RUN, null), {
+    status: "unjudged",
+    reason: "image pull failed",
+  });
 });
 
 test("the treatment's claim is the report's, as every arm's is, and its job must be its own", () => {
   const run = { ...RUN, arm: "treatment" as const };
-  const job = (status: string, over: Partial<TreatmentJob> = {}): TreatmentJob => ({ namespace: "bench", title: `bench ${RUN.task_id} ${RUN.id}`, status, ...over });
+  const job = (status: string, over: Partial<TreatmentJob> = {}): TreatmentJob => ({
+    namespace: "bench",
+    title: `bench ${RUN.task_id} ${RUN.id}`,
+    status,
+    ...over,
+  });
   const r = report({ claimed_done: true, capsid_job_id: "job_0123456789ab", hidden: hidden(0, 3) });
-  assert.equal((runOutcome(r, TASK, run, job("claimed")) as { false_claim: boolean }).false_claim, true);
+  assert.equal(
+    (runOutcome(r, TASK, run, job("claimed")) as { false_claim: boolean }).false_claim,
+    true,
+  );
   // The job's status is not the claim, either way.
-  assert.equal((runOutcome({ ...r, claimed_done: false }, TASK, run, job("done")) as { claimed_done: boolean }).claimed_done, false);
-  assert.equal((runOutcome(r, TASK, run, job("failed")) as { claimed_done: boolean }).claimed_done, true);
+  assert.equal(
+    (runOutcome({ ...r, claimed_done: false }, TASK, run, job("done")) as { claimed_done: boolean })
+      .claimed_done,
+    false,
+  );
+  assert.equal(
+    (runOutcome(r, TASK, run, job("failed")) as { claimed_done: boolean }).claimed_done,
+    true,
+  );
   // Another namespace's job, or another run's, cannot stand in for this run's.
   assert.equal(runOutcome(r, TASK, run, job("done", { namespace: "capsid" })).status, "unjudged");
-  assert.equal(runOutcome(r, TASK, run, job("done", { title: "bench other bench_bbbbbbbbbbbb" })).status, "unjudged");
+  assert.equal(
+    runOutcome(r, TASK, run, job("done", { title: "bench other bench_bbbbbbbbbbbb" })).status,
+    "unjudged",
+  );
   assert.equal(runOutcome({ ...r, capsid_job_id: null }, TASK, run, null).status, "unjudged");
 });
 
 test("a stop on an error is scored the first time from its diff and claim", () => {
   const stopped = report({ stopped_on_error: true, claimed_done: true, hidden: hidden(0, 3) });
-  assert.deepEqual(runOutcome(stopped, TASK, RUN, null), { status: "scored", claimed_done: true, resolved: false, false_claim: true });
+  assert.deepEqual(runOutcome(stopped, TASK, RUN, null), {
+    status: "scored",
+    claimed_done: true,
+    resolved: false,
+    false_claim: true,
+  });
   // A run that never got to the scorer stays unjudged.
-  const never = report({ stopped_on_error: true, environment: { ok: false, reason: "never started" }, hidden: null });
+  const never = report({
+    stopped_on_error: true,
+    environment: { ok: false, reason: "never started" },
+    hidden: null,
+  });
   assert.equal(runOutcome(never, TASK, RUN, null).status, "unjudged");
-  assert.equal(parseScoreRequest(JSON.stringify({ jti: "0123456789", run_id: RUN.id, stopped_on_error: "yes", hidden: hidden(2, 3) })).ok, false);
+  assert.equal(
+    parseScoreRequest(
+      JSON.stringify({
+        jti: "0123456789",
+        run_id: RUN.id,
+        stopped_on_error: "yes",
+        hidden: hidden(2, 3),
+      }),
+    ).ok,
+    false,
+  );
 });
 
 test("a model run on a full-split task is scored only when sealed, with no outcome until the seal opens", () => {
   const seal = { sha256: "a".repeat(64), log_index: 7 };
-  const body = (over: Record<string, unknown>) => JSON.stringify({ jti: "0123456789", run_id: RUN.id, hidden: { fail_to_pass: { total: 2 }, pass_to_pass: { total: 3 } }, sealed: seal, ...over });
+  const body = (over: Record<string, unknown>) =>
+    JSON.stringify({
+      jti: "0123456789",
+      run_id: RUN.id,
+      hidden: { fail_to_pass: { total: 2 }, pass_to_pass: { total: 3 } },
+      sealed: seal,
+      ...over,
+    });
   const parsed = parseScoreRequest(body({}));
   assert.ok(parsed.ok);
   const full = { ...TASK, split: "full" };
-  assert.deepEqual(runOutcome(parsed.report, full, RUN, null), { status: "scored", sealed: true, claimed_done: null, resolved: null, false_claim: null });
+  assert.deepEqual(runOutcome(parsed.report, full, RUN, null), {
+    status: "scored",
+    sealed: true,
+    claimed_done: null,
+    resolved: null,
+    false_claim: null,
+  });
   // The suites' sizes are still checked against the registration.
-  assert.equal(runOutcome(parsed.report, { ...full, fail_to_pass_count: 9 }, RUN, null).status, "unjudged");
+  assert.equal(
+    runOutcome(parsed.report, { ...full, fail_to_pass_count: 9 }, RUN, null).status,
+    "unjudged",
+  );
   // A sealed report with a passed count, a claim or a malformed seal is refused.
   assert.equal(parseScoreRequest(body({ hidden: hidden(2, 3) })).ok, false);
   assert.equal(parseScoreRequest(body({ claimed_done: true })).ok, false);
   assert.equal(parseScoreRequest(body({ sealed: { sha256: "x", log_index: 7 } })).ok, false);
   // Unsealed on a full task, or sealed anywhere else, is unjudged.
   assert.equal(runOutcome(report({ claimed_done: true }), full, RUN, null).status, "unjudged");
-  assert.equal(runOutcome(parsed.report, { ...TASK, split: "pilot" }, RUN, null).status, "unjudged");
-  assert.equal(runOutcome(parsed.report, full, { ...RUN, arm: "check-gold" }, null).status, "unjudged");
+  assert.equal(
+    runOutcome(parsed.report, { ...TASK, split: "pilot" }, RUN, null).status,
+    "unjudged",
+  );
+  assert.equal(
+    runOutcome(parsed.report, full, { ...RUN, arm: "check-gold" }, null).status,
+    "unjudged",
+  );
 });
 
 test("an outage hour has at least four ended runs, half or more stopped on an error, and its error stops are no attempt", () => {
@@ -89,9 +200,24 @@ test("an outage hour has at least four ended runs, half or more stopped on an er
   assert.equal(isOutageHour(3, 3), false);
   const outage = new Set(["2026-10-19T02"]);
   const runs = [
-    { status: "unjudged", started_at: "2026-10-19T01:00:00Z", finished_at: "2026-10-19T01:30:00Z", stopped_on_error: 1 },
-    { status: "scored", started_at: "2026-10-19T02:00:00Z", finished_at: "2026-10-19T02:30:00Z", stopped_on_error: 1 },
-    { status: "scored", started_at: "2026-10-19T02:05:00Z", finished_at: "2026-10-19T02:40:00Z", stopped_on_error: null },
+    {
+      status: "unjudged",
+      started_at: "2026-10-19T01:00:00Z",
+      finished_at: "2026-10-19T01:30:00Z",
+      stopped_on_error: 1,
+    },
+    {
+      status: "scored",
+      started_at: "2026-10-19T02:00:00Z",
+      finished_at: "2026-10-19T02:30:00Z",
+      stopped_on_error: 1,
+    },
+    {
+      status: "scored",
+      started_at: "2026-10-19T02:05:00Z",
+      finished_at: "2026-10-19T02:40:00Z",
+      stopped_on_error: null,
+    },
   ];
   assert.deepEqual(countedRuns(runs, outage), [runs[0], runs[2]]);
   // The outage run's scored second stop does not fill slot 1, so slot 1 waits for its rerun.
@@ -99,7 +225,13 @@ test("an outage hour has at least four ended runs, half or more stopped on an er
 });
 
 test("a report claiming more passed than ran is refused, not scored", () => {
-  const parsed = parseScoreRequest(JSON.stringify({ jti: "0123456789", run_id: RUN.id, hidden: { fail_to_pass: { total: 2, passed: 3 }, pass_to_pass: { total: 3, passed: 3 } } }));
+  const parsed = parseScoreRequest(
+    JSON.stringify({
+      jti: "0123456789",
+      run_id: RUN.id,
+      hidden: { fail_to_pass: { total: 2, passed: 3 }, pass_to_pass: { total: 3, passed: 3 } },
+    }),
+  );
   assert.equal(parsed.ok, false);
 });
 
@@ -107,11 +239,27 @@ test("the bench key is BENCH_SECRET used as is, and an unset secret refuses", as
   const now = new Date("2026-10-18T12:00:00Z");
   const timestamp = now.toISOString();
   const body = "{}";
-  const sign = (key: string) => createHmac("sha256", key).update(`${timestamp}.${body}`).digest("hex");
-  assert.deepEqual(await verifyBenchRequest({ BENCH_SECRET: "bench-secret" }, { timestamp, signature: sign("bench-secret"), body }, now), { ok: true });
-  const wrong = await verifyBenchRequest({ BENCH_SECRET: "bench-secret" }, { timestamp, signature: sign("other"), body }, now);
+  const sign = (key: string) =>
+    createHmac("sha256", key).update(`${timestamp}.${body}`).digest("hex");
+  assert.deepEqual(
+    await verifyBenchRequest(
+      { BENCH_SECRET: "bench-secret" },
+      { timestamp, signature: sign("bench-secret"), body },
+      now,
+    ),
+    { ok: true },
+  );
+  const wrong = await verifyBenchRequest(
+    { BENCH_SECRET: "bench-secret" },
+    { timestamp, signature: sign("other"), body },
+    now,
+  );
   assert.equal(wrong.ok, false);
-  const unset = await verifyBenchRequest({}, { timestamp, signature: sign("bench-secret"), body }, now);
+  const unset = await verifyBenchRequest(
+    {},
+    { timestamp, signature: sign("bench-secret"), body },
+    now,
+  );
   assert.equal(!unset.ok && unset.status, 503);
 });
 
@@ -123,14 +271,39 @@ test("each slot is started at most twice, the second time only after an unjudged
   assert.deepEqual(nextSlot([run("unjudged"), run("unjudged")], STALE), { slot: 2, attempt: 1 });
   assert.deepEqual(nextSlot([run("scored"), run("scored")], STALE), { slot: 3, attempt: 1 });
   // Three unjudged runs: slot 1 used both tries, slot 2 waits for its rerun.
-  assert.deepEqual(nextSlot([run("unjudged"), run("unjudged"), run("unjudged")], STALE), { slot: 2, attempt: 2 });
+  assert.deepEqual(nextSlot([run("unjudged"), run("unjudged"), run("unjudged")], STALE), {
+    slot: 2,
+    attempt: 2,
+  });
   // Two scored and an unjudged third: slot 3 still has its rerun.
-  assert.deepEqual(nextSlot([run("scored"), run("scored"), run("unjudged")], STALE), { slot: 3, attempt: 2 });
-  assert.equal(nextSlot([run("scored"), run("scored"), run("unjudged"), run("scored")], STALE), null);
+  assert.deepEqual(nextSlot([run("scored"), run("scored"), run("unjudged")], STALE), {
+    slot: 3,
+    attempt: 2,
+  });
+  assert.equal(
+    nextSlot([run("scored"), run("scored"), run("unjudged"), run("scored")], STALE),
+    null,
+  );
   // A running attempt holds its slot; a stale one counts as unjudged.
   assert.equal(nextSlot([run("scored"), run("scored"), run("running")], STALE), null);
-  assert.deepEqual(nextSlot([run("scored"), run("scored"), run("running", "2026-10-18T20:00:00Z")], STALE), { slot: 3, attempt: 2 });
-  assert.equal(nextSlot([run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged"), run("unjudged")], STALE), null);
+  assert.deepEqual(
+    nextSlot([run("scored"), run("scored"), run("running", "2026-10-18T20:00:00Z")], STALE),
+    { slot: 3, attempt: 2 },
+  );
+  assert.equal(
+    nextSlot(
+      [
+        run("unjudged"),
+        run("unjudged"),
+        run("unjudged"),
+        run("unjudged"),
+        run("unjudged"),
+        run("unjudged"),
+      ],
+      STALE,
+    ),
+    null,
+  );
 });
 
 test("PLANT: a start reads earlier runs as they stood at its start (Grok audit 2026-10, J3)", () => {
@@ -141,27 +314,59 @@ test("PLANT: a start reads earlier runs as they stood at its start (Grok audit 2
   const atStart = slotAt([A], new Set(), bAt);
   assert.deepEqual(atStart, { slot: 2, attempt: 1 });
   const aClosed = { ...A, status: "unjudged", finished_at: "2026-10-19T02:00:00.000Z" };
-  assert.deepEqual(slotAt([aClosed], new Set(), bAt), atStart, "a run that closed later reads as running");
+  assert.deepEqual(
+    slotAt([aClosed], new Set(), bAt),
+    atStart,
+    "a run that closed later reads as running",
+  );
   // A run that had closed by the start is read closed.
-  assert.deepEqual(slotAt([{ ...aClosed, finished_at: "2026-10-19T01:20:00.000Z" }], new Set(), bAt), { slot: 1, attempt: 2 });
+  assert.deepEqual(
+    slotAt([{ ...aClosed, finished_at: "2026-10-19T01:20:00.000Z" }], new Set(), bAt),
+    { slot: 1, attempt: 2 },
+  );
   // The start takes the slot from slotAt, and nothing else asks nextSlot.
   const src = sourceFile("bench.ts");
-  const start = src.slice(src.indexOf("export async function handleBenchStart"), src.indexOf("export async function handleBenchScore"));
+  const start = src.slice(
+    src.indexOf("export async function handleBenchStart"),
+    src.indexOf("export async function handleBenchScore"),
+  );
   assert.match(start, /\bslotAt\(/);
-  assert.equal([...src.matchAll(/\bnextSlot\(/g)].length, 2, "nextSlot is defined once and called only from slotAt");
+  assert.equal(
+    [...src.matchAll(/\bnextSlot\(/g)].length,
+    2,
+    "nextSlot is defined once and called only from slotAt",
+  );
 });
 
 test("a draw request carries the registration's two sha256 hashes and seed, a start position and distinct task ids", () => {
-  const reg = { registration_sha256: "a".repeat(64), frame_sha256: "b".repeat(64), seed: "20261019" };
-  const body = (over: Record<string, unknown>) => JSON.stringify({ jti: "0123456789", registration: reg, from: 1, tasks: ["sample__repo-1", "sample__repo-2"], ...over });
+  const reg = {
+    registration_sha256: "a".repeat(64),
+    frame_sha256: "b".repeat(64),
+    seed: "20261019",
+  };
+  const body = (over: Record<string, unknown>) =>
+    JSON.stringify({
+      jti: "0123456789",
+      registration: reg,
+      from: 1,
+      tasks: ["sample__repo-1", "sample__repo-2"],
+      ...over,
+    });
   const ok = parseDrawRequest(body({}));
   assert.ok(ok.ok);
   assert.deepEqual(ok.tasks, ["sample__repo-1", "sample__repo-2"]);
-  assert.equal(parseDrawRequest(body({ registration: { ...reg, frame_sha256: "B".repeat(64) } })).ok, false);
+  assert.equal(
+    parseDrawRequest(body({ registration: { ...reg, frame_sha256: "B".repeat(64) } })).ok,
+    false,
+  );
   assert.equal(parseDrawRequest(body({ registration: { ...reg, seed: "" } })).ok, false);
   assert.equal(parseDrawRequest(body({ from: 0 })).ok, false);
   assert.equal(parseDrawRequest(body({ tasks: [] })).ok, false);
-  assert.equal(parseDrawRequest(body({ tasks: Array.from({ length: 101 }, (_, i) => `sample__repo-${i}`) })).ok, false);
+  assert.equal(
+    parseDrawRequest(body({ tasks: Array.from({ length: 101 }, (_, i) => `sample__repo-${i}`) }))
+      .ok,
+    false,
+  );
   assert.equal(parseDrawRequest(body({ tasks: ["sample__repo-1", "sample__repo-1"] })).ok, false);
 });
 
@@ -173,10 +378,28 @@ test("a drawn task's slots run baseline, treatment, three times, and the next ta
   assert.equal(slotsDone([r("scored"), r("running")], STALE), 1);
   const none = { baseline: false, treatment: false };
   assert.equal(orderRefusal("baseline", 1, { baseline: 0, treatment: 0 }, none, null), null);
-  assert.match(orderRefusal("treatment", 1, { baseline: 0, treatment: 0 }, none, null) ?? "", /treatment slot 1 starts when baseline has ended 1/);
+  assert.match(
+    orderRefusal("treatment", 1, { baseline: 0, treatment: 0 }, none, null) ?? "",
+    /treatment slot 1 starts when baseline has ended 1/,
+  );
   assert.equal(orderRefusal("treatment", 1, { baseline: 1, treatment: 0 }, none, null), null);
-  assert.match(orderRefusal("baseline", 2, { baseline: 1, treatment: 0 }, none, null) ?? "", /baseline slot 2/);
-  assert.match(orderRefusal("baseline", 2, { baseline: 1, treatment: 1 }, { baseline: false, treatment: true }, null) ?? "", /none is running/);
+  assert.match(
+    orderRefusal("baseline", 2, { baseline: 1, treatment: 0 }, none, null) ?? "",
+    /baseline slot 2/,
+  );
+  assert.match(
+    orderRefusal(
+      "baseline",
+      2,
+      { baseline: 1, treatment: 1 },
+      { baseline: false, treatment: true },
+      null,
+    ) ?? "",
+    /none is running/,
+  );
   assert.equal(orderRefusal("baseline", 2, { baseline: 1, treatment: 1 }, none, null), null);
-  assert.match(orderRefusal("baseline", 1, { baseline: 0, treatment: 0 }, none, "sample__a-1") ?? "", /sample__a-1 has not ended/);
+  assert.match(
+    orderRefusal("baseline", 1, { baseline: 0, treatment: 0 }, none, "sample__a-1") ?? "",
+    /sample__a-1 has not ended/,
+  );
 });

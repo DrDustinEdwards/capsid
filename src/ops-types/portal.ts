@@ -165,7 +165,13 @@ export interface PortalNamespace {
   namespace: string;
   // The queue's circuit breaker: open after the threshold of holder fails in 24 hours,
   // until reset. since is the window's start in audit_log's UTC format.
-  breaker: { open: boolean; failed: number; threshold: number; since: string; reset_at: string | null };
+  breaker: {
+    open: boolean;
+    failed: number;
+    threshold: number;
+    since: string;
+    reset_at: string | null;
+  };
   // Null means no truth report was ever run, which is not an integrity of zero.
   latest_report: { integrity: number | null; generated: string } | null;
   jobs: { queued: number; claimed: number; blocked: number; done_today: number };

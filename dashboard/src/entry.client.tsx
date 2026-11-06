@@ -13,7 +13,9 @@ if (pageBase(window.location.pathname) === DEMO_BASE) installDemoFetch();
 
 // A page the server drew a chart on loads the charts' chunk before it hydrates, so the chart hydrates in place instead
 // of dropping out for a moment (views/charts.ts). A failed load hydrates anyway; the chart's slot says it failed.
-const charts = document.querySelector(".cap-chart, .enarratio") ? loadCharts().catch(() => undefined) : undefined;
+const charts = document.querySelector(".cap-chart, .enarratio")
+  ? loadCharts().catch(() => undefined)
+  : undefined;
 
 void Promise.resolve(charts).then(() =>
   startTransition(() => {

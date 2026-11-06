@@ -22,19 +22,28 @@ export interface AuditArgs {
   row_limit?: number;
 }
 
-export async function siteAudit(env: Env, namespace: string, args: AuditArgs, fetchImpl: FetchLike = fetch) {
+export async function siteAudit(
+  env: Env,
+  namespace: string,
+  args: AuditArgs,
+  fetchImpl: FetchLike = fetch,
+) {
   const maxPages = args.max_pages ?? 50;
   const limit = args.row_limit ?? 50;
   const site = await reportSite(env, namespace, "site audit");
   const { pages, sitemap } = await crawlSite({
     origin: site.origin,
-    fetch: ((input: RequestInfo | URL, init?: RequestInit) => fetchImpl(input instanceof Request ? input.url : String(input), init)) as typeof fetch,
+    fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
+      fetchImpl(input instanceof Request ? input.url : String(input), init)) as typeof fetch,
     maxPages,
   });
   const report = auditPages(pages, { origin: site.origin, sitemap });
   // Errors first, then by check and url, so a cut list keeps the worst.
   const findings = [...report.findings].sort(
-    (a, b) => Number(a.severity !== "error") - Number(b.severity !== "error") || a.check.localeCompare(b.check) || a.url.localeCompare(b.url)
+    (a, b) =>
+      Number(a.severity !== "error") - Number(b.severity !== "error") ||
+      a.check.localeCompare(b.check) ||
+      a.url.localeCompare(b.url),
   );
   return {
     namespace,

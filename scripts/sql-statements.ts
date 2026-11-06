@@ -57,7 +57,9 @@ function tsFilesUnder(root: string): string[] {
   const out: string[] = [];
   const walk = (rel: string) => {
     const dir = rel ? join(root, rel) : root;
-    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
       const next = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory()) walk(next);
       else if (entry.name.endsWith(".ts")) out.push(next);
@@ -76,7 +78,10 @@ export interface ExtractedStatement {
   sql: string;
 }
 
-export function extractStatements(srcDir: string): { statements: ExtractedStatement[]; skipped: ExtractedStatement[] } {
+export function extractStatements(srcDir: string): {
+  statements: ExtractedStatement[];
+  skipped: ExtractedStatement[];
+} {
   const statements: ExtractedStatement[] = [];
   const skipped: ExtractedStatement[] = [];
   for (const name of tsFilesUnder(srcDir)) {
@@ -85,7 +90,9 @@ export function extractStatements(srcDir: string): { statements: ExtractedStatem
     // quote. Both quote styles and backticks, and a leading newline for the
     // multi-line form this codebase mostly uses. Line comments between `.prepare(`
     // and the string are skipped, since several statements carry one there.
-    const calls = text.matchAll(/\.prepare\(\s*(?:\/\/[^\n]*\n\s*)*(`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g);
+    const calls = text.matchAll(
+      /\.prepare\(\s*(?:\/\/[^\n]*\n\s*)*(`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
+    );
     for (const call of calls) {
       const raw = call[1];
       const body = raw.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\'/g, "'");

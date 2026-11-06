@@ -1,5 +1,11 @@
 import type { Env } from "./env";
-import { CF_API, CfReadError, cfGetAll, cloudflareCredentials, type FetchLike } from "./ops-cloudflare";
+import {
+  CF_API,
+  CfReadError,
+  cfGetAll,
+  cloudflareCredentials,
+  type FetchLike,
+} from "./ops-cloudflare";
 
 // The reads behind capsid_admin_read_ops's Cloudflare actions: Access applications and policies, and Email
 // Routing rules and destination addresses. Ruled 2026-09-29, "Capsid MCP roadmap,
@@ -16,7 +22,12 @@ import { CF_API, CfReadError, cfGetAll, cloudflareCredentials, type FetchLike } 
 // Permissions, all on CF_OPS_TOKEN (the steps to add them are in src/ops-cloudflare.ts
 // and docs/portal.md, "The Cloudflare token"). A 403 names the one that is missing.
 
-export const CF_CONFIG_ACTIONS = ["access_apps", "access_policies", "email_rules", "email_addresses"] as const;
+export const CF_CONFIG_ACTIONS = [
+  "access_apps",
+  "access_policies",
+  "email_rules",
+  "email_addresses",
+] as const;
 export type CfConfigAction = (typeof CF_CONFIG_ACTIONS)[number];
 
 export const CF_PERMISSION = {
@@ -76,14 +87,25 @@ type CfConfigResult =
   | { action: "email_rules"; zones: Array<{ zone: string; count: number; rules: EmailRuleOut[] }> }
   | { action: "email_addresses"; count: number; addresses: EmailAddressOut[] };
 
-const text = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v.slice(0, MAX_TEXT) : null);
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const text = (v: unknown): string | null =>
+  typeof v === "string" && v.length > 0 ? v.slice(0, MAX_TEXT) : null;
+const obj = (v: unknown): Record<string, unknown> =>
+  v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-const texts = (v: unknown): string[] => list(v).map(text).filter((s): s is string => s !== null);
+const texts = (v: unknown): string[] =>
+  list(v)
+    .map(text)
+    .filter((s): s is string => s !== null);
 
 /** One list read, with a 403 turned into the permission the token lacks. Any other
  *  failure keeps Cloudflare's own message. */
-async function readAll(fetchImpl: FetchLike, token: string, url: string, what: string, permission: string): Promise<unknown[]> {
+async function readAll(
+  fetchImpl: FetchLike,
+  token: string,
+  url: string,
+  what: string,
+  permission: string,
+): Promise<unknown[]> {
   try {
     return await cfGetAll(fetchImpl, token, url, what, PER_PAGE);
   } catch (err) {
@@ -91,7 +113,7 @@ async function readAll(fetchImpl: FetchLike, token: string, url: string, what: s
       throw new Error(
         `${what} was refused with 403: CF_OPS_TOKEN lacks ${permission}. ` +
           `Add it at dash.cloudflare.com/profile/api-tokens, token capsid-portal-read, Edit (docs/portal.md, "The Cloudflare token"). ` +
-          `Cloudflare said: ${err.message}`
+          `Cloudflare said: ${err.message}`,
       );
     }
     throw err;
@@ -171,16 +193,30 @@ function toEmailRule(raw: unknown): EmailRuleOut {
 function toEmailAddress(raw: unknown): EmailAddressOut {
   const a = obj(raw);
   // Cloudflare's verified is the time of verification, or null while unverified.
-  return { email: text(a.email), verified: typeof a.verified === "string" && a.verified.length > 0 };
+  return {
+    email: text(a.email),
+    verified: typeof a.verified === "string" && a.verified.length > 0,
+  };
 }
 
 /** The zones Email Routing rules are read for: the one named, or every zone in the
  *  account the token can list. A name no zone has fails, never an empty answer. */
-async function zonesFor(fetchImpl: FetchLike, token: string, account: string, zone: string | undefined): Promise<Array<{ id: string; name: string }>> {
+async function zonesFor(
+  fetchImpl: FetchLike,
+  token: string,
+  account: string,
+  zone: string | undefined,
+): Promise<Array<{ id: string; name: string }>> {
   const url = new URL(`${CF_API}/zones`);
   url.searchParams.set("account.id", account);
   if (zone !== undefined) url.searchParams.set("name", zone);
-  const raw = await readAll(fetchImpl, token, url.toString(), "the zones list", CF_PERMISSION.zones);
+  const raw = await readAll(
+    fetchImpl,
+    token,
+    url.toString(),
+    "the zones list",
+    CF_PERMISSION.zones,
+  );
   const zones = raw
     .map((z) => ({ id: text(obj(z).id), name: text(obj(z).name) }))
     .filter((z): z is { id: string; name: string } => z.id !== null && z.name !== null);
@@ -196,7 +232,7 @@ export async function readCloudflareConfig(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
   action: CfConfigAction,
   zone: string | undefined,
-  fetchImpl: FetchLike
+  fetchImpl: FetchLike,
 ): Promise<CfConfigResult> {
   const creds = cloudflareCredentials(env);
   if (!creds.ok) throw new Error(`the Cloudflare read is not configured: ${creds.reason}.`);
@@ -204,26 +240,56 @@ export async function readCloudflareConfig(
   const account = `${CF_API}/accounts/${encodeURIComponent(creds.account)}`;
   switch (action) {
     case "access_apps": {
-      const apps = (await readAll(fetchImpl, token, `${account}/access/apps`, "the Access applications list", CF_PERMISSION.access)).map(toAccessApp);
+      const apps = (
+        await readAll(
+          fetchImpl,
+          token,
+          `${account}/access/apps`,
+          "the Access applications list",
+          CF_PERMISSION.access,
+        )
+      ).map(toAccessApp);
       return { action, count: apps.length, apps };
     }
     case "access_policies": {
-      const policies = (await readAll(fetchImpl, token, `${account}/access/policies`, "the Access policies list", CF_PERMISSION.access)).map(toAccessPolicy);
+      const policies = (
+        await readAll(
+          fetchImpl,
+          token,
+          `${account}/access/policies`,
+          "the Access policies list",
+          CF_PERMISSION.access,
+        )
+      ).map(toAccessPolicy);
       return { action, count: policies.length, policies };
     }
     case "email_rules": {
       const out: Array<{ zone: string; count: number; rules: EmailRuleOut[] }> = [];
       for (const z of await zonesFor(fetchImpl, token, creds.account, zone)) {
         const url = `${CF_API}/zones/${encodeURIComponent(z.id)}/email/routing/rules`;
-        const rules = (await readAll(fetchImpl, token, url, `the Email Routing rules for ${z.name}`, CF_PERMISSION.rules)).map(toEmailRule);
+        const rules = (
+          await readAll(
+            fetchImpl,
+            token,
+            url,
+            `the Email Routing rules for ${z.name}`,
+            CF_PERMISSION.rules,
+          )
+        ).map(toEmailRule);
         out.push({ zone: z.name, count: rules.length, rules });
       }
       return { action, zones: out };
     }
     case "email_addresses": {
-      const addresses = (await readAll(fetchImpl, token, `${account}/email/routing/addresses`, "the Email Routing addresses list", CF_PERMISSION.addresses)).map(
-        toEmailAddress
-      );
+      const addresses = (
+        await readAll(
+          fetchImpl,
+          token,
+          `${account}/email/routing/addresses`,
+          "the Email Routing addresses list",
+          CF_PERMISSION.addresses,
+        )
+      ).map(toEmailAddress);
       return { action, count: addresses.length, addresses };
     }
   }

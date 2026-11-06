@@ -83,7 +83,9 @@ function median(values: number[]): number | null {
 function verifiedFields(json: string): Record<string, boolean> {
   try {
     const parsed = JSON.parse(json);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, boolean>) : {};
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, boolean>)
+      : {};
   } catch {
     // Corrupt means nothing verified: a rate is withheld, not invented.
     return {};
@@ -93,7 +95,9 @@ function verifiedFields(json: string): Record<string, boolean> {
 export function recordFor(actor: string, rows: RecordRows): AgentRecord {
   const mine = rows.outcomes.filter((o) => o.agent === actor);
   const jobsByStatus = (status: string) =>
-    rows.jobs.filter((r) => r.actor === actor && r.status === status).reduce((total, r) => total + r.n, 0);
+    rows.jobs
+      .filter((r) => r.actor === actor && r.status === status)
+      .reduce((total, r) => total + r.n, 0);
 
   // Every outcome row carries the counts; only the verified ones feed the rates.
   const prVerified = mine.filter((o) => verifiedFields(o.verified).prs_opened === true);
@@ -104,8 +108,12 @@ export function recordFor(actor: string, rows: RecordRows): AgentRecord {
   const prsMerged = mergeVerified.reduce((total, o) => total + (o.prs_merged ?? 0), 0);
   const prsOpenedForRate = mergeVerified.reduce((total, o) => total + (o.prs_opened ?? 0), 0);
 
-  const ciChecked = mine.filter((o) => verifiedFields(o.verified).ci_green === true && o.ci_green !== null);
-  const durations = mine.map((o) => o.duration_minutes).filter((d): d is number => typeof d === "number");
+  const ciChecked = mine.filter(
+    (o) => verifiedFields(o.verified).ci_green === true && o.ci_green !== null,
+  );
+  const durations = mine
+    .map((o) => o.duration_minutes)
+    .filter((d): d is number => typeof d === "number");
 
   return {
     actor,
@@ -125,7 +133,10 @@ export function recordFor(actor: string, rows: RecordRows): AgentRecord {
 }
 
 // One record per credential.
-export function recordsFrom(agents: RecordSubject[], rows: RecordRows): Record<string, AgentRecord> {
+export function recordsFrom(
+  agents: RecordSubject[],
+  rows: RecordRows,
+): Record<string, AgentRecord> {
   const out: Record<string, AgentRecord> = Object.create(null);
   for (const agent of agents) {
     out[agent.name] = recordFor(agentActor(agent.name), rows);
@@ -143,18 +154,21 @@ export async function loadRecordRows(db: D1Database): Promise<RecordRows> {
     .prepare(
       `SELECT agent, prs_opened, prs_merged, ci_green, blocked_count, resumed_count, duration_minutes, verified
        FROM job_outcomes o
-       WHERE NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = o.job_id AND j.status = 'superseded')`
+       WHERE NOT EXISTS (SELECT 1 FROM jobs j WHERE j.id = o.job_id AND j.status = 'superseded')`,
     )
     .all<RecordRows["outcomes"][number]>();
   const jobs = await db
     .prepare(
       `SELECT claimed_by AS actor, status, COUNT(*) AS n FROM jobs
-       WHERE claimed_by IS NOT NULL GROUP BY claimed_by, status`
+       WHERE claimed_by IS NOT NULL GROUP BY claimed_by, status`,
     )
     .all<{ actor: string; status: string; n: number }>();
   return { outcomes: outcomes.results ?? [], jobs: jobs.results ?? [] };
 }
 
-export async function loadAgentRecords(db: D1Database, agents: RecordSubject[]): Promise<Record<string, AgentRecord>> {
+export async function loadAgentRecords(
+  db: D1Database,
+  agents: RecordSubject[],
+): Promise<Record<string, AgentRecord>> {
   return recordsFrom(agents, await loadRecordRows(db));
 }

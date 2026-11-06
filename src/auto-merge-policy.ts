@@ -69,7 +69,8 @@ export const AUTO_MERGE_SIZE_CAP = 1000;
 
 /** Whether a pull request's changed lines are over the size cap. Uncounted is not over it;
  *  the policy refuses an uncounted pull request on its own. */
-export const overSizeCap = (facts: Pick<PrFacts, "changedLines">): boolean => facts.changedLines !== null && facts.changedLines > AUTO_MERGE_SIZE_CAP;
+export const overSizeCap = (facts: Pick<PrFacts, "changedLines">): boolean =>
+  facts.changedLines !== null && facts.changedLines > AUTO_MERGE_SIZE_CAP;
 
 /** The reason a pull request over the cap carries, in the merge class and the decline. */
 export const sizeCapReason = (facts: Pick<PrFacts, "changedLines">): string =>
@@ -80,23 +81,44 @@ export const sizeCapReason = (facts: Pick<PrFacts, "changedLines">): string =>
 // case-insensitively against the repo-relative path; the document lists each source.
 export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /^src\/gate-policy\.ts$/i, why: "the gate policy source" },
-  { pattern: /^src\/auto-merge(-(policy|tick))?\.ts$/i, why: "the auto-merge source, which holds this list" },
+  {
+    pattern: /^src\/auto-merge(-(policy|tick))?\.ts$/i,
+    why: "the auto-merge source, which holds this list",
+  },
   { pattern: /^src\/policy-sign\.ts$/i, why: "the policy signer" },
   { pattern: /^src\/protected-paths\.ts$/i, why: "the protected path list" },
   // The sources the checks read their answers from, not only the ones that run them.
   // Each is a two-step route otherwise: a green driver PR weakens the source and
   // merges on its own, and the next PR passes the check it weakened.
-  { pattern: /^src\/scope\.ts$/i, why: "isMoneyPath, which is the whole of the paths_not_money check" },
-  { pattern: /^src\/signed-docs\.ts$/i, why: "verifySignedBody, which is how loadMergePolicy decides the stored policy is signed" },
-  { pattern: /^src\/auth\.ts$/i, why: "the HMAC and the constant-time comparison that verifier delegates to" },
-  { pattern: /^src\/encoding\.ts$/i, why: "the hex encoding of the signature that verifier compares" },
-  { pattern: /^src\/github\/client\.ts$/i, why: "the reader that supplies the changed paths and the CI facts every check judges" },
+  {
+    pattern: /^src\/scope\.ts$/i,
+    why: "isMoneyPath, which is the whole of the paths_not_money check",
+  },
+  {
+    pattern: /^src\/signed-docs\.ts$/i,
+    why: "verifySignedBody, which is how loadMergePolicy decides the stored policy is signed",
+  },
+  {
+    pattern: /^src\/auth\.ts$/i,
+    why: "the HMAC and the constant-time comparison that verifier delegates to",
+  },
+  {
+    pattern: /^src\/encoding\.ts$/i,
+    why: "the hex encoding of the signature that verifier compares",
+  },
+  {
+    pattern: /^src\/github\/client\.ts$/i,
+    why: "the reader that supplies the changed paths and the CI facts every check judges",
+  },
   // dustinedwards-info's judge files. The list stays one list rather than one per
   // namespace: every pattern is a refusal, so a namespace inheriting another's pattern
   // can only refuse more, and a list split per namespace would be a second place to
   // forget a pattern.
   { pattern: /^\.github\/workflows\//i, why: "any workflow, which is what CI runs" },
-  { pattern: /^scripts\/check-[^/]*\.mjs$/i, why: "a check script, which is what the Gates step runs" },
+  {
+    pattern: /^scripts\/check-[^/]*\.mjs$/i,
+    why: "a check script, which is what the Gates step runs",
+  },
   { pattern: /^scripts\/lib\//i, why: "the library those check scripts read their rules from" },
   { pattern: /(^|\/)\.aislop\//i, why: "the slop checker's word lists and allowances" },
   { pattern: /(^|\/)workers\//i, why: "a worker that ships beside the site" },
@@ -109,14 +131,23 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   { pattern: /(^|\/)tsconfig[^/]*\.json$/i, why: "what the typechecks check" },
   { pattern: /(^|\/)vitest\.config\.[cm]?[jt]s$/i, why: "the integration suite's configuration" },
   { pattern: /^scripts\/test-budget\.mjs$/i, why: "the runner behind npm test" },
-  { pattern: /^scripts\/verify-live\.mjs$/i, why: "the live gate, whose rollback is the backstop for an unattended merge" },
+  {
+    pattern: /^scripts\/verify-live\.mjs$/i,
+    why: "the live gate, whose rollback is the backstop for an unattended merge",
+  },
   // Install, build and deploy glue. A namespace with no allowed-path limit merged these
   // on green, though each runs in CI or ships (Grok audit 2026-10, U2). Lockfiles are
   // no_migration_workflow_lockfile's, below.
   { pattern: /(^|\/)scripts\//i, why: "a script CI, a build or a deploy runs" },
   { pattern: /(^|\/)\.github\//i, why: "CI configuration beyond the workflows" },
-  { pattern: /(^|\/)package\.json$/i, why: "a nested package manifest, whose scripts and dependencies an install runs" },
-  { pattern: /(^|\/)(pnpm-workspace\.yaml|\.pnpmfile\.cjs|\.yarnrc[^/]*)$/i, why: "install configuration or a hook that runs during install" },
+  {
+    pattern: /(^|\/)package\.json$/i,
+    why: "a nested package manifest, whose scripts and dependencies an install runs",
+  },
+  {
+    pattern: /(^|\/)(pnpm-workspace\.yaml|\.pnpmfile\.cjs|\.yarnrc[^/]*)$/i,
+    why: "install configuration or a hook that runs during install",
+  },
   { pattern: /(^|\/)\.npmrc$/i, why: "npm registry and install-script policy" },
   { pattern: /(^|\/)Dockerfile[^/]*$/i, why: "the image a build runs in" },
   { pattern: /(^|\/)Makefile$/i, why: "build glue CI executes" },
@@ -126,8 +157,14 @@ export const AUTO_MERGE_REFUSED_PATHS: Array<{ pattern: RegExp; why: string }> =
   // holder writes them. These two sources are what writes them, so a green PR that
   // loosened either could record any PR against any job. The job transitions are
   // src/jobs.ts and the jobs-* modules it re-exports; jobs-schema.ts writes nothing.
-  { pattern: /^src\/jobs(-(claim|holder|seat|mirror|transition))?\.ts$/i, why: "the job transitions that write result_ref, which pr_recorded_for_job reads" },
-  { pattern: /^src\/outcome-prs\.ts$/i, why: "the writer of job_outcome_prs, which pr_recorded_for_job reads" },
+  {
+    pattern: /^src\/jobs(-(claim|holder|seat|mirror|transition))?\.ts$/i,
+    why: "the job transitions that write result_ref, which pr_recorded_for_job reads",
+  },
+  {
+    pattern: /^src\/outcome-prs\.ts$/i,
+    why: "the writer of job_outcome_prs, which pr_recorded_for_job reads",
+  },
 ];
 
 function refusedPathHits(paths: string[]): Array<{ path: string; why: string }> {
@@ -150,19 +187,26 @@ function refusedPathHits(paths: string[]): Array<{ path: string; why: string }> 
 // refused paths, so docs/Policy/ is still docs/policy/.
 export const AUTO_MERGE_ALLOWED_PATHS: Record<string, Array<{ pattern: RegExp; why: string }>> = {
   capsid: [
-    { pattern: /^docs\/(?!policy\/).+$/i, why: "a document under docs/, except the policy sources in docs/policy/" },
+    {
+      pattern: /^docs\/(?!policy\/).+$/i,
+      why: "a document under docs/, except the policy sources in docs/policy/",
+    },
     { pattern: /^dashboard\/.+\.css$/i, why: "a Portal stylesheet" },
   ],
 };
 
 /** The allowed-path rule for a namespace, or null when it has no limit. */
 function allowedPathsFor(namespace: string): Array<{ pattern: RegExp; why: string }> | null {
-  return Object.hasOwn(AUTO_MERGE_ALLOWED_PATHS, namespace) ? AUTO_MERGE_ALLOWED_PATHS[namespace] : null;
+  return Object.hasOwn(AUTO_MERGE_ALLOWED_PATHS, namespace)
+    ? AUTO_MERGE_ALLOWED_PATHS[namespace]
+    : null;
 }
 
 /** Every allowed-path pattern as the document writes it, under its namespace's heading. */
 export const namespacedAllowedPaths = (): string[] =>
-  Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) => rows.map((r) => `${ns} / ${r.pattern.source}`));
+  Object.entries(AUTO_MERGE_ALLOWED_PATHS).flatMap(([ns, rows]) =>
+    rows.map((r) => `${ns} / ${r.pattern.source}`),
+  );
 
 // The CI steps a green PR must have run, per namespace. A repo's CI runs its suites as
 // steps of one job, so check-run names cannot show that any of them ran. ci_green reads
@@ -179,7 +223,9 @@ export interface RequiredStep {
   step: string;
 }
 
-const ciStep = (job: string) => (step: string): RequiredStep => ({ workflow: ".github/workflows/ci.yml", job, step });
+const ciStep =
+  (job: string) =>
+  (step: string): RequiredStep => ({ workflow: ".github/workflows/ci.yml", job, step });
 
 export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
   // One typecheck step runs all four configs.
@@ -195,7 +241,9 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
   // skipped it. The Admin MCP job's command steps carry no name, so GitHub reports them
   // as "Run <command>", and those are the names below.
   dustinedwards: [
-    ...["Install", "Migrations, stack and content build, local sync", "Lint", "Gates", "Build"].map(ciStep("Gates, clean checkout")),
+    ...["Install", "Migrations, stack and content build, local sync", "Lint", "Gates", "Build"].map(
+      ciStep("Gates, clean checkout"),
+    ),
     ...[
       "Install",
       "Bootstrap wrangler.jsonc from the example",
@@ -221,7 +269,9 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
       "Install Chromium for the accessibility scan",
       "Run npm run check:a11y",
     ].map(ciStep("check")),
-    ...["Run npm ci", "Run npm run check:conformance", "Run npm run check:plants"].map(ciStep("gates")),
+    ...["Run npm ci", "Run npm run check:conformance", "Run npm run check:plants"].map(
+      ciStep("gates"),
+    ),
   ],
   // Every blocking step of Capsomer's `check` job, read off its ci.yml on main on
   // 2026-10-07. The steps its own file marks warn-only (forced-colors screenshots, size,
@@ -242,7 +292,9 @@ export const AUTO_MERGE_REQUIRED_CI: Record<string, RequiredStep[]> = {
 
 /** The steps that namespace's pull requests must have run, or null when none are written down. */
 export function requiredCiFor(namespace: string): RequiredStep[] | null {
-  const rows = Object.hasOwn(AUTO_MERGE_REQUIRED_CI, namespace) ? AUTO_MERGE_REQUIRED_CI[namespace] : undefined;
+  const rows = Object.hasOwn(AUTO_MERGE_REQUIRED_CI, namespace)
+    ? AUTO_MERGE_REQUIRED_CI[namespace]
+    : undefined;
   return rows && rows.length > 0 ? rows : null;
 }
 
@@ -250,7 +302,9 @@ export const requiredCiLabel = (r: RequiredStep): string => `${r.workflow} / ${r
 
 /** Every required step as the document writes it, under its namespace's heading. */
 export const namespacedCiLabels = (): string[] =>
-  Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) => rows.map((r) => `${ns} / ${requiredCiLabel(r)}`));
+  Object.entries(AUTO_MERGE_REQUIRED_CI).flatMap(([ns, rows]) =>
+    rows.map((r) => `${ns} / ${requiredCiLabel(r)}`),
+  );
 
 export interface MergePolicy {
   version: string;
@@ -287,7 +341,16 @@ const UNITS_HEADING = /^##\s+Auto units\s*$/i;
 // The path classes a unit may promote: every class src/merge-class.ts holds except
 // money (typed forever, design section 8), migration and workflow (each a step outside a
 // merge, class seat). test/policy-change.test.ts holds this to merge-class's list.
-export const PROMOTABLE_PATH_CLASSES: readonly string[] = ["docs", "dashboard-css", "tests", "dashboard-code", "deps-own", "src-routine", "deps-other", "src-worth"];
+export const PROMOTABLE_PATH_CLASSES: readonly string[] = [
+  "docs",
+  "dashboard-css",
+  "tests",
+  "dashboard-code",
+  "deps-own",
+  "src-routine",
+  "deps-other",
+  "src-worth",
+];
 // The heading a required step is filed under: `## Required CI, <namespace>`. A step
 // written before any such heading is a refusal rather than a step belonging to
 // whichever namespace came first.
@@ -300,7 +363,10 @@ const ALLOW_HEADING = /^##\s+Allowed paths,\s*([a-z0-9-]+)\s*$/i;
 export function parseMergePolicy(body: string): { policy: MergePolicy } | { error: string } {
   const version = policyField(body, "version");
   if (!version) {
-    return { error: "the policy document names no version. A merge audited against an unnamed policy cannot be traced to what it allowed." };
+    return {
+      error:
+        "the policy document names no version. A merge audited against an unnamed policy cannot be traced to what it allowed.",
+    };
   }
   const enabled = policyField(body, "enabled");
   if (enabled === null) return { error: "the policy document does not say whether it is enabled." };
@@ -308,7 +374,8 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
     .split(",")
     .map((n) => n.trim())
     .filter(Boolean);
-  if (namespaces.length === 0) return { error: "the policy document covers no namespaces, so it authorizes nothing." };
+  if (namespaces.length === 0)
+    return { error: "the policy document covers no namespaces, so it authorizes nothing." };
   const unknown = namespaces.filter((n) => !onRoster(n));
   if (unknown.length > 0) {
     return {
@@ -339,14 +406,23 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
     const unitItem = UNIT_ITEM.exec(trimmed);
     if (unitItem) {
       // A unit is a widening, so every way it can be malformed refuses the whole document.
-      if (!inUnits) return { error: `the policy lists unit '${unitItem[1]}' outside the ## Auto units section, so whether it is promoted is unstated.` };
+      if (!inUnits)
+        return {
+          error: `the policy lists unit '${unitItem[1]}' outside the ## Auto units section, so whether it is promoted is unstated.`,
+        };
       const m = /^([a-z0-9-]+)\s*\/\s*([a-z-]+)$/.exec(unitItem[1]!.trim());
-      if (!m) return { error: `the policy's unit '${unitItem[1]}' is not '<namespace> / <path class>'.` };
+      if (!m)
+        return { error: `the policy's unit '${unitItem[1]}' is not '<namespace> / <path class>'.` };
       const [, ns, cls] = m;
       if (!PROMOTABLE_PATH_CLASSES.includes(cls!)) {
-        return { error: `the policy's unit '${unitItem[1]}' names path class '${cls}', which is ${cls === "money" || cls === "migration" || cls === "workflow" ? "never promoted to auto" : "not a path class this Worker knows"}. Refusing the whole document rather than guessing what it widens.` };
+        return {
+          error: `the policy's unit '${unitItem[1]}' names path class '${cls}', which is ${cls === "money" || cls === "migration" || cls === "workflow" ? "never promoted to auto" : "not a path class this Worker knows"}. Refusing the whole document rather than guessing what it widens.`,
+        };
       }
-      if (!namespaces.includes(ns!)) return { error: `the policy's unit '${unitItem[1]}' names ${ns}, which the policy does not cover.` };
+      if (!namespaces.includes(ns!))
+        return {
+          error: `the policy's unit '${unitItem[1]}' names ${ns}, which the policy does not cover.`,
+        };
       const unit = `${ns} / ${cls}`;
       if (units.includes(unit)) return { error: `the policy lists unit '${unit}' twice.` };
       units.push(unit);
@@ -361,23 +437,42 @@ export function parseMergePolicy(body: string): { policy: MergePolicy } | { erro
     const step = STEP_ITEM.exec(trimmed);
     if (step) {
       if (!ciNamespace) {
-        return { error: `the policy lists required CI step '${step[1]}' under no namespace heading, so which repo's CI it describes is unstated.` };
+        return {
+          error: `the policy lists required CI step '${step[1]}' under no namespace heading, so which repo's CI it describes is unstated.`,
+        };
       }
       requiredCi.push(`${ciNamespace} / ${step[1]}`);
     }
     const allow = ALLOW_ITEM.exec(trimmed);
     if (allow) {
       if (!allowNamespace) {
-        return { error: `the policy lists allowed path '${allow[1]}' under no namespace heading, so which namespace it limits is unstated.` };
+        return {
+          error: `the policy lists allowed path '${allow[1]}' under no namespace heading, so which namespace it limits is unstated.`,
+        };
       }
       allowedPaths.push(`${allowNamespace} / ${allow[1]}`);
     }
   }
   // Fails closed: a document with no author allowlist loads nothing.
   if (authors.length === 0) {
-    return { error: "the policy document names no PR author, so it authorizes no pull request. Refusing rather than merging with no author allowlist." };
+    return {
+      error:
+        "the policy document names no PR author, so it authorizes no pull request. Refusing rather than merging with no author allowlist.",
+    };
   }
-  return { policy: { version, enabled: enabled.toLowerCase() === "true", namespaces, checks, refusedPaths, allowedPaths, authors, requiredCi, units } };
+  return {
+    policy: {
+      version,
+      enabled: enabled.toLowerCase() === "true",
+      namespaces,
+      checks,
+      refusedPaths,
+      allowedPaths,
+      authors,
+      requiredCi,
+      units,
+    },
+  };
 }
 
 // Both directions: what the document lists and the code does not, and the reverse.
@@ -386,14 +481,23 @@ function listDisagreement(what: string, documented: string[], enforced: string[]
   const undocumented = enforced.filter((e) => !documented.includes(e));
   if (unenforced.length === 0 && undocumented.length === 0) return null;
   const parts: string[] = [];
-  if (undocumented.length > 0) parts.push(`does not list ${undocumented.join(", ")}, which this Worker enforces`);
-  if (unenforced.length > 0) parts.push(`lists ${unenforced.join(", ")}, which this Worker does not enforce`);
+  if (undocumented.length > 0)
+    parts.push(`does not list ${undocumented.join(", ")}, which this Worker enforces`);
+  if (unenforced.length > 0)
+    parts.push(`lists ${unenforced.join(", ")}, which this Worker does not enforce`);
   return `the policy document's ${what} ${parts.join(", and ")}. Refusing rather than merging against a policy that disagrees with the code.`;
 }
 
 /** Read and verify the policy. A missing, unsigned or tampered document merges nothing. */
-export async function loadMergePolicy(env: Env): Promise<{ policy: MergePolicy } | { error: string }> {
-  const read = await readSignedPolicy(env, AUTO_MERGE_POLICY_PATH, "merge policy", "nothing is auto-merged");
+export async function loadMergePolicy(
+  env: Env,
+): Promise<{ policy: MergePolicy } | { error: string }> {
+  const read = await readSignedPolicy(
+    env,
+    AUTO_MERGE_POLICY_PATH,
+    "merge policy",
+    "nothing is auto-merged",
+  );
   if ("error" in read) return read;
   return checkMergePolicyBody(read.body);
 }
@@ -414,14 +518,22 @@ export function checkMergePolicyBody(body: string): { policy: MergePolicy } | { 
   const paths = listDisagreement(
     "refused paths",
     parsed.policy.refusedPaths,
-    AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source)
+    AUTO_MERGE_REFUSED_PATHS.map((p) => p.pattern.source),
   );
   if (paths) return { error: paths };
   // Both directions here too: a limit the document drops would widen a namespace the
   // signer meant to hold narrow, and one it adds would be a limit nothing enforces.
-  const allowed = listDisagreement("allowed paths", parsed.policy.allowedPaths, namespacedAllowedPaths());
+  const allowed = listDisagreement(
+    "allowed paths",
+    parsed.policy.allowedPaths,
+    namespacedAllowedPaths(),
+  );
   if (allowed) return { error: allowed };
-  const steps = listDisagreement("required CI steps", parsed.policy.requiredCi, namespacedCiLabels());
+  const steps = listDisagreement(
+    "required CI steps",
+    parsed.policy.requiredCi,
+    namespacedCiLabels(),
+  );
   if (steps) return { error: steps };
   // A namespace the policy covers with no required CI steps merges nothing. Without
   // this, ci_green's step check would have nothing to compare and would pass on any run
@@ -510,7 +622,8 @@ const MIGRATION_WORKFLOW_LOCKFILE: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /(^|\/)migrations\//i, why: "a migration, which runs against the live database" },
   { pattern: /(^|\/)\.github\/workflows\//i, why: "a workflow, which is what measures the code" },
   {
-    pattern: /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|deno\.lock)$/i,
+    pattern:
+      /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|deno\.lock)$/i,
     why: "a lockfile, which decides what gets installed and executed",
   },
 ];
@@ -525,25 +638,39 @@ export function evaluatePolicy(
   // The promoted unit this PR falls in, when the signed policy lists its namespace and
   // path class under ## Auto units (the tick computes the path class). It widens only
   // paths_allowed_for_namespace: never a refused path, money, a migration or a workflow.
-  promoted: { unit: string } | null = null
+  promoted: { unit: string } | null = null,
 ): PolicyVerdict {
   const passed: PolicyCheck[] = [];
-  const no = (failed: PolicyCheck, why: string): PolicyVerdict => ({ merge: false, failed, why, passed: [...passed] });
+  const no = (failed: PolicyCheck, why: string): PolicyVerdict => ({
+    merge: false,
+    failed,
+    why,
+    passed: [...passed],
+  });
 
   // A path list that was not read whole is not judged on the part that loaded: a
   // refused path on page two would merge that way.
   if (facts.filesProblem) {
-    return no("paths_not_refused", `the changed-file list is incomplete (${facts.filesProblem}), so this PR is not evaluated.`);
+    return no(
+      "paths_not_refused",
+      `the changed-file list is incomplete (${facts.filesProblem}), so this PR is not evaluated.`,
+    );
   }
   const refused = refusedPathHits(facts.changedPaths);
   if (refused.length > 0) {
-    return no("paths_not_refused", `the change touches ${refused.length} path(s) auto-merge refuses: ${refused.map((h) => `${h.path} (${h.why})`).join("; ")}.`);
+    return no(
+      "paths_not_refused",
+      `the change touches ${refused.length} path(s) auto-merge refuses: ${refused.map((h) => `${h.path} (${h.why})`).join("; ")}.`,
+    );
   }
   passed.push("paths_not_refused");
 
   const money = facts.changedPaths.filter((p) => isMoneyPath(p));
   if (money.length > 0) {
-    return no("paths_not_money", `the change touches a billing or payment surface: ${money.join(", ")}.`);
+    return no(
+      "paths_not_money",
+      `the change touches a billing or payment surface: ${money.join(", ")}.`,
+    );
   }
   passed.push("paths_not_money");
 
@@ -559,13 +686,18 @@ export function evaluatePolicy(
   const allowedRules = allowedPathsFor(facts.namespace);
   if (allowedRules) {
     if (facts.changedPaths.length === 0) {
-      return no("paths_allowed_for_namespace", `the PR changes no file, and ${facts.namespace} merges unattended only a change inside its allowed paths.`);
+      return no(
+        "paths_allowed_for_namespace",
+        `the PR changes no file, and ${facts.namespace} merges unattended only a change inside its allowed paths.`,
+      );
     }
-    const outside = facts.changedPaths.filter((p) => !allowedRules.some(({ pattern }) => pattern.test(p)));
+    const outside = facts.changedPaths.filter(
+      (p) => !allowedRules.some(({ pattern }) => pattern.test(p)),
+    );
     if (outside.length > 0 && !promoted) {
       return no(
         "paths_allowed_for_namespace",
-        `${facts.namespace} merges unattended only ${allowedRules.map((r) => r.why).join(" or ")}, and the change also touches ${outside.join(", ")}.`
+        `${facts.namespace} merges unattended only ${allowedRules.map((r) => r.why).join(" or ")}, and the change also touches ${outside.join(", ")}.`,
       );
     }
   }
@@ -574,7 +706,10 @@ export function evaluatePolicy(
   // A fork's head is code nobody holding a credential here pushed. GitHub reports no
   // head repo when the fork was deleted, which is refused the same way.
   if (!facts.headRepo || facts.headRepo.toLowerCase() !== facts.repo.toLowerCase()) {
-    return no("head_in_base_repo", `the PR's head is on ${facts.headRepo ?? "no repo GitHub reports"}, not on ${facts.repo}. A fork's PR waits for the seat.`);
+    return no(
+      "head_in_base_repo",
+      `the PR's head is on ${facts.headRepo ?? "no repo GitHub reports"}, not on ${facts.repo}. A fork's PR waits for the seat.`,
+    );
   }
   passed.push("head_in_base_repo");
 
@@ -584,7 +719,10 @@ export function evaluatePolicy(
   // job checks pass on the unit, and every other check still applies.
   const earned = !facts.jobId && promoted !== null;
   if (!facts.jobId && !earned) {
-    return no("body_names_job", "the PR body names no job id, and its unit has not earned unattended merging, so a person approves it.");
+    return no(
+      "body_names_job",
+      "the PR body names no job id, and its unit has not earned unattended merging, so a person approves it.",
+    );
   }
   passed.push("body_names_job");
 
@@ -593,7 +731,7 @@ export function evaluatePolicy(
   if (!author || !allowedAuthors.some((a) => a.toLowerCase() === author)) {
     return no(
       "pr_author_allowed",
-      `the PR was opened by ${facts.prAuthor ?? "no account GitHub reports"}, which is not on the policy's author allowlist (${allowedAuthors.join(", ") || "empty"}).`
+      `the PR was opened by ${facts.prAuthor ?? "no account GitHub reports"}, which is not on the policy's author allowlist (${allowedAuthors.join(", ") || "empty"}).`,
     );
   }
   passed.push("pr_author_allowed");
@@ -602,7 +740,10 @@ export function evaluatePolicy(
     passed.push("job_handed_on", "pr_recorded_for_job");
   } else {
     if (!facts.jobStatus || !HANDED_ON_STATUSES.includes(facts.jobStatus)) {
-      return no("job_handed_on", `${facts.jobId} is ${facts.jobStatus ?? "in no status"}, not blocked or done, so it has not handed a PR on.`);
+      return no(
+        "job_handed_on",
+        `${facts.jobId} is ${facts.jobStatus ?? "in no status"}, not blocked or done, so it has not handed a PR on.`,
+      );
     }
     passed.push("job_handed_on");
 
@@ -612,21 +753,28 @@ export function evaluatePolicy(
     if (!facts.jobPrUrls.some((recorded) => normalizedPrUrls(recorded).includes(url))) {
       return no(
         "pr_recorded_for_job",
-        `${facts.jobId}'s holder never recorded this PR against it (neither its result_ref nor its outcome PRs name ${url}), so it is not shown to be that job's work.`
+        `${facts.jobId}'s holder never recorded this PR against it (neither its result_ref nor its outcome PRs name ${url}), so it is not shown to be that job's work.`,
       );
     }
     passed.push("pr_recorded_for_job");
   }
 
   if (facts.baseRef !== facts.defaultBranch) {
-    return no("base_is_default_branch", `the PR targets '${facts.baseRef}', not the default branch '${facts.defaultBranch}'.`);
+    return no(
+      "base_is_default_branch",
+      `the PR targets '${facts.baseRef}', not the default branch '${facts.defaultBranch}'.`,
+    );
   }
   passed.push("base_is_default_branch");
 
   if (facts.changedLines === null) {
-    return no("size_within_cap", "GitHub reported no line counts for at least one changed file, so the size cap cannot be judged. A person approves it.");
+    return no(
+      "size_within_cap",
+      "GitHub reported no line counts for at least one changed file, so the size cap cannot be judged. A person approves it.",
+    );
   }
-  if (overSizeCap(facts)) return no("size_within_cap", `${sizeCapReason(facts)}. A person approves it.`);
+  if (overSizeCap(facts))
+    return no("size_within_cap", `${sizeCapReason(facts)}. A person approves it.`);
   passed.push("size_within_cap");
 
   const ci = ciGreenOn(facts);
@@ -642,21 +790,48 @@ export function evaluatePolicy(
  *  green: every check and every required step succeeded. wait: CI has not finished, or its
  *  steps could not be read. red: CI failed, or a required step did not run to success.
  *  never: no required steps are written down for the namespace, so no run shows anything. */
-export function ciGreenOn(facts: Pick<PrFacts, "headSha" | "ciConclusion" | "ciNote" | "ciStepsProblem" | "ciSteps" | "namespace">): { state: "green" | "wait" | "red" | "never"; why: string } {
+export function ciGreenOn(
+  facts: Pick<
+    PrFacts,
+    "headSha" | "ciConclusion" | "ciNote" | "ciStepsProblem" | "ciSteps" | "namespace"
+  >,
+): { state: "green" | "wait" | "red" | "never"; why: string } {
   const sha = facts.headSha.slice(0, 7);
-  if (facts.ciConclusion === null || facts.ciConclusion === "pending") return { state: "wait", why: `CI on ${sha} is ${facts.ciConclusion ?? "not reported"}: ${facts.ciNote}` };
-  if (facts.ciConclusion !== "success") return { state: "red", why: `CI on ${sha} is ${facts.ciConclusion}: ${facts.ciNote}` };
+  if (facts.ciConclusion === null || facts.ciConclusion === "pending")
+    return {
+      state: "wait",
+      why: `CI on ${sha} is ${facts.ciConclusion ?? "not reported"}: ${facts.ciNote}`,
+    };
+  if (facts.ciConclusion !== "success")
+    return { state: "red", why: `CI on ${sha} is ${facts.ciConclusion}: ${facts.ciNote}` };
   if (facts.ciStepsProblem) {
-    return { state: "wait", why: `the CI steps on ${sha} could not be read (${facts.ciStepsProblem}), so the required suites are not shown to have run.` };
+    return {
+      state: "wait",
+      why: `the CI steps on ${sha} could not be read (${facts.ciStepsProblem}), so the required suites are not shown to have run.`,
+    };
   }
   const required = requiredCiFor(facts.namespace);
   if (!required) {
-    return { state: "never", why: `no required CI steps are written down for namespace '${facts.namespace}', so a green run there shows nothing. It waits for the seat.` };
+    return {
+      state: "never",
+      why: `no required CI steps are written down for namespace '${facts.namespace}', so a green run there shows nothing. It waits for the seat.`,
+    };
   }
   const notRun = required.filter(
-    (r) => !facts.ciSteps.some((s) => s.workflow === r.workflow && s.job === r.job && s.step === r.step && s.conclusion === "success")
+    (r) =>
+      !facts.ciSteps.some(
+        (s) =>
+          s.workflow === r.workflow &&
+          s.job === r.job &&
+          s.step === r.step &&
+          s.conclusion === "success",
+      ),
   );
-  if (notRun.length > 0) return { state: "red", why: `CI on ${sha} did not run ${notRun.map(requiredCiLabel).join(", ")} to success.` };
+  if (notRun.length > 0)
+    return {
+      state: "red",
+      why: `CI on ${sha} did not run ${notRun.map(requiredCiLabel).join(", ")} to success.`,
+    };
   return { state: "green", why: `CI on ${sha} is green, with every required step` };
 }
 
@@ -664,16 +839,23 @@ export function ciGreenOn(facts: Pick<PrFacts, "headSha" | "ciConclusion" | "ciN
 // least one must have reported. A PR with no checks is not green: its workflow never
 // started, which cannot be told apart from a workflow that was removed.
 export function ciVerdict(
-  runs: Array<{ name: string; status: string; conclusion: string | null }>
+  runs: Array<{ name: string; status: string; conclusion: string | null }>,
 ): { conclusion: string | null; note: string } {
-  if (runs.length === 0) return { conclusion: null, note: "no check run has reported on this commit" };
+  if (runs.length === 0)
+    return { conclusion: null, note: "no check run has reported on this commit" };
   const pending = runs.filter((r) => r.status !== "completed");
   if (pending.length > 0) {
-    return { conclusion: "pending", note: `${pending.length} check(s) still running: ${pending.map((r) => r.name).join(", ")}` };
+    return {
+      conclusion: "pending",
+      note: `${pending.length} check(s) still running: ${pending.map((r) => r.name).join(", ")}`,
+    };
   }
   const bad = runs.filter((r) => !["success", "skipped", "neutral"].includes(r.conclusion ?? ""));
   if (bad.length > 0) {
-    return { conclusion: "failure", note: `${bad.map((r) => `${r.name}=${r.conclusion ?? "null"}`).join(", ")}` };
+    return {
+      conclusion: "failure",
+      note: `${bad.map((r) => `${r.name}=${r.conclusion ?? "null"}`).join(", ")}`,
+    };
   }
   return { conclusion: "success", note: `${runs.length} check(s) green` };
 }

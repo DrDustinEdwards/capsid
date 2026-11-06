@@ -3,12 +3,29 @@ import { z } from "zod";
 import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
 import { surfaceOf } from "./surface";
 
-import { auditStatement, documentUpsert, guardedCommit, snapshotLive, snapshotTaken } from "../store-guards";
+import {
+  auditStatement,
+  documentUpsert,
+  guardedCommit,
+  snapshotLive,
+  snapshotTaken,
+} from "../store-guards";
 import { normalizeDashes } from "../normalize";
 import { parseLinks, type LinkEdge } from "../links";
 import { JOB_DOC_PREFIX } from "../jobs-schema";
 import { validateDocStatus, validateDocType } from "../doc-meta";
-import { bounded, MAX_BODY, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_LINKS_JSON, MAX_SHA, MAX_TAGS, MAX_TITLE, nsName, docPath } from "../limits";
+import {
+  bounded,
+  MAX_BODY,
+  MAX_DOC_STATUS,
+  MAX_DOC_TYPE,
+  MAX_LINKS_JSON,
+  MAX_SHA,
+  MAX_TAGS,
+  MAX_TITLE,
+  nsName,
+  docPath,
+} from "../limits";
 import { assembleBody } from "../write-modes";
 import { policyWriteRefusal } from "../signed-docs";
 import { concurrentEditWarning } from "../server";
@@ -20,8 +37,14 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // The document tools that change the store: write, restore, delete and move.
 // defineDocOperations in ./docs registers them in the published order.
 
-export async function requireRegisteredNamespace(db: D1Database, namespace: string): Promise<string | null> {
-  const row = await db.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(namespace).first();
+export async function requireRegisteredNamespace(
+  db: D1Database,
+  namespace: string,
+): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT namespace FROM namespaces WHERE namespace = ?1")
+    .bind(namespace)
+    .first();
   if (row) return null;
   return (
     `unknown namespace '${namespace}'. Nothing was written. Documents can only live in a registered namespace, ` +
@@ -41,15 +64,20 @@ export function policyPathsRefusal(
   tool: "write" | "restore" | "delete" | "move",
   namespace: string,
   allowImprovePaths: boolean | undefined,
-  paths: string[]
+  paths: string[],
 ): string | null {
   const allow = allowImprovePaths === true;
   if (allow) {
-    const overrideRefusal = ctx.scope({ ...surfaceOf(tool), namespace, flags: IMPROVE_OVERRIDE_FLAGS });
+    const overrideRefusal = ctx.scope({
+      ...surfaceOf(tool),
+      namespace,
+      flags: IMPROVE_OVERRIDE_FLAGS,
+    });
     if (overrideRefusal) return overrideRefusal;
   }
   for (const path of paths) {
-    const refusal = policyWriteRefusal(namespace, path, allow) ?? jobMirrorRefusal(tool, namespace, path);
+    const refusal =
+      policyWriteRefusal(namespace, path, allow) ?? jobMirrorRefusal(tool, namespace, path);
     if (refusal) return refusal;
   }
   return null;
@@ -59,7 +87,11 @@ export function policyPathsRefusal(
 // projection of the jobs row, written only by the jobs code in the same batch as the
 // row. The brief serves it as a task, so one written here could stand in for a signed job
 // that was never posted (Grok audit 2026-10, M2). No caller and no flag writes one by hand.
-function jobMirrorRefusal(tool: "write" | "restore" | "delete" | "move", namespace: string, path: string): string | null {
+function jobMirrorRefusal(
+  tool: "write" | "restore" | "delete" | "move",
+  namespace: string,
+  path: string,
+): string | null {
   if (!path.startsWith(JOB_DOC_PREFIX)) return null;
   return (
     `${namespace}/${path} is under ${JOB_DOC_PREFIX}, where each document mirrors a job and is written only by capsid_work_jobs. ` +
@@ -78,7 +110,8 @@ function supersedingEdgeRefusal(ctx: ToolCtx, namespace: string, edges: LinkEdge
     const target = `${edge.to_ns}/${edge.to_path}`;
     if (edge.to_ns !== namespace) {
       const refusal = ctx.scope({ ...surfaceOf("write"), grant: "write", namespace: edge.to_ns });
-      if (refusal) return `a ${edge.type} edge to ${target} marks it superseded, so it needs the write grant on ${edge.to_ns}: ${refusal} Nothing was written.`;
+      if (refusal)
+        return `a ${edge.type} edge to ${target} marks it superseded, so it needs the write grant on ${edge.to_ns}: ${refusal} Nothing was written.`;
     }
     if (canonGuarded(ctx.agent, edge.to_ns, edge.to_path)) {
       return `a ${edge.type} edge to ${target} would mark a canon document superseded, which is the seat's change to make. Nothing was written. Use references, or ask the seat.`;
@@ -94,7 +127,7 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
     "write",
     {
       description:
-        "Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: 'replace' (default, full body, needs title and body), 'append' (body is added to the end; no title or confirmation needed), 'patch' (needs find and replace_with; find must occur EXACTLY ONCE or the write is refused), or 'meta' (change type, tags, status or title and leave the body byte-identical). Every response carries sha256 and bytes of the resulting body. Optional if_match: the sha256 of the body you believe is stored; when it does not match, the write is REFUSED and the error carries the current sha256. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of outgoing edges [{\"type\":\"references\",\"to_path\":\"conventions.md\",\"to_ns\":\"capsid\"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace) that replaces this document's outgoing edges; omit it to keep them, pass [] to clear them. CANON: a write to capsid/conventions*.md, any namespace's core.md, or decisions.md and its archived volumes is REFUSED for a key scoped to some namespaces; the admin, the seat and a portfolio-wide key write it like any document. Needs the write grant.",
+        'Create or update a document. Snapshots the prior version and writes an audit log entry. mode selects how body is applied: \'replace\' (default, full body, needs title and body), \'append\' (body is added to the end; no title or confirmation needed), \'patch\' (needs find and replace_with; find must occur EXACTLY ONCE or the write is refused), or \'meta\' (change type, tags, status or title and leave the body byte-identical). Every response carries sha256 and bytes of the resulting body. Optional if_match: the sha256 of the body you believe is stored; when it does not match, the write is REFUSED and the error carries the current sha256. Overwriting with replace or patch needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Optional links: a JSON array of outgoing edges [{"type":"references","to_path":"conventions.md","to_ns":"capsid"}] (types: governs, references, supersedes, replaces, depends-on; to_ns defaults to this namespace) that replaces this document\'s outgoing edges; omit it to keep them, pass [] to clear them. CANON: a write to capsid/conventions*.md, any namespace\'s core.md, or decisions.md and its archived volumes is REFUSED for a key scoped to some namespaces; the admin, the seat and a portfolio-wide key write it like any document. Needs the write grant.',
       inputSchema: {
         namespace: nsName,
         path: docPath,
@@ -118,7 +151,22 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         allow_improve_paths: z.boolean().optional(),
       },
     },
-    async ({ namespace, path, title, body, mode, find, replace_with, type, tags, status, confirm, links, if_match, allow_improve_paths }) => {
+    async ({
+      namespace,
+      path,
+      title,
+      body,
+      mode,
+      find,
+      replace_with,
+      type,
+      tags,
+      status,
+      confirm,
+      links,
+      if_match,
+      allow_improve_paths,
+    }) => {
       const writeMode = mode ?? "replace";
       const typeError = type === undefined ? null : validateDocType(type);
       if (typeError) return fail(typeError);
@@ -126,15 +174,27 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       if (statusError) return fail(statusError);
       const parsedLinks = links === undefined ? null : parseLinks(links, namespace);
       if (parsedLinks && "error" in parsedLinks) return fail(parsedLinks.error);
-      const edgeRefusal = parsedLinks ? supersedingEdgeRefusal(ctx, namespace, parsedLinks.edges) : null;
+      const edgeRefusal = parsedLinks
+        ? supersedingEdgeRefusal(ctx, namespace, parsedLinks.edges)
+        : null;
       if (edgeRefusal) return fail(edgeRefusal);
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
 
       const prior = await db
-        .prepare("SELECT id, title, body, type, status, tags, updated_at FROM documents WHERE namespace = ?1 AND path = ?2")
+        .prepare(
+          "SELECT id, title, body, type, status, tags, updated_at FROM documents WHERE namespace = ?1 AND path = ?2",
+        )
         .bind(namespace, path)
-        .first<{ id: number; title: string | null; body: string | null; type: string | null; status: string | null; tags: string | null; updated_at: string }>();
+        .first<{
+          id: number;
+          title: string | null;
+          body: string | null;
+          type: string | null;
+          status: string | null;
+          tags: string | null;
+          updated_at: string;
+        }>();
 
       // Optimistic concurrency. if_match is the sha256 of the body the caller believes
       // is stored, which every write already returns. A lost update otherwise leaves
@@ -194,12 +254,22 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       });
       if ("error" in assembled) return fail(`${assembled.error} (${namespace}/${path})`);
       body = assembled.body;
-      if (writeMode === "meta" && title === undefined && type === undefined && tags === undefined && status === undefined) {
-        return fail(`mode 'meta' needs at least one of title, type, tags or status to change (${namespace}/${path}).`);
+      if (
+        writeMode === "meta" &&
+        title === undefined &&
+        type === undefined &&
+        tags === undefined &&
+        status === undefined
+      ) {
+        return fail(
+          `mode 'meta' needs at least one of title, type, tags or status to change (${namespace}/${path}).`,
+        );
       }
 
       // The policy-document guard. Refused unless allow_improve_paths was passed.
-      const policyRefusal = policyPathsRefusal(ctx, "write", namespace, allow_improve_paths, [path]);
+      const policyRefusal = policyPathsRefusal(ctx, "write", namespace, allow_improve_paths, [
+        path,
+      ]);
       if (policyRefusal) return fail(policyRefusal);
 
       // A rule document (src/rule-docs.ts) may not be made worse: over its cap and
@@ -210,7 +280,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
 
       // Canon write-protection (src/canon.ts): a key scoped to some namespaces may not
       // change canon.
-      if (canonGuarded(ctx.agent, namespace, path)) return fail(canonRefusal("write", namespace, path));
+      if (canonGuarded(ctx.agent, namespace, path))
+        return fail(canonRefusal("write", namespace, path));
 
       // append and meta are exempt from confirmation. Confirmation exists to stop an
       // accidental clobber of existing text, and an append destroys none: the prior
@@ -238,13 +309,25 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         // the overwrite.
         statements.push(snapshotLive(db, namespace, path));
       }
-      statements.push(documentUpsert(db, namespace, path, title ?? null, body, type ?? null, tags ?? null, status ?? null));
+      statements.push(
+        documentUpsert(
+          db,
+          namespace,
+          path,
+          title ?? null,
+          body,
+          type ?? null,
+          tags ?? null,
+          status ?? null,
+        ),
+      );
       // The prior type, status, tags and title go into the audit params whenever a
       // write changes any of them, and this is the only place they survive:
       // document_versions snapshots title and body only. The snapshot schema stays
       // title plus body, because widening a version row would mean a migration plus a
       // rewrite of every restore path to answer a question the log already answers.
-      const metaChanged = title !== undefined || type !== undefined || tags !== undefined || status !== undefined;
+      const metaChanged =
+        title !== undefined || type !== undefined || tags !== undefined || status !== undefined;
       statements.push(
         auditStatement(db, actor, "write", namespace, path, {
           title,
@@ -255,9 +338,16 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
           updated: Boolean(prior),
           ...(allow_improve_paths === true ? { allow_improve_paths: true } : {}),
           ...(prior && metaChanged
-            ? { prior_meta: { title: prior.title, type: prior.type, status: prior.status, tags: prior.tags } }
+            ? {
+                prior_meta: {
+                  title: prior.title,
+                  type: prior.type,
+                  status: prior.status,
+                  tags: prior.tags,
+                },
+              }
             : {}),
-        })
+        }),
       );
       // links replaces this document's outgoing edges when provided. Left
       // untouched when omitted, so a routine body edit never drops edges.
@@ -270,18 +360,20 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
               `INSERT INTO audit_log (actor, action, namespace, path, params)
                SELECT ?1, 'links', ?2, ?3, json_object('edges', ?4, 'edges_replaced', json_group_array(
                  json_object('type', type, 'to_ns', to_ns, 'to_path', to_path)))
-               FROM document_links WHERE from_ns = ?2 AND from_path = ?3`
+               FROM document_links WHERE from_ns = ?2 AND from_path = ?3`,
             )
             .bind(actor, namespace, path, parsedLinks.edges.length),
-          db.prepare("DELETE FROM document_links WHERE from_ns = ?1 AND from_path = ?2").bind(namespace, path)
+          db
+            .prepare("DELETE FROM document_links WHERE from_ns = ?1 AND from_path = ?2")
+            .bind(namespace, path),
         );
         for (const edge of parsedLinks.edges) {
           statements.push(
             db
               .prepare(
-                "INSERT OR IGNORE INTO document_links (from_ns, from_path, type, to_ns, to_path) VALUES (?1, ?2, ?3, ?4, ?5)"
+                "INSERT OR IGNORE INTO document_links (from_ns, from_path, type, to_ns, to_path) VALUES (?1, ?2, ?3, ?4, ?5)",
               )
-              .bind(namespace, path, edge.type, edge.to_ns, edge.to_path)
+              .bind(namespace, path, edge.type, edge.to_ns, edge.to_path),
           );
         }
       }
@@ -313,8 +405,8 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
             parsedLinks.edges.map((edge) =>
               db
                 .prepare("SELECT 1 AS ok FROM documents WHERE namespace = ?1 AND path = ?2")
-                .bind(edge.to_ns, edge.to_path)
-            )
+                .bind(edge.to_ns, edge.to_path),
+            ),
           );
           danglingTargets = parsedLinks.edges
             .filter((_, i) => (checks[i].results?.length ?? 0) === 0)
@@ -343,7 +435,10 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         snapshotted,
         ...(prior && if_match === undefined
           ? (() => {
-              const warning = concurrentEditWarning(atCommit?.updated_at ?? prior.updated_at, Date.now());
+              const warning = concurrentEditWarning(
+                atCommit?.updated_at ?? prior.updated_at,
+                Date.now(),
+              );
               return warning ? { concurrency_warning: warning } : {};
             })()
           : {}),
@@ -354,6 +449,6 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
             }
           : {}),
       });
-    }
+    },
   );
 }

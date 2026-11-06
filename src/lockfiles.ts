@@ -19,7 +19,12 @@ const asTag = (v: string) => (v.startsWith("v") ? v : `v${v}`);
 
 /** The installed version of each of `names`, for the manifest in `dir` ("" for the root),
  *  from a package-lock.json at `lockDir`. Missing names are left out. */
-export function npmLockVersions(raw: string, lockDir: string, dir: string, names: readonly string[]): Record<string, string> {
+export function npmLockVersions(
+  raw: string,
+  lockDir: string,
+  dir: string,
+  names: readonly string[],
+): Record<string, string> {
   let lock: { packages?: Record<string, { version?: unknown }> };
   try {
     lock = JSON.parse(raw) as typeof lock;
@@ -38,12 +43,21 @@ export function npmLockVersions(raw: string, lockDir: string, dir: string, names
   return out;
 }
 
-const unquote = (s: string) => s.trim().replace(/^'(.*)'$/, "$1").replace(/^"(.*)"$/, "$1");
+const unquote = (s: string) =>
+  s
+    .trim()
+    .replace(/^'(.*)'$/, "$1")
+    .replace(/^"(.*)"$/, "$1");
 const indentOf = (line: string) => line.length - line.trimStart().length;
 
 /** The installed version of each of `names`, for the manifest in `dir`, from a
  *  pnpm-lock.yaml at `lockDir`. Missing names are left out. */
-export function pnpmLockVersions(raw: string, lockDir: string, dir: string, names: readonly string[]): Record<string, string> {
+export function pnpmLockVersions(
+  raw: string,
+  lockDir: string,
+  dir: string,
+  names: readonly string[],
+): Record<string, string> {
   const want = new Set(names);
   const importer = relative(lockDir, dir) || ".";
   const lines = raw.split(/\r?\n/);
@@ -77,7 +91,8 @@ export function pnpmLockVersions(raw: string, lockDir: string, dir: string, name
       }
     } else if (section === "packages") {
       if (indent === 2) pkgKey = unquote(text.replace(/:$/, ""));
-      else if (pkgKey && indent === 4 && text.startsWith("version:")) gitVersions.set(pkgKey, unquote(text.slice("version:".length)));
+      else if (pkgKey && indent === 4 && text.startsWith("version:"))
+        gitVersions.set(pkgKey, unquote(text.slice("version:".length)));
     }
   }
 
@@ -102,7 +117,9 @@ function relative(base: string, dir: string): string {
  *  spelling Renovate writes beside a sha), or the ref itself when that is a version. */
 export function workflowPins(text: string): Array<{ repo: string; pinned: string | null }> {
   const out: Array<{ repo: string; pinned: string | null }> = [];
-  for (const m of text.matchAll(/^\s*-?\s*uses:\s*["']?([A-Za-z0-9-]+\/[A-Za-z0-9._-]+)(?:\/[^@\s"']*)?@([^\s"'#]+)["']?(?:\s*#\s*(v?\d+\.\d+\.\d+))?/gm)) {
+  for (const m of text.matchAll(
+    /^\s*-?\s*uses:\s*["']?([A-Za-z0-9-]+\/[A-Za-z0-9._-]+)(?:\/[^@\s"']*)?@([^\s"'#]+)["']?(?:\s*#\s*(v?\d+\.\d+\.\d+))?/gm,
+  )) {
     const ref = m[2];
     const pinned = m[3] ? asTag(m[3]) : /^v?\d+\.\d+\.\d+$/.test(ref) ? asTag(ref) : null;
     out.push({ repo: m[1].toLowerCase(), pinned });

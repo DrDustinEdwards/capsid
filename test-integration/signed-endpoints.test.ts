@@ -21,7 +21,7 @@ async function hmacHex(key: string, message: string): Promise<string> {
     new TextEncoder().encode(key),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
   const signature = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
   return [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -99,7 +99,11 @@ describe("/backup/credential", () => {
         controller.close();
       },
     });
-    const response = await SELF.fetch("https://capsid.test/backup/credential", { method: "POST", body, duplex: "half" } as RequestInit);
+    const response = await SELF.fetch("https://capsid.test/backup/credential", {
+      method: "POST",
+      body,
+      duplex: "half",
+    } as RequestInit);
     expect(response.status).toBe(413);
     expect(await response.text()).toBe(`request too large: exceeds ${MAX_REPORT_BYTES} bytes`);
   });
@@ -108,14 +112,34 @@ describe("/backup/credential", () => {
 // The Amazon copy's report: the backup key, its own jti scope, and the report stored for
 // the watcher. A refused report must leave the stored one alone.
 describe("/backup/offaccount-report", () => {
-  const sites = Object.fromEntries(OFFACCOUNT_SITES.map((s) => [s, { newest: "2026-11-05T09-00-48-001Z", bytes: 10, recent_bytes: [10], weekly: null, monthly: null }]));
+  const sites = Object.fromEntries(
+    OFFACCOUNT_SITES.map((s) => [
+      s,
+      {
+        newest: "2026-11-05T09-00-48-001Z",
+        bytes: 10,
+        recent_bytes: [10],
+        weekly: null,
+        monthly: null,
+      },
+    ]),
+  );
   it("stores a signed report once, and refuses another key and a replay", async () => {
     const jti = crypto.randomUUID();
-    expect((await backupPost(await otherKey(), { jti, sites }, OFFACCOUNT_REPORT_PATH)).status).toBe(401);
+    expect(
+      (await backupPost(await otherKey(), { jti, sites }, OFFACCOUNT_REPORT_PATH)).status,
+    ).toBe(401);
     expect(await env.APP_KV.get(OFFACCOUNT_REPORT_KEY)).toBeNull();
-    expect((await backupPost(await backupKey(), { jti, sites }, OFFACCOUNT_REPORT_PATH)).status).toBe(204);
-    const stored = await env.APP_KV.get<{ received_at: string; sites: Record<string, unknown> }>(OFFACCOUNT_REPORT_KEY, "json");
+    expect(
+      (await backupPost(await backupKey(), { jti, sites }, OFFACCOUNT_REPORT_PATH)).status,
+    ).toBe(204);
+    const stored = await env.APP_KV.get<{ received_at: string; sites: Record<string, unknown> }>(
+      OFFACCOUNT_REPORT_KEY,
+      "json",
+    );
     expect(stored?.sites).toEqual(sites);
-    expect((await backupPost(await backupKey(), { jti, sites }, OFFACCOUNT_REPORT_PATH)).status).toBe(409);
+    expect(
+      (await backupPost(await backupKey(), { jti, sites }, OFFACCOUNT_REPORT_PATH)).status,
+    ).toBe(409);
   });
 });

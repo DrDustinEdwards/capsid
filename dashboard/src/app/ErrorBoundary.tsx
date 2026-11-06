@@ -3,7 +3,10 @@ import { APP_URL } from "../lib/api";
 
 // A render error shows what broke instead of a blank page. With a fallback it holds one part
 // of a page, so the rest stays up.
-export class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { error: Error | null }> {
+export class ErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ReactNode },
+  { error: Error | null }
+> {
   state = { error: null as Error | null };
 
   static getDerivedStateFromError(error: Error) {

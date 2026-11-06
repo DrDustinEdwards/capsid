@@ -18,7 +18,7 @@ describe("the nightly dump on a migrated D1", () => {
     // indexes it.
     await env.DB.prepare(
       `INSERT INTO documents (namespace, path, title, body, type, status)
-       VALUES ('capsid', 'conventions.md', 'Portfolio-wide conventions', 'Standing rules that apply across all projects.', 'procedural', 'published')`
+       VALUES ('capsid', 'conventions.md', 'Portfolio-wide conventions', 'Standing rules that apply across all projects.', 'procedural', 'published')`,
     ).run();
 
     const result = await runBackup(ENV);
@@ -27,17 +27,31 @@ describe("the nightly dump on a migrated D1", () => {
     expect(result.prune_refused, "the live schema is not the one TABLES lists").toBeNull();
 
     const files = result.json_keys.map((k) => k.slice(result.json_prefix.length));
-    expect(files.filter((f) => !f.startsWith("_")).sort()).toEqual(TABLES.map((t) => `${t}.json.gz`).sort());
-    expect(files.filter((f) => f.startsWith("_")).sort()).toEqual(["_complete.json", "_kv.json", "_schema.json"]);
+    expect(files.filter((f) => !f.startsWith("_")).sort()).toEqual(
+      TABLES.map((t) => `${t}.json.gz`).sort(),
+    );
+    expect(files.filter((f) => f.startsWith("_")).sort()).toEqual([
+      "_complete.json",
+      "_kv.json",
+      "_schema.json",
+    ]);
     expect(files.at(-1)).toBe("_complete.json");
 
-    const schema = JSON.parse(await (await env.MEDIA.get(`${result.json_prefix}_schema.json`))!.text()) as {
+    const schema = JSON.parse(
+      await (await env.MEDIA.get(`${result.json_prefix}_schema.json`))!.text(),
+    ) as {
       schema: Array<{ type: string; name: string }>;
     };
     const tables = schema.schema.filter((e) => e.type === "table").map((e) => e.name);
     for (const t of TABLES) expect(tables).toContain(t);
     expect(tables).toContain("documents_fts");
-    expect(tables.filter((t) => t.startsWith("documents_fts_")), "a shadow table reached the schema").toEqual([]);
-    expect(tables.filter((t) => t.startsWith("_cf_") || t.startsWith("sqlite_")), "an internal table reached the schema").toEqual([]);
+    expect(
+      tables.filter((t) => t.startsWith("documents_fts_")),
+      "a shadow table reached the schema",
+    ).toEqual([]);
+    expect(
+      tables.filter((t) => t.startsWith("_cf_") || t.startsWith("sqlite_")),
+      "an internal table reached the schema",
+    ).toEqual([]);
   });
 });

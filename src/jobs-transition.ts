@@ -26,7 +26,7 @@ export function actorShapeRefusal(action: string, actor: string): JobResult | nu
   if (ACTOR_SHAPE.test(actor)) return null;
   return refuse(
     action,
-    `'${actor}' is not a caller identity this queue can hold a claim for. A claim is recorded against an access: email, a github: login or an agent: name.`
+    `'${actor}' is not a caller identity this queue can hold a claim for. A claim is recorded against an access: email, a github: login or an agent: name.`,
   );
 }
 
@@ -100,13 +100,18 @@ export async function markJobFailed(
   auditAction: string,
   actor: string,
   auditParams: Record<string, unknown>,
-  now: Date
+  now: Date,
 ): Promise<{ failed: true } | { failed: false; current: JobRow | null }> {
-  const failed = { ...job, status: "failed" as const, result_summary: summary, updated_at: now.toISOString() };
+  const failed = {
+    ...job,
+    status: "failed" as const,
+    result_summary: summary,
+    updated_at: now.toISOString(),
+  };
   const committed = await guardedTransition(env, job, [
     env.DB.prepare(
       `UPDATE jobs SET status = 'failed', result_summary = ?2, summary_sig = NULL, updated_at = ?3
-       WHERE id = ?1 AND status = ?4 RETURNING id`
+       WHERE id = ?1 AND status = ?4 RETURNING id`,
     ).bind(job.id, summary, now.toISOString(), fromStatus),
     ...(await mirrorStatements(env, failed, auditAction, actor)),
     jobAudit(env.DB, actor, auditAction, failed, auditParams),
@@ -124,9 +129,16 @@ export async function markJobFailed(
 // and D1 runs a batch as one transaction, so the UPDATE and every record built from
 // `read` commit together or not at all. Returns false when the guard aborted, which
 // means nothing was written and the row changed since `read`.
-export async function guardedTransition(env: Env, read: JobRow, statements: D1PreparedStatement[]): Promise<boolean> {
+export async function guardedTransition(
+  env: Env,
+  read: JobRow,
+  statements: D1PreparedStatement[],
+): Promise<boolean> {
   try {
-    await env.DB.batch([requireJobUnchanged(env.DB, read.id, read.status, read.claimed_by, read.updated_at), ...statements]);
+    await env.DB.batch([
+      requireJobUnchanged(env.DB, read.id, read.status, read.claimed_by, read.updated_at),
+      ...statements,
+    ]);
     return true;
   } catch (err) {
     if (!isMissingRowAbort(err)) throw err;
@@ -135,10 +147,15 @@ export async function guardedTransition(env: Env, read: JobRow, statements: D1Pr
 }
 
 /** The refusal for a job markJobFailed found had already moved. */
-export function movedBeforeFailing(action: string, id: string, current: JobRow | null, why: string): JobResult {
+export function movedBeforeFailing(
+  action: string,
+  id: string,
+  current: JobRow | null,
+  why: string,
+): JobResult {
   return refuse(
     action,
-    `${id} ${why}, but it changed before it could be marked failed: it is now ${current?.status ?? "gone"}${current?.claimed_by ? `, held by ${current.claimed_by}` : ""}. Nothing was written.`
+    `${id} ${why}, but it changed before it could be marked failed: it is now ${current?.status ?? "gone"}${current?.claimed_by ? `, held by ${current.claimed_by}` : ""}. Nothing was written.`,
   );
 }
 
@@ -150,7 +167,11 @@ export function movedBeforeFailing(action: string, id: string, current: JobRow |
 //
 // It goes through recordFor, the same function capsid_read_status action status and the Portal call,
 // so the bar a claim is measured against is the number a human can read on the page.
-export async function recordShortfall(db: D1Database, actor: string, job: JobRow): Promise<string | null> {
+export async function recordShortfall(
+  db: D1Database,
+  actor: string,
+  job: JobRow,
+): Promise<string | null> {
   if (!job.min_record) return null;
   return missingForRecord(recordFor(actor, await loadRecordRows(db)), job.min_record);
 }
@@ -170,16 +191,28 @@ export async function recordShortfall(db: D1Database, actor: string, job: JobRow
 //
 // Fails closed. A read that throws, or a SUM that is not a finite number, returns
 // NaN, and atCorrectionCap treats a budget it cannot read as a budget already spent.
-export async function correctionsForWork(db: D1Database, namespace: string, title: string): Promise<number> {
+export async function correctionsForWork(
+  db: D1Database,
+  namespace: string,
+  title: string,
+): Promise<number> {
   try {
     const row = await db
-      .prepare("SELECT COALESCE(SUM(corrections_count), 0) AS spent FROM jobs WHERE namespace = ?1 AND title = ?2")
+      .prepare(
+        "SELECT COALESCE(SUM(corrections_count), 0) AS spent FROM jobs WHERE namespace = ?1 AND title = ?2",
+      )
       .bind(namespace, title)
       .first<{ spent: number }>();
     const spent = row?.spent;
     return typeof spent === "number" && Number.isFinite(spent) ? spent : Number.NaN;
   } catch (err) {
-    logEvent("CORRECTIONS_READ_FAILED", { message: `CORRECTIONS_READ_FAILED ${namespace}/${title}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "CORRECTIONS_READ_FAILED",
+      {
+        message: `CORRECTIONS_READ_FAILED ${namespace}/${title}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
     return Number.NaN;
   }
 }

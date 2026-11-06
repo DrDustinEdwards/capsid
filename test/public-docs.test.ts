@@ -40,12 +40,16 @@ test("PLANT: no public doc carries private infrastructure identifiers", () => {
   // example config carries placeholders for this reason.
   for (const file of docFiles()) {
     const text = read(file);
-    assert.doesNotMatch(text, /\b[0-9a-f]{32}\b/, `docs/${file} contains something shaped like a Cloudflare resource id`);
+    assert.doesNotMatch(
+      text,
+      /\b[0-9a-f]{32}\b/,
+      `docs/${file} contains something shaped like a Cloudflare resource id`,
+    );
     // A UUID, which is what a D1 database id looks like.
     assert.doesNotMatch(
       text,
       /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/,
-      `docs/${file} contains a UUID`
+      `docs/${file} contains a UUID`,
     );
   }
 });

@@ -18,7 +18,17 @@ export function useTabParam(): string | null {
   return new URLSearchParams(useSearch()).get("tab");
 }
 
-export function PageTabs({ label, path, tabs, current }: { label: string; path: string; tabs: ReadonlyArray<PageTab>; current: string }) {
+export function PageTabs({
+  label,
+  path,
+  tabs,
+  current,
+}: {
+  label: string;
+  path: string;
+  tabs: ReadonlyArray<PageTab>;
+  current: string;
+}) {
   const search = useSearch();
   const hrefFor = (id: string) => {
     const qs = new URLSearchParams(search);

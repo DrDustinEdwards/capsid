@@ -23,6 +23,7 @@ The biggest gaps on a screen are PR approval, supersede, the job digest, parked 
 ## 1. Coverage
 
 **Key:**
+
 - **S**: has a screen.
 - **R**: chat-only by a ruling.
 - **A**: agent or driver step, needs no screen.
@@ -32,57 +33,57 @@ For M rows the last column says whether Dustin needs a screen. Sources are `src/
 
 ### Capsid tools and actions
 
-| Tool: action | Mark | Where, or why |
-|---|---|---|
-| jobs: list | S | Queue (`views/Queue.tsx`), drawer |
-| jobs: resume, release, fail | S | `app/Drawer.tsx:160,165,169` |
-| jobs: claim, heartbeat, complete, block, start | A | drivers (`docs/work-queue.md:3`) |
-| jobs: supersede | M | **Yes.** 250 calls in 14 days, ruled yes. Drawer button with a confirm, and batch for duplicates |
-| jobs: question mark (`OpsJob.question`, `ops-types.ts:218`) | M | **Yes.** Typed but not rendered. Questions are the inbox's main item |
-| jobs: park, unpark | M | **Yes.** `OpsJobStatus` has no `parked` (`ops-types.ts:191`), so parked jobs vanish. Show them under Queue with Unpark. Park is reversible, so Undo |
-| jobs: edit | M | Rarely. Priority and title edits stay chat-only; record a ruling |
-| jobs: post | M | No. Posting is a chat act with a signed body; record chat-only |
-| jobs: list view digest | M | **Yes**, as the inbox's "since you last looked" strip, not a page |
-| jobs: list view plan | M | Yes, as a Queue section "Tonight" (timeline) |
-| jobs: list view models | M | Yes, inside Records > Agents, as the routing learning table (proposals only) |
-| jobs: list stale | M | Yes, it is the Queue's Stale group. Today that group is computed client-side as over 7 days, while the Worker's rule is 3 days. Use the Worker's rules |
-| manage_pr: merge | R | `docs/portal.md:200`. Replaced by `approve_pr` (merge pipeline design) |
-| manage_pr: close, comment | M | Close: **yes**, in the PR card, with a confirm (reopen is possible, so Undo is an option). Comment: no |
-| delete_branch, create_branch | A | automatic after merge; the backup button per the ruling |
-| improve_run: mode, pause, unpause, seat_start, overnight, breaker_reset | S | `views/Namespaces.tsx:82-356` |
-| improve_run: budget | M | Yes, read-only today (`views/Agents.tsx:80`). Editing caps is rare: keep it chat-only, and show the budget as a visual |
-| improve_run: mint_operator_key, sign_policy | R | never mints (`docs/portal.md:200`). Signing stays chat, except the typed `sign_policy_change` in the merge design |
-| improve_run: run, claim, register_skill, skill_transitions | A | loop and skills step |
-| improve_status | S | Namespaces, and Agents' budget panel. `needs_dustin` and `maintenance` are served but not typed for the Portal (`ops-types.ts:480-497`) |
-| agents: list, revoke | S | Agents view, drawer |
-| agents: mint | R | never mints |
-| agents: update_scopes | M | No. Rare and security-sensitive: record chat-only |
-| claims: aggregate, job | S | Claims view |
-| claims: export | M | Yes, as a download button. `aggregate.waits[]` and `usage[]` are served and never rendered: render them as visuals 5 and 6 |
-| ci_status | S (partial) | CI shows the latest run per repo only, with no history |
-| ci_dispatch | M | Rarely. A "Re-run" on a red default branch saves a chat. Optional |
-| ops_snapshot | S | it is the feed |
-| cloudflare_config | R | `docs/portal.md:155` |
-| namespaces | S (partial) | Namespaces roster |
-| register_namespace, update_namespace, delete_namespace | M | No. Admin setup is a few times a year: record chat-only |
-| lint | M | No screen needed. Lint findings arrive as jobs. Record agent-only |
-| docs read tools (list, read, brief, history, backlinks, find, search) and the MCP resource and prompts | M | No. Recommend the ruling the review proposed (knowledge store chat-only) |
-| docs write tools, repo tools | A | agent memory, drivers |
-| controls | S | it is the Portal's registry |
+| Tool: action                                                                                           | Mark        | Where, or why                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| jobs: list                                                                                             | S           | Queue (`views/Queue.tsx`), drawer                                                                                                                      |
+| jobs: resume, release, fail                                                                            | S           | `app/Drawer.tsx:160,165,169`                                                                                                                           |
+| jobs: claim, heartbeat, complete, block, start                                                         | A           | drivers (`docs/work-queue.md:3`)                                                                                                                       |
+| jobs: supersede                                                                                        | M           | **Yes.** 250 calls in 14 days, ruled yes. Drawer button with a confirm, and batch for duplicates                                                       |
+| jobs: question mark (`OpsJob.question`, `ops-types.ts:218`)                                            | M           | **Yes.** Typed but not rendered. Questions are the inbox's main item                                                                                   |
+| jobs: park, unpark                                                                                     | M           | **Yes.** `OpsJobStatus` has no `parked` (`ops-types.ts:191`), so parked jobs vanish. Show them under Queue with Unpark. Park is reversible, so Undo    |
+| jobs: edit                                                                                             | M           | Rarely. Priority and title edits stay chat-only; record a ruling                                                                                       |
+| jobs: post                                                                                             | M           | No. Posting is a chat act with a signed body; record chat-only                                                                                         |
+| jobs: list view digest                                                                                 | M           | **Yes**, as the inbox's "since you last looked" strip, not a page                                                                                      |
+| jobs: list view plan                                                                                   | M           | Yes, as a Queue section "Tonight" (timeline)                                                                                                           |
+| jobs: list view models                                                                                 | M           | Yes, inside Records > Agents, as the routing learning table (proposals only)                                                                           |
+| jobs: list stale                                                                                       | M           | Yes, it is the Queue's Stale group. Today that group is computed client-side as over 7 days, while the Worker's rule is 3 days. Use the Worker's rules |
+| manage_pr: merge                                                                                       | R           | `docs/portal.md:200`. Replaced by `approve_pr` (merge pipeline design)                                                                                 |
+| manage_pr: close, comment                                                                              | M           | Close: **yes**, in the PR card, with a confirm (reopen is possible, so Undo is an option). Comment: no                                                 |
+| delete_branch, create_branch                                                                           | A           | automatic after merge; the backup button per the ruling                                                                                                |
+| improve_run: mode, pause, unpause, seat_start, overnight, breaker_reset                                | S           | `views/Namespaces.tsx:82-356`                                                                                                                          |
+| improve_run: budget                                                                                    | M           | Yes, read-only today (`views/Agents.tsx:80`). Editing caps is rare: keep it chat-only, and show the budget as a visual                                 |
+| improve_run: mint_operator_key, sign_policy                                                            | R           | never mints (`docs/portal.md:200`). Signing stays chat, except the typed `sign_policy_change` in the merge design                                      |
+| improve_run: run, claim, register_skill, skill_transitions                                             | A           | loop and skills step                                                                                                                                   |
+| improve_status                                                                                         | S           | Namespaces, and Agents' budget panel. `needs_dustin` and `maintenance` are served but not typed for the Portal (`ops-types.ts:480-497`)                |
+| agents: list, revoke                                                                                   | S           | Agents view, drawer                                                                                                                                    |
+| agents: mint                                                                                           | R           | never mints                                                                                                                                            |
+| agents: update_scopes                                                                                  | M           | No. Rare and security-sensitive: record chat-only                                                                                                      |
+| claims: aggregate, job                                                                                 | S           | Claims view                                                                                                                                            |
+| claims: export                                                                                         | M           | Yes, as a download button. `aggregate.waits[]` and `usage[]` are served and never rendered: render them as visuals 5 and 6                             |
+| ci_status                                                                                              | S (partial) | CI shows the latest run per repo only, with no history                                                                                                 |
+| ci_dispatch                                                                                            | M           | Rarely. A "Re-run" on a red default branch saves a chat. Optional                                                                                      |
+| ops_snapshot                                                                                           | S           | it is the feed                                                                                                                                         |
+| cloudflare_config                                                                                      | R           | `docs/portal.md:155`                                                                                                                                   |
+| namespaces                                                                                             | S (partial) | Namespaces roster                                                                                                                                      |
+| register_namespace, update_namespace, delete_namespace                                                 | M           | No. Admin setup is a few times a year: record chat-only                                                                                                |
+| lint                                                                                                   | M           | No screen needed. Lint findings arrive as jobs. Record agent-only                                                                                      |
+| docs read tools (list, read, brief, history, backlinks, find, search) and the MCP resource and prompts | M           | No. Recommend the ruling the review proposed (knowledge store chat-only)                                                                               |
+| docs write tools, repo tools                                                                           | A           | agent memory, drivers                                                                                                                                  |
+| controls                                                                                               | S           | it is the Portal's registry                                                                                                                            |
 
 ### Portal-only controls and Worker capabilities
 
-| Capability | Mark | Note |
-|---|---|---|
-| site and package add, edit, remove | S | Settings. Undo instead of confirm (ruled in the review) |
-| Refresh | S | top bar, `r` |
-| `/ops/inbox` | M | **Yes.** Feed it into Needs you and the strip badges (`lib/apps.ts:5-8`) |
-| `/ops/backup` (run a backup now) | M | Rarely. The daily cron covers it. A button on Health is cheap if a failed run is common |
-| `/ops/hooks` sessions | S | Queue "Live sessions" |
-| OTLP usage | M | Yes, as visual 6 (cost) |
-| task ledger (`task_runs`) | S | Incidents "Scheduled tasks" |
-| watcher checks (14) | S | Incidents "Last watcher pass" |
-| `/csp-report`, `/improve/*`, OAuth routes | A | machine routes |
+| Capability                                | Mark | Note                                                                                    |
+| ----------------------------------------- | ---- | --------------------------------------------------------------------------------------- |
+| site and package add, edit, remove        | S    | Settings. Undo instead of confirm (ruled in the review)                                 |
+| Refresh                                   | S    | top bar, `r`                                                                            |
+| `/ops/inbox`                              | M    | **Yes.** Feed it into Needs you and the strip badges (`lib/apps.ts:5-8`)                |
+| `/ops/backup` (run a backup now)          | M    | Rarely. The daily cron covers it. A button on Health is cheap if a failed run is common |
+| `/ops/hooks` sessions                     | S    | Queue "Live sessions"                                                                   |
+| OTLP usage                                | M    | Yes, as visual 6 (cost)                                                                 |
+| task ledger (`task_runs`)                 | S    | Incidents "Scheduled tasks"                                                             |
+| watcher checks (14)                       | S    | Incidents "Last watcher pass"                                                           |
+| `/csp-report`, `/improve/*`, OAuth routes | A    | machine routes                                                                          |
 
 **Totals for master (by row):** S 14, R 5, A 9, **M 22**. Dustin needs 13 of the 22 on a screen. The rest are worth a recorded chat-only or agent-only ruling.
 
@@ -91,6 +92,7 @@ The 13: supersede, question, park and unpark, digest, plan, models, stale (Worke
 ## 2. Grouping by task frequency
 
 **The 30-day audit query was not run.**
+
 - `audit_log` is admin-only. No MCP tool returns audit rows (`read` and `brief` show only `last_actor`).
 - The Portal's `/portal/api/activity` returns at most 50 rows with no date range (`src/portal-activity.ts:9`).
 - This session's instructions allowed the Capsid connector only for job text and documents, and forbid touching live data.
@@ -114,32 +116,33 @@ The range form on `at` uses the `audit_log_at` index (migration 0005). Retention
 
 **Task rank** (14-day counts quoted in the review):
 
-| # | Task | Count | Today | Target |
-|---|---|---|---|---|
-| 1 | Answer a blocked job or question | block 652, resumed 612 | about 5 clicks | 1 tap from Needs you (recommended answer) |
-| 2 | Approve or close a PR | manage_pr 265 | chat only | 1 tap, batch (merge design) |
-| 3 | Supersede a job | 250 | chat only | 2 clicks, batch |
-| 4 | Delete a merged branch | 78 | chat | none: automatic |
-| 5 | Is anything broken? | not counted (reads) | Overview | Health page, glance |
-| 6 | Change automation (pause, loop, overnight) | not counted | Namespaces | Settings > Automation |
-| 7 | Look something up (an audit row, a claim, an agent) | not counted | Activity, Claims, Agents | Records |
+| #   | Task                                                | Count                  | Today                    | Target                                    |
+| --- | --------------------------------------------------- | ---------------------- | ------------------------ | ----------------------------------------- |
+| 1   | Answer a blocked job or question                    | block 652, resumed 612 | about 5 clicks           | 1 tap from Needs you (recommended answer) |
+| 2   | Approve or close a PR                               | manage_pr 265          | chat only                | 1 tap, batch (merge design)               |
+| 3   | Supersede a job                                     | 250                    | chat only                | 2 clicks, batch                           |
+| 4   | Delete a merged branch                              | 78                     | chat                     | none: automatic                           |
+| 5   | Is anything broken?                                 | not counted (reads)    | Overview                 | Health page, glance                       |
+| 6   | Change automation (pause, loop, overnight)          | not counted            | Namespaces               | Settings > Automation                     |
+| 7   | Look something up (an audit row, a claim, an agent) | not counted            | Activity, Claims, Agents | Records                                   |
 
 ### Proposed menu
 
-| Group | Page | Task it serves | Built from |
-|---|---|---|---|
-| **Needs you** | Needs you (home) | 1, 2, 3 | Overview's Needs attention, plus `/ops/inbox`, CI's Awaiting the seat, questions and digest |
-| **Work** | Queue | 3, and watching work move | Queue, plus parked, plan ("Tonight") and Live sessions |
-| | Pull requests | 2 when not urgent; PR history | CI and merges (PR half) |
-| **Health** | Health | 5 | Sites, Deploys, Incidents, Backups and the CI default-branch table folded into one page with sections |
-| **Records** | Activity | 7 | Activity |
-| | Agents and claims | 7, routing learning | Agents and Claims merged. Both answer "how is this agent doing"; Claims becomes a tab |
-| | Packages | 7 | Packages (shown only when configured) |
-| **Settings** | Settings | 6, setup | Settings plus the Namespaces automation panel and roster |
+| Group         | Page              | Task it serves                | Built from                                                                                            |
+| ------------- | ----------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Needs you** | Needs you (home)  | 1, 2, 3                       | Overview's Needs attention, plus `/ops/inbox`, CI's Awaiting the seat, questions and digest           |
+| **Work**      | Queue             | 3, and watching work move     | Queue, plus parked, plan ("Tonight") and Live sessions                                                |
+|               | Pull requests     | 2 when not urgent; PR history | CI and merges (PR half)                                                                               |
+| **Health**    | Health            | 5                             | Sites, Deploys, Incidents, Backups and the CI default-branch table folded into one page with sections |
+| **Records**   | Activity          | 7                             | Activity                                                                                              |
+|               | Agents and claims | 7, routing learning           | Agents and Claims merged. Both answer "how is this agent doing"; Claims becomes a tab                 |
+|               | Packages          | 7                             | Packages (shown only when configured)                                                                 |
+| **Settings**  | Settings          | 6, setup                      | Settings plus the Namespaces automation panel and roster                                              |
 
 That is 8 pages, down from 13.
 
 **Dropped as pages:**
+
 - Overview: its tiles move to the top of Health, and its attention list becomes Needs you.
 - Sites, Deploys, Incidents and Backups: these become sections of Health.
 - CI: split between Health (default branches) and Pull requests.
@@ -153,6 +156,7 @@ None of their content is removed (conventions 1.3); it moves.
 **Phone tabs.** Needs you, Queue, Health and More. More holds Pull requests, Records and Settings. Needs you carries the badge count.
 
 **Desktop.** The left rail keeps the four groups. Badges:
+
 - Needs you: count of items;
 - Health: critical count;
 - Queue: blocked count, minus what Needs you already shows. One number, one place.
@@ -160,27 +164,29 @@ None of their content is removed (conventions 1.3); it moves.
 ## 3. Visuals
 
 Rules:
+
 - Each visual answers one named question.
 - Each is drawn with an Enarratio primitive (`capsid/research/enarratio-coverage.md`: all needed types exist) and carries its `*Table` companion as the text equivalent.
 - No decorative charts. A table stays wherever the question is a lookup.
 
 **Two prerequisites:**
+
 1. **How the Portal gets Enarratio** is still that research's DECIDE 1. It recommends a client-side call, after measuring size against the 105 KB initial and 40 KB per-lazy-chunk budget (`dashboard/scripts/size-budget.mjs`). Enarratio is not a dashboard dependency today, and the current charts are hand-drawn SVG in `dashboard/src/ui/charts.tsx`.
 2. **The feed has no series longer than 7 days.** The longest are uptime rings, 10 deploys per site, 7 days of PRs, and 24 hours of ended jobs. Visuals 1, 2, 5, 6 and 7 need one new read-only admin route, `/portal/api/trends?weeks=8`, returning the shapes below from `audit_log`, `job_touches`, `job_outcomes`, `pr_approvals` and `deploy_outcomes`.
 
-| # | Page | Question | Primitive | Data shape (real types) |
-|---|---|---|---|---|
-| 1 | Needs you, header | Am I spending less time on this than last month? | `sparkline`, 8 weeks, with "vs last week" as text in a Capsomer stat tile | `{week: "2026-W41", minutes: 47, decisions: 31}[]`. Minutes computed per the review's section 8: audit and touch rows by `access:` or the admin, sessions split at a 5-minute gap, plus 1 minute per session |
-| 2 | Needs you, header | Where does waiting go? | `barChart` stacked horizontal, one bar per gate class | `ClaimsWaitRow` (`ops-types.ts:619`: `gate_class`, `ended_by`, `waits`, `waited_ms_median`) |
-| 3 | Queue | Is the queue growing or draining? | `areaChart` stacked over 14 days: queued, claimed, blocked, parked | `{day, queued, claimed, blocked, parked}[]`, derived from job transitions in `audit_log` (`job-*` actions). The feed has only current state |
-| 4 | Queue, "Tonight" | What will run overnight, and what was skipped? | `timeline`, lanes per repo | the `jobs` list view `plan`: per repo, ordered jobs with estimated minutes, plus skipped with reason |
-| 5 | Agents | Does each agent's claim match what was verified? | `barChart` grouped: agree, disagree, unclaimed, unchecked per agent | `ClaimsGroup.evaluations` (`ops-types.ts:603`, `ClaimsAgreementCounts`) |
-| 6 | Agents | What does the work cost, and is it on budget? | `lineChart` weekly cost with the monthly cap as a reference line | `ClaimsUsageRow` (`ops-types.ts:640`, telemetry beside reported) and `OpsLoop.budget{caps, spend}` (`ops-types.ts:314`) |
-| 7 | Pull requests | How much merges with no human, and is that rising? | `barChart` stacked weekly: auto, approved, seat-merged, closed. Rollbacks as `lineChart` event markers | `auto-merged`, `approved-merged` and `manage_pr` merge audit rows. `deploy_outcomes` for the markers (merge design) |
-| 8 | Health, top | Is every site up, and since when? | `uptimeStrip` per site (exists as `UptimeTicks`) | `SiteSnapshot.ring` (336 slots, `ops-types.ts:62`) |
-| 9 | Health, Deploys | Did a deploy cause errors? | `lineChart` error rate with deploy event markers (exists as `ErrorChart`) | `SiteCloudflare.errors24: HourBucket[]`, `deploys: CfDeploy[]` (`ops-types.ts:25-46`) |
-| 10 | Health, Backups | Is every retention slot filled? | `uptimeStrip` three rows: 14 daily, 8 weekly, 6 monthly | the backup run list by age. Today only `HealthSnapshot.backup.age_hours`. Needs the R2 listing in the snapshot |
-| 11 | Health, CI | Which repos are red, and for how long? | `heatStrip`, repo by day, 14 days | `CiObservation` holds only the latest run, so this needs CI history in the trends route |
+| #   | Page              | Question                                           | Primitive                                                                                              | Data shape (real types)                                                                                                                                                                                      |
+| --- | ----------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Needs you, header | Am I spending less time on this than last month?   | `sparkline`, 8 weeks, with "vs last week" as text in a Capsomer stat tile                              | `{week: "2026-W41", minutes: 47, decisions: 31}[]`. Minutes computed per the review's section 8: audit and touch rows by `access:` or the admin, sessions split at a 5-minute gap, plus 1 minute per session |
+| 2   | Needs you, header | Where does waiting go?                             | `barChart` stacked horizontal, one bar per gate class                                                  | `ClaimsWaitRow` (`ops-types.ts:619`: `gate_class`, `ended_by`, `waits`, `waited_ms_median`)                                                                                                                  |
+| 3   | Queue             | Is the queue growing or draining?                  | `areaChart` stacked over 14 days: queued, claimed, blocked, parked                                     | `{day, queued, claimed, blocked, parked}[]`, derived from job transitions in `audit_log` (`job-*` actions). The feed has only current state                                                                  |
+| 4   | Queue, "Tonight"  | What will run overnight, and what was skipped?     | `timeline`, lanes per repo                                                                             | the `jobs` list view `plan`: per repo, ordered jobs with estimated minutes, plus skipped with reason                                                                                                         |
+| 5   | Agents            | Does each agent's claim match what was verified?   | `barChart` grouped: agree, disagree, unclaimed, unchecked per agent                                    | `ClaimsGroup.evaluations` (`ops-types.ts:603`, `ClaimsAgreementCounts`)                                                                                                                                      |
+| 6   | Agents            | What does the work cost, and is it on budget?      | `lineChart` weekly cost with the monthly cap as a reference line                                       | `ClaimsUsageRow` (`ops-types.ts:640`, telemetry beside reported) and `OpsLoop.budget{caps, spend}` (`ops-types.ts:314`)                                                                                      |
+| 7   | Pull requests     | How much merges with no human, and is that rising? | `barChart` stacked weekly: auto, approved, seat-merged, closed. Rollbacks as `lineChart` event markers | `auto-merged`, `approved-merged` and `manage_pr` merge audit rows. `deploy_outcomes` for the markers (merge design)                                                                                          |
+| 8   | Health, top       | Is every site up, and since when?                  | `uptimeStrip` per site (exists as `UptimeTicks`)                                                       | `SiteSnapshot.ring` (336 slots, `ops-types.ts:62`)                                                                                                                                                           |
+| 9   | Health, Deploys   | Did a deploy cause errors?                         | `lineChart` error rate with deploy event markers (exists as `ErrorChart`)                              | `SiteCloudflare.errors24: HourBucket[]`, `deploys: CfDeploy[]` (`ops-types.ts:25-46`)                                                                                                                        |
+| 10  | Health, Backups   | Is every retention slot filled?                    | `uptimeStrip` three rows: 14 daily, 8 weekly, 6 monthly                                                | the backup run list by age. Today only `HealthSnapshot.backup.age_hours`. Needs the R2 listing in the snapshot                                                                                               |
+| 11  | Health, CI        | Which repos are red, and for how long?             | `heatStrip`, repo by day, 14 days                                                                      | `CiObservation` holds only the latest run, so this needs CI history in the trends route                                                                                                                      |
 
 **Kept as tables:** Activity, Settings, the Agents roster and Claims "By check". Those are lookups or edits, where a table is the faster answer (NN/g, "Data Tables: Four Major User Tasks").
 

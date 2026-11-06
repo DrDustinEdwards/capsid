@@ -24,12 +24,18 @@ function fresh(prefix: string): { ns: string; id: (n: number) => string } {
 }
 
 async function mapNamespace(ns: string, repo: string): Promise<void> {
-  await env.DB.prepare("INSERT INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(ns, JSON.stringify([{ repo, label: "primary" }])).run();
+  await env.DB.prepare("INSERT INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind(ns, JSON.stringify([{ repo, label: "primary" }]))
+    .run();
 }
 
-async function queue(id: string, ns: string, over: { priority?: number; gate?: number; title?: string } = {}): Promise<void> {
+async function queue(
+  id: string,
+  ns: string,
+  over: { priority?: number; gate?: number; title?: string } = {},
+): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO jobs (id, namespace, title, body, status, priority, gate_required, posted_by) VALUES (?1, ?2, ?3, 'body', 'queued', ?4, ?5, 'github:sample')`
+    `INSERT INTO jobs (id, namespace, title, body, status, priority, gate_required, posted_by) VALUES (?1, ?2, ?3, 'body', 'queued', ?4, ?5, 'github:sample')`,
   )
     .bind(id, ns, over.title ?? `Job ${id}`, over.priority ?? 50, over.gate ?? 0)
     .run();
@@ -48,7 +54,11 @@ describe("the overnight plan on a real D1", () => {
     expect(plan.lanes).toHaveLength(1);
     expect(plan.lanes[0].repo).toBe("example/night");
     // The gated job is planned at its priority (50), between the other two, and marked.
-    expect(plan.lanes[0].jobs.map((j) => [j.id, j.gated])).toEqual([[id(2), false], [id(3), true], [id(1), false]]);
+    expect(plan.lanes[0].jobs.map((j) => [j.id, j.gated])).toEqual([
+      [id(2), false],
+      [id(3), true],
+      [id(1), false],
+    ]);
     expect(plan.skipped.map((s) => s.id)).toEqual([id(4)]);
     // With no policy document every repo is heavy, said aloud.
     expect(plan.policy).toBe("default");
@@ -83,12 +93,21 @@ describe("the overnight plan on a real D1", () => {
     const [c, s] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(s), client.connect(c)]);
     try {
-      const result = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", view: "plan", namespace: ns } })) as { isError?: boolean; content: Array<{ text: string }> };
+      const result = (await client.callTool({
+        name: "capsid_work_jobs",
+        arguments: { action: "list", view: "plan", namespace: ns },
+      })) as { isError?: boolean; content: Array<{ text: string }> };
       expect(result.isError, result.content[0].text).not.toBe(true);
-      const plan = JSON.parse(result.content[0].text) as { lanes: Array<{ jobs: Array<{ id: string }> }>; for_namespace: string };
+      const plan = JSON.parse(result.content[0].text) as {
+        lanes: Array<{ jobs: Array<{ id: string }> }>;
+        for_namespace: string;
+      };
       expect(plan.for_namespace).toBe(ns);
       expect(plan.lanes[0].jobs.map((j) => j.id)).toEqual([id(1)]);
-      const bad = (await client.callTool({ name: "capsid_work_jobs", arguments: { action: "list", view: "digest", since: "yesterday" } })) as { isError?: boolean; content: Array<{ text: string }> };
+      const bad = (await client.callTool({
+        name: "capsid_work_jobs",
+        arguments: { action: "list", view: "digest", since: "yesterday" },
+      })) as { isError?: boolean; content: Array<{ text: string }> };
       expect(bad.isError).toBe(true);
       expect(bad.content[0].text).toMatch(/since must be an ISO 8601 time/);
     } finally {
@@ -103,14 +122,18 @@ describe("the morning digest on a real D1", () => {
     const at = "2026-10-05T03:00:00.000Z";
     const since = "2026-10-05T00:00:00.000Z";
     const job = (n: number, status: string, summary: string | null = null) =>
-      env.DB.prepare(`INSERT INTO jobs (id, namespace, title, body, status, posted_by, result_summary, updated_at) VALUES (?1, ?2, ?3, 'body', ?4, 'github:sample', ?5, ?6)`).bind(id(n), ns, `Job ${n}`, status, summary, at);
+      env.DB.prepare(
+        `INSERT INTO jobs (id, namespace, title, body, status, posted_by, result_summary, updated_at) VALUES (?1, ?2, ?3, 'body', ?4, 'github:sample', ?5, ?6)`,
+      ).bind(id(n), ns, `Job ${n}`, status, summary, at);
     const outcome = (n: number, cost: number | null) =>
       env.DB.prepare(
         `INSERT INTO job_outcomes (job_id, agent, namespace, blocked_count, resumed_count, duration_minutes, result_kind, verified, recorded_at, cost_usd, active_seconds)
-         VALUES (?1, 'agent:sample-driver', ?2, 0, 0, 12, 'pr', '{}', ?3, ?4, ?5)`
+         VALUES (?1, 'agent:sample-driver', ?2, 0, 0, 12, 'pr', '{}', ?3, ?4, ?5)`,
       ).bind(id(n), ns, at, cost, cost === null ? null : 300);
     const claim = (n: number, usage: object | null, action = "complete") =>
-      env.DB.prepare(`INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, ?2, 'agent:sample-driver', ?3, ?4, ?5)`).bind(id(n), action, ns, JSON.stringify(usage ? { claim: { usage } } : { claim: {} }), at);
+      env.DB.prepare(
+        `INSERT INTO job_claims (job_id, action, agent, namespace, raw, recorded_at) VALUES (?1, ?2, 'agent:sample-driver', ?3, ?4, ?5)`,
+      ).bind(id(n), action, ns, JSON.stringify(usage ? { claim: { usage } } : { claim: {} }), at);
     await env.DB.batch([
       job(1, "done"),
       job(2, "done"),
@@ -123,21 +146,33 @@ describe("the morning digest on a real D1", () => {
       claim(3, null),
       // The blocked job's two sessions reported usage; claims on a job are summed.
       claim(4, { cost_usd: 0.5 }, "block"),
-      env.DB.prepare(`INSERT INTO job_outcome_prs (job_id, pr_url, merged) VALUES (?1, 'https://github.com/example/sample/pull/40', 0)`).bind(id(1)),
-      env.DB.prepare(`INSERT INTO job_outcome_prs (job_id, pr_url, merged) VALUES (?1, 'https://github.com/example/sample/pull/39', 1)`).bind(id(1)),
+      env.DB.prepare(
+        `INSERT INTO job_outcome_prs (job_id, pr_url, merged) VALUES (?1, 'https://github.com/example/sample/pull/40', 0)`,
+      ).bind(id(1)),
+      env.DB.prepare(
+        `INSERT INTO job_outcome_prs (job_id, pr_url, merged) VALUES (?1, 'https://github.com/example/sample/pull/39', 1)`,
+      ).bind(id(1)),
     ]);
     const out = await readOvernightDigest(env as never, { namespace: ns, since }, NOW);
     expect(out.truncated).toEqual([]);
     const by = Object.fromEntries(out.finished.map((j) => [j.id, j]));
     expect([by[id(1)].usage_source, by[id(1)].usage.cost_usd]).toEqual(["telemetry", 2.5]);
-    expect([by[id(2)].usage_source, by[id(2)].usage.cost_usd, by[id(2)].usage.active_seconds]).toEqual(["reported", 1.25, 90]);
+    expect([
+      by[id(2)].usage_source,
+      by[id(2)].usage.cost_usd,
+      by[id(2)].usage.active_seconds,
+    ]).toEqual(["reported", 1.25, 90]);
     expect([by[id(3)].usage_source, by[id(3)].usage.cost_usd]).toEqual(["none", null]);
-    expect(out.blocked.map((b) => [b.id, b.usage_source, b.usage.cost_usd])).toEqual([[id(4), "reported", 0.5]]);
-    expect(out.blocked[0].pull_requests).toEqual(["https://github.com/example/sample/pull/41"]);
-    expect(out.pull_requests_ready.map((p) => [p.url.split("/").pop(), p.state, p.source])).toEqual([
-      ["40", "open", "outcome"],
-      ["41", "unchecked", "blocked summary"],
+    expect(out.blocked.map((b) => [b.id, b.usage_source, b.usage.cost_usd])).toEqual([
+      [id(4), "reported", 0.5],
     ]);
+    expect(out.blocked[0].pull_requests).toEqual(["https://github.com/example/sample/pull/41"]);
+    expect(out.pull_requests_ready.map((p) => [p.url.split("/").pop(), p.state, p.source])).toEqual(
+      [
+        ["40", "open", "outcome"],
+        ["41", "unchecked", "blocked summary"],
+      ],
+    );
     expect(out.pull_requests_merged).toBe(1);
     // Per source, never added: the telemetry job's report would not have counted either.
     expect([out.totals.telemetry.jobs, out.totals.telemetry.cost_usd]).toEqual([1, 2.5]);
@@ -147,7 +182,11 @@ describe("the morning digest on a real D1", () => {
 
   it("a window with nothing in it is empty, not an error", async () => {
     const { ns } = fresh("quiet");
-    const out = await readOvernightDigest(env as never, { namespace: ns, since: "2030-01-01T00:00:00.000Z" }, NOW);
+    const out = await readOvernightDigest(
+      env as never,
+      { namespace: ns, since: "2030-01-01T00:00:00.000Z" },
+      NOW,
+    );
     expect(out.finished).toEqual([]);
     expect(out.blocked).toEqual([]);
     expect(out.pull_requests_ready).toEqual([]);
@@ -159,15 +198,27 @@ describe("the overnight switch on a real KV", () => {
   it("setOvernight stores the mode and the decision, improve_status reports them, and leaving the subscription removes the record", async () => {
     await env.APP_KV.delete(OVERNIGHT_MODE_KEY);
     await env.APP_KV.delete(OVERNIGHT_DECISION_KEY);
-    expect((await capsidStatus(env as never, "capsid")).overnight).toEqual({ mode: "off", decision: null });
-    const set = await setOvernight(env as never, "access:admin@example.com", NOW, { value: "subscription", reason: "first supervised night" });
+    expect((await capsidStatus(env as never, "capsid")).overnight).toEqual({
+      mode: "off",
+      decision: null,
+    });
+    const set = await setOvernight(env as never, "access:admin@example.com", NOW, {
+      value: "subscription",
+      reason: "first supervised night",
+    });
     expect(set.mode).toBe("subscription");
     const status = await capsidStatus(env as never, "capsid");
     expect(status.overnight.mode).toBe("subscription");
     expect(status.overnight.decision?.decided_on).toBe("2026-10-04");
     expect(status.overnight.decision?.reason).toBe("first supervised night");
-    await setOvernight(env as never, "access:admin@example.com", NOW, { value: "off", reason: "done" });
+    await setOvernight(env as never, "access:admin@example.com", NOW, {
+      value: "off",
+      reason: "done",
+    });
     expect(await env.APP_KV.get(OVERNIGHT_DECISION_KEY)).toBeNull();
-    expect((await capsidStatus(env as never, "capsid")).overnight).toEqual({ mode: "off", decision: null });
+    expect((await capsidStatus(env as never, "capsid")).overnight).toEqual({
+      mode: "off",
+      decision: null,
+    });
   });
 });

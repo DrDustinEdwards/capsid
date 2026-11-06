@@ -53,7 +53,13 @@ function Archive() {
               </thead>
               <tbody>
                 {rows.map((a) => (
-                  <tr key={a.name} className="click" data-row="" data-open={`agent:${a.name}`} tabIndex={0}>
+                  <tr
+                    key={a.name}
+                    className="click"
+                    data-row=""
+                    data-open={`agent:${a.name}`}
+                    tabIndex={0}
+                  >
                     <td>
                       <b>{a.name}</b>
                       <div className="src">
@@ -65,7 +71,12 @@ function Archive() {
                       {a.archived_at ? (
                         <St kind="nodata">Archived {ago(ms(a.archived_at), now)}</St>
                       ) : (
-                        <St kind="queued">Moves by {new Date(ms(a.revoked_at as string) + ARCHIVE_AFTER_MS).toLocaleDateString()}</St>
+                        <St kind="queued">
+                          Moves by{" "}
+                          {new Date(
+                            ms(a.revoked_at as string) + ARCHIVE_AFTER_MS,
+                          ).toLocaleDateString()}
+                        </St>
                       )}
                     </td>
                     <td data-label="Done / failed / blocked" className="num">
@@ -74,7 +85,9 @@ function Archive() {
                     <td data-label="PRs merged" className="num">
                       {a.prs_merged} of {a.prs_opened}
                     </td>
-                    <td data-label="Last seen">{a.last_seen ? ago(ms(a.last_seen), now) : "never"}</td>
+                    <td data-label="Last seen">
+                      {a.last_seen ? ago(ms(a.last_seen), now) : "never"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -102,7 +115,10 @@ function Access() {
   return (
     <div className="embedded">
       <Panel flush title="AI access" src="each MCP server's owner page">
-        <div className="body faint">Grants you gave AI clients, with Revoke, and every tool call. Each opens on its server after a sign-in.</div>
+        <div className="body faint">
+          Grants you gave AI clients, with Revoke, and every tool call. Each opens on its server
+          after a sign-in.
+        </div>
         <div className="scroll-x">
           <table className="list">
             <thead>
@@ -154,7 +170,13 @@ function Roster() {
               {rosterAgents(live.agents).map((a) => {
                 const st = agentState(a, now);
                 return (
-                  <tr key={a.name} className="click" data-row="" data-open={`agent:${a.name}`} tabIndex={0}>
+                  <tr
+                    key={a.name}
+                    className="click"
+                    data-row=""
+                    data-open={`agent:${a.name}`}
+                    tabIndex={0}
+                  >
                     <td>
                       <b>{a.name}</b>
                       <div className="src">
@@ -171,9 +193,15 @@ function Roster() {
                     <td data-label="PRs merged" className="num">
                       {a.prs_merged} of {a.prs_opened}
                     </td>
-                    <td data-label="Merge rate" className="num">{pct(a.pr_merge_rate, 0)}</td>
-                    <td data-label="CI green" className="num">{pct(a.ci_green_rate, 0)}</td>
-                    <td data-label="Median job" className="num">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</td>
+                    <td data-label="Merge rate" className="num">
+                      {pct(a.pr_merge_rate, 0)}
+                    </td>
+                    <td data-label="CI green" className="num">
+                      {pct(a.ci_green_rate, 0)}
+                    </td>
+                    <td data-label="Median job" className="num">
+                      {a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}
+                    </td>
                     <td data-label="Flags">
                       {a.flags.length ? (
                         a.flags.map((f) => (

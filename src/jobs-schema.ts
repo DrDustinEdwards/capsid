@@ -8,7 +8,15 @@ import { toHex } from "@dustinedwards/site-runtime/encoding";
 
 // parked: wanted but not now (src/jobs-park.ts). Not open, not terminal: it holds no title slot
 // and its mirror stays active.
-export const JOB_STATUSES = ["queued", "claimed", "done", "failed", "blocked", "superseded", "parked"] as const;
+export const JOB_STATUSES = [
+  "queued",
+  "claimed",
+  "done",
+  "failed",
+  "blocked",
+  "superseded",
+  "parked",
+] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 // The states a job still holds a title slot in. The partial unique index names the
@@ -29,7 +37,22 @@ export function isTerminalJobStatus(status: JobStatus): boolean {
   return TERMINAL_JOB_STATUSES.includes(status);
 }
 
-export const JOB_ACTIONS = ["post", "list", "claim", "complete", "record", "fail", "block", "resume", "supersede", "release", "begin", "edit", "park", "unpark"] as const;
+export const JOB_ACTIONS = [
+  "post",
+  "list",
+  "claim",
+  "complete",
+  "record",
+  "fail",
+  "block",
+  "resume",
+  "supersede",
+  "release",
+  "begin",
+  "edit",
+  "park",
+  "unpark",
+] as const;
 
 export const JOBS_ROWS_MAX = 100;
 
@@ -90,7 +113,9 @@ export interface StartedNotice {
   note: string;
 }
 
-export function startedNotice(job: Pick<JobRow, "started_at" | "started_by">): StartedNotice | null {
+export function startedNotice(
+  job: Pick<JobRow, "started_at" | "started_by">,
+): StartedNotice | null {
   if (!job.started_by || !job.started_at) return null;
   return {
     by: job.started_by,
@@ -151,7 +176,9 @@ function parseObject(field: string, json: string): ParsedRequirement<Record<stri
   return { ok: true, value: raw as Record<string, unknown> };
 }
 
-export function parseRequiredScopes(json: string | null | undefined): ParsedRequirement<RequiredScopes> {
+export function parseRequiredScopes(
+  json: string | null | undefined,
+): ParsedRequirement<RequiredScopes> {
   if (!json) return { ok: true, value: { flags: [] } };
   const parsed = parseObject("required_scopes", json);
   if (!parsed.ok) return parsed;
@@ -164,13 +191,19 @@ export function parseRequiredScopes(json: string | null | undefined): ParsedRequ
   const unknown = current.filter((f) => !(SCOPE_FLAGS as readonly unknown[]).includes(f));
   if (unknown.length) {
     const names = unknown.map((f) => JSON.stringify(f)).join(", ");
-    return { ok: false, problem: `required_scopes.flags names ${names}, which ${unknown.length === 1 ? "is not a flag" : "are not flags"}` };
+    return {
+      ok: false,
+      problem: `required_scopes.flags names ${names}, which ${unknown.length === 1 ? "is not a flag" : "are not flags"}`,
+    };
   }
   return { ok: true, value: { flags: current as ScopeFlag[] } };
 }
 
 /** The problem with a job's stored requirements, or null when both read cleanly. */
-export function corruptRequirement(job: { required_scopes: string | null; min_record: string | null }): string | null {
+export function corruptRequirement(job: {
+  required_scopes: string | null;
+  min_record: string | null;
+}): string | null {
   const scopes = parseRequiredScopes(job.required_scopes);
   if (!scopes.ok) return scopes.problem;
   const min = parseMinRecord(job.min_record);
@@ -183,11 +216,20 @@ export function serializeRequiredScopes(required: Partial<RequiredScopes>): stri
 
 // The claim's authorization, through the one enforcement point: the write grant and
 // the namespace for every job, plus the job's own flags. Returns a refusal or null.
-export function missingForJob(agent: Agent, namespace: string, requiredScopes: string | null | undefined): string | null {
+export function missingForJob(
+  agent: Agent,
+  namespace: string,
+  requiredScopes: string | null | undefined,
+): string | null {
   const required = parseRequiredScopes(requiredScopes);
   // Fails closed for a caller that skipped the claim's corrupt check.
   if (!required.ok) return `this job's ${required.problem}, so nothing can be checked against it.`;
-  return checkScope(agent, { tool: JOBS_TOOL, namespace, grant: "write", flags: required.value.flags });
+  return checkScope(agent, {
+    tool: JOBS_TOOL,
+    namespace,
+    grant: "write",
+    flags: required.value.flags,
+  });
 }
 
 /** The namespace half of missingForJob, for a resume that returns a job to its own
@@ -219,7 +261,10 @@ export function parseMinRecord(json: string | null | undefined): ParsedRequireme
   const value = parsed.value.prs_merged;
   if (value === undefined) return { ok: true, value: {} };
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    return { ok: false, problem: `min_record.prs_merged is ${JSON.stringify(value)}, not a whole number of zero or more` };
+    return {
+      ok: false,
+      problem: `min_record.prs_merged is ${JSON.stringify(value)}, not a whole number of zero or more`,
+    };
   }
   return { ok: true, value: { prs_merged: value } };
 }
@@ -230,7 +275,10 @@ export function serializeMinRecord(min: MinRecord): string {
 
 // The bar against the record's numbers, a pure comparison; src/agent-record.ts
 // computes them. Returns a refusal naming the shortfall, or null.
-export function missingForRecord(record: { prs_merged: number }, minRecord: string | null | undefined): string | null {
+export function missingForRecord(
+  record: { prs_merged: number },
+  minRecord: string | null | undefined,
+): string | null {
   const parsed = parseMinRecord(minRecord);
   if (!parsed.ok) return `this job's ${parsed.problem}, so no record can be compared against it.`;
   const { prs_merged } = parsed.value;

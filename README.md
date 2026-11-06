@@ -11,7 +11,7 @@ The repository contains the source of one production deployment, operated by its
 
 [![The Capsid system explorer](docs/images/explorer-light.png)](https://capsid.dustinedwards.info)
 
-*The public system explorer at [capsid.dustinedwards.info](https://capsid.dustinedwards.info), generated daily from Capsid's public data.*
+_The public system explorer at [capsid.dustinedwards.info](https://capsid.dustinedwards.info), generated daily from Capsid's public data._
 
 ## Contents
 
@@ -31,14 +31,14 @@ The repository contains the source of one production deployment, operated by its
 
 Capsid is written in TypeScript and deployed as one Cloudflare Worker. It uses the following bindings:
 
-| Binding | Type | Purpose |
-| --- | --- | --- |
-| `DB` | D1 | Documents, document versions, jobs, agents, namespaces, outcomes and the audit log. Full-text search uses SQLite FTS5. |
-| `APP_KV` | KV | Cached GitHub installation tokens, switches and short-lived state. |
-| `OAUTH_KV` | KV | OAuth grants and client registrations. |
-| `MEDIA` | R2 | Daily database exports and the Markdown mirror of every document. |
-| `AI_SEARCH` | AI Search | A derived semantic index of the documents, used for hybrid search. D1 remains the source of record. |
-| `ASSETS` | Static assets | The built Capsid Portal's browser files (`dashboard/build/client`). |
+| Binding     | Type          | Purpose                                                                                                                |
+| ----------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `DB`        | D1            | Documents, document versions, jobs, agents, namespaces, outcomes and the audit log. Full-text search uses SQLite FTS5. |
+| `APP_KV`    | KV            | Cached GitHub installation tokens, switches and short-lived state.                                                     |
+| `OAUTH_KV`  | KV            | OAuth grants and client registrations.                                                                                 |
+| `MEDIA`     | R2            | Daily database exports and the Markdown mirror of every document.                                                      |
+| `AI_SEARCH` | AI Search     | A derived semantic index of the documents, used for hybrid search. D1 remains the source of record.                    |
+| `ASSETS`    | Static assets | The built Capsid Portal's browser files (`dashboard/build/client`).                                                    |
 
 ### Hosts
 
@@ -51,11 +51,11 @@ The system explorer at `capsid.dustinedwards.info` is a separate, assets-only Wo
 
 ### Authentication
 
-| Caller | Mechanism |
-| --- | --- |
-| Owner and co-owners, through an MCP client or the Portal | Cloudflare Access for SaaS (OIDC), issued as an OAuth access token by `@cloudflare/workers-oauth-provider`. |
-| Agents and scheduled clients | A per-agent bearer key on `/ops/mcp`. Only the key's SHA-256 hash is stored. |
-| Capsid, towards GitHub | A GitHub App. The Worker signs an RS256 JWT and exchanges it for a short-lived installation token; no long-lived GitHub token is stored. |
+| Caller                                                   | Mechanism                                                                                                                                |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner and co-owners, through an MCP client or the Portal | Cloudflare Access for SaaS (OIDC), issued as an OAuth access token by `@cloudflare/workers-oauth-provider`.                              |
+| Agents and scheduled clients                             | A per-agent bearer key on `/ops/mcp`. Only the key's SHA-256 hash is stored.                                                             |
+| Capsid, towards GitHub                                   | A GitHub App. The Worker signs an RS256 JWT and exchanges it for a short-lived installation token; no long-lived GitHub token is stored. |
 
 Every caller resolves to an agent record with a name, a set of scopes and an audit identity. Authorization is checked in one function, `checkScope` in `src/scope.ts`.
 
@@ -63,11 +63,11 @@ Every caller resolves to an agent record with a name, a set of scopes and an aud
 
 Three Cron Triggers are declared, and their expressions are defined once in `src/index.ts`:
 
-| Schedule (UTC) | Task |
-| --- | --- |
-| `*/5 * * * *` | The tick: site watcher, auto-merge evaluation, merge-state sweep, search indexing, phone alerts, the daily email digest, and the daily build of the public model and statistics. |
-| `0 9 * * *` | Database backup to R2, followed by pruning of old document versions and audit rows. |
-| `30 9 * * *` | Weekly skills refresh, which runs on one configured day and posts a job when a model's prompting guide has changed. |
+| Schedule (UTC) | Task                                                                                                                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `*/5 * * * *`  | The tick: site watcher, auto-merge evaluation, merge-state sweep, search indexing, phone alerts, the daily email digest, and the daily build of the public model and statistics. |
+| `0 9 * * *`    | Database backup to R2, followed by pruning of old document versions and audit rows.                                                                                              |
+| `30 9 * * *`   | Weekly skills refresh, which runs on one configured day and posts a job when a model's prompting guide has changed.                                                              |
 
 ## Components
 
@@ -99,11 +99,11 @@ The Portal is a single-page application in `dashboard/`, served by the Worker as
 
 ![The Portal Health view, rendered from sample data](docs/images/health-light.png)
 
-*Portal Health view, rendered from sample data.*
+_Portal Health view, rendered from sample data._
 
 ![The Portal job queue with a job's detail drawer open, rendered from sample data](docs/images/queue-drawer-light.png)
 
-*Portal job queue with a job's detail drawer open, rendered from sample data.*
+_Portal job queue with a job's detail drawer open, rendered from sample data._
 
 ### Site monitoring
 
@@ -127,32 +127,32 @@ Capsid serves 19 tools over two MCP servers. The count is derived from `TOOL_GRA
 
 **Capsid** (`/mcp`, `/ops/mcp`): 11 tools for project work.
 
-| Tool | Grant | Function |
-| --- | --- | --- |
-| `capsid_start_session` | read | Session briefing for a namespace. |
-| `capsid_find_docs` | read | List, glob or full-text search documents; list reachable namespaces. |
-| `capsid_read_doc` | read | Read a document, its versions or its edges. |
-| `capsid_write_doc` | write | Create, change, restore or move a document. |
-| `capsid_delete_doc` | write | Delete a document, retaining its last version. |
-| `capsid_lint_namespace` | per action | Gather, finalize and report on a namespace's documents ([docs/consolidation.md](docs/consolidation.md)). |
-| `capsid_read_repo` | read | List directories, read files and search code in a mapped repository. |
-| `capsid_inspect_repo` | read | Branches, tags, pull requests, history, CI runs, live site checks and search-console data. |
-| `capsid_close_pr` | write | Merge or close a pull request, delete a branch, tag a commit or publish a release. |
-| `capsid_work_jobs` | per action | The work queue lifecycle. |
-| `capsid_read_status` | read | Capsid status per namespace: queue, breaker, maintenance and items awaiting the owner. The name is retained from a removed feature. |
+| Tool                    | Grant      | Function                                                                                                                            |
+| ----------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `capsid_start_session`  | read       | Session briefing for a namespace.                                                                                                   |
+| `capsid_find_docs`      | read       | List, glob or full-text search documents; list reachable namespaces.                                                                |
+| `capsid_read_doc`       | read       | Read a document, its versions or its edges.                                                                                         |
+| `capsid_write_doc`      | write      | Create, change, restore or move a document.                                                                                         |
+| `capsid_delete_doc`     | write      | Delete a document, retaining its last version.                                                                                      |
+| `capsid_lint_namespace` | per action | Gather, finalize and report on a namespace's documents ([docs/consolidation.md](docs/consolidation.md)).                            |
+| `capsid_read_repo`      | read       | List directories, read files and search code in a mapped repository.                                                                |
+| `capsid_inspect_repo`   | read       | Branches, tags, pull requests, history, CI runs, live site checks and search-console data.                                          |
+| `capsid_close_pr`       | write      | Merge or close a pull request, delete a branch, tag a commit or publish a release.                                                  |
+| `capsid_work_jobs`      | per action | The work queue lifecycle.                                                                                                           |
+| `capsid_read_status`    | read       | Capsid status per namespace: queue, breaker, maintenance and items awaiting the owner. The name is retained from a removed feature. |
 
 **Capsid Admin** (`/mcp/admin`): 8 tools, available to the administrator identity only.
 
-| Tool | Grant | Function |
-| --- | --- | --- |
-| `capsid_admin_whats_next` | admin read | Items awaiting the owner across every namespace. |
-| `capsid_admin_manage_namespaces` | admin | Register, remap or delete a namespace. |
-| `capsid_admin_manage_agents` | admin | Mint, revoke and re-scope agent credentials. |
-| `capsid_admin_read_claims` | admin read | Agent claims beside verified outcomes. |
-| `capsid_admin_read_ops` | admin read | Watcher state, Cloudflare Access and Email Routing configuration, Workers Builds. |
-| `capsid_admin_run_controls` | admin | Preview and perform administrative controls with a single-use token. |
-| `capsid_admin_manage_switches` | admin | Operator keys, policy signing, the job breaker and the overnight switch. |
-| `capsid_admin_set_site_key` | admin | Mint a site key and install it on the site Worker. |
+| Tool                             | Grant      | Function                                                                          |
+| -------------------------------- | ---------- | --------------------------------------------------------------------------------- |
+| `capsid_admin_whats_next`        | admin read | Items awaiting the owner across every namespace.                                  |
+| `capsid_admin_manage_namespaces` | admin      | Register, remap or delete a namespace.                                            |
+| `capsid_admin_manage_agents`     | admin      | Mint, revoke and re-scope agent credentials.                                      |
+| `capsid_admin_read_claims`       | admin read | Agent claims beside verified outcomes.                                            |
+| `capsid_admin_read_ops`          | admin read | Watcher state, Cloudflare Access and Email Routing configuration, Workers Builds. |
+| `capsid_admin_run_controls`      | admin      | Preview and perform administrative controls with a single-use token.              |
+| `capsid_admin_manage_switches`   | admin      | Operator keys, policy signing, the job breaker and the overnight switch.          |
+| `capsid_admin_set_site_key`      | admin      | Mint a site key and install it on the site Worker.                                |
 
 Adding a tool requires a recorded ruling (CLAUDE.md, rule 1).
 
@@ -160,33 +160,33 @@ Adding a tool requires a recorded ruling (CLAUDE.md, rule 1).
 
 The router is `defaultHandler` in `src/routes.ts`. The principal routes are:
 
-| Route | Authentication | Purpose |
-| --- | --- | --- |
-| `POST /mcp`, `POST /mcp/admin` | OAuth | MCP over Streamable HTTP for the owner and co-owners. |
-| `POST /ops/mcp` | Bearer key | MCP for agents and scheduled clients. |
-| `/authorize`, `/callback`, `/token`, `/register`, `/.well-known/*` | None | OAuth sign-in and discovery. |
-| `POST /ops/hooks`, `POST /ops/otlp/v1/*` | Bearer key | Claude Code hook events and telemetry. |
-| `GET /ops/inbox`, `POST /ops/inbox/report` | Bearer key | Items awaiting the owner, per application. |
-| `GET /health` | None | Deploy provenance and a store probe; returns 503 when D1 or FTS5 fails. |
-| `GET /public/model/v1.json`, `/public/stats/v1.json`, `/public/code/v1.json`, `/public/versions/v1.json` | None | Public system model, statistics, code maps and package versions. |
-| `/portal/*` | Access session | The Capsid Portal and its API. |
+| Route                                                                                                    | Authentication | Purpose                                                                 |
+| -------------------------------------------------------------------------------------------------------- | -------------- | ----------------------------------------------------------------------- |
+| `POST /mcp`, `POST /mcp/admin`                                                                           | OAuth          | MCP over Streamable HTTP for the owner and co-owners.                   |
+| `POST /ops/mcp`                                                                                          | Bearer key     | MCP for agents and scheduled clients.                                   |
+| `/authorize`, `/callback`, `/token`, `/register`, `/.well-known/*`                                       | None           | OAuth sign-in and discovery.                                            |
+| `POST /ops/hooks`, `POST /ops/otlp/v1/*`                                                                 | Bearer key     | Claude Code hook events and telemetry.                                  |
+| `GET /ops/inbox`, `POST /ops/inbox/report`                                                               | Bearer key     | Items awaiting the owner, per application.                              |
+| `GET /health`                                                                                            | None           | Deploy provenance and a store probe; returns 503 when D1 or FTS5 fails. |
+| `GET /public/model/v1.json`, `/public/stats/v1.json`, `/public/code/v1.json`, `/public/versions/v1.json` | None           | Public system model, statistics, code maps and package versions.        |
+| `/portal/*`                                                                                              | Access session | The Capsid Portal and its API.                                          |
 
 The complete list, including signed backup and benchmark routes, is in [docs/auth.md](docs/auth.md#endpoints).
 
 ## Repository layout
 
-| Path | Contents |
-| --- | --- |
-| `src/` | Worker source. `index.ts` is the entry point; `tools/` holds the MCP tool surface. |
-| `migrations/` | D1 schema migrations, applied in order. |
-| `dashboard/` | The Capsid Portal (Vite) and its Playwright tests. |
-| `explorer/` | The public system explorer, a separate assets-only Worker. |
-| `system/` | The hand-written public system model and its JSON Schema. |
-| `scripts/` | Deploy, agent minting, backup and verification scripts. |
-| `test/` | Unit tests and lint checks. |
-| `test-integration/` | Integration tests run in workerd through `@cloudflare/vitest-plugin`. |
-| `docs/` | Reference documentation. `docs/policy/` holds the reviewable copies of the signed policies. |
-| `wrangler.jsonc.example` | Template for the Worker configuration. The real `wrangler.jsonc` is not committed. |
+| Path                     | Contents                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| `src/`                   | Worker source. `index.ts` is the entry point; `tools/` holds the MCP tool surface.          |
+| `migrations/`            | D1 schema migrations, applied in order.                                                     |
+| `dashboard/`             | The Capsid Portal (Vite) and its Playwright tests.                                          |
+| `explorer/`              | The public system explorer, a separate assets-only Worker.                                  |
+| `system/`                | The hand-written public system model and its JSON Schema.                                   |
+| `scripts/`               | Deploy, agent minting, backup and verification scripts.                                     |
+| `test/`                  | Unit tests and lint checks.                                                                 |
+| `test-integration/`      | Integration tests run in workerd through `@cloudflare/vitest-plugin`.                       |
+| `docs/`                  | Reference documentation. `docs/policy/` holds the reviewable copies of the signed policies. |
+| `wrangler.jsonc.example` | Template for the Worker configuration. The real `wrangler.jsonc` is not committed.          |
 
 ## Installation
 
@@ -204,17 +204,17 @@ An installation requires a Cloudflare account and a GitHub App. The procedure is
 
 ## Development
 
-| Command | Purpose |
-| --- | --- |
-| `npm run check` | Type-check the Worker. |
-| `npm test` | Unit tests. |
-| `npm run test:integration` | Integration tests in workerd. |
-| `npm run lint` | The shared Oxlint config, type-aware (dashboard included). |
-| `npm run lint:repo` | The repository's own lints: dead exports and documentation drift. |
-| `npm run build:dashboard` | Build the Portal and enforce its size budget. |
-| `npm run test:browser` | Portal browser tests (Playwright). |
-| `npm --prefix dashboard run dev` | Serve the Portal locally against sample data. |
-| `EXPECT_SHA=<sha> npm run verify:live` | Verify the deployed Worker. |
+| Command                                | Purpose                                                           |
+| -------------------------------------- | ----------------------------------------------------------------- |
+| `npm run check`                        | Type-check the Worker.                                            |
+| `npm test`                             | Unit tests.                                                       |
+| `npm run test:integration`             | Integration tests in workerd.                                     |
+| `npm run lint`                         | The shared Oxlint config, type-aware (dashboard included).        |
+| `npm run lint:repo`                    | The repository's own lints: dead exports and documentation drift. |
+| `npm run build:dashboard`              | Build the Portal and enforce its size budget.                     |
+| `npm run test:browser`                 | Portal browser tests (Playwright).                                |
+| `npm --prefix dashboard run dev`       | Serve the Portal locally against sample data.                     |
+| `EXPECT_SHA=<sha> npm run verify:live` | Verify the deployed Worker.                                       |
 
 The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#11-checks-before-a-push). Continuous integration runs these checks on every pull request, and a merge to `master` deploys to production.
 

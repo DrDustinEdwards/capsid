@@ -15,7 +15,16 @@ afterEach(async () => {
 
 describe("the Merge units panel's read", () => {
   it("serves the suspensions and proposals, and drops a promote for a suspended unit", async () => {
-    await env.APP_KV.put(SUSPENDED_KEY, JSON.stringify([{ unit: "sample/docs", since: GENERATED, reason: "example/sample#3 merged unattended and was rolled back" }]));
+    await env.APP_KV.put(
+      SUSPENDED_KEY,
+      JSON.stringify([
+        {
+          unit: "sample/docs",
+          since: GENERATED,
+          reason: "example/sample#3 merged unattended and was rolled back",
+        },
+      ]),
+    );
     await env.APP_KV.put(
       REPORT_KEY,
       JSON.stringify({
@@ -23,16 +32,33 @@ describe("the Merge units panel's read", () => {
         suspended: [],
         unplaced: [],
         proposals: [
-          { kind: "demote", unit: "sample/docs", title: "Remove sample docs from auto", evidence: {} },
-          { kind: "promote", unit: "sample/docs", title: "Promote sample docs to auto", evidence: {} },
-          { kind: "promote", unit: "sample/tests", title: "Promote sample tests to auto", evidence: {} },
+          {
+            kind: "demote",
+            unit: "sample/docs",
+            title: "Remove sample docs from auto",
+            evidence: {},
+          },
+          {
+            kind: "promote",
+            unit: "sample/docs",
+            title: "Promote sample docs to auto",
+            evidence: {},
+          },
+          {
+            kind: "promote",
+            unit: "sample/tests",
+            title: "Promote sample tests to auto",
+            evidence: {},
+          },
         ],
-      })
+      }),
     );
     const units = await readMergeUnits(env.APP_KV);
     expect(units.generated).toBe(GENERATED);
     expect(units.suspended.map((s) => s.unit)).toEqual(["sample/docs"]);
-    expect(units.proposals.map((p) => `${p.kind} ${p.unit}`)).toEqual(["demote sample/docs", "promote sample/tests"]);
+    expect(units.proposals.map((p) => `${p.kind} ${p.unit}`)).toEqual([
+      "demote sample/docs",
+      "promote sample/tests",
+    ]);
   });
-
 });

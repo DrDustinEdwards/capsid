@@ -15,7 +15,9 @@ for (const [path, charts] of [
   ["demos/agents", 1],
   ["demos/packages", 1],
 ] as const) {
-  test(`PLANT: with scripts off, ${path} has its ${charts} charts, each drawn with its table`, async ({ page }) => {
+  test(`PLANT: with scripts off, ${path} has its ${charts} charts, each drawn with its table`, async ({
+    page,
+  }) => {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     const frames = page.locator(".cap-chart");
