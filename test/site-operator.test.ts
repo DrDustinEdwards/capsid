@@ -23,6 +23,7 @@ const OPERATOR: SiteOperator = {
   repairs: { "content-drift": "sync_posts", "pages-drift": "sync_pages", "ask-index-drift": "sync_ask" },
   weekly: ["refresh_citations"],
   secrets: ["GITHUB_TOKEN"],
+  backup: false,
 };
 const SITE = { origin: "https://sample.example.com", operator: OPERATOR };
 const ENV = { SAMPLE_OPERATOR_TOKEN: TOKEN } as unknown as Env;
@@ -51,8 +52,9 @@ test("the migration's dustinedwards configuration passes the same rules an edit 
 test("PLANT: a configuration naming backup_media, a write tool or sync_status as a repair is refused whole", () => {
   const base = { path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN" };
   for (const [label, extra, pattern] of [
-    ["backup_media as a repair", { repairs: { "media-backup-drift": "backup_media" } }, /backup_media is not a repair/],
-    ["backup_media weekly", { weekly: ["backup_media"] }, /backup_media is not a repair/],
+    ["backup_media as a repair", { repairs: { "media-backup-drift": "backup_media" } }, /backup_media is a backup, not a repair/],
+    ["backup_media weekly", { weekly: ["backup_media"] }, /backup_media is a backup, not a repair/],
+    ["backup not a boolean", { backup: "yes" }, /backup must be true or false/],
     ["a write tool", { repairs: { "content-drift": "save_post" } }, /'save_post' is not a repair/],
     ["sync_status as a repair", { repairs: { "content-drift": "sync_status" } }, /sync_status is a read/],
     ["a token that is not an operator token", { auth_var: "GITHUB_APP_PRIVATE_KEY" }, /must name a Capsid Worker secret ending in _OPERATOR_TOKEN/],
@@ -65,6 +67,19 @@ test("PLANT: a configuration naming backup_media, a write tool or sync_status as
   }
   assert.equal(repairToolRefusal("sync_media"), null);
   assert.equal(repairToolRefusal("refresh_citations"), null);
+});
+
+test("PLANT: the backup tools go only from the backups and only to a site that sets backup: true; nothing else goes as a backup", async () => {
+  const { calls, impl } = recorder(() => Response.json({ ok: true, data: { last_ok: "2026-11-06T05:00:00.000Z", age_hours: 2 } }));
+  const off = await callOperator(ENV, SITE, "backup_status", impl, { backup: true });
+  assert.match(off.error ?? "", /does not set backup: true/);
+  const on = { origin: SITE.origin, operator: { ...OPERATOR, backup: true } };
+  for (const tool of ["sync_posts", "delete_post"]) assert.match((await callOperator(ENV, on, tool, impl, { backup: true })).error ?? "", /is not a backup tool/);
+  assert.match((await callOperator(ENV, on, "backup_media", impl)).error ?? "", /is a backup, not a repair/, "a repair call cannot reach a backup tool");
+  assert.equal(calls.length, 0, "a refused call reached the site");
+  const read = await callOperator(ENV, on, "backup_status", impl, { backup: true });
+  assert.deepEqual([read.ok, read.data], [true, { last_ok: "2026-11-06T05:00:00.000Z", age_hours: 2 }]);
+  assert.deepEqual(JSON.parse(String(calls[0].init.body)), { tool: "backup_status", args: {} });
 });
 
 test("PLANT: backup_media and an unknown tool are refused at the Worker before any request, even when a stored configuration names them", async () => {

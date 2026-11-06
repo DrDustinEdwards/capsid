@@ -84,7 +84,7 @@ const SITE_ROWS: OpsSiteConfig[] = [
     self_probe: false,
     revision: 1,
     updated_at: "2026-09-28 00:00:00",
-    operator: { path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN", repairs: { "content-drift": "sync_posts" }, weekly: ["refresh_citations"], secrets: [] },
+    operator: { path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN", repairs: { "content-drift": "sync_posts" }, weekly: ["refresh_citations"], secrets: [], backup: true },
     operator_problem: null,
   },
 ];
@@ -341,6 +341,7 @@ const EVERY_ACTION = [
   ["package_edit", { name: "sample-pkg", revision: "1", repo: "example-org/sample-pkg", formerly: "sample-old" }],
   ["package_remove", { name: "sample-pkg", revision: "1" }],
   ["site_repair", { namespace: "sample", tool: "sync_posts" }],
+  ["site_backup", {}],
   ["sign_policy_change", { change: "promote", unit: "capsid/tests", confirm: "11" }],
   ["sign_policy_from_repo", { confirm: "11" }],
   ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
@@ -351,7 +352,7 @@ const EVERY_ACTION = [
   ["site_key_rotate", { namespace: "capsid" }],
 ] as const;
 
-test("the Portal's actions are the five job and agent actions the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the site repair, supersede, park, unpark and PR close, and approve, the two merge resumes, the three project edits and the site key, and every loop below covers each", () => {
+test("the Portal's actions are the five job and agent actions the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the site repair, the site backup, supersede, park, unpark and PR close, and approve, the two merge resumes, the three project edits and the site key, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
@@ -375,6 +376,7 @@ test("the Portal's actions are the five job and agent actions the old /console p
     "sign_policy_change",
     "sign_policy_from_repo",
     "site_add",
+    "site_backup",
     "site_edit",
     "site_key_rotate",
     "site_remove",
@@ -384,7 +386,7 @@ test("the Portal's actions are the five job and agent actions the old /console p
     "unpark_job",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 27);
+  assert.equal(PORTAL_ACTIONS.length, 28);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing

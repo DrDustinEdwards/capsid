@@ -1923,7 +1923,8 @@
             "GITHUB_TOKEN",
             "OPERATOR_TOKEN",
             "SMOKE_TOKEN"
-          ]
+          ],
+          "backup": true
         },
         "operator_problem": null
       },

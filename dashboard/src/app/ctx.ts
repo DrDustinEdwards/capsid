@@ -183,6 +183,7 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   package_edit: "Save changes",
   package_remove: "Remove package",
   site_repair: (p) => `Run ${p.tool ?? "repair"}`,
+  site_backup: (p) => (p.namespace ? `Back up ${p.namespace} now` : "Back up every site now"),
   sign_policy_change: (p) => (p.change === "demote" ? "Sign without the unit" : "Sign and promote"),
   sign_policy_from_repo: "Load from repo and sign",
   unit_resume: "Lift suspension",

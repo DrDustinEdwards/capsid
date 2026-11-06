@@ -3,6 +3,7 @@ import { z } from "zod";
 import { bounded, nsName } from "../limits";
 import { buildLogs, BUILDS_DEFAULT, BUILDS_MAX, listBuilds, LOG_LINES_MAX } from "../workers-builds";
 import { setSiteKey, SITE_SECRET } from "../site-key";
+import { readSiteBackups } from "../site-backup";
 import { whatsNext } from "../whats-next";
 import { fail, ok, type ToolCtx } from "./docs";
 
@@ -41,6 +42,16 @@ export function defineAdminOperations(_server: McpServer, ctx: ToolCtx): void {
       },
     },
     ({ script, namespace, limit }) => run(() => listBuilds(env, { script, namespace, limit }))
+  );
+
+  ctx.ops.define(
+    "site_backups",
+    {
+      description:
+        "Every site's backups, read live: each site with backup: true, its backup_status beside its newest Amazon copy, and Capsid's own dump. Back up now is the site_backup control. Read-only.",
+      inputSchema: {},
+    },
+    () => run(() => readSiteBackups(env))
   );
 
   ctx.ops.define(

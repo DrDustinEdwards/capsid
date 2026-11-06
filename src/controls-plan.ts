@@ -32,6 +32,7 @@ import { planApproval } from "./pr-approvals";
 import { APP_ROSTER } from "./roster";
 import { toolRefusal, tokenSet } from "./site-operator";
 import { limitRefusalFor } from "./site-repair";
+import { backupRefusal, backupSites } from "./site-backup";
 
 // A control's preview (src/controls.ts is the core): reads the current state, writes
 // nothing, and returns what will change and the audit rows it will write.
@@ -474,6 +475,30 @@ export async function planAction(env: Env, email: string, action: PortalAction, 
           `The site re-derives that store from its source and reports a read-back verdict; the result is shown when it returns, up to five minutes. One task_runs row (site-repair) records it.`,
         ],
         audit: [`site-repair by ${actor}`, click],
+      };
+    }
+    case "site_backup": {
+      const now = new Date();
+      if (p.namespace) {
+        const bad = await backupRefusal(env, p.namespace);
+        if (bad) return refused(bad);
+      }
+      const sites = (await backupSites(env)).filter((s) => !p.namespace || s.namespace === p.namespace);
+      if (sites.length === 0) return refused("no site sets backup: true in its operator configuration, so there is nothing to back up.");
+      const lines = await Promise.all(
+        sites.map(async (s) => {
+          const wait = await limitRefusalFor(env, s.namespace, "backup_media", now);
+          const unset = tokenSet(env, s.operator) ? null : `the Capsid Worker secret ${s.operator.auth_var} is not set`;
+          return `${s.namespace}: POST ${s.origin}${s.operator.path} with tool backup_media, authorized by ${s.operator.auth_var}${unset || wait ? `; skipped, ${unset ?? `it waits: ${wait}`}` : ""}.`;
+        })
+      );
+      return {
+        ok: true,
+        changes: [
+          ...lines,
+          "Each site runs its nightly files backup passes now (d1-dump backupFiles: copy only, under files/ in its backups bucket). A pass that hits its time budget goes on where it stopped on the next run. The result is shown when every site answers, up to five minutes. Each call is an audit_log and a task_runs row (site-backup). The tokens are never shown or recorded.",
+        ],
+        audit: [`site-backup by ${actor}`, click],
       };
     }
     case "revoke_agent": {

@@ -64,6 +64,7 @@ import {
 } from "./portal-site";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "./portal-maintenance";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "./portal-convergence";
+import { handlePortalBackups, PORTAL_BACKUPS_PATH } from "./portal-backups";
 import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "./push";
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "./portal-library";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "./portal-trends";
@@ -307,6 +308,7 @@ function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === PORTAL_DIGEST_PATH && request.method === "GET") return handlePortalDigest(request, env);
   if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET") return handlePortalMaintenance(request, env);
   if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET") return handlePortalConvergence(request, env);
+  if (url.pathname === PORTAL_BACKUPS_PATH && request.method === "GET") return handlePortalBackups(request, env);
   if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
   if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET") return handlePortalSharedCode(request, env);
   if (url.pathname === PORTAL_NOT_FOUND_PATH && request.method === "GET") return handlePortalNotFound(request, env);

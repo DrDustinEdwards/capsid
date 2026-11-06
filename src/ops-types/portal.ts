@@ -50,6 +50,9 @@ export type PortalAction =
   | "package_edit"
   | "package_remove"
   | "site_repair"
+  // Back up now (src/site-backup.ts): backup_media on one site or on every site that sets
+  // backup: true in its operator configuration.
+  | "site_backup"
   // The merge units (docs/design/design-merge-pipeline.md section 7): a signed policy
   // change that promotes or removes a unit, and the Undo of a unit's suspension.
   | "sign_policy_change"
@@ -111,6 +114,8 @@ export type PortalAction =
 //   site_repair   { namespace, tool }     one allowlisted tool on a site's operator API
 //                 (src/site-repair.ts); refused for a tool outside the site's list or the
 //                 Worker's ceiling, and while the rate limit holds
+//   site_backup   { namespace? }          backup_media on that site, or with no namespace on
+//                 every site that sets backup: true (src/site-backup.ts); copy only
 //   sign_policy_change { change: "promote" | "demote", unit, confirm, reason? }
 //                 confirm is the policy's next version, typed
 //   sign_policy_from_repo { confirm, reason? }   confirm is the file's version, typed
