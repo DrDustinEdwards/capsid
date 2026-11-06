@@ -78,9 +78,11 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
     case "site_repair":
       return `Run ${params.tool ?? ""} on ${ns} through its operator API. It re-derives one of the site's stores from its source and reports whether it converged. Capsid calls only the site's allowlisted repairs; it never merges and never mints.`;
     case "site_backup":
-      return params.namespace
-        ? `Back up ${params.namespace}'s files now: run its files backup passes through its operator API, the same passes as its nightly cron. Copy only: it writes under files/ in the site's backups bucket and nothing else.`
-        : "Back up every site's files now: run each site's files backup passes through its operator API, at once, the same passes as their nightly crons. Copy only: each writes under files/ in its site's backups bucket and nothing else.";
+      return params.namespace === "capsid"
+        ? "Back up Capsid's own D1 dump now: the nightly 09:00 UTC run, on demand, under the cron's lease."
+        : params.namespace
+          ? `Back up ${params.namespace}'s files now: run its files backup passes through its operator API, the same passes as its nightly cron. Copy only: it writes under files/ in the site's backups bucket and nothing else.`
+          : "Back up every site's files now: run each site's files backup passes through its operator API, at once, the same passes as their nightly crons. Copy only: each writes under files/ in its site's backups bucket and nothing else.";
     case "sign_policy_change":
       return params.change === "demote"
         ? `Write and sign the next version of the auto-merge policy without the merge unit ${params.unit ?? ""}: its pull requests wait for an approval again.`

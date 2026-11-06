@@ -46,7 +46,7 @@ import { planApproval } from "./pr-approvals";
 import { APP_ROSTER } from "./roster";
 import { toolRefusal, tokenSet } from "./site-operator";
 import { limitRefusalFor } from "./site-repair";
-import { backupRefusal, backupSites } from "./site-backup";
+import { backupRefusal, backupSites, CAPSID_DUMP } from "./site-backup";
 
 // A control's preview (src/controls.ts is the core): reads the current state, writes
 // nothing, and returns what will change and the audit rows it will write.
@@ -633,6 +633,14 @@ export async function planAction(
     }
     case "site_backup": {
       const now = new Date();
+      if (p.namespace === CAPSID_DUMP)
+        return {
+          ok: true,
+          changes: [
+            "capsid: run Capsid's own D1 dump now, the same run as the nightly 09:00 UTC cron (d1-dump runCheckedBackup into the backups bucket, then its checks and prunes). It takes the cron's lease, so a run that overlaps the cron skips. One task_runs row (backup) records it.",
+          ],
+          audit: [`site-backup by ${actor}`, click],
+        };
       if (p.namespace) {
         const bad = await backupRefusal(env, p.namespace);
         if (bad) return refused(bad);

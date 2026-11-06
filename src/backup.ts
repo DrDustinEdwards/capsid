@@ -11,6 +11,7 @@ import { REPORT_PREFIX } from "./security-headers";
 import { probeFts } from "./store-probe";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { pruneNotFound } from "@dustinedwards/site-runtime/not-found";
+import type { TaskResult } from "./task-runs";
 import { DAY_MS } from "./time";
 
 const JSON_PREFIX = "backups/json/";
@@ -567,5 +568,32 @@ async function exportAndPrune(env: Env, now: string, lease: string): Promise<Bac
     audit_pruned: history.audit,
     prune_refused: null,
     preflight: { documents: docs.length, fts },
+  };
+}
+
+/** What the run ledger records for a backup run, from the cron and from Capsid Admin's back up now. */
+export function backupTaskResult(result: BackupResult): TaskResult {
+  if (!result.ran) {
+    logEvent(
+      "BACKUP_CRON_SKIPPED",
+      { message: `BACKUP_CRON_SKIPPED ${result.skipped}` },
+      { level: "error" },
+    );
+    return { outcome: "skipped", reason: `skipped: ${result.skipped}` };
+  }
+  if (result.prune_refused !== null) {
+    logEvent(
+      "BACKUP_CRON_REFUSED_PRUNE",
+      { message: `BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}` },
+      { level: "error" },
+    );
+    return {
+      outcome: "refused",
+      reason: `wrote ${result.json_keys.length} dump objects, and the prune refused: ${result.prune_refused}`,
+    };
+  }
+  return {
+    outcome: "ok",
+    reason: `wrote ${result.json_keys.length} dump objects (${result.documents} documents); pruned ${result.json_backups_pruned} dumps (${result.json_backups_locked} locked), ${result.versions_pruned} versions, ${result.audit_pruned} audit rows`,
   };
 }

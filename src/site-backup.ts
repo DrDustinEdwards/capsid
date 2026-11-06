@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { logEvent } from "@dustinedwards/site-runtime/log";
+import { backupTaskResult, runBackup } from "./backup";
 import { backupFreshness } from "./health";
 import { OFFACCOUNT_REPORT_KEY, isOffaccountSite } from "./offaccount";
 import { readSiteConfig, readSiteRow } from "./ops-sites";
@@ -8,7 +9,7 @@ import type { PortalBackups, SiteBackupRow, SiteBackupStatus } from "./ops-types
 import { callOperator, tokenSet, type FetchLike, type OperatorCall } from "./site-operator";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
-import { taskRunStatements } from "./task-runs";
+import { runTask, taskRunStatements } from "./task-runs";
 import { parseDumpStamp, type OffaccountReport } from "./watcher-detect";
 
 // BACKUPS FOR EVERY SITE, IN ONE PLACE (Dustin 2026-11-06, "as recommended"): checking the
@@ -28,8 +29,10 @@ import { parseDumpStamp, type OffaccountReport } from "./watcher-detect";
 //          task_runs row (site-backup), and the per-site rate limit is the repairs' one
 //          (src/site-repair.ts): two minutes between calls of a tool on a site.
 //
-// The D1 dump is not run here: each site's nightly cron runs it under its own lease and
-// checks (d1-dump runCheckedBackup), and a second runner would race it.
+// A site's D1 dump is not run here: each site's nightly cron runs it under its own lease and
+// checks (d1-dump runCheckedBackup), and a second runner would race it. Capsid's own dump is
+// the one exception (CAPSID_DUMP below): this Worker runs it, under the same lease the
+// nightly cron takes, so a run that overlaps the cron skips.
 
 const BACKUP_AUDIT_ACTION = "site-backup";
 
@@ -233,4 +236,34 @@ export async function runSiteBackups(
     ),
   );
   return { ok: true, runs };
+}
+
+/** The namespace that backs up Capsid's own D1 dump, by this Worker rather than through an operator API. */
+export const CAPSID_DUMP = "capsid";
+
+/**
+ * Back up now for Capsid itself (Dustin 2026-11-06): the nightly cron's run, on demand. It
+ * takes the cron's lease (src/backup.ts runBackup), so a run that overlaps the cron skips
+ * and prunes nothing, and it writes the same task_runs row (backup) the Portal reads.
+ */
+export async function runCapsidDump(env: Env): Promise<{ ok: boolean; line: string }> {
+  let outcome = "";
+  await runTask(
+    env,
+    "backup",
+    () => runBackup(env),
+    (result) => {
+      const judged = backupTaskResult(result);
+      outcome = judged ? `${judged.outcome}: ${judged.reason}` : "";
+      return judged;
+    },
+    { tag: "BACKUP_NOW_THREW", rethrow: false },
+  );
+  // A throw is recorded by runTask and leaves outcome empty.
+  return outcome.startsWith("ok:")
+    ? { ok: true, line: `capsid: dump ${outcome}` }
+    : {
+        ok: false,
+        line: `capsid: ${outcome || "the dump threw (see the backup row in task_runs)"}`,
+      };
 }
