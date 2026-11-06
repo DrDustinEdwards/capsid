@@ -49,7 +49,15 @@
   // going rather than where it was on one measured week. scripts/bindings.mjs
   // exports the same number and test/cloudflare-platform.test.ts fails if they
   // drift; that test also asserts the floor, so shrinking this is a build failure.
-  "limits": { "cpu_ms": 3500 },
+  //
+  // RESIZED 2026-11-06, 3500 to 10000. The 09:00 backup of 2026-11-06 was killed
+  // (outcome exceededCpu, 5500 ms read at the kill, 36 s wall) and /health went to
+  // "warn", the backup 31 hours old. Workers Observability for the trigger: 2987 ms
+  // on 2026-10-31 and 1530 ms on 2026-11-03 (both ok, the only two runs it kept), so
+  // 3500 was already within 15% of a run that passed. 5500 is the least the run needs,
+  // since it was killed before it finished; 5500 * 1.5 rounded up is the number below.
+  // The next nights' cpuTimeMs for "0 9 * * *" decides whether to shrink it.
+  "limits": { "cpu_ms": 10000 },
   // THREE CRONS. src/index.ts dispatches on which one fired and exports the same
   // three strings; test/crons.test.ts derives one list from the other and fails in
   // both directions, so this config and the handler cannot drift.

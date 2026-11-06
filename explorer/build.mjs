@@ -48,9 +48,15 @@ async function read(source) {
   return JSON.parse(readFileSync(source, "utf8"));
 }
 
-/** One hash over every file under a directory, its path and its bytes, in a fixed order. */
+/**
+ * One hash over every file under a directory, its path and its bytes, in a fixed order, and
+ * over the Worker as it deploys (worker.mjs bundled with site-runtime and Prelum), so a
+ * dependency bump that changes only the Worker still differs from the live build.
+ */
 function contentHash(/** @type {string} */ dir) {
   const hash = createHash("sha256");
+  const worker = buildSync({ entryPoints: [join(here, "worker.mjs")], bundle: true, write: false, format: "esm", platform: "neutral", nodePaths: [join(here, "node_modules")], logLevel: "warning" });
+  hash.update("worker.mjs\0").update(worker.outputFiles[0].contents).update("\0");
   const files = readdirSync(dir, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => relative(dir, join(entry.parentPath, entry.name)))
