@@ -71,7 +71,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="color-scheme" content="light dark" />
         <meta name="robots" content="noindex" />
         <meta name="theme-color" content="#01585c" />
-        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: the static no-flash theme line */}
+        {/* The static no-flash theme line, set before first paint. */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
         <link rel="icon" href="/favicon.ico" sizes="48x48" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
