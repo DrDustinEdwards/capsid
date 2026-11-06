@@ -5,7 +5,7 @@ import { callSignal } from "./call-signal";
 
 // A SITE'S OPERATOR API (job_09e5f6cbf782, Dustin 2026-10-03). Capsid is the operations
 // hub and may trigger an allowlist of a site's own repair tools, so the repairs, the
-// convergence view and the watchdog can leave the site. A site opts in by configuration
+// convergence view and the watchdog could leave the site (it did, 2026-11-06). A site opts in by configuration
 // (ops_sites.operator, migrations/0035), never by code here.
 //
 // Two allowlists, both enforced in this Worker before any request leaves it:
