@@ -29,8 +29,15 @@ const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 
 // The Durable Objects wrangler.jsonc binds (RATE_LIMITER, TOOL_CALL_LOG), from site-runtime.
 export { RateLimiter } from "@dustinedwards/site-runtime/rate-limit/durable-object";
-export { ToolCallLog } from "@dustinedwards/site-runtime/audit-log";
-import { exportAuditLog } from "@dustinedwards/site-runtime/audit-log";
+import { ToolCallLog as SharedToolCallLog, exportAuditLog } from "@dustinedwards/site-runtime/audit-log";
+import { withAuditKey } from "./audit-key";
+
+// The tool-call log with its signing key derived from COOKIE_ENCRYPTION_KEY (audit-key.ts).
+export class ToolCallLog extends SharedToolCallLog {
+  constructor(state: DurableObjectState, env: Env) {
+    super(state, withAuditKey(env));
+  }
+}
 
 // Spelled once. wrangler.jsonc declares them; test/crons.test.ts derives one list
 // from the other and fails in both directions.
@@ -279,7 +286,7 @@ export default {
         runTask(
           env,
           "tool-call-log-export",
-          () => exportAuditLog(env, env.AUDIT_BUCKET),
+          () => exportAuditLog(withAuditKey(env), env.AUDIT_BUCKET),
           (done): TaskResult => ({ outcome: "ok", reason: `copied ${done.exported} rows in ${done.objects.length} objects; pruned ${done.pruned}` }),
           { tag: "TOOL_CALL_LOG_EXPORT_THREW", rethrow: true }
         )
