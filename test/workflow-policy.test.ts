@@ -57,8 +57,6 @@ function jobNamed(workflow: string, id: string): Job {
   return job;
 }
 
-const jobText = (job: Job): string => job.lines.join("\n");
-
 // Steps are the six-space list items of a job.
 function stepsOf(job: Job): string[][] {
   const steps: string[][] = [];
@@ -153,11 +151,13 @@ test("every job declares timeout-minutes", () => {
 // before the required Tests step: its failure skips Tests, and a skipped required
 // step refuses the merge.
 
-test("the checks job runs npm run lint, before the Tests step", () => {
+test("the checks job runs npm run lint and npm run lint:repo, before the Tests step", () => {
   const steps = stepsOf(jobNamed("ci.yml", "checks")).map((s) => ({ name: stepName(s), text: s.join("\n") }));
-  const lint = steps.findIndex((s) => /^\s+run:\s*npm run lint\s*$/m.test(s.text));
+  const lint = steps.findIndex((s) => /^\s+run:\s*npm run lint:repo\s*$/m.test(s.text));
   const tests = steps.findIndex((s) => s.name === "Tests");
-  assert.ok(lint >= 0, "no step in ci.yml's checks job runs `npm run lint`; the lints in test/lint/ run nowhere");
+  assert.ok(lint >= 0, "no step in ci.yml's checks job runs `npm run lint:repo`; the lints in test/lint/ run nowhere");
+  const shared = steps.findIndex((s) => /^\s+run:\s*npm run lint\s*$/m.test(s.text));
+  assert.ok(shared >= 0 && shared < tests, "no Lint step before Tests runs the shared `npm run lint`");
   assert.ok(tests >= 0, "no Tests step parsed out of ci.yml's checks job");
   assert.ok(lint < tests, "the lint step runs after Tests, so its failure no longer stops a merge");
   assert.doesNotMatch(steps[lint].text, /continue-on-error/, "the lint step must fail the job");

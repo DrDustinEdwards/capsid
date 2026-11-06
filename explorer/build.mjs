@@ -40,7 +40,7 @@ const LIVE = "https://mcp.dustinedwards.info/public";
 
 /** @param {string} source a path or an https URL */
 async function read(source) {
-  if (/^https:\/\//.test(source)) {
+  if (source.startsWith("https://")) {
     const response = await fetch(source, { headers: { accept: "application/json" } });
     if (!response.ok) throw new Error(`GET ${source} answered ${response.status}`);
     return response.json();
@@ -89,7 +89,7 @@ function inlineCss(file) {
  */
 async function readCode(source) {
   if (!source) return null;
-  if (/^https:\/\//.test(source)) {
+  if (source.startsWith("https://")) {
     const response = await fetch(source, { headers: { accept: "application/json" } });
     if (response.status === 503) {
       console.log(`explorer: ${source} is not computed yet, so no code pages`);
@@ -146,7 +146,7 @@ async function readPrevious(source) {
   if (!source) return undefined;
   try {
     let record;
-    if (/^https:\/\//.test(source)) {
+    if (source.startsWith("https://")) {
       const response = await fetch(source, { headers: { accept: "application/json" } });
       if (!response.ok) return undefined;
       record = await response.json();

@@ -16,7 +16,6 @@ import {
 } from "../src/ops-snapshot.ts";
 import { checkStates, watcherTick, WATCHER_LAST_KEY, type Gathered } from "../src/watcher.ts";
 import { WATCHER_CHECKS } from "../src/watcher-checks.ts";
-import { siteMapFindings } from "../src/watcher-detect.ts";
 import { type Finding } from "../src/watcher-detect.ts";
 import { fakeEnv, fakeKv } from "./fakes.ts";
 

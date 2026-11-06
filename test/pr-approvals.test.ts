@@ -63,7 +63,7 @@ function db(open: Array<{ id: number; pr: number; head_sha: string }> = []) {
     prepare,
     async batch(statements: Array<{ sql: string; params: unknown[] }>) {
       for (const s of statements) recorded.push({ sql: s.sql, params: s.params });
-      return statements.map((s) => ({ results: /^UPDATE/.test(s.sql.trim()) ? [{ id: 1 }] : [], meta: { changes: 1 } }));
+      return statements.map((s) => ({ results: s.sql.trim().startsWith("UPDATE") ? [{ id: 1 }] : [], meta: { changes: 1 } }));
     },
   };
   return { d1, recorded };

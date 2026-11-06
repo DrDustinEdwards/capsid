@@ -318,7 +318,9 @@ const CSRF = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 async function request(method: "GET" | "POST", body?: unknown, opts: { site?: string } = {}): Promise<Request> {
   const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
   const headers: Record<string, string> = { Cookie: `${session}; ${PORTAL_CSRF_COOKIE}=${CSRF}`, [PORTAL_CSRF_HEADER]: CSRF, "Sec-Fetch-Site": opts.site ?? "same-origin", "Content-Type": "application/json" };
-  return new Request(`https://capsid.example${PORTAL_PUSH_PATH}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const init: RequestInit = { method, headers };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  return new Request(`https://capsid.example${PORTAL_PUSH_PATH}`, init);
 }
 
 const subscription = { endpoint: "https://fcm.googleapis.com/fcm/send/device-2", keys: { p256dh: DEVICE.raw, auth: AUTH } };

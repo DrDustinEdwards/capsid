@@ -470,7 +470,7 @@ function validateSite(p: Record<string, string>): SiteFields {
   if (host !== host.toLowerCase()) throw new Refusal(400, `the hostname '${host}' must be lowercase.`);
   if (!host.includes(".")) throw new Refusal(400, `'${host}' is a single-label name; a site needs a public hostname such as example.com.`);
   if (p.platform !== "cloudflare" && p.platform !== "vercel") throw new Refusal(400, `the platform must be one of cloudflare, vercel; got '${p.platform ?? ""}'.`);
-  if (p.health_path && !/^\/[A-Za-z0-9._~\/-]{0,199}$/.test(p.health_path)) {
+  if (p.health_path && !/^\/[A-Za-z0-9._~/-]{0,199}$/.test(p.health_path)) {
     throw new Refusal(400, `the health path '${p.health_path}' must start with / and use only letters, digits and - . _ ~ /, at most 200 characters, with no query or fragment.`);
   }
   if (p.script) {

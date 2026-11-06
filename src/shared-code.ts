@@ -480,7 +480,7 @@ export async function readSharedCode(env: Env, now: Date, fresh = false, fetchIm
   // A few repos at a time: one repo is a few dozen reads, and the nightly build has the
   // tick's four minutes for everything.
   const targets = modelApps(model, namespaceOf);
-  const apps: AppRead[] = new Array(targets.length);
+  const apps = Array.from<AppRead>({ length: targets.length });
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(APP_CONCURRENCY, targets.length) }, async () => {

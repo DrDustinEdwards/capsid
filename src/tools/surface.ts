@@ -136,7 +136,7 @@ function compositeHandler(ops: Operations, spec: CompositeSpec) {
     if (extra.length > 0) {
       return { content: [{ type: "text", text: `${spec.name} action '${action}' does not take ${extra.join(", ")}. It takes ${fields!.join(", ")}.` }], isError: true };
     }
-    return ops.run(chosen.op, { ...rest, ...(chosen.inject ?? {}) }, `${spec.name} action '${action}'`);
+    return ops.run(chosen.op, { ...rest, ...chosen.inject }, `${spec.name} action '${action}'`);
   };
 }
 

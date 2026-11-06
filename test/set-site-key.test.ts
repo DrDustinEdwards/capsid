@@ -49,7 +49,7 @@ function siteDb(opts: { script?: string | null; platform?: string; failAudit?: b
           return params[0] === "sample" ? row : null;
         },
         run: async () => {
-          if (!/^INSERT INTO audit_log/.test(sql)) throw new Error(`unexpected write: ${sql}`);
+          if (!sql.startsWith("INSERT INTO audit_log")) throw new Error(`unexpected write: ${sql}`);
           if (opts.failAudit) throw new Error("D1_ERROR: sample audit insert failed");
           const [actor, action, namespace, path, p] = params;
           audits.push({ actor, action, namespace, path, params: String(p) });

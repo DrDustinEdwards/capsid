@@ -21,7 +21,7 @@ export function uptimeOptions(site: SiteSnapshot) {
   let downTicks = 0;
   let gaps = 0;
   for (let b = 0; b < TICKS; b++) {
-    const slice = [...ring.slice(b * PER, (b + 1) * PER)];
+    const slice = Array.from(ring.slice(b * PER, (b + 1) * PER));
     const seen = slice.filter((c) => c !== "-").length;
     const down = slice.filter((c) => c === "0").length;
     const status = !seen ? "unknown" : down === seen ? "down" : down ? "degraded" : "up";

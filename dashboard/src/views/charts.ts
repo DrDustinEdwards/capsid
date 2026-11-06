@@ -10,7 +10,7 @@ import { type ComponentType, type LazyExoticComponent, lazy } from "react";
 
 type Charts = typeof import("./TrendCharts");
 // Each chart takes its own props.
-type Chart = ComponentType<any>;
+type Chart = ComponentType<never>;
 /** The names of TrendCharts' exports that are components. */
 type ChartName = { [K in keyof Charts]: Charts[K] extends Chart ? K : never }[keyof Charts];
 
@@ -31,6 +31,7 @@ export function trendChart<K extends ChartName>(name: K): LazyExoticComponent<Ch
     const ready = loaded;
     if (!ready) return loadCharts().then(pick);
     const module = pick(ready);
+    // oxlint-disable-next-line unicorn/no-thenable -- the point: React.lazy reads an already-resolved thenable synchronously, a Promise would suspend
     return { then: (resolve: (m: Module) => unknown) => resolve(module) } as Promise<Module>;
   });
 }

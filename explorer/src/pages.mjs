@@ -298,7 +298,7 @@ export const minutes = (/** @type {number | null} */ m) => (m === null ? "not en
  * @param {any} model @param {string} id @param {string} asOf @param {any[]} [maps] its code maps, if it has any
  * @param {any} [home] the system whose code pages hold its repo, when it shares one
  */
-export function systemPage(model, id, asOf, maps = [], home = undefined) {
+export function systemPage(model, id, asOf, maps = [], home) {
   const s = model.systems.find((/** @type {any} */ x) => x.id === id);
   if (!s) throw new Error(`no system ${id}`);
   const parts = model.containers.filter((/** @type {any} */ c) => c.system === id);

@@ -194,7 +194,7 @@ test("begin marks a queued job started, and a second session reading it is told 
   assert.equal(listed.started?.by, CLOUD.actor);
   assert.equal(listed.started?.at, NOW.toISOString());
   assert.match(listed.started?.note ?? "", /admin@example\.com started this job at 2026-10-11T12:00:00\.000Z/);
-  assert.equal((listed.jobs?.[0] as { started_by?: string }).started_by, CLOUD.actor);
+  assert.equal((listed.jobs?.[0] as { started_by?: string } | undefined)?.started_by, CLOUD.actor);
 
   // Its own begin writes nothing and is told the same.
   const writes = d1.recorded.length;

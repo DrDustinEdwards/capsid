@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { TABLES } from "../../src/backup.ts";
 import { AUTHORITATIVE } from "../../src/counts.ts";
 
-// The doc-drift lint. Run by `npm run lint:docs` (and `npm run lint`), in the checks
+// The doc-drift lint. Run by `npm run lint:docs` (and `npm run lint:repo`), in the checks
 // job of .github/workflows/ci.yml; not part of `npm test`. These read prose, so they
 // fail when a document falls behind the code rather than when the Worker misbehaves.
 // Each count is derived from its source of truth (TABLES, migrations/, docs/,

@@ -85,8 +85,9 @@ const destructiveTool = (tool: string) => isWriteGated(tool) && toolOps(tool, { 
 // The annotations a client receives, read from tools/list rather than from the
 // registration source.
 // Both servers: Capsid and Capsid Admin.
-async function servedTools(caller: Agent = adminAgentForEmail("admin@example.com"), builds = [buildServer, buildAdminServer]): Promise<Array<Record<string, any>>> {
-  const out: Array<Record<string, any>> = [];
+type ServedTool = { name: string; annotations?: Record<string, unknown>; [field: string]: unknown };
+async function servedTools(caller: Agent = adminAgentForEmail("admin@example.com"), builds = [buildServer, buildAdminServer]): Promise<ServedTool[]> {
+  const out: ServedTool[] = [];
   for (const build of builds) {
     const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), caller);
     const client = new Client({ name: "tool-annotations", version: "1.0.0" });

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import { useApp } from "../app/ctx";
 import { ReasonForm, SwitchWithReason } from "capsomer/react/switch-reason";
 import { useApplySwitch } from "../ui/applySwitch";
@@ -31,9 +31,12 @@ export function Automation() {
   const night = feed.live.overnight;
   const nightOn = isRunsOn(night.mode);
   const [nightChosen, setNightChosen] = useState<RunsOn>(nightOn ? (night.mode as RunsOn) : "api");
-  useEffect(() => {
+  // A new mode from the server becomes the choice (adjusted while rendering, not in an effect).
+  const [seenMode, setSeenMode] = useState(night.mode);
+  if (seenMode !== night.mode) {
+    setSeenMode(night.mode);
     if (isRunsOn(night.mode)) setNightChosen(night.mode);
-  }, [night.mode]);
+  }
   const [pendingNight, setPendingNight] = useState<RunsOn | null>(null);
   const nightFocus = () => requestAnimationFrame(() => document.querySelector<HTMLInputElement>('input[name="overnight-runs-on"]:checked')?.focus());
   const shownNight = pendingNight ?? (nightOn ? (night.mode as RunsOn) : nightChosen);

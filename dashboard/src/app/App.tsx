@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
 import { Outlet } from "react-router";
@@ -72,14 +72,31 @@ const BADGE_NOTE: Partial<Record<ViewId, string>> = {
 // 0 until the page has hydrated: the first render, on the server and in the browser alike,
 // measures every time from the feed's own read time (portalNow), so both say the same words
 // and React keeps the server's HTML. The clock starts once the page is live.
+// The toast's hide timer, one for the page.
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Message ids, one counter for the page.
+let nextMessageId = 1;
+
+function createClock(ms: number) {
+  let now = 0;
+  return {
+    subscribe(onChange: () => void) {
+      now = Date.now();
+      const t = setInterval(() => {
+        now = Date.now();
+        onChange();
+      }, ms);
+      return () => clearInterval(t);
+    },
+    read: () => now,
+  };
+}
+
 function useTick(ms: number): number {
-  const [now, setNow] = useState(0);
-  useEffect(() => {
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), ms);
-    return () => clearInterval(t);
-  }, [ms]);
-  return now;
+  // The server snapshot is 0; in the browser the clock reads when the page subscribes (after hydration) and every `ms`.
+  const clock = useMemo(() => createClock(ms), [ms]);
+  return useSyncExternalStore(clock.subscribe, clock.read, () => 0);
 }
 
 function Freshness({ feed, nextPollAt, skew }: { feed: OpsFeed | null; nextPollAt: number; skew: number }) {
@@ -135,6 +152,7 @@ export function App() {
   const tick = useTick(15_000);
   const [skew, setSkew] = useState(0);
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- the skew is the browser's clock against the feed's stamp, taken when a feed arrives; it is read from the clock, not derived from props
     if (feed) setSkew(ms(feed.live.generated) - Date.now());
   }, [feed]);
   const now = portalNow(tick, skew, feed ? ms(feed.live.generated) : 0);
@@ -143,19 +161,16 @@ export function App() {
   const [help, setHelp] = useState(false);
   // Set on the first open and never cleared, so the sheet mounts once and keeps its state.
   const [helpUsed, setHelpUsed] = useState(false);
-  useEffect(() => {
-    if (help) setHelpUsed(true);
-  }, [help]);
+  if (help && !helpUsed) setHelpUsed(true);
   const singleKeys = useSingleKeys();
   const [messages, setMessages] = useState<Message[]>([]);
-  const nextMessage = useRef(1);
   // Read after the first paint: the server renders the menu open, and the browser's saved choice
   // then closes it, so the HTML and the first render agree.
   const [railCollapsed, setRailCollapsed] = useState(false);
+  // oxlint-disable-next-line react/set-state-in-effect -- the saved choice lives in localStorage, which the server cannot read: it is read once after hydration so the first render matches the server's HTML
   useEffect(() => setRailCollapsed(readPref(RAIL_PREF) === "collapsed"), []);
   const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mainRef = useRef<HTMLElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
 
@@ -164,18 +179,18 @@ export function App() {
   // A longer message stays up longer, so an action's warning can be read.
   const say = useCallback((msg: string) => {
     setToast({ msg, on: true });
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, on: false })), Math.max(2400, msg.length * 70));
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => setToast((t) => ({ ...t, on: false })), Math.max(2400, msg.length * 70));
   }, []);
 
-  const confirm = useCallback((r: ConfirmRequest) => setConfirmReq(r), []);
+  const confirm = useCallback((r: ConfirmRequest) => setConfirmReq(r), [setConfirmReq]);
 
   // The newest first. Plain results before it go; anything lasting stays.
   const post = useCallback((m: Omit<Message, "id">) => {
-    const id = nextMessage.current++;
+    const id = nextMessageId++;
     setMessages((all) => withMessage(all, { ...m, id }));
-  }, []);
-  const update = useCallback((id: number, m: Omit<Message, "id">) => setMessages((all) => all.map((x) => (x.id === id ? { ...m, id } : x))), []);
+  }, [setMessages]);
+  const update = useCallback((id: number, m: Omit<Message, "id">) => setMessages((all) => all.map((x) => (x.id === id ? { ...m, id } : x))), [setMessages]);
   const fail = useCallback((text: string) => post({ text, warning: null, undo: null, error: null, busy: false, failure: true }), [post]);
 
   const performed = useCallback(
@@ -189,7 +204,9 @@ export function App() {
   // Undo sends the reverse change as its own action (params.undo "true"), which the
   // Worker records as portal-undo-<action>. Focus goes back to the switch it undid.
   const csrfRef = useRef("");
-  csrfRef.current = feed?.csrf ?? "";
+  useEffect(() => {
+    csrfRef.current = feed?.csrf ?? "";
+  }, [feed]);
   const undo = useCallback(
     async (m: Message) => {
       const u = m.undo;
@@ -212,7 +229,7 @@ export function App() {
       const back = u.focus;
       if (back) requestAnimationFrame(() => document.getElementById(back)?.focus());
     },
-    [accept, post, signOut, update],
+    [accept, post, setMessages, signOut, update],
   );
 
   const go = useCallback(
@@ -298,7 +315,9 @@ export function App() {
   const theme = useCallback(() => say(toggleTheme() === "dark" ? "Dark" : "Light"), [say]);
 
   const railRef = useRef(railCollapsed);
-  railRef.current = railCollapsed;
+  useEffect(() => {
+    railRef.current = railCollapsed;
+  }, [railCollapsed]);
   const setRail = useCallback((next: boolean) => {
     setRailCollapsed(next);
     writePref(RAIL_PREF, next ? "collapsed" : "expanded");
@@ -332,7 +351,9 @@ export function App() {
   // confirm dialog, the menu, the sheet) owns every key while it is open. Latest values
   // through a ref so each shortcut is registered once.
   const act = useRef({ go, refresh, theme, toggleRail, step });
-  act.current = { go, refresh, theme, toggleRail, step };
+  useEffect(() => {
+    act.current = { go, refresh, theme, toggleRail, step };
+  });
   useEffect(() => {
     setSheetOpener(() => setHelp(true));
     const a = () => act.current;
@@ -412,15 +433,11 @@ export function App() {
     },
     [navigate, say],
   );
-  const paletteActions = useMemo(() => ({ go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy, confirm, flip }), [go, open, refresh, theme, copy, confirm, flip]);
+  const paletteActions = useMemo(() => ({ go, open, refresh: () => void refresh(), theme, help: () => setHelp(true), copy, confirm, flip }), [go, open, refresh, theme, copy, confirm, flip, setHelp]);
   const [paletteUsed, setPaletteUsed] = useState(false);
-  useEffect(() => {
-    if (palette) setPaletteUsed(true);
-  }, [palette]);
+  if (palette && !paletteUsed) setPaletteUsed(true);
   const [drawerUsed, setDrawerUsed] = useState(false);
-  useEffect(() => {
-    if (route.drawer) setDrawerUsed(true);
-  }, [route.drawer]);
+  if (route.drawer && !drawerUsed) setDrawerUsed(true);
 
   const onRowActivate = (e: ReactMouseEvent | ReactKeyboardEvent) => {
     const target = e.target as Element;

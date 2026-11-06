@@ -63,7 +63,7 @@ test("every logEvent call names an upper-case event token and carries a message"
   for (const { file, text } of calls()) {
     const arg = /^logEvent\(\s*([^,]+),/.exec(text)?.[1].trim() ?? "";
     // A string literal must be ALL_CAPS; a variable or a template is allowed where the token is built.
-    if (/^"/.test(arg) && !/^"[A-Z][A-Z0-9_]*"$/.test(arg)) bad.push(`src/${file}: ${arg}`);
+    if (arg.startsWith('"') && !/^"[A-Z][A-Z0-9_]*"$/.test(arg)) bad.push(`src/${file}: ${arg}`);
     if (!/\bmessage\b/.test(text)) bad.push(`src/${file}: ${arg} has no message`);
   }
   assert.deepEqual(bad, []);

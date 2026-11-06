@@ -397,7 +397,7 @@ export function applyWrite(tables: Record<string, TableSpec>, sql: string, param
     const cols = splitTop(colList, ",");
     const values = splitTop(valueList, ",");
     if (cols.length !== values.length) throw new Error(`fake D1: ${cols.length} columns against ${values.length} values in: ${flat}`);
-    const row: Row = { ...(spec.defaults?.() ?? {}) };
+    const row: Row = { ...spec.defaults?.() };
     cols.forEach((c, i) => (row[c] = evalExpr(values[i], { params })));
     const clash = spec.rows.find((existing) =>
       spec.unique.some((key) => key.every((k) => existing[k] !== null && existing[k] !== undefined && existing[k] === row[k]))

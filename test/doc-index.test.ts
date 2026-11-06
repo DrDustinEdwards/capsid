@@ -219,11 +219,11 @@ test("hybrid search keeps the index's order and reads every hit back from D1 wit
   const other = put(raw, "elsewhere", "c.md", "gamma body");
   const gone = put(raw, "sample", "gone.md", "deleted since indexing");
   raw.prepare("DELETE FROM documents WHERE id = ?").run(gone);
-  let seen: AiSearchSearchRequest | undefined;
+  const requests: AiSearchSearchRequest[] = [];
   const search = fakeSearch({
     exists: true,
     search: (request) => {
-      seen = request;
+      requests.push(request);
       return [
         chunk(b, "beta   best\nchunk", 0.9, { vector_rank: 1 }),
         chunk(gone, "stale", 0.8),
@@ -241,6 +241,7 @@ test("hybrid search keeps the index's order and reads every hit back from D1 wit
   assert.deepEqual(rows.map((r) => r.path), ["b.md", "a.md"], "the deleted document and the other namespace's are dropped, the order kept");
   assert.equal(rows[0].snippet, "beta best chunk", "the best chunk is the snippet");
   assert.deepEqual(rows.map((r) => r.match), ["both", "keyword"], "a document's chunks add up to how it matched");
+  const seen = requests.at(-1);
   const retrieval = seen?.ai_search_options?.retrieval;
   assert.equal(retrieval?.retrieval_type, "hybrid");
   assert.equal(retrieval?.return_on_failure, false, "a failure throws, so the caller falls back instead of seeing nothing");
@@ -290,12 +291,12 @@ test("retired documents are hidden unless asked for, in the index's filter and a
   const live = put(raw, "sample", "live.md", "current");
   const old = put(raw, "sample", "old.md", "replaced");
   raw.prepare("UPDATE documents SET status = 'superseded' WHERE id = ?").run(old);
-  let seen: AiSearchSearchRequest | undefined;
+  const requests: AiSearchSearchRequest[] = [];
   // The fake ignores the filter, as a stale index entry would: the D1 read must still hold.
   const search = fakeSearch({
     exists: true,
     search: (request) => {
-      seen = request;
+      requests.push(request);
       return [chunk(old, "old", 0.9), chunk(live, "live", 0.8)];
     },
   });
@@ -305,5 +306,5 @@ test("retired documents are hidden unless asked for, in the index's filter and a
   assert.deepEqual(Array.isArray(hidden) && hidden.map((r) => r.path), ["live.md"]);
   const shown = await hybridSearch(env, "q", { ...filter, includeRetired: true }, DAY1);
   assert.deepEqual(Array.isArray(shown) && shown.map((r) => r.path), ["old.md", "live.md"]);
-  assert.equal(seen?.ai_search_options?.retrieval?.filters, undefined, "include_retired drops the status filter");
+  assert.equal(requests.at(-1)?.ai_search_options?.retrieval?.filters, undefined, "include_retired drops the status filter");
 });

@@ -240,8 +240,14 @@ export function parseRoute(path: string): Route {
   let view: ViewId = "needs";
   let site: string | null = null;
   let i = 0;
-  if (isView(segs[0])) (view = segs[0]), (i = 1);
-  if (view === "sites" && segs[1] !== undefined) (site = segs[1]), (i = 2);
+  if (isView(segs[0])) {
+    view = segs[0];
+    i = 1;
+  }
+  if (view === "sites" && segs[1] !== undefined) {
+    site = segs[1];
+    i = 2;
+  }
   const type = segs[i] as DrawerType | undefined;
   const id = segs[i + 1];
   return { view, site, drawer: type && DRAWER_TYPES.includes(type) && id ? { type, id } : null };
