@@ -144,6 +144,8 @@ const KNOWN_SUSPECTS = [
   "aggregate",
   "HEALTH_PROBE_NS",
   "HEALTH_PROBE_PATH",
+  // The Durable Object class wrangler binds by name (TOOL_CALL_LOG), which is its caller.
+  "ToolCallLog",
 ];
 
 // Two checks, and neither is "the set still matches exactly": splitting a module
