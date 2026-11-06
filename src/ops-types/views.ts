@@ -285,7 +285,7 @@ export interface PortalConvergence {
 // GET /portal/api/backups and capsid_admin_read_ops action backups -> PortalBackups
 // (src/site-backup.ts). A site's status is its backup_status as it answered: d1-dump's
 // backupHealth for the newest dump, and one per files pass under files.
-export interface BackupFreshness {
+interface BackupFreshness {
   last_ok: string | null;
   age_hours: number | null;
   warning?: string;
@@ -293,7 +293,7 @@ export interface BackupFreshness {
 export interface SiteBackupStatus extends BackupFreshness {
   files?: Record<string, BackupFreshness>;
 }
-export interface AmazonCopy {
+interface AmazonCopy {
   newest: string | null;
   bytes: number | null;
 }
