@@ -346,7 +346,7 @@ Turning it on, one step at a time:
 2. **Dustin:** press **Get started** (or **Enable Email Routing**), then **Add records and enable**. Cloudflare adds the MX and SPF records itself.
 3. **Dustin:** on **Destination addresses**, **Add destination address**: the address the digest should go to.
 4. **Dustin:** open the verification email Cloudflare sends there and press **Verify email address**. The address shows **Verified**.
-5. **The seat:** in the real `wrangler.jsonc` (never committed), add `"send_email": [{ "name": "EMAIL", "destination_address": "<the verified address>" }]` and the vars `ALERT_EMAIL` (the verified address), `ALERT_FROM` (`capsid@dustinedwards.info`) and `EMAIL_ROUTING: "on"`. Then `npm run deploy`.
+5. **The seat:** `wrangler.jsonc.example` carries the `send_email` binding `EMAIL` and the vars `ALERT_FROM` (`capsid@dustinedwards.info`) and `EMAIL_ROUTING: "on"`; set the verified address as the secret `ALERT_EMAIL` (`npx wrangler secret put ALERT_EMAIL --name capsid-mcp`), so it stays out of the public repo. The next deploy binds them.
 6. **Dustin:** Settings, **Daily digest**, now says **On**. The first email arrives after 12:00 UTC.
 
 The same binding and addresses also turn on the watcher's site health mail (above, "Site repairs").

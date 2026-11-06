@@ -7,7 +7,7 @@ import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 // secrets, the OAuth provider the library injects, the optional assets binding, and the
 // build stamps. GITHUB_APP_CLIENT_ID is generated as the literal pinned id; it is widened to string
 // here so tests and the deploy check can hold other values.
-export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
+export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID" | "EMAIL" | "ALERT_FROM" | "EMAIL_ROUTING"> {
   OAUTH_PROVIDER: OAuthHelpers;
   COOKIE_ENCRYPTION_KEY: string;
   // The MCP and Portal logins' upstream: Cloudflare Access for SaaS (OIDC),
@@ -78,9 +78,10 @@ export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID"> {
   // Gemini's and ChatGPT's exact redirect URIs, comma separated, set by the seat in
   // wrangler.jsonc. Unset, only site-runtime's DCR_CALLBACKS can register.
   DCR_REDIRECT_URIS?: string;
+  // The daily digest (src/digest.ts) sends only when EMAIL_ROUTING is "on". EMAIL,
+  // ALERT_FROM and EMAIL_ROUTING come from the example (worker-configuration.d.ts) and are
+  // widened to optional here, so the code keeps saying which is missing when one is not set.
   EMAIL?: SendEmail;
-  // The daily digest (src/digest.ts) sends only when this var is "on", which the seat sets
-  // once Dustin has turned Email Routing on for the domain and verified ALERT_EMAIL.
   EMAIL_ROUTING?: string;
   // Phone alerts (src/push.ts, src/web-push.ts): the VAPID key that signs each Web Push,
   // a P-256 private key as a JWK, put by scripts/vapid-keys.mjs. Unset, no alert is sent
