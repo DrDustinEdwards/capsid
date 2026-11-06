@@ -421,8 +421,10 @@ legitimately.
 ## The review gate
 
 Removed 2026-10-31 with `capsid_open_pr`, whose `comment` action was the only way a
-verdict could be posted. `jobs.review_required` (migrations/0017) stays as a column:
-new jobs store 0, and no transition reads it.
+verdict could be posted. `jobs.review_required` (migrations/0017) was dropped by
+migrations/0061, with `jobs.lease_expires` and its index `jobs_lease` (the claim lease,
+removed 2026-10-11). `jobs_status (status, updated_at)` replaces `jobs_lease` for the
+reads that filter on status alone.
 
 ## Skill records
 

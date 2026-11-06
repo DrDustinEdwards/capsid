@@ -61,6 +61,7 @@
     "0057_drop_canon_proposals_access_sync.sql": "083c6be0bf9c81788699442d606831fe278661d5155354426dd03d96c9e7945b",
     "0058_ops_sites_unwatched.sql": "55bfa2fa63971a24cce9ef71430be30bc09d4d5169758ba230fbc2bd4e7d71ef",
     "0059_audit_log_action_namespace.sql": "2202e1098d5cae8cb9c51cf3539a2dc0770fc07a1b6980a771571b1f8592cd18",
-    "0060_audit_log_action_ns_at.sql": "9d873fafe33bf7237d5f8ed15d3936bbe42e09cb2bb31253b10f40221955fd39"
+    "0060_audit_log_action_ns_at.sql": "9d873fafe33bf7237d5f8ed15d3936bbe42e09cb2bb31253b10f40221955fd39",
+    "0061_drop_jobs_lease_review.sql": "e70ced7019718d531465a57d562660050fdd15ebf93234f9e6c24ee5091ad04b"
   }
 }

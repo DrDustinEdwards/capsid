@@ -2,7 +2,6 @@ import { McpServer } from "@modelcontextprotocol/server";
 import type { Env } from "./env";
 import { grantAgent, type Agent } from "./agents";
 import { checkScope, guardRegistrations } from "./scope";
-import type { AdminWriteObserver } from "./admin-client-audit";
 import { registerDocumentResources } from "./resources";
 import { registerPrompts } from "./prompts";
 import { mcpCacheHints } from "@dustinedwards/site-runtime/mcp-server";
@@ -74,19 +73,19 @@ export function concurrentEditWarning(updatedAt: string | null | undefined, now:
 // code path where scopes do not apply.
 const MAX_TOOL_INPUT_ELEMENTS = 10_000;
 
-export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", observeAdminWrite?: AdminWriteObserver, clientId?: string): McpServer {
-  return build(env, caller, actor, observeAdminWrite, "capsid", clientId);
+export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", clientId?: string): McpServer {
+  return build(env, caller, actor, "capsid", clientId);
 }
 
 // Capsid Admin: the eight
 // administrator tools, on their own route for the administrator alone
 // (src/mcp-handler.ts). Every tool on it is admin only in TOOL_GRANTS too, so the route
 // and the registrar refuse a non-admin twice.
-export function buildAdminServer(env: Env, caller: Agent | ToolGrant, actor = "", observeAdminWrite?: AdminWriteObserver, clientId?: string): McpServer {
-  return build(env, caller, actor, observeAdminWrite, "admin", clientId);
+export function buildAdminServer(env: Env, caller: Agent | ToolGrant, actor = "", clientId?: string): McpServer {
+  return build(env, caller, actor, "admin", clientId);
 }
 
-function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminWrite: AdminWriteObserver | undefined, surface: "capsid" | "admin", clientId?: string): McpServer {
+function build(env: Env, caller: Agent | ToolGrant, actor: string, surface: "capsid" | "admin", clientId?: string): McpServer {
   const agent = typeof caller === "string" ? grantAgent(caller, actor) : caller;
   // maxToolInputElements caps how many array elements and object members one tools/call may
   // carry, which the SDK leaves unlimited (GHSA-46jr-4wx8-v453; Grok audit 2026-10-21, CA-2).
@@ -140,7 +139,7 @@ function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminW
 
   // Before any registration, so every tool registered below is wrapped.
   const info = surface === "admin" ? ADMIN_SERVER_INFO : SERVER_INFO;
-  guardRegistrations(server, agent, observeAdminWrite, env.APP_KV, { env, server: { name: info.name, version: info.version }, clientId }, info.icons);
+  guardRegistrations(server, agent, env.APP_KV, { env, server: { name: info.name, version: info.version }, clientId }, info.icons);
 
   if (surface === "admin") {
     registerCapsidAdminTools(server, ctx.ops);

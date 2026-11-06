@@ -104,14 +104,3 @@ export function extractStatements(srcDir: string): { statements: ExtractedStatem
   }
   return { statements, skipped };
 }
-
-// Only the statements SQLite can plan. A plan is meaningless for a write, and EXPLAIN
-// QUERY PLAN on an INSERT reports the plan of its SELECT half or nothing at all.
-export function readStatements(statements: ExtractedStatement[]): ExtractedStatement[] {
-  return statements.filter((s) => /^SELECT\b/i.test(s.sql));
-}
-
-// The tables whose plans matter, because each grows without bound: documents is the
-// corpus, document_versions is every snapshot, audit_log is every write, improve_jti
-// is every signed request's nonce, and jobs is the queue.
-export const HOT_TABLES = ["documents", "document_links", "document_versions", "audit_log", "improve_jti", "jobs"];

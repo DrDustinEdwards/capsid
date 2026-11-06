@@ -14,11 +14,9 @@ test("actorKind: every caller the queue sees maps to one kind, and the table cov
     ["access:admin@example.com", {}, "human"],
     ["access:admin@example.com", { seat: true }, "human"],
     ["github:sample-user", {}, "human"],
-    // The seat: its minted credentials, a legacy operator key, and any caller whose
-    // flags make it the seat.
+    // The seat: its minted credentials and any caller whose flags make it the seat.
     ["agent:seat", {}, "seat"],
     ["agent:site-seat", {}, "seat"],
-    ["opkey:0123abcd", {}, "seat"],
     ["agent:sample-operator", { seat: true }, "seat"],
     // Drivers, including a seat-started runner and an unlisted minted agent.
     ["agent:sample-driver", {}, "driver"],

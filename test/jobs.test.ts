@@ -314,7 +314,6 @@ const MOVED_JOB = {
   blocked_count: 0,
   resumed_count: 0,
   corrections_count: 0,
-  review_required: 0,
   created_at: "2026-09-25T08:00:00.000Z",
   updated_at: "2026-09-25T08:00:00.000Z",
 };

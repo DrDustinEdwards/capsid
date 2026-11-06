@@ -16,7 +16,8 @@ export const ACTOR_KINDS = ["human", "seat", "driver", "policy", "reviewer", "sy
 export type ActorKind = (typeof ACTOR_KINDS)[number];
 
 // The seat's minted credentials, by agent name (`seat`, and `site-seat` for dustinedwards,
-// scripts/roles.ts). A retired operator key (`opkey:`, on older rows) was the seat's too.
+// scripts/roles.ts). A retired operator key (`opkey:`) was the seat's too; it is left only on
+// older audit_log rows, and no job or touch carries one.
 const SEAT_AGENTS = new Set(["agent:seat", "agent:site-seat"]);
 // Credentials that act on a schedule rather than for a person: the watcher
 // (src/watcher.ts, WATCHER_ACTOR), the skills refresh (src/skills-refresh.ts) and the
@@ -48,7 +49,7 @@ export function actorKind(actor: string, context: ActorContext = {}): ActorKind 
   if (context.policy) return "policy";
   if (context.reviewer) return "reviewer";
   if (actor.startsWith("access:") || actor.startsWith("github:")) return "human";
-  if (actor.startsWith("opkey:") || SEAT_AGENTS.has(actor) || context.seat) return "seat";
+  if (SEAT_AGENTS.has(actor) || context.seat) return "seat";
   if (actor === "agent:reviewer") return "reviewer";
   if (SYSTEM_ACTORS.has(actor)) return "system";
   // `<ns>-driver`. Any other minted agent that holds a job is working it, so it is a

@@ -4,7 +4,6 @@
 # Stryker's instrumentation rewrites that text. They still run in CI on every PR, and
 # under the audit's keep rules they are always kept, so none is a removal candidate.
 # Mutants only they would kill show as survivors in the report.
-admin-client-audit.test.ts
 blast-radius.test.ts
 deploy-pipeline.test.ts
 invariants.test.ts

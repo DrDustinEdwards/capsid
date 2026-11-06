@@ -20,13 +20,13 @@ import { logEvent } from "@dustinedwards/site-runtime/log";
 // agents table and never reused, so the string identifies exactly one credential. The
 // admin is `access:<email>` on the MCP login since it moved to Cloudflare Access
 // (docs/auth.md, 2026-09-27) and `github:<login>` on rows the old console wrote before it moved to Access.
-const ACTOR_SHAPE = /^(access:|github:|opkey:|agent:)/;
+const ACTOR_SHAPE = /^(access:|github:|agent:)/;
 
 export function actorShapeRefusal(action: string, actor: string): JobResult | null {
   if (ACTOR_SHAPE.test(actor)) return null;
   return refuse(
     action,
-    `'${actor}' is not a caller identity this queue can hold a claim for. A claim is recorded against an access: email, a github: login, an opkey: fingerprint, or an agent: name.`
+    `'${actor}' is not a caller identity this queue can hold a claim for. A claim is recorded against an access: email, a github: login or an agent: name.`
   );
 }
 

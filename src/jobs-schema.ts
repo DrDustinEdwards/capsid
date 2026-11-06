@@ -66,9 +66,6 @@ export interface JobRow {
   // The retry cap's budget (migrations/0016): only the times the work was sent back to
   // be corrected. See atCorrectionCap.
   corrections_count: number;
-  // 1 when a reviewer must speak before the work reaches the seat (migrations/0017).
-  // On the row, so the party being reviewed does not decide whether it is reviewed.
-  review_required: number;
   // The kind Capsid read or was given, and the model and effort it recommends, with the
   // one-line reason (migrations/0032, src/model-routing.ts). NULL: not routed yet, which
   // the next claim fixes.

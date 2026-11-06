@@ -295,7 +295,7 @@ export interface FakeD1 {
 const GUARD_ERROR = "NOT NULL constraint failed: document_versions.document_id";
 
 // postJob's INSERT, whose bound order is (id, namespace, title, body, priority,
-// posted_by, gate_required, required_scopes, min_record, review_required, created_at).
+// posted_by, gate_required, required_scopes, min_record, created_at, ...).
 const isJobInsert = (sql: string) => /^\s*INSERT INTO jobs \(/i.test(sql);
 
 // Column projection, so `SELECT *` and a named column list are distinguishable.
@@ -418,7 +418,6 @@ const jobDefaults = (): Row => ({
   blocked_count: 0,
   required_scopes: null,
   corrections_count: 0,
-  review_required: 0,
   min_record: null,
   started_at: null,
   started_by: null,

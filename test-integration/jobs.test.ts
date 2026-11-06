@@ -106,7 +106,6 @@ describe("the lifecycle", () => {
     expect(claimed.job!.claimed_by).toBe(DRIVER_ACTOR);
     // A claim carries no lease: the first claim time is the only clock on it.
     expect(claimed.job!.claimed_at).toBe(NOW.toISOString());
-    expect((await row(id))?.lease_expires).toBeNull();
 
     const done = await completeJob(jobsEnv(), DRIVER, NOW, id, {
       result_summary: "did the thing",
@@ -224,13 +223,12 @@ describe("the refusals", () => {
     expect((await row(c.job!.id))?.status).toBe("claimed");
   });
 
-  it("an agent, an OAuth session and an operator key can each hold a claim", async () => {
+  it("an agent and an OAuth session can each hold a claim", async () => {
     // claimed_by has the shape of audit_log.actor, so one query joins a job to what its
-    // driver did. Each of the three caller kinds claims its own job.
+    // driver did. Each caller kind claims its own job.
     for (const [title, actor] of [
       ["held by an agent", "agent:capsid-driver"],
       ["held by a session", "github:someone"],
-      ["held by a key", "opkey:0123456789ab"],
     ] as const) {
       const posted = await post({ title });
       const claimed = await claimJob(jobsEnv(), grantAgent("write", actor), NOW, { id: posted.job!.id });
@@ -289,7 +287,6 @@ describe("a claim has no lease", () => {
     await claimJob(jobsEnv(), DRIVER, NOW, { id });
     const muchLater = new Date(NOW.getTime() + 30 * 24 * 3_600_000);
     expect((await row(id))?.status).toBe("claimed");
-    expect((await row(id))?.lease_expires).toBeNull();
     const done = await completeJob(jobsEnv(), DRIVER, muchLater, id, { result_summary: "finished eventually" });
     expect(done.ok, done.refusal).toBe(true);
   });
@@ -1452,52 +1449,6 @@ describe("no claim limit and no repo rule", () => {
       expect(claimed.ok, claimed.refusal).toBe(true);
     }
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE status = 'claimed'").first<{ n: number }>())?.n).toBe(6);
-  });
-});
-
-describe("migrations/0044, claimed jobs become started jobs", () => {
-  // The migration already ran on an empty table at setup, so its statements are run
-  // again here, taken from the migration itself, over rows seeded on either side.
-  const migration = env.TEST_MIGRATIONS.find((m) => m.name === "0044_jobs_no_leases.sql");
-
-  async function seed(id: string, status: string, extra: Record<string, string | null> = {}) {
-    await env.DB.prepare(
-      `INSERT INTO jobs (id, namespace, title, body, status, posted_by, claimed_by, claimed_at, lease_expires, started_by, started_at, updated_at)
-       VALUES (?1, 'capsid', ?1, 'lorem ipsum', ?2, 'github:example', ?3, ?4, ?5, ?6, ?7, ?8)`
-    )
-      .bind(id, status, extra.claimed_by ?? null, extra.claimed_at ?? null, extra.lease_expires ?? null, extra.started_by ?? null, extra.started_at ?? null, extra.updated_at ?? "2026-10-10T09:00:00.000Z")
-      .run();
-  }
-
-  it("turns every claimed job into a queued one started by its holder, and clears every lease", async () => {
-    expect(migration, "no migration named 0044_jobs_no_leases.sql").toBeTruthy();
-    await seed("job_claimed0001", "claimed", { claimed_by: "agent:capsid-driver", claimed_at: "2026-10-10T08:00:00.000Z", lease_expires: "2026-10-10T12:00:00.000Z" });
-    await seed("job_claimed0002", "claimed", { claimed_by: "agent:other", claimed_at: "2026-10-10T08:00:00.000Z", started_by: "access:seat@example.com", started_at: "2026-10-10T07:00:00.000Z" });
-    await seed("job_blocked0001", "blocked", { claimed_by: "agent:capsid-driver", lease_expires: "2026-10-10T12:00:00.000Z" });
-    await seed("job_queued00001", "queued");
-    await seed("job_done0000001", "done", { claimed_by: "agent:capsid-driver", lease_expires: "2026-10-10T12:00:00.000Z" });
-    await env.DB.prepare("DELETE FROM agents WHERE name = 'runner-bound-test'").run();
-    await env.DB.prepare(
-      "INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at, job_id) VALUES ('agent_bound0000001', 'runner-bound-test', 'session', ?1, '{}', 'test', '2026-10-10 08:00:00', 'job_claimed0001')"
-    )
-      .bind("e".repeat(64))
-      .run();
-
-    for (const query of migration!.queries) await env.DB.prepare(query).run();
-
-    const first = await row("job_claimed0001");
-    expect(first).toMatchObject({ status: "queued", claimed_by: null, lease_expires: null, started_by: "agent:capsid-driver", started_at: "2026-10-10T09:00:00.000Z" });
-    // claimed_at survives, so the job's duration still runs from its first claim.
-    expect(first?.claimed_at).toBe("2026-10-10T08:00:00.000Z");
-    // A label already on the job is kept, not overwritten by the holder.
-    expect(await row("job_claimed0002")).toMatchObject({ status: "queued", claimed_by: null, started_by: "access:seat@example.com", started_at: "2026-10-10T07:00:00.000Z" });
-    // Blocked and finished jobs keep their holder and status; only the lease goes.
-    expect(await row("job_blocked0001")).toMatchObject({ status: "blocked", claimed_by: "agent:capsid-driver", lease_expires: null });
-    expect(await row("job_done0000001")).toMatchObject({ status: "done", claimed_by: "agent:capsid-driver", lease_expires: null });
-    expect(await row("job_queued00001")).toMatchObject({ status: "queued", started_by: null });
-    // The key bound to a job that is no longer claimed is revoked.
-    const key = await env.DB.prepare("SELECT revoked_at FROM agents WHERE name = 'runner-bound-test'").first<{ revoked_at: string | null }>();
-    expect(key?.revoked_at).not.toBeNull();
   });
 });
 

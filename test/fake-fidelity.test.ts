@@ -58,7 +58,7 @@ test("C1-17: a keyed jobs UPDATE ... RETURNING moves only the row its CAS names"
   const clear = (postedBy: string) =>
     fake.db
       .prepare(
-        `UPDATE jobs SET status = 'failed', result_summary = ?2, lease_expires = NULL, updated_at = ?3
+        `UPDATE jobs SET status = 'failed', result_summary = ?2, updated_at = ?3
          WHERE id = ?1 AND status = 'queued' AND posted_by = ?4 RETURNING id`
       )
       .bind("j-1", "cleared", "2026-09-25T00:00:00.000Z", postedBy)

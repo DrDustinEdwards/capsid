@@ -3,8 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
-import { adminAgentForEmail, resolveAgent } from "../src/agents.ts";
+import { adminAgentForEmail } from "../src/agents.ts";
 import { PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "../src/portal-auth.ts";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
 import { OPS_HOOKS_PATH } from "../src/ops-hooks.ts";
@@ -39,12 +38,10 @@ import {
   ROUTE_GRANTS,
   UNGATED_ROUTES,
   requiredForAction,
-  routeRefusal,
 } from "../src/scope.ts";
-import { fakeD1, fakeEnv, fakeKv } from "./fakes.ts";
+import { fakeEnv, fakeKv } from "./fakes.ts";
 import { buildAdminServer, buildServer } from "../src/server.ts";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // Every route goes through the one enforcement point, or says why it does not. A
 // route that checks only the write grant lets a driver minted for one namespace act
@@ -52,47 +49,10 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 //
 // The routes themselves are driven through the whole Worker in
 // test-integration/route-gates.test.ts. node --test cannot load src/routes.ts, so
-// what stays here is routeRefusal over callers resolved for real, and the one
-// direction no request can show: every path defaultHandler dispatches on is in one of
-// the two tables.
+// what stays here is the one direction no request can show: every path defaultHandler
+// dispatches on is in one of the two tables.
 
-const DRIVER_KEY = "capsid_agent_" + "d".repeat(64);
 const ROUTES = readFileSync(join(import.meta.dirname, "..", "src", "routes.ts"), "utf8");
-
-async function resolveWith(bearer: string) {
-  const scopes = defaultScopes(["capsid"]);
-  scopes.grants = ["read", "write"];
-  const d1 = fakeD1({
-    agents: [
-      {
-        id: "agent_driver000001",
-        name: "capsid-driver",
-        kind: "driver",
-        key_hash: await sha256Hex(DRIVER_KEY),
-        scopes: serializeScopes(scopes),
-        created_by: "github:dustin",
-        created_at: "2026-09-11 00:00:00",
-        revoked_at: null,
-        last_seen: null,
-      },
-    ],
-  });
-  const env = fakeEnv({ DB: d1.db });
-  const req = new Request("https://capsid.example/ops/mcp", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${bearer}` },
-  });
-  const resolved = await resolveAgent(req, env);
-  assert.ok(resolved, "the key did not resolve, so this test would prove nothing about the gate");
-  return resolved.agent;
-}
-
-test("a path in neither table is refused to everyone but the admin", async () => {
-  // routeRefusal fails closed: a route wired to it before its table entry exists is
-  // admin only, never open.
-  assert.ok(routeRefusal("/ops/not-a-route", await resolveWith(DRIVER_KEY)));
-  assert.equal(routeRefusal("/ops/not-a-route", adminAgentForEmail("admin@example.com")), null);
-});
 
 // every route
 

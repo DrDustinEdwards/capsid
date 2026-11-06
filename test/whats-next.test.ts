@@ -248,7 +248,7 @@ test("a blocked job whose named migration is applied is left out, and one still 
 
 test("blocked jobs split into questions and commands", async () => {
   const blocked = [
-    { id: "job_aaaaaaaaaaaa", namespace: "sample", title: "Needs a push", result_summary: "Run this, then send it back in with jobs action 'resume':\nnpm run deploy", updated_at: "2026-10-09T00:00:00Z" },
+    { id: "job_aaaaaaaaaaaa", namespace: "sample", title: "Needs a push", result_summary: "Run this, then send it back in with capsid_work_jobs action 'resume':\nnpm run deploy", updated_at: "2026-10-09T00:00:00Z" },
   ];
   await withFetch({}, async () => {
     const r = await whatsNext(env(db({ blocked })), NOW);
@@ -264,7 +264,7 @@ test("PLANT: a pull request's title and a block's question and command are relay
   list.body[0].title = hostile;
   const blocked = [
     { id: "job_aaaaaaaaaaaa", namespace: "sample", title: "Asks", result_summary: `QUESTION: ${hostile}`, updated_at: "2026-10-09T00:00:00Z" },
-    { id: "job_bbbbbbbbbbbb", namespace: "sample", title: "Waits", result_summary: "Run this, then send it back in with jobs action 'resume':\nnpm run sample", updated_at: "2026-10-09T00:00:00Z" },
+    { id: "job_bbbbbbbbbbbb", namespace: "sample", title: "Waits", result_summary: "Run this, then send it back in with capsid_work_jobs action 'resume':\nnpm run sample", updated_at: "2026-10-09T00:00:00Z" },
   ];
   await withFetch(routes, async () => {
     const r = await whatsNext(env(db({ namespaces: [{ namespace: "sample", repos: repos("o/r") }], blocked })), NOW);

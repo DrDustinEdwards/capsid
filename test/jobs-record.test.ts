@@ -119,7 +119,7 @@ test("PLANT: a seat key scoped to another namespace is refused the job", async (
 // A job that is not queued
 
 const NOT_QUEUED: Array<[string, Record<string, unknown>, RegExp]> = [
-  ["claimed", { status: "claimed", claimed_by: "agent:sample-driver", lease_expires: "2026-10-10T14:00:00.000Z" }, /is claimed by agent:sample-driver: its holder completes it/],
+  ["claimed", { status: "claimed", claimed_by: "agent:sample-driver" }, /is claimed by agent:sample-driver: its holder completes it/],
   ["blocked", { status: "blocked", claimed_by: "agent:sample-driver" }, /is blocked: the seat completes a blocked job with action complete/],
   ["done", { status: "done", claimed_by: "agent:sample-driver" }, /is done; record is for a queued job/],
   ["failed", { status: "failed", claimed_by: "agent:sample-driver" }, /is failed; record is for a queued job/],
