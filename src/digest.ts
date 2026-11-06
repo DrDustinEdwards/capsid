@@ -1,3 +1,4 @@
+import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readOvernightDigest } from "./overnight-plan";
@@ -140,15 +141,12 @@ export async function digestTick(env: Env, now: Date, read: DigestReader = readO
   const lastAt = last?.outcome === "sent" ? Date.parse(last.at) : NaN;
   const since = new Date(Number.isFinite(lastAt) && now.getTime() - lastAt < 7 * DAY_MS ? lastAt : now.getTime() - DAY_MS).toISOString();
   const mail = await composeDigest(env, now, since, read);
-  let record: LastDigest;
-  try {
-    await env.EMAIL!.send({ from: env.ALERT_FROM!, to: env.ALERT_EMAIL!, subject: mail.subject, text: mail.text });
-    record = { at: now.toISOString(), outcome: "sent", note: mail.subject };
-  } catch (err) {
-    // Recorded for the day, so a refusal is not retried every five minutes; the Portal
-    // shows it, and tomorrow's digest covers today too.
-    record = { at: now.toISOString(), outcome: "failed", note: `Cloudflare refused the mail: ${(err instanceof Error ? err.message : String(err)).slice(0, 300)}` };
-  }
+  const sent = await sendEmail(env.EMAIL, { from: env.ALERT_FROM!, to: env.ALERT_EMAIL!, subject: mail.subject, text: mail.text });
+  // A refusal is recorded for the day, so it is not retried every five minutes; the Portal
+  // shows it, and tomorrow's digest covers today too.
+  const record: LastDigest = sent.sent
+    ? { at: now.toISOString(), outcome: "sent", note: mail.subject }
+    : { at: now.toISOString(), outcome: "failed", note: `Cloudflare refused the mail: ${sent.error.slice(0, 300)}` };
   await env.APP_KV.put(DIGEST_LAST_KEY, JSON.stringify(record));
   return { ran: true, note: record.note, sent: record.outcome === "sent" };
 }

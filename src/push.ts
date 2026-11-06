@@ -1,3 +1,4 @@
+import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { RETRY_CAP_REASON } from "./jobs-schema";
@@ -308,16 +309,16 @@ async function emailFallback(env: Env, now: Date, why: string): Promise<PushRepo
       ...due.flatMap((u) => [`${u.title}`, u.body, u.url, ""]),
       ...(urgent.length > due.length ? [`${urgent.length - due.length} more on the next tick.`] : []),
     ].join("\n");
-    try {
-      await env.EMAIL!.send({ from: env.ALERT_FROM!, to: env.ALERT_EMAIL!, subject, text });
+    const mailed = await sendEmail(env.EMAIL, { from: env.ALERT_FROM!, to: env.ALERT_EMAIL!, subject, text });
+    if (mailed.sent) {
       for (const u of due) {
         state.sent[u.key] = at;
         sent.push(u.key);
       }
       await env.DB.batch(due.map((u) => auditStatement(env.DB, "capsid:push", "push-emailed", u.namespace, null, { kind: u.kind, key: u.key })));
       note = `emailed ${sent.length} alert(s) (${why}): ${sent.join(", ")}`;
-    } catch (err) {
-      note = `${why}, and Cloudflare refused the fallback mail: ${(err instanceof Error ? err.message : String(err)).slice(0, 200)}; tried again next tick`;
+    } else {
+      note = `${why}, and Cloudflare refused the fallback mail: ${mailed.error.slice(0, 200)}; tried again next tick`;
     }
   }
   for (const [k, v] of Object.entries(state.sent)) if (now.getTime() - Date.parse(v) > SENT_TTL_MS) delete state.sent[k];
