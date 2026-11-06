@@ -109,6 +109,9 @@ export default defineConfig({
           IMPROVE_SCORE_SECRET: "integration-root-secret-not-a-real-one",
           // The bench endpoints' own key (src/bench.ts), not derived from the root.
           BENCH_SECRET: "integration-bench-secret-not-a-real-one",
+          // The tool-call log's signing key. The Worker derives it from COOKIE_ENCRYPTION_KEY (src/audit-key.ts),
+          // which this env leaves unbound so the tests can set it per call; bound here, it reaches the log as is.
+          AUDIT_SIGNING_KEY: "integration-signing-key-not-a-real-one-0123456789",
           // The MCP and Portal logins' Access for SaaS app (src/access-login.ts). A fake team domain;
           // the tests stub its token and JWKS endpoints.
           ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",
