@@ -3,15 +3,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { test } from "node:test";
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
+// oxfmt-ignore
 // @ts-expect-error scripts/ is plain .mjs with no declarations, deliberately: it
 // runs in the live CI job with no npm ci and no build step.
-import {
-  EXPECTED_TOOLS,
-  eraSteps,
-  probeMcp,
-  rpcMessage,
-  stepProblem,
-} from "../scripts/mcp-probe-lib.mjs";
+import { EXPECTED_TOOLS, eraSteps, probeMcp, rpcMessage, stepProblem } from "../scripts/mcp-probe-lib.mjs";
 import { ROLES } from "../scripts/roles.ts";
 import { defaultScopes } from "../src/agents-schema.ts";
 import type { Agent } from "../src/agents.ts";

@@ -123,8 +123,8 @@ test("prompts/list passes titles through a character allowlist", async () => {
     !description.includes("`"),
     `a backtick from a stored title reached the client verbatim: ${JSON.stringify(description)}`,
   );
-  // oxlint-disable-next-line no-control-regex -- asserting no control character reached the client is the point
   assert.ok(
+    // oxlint-disable-next-line no-control-regex -- asserting no control character reached the client is the point
     !/[\u0000-\u001f\u007f]/.test(description),
     "a control character from a stored title reached the client",
   );
