@@ -1,15 +1,16 @@
 name: code-map
 
 # Capsid's code map for the system explorer at capsid.dustinedwards.info (capsid/research/design-system-explorer.md,
-# section 5, slice 10): after each push to master, devkit's code-map workflow maps src/ with the unit suite's coverage and
-# publishes code-map.json to the orphan code-map branch, which the daily public build reads. Never a gate on a pull request.
+# section 5, slice 10): nightly, devkit's code-map workflow maps src/ with the unit suite's coverage and publishes
+# code-map.json to the orphan code-map branch, which the daily public build reads. Never a gate on a pull request. Nightly
+# rather than on every push, so the map is at most a day behind (devkit README, "No second run on main").
 #
 # Mutation scores come from the last full mutation baseline (mutation-baseline.yml), whose final job publishes the map with
 # its shard reports. Every map after it carries those numbers forward while a function is unchanged and marks the rest stale.
 
 on:
-  push:
-    branches: [master]
+  schedule:
+    - cron: "17 4 * * *"
   workflow_dispatch:
 
 permissions:
@@ -20,7 +21,7 @@ jobs:
     # A called workflow holds no more than this job grants: the write lets it push to the code-map branch.
     permissions:
       contents: write
-    # Shared with mutation-baseline.yml's map job, so a push's map never lands over a baseline's mid-run.
+    # Shared with mutation-baseline.yml's map job, so a nightly map never lands over a baseline's mid-run.
     concurrency:
       group: code-map
       cancel-in-progress: false

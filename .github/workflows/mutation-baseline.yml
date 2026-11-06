@@ -382,7 +382,7 @@ jobs:
   # The explorer's code map with this run's mutation scores (capsid/research/design-system-explorer.md, slice 10). Only a
   # full baseline of src/ at the baseline's Stryker: a targeted pass or another version would publish a part as the whole.
   # devkit's code-map reads the shard reports from this run's artifacts and keeps them on the code-map branch, so the map
-  # code-map.yml publishes after each push carries these numbers forward until the next baseline.
+  # code-map.yml publishes each night carries these numbers forward until the next baseline.
   code-map:
     name: publish the code map
     needs: mutate
@@ -391,7 +391,7 @@ jobs:
       && (inputs.stryker == '10.0.0' || inputs.stryker == '') && inputs.runner != 'command'
     permissions:
       contents: write
-    # Shared with code-map.yml, so a push's map never lands over this one mid-run.
+    # Shared with code-map.yml, so a nightly map never lands over this one mid-run.
     concurrency:
       group: code-map
       cancel-in-progress: false
