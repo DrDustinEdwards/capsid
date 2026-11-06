@@ -4,6 +4,7 @@ import { capsidCookie, getCookie } from "./auth";
 import { AWAITING_SEAT_KEY } from "./auto-merge-tick";
 import { loadMergePolicy } from "./auto-merge-policy";
 import { readSafetyReport } from "./merge-safety";
+import { REPORT_KEY as UNITS_REPORT_KEY, readSuspended, type UnitsReport } from "./merge-units";
 import { PORTAL_CSRF_COOKIE, PORTAL_PREFIX, PORTAL_SESSION_TTL_SECONDS, type PortalUser, portalDisplay, portalGate, sourceAddress } from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import type { Env } from "./env";
@@ -373,14 +374,33 @@ async function liveSessions(db: D1Database, now: Date): Promise<OpsSession[]> {
 async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
   try {
     const loaded = await loadMergePolicy(env);
-    return "error" in loaded ? { loads: false, reason: loaded.error } : { loads: true, version: loaded.policy.version, enabled: loaded.policy.enabled };
+    return "error" in loaded ? { loads: false, reason: loaded.error } : { loads: true, version: loaded.policy.version, enabled: loaded.policy.enabled, units: [...loaded.policy.units] };
   } catch (err) {
     return { loads: false, reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
 
+// The suspended units as the tick reads them (SUSPENDED_KEY, the truth a lift changes), and the
+// proposals of the units tick's last report. An unreadable report is no proposals, never a throw.
+async function liveMergeUnits(kv: KVNamespace): Promise<OpsLive["merge_units"]> {
+  const [suspended, raw] = await Promise.all([readSuspended(kv).catch(() => []), kv.get(UNITS_REPORT_KEY).catch(() => null)]);
+  let report: Pick<UnitsReport, "generated" | "proposals"> | null = null;
+  try {
+    report = raw ? (JSON.parse(raw) as UnitsReport) : null;
+  } catch {
+    report = null;
+  }
+  const suspendedUnits = new Set(suspended.map((s) => s.unit));
+  return {
+    generated: report?.generated ?? null,
+    suspended,
+    // A suspended unit's promote proposal cannot stand; the report already leaves it out.
+    proposals: (report?.proposals ?? []).filter((p) => p.kind === "demote" || !suspendedUnits.has(p.unit)).map((p) => ({ kind: p.kind, unit: p.unit, title: p.title })),
+  };
+}
+
 async function opsLive(env: Env, now: Date): Promise<OpsLive> {
-  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, inbox, findings, mergePolicy] = await Promise.all([
+  const [jobRead, agents, prs, awaitingRaw, mergeSafety, sites, sessions, packages, overnight, inbox, findings, mergePolicy, mergeUnits] = await Promise.all([
     liveJobs(env.DB, now, env.IMPROVE_SCORE_SECRET),
     agentSummaries(env.DB),
     livePrs(env.DB, now),
@@ -393,6 +413,7 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     gatherInbox(env, now, null),
     openQuietFindings(env.DB),
     liveMergePolicy(env),
+    liveMergeUnits(env.APP_KV),
   ]);
   return {
     generated: now.toISOString(),
@@ -402,6 +423,7 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     awaiting_seat: awaitingFrom(awaitingRaw),
     merge_safety: mergeSafety,
     merge_policy: mergePolicy,
+    merge_units: mergeUnits,
     overnight,
     sessions,
     namespaces: APP_ROSTER.map((name) => ({ name })),

@@ -110,6 +110,9 @@ export interface ConfirmRequest {
   // one dialog, then performed one after another. action and params above are the first
   // item's. No item takes a reason.
   batch?: ReadonlyArray<BatchItem>;
+  // The help under the typed version field (TYPED_CONFIRM), when the caller knows which
+  // number to type: a policy change signs the version after the one in force.
+  confirmHelp?: string;
 }
 
 export interface BatchItem {
@@ -128,14 +131,14 @@ export interface UndoRequest {
   focus?: string;
 }
 
-export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "pr_close"]);
+export const NEEDS_REASON: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "pr_close", "unit_resume", "automerge_resume"]);
 
 // The actions whose dialog also offers an optional note under the reason: resume_job's
 // is the full approval, which the driver reads as resume_note.note.
 export const TAKES_NOTE: ReadonlySet<PortalAction> = new Set<PortalAction>(["resume_job"]);
 
 // The actions whose dialog asks for the version number typed before the preview (confirm).
-export const TYPED_CONFIRM: ReadonlySet<PortalAction> = new Set<PortalAction>(["sign_policy_from_repo"]);
+export const TYPED_CONFIRM: ReadonlySet<PortalAction> = new Set<PortalAction>(["sign_policy_from_repo", "sign_policy_change"]);
 
 // The confirm dialog's perform button, named for what it does (audit DECIDE 11).
 const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) => string)> = {

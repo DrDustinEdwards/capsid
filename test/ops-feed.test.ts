@@ -206,6 +206,7 @@ const FEED: OpsFeedData = {
     awaiting_seat: [],
     merge_safety: null,
     merge_policy: { loads: false, reason: "sample" },
+    merge_units: { generated: null, suspended: [], proposals: [] },
     overnight: { mode: "off", decision: null },
     sessions: [],
     sites: [],

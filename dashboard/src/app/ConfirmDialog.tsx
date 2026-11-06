@@ -215,7 +215,7 @@ function SingleDialog({ req, csrf, onClose, onSignedOut }: DialogProps) {
               if (!busy) void runPreview("");
             }}
           >
-            <Field label="Version to sign" required help="The version number in the policy file. It decides what merges with no human, so it is typed, not clicked." error={fieldError} announce>
+            <Field label="Version to sign" required help={req.confirmHelp ?? "The version number in the policy file. It decides what merges with no human, so it is typed, not clicked."} error={fieldError} announce>
               <input ref={confirmRef} className="cap-input" type="text" inputMode="numeric" autoComplete="off" autoFocus value={typedVersion} readOnly={busy} onChange={(e) => setTypedVersion(e.target.value)} />
             </Field>
           </form>

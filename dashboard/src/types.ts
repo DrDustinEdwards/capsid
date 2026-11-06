@@ -23,6 +23,7 @@ export type {
   InboxItem,
   OpsAgent,
   OpsAwaitingSeat,
+  OpsMergeUnits,
   OpsFeed,
   OpsJob,
   OpsSession,

@@ -59,7 +59,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "site_repair", "sign_policy_from_repo"];
+const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "site_repair", "sign_policy_change", "sign_policy_from_repo", "unit_resume", "automerge_resume"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["overnight"];
@@ -112,6 +112,11 @@ interface MockState {
   repairs: Array<{ namespace: string; tool: string; at: string }>;
   // Pull requests closed from the Portal since the mock started, as "<repo>#<number>".
   closedPrs: Set<string>;
+  // The merge units' controls: the units the policy promotes and its version once a change
+  // is signed, units whose suspension was lifted, and namespaces whose auto-merge resumed.
+  policy: { version: string; units: string[] } | null;
+  unitsLifted: Set<string>;
+  automergeResumed: Set<string>;
   tokens: Map<string, { action: PortalAction; params: Record<string, string>; expires: number }>;
 }
 
@@ -507,6 +512,14 @@ function feed(nextRefresh: number, st: MockState): OpsFeed {
   out.live.sites = st.sites.map((s) => ({ ...s }));
   out.live.packages = st.packages.map((p) => ({ ...p }));
   out.live.awaiting_seat = out.live.awaiting_seat.filter((a) => !st.closedPrs.has(`${a.repo}#${a.number}`));
+  if (st.policy && out.live.merge_policy.loads) out.live.merge_policy = { ...out.live.merge_policy, ...st.policy };
+  const units = out.live.merge_policy.loads ? out.live.merge_policy.units : [];
+  out.live.merge_units = {
+    ...out.live.merge_units,
+    suspended: out.live.merge_units.suspended.filter((u) => !st.unitsLifted.has(u.unit)),
+    proposals: out.live.merge_units.proposals.filter((p) => (p.kind === "promote" ? !units.includes(p.unit) : units.includes(p.unit))),
+  };
+  if (out.live.merge_safety) out.live.merge_safety = { ...out.live.merge_safety, namespaces: out.live.merge_safety.namespaces.map((n) => (st.automergeResumed.has(n.namespace) ? { ...n, paused: null } : n)) };
   out.refresh_allowed_at = nextRefresh > mockNow() ? new Date(nextRefresh).toISOString() : null;
   return out;
 }
@@ -836,10 +849,26 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         apply: (st) => void st.repairs.unshift({ namespace: ns, tool, at: now }),
       };
     }
-    // The merge units' controls have no screen yet: the mock answers as the Worker does
-    // when nothing is promoted or suspended.
-    case "sign_policy_change":
-      throw new Refusal(400, "The mock holds no signed auto-merge policy, so no version is changed.");
+    // A signed change to the promoted units: the typed version must be the next one.
+    case "sign_policy_change": {
+      const change = need(params, "change", "The change");
+      const unit = need(params, "unit", "The unit");
+      if (!f.live.merge_policy.loads) throw new Refusal(400, "the auto-merge policy in force does not load, so it is not changed.");
+      const from = f.live.merge_policy.version;
+      const to = String(Number(from) + 1);
+      const listed = f.live.merge_policy.units.includes(unit);
+      if (change === "promote" && listed) throw new Refusal(400, `${unit} is already promoted to auto in version ${from}.`);
+      if (change === "demote" && !listed) throw new Refusal(400, `${unit} is not promoted to auto in version ${from}, so there is nothing to remove.`);
+      const typed = need(params, "confirm", "The version to sign");
+      if (typed !== to) throw new Refusal(400, `${typed} is not the policy's next version. Type ${to} to sign it. Nothing was signed.`);
+      const units = change === "promote" ? [...f.live.merge_policy.units, unit] : f.live.merge_policy.units.filter((u) => u !== unit);
+      return {
+        summary: change === "promote" ? `Promote ${unit} to auto and sign version ${to}.` : `Remove ${unit} from auto and sign version ${to}.`,
+        done: `Signed auto-merge policy version ${to}${change === "promote" ? ` with ${unit} promoted` : ` without ${unit}`}.`,
+        changes: [`capsid/policy/auto-merge.md: version ${from} -> ${to}, signed.`, change === "promote" ? `${unit} is added under ## Auto units.` : `${unit} is removed from ## Auto units: its pull requests wait for an approval again.`],
+        apply: (st) => void (st.policy = { version: to, units }),
+      };
+    }
     // The mock's repo says version 8 against the stored 7, so the typed version is checked
     // as the Worker checks it and a perform writes nothing.
     case "sign_policy_from_repo": {
@@ -857,10 +886,31 @@ function plan(f: OpsFeed, action: PortalAction, params: Record<string, string>):
         apply: () => {},
       };
     }
-    case "unit_resume":
-      throw new Refusal(400, `${params.unit ?? "That unit"} is not suspended, so there is nothing to lift.`);
-    case "automerge_resume":
-      throw new Refusal(400, `auto-merge for ${params.namespace ?? "that namespace"} is not paused, so there is nothing to lift.`);
+    case "unit_resume": {
+      const unit = need(params, "unit", "The unit");
+      need(params, "reason", "The reason");
+      const s = f.live.merge_units.suspended.find((u) => u.unit === unit);
+      if (!s) throw new Refusal(400, `${unit} is not suspended, so there is nothing to lift.`);
+      return {
+        summary: `Lift the suspension of the merge unit ${unit}.`,
+        done: `Lifted the suspension of ${unit}.`,
+        changes: [`${unit}: suspended since ${s.since} ("${s.reason}") -> lifted. The tick may merge its pull requests unattended again; a rollback after now suspends it again.`],
+        apply: (st) => void st.unitsLifted.add(unit),
+      };
+    }
+    case "automerge_resume": {
+      const ns = need(params, "namespace", "The namespace");
+      need(params, "reason", "The reason");
+      const row = f.live.merge_safety?.namespaces.find((n) => n.namespace === ns);
+      if (!row?.paused) throw new Refusal(400, `auto-merge for ${ns} is not paused, so there is nothing to lift.`);
+      const { since, reason } = row.paused;
+      return {
+        summary: `Lift the pause on auto-merge for ${ns}.`,
+        done: `Resumed auto-merge for ${ns}.`,
+        changes: [`${ns}: auto-merge paused since ${since} ("${reason}") -> lifted. The tick may merge its pull requests unattended again; new bad merges pause it again.`],
+        apply: (st) => void st.automergeResumed.add(ns),
+      };
+    }
   }
 }
 
@@ -1290,7 +1340,7 @@ function quietFeed(f: OpsFeed): OpsFeed {
  *  /api/... as the browser on the Portal host asks for them. */
 export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => void {
   let nextRefresh = 0;
-  const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), repairs: [], closedPrs: new Set(), tokens: new Map() };
+  const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), repairs: [], closedPrs: new Set(), policy: null, unitsLifted: new Set(), automergeResumed: new Set(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();

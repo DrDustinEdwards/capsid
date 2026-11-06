@@ -2,7 +2,7 @@ import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense } from "react";
 import { useApp } from "../app/ctx";
-import { ciState } from "../lib/derive";
+import { ciState, type Kind } from "../lib/derive";
 import { checkWords } from "../../../src/check-words";
 import { age, ago, ms, utc } from "../lib/format";
 import { St } from "../ui/icons";
@@ -10,7 +10,7 @@ import { Panel } from "capsomer/react/panel";
 import { Empty } from "capsomer/react/empty";
 import { approveRequest, canApprove, closeRequest, prAnchor, prName, prUrl } from "../lib/pr-actions";
 import { NoSnapshot, PageHead } from "./shared";
-import type { OpsAwaitingSeat } from "../types";
+import type { OpsAwaitingSeat, OpsMergeUnits } from "../types";
 
 function prLabel(url: string): string {
   const m = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(url);
@@ -153,6 +153,9 @@ export function PullRequests() {
                     <th>Reverts</th>
                     <th>State</th>
                     <th>Why</th>
+                    <th>
+                      <span className="sr-only">Action</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -170,6 +173,18 @@ export function PullRequests() {
                       <td data-label="State">{n.paused ? <St kind="warn">Paused</St> : <span className="faint">running</span>}</td>
                       {/* The reason wraps in its own cell: a status chip does not wrap. */}
                       <td className="muted" data-label="Why">{n.paused?.reason ?? ""}</td>
+                      <td>
+                        {n.paused && (
+                          <button
+                            type="button"
+                            className="btn"
+                            aria-label={`Resume auto-merge for ${n.namespace}`}
+                            onClick={() => confirm({ action: "automerge_resume", params: { namespace: n.namespace }, title: `Resume auto-merge for ${n.namespace}` })}
+                          >
+                            Resume
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -177,6 +192,7 @@ export function PullRequests() {
             </div>
           </Panel>
         )}
+        <MergeUnits />
       </div>
       <Panel flush title="Pull requests, last 7 days" src="recorded against jobs" count={live.prs.length}>
         <div className="scroll-x reflow">
@@ -225,6 +241,109 @@ export function PullRequests() {
         <DeploysTable />
       </ChartSlot>
     </div>
+  );
+}
+
+// The merge units (a project and a kind of change, such as sample/docs; src/merge-units.ts):
+// those the signed policy promotes to auto, those suspended after a rollback of an unattended
+// merge, and the tick's promote and demote proposals. Each row offers its control: Demote and
+// Promote sign the policy's next version (sign_policy_change, the version typed), and Lift
+// suspension is unit_resume, with a reason. docs/autonomy.md, "Earned promotion and demotion".
+type UnitRow = { unit: string; state: "auto" | "suspended" | "promote" | "demote"; why: string };
+
+function unitRows(promoted: readonly string[], units: OpsMergeUnits): UnitRow[] {
+  const rows = new Map<string, UnitRow>();
+  for (const u of promoted) rows.set(u, { unit: u, state: "auto", why: "" });
+  for (const p of units.proposals) {
+    // A demote proposal is for a unit in the list; a promote one for a unit not yet in it.
+    if (p.kind === "demote" && !rows.has(p.unit)) continue;
+    rows.set(p.unit, { unit: p.unit, state: p.kind, why: p.title });
+  }
+  for (const s of units.suspended) {
+    const row = rows.get(s.unit);
+    rows.set(s.unit, { unit: s.unit, state: "suspended", why: row?.state === "demote" ? row.why : s.reason });
+  }
+  return [...rows.values()].sort((a, b) => a.unit.localeCompare(b.unit));
+}
+
+const UNIT_STATE: Record<UnitRow["state"], { kind: Kind; label: string }> = {
+  auto: { kind: "ok", label: "Auto" },
+  suspended: { kind: "warn", label: "Suspended" },
+  promote: { kind: "queued", label: "Ready to promote" },
+  demote: { kind: "warn", label: "Proposed for removal" },
+};
+
+function MergeUnits() {
+  const { feed, confirm } = useApp();
+  const { merge_policy: policy, merge_units: units } = feed.live;
+  if (!policy.loads || !units) return null;
+  const rows = unitRows(policy.units, units);
+  const next = String(Number(policy.version) + 1);
+  const sign = (change: "promote" | "demote", unit: string) =>
+    confirm({
+      action: "sign_policy_change",
+      params: { change, unit },
+      title: change === "promote" ? `Promote ${unit} to auto-merge` : `Remove ${unit} from auto-merge`,
+      confirmHelp: `The policy's next version, ${next}. It decides what merges with no human, so it is typed, not clicked.`,
+    });
+  const suspended = new Set(units.suspended.map((s) => s.unit));
+  return (
+    <Panel flush title="Merge units" id="merge-units" count={rows.length} src={units.generated ? `judged ${utc(ms(units.generated))}` : "not judged yet"}>
+      {rows.length ? (
+        <div className="scroll-x reflow">
+          <table className="list cards-below-1100">
+            <thead>
+              <tr>
+                <th>Unit</th>
+                <th>State</th>
+                <th>Why</th>
+                <th>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const st = UNIT_STATE[r.state];
+                const listed = policy.units.includes(r.unit);
+                return (
+                  <tr key={r.unit}>
+                    <td className="mono nowrap">{r.unit}</td>
+                    <td data-label="State">
+                      <St kind={st.kind}>{st.label}</St>
+                    </td>
+                    <td className="muted" data-label="Why">
+                      {r.why || (r.state === "auto" ? "merges with no human when every other check passes" : "")}
+                    </td>
+                    <td>
+                      <span className="toolbar">
+                        {suspended.has(r.unit) && (
+                          <button type="button" className="btn" aria-label={`Lift the suspension of ${r.unit}`} onClick={() => confirm({ action: "unit_resume", params: { unit: r.unit }, title: `Lift the suspension of ${r.unit}` })}>
+                            Lift suspension
+                          </button>
+                        )}
+                        {r.state === "promote" && (
+                          <button type="button" className="btn primary" aria-label={`Promote ${r.unit}`} onClick={() => sign("promote", r.unit)}>
+                            Promote
+                          </button>
+                        )}
+                        {listed && (
+                          <button type="button" className="btn" aria-label={`Demote ${r.unit}`} onClick={() => sign("demote", r.unit)}>
+                            Demote
+                          </button>
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <Empty kind="all-clear" title="No unit is promoted, suspended or ready to promote." />
+      )}
+    </Panel>
   );
 }
 
