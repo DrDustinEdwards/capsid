@@ -67,7 +67,7 @@ export default defineConfig({
         compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
         d1Databases: ["DB"],
         kvNamespaces: ["APP_KV", "OAUTH_KV"],
-        r2Buckets: ["MEDIA", "HOLDOUT"],
+        r2Buckets: ["MEDIA", "HOLDOUT", "AUDIT_BUCKET"],
         // site-runtime's two SQLite Durable Objects, exported by src/index.ts as in
         // wrangler.jsonc.example.
         durableObjects: {
