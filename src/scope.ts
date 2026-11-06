@@ -243,6 +243,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/workers-builds": "a site page's deploys tab: the Workers Builds of the Worker one namespace's site row names, through the reader behind capsid_admin_read_ops action workers_builds, gated by portalGate",
   "/portal/api/build-log": "one Workers Build's log for a site page's deploys tab, through the reader behind capsid_admin_read_ops action workers_build_logs, gated by portalGate",
   "/portal/api/digest": "the Portal's since-you-last-looked strip, through the reader behind capsid_work_jobs action list view digest, over every namespace, gated by portalGate",
+  "/portal/api/backups": "Health's Backups tab: every site's backup_status read live through its operator API beside its Amazon copy, through the reader behind capsid_admin_read_ops action backups, gated by portalGate",
   "/portal/api/convergence": "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
   "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_read_status action status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",

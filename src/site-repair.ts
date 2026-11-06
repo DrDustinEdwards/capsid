@@ -70,6 +70,20 @@ async function writeLimit(env: Pick<Env, "APP_KV">, namespace: string, tool: str
   await env.APP_KV.put(limitKey(namespace, tool), JSON.stringify(next), { expirationTtl: 2 * 86_400 });
 }
 
+/** Take one call of the rate limit for a person's or the watcher's call: why it must wait,
+ *  or null after writing the call into the record. Shared with the backups
+ *  (src/site-backup.ts), so a site's operator calls have one limit. */
+export async function takeLimit(env: Pick<Env, "APP_KV">, namespace: string, tool: string, now: Date, auto: boolean): Promise<string | null> {
+  const before = await readLimit(env, namespace, tool);
+  const wait = limitRefusal(before, now, auto);
+  if (wait) return wait;
+  // The limit is written before the call, which narrows a race between two callers but does
+  // not close it: KV has no compare-and-set, so two that read the same record both go. The
+  // operator API's own limits are the hard bound (Grok audit 2026-10-21, CA-7).
+  await writeLimit(env, namespace, tool, before, now, auto);
+  return null;
+}
+
 export type RepairOutcome =
   | { ran: false; refusal: string }
   | { ran: true; call: OperatorCall; line: string; recorded: boolean };
@@ -92,13 +106,8 @@ export async function runSiteRepair(
   }
   const refusal = toolRefusal(target.operator, args.tool);
   if (refusal) return { ran: false, refusal };
-  const before = await readLimit(env, args.namespace, args.tool);
-  const wait = limitRefusal(before, now, args.auto);
+  const wait = await takeLimit(env, args.namespace, args.tool, now, args.auto);
   if (wait) return { ran: false, refusal: `${args.tool} on ${args.namespace} waits: ${wait}` };
-  // The limit is written before the call, which narrows a race between two callers but does
-  // not close it: KV has no compare-and-set, so two that read the same record both go. The
-  // operator API's own limits are the hard bound (Grok audit 2026-10-21, CA-7).
-  await writeLimit(env, args.namespace, args.tool, before, now, args.auto);
   const started = new Date();
   const call = await callOperator(env, target, args.tool, fetchImpl);
   const line = callLine(args.tool, call);

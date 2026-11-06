@@ -342,6 +342,7 @@ const OUTPUTS: Record<string, Shape> = {
     { version: num, read_at: str, workers: rows, databases: rows, kv_namespaces: rows, buckets: rows, problems: strs },
     { read_at: str, worker: obj, databases: rows, kv_namespaces: rows, buckets: rows, problems: strs },
   ]),
+  site_backups: { read_at: str, capsid: obj, sites: rows, amazon_report_at: nullable(str), not_configured: strs },
   workers_build_logs: { build_uuid: str, lines: strs, line_count: num, truncated: bool, note: str.optional() },
   set_site_key: { namespace: str, matched: bool, note: str, site: obj, carrel: obj },
   agents: mergeOutputs([agentResult, { ok: bool, action: str, archived: rows }]),

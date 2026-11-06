@@ -13,7 +13,7 @@ import { DEMO_CAPTURED, demoFileName } from "../src/lib/demo.ts";
 // package's history is read on its own, into packages/history/<name>.json (src/lib/demo.ts reads it).
 // A site page's reads take a query; the demo keeps one answer per route (src/lib/demo.ts drops the
 // query), captured for the sample site, so a route's file is named for its path alone.
-const ROUTES = ["ops", "namespaces", "activity", "claims", "stale", "merge-units", "site-search?namespace=sample", "site-traffic?namespace=sample", "workers-builds?namespace=sample", "build-log?build=0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "plan", "digest", "maintenance", "convergence", "shared-code", "completeness", "resources", "library", "trends", "push"];
+const ROUTES = ["ops", "namespaces", "activity", "claims", "stale", "merge-units", "site-search?namespace=sample", "site-traffic?namespace=sample", "workers-builds?namespace=sample", "build-log?build=0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "plan", "digest", "maintenance", "convergence", "backups", "shared-code", "completeness", "resources", "library", "trends", "push"];
 
 // Before the mock loads: it reads the pinned clock as it starts.
 process.env.WF_MOCK_NOW = DEMO_CAPTURED;

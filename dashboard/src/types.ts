@@ -75,6 +75,8 @@ export type {
   PortalDigest,
   PortalMaintenance,
   PortalConvergence,
+  PortalBackups,
+  SiteBackupRow,
   ConvergenceSite,
   ConvergenceCheck,
   OpsMaintenanceItem,

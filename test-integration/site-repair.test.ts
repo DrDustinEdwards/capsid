@@ -6,6 +6,7 @@ import type { OpsSiteConfig } from "../src/ops-types/sites";
 import { previewControl, performControl } from "../src/controls";
 import { watchSites } from "../src/site-watch";
 import { handlePortalConvergence } from "../src/portal-convergence";
+import { readSiteBackups, runSiteBackups } from "../src/site-backup";
 import { portalSessionCookie } from "../src/portal-auth";
 import type { PortalConvergence } from "../src/ops-types/views";
 
@@ -198,6 +199,38 @@ describe("the site_repair control", () => {
       expect(performed.ok).toBe(false);
       expect(performed.ok ? "" : performed.refusal).toMatch(/sync_pages is not in this site's allowlist/);
       expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'site-repair'").first<{ n: number }>())?.n).toBe(0);
+    } finally {
+      await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(row!.operator).run();
+    }
+  });
+});
+
+describe("the backups (check, and back up now)", () => {
+  it("backs up only a site with backup: true, records each call once, holds the rate limit, and reads its status live", async () => {
+    const { env: e } = siteEnv();
+    const tools: string[] = [];
+    const impl = async (url: string, init: RequestInit = {}) => {
+      if (url !== OPERATOR) throw new Error(`unexpected fetch ${url}`);
+      const tool = JSON.parse(String(init.body)).tool as string;
+      tools.push(tool);
+      return tool === "backup_media"
+        ? Response.json({ ok: true, data: { files: [{ name: "media", complete: true, copied: 3 }] } })
+        : Response.json({ ok: true, data: { last_ok: "2026-10-10T05:00:00.000Z", age_hours: 7, files: { media: { last_ok: "2026-10-10T05:01:00.000Z", age_hours: 7 } } } });
+    };
+    expect(await runSiteBackups(e, { actor: EMAIL, via: "chat" }, NOW, impl)).toEqual({ ok: false, refusal: expect.stringMatching(/no site sets backup: true/) });
+    const row = await env.DB.prepare("SELECT operator FROM ops_sites WHERE namespace = 'dustinedwards'").first<{ operator: string }>();
+    await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(JSON.stringify({ ...JSON.parse(row!.operator), backup: true })).run();
+    try {
+      const ran = await runSiteBackups(e, { actor: EMAIL, via: "chat" }, NOW, impl);
+      expect(ran.ok && ran.runs.map((r) => (r.ran ? [r.namespace, r.line] : [r.namespace, r.refusal]))).toEqual([["dustinedwards", "backup_media ran: media complete (3 copied)"]]);
+      const again = await runSiteBackups(e, { namespace: "dustinedwards", actor: EMAIL, via: "chat" }, later(1), impl);
+      expect(again.ok && again.runs[0].ran).toBe(false);
+      expect(tools).toEqual(["backup_media"]);
+      expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'site-backup'").first<{ n: number }>())?.n).toBe(1);
+      expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM task_runs WHERE task = 'site-backup'").first<{ n: number }>())?.n).toBe(1);
+      const read = await readSiteBackups(e, impl);
+      expect(read.sites.map((s) => [s.namespace, s.status?.age_hours, s.status?.files?.media?.age_hours])).toEqual([["dustinedwards", 7, 7]]);
+      expect(JSON.stringify(read)).not.toContain(TOKEN);
     } finally {
       await env.DB.prepare("UPDATE ops_sites SET operator = ?1 WHERE namespace = 'dustinedwards'").bind(row!.operator).run();
     }

@@ -255,17 +255,26 @@ const OPEN_WORLD_THROUGH: Record<string, { reason: string; via: RegExp; evidence
     via: /\blistBuilds\(/,
     evidence: [{ file: "workers-builds.ts", pattern: /\bcfGet\(/ }],
   },
+  site_backups: {
+    reason: "reads each site's backup state live through its operator API",
+    via: /\breadSiteBackups\(/,
+    evidence: [
+      { file: "site-backup.ts", pattern: /\bcallOperator\(/ },
+      { file: "site-operator.ts", pattern: /\bfetchImpl\(/ },
+    ],
+  },
   workers_build_logs: {
     reason: "reads a build's log from the Cloudflare API",
     via: /\bbuildLogs\(/,
     evidence: [{ file: "workers-builds.ts", pattern: /\bcfGet\(/ }],
   },
   controls: {
-    reason: "perform closes a pull request on GitHub and runs a site repair through the site's operator API",
+    reason: "perform closes a pull request on GitHub and runs a site repair or a backup through the site's operator API",
     via: /\bperformControl\(/,
     evidence: [
       { file: "controls-perform.ts", pattern: /\bmanagePr\(/ },
       { file: "controls-perform.ts", pattern: /\brunSiteRepair\(/ },
+      { file: "controls-perform.ts", pattern: /\brunSiteBackups\(/ },
       { file: "site-repair.ts", pattern: /\bcallOperator\(/ },
       { file: "site-operator.ts", pattern: /\bfetchImpl\(/ },
     ],

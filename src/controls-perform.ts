@@ -32,6 +32,7 @@ import { overnightValueRefusal, setOvernight } from "./overnight";
 import { performPolicyChange, performPolicyFromRepo } from "./policy-sign";
 import { planApproval, performApproval } from "./pr-approvals";
 import { runSiteRepair } from "./site-repair";
+import { runSiteBackups } from "./site-backup";
 import { auditStatement } from "./store-guards";
 
 // A control's perform (src/controls.ts is the core): the one dispatch to the shared
@@ -414,6 +415,21 @@ export async function performAction(
         committed = true;
         summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_REPAIR_NOT_RECORDED in the log)."}`;
         await auditClick(env, actor, source, surface, action, namespace, { tool, ok: outcome.call.ok, converged: outcome.call.converged });
+        break;
+      }
+      case "site_backup": {
+        // Every check runs again inside runSiteBackups: the configuration, the tokens and the
+        // rate limit can all change between the preview and this click.
+        const namespace = params.namespace?.trim() || undefined;
+        const outcome = await runSiteBackups(env, { namespace, actor, via: surface }, now);
+        if (!outcome.ok) return { ok: false, refusal: outcome.refusal };
+        committed = outcome.runs.some((r) => r.ran);
+        if (!committed) return { ok: false, refusal: outcome.runs.map((r) => (r.ran ? "" : r.refusal)).join(" ") };
+        const unrecorded = outcome.runs.some((r) => r.ran && !r.recorded);
+        summary = `${outcome.runs.map((r) => `${r.namespace}: ${r.ran ? r.line : `skipped, ${r.refusal}`}`).join(". ")}.${unrecorded ? " A call's audit row was not written (SITE_BACKUP_NOT_RECORDED in the log)." : ""}`;
+        await auditClick(env, actor, source, surface, action, namespace ?? null, {
+          sites: outcome.runs.map((r) => ({ namespace: r.namespace, ran: r.ran, ok: r.ran ? r.call.ok : false })),
+        });
         break;
       }
     }

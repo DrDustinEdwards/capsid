@@ -10,17 +10,25 @@ import { callSignal } from "./call-signal";
 //
 // Two allowlists, both enforced in this Worker before any request leaves it:
 //   - the CEILING, in code: a repair is a sync_* tool (sync_status is a read, not a
-//     repair) or refresh_citations. backup_media is never called, and neither is anything
-//     else the site's operator API serves (save_post, delete_post, decide_mention...).
+//     repair) or refresh_citations, and a backup is backup_status or backup_media
+//     (Capsid Admin's backups, src/site-backup.ts, Dustin 2026-11-06: one control for
+//     every site in place of each site's own). Nothing else the site's operator API
+//     serves is ever called (save_post, delete_post, decide_mention...).
 //   - the SITE'S OWN list, in its configuration: the tools its repairs map and its weekly
-//     tools name. A tool the ceiling allows but the site does not name is refused too.
+//     tools name, and the two backup tools only where it sets backup: true. A tool the
+//     ceiling allows but the site does not name is refused too.
 // Capsid never merges and never mints: the token is one the seat set as a Capsid Worker
 // secret, read by name, sent only to the site's own origin, and never logged, returned or
 // put in an audit row.
 
+/** The two backup tools: the backup state read now, and the files backup run now (copy only). */
+const BACKUP_TOOLS = ["backup_status", "backup_media"] as const;
+type BackupTool = (typeof BACKUP_TOOLS)[number];
+const isBackupTool = (tool: string): tool is BackupTool => (BACKUP_TOOLS as readonly string[]).includes(tool);
+
 /** The ceiling: the only tools Capsid will ever call as a repair. */
 export function repairToolRefusal(tool: string): string | null {
-  if (tool === "backup_media") return "backup_media is not a repair Capsid may call: it copies the media bucket, and it stays with the site's own watchdog.";
+  if (isBackupTool(tool)) return `${tool} is a backup, not a repair: Capsid Admin's backups call it on a site that sets backup: true.`;
   if (tool === "sync_status") return "sync_status is a read, not a repair.";
   if (tool === "refresh_citations" || /^sync_[a-z][a-z_]{0,40}$/.test(tool)) return null;
   return `'${tool}' is not a repair Capsid may call: only the site's sync_* tools and refresh_citations are.`;
@@ -49,7 +57,7 @@ export function parseOperator(raw: string): ParsedOperator {
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) return refuse("must be a JSON object.");
   const o = value as Record<string, unknown>;
-  const known = ["path", "auth_var", "repairs", "weekly", "secrets"];
+  const known = ["path", "auth_var", "repairs", "weekly", "secrets", "backup"];
   const extra = Object.keys(o).filter((k) => !known.includes(k));
   if (extra.length) return refuse(`takes ${known.join(", ")}; '${extra[0]}' is not one of them.`);
   if (typeof o.path !== "string" || !OPERATOR_PATH.test(o.path) || o.path.includes("..")) return refuse("path must be a path on the site's origin, such as /api/operator.");
@@ -84,7 +92,8 @@ export function parseOperator(raw: string): ParsedOperator {
       if (!secrets.includes(name)) secrets.push(name);
     }
   }
-  return { ok: true, operator: { path: o.path, auth_var: o.auth_var, repairs: Object.fromEntries(repairs), weekly, secrets } };
+  if (o.backup !== undefined && typeof o.backup !== "boolean") return refuse("backup must be true or false.");
+  return { ok: true, operator: { path: o.path, auth_var: o.auth_var, repairs: Object.fromEntries(repairs), weekly, secrets, backup: o.backup === true } };
 }
 
 /** The tools this site allows: its repairs and its weekly tools. */
@@ -94,8 +103,13 @@ export function allowedTools(operator: SiteOperator): string[] {
 
 /** Why `tool` may not be called on this site, or null. The ceiling first, then the site's
  *  own list, checked again here before every request, not only when the configuration
- *  was saved: a row written before a ceiling change must not outlive it. */
-export function toolRefusal(operator: SiteOperator, tool: string, reading = false): string | null {
+ *  was saved: a row written before a ceiling change must not outlive it. A backup tool
+ *  goes only where the site set backup: true, and only from the backups (`backup`). */
+export function toolRefusal(operator: SiteOperator, tool: string, reading = false, backup = false): string | null {
+  if (backup) {
+    if (!isBackupTool(tool)) return `'${tool}' is not a backup tool: only ${BACKUP_TOOLS.join(" and ")} are.`;
+    return operator.backup ? null : `this site does not set backup: true in its operator configuration, so Capsid calls no backup tool on it.`;
+  }
   if (reading && tool === "sync_status") return null;
   const ceiling = repairToolRefusal(tool);
   if (ceiling) return ceiling;
@@ -116,7 +130,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export interface OperatorCall {
   ok: boolean;
   status: number;
-  /** The reply's data, for a read (sync_status). Never echoed for a repair. */
+  /** The reply's data, for a read (sync_status) or a backup. Never echoed for a repair. */
   data: unknown;
   converged: boolean | null;
   expected: number | null;
@@ -140,10 +154,10 @@ export async function callOperator(
   site: { origin: string; operator: SiteOperator },
   tool: string,
   fetchImpl: FetchLike = fetch,
-  opts: { reading?: boolean } = {}
+  opts: { reading?: boolean; backup?: boolean } = {}
 ): Promise<OperatorCall> {
   const fail = (status: number, error: string): OperatorCall => ({ ok: false, status, data: null, converged: null, expected: null, present: null, error: error.slice(0, ERROR_MAX) });
-  const refusal = toolRefusal(site.operator, tool, opts.reading === true);
+  const refusal = toolRefusal(site.operator, tool, opts.reading === true, opts.backup === true);
   if (refusal) return fail(0, `refused by Capsid before any request: ${refusal}`);
   const token = (env as unknown as Record<string, unknown>)[site.operator.auth_var];
   if (typeof token !== "string" || token.length === 0) return fail(0, `the Capsid Worker secret ${site.operator.auth_var} is not set, so nothing was called.`);
@@ -171,7 +185,7 @@ export async function callOperator(
   return {
     ok: true,
     status: response.status,
-    data: opts.reading ? body.data : null,
+    data: opts.reading || opts.backup ? body.data : null,
     converged: typeof data?.converged === "boolean" ? data.converged : null,
     expected: num(data?.expected),
     present: num(data?.present),
