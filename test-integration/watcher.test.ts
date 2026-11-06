@@ -91,7 +91,17 @@ describe("a job blocked on a human is not a watcher finding", () => {
     // job was noise (Dustin, 2026-09-26). The Portal lists blocked jobs with their
     // commands; alerting is a separate item.
     await seed("job_longblocked0", { status: "blocked", posted_by: "github:DrDustinEdwards", updated_at: hoursAgo(48) });
-    const { findings, ran } = await gatherFindings(env_, NOW);
+    // Only the jobs matter here, so nothing leaves the test: the watcher's GitHub and site
+    // reads fail at once instead of waiting on the network, which ran this past its timeout.
+    const live = globalThis.fetch;
+    globalThis.fetch = (async () => new Response("offline in this test", { status: 503 })) as typeof fetch;
+    let gathered: Awaited<ReturnType<typeof gatherFindings>>;
+    try {
+      gathered = await gatherFindings(env_, NOW, globalThis.fetch);
+    } finally {
+      globalThis.fetch = live;
+    }
+    const { findings, ran } = gathered;
     expect(findings.filter((f) => f.fingerprint.startsWith("blocked-"))).toEqual([]);
     expect([...ran] as string[]).not.toContain("blocked jobs");
   });
