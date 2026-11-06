@@ -19,7 +19,7 @@ const MERGE_RESUME_ACTOR = "system:merge-resume";
 // keeps not happening, and each stale thing was found only when he asked). One pass a day
 // on the five-minute tick, reusing its stamp pattern rather than adding a second scheduler.
 // Every finding either was acted on by a step that already audit-logs (the merge-resume
-// step) or lands in one short list, served by capsid_run_improve action status, that the seat reads at the
+// step) or lands in one short list, served by capsid_read_status action status, that the seat reads at the
 // start of a session. This pass lists; it acts twice. It prunes merged branches, which is
 // off until the seat turns it on and audit-logs each delete (src/maintenance-branches.ts),
 // and it tags a shared package's merged version bump, which is on until the seat turns it
@@ -212,7 +212,7 @@ export async function gatherMaintenance(
 }
 
 /** The daily pass. Not due returns a note and records nothing; due gathers the list, keeps
- *  it in KV for capsid_run_improve action status, and stamps the day. The stamp is written after the list,
+ *  it in KV for capsid_read_status action status, and stamps the day. The stamp is written after the list,
  *  so a pass that threw runs again on the next tick. */
 export async function maintenanceTick(
   env: Env,

@@ -191,7 +191,7 @@ by different calls and neither is editable by the credential they bind.
 
 **The two exceptions are named rather than left as a general no**, because a table
 that says no while the inventory says yes teaches a reader to distrust the table.
-The seat granted them on 2026-09-11. Every other driver holds none. `capsid_run_improve` action `status` and Capsid Portal list what each agent actually holds, so the
+The seat granted them on 2026-09-11. Every other driver holds none. `capsid_read_status` action `status` and Capsid Portal list what each agent actually holds, so the
 inventory settles it and this table describes the rule.
 
 A driver opens pull requests with its own GitHub access and never merges them. A driver's pull request is
@@ -232,8 +232,8 @@ rather than after a driver has already taken it.
 
 ## 8. Names kept from the removed improve loop
 
-`capsid_run_improve` serves only action `status`, a read-grant read of Capsid's state,
-and `capsid_admin_control_improve` holds the admin's switches (`sign_policy`,
+`capsid_read_status` serves only action `status`, a read-grant read of Capsid's state,
+and `capsid_admin_manage_switches` holds the admin's switches (`sign_policy`,
 `breaker_reset` and `overnight`). `IMPROVE_SCORE_SECRET` is the root the
 job, policy and backup credential keys are derived from.
 
@@ -276,7 +276,7 @@ Optional parts stay hidden or inert until configured:
 
 One switch, off by default.
 
-- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_control_improve` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
+- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_manage_switches` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
 
 Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16.
 

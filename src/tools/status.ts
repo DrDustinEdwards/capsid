@@ -7,7 +7,7 @@ import { signPolicyDocument } from "../policy-sign";
 import { resetBreaker } from "../job-breaker";
 import { fail, ok, type ToolCtx } from "./docs";
 
-// The two operations behind capsid_run_improve (status) and capsid_admin_control_improve
+// The two operations behind capsid_read_status (status) and capsid_admin_manage_switches
 // (the admin's switches). Both tools keep the improve loop's names, under which agents'
 // tools lists grant them, though the loop itself was removed (Dustin, 2026-10-19).
 export function defineStatusOperations(server: McpServer, ctx: ToolCtx): void {

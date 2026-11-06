@@ -210,7 +210,7 @@ export function opsJobFrom(row: JobFeedRow, commandSignature: SignatureCheck | n
   };
 }
 
-/** One credential as the feed shows it: the inventory capsid_run_improve action status serves, with its
+/** One credential as the feed shows it: the inventory capsid_read_status action status serves, with its
  *  record. Grants are left out; the contract carries flags only. */
 export function opsAgentFrom(agent: AgentSummary): OpsAgent {
   const r = agent.record;

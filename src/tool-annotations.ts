@@ -59,7 +59,7 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // post and record create a job each call; evidence is checked against GitHub.
   capsid_work_jobs: destructive({ idempotent: false, openWorld: true }),
   // Status only: Capsid's state from this Worker's own stores.
-  capsid_run_improve: read({ idempotent: true, openWorld: false }),
+  capsid_read_status: read({ idempotent: true, openWorld: false }),
 
   // ---- Capsid Admin (8)
   // Reads the queue, the Portal's stored state and GitHub's open pull requests.
@@ -80,7 +80,7 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   capsid_admin_run_controls: destructive({ idempotent: false, openWorld: true }),
   // sign_policy overwrites a policy document (snapshotted and audit-logged each call), and
   // breaker_reset and overnight overwrite their switches. Only this Worker's own stores.
-  capsid_admin_control_improve: destructive({ idempotent: false, openWorld: false }),
+  capsid_admin_manage_switches: destructive({ idempotent: false, openWorld: false }),
   // Replaces a site's key on the site Worker and on Carrel through the Cloudflare API.
   capsid_admin_set_site_key: destructive({ idempotent: false, openWorld: true }),
 };

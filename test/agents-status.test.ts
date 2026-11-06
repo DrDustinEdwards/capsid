@@ -6,7 +6,7 @@ import { defaultScopes, serializeScopes } from "../src/agents-schema.ts";
 import { fakeD1, fakeEnv, fakeKv, fakeR2 } from "./fakes.ts";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
-// The agent inventory is in capsid_run_improve action status, which a session calls at the start of a
+// The agent inventory is in capsid_read_status action status, which a session calls at the start of a
 // run and the console renders, so last_seen is seen by someone who can act on it.
 
 async function statusEnv(agents: Array<Record<string, unknown>>) {
@@ -29,13 +29,13 @@ async function row(name: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
-test("capsid_run_improve action status carries the agent inventory, with last_seen", async () => {
+test("capsid_read_status action status carries the agent inventory, with last_seen", async () => {
   const env = await statusEnv([
     await row("capsid-driver", { last_seen: "2026-09-11 02:00:00" }),
     await row("sample-driver"),
   ]);
   const status = await capsidStatus(env);
-  assert.ok(Array.isArray(status.agents), "capsid_run_improve action status does not report the agents");
+  assert.ok(Array.isArray(status.agents), "capsid_read_status action status does not report the agents");
   const capsid = status.agents.find((a) => a.name === "capsid-driver");
   assert.ok(capsid, "the capsid driver is missing from the report");
   assert.equal(capsid.last_seen, "2026-09-11 02:00:00");
@@ -69,8 +69,8 @@ test("the report never carries a key or the stored verifier", async () => {
   const env = await statusEnv([await row("capsid-driver")]);
   const status = await capsidStatus(env);
   const serialized = JSON.stringify(status.agents);
-  assert.ok(!serialized.includes(await sha256Hex("capsid-driver")), "capsid_run_improve action status handed out the stored verifier");
-  assert.ok(!/capsid_agent_/.test(serialized), "capsid_run_improve action status carries something shaped like a key");
+  assert.ok(!serialized.includes(await sha256Hex("capsid-driver")), "capsid_read_status action status handed out the stored verifier");
+  assert.ok(!/capsid_agent_/.test(serialized), "capsid_read_status action status carries something shaped like a key");
 });
 
 test("a Worker with no agents yet reports an empty inventory rather than failing", async () => {
@@ -79,10 +79,10 @@ test("a Worker with no agents yet reports an empty inventory rather than failing
   assert.deepEqual(status.agents, []);
 });
 
-// The auto-merge safety meter (src/merge-safety.ts) rides on capsid_run_improve action status from the
+// The auto-merge safety meter (src/merge-safety.ts) rides on capsid_read_status action status from the
 // report the tick keeps, so asking costs one KV read.
 
-test("capsid_run_improve action status carries the auto-merge safety meter, null before the first pass, and a scoped caller sees its own namespaces", async () => {
+test("capsid_read_status action status carries the auto-merge safety meter, null before the first pass, and a scoped caller sees its own namespaces", async () => {
   const empty = await capsidStatus(await statusEnv([]));
   assert.equal(empty.merge_safety, null);
   const row = (namespace: string, paused: { since: string; reason: string } | null) => ({ namespace, auto_merged: 3, approved: 1, deploys_verified: 4, rolled_back: 1, rollback_failed: 0, reverts: 1, bad_auto_7d: 2, paused });

@@ -165,23 +165,23 @@ async function servedActions(build: typeof buildServer, name: string): Promise<s
   return served?.enum ?? [];
 }
 
-test("capsid_run_improve serves status and the versions model, as reads, and the admin's switches are admin", async () => {
+test("capsid_read_status serves status and the versions model, as reads, and the admin's switches are admin", async () => {
   // The actions come from the schemas the servers serve, so an action added to either
   // tool without a decision here fails.
-  const driver = await servedActions(buildServer, "capsid_run_improve");
-  assert.deepEqual(driver, ["status", "versions"], "capsid_run_improve's action list changed; decide its requirement here and in TOOL_ACTION_GRANTS");
-  assert.equal(requiredForAction("capsid_run_improve", "status"), "read");
+  const driver = await servedActions(buildServer, "capsid_read_status");
+  assert.deepEqual(driver, ["status", "versions"], "capsid_read_status's action list changed; decide its requirement here and in TOOL_ACTION_GRANTS");
+  assert.equal(requiredForAction("capsid_read_status", "status"), "read");
   // The versions model is the public document (/public/versions/v1.json), so a read.
-  assert.equal(requiredForAction("capsid_run_improve", "versions"), "read");
+  assert.equal(requiredForAction("capsid_read_status", "versions"), "read");
 
-  const admin = await servedActions(buildAdminServer, "capsid_admin_control_improve");
+  const admin = await servedActions(buildAdminServer, "capsid_admin_manage_switches");
   // The overnight run's switch (src/overnight.ts) and the queue's circuit breaker
   // (src/job-breaker.ts) are among them.
   assert.deepEqual(
     [...admin].sort(),
     ["breaker_reset", "overnight", "sign_policy"],
-    "capsid_admin_control_improve's action list changed"
+    "capsid_admin_manage_switches's action list changed"
   );
-  for (const action of admin) assert.equal(requiredForAction("capsid_admin_control_improve", action), "admin", `capsid_admin_control_improve.${action}`);
+  for (const action of admin) assert.equal(requiredForAction("capsid_admin_manage_switches", action), "admin", `capsid_admin_manage_switches.${action}`);
   for (const action of admin) assert.ok(!driver.includes(action), `${action} is served to drivers`);
 });

@@ -123,7 +123,7 @@ block and complete act only on a job this caller holds, except as stated above.`
           .boolean()
           .optional()
           .describe(
-            "For block: true when the session needs an answer, not a command run. reason is the question; the Worker fixes the command as 'Answer in a resume note' (a command sent with it is refused). The job is marked a question in capsid_run_improve action status and the Portal's feed, and the seat answers with resume and a note, which every later claim and list for the job returns."
+            "For block: true when the session needs an answer, not a command run. reason is the question; the Worker fixes the command as 'Answer in a resume note' (a command sent with it is refused). The job is marked a question in capsid_read_status action status and the Portal's feed, and the seat answers with resume and a note, which every later claim and list for the job returns."
           ),
         approved_by_policy: bounded(32)
           .optional()

@@ -10,7 +10,7 @@ import { DAY_MS } from "./time";
 // module turns that per-package view into the published per-system document and the
 // nightly drift lines. Versions may be public (the coordinator's plan Dustin said go to):
 // the document is served at /public/versions/v1.json beside the model, and read through
-// capsid_run_improve action versions.
+// capsid_read_status action versions.
 //
 // Like toPublic, the document is built by picking named fields into new objects. A
 // private system's pins are published without the paths they were read from, the same

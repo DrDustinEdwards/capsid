@@ -16,7 +16,7 @@ import type { OpsMergeSafety } from "./ops-types/feed";
 import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 
-// Capsid's status as a driver and the Portal read it (capsid_run_improve action status,
+// Capsid's status as a driver and the Portal read it (capsid_read_status action status,
 // GET /portal/api/namespaces): per namespace the queue, the breaker, what waits on the
 // seat and the maintenance list, and across them the signed policies, the overnight
 // switch, the merge safety meter and, for the admin, the credential inventory. The
@@ -155,7 +155,7 @@ async function servedPolicies(env: Env): Promise<PolicyVersions> {
 }
 
 // An item an app reported about itself is the app's words, and an agent reads
-// capsid_run_improve action status, so its title is relayed inside an external fence (src/provenance.ts,
+// capsid_read_status action status, so its title is relayed inside an external fence (src/provenance.ts,
 // OWASP item 1; capsid/research/design-inbox-report.md, "Trust").
 function fenceReported(app: InboxApp): InboxApp {
   return { ...app, items: app.items.map((item) => (item.kind === "report" ? { ...item, title: externalFence("inbox-report", app.namespace, item.title) } : item)) };

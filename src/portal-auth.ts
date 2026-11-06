@@ -249,7 +249,7 @@ export async function handlePortalCallback(request: Request, env: Env, now: Date
 // machine to the Access sign-in and look, from its side, like the Portal being down.
 // The refusal names what was presented and what the page admits instead.
 const BEARER_REFUSAL =
-  "forbidden: Capsid Portal admits the administrator's Access session only. An agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_run_improve action status and capsid_work_jobs there. Open the Portal in a browser to sign in as the administrator.";
+  "forbidden: Capsid Portal admits the administrator's Access session only. An agent key authenticates to /ops/mcp, not to this page; the same state is served by capsid_read_status action status and capsid_work_jobs there. Open the Portal in a browser to sign in as the administrator.";
 
 export type PortalGate = { ok: true; user: PortalUser } | { ok: false; response: Response };
 

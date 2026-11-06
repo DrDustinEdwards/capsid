@@ -326,7 +326,7 @@ test("SWEEP: every served tool on both servers refuses a caller whose tools axis
 const READ_ACTIONS: Record<string, string[]> = { capsid_work_jobs: ["list"], capsid_lint_namespace: ["gather"] };
 
 // A read is a "read" or "admin_read" requirement for this action (TOOL_ACTION_GRANTS
-// decides capsid_run_improve's per action), or a READ_ACTIONS entry.
+// decides capsid_read_status's per action), or a READ_ACTIONS entry.
 function isReadCall(tool: string, action: string | undefined): boolean {
   const requirement = requiredForAction(tool, action);
   if (requirement === "read" || requirement === "admin_read") return true;

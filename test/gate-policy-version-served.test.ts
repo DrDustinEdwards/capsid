@@ -16,7 +16,7 @@ import { fakeD1, fakeEnv, fakeKv, fakeR2, type DocRow } from "./fakes.ts";
 // Every driver can learn the policy version it must approve under.
 //
 // A driver passes the version of capsid/policy/gates.md as approved_by_policy, but a
-// namespace-scoped driver cannot read the capsid namespace. So capsid_run_improve action status serves
+// namespace-scoped driver cannot read the capsid namespace. So capsid_read_status action status serves
 // the version and the enabled flag, and nothing else: not the body, not the classes,
 // not the never list. Reading the policy itself stays scoped to capsid.
 

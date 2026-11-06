@@ -66,9 +66,8 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_close_pr: "write",
   // list reads; every other action changes the queue.
   capsid_work_jobs: "action",
-  // Capsid's status (src/status.ts). The name is the improve loop's, kept when the loop
-  // was removed so no agent's tools list changes.
-  capsid_run_improve: "read",
+  // Capsid's status (src/status.ts).
+  capsid_read_status: "read",
 
   // What needs the seat, across every namespace and repo. It only reads.
   capsid_admin_whats_next: "admin_read",
@@ -94,7 +93,7 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // sign_policy decides whether this Worker may merge without a human, breaker_reset
   // reopens a namespace's queue and overnight starts unattended sessions. None of those
   // is a driver's work.
-  capsid_admin_control_improve: "admin",
+  capsid_admin_manage_switches: "admin",
   // Mints a site key and sets it on the site Worker and on Carrel.
   capsid_admin_set_site_key: "admin",
 };
@@ -233,7 +232,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "a Portal action's preview, which writes nothing: portalGate, a same-origin Sec-Fetch-Site, a 64KB body cap, then the X-Capsid-CSRF header against the capsid_portal_csrf cookie",
   "/portal/api/actions/perform":
     "a Portal action's perform: the preview's checks, then a token signed at preview time that binds the action, its params and the administrator's email for five minutes",
-  "/portal/api/namespaces": "the Portal's per-namespace status, read through the function behind capsid_run_improve action status, gated by portalGate",
+  "/portal/api/namespaces": "the Portal's per-namespace status, read through the function behind capsid_read_status action status, gated by portalGate",
   "/portal/api/activity": "the Portal's bounded audit_log read, gated by portalGate",
   "/portal/api/claims": "the Portal's bounded read of claims, evaluations and touches, through the capsid_admin_read_claims tool's readers, gated by portalGate",
   "/portal/api/stale": "the Portal's stale jobs, through the reader behind capsid_work_jobs action list stale: true, gated by portalGate",
@@ -245,7 +244,7 @@ export const UNGATED_ROUTES: Record<string, string> = {
   "/portal/api/build-log": "one Workers Build's log for a site page's deploys tab, through the reader behind capsid_admin_read_ops action workers_build_logs, gated by portalGate",
   "/portal/api/digest": "the Portal's since-you-last-looked strip, through the reader behind capsid_work_jobs action list view digest, over every namespace, gated by portalGate",
   "/portal/api/convergence": "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
-  "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_run_improve action status serves, gated by portalGate",
+  "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_read_status action status serves, gated by portalGate",
   "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
   "/portal/api/completeness": "the Portal's Completeness view: devkit's daily scoreboard (board.json on its scoreboard branch), read through the GitHub App and cached for ten minutes, gated by portalGate",
   "/portal/api/not-found": "the Portal's 404 panel: Capsid's own missing pages from page_404_daily over 30 days, read-only, gated by portalGate",
@@ -422,7 +421,7 @@ export const STEP_UP: Record<string, readonly string[] | "*"> = {
   capsid_admin_manage_namespaces: ["register", "update", "delete_perform"],
   capsid_admin_manage_agents: ["mint", "revoke", "update_scopes"],
   capsid_admin_run_controls: ["perform"],
-  capsid_admin_control_improve: "*",
+  capsid_admin_manage_switches: "*",
   capsid_admin_set_site_key: "*",
 };
 
@@ -499,8 +498,8 @@ const ADMIN_REASON: Record<string, string> = {
     "It reads the watcher's last pass, the Cloudflare account's Access and Email Routing configuration, and every Workers Build, across every namespace, which is wider than any one caller's scope.",
   capsid_admin_run_controls:
     "It runs the administrator's controls (revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
-  capsid_admin_control_improve:
-    "It holds the administrator's switches: sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_run_improve.",
+  capsid_admin_manage_switches:
+    "It holds the administrator's switches: sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_read_status.",
   capsid_admin_set_site_key: "It mints a site's operator key and sets it as a secret on the site's Worker and on Carrel, so a caller that could use it could hand itself a site's key.",
 };
 
@@ -521,7 +520,7 @@ function deny(message: string) {
 }
 
 // An omitted namespace means "every namespace" on tools such as capsid_find_docs
-// (list, glob, search), capsid_run_improve action status and capsid_work_jobs action list. For a caller scoped to "*" that changes nothing. For a
+// (list, glob, search), capsid_read_status action status and capsid_work_jobs action list. For a caller scoped to "*" that changes nothing. For a
 // narrowed caller it would be a hole with no check in it, invisible because the tool
 // works. So a namespace-restricted caller that omits it is refused and told to name
 // it. Whether a tool takes a namespace is read from its own input schema, so a tool
@@ -577,13 +576,13 @@ const ACTION_ARG: Record<string, string> = {
   capsid_inspect_repo: "action",
   capsid_close_pr: "action",
   capsid_work_jobs: "action",
-  capsid_run_improve: "action",
+  capsid_read_status: "action",
   capsid_admin_manage_namespaces: "action",
   capsid_admin_manage_agents: "action",
   capsid_admin_read_claims: "action",
   capsid_admin_read_ops: "action",
   capsid_admin_run_controls: "action",
-  capsid_admin_control_improve: "action",
+  capsid_admin_manage_switches: "action",
 };
 
 // The action a tool falls back to when the caller omits an optional one, so a
@@ -598,7 +597,7 @@ const DEFAULT_ACTION: Record<string, string> = {
   capsid_read_doc: "read",
   capsid_write_doc: "write",
   capsid_lint_namespace: "gather",
-  capsid_run_improve: "status",
+  capsid_read_status: "status",
   capsid_admin_read_claims: "aggregate",
 };
 

@@ -150,11 +150,11 @@ test("THE ADMIN STILL SEES THE WHOLE MAPPING", async () => {
   assert.deepEqual(rows.map((r) => r.namespace).sort(), ["capsid", "foxhound"]);
 });
 
-test("PLANT: capsid_run_improve status hands a scoped caller NO credential inventory", async () => {
+test("PLANT: capsid_read_status status hands a scoped caller NO credential inventory", async () => {
   // `agents` names every minted credential, its namespaces, its grants and its
   // blast-radius flags: the map an agent looking to widen itself would want.
   const { client, close } = await connect(driver());
-  const result = (await client.callTool({ name: "capsid_run_improve", arguments: { action: "status", namespace: "capsid" } })) as {
+  const result = (await client.callTool({ name: "capsid_read_status", arguments: { action: "status", namespace: "capsid" } })) as {
     content: Array<{ text: string }>;
   };
   await close();
@@ -164,7 +164,7 @@ test("PLANT: capsid_run_improve status hands a scoped caller NO credential inven
 
 test("THE ADMIN STILL GETS THE INVENTORY, which is who it is for", async () => {
   const { client, close } = await connect(adminAgentForEmail("admin@example.com"));
-  const result = (await client.callTool({ name: "capsid_run_improve", arguments: { action: "status" } })) as { content: Array<{ text: string }> };
+  const result = (await client.callTool({ name: "capsid_read_status", arguments: { action: "status" } })) as { content: Array<{ text: string }> };
   await close();
   const body = JSON.parse(result.content[0].text) as { agents?: unknown[] };
   assert.ok(Array.isArray(body.agents), "the admin lost the inventory it is the audience for");
@@ -222,15 +222,15 @@ test("PLANT: a WRITE-ONLY agent is refused jobs list, which is the grant half", 
 
 test("PLANT: a driver is REFUSED the administrator's switches: its status tool serves none, and the admin tool is admin only", async () => {
   // breaker_reset reopens a namespace's queue and overnight starts unattended sessions.
-  // Neither is an action of the driver's capsid_run_improve; both are
-  // capsid_admin_control_improve, admin only.
+  // Neither is an action of the driver's capsid_read_status; both are
+  // capsid_admin_manage_switches, admin only.
   const driverSide = await connect(driver());
-  const asked = (await driverSide.client.callTool({ name: "capsid_run_improve", arguments: { action: "breaker_reset", namespace: "capsid" } })) as {
+  const asked = (await driverSide.client.callTool({ name: "capsid_read_status", arguments: { action: "breaker_reset", namespace: "capsid" } })) as {
     isError?: boolean;
     content: Array<{ text: string }>;
   };
   await driverSide.close();
-  assert.equal(asked.isError, true, "capsid_run_improve served breaker_reset");
+  assert.equal(asked.isError, true, "capsid_read_status served breaker_reset");
   for (const args of [
     { action: "breaker_reset", namespace: "capsid" },
     { action: "overnight", value: "off", namespace: "capsid" },
@@ -238,7 +238,7 @@ test("PLANT: a driver is REFUSED the administrator's switches: its status tool s
     // The namespace is passed because the tool declares one and namespaceRefusal fires
     // first for a scoped caller that omits it; this plant is about the admin check.
     const admin = await connect(driver(), [], buildAdminServer);
-    const result = (await admin.client.callTool({ name: "capsid_admin_control_improve", arguments: args })) as {
+    const result = (await admin.client.callTool({ name: "capsid_admin_manage_switches", arguments: args })) as {
       content: Array<{ text: string }>;
     };
     await admin.close();

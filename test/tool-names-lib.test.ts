@@ -13,13 +13,13 @@ for (const name of Object.keys(SINGLE_TOOLS)) served.set(name, null);
 // Targets whose actions were removed after the regroup; the map keeps them so prose
 // naming the old tool still reads as stale.
 const RETIRED = new Set([
-  "capsid_run_improve.run",
-  "capsid_run_improve.claim",
-  "capsid_admin_control_improve.mode",
-  "capsid_admin_control_improve.pause",
-  "capsid_admin_control_improve.unpause",
-  "capsid_admin_control_improve.budget",
-  "capsid_admin_control_improve.register_skill",
+  "capsid_read_status.run",
+  "capsid_read_status.claim",
+  "capsid_admin_manage_switches.mode",
+  "capsid_admin_manage_switches.pause",
+  "capsid_admin_manage_switches.unpause",
+  "capsid_admin_manage_switches.budget",
+  "capsid_admin_manage_switches.register_skill",
 ]);
 // Whole tools removed after the regroup (Dustin, 2026-10-31), kept for the same reason.
 const RETIRED_TOOLS = new Set(["capsid_change_repo", "capsid_open_pr", "capsid_run_ci"]);
@@ -53,8 +53,8 @@ test("prose: tool-call contexts are rewritten", () => {
   assert.deepEqual(r.text.split("\n"), [
     "Call `capsid_read_doc` on capsid/core.md, then `capsid_read_repo` action `tree` for the layout.",
     "Post it with `capsid_work_jobs.post`, or merge with `capsid_close_pr` action `merge`.",
-    "Then call capsid_run_improve(namespace) and `capsid_write_doc(namespace, path)`.",
-    "Then `capsid_run_improve(action: \"run\")` runs one.",
+    "Then call capsid_read_status(namespace) and `capsid_write_doc(namespace, path)`.",
+    "Then `capsid_read_status(action: \"run\")` runs one.",
   ]);
   assert.equal(r.changes.length, 4);
 });
@@ -90,8 +90,8 @@ test("PLANT: a name that is also a word is rewritten only where the text says it
 });
 
 test("an action named after the span is kept, not doubled", () => {
-  assert.equal(rewriteProse("set by `improve_run` action `mode`.").text, "set by `capsid_admin_control_improve` action `mode`.");
-  assert.equal(rewriteProse("signed with `improve_run` action `sign_policy`, admin only").text, "signed with `capsid_admin_control_improve` action `sign_policy`, admin only");
+  assert.equal(rewriteProse("set by `improve_run` action `mode`.").text, "set by `capsid_admin_manage_switches` action `mode`.");
+  assert.equal(rewriteProse("signed with `improve_run` action `sign_policy`, admin only").text, "signed with `capsid_admin_manage_switches` action `sign_policy`, admin only");
   assert.equal(rewriteProse("`jobs` action `post`").text, "`capsid_work_jobs` action `post`");
   assert.equal(rewriteProse("`manage_pr` action \"merge\"").text, "`capsid_close_pr` action `merge`");
 });

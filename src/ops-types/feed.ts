@@ -231,7 +231,7 @@ export interface CompletenessView {
   areas: CompletenessArea[];
 }
 
-// What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, capsid_run_improve action
+// What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, capsid_read_status action
 // status's needs_dustin, and the Portal's Needs you page all carry this one shape.
 export type InboxSeverity = "needs-you" | "failing" | "none";
 // "proposal": a merge unit promotion, demotion or suspension (src/merge-units.ts).
