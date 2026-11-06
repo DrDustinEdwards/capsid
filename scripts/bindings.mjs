@@ -21,7 +21,7 @@ export const COMPATIBILITY_DATE = "2026-09-06";
 // by the platform at this line, which is the one hard stop budget alerts cannot provide.
 // Sized at the projected backup dump cost times 1.5; the derivation is in
 // wrangler.jsonc.example.
-export const LIMITS = { cpu_ms: 3500 };
+export const LIMITS = { cpu_ms: 10000 };
 
 export const D1 = { name: "capsid", id: "f24921c8-5e6f-499e-96a1-f124f52f12f7" };
 
