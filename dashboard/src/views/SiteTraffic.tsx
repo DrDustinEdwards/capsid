@@ -361,7 +361,8 @@ const BUILD: Record<string, { kind: "ok" | "crit" | "warn" | "run" | "nodata"; l
   success: { kind: "ok", label: "Built" },
   fail: { kind: "crit", label: "Failed" },
   failure: { kind: "crit", label: "Failed" },
-  cancelled: { kind: "warn", label: "Canceled" },
+  // Cloudflare's own outcome value, so its spelling is a data contract.
+  cancelled: { kind: "warn", label: "Canceled" }, // codespell:ignore
   canceled: { kind: "warn", label: "Canceled" },
   skipped: { kind: "nodata", label: "Skipped" },
 };
