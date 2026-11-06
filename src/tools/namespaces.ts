@@ -3,8 +3,7 @@ import { z } from "zod";
 import { IMPROVE_OVERRIDE_FLAGS } from "../scope";
 import { surfaceOf } from "./surface";
 import { NAMESPACE_DELETE_MAX_DOCUMENTS, performNamespaceDelete, previewNamespaceDelete } from "../namespace-delete";
-import { parseReposList, REPO_SHAPE, requireSinglePrimary } from "../github";
-import { auditStatement } from "../store-guards";
+import { registerNamespace, registerRepos, updateNamespace, updateRepos } from "../namespace-admin";
 import { driverMintInstruction } from "../agents-schema";
 import { bounded, MAX_CONFIRM_TOKEN, MAX_REPO_SELECTOR, MAX_REPOS_JSON, nsName } from "../limits";
 import { ok, fail, type ToolCtx } from "./docs";
@@ -67,31 +66,12 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
     async ({ namespace, repo, label, repos }) => {
       const ns = namespace.trim();
       if (!ns) return fail("namespace is required");
-      let list: Array<{ repo: string; label: string }>;
-      if (repos) {
-        const parsed = parseReposList(repos);
-        if ("error" in parsed) return fail(parsed.error);
-        list = parsed.list;
-      } else {
-        if (!repo || !REPO_SHAPE.test(repo)) {
-          return fail('provide repo as "owner/name", or pass a repos JSON array');
-        }
-        list = [{ repo, label: (label ?? "primary").trim() || "primary" }];
-      }
-      // The same single-primary requirement as update_namespace. Two primaries or none
-      // would make every repo tool resolve by accident, and update would refuse to fix
-      // it in place.
-      const primaryError = requireSinglePrimary(list);
-      if (primaryError) return fail(primaryError);
-      const existing = await db.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(ns).first();
-      if (existing) {
-        return fail(`namespace already registered: ${ns}. Use capsid_admin_manage_namespaces action update to change its repo mapping; it snapshots the prior mapping to the audit log.`);
-      }
-      const reposJson = JSON.stringify(list);
-      await db.batch([
-        db.prepare("INSERT INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind(ns, reposJson),
-        auditStatement(db, actor, "register_namespace", ns, null, list),
-      ]);
+      // The rules and the write are shared with the namespace_add control (src/namespace-admin.ts).
+      const mapped = registerRepos({ repo, label, repos });
+      if (!mapped.ok) return fail(mapped.refusal);
+      const list = mapped.list;
+      const registered = await registerNamespace(db, actor, ns, list);
+      if (!registered.ok) return fail(registered.refusal);
       return ok({
         namespace: ns,
         repos: list,
@@ -115,22 +95,12 @@ export function defineNamespaceOperations(server: McpServer, ctx: ToolCtx): void
     async ({ namespace, repos }) => {
       const ns = namespace.trim();
       if (!ns) return fail("namespace is required");
-      const parsed = parseReposList(repos);
-      if ("error" in parsed) return fail(parsed.error);
-      const list = parsed.list;
-      const primaryError = requireSinglePrimary(list);
-      if (primaryError) return fail(primaryError);
-      const existing = await db
-        .prepare("SELECT repos FROM namespaces WHERE namespace = ?1")
-        .bind(ns)
-        .first<{ repos: string }>();
-      if (!existing) return fail(`namespace not found: ${ns}. Use capsid_admin_manage_namespaces action register to create it.`);
-      const reposJson = JSON.stringify(list);
-      await db.batch([
-        db.prepare("UPDATE namespaces SET repos = ?2 WHERE namespace = ?1").bind(ns, reposJson),
-        auditStatement(db, actor, "update_namespace", ns, null, { old: existing.repos, new: reposJson }),
-      ]);
-      return ok({ namespace: ns, repos: list, action: "updated", previous: existing.repos });
+      // Shared with the namespace_edit control (src/namespace-admin.ts).
+      const mapped = updateRepos(repos);
+      if (!mapped.ok) return fail(mapped.refusal);
+      const updated = await updateNamespace(db, actor, ns, mapped.list);
+      if (!updated.ok) return fail(updated.refusal);
+      return ok({ namespace: ns, repos: mapped.list, action: "updated", previous: updated.previous });
     }
   );
   // Delete a namespace: a preview that counts everything naming it and signs a token,

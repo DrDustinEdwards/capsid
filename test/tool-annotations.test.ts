@@ -390,6 +390,8 @@ const NEW_EACH_CALL = [
   /\bmanagePr\(/,
   /\bmintAgent\(/,
   /\bpostJob\(/,
+  // A namespaces row, written in src/namespace-admin.ts since the Portal's namespace_add shares it.
+  /\bregisterNamespace\(/,
 ];
 
 // An INSERT into anything but audit_log with no ON CONFLICT, read up to the end of

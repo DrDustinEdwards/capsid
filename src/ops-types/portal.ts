@@ -15,6 +15,11 @@ import type { OpsFeed } from "./feed";
 //   GET  /portal/api/packages/history?name=                       -> PortalPackageHistory
 //   GET  /portal/api/not-found                                    -> PortalNotFound
 //   GET  /portal/api/stale                                        -> PortalStale
+//   GET  /portal/api/merge-units                                  -> PortalMergeUnits
+//   GET  /portal/api/site-search?namespace=                       -> PortalSiteSearch
+//   GET  /portal/api/site-traffic?namespace=&days=                -> PortalSiteTraffic
+//   GET  /portal/api/workers-builds?namespace=&limit=             -> PortalWorkersBuilds
+//   GET  /portal/api/build-log?build=                             -> PortalBuildLog
 //   GET  /portal/api/plan                                         -> PortalPlan
 //   GET  /portal/api/digest?since=                                -> PortalDigest
 //   GET  /portal/api/maintenance                                  -> PortalMaintenance
@@ -54,7 +59,16 @@ export type PortalAction =
   | "unit_resume"
   // Lift a namespace's auto-merge pause (src/merge-safety.ts), the shutoff after bad
   // unattended merges.
-  | "automerge_resume";
+  | "automerge_resume"
+  // Register, remap and delete a project (namespace), as capsid_admin_manage_namespaces
+  // actions register, update and delete_preview/delete_perform do (src/namespace-admin.ts,
+  // src/namespace-delete.ts).
+  | "namespace_add"
+  | "namespace_edit"
+  | "namespace_remove"
+  // Mint a new site key and set it on the site's Worker and on Carrel, as
+  // capsid_admin_set_site_key does (src/site-key.ts). The value is never shown.
+  | "site_key_rotate";
 
 // params by action:
 //   pause         { namespace, reason, undo? }   reason required
@@ -97,6 +111,24 @@ export type PortalAction =
 //   site_repair   { namespace, tool }     one allowlisted tool on a site's operator API
 //                 (src/site-repair.ts); refused for a tool outside the site's list or the
 //                 Worker's ceiling, and while the rate limit holds
+//   sign_policy_change { change: "promote" | "demote", unit, confirm, reason? }
+//                 confirm is the policy's next version, typed
+//   sign_policy_from_repo { confirm, reason? }   confirm is the file's version, typed
+//   unit_resume   { unit, reason }        reason required
+//   automerge_resume { namespace, reason }   reason required
+//   namespace_add { namespace, repo?, label?, repos? }   repo as "owner/name" (label
+//                 defaults to "primary"), or repos as a JSON array of { repo, label } with
+//                 exactly one "primary"; refused if the namespace is registered
+//   namespace_edit { namespace, repos }   repos as above, the whole mapping as it will be;
+//                 the preview binds the mapping it read, so an edit in between is refused
+//   namespace_remove { namespace, cascade?: "true", allow_improve_paths?: "true" }
+//                 every refusal of delete_preview: an open job, a live agent naming it,
+//                 the roster, live documents without cascade, signed policy documents
+//                 without allow_improve_paths, over the batch cap. The preview binds the
+//                 plan's fingerprint; anything counted that changes refuses the perform
+//   site_key_rotate { namespace }         the site's ops_sites row must name a Cloudflare
+//                 Worker script, and CF_SECRETS_TOKEN must be set. The key is never shown,
+//                 logged or audited
 export interface PortalActionRequest {
   action: PortalAction;
   params: Record<string, string>;

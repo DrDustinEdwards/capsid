@@ -6,10 +6,14 @@ import {
   AUTOMERGE_RESUME_REASON,
   UNIT_RESUME_REASON,
   clickAuditAction,
+  deleteOptionsFrom,
   revisionOf,
   shippedEvidence,
   switchReasonRefusal,
 } from "./controls-base";
+import { ALREADY_REGISTERED, namespaceNameRefusal, namespaceRepos, NOT_REGISTERED, registerRepos, reposDigest, updateRepos } from "./namespace-admin";
+import { deleteRefusals, planFingerprint, readDeletePlan, summarize } from "./namespace-delete";
+import { CARREL_SCRIPT, SITE_SECRET, siteKeyTarget } from "./site-key";
 import type { Env } from "./env";
 import { resolveRepo } from "./github";
 import { breakerState } from "./job-breaker";
@@ -270,6 +274,72 @@ export async function planAction(env: Env, email: string, action: PortalAction, 
         ok: true,
         changes: [`${plan.namespace}: auto-merge paused since ${plan.paused.since} ("${plan.paused.reason}") -> lifted. The tick may merge its pull requests unattended again; new bad merges pause it again.`],
         audit: [`auto-merge-resumed by ${actor}`, click],
+      };
+    }
+    case "namespace_add": {
+      const bad = namespaceNameRefusal(p.namespace);
+      if (bad) return refused(bad);
+      const mapped = registerRepos(p);
+      if (!mapped.ok) return refused(mapped.refusal);
+      if ((await namespaceRepos(env.DB, p.namespace)) !== null) return refused(ALREADY_REGISTERED(p.namespace));
+      return {
+        ok: true,
+        changes: [
+          `namespaces: add ${p.namespace}, mapped to ${mapped.list.map((r) => `${r.repo} (${r.label})`).join(", ")}. The repo tools resolve through this mapping, so it is what an agent scoped to ${p.namespace} may reach.`,
+          `No driver agent is minted: a mint hands out a key, so it stays with capsid_admin_manage_agents. Until a site row is added (or one saying it serves no site), the site-map check reports ${p.namespace} as unmapped.`,
+        ],
+        audit: [`register_namespace by ${actor}`, click],
+      };
+    }
+    case "namespace_edit": {
+      const bad = namespaceNameRefusal(p.namespace);
+      if (bad) return refused(bad);
+      const mapped = updateRepos(p.repos);
+      if (!mapped.ok) return refused(mapped.refusal);
+      const previous = await namespaceRepos(env.DB, p.namespace);
+      if (previous === null) return refused(NOT_REGISTERED(p.namespace));
+      const next = JSON.stringify(mapped.list);
+      if (previous === next) return refused(`the edit changes nothing in ${p.namespace}'s repo mapping.`);
+      return {
+        ok: true,
+        changes: [
+          `namespaces ${p.namespace}: repos ${previous} -> ${next}.`,
+          "The prior mapping is recorded in the audit row. The namespace is not renamed and its documents do not move.",
+        ],
+        audit: [`update_namespace by ${actor}`, click],
+        bind: { from: await reposDigest(previous) },
+      };
+    }
+    case "namespace_remove": {
+      const bad = namespaceNameRefusal(p.namespace);
+      if (bad) return refused(bad);
+      const options = deleteOptionsFrom(p);
+      if (!options.ok) return refused(options.refusal);
+      // Every refusal of capsid_admin_manage_namespaces action delete_preview, from the same reader.
+      const plan = await readDeletePlan(env.DB, p.namespace);
+      const refusals = deleteRefusals(plan, options.opts);
+      if (refusals.length) return refused(refusals.join(" "));
+      const { will_delete, will_keep } = summarize(plan);
+      return {
+        ok: true,
+        changes: [...will_delete.map((line) => `Deleted: ${line}.`), ...will_keep.map((line) => `Kept: ${line}.`)],
+        audit: [`namespace-delete by ${actor}`, click],
+        bind: { plan: planFingerprint(plan) },
+      };
+    }
+    case "site_key_rotate": {
+      const bad = namespaceNameRefusal(p.namespace);
+      if (bad) return refused(bad);
+      const target = await siteKeyTarget(env, p.namespace);
+      if (!target.ok) return refused(target.refusal);
+      return {
+        ok: true,
+        changes: [
+          `Mint a new key and set it as ${SITE_SECRET} on the Worker ${target.siteScript}, then as ${target.carrelSecret} on ${CARREL_SCRIPT}, through the Cloudflare API.`,
+          "The value is never shown, logged or written to an audit row: the row names each side's script and secret and whether it was set.",
+          `If ${target.siteScript} refuses it, nothing changes and Carrel is not touched. If Carrel alone refuses it, the two sides differ and Carrel's calls to the site are refused until you rotate again.`,
+        ],
+        audit: [`set_site_key by ${actor}`, click],
       };
     }
     case "pr_close": {

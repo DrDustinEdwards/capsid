@@ -187,6 +187,10 @@ const PERFORM_LABEL: Record<PortalAction, string | ((p: Record<string, string>) 
   sign_policy_from_repo: "Load from repo and sign",
   unit_resume: "Lift suspension",
   automerge_resume: "Resume auto-merge",
+  namespace_add: "Add project",
+  namespace_edit: "Save changes",
+  namespace_remove: "Delete project",
+  site_key_rotate: "Rotate key",
 };
 
 export function performLabel(action: PortalAction, params: Record<string, string>): string {
@@ -195,10 +199,10 @@ export function performLabel(action: PortalAction, params: Record<string, string
 }
 
 // One-way actions: once the preview arrives, focus goes to Cancel, not to perform.
-export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job", "close_shipped", "supersede_job", "pr_close"]);
+export const ONE_WAY: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "reset_breaker", "release_job", "close_shipped", "supersede_job", "pr_close", "namespace_remove", "site_key_rotate"]);
 
 // Destructive actions: the perform button is the danger style and sits apart from Cancel.
-export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove"]);
+export const DESTRUCTIVE: ReadonlySet<PortalAction> = new Set<PortalAction>(["revoke_agent", "fail_job", "site_remove", "package_remove", "namespace_remove"]);
 
 export const AppCtx = createContext<Ctx | null>(null);
 

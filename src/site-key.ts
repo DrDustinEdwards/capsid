@@ -7,7 +7,7 @@ import { base64url } from "@dustinedwards/site-runtime/encoding";
 import { callSignal } from "./call-signal";
 
 // SET A SITE KEY (create a site key and set it on both sides, never shown), served as
-// capsid_admin_set_site_key. The site key is the site API's key
+// capsid_admin_set_site_key and as the site_key_rotate control (src/controls.ts).The site key is the site API's key
 // (DrDustinEdwards/site-api): the site's Worker holds it as CARREL_SITE_KEY, and Carrel
 // holds the same value as SITE_<NAMESPACE>_KEY to call that site. This mints a new one
 // and sets it as a secret on both Workers through the Cloudflare API.
@@ -64,18 +64,32 @@ async function putSecret(fetchImpl: FetchLike, token: string, account: string, s
   return { ok: false, error: `Cloudflare answered ${res.status}: ${messages || "no error message"}.${hint}` };
 }
 
-export async function setSiteKey(env: Env, actor: string, namespace: string, fetchImpl: FetchLike = fetch) {
+/** Where a new key would go, or why none can be minted: the token and account it is set
+ *  with, and the site's Worker from its ops_sites row. Reads only, so the site_key_rotate
+ *  control's preview (src/controls-plan.ts) refuses exactly what this refuses. */
+export async function siteKeyTarget(
+  env: Env,
+  namespace: string
+): Promise<{ ok: true; token: string; account: string; siteScript: string; carrelSecret: string } | { ok: false; refusal: string }> {
   const token = env.CF_SECRETS_TOKEN?.trim();
   const account = env.CF_ACCOUNT_ID?.trim() || env.R2_ACCOUNT_ID?.trim();
   if (!token || !account) {
-    throw new Error(`no key was minted: ${!token ? "CF_SECRETS_TOKEN is not set" : "neither CF_ACCOUNT_ID nor R2_ACCOUNT_ID is set"}. The seat sets CF_SECRETS_TOKEN, a token with Workers Scripts Edit (docs/portal.md, "Site keys").`);
+    return {
+      ok: false,
+      refusal: `no key was minted: ${!token ? "CF_SECRETS_TOKEN is not set" : "neither CF_ACCOUNT_ID nor R2_ACCOUNT_ID is set"}. The seat sets CF_SECRETS_TOKEN, a token with Workers Scripts Edit (docs/portal.md, "Site keys").`,
+    };
   }
   const row = await readSiteRow(env.DB, namespace);
   if (!row || row.platform !== "cloudflare" || !row.script || !SCRIPT.test(row.script)) {
-    throw new Error(`no key was minted: ${namespace}'s site row names no Cloudflare Worker script, so there is no site Worker to set it on.`);
+    return { ok: false, refusal: `no key was minted: ${namespace}'s site row names no Cloudflare Worker script, so there is no site Worker to set it on.` };
   }
-  const siteScript = row.script;
-  const carrelSecret = carrelSecretName(namespace);
+  return { ok: true, token, account, siteScript: row.script, carrelSecret: carrelSecretName(namespace) };
+}
+
+export async function setSiteKey(env: Env, actor: string, namespace: string, fetchImpl: FetchLike = fetch) {
+  const target = await siteKeyTarget(env, namespace);
+  if (!target.ok) throw new Error(target.refusal);
+  const { token, account, siteScript, carrelSecret } = target;
 
   const key = mintSiteKey();
   const site = await putSecret(fetchImpl, token, account, siteScript, SITE_SECRET, key);

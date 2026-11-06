@@ -29,6 +29,10 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "sign_policy_from_repo",
   "unit_resume",
   "automerge_resume",
+  "namespace_add",
+  "namespace_edit",
+  "namespace_remove",
+  "site_key_rotate",
 ];
 
 export type ActionParams = Record<string, string | undefined>;
@@ -78,6 +82,15 @@ export function isPortalAction(value: unknown): value is PortalAction {
 export function revisionOf(raw: string | undefined): number | null {
   if (!raw || !/^[1-9][0-9]{0,9}$/.test(raw)) return null;
   return Number(raw);
+}
+
+/** namespace_remove's two switches, each "true" or absent, as the delete's options
+ *  (src/namespace-delete.ts). */
+export function deleteOptionsFrom(params: ActionParams): { ok: true; opts: { cascade: boolean; allowImprovePaths: boolean } } | { ok: false; refusal: string } {
+  for (const key of ["cascade", "allow_improve_paths"] as const) {
+    if (params[key] !== undefined && params[key] !== "true") return { ok: false, refusal: `namespace_remove's ${key} is "true" or absent; got '${params[key]}'.` };
+  }
+  return { ok: true, opts: { cascade: params.cascade === "true", allowImprovePaths: params.allow_improve_paths === "true" } };
 }
 
 export const UNIT_RESUME_REASON = "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";

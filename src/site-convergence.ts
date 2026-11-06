@@ -13,8 +13,8 @@ import { callSignal } from "./call-signal";
 // each failing check with the repair it maps to and whether Capsid may run it, and the
 // site Worker's secrets by name, set or not. The operator API and the health route are read
 // live when the Portal asks: a view a pass old shows a repair that already ran as still
-// needed. The secret names are the watcher's last read (src/secret-presence.ts), because no
-// Portal request calls Cloudflare (test/ops-cloudflare.test.ts).
+// needed. The secret names are the watcher's last read (src/secret-presence.ts), because only
+// a site page's own tabs call Cloudflare from the Portal (test/ops-cloudflare.test.ts).
 // Every part fails on its own and says why, so one unreadable part is never shown as zero.
 
 const HEALTH_TIMEOUT_MS = 10_000;

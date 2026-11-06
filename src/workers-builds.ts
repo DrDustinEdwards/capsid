@@ -55,12 +55,18 @@ interface RawBuild {
   build_trigger_metadata?: { branch?: string; commit_hash?: string; commit_message?: string; author?: string; build_trigger_source?: string } | null;
 }
 
-const commitMessage = (b: RawBuild): string | null => {
+const COMMIT_MESSAGE_MAX = 200;
+
+const commitMessage = (b: RawBuild, fenced: boolean): string | null => {
   const message = b.build_trigger_metadata?.commit_message;
-  return typeof message === "string" ? externalFence("commit-message", b.build_trigger_metadata?.commit_hash ?? b.build_uuid ?? "none", message, 200) : null;
+  if (typeof message !== "string") return null;
+  if (!fenced) return message.length > COMMIT_MESSAGE_MAX ? `${message.slice(0, COMMIT_MESSAGE_MAX)} [truncated]` : message;
+  return externalFence("commit-message", b.build_trigger_metadata?.commit_hash ?? b.build_uuid ?? "none", message, COMMIT_MESSAGE_MAX);
 };
 
-export async function listBuilds(env: Env, args: { script?: string; namespace?: string; limit?: number }, fetchImpl: FetchLike = fetch) {
+/** The Worker's builds, newest first. `fenced` false is for the Portal, a person's screen
+ *  that shows the message as text: the fence is for an agent that reads it. */
+export async function listBuilds(env: Env, args: { script?: string; namespace?: string; limit?: number }, fetchImpl: FetchLike = fetch, fenced = true) {
   const { token, account } = credentials(env);
   const script = await scriptFor(env, args);
   const limit = Math.min(Math.max(args.limit ?? BUILDS_DEFAULT, 1), BUILDS_MAX);
@@ -82,7 +88,7 @@ export async function listBuilds(env: Env, args: { script?: string; namespace?: 
         branch: b.build_trigger_metadata?.branch ?? b.trigger?.branch ?? null,
         commit: b.build_trigger_metadata?.commit_hash ?? null,
         // The commit message is the author's text: data, relayed fenced (src/provenance.ts).
-        commit_message: commitMessage(b),
+        commit_message: commitMessage(b, fenced),
         source: b.build_trigger_metadata?.build_trigger_source ?? null,
       })),
     };

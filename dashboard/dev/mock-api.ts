@@ -7,7 +7,8 @@
 //
 // It also mocks the Portal's controls (preview and perform), GET
 // /portal/api/namespaces, GET /portal/api/activity, GET /portal/api/claims, GET
-// /portal/api/stale, GET /portal/api/merge-units, GET /portal/api/maintenance, GET and POST /portal/api/push and POST
+// /portal/api/stale, GET /portal/api/merge-units, a site page's GET /portal/api/site-search,
+// /portal/api/site-traffic, /portal/api/workers-builds and /portal/api/build-log, GET /portal/api/maintenance, GET and POST /portal/api/push and POST
 // /portal/api/sign-out, with
 // the Worker's refusals:
 // text/plain 400 for a bad request, 403 for a missing or wrong X-Capsid-CSRF, 410 for
@@ -39,6 +40,13 @@ import type {
   PortalPackageHistory,
   PortalStale,
   PortalMergeUnits,
+  PortalSiteSearch,
+  PortalSiteTraffic,
+  PortalWorkersBuilds,
+  PortalBuildLog,
+  SiteSource,
+  SearchRow,
+  TrafficAiCrawlers,
   PortalPush,
   PortalPlan,
   PortalDigest,
@@ -60,7 +68,7 @@ const REFRESH_GAP_MS = 30_000;
 const TOKEN_MS = 5 * 60_000;
 const MAX_BODY = 8 * 1024;
 const ACTOR = "admin@example.com";
-const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "site_repair", "sign_policy_change", "sign_policy_from_repo", "unit_resume", "automerge_resume"];
+const ACTIONS: PortalAction[] = ["overnight", "resume_job", "release_job", "fail_job", "close_shipped", "supersede_job", "park_job", "unpark_job", "pr_close", "approve_pr", "revoke_agent", "site_add", "site_edit", "site_remove", "reset_breaker", "package_add", "package_edit", "package_remove", "site_repair", "sign_policy_change", "sign_policy_from_repo", "unit_resume", "automerge_resume", "namespace_add", "namespace_edit", "namespace_remove", "site_key_rotate"];
 // The automation switches: a reason in both directions, and an optional undo: "true"
 // that the Worker records as portal-undo-<action> (src/portal-actions.ts).
 const SWITCHES: PortalAction[] = ["overnight"];
@@ -118,6 +126,10 @@ interface MockState {
   policy: { version: string; units: string[] } | null;
   unitsLifted: Set<string>;
   automergeResumed: Set<string>;
+  // The project controls: repo mappings registered or changed since the mock started (the
+  // fixture's projects map to example-org/<namespace>), and projects deleted.
+  projects: Map<string, string>;
+  projectsRemoved: Set<string>;
   tokens: Map<string, { action: PortalAction; params: Record<string, string>; expires: number }>;
 }
 
@@ -906,7 +918,199 @@ function plan(f: OpsFeed, st: MockState, action: PortalAction, params: Record<st
         apply: (st) => void st.automergeResumed.add(ns),
       };
     }
+    // The project controls, with the Worker's refusals (src/namespace-admin.ts, src/namespace-delete.ts).
+    case "namespace_add": {
+      const ns = need(params, "namespace", "The namespace");
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(ns)) throw new Refusal(400, `'${ns}' is not a namespace: a lowercase slug of a-z, 0-9 and '-', at most 64 characters.`);
+      if (projectRepos(st, ns) !== null) throw new Refusal(400, `namespace already registered: ${ns}. Use capsid_admin_manage_namespaces action update to change its repo mapping; it snapshots the prior mapping to the audit log.`);
+      const repo = need(params, "repo", "The repo");
+      if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo)) throw new Refusal(400, 'provide repo as "owner/name", or pass a repos JSON array');
+      const repos = JSON.stringify([{ repo, label: (params.label ?? "").trim() || "primary" }]);
+      return {
+        summary: `Register the project ${ns} with its repo mapping.`,
+        done: `Registered ${ns}, mapped to ${repo}.`,
+        changes: [`namespaces: add ${ns}, mapped to ${repo} (primary).`, "No driver agent is minted: a mint hands out a key, so it stays with capsid_admin_manage_agents."],
+        apply: (st) => void (st.projects.set(ns, repos), st.projectsRemoved.delete(ns)),
+      };
+    }
+    case "namespace_edit": {
+      const ns = need(params, "namespace", "The namespace");
+      const before = projectRepos(st, ns);
+      if (before === null) throw new Refusal(400, `namespace not found: ${ns}. Use capsid_admin_manage_namespaces action register to create it.`);
+      const raw = need(params, "repos", "The repos");
+      let list: Array<{ repo?: unknown; label?: unknown }>;
+      try {
+        list = JSON.parse(raw);
+      } catch {
+        throw new Refusal(400, "invalid repos JSON");
+      }
+      if (!Array.isArray(list) || list.length === 0 || list.some((r) => typeof r?.repo !== "string")) throw new Refusal(400, "repos must be a non-empty JSON array of { repo, label } entries");
+      const next = JSON.stringify(list.map((r) => ({ repo: r.repo, label: typeof r.label === "string" && r.label.trim() ? r.label.trim() : "primary" })));
+      if (next === before) throw new Refusal(400, `the edit changes nothing in ${ns}'s repo mapping.`);
+      return {
+        summary: `Change the repo mapping of the project ${ns}.`,
+        done: `Changed ${ns}'s repo mapping.`,
+        changes: [`namespaces ${ns}: repos ${before} -> ${next}.`, "The prior mapping is recorded in the audit row."],
+        apply: (st) => void st.projects.set(ns, next),
+      };
+    }
+    case "namespace_remove": {
+      const ns = need(params, "namespace", "The namespace");
+      if (projectRepos(st, ns) === null) throw new Refusal(400, `namespace not found: ${ns}. There is no registered namespace to delete.`);
+      if (f.live.namespaces.some((n) => n.name === ns)) {
+        throw new Refusal(400, `${ns} is on the roster (ROSTER in src/roster.ts), which the watcher, auto-merge and maintenance iterate by name. Remove it from the roster in code first; this tool will not.`);
+      }
+      return {
+        summary: `Delete the project ${ns}.`,
+        done: `Deleted ${ns}: 0 live documents (each snapshotted first), 0 links and its registration.`,
+        changes: ["Deleted: 0 live document(s), each snapshotted to document_versions first.", "Deleted: the namespaces row and its repo mapping, recorded in the audit row.", "Kept: the audit_log rows and the nightly backup objects."],
+        apply: (st) => void (st.projectsRemoved.add(ns), (st.sites = st.sites.filter((s) => s.namespace !== ns))),
+      };
+    }
+    case "site_key_rotate": {
+      const ns = need(params, "namespace", "The namespace");
+      const site = st.sites.find((s) => s.namespace === ns);
+      if (!site || site.platform !== "cloudflare" || !site.script) throw new Refusal(400, `no key was minted: ${ns}'s site row names no Cloudflare Worker script, so there is no site Worker to set it on.`);
+      const carrel = `SITE_${ns.toUpperCase().replace(/-/g, "_")}_KEY`;
+      return {
+        summary: `Mint a new operator key for ${ns}'s site API and set it on the site's Worker, then on Carrel.`,
+        done: `Rotated ${ns}'s site key: set on ${site.script} and on carrel-desk. The value is not shown anywhere.`,
+        changes: [
+          `Mint a new key and set it as CARREL_SITE_KEY on the Worker ${site.script}, then as ${carrel} on carrel-desk, through the Cloudflare API.`,
+          "The value is never shown, logged or written to an audit row: the row names each side's script and secret and whether it was set.",
+        ],
+        apply: () => {},
+      };
+    }
   }
+}
+
+// A project's repo mapping as the mock holds it, or null when it is not registered.
+function projectRepos(st: MockState, ns: string): string | null {
+  if (st.projectsRemoved.has(ns)) return null;
+  const changed = st.projects.get(ns);
+  if (changed !== undefined) return changed;
+  return registered().has(ns) ? JSON.stringify([{ repo: `example-org/${ns}`, label: "primary" }]) : null;
+}
+
+// ---------------------------------------------------------------------------
+// A site page's reads (src/portal-site.ts), from the feed's sites: each source its data or
+// no data with the reason, as the Worker answers. sample-a's Worker has builds; a site with
+// no script, or an unknown namespace, says why there is nothing.
+
+const noSite = (ns: string, what: string) => ({ ok: false as const, kind: "no_site" as const, reason: `${ns} has no site configured (ops_sites), so it has no ${what}. Add one in Settings (site_add).` });
+
+function siteSource<T>(site: OpsSiteConfig | undefined, ns: string, what: string, data: () => T): SiteSource<T> {
+  return site?.origin ? { ok: true, data: data() } : noSite(ns, what);
+}
+
+function siteSearch(st: MockState, ns: string): PortalSiteSearch {
+  const site = st.sites.find((s) => s.namespace === ns);
+  const now = mockNow();
+  const day = (offset: number) => new Date(now - offset * 86_400_000).toISOString().slice(0, 10);
+  const row = (key: string, clicks: number, impressions: number, position: number): SearchRow => ({ key, clicks, impressions, ctr: Number((clicks / impressions).toFixed(4)), position });
+  const origin = site?.origin ?? "";
+  return {
+    generated: new Date(now).toISOString(),
+    namespace: ns,
+    google: siteSource(site, ns, "search data", () => ({
+      origin,
+      property: `sc-domain:${new URL(origin).hostname}`,
+      start_date: day(30),
+      end_date: day(3),
+      totals: { clicks: 412, impressions: 18_240, ctr: 0.0226, position: 14.2 },
+      queries: [row("sample phage protocol", 96, 2_310, 6.1), row("example assay steps", 41, 1_880, 9.4), row("sample lab notes", 12, 940, 17.8)],
+      pages: [row(`${origin}/protocols/sample`, 151, 4_020, 7.3), row(`${origin}/`, 88, 3_550, 11.0)],
+      queries_truncated: false,
+      pages_truncated: false,
+    })),
+    bing: site?.origin
+      ? { ok: false, kind: "not_configured", reason: "Bing Webmaster Tools is not configured: the secret BING_WEBMASTER_API_KEY is not set on Capsid (docs/bing-webmaster.md)." }
+      : noSite(ns, "search data"),
+  };
+}
+
+const MOCK_CRAWLERS: TrafficAiCrawlers["crawlers"] = [
+  { name: "GPTBot", kind: "training", hits: 31, statuses: { "402": 31 } },
+  { name: "OAI-SearchBot", kind: "ai_search", hits: 12, statuses: { "200": 12 } },
+  { name: "Googlebot", kind: "search", hits: 220, statuses: { "200": 214, "304": 6 } },
+];
+
+function siteTraffic(st: MockState, ns: string, days: number): PortalSiteTraffic {
+  const site = st.sites.find((s) => s.namespace === ns);
+  const now = mockNow();
+  const since = new Date(now - days * 86_400_000).toISOString();
+  const hour = (h: number) => new Date(Math.floor(now / 3_600_000) * 3_600_000 - h * 3_600_000).toISOString();
+  return {
+    generated: new Date(now).toISOString(),
+    namespace: ns,
+    days,
+    not_found: siteSource(site, ns, "traffic report", () => ({
+      since,
+      note: "Cloudflare samples this record, so hits are estimates. probe marks a path scanners try on every site.",
+      paths: [
+        { path: "/protocols/old-sample", hits: 23, probe: false },
+        { path: "/feed.xml", hits: 6, probe: false },
+        { path: "/wp-login.php", hits: 140, probe: true },
+      ],
+      total_paths: 3,
+      probes: 1,
+      truncated: false,
+    })),
+    server_errors: siteSource(site, ns, "traffic report", () => ({
+      since,
+      note: "Every 5xx the edge answered a visitor, by path and status, and by hour (UTC). Sampled, so hits are estimates; paths are what visitors sent.",
+      failures: [{ path: "/api/search", status: 503, hits: 4 }],
+      hours: [{ hour: hour(5), status: 503, hits: 4 }],
+      truncated: false,
+    })),
+    web_vitals: site?.origin
+      ? { ok: false, kind: "empty", reason: `No visitor's browser reported web vitals for ${site.origin} in the last ${days} day${days === 1 ? "" : "s"}.` }
+      : noSite(ns, "traffic report"),
+    ai_crawlers: siteSource<TrafficAiCrawlers>(site, ns, "traffic report", () => ({
+      since,
+      note: "Sampled, so hits are estimates. The policy: search and ai_search free (200), training charged (402) or blocked (403), denied blocked. A user agent can be faked.",
+      crawlers: MOCK_CRAWLERS,
+      truncated: false,
+    })),
+  };
+}
+
+const MOCK_BUILD = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+
+function workersBuilds(st: MockState, ns: string): PortalWorkersBuilds {
+  const site = st.sites.find((s) => s.namespace === ns);
+  const now = mockNow();
+  const at = (h: number) => new Date(now - h * 3_600_000).toISOString();
+  const script = site?.script ?? null;
+  const base = { generated: new Date(now).toISOString(), namespace: ns, script };
+  if (!site) return { ...base, builds: noSite(ns, "Workers Builds") };
+  if (!script) return { ...base, builds: { ok: false, kind: "no_site", reason: `${ns}'s site row names no Worker script, so its Workers Builds cannot be found. Add the script in Settings.` } };
+  return {
+    ...base,
+    builds: {
+      ok: true,
+      data: {
+        builds: [
+          { build_uuid: MOCK_BUILD, status: "stopped", outcome: "success", created_on: at(3), stopped_on: at(2.95), branch: "main", commit: "a".repeat(40), commit_message: "Fix the sample protocol page", source: "push_event" },
+          { build_uuid: "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e", status: "stopped", outcome: "fail", created_on: at(27), stopped_on: at(26.9), branch: "main", commit: "b".repeat(40), commit_message: "Add the sample feed", source: "push_event" },
+        ],
+      },
+    },
+  };
+}
+
+function buildLog(build: string): PortalBuildLog {
+  const now = mockNow();
+  const at = (s: number) => new Date(now - 3 * 3_600_000 + s * 1000).toISOString();
+  return {
+    generated: new Date(now).toISOString(),
+    build_uuid: build,
+    log: {
+      ok: true,
+      data: { lines: [`${at(1)} Cloning the repository`, `${at(4)} Installing dependencies`, `${at(31)} Building`, `${at(52)} Deployed sample-a`], line_count: 4, truncated: false, note: null },
+    },
+  };
 }
 
 // GET /portal/api/merge-units: one suspended unit (also proposed for removal) and one ready to
@@ -1352,7 +1556,7 @@ function quietFeed(f: OpsFeed): OpsFeed {
  *  /api/... as the browser on the Portal host asks for them. */
 export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => void {
   let nextRefresh = 0;
-  const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), repairs: [], closedPrs: new Set(), policy: null, unitsLifted: new Set(), automergeResumed: new Set(), tokens: new Map() };
+  const st: MockState = { breakerReset: new Set(), overnight: null, overnightReason: "", jobs: new Map(), revoked: new Map(), sites: seedSites(), packages: seedPackages(), activity: seedActivity(), repairs: [], closedPrs: new Set(), policy: null, unitsLifted: new Set(), automergeResumed: new Set(), projects: new Map(), projectsRemoved: new Set(), tokens: new Map() };
   const csrf = () => fixture().csrf;
   const claimGroups = seedClaimGroups();
   const claimJobs = seedClaimJobs();
@@ -1416,7 +1620,7 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
   return (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const path = url.pathname.startsWith("/api/") ? `/portal${url.pathname}` : url.pathname;
-        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/merge-units", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/not-found", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
+        const known = ["/portal/api/ops", "/portal/api/ops/refresh", "/portal/api/actions/preview", "/portal/api/actions/perform", "/portal/api/namespaces", "/portal/api/activity", "/portal/api/claims", "/portal/api/packages/history", "/portal/api/stale", "/portal/api/merge-units", "/portal/api/site-search", "/portal/api/site-traffic", "/portal/api/workers-builds", "/portal/api/build-log", "/portal/api/plan", "/portal/api/digest", "/portal/api/maintenance", "/portal/api/convergence", "/portal/api/shared-code", "/portal/api/not-found", "/portal/api/completeness", "/portal/api/resources", "/portal/api/library", "/portal/api/trends", "/portal/api/push", "/portal/api/sign-out"];
         if (!known.includes(path)) return next();
         if (process.env.WF_MOCK === "signed-out") return send(res, 401, { error: "signed out" });
         if (path === "/portal/api/ops") {
@@ -1440,6 +1644,27 @@ export function mockHandler(): (req: IncomingMessage, res: ServerResponse, next:
         if (path === "/portal/api/merge-units") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
           return send(res, 200, mergeUnits(feed(nextRefresh, st), st));
+        }
+        // A site page's reads, with the Worker's 400s for a bad namespace, days, limit or build.
+        if (path === "/portal/api/site-search" || path === "/portal/api/site-traffic" || path === "/portal/api/workers-builds") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          const ns = url.searchParams.get("namespace") ?? "";
+          if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(ns)) return refuse(res, 400, ns ? `'${ns}' is not a namespace: a lowercase slug of a-z, 0-9 and '-', at most 64 characters.` : "namespace is required");
+          if (path === "/portal/api/site-search") return send(res, 200, siteSearch(st, ns));
+          if (path === "/portal/api/workers-builds") {
+            const limit = url.searchParams.get("limit");
+            if (limit !== null && !(/^[0-9]{1,2}$/.test(limit) && Number(limit) >= 1 && Number(limit) <= 50)) return refuse(res, 400, "limit must be a whole number from 1 to 50.");
+            return send(res, 200, workersBuilds(st, ns));
+          }
+          const days = url.searchParams.get("days");
+          if (days !== null && !(/^[0-9]{1,2}$/.test(days) && Number(days) >= 1 && Number(days) <= 30)) return refuse(res, 400, "days must be a whole number from 1 to 30.");
+          return send(res, 200, siteTraffic(st, ns, days === null ? 7 : Number(days)));
+        }
+        if (path === "/portal/api/build-log") {
+          if (req.method !== "GET") return send(res, 405, { error: "method" });
+          const build = url.searchParams.get("build") ?? "";
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(build)) return refuse(res, 400, "build must be a build's id (a lowercase UUID), from GET /portal/api/workers-builds.");
+          return send(res, 200, buildLog(build));
         }
         if (path === "/portal/api/plan") {
           if (req.method !== "GET") return send(res, 405, { error: "method" });
