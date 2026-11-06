@@ -44,7 +44,7 @@ import { overnightValueRefusal, setOvernight } from "./overnight";
 import { performPolicyChange, performPolicyFromRepo } from "./policy-sign";
 import { planApproval, performApproval } from "./pr-approvals";
 import { runSiteRepair } from "./site-repair";
-import { runSiteBackups } from "./site-backup";
+import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";
 import { auditStatement } from "./store-guards";
 
 // A control's perform (src/controls.ts is the core): the one dispatch to the shared
@@ -665,6 +665,14 @@ export async function performAction(
         // Every check runs again inside runSiteBackups: the configuration, the tokens and the
         // rate limit can all change between the preview and this click.
         const namespace = params.namespace?.trim() || undefined;
+        if (namespace === CAPSID_DUMP) {
+          const dump = await runCapsidDump(env);
+          if (!dump.ok) return { ok: false, refusal: dump.line };
+          committed = true;
+          summary = `${dump.line}.`;
+          await auditClick(env, actor, source, surface, action, namespace, { dump: true });
+          break;
+        }
         const outcome = await runSiteBackups(env, { namespace, actor, via: surface }, now);
         if (!outcome.ok) return { ok: false, refusal: outcome.refusal };
         committed = outcome.runs.some((r) => r.ran);

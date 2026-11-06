@@ -2,7 +2,7 @@ import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { adminEmailList, adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
 import { readLastStepUp } from "./scope";
-import { runBackup } from "./backup";
+import { backupTaskResult, runBackup } from "./backup";
 import { supersedePass } from "./supersede";
 import { defaultHandler } from "./routes";
 import { withSecurityHeaders } from "./security-headers";
@@ -320,37 +320,10 @@ export default {
 
     if (cron === BACKUP_CRON) {
       ctx.waitUntil(
-        runTask(
-          env,
-          "backup",
-          () => runBackup(env),
-          (result): TaskResult => {
-            if (!result.ran) {
-              logEvent(
-                "BACKUP_CRON_SKIPPED",
-                { message: `BACKUP_CRON_SKIPPED ${result.skipped}` },
-                { level: "error" },
-              );
-              return { outcome: "skipped", reason: `skipped: ${result.skipped}` };
-            }
-            if (result.prune_refused !== null) {
-              logEvent(
-                "BACKUP_CRON_REFUSED_PRUNE",
-                { message: `BACKUP_CRON_REFUSED_PRUNE ${result.prune_refused}` },
-                { level: "error" },
-              );
-              return {
-                outcome: "refused",
-                reason: `wrote ${result.json_keys.length} dump objects, and the prune refused: ${result.prune_refused}`,
-              };
-            }
-            return {
-              outcome: "ok",
-              reason: `wrote ${result.json_keys.length} dump objects (${result.documents} documents); pruned ${result.json_backups_pruned} dumps (${result.json_backups_locked} locked), ${result.versions_pruned} versions, ${result.audit_pruned} audit rows`,
-            };
-          },
-          { tag: "BACKUP_CRON_THREW", rethrow: true },
-        ),
+        runTask(env, "backup", () => runBackup(env), backupTaskResult, {
+          tag: "BACKUP_CRON_THREW",
+          rethrow: true,
+        }),
       );
       // The tool-call log's daily copy to AUDIT_BUCKET and the 90-day prune of copied rows
       // (area 11, L6-L7). Its own task, so a failed write cannot stop the backup; it throws,

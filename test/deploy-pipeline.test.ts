@@ -46,7 +46,7 @@ test("every cron branch rethrows after logging, so a failed invocation reports f
   for (const marker of ["BACKUP_CRON_THREW", "TICK_THREW", "SKILLS_REFRESH_THREW"]) {
     assert.match(
       idx,
-      new RegExp(`tag: "${marker}", rethrow: true`),
+      new RegExp(`tag: "${marker}",\\s+rethrow: true`),
       `${marker} logs but does not rethrow, so a failed invocation reports clean`,
     );
   }
