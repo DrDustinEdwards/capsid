@@ -36,6 +36,7 @@ export const OFFACCOUNT_AUDIT_SOURCES = {
   foxhound: "foxhound-tool-calls",
   "foxhound-admin-mcp": "foxhound-admin-mcp-tool-calls",
   "foxing-admin-mcp": "foxing-admin-mcp-tool-calls",
+  "germomics-admin-mcp": "germomics-admin-mcp-tool-calls",
 } as const satisfies Record<string, string>;
 
 export type OffaccountAudit = keyof typeof OFFACCOUNT_AUDIT_SOURCES;
