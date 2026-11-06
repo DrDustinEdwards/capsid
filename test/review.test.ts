@@ -8,9 +8,9 @@ import {
   toolArguments,
 } from "../src/review.ts";
 
-// The gate on who may spend a review: the one shared workflow, on a pull request, in a
+// The gate on who may spend a review: the shared workflows, on a pull request, in a
 // repository Dustin owns. Any of the three missing is a refusal.
-test("reviewCaller admits devkit's review.yml on a pull request in Dustin's repository and nothing else", () => {
+test("reviewCaller admits devkit's review.yml or pr.yml on a pull request in Dustin's repository and nothing else", () => {
   const claims = {
     repository: "DrDustinEdwards/foxing",
     repository_owner_id: REVIEW_OWNER_ID,
@@ -20,6 +20,14 @@ test("reviewCaller admits devkit's review.yml on a pull request in Dustin's repo
     ref: "refs/pull/42/merge",
   };
   assert.deepEqual(reviewCaller(claims), { owner: "DrDustinEdwards", repo: "foxing", pr: 42 });
+  assert.deepEqual(
+    reviewCaller({
+      ...claims,
+      job_workflow_ref:
+        "DrDustinEdwards/devkit/.github/workflows/pr.yml@0123456789abcdef0123456789abcdef01234567",
+    }),
+    { owner: "DrDustinEdwards", repo: "foxing", pr: 42 },
+  );
   assert.ok("refusal" in reviewCaller({ ...claims, repository_owner_id: "1" }), "another owner");
   assert.ok(
     "refusal" in

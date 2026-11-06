@@ -43,8 +43,12 @@ const REVIEW_MODEL = "@cf/deepseek-ai/deepseek-v4.1-flash-1017";
 const REVIEW_GATEWAY = "default";
 const REVIEW_ACTION = "pr-review";
 const REVIEW_AUDIENCE = "capsid-review";
-// The one workflow allowed to ask, at any ref of devkit, in any repository Dustin owns.
-const REVIEW_WORKFLOW = "drdustinedwards/devkit/.github/workflows/review.yml@";
+// The workflows allowed to ask, at any ref of devkit, in any repository Dustin owns: review.yml on its own, and pr.yml,
+// which runs every pull request check in one job (devkit 0.26.0), the reviewer among them.
+const REVIEW_WORKFLOWS = [
+  "drdustinedwards/devkit/.github/workflows/review.yml@",
+  "drdustinedwards/devkit/.github/workflows/pr.yml@",
+];
 // Dustin's GitHub account id. Owner ids never change; a login can be renamed and reused.
 export const REVIEW_OWNER_ID = "204601333";
 const RENOVATE = /^renovate(\[bot\])?$/i;
@@ -139,8 +143,9 @@ export function reviewCaller(claims: Record<string, unknown>): ReviewCaller | { 
   const pr = /^refs\/pull\/(\d+)\/merge$/.exec(claim("ref"))?.[1];
   if (claim("repository_owner_id") !== REVIEW_OWNER_ID || !owner || !repo)
     return { refusal: "only a repository Dustin owns may ask for a review" };
-  if (!claim("job_workflow_ref").toLowerCase().startsWith(REVIEW_WORKFLOW))
-    return { refusal: "only devkit's review.yml may ask for a review" };
+  const workflow = claim("job_workflow_ref").toLowerCase();
+  if (!REVIEW_WORKFLOWS.some((w) => workflow.startsWith(w)))
+    return { refusal: "only devkit's review.yml or pr.yml may ask for a review" };
   if (claim("event_name") !== "pull_request" || !pr)
     return { refusal: "a review is asked for on a pull request only" };
   return { owner, repo, pr: Number(pr) };
