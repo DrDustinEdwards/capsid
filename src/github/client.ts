@@ -277,7 +277,7 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
 // "../other" as a legal mapping and make the authorization boundary traversable.
 // GitHub owner and repo names are drawn from [A-Za-z0-9._-]; the charset still
 // matches "..", so repoTokenOk below also rejects "." and "..".
-export const REPO_SHAPE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+const REPO_SHAPE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
 // Neither side of an owner/name may be "." or "..": those walk a URL out of
 // /repos/<owner>/<repo>/ even though they satisfy the charset.

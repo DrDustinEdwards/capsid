@@ -1,9 +1,7 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useState } from "react";
 import { useApp } from "../app/ctx";
 import type { PortalNamespace } from "../types";
-import "capsomer/button.css";
-import "capsomer/field.css";
-import { Field } from "./SiteConfig";
+import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
 import { Danger } from "./shared";
 
 // ADD, CHANGE OR DELETE A PROJECT (the Portal audit's new map, 2026-11-06): the namespace_add,
@@ -21,20 +19,13 @@ const draftRow = (repo = "", label = ""): RepoDraft => ({ key: nextKey++, repo, 
 
 export function ProjectForm({ editing, onClose }: { editing: ProjectEditing; onClose: () => void }) {
   const { confirm } = useApp();
-  const id = useId();
-  const box = useRef<HTMLElement>(null);
-  const first = useRef<HTMLInputElement>(null);
+  const { f, first } = useConfigForm();
   const adding = editing.kind === "add";
   const [ns, setNs] = useState(adding ? "" : editing.n.namespace);
   const [rows, setRows] = useState<RepoDraft[]>(() => (adding || !editing.n.repos.length ? [draftRow("", "primary")] : editing.n.repos.map((r) => draftRow(r.repo, r.label))));
   const [cascade, setCascade] = useState(false);
   const [policies, setPolicies] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
-
-  useEffect(() => {
-    box.current?.scrollIntoView({ block: "nearest" });
-    first.current?.focus();
-  }, []);
 
   const edit = (key: number, patch: Partial<RepoDraft>) => (setRows((all) => all.map((r) => (r.key === key ? { ...r, ...patch } : r))), setHint(null));
 
@@ -58,20 +49,30 @@ export function ProjectForm({ editing, onClose }: { editing: ProjectEditing; onC
     confirm({ action: "namespace_remove", params, title: `Delete the project ${ns}`, onDone: onClose });
   };
 
-  const f = (k: string) => `${id}-${k}`;
   return (
-    <section className="cap-panel" ref={box} aria-labelledby={f("h")}>
-      <header className="cap-panel-head">
-        <h2 id={f("h")}>{adding ? "Add a project" : `Edit ${ns}`}</h2>
-      </header>
-      <form
-        className="siteform"
-        noValidate
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
+    <ConfigForm
+      f={f}
+      first={first}
+      title={adding ? "Add a project" : `Edit ${ns}`}
+      hint={hint}
+      onSubmit={submit}
+      onClose={onClose}
+      danger={
+        !adding && (
+          <Danger note="Archived documents, versions, the audit log and finished jobs are kept. The preview lists what it deletes, or what has to end first.">
+            <label className="check">
+              <input type="checkbox" checked={cascade} onChange={(e) => setCascade(e.target.checked)} /> Also delete its live documents (each is saved as a version first)
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={policies} onChange={(e) => setPolicies(e.target.checked)} /> Also delete its signed policy documents
+            </label>
+            <button type="button" className="btn danger" aria-label={`Delete ${ns}`} onClick={remove}>
+              Delete
+            </button>
+          </Danger>
+        )
+      }
+    >
         <Field id={f("ns")} label="Project" note="Its namespace: a lowercase slug of a-z, 0-9 and '-'. It cannot be renamed later.">
           <input ref={adding ? first : undefined} id={f("ns")} aria-describedby={`${f("ns")}-note`} className="field mono" value={ns} readOnly={!adding} autoComplete="off" spellCheck={false} onChange={(e) => (setNs(e.target.value), setHint(null))} />
         </Field>
@@ -94,33 +95,6 @@ export function ProjectForm({ editing, onClose }: { editing: ProjectEditing; onC
           </div>
         </fieldset>
         {adding && <p className="faint note full">No driver agent is minted here: a mint hands out a key, so it stays with the admin tools. Add the project's site on Sites.</p>}
-        {hint && (
-          <div className="callout warn full" role="alert">
-            {hint}
-          </div>
-        )}
-        <div className="toolbar full">
-          <button type="submit" className="btn primary">
-            Preview
-          </button>
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
-        </div>
-        {!adding && (
-          <Danger note="Archived documents, versions, the audit log and finished jobs are kept. The preview lists what it deletes, or what has to end first.">
-            <label className="check">
-              <input type="checkbox" checked={cascade} onChange={(e) => setCascade(e.target.checked)} /> Also delete its live documents (each is saved as a version first)
-            </label>
-            <label className="check">
-              <input type="checkbox" checked={policies} onChange={(e) => setPolicies(e.target.checked)} /> Also delete its signed policy documents
-            </label>
-            <button type="button" className="btn danger" aria-label={`Delete ${ns}`} onClick={remove}>
-              Delete
-            </button>
-          </Danger>
-        )}
-      </form>
-    </section>
+    </ConfigForm>
   );
 }

@@ -292,28 +292,27 @@ export async function handlePortalSiteSearch(request: Request, env: Env, now: Da
   return jsonResponse(await readSiteSearch(env, ns.namespace, fetch, now));
 }
 
-/** GET /portal/api/site-traffic?namespace=&days=. */
-export async function handlePortalSiteTraffic(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+/** A namespace read with one whole-number parameter (days, limit): the gate, the namespace
+ *  and the number, each refused with its reason, then the read. */
+async function countedRead(request: Request, env: Env, now: Date, param: { name: string; max: number; fallback: number }, read: (namespace: string, n: number) => Promise<unknown>): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const url = new URL(request.url);
   const ns = namespaceParam(url);
   if (!ns.ok) return ns.response;
-  const days = wholeParam(url, "days", MAX_TRAFFIC_DAYS, DEFAULT_TRAFFIC_DAYS);
-  if (days === null) return textResponse(`days must be a whole number from 1 to ${MAX_TRAFFIC_DAYS}.`, 400);
-  return jsonResponse(await readSiteTraffic(env, ns.namespace, days, fetch, now));
+  const n = wholeParam(url, param.name, param.max, param.fallback);
+  if (n === null) return textResponse(`${param.name} must be a whole number from 1 to ${param.max}.`, 400);
+  return jsonResponse(await read(ns.namespace, n));
+}
+
+/** GET /portal/api/site-traffic?namespace=&days=. */
+export function handlePortalSiteTraffic(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+  return countedRead(request, env, now, { name: "days", max: MAX_TRAFFIC_DAYS, fallback: DEFAULT_TRAFFIC_DAYS }, (ns, days) => readSiteTraffic(env, ns, days, fetch, now));
 }
 
 /** GET /portal/api/workers-builds?namespace=&limit=. */
-export async function handlePortalWorkersBuilds(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
-  const gate = await portalGate(request, env, now, OPS_RETURN_TO);
-  if (!gate.ok) return gate.response;
-  const url = new URL(request.url);
-  const ns = namespaceParam(url);
-  if (!ns.ok) return ns.response;
-  const limit = wholeParam(url, "limit", BUILDS_MAX, BUILDS_DEFAULT);
-  if (limit === null) return textResponse(`limit must be a whole number from 1 to ${BUILDS_MAX}.`, 400);
-  return jsonResponse(await readWorkersBuilds(env, ns.namespace, limit, fetch, now));
+export function handlePortalWorkersBuilds(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+  return countedRead(request, env, now, { name: "limit", max: BUILDS_MAX, fallback: BUILDS_DEFAULT }, (ns, limit) => readWorkersBuilds(env, ns, limit, fetch, now));
 }
 
 /** GET /portal/api/build-log?build=<uuid>. */

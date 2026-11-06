@@ -1,5 +1,4 @@
 export {
-  REPO_SHAPE,
   defaultBranchSha,
   encodePath,
   parseReposList,

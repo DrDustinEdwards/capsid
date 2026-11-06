@@ -1,10 +1,9 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useApp } from "../app/ctx";
 import { ago, msSql, utc } from "../lib/format";
 import { St } from "../ui/icons";
 import type { OpsSiteConfig } from "../types";
-import "capsomer/button.css";
-import "capsomer/field.css";
+import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
 import { Danger } from "./shared";
 
 // The site configuration (live.sites, the ops_sites table): one row per namespace. A row
@@ -59,38 +58,16 @@ function paramsOf(d: Draft): Record<string, string> {
   return p;
 }
 
-export function Field({ id, label, note, children }: { id: string; label: string; note?: string; children: ReactNode }) {
-  return (
-    <div className="f">
-      <label htmlFor={id} className="section-title">
-        {label}
-      </label>
-      {children}
-      {note && (
-        <span id={`${id}-note`} className="faint note">
-          {note}
-        </span>
-      )}
-    </div>
-  );
-}
 
 export type Editing = { kind: "add" } | { kind: "edit"; row: OpsSiteConfig };
 
 export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () => void }) {
   const { feed, confirm } = useApp();
-  const id = useId();
-  const box = useRef<HTMLElement>(null);
-  const first = useRef<HTMLInputElement>(null);
+  const { f, first } = useConfigForm();
   const [d, setD] = useState<Draft>(editing.kind === "edit" ? draftOf(editing.row) : BLANK);
   const [hint, setHint] = useState<string | null>(null);
   const set = (patch: Partial<Draft>) => (setD((x) => ({ ...x, ...patch })), setHint(null));
   const adding = editing.kind === "add";
-
-  useEffect(() => {
-    box.current?.scrollIntoView({ block: "nearest" });
-    first.current?.focus();
-  }, []);
 
   // Namespaces on the roster with no row yet, offered as suggestions when adding.
   const taken = new Set(feed.live.sites.map((s) => s.namespace));
@@ -106,21 +83,30 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
     confirm({ action: "site_edit", params: { ...params, namespace: editing.row.namespace, revision: String(editing.row.revision) }, title: `Change ${editing.row.namespace}`, onDone: onClose });
   };
 
-  const f = (k: string) => `${id}-${k}`;
   return (
-    <section className="cap-panel" ref={box} aria-labelledby={f("h")}>
-      <header className="cap-panel-head">
-        <h2 id={f("h")}>{adding ? "Add a site" : `Edit ${editing.row.namespace}`}</h2>
-        {!adding && <span className="cap-panel-src">revision {editing.row.revision}</span>}
-      </header>
-      <form
-        className="siteform"
-        noValidate
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
+    <ConfigForm
+      f={f}
+      first={first}
+      title={adding ? "Add a site" : `Edit ${editing.row.namespace}`}
+      src={adding ? undefined : `revision ${editing.row.revision}`}
+      hint={hint}
+      onSubmit={submit}
+      onClose={onClose}
+      danger={
+        !adding && (
+          <Danger note="The watcher stops probing it. Its history stays.">
+            <button
+              type="button"
+              className="btn danger"
+              aria-label={`Remove ${editing.row.namespace}`}
+              onClick={() => confirm({ action: "site_remove", params: { namespace: editing.row.namespace, revision: String(editing.row.revision) }, title: `Remove ${editing.row.namespace}`, onDone: onClose })}
+            >
+              Remove
+            </button>
+          </Danger>
+        )
+      }
+    >
         <Field id={f("ns")} label="Project" note="A registered project (its namespace). One row each.">
           {adding ? (
             <>
@@ -156,33 +142,7 @@ export function SiteForm({ editing, onClose }: { editing: Editing; onClose: () =
         <Field id={f("script")} label="Worker script" note="Cloudflare only. Blank finds it from the account's custom domains.">
           <input id={f("script")} aria-describedby={`${f("script")}-note`} className="field mono" value={d.noSite || d.platform !== "cloudflare" ? "" : d.script} disabled={d.noSite || d.platform !== "cloudflare"} autoComplete="off" spellCheck={false} onChange={(e) => set({ script: e.target.value })} />
         </Field>
-        {hint && (
-          <div className="callout warn full" role="alert">
-            {hint}
-          </div>
-        )}
-        <div className="toolbar full">
-          <button type="submit" className="btn primary">
-            Preview
-          </button>
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
-        </div>
-        {!adding && (
-          <Danger note="The watcher stops probing it. Its history stays.">
-            <button
-              type="button"
-              className="btn danger"
-              aria-label={`Remove ${editing.row.namespace}`}
-              onClick={() => confirm({ action: "site_remove", params: { namespace: editing.row.namespace, revision: String(editing.row.revision) }, title: `Remove ${editing.row.namespace}`, onDone: onClose })}
-            >
-              Remove
-            </button>
-          </Danger>
-        )}
-      </form>
-    </section>
+    </ConfigForm>
   );
 }
 

@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useState } from "react";
 import { useApp } from "../app/ctx";
 import type { OpsPackageConfig } from "../types";
+import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
 import { Danger } from "./shared";
 
 // The package configuration (live.packages, the ops_packages table): one row per npm
@@ -26,17 +27,10 @@ function paramsOf(d: Draft): Record<string, string> {
 
 export function PackageForm({ editing, onClose }: { editing: PackageEditing; onClose: () => void }) {
   const { confirm } = useApp();
-  const id = useId();
-  const box = useRef<HTMLElement>(null);
-  const first = useRef<HTMLInputElement>(null);
+  const { f, first } = useConfigForm();
   const adding = editing.kind === "add";
   const [d, setD] = useState<Draft>(adding ? { name: "", repo: "", formerly: "" } : { name: editing.row.name, repo: editing.row.repo ?? "", formerly: editing.row.formerly ?? "" });
   const [hint, setHint] = useState<string | null>(null);
-  useEffect(() => {
-    box.current?.scrollIntoView({ block: "nearest" });
-    first.current?.focus();
-  }, []);
-  const f = (k: string) => `${id}-${k}`;
   const submit = () => {
     if (!d.name.trim()) return setHint("Type the package's npm name.");
     setHint(null);
@@ -49,52 +43,16 @@ export function PackageForm({ editing, onClose }: { editing: PackageEditing; onC
     });
   };
   return (
-    <section className="cap-panel" ref={box} aria-labelledby={f("h")}>
-      <header className="cap-panel-head">
-        <h2 id={f("h")}>{adding ? "Add a package" : `Edit ${editing.row.name}`}</h2>
-        {!adding && <span className="cap-panel-src">revision {editing.row.revision}</span>}
-      </header>
-      <form
-        className="siteform"
-        noValidate
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <div className="f">
-          <label htmlFor={f("name")} className="section-title">
-            npm name
-          </label>
-          <input ref={first} id={f("name")} className="field mono" value={d.name} readOnly={!adding} autoComplete="off" spellCheck={false} onChange={(e) => setD({ ...d, name: e.target.value })} />
-        </div>
-        <div className="f">
-          <label htmlFor={f("repo")} className="section-title">
-            GitHub repository
-          </label>
-          <input id={f("repo")} className="field mono" value={d.repo} placeholder="owner/name" autoComplete="off" spellCheck={false} onChange={(e) => setD({ ...d, repo: e.target.value })} />
-        </div>
-        <div className="f">
-          <label htmlFor={f("formerly")} className="section-title">
-            Formerly
-          </label>
-          <input id={f("formerly")} className="field mono" value={d.formerly} placeholder="an earlier npm name" autoComplete="off" spellCheck={false} onChange={(e) => setD({ ...d, formerly: e.target.value })} />
-          <span className="faint note">Its download history is shown joined to this one.</span>
-        </div>
-        <div className="full toolbar">
-          <button type="submit" className="btn primary">
-            {adding ? "Preview the add" : "Preview the change"}
-          </button>
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
-          {hint && (
-            <span className="note" role="alert">
-              {hint}
-            </span>
-          )}
-        </div>
-        {!adding && (
+    <ConfigForm
+      f={f}
+      first={first}
+      title={adding ? "Add a package" : `Edit ${editing.row.name}`}
+      src={adding ? undefined : `revision ${editing.row.revision}`}
+      hint={hint}
+      onSubmit={submit}
+      onClose={onClose}
+      danger={
+        !adding && (
           <Danger note="The Packages page stops showing it.">
             <button
               type="button"
@@ -105,9 +63,18 @@ export function PackageForm({ editing, onClose }: { editing: PackageEditing; onC
               Remove
             </button>
           </Danger>
-        )}
-      </form>
-    </section>
+        )
+      }
+    >
+      <Field id={f("name")} label="npm name">
+        <input ref={first} id={f("name")} className="field mono" value={d.name} readOnly={!adding} autoComplete="off" spellCheck={false} onChange={(e) => setD({ ...d, name: e.target.value })} />
+      </Field>
+      <Field id={f("repo")} label="GitHub repository">
+        <input id={f("repo")} className="field mono" value={d.repo} placeholder="owner/name" autoComplete="off" spellCheck={false} onChange={(e) => setD({ ...d, repo: e.target.value })} />
+      </Field>
+      <Field id={f("formerly")} label="Formerly" note="Its download history is shown joined to this one.">
+        <input id={f("formerly")} aria-describedby={`${f("formerly")}-note`} className="field mono" value={d.formerly} placeholder="an earlier npm name" autoComplete="off" spellCheck={false} onChange={(e) => setD({ ...d, formerly: e.target.value })} />
+      </Field>
+    </ConfigForm>
   );
 }
-
