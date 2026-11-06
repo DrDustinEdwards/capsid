@@ -70,9 +70,9 @@ missing build is a failure, not a pass.
 
 ## Keyboard
 
-`Ctrl K` or `/` opens the command menu. `g` then `y h p q l a k b e` goes to a page
-(Needs you, Health, Pull requests, Jobs, Activity, Agents, Packages, Library,
-Settings),
+`Ctrl K` or `/` opens the command menu. `g` then `y h s p q o l a k b e` goes to a page
+(Needs you, Health, Sites, Pull requests, Jobs, Projects, Activity, Agents, Packages,
+Library, Settings),
 `j` and `k` move through rows, `Enter` opens one, `Esc` closes, `r` refreshes,
 `t` switches theme, `f` focuses the queue filter, `?` shows the sheet, where
 single-key shortcuts can be turned off.

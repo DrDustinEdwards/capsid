@@ -20,7 +20,7 @@ async function newestActivity(page: Page): Promise<string> {
 test("PLANT: flipping a switch opens a reason field and does not move it; an empty reason is an error on the field and sends nothing", async ({ page }) => {
   let sent = 0;
   await page.route(PREVIEW_URL, (route) => (sent++, route.continue()));
-  await visit(page, "namespaces");
+  await visit(page, "settings");
   await expect(seat(page)).not.toBeChecked();
   await seat(page).click();
   const field = page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/);
@@ -39,7 +39,7 @@ test("PLANT: flipping a switch opens a reason field and does not move it; an emp
 });
 
 test("PLANT: Esc cancels the reason and returns focus to the switch, which has not moved", async ({ page }) => {
-  await visit(page, "namespaces");
+  await visit(page, "settings");
   await seat(page).click();
   const field = page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/);
   await field.fill("typed, then thought better of it");
@@ -50,7 +50,7 @@ test("PLANT: Esc cancels the reason and returns focus to the switch, which has n
 });
 
 test("PLANT: the switch's accessible name is the same in both states", async ({ page }) => {
-  await visit(page, "namespaces");
+  await visit(page, "settings");
   await expect(seat(page)).toHaveAccessibleName("Overnight run");
   await seat(page).click();
   await page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/).fill("checking the name");
@@ -64,7 +64,7 @@ test("PLANT: the switch's accessible name is the same in both states", async ({ 
 
 test("PLANT: applying moves the switch, returns focus to it, and leaves a message with Undo that is still there after 10 seconds; Undo reverses it as its own action", async ({ page }) => {
   await page.clock.install();
-  await visit(page, "namespaces");
+  await visit(page, "settings");
   await seat(page).click();
   await page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/).fill("queued jobs are waiting");
   await page.keyboard.press("Enter");
@@ -92,7 +92,7 @@ test("PLANT: applying moves the switch, returns focus to it, and leaves a messag
 
 test("PLANT: a refusal from the Worker is shown beside the switch in plain words, and the switch does not move", async ({ page }) => {
   await page.route(PREVIEW_URL, (route) => route.fulfill({ status: 400, contentType: "text/plain", body: "overnight needs a reason: why the overnight run goes on, off, or changes what it runs on." }));
-  await visit(page, "namespaces");
+  await visit(page, "settings");
   await seat(page).click();
   await page.getByLabel(/^Turning the overnight run on, on .*\. Reason:$/).fill("anything");
   await page.keyboard.press("Enter");
@@ -115,7 +115,7 @@ test("Queue and Agents have no automation control of their own", async ({ page }
 const overnight = (page: Page) => page.getByRole("switch", { name: "Overnight run", exact: true });
 
 test("PLANT: the overnight run is off and runs on the API key by default, and turning it on asks a reason before it moves", async ({ page }) => {
-  await visit(page, "namespaces");
+  await visit(page, "settings");
   await expect(overnight(page)).not.toBeChecked();
   await expect(page.locator("#overnight-runs-on-api")).toBeChecked();
   await expect(page.locator("#overnight-runs-on-subscription")).not.toBeChecked();
@@ -128,7 +128,7 @@ test("PLANT: the overnight run is off and runs on the API key by default, and tu
 });
 
 test("PLANT: choosing the subscription records Dustin's decision, its date and its reasoning where the switch is set, and the panel shows it", async ({ page }) => {
-  await visit(page, "namespaces");
+  await visit(page, "settings");
   await expect(page.locator("#overnight-decision")).toHaveCount(0);
   // The radios are drawn as a segmented control; a click lands on the label.
   await page.locator('label[for="overnight-runs-on-subscription"]').click();

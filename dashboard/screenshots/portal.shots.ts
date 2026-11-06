@@ -58,9 +58,17 @@ test("health, dark", async ({ page }) => {
   await shoot(page, "health-dark");
 });
 
-test("health's sites section, light", async ({ page }) => {
+test("sites, light", async ({ page }) => {
   await open(page, "sites");
-  await shoot(page, "health-sites-light");
+  await shoot(page, "sites-light");
+});
+
+test("a site's own page, light", async ({ page }) => {
+  await prepare(page, "light");
+  await page.goto("sites/sample");
+  await expect(page.getByRole("heading", { level: 1, name: "Sample A" })).toBeVisible();
+  await expect(page.locator("main .loading")).toHaveCount(0);
+  await shoot(page, "site-light");
 });
 
 test("queue with a job drawer open, light", async ({ page }) => {
@@ -80,7 +88,7 @@ test("a control's preview open, light", async ({ page }) => {
   await page.getByRole("button", { name: "Mark failed", exact: true }).click();
   const dialog = page.locator("dialog.confirm");
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Reason (required)").pressSequentially("maintenance window");
+  await dialog.getByRole("textbox", { name: "Reason", exact: true }).pressSequentially("maintenance window");
   await dialog.getByRole("button", { name: "Preview" }).click();
   // The rows it changes are behind Details (e2e/confirm.spec.ts); the shot opens them.
   await dialog.getByText("Details", { exact: true }).click();
@@ -95,9 +103,9 @@ test("activity, light", async ({ page }) => {
   await shoot(page, "activity-light");
 });
 
-test("claims, light", async ({ page }) => {
-  await open(page, "claims");
-  await shoot(page, "claims-light");
+test("jobs' checks, light", async ({ page }) => {
+  await open(page, "queue#checks");
+  await shoot(page, "checks-light");
 });
 
 test.describe("on a phone", () => {

@@ -1,7 +1,6 @@
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
-import { Suspense, lazy } from "react";
-import { useApp } from "../app/ctx";
+import { AGENT_TABS, tabOf, useApp } from "../app/ctx";
 import { agentState, archiveAgents, nsList, rosterAgents } from "../lib/derive";
 import { ago, ms, pct } from "../lib/format";
 import { St } from "../ui/icons";
@@ -9,41 +8,18 @@ import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
 
-// Checks (the claims ledger; "Claims" until the UX audit's M5) is a tab of Agents
-// (design-portal-evaluation.md section 2: both answer "how is this agent doing"), loaded when
-// the tab opens. The tab is in the address (?tab=claims, its id unchanged), so it can be
-// reloaded or shared.
-const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
 // Chart 6, weekly model spend, sits under the roster.
 const CostChart = trendChart("CostChart");
 
-type Tab = "roster" | "archive" | "claims" | "access";
-
-const TABS = [
-  { id: "roster", label: "Agents" },
-  { id: "archive", label: "Archive" },
-  { id: "claims", label: "Checks" },
-  { id: "access", label: "AI access" },
-] as const;
-
+// Three tabs (the Portal audit's new map, 2026-11-06): the roster, the archive of revoked
+// agents, and the AI access granted on each server. The claim checks are Jobs' Checks tab.
 export function Agents() {
-  const asked = useTabParam();
-  const tab: Tab = asked === "claims" || asked === "archive" || asked === "access" ? asked : "roster";
+  const tab = tabOf(AGENT_TABS, useTabParam()) ?? AGENT_TABS[0].id;
   return (
     <div className="page">
       <PageHead title="Agents" />
-      <PageTabs label="Agents" path="/agents" tabs={TABS} current={tab} />
-      {tab === "claims" ? (
-        <Suspense fallback={null}>
-          <Claims embedded />
-        </Suspense>
-      ) : tab === "archive" ? (
-        <Archive />
-      ) : tab === "access" ? (
-        <Access />
-      ) : (
-        <Roster />
-      )}
+      <PageTabs label="Agents" path="/agents" tabs={AGENT_TABS} current={tab} />
+      {tab === "archive" ? <Archive /> : tab === "access" ? <Access /> : <Roster />}
     </div>
   );
 }

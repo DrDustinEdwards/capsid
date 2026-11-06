@@ -210,6 +210,9 @@ function world(opts: { adminEmail?: string; coOwners?: string } = {}): { d1: Fak
     ACCESS_SAAS_CLIENT_ID: "sample-client",
     ACCESS_SAAS_CLIENT_SECRET: "sample-secret",
     SAMPLE_OPERATOR_TOKEN: "sample-operator-token-for-tests-only-0000",
+    // For site_key_rotate's preview: the token it would set the key with is set.
+    CF_SECRETS_TOKEN: "sample-secrets-token",
+    CF_ACCOUNT_ID: "sample-account",
   } as never;
   return { d1, kv, env };
 }
@@ -342,9 +345,13 @@ const EVERY_ACTION = [
   ["sign_policy_from_repo", { confirm: "11" }],
   ["unit_resume", { unit: "capsid/docs", reason: "the rollback's cause is fixed" }],
   ["automerge_resume", { namespace: "capsid", reason: "both rollbacks are answered" }],
+  ["namespace_add", { namespace: "sample-added", repo: "example-org/sample-added" }],
+  ["namespace_edit", { namespace: "capsid-new", repos: JSON.stringify([{ repo: "example-org/new", label: "primary" }]) }],
+  ["namespace_remove", { namespace: "capsid-new" }],
+  ["site_key_rotate", { namespace: "capsid" }],
 ] as const;
 
-test("the Portal's actions are the five job and agent actions the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the site repair, supersede, park, unpark and PR close, and approve, the two merge resumes, and every loop below covers each", () => {
+test("the Portal's actions are the five job and agent actions the old /console page had, the overnight switch, the three site edits, the breaker reset, the three package edits, close as shipped, the site repair, supersede, park, unpark and PR close, and approve, the two merge resumes, the three project edits and the site key, and every loop below covers each", () => {
   // Written out, so an action added to PORTAL_ACTIONS without a decision here, or
   // without a row below, fails.
   assert.deepEqual([...PORTAL_ACTIONS].sort(), [
@@ -352,6 +359,9 @@ test("the Portal's actions are the five job and agent actions the old /console p
     "automerge_resume",
     "close_shipped",
     "fail_job",
+    "namespace_add",
+    "namespace_edit",
+    "namespace_remove",
     "overnight",
     "package_add",
     "package_edit",
@@ -366,6 +376,7 @@ test("the Portal's actions are the five job and agent actions the old /console p
     "sign_policy_from_repo",
     "site_add",
     "site_edit",
+    "site_key_rotate",
     "site_remove",
     "site_repair",
     "supersede_job",
@@ -373,7 +384,7 @@ test("the Portal's actions are the five job and agent actions the old /console p
     "unpark_job",
   ]);
   assert.deepEqual(EVERY_ACTION.map(([action]) => action).sort(), [...PORTAL_ACTIONS].sort());
-  assert.equal(PORTAL_ACTIONS.length, 23);
+  assert.equal(PORTAL_ACTIONS.length, 27);
 });
 
 // Every action: the CSRF pair, and a preview that writes nothing
@@ -393,6 +404,10 @@ for (const [action, params] of EVERY_ACTION) {
     });
   }
 
+  // namespace_remove's plan is the delete's reader, json_each and all, which the node fake
+  // does not evaluate (test/namespace-delete.test.ts); its preview and perform run against
+  // real D1 in test-integration/portal-actions.test.ts.
+  if (action === "namespace_remove") continue;
   test(`PLANT: ${action} preview states what will change, signs it, and writes NOTHING`, async () => {
     const w = world();
     const body = await previewOk(w, action, params);
@@ -580,9 +595,9 @@ function auditRows(d1: FakeD1): string[] {
 }
 
 // The action whose mutator writes KV and one audit row, and the revoke; the job
-// transitions (close_shipped, supersede, park and unpark among them), the PR close, the approval, the site edits, the package edits and the
-// canon decisions are performed against real D1 in test-integration/portal-actions.test.ts.
-for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && a !== "close_shipped" && a !== "pr_close" && a !== "approve_pr" && !a.startsWith("site_") && !a.startsWith("package_"))) {
+// transitions (close_shipped, supersede, park and unpark among them), the PR close, the approval, the site edits, the package edits,
+// the site key, the project edits and the canon decisions are performed against real D1 in test-integration/portal-actions.test.ts.
+for (const [action, params] of EVERY_ACTION.filter(([a]) => !a.endsWith("_job") && a !== "close_shipped" && a !== "pr_close" && a !== "approve_pr" && !a.startsWith("site_") && !a.startsWith("package_") && !a.startsWith("namespace_"))) {
   test(`${action} performed from its token writes the rows its preview listed, and returns the feed`, async () => {
     const w = world();
     const { token, audit } = await previewOk(w, action, params);

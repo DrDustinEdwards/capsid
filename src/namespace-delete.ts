@@ -12,7 +12,9 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and
 // delete_perform): the plan, the refusals, the signed confirmation and the one batch.
 // Its operation is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
-// src/scope.ts). Ruled 2026-09-29, "Capsid MCP roadmap, build or don't build".
+// src/scope.ts). Ruled 2026-09-29, "Capsid MCP roadmap, build or don't build". The
+// namespace_remove control (src/controls.ts) is its second door: its preview reads this
+// plan and refusals and binds the same fingerprint, and its perform is deleteAsPlanned.
 //
 // Two calls, as the Portal's controls are (src/portal-actions.ts). The preview reads
 // everything that names the namespace, writes nothing, and when nothing refuses returns
@@ -310,7 +312,9 @@ export function fingerprintDifference(signed: string, current: string): string[]
 
 // ---- Preview and perform ------------------------------------------------------------
 
-function summarize(plan: DeletePlan): { will_delete: string[]; will_keep: string[] } {
+/** What the delete removes and what it keeps, one line each: the tool's preview and the
+ *  namespace_remove control's preview (src/controls-plan.ts) both show it. */
+export function summarize(plan: DeletePlan): { will_delete: string[]; will_keep: string[] } {
   const c = plan.counts;
   return {
     will_delete: [
@@ -443,7 +447,6 @@ export async function performNamespaceDelete(
   token: string | undefined,
   now: Date
 ): Promise<ToolAnswer> {
-  const db = env.DB;
   if (typeof token !== "string" || token.length === 0) {
     return { ok: false, refusal: "delete_perform needs the token capsid_admin_manage_namespaces action delete_preview returned. Preview first." };
   }
@@ -454,7 +457,18 @@ export async function performNamespaceDelete(
     return { ok: false, refusal: `delete_namespace refused, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
   }
   if (!verified.ok) return { ok: false, refusal: `delete_namespace refused, nothing changed: ${verified.refusal}` };
+  return deleteAsPlanned(env, actor, namespace, opts, verified.claims.plan);
+}
 
+/**
+ * The commit behind both doors, once a confirmation is verified: capsid_admin_manage_namespaces
+ * action delete_perform (its own token, above) and the namespace_remove control (the
+ * controls' token, src/controls.ts, which binds the same fingerprint). The plan is read
+ * again, every refusal applies again, and the fingerprint the confirmation signed must
+ * match it exactly.
+ */
+export async function deleteAsPlanned(env: Env, actor: string, namespace: string, opts: DeleteOptions, signedPlan: string): Promise<ToolAnswer> {
+  const db = env.DB;
   let plan: DeletePlan;
   try {
     plan = await readDeletePlan(db, namespace);
@@ -464,8 +478,8 @@ export async function performNamespaceDelete(
   const refusals = deleteRefusals(plan, opts);
   if (refusals.length) return { ok: false, refusal: `delete_namespace refused, nothing changed: ${refusals.join(" ")}` };
   const current = planFingerprint(plan);
-  if (current !== verified.claims.plan) {
-    const changed = fingerprintDifference(verified.claims.plan, current);
+  if (current !== signedPlan) {
+    const changed = fingerprintDifference(signedPlan, current);
     return {
       ok: false,
       refusal: `delete_namespace refused, nothing changed: the namespace changed since the preview (${changed.join("; ")}). Preview again.`,

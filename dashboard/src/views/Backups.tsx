@@ -7,19 +7,18 @@ import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
-import { NoSnapshot, PageHead } from "./shared";
+import { NoSnapshot } from "./shared";
 
 // Chart 10, the retention slots, from GET /portal/api/trends; Enarratio loads with it.
 const BackupSlots = trendChart("BackupSlots");
 
-export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
+// Health's Backups tab.
+export function Backups() {
   const { feed, now } = useApp();
   const snap = feed.snapshot;
-  const head = embedded ? null : <PageHead title="Backups" />;
   if (!snap) {
     return (
-      <div className={embedded ? "embedded" : "page"}>
-        {head}
+      <div className="embedded">
         <NoSnapshot />
       </div>
     );
@@ -28,8 +27,7 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
   const o = snap.offaccount;
   const os = o ? offaccountState(o, now) : null;
   return (
-    <div className={embedded ? "embedded" : "page"}>
-      {head}
+    <div className="embedded">
       <div className="grid2">
         <Panel flush title="Primary: Capsid D1" src="/health backup">
           <div className="body stack-gap">

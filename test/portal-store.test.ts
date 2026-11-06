@@ -35,7 +35,7 @@ test("PLANT: from half the cap the store is a warning in Needs attention, and no
   const half = feed(D1_CAP_BYTES / 2);
   assert.deepEqual(
     storeRows(half.f, half.now).map((a) => [a.sev, a.title, a.sub, a.open]),
-    [["warn", "The D1 store is at 50% of its 10 GB cap", "5 GB used", "view:backups"]]
+    [["warn", "The D1 store is at 50% of its 10 GB cap", "5 GB used", "view:health#backups"]]
   );
 });
 

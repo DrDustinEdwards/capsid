@@ -8,9 +8,10 @@ import { St } from "../ui/icons";
 
 // WORKERS: the secrets and data model (src/system-resources.ts), as the nightly build read it
 // from Cloudflare. One panel per Worker with its system, its secret and variable names (never
-// a value) and what it binds; then every D1 database with its tables, every KV namespace and
-// R2 bucket, and who uses each, so a cleanup can see what is safe to remove. Private: behind
-// the Portal's sign-in only. Nothing here changes anything.
+// a value) and what it binds: a site's own Workers on its Setup tab, the rest on Health's
+// Cloudflare tab with every D1 database, KV namespace and R2 bucket and who uses each, so a
+// cleanup can see what is safe to remove. Private: behind the Portal's sign-in only. Nothing
+// here changes anything.
 
 type Worker = ResourcesDoc["workers"][number];
 type User = ResourcesDoc["databases"][number]["used_by"][number];
@@ -142,40 +143,91 @@ function StoresPanel({ doc }: { doc: ResourcesDoc }) {
   );
 }
 
-export function Workers() {
-  const { now } = useApp();
-  const load = useAnswer<ResourcesDoc>(["resources"], fetchResources);
+function useResources() {
+  return useAnswer<ResourcesDoc>(["resources"], fetchResources);
+}
+
+// The read's state when it has no document to show yet, or null when it has one.
+function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
   const doc = load.data;
+  if (load.loading && !doc) {
+    return (
+      <div className="loading">
+        <Spinner label="Reading the Workers" />
+      </div>
+    );
+  }
+  if (load.error && !doc) {
+    return (
+      <p role="alert">
+        <St kind="crit">Could not read the Workers: {load.error}</St>
+      </p>
+    );
+  }
+  if (!doc || !doc.read_at) {
+    return (
+      <Empty kind="nothing-yet" title="The Workers have not been read yet.">
+        {doc?.problems[0] ?? "The nightly build reads every Worker from Cloudflare after 06:00 UTC."}
+      </Empty>
+    );
+  }
+  return null;
+}
+
+function ReadNote({ doc }: { doc: ResourcesDoc }) {
+  const { now } = useApp();
+  return <p className="faint shared-read">{`Read from Cloudflare ${ago(ms(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>;
+}
+
+/** The Workers a site owns: its own script, and every Worker its system lists beside it
+ *  (system/model.json), such as a site's watchdog or desk. */
+function ownedScripts(doc: ResourcesDoc, scripts: ReadonlyArray<string>): string[] {
+  const systems = new Set(doc.workers.filter((w) => scripts.includes(w.script) && w.system).map((w) => w.system));
+  return doc.workers.filter((w) => scripts.includes(w.script) || (w.system !== null && systems.has(w.system))).map((w) => w.script);
+}
+
+/** A site's Setup tab: what each of its Workers binds, and its secret and variable names. */
+export function SiteWorkers({ scripts }: { scripts: ReadonlyArray<string> }) {
+  const load = useResources();
+  const doc = load.data;
+  const waiting = <NotRead load={load} />;
+  if (!doc || !doc.read_at) return waiting;
+  const owned = new Set(ownedScripts(doc, scripts));
+  const workers = doc.workers.filter((w) => owned.has(w.script));
+  return (
+    <>
+      {workers.length === 0 ? (
+        <p className="shared-none">
+          <St kind="nodata">{scripts.length ? `Cloudflare has no Worker named ${scripts.join(" or ")}.` : "No Worker script is known for this site: set one in its settings above."}</St>
+        </p>
+      ) : (
+        workers.map((w) => <WorkerPanel key={w.script} w={w} />)
+      )}
+      <ReadNote doc={doc} />
+    </>
+  );
+}
+
+/** Health's Cloudflare tab: the Workers no site owns, then every store and who uses it. */
+export function UnownedResources({ siteScripts }: { siteScripts: ReadonlyArray<string> }) {
+  const load = useResources();
+  const doc = load.data;
+  if (!doc || !doc.read_at) return <div className="embedded"><NotRead load={load} /></div>;
+  const owned = new Set(ownedScripts(doc, siteScripts));
+  const rest = doc.workers.filter((w) => !owned.has(w.script));
   return (
     <div className="embedded">
-      {load.loading ? (
-        <div className="loading">
-          <Spinner label="Reading the Workers" />
-        </div>
-      ) : load.error ? (
-        <p role="alert">
-          <St kind="crit">Could not read the Workers: {load.error}</St>
+      {doc.problems.map((p) => (
+        <p key={p} className="shared-none">
+          <St kind="nodata">{p}</St>
         </p>
-      ) : !doc || !doc.read_at ? (
-        <Empty kind="nothing-yet" title="The Workers have not been read yet.">
-          {doc?.problems[0] ?? "The nightly build reads every Worker from Cloudflare after 06:00 UTC."}
-        </Empty>
-      ) : (
-        <>
-          {doc.problems.map((p) => (
-            <p key={p} className="shared-none">
-              <St kind="nodata">{p}</St>
-            </p>
-          ))}
-          {doc.workers.map((w) => (
-            <WorkerPanel key={w.script} w={w} />
-          ))}
-          <StoresPanel doc={doc} />
-          <p className="faint shared-read">
-            {`Read from Cloudflare ${ago(ms(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}
-          </p>
-        </>
-      )}
+      ))}
+      {rest.map((w) => (
+        <WorkerPanel key={w.script} w={w} />
+      ))}
+      {rest.length === 0 && <p className="faint">Every Worker belongs to a site; each is on its site's Setup tab.</p>}
+      <StoresPanel doc={doc} />
+      <ReadNote doc={doc} />
     </div>
   );
 }

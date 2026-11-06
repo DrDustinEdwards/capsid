@@ -1,14 +1,14 @@
 import { expect, type Page } from "@playwright/test";
-import { MOVED, VIEWS, placePath, type MovedId, type ViewId } from "../src/app/ctx.ts";
+import { VIEWS, placePath, type ViewId } from "../src/app/ctx.ts";
 
 // Every view the app registers, so a new view is covered without editing a test. The
 // count is asserted where it is used: an empty list would otherwise pass vacuously.
 export const ALL_VIEWS = VIEWS.map((v) => ({ id: v.id as ViewId, label: v.label as string }));
-export const VIEW_COUNT = 9;
+export const VIEW_COUNT = 11;
 
-// A place: a view, or a retired view's id (MOVED in src/app/ctx.ts), which names the page,
-// section or tab that holds its content now.
-export type Place = ViewId | MovedId;
+// A place: a view, or a view and its tab or section as "view#tab" (placePath in
+// src/app/ctx.ts).
+export type Place = ViewId | `${ViewId}#${string}`;
 
 // Relative to the Portal's root.
 function urlOf(id: Place): string {
@@ -18,7 +18,7 @@ function urlOf(id: Place): string {
 // Opens a place and waits until its page's heading is up and nothing on it is still
 // loading.
 export async function visit(page: Page, id: Place): Promise<void> {
-  const view = Object.hasOwn(MOVED, id) ? MOVED[id as MovedId].view : id;
+  const view = id.split("#")[0] as ViewId;
   const label = ALL_VIEWS.find((v) => v.id === view)!.label;
   await page.goto(urlOf(id));
   await expect(page.getByRole("heading", { level: 1, name: label })).toBeVisible();

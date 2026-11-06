@@ -1,24 +1,30 @@
 import { expect, test, type Page } from "@playwright/test";
 import { visit } from "./views.ts";
 
-// The Settings view: the site configuration, edited through the confirm dialog, against
-// the production build and the dev mock (dev/mock-api.ts), which keeps changes in memory
-// for the life of the preview server. The tests run in order on one namespace the mock has
-// registered with no row (sample-i), and leave the configuration as they found it.
+// The site configuration: added on Sites, changed and removed on the site's own Setup tab,
+// through the confirm dialog, against the production build and the dev mock (dev/mock-api.ts),
+// which keeps changes in memory for the life of the preview server. The tests run in order on
+// one namespace the mock has registered with no row (sample-i), and leave the configuration as
+// they found it.
 
 const NS = "sample-i";
-const row = (page: Page, ns = NS) => page.locator("main tr[data-row]").filter({ has: page.locator("td:first-child", { hasText: new RegExp(`^${ns}$`) }) });
+const settings = (page: Page) => page.locator("main section#settings");
+
+async function openSetup(page: Page) {
+  await page.goto(`sites/${NS}?tab=setup`);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.locator("main .loading")).toHaveCount(0);
+}
 
 async function openAdd(page: Page) {
-  await visit(page, "settings");
+  await visit(page, "sites");
   await page.getByRole("button", { name: "Add site", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Add a site" })).toBeVisible();
 }
 
 test.describe.serial("the site configuration", () => {
-  test("add a site through the form: preview, Add site, and the row appears", async ({ page }) => {
+  test("add a site on Sites: preview, Add site, and its own page shows its settings", async ({ page }) => {
     await openAdd(page);
-    await expect(row(page)).toHaveCount(0);
     await page.getByLabel("Project", { exact: true }).fill(NS);
     await page.getByLabel("Name", { exact: true }).fill("Sample I");
     await page.getByLabel("Origin", { exact: true }).fill("https://sample-i.example.com");
@@ -30,16 +36,18 @@ test.describe.serial("the site configuration", () => {
     await expect(dialog).toContainText("ops_sites: add sample-i");
     await dialog.getByRole("button", { name: "Add site", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
-    await expect(row(page)).toHaveCount(1);
-    await expect(row(page)).toContainText("https://sample-i.example.com");
-    await expect(row(page)).toContainText("/health");
-    // The form closed once the change was made.
+    // The form closed once the change was made, and the site waits for its first probe.
     await expect(page.getByRole("heading", { level: 2, name: "Add a site" })).toHaveCount(0);
+    await page.locator("main").getByRole("link", { name: "Sample I", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Sample I" })).toBeVisible();
+    await page.getByRole("link", { name: "Setup", exact: true }).click();
+    await expect(settings(page)).toContainText("https://sample-i.example.com");
+    await expect(settings(page)).toContainText("/health");
   });
 
-  test("edit a row: the form opens filled in, and the change shows with a new revision", async ({ page }) => {
-    await visit(page, "settings");
-    await row(page).getByRole("button", { name: `Edit ${NS}` }).click();
+  test("edit on Setup: the form opens filled in, and the change shows with a new revision", async ({ page }) => {
+    await openSetup(page);
+    await settings(page).getByRole("button", { name: `Edit ${NS}` }).click();
     await expect(page.getByRole("heading", { level: 2, name: `Edit ${NS}` })).toBeVisible();
     await expect(page.getByLabel("Origin", { exact: true })).toHaveValue("https://sample-i.example.com");
     await page.getByLabel("Name", { exact: true }).fill("Sample I renamed");
@@ -50,9 +58,9 @@ test.describe.serial("the site configuration", () => {
     await expect(dialog).toContainText("revision 1 -> 2");
     await dialog.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
-    await expect(row(page)).toContainText("Sample I renamed");
-    await expect(row(page)).toContainText("Vercel");
-    await expect(row(page).locator('td[data-label="Revision"] .num')).toHaveText("2");
+    await expect(page.getByRole("heading", { level: 1, name: "Sample I renamed" })).toBeVisible();
+    await expect(settings(page)).toContainText("Vercel");
+    await expect(settings(page).locator('[data-revision]')).toHaveText("2");
   });
 
   test("a refusal from the server is shown in the dialog, verbatim", async ({ page }) => {
@@ -69,16 +77,16 @@ test.describe.serial("the site configuration", () => {
     await expect(page.getByLabel("Origin", { exact: true })).toHaveValue("http://sample-j.example.com");
   });
 
-  test("remove a row", async ({ page }) => {
-    await visit(page, "settings");
+  test("remove on Setup", async ({ page }) => {
+    await openSetup(page);
     // Remove is in the edit form's Danger area, not beside Edit (UX audit M9).
-    await expect(row(page).getByRole("button", { name: `Remove ${NS}` })).toHaveCount(0);
-    await row(page).getByRole("button", { name: `Edit ${NS}` }).click();
+    await expect(settings(page).getByRole("button", { name: `Remove ${NS}` })).toHaveCount(0);
+    await settings(page).getByRole("button", { name: `Edit ${NS}` }).click();
     await page.getByRole("group", { name: "Danger" }).getByRole("button", { name: `Remove ${NS}` }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText(`ops_sites: remove ${NS}`);
     await dialog.getByRole("button", { name: "Remove site", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
-    await expect(row(page)).toHaveCount(0);
+    await expect(page.locator("main")).toContainText("No site has this name.");
   });
 });

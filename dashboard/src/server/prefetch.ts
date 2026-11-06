@@ -58,7 +58,7 @@ const qs = (o: Record<string, string>) => {
 };
 
 /** What a view reads as it first draws, for the address it was opened at. */
-function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, drawer: { type: string; id: string } | null): Spec[] {
+function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, drawer: { type: string; id: string } | null, site: string | null): Spec[] {
   const p = url.searchParams;
   const trends: Spec = { key: [LIVE, "trends"], path: "/trends" };
   const namespaces: Spec = { key: [LIVE, "namespaces"], path: "/namespaces" };
@@ -70,12 +70,42 @@ function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, d
       out.push({ key: [LIVE, "digest", digestSince(generated)], path: `/digest${qs({ since: digestSince(generated) })}` });
       break;
     case "health":
-      out.push(trends, { key: ["convergence"], path: "/convergence" }, { key: ["maintenance"], path: "/maintenance" });
+      out.push(trends, { key: ["maintenance"], path: "/maintenance" });
+      if (p.get("tab") === "resources") out.push({ key: ["resources"], path: "/resources" });
+      break;
+    case "sites": {
+      // A site's own page reads what its tab shows; the list reads the deploy measures on its
+      // Deploys tab.
+      if (!site) {
+        if (p.get("tab") === "deploys") out.push(trends);
+        break;
+      }
+      out.push(trends);
+      const tab = p.get("tab");
+      if (tab === "sync") out.push({ key: ["convergence"], path: "/convergence" });
+      if (tab === "setup") out.push({ key: ["convergence"], path: "/convergence" }, { key: ["resources"], path: "/resources" });
+      const ns = qs({ namespace: site });
+      if (tab === "deploys") out.push({ key: ["workers-builds", site], path: `/workers-builds${ns}` });
+      if (tab === "traffic") {
+        out.push({ key: ["site-search", site], path: `/site-search${ns}` }, { key: ["site-traffic", site], path: `/site-traffic${ns}` });
+        if (site === "capsid") out.push({ key: ["not-found"], path: "/not-found" });
+      }
+      break;
+    }
+    case "projects":
+      out.push(namespaces);
       break;
     case "prs":
       out.push(trends, { key: [LIVE, "merge-units"], path: "/merge-units" });
       break;
     case "queue":
+      if (p.get("tab") === "checks") {
+        const filter = Object.fromEntries(FILTER_KEYS.map((k) => [k, p.get(k) ?? ""])) as Record<(typeof FILTER_KEYS)[number], string>;
+        out.push(trends, { key: ["claims", FILTER_KEYS.map((k) => filter[k]).join("\u0000")], path: `/claims${qs(filter)}` });
+        const job = p.get("job") ?? "";
+        if (job) out.push({ key: ["claims", "job", job], path: `/claims${qs({ job })}` });
+        break;
+      }
       out.push(trends, { key: [LIVE, "stale"], path: "/stale" }, { key: [LIVE, "plan"], path: "/plan" });
       break;
     case "activity": {
@@ -84,18 +114,11 @@ function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, d
       out.push({ key: ["activity", namespace, actor], path: `/activity${qs({ namespace, actor })}` });
       break;
     }
-    case "agents": {
+    case "agents":
       out.push(trends);
-      if (p.get("tab") === "claims") {
-        const filter = Object.fromEntries(FILTER_KEYS.map((k) => [k, p.get(k) ?? ""])) as Record<(typeof FILTER_KEYS)[number], string>;
-        out.push({ key: ["claims", FILTER_KEYS.map((k) => filter[k]).join("\u0000")], path: `/claims${qs(filter)}` });
-        const job = p.get("job") ?? "";
-        if (job) out.push({ key: ["claims", "job", job], path: `/claims${qs({ job })}` });
-      }
       break;
-    }
     case "packages":
-      out.push({ key: ["shared-code"], path: "/shared-code" }, { key: ["completeness"], path: "/completeness" }, { key: ["resources"], path: "/resources" });
+      out.push({ key: ["shared-code"], path: "/shared-code" }, { key: ["completeness"], path: "/completeness" });
       // The demo draws each package's download chart at once (views/Packages.tsx).
       if (demo) for (const pkg of feed?.live.packages ?? []) out.push({ key: ["packages", "history", pkg.name], path: `/packages/history${qs({ name: pkg.name })}` });
       break;
@@ -107,7 +130,7 @@ function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, d
       break;
     }
     case "settings":
-      out.push(namespaces, { key: PUSH_KEY, path: "/push" });
+      out.push({ key: PUSH_KEY, path: "/push" });
       break;
   }
   if (drawer?.type === "audit") out.push({ key: ["activity", "row", drawer.id], path: `/activity${qs({ id: drawer.id })}` });
@@ -148,12 +171,12 @@ export async function prefetchFeed(context: Readonly<RouterContextProvider>, req
 }
 
 /** A view's own reads, for the address it was opened at. */
-export async function prefetchView(context: Readonly<RouterContextProvider>, request: Request, view: ViewId, drawer: { type: string; id: string } | null = null): Promise<DehydratedState> {
+export async function prefetchView(context: Readonly<RouterContextProvider>, request: Request, view: ViewId, drawer: { type: string; id: string } | null = null, site: string | null = null): Promise<DehydratedState> {
   const server = serverFor(context, request);
   const url = new URL(request.url);
   const client = new QueryClient();
   const demo = pageBase(url.pathname) !== "";
   const feed = await feedOf(context, request);
-  await Promise.all(specsFor(view, url, feed, demo, drawer).map((s) => readInto(client, server, s)));
+  await Promise.all(specsFor(view, url, feed, demo, drawer, site).map((s) => readInto(client, server, s)));
   return dehydrate(client);
 }

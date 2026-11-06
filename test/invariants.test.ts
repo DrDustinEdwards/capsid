@@ -25,7 +25,9 @@ import { TOOL_GRANTS } from "../src/scope.ts";
 // dispatches to (src/tools/surface.ts, src/tools/operations.ts), so each operation's
 // block is scanned and judged by every tool action that runs it (./served.ts).
 
-const MUTATING_SQL = /\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b/i;
+// The namespace register and update moved to src/namespace-admin.ts so the Portal's controls
+// share them; a call of either is the same write the SQL was, so it is matched by name.
+const MUTATING_SQL = /\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b|\b(registerNamespace|updateNamespace)\(/i;
 // The gate is src/scope.ts, reached two ways, and a write tool has to be covered by
 // one of them:
 //

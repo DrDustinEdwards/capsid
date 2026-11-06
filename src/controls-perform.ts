@@ -8,10 +8,14 @@ import {
   SWITCHES,
   auditPrefix,
   clickAuditAction,
+  deleteOptionsFrom,
   revisionOf,
   shippedEvidence,
   switchReasonRefusal,
 } from "./controls-base";
+import { namespaceNameRefusal, registerNamespace, registerRepos, updateNamespace, updateRepos } from "./namespace-admin";
+import { deleteAsPlanned } from "./namespace-delete";
+import { setSiteKey } from "./site-key";
 import type { Env } from "./env";
 import { managePr } from "./github";
 import { resetBreaker } from "./job-breaker";
@@ -237,6 +241,75 @@ export async function performAction(
         summary = done.summary;
         committed = true;
         await auditClick(env, actor, source, surface, action, (params.namespace ?? "").trim() || null, { namespace: params.namespace, reason }, click);
+        break;
+      }
+      case "namespace_add":
+      case "namespace_edit": {
+        // Checked again here, as the site controls are: the token binds the params, not the
+        // rules they were checked against. The mutators are the admin tool's (src/namespace-admin.ts).
+        const namespace = required(params, "namespace") ?? undefined;
+        const bad = namespaceNameRefusal(namespace);
+        if (bad || !namespace) return { ok: false, refusal: bad ?? `${action} needs a namespace.` };
+        if (action === "namespace_add") {
+          const mapped = registerRepos({ repo: required(params, "repo") ?? undefined, label: required(params, "label") ?? undefined, repos: required(params, "repos") ?? undefined });
+          if (!mapped.ok) return { ok: false, refusal: mapped.refusal };
+          const done = await registerNamespace(env.DB, actor, namespace, mapped.list);
+          if (!done.ok) return { ok: false, refusal: done.refusal };
+          committed = true;
+          summary = `Registered ${namespace}, mapped to ${mapped.list.map((r) => r.repo).join(", ")}.`;
+          await auditClick(env, actor, source, surface, action, namespace, { namespace, repos: mapped.list });
+        } else {
+          const mapped = updateRepos(required(params, "repos") ?? undefined);
+          if (!mapped.ok) return { ok: false, refusal: mapped.refusal };
+          const from = required(params, "from");
+          if (!from) return { ok: false, refusal: "namespace_edit needs the mapping its preview read: preview again." };
+          const done = await updateNamespace(env.DB, actor, namespace, mapped.list, from);
+          if (!done.ok) return { ok: false, refusal: done.refusal };
+          committed = true;
+          summary = `Changed ${namespace}'s repo mapping to ${mapped.list.map((r) => `${r.repo} (${r.label})`).join(", ")}.`;
+          await auditClick(env, actor, source, surface, action, namespace, { namespace, repos: mapped.list, previous: done.previous });
+        }
+        break;
+      }
+      case "namespace_remove": {
+        // deleteAsPlanned reads the plan again, applies every refusal again, and requires the
+        // fingerprint the preview bound: anything counted that moved since refuses it.
+        const namespace = required(params, "namespace") ?? undefined;
+        const bad = namespaceNameRefusal(namespace);
+        if (bad || !namespace) return { ok: false, refusal: bad ?? "namespace_remove needs a namespace." };
+        const options = deleteOptionsFrom(params);
+        if (!options.ok) return { ok: false, refusal: options.refusal };
+        const signedPlan = required(params, "plan");
+        if (!signedPlan) return { ok: false, refusal: "namespace_remove needs the plan its preview read: preview again." };
+        const done = await deleteAsPlanned(env, actor, namespace, options.opts, signedPlan);
+        if (!done.ok) return { ok: false, refusal: done.refusal };
+        const data = done.data as { documents_deleted: number; edges_removed: number; ops_site_removed: boolean };
+        committed = true;
+        summary = `Deleted ${namespace}: ${data.documents_deleted} live document${data.documents_deleted === 1 ? "" : "s"} (each snapshotted first), ${data.edges_removed} link${data.edges_removed === 1 ? "" : "s"}${data.ops_site_removed ? ", its site row" : ""} and its registration.`;
+        await auditClick(env, actor, source, surface, action, namespace, {
+          namespace,
+          cascade: options.opts.cascade,
+          allow_improve_paths: options.opts.allowImprovePaths,
+          documents_deleted: data.documents_deleted,
+          edges_removed: data.edges_removed,
+          ops_site_removed: data.ops_site_removed,
+        });
+        break;
+      }
+      case "site_key_rotate": {
+        // setSiteKey checks the token and the site row again, mints, sets the site then
+        // Carrel, and writes set_site_key. The value never leaves it.
+        const namespace = required(params, "namespace") ?? undefined;
+        const bad = namespaceNameRefusal(namespace);
+        if (bad || !namespace) return { ok: false, refusal: bad ?? "site_key_rotate needs a namespace." };
+        const result = await setSiteKey(env, actor, namespace);
+        // The site refused: nothing changed, so it is a refusal (its set_site_key row records the attempt).
+        if (!result.site.set) return { ok: false, refusal: `${result.note} ${result.site.script}: ${result.site.error ?? "not set"}` };
+        committed = true;
+        summary = result.matched
+          ? `Rotated ${namespace}'s site key: set on ${result.site.script} and on ${result.carrel.script}. The value is not shown anywhere.`
+          : `${result.note} ${result.carrel.script}: ${result.carrel.error ?? "not set"}`;
+        await auditClick(env, actor, source, surface, action, namespace, { namespace, site_set: result.site.set, carrel_set: result.carrel.set, matched: result.matched });
         break;
       }
       case "pr_close": {

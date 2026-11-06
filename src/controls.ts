@@ -81,6 +81,14 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Lift the suspension of the merge unit ${params.unit ?? ""}. The tick may merge its pull requests unattended again, and the rollbacks before now suspend it no more.`;
     case "automerge_resume":
       return `Lift the pause on auto-merge for ${ns}. The tick may merge its pull requests unattended again, and the rollbacks and reverts before now count against it no more.`;
+    case "namespace_add":
+      return `Register the project ${ns} with its repo mapping. The repo tools resolve through the mapping, so it is what an agent scoped to ${ns} may reach; its driver agent is minted separately.`;
+    case "namespace_edit":
+      return `Change the repo mapping of the project ${ns}. The repo tools resolve through it from the next call, so it changes what an agent scoped to ${ns} may reach. The namespace is not renamed and its documents do not move.`;
+    case "namespace_remove":
+      return `Delete the project ${ns}: its live documents (each snapshotted first) and their links, its site row and its registration. Archived documents, versions, the audit log and finished jobs are kept, and registering ${ns} again brings the archived documents back into scope.`;
+    case "site_key_rotate":
+      return `Mint a new operator key for ${ns}'s site API and set it on the site's Worker, then on Carrel. The old key stops working on each side as it is replaced. The new key is never shown, logged or recorded.`;
   }
 }
 
@@ -111,6 +119,12 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   sign_policy_from_repo: ["confirm", "reason"],
   unit_resume: ["unit", "reason"],
   automerge_resume: ["namespace", "reason"],
+  namespace_add: ["namespace", "repo", "label", "repos"],
+  // The digest of the mapping its preview read is bound into the token (Plan.bind).
+  namespace_edit: ["namespace", "repos"],
+  // The plan's fingerprint is bound into the token (Plan.bind), as the tool's own token binds it.
+  namespace_remove: ["namespace", "cascade", "allow_improve_paths"],
+  site_key_rotate: ["namespace"],
 };
 
 

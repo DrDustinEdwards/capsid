@@ -164,7 +164,15 @@ export function NoData({ reason, brief }: { reason: string; brief?: boolean }) {
 
 const NAV_ICONS: Record<string, ReactNode> = {
   needs: <path d="M2 4.5h12v7.5H2zM2 4.5l2.5-2.5h7L14 4.5M2 8h3.5l1 1.5h3l1-1.5H14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
-  shared: <path d="M5 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM5 12.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM14 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM3.5 5v6M5 4l6 3.3M5 12l6-3.3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
+  // A globe: every site, and each site's own page.
+  sites: (
+    <>
+      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M2 8h12M8 2c1.8 1.7 2.6 3.7 2.6 6S9.8 12.3 8 14C6.2 12.3 5.4 10.3 5.4 8S6.2 3.7 8 2z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </>
+  ),
+  // A folder: the projects (namespaces) the work is filed under.
+  projects: <path d="M1.8 4V12.5h12.4V5.5H7.6L6.2 3.5H1.8z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />,
   queue: <path d="M2 4h12M2 8h12M2 12h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />,
   agents: (
     <>

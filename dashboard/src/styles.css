@@ -217,6 +217,9 @@ table.brief.workers-stores .st { white-space: normal; }
 .anchors a[aria-current] { color: var(--text); border-bottom-color: var(--accent); }
 :root:has(.anchor-host) { scroll-padding-top: 48px; }
 
+/* a site's own page: its status, address and project under its name */
+.site-lead { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
 /* fleet table */
 .fleet tbody tr { cursor: pointer; }
 .fleet tbody tr:hover { background: var(--raised); }
@@ -417,6 +420,10 @@ main .sev-crit[data-row]:focus-visible { box-shadow: inset 3px 0 var(--crit), in
 .siteform .f .section-title { margin: 0; }
 .siteform .check { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; font-size: 13px; }
 .siteform .full { grid-column: 1 / -1; }
+.siteform .repos { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.siteform .repos legend { padding: 0; }
+.repo-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; }
+.siteform [data-danger] .check { grid-column: auto; }
 .field { height: 32px; width: 100%; min-width: 0; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); padding: 0 10px; }
 .field::placeholder { color: var(--dim); }
 .field:disabled { opacity: 0.5; }
@@ -460,3 +467,6 @@ td.ctl .toolbar.col { flex-direction: column; align-items: flex-end; }
 .visual-look { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; color: var(--text); }
 .visual-look > span:first-child { flex-basis: 100%; }
 .visual-look a { white-space: nowrap; }
+/* A build log: strangers' text, kept as written, scrolled in place. */
+pre.log { margin: 0; padding: 12px 16px; max-height: 480px; overflow: auto; background: var(--sunken); font-family: var(--mono); font-size: var(--fs-detail); line-height: 1.5; white-space: pre; }
+.search-rows + .search-rows { margin-top: 12px; }

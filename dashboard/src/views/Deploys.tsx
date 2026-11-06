@@ -2,13 +2,20 @@ import { useApp, type Filters } from "../app/ctx";
 import type { CfDeploy, SiteSnapshot } from "../types";
 import { cfNoData, cfOk, siteKey } from "../lib/derive";
 import { DAY, ago, ms, shortId, utc } from "../lib/format";
-import { Anchors } from "../ui/anchors";
 import { Panel } from "capsomer/react/panel";
-import { NoSnapshot, NsChips, PageHead, TimelinePanel, useNsFilter } from "./shared";
+import { ChartSlot } from "../ui/ChartSlot";
+import { trendChart } from "./charts";
+import { NoSnapshot, NsChips, TimelinePanel, useNsFilter } from "./shared";
+
+// DORA's deploy measures per repository, from the trends read, in the charts' lazy chunk.
+const DeploysTable = trendChart("DeploysTable");
 
 const RANGES: Array<Filters["range"]> = ["24h", "7d", "30d"];
 
-export function Deploys({ embedded = false }: { embedded?: boolean } = {}) {
+// Sites' Deploys tab: every site's deploys over the range, as Cloudflare recorded them (so a
+// hand-run wrangler deploy shows up too), on the timeline and in one table, then the sites with
+// no deploy data and each repository's deploy measures. One site's deploys are on its own page.
+export function Deploys() {
   const { feed, now, filters, setFilters } = useApp();
   const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
@@ -20,9 +27,7 @@ export function Deploys({ embedded = false }: { embedded?: boolean } = {}) {
     .sort((a, b) => ms(b.d.created_on) - ms(a.d.created_on));
   const missing = (snap?.sites ?? []).filter((s) => !cfOk(s));
   return (
-    <div className={embedded ? "embedded" : "page"}>
-      {!embedded && <Anchors />}
-      {!embedded && <PageHead title="Deploys" />}
+    <div className="embedded">
       <div className="toolbar">
         {RANGES.map((r) => (
           <button key={r} type="button" className="chip" aria-pressed={filters.range === r} onClick={() => setFilters({ range: r })}>
@@ -105,6 +110,9 @@ export function Deploys({ embedded = false }: { embedded?: boolean } = {}) {
       ) : (
         <NoSnapshot />
       )}
+      <ChartSlot>
+        <DeploysTable />
+      </ChartSlot>
     </div>
   );
 }

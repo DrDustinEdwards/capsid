@@ -1,7 +1,7 @@
 import { QueryCache, QueryClient, keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { BASE } from "./base";
-import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalNotFound, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMergeUnits, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView, ResourcesDoc } from "../types";
+import type { OpsFeed, PortalActionRequest, PortalActivity, PortalClaimsAggregate, PortalClaimsJob, PortalNamespaces, PortalNotFound, PortalPackageHistory, PortalPerformed, PortalPreview, PortalStale, PortalMergeUnits, PortalSiteSearch, PortalSiteTraffic, PortalWorkersBuilds, PortalBuildLog, PortalPush, PortalPlan, PortalDigest, PortalMaintenance, PortalConvergence, PortalLibrary, PortalTrends, SharedCodeView, CompletenessView, ResourcesDoc } from "../types";
 
 // Every URL under the Portal's base on this page (lib/base.ts): /api/... on
 // portal.dustinedwards.info, /demos/api/... on the chart demo.
@@ -21,6 +21,10 @@ const LIBRARY_URL = `${BASE}/api/library`;
 const TRENDS_URL = `${BASE}/api/trends`;
 const STALE_URL = `${BASE}/api/stale`;
 const MERGE_UNITS_URL = `${BASE}/api/merge-units`;
+const SITE_SEARCH_URL = `${BASE}/api/site-search`;
+const SITE_TRAFFIC_URL = `${BASE}/api/site-traffic`;
+const WORKERS_BUILDS_URL = `${BASE}/api/workers-builds`;
+const BUILD_LOG_URL = `${BASE}/api/build-log`;
 const PLAN_URL = `${BASE}/api/plan`;
 const DIGEST_URL = `${BASE}/api/digest`;
 const MAINTENANCE_URL = `${BASE}/api/maintenance`;
@@ -362,6 +366,34 @@ export function fetchStale(): Promise<Answer<PortalStale>> {
 // (src/portal-merge-units.ts), for the Pull requests page's Merge units panel.
 export function fetchMergeUnits(): Promise<Answer<PortalMergeUnits>> {
   return get<PortalMergeUnits>(MERGE_UNITS_URL);
+}
+
+// The site page's reads (src/portal-site.ts), each live for one namespace. Every source in
+// them is its data or no data with the reason (SiteSource), never a zero.
+
+// GET /portal/api/site-search?namespace=: Search Console and Bing Webmaster, the 28 days
+// ending 3 days ago.
+export function fetchSiteSearch(namespace: string): Promise<Answer<PortalSiteSearch>> {
+  return get<PortalSiteSearch>(`${SITE_SEARCH_URL}?${new URLSearchParams({ namespace }).toString()}`);
+}
+
+// GET /portal/api/site-traffic?namespace=&days=: 404s, 5xx, web vitals and AI crawlers from
+// Cloudflare over the last `days` (1 to 30; the Worker's default is 7).
+export function fetchSiteTraffic(namespace: string, days?: number): Promise<Answer<PortalSiteTraffic>> {
+  const q = new URLSearchParams({ namespace, ...(days === undefined ? {} : { days: String(days) }) });
+  return get<PortalSiteTraffic>(`${SITE_TRAFFIC_URL}?${q.toString()}`);
+}
+
+// GET /portal/api/workers-builds?namespace=&limit=: the Workers Builds of the Worker the
+// site row names, newest first (1 to 50; the Worker's default is 10).
+export function fetchWorkersBuilds(namespace: string, limit?: number): Promise<Answer<PortalWorkersBuilds>> {
+  const q = new URLSearchParams({ namespace, ...(limit === undefined ? {} : { limit: String(limit) }) });
+  return get<PortalWorkersBuilds>(`${WORKERS_BUILDS_URL}?${q.toString()}`);
+}
+
+// GET /portal/api/build-log?build=<uuid>: one build's log, its last 500 lines.
+export function fetchBuildLog(build: string): Promise<Answer<PortalBuildLog>> {
+  return get<PortalBuildLog>(`${BUILD_LOG_URL}?${new URLSearchParams({ build }).toString()}`);
 }
 
 // GET /portal/api/trends: the series behind the charts the feed does not carry (minutes

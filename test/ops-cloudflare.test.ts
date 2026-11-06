@@ -535,14 +535,16 @@ test("a site down on two probes in a row, and a Worker over the error rate, reac
   assert.equal(gathered.observed.cloudflare?.foxing?.state, "unresolved");
 });
 
-// scanner-rule: Cloudflare is read in the watcher pass only, never per dashboard request
-test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_site_key calls and the capsid_inspect_repo traffic call import the Cloudflare read, so no dashboard request can call Cloudflare", () => {
+// scanner-rule: Cloudflare is read in the watcher pass, never per feed request; from the Portal only a site page's tabs read it
+test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_site_key calls, the capsid_inspect_repo traffic call, a site page's reads and the site key control import the Cloudflare read, so the feed cannot call Cloudflare", () => {
   const importersOf = (module: string) =>
     sourceFiles()
       // A static import, a bare side-effect import, or a dynamic import().
       .filter((f) => new RegExp(`(\\bfrom\\s*|\\bimport\\s*\\(?\\s*)["'](\\.\\.?\\/)+${module}(\\.ts)?["']`).test(f.text))
       .map((f) => f.name);
-  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "site-key.ts", "site-traffic.ts", "system-resources.ts", "tls-expiry.ts", "watcher-gather.ts", "workers-builds.ts"]);
+  // portal-site.ts is a site page's tabs (the Portal map, 2026-11): read live for one site when
+  // its Search and traffic or Deploys tab opens, never with the feed or its poll.
+  assert.deepEqual(importersOf("ops-cloudflare"), ["ops-cloudflare-config.ts", "portal-site.ts", "site-key.ts", "site-traffic.ts", "system-resources.ts", "tls-expiry.ts", "watcher-gather.ts", "workers-builds.ts"]);
   // The secrets and data model reads Cloudflare in the nightly build only; the Portal and
   // the admin tool read what it stored (src/system-facts-store.ts).
   assert.deepEqual(importersOf("system-resources"), ["system-facts.ts"]);
@@ -550,13 +552,15 @@ test("only the watcher, the admin capsid_admin_read_ops and capsid_admin_set_sit
   // call of an admin-only MCP tool and nowhere else: not from a Portal route, whose
   // every page load would then call Cloudflare.
   assert.deepEqual(importersOf("ops-cloudflare-config"), ["tools/cloudflare.ts"]);
-  // So do the Workers Builds reads (capsid_admin_read_ops builds and build_logs) and the
-  // site key's secret write (capsid_admin_set_site_key), both from the admin tool module.
-  assert.deepEqual(importersOf("workers-builds"), ["tools/admin.ts"]);
-  assert.deepEqual(importersOf("site-key"), ["tools/admin.ts"]);
-  // The 404 report (capsid_inspect_repo traffic) reads per call of that MCP tool, and the
-  // watcher reads the returned 5xx once a pass (readServerErrors).
-  assert.deepEqual(importersOf("site-traffic"), ["tools/repo.ts", "watcher-gather.ts"]);
+  // The Workers Builds reads (capsid_admin_read_ops builds and build_logs) run per call of the
+  // admin tool and per open of a site page's Deploys tab. The site key's secret write runs per
+  // call of capsid_admin_set_site_key and per perform of the site_key_rotate control (its
+  // preview reads only the site row).
+  assert.deepEqual(importersOf("workers-builds"), ["portal-site.ts", "tools/admin.ts"]);
+  assert.deepEqual(importersOf("site-key"), ["controls-perform.ts", "controls-plan.ts", "tools/admin.ts"]);
+  // The 404 report (capsid_inspect_repo traffic) reads per call of that MCP tool and per open
+  // of a site page's traffic tab, and the watcher reads the returned 5xx once a pass (readServerErrors).
+  assert.deepEqual(importersOf("site-traffic"), ["portal-site.ts", "tools/repo.ts", "watcher-gather.ts"]);
   // The certificate read (readTlsExpiry) runs in the watcher pass; push only reads what it stored in KV.
   assert.deepEqual(importersOf("tls-expiry"), ["push.ts", "watcher-gather.ts"]);
 });

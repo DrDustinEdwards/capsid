@@ -9,6 +9,7 @@ import { refuseCrossSite } from "@dustinedwards/site-runtime/origin";
 import { requireJson } from "@dustinedwards/site-runtime/body";
 import type { Env } from "./env";
 import { capsidStatus } from "./status";
+import { parseReposList } from "./github";
 import { readBoundedText } from "./signed-requests";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import type { PortalActivity, PortalNamespaces, PortalPerformed } from "./ops-types/portal";
@@ -145,6 +146,12 @@ export async function handlePortalNamespaces(request: Request, env: Env, now: Da
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const status = await capsidStatus(env);
+  // Each project's repo mapping, so the Projects page can show it and edit it in place.
+  const mapped = await env.DB.prepare("SELECT namespace, repos FROM namespaces").all<{ namespace: string; repos: string }>();
+  const reposOf = new Map(mapped.results.map((r) => {
+    const parsed = parseReposList(r.repos);
+    return [r.namespace, "error" in parsed ? [] : parsed.list.map((e) => ({ repo: e.repo, label: e.label }))] as const;
+  }));
   const body: PortalNamespaces = {
     generated: now.toISOString(),
     namespaces: status.namespaces.map((ns) => ({
@@ -152,6 +159,7 @@ export async function handlePortalNamespaces(request: Request, env: Env, now: Da
       breaker: { open: ns.breaker.open, failed: ns.breaker.failed, threshold: ns.breaker.threshold, since: ns.breaker.since, reset_at: ns.breaker.reset_at },
       latest_report: ns.latest_report ? { integrity: ns.latest_report.integrity, generated: ns.latest_report.generated } : null,
       jobs: { queued: ns.jobs.queued, claimed: ns.jobs.claimed, blocked: ns.jobs.blocked, done_today: ns.jobs.done_today },
+      repos: reposOf.get(ns.namespace) ?? [],
     })),
   };
   return jsonResponse(body);

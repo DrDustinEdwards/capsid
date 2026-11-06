@@ -18,11 +18,18 @@ function useConvergence(): { load: Load<PortalConvergence>; reread: () => void }
   return { load, reread: load.reread };
 }
 
+// One site's Sync and repairs tab. A site that has not opted in says so.
 export function Convergence({ ns }: { ns: string }) {
   const { load, reread } = useConvergence();
   const data = load.data;
-  const sites = data ? data.sites.filter((s) => ns === "all" || s.namespace === ns) : [];
-  if (data && data.sites.length === 0) return null;
+  const sites = data ? data.sites.filter((s) => s.namespace === ns) : [];
+  if (data && sites.length === 0) {
+    return (
+      <Empty kind="nothing-yet" title="This site has not opted in.">
+        Capsid calls a site's operator API only when the site's row names one (its operator field). Until then there is no sync status to read and no repair to run.
+      </Empty>
+    );
+  }
   if (!data) {
     return (
       <Panel flush title="Site sync" id="convergence" section="Site sync">
@@ -60,9 +67,9 @@ function SitePanel({ site, loading, reread }: { site: ConvergenceSite; loading: 
   return (
     <Panel
       flush
-      title={`Site sync: ${site.name}`}
+      title="Operator API"
       id={`convergence-${site.namespace}`}
-      section={`Site sync ${site.name}`}
+      section="Operator API"
       src={
         <>
           {`read ${ago(ms(site.read_at), now)} · `}
@@ -131,7 +138,6 @@ function SitePanel({ site, loading, reread }: { site: ConvergenceSite; loading: 
           )}
         </div>
       )}
-      {site.secrets && <Secrets secrets={site.secrets} />}
       {site.recent.length > 0 && (
         <div className="body stack-gap">
           <h3 className="conv-h">Recent repairs</h3>
@@ -208,12 +214,23 @@ function Checks({ checks, canRun, run }: { checks: ConvergenceCheck[]; canRun: b
   );
 }
 
+// The site's Worker secrets by name, set or not, against what its configuration names: on
+// the site's Setup tab, from the same read.
+export function SiteSecrets({ ns }: { ns: string }) {
+  const { load } = useConvergence();
+  const site = load.data?.sites.find((s) => s.namespace === ns);
+  if (!site?.secrets) return null;
+  return (
+    <Panel flush title="Worker secrets" id="secrets" section="Worker secrets">
+      <Secrets secrets={site.secrets} />
+    </Panel>
+  );
+}
+
 function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]> }) {
   return (
     <div className="body stack-gap">
-      <h3 className="conv-h">
-        Worker secrets{secrets.script ? <span className="faint mono"> {secrets.script}</span> : null}
-      </h3>
+      {secrets.script ? <p className="faint mono">{secrets.script}</p> : null}
       {secrets.state !== "ok" ? (
         <div className="callout">
           <St kind="nodata">Not read</St> {secrets.reason}

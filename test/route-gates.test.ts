@@ -19,6 +19,7 @@ import { PORTAL_CLAIMS_PATH } from "../src/portal-claims.ts";
 import { PORTAL_STALE_PATH } from "../src/portal-stale.ts";
 import { PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "../src/portal-overnight.ts";
 import { PORTAL_MERGE_UNITS_PATH } from "../src/portal-merge-units.ts";
+import { PORTAL_BUILD_LOG_PATH, PORTAL_SITE_SEARCH_PATH, PORTAL_SITE_TRAFFIC_PATH, PORTAL_WORKERS_BUILDS_PATH } from "../src/portal-site.ts";
 import { PORTAL_MAINTENANCE_PATH } from "../src/portal-maintenance.ts";
 import { PORTAL_CONVERGENCE_PATH } from "../src/portal-convergence.ts";
 import { PORTAL_COMPLETENESS_PATH, PORTAL_NOT_FOUND_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_RESOURCES_PATH, PORTAL_SHARED_CODE_PATH } from "../src/portal-packages.ts";
@@ -84,6 +85,10 @@ const PATH_CONSTANTS: Record<string, string> = {
   PORTAL_STALE_PATH,
   PORTAL_PLAN_PATH,
   PORTAL_MERGE_UNITS_PATH,
+  PORTAL_SITE_SEARCH_PATH,
+  PORTAL_SITE_TRAFFIC_PATH,
+  PORTAL_WORKERS_BUILDS_PATH,
+  PORTAL_BUILD_LOG_PATH,
   PORTAL_DIGEST_PATH,
   PORTAL_MAINTENANCE_PATH,
   PORTAL_CONVERGENCE_PATH,

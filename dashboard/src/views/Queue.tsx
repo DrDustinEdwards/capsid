@@ -1,7 +1,9 @@
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
+import { Suspense, lazy } from "react";
 import { Spinner } from "capsomer/react/empty";
-import { useApp } from "../app/ctx";
+import { QUEUE_TABS, tabOf, useApp } from "../app/ctx";
+import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { LIVE, fetchStale, useAnswer, type Load } from "../lib/api";
 import { JOB } from "../lib/derive";
 import { agentLabel, ago, ms } from "../lib/format";
@@ -139,7 +141,29 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
   );
 }
 
+// The claim checks (the claims ledger: what each agent said beside what the Worker verified),
+// Jobs' second tab since the Portal audit's new map (2026-11-06; it was Agents' Checks tab),
+// loaded when the tab opens. The tab is in the address (?tab=checks), so it can be reloaded or
+// shared with its filters.
+const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
+
 export function Queue() {
+  const tab = tabOf(QUEUE_TABS, useTabParam()) ?? QUEUE_TABS[0].id;
+  if (tab === "checks") {
+    return (
+      <div className="page">
+        <PageHead title="Jobs" />
+        <PageTabs label="Jobs" path="/queue" tabs={QUEUE_TABS} current={tab} />
+        <Suspense fallback={null}>
+          <Claims />
+        </Suspense>
+      </div>
+    );
+  }
+  return <JobsTab />;
+}
+
+function JobsTab() {
   const { feed, filters, setFilters } = useApp();
   const [ns, setNs] = useNsFilter();
   const all = feed.live.jobs;
@@ -155,6 +179,7 @@ export function Queue() {
     <div className="page">
       <Anchors />
       <PageHead title="Jobs" />
+      <PageTabs label="Jobs" path="/queue" tabs={QUEUE_TABS} current="jobs" />
       <div className="toolbar">
         <NsChips list={nss} />
         <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />

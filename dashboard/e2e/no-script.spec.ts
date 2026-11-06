@@ -9,7 +9,8 @@ test.use({ javaScriptEnabled: false });
 
 for (const [path, charts] of [
   ["demos/", 2],
-  ["demos/health?tab=deploys", 1],
+  ["demos/sites?tab=deploys", 1],
+  ["demos/sites/sample", 2],
   ["demos/queue", 3],
   ["demos/agents", 1],
   ["demos/packages", 1],
