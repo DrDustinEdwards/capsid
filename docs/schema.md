@@ -100,7 +100,7 @@ Ruled 2026-08-13 to 2026-08-17. The type and status vocabulary is enforced on wr
 
 ## Canon is protected from namespace keys
 
-Canon is what every agent is told to trust: `capsid/conventions.md` and `capsid/conventions-<name>.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its archived volumes. `CANON_RULES` in `src/canon.ts` is the list, checked by `test/canon.test.ts` and served by `capsid_run_improve` action `status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
+Canon is what every agent is told to trust: `capsid/conventions.md` and `capsid/conventions-<name>.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its archived volumes. `CANON_RULES` in `src/canon.ts` is the list, checked by `test/canon.test.ts` and served by `capsid_read_status` action `status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
 
 - **Only the admin, the seat (`can_merge`) and a portfolio-wide key (namespaces `*`, the key Dustin's cloud sessions use) change canon.** For them a canon write, restore, move or delete is an ordinary one: snapshotted and audit-logged.
 - **A key scoped to some namespaces (a site driver, a cron) is refused** every write, restore, move and delete of canon, and a move onto a canon path, with nothing changed.
@@ -357,7 +357,7 @@ stored text of the first job it happened to.
 ### agent_record
 
 `src/agent-record.ts` aggregates those rows into one record per credential, served
-in `capsid_run_improve` action `status`'s `agents` and rendered in Capsid Portal: jobs done, failed and
+in `capsid_read_status` action `status`'s `agents` and rendered in Capsid Portal: jobs done, failed and
 blocked, gates hit, resumes, pull requests opened and merged, a merge rate, a CI
 green rate with `ci_checked` as its stated denominator, and a median duration.
 
@@ -448,7 +448,7 @@ body is exactly what an attacker controls.
 Capsid Portal (`/portal/`, docs/portal.md) reads the store through the same
 functions the tools call, so the two cannot disagree. `GET /portal/api/ops` is the
 feed, `OpsFeed` in `src/ops-types/feed.ts`. `GET /portal/api/namespaces` returns each
-roster namespace from `capsidStatus()` (`src/status.ts`), the function behind `capsid_run_improve` action `status`.
+roster namespace from `capsidStatus()` (`src/status.ts`), the function behind `capsid_read_status` action `status`.
 `GET /portal/api/activity?namespace=&actor=` returns the last 50 `audit_log` rows,
 filtered, with ISO times. `GET /portal/api/stale` returns the stale jobs from
 `staleJobs()`, the function behind `capsid_work_jobs` action `list` with `stale: true`. All four are admin

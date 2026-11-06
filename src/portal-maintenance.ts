@@ -6,7 +6,7 @@ import type { PortalMaintenance } from "./ops-types/views";
 import { portalGate } from "./portal-auth";
 
 // The Portal's Maintenance list: GET /portal/api/maintenance (job_549550d73d4e). The list
-// the daily maintenance pass stored, the same one capsid_run_improve action status serves per namespace, so
+// the daily maintenance pass stored, the same one capsid_read_status action status serves per namespace, so
 // the Portal and chat cannot disagree. It reads KV only and runs nothing: the pass runs on
 // the five-minute tick once a day. A route, not a tool, so no grant is checked here
 // (one enforcement point, test/route-gates.test.ts): it answers to portalGate, and src/scope.ts lists

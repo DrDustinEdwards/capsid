@@ -139,7 +139,7 @@ Capsid serves 19 tools over two MCP servers. The count is derived from `TOOL_GRA
 | `capsid_inspect_repo` | read | Branches, tags, pull requests, history, CI runs, live site checks and search-console data. |
 | `capsid_close_pr` | write | Merge or close a pull request, delete a branch, tag a commit or publish a release. |
 | `capsid_work_jobs` | per action | The work queue lifecycle. |
-| `capsid_run_improve` | read | Capsid status per namespace: queue, breaker, maintenance and items awaiting the owner. The name is retained from a removed feature. |
+| `capsid_read_status` | read | Capsid status per namespace: queue, breaker, maintenance and items awaiting the owner. The name is retained from a removed feature. |
 
 **Capsid Admin** (`/mcp/admin`): 8 tools, available to the administrator identity only.
 
@@ -151,7 +151,7 @@ Capsid serves 19 tools over two MCP servers. The count is derived from `TOOL_GRA
 | `capsid_admin_read_claims` | admin read | Agent claims beside verified outcomes. |
 | `capsid_admin_read_ops` | admin read | Watcher state, Cloudflare Access and Email Routing configuration, Workers Builds. |
 | `capsid_admin_run_controls` | admin | Preview and perform administrative controls with a single-use token. |
-| `capsid_admin_control_improve` | admin | Operator keys, policy signing, the job breaker and the overnight switch. |
+| `capsid_admin_manage_switches` | admin | Operator keys, policy signing, the job breaker and the overnight switch. |
 | `capsid_admin_set_site_key` | admin | Mint a site key and install it on the site Worker. |
 
 Adding a tool requires a recorded ruling (CLAUDE.md, rule 1).

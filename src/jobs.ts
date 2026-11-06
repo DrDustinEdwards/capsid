@@ -23,7 +23,7 @@ import { checkJobText, type SignatureCheck } from "./job-signing";
 // jobs-edit.ts holds the seat's edit of a queued or blocked job, and jobs-park.ts its
 // parking of a queued one; jobs-begin.ts holds the started label any writer may set;
 // jobs-mirror.ts writes the mirror document and audit row; jobs-transition.ts holds
-// what they share. This module is the one other modules import from, and it keeps the capsid_run_improve
+// what they share. This module is the one other modules import from, and it keeps the capsid_read_status
 // action status summary.
 
 export { claimJob, listJobs, postJob } from "./jobs-claim";
@@ -34,7 +34,7 @@ export { parkJob, unparkJob } from "./jobs-park";
 export { beginJob } from "./jobs-begin";
 export type { JobResult } from "./jobs-transition";
 
-// The capsid_run_improve action status block. Counted per namespace, plus what a human has to look at:
+// The capsid_read_status action status block. Counted per namespace, plus what a human has to look at:
 // the blocked jobs, with the command each is waiting on. Blocked is the only status
 // whose rows come back rather than a count, because a count of blocked jobs tells
 // nobody what to run, and the Portal shows exactly these.

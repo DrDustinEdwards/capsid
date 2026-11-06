@@ -148,7 +148,7 @@ export function movedBeforeFailing(action: string, id: string, current: JobRow |
 // outcome row, so making every claim pay for that read would put a table scan in
 // front of the queue's hottest path.
 //
-// It goes through recordFor, the same function capsid_run_improve action status and the Portal call,
+// It goes through recordFor, the same function capsid_read_status action status and the Portal call,
 // so the bar a claim is measured against is the number a human can read on the page.
 export async function recordShortfall(db: D1Database, actor: string, job: JobRow): Promise<string | null> {
   if (!job.min_record) return null;

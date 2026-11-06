@@ -39,7 +39,7 @@ export function canonGuarded(agent: Agent, namespace: string, path: string): boo
   return !callerIsSeat(agent) && agent.scopes.namespaces !== "*" && isCanonPath(namespace, path);
 }
 
-/** The list as capsid_run_improve action status serves it, beside protected_paths. */
+/** The list as capsid_read_status action status serves it, beside protected_paths. */
 export function servedCanonPaths(): Array<{ namespace: string; source: string; label: string }> {
   return CANON_RULES.map((r) => ({ namespace: r.namespace, source: r.pattern.source, label: r.label }));
 }

@@ -137,7 +137,7 @@ async function handleInbox(request: Request, env: Env): Promise<Response> {
     });
   }
   const everything = await gatherInbox(env, new Date(), null);
-  const readable = (namespace: string) => checkScope(caller.agent, { tool: "capsid_run_improve", action: "status", namespace, grant: "read" }) === null;
+  const readable = (namespace: string) => checkScope(caller.agent, { tool: "capsid_read_status", action: "status", namespace, grant: "read" }) === null;
   return Response.json(restrictInbox(everything, readable), { headers: { "Cache-Control": "private, max-age=30" } });
 }
 

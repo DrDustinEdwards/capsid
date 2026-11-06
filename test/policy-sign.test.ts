@@ -191,19 +191,19 @@ test("signing snapshots the prior body and writes an audit row, in one batch", a
 // admin only
 
 test("sign_policy is admin only in the scope table, and the refusal says why", () => {
-  // Served as capsid_admin_control_improve action "sign_policy", an admin tool in
-  // TOOL_GRANTS, and enforced by the registrar. The driver's capsid_run_improve serves
+  // Served as capsid_admin_manage_switches action "sign_policy", an admin tool in
+  // TOOL_GRANTS, and enforced by the registrar. The driver's capsid_read_status serves
   // status and the versions model, two reads, so no driver tool can name sign_policy.
-  assert.equal(requiredForAction("capsid_admin_control_improve", "sign_policy"), "admin", "signing a policy must be gated on admin, not on the write grant");
-  const runImprove = COMPOSITES.find((c) => c.name === "capsid_run_improve");
-  assert.ok(runImprove, "capsid_run_improve is not served");
+  assert.equal(requiredForAction("capsid_admin_manage_switches", "sign_policy"), "admin", "signing a policy must be gated on admin, not on the write grant");
+  const runImprove = COMPOSITES.find((c) => c.name === "capsid_read_status");
+  assert.ok(runImprove, "capsid_read_status is not served");
   assert.deepEqual(Object.keys(runImprove.actions), ["status", "versions"], "the driver's status tool serves an action beyond its two reads");
   const driver = { ...adminAgentForEmail("admin@example.com"), actor: "agent:capsid-driver", admin: false };
   const refusal = checkScope(driver, {
-    tool: "capsid_admin_control_improve",
+    tool: "capsid_admin_manage_switches",
     action: "sign_policy",
     namespace: "capsid",
-    ...needFor(requiredForAction("capsid_admin_control_improve", "sign_policy")),
+    ...needFor(requiredForAction("capsid_admin_manage_switches", "sign_policy")),
   });
   assert.ok(refusal, "a driver holding every grant was allowed to sign a policy");
   assert.match(refusal, /admin only/);

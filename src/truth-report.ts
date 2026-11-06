@@ -340,7 +340,7 @@ export function buildTruthReport(input: TruthInput): TruthReport {
   };
 }
 
-// The integrity line is first and in a fixed shape, because `capsid_run_improve` action `status` parses
+// The integrity line is first and in a fixed shape, because `capsid_read_status` action `status` parses
 // it back out.
 export const INTEGRITY_LINE = /^integrity:\s*([0-9]+(?:\.[0-9]+)?)%\s*$/m;
 
@@ -350,7 +350,7 @@ export function renderTruthReport(report: TruthReport): string {
   lines.push("");
   // Not measured is not zero. `integrity` is null when no check had a subject, and
   // "0%" would read as a store in the worst state it can be in. INTEGRITY_LINE does
-  // not match the words, so integrityOf returns null and capsid_run_improve action status reports no
+  // not match the words, so integrityOf returns null and capsid_read_status action status reports no
   // report, the same answer a missing document gets.
   lines.push(`integrity: ${report.integrity === null ? "not measured" : `${report.integrity}%`}`);
   lines.push("");
@@ -404,7 +404,7 @@ export function reportPath(date: Date): string {
 }
 
 // Pull the integrity number back out of a stored report. Returns null on anything
-// unexpected, which `capsid_run_improve` action `status` reports as "no report" rather than as zero.
+// unexpected, which `capsid_read_status` action `status` reports as "no report" rather than as zero.
 export function integrityOf(body: string | null | undefined): number | null {
   if (!body) return null;
   const match = INTEGRITY_LINE.exec(body);
