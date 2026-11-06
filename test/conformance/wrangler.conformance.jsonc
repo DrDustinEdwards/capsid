@@ -13,7 +13,10 @@
   "workers_dev": false,
   // The Portal's pages are the tests' stand-in (test/fixtures/portal-pages.ts), so no dashboard build is needed.
   "alias": { "capsid-portal-pages": "./test/fixtures/portal-pages.ts" },
-  "vars": { "GITHUB_APP_CLIENT_ID": "conformance" },
+  "vars": {
+    "GITHUB_APP_CLIENT_ID": "conformance",
+    "AUDIT_SIGNING_KEY": "conformance-signing-key-not-a-real-one-0123456789",
+  },
   "d1_databases": [
     {
       "binding": "DB",

@@ -145,7 +145,13 @@ test("the scan finds the exports at all, so nothing here can pass by reading not
 // Listed rather than counted, so a new suspect fails the build the day it appears
 // and removing one means editing this list.
 // Keyed by export name, not by file, so a module move does not change the set.
-const KNOWN_SUSPECTS = ["aggregate", "HEALTH_PROBE_NS", "HEALTH_PROBE_PATH"];
+const KNOWN_SUSPECTS = [
+  "aggregate",
+  "HEALTH_PROBE_NS",
+  "HEALTH_PROBE_PATH",
+  // The Durable Object class wrangler binds by name (TOOL_CALL_LOG), which is its caller.
+  "ToolCallLog",
+];
 
 // Two checks, and neither is "the set still matches exactly": splitting a module
 // turns intra-file usage into cross-file usage, so a suspect can gain a caller
