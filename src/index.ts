@@ -22,6 +22,7 @@ import { handlePortalDemo, isDemoRequest } from "./portal-demo";
 import { portalAsset } from "./portal-app";
 import { hostRefusal, MCP_URL } from "./mcp-host";
 import { logEvent, withRequestLog } from "@dustinedwards/site-runtime/log";
+import { maintenanceOn, maintenanceResponse } from "@dustinedwards/site-runtime/maintenance";
 import { countNotFound } from "@dustinedwards/site-runtime/not-found";
 import { securityTxtResponse } from "@dustinedwards/site-runtime/security-txt";
 import { ADMIN_LIST_PATH, adminListResponse } from "@dustinedwards/site-runtime/access-drift";
@@ -204,6 +205,10 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   const { hostname, pathname: asked } = new URL(original.url);
   const secured = (response: Response, path: string) =>
     withSecurityHeaders(withCacheDefault(response, path), hostname);
+  // The maintenance page (site-runtime ./maintenance), on every host: every path but /health answers 503 while the
+  // MAINTENANCE var is on. It stops the MCP and the Portal alike, which is the point of a maintenance window.
+  if (maintenanceOn(env) && asked !== "/health")
+    return secured(maintenanceResponse({ siteName: "Capsid" }), asked);
   // security.txt on both hosts, before the Portal's sign-in and the MCP host's path list.
   if (asked === SECURITY_TXT_PATH)
     return secured(

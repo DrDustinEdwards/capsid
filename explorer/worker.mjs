@@ -24,6 +24,7 @@ export const PAGE_PRELOADS = preloads([
 
 export default staticSite({
   site: capsid,
+  siteName: "Capsid",
   headers: TDM_RESERVATION_HEADERS,
   preload: PAGE_PRELOADS.header,
   reportPath: null,

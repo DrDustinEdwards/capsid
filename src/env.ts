@@ -12,6 +12,9 @@ export interface Env extends Omit<
   "GITHUB_APP_CLIENT_ID" | "EMAIL" | "ALERT_FROM" | "EMAIL_ROUTING"
 > {
   OAUTH_PROVIDER: OAuthHelpers;
+  // "1" or "true" puts every host in maintenance: every path but /health answers the 503 page (site-runtime
+  // ./maintenance). A dashboard var, set by the owner.
+  MAINTENANCE?: string;
   COOKIE_ENCRYPTION_KEY: string;
   // The MCP and Portal logins' upstream: Cloudflare Access for SaaS (OIDC),
   // src/access-login.ts. Unset, the sign-in is closed; ADMIN_EMAIL unset admits nobody,
