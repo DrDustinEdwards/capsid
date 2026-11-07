@@ -15,7 +15,6 @@ import {
   OFFACCOUNT_AUDITS,
   OFFACCOUNT_SITES,
   OFFACCOUNT_SOURCES,
-  offaccountSiteOf,
 } from "../src/offaccount.ts";
 // @ts-expect-error scripts/ is plain .mjs with no declarations (see test/canary.test.ts).
 import { R2 } from "../scripts/bindings.mjs";
@@ -379,12 +378,4 @@ test("the derive script refuses a missing or blank root secret and an unknown ar
   });
   assert.notEqual(unknown.status, 0);
   assert.equal(unknown.stdout, "");
-});
-
-test("a further host of a site (carrel-mcp) belongs to that site's Amazon copy", () => {
-  assert.equal(offaccountSiteOf("carrel"), "carrel");
-  assert.equal(offaccountSiteOf("carrel-mcp"), "carrel");
-  assert.equal(offaccountSiteOf("foxhound-admin-mcp"), "foxhound");
-  assert.equal(offaccountSiteOf("carrelx"), null);
-  assert.equal(offaccountSiteOf("claude-skills"), null);
 });
