@@ -6,7 +6,7 @@ import { QUEUE_TABS, tabOf, useApp } from "../app/ctx";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { LIVE, fetchStale, useAnswer, type Load } from "../lib/api";
 import { JOB } from "../lib/derive";
-import { agentLabel, ago, ms } from "../lib/format";
+import { ago, ms } from "../lib/format";
 import type { OpsJob, PortalStale, StaleRule } from "../types";
 import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
@@ -20,59 +20,6 @@ import { Tonight } from "./Overnight";
 const QueueChart = trendChart("QueueChart");
 // The "By project" panel's stacked bars, from the same module.
 const ProjectChart = trendChart("ProjectChart");
-
-// Claude Code sessions reporting through their hooks (POST /ops/hooks, docs/hooks.md):
-// the job each is bound to, the key, its last event, whether it waits on a person, and
-// its last failure.
-function LiveSessions() {
-  const { feed, now } = useApp();
-  const list = feed.live.sessions;
-  if (!list.length)
-    return <Empty kind="all-clear" title="No live sessions in the last 24 hours." />;
-  // A row names the session's job by its title; the id is in the job's drawer (D11).
-  const title = (id: string | null) =>
-    id
-      ? (feed.live.jobs.find((j) => j.id === id)?.title ?? "A job outside the live window")
-      : "No job bound";
-  return (
-    <>
-      {list.map((s) => (
-        <div
-          className={s.last_failure && s.incident === "failure" ? "qrow sev-crit" : "qrow"}
-          key={s.session_id}
-          data-row=""
-          data-session={s.session_id}
-          data-open={s.job_id ? `job:${s.job_id}` : undefined}
-          role={s.job_id ? "button" : undefined}
-          tabIndex={s.job_id ? 0 : undefined}
-        >
-          {s.last_failure ? (
-            <St kind={s.incident === "failure" ? "crit" : "warn"}>Failed</St>
-          ) : s.needs_input ? (
-            <St kind={s.incident === "waiting" ? "warn" : "blocked"}>Needs input</St>
-          ) : (
-            <St kind="run">Running</St>
-          )}
-          <div className="t">
-            <b>{title(s.job_id)}</b>
-            <div>
-              {agentLabel(s.agent)}
-              {s.namespace ? ` · ${s.namespace}` : ""}
-              {s.last_failure ? ` · failure: ${s.last_failure}` : ""}
-            </div>
-          </div>
-          <div className="m">
-            {s.last_event === "Notification" && s.last_notification_type
-              ? s.last_notification_type
-              : s.last_event}
-            <br />
-            {ago(ms(s.last_event_at), now)}
-          </div>
-        </div>
-      ))}
-    </>
-  );
-}
 
 // What each stale rule is called in a row, the most actionable first, as the Worker
 // orders them (src/stale-jobs.ts).
@@ -262,16 +209,6 @@ function JobsTab() {
           </div>
         </Panel>
         <Tonight />
-        <Panel
-          flush
-          title="Live sessions"
-          id="live-sessions"
-          section="Live sessions"
-          src="live · hook events, D1 agent_sessions"
-          count={feed.live.sessions.length}
-        >
-          <LiveSessions />
-        </Panel>
       </div>
       {/* The chart goes last: the lists are what a person comes for (the UX audit's m6). */}
       <ChartSlot>

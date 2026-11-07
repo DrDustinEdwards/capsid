@@ -6,7 +6,6 @@ import { test } from "node:test";
 import { adminAgentForEmail } from "../src/agents.ts";
 import { PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX } from "../src/portal-auth.ts";
 import { OPS_FEED_PATH, OPS_REFRESH_PATH } from "../src/ops-feed.ts";
-import { OPS_HOOKS_PATH } from "../src/ops-hooks.ts";
 import {
   PORTAL_ACTIVITY_PATH,
   PORTAL_API_PREFIX,
@@ -40,7 +39,6 @@ import { PORTAL_LIBRARY_PATH } from "../src/portal-library.ts";
 import { PORTAL_TRENDS_PATH } from "../src/portal-trends.ts";
 import { REPORT_PATH } from "../src/security-headers.ts";
 import { VERIFY_LIVE_CLIENT_PATH } from "../src/oauth-client-docs.ts";
-import { OTLP_LOGS_PATH, OTLP_METRICS_PATH } from "../src/ops-otlp.ts";
 import { BACKUP_CREDENTIAL_PATH } from "../src/signed-requests.ts";
 import { OFFACCOUNT_REPORT_PATH } from "../src/offaccount.ts";
 import {
@@ -91,11 +89,8 @@ const PATH_CONSTANTS: Record<string, string> = {
   SHADOW_RESULT_PATH,
   REVIEW_RUN_PATH,
   PORTAL_CALLBACK_PATH,
-  OTLP_METRICS_PATH,
-  OTLP_LOGS_PATH,
   OPS_FEED_PATH,
   OPS_REFRESH_PATH,
-  OPS_HOOKS_PATH,
   PORTAL_PREVIEW_PATH,
   PORTAL_PERFORM_PATH,
   PORTAL_NAMESPACES_PATH,

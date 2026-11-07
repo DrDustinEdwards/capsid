@@ -256,12 +256,6 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "what needs Dustin, per app (src/inbox.ts): resolveAgent on the bearer (401 without one), then each app is kept only if checkScope admits the caller's read grant on that app's namespace, so a key scoped to one namespace sees that app alone and the admin or an all-namespace read key sees every app. GET only, no CORS headers (an app's server calls it, never a browser), nothing written",
   "/ops/inbox/report":
     "what an app reports about itself to the inbox (src/inbox-report.ts): resolveAgent on the bearer (401 without one), then checkScope for the write grant on the namespace the report names (403 otherwise), so a key reports for its own app alone; one report per minute per key, failing closed; at most 20 items, links on the app's own ops_sites origin only, a 16KB body cap; POST only, no CORS",
-  "/ops/hooks":
-    "Claude Code's HTTP hooks: resolveAgent on the bearer (401 without one), then only a driver or the admin, and through checkScope only a caller holding the write grant on capsid_work_jobs (403 otherwise); each event binds to the one job the driver holds claimed, and a session keeps its first binding. 64KB body cap, allowlisted fields only (src/ops-hooks.ts, caller check in src/ops-session-auth.ts)",
-  "/ops/otlp/v1/metrics":
-    "Claude Code's OTLP metrics: resolveAgent on the bearer (401 otherwise), then a driver or the admin holding write through checkScope (403 otherwise); the usage is bound to the one job the driver holds claimed, never to a job the body names; points for a session another caller reported first are refused (src/ops-session-auth.ts, src/ops-otlp.ts)",
-  "/ops/otlp/v1/logs":
-    "Claude Code's OTLP logs, counted as api_error events only: resolveAgent on the bearer and the same caller and job binding as the metrics route (src/ops-session-auth.ts)",
   "/authorize":
     "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
   "/callback": "the OAuth callback, which validates state before issuing anything",
@@ -371,7 +365,7 @@ export interface ScopeNeed {
 }
 
 // The work queue's tool, named once: the handlers' re-checks
-// (src/tools/jobs.ts, src/jobs-schema.ts, src/ops-session-auth.ts) ask about it.
+// (src/tools/jobs.ts, src/jobs-schema.ts) ask about it.
 export const JOBS_TOOL = "capsid_work_jobs";
 
 // Why a flag is needed, so a refusal tells the caller what to ask for.

@@ -161,8 +161,6 @@ MCP and sign-in:
 
 Agents (`/ops/`):
 
-- `POST /ops/otlp/v1/metrics`, `POST /ops/otlp/v1/logs` Claude Code's OpenTelemetry as OTLP/HTTP JSON, gzip or plain, at most 1MB. A driver key as `Authorization: Bearer <key>` (401 without one, 403 for a read-only key). Keeps usage totals per session and a count of api_error events; never a prompt, a response or tool content (docs/telemetry.md)
-- `POST /ops/hooks` Claude Code HTTP hook events, requires a driver key as `Authorization: Bearer <key>`; keeps a summary of each session, never a prompt, a response or a tool's input or output beyond its name, an edited file's path and a Bash command's first word and exit code (docs/hooks.md)
 - `GET /ops/inbox` what needs Dustin, per app: blocked jobs and questions, pull requests auto-merge declined, failing CI, a site that is down. Read by an app's server with a bearer key; a key scoped to one namespace sees that app only, a key on every namespace sees every app, and the response carries no CORS headers (docs/portal.md)
 - `POST /ops/inbox/report` what an app reports about itself to the inbox (Carrel's drafts waiting), with its own key and the write grant on its namespace; replaced whole, expires after 6 hours, one per minute per key (docs/portal.md)
 

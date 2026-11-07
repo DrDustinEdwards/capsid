@@ -1,4 +1,4 @@
-import { readActionHours, readToolHours, anomalyFindings, toolRateFindings } from "./anomaly";
+import { readActionHours, anomalyFindings } from "./anomaly";
 import { DEPLOY_ROSTER, readDeployOutcomes, deployFindings } from "./deploy-outcomes";
 import { registrableDomain, readExpiries, expiryFindings } from "./domain-expiry";
 import { readTlsExpiry, TLS_EXPIRY_KEY } from "./tls-expiry";
@@ -448,20 +448,12 @@ export async function gatherFindings(
 
   // Agents acting out of their usual pattern, from audit_log (src/anomaly.ts, OWASP item
   // 6). A finding only, never a suspension (Dustin, D4 of 2026-10-03).
-  // The hook receiver's tool-use rows, on their own series, rule and check (D1 of
-  // 2026-10-03), so a failed read of one never holds the other's findings open. The two
-  // reads are independent and run together.
-  const [actionHours, toolHours] = await Promise.all([
-    attempt("agent anomalies", () => readActionHours(env.DB, now, WATCHER_ACTOR)),
-    attempt("tool anomalies", () => readToolHours(env.DB, now, WATCHER_ACTOR)),
-  ]);
+  const actionHours = await attempt("agent anomalies", () =>
+    readActionHours(env.DB, now, WATCHER_ACTOR),
+  );
   if (actionHours) {
     ran.add("agent anomalies");
     out.push(...anomalyFindings(actionHours, now));
-  }
-  if (toolHours) {
-    ran.add("tool anomalies");
-    out.push(...toolRateFindings(toolHours, now));
   }
 
   // Each configured site's domain registration, by RDAP (src/domain-expiry.ts): a

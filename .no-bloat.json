@@ -19,13 +19,13 @@
       "Unused exports": 1
     },
     "jscpd": {
-      "clones": 42,
-      "lines": 351,
+      "clones": 41,
+      "lines": 345,
       "percentage": 0.43
     },
     "tests": {
-      "files": 273,
-      "cases": 2651
+      "files": 269,
+      "cases": 2596
     },
     "comments": {
       "lines": 16886,

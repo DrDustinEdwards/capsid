@@ -82,7 +82,7 @@ export const claimSchema = z
       .strict()
       .optional()
       .describe(
-        "What this session used, as the session reports it: cost_usd, active_seconds and tokens {input, output, cache_read, cache_creation}. This session's own total, not a running total across earlier claims on the job. Self-reported, recorded and never used to authorize anything. Telemetry (docs/telemetry.md) stays the measured source; the claims aggregate shows both side by side.",
+        "What this session used, as the session reports it: cost_usd, active_seconds and tokens {input, output, cache_read, cache_creation}. This session's own total, not a running total across earlier claims on the job. Self-reported, recorded and never used to authorize anything.",
       ),
     versions: z
       .object({

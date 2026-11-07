@@ -3,14 +3,13 @@ import type {
   OpsAgent,
   OpsFeed,
   OpsJob,
-  OpsSession,
   OpsSnapshot,
   OpsTaskRun,
   ProbeState,
   SiteCloudflare,
   SiteSnapshot,
 } from "../types";
-import { DAY, HOUR, SLOT_MS, age, agentLabel, ago, hostOf, ms } from "./format";
+import { DAY, HOUR, SLOT_MS, age, ago, hostOf, ms } from "./format";
 import { storeAttention } from "./store";
 
 // The status vocabulary: every state is a shape, a word and a color.
@@ -432,21 +431,6 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       group: { key: "pr-seat", facet: a.repo },
     });
   }
-  // Session incidents (the same ones Incidents lists): a live session stopped on a
-  // failure is critical, one waiting on input over ten minutes a warning. Named by the
-  // job's title; opens the job when it has one, else the Queue's live sessions.
-  for (const s of live.sessions) {
-    if (!s.incident) continue;
-    const job = s.job_id ? live.jobs.find((j) => j.id === s.job_id) : undefined;
-    out.push({
-      sev: s.incident === "failure" ? "crit" : "warn",
-      kind: "Session",
-      title: sessionIncidentTitle(s, job),
-      sub: `${agentLabel(s.agent)}${s.namespace ? ` · ${s.namespace}` : ""} · ${s.incident === "failure" ? "a person must act" : `${s.last_notification_type ?? "input"} pending`}`,
-      at: ms(s.last_event_at),
-      open: s.job_id ? `job:${s.job_id}` : "view:queue",
-    });
-  }
   for (const a of live.agents) {
     if (a.kind === "driver" && !a.revoked_at && a.last_seen && now - ms(a.last_seen) > 7 * DAY) {
       out.push({
@@ -646,15 +630,6 @@ export interface Incident {
 
 const HOT = /^(probe|down|offaccount|backup)/;
 
-// A session incident in plain words, named by the job's title, not its id: the id is in
-// the job's drawer (D11). Shared by Incidents and Needs attention.
-function sessionIncidentTitle(s: OpsSession, job: OpsJob | undefined): string {
-  const who = job ? `"${job.title}"` : agentLabel(s.agent);
-  return s.incident === "failure"
-    ? `Session for ${who} stopped: ${s.last_failure ?? "unknown"}`
-    : `Session for ${who} is waiting on input`;
-}
-
 export function incidents(feed: OpsFeed): Incident[] {
   const items: Incident[] = [];
   const seen = new Set<string>();
@@ -688,26 +663,6 @@ export function incidents(feed: OpsFeed): Incident[] {
         status: "no job in the live window",
       });
     }
-  }
-  // A live session the feed marks as an incident (src/ops-feed.ts, opsSessionFrom):
-  // stopped on a failure a person must act on, or waiting on input for over ten
-  // minutes. Decided when the feed was read; no job is posted for it.
-  for (const s of feed.live.sessions) {
-    if (!s.incident) continue;
-    const job = s.job_id ? feed.live.jobs.find((j) => j.id === s.job_id) : undefined;
-    items.push({
-      sev: s.incident === "failure" ? "crit" : "warn",
-      open: true,
-      title: sessionIncidentTitle(s, job),
-      fp: `session-${s.incident}-${s.session_id.slice(0, 8)}`,
-      ns: s.namespace ?? "sessions",
-      at: ms(s.last_event_at),
-      ref: s.job_id ? `job:${s.job_id}` : null,
-      status:
-        s.incident === "failure"
-          ? "a person must act"
-          : `${s.last_notification_type ?? "input"} pending`,
-    });
   }
   return items.sort((a, b) => Number(b.open) - Number(a.open) || b.at - a.at);
 }
