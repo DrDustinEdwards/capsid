@@ -20,7 +20,7 @@ export interface StoredDrift {
   read: number;
 }
 
-export async function readJson<T>(env: Pick<Env, "APP_KV">, key: string): Promise<T | null> {
+export async function readKvJson<T>(env: Pick<Env, "APP_KV">, key: string): Promise<T | null> {
   const raw = await env.APP_KV.get(key);
   if (!raw) return null;
   try {
@@ -36,7 +36,7 @@ export async function readFactsDrift(
   env: Pick<Env, "APP_KV">,
   now: Date,
 ): Promise<{ items: OpsMaintenanceItem[]; read: number }> {
-  const stored = await readJson<StoredDrift>(env, FACTS_DRIFT_KEY);
+  const stored = await readKvJson<StoredDrift>(env, FACTS_DRIFT_KEY);
   if (!stored || !Array.isArray(stored.items))
     return {
       items: [
@@ -62,7 +62,7 @@ export async function readFactsDrift(
 
 /** The stored secrets and data model, or null before the first build. */
 export async function readResources(env: Pick<Env, "APP_KV">): Promise<ResourcesDoc | null> {
-  const doc = await readJson<ResourcesDoc>(env, RESOURCES_KEY);
+  const doc = await readKvJson<ResourcesDoc>(env, RESOURCES_KEY);
   if (!doc) return null;
   // The stored doc is one night old at most and can predate a field the type has since gained
   // (#762 added `previews`, and the Workers tab crashed on the earlier night's doc until the next

@@ -10,7 +10,7 @@ import {
   FACTS_DRIFT_KEY,
   FACTS_LAST_KEY,
   RESOURCES_KEY,
-  readJson,
+  readKvJson,
   type StoredDrift,
 } from "./system-facts-store";
 import {
@@ -76,7 +76,7 @@ export async function systemFactsTick(
     const privacy = new Map(repos.map((r) => [r.full_name.toLowerCase(), r.private] as const));
     // Checked against the strict schema before it is published, as the explorer checks the model.
     const doc = PublicVersionsSchema.parse(toPublicVersions(view, model, privacy, today));
-    const prior = await readJson<BehindSince>(env, FACTS_BEHIND_KEY);
+    const prior = await readKvJson<BehindSince>(env, FACTS_BEHIND_KEY);
     const drift = versionDrift(view, prior ?? {}, now);
     await env.APP_KV.put(PUBLIC_VERSIONS_KEY, JSON.stringify(doc));
     await env.APP_KV.put(FACTS_BEHIND_KEY, JSON.stringify(drift.since));
