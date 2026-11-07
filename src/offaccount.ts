@@ -57,6 +57,17 @@ export function isOffaccountSite(site: string): site is OffaccountSite {
   return Object.hasOwn(OFFACCOUNT_SOURCES, site);
 }
 
+/** The Amazon-copied site a row belongs to: its own key, or, for a further host of one (a row keyed
+ *  `<site>-<host>`, such as carrel-mcp, whose Worker serves carrel's operator API), the longest site
+ *  it starts with. Null for any other row. */
+export function offaccountSiteOf(namespace: string): OffaccountSite | null {
+  if (isOffaccountSite(namespace)) return namespace;
+  const owners = OFFACCOUNT_SITES.filter((s) => namespace.startsWith(s + "-")).sort(
+    (a, b) => b.length - a.length,
+  );
+  return owners[0] ?? null;
+}
+
 // The Amazon copy's report (job_51bf55f7b42c step 4). capsid-backups' watch.yml lists the
 // Object Lock bucket every 6 hours with a list-only role and POSTs, signed with the backup
 // key, the newest complete run id under daily/<site>/ for every site. The Worker holds no
