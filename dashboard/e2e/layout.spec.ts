@@ -93,3 +93,13 @@ test.describe("on a phone", () => {
     });
   }
 });
+
+test("an address no page answers shows Capsomer's shared error page, not raw error text", async ({
+  page,
+}) => {
+  await page.goto("no-such-page");
+  await expect(page.getByRole("heading", { level: 1, name: "Page not found" })).toBeVisible();
+  await expect(page).toHaveTitle("Page not found | Capsid Portal");
+  await expect(page.locator("main.cap-error-page")).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "Go to Needs you" })).toBeVisible();
+});
