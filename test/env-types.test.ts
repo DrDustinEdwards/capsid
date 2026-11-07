@@ -31,6 +31,8 @@ function exampleBindings(): Map<string, string> {
   }
   const objects = (config.durable_objects ?? {}) as { bindings?: Array<{ name: string }> };
   for (const entry of objects.bindings ?? []) found.set(entry.name, "DurableObjectNamespace");
+  for (const entry of (config.send_email ?? []) as Array<{ name: string }>)
+    found.set(entry.name, "SendEmail");
   const ai = config.ai as { binding?: string } | undefined;
   if (ai?.binding) found.set(ai.binding, "Ai");
   for (const name of Object.keys((config.vars ?? {}) as object)) found.set(name, "var");
@@ -46,7 +48,9 @@ function generatedBindings(): Map<string, string> {
     if (!m) continue;
     found.set(
       m[1],
-      [...Object.values(TYPES), "DurableObjectNamespace", "Ai"].includes(m[2]) ? m[2] : "var",
+      [...Object.values(TYPES), "DurableObjectNamespace", "Ai", "SendEmail"].includes(m[2])
+        ? m[2]
+        : "var",
     );
   }
   return found;

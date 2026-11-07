@@ -98,8 +98,20 @@
   //                                                     Bing Webmaster Tools' API key,
   //                                                     docs/bing-webmaster.md)
   "vars": {
-    "GITHUB_APP_CLIENT_ID": "YOUR_GITHUB_APP_CLIENT_ID"
+    "GITHUB_APP_CLIENT_ID": "YOUR_GITHUB_APP_CLIENT_ID",
+    // THE MAIL (docs/portal.md, "Daily digest"): the watcher's site health mail
+    // (src/site-watch.ts), the push alerts' email fallback (src/push.ts) and the daily
+    // digest (src/digest.ts) send from ALERT_FROM to the secret ALERT_EMAIL through the
+    // EMAIL binding below. dustinedwards.info has Email Routing on and the address is a
+    // verified destination, which EMAIL_ROUTING "on" records. ALERT_EMAIL is a secret so
+    // the address stays out of this public repo:
+    //   wrangler secret put ALERT_EMAIL
+    "ALERT_FROM": "capsid@dustinedwards.info",
+    "EMAIL_ROUTING": "on"
   },
+  // No destination_address: ALERT_EMAIL is the one owner of the address, and it must be
+  // a verified Email Routing destination or Cloudflare refuses the send.
+  "send_email": [{ "name": "EMAIL" }],
   "d1_databases": [
     {
       "binding": "DB",
