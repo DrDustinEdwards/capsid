@@ -204,7 +204,7 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
   // live gate 7 rolled #218's deploy back (run 36863432268).
   const { hostname, pathname: asked } = new URL(original.url);
   const secured = (response: Response, path: string) =>
-    withSecurityHeaders(withCacheDefault(response, path), hostname);
+    withSecurityHeaders(withCacheDefault(response, path), original);
   // The maintenance page (site-runtime ./maintenance), on every host: every path but /health answers 503 while the
   // MAINTENANCE var is on. It stops the MCP and the Portal alike, which is the point of a maintenance window.
   if (maintenanceOn(env) && asked !== "/health")
