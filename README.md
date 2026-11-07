@@ -251,6 +251,7 @@ The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#11-checks
 - [docs/consolidation.md](docs/consolidation.md): namespace maintenance and destructive writes.
 - [docs/backups.md](docs/backups.md): backup contents and restore procedure.
 - [docs/rollback.md](docs/rollback.md): reverting a deploy.
+- [docs/reliability.md](docs/reliability.md): the uptime target and what happens when a site spends its error budget.
 
 ## License
 
