@@ -161,10 +161,10 @@ test("PLANT: read returns a hostile body verbatim, with provenance, and writes n
   }
 });
 
-test("PLANT: brief carries the payloads through verbatim, each with its provenance, and writes nothing", async () => {
+test("PLANT: brief lists the payloads as stubs with their provenance, carries none of their text, and writes nothing", async () => {
   // brief puts many documents into one response, beside real canon. The payloads
-  // are filed as open tasks, the section brief returns whole, so each can be checked
-  // field by field.
+  // are filed as open tasks, which brief returns as stubs: a hostile body never
+  // enters the packet, and each stub still names its writer.
   const rows = storeRows();
   for (const doc of rows.documents)
     if (doc.path.startsWith("adversarial/") && doc.type === "note") doc.type = "task";
@@ -193,12 +193,8 @@ test("PLANT: brief carries the payloads through verbatim, each with its provenan
     for (const entry of DOC_FIXTURES) {
       const row = out.open_tasks.find((t) => t.path === `adversarial/${entry.file}`);
       assert.ok(row, `${entry.file} is missing from brief`);
-      assert.equal(
-        row.body,
-        corpusText(entry.file),
-        `${entry.file} did not round-trip byte-for-byte through brief`,
-      );
-      assert.ok(row.body.includes(entry.canary));
+      assert.ok(!row.body.includes(entry.canary), `${entry.file} body reached the brief packet`);
+      assert.match(row.body, /not in the packet: read it with capsid_read_doc/);
       assert.equal(
         row.last_actor,
         "operator:leaked-key",

@@ -122,7 +122,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "brief",
     {
-      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
+      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at and last_actor (read one with capsid_read_doc), the 3 most recent episodics in full (this is where a handoff written as type episodic shows up), and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if the episodics are cut, the \`trimmed\` field says so. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: { namespace: nsName },
     },
     async ({ namespace }) => {
@@ -247,8 +247,11 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       const openTasksA = withActors(openTasks);
       const recentEpisodicsA = withActors(recentEpisodics);
 
-      // Stay under budget by trimming the largest, most re-readable sections to
-      // metadata first (episodics, then task bodies), and report what was cut.
+      // Open tasks always come back as stubs (path, title, updated_at, last_actor): the
+      // packet is read on every start and re-read on every later turn, and the list
+      // includes whole job prompts and stale watcher findings. A session reads the
+      // one it works with capsid_read_doc. Episodics, which carry the handoff, stay
+      // whole until the packet is over budget, then they are cut to metadata too.
       //
       // Only a cut that happened is reported. Nothing is cut when the two documents
       // that are never trimmed exceed the budget by themselves, since trimming the
@@ -270,7 +273,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
           title: r.title,
           updated_at: r.updated_at,
           last_actor: r.last_actor ?? null,
-          body: `(trimmed for size: read it with capsid_read_doc, ${r.namespace}/${r.path})`,
+          body: `(not in the packet: read it with capsid_read_doc, ${r.namespace}/${r.path})`,
         }));
       const sizes = {
         conventions: conventionsA?.body?.length ?? 0,
@@ -279,19 +282,13 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       const floorChars = sizes.conventions + sizes.core;
       const floorOver = floorChars > BRIEF_BUDGET;
       const trimmed: string[] = [];
-      let total =
-        floorChars + bodyChars(openTasksA as Row[]) + bodyChars(recentEpisodicsA as Row[]);
+      const tasksOut: unknown[] = toStub(openTasksA as Row[]);
+      let total = floorChars + bodyChars(recentEpisodicsA as Row[]);
       let episodicsOut: unknown[] = recentEpisodicsA;
-      let tasksOut: unknown[] = openTasksA;
       if (!floorOver && total > BRIEF_BUDGET && bodyChars(recentEpisodicsA as Row[]) > 0) {
         total -= bodyChars(recentEpisodicsA as Row[]);
         episodicsOut = toStub(recentEpisodicsA as Row[]);
         trimmed.push(`${recentEpisodicsA.length} episodic bodies`);
-      }
-      if (!floorOver && total > BRIEF_BUDGET && bodyChars(openTasksA as Row[]) > 0) {
-        total -= bodyChars(openTasksA as Row[]);
-        tasksOut = toStub(openTasksA as Row[]);
-        trimmed.push(`${openTasksA.length} task bodies`);
       }
 
       return ok({
