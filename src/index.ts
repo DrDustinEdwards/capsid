@@ -2,8 +2,7 @@ import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { adminEmailList, adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
 import { readLastStepUp } from "./scope";
-import { backupTaskResult, runBackup } from "./backup";
-import { supersedePass } from "./supersede";
+import { CAPSID_JOBS, runCapsidJob } from "./site-jobs";
 import { defaultHandler } from "./routes";
 import { withSecurityHeaders } from "./security-headers";
 import type { Env, Props } from "./env";
@@ -33,10 +32,7 @@ const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 
 // The Durable Objects wrangler.jsonc binds (RATE_LIMITER, TOOL_CALL_LOG), from site-runtime.
 export { RateLimiter } from "@dustinedwards/site-runtime/rate-limit/durable-object";
-import {
-  ToolCallLog as SharedToolCallLog,
-  exportAuditLog,
-} from "@dustinedwards/site-runtime/audit-log";
+import { ToolCallLog as SharedToolCallLog } from "@dustinedwards/site-runtime/audit-log";
 import { withAuditKey } from "./audit-key";
 
 // The tool-call log with its signing key derived from COOKIE_ENCRYPTION_KEY (audit-key.ts).
@@ -319,44 +315,11 @@ export default {
     }
 
     if (cron === BACKUP_CRON) {
-      ctx.waitUntil(
-        runTask(env, "backup", () => runBackup(env), backupTaskResult, {
-          tag: "BACKUP_CRON_THREW",
-          rethrow: true,
-        }),
-      );
-      // The tool-call log's daily copy to AUDIT_BUCKET and the 90-day prune of copied rows
-      // (area 11, L6-L7). Its own task, so a failed write cannot stop the backup; it throws,
-      // so the run is recorded threw, and /health's tool-call-log check warns after two days.
-      ctx.waitUntil(
-        runTask(
-          env,
-          "tool-call-log-export",
-          () => exportAuditLog(withAuditKey(env), env.AUDIT_BUCKET),
-          (done): TaskResult => ({
-            outcome: "ok",
-            reason: `copied ${done.exported} rows in ${done.objects.length} objects; pruned ${done.pruned}`,
-          }),
-          { tag: "TOOL_CALL_LOG_EXPORT_THREW", rethrow: true },
-        ),
-      );
-      // Its own task, so a throw here cannot stop the backup (design-hybrid-search 3.4).
-      ctx.waitUntil(
-        runTask(
-          env,
-          "supersede",
-          () => supersedePass(env),
-          (report): TaskResult => {
-            if (report.marked.length === 0) return null;
-            const line = report.marked.map((m) => `${m.document} by ${m.by}`).join("; ");
-            return {
-              outcome: "ok",
-              reason: `marked ${report.marked.length} superseded${report.more ? " (more next pass)" : ""}: ${line}`,
-            };
-          },
-          { tag: "SUPERSEDE_PASS_THREW", rethrow: true },
-        ),
-      );
+      // Each its own task (src/site-jobs.ts CAPSID_JOBS, the list the run_job control runs
+      // now), so a throw in one cannot stop the others: the dump under its lease, the
+      // tool-call log's daily copy to AUDIT_BUCKET (area 11, L6-L7), and the supersede pass
+      // (design-hybrid-search 3.4).
+      for (const job of CAPSID_JOBS) ctx.waitUntil(runCapsidJob(env, job, true));
     }
 
     if (cron === TICK_CRON) {

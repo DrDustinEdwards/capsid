@@ -23,6 +23,7 @@ export type TaskId =
   | "maintenance"
   | "site-repair"
   | "site-backup"
+  | "site-job"
   | "public-build"
   | "system-facts"
   | "push"
@@ -74,9 +75,12 @@ export const TASKS: ReadonlyArray<{
   // One row per call to a site's operator API (src/site-repair.ts), from the watcher or a
   // person, so its runs come and go with the drift.
   { id: "site-repair", label: "Site repairs", period_ms: null },
-  // One row per backup_media call from Capsid Admin's backups (src/site-backup.ts), on
+  // One row per back up now call from Capsid Admin's backups (src/site-backup.ts), on
   // demand only: each site's own nightly cron does the backing up.
   { id: "site-backup", label: "Site backups", period_ms: null },
+  // One row per run_job call from Capsid Admin's run_job control (src/site-jobs.ts), on
+  // demand only: each site's own cron runs its jobs on schedule.
+  { id: "site-job", label: "Site jobs run now", period_ms: null },
   // The public system model (src/public-data.ts), built once a UTC day on the tick.
   { id: "public-build", label: "Public model build", period_ms: DAY_MS },
   // The versions and secrets models (src/system-facts.ts), built once a UTC day on the tick.

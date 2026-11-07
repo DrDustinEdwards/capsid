@@ -46,7 +46,8 @@ import { planApproval } from "./pr-approvals";
 import { APP_ROSTER } from "./roster";
 import { toolRefusal, tokenSet } from "./site-operator";
 import { limitRefusalFor } from "./site-repair";
-import { backupRefusal, backupSites, CAPSID_DUMP } from "./site-backup";
+import { BACKUP_LIMIT, backupRefusal, backupSites, CAPSID_DUMP } from "./site-backup";
+import { CAPSID_NAMESPACE, jobRefusal } from "./site-jobs";
 
 // A control's preview (src/controls.ts is the core): reads the current state, writes
 // nothing, and returns what will change and the audit rows it will write.
@@ -654,20 +655,44 @@ export async function planAction(
         );
       const lines = await Promise.all(
         sites.map(async (s) => {
-          const wait = await limitRefusalFor(env, s.namespace, "backup_media", now);
+          const wait = await limitRefusalFor(env, s.namespace, BACKUP_LIMIT, now);
           const unset = tokenSet(env, s.operator)
             ? null
             : `the Capsid Worker secret ${s.operator.auth_var} is not set`;
-          return `${s.namespace}: POST ${s.origin}${s.operator.path} with tool backup_media, authorized by ${s.operator.auth_var}${unset || wait ? `; skipped, ${unset ?? `it waits: ${wait}`}` : ""}.`;
+          return `${s.namespace}: POST ${s.origin}${s.operator.path} with tool run_job { backup: true }, authorized by ${s.operator.auth_var}${unset || wait ? `; skipped, ${unset ?? `it waits: ${wait}`}` : ""}.`;
         }),
       );
       return {
         ok: true,
         changes: [
           ...lines,
-          "Each site runs its nightly files backup passes now (d1-dump backupFiles: copy only, under files/ in its backups bucket). A pass that hits its time budget goes on where it stopped on the next run. The result is shown when every site answers, up to five minutes. Each call is an audit_log and a task_runs row (site-backup). The tokens are never shown or recorded.",
+          "Each site runs its own backup jobs now (its D1 dump and its files passes), through the path its nightly cron runs, recorded in its cron_runs. A dump adds a run under the site's own checks; a files pass copies under files/ in its backups bucket and goes on where it stopped. The result is shown when every site answers, up to five minutes. Each call is an audit_log and a task_runs row (site-backup). The tokens are never shown or recorded.",
         ],
         audit: [`site-backup by ${actor}`, click],
+      };
+    }
+    case "run_job": {
+      if (!p.namespace || !p.name) return refused("run_job needs a namespace and a job name.");
+      const bad = await jobRefusal(env, p.namespace, p.name);
+      if (bad) return refused(bad);
+      if (p.namespace === CAPSID_NAMESPACE)
+        return {
+          ok: true,
+          changes: [
+            `capsid: run Capsid's own ${p.name} job now, the same run as the nightly 09:00 UTC cron, with its task_runs row (${p.name}). The dump takes the cron's lease, so a run that overlaps the cron skips.`,
+          ],
+          audit: [`site-job by ${actor}`, click],
+        };
+      const row = await readSiteRow(env.DB, p.namespace);
+      const wait = await limitRefusalFor(env, p.namespace, `run_job:${p.name}`, new Date());
+      if (wait) return refused(`${p.name} on ${p.namespace} waits: ${wait}`);
+      return {
+        ok: true,
+        changes: [
+          `POST ${row?.origin ?? ""}${row?.operator?.path ?? ""} with tool run_job { job: "${p.name}" }, authorized by the Capsid Worker secret ${row?.operator?.auth_var ?? ""} (the token is never shown or recorded).`,
+          "The site runs that job now through the code its cron runs (site-runtime runJobTool), recorded in its cron_runs so /health's cron check sees the run, and answers each run's outcome; the result is shown when it returns, up to five minutes. A name the site does not run is refused by the site, naming its jobs. One audit_log and one task_runs row (site-job) record it.",
+        ],
+        audit: [`site-job by ${actor}`, click],
       };
     }
     case "revoke_agent": {

@@ -251,9 +251,9 @@ describe("GET /portal/api/convergence", () => {
 });
 
 describe("the site_repair control", () => {
-  it("PLANT: refuses backup_media and a tool outside the site's list at preview, and a token for either at perform, writing nothing", async () => {
+  it("PLANT: refuses run_job and a tool outside the site's list at preview, and a token for either at perform, writing nothing", async () => {
     const { env: e } = siteEnv();
-    for (const tool of ["backup_media", "save_post", "sync_unlisted"]) {
+    for (const tool of ["run_job", "save_post", "sync_unlisted"]) {
       const previewed = await previewControl(
         e,
         EMAIL,
@@ -318,10 +318,10 @@ describe("the backups (check, and back up now)", () => {
       if (url !== OPERATOR) throw new Error(`unexpected fetch ${url}`);
       const tool = JSON.parse(String(init.body)).tool as string;
       tools.push(tool);
-      return tool === "backup_media"
+      return tool === "run_job"
         ? Response.json({
             ok: true,
-            data: { files: [{ name: "media", complete: true, copied: 3 }] },
+            data: { runs: [{ job: "media-backup", status: "ok", ms: 40 }] },
           })
         : Response.json({
             ok: true,
@@ -346,7 +346,7 @@ describe("the backups (check, and back up now)", () => {
       const ran = await runSiteBackups(e, { actor: EMAIL, via: "chat" }, NOW, impl);
       expect(
         ran.ok && ran.runs.map((r) => (r.ran ? [r.namespace, r.line] : [r.namespace, r.refusal])),
-      ).toEqual([["dustinedwards", "backup_media ran: media complete (3 copied)"]]);
+      ).toEqual([["dustinedwards", "run_job { backup: true } ran: media-backup ok in 40 ms"]]);
       const again = await runSiteBackups(
         e,
         { namespace: "dustinedwards", actor: EMAIL, via: "chat" },
@@ -354,7 +354,7 @@ describe("the backups (check, and back up now)", () => {
         impl,
       );
       expect(again.ok && again.runs[0].ran).toBe(false);
-      expect(tools).toEqual(["backup_media"]);
+      expect(tools).toEqual(["run_job"]);
       expect(
         (
           await env.DB.prepare(

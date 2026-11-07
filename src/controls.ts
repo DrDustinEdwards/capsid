@@ -81,8 +81,10 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return params.namespace === "capsid"
         ? "Back up Capsid's own D1 dump now: the nightly 09:00 UTC run, on demand, under the cron's lease."
         : params.namespace
-          ? `Back up ${params.namespace}'s files now: run its files backup passes through its operator API, the same passes as its nightly cron. Copy only: it writes under files/ in the site's backups bucket and nothing else.`
-          : "Back up every site's files now: run each site's files backup passes through its operator API, at once, the same passes as their nightly crons. Copy only: each writes under files/ in its site's backups bucket and nothing else.";
+          ? `Back up ${params.namespace} now: its own backup jobs (its D1 dump and its files passes) run through its operator API's run_job, the same jobs as its nightly cron, recorded in its cron_runs.`
+          : "Back up every site now: each site's own backup jobs (its D1 dump and its files passes) run through its operator API's run_job, at once, the same jobs as their nightly crons, recorded in their cron_runs.";
+    case "run_job":
+      return `Run ${params.name ?? ""} on ${ns} now: the job its cron runs, through the same code and record, at once instead of at its hour. Capsid asks the site to run its own job; it never runs a site's work itself.`;
     case "sign_policy_change":
       return params.change === "demote"
         ? `Write and sign the next version of the auto-merge policy without the merge unit ${params.unit ?? ""}: its pull requests wait for an approval again.`
@@ -136,6 +138,7 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   package_remove: ["name", "revision"],
   site_repair: ["namespace", "tool"],
   site_backup: ["namespace"],
+  run_job: ["namespace", "name"],
   sign_policy_change: ["change", "unit", "confirm", "reason"],
   // The hash its preview read is bound into the token (Plan.bind), so a caller cannot send one.
   sign_policy_from_repo: ["confirm", "reason"],

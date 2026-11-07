@@ -47,7 +47,7 @@ function recorder(answer: (url: string, init: RequestInit) => Response) {
   return { calls, impl };
 }
 
-test("the migration's dustinedwards configuration passes the same rules an edit passes, and names no backup_media", () => {
+test("the migration's dustinedwards configuration passes the same rules an edit passes, and names no run_job", () => {
   const sql = readFileSync(
     join(import.meta.dirname, "..", "migrations", "0035_ops_sites_operator.sql"),
     "utf8",
@@ -58,19 +58,19 @@ test("the migration's dustinedwards configuration passes the same rules an edit 
   assert.ok(parsed.ok, parsed.ok ? "" : parsed.refusal);
   assert.equal(parsed.operator.auth_var, "DUSTINEDWARDS_OPERATOR_TOKEN");
   assert.equal(Object.keys(parsed.operator.repairs).length, 13);
-  assert.ok(!allowedTools(parsed.operator).includes("backup_media"));
+  assert.ok(!allowedTools(parsed.operator).includes("run_job"));
   assert.deepEqual(parsed.operator.weekly, ["refresh_citations"]);
 });
 
-test("PLANT: a configuration naming backup_media, a write tool or sync_status as a repair is refused whole", () => {
+test("PLANT: a configuration naming run_job, a write tool or sync_status as a repair is refused whole", () => {
   const base = { path: "/api/operator", auth_var: "SAMPLE_OPERATOR_TOKEN" };
   for (const [label, extra, pattern] of [
     [
-      "backup_media as a repair",
-      { repairs: { "media-backup-drift": "backup_media" } },
-      /backup_media is a backup, not a repair/,
+      "run_job as a repair",
+      { repairs: { "media-backup-drift": "run_job" } },
+      /run_job is a backup or a job run, not a repair/,
     ],
-    ["backup_media weekly", { weekly: ["backup_media"] }, /backup_media is a backup, not a repair/],
+    ["run_job weekly", { weekly: ["run_job"] }, /run_job is a backup or a job run, not a repair/],
     ["backup not a boolean", { backup: "yes" }, /backup must be true or false/],
     ["a write tool", { repairs: { "content-drift": "save_post" } }, /'save_post' is not a repair/],
     [
@@ -107,8 +107,8 @@ test("PLANT: the backup tools go only from the backups and only to a site that s
       /is not a backup tool/,
     );
   assert.match(
-    (await callOperator(ENV, on, "backup_media", impl)).error ?? "",
-    /is a backup, not a repair/,
+    (await callOperator(ENV, on, "run_job", impl)).error ?? "",
+    /is a backup or a job run, not a repair/,
     "a repair call cannot reach a backup tool",
   );
   assert.equal(calls.length, 0, "a refused call reached the site");
@@ -120,25 +120,25 @@ test("PLANT: the backup tools go only from the backups and only to a site that s
   assert.deepEqual(JSON.parse(String(calls[0].init.body)), { tool: "backup_status", args: {} });
 });
 
-test("PLANT: backup_media and an unknown tool are refused at the Worker before any request, even when a stored configuration names them", async () => {
+test("PLANT: run_job and an unknown tool are refused at the Worker before any request, even when a stored configuration names them", async () => {
   // A row that bypassed the edit rules: the ceiling is checked again before every call.
   const tampered: SiteOperator = {
     ...OPERATOR,
     repairs: {
       ...OPERATOR.repairs,
-      "media-backup-drift": "backup_media",
+      "media-backup-drift": "run_job",
       "x-drift": "delete_post",
     },
   };
   const { calls, impl } = recorder(() => Response.json({ ok: true, data: { converged: true } }));
-  for (const tool of ["backup_media", "delete_post", "sync_unlisted"]) {
+  for (const tool of ["run_job", "delete_post", "sync_unlisted"]) {
     const got = await callOperator(ENV, { origin: SITE.origin, operator: tampered }, tool, impl);
     assert.equal(got.ok, false, `${tool} was called`);
     assert.match(got.error ?? "", /refused by Capsid before any request/);
   }
   assert.equal(
     toolRefusal(tampered, "sync_unlisted"),
-    "sync_unlisted is not in this site's allowlist (sync_posts, sync_pages, sync_ask, backup_media, delete_post, refresh_citations).",
+    "sync_unlisted is not in this site's allowlist (sync_posts, sync_pages, sync_ask, run_job, delete_post, refresh_citations).",
   );
   assert.deepEqual(calls, [], "a refused tool reached the site");
 });
