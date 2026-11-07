@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "5.105.3",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.77.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.79.2",
     "enarratio": "0.7.3",
     "react": "19.3.1",
     "react-dom": "19.3.1",
