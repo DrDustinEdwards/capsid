@@ -1,5 +1,6 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
-import { adminEmailList, adminGrantEmail } from "./auth";
+import { adminEmails } from "@dustinedwards/site-runtime/access";
+import { adminGrantEmail } from "./auth";
 import { adminAgentForEmail } from "./agents";
 import { readLastStepUp } from "./scope";
 import { CAPSID_JOBS, runCapsidJob } from "./site-jobs";
@@ -229,7 +230,7 @@ async function serve(original: Request, env: Env, ctx: ExecutionContext): Promis
     const list = await adminListResponse(
       original,
       { ACCESS_TEAM_DOMAIN: env.ACCESS_TEAM_DOMAIN, ACCESS_AUD: env.ACCESS_DRIFT_AUD },
-      { admins: adminEmailList(env) },
+      { admins: adminEmails(env) },
     );
     return secured(list, asked);
   }

@@ -410,7 +410,7 @@ test("THE INNOCENT DIRECTION: an admin signed in within the window sets the key 
 });
 
 // Who is the admin is deployment configuration: ADMIN_EMAIL (the primary owner) and
-// CO_OWNER_EMAILS, Worker secrets read by src/auth.ts isAdminEmail and set only in
+// CO_OWNER_EMAILS, Worker secrets read by site-runtime isAdminEmail and set only in
 // Cloudflare. The one place Capsid writes a Worker secret is putSecret here, so no
 // route or tool can name the owner as long as that stays the only writer and the only
 // names it writes are the site key's.

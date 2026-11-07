@@ -41,19 +41,20 @@ test("every secret compare goes through safeEqual, in every file", () => {
 
 // safeEqual and the admin check built on it return promises, and a promise is truthy: a
 // call that loses its await admits every caller, and neither tsc nor the tests see it.
-test("every safeEqual, isAdminEmail and adminGrantEmail call is awaited, in every file", () => {
+test("every safeEqual and adminGrantEmail call is awaited, in every file", () => {
   const calls = sourceFiles().flatMap((f) =>
     f.text
       .split("\n")
       .map((line, i) => ({ file: f.name, line: i + 1, text: line.trim() }))
       .flatMap((l) =>
-        [...l.text.matchAll(/(\bawait\s+\(?)?\b(safeEqual|isAdminEmail|adminGrantEmail)\(/g)].map(
-          (m) => ({ ...l, awaited: Boolean(m[1]) }),
-        ),
+        [...l.text.matchAll(/(\bawait\s+\(?)?\b(safeEqual|adminGrantEmail)\(/g)].map((m) => ({
+          ...l,
+          awaited: Boolean(m[1]),
+        })),
       )
       .filter((c) => !c.text.startsWith("export async function ")),
   );
-  assert.ok(calls.length >= 15, `found only ${calls.length} calls`);
+  assert.ok(calls.length >= 11, `found only ${calls.length} calls`);
   assert.deepEqual(
     calls.filter((c) => !c.awaited).map((c) => `src/${c.file}:${c.line} ${c.text}`),
     [],
