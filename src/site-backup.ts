@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { backupFreshness } from "./health";
-import { OFFACCOUNT_REPORT_KEY, isOffaccountSite } from "./offaccount";
+import { OFFACCOUNT_REPORT_KEY, isOffaccountSite, offaccountSiteOf } from "./offaccount";
 import { readSiteConfig, readSiteRow } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
 import type { PortalBackups, SiteBackupRow, SiteBackupStatus } from "./ops-types/views";
@@ -82,7 +82,9 @@ export async function readSiteBackups(
     backupFreshness(env),
   ]);
   const amazonFor = (namespace: string) => {
-    const line = isOffaccountSite(namespace) ? amazon?.sites[namespace] : undefined;
+    // A further host (carrel-mcp) reports its site's copy (carrel): the copy is of the site's database.
+    const site = offaccountSiteOf(namespace);
+    const line = site ? amazon?.sites[site] : undefined;
     // The report names a run by its id; the answer gives its time, like every other field.
     return line
       ? {
@@ -106,13 +108,15 @@ export async function readSiteBackups(
       };
     }),
   );
+  // A site is checked when it or any further host of it (carrel-mcp for carrel) sets backup: true.
+  const checked = new Set(sites.map((s) => offaccountSiteOf(s.namespace)));
   const unconfigured = rows
     .filter(
       (r) =>
         r.origin &&
         isOffaccountSite(r.namespace) &&
         r.namespace !== "capsid" &&
-        !r.operator?.backup,
+        !checked.has(r.namespace),
     )
     .map((r) => r.namespace);
   return {
