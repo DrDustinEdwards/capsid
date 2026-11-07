@@ -235,7 +235,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
           <p className="section-title">Holding now</p>
           {mine.length ? (
             mine.map((j) => (
-              <div className="qrow" key={j.id} data-open={`job:${j.id}`} tabIndex={0}>
+              <div className="qrow" key={j.id} data-open={`job:${j.id}`} role="button" tabIndex={0}>
                 <St kind={JOB[j.status].kind}>{JOB[j.status].label}</St>
                 <div className="t">
                   <b>{j.title}</b>

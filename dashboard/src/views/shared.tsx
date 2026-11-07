@@ -381,6 +381,7 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                       key={j.id}
                       data-row=""
                       data-open={`job:${j.id}`}
+                      role="button"
                       tabIndex={0}
                       {...(j.question ? { "data-question": "" } : {})}
                     >
@@ -428,6 +429,7 @@ export function IncidentFeed({ ns }: { ns?: string }) {
             key={`${it.fp}-${it.ref ?? ""}`}
             data-row=""
             data-open={it.ref ?? undefined}
+            role={it.ref ? "button" : undefined}
             tabIndex={it.ref ? 0 : undefined}
             title={it.ref ? undefined : `fingerprint ${it.fp}`}
           >

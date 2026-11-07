@@ -79,6 +79,7 @@ function ProblemRow({ row }: { row: AttentionRow }) {
       className={row.sev === "crit" ? "att-row sev-crit" : "att-row"}
       data-row=""
       data-open={row.open}
+      role="button"
       tabIndex={0}
     >
       <span className="kind">
@@ -133,6 +134,7 @@ function GroupRow({ row }: { row: AttentionRow }) {
                 key={`${k.open}|${k.title}`}
                 data-row=""
                 data-open={k.open}
+                role="button"
                 tabIndex={0}
               >
                 <div className="what">
@@ -194,6 +196,7 @@ function Notices({ rows, count }: { rows: AttentionRow[]; count: number }) {
               key={r.key}
               data-row=""
               data-open={r.children && r.view ? `view:${r.view.id}` : r.open}
+              role="button"
               tabIndex={0}
             >
               <div className="what">
