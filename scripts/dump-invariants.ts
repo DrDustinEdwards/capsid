@@ -47,7 +47,7 @@ function fail(reason: string): never {
   throw err;
 }
 
-function readDumpJson(dumpDir: string, file: string): Json {
+function readDumpFile(dumpDir: string, file: string): Json {
   try {
     const bytes = readFileSync(join(dumpDir, file));
     return JSON.parse((file.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8")) as Json;
@@ -62,7 +62,7 @@ function checkSidecar(
   field: string,
   valueOk: (v: unknown) => boolean,
 ): void {
-  const parsed = readDumpJson(dumpDir, file);
+  const parsed = readDumpFile(dumpDir, file);
   const inner = parsed?.[field];
   if (!inner || typeof inner !== "object" || Array.isArray(inner))
     fail(`${file} carries no '${field}' object`);
@@ -92,7 +92,7 @@ export function checkDump(dumpDir: string): DumpSummary {
   if (!files.includes(COMPLETE_MARKER))
     fail(`${COMPLETE_MARKER} is missing, so this run is not a complete dump`);
 
-  const marker = readDumpJson(dumpDir, COMPLETE_MARKER);
+  const marker = readDumpFile(dumpDir, COMPLETE_MARKER);
   const listed = (Array.isArray(marker.keys) ? marker.keys : [])
     .map((k: unknown) => String(k).split("/").pop())
     .sort();
@@ -123,7 +123,7 @@ export function checkDump(dumpDir: string): DumpSummary {
   let rows = 0;
   for (const file of files.filter((f) => !f.startsWith("_"))) {
     const name = file.replace(/\.json(\.gz)?$/, "");
-    const parsed = readDumpJson(dumpDir, file);
+    const parsed = readDumpFile(dumpDir, file);
     if (parsed.table !== name)
       fail(`${file} says it dumps '${parsed.table}'; refusing to restore shuffled files`);
     if (!Array.isArray(parsed.rows)) fail(`${file} carries no rows array`);
