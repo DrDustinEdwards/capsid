@@ -24,7 +24,7 @@ export interface Env extends Omit<
   ACCESS_SAAS_CLIENT_SECRET?: string;
   ADMIN_EMAIL?: string;
   // Co-owners: comma-separated emails admitted exactly like ADMIN_EMAIL (src/auth.ts
-  // isAdminEmail), each recorded under its own verified email, `access:<email>`. A
+  // site-runtime isAdminEmail), each recorded under its own verified email, `access:<email>`. A
   // co-owner cannot change ADMIN_EMAIL or this list: both are set only in Cloudflare.
   // Optional; unset or empty means no co-owners. Ignored while ADMIN_EMAIL is unset.
   CO_OWNER_EMAILS?: string;

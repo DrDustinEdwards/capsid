@@ -40,7 +40,7 @@ import { ipKey, limit } from "@dustinedwards/site-runtime/rate-limit";
 import type { Env } from "./env";
 import { buildServer, SERVER_INFO } from "./server";
 import { mcpRateLimited, SCOPES, serveMcp } from "./mcp-handler";
-import { isAdminEmail } from "./auth";
+import { isAdminEmail } from "@dustinedwards/site-runtime/access";
 import { loginHandler } from "@dustinedwards/site-runtime/mcp-login";
 import {
   BACKUP_CREDENTIAL_PATH,
@@ -131,7 +131,7 @@ const login = loginHandler<Env>({
     "<p>Capsid serves the portfolio's knowledge base and reaches its GitHub repos. It will always be able to read. " +
     "Writing documents, changing repos, working jobs and Capsid Admin's controls need the box below.</p>",
   admit: async (env, user) =>
-    (await isAdminEmail(env, user.email)) ? { signed_in_at: Date.now() } : false,
+    isAdminEmail(env, user.email) ? { signed_in_at: Date.now() } : false,
   admits: {
     consent: "Only Capsid's administrator and its co-owners are accepted.",
     refusal: "This account is not an administrator of Capsid (ADMIN_EMAIL or CO_OWNER_EMAILS).",

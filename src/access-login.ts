@@ -7,7 +7,8 @@ import {
 } from "@dustinedwards/site-runtime/access-login";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { sha256Hex, toHex } from "@dustinedwards/site-runtime/encoding";
-import { capsidCookie, getCookie, isAdminEmail } from "./auth";
+import { isAdminEmail } from "@dustinedwards/site-runtime/access";
+import { capsidCookie, getCookie } from "./auth";
 import type { Env } from "./env";
 // The sign-in round trip with Cloudflare Access for SaaS (OIDC) as the upstream
 // identity (capsid/research/design-capsid-access-login.md, decided 2026-09-27) for
@@ -212,7 +213,7 @@ export async function completeAccessLogin<T>(
       403,
       verdict.reason.toUpperCase().replaceAll("-", "_"),
     );
-  if (!(await isAdminEmail(env, verdict.email))) {
+  if (!isAdminEmail(env, verdict.email)) {
     return fail(
       "access denied: this email is not an administrator of capsid (ADMIN_EMAIL or CO_OWNER_EMAILS)",
       403,

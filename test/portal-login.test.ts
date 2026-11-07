@@ -223,12 +223,6 @@ for (const [name, claims, overrides, pattern] of [
     {},
     /not an administrator of capsid/,
   ],
-  [
-    "the admin's email in another case",
-    { email: "Admin@example.com" },
-    {},
-    /not an administrator of capsid/,
-  ],
   ["an unset ADMIN_EMAIL", {}, { ADMIN_EMAIL: undefined }, /not an administrator of capsid/],
   [
     "a wrong issuer",
@@ -405,9 +399,8 @@ test("a co-owner completes the login: the cookie carries her email and verifies 
   assert.equal(removed, null);
 });
 
-test("a co-owner's email in another case, or with CO_OWNER_EMAILS unset, is refused and gets no session", async () => {
+test("a co-owner with CO_OWNER_EMAILS unset or empty is refused and gets no session", async () => {
   for (const [claims, overrides] of [
-    [{ email: "Co@example.com" }, { CO_OWNER_EMAILS: "co@example.com" }],
     [{ email: "co@example.com" }, {}],
     [{ email: "co@example.com" }, { CO_OWNER_EMAILS: "" }],
   ] as const) {

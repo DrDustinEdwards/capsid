@@ -11,7 +11,8 @@ import {
   type LoginFlow,
   startAccessLogin,
 } from "./access-login";
-import { capsidCookie, getCookie, hmacHex, isAdminEmail } from "./auth";
+import { isAdminEmail } from "@dustinedwards/site-runtime/access";
+import { capsidCookie, getCookie, hmacHex } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { logEvent, OWASP_EVENTS } from "@dustinedwards/site-runtime/log";
 import { emailKey } from "@dustinedwards/site-runtime/rate-limit";
@@ -167,7 +168,7 @@ async function verifySession(request: Request, env: Env): Promise<SessionPayload
     typeof payload.sid !== "string"
   )
     return null;
-  if (!(await isAdminEmail(env, payload.email))) return null;
+  if (!isAdminEmail(env, payload.email)) return null;
   const ended = await env.DB.prepare("SELECT 1 AS ended FROM portal_session_ends WHERE sid = ?1")
     .bind(payload.sid)
     .first();
