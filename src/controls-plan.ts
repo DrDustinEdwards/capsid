@@ -461,14 +461,17 @@ export async function planAction(
       const checked = validateSite(p);
       if (!checked.ok) return refused(checked.refusal);
       const site = checked.site;
+      // A registered namespace, or a further host of one (`<namespace>-<host>`, such as
+      // carrel-mcp): the rule the watcher's site-map check reads (ops-sites owningNamespace).
+      // Namespace names hold no LIKE wildcards (lowercase letters, digits and hyphens).
       const registered = await env.DB.prepare(
-        "SELECT namespace FROM namespaces WHERE namespace = ?1",
+        "SELECT namespace FROM namespaces WHERE namespace = ?1 OR ?1 LIKE namespace || '-%' LIMIT 1",
       )
         .bind(site.namespace)
         .first<{ namespace: string }>();
       if (!registered)
         return refused(
-          `'${site.namespace}' is not a registered namespace. Register it first; a site row for an unregistered namespace is drift the watcher reports.`,
+          `'${site.namespace}' is neither a registered namespace nor a further host of one (<namespace>-<host>). Register it first; a site row for an unregistered namespace is drift the watcher reports.`,
         );
       const existing = await readSiteRow(env.DB, site.namespace);
       if (existing)

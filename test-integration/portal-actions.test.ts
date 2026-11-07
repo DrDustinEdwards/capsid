@@ -1258,7 +1258,21 @@ describe("the site actions against real D1", () => {
       },
     });
     expect(unregistered.status).toBe(400);
-    expect(await unregistered.text()).toMatch(/not a registered namespace/);
+    expect(await unregistered.text()).toMatch(/neither a registered namespace nor a further host/);
+    // A further host of a registered namespace (<namespace>-<host>) is a site row the
+    // watcher accepts, so the add previews.
+    const host = await call(PORTAL_PREVIEW_PATH, {
+      method: "POST",
+      body: {
+        action: "site_add",
+        params: {
+          namespace: "sample-mcp",
+          origin: "https://mcp.sample.example.com",
+          platform: "cloudflare",
+        },
+      },
+    });
+    expect(host.status).toBe(200);
     const http = await call(PORTAL_PREVIEW_PATH, {
       method: "POST",
       body: {
