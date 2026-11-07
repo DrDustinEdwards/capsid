@@ -1366,10 +1366,10 @@ function plan(
           400,
           `${ns} has no operator API configured, so Capsid may call nothing on it.`,
         );
-      if (tool === "backup_media" || tool === "backup_status")
+      if (tool === "run_job" || tool === "backup_status")
         throw new Refusal(
           400,
-          `${tool} is a backup, not a repair: Capsid Admin's backups call it on a site that sets backup: true.`,
+          `${tool} is not a repair: Capsid Admin's backups and run_job control call it.`,
         );
       const allowed = [
         ...new Set([...Object.values(site.operator.repairs), ...site.operator.weekly]),
@@ -1399,15 +1399,32 @@ function plan(
             : "no site sets backup: true in its operator configuration, so there is nothing to back up.",
         );
       return {
-        summary: ns ? `Back up ${ns}'s files now.` : "Back up every site's files now.",
+        summary: ns ? `Back up ${ns} now.` : "Back up every site now.",
         done:
           sites
-            .map((s) => `${s.namespace}: backup_media ran: media complete (3 copied)`)
+            .map((s) => `${s.namespace}: run_job { backup: true } ran: media-backup ok in 40 ms`)
             .join(". ") + ".",
         changes: sites.map(
           (s) =>
-            `${s.namespace}: POST ${s.origin}${s.operator!.path} with tool backup_media, authorized by ${s.operator!.auth_var}.`,
+            `${s.namespace}: POST ${s.origin}${s.operator!.path} with tool run_job { backup: true }, authorized by ${s.operator!.auth_var}.`,
         ),
+        apply: () => undefined,
+      };
+    }
+    case "run_job": {
+      const ns = need(params, "namespace", "The site");
+      const name = need(params, "name", "The job");
+      const site = f.live.sites.find((s) => s.namespace === ns);
+      if (ns !== "capsid" && !site?.operator)
+        throw new Refusal(400, `${ns} has no operator API configured.`);
+      return {
+        summary: `Run ${name} on ${ns} now.`,
+        done: `${ns}: run_job ran: ${name} ok in 40 ms.`,
+        changes: [
+          ns === "capsid"
+            ? `Capsid runs its own ${name} job now, as its nightly cron does.`
+            : `${ns}: POST ${site!.origin}${site!.operator!.path} with tool run_job { job: "${name}" }, authorized by ${site!.operator!.auth_var}.`,
+        ],
         apply: () => undefined,
       };
     }

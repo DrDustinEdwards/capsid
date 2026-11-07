@@ -10,10 +10,12 @@ import { callSignal } from "./call-signal";
 //
 // Two allowlists, both enforced in this Worker before any request leaves it:
 //   - the CEILING, in code: a repair is a sync_* tool (sync_status is a read, not a
-//     repair) or refresh_citations, and a backup is backup_status or backup_media
+//     repair) or refresh_citations, a backup is backup_status or run_job { backup: true }
 //     (Capsid Admin's backups, src/site-backup.ts, Dustin 2026-11-06: one control for
-//     every site in place of each site's own). Nothing else the site's operator API
-//     serves is ever called (save_post, delete_post, decide_mention...).
+//     every site in place of each site's own), and a job run is run_job { job } (the
+//     run_job control, src/site-jobs.ts, Dustin 2026-11-07: any of a site's cron jobs
+//     run now, through site-runtime's runJobTool on the site). Nothing else the site's
+//     operator API serves is ever called (save_post, delete_post, decide_mention...).
 //   - the SITE'S OWN list, in its configuration: the tools its repairs map and its weekly
 //     tools name, and the two backup tools only where it sets backup: true. A tool the
 //     ceiling allows but the site does not name is refused too.
@@ -21,8 +23,9 @@ import { callSignal } from "./call-signal";
 // secret, read by name, sent only to the site's own origin, and never logged, returned or
 // put in an audit row.
 
-/** The two backup tools: the backup state read now, and the files backup run now (copy only). */
-const BACKUP_TOOLS = ["backup_status", "backup_media"] as const;
+/** The two backup tools: the backup state read now, and the site's backup jobs run now
+ *  (run_job { backup: true }). */
+const BACKUP_TOOLS = ["backup_status", "run_job"] as const;
 type BackupTool = (typeof BACKUP_TOOLS)[number];
 const isBackupTool = (tool: string): tool is BackupTool =>
   (BACKUP_TOOLS as readonly string[]).includes(tool);
@@ -30,7 +33,7 @@ const isBackupTool = (tool: string): tool is BackupTool =>
 /** The ceiling: the only tools Capsid will ever call as a repair. */
 export function repairToolRefusal(tool: string): string | null {
   if (isBackupTool(tool))
-    return `${tool} is a backup, not a repair: Capsid Admin's backups call it on a site that sets backup: true.`;
+    return `${tool} is a backup or a job run, not a repair: Capsid Admin's backups and run_job control call it.`;
   if (tool === "sync_status") return "sync_status is a read, not a repair.";
   if (tool === "refresh_citations" || /^sync_[a-z][a-z_]{0,40}$/.test(tool)) return null;
   return `'${tool}' is not a repair Capsid may call: only the site's sync_* tools and refresh_citations are.`;
@@ -134,7 +137,11 @@ export function toolRefusal(
   tool: string,
   reading = false,
   backup = false,
+  job = false,
 ): string | null {
+  // A job run goes to any site with an operator configuration: serving run_job is the
+  // site's own opt in, and its job list is the site's (site-runtime runJobTool).
+  if (job) return tool === "run_job" ? null : `'${tool}' is not run_job.`;
   if (backup) {
     if (!isBackupTool(tool))
       return `'${tool}' is not a backup tool: only ${BACKUP_TOOLS.join(" and ")} are.`;
@@ -179,7 +186,7 @@ export interface OperatorCall {
 const CALL_TIMEOUT_MS = 5 * MINUTE_MS;
 const ERROR_MAX = 300;
 
-/** One allowlisted call: POST {tool, args: {}} to the site's operator route with the
+/** One allowlisted call: POST {tool, args} to the site's operator route with the
  *  configured token. Refused before any request when the tool is not allowed or the token
  *  is not set. Never throws. */
 export async function callOperator(
@@ -187,7 +194,7 @@ export async function callOperator(
   site: { origin: string; operator: SiteOperator },
   tool: string,
   fetchImpl: FetchLike = fetch,
-  opts: { reading?: boolean; backup?: boolean } = {},
+  opts: { reading?: boolean; backup?: boolean; job?: boolean; args?: Record<string, unknown> } = {},
 ): Promise<OperatorCall> {
   const fail = (status: number, error: string): OperatorCall => ({
     ok: false,
@@ -198,7 +205,13 @@ export async function callOperator(
     present: null,
     error: error.slice(0, ERROR_MAX),
   });
-  const refusal = toolRefusal(site.operator, tool, opts.reading === true, opts.backup === true);
+  const refusal = toolRefusal(
+    site.operator,
+    tool,
+    opts.reading === true,
+    opts.backup === true,
+    opts.job === true,
+  );
   if (refusal) return fail(0, `refused by Capsid before any request: ${refusal}`);
   const token = (env as unknown as Record<string, unknown>)[site.operator.auth_var];
   if (typeof token !== "string" || token.length === 0)
@@ -216,7 +229,7 @@ export async function callOperator(
         "content-type": "application/json",
         "user-agent": "capsid",
       },
-      body: JSON.stringify({ tool, args: {} }),
+      body: JSON.stringify({ tool, args: opts.args ?? {} }),
       redirect: "manual",
       signal: callSignal(CALL_TIMEOUT_MS),
     });
@@ -239,7 +252,7 @@ export async function callOperator(
   return {
     ok: true,
     status: response.status,
-    data: opts.reading || opts.backup ? body.data : null,
+    data: opts.reading || opts.backup || opts.job ? body.data : null,
     converged: typeof data?.converged === "boolean" ? data.converged : null,
     expected: num(data?.expected),
     present: num(data?.present),

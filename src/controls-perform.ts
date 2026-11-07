@@ -45,6 +45,7 @@ import { performPolicyChange, performPolicyFromRepo } from "./policy-sign";
 import { planApproval, performApproval } from "./pr-approvals";
 import { runSiteRepair } from "./site-repair";
 import { CAPSID_DUMP, runCapsidDump, runSiteBackups } from "./site-backup";
+import { runSiteJob } from "./site-jobs";
 import { auditStatement } from "./store-guards";
 
 // A control's perform (src/controls.ts is the core): the one dispatch to the shared
@@ -658,6 +659,23 @@ export async function performAction(
           tool,
           ok: outcome.call.ok,
           converged: outcome.call.converged,
+        });
+        break;
+      }
+      case "run_job": {
+        // Every check runs again inside runSiteJob: the configuration, the token and the
+        // rate limit can all change between the preview and this click.
+        const namespace = required(params, "namespace");
+        const name = required(params, "name");
+        if (!namespace || !name)
+          return { ok: false, refusal: "run_job needs a namespace and a job name." };
+        const outcome = await runSiteJob(env, { namespace, name, actor, via: surface }, now);
+        if (!outcome.ran) return { ok: false, refusal: outcome.refusal };
+        committed = true;
+        summary = `${namespace}: ${outcome.line}.${outcome.recorded ? "" : " The call's audit row was not written (SITE_JOB_NOT_RECORDED in the log)."}`;
+        await auditClick(env, actor, source, surface, action, namespace, {
+          job: name,
+          ok: outcome.ok,
         });
         break;
       }

@@ -130,7 +130,7 @@ export interface SiteOperator {
   weekly: string[];
   secrets: string[];
   // Whether Capsid Admin's backups (src/site-backup.ts) call backup_status and
-  // backup_media on this site. False where the configuration leaves it out.
+  // run_job { backup: true } on this site. False where the configuration leaves it out.
   backup: boolean;
 }
 

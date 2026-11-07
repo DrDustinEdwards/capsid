@@ -131,10 +131,10 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     auth: new Headers(init?.headers).get("authorization"),
     body: String(init?.body),
   });
-  if ((JSON.parse(String(init?.body)) as { tool?: string }).tool === "backup_media")
+  if ((JSON.parse(String(init?.body)) as { tool?: string }).tool === "run_job")
     return Response.json({
       ok: true,
-      data: { files: [{ name: "images", complete: true, copied: 2 }] },
+      data: { runs: [{ job: "media-backup", status: "ok", ms: 20 }] },
     });
   return Response.json({
     ok: true,
@@ -791,14 +791,14 @@ const CASES: Record<string, Case> = {
         [
           "https://dustinedwards.info/api/operator",
           `Bearer ${OPERATOR_TOKEN}`,
-          { tool: "backup_media", args: {} },
+          { tool: "run_job", args: { backup: true } },
         ],
       ]);
       const row = await env.DB.prepare(
         "SELECT params FROM audit_log WHERE action = 'site-backup' ORDER BY id DESC LIMIT 1",
       ).first<{ params: string }>();
       expect(JSON.parse(row?.params ?? "{}")).toMatchObject({
-        tool: "backup_media",
+        tool: "run_job",
         via: "portal",
         ok: true,
       });
@@ -808,7 +808,28 @@ const CASES: Record<string, Case> = {
       ).first<{ outcome: string; reason: string }>();
       expect(run).toEqual({
         outcome: "ok",
-        reason: "dustinedwards: backup_media ran: images complete (2 copied) (portal)",
+        reason: "dustinedwards: run_job { backup: true } ran: media-backup ok in 20 ms (portal)",
+      });
+    },
+  },
+  run_job: {
+    params: async () => {
+      operatorCalls.length = 0;
+      return { namespace: "dustinedwards", name: "media-backup" };
+    },
+    after: async () => {
+      expect(operatorCalls.map((c) => [c.url, JSON.parse(c.body)])).toEqual([
+        [
+          "https://dustinedwards.info/api/operator",
+          { tool: "run_job", args: { job: "media-backup" } },
+        ],
+      ]);
+      const run = await env.DB.prepare(
+        "SELECT outcome, reason FROM task_runs WHERE task = 'site-job' ORDER BY id DESC LIMIT 1",
+      ).first<{ outcome: string; reason: string }>();
+      expect(run).toEqual({
+        outcome: "ok",
+        reason: "dustinedwards: run_job ran: media-backup ok in 20 ms (portal)",
       });
     },
   },
@@ -848,9 +869,9 @@ const CASES: Record<string, Case> = {
 };
 
 describe("every action, previewed then performed through the Worker", () => {
-  it("covers the allow-list, twenty-eight actions", () => {
+  it("covers the allow-list, twenty-nine actions", () => {
     expect(Object.keys(CASES).sort()).toEqual([...PORTAL_ACTIONS].sort());
-    expect(Object.keys(CASES).length).toBe(28);
+    expect(Object.keys(CASES).length).toBe(29);
   });
 
   for (const action of PORTAL_ACTIONS) {

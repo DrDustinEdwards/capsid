@@ -1,15 +1,15 @@
 import type { Env } from "./env";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { backupTaskResult, runBackup } from "./backup";
 import { backupFreshness } from "./health";
 import { OFFACCOUNT_REPORT_KEY, isOffaccountSite } from "./offaccount";
 import { readSiteConfig, readSiteRow } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
 import type { PortalBackups, SiteBackupRow, SiteBackupStatus } from "./ops-types/views";
 import { callOperator, tokenSet, type FetchLike, type OperatorCall } from "./site-operator";
+import { runCapsidJob, runsLine } from "./site-jobs";
 import { takeLimit } from "./site-repair";
 import { auditStatement } from "./store-guards";
-import { runTask, taskRunStatements } from "./task-runs";
+import { taskRunStatements } from "./task-runs";
 import { parseDumpStamp, type OffaccountReport } from "./watcher-detect";
 
 // BACKUPS FOR EVERY SITE, IN ONE PLACE (Dustin 2026-11-06, "as recommended"): checking the
@@ -22,19 +22,22 @@ import { parseDumpStamp, type OffaccountReport } from "./watcher-detect";
 //          dump and each files pass, with the site's own warning past 26 hours), beside
 //          the Amazon copy's newest daily run from capsid-backups' last report. Capsid's
 //          own dump is read from this Worker. Reads only, so it is not audited.
-//   run    the site_backup control: backup_media on one site, or on every such site at
-//          once. Copy only (d1-dump backupFiles writes under files/ in the site's backups
-//          bucket alone and never touches the source buckets), so it is safe to repeat.
+//   run    the site_backup control: run_job { backup: true } on one site, or on every such
+//          site at once: the site's own jobs marked backup (its D1 dump and its files
+//          passes), run now through the path its nightly cron runs (site-runtime
+//          runJobTool), under the dump's own lease and checks, recorded in the site's
+//          cron_runs. Each is safe to repeat: a dump adds a run, a files pass copies.
 //          Each call that leaves the Worker is an audit_log row (site-backup) and a
 //          task_runs row (site-backup), and the per-site rate limit is the repairs' one
 //          (src/site-repair.ts): two minutes between calls of a tool on a site.
 //
-// A site's D1 dump is not run here: each site's nightly cron runs it under its own lease and
-// checks (d1-dump runCheckedBackup), and a second runner would race it. Capsid's own dump is
-// the one exception (CAPSID_DUMP below): this Worker runs it, under the same lease the
-// nightly cron takes, so a run that overlaps the cron skips.
+// Capsid never runs a site's work itself: it asks the site to run its own jobs. Capsid's own
+// dump (CAPSID_DUMP below) is the one this Worker runs, under the same lease the nightly
+// cron takes, so a run that overlaps the cron skips.
 
 const BACKUP_AUDIT_ACTION = "site-backup";
+/** The rate limit's key for back up now (src/site-repair.ts takeLimit): two minutes apart per site. */
+export const BACKUP_LIMIT = "run_job:backup";
 
 interface BackupSite {
   namespace: string;
@@ -127,17 +130,7 @@ export type BackupRun =
   | { namespace: string; ran: true; call: OperatorCall; line: string; recorded: boolean };
 
 function backupLine(call: OperatorCall): string {
-  if (!call.ok) return call.error ?? "backup_media failed";
-  const files = (
-    call.data as { files?: Array<{ name?: unknown; complete?: unknown; copied?: unknown }> } | null
-  )?.files;
-  if (!Array.isArray(files))
-    return `backup_media answered ${call.status} without its files list, so nothing was proven`;
-  const passes = files.map(
-    (f) =>
-      `${String(f.name)} ${f.complete === true ? "complete" : "goes on next run"}${typeof f.copied === "number" ? ` (${f.copied} copied)` : ""}`,
-  );
-  return `backup_media ran: ${passes.join(", ") || "no passes"}`;
+  return runsLine("run_job { backup: true }", call);
 }
 
 /** Why backups cannot run on `namespace`, or null. Reads only, so the control's preview refuses what the run refuses. */
@@ -163,21 +156,25 @@ async function runOne(
   now: Date,
   fetchImpl: FetchLike,
 ): Promise<BackupRun> {
-  const wait = await takeLimit(env, site.namespace, "backup_media", now, false);
+  const wait = await takeLimit(env, site.namespace, BACKUP_LIMIT, now, false);
   if (wait)
     return {
       namespace: site.namespace,
       ran: false,
-      refusal: `backup_media on ${site.namespace} waits: ${wait}`,
+      refusal: `back up now on ${site.namespace} waits: ${wait}`,
     };
   const started = new Date();
-  const call = await callOperator(env, site, "backup_media", fetchImpl, { backup: true });
+  const call = await callOperator(env, site, "run_job", fetchImpl, {
+    backup: true,
+    args: { backup: true },
+  });
   const line = backupLine(call);
   let recorded = true;
   try {
     await env.DB.batch([
       auditStatement(env.DB, args.actor, BACKUP_AUDIT_ACTION, site.namespace, null, {
-        tool: "backup_media",
+        tool: "run_job",
+        backup: true,
         via: args.via,
         status: call.status,
         ok: call.ok,
@@ -205,7 +202,7 @@ async function runOne(
   return { namespace: site.namespace, ran: true, call, line, recorded };
 }
 
-/** Back up now: backup_media on one site, or on every site that sets backup: true, at once. */
+/** Back up now: run_job { backup: true } on one site, or on every site that sets backup: true, at once. */
 export async function runSiteBackups(
   env: Env,
   args: { namespace?: string; actor: string; via: string },
@@ -247,23 +244,5 @@ export const CAPSID_DUMP = "capsid";
  * and prunes nothing, and it writes the same task_runs row (backup) the Portal reads.
  */
 export async function runCapsidDump(env: Env): Promise<{ ok: boolean; line: string }> {
-  let outcome = "";
-  await runTask(
-    env,
-    "backup",
-    () => runBackup(env),
-    (result) => {
-      const judged = backupTaskResult(result);
-      outcome = judged ? `${judged.outcome}: ${judged.reason}` : "";
-      return judged;
-    },
-    { tag: "BACKUP_NOW_THREW", rethrow: false },
-  );
-  // A throw is recorded by runTask and leaves outcome empty.
-  return outcome.startsWith("ok:")
-    ? { ok: true, line: `capsid: dump ${outcome}` }
-    : {
-        ok: false,
-        line: `capsid: ${outcome || "the dump threw (see the backup row in task_runs)"}`,
-      };
+  return runCapsidJob(env, "backup", false);
 }
