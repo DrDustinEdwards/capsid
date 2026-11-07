@@ -474,7 +474,7 @@ export function codeIndexPage(model, bySystem, totals, asOf) {
     .map(([v, l]) => readingBox(String(v), String(l)))
     .join("")}</dl>
 <section aria-labelledby="repos-title"><h2 id="repos-title">Every repo</h2>
-${scroller("repos", `<table class="cap-table code-table" data-sortable><caption>Each public repo's size and health; choose a heading to sort</caption><thead><tr><th scope="col">Repo</th><th scope="col">Lines</th><th scope="col">Modules</th><th scope="col">Functions</th><th scope="col">Covered</th><th scope="col">Critical</th><th scope="col">Cycles</th><th scope="col">Mutation</th></tr></thead><tbody>${repoRows}</tbody></table>`, "Every repo")}
+${scroller("repos", `<table class="cap-table code-table" data-sortable><caption>Each public repo's size and health; choose a heading to sort</caption><thead><tr><th scope="col">Repo</th><th scope="col">Lines</th><th scope="col">Modules</th><th scope="col">Functions</th><th scope="col">Covered</th><th scope="col">Critical</th><th scope="col">Cycles</th><th scope="col">Mutation</th></tr></thead><tbody>${repoRows}</tbody></table>`, "Every repo table")}
 </section>
 <section aria-labelledby="worst-title"><h2 id="worst-title">The 25 riskiest functions</h2>
 ${scroller("worst", `<table class="cap-table code-table" data-sortable><caption>By CRAP, highest first, across every public repo</caption><thead><tr><th scope="col">Function</th><th scope="col">Repo</th><th scope="col">Module</th><th scope="col">Complexity</th><th scope="col">Covered</th><th scope="col">CRAP</th></tr></thead><tbody>${worst.map((f) => riskRow(f, true)).join("")}</tbody></table>`, "The riskiest functions")}
@@ -491,7 +491,7 @@ ${scroller(
         `<tr><th scope="row"><a href="${blobUrl(x.r.map, x.m.path)}">${escapeHtml(x.m.path)}</a></th><td>${escapeHtml(x.r.repo.split("/")[1])}</td><td>${x.m.functions.length}</td><td data-sort="${x.score}">${scoreStatus(x.score, "")}</td></tr>`,
     )
     .join("")}</tbody></table>`,
-  "The weakest-tested modules",
+  "The weakest-tested modules table",
 )}</section>`
     : ""
 }`;

@@ -246,7 +246,7 @@ ${scroller(
   `<table class="cap-table numbers-table"><caption class="cap-sr-only">Every number, as of ${escapeHtml(stats.as_of)}</caption><tbody>
 ${rows.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("\n")}
 </tbody></table>`,
-  "Every number",
+  "Every number table",
 )}
 </section>
 <section class="numbers-part" id="how" aria-labelledby="how-title"><h2 id="how-title">How Capsid counts</h2>

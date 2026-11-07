@@ -536,7 +536,7 @@ ${scroller(
   `<table class="cap-table" data-sortable><caption>Every system, with its parts, connections and measured modules</caption>
 <thead><tr><th scope="col">System</th><th scope="col">Ring</th><th scope="col">Kind</th><th scope="col">Address</th><th scope="col">Parts</th><th scope="col">Connections</th><th scope="col">Modules</th><th scope="col">Visibility</th></tr></thead>
 <tbody>${rows}</tbody></table>`,
-  "Every system",
+  "Every system table",
 )}
 <p class="hint" data-filter-empty hidden>No system matches that.</p>
 </section>`;
