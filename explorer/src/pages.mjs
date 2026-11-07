@@ -611,7 +611,7 @@ function flowLinks(model, id) {
     f.steps.some((st) => st.touches.some((p) => p.system === id)),
   );
   if (!flows.length) return "";
-  return `<section aria-labelledby="flows-title"><h2 id="flows-title">Step by step</h2>
+  return `<section aria-labelledby="flows-title"><h2 id="flows-title">Flows through it</h2>
 <ul>${flows.map((f) => `<li><a href="${flowPath(f.id)}">${escapeHtml(f.name)}</a>, in ${f.steps.length} steps${f.description ? `: ${escapeHtml(f.description)}` : ""}</li>`).join("")}</ul>
 </section>`;
 }
