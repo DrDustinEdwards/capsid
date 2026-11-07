@@ -311,7 +311,9 @@ export async function build({
     entryPoints: [join(stage, "explorer.js")],
     outfile: join(assets, "explorer.js"),
     bundle: true,
-    nodePaths: [join(here, "node_modules")],
+    // The root's node_modules too: Capsomer's email imports site-runtime's escapeHtml (Capsomer 0.78.0), and
+    // site-runtime is the root's, not the explorer's.
+    nodePaths: [join(here, "node_modules"), join(here, "..", "node_modules")],
     format: "esm",
     minify: true,
     logLevel: "warning",
