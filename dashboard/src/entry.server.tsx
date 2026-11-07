@@ -2,6 +2,9 @@ import { prerender } from "react-dom/static";
 import { ServerRouter, type EntryContext, type RouterContextProvider } from "react-router";
 import { nonceFor } from "./server/prefetch";
 
+// React Router prints every route error, so each scanner 404 wrote a stack trace; a route 404 is counted, not logged.
+export { handleServerError as handleError } from "@dustinedwards/site-runtime/log";
+
 // The Workers runtime's render. React's prerender, not renderToReadableStream: it waits for the
 // whole tree, its lazy charts and panels included, and writes each in place, so the HTML a reader
 // with scripts off receives holds every table, chart and number, not a fallback with the content
