@@ -32,13 +32,7 @@ import { MAX_RESUME_NOTE } from "./limits";
 import { planResume } from "./merge-safety";
 import { planLift } from "./merge-units";
 import { validatePackage, readPackageRow, describePackage } from "./ops-packages";
-import {
-  validateSite,
-  readSiteRow,
-  describeSite,
-  owningNamespace,
-  type SiteInput,
-} from "./ops-sites";
+import { validateSite, readSiteRow, describeSite, type SiteInput } from "./ops-sites";
 import type { PortalAction } from "./ops-types/portal";
 import {
   overnightValueRefusal,
@@ -468,16 +462,14 @@ export async function planAction(
       if (!checked.ok) return refused(checked.refusal);
       const site = checked.site;
       // A registered namespace, or a further host of one (`<namespace>-<host>`, such as
-      // carrel-mcp): the same rule the watcher's site-map check reads (owningNamespace).
-      const { results } = await env.DB.prepare("SELECT namespace FROM namespaces").all<{
-        namespace: string;
-      }>();
-      if (
-        !owningNamespace(
-          site.namespace,
-          results.map((r) => r.namespace),
-        )
+      // carrel-mcp): the rule the watcher's site-map check reads (ops-sites owningNamespace).
+      // Namespace names hold no LIKE wildcards (lowercase letters, digits and hyphens).
+      const registered = await env.DB.prepare(
+        "SELECT namespace FROM namespaces WHERE namespace = ?1 OR ?1 LIKE namespace || '-%' LIMIT 1",
       )
+        .bind(site.namespace)
+        .first<{ namespace: string }>();
+      if (!registered)
         return refused(
           `'${site.namespace}' is neither a registered namespace nor a further host of one (<namespace>-<host>). Register it first; a site row for an unregistered namespace is drift the watcher reports.`,
         );

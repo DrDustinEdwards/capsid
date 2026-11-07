@@ -123,7 +123,7 @@ export function sitesFrom(config: readonly OpsSiteConfig[]): OpsSite[] {
  *  foxhound-admin-mcp, migrations/0052), the longest registered namespace it starts with.
  *  Null when it is neither. A further host is probed and alerted like any site; it is not
  *  a namespace, so it has no repository of its own. */
-export function owningNamespace(key: string, registered: readonly string[]): string | null {
+function owningNamespace(key: string, registered: readonly string[]): string | null {
   if (registered.includes(key)) return key;
   const owners = registered
     .filter((ns) => key.startsWith(ns + "-"))
