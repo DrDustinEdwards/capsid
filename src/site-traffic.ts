@@ -123,7 +123,7 @@ function notFoundRows(raw: Array<Record<string, unknown>>, limit: number) {
   };
 }
 
-// web_vitals: what real visitors' browsers measured, from Web Analytics (the GraphQL
+// web_vitals: what real visitors' browsers measured from Web Analytics (the GraphQL
 // dataset rumWebVitalsEventsAdaptiveGroups, account-scoped, filtered to the site's Web
 // Analytics siteTag). Values come back in microseconds; CLS is unitless. The site's
 // siteTag is read from the rum site_info list, the same list the live checks read.
@@ -180,7 +180,12 @@ async function webVitals(
 ) {
   const siteTag = await siteTagFor(fetchImpl, token, account, host);
   const fields = VITALS.flatMap((v) => P.map((p) => `${v}${p}`)).join(" ");
-  const query = `query($account: string!, $siteTag: string!, $start: Time!, $end: Time!) { viewer { accounts(filter: { accountTag: $account }) { rumWebVitalsEventsAdaptiveGroups(filter: { siteTag: $siteTag, datetime_geq: $start, datetime_leq: $end }, limit: 1) { count quantiles { ${fields} } } } } }`;
+  // One host, not the whole zone's Web Analytics site (a zone's site also holds its subdomains),
+  // and not Cloudflare's ChromeHeadless or ChromeDerivative, which are test runners and audits
+  // (Brave and Opera fall in the latter and are left out too). On 2026-11-07, over 30 days, they were
+  // 49,070 of dustinedwards.info's 50,850 measured views and 22,460 of capsomer's 22,560, where they
+  // made CLS read 0.795 against 0.002 for the 90 real Chrome views.
+  const query = `query($account: string!, $siteTag: string!, $host: string!, $start: Time!, $end: Time!) { viewer { accounts(filter: { accountTag: $account }) { rumWebVitalsEventsAdaptiveGroups(filter: { siteTag: $siteTag, requestHost: $host, userAgentBrowser_notin: ["ChromeHeadless", "ChromeDerivative"], datetime_geq: $start, datetime_leq: $end }, limit: 1) { count quantiles { ${fields} } } } } }`;
   const resp = await fetchImpl(CF_GRAPHQL, {
     method: "POST",
     headers: {
@@ -188,7 +193,7 @@ async function webVitals(
       "Content-Type": "application/json",
       "User-Agent": "capsid (site traffic)",
     },
-    body: JSON.stringify({ query, variables: { account, siteTag, start, end } }),
+    body: JSON.stringify({ query, variables: { account, siteTag, host, start, end } }),
     signal: callSignal(TIMEOUT_MS),
   });
   const text = await resp.text();
