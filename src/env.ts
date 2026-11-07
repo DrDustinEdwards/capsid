@@ -7,7 +7,10 @@ import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 // secrets, the OAuth provider the library injects, the optional assets binding, and the
 // build stamps. GITHUB_APP_CLIENT_ID is generated as the literal pinned id; it is widened to string
 // here so tests and the deploy check can hold other values.
-export interface Env extends Omit<GeneratedEnv, "GITHUB_APP_CLIENT_ID" | "EMAIL" | "ALERT_FROM" | "EMAIL_ROUTING"> {
+export interface Env extends Omit<
+  GeneratedEnv,
+  "GITHUB_APP_CLIENT_ID" | "EMAIL" | "ALERT_FROM" | "EMAIL_ROUTING"
+> {
   OAUTH_PROVIDER: OAuthHelpers;
   COOKIE_ENCRYPTION_KEY: string;
   // The MCP and Portal logins' upstream: Cloudflare Access for SaaS (OIDC),
