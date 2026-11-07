@@ -47,6 +47,8 @@ const SECURITY_TXT_EXPIRES = "2027-10-25T00:00:00Z";
 import { servedTools } from "./src/surface.mjs";
 
 const here = import.meta.dirname;
+// Capsomer imports site-runtime (its escapeHtml), which the repo root installs; the staged copy sits in a temp directory, so name both places.
+const nodePaths = [join(here, "node_modules"), join(here, "..", "node_modules")];
 const require = createRequire(import.meta.url);
 const LIVE = "https://mcp.dustinedwards.info/public";
 
@@ -73,7 +75,7 @@ function contentHash(/** @type {string} */ dir) {
     write: false,
     format: "esm",
     platform: "neutral",
-    nodePaths: [join(here, "node_modules")],
+    nodePaths: nodePaths,
     logLevel: "warning",
   });
   hash.update("worker.mjs\0").update(worker.outputFiles[0].contents).update("\0");
@@ -276,7 +278,7 @@ export async function build({
     entryPoints: [join(stage, "explorer.js")],
     outfile: join(assets, "explorer.js"),
     bundle: true,
-    nodePaths: [join(here, "node_modules")],
+    nodePaths: nodePaths,
     format: "esm",
     minify: true,
     logLevel: "warning",
