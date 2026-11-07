@@ -18,7 +18,7 @@ jobs:
     with:
       app: Capsid
       admins-url: https://portal.dustinedwards.info/admin/access-drift
-      site-runtime-ref: v0.59.0
+      site-runtime-ref: v0.97.0
     secrets:
       ACCESS_READ_TOKEN: ${{ secrets.ACCESS_READ_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
