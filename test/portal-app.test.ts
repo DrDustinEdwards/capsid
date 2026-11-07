@@ -4,6 +4,7 @@ import { portalSessionCookie } from "../src/portal-auth.ts";
 import { dashboardCsp } from "../src/dashboard-csp.ts";
 import { handlePortalApp, HASHED_ASSET_CACHE, portalAsset } from "../src/portal-app.ts";
 import { withSecurityHeaders } from "../src/security-headers.ts";
+import { MCP_HOST } from "../src/mcp-host.ts";
 import { fakeEnv, fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 // Capsid Portal behind its gate (src/portal-app.ts): its server-rendered pages (the tests'
@@ -112,6 +113,7 @@ test("a signed-in administrator gets the page rendered with its reads, uncached,
   // As index.ts serves it: through the header layer.
   const res = withSecurityHeaders(
     await handlePortalApp(await signed("/portal/queue"), env(), reads.api, NOW),
+    new Request(`https://${MCP_HOST}/portal/queue`),
   );
   assert.equal(res.status, 200);
   const html = await res.text();

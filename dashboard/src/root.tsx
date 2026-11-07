@@ -1,4 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import { ErrorPage, errorTitle } from "capsomer/react/error-page";
 import { themeScript } from "capsomer/theme-server";
 import { StrictMode, useState, type ReactNode } from "react";
 import {
@@ -7,7 +8,6 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-  isRouteErrorResponse,
   useLocation,
   useRouteLoaderData,
   type LoaderFunctionArgs,
@@ -27,6 +27,7 @@ import "capsomer/site-capsid-portal.css";
 import "capsomer/status.css";
 import "capsomer/panel.css";
 import "capsomer/empty.css";
+import "capsomer/error-page.css";
 import "capsomer/skeleton.css";
 import "capsomer/dialog.css";
 import "capsomer/popover.css";
@@ -120,29 +121,22 @@ export const links = () =>
     crossOrigin: "anonymous" as const,
   }));
 
-export function meta() {
-  return [{ title: "Capsid Portal" }];
+export function meta({ error }: { error?: unknown }) {
+  return [{ title: error ? errorTitle(error, "Capsid Portal") : "Capsid Portal" }];
 }
 
-// An address no page answers, or a page that failed to render: said in the page, with the way home.
+// An address no page answers, or a page that failed to render: Capsomer's shared error page, so the
+// words, the noindex and the way out match every other site's. Only development shows the thrown
+// message; the old boundary printed it to any visitor.
 export function ErrorBoundary({ error }: { error: unknown }) {
   const base = pageBase(useLocation().pathname);
-  const missing = isRouteErrorResponse(error) && error.status === 404;
   return (
-    <main className="page">
-      <div className="callout crit" role="alert">
-        <h1>{missing ? "No such page" : "The Portal failed to render"}</h1>
-        <p>
-          {missing
-            ? "Nothing in Capsid Portal is at this address."
-            : error instanceof Error
-              ? error.message
-              : "An unexpected error."}
-        </p>
-        <a className="btn" href={base ? `${base}/` : "/"}>
-          Go to Needs you
-        </a>
-      </div>
-    </main>
+    <ErrorPage
+      error={error}
+      home={base ? `${base}/` : "/"}
+      homeLabel="Go to Needs you"
+      className="page"
+      dev={import.meta.env.DEV}
+    />
   );
 }

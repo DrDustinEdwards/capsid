@@ -4,9 +4,10 @@ import {
   reportingEndpoints,
   scriptHash,
 } from "@dustinedwards/site-runtime/csp";
-import { applyHeaderSet, buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
+import { buildSecurityHeaders } from "@dustinedwards/site-runtime/headers";
 import { CONSENT_STYLE } from "@dustinedwards/site-runtime/mcp-login";
 import { OWNER_STYLE } from "@dustinedwards/site-runtime/owner-page";
+import { pageSecurity } from "@dustinedwards/site-runtime/page-headers";
 import { capsidMcp, capsidPortal } from "@dustinedwards/site-runtime/sites";
 import { MCP_HOST } from "./mcp-host";
 import { PORTAL_HOST } from "./portal-host";
@@ -91,8 +92,16 @@ export function securityHeadersFor(host: string): Record<string, string> {
   };
 }
 
-export function withSecurityHeaders(response: Response, host: string = MCP_HOST): Response {
-  // A route's own value wins (overwrite: false). applyHeaderSet also gives a text or XML Content-Type with no charset
-  // `charset=utf-8` (H2): the assets binding serves the Portal's page and scripts without one.
-  return applyHeaderSet(response, securityHeadersFor(host), { overwrite: false });
+// site-runtime's pageSecurity applies each host's set, the Reporting-Endpoints header and the default policy; a route's
+// own value wins, and a text or XML Content-Type with no charset gets `charset=utf-8` (H2): the assets binding serves
+// the Portal's page and scripts without one. Nothing is staged and no response carries a nonce here: the Portal's page
+// brings its own policy and nonce (src/dashboard-csp.ts).
+const pages = (set: Readonly<Record<string, string>>) =>
+  pageSecurity({ set, policy: () => DEFAULT_CSP, staged: false, reportPath: REPORT_URL });
+const MCP_PAGES = pages(MCP_SET);
+const PORTAL_PAGES = pages(PORTAL_SET);
+
+export function withSecurityHeaders(response: Response, request: Request): Response {
+  const host = new URL(request.url).hostname;
+  return (host === PORTAL_HOST ? PORTAL_PAGES : MCP_PAGES).withSecurityHeaders(response, request);
 }

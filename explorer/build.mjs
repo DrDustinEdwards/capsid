@@ -26,6 +26,7 @@ import { parseArgs } from "node:util";
 
 import { webManifest } from "@drdustinedwards/site-helpers/icons";
 import { llmsDocument } from "@drdustinedwards/site-helpers/llms";
+import { writeMarkdownCopies } from "@drdustinedwards/site-helpers/markdown-files";
 import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
@@ -394,6 +395,10 @@ export async function build({
     }),
   );
   writeFileSync(join(out, `${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
+  // Each page's Markdown copy (/tools.md, or Accept: text/markdown) and llms-full.txt, from the pages just written; the
+  // Worker serves them as files (serveMarkdownCopies, worker.mjs).
+  // The search page is not in the sitemap, so it gets no copy.
+  await writeMarkdownCopies({ dir: out, origin: ORIGIN, skip: (path) => path === "/search" });
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the
   // explorer's own files changed. Written last, so the hash cannot cover itself.
