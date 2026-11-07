@@ -13,7 +13,6 @@ import { isMissingRowAbort, requireJobUnchanged } from "./store-guards";
 import {
   outcomeFrom,
   outcomeStatement,
-  readJobUsage,
   namedPrUrls,
   verifyEvidence,
   type JobEvidence,
@@ -279,16 +278,7 @@ async function holderTransition(
         ),
       );
     }
-    // Cost, tokens and active time from the job's sessions' telemetry, NULL when none
-    // reached Capsid (src/ops-otlp.ts). Points exported after this read stay in
-    // session_usage and are not added to the row, which is written once.
-    const row = outcomeFrom(
-      job,
-      verdict,
-      now,
-      await readJobUsage(env.DB, job.id),
-      claimed?.model_id ?? null,
-    );
+    const row = outcomeFrom(job, verdict, now, undefined, claimed?.model_id ?? null);
     outcome = { row, notes: verdict.notes };
     statements.push(outcomeStatement(env.DB, row));
     // One row per pull request the evidence named, in the same batch as the outcome.

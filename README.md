@@ -109,10 +109,6 @@ _Portal job queue with a job's detail drawer open, rendered from sample data._
 
 The watcher, which runs on the tick, reads each registered site's health route, CI status, deploys and live responses ([docs/health-format.md](docs/health-format.md), [docs/live-checks.md](docs/live-checks.md)). Search performance is read from Google Search Console and Bing Webmaster Tools ([docs/search-console.md](docs/search-console.md), [docs/bing-webmaster.md](docs/bing-webmaster.md)).
 
-### Session telemetry
-
-Claude Code sessions can send hook events to `/ops/hooks` and OpenTelemetry metrics to `/ops/otlp/v1/*`. Capsid keeps per-session summaries and per-job cost and token totals; it does not store prompts, responses or tool content ([docs/hooks.md](docs/hooks.md), [docs/telemetry.md](docs/telemetry.md)).
-
 ### Public data
 
 Once a day the Worker builds a public system model and a set of aggregate statistics, after a privacy filter, and serves them without authentication ([docs/public-data.md](docs/public-data.md)). Current figures are available at [mcp.dustinedwards.info/public/stats/v1.json](https://mcp.dustinedwards.info/public/stats/v1.json). The system explorer is built from these documents ([explorer/README.md](explorer/README.md)).
@@ -225,8 +221,6 @@ The full pre-push sequence is in [docs/bootstrap.md](docs/bootstrap.md#11-checks
 - [docs/bootstrap.md](docs/bootstrap.md): installation, agent minting, switches and pre-push checks.
 - [docs/auth.md](docs/auth.md): authentication, scopes, roles, co-owners and endpoints.
 - [docs/repo-access.md](docs/repo-access.md): the GitHub App and repository resolution.
-- [docs/hooks.md](docs/hooks.md): Claude Code hook events.
-- [docs/telemetry.md](docs/telemetry.md): session and job telemetry.
 
 **Jobs and agents**
 

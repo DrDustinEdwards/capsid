@@ -146,7 +146,6 @@ test("the scan finds the exports at all, so nothing here can pass by reading not
 // and removing one means editing this list.
 // Keyed by export name, not by file, so a module move does not change the set.
 const KNOWN_SUSPECTS = [
-  "aggregate",
   "HEALTH_PROBE_NS",
   "HEALTH_PROBE_PATH",
   // The Durable Object class wrangler binds by name (TOOL_CALL_LOG), which is its caller.

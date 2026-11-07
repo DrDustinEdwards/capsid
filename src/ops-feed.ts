@@ -23,7 +23,6 @@ import { OPEN_JOB_STATUSES } from "./jobs-schema";
 import { readSiteConfig } from "./ops-sites";
 import { readPackageConfig } from "./ops-packages";
 import { readSnapshot } from "./ops-snapshot";
-import { INCIDENT_FAILURES, NEEDS_INPUT_INCIDENT_MS } from "./ops-hooks";
 import type {
   OpsAgent,
   OpsAwaitingSeat,
@@ -32,7 +31,6 @@ import type {
   OpsJobStatus,
   OpsLive,
   OpsPr,
-  OpsSession,
   OpsUptime,
   OpsUptimeCounts,
 } from "./ops-types/feed";
@@ -65,13 +63,12 @@ import { MINUTE_MS, DAY_MS } from "./time";
 //
 // READS PER FEED REQUEST, stated because the dashboard polls this and a per-namespace
 // loop would multiply them. Asserted by test-integration/ops-feed.test.ts, which counts.
-//   D1, 14 statements plus one per TASKS entry (18 today, so 32):
+//   D1, 13 statements plus one per TASKS entry (18 today, so 31):
 //     1  jobs: every open job and every job that ended in the last 24 hours
 //     3  agentSummaries: the inventory, then loadRecordRows' two grouped reads
 //     1  job_outcome_prs in the last 7 days
 //     1  ops_sites: the site configuration, every row
 //     1  ops_packages: the package configuration, every row
-//     1  agent_sessions: live sessions from the hook receiver, at most 50
 //    18  task_runs: each scheduled task's newest runs, one keyed read per task in
 //        one batch (src/task-runs.ts, TASKS)
 //     1  watcher_findings: the open findings that post no job (src/watcher-digest.ts)
@@ -94,7 +91,7 @@ export const OPS_REFRESH_PATH = "/portal/api/ops/refresh";
 export const OPS_RETURN_TO = PORTAL_PREFIX;
 
 // D1 statements: one per task, and 14 more, one of them the signed policy's read (liveMergePolicy).
-export const OPS_FEED_READS = { d1: 14 + TASKS.length, kv: 10 } as const;
+export const OPS_FEED_READS = { d1: 13 + TASKS.length, kv: 10 } as const;
 
 // The uptime target the Portal shows each site against (area 8, U4).
 const UPTIME_TARGET = 0.999;
@@ -170,8 +167,6 @@ export const OPS_REFRESH_HEADER = "X-Capsid-Ops";
 const OPS_REFRESH_HEADER_VALUE = "refresh";
 
 const WEEK_MS = 7 * DAY_MS;
-// The live-sessions read's bound.
-const SESSION_ROWS_LIMIT = 50;
 
 // D1's datetime('now') text form, for comparing against columns written by default.
 const sqliteTime = (at: Date): string => at.toISOString().slice(0, 19).replace("T", " ");
@@ -397,54 +392,6 @@ async function livePrs(db: D1Database, now: Date): Promise<OpsPr[]> {
   }));
 }
 
-// The row as D1 holds it: needs_input is SQLite's 0 or 1, and the incident is decided
-// when the feed is read.
-export type SessionFeedRow = Omit<OpsSession, "needs_input" | "incident"> & { needs_input: number };
-
-/** A session as the feed shows it, with its incident decided now: a failure a person
- *  must act on, or input awaited for more than ten minutes (src/ops-hooks.ts). */
-export function opsSessionFrom(row: SessionFeedRow, now: Date): OpsSession {
-  const needsInput = row.needs_input === 1;
-  const waitedMs = now.getTime() - Date.parse(isoTime(row.last_event_at));
-  const incident =
-    row.last_failure !== null && INCIDENT_FAILURES.includes(row.last_failure)
-      ? "failure"
-      : needsInput && waitedMs > NEEDS_INPUT_INCIDENT_MS
-        ? "waiting"
-        : null;
-  return {
-    session_id: row.session_id,
-    agent: row.agent,
-    job_id: row.job_id,
-    namespace: row.namespace,
-    source: row.source,
-    model: row.model,
-    permission_mode: row.permission_mode,
-    started_at: isoTime(row.started_at),
-    last_event_at: isoTime(row.last_event_at),
-    last_event: row.last_event,
-    last_notification_type: row.last_notification_type,
-    needs_input: needsInput,
-    last_failure: row.last_failure,
-    incident,
-  };
-}
-
-// Through agent_sessions_live (ended_at, last_event_at): the NULL ended_at and the
-// range on last_event_at are both on the index, which also gives the order.
-async function liveSessions(db: D1Database, now: Date): Promise<OpsSession[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT session_id, agent, job_id, namespace, source, model, permission_mode, started_at, last_event_at, last_event,
-              last_notification_type, needs_input, last_failure
-       FROM agent_sessions WHERE ended_at IS NULL AND last_event_at >= ?1
-       ORDER BY last_event_at DESC LIMIT ?2`,
-    )
-    .bind(new Date(now.getTime() - DAY_MS).toISOString(), SESSION_ROWS_LIMIT)
-    .all<SessionFeedRow>();
-  return (results ?? []).map((row) => opsSessionFrom(row, now));
-}
-
 // The policy as the tick loads it. A throw is reported as not loading, not raised: one
 // unreadable policy must not take the whole live feed down.
 async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
@@ -474,7 +421,6 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     awaitingRaw,
     mergeSafety,
     sites,
-    sessions,
     packages,
     overnight,
     inbox,
@@ -487,7 +433,6 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     env.APP_KV.get(AWAITING_SEAT_KEY),
     readSafetyReport(env.APP_KV),
     readSiteConfig(env.DB),
-    liveSessions(env.DB, now),
     readPackageConfig(env.DB),
     overnightState(env),
     gatherInbox(env, now, null),
@@ -503,7 +448,6 @@ async function opsLive(env: Env, now: Date): Promise<OpsLive> {
     merge_safety: mergeSafety,
     merge_policy: mergePolicy,
     overnight,
-    sessions,
     namespaces: APP_ROSTER.map((name) => ({ name })),
     sites,
     packages,

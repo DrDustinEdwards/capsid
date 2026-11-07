@@ -38,7 +38,7 @@ Opening VS Code tabs yourself and asking Claude Code to chain jobs overnight is 
 - **finished:** each job recorded in the window, with its usage.
 - **blocked:** each job blocked in the window, the reason and command as the driver wrote them (cut to 600 characters), and any pull request named in them.
 - **pull_requests_ready:** pull requests recorded against finished jobs that are not merged (`open` is not merged, open or closed; `unchecked` was never read), plus pull requests named in a blocked job's summary.
-- **usage per job** is the telemetry on the outcome row if there is one, else what the agent reported in `claim.usage` (PR 240), else null. The two are never added. `totals` keeps them apart and counts the jobs that reported nothing. Telemetry is empty until the exporter in `docs/telemetry.md` is turned on, so until then the numbers are what agents reported.
+- **usage per job** is what the agent reported in `claim.usage` (PR 240), else null. The outcome row's telemetry columns are always empty since the receiver was removed (2026-11-07), though the digest still reads them.
 - Each read is bounded; one that hit its bound is named in `truncated`.
 
 ## The overnight switch

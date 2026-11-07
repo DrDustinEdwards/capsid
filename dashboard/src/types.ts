@@ -25,7 +25,6 @@ export type {
   OpsAwaitingSeat,
   OpsFeed,
   OpsJob,
-  OpsSession,
   OpsTask,
   OpsTaskRun,
 } from "../../src/ops-types/feed";

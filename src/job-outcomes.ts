@@ -54,9 +54,8 @@ export interface JobOutcomeRow {
   result_kind: OutcomeResultKind;
   verified: string;
   recorded_at: string;
-  // What the job's Claude Code sessions reported by OpenTelemetry (migrations/0025),
-  // summed from session_usage when the row is written. NULL when no telemetry for the
-  // job reached Capsid, never 0.
+  // Usage columns (migrations/0025). Nothing fills them since the telemetry receiver was
+  // removed, so they stay NULL, never 0.
   cost_usd: number | null;
   tokens_input: number | null;
   tokens_output: number | null;
@@ -89,64 +88,6 @@ const NO_USAGE: JobUsage = {
   tokens_cache_creation: null,
   active_seconds: null,
 };
-
-const TOKEN_COLUMN: Record<
-  string,
-  "tokens_input" | "tokens_output" | "tokens_cache_read" | "tokens_cache_creation"
-> = {
-  input: "tokens_input",
-  output: "tokens_output",
-  cacheRead: "tokens_cache_read",
-  cacheCreation: "tokens_cache_creation",
-};
-
-/**
- * The per-job totals from session_usage rows (metric, kind, total), which is what
- * readJobUsage selects. Per metric family: a family with no row at all stays NULL
- * (nothing was reported); once a family has a row, a type it lacks is 0, because
- * Claude Code exports no point for a counter that did not move.
- */
-export function usageFromTotals(
-  rows: ReadonlyArray<{ metric: string; kind: string; total: number | null }>,
-): JobUsage {
-  const usage: JobUsage = { ...NO_USAGE };
-  const families = new Set(rows.map((r) => r.metric));
-  if (families.has("claude_code.cost.usage")) usage.cost_usd = 0;
-  if (families.has("claude_code.token.usage")) {
-    for (const column of Object.values(TOKEN_COLUMN)) usage[column] = 0;
-  }
-  if (families.has("claude_code.active_time.total")) usage.active_seconds = 0;
-  for (const row of rows) {
-    const total = Number(row.total ?? 0);
-    if (!Number.isFinite(total)) continue;
-    if (row.metric === "claude_code.cost.usage") usage.cost_usd = (usage.cost_usd ?? 0) + total;
-    else if (row.metric === "claude_code.active_time.total")
-      usage.active_seconds = (usage.active_seconds ?? 0) + total;
-    else if (row.metric === "claude_code.token.usage" && Object.hasOwn(TOKEN_COLUMN, row.kind)) {
-      const column = TOKEN_COLUMN[row.kind];
-      usage[column] = (usage[column] ?? 0) + total;
-    }
-  }
-  // The token columns are INTEGER.
-  for (const column of Object.values(TOKEN_COLUMN)) {
-    const value = usage[column];
-    if (value !== null) usage[column] = Math.round(value);
-  }
-  return usage;
-}
-
-/** The job's telemetry totals from session_usage (src/ops-otlp.ts writes it). */
-export async function readJobUsage(db: D1Database, jobId: string): Promise<JobUsage> {
-  const { results } = await db
-    .prepare(
-      `SELECT metric, kind, SUM(value) AS total FROM session_usage
-       WHERE job_id = ?1 AND metric IN ('claude_code.cost.usage', 'claude_code.token.usage', 'claude_code.active_time.total')
-       GROUP BY metric, kind`,
-    )
-    .bind(jobId)
-    .all<{ metric: string; kind: string; total: number | null }>();
-  return usageFromTotals(results ?? []);
-}
 
 const NOTHING_VERIFIED: VerifiedFields = {
   prs_opened: false,
@@ -488,7 +429,7 @@ export async function verifyEvidence(
   return verdict;
 }
 
-// usage: the job's telemetry totals (readJobUsage). Omitted is no telemetry: NULL.
+// usage: omitted is no usage: NULL.
 // actualModel: the model_id the session reported in its claim, or null when it reported none.
 export function outcomeFrom(
   job: JobRow,

@@ -269,7 +269,6 @@ Optional parts stay hidden or inert until configured:
 
 - With no row in `ops_sites` that has an origin, nothing is probed and Health shows no Sites section.
 - Without `CF_OPS_TOKEN`, deploy and error columns say the Cloudflare read is not configured.
-- The telemetry receiver (`/ops/otlp/v1/*`, docs/telemetry.md) and the hook receiver (`/ops/hooks`, docs/hooks.md) are live but store nothing until a Claude Code session is configured to send to them with a key.
 - Auto-merge is off by default (section 10).
 
 ## 10. Switches

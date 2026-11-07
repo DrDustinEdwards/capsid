@@ -220,7 +220,6 @@ const FEED: OpsFeedData = {
     merge_safety: null,
     merge_policy: { loads: false, reason: "sample" },
     overnight: { mode: "off", decision: null },
-    sessions: [],
     sites: [],
     packages: [],
     namespaces: [{ name: "sample" }],

@@ -160,7 +160,7 @@ export function taskRunStatements(
       .bind(task, started.toISOString(), finished.toISOString(), outcome, oneLine(reason)),
     // The oldest PRUNE_BATCH rows by id, of which those past retention go: rows are
     // appended in time order, so this stays a short index walk however large the
-    // table is (the same prune as session_events, src/ops-hooks.ts).
+    // table is.
     db
       .prepare(
         `DELETE FROM task_runs WHERE id IN (SELECT id FROM task_runs ORDER BY id LIMIT ?1) AND finished_at < ?2`,
