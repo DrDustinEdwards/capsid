@@ -12,8 +12,8 @@ interface __BaseEnv_Env {
 	GITHUB_APP_CLIENT_ID: "Iv23lik2O8SPPksxbc6O";
 	ALERT_FROM: "capsid@dustinedwards.info";
 	EMAIL_ROUTING: "on";
-	RATE_LIMITER: DurableObjectNamespace<import("./src/index").RateLimiter>;
-	TOOL_CALL_LOG: DurableObjectNamespace<import("./src/index").ToolCallLog>;
+	RATE_LIMITER: DurableObjectNamespace /* RateLimiter */;
+	TOOL_CALL_LOG: DurableObjectNamespace /* ToolCallLog */;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
