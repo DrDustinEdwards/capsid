@@ -7,6 +7,7 @@
 // private, no-store, and so does a page asked for with a cookie. Reports go to Capsid's /csp-report
 // (the entry's reportOrigin), so the explorer receives none; pages end in a slash, which the asset
 // server's auto-trailing-slash keeps, so there is no canonical redirect.
+import { serveMarkdownCopies } from "@drdustinedwards/site-helpers/llms";
 import { TDM_RESERVATION_HEADERS } from "@drdustinedwards/site-helpers/robots";
 import { preloads } from "@dustinedwards/site-runtime/preload";
 import { capsid } from "@dustinedwards/site-runtime/sites";
@@ -22,7 +23,7 @@ export const PAGE_PRELOADS = preloads([
   { href: "/fonts/inter-latin-wght-normal.woff2", as: "font", type: "font/woff2" },
 ]);
 
-export default staticSite({
+const site = staticSite({
   site: capsid,
   siteName: "Capsid",
   headers: TDM_RESERVATION_HEADERS,
@@ -30,3 +31,6 @@ export default staticSite({
   reportPath: null,
   canonical: false,
 });
+
+// Each page's Markdown copy and llms-full.txt are files build.mjs writes; serveMarkdownCopies answers them.
+export default { fetch: serveMarkdownCopies(site.fetch, { origin: capsid.origin }) };
