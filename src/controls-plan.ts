@@ -32,7 +32,13 @@ import { MAX_RESUME_NOTE } from "./limits";
 import { planResume } from "./merge-safety";
 import { planLift } from "./merge-units";
 import { validatePackage, readPackageRow, describePackage } from "./ops-packages";
-import { validateSite, readSiteRow, describeSite, type SiteInput } from "./ops-sites";
+import {
+  validateSite,
+  readSiteRow,
+  describeSite,
+  owningNamespace,
+  type SiteInput,
+} from "./ops-sites";
 import type { PortalAction } from "./ops-types/portal";
 import {
   overnightValueRefusal,
@@ -461,14 +467,19 @@ export async function planAction(
       const checked = validateSite(p);
       if (!checked.ok) return refused(checked.refusal);
       const site = checked.site;
-      const registered = await env.DB.prepare(
-        "SELECT namespace FROM namespaces WHERE namespace = ?1",
+      // A registered namespace, or a further host of one (`<namespace>-<host>`, such as
+      // carrel-mcp): the same rule the watcher's site-map check reads (owningNamespace).
+      const { results } = await env.DB.prepare("SELECT namespace FROM namespaces").all<{
+        namespace: string;
+      }>();
+      if (
+        !owningNamespace(
+          site.namespace,
+          results.map((r) => r.namespace),
+        )
       )
-        .bind(site.namespace)
-        .first<{ namespace: string }>();
-      if (!registered)
         return refused(
-          `'${site.namespace}' is not a registered namespace. Register it first; a site row for an unregistered namespace is drift the watcher reports.`,
+          `'${site.namespace}' is neither a registered namespace nor a further host of one (<namespace>-<host>). Register it first; a site row for an unregistered namespace is drift the watcher reports.`,
         );
       const existing = await readSiteRow(env.DB, site.namespace);
       if (existing)

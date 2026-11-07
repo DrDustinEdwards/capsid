@@ -1189,10 +1189,11 @@ function plan(
     }
     case "site_add": {
       const site = validateSite(params);
-      if (!registered().has(site.namespace))
+      const known = [...registered()];
+      if (!known.some((ns) => site.namespace === ns || site.namespace.startsWith(ns + "-")))
         throw new Refusal(
           400,
-          `'${site.namespace}' is not a registered namespace. Register it first; a site row for an unregistered namespace is drift the watcher reports.`,
+          `'${site.namespace}' is neither a registered namespace nor a further host of one (<namespace>-<host>). Register it first; a site row for an unregistered namespace is drift the watcher reports.`,
         );
       const existing = f.live.sites.find((s) => s.namespace === site.namespace);
       if (existing)
