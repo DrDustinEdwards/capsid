@@ -16,8 +16,6 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 // scanner-rule: quality audit 6.6 and 1.1, one definition imported everywhere
 test("every secret compare goes through safeEqual, in every file", () => {
   // The specific compares, still where they belong.
-  const auth = sourceFiles().find((f) => f.name === "auth.ts")!.text;
-  assert.ok(auth.includes("await safeEqual(candidate, entry)"));
   const accessLogin = sourceFiles().find((f) => f.name === "access-login.ts")!.text;
   assert.match(accessLogin, /await safeEqual\(await sha256Hex\(stateCookie\), signIn\.binding\)/);
 
@@ -55,7 +53,7 @@ test("every safeEqual, isAdminEmail and adminGrantEmail call is awaited, in ever
       )
       .filter((c) => !c.text.startsWith("export async function ")),
   );
-  assert.ok(calls.length >= 16, `found only ${calls.length} calls`);
+  assert.ok(calls.length >= 15, `found only ${calls.length} calls`);
   assert.deepEqual(
     calls.filter((c) => !c.awaited).map((c) => `src/${c.file}:${c.line} ${c.text}`),
     [],

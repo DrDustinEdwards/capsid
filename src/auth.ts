@@ -1,4 +1,7 @@
-import { safeEqual } from "@dustinedwards/site-runtime/compare";
+import {
+  adminEmails,
+  isAdminEmail as siteRuntimeIsAdminEmail,
+} from "@dustinedwards/site-runtime/access";
 import { toHex } from "@dustinedwards/site-runtime/encoding";
 import { hostCookie } from "@dustinedwards/site-runtime/headers";
 
@@ -46,29 +49,20 @@ export function getCookie(request: Request, name: string): string | null {
 
 type AdminEnv = { ADMIN_EMAIL?: string; CO_OWNER_EMAILS?: string };
 
-// The admin, by the email Access verified: ADMIN_EMAIL, the primary owner, or an entry
-// of CO_OWNER_EMAILS (comma separated). Each entry is trimmed and compared exactly, with
-// no case folding; empty entries are skipped. An unset ADMIN_EMAIL admits nobody, a
-// co-owner included, so losing the primary owner's secret closes both logins. Both
-// secrets are set only in Cloudflare: nothing inside Capsid can change who is admin.
+// The admin, by the email Access verified: ADMIN_EMAIL, the main admin, or an entry of
+// CO_OWNER_EMAILS (comma separated). The roster is site-runtime's (./access, the one admin model
+// of every site): addresses are trimmed and compared in lower case, empty entries are skipped.
+// An unset ADMIN_EMAIL admits nobody, a co-owner included, so losing the main admin's secret
+// closes both logins. Both secrets are set only in Cloudflare: nothing inside Capsid can change
+// who is admin. Async so every call site keeps its await (test/source-conventions.test.ts).
 export async function isAdminEmail(env: AdminEnv, email: string): Promise<boolean> {
-  const candidate = email.trim();
-  let admitted = false;
-  for (const entry of adminEmailList(env)) {
-    if (await safeEqual(candidate, entry)) admitted = true;
-  }
-  return admitted;
+  return siteRuntimeIsAdminEmail(env, email);
 }
 
-// The admins as a list: ADMIN_EMAIL and every CO_OWNER_EMAILS entry, trimmed, empty
-// entries skipped, and nobody while ADMIN_EMAIL is unset. isAdminEmail checks against it,
-// and the Access drift check reads it hashed (src/index.ts, ADMIN_LIST_PATH).
+// The admins as a list: ADMIN_EMAIL and every CO_OWNER_EMAILS entry, and nobody while
+// ADMIN_EMAIL is unset. The Access drift check reads it hashed (src/index.ts, ADMIN_LIST_PATH).
 export function adminEmailList(env: AdminEnv): string[] {
-  const admin = (env.ADMIN_EMAIL ?? "").trim();
-  if (!admin) return [];
-  return [admin, ...(env.CO_OWNER_EMAILS ?? "").split(",")]
-    .map((raw) => raw.trim())
-    .filter(Boolean);
+  return adminEmails(env);
 }
 
 // A grant's props on /mcp, checked on every request: only a grant whose email Access
