@@ -71,8 +71,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      # The no AI trailer check is checks.yml (devkit's reusable workflow), and the
-      # no-bloat report is no-bloat.yml.
+      # The no AI trailer check, no-bloat and the Worker bundle size are checks.yml
+      # (devkit's pr.yml, one job per pull request).
 
       # Verified on a fresh clone 2026-08-11: npm ci, npm run check and npm test all
       # succeed with no wrangler.jsonc present, because tsconfig pulls its types from
@@ -169,11 +169,13 @@ jobs:
   # (test/conformance/entry.ts) and the real door with its OAuth provider (src/index.ts)
   # under wrangler dev, each scenario held to its recorded count, then the 401 challenge,
   # CIMD and the /register allowlist. Its own job, beside checks, so it adds no
-  # wall-clock time; not on the schedule, for the reason checks is not.
+  # wall-clock time; not on the schedule, for the reason checks is not, and not on a
+  # push to master: the merge was checked as a pull request and no deploy needs it
+  # (devkit README, "No second run on main").
   conformance:
     name: conformance
     runs-on: ubuntu-latest
-    if: github.event_name != 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
