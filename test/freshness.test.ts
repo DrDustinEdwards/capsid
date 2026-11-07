@@ -66,7 +66,10 @@ test("a stamp in the future FAILS: a negative age is not fresh", () => {
   assert.equal(r.outcome, "unknown");
   assert.match(r.detail, /24h in the future/);
   // Inside the one hour clock skew tolerance it still passes.
-  assert.equal(checkBackupFreshness(health("2026-09-08T12:30:00Z"), { assert: true, now: NOW }).passed, true);
+  assert.equal(
+    checkBackupFreshness(health("2026-09-08T12:30:00Z"), { assert: true, now: NOW }).passed,
+    true,
+  );
 });
 
 test("a non-scheduled run SKIPS, says so, and never reports a pass as an assertion", () => {
@@ -86,10 +89,24 @@ test("the age is computed here, and a clock disagreement is reported", () => {
 });
 
 test("verify-live wires the gate, and CI turns the assertion on for scheduled runs", () => {
-  const verify = readFileSync(join(import.meta.dirname, "..", "scripts", "verify-live.mjs"), "utf8");
+  const verify = readFileSync(
+    join(import.meta.dirname, "..", "scripts", "verify-live.mjs"),
+    "utf8",
+  );
   assert.match(verify, /checkBackupFreshness/, "verify-live does not run the freshness check");
-  assert.match(verify, /ASSERT_BACKUP_FRESH/, "verify-live has no way to be told this is a scheduled run");
-  const ci = readFileSync(join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"), "utf8");
+  assert.match(
+    verify,
+    /ASSERT_BACKUP_FRESH/,
+    "verify-live has no way to be told this is a scheduled run",
+  );
+  const ci = readFileSync(
+    join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"),
+    "utf8",
+  );
   const line = ci.split("\n").find((l) => l.includes("ASSERT_BACKUP_FRESH")) ?? "";
-  assert.match(line, /schedule/, "CI never sets ASSERT_BACKUP_FRESH on the scheduled run, so the gate always skips");
+  assert.match(
+    line,
+    /schedule/,
+    "CI never sets ASSERT_BACKUP_FRESH on the scheduled run, so the gate always skips",
+  );
 });

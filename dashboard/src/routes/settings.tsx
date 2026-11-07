@@ -3,4 +3,5 @@ import { Settings } from "../views/Settings";
 
 export const loader = viewLoader("settings");
 export const clientLoader = browserLoader;
-export default viewPage(Settings);
+const SettingsPage = viewPage(Settings);
+export default SettingsPage;

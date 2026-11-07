@@ -25,7 +25,9 @@ export function portalNow(clientNow: number, skew: number, newestServerRead: num
 // Milliseconds from a D1 datetime('now') value ("2026-09-28 11:00:00", UTC with no zone
 // mark), which Date.parse would read as local time. An ISO string passes through.
 export function msSql(t: string): number {
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(t) ? Date.parse(`${t.replace(" ", "T")}Z`) : Date.parse(t);
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(t)
+    ? Date.parse(`${t.replace(" ", "T")}Z`)
+    : Date.parse(t);
 }
 
 function span(a: number): string {
@@ -53,11 +55,22 @@ export function utc(t: number): string {
 // An exact time for a panel or a detail field (ruled 2026-09-30, DECIDE 13): the
 // viewer's own zone, named, with UTC beside it, and the ISO form for a <time> element.
 // Rows keep relative times only.
-const LOCAL = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+const LOCAL = new Intl.DateTimeFormat(undefined, {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZoneName: "short",
+});
 
 export function exactTime(t: number): { iso: string; local: string; utc: string } {
   if (!Number.isFinite(t)) return { iso: "", local: "an unreadable time", utc: "" };
-  return { iso: new Date(t).toISOString(), local: LOCAL.format(t), utc: utc(t).replace("Z", " UTC") };
+  return {
+    iso: new Date(t).toISOString(),
+    local: LOCAL.format(t),
+    utc: utc(t).replace("Z", " UTC"),
+  };
 }
 
 export function pct(x: number | null, dp = 2): string {
@@ -70,7 +83,10 @@ export function bytes(n: number): string {
   const units = ["KB", "MB", "GB", "TB"];
   let v = n / 1024;
   let i = 0;
-  while (v >= 1024 && i < units.length - 1) (v /= 1024), i++;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
   return `${v >= 100 || Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
 }
 

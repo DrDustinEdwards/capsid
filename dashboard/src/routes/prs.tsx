@@ -3,4 +3,5 @@ import { PullRequests } from "../views/Ci";
 
 export const loader = viewLoader("prs");
 export const clientLoader = browserLoader;
-export default viewPage(PullRequests);
+const PullRequestsPage = viewPage(PullRequests);
+export default PullRequestsPage;

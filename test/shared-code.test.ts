@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { behindBy, gitSpec, latestTag, presetSpec, releaseDecision, rootManifest, sharedCodeView, type ReleaseRead, type SharedConfig } from "../src/shared-code.ts";
+import {
+  behindBy,
+  gitSpec,
+  latestTag,
+  presetSpec,
+  releaseDecision,
+  rootManifest,
+  sharedCodeView,
+  type ReleaseRead,
+  type SharedConfig,
+} from "../src/shared-code.ts";
 
 // The Shared code view's rules (job_584b4e7f2824), on what was read rather than on GitHub.
 // Sample data only: example-org repos, namespace "sample".
@@ -9,16 +19,34 @@ const NOW = new Date("2026-10-10T07:00:00.000Z");
 const TAGS = ["v0.1.0", "v0.2.0", "v0.3.0", "v0.10.0", "latest", "v0.3.0-rc.1"];
 
 test("a git dependency is read from every spelling npm writes, with its tag", () => {
-  assert.deepEqual(gitSpec("github:Example-Org/Kit#v0.2.0"), { repo: "example-org/kit", ref: "v0.2.0" });
-  assert.deepEqual(gitSpec("git+ssh://git@github.com/example-org/kit.git#v0.2.0"), { repo: "example-org/kit", ref: "v0.2.0" });
-  assert.deepEqual(gitSpec("git+https://github.com/example-org/kit.git"), { repo: "example-org/kit", ref: null });
-  assert.deepEqual(gitSpec("https://github.com/example-org/kit#v1.0.0"), { repo: "example-org/kit", ref: "v1.0.0" });
+  assert.deepEqual(gitSpec("github:Example-Org/Kit#v0.2.0"), {
+    repo: "example-org/kit",
+    ref: "v0.2.0",
+  });
+  assert.deepEqual(gitSpec("git+ssh://git@github.com/example-org/kit.git#v0.2.0"), {
+    repo: "example-org/kit",
+    ref: "v0.2.0",
+  });
+  assert.deepEqual(gitSpec("git+https://github.com/example-org/kit.git"), {
+    repo: "example-org/kit",
+    ref: null,
+  });
+  assert.deepEqual(gitSpec("https://github.com/example-org/kit#v1.0.0"), {
+    repo: "example-org/kit",
+    ref: "v1.0.0",
+  });
   assert.deepEqual(gitSpec("example-org/kit#v1.0.0"), { repo: "example-org/kit", ref: "v1.0.0" });
   assert.equal(gitSpec("^1.2.3"), null);
   assert.equal(gitSpec("file:../kit"), null);
   assert.equal(gitSpec("example-org/kit"), null, "a bare a/b is not a repo");
-  assert.deepEqual(presetSpec("github>example-org/devkit"), { repo: "example-org/devkit", ref: null });
-  assert.deepEqual(presetSpec("github>example-org/devkit:node#v2.0.0"), { repo: "example-org/devkit", ref: "v2.0.0" });
+  assert.deepEqual(presetSpec("github>example-org/devkit"), {
+    repo: "example-org/devkit",
+    ref: null,
+  });
+  assert.deepEqual(presetSpec("github>example-org/devkit:node#v2.0.0"), {
+    repo: "example-org/devkit",
+    ref: "v2.0.0",
+  });
   assert.equal(presetSpec("config:recommended"), null);
 });
 
@@ -31,27 +59,75 @@ test("the newest release is by version, not by text, and behind counts the relea
   assert.equal(behindBy(null, TAGS), null);
 });
 
-const KIT: SharedConfig = { name: "Kit", repo: "example-org/kit", formerly: ["example-org/old-kit"], local_paths: ["sample:packages/kit", "sample-b:packages/kit"] };
-const DEVKIT: SharedConfig = { name: "devkit", repo: "example-org/devkit", formerly: [], local_paths: [] };
+const KIT: SharedConfig = {
+  name: "Kit",
+  repo: "example-org/kit",
+  formerly: ["example-org/old-kit"],
+  local_paths: ["sample:packages/kit", "sample-b:packages/kit"],
+};
+const DEVKIT: SharedConfig = {
+  name: "devkit",
+  repo: "example-org/devkit",
+  formerly: [],
+  local_paths: [],
+};
 
-function app(namespace: string, deps: Record<string, string>, blobs: string[], presets: string[] = [], lockVersions: Record<string, string> = {}) {
-  return { namespace, name: namespace.toUpperCase(), blobs: new Set(blobs), manifests: [{ path: "package.json", deps, lockVersions }], presets, error: null };
+function app(
+  namespace: string,
+  deps: Record<string, string>,
+  blobs: string[],
+  presets: string[] = [],
+  lockVersions: Record<string, string> = {},
+) {
+  return {
+    namespace,
+    name: namespace.toUpperCase(),
+    blobs: new Set(blobs),
+    manifests: [{ path: "package.json", deps, lockVersions }],
+    presets,
+    error: null,
+  };
 }
 
 test("PLANT: an app pinned two releases behind, one current, one through the old name, and a local copy still there", () => {
   const view = sharedCodeView(
     [KIT, DEVKIT],
-    new Map<string, string[] | string>([["Kit", TAGS], ["devkit", ["v1.0.0"]]]),
+    new Map<string, string[] | string>([
+      ["Kit", TAGS],
+      ["devkit", ["v1.0.0"]],
+    ]),
     [
-      app("sample", { "@example/kit": "github:example-org/kit#v0.2.0" }, ["package.json", "packages/kit/index.ts"], ["github>example-org/devkit"]),
-      app("sample-b", { "@example/kit": "github:example-org/old-kit#v0.10.0", react: "19.0.0" }, ["package.json"]),
-      app("sample-c", { "@example/kit": "git+https://github.com/example-org/kit.git" }, ["package.json"], [], { "@example/kit": "v0.3.0" }),
-      { namespace: "sample-d", name: "SAMPLE-D", blobs: null, manifests: [], presets: [], error: "its file tree could not be read" },
+      app(
+        "sample",
+        { "@example/kit": "github:example-org/kit#v0.2.0" },
+        ["package.json", "packages/kit/index.ts"],
+        ["github>example-org/devkit"],
+      ),
+      app("sample-b", { "@example/kit": "github:example-org/old-kit#v0.10.0", react: "19.0.0" }, [
+        "package.json",
+      ]),
+      app(
+        "sample-c",
+        { "@example/kit": "git+https://github.com/example-org/kit.git" },
+        ["package.json"],
+        [],
+        { "@example/kit": "v0.3.0" },
+      ),
+      {
+        namespace: "sample-d",
+        name: "SAMPLE-D",
+        blobs: null,
+        manifests: [],
+        presets: [],
+        error: "its file tree could not be read",
+      },
     ],
-    NOW
+    NOW,
   );
   assert.equal(view.apps_read, 3, "the read count says how many apps the answer covers");
-  assert.deepEqual(view.apps_failed, [{ namespace: "sample-d", error: "its file tree could not be read" }]);
+  assert.deepEqual(view.apps_failed, [
+    { namespace: "sample-d", error: "its file tree could not be read" },
+  ]);
   const kit = view.packages.find((p) => p.name === "Kit")!;
   assert.equal(kit.latest, "v0.10.0");
   assert.deepEqual(
@@ -60,7 +136,7 @@ test("PLANT: an app pinned two releases behind, one current, one through the old
       ["sample", "v0.2.0", 2, false],
       ["sample-b", "v0.10.0", 0, true],
       ["sample-c", "v0.3.0", 1, false],
-    ]
+    ],
   );
   assert.equal(kit.behind, 2, "two apps are at least one release behind");
   assert.deepEqual(kit.local_copies, [
@@ -69,14 +145,26 @@ test("PLANT: an app pinned two releases behind, one current, one through the old
   ]);
   assert.equal(kit.local_left, 1);
   const devkit = view.packages.find((p) => p.name === "devkit")!;
-  assert.deepEqual(devkit.users.map((u) => [u.namespace, u.where, u.pinned, u.behind]), [["sample", "renovate", null, null]]);
+  assert.deepEqual(
+    devkit.users.map((u) => [u.namespace, u.where, u.pinned, u.behind]),
+    [["sample", "renovate", null, null]],
+  );
 });
 
 test("a package whose tags could not be read says why, and still lists who uses it", () => {
-  const view = sharedCodeView([KIT], new Map([["Kit", "GitHub answered 404 for example-org/kit's tags"]]), [app("sample", { "@example/kit": "github:example-org/kit#v0.2.0" }, ["package.json"])], NOW);
+  const view = sharedCodeView(
+    [KIT],
+    new Map([["Kit", "GitHub answered 404 for example-org/kit's tags"]]),
+    [app("sample", { "@example/kit": "github:example-org/kit#v0.2.0" }, ["package.json"])],
+    NOW,
+  );
   assert.equal(view.packages[0].tags_error, "GitHub answered 404 for example-org/kit's tags");
   assert.equal(view.packages[0].latest, null);
-  assert.equal(view.packages[0].users[0].behind, null, "behind is unknown, not zero, without the tags");
+  assert.equal(
+    view.packages[0].users[0].behind,
+    null,
+    "behind is unknown, not zero, without the tags",
+  );
 });
 
 // Release tracking (Capsid improvement list, item 13): the version in each package's own
@@ -85,43 +173,145 @@ test("a package whose tags could not be read says why, and still lists who uses 
 test("the version decision: tagged by either spelling, the next release, never backwards, and a pre-release left alone", () => {
   assert.deepEqual(releaseDecision("0.10.0", TAGS), { kind: "tagged", tag: "v0.10.0" });
   assert.deepEqual(releaseDecision("0.3.0", ["0.3.0"]), { kind: "tagged", tag: "0.3.0" });
-  assert.deepEqual(releaseDecision("0.11.0", TAGS), { kind: "tag", tag: "v0.11.0", newest: "v0.10.0" }, "newer by version, not by text");
-  assert.deepEqual(releaseDecision("1.0.0", []), { kind: "tag", tag: "v1.0.0", newest: null }, "a first release");
-  assert.deepEqual(releaseDecision("0.4.0", TAGS), { kind: "backwards", tag: "v0.4.0", newest: "v0.10.0" });
-  assert.deepEqual(releaseDecision("0.11.0-rc.1", TAGS), { kind: "not-a-release", version: "0.11.0-rc.1" });
+  assert.deepEqual(
+    releaseDecision("0.11.0", TAGS),
+    { kind: "tag", tag: "v0.11.0", newest: "v0.10.0" },
+    "newer by version, not by text",
+  );
+  assert.deepEqual(
+    releaseDecision("1.0.0", []),
+    { kind: "tag", tag: "v1.0.0", newest: null },
+    "a first release",
+  );
+  assert.deepEqual(releaseDecision("0.4.0", TAGS), {
+    kind: "backwards",
+    tag: "v0.4.0",
+    newest: "v0.10.0",
+  });
+  assert.deepEqual(releaseDecision("0.11.0-rc.1", TAGS), {
+    kind: "not-a-release",
+    version: "0.11.0-rc.1",
+  });
   assert.deepEqual(releaseDecision(null, TAGS), { kind: "not-a-release", version: null });
-  assert.deepEqual(releaseDecision("v0.11.0", TAGS), { kind: "not-a-release", version: "v0.11.0" }, "a package.json version has no v");
+  assert.deepEqual(
+    releaseDecision("v0.11.0", TAGS),
+    { kind: "not-a-release", version: "v0.11.0" },
+    "a package.json version has no v",
+  );
 });
 
 test("a package.json's release fields, and one that is not an object is refused", () => {
-  assert.deepEqual(rootManifest(JSON.stringify({ name: "@example/kit", version: "1.2.3", private: true })), { name: "@example/kit", version: "1.2.3", private: true });
-  assert.deepEqual(rootManifest(JSON.stringify({ name: "@example/kit" })), { name: "@example/kit", version: null, private: false });
+  assert.deepEqual(
+    rootManifest(JSON.stringify({ name: "@example/kit", version: "1.2.3", private: true })),
+    { name: "@example/kit", version: "1.2.3", private: true },
+  );
+  assert.deepEqual(rootManifest(JSON.stringify({ name: "@example/kit" })), {
+    name: "@example/kit",
+    version: null,
+    private: false,
+  });
   assert.throws(() => rootManifest("[]"), /not a JSON object/);
 });
 
-const npmOk = (latest: string): ReleaseRead["npm"] => ({ state: "ok", latest, dist_tags: { latest }, versions: 3, modified: null });
+const npmOk = (latest: string): ReleaseRead["npm"] => ({
+  state: "ok",
+  latest,
+  dist_tags: { latest },
+  versions: 3,
+  modified: null,
+});
 
 test("PLANT: the view says untagged, on npm, private, and what was not read", () => {
-  const PRIVATE: SharedConfig = { name: "Private", repo: "example-org/private", formerly: [], local_paths: [] };
-  const GONE: SharedConfig = { name: "Gone", repo: "example-org/gone", formerly: [], local_paths: [] };
+  const PRIVATE: SharedConfig = {
+    name: "Private",
+    repo: "example-org/private",
+    formerly: [],
+    local_paths: [],
+  };
+  const GONE: SharedConfig = {
+    name: "Gone",
+    repo: "example-org/gone",
+    formerly: [],
+    local_paths: [],
+  };
   const view = sharedCodeView(
     [KIT, DEVKIT, PRIVATE, GONE],
-    new Map<string, string[] | string>([["Kit", TAGS], ["devkit", "GitHub answered 502 for example-org/devkit's tags"], ["Private", ["v1.0.0"]], ["Gone", []]]),
+    new Map<string, string[] | string>([
+      ["Kit", TAGS],
+      ["devkit", "GitHub answered 502 for example-org/devkit's tags"],
+      ["Private", ["v1.0.0"]],
+      ["Gone", []],
+    ]),
     [],
     NOW,
     new Map<string, ReleaseRead>([
-      ["Kit", { manifest: { name: "@example/kit", version: "0.11.0", private: false }, npm: npmOk("0.10.0") }],
-      ["devkit", { manifest: { name: "@example/devkit", version: "2.0.0", private: false }, npm: { state: "none" as const, reason: "npm has no package @example/devkit" } }],
+      [
+        "Kit",
+        {
+          manifest: { name: "@example/kit", version: "0.11.0", private: false },
+          npm: npmOk("0.10.0"),
+        },
+      ],
+      [
+        "devkit",
+        {
+          manifest: { name: "@example/devkit", version: "2.0.0", private: false },
+          npm: { state: "none" as const, reason: "npm has no package @example/devkit" },
+        },
+      ],
       ["Private", { manifest: { name: "private", version: "1.0.0", private: true }, npm: null }],
       ["Gone", { manifest: "GitHub answered 404 for example-org/gone's package.json", npm: null }],
-    ])
+    ]),
   );
   const fields = (name: string) => {
     const p = view.packages.find((x) => x.name === name)!;
-    return { version: p.version, untagged: p.untagged, private: p.private, npm_latest: p.npm_latest, npm_note: p.npm_note, manifest_error: p.manifest_error };
+    return {
+      version: p.version,
+      untagged: p.untagged,
+      private: p.private,
+      npm_latest: p.npm_latest,
+      npm_note: p.npm_note,
+      manifest_error: p.manifest_error,
+    };
   };
-  assert.deepEqual(fields("Kit"), { version: "0.11.0", untagged: true, private: false, npm_latest: "0.10.0", npm_note: null, manifest_error: null }, "bumped, not tagged, npm one behind");
-  assert.deepEqual(fields("devkit"), { version: "2.0.0", untagged: false, private: false, npm_latest: null, npm_note: "npm has no package @example/devkit", manifest_error: null }, "without the tags, untagged is unknown, not true");
-  assert.deepEqual(fields("Private"), { version: "1.0.0", untagged: false, private: true, npm_latest: null, npm_note: null, manifest_error: null });
-  assert.deepEqual(fields("Gone"), { version: null, untagged: false, private: false, npm_latest: null, npm_note: null, manifest_error: "GitHub answered 404 for example-org/gone's package.json" });
+  assert.deepEqual(
+    fields("Kit"),
+    {
+      version: "0.11.0",
+      untagged: true,
+      private: false,
+      npm_latest: "0.10.0",
+      npm_note: null,
+      manifest_error: null,
+    },
+    "bumped, not tagged, npm one behind",
+  );
+  assert.deepEqual(
+    fields("devkit"),
+    {
+      version: "2.0.0",
+      untagged: false,
+      private: false,
+      npm_latest: null,
+      npm_note: "npm has no package @example/devkit",
+      manifest_error: null,
+    },
+    "without the tags, untagged is unknown, not true",
+  );
+  assert.deepEqual(fields("Private"), {
+    version: "1.0.0",
+    untagged: false,
+    private: true,
+    npm_latest: null,
+    npm_note: null,
+    manifest_error: null,
+  });
+  assert.deepEqual(fields("Gone"), {
+    version: null,
+    untagged: false,
+    private: false,
+    npm_latest: null,
+    npm_note: null,
+    manifest_error: "GitHub answered 404 for example-org/gone's package.json",
+  });
 });

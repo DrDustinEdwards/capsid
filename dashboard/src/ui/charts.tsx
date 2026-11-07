@@ -21,7 +21,7 @@ export function uptimeOptions(site: SiteSnapshot) {
   let downTicks = 0;
   let gaps = 0;
   for (let b = 0; b < TICKS; b++) {
-    const slice = [...ring.slice(b * PER, (b + 1) * PER)];
+    const slice = Array.from(ring.slice(b * PER, (b + 1) * PER));
     const seen = slice.filter((c) => c !== "-").length;
     const down = slice.filter((c) => c === "0").length;
     const status = !seen ? "unknown" : down === seen ? "down" : down ? "degraded" : "up";
@@ -31,7 +31,12 @@ export function uptimeOptions(site: SiteSnapshot) {
     slots.push({ status, label });
   }
   const up = uptime(ring);
-  return { slots, width: 420, height: 22, label: `Uptime over 7 days for ${site.name}: ${up == null ? "no probe data" : `${pct(up)} of probes up`}, ${downTicks} two-hour windows with a failed probe, ${gaps} with no watcher pass` };
+  return {
+    slots,
+    width: 420,
+    height: 22,
+    label: `Uptime over 7 days for ${site.name}: ${up == null ? "no probe data" : `${pct(up)} of probes up`}, ${downTicks} two-hour windows with a failed probe, ${gaps} with no watcher pass`,
+  };
 }
 
 /** The Sites table's strip, its windows also stated in a table only assistive technology reads. */
@@ -39,8 +44,15 @@ export function UptimeTicks({ site }: { site: SiteSnapshot }) {
   const opts = uptimeOptions(site);
   return (
     <>
-      <span className="cap-uptime-strip" dangerouslySetInnerHTML={{ __html: uptimeStrip({ ...opts, inline: true }) }} />
-      <span dangerouslySetInnerHTML={{ __html: uptimeStripTable(opts, { dataTable: "visually-hidden" }).markup }} />
+      <span
+        className="cap-uptime-strip"
+        dangerouslySetInnerHTML={{ __html: uptimeStrip({ ...opts, inline: true }) }}
+      />
+      <span
+        dangerouslySetInnerHTML={{
+          __html: uptimeStripTable(opts, { dataTable: "visually-hidden" }).markup,
+        }}
+      />
     </>
   );
 }
@@ -67,5 +79,20 @@ export function errorTotals(e: HourBucket[]) {
 
 /** The Sites table's errors per hour, the cell's totals under it. */
 export function ErrorSpark({ values, label }: { values: number[]; label: string }) {
-  return <span className="spark" dangerouslySetInnerHTML={{ __html: sparkline({ values, label, alt: label, width: 86, height: 22, area: true, inline: true }) }} />;
+  return (
+    <span
+      className="spark"
+      dangerouslySetInnerHTML={{
+        __html: sparkline({
+          values,
+          label,
+          alt: label,
+          width: 86,
+          height: 22,
+          area: true,
+          inline: true,
+        }),
+      }}
+    />
+  );
 }

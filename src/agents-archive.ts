@@ -58,7 +58,7 @@ async function archiveDue(db: D1Database, now: Date): Promise<DueRow[]> {
           AND (datetime(a.revoked_at) <= datetime(?1, ?3)
                OR (a.job_id IS NOT NULL AND j.status IN ('done', 'failed', 'superseded')))
         ORDER BY a.revoked_at, a.name
-        LIMIT ?2`
+        LIMIT ?2`,
     )
     .bind(now.toISOString(), MAX_PER_PASS, `-${ARCHIVE_AFTER_DAYS} days`)
     .all<DueRow>();
@@ -80,11 +80,18 @@ function archiveStatements(db: D1Database, actor: string, due: DueRow): D1Prepar
                    SELECT id FROM jobs WHERE posted_by = ?3 OR claimed_by = ?3
                    UNION SELECT job_id FROM job_outcomes WHERE agent = ?3
                    UNION SELECT job_id FROM job_claims WHERE agent = ?3))
-           FROM agents WHERE id = ?1 AND revoked_at IS NOT NULL`
+           FROM agents WHERE id = ?1 AND revoked_at IS NOT NULL`,
       )
       .bind(due.id, due.reason, agentActor),
-    db.prepare("DELETE FROM agents WHERE id = ?1 AND revoked_at IS NOT NULL AND EXISTS (SELECT 1 FROM agents_archive WHERE id = ?1)").bind(due.id),
-    auditStatement(db, actor, ARCHIVE_ACTION, "agents", due.name, { reason: due.reason, id: due.id }),
+    db
+      .prepare(
+        "DELETE FROM agents WHERE id = ?1 AND revoked_at IS NOT NULL AND EXISTS (SELECT 1 FROM agents_archive WHERE id = ?1)",
+      )
+      .bind(due.id),
+    auditStatement(db, actor, ARCHIVE_ACTION, "agents", due.name, {
+      reason: due.reason,
+      id: due.id,
+    }),
   ];
 }
 
@@ -96,13 +103,18 @@ export interface ArchivePass {
 
 /** The watcher pass's archive step. Each agent moves in its own batch, so one that
  *  fails leaves the rest moved and says which. */
-export async function archiveRevokedAgents(db: D1Database, actor: string, now: Date): Promise<ArchivePass> {
+export async function archiveRevokedAgents(
+  db: D1Database,
+  actor: string,
+  now: Date,
+): Promise<ArchivePass> {
   const out: ArchivePass = { archived: [], skipped: [] };
   for (const due of await archiveDue(db, now)) {
     const results = await db.batch(archiveStatements(db, actor, due));
     // The DELETE is what takes the row out of the live table, so its count is the move.
     // agents has no trigger to inflate it.
-    if ((results[1]?.meta?.changes ?? 0) === 1) out.archived.push({ name: due.name, reason: due.reason });
+    if ((results[1]?.meta?.changes ?? 0) === 1)
+      out.archived.push({ name: due.name, reason: due.reason });
     else out.skipped.push(due.name);
   }
   return out;
@@ -110,12 +122,27 @@ export async function archiveRevokedAgents(db: D1Database, actor: string, now: D
 
 /** Archived agents, newest move first. The stored verifier never leaves this module:
  *  readers get its first twelve hex, the fingerprint agents list shows. */
-export async function listArchivedAgents(db: D1Database, limit = 200): Promise<Array<Omit<ArchivedAgent, "key_hash"> & { fingerprint: string }>> {
-  const { results } = await db.prepare("SELECT * FROM agents_archive ORDER BY archived_at DESC, name LIMIT ?1").bind(limit).all<ArchivedAgent>();
-  return (results ?? []).map(({ key_hash, ...row }) => ({ ...row, fingerprint: key_hash.slice(0, 12) }));
+export async function listArchivedAgents(
+  db: D1Database,
+  limit = 200,
+): Promise<Array<Omit<ArchivedAgent, "key_hash"> & { fingerprint: string }>> {
+  const { results } = await db
+    .prepare("SELECT * FROM agents_archive ORDER BY archived_at DESC, name LIMIT ?1")
+    .bind(limit)
+    .all<ArchivedAgent>();
+  return (results ?? []).map(({ key_hash, ...row }) => ({
+    ...row,
+    fingerprint: key_hash.slice(0, 12),
+  }));
 }
 
 /** An archived agent by name, or null. */
-export async function archivedAgentByName(db: D1Database, name: string): Promise<ArchivedAgent | null> {
-  return db.prepare("SELECT * FROM agents_archive WHERE name = ?1").bind(name).first<ArchivedAgent>();
+export async function archivedAgentByName(
+  db: D1Database,
+  name: string,
+): Promise<ArchivedAgent | null> {
+  return db
+    .prepare("SELECT * FROM agents_archive WHERE name = ?1")
+    .bind(name)
+    .first<ArchivedAgent>();
 }

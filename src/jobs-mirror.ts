@@ -34,11 +34,16 @@ export interface ResumeNote {
 type NoteEnv = Pick<Env, "DB" | "IMPROVE_SCORE_SECRET">;
 
 /** The fields a resume note's signature covers, in one place for the writer and reader. */
-export function resumeNoteFields(approved: string, note: string | null, by: string): Record<string, string | null> {
+export function resumeNoteFields(
+  approved: string,
+  note: string | null,
+  by: string,
+): Record<string, string | null> {
   return { approved, note, by };
 }
 
-const WITHHELD = "WITHHELD: this approval's signature does not match, so it was changed after the resume wrote it. Do not act on it; ask the seat.";
+const WITHHELD =
+  "WITHHELD: this approval's signature does not match, so it was changed after the resume wrote it. Do not act on it; ask the seat.";
 
 // Served by audit_log_doc (namespace, path, id DESC), the index every job audit row
 // already falls under because it is written against the job's mirror path.
@@ -46,7 +51,11 @@ type NoteRow = { actor: string | null; params: string | null; at: string };
 
 // One audit row as the note it recorded, its signature checked, or null when the row is
 // not a readable resume (no params, not JSON, no approved text).
-async function noteFromRow(env: NoteEnv, job: Pick<JobRow, "id">, row: NoteRow): Promise<ResumeNote | null> {
+async function noteFromRow(
+  env: NoteEnv,
+  job: Pick<JobRow, "id">,
+  row: NoteRow,
+): Promise<ResumeNote | null> {
   if (!row.params) return null;
   let params: Record<string, unknown>;
   try {
@@ -62,7 +71,7 @@ async function noteFromRow(env: NoteEnv, job: Pick<JobRow, "id">, row: NoteRow):
     "resume-note",
     job.id,
     resumeNoteFields(params.approved, note, by),
-    typeof params.sig === "string" ? params.sig : null
+    typeof params.sig === "string" ? params.sig : null,
   );
   if (signature === "mismatch") return { reason: WITHHELD, by, at: row.at, signature };
   return {
@@ -71,7 +80,9 @@ async function noteFromRow(env: NoteEnv, job: Pick<JobRow, "id">, row: NoteRow):
     by,
     at: row.at,
     signature,
-    ...(typeof params.approved_by_policy === "string" ? { approved_by_policy: params.approved_by_policy } : {}),
+    ...(typeof params.approved_by_policy === "string"
+      ? { approved_by_policy: params.approved_by_policy }
+      : {}),
     ...(typeof params.policy_class === "string" ? { policy_class: params.policy_class } : {}),
     ...(params.correction === true ? { correction: true as const } : {}),
   };
@@ -79,13 +90,12 @@ async function noteFromRow(env: NoteEnv, job: Pick<JobRow, "id">, row: NoteRow):
 
 export async function latestResumeNote(
   env: NoteEnv,
-  job: Pick<JobRow, "id" | "namespace" | "resumed_count">
+  job: Pick<JobRow, "id" | "namespace" | "resumed_count">,
 ): Promise<ResumeNote | null> {
   if (!job.resumed_count) return null;
-  const row = await env.DB
-    .prepare(
-      "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT 1"
-    )
+  const row = await env.DB.prepare(
+    "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT 1",
+  )
     .bind(job.namespace, jobDocPath(job.id))
     .first<NoteRow>();
   return row ? noteFromRow(env, job, row) : null;
@@ -109,12 +119,14 @@ export interface ResumeNotes {
 
 /** Every resume note for a job, newest first, at most RESUME_NOTES_MAX_BYTES of them (the
  *  oldest dropped and counted). The newest is first and is what `latestResumeNote` returns. */
-export async function resumeNotes(env: NoteEnv, job: Pick<JobRow, "id" | "namespace" | "resumed_count">): Promise<ResumeNotes> {
+export async function resumeNotes(
+  env: NoteEnv,
+  job: Pick<JobRow, "id" | "namespace" | "resumed_count">,
+): Promise<ResumeNotes> {
   if (!job.resumed_count) return { notes: [], dropped: 0 };
-  const { results } = await env.DB
-    .prepare(
-      "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT ?3"
-    )
+  const { results } = await env.DB.prepare(
+    "SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT ?3",
+  )
     .bind(job.namespace, jobDocPath(job.id), RESUME_NOTES_MAX_ROWS)
     .all<NoteRow>();
   const notes: ResumeNote[] = [];
@@ -149,12 +161,17 @@ function renderJobDoc(job: JobRow, notes: ResumeNote[], dropped = 0): string {
     `- claimed by: ${job.claimed_by ?? "(unclaimed)"}`,
   ];
   // The started label (src/jobs-begin.ts), once somebody began the job.
-  if (job.started_by) lines.push(`- started by: ${job.started_by} at ${job.started_at ?? "(no time recorded)"}`);
+  if (job.started_by)
+    lines.push(`- started by: ${job.started_by} at ${job.started_at ?? "(no time recorded)"}`);
   // Only once it has happened, so a job that never hit a gate carries no line of zeroes.
-  if (job.blocked_count > 0) lines.push(`- gates hit: ${job.blocked_count}, resumed: ${job.resumed_count}`);
+  if (job.blocked_count > 0)
+    lines.push(`- gates hit: ${job.blocked_count}, resumed: ${job.resumed_count}`);
   // The brief carries open job documents, so this line is how brief hands the
   // approval to a driver.
-  if (note) lines.push(`- last resume, by ${note.by} at ${note.at}${note.signature === "verified" ? "" : ` (${note.signature})`}: ${note.reason}`);
+  if (note)
+    lines.push(
+      `- last resume, by ${note.by} at ${note.at}${note.signature === "verified" ? "" : ` (${note.signature})`}: ${note.reason}`,
+    );
   if (job.result_summary) lines.push(`- result: ${job.result_summary}`);
   if (job.result_ref) lines.push(`- result ref: ${job.result_ref}`);
   // The full note as its own block after the status lines, untruncated: a driver
@@ -165,18 +182,27 @@ function renderJobDoc(job: JobRow, notes: ResumeNote[], dropped = 0): string {
   if (notes.length > 1) {
     lines.push("", "## Earlier resumes", "");
     for (const earlier of notes.slice(1)) {
-      lines.push(`- by ${earlier.by} at ${earlier.at}${earlier.signature === "verified" ? "" : ` (${earlier.signature})`}: ${earlier.reason}`);
+      lines.push(
+        `- by ${earlier.by} at ${earlier.at}${earlier.signature === "verified" ? "" : ` (${earlier.signature})`}: ${earlier.reason}`,
+      );
       if (earlier.note) lines.push("", earlier.note, "");
     }
   }
-  if (dropped > 0) lines.push("", `(${dropped} older resume${dropped === 1 ? "" : "s"} not shown.)`);
+  if (dropped > 0)
+    lines.push("", `(${dropped} older resume${dropped === 1 ? "" : "s"} not shown.)`);
   lines.push("", "## The prompt", "", job.body);
   return lines.join("\n");
 }
 
 // `note` is passed by resume, whose audit row is written in the same batch as this
 // mirror and so cannot be read back yet. Every other transition reads it.
-export async function mirrorStatements(env: NoteEnv, job: JobRow, action: string, actor: string, note?: ResumeNote) {
+export async function mirrorStatements(
+  env: NoteEnv,
+  job: JobRow,
+  action: string,
+  actor: string,
+  note?: ResumeNote,
+) {
   const path = jobDocPath(job.id);
   const prior = await priorDoc(env.DB, job.namespace, path);
   // The passed note is the resume being written in this batch, so it is not in the audit
@@ -201,6 +227,15 @@ export async function mirrorStatements(env: NoteEnv, job: JobRow, action: string
 }
 
 // A job's audit row is addressed to its mirror document and carries the job id.
-export function jobAudit(db: D1Database, actor: string, action: string, job: JobRow, params: Record<string, unknown>) {
-  return auditStatement(db, actor, action, job.namespace, jobDocPath(job.id), { job_id: job.id, ...params });
+export function jobAudit(
+  db: D1Database,
+  actor: string,
+  action: string,
+  job: JobRow,
+  params: Record<string, unknown>,
+) {
+  return auditStatement(db, actor, action, job.namespace, jobDocPath(job.id), {
+    job_id: job.id,
+    ...params,
+  });
 }

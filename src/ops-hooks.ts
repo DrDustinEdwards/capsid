@@ -141,15 +141,22 @@ export function parseHook(raw: string): HookParse {
   try {
     body = JSON.parse(raw);
   } catch {
-    return { ok: false, refusal: "the body is not JSON: a Claude Code HTTP hook posts its input JSON" };
+    return {
+      ok: false,
+      refusal: "the body is not JSON: a Claude Code HTTP hook posts its input JSON",
+    };
   }
-  if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, refusal: "the body is not a JSON object" };
+  if (!body || typeof body !== "object" || Array.isArray(body))
+    return { ok: false, refusal: "the body is not a JSON object" };
   const input = body as Record<string, unknown>;
   const sessionId = matching(input.session_id, SESSION_ID);
   if (!sessionId) return { ok: false, refusal: "the body carries no usable session_id" };
   const name = input.hook_event_name;
   if (typeof name !== "string" || !(HOOK_EVENTS as readonly string[]).includes(name)) {
-    return { ok: false, refusal: `hook_event_name must be one of ${HOOK_EVENTS.join(", ")}; this receiver records no other event` };
+    return {
+      ok: false,
+      refusal: `hook_event_name must be one of ${HOOK_EVENTS.join(", ")}; this receiver records no other event`,
+    };
   }
   const event = name as HookEventName;
   const hook: ParsedHook = {
@@ -179,8 +186,16 @@ export function parseHook(raw: string): HookParse {
       const type = matching(input.notification_type, TOKEN);
       hook.notification_type = type;
       hook.subtype = type;
-      hook.needs_input = type !== null && NEEDS_INPUT_TYPES.includes(type) ? 1 : type === "agent_completed" ? 0 : null;
-      hook.detail = detailJson({ title: capped(input.title, 120), message: capped(input.message, 300) });
+      hook.needs_input =
+        type !== null && NEEDS_INPUT_TYPES.includes(type)
+          ? 1
+          : type === "agent_completed"
+            ? 0
+            : null;
+      hook.detail = detailJson({
+        title: capped(input.title, 120),
+        message: capped(input.message, 300),
+      });
       break;
     }
     case "StopFailure":
@@ -207,20 +222,33 @@ export function parseHook(raw: string): HookParse {
     case "PostToolUseFailure": {
       const tool = matching(input.tool_name, TOOL_NAME);
       hook.subtype = tool ?? "unknown";
-      const toolInput = input.tool_input && typeof input.tool_input === "object" && !Array.isArray(input.tool_input) ? (input.tool_input as Record<string, unknown>) : {};
+      const toolInput =
+        input.tool_input && typeof input.tool_input === "object" && !Array.isArray(input.tool_input)
+          ? (input.tool_input as Record<string, unknown>)
+          : {};
       const failed = event === "PostToolUseFailure";
       let exitCode: string | null = null;
       if (tool === "Bash") {
-        const word = typeof toolInput.command === "string" ? toolInput.command.trim().split(/\s+/)[0] : null;
+        const word =
+          typeof toolInput.command === "string" ? toolInput.command.trim().split(/\s+/)[0] : null;
         const program = matching(word, COMMAND_WORD)?.split("/").pop() || null;
         // A call that failed without running (a denied or interrupted one) has no
         // "Exit code N" line, and keeps no exit code.
-        if (failed) exitCode = typeof input.error === "string" ? (EXIT_LINE.exec(input.error.split("\n")[0].trim())?.[1] ?? null) : null;
+        if (failed)
+          exitCode =
+            typeof input.error === "string"
+              ? (EXIT_LINE.exec(input.error.split("\n")[0].trim())?.[1] ?? null)
+              : null;
         else exitCode = "0";
-        hook.detail = detailJson({ command: program, exit_code: exitCode, interrupted: failed && input.is_interrupt === true ? "true" : null });
+        hook.detail = detailJson({
+          command: program,
+          exit_code: exitCode,
+          interrupted: failed && input.is_interrupt === true ? "true" : null,
+        });
       } else {
         hook.detail = detailJson({
-          file_path: tool !== null && FILE_TOOLS.includes(tool) ? capped(toolInput.file_path, 300) : null,
+          file_path:
+            tool !== null && FILE_TOOLS.includes(tool) ? capped(toolInput.file_path, 300) : null,
           interrupted: failed && input.is_interrupt === true ? "true" : null,
         });
       }
@@ -243,7 +271,13 @@ export interface HookBinding {
  *  A session keeps the job it was first bound to (COALESCE on job_id). The upsert only
  *  updates a row whose agent is this caller, so one key cannot mark another's session
  *  waiting or ended. */
-export function hookStatements(db: D1Database, actor: string, binding: HookBinding | null, hook: ParsedHook, now: Date): D1PreparedStatement[] {
+export function hookStatements(
+  db: D1Database,
+  actor: string,
+  binding: HookBinding | null,
+  hook: ParsedHook,
+  now: Date,
+): D1PreparedStatement[] {
   const at = now.toISOString();
   const cutoff = new Date(now.getTime() - EVENT_RETENTION_DAYS * DAY_MS).toISOString();
   return [
@@ -268,7 +302,7 @@ export function hookStatements(db: D1Database, actor: string, binding: HookBindi
            end_reason = CASE ?13 WHEN 'end' THEN ?14 WHEN 'reopen' THEN NULL ELSE agent_sessions.end_reason END,
            updated_at = excluded.updated_at
          WHERE agent_sessions.agent = excluded.agent
-         RETURNING session_id`
+         RETURNING session_id`,
       )
       .bind(
         hook.session_id,
@@ -285,12 +319,12 @@ export function hookStatements(db: D1Database, actor: string, binding: HookBindi
         hook.failure,
         hook.end_mode,
         hook.end_reason,
-        hook.clears_failure ? 1 : 0
+        hook.clears_failure ? 1 : 0,
       ),
     db
       .prepare(
         `INSERT INTO session_events (session_id, job_id, agent, event, subtype, detail, at)
-         SELECT session_id, job_id, agent, ?3, ?4, ?5, ?6 FROM agent_sessions WHERE session_id = ?1 AND agent = ?2`
+         SELECT session_id, job_id, agent, ?3, ?4, ?5, ?6 FROM agent_sessions WHERE session_id = ?1 AND agent = ?2`,
       )
       .bind(hook.session_id, actor, hook.event, hook.subtype, hook.detail, at),
     // The oldest PRUNE_BATCH rows by id, of which those past retention go. Bounded
@@ -298,13 +332,18 @@ export function hookStatements(db: D1Database, actor: string, binding: HookBindi
     // are the lowest ids, and a table with none expired costs one short index walk.
     db
       .prepare(
-        `DELETE FROM session_events WHERE id IN (SELECT id FROM session_events ORDER BY id LIMIT ?1) AND at < ?2`
+        `DELETE FROM session_events WHERE id IN (SELECT id FROM session_events ORDER BY id LIMIT ?1) AND at < ?2`,
       )
       .bind(PRUNE_BATCH, cutoff),
   ];
 }
 
-export async function handleOpsHooks(request: Request, env: Env, ctx: ExecutionContext | null, now: Date = new Date()): Promise<Response> {
+export async function handleOpsHooks(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext | null,
+  now: Date = new Date(),
+): Promise<Response> {
   // 401 with realm capsid-hooks, or 403 for a caller that is not a driver, a runner or
   // the admin, or that holds no write grant.
   const caller = await resolveSessionCaller(request, env, now);
@@ -315,10 +354,18 @@ export async function handleOpsHooks(request: Request, env: Env, ctx: ExecutionC
   const parsed = parseHook(bounded.text);
   if (!parsed.ok) return textResponse(parsed.refusal, 400);
 
-  const binding: HookBinding | null = caller.job_id && caller.namespace ? { job_id: caller.job_id, namespace: caller.namespace } : null;
-  const [session] = await env.DB.batch(hookStatements(env.DB, caller.agent.actor, binding, parsed.hook, now));
+  const binding: HookBinding | null =
+    caller.job_id && caller.namespace
+      ? { job_id: caller.job_id, namespace: caller.namespace }
+      : null;
+  const [session] = await env.DB.batch(
+    hookStatements(env.DB, caller.agent.actor, binding, parsed.hook, now),
+  );
   if ((session.results ?? []).length === 0) {
-    return textResponse(`session ${parsed.hook.session_id} was first reported by another key, so this event was not recorded`, 409);
+    return textResponse(
+      `session ${parsed.hook.session_id} was first reported by another key, so this event was not recorded`,
+      409,
+    );
   }
   // last_seen is not part of authorizing; see handleOperatorMcp. A tool event skips it:
   // tool calls come by the hundred an hour, and the Stop that ends every turn keeps

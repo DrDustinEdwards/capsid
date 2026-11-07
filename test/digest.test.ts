@@ -13,7 +13,11 @@ import { fakeKv } from "./fakes.ts";
 const NOON = new Date("2026-10-11T12:05:00.000Z");
 const H = 3_600_000;
 
-const usage = { cost_usd: null, active_seconds: null, tokens: { input: null, output: null, cache_read: null, cache_creation: null } } as never;
+const usage = {
+  cost_usd: null,
+  active_seconds: null,
+  tokens: { input: null, output: null, cache_read: null, cache_creation: null },
+} as never;
 const EMPTY: OvernightDigest = {
   generated: NOON.toISOString(),
   since: "",
@@ -22,29 +26,111 @@ const EMPTY: OvernightDigest = {
   blocked: [],
   pull_requests_ready: [],
   pull_requests_merged: 0,
-  totals: { telemetry: { jobs: 0 } as never, reported: { jobs: 0 } as never, jobs_without_usage: 0 },
+  totals: {
+    telemetry: { jobs: 0 } as never,
+    reported: { jobs: 0 } as never,
+    jobs_without_usage: 0,
+  },
   truncated: [],
 };
 const FULL: OvernightDigest = {
   ...EMPTY,
-  finished: [{ id: "job_done", namespace: "capsid", title: "Ship the thing", status: "done", result_kind: "pr", duration_minutes: 30, blocked_count: 0, usage, usage_source: "none" }],
-  blocked: [
-    { id: "job_q", namespace: "carrel", title: "Which domain?", at: NOON.toISOString(), summary: "QUESTION: which domain?", pull_requests: [], usage, usage_source: "none" },
-    { id: "job_b", namespace: "sample", title: "Create the bucket", at: NOON.toISOString(), summary: "run this", pull_requests: [], usage, usage_source: "none" },
+  finished: [
+    {
+      id: "job_done",
+      namespace: "capsid",
+      title: "Ship the thing",
+      status: "done",
+      result_kind: "pr",
+      duration_minutes: 30,
+      blocked_count: 0,
+      usage,
+      usage_source: "none",
+    },
   ],
-  pull_requests_ready: [{ job_id: "job_done", namespace: "capsid", url: "https://github.com/owner/capsid/pull/9", state: "open", source: "outcome" }],
+  blocked: [
+    {
+      id: "job_q",
+      namespace: "carrel",
+      title: "Which domain?",
+      at: NOON.toISOString(),
+      summary: "QUESTION: which domain?",
+      pull_requests: [],
+      usage,
+      usage_source: "none",
+    },
+    {
+      id: "job_b",
+      namespace: "sample",
+      title: "Create the bucket",
+      at: NOON.toISOString(),
+      summary: "run this",
+      pull_requests: [],
+      usage,
+      usage_source: "none",
+    },
+  ],
+  pull_requests_ready: [
+    {
+      job_id: "job_done",
+      namespace: "capsid",
+      url: "https://github.com/owner/capsid/pull/9",
+      state: "open",
+      source: "outcome",
+    },
+  ],
   pull_requests_merged: 2,
 };
 
 const awaiting = [
-  { namespace: "foxhound", repo: "owner/foxhound", number: 7, failed: "money", why: "", at: "", class: "typed" },
-  { namespace: "capsid", repo: "owner/capsid", number: 8, failed: "path", why: "", at: "", class: "approve", visual: { title: "New header", preview: "https://pr-8.sample.workers.dev/", shots: [] } },
-  { namespace: "capsid", repo: "owner/capsid", number: 9, failed: "ci", why: "", at: "", class: "wait" },
+  {
+    namespace: "foxhound",
+    repo: "owner/foxhound",
+    number: 7,
+    failed: "money",
+    why: "",
+    at: "",
+    class: "typed",
+  },
+  {
+    namespace: "capsid",
+    repo: "owner/capsid",
+    number: 8,
+    failed: "path",
+    why: "",
+    at: "",
+    class: "approve",
+    visual: { title: "New header", preview: "https://pr-8.sample.workers.dev/", shots: [] },
+  },
+  {
+    namespace: "capsid",
+    repo: "owner/capsid",
+    number: 9,
+    failed: "ci",
+    why: "",
+    at: "",
+    class: "wait",
+  },
 ];
 
-function world(opts: { routing?: string; email?: boolean; send?: (m: unknown) => Promise<void>; last?: object; deploys?: Row[]; findings?: Row[]; findingsThrow?: boolean } = {}) {
+function world(
+  opts: {
+    routing?: string;
+    email?: boolean;
+    send?: (m: unknown) => Promise<void>;
+    last?: object;
+    deploys?: Row[];
+    findings?: Row[];
+    findingsThrow?: boolean;
+  } = {},
+) {
   const sent: Array<{ from: string; to: string; subject: string; text: string }> = [];
-  const kv = fakeKv({ seed: { [AWAITING_SEAT_KEY]: JSON.stringify(awaiting), ...(opts.last ? { [DIGEST_LAST_KEY]: JSON.stringify(opts.last) } : {}) } });
+  const kv = fakeKv({
+    seed: {
+      [AWAITING_SEAT_KEY]: JSON.stringify(awaiting),
+      ...(opts.last ? { [DIGEST_LAST_KEY]: JSON.stringify(opts.last) } : {}),
+    },
+  });
   const deploys = opts.deploys ?? [];
   const db = {
     prepare: (sql: string) => {
@@ -53,7 +139,13 @@ function world(opts: { routing?: string; email?: boolean; send?: (m: unknown) =>
         bind: (...p: unknown[]) => ((params = p), st),
         all: async () => {
           if (opts.findingsThrow && /FROM watcher_findings/.test(sql)) throw new Error("D1 down");
-          return { results: selectRows(/FROM watcher_findings/.test(sql) ? (opts.findings ?? []) : deploys, sql, params) };
+          return {
+            results: selectRows(
+              /FROM watcher_findings/.test(sql) ? (opts.findings ?? []) : deploys,
+              sql,
+              params,
+            ),
+          };
         },
       };
       return st;
@@ -92,9 +184,27 @@ test("Email Routing not on: nothing is read or sent, and the reason names it", a
 });
 
 test("routing on but an address or the binding missing: still nothing, and it says which", () => {
-  assert.match(digestProblem({ EMAIL_ROUTING: "on", EMAIL: {}, ALERT_EMAIL: "a@example.com" } as never)!, /ALERT_FROM is not set/);
-  assert.match(digestProblem({ EMAIL_ROUTING: "on", ALERT_EMAIL: "a@example.com", ALERT_FROM: "b@example.com" } as never)!, /the send_email binding EMAIL/);
-  assert.equal(digestProblem({ EMAIL_ROUTING: "on", EMAIL: {}, ALERT_EMAIL: "a@example.com", ALERT_FROM: "b@example.com" } as never), null);
+  assert.match(
+    digestProblem({ EMAIL_ROUTING: "on", EMAIL: {}, ALERT_EMAIL: "a@example.com" } as never)!,
+    /ALERT_FROM is not set/,
+  );
+  assert.match(
+    digestProblem({
+      EMAIL_ROUTING: "on",
+      ALERT_EMAIL: "a@example.com",
+      ALERT_FROM: "b@example.com",
+    } as never)!,
+    /the send_email binding EMAIL/,
+  );
+  assert.equal(
+    digestProblem({
+      EMAIL_ROUTING: "on",
+      EMAIL: {},
+      ALERT_EMAIL: "a@example.com",
+      ALERT_FROM: "b@example.com",
+    } as never),
+    null,
+  );
 });
 
 test("the Portal's state says off and why, or on and where", async () => {
@@ -103,7 +213,10 @@ test("the Portal's state says off and why, or on and where", async () => {
   assert.match(off.problem!, /Email Routing is not on/);
   assert.equal(off.to, null);
   const on = await digestState(world().env);
-  assert.deepEqual({ on: on.on, to: on.to, hour: on.hour_utc }, { on: true, to: "admin@example.com", hour: 12 });
+  assert.deepEqual(
+    { on: on.on, to: on.to, hour: on.hour_utc },
+    { on: true, to: "admin@example.com", hour: 12 },
+  );
 });
 
 test("nothing before 12:00 UTC; then one mail, and none again that day", async () => {
@@ -115,18 +228,34 @@ test("nothing before 12:00 UTC; then one mail, and none again that day", async (
   const again = await digestTick(w.env, new Date(NOON.getTime() + 6 * H), read(FULL));
   assert.equal(again.ran, false);
   assert.equal(w.sent.length, 1);
-  assert.equal((await digestTick(w.env, new Date(NOON.getTime() + 24 * H), read(FULL))).sent, true, "the next day sent nothing");
+  assert.equal(
+    (await digestTick(w.env, new Date(NOON.getTime() + 24 * H), read(FULL))).sent,
+    true,
+    "the next day sent nothing",
+  );
 });
 
 test("the mail lists what waits by class, questions, blocked jobs, rollbacks and what finished", async () => {
-  const w = world({ deploys: [{ repo: "owner/capsid", head_sha: "a".repeat(40), outcome: "rolled_back", recorded_at: "2026-10-11 02:00:00" }] });
+  const w = world({
+    deploys: [
+      {
+        repo: "owner/capsid",
+        head_sha: "a".repeat(40),
+        outcome: "rolled_back",
+        recorded_at: "2026-10-11 02:00:00",
+      },
+    ],
+  });
   await digestTick(w.env, NOON, read(FULL));
   const m = w.sent[0]!;
   assert.equal(m.to, "admin@example.com");
   assert.equal(m.from, "capsid@example.com");
   assert.equal(m.subject, "Capsid digest 2026-10-11: 4 waiting on you");
   assert.match(m.text, /owner\/foxhound#7, class typed \(money: approve by typing its number\)/);
-  assert.match(m.text, /owner\/capsid#8, class approve \(visual: look at https:\/\/pr-8\.sample\.workers\.dev\/ and approve in the Portal\)/);
+  assert.match(
+    m.text,
+    /owner\/capsid#8, class approve \(visual: look at https:\/\/pr-8\.sample\.workers\.dev\/ and approve in the Portal\)/,
+  );
   assert.doesNotMatch(m.text, /#9/, "a wait-class pull request was listed as waiting on Dustin");
   assert.match(m.text, /Questions \(1\)\n- carrel job_q: Which domain\?/);
   assert.match(m.text, /Blocked \(1\)\n- sample job_b: Create the bucket/);
@@ -160,13 +289,30 @@ test("a refused send is recorded for the day and not retried every tick", async 
 test("a digest covers the time since the last one sent, or the last day", async () => {
   const seen: string[] = [];
   const spy = async (_e: unknown, a: { since: string }) => (seen.push(a.since), EMPTY);
-  await digestTick(world({ last: { at: "2026-10-09T12:00:00.000Z", outcome: "sent", note: "" } }).env, NOON, spy as never);
+  await digestTick(
+    world({ last: { at: "2026-10-09T12:00:00.000Z", outcome: "sent", note: "" } }).env,
+    NOON,
+    spy as never,
+  );
   await digestTick(world().env, NOON, spy as never);
-  await digestTick(world({ last: { at: "2026-10-10T12:00:00.000Z", outcome: "failed", note: "" } }).env, NOON, spy as never);
-  assert.deepEqual(seen, ["2026-10-09T12:00:00.000Z", "2026-10-10T12:05:00.000Z", "2026-10-10T12:05:00.000Z"]);
+  await digestTick(
+    world({ last: { at: "2026-10-10T12:00:00.000Z", outcome: "failed", note: "" } }).env,
+    NOON,
+    spy as never,
+  );
+  assert.deepEqual(seen, [
+    "2026-10-09T12:00:00.000Z",
+    "2026-10-10T12:05:00.000Z",
+    "2026-10-10T12:05:00.000Z",
+  ]);
 });
 
-const FINDING = (fingerprint: string, namespace: string, headline: string, job_id: string | null = null): Row => ({
+const FINDING = (
+  fingerprint: string,
+  namespace: string,
+  headline: string,
+  job_id: string | null = null,
+): Row => ({
   fingerprint,
   namespace,
   title: `Watcher: ${headline} [${fingerprint}]`,
@@ -191,7 +337,10 @@ test("on Monday the mail lists the open digest-class findings per site; other da
   await digestTick(monday.env, MONDAY, read(EMPTY));
   const text = monday.sent[0]!.text;
   assert.match(text, /Weekly digest \(3 open/);
-  assert.match(text, /sample\n- Sample's CSP blocks the beacon script \(since 2026-10-05\)\n- Sample is missing security headers/);
+  assert.match(
+    text,
+    /sample\n- Sample's CSP blocks the beacon script \(since 2026-10-05\)\n- Sample is missing security headers/,
+  );
   assert.match(text, /other\n- Other is missing security headers/);
   assert.doesNotMatch(text, /busy/, "an attention-class finding was in the weekly digest");
   assert.doesNotMatch(text, /is down/, "a job-class finding was in the weekly digest");

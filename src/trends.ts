@@ -5,7 +5,17 @@ import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import type { TrendBackupSlot, TrendCiDay, TrendCiRepo, TrendCostWeek, TrendDeployRepo, TrendMergeWeek, TrendMinutesWeek, TrendQueueDay, PortalTrends } from "./ops-types/views";
+import type {
+  TrendBackupSlot,
+  TrendCiDay,
+  TrendCiRepo,
+  TrendCostWeek,
+  TrendDeployRepo,
+  TrendMergeWeek,
+  TrendMinutesWeek,
+  TrendQueueDay,
+  PortalTrends,
+} from "./ops-types/views";
 import { MINUTE_MS, DAY_MS } from "./time";
 
 // The series behind the Portal's charts (docs/design/design-portal-evaluation.md section 3,
@@ -72,13 +82,22 @@ export function lastDays(now: Date, days: number): string[] {
 /** An audit or touch time to milliseconds. Both "YYYY-MM-DD HH:MM:SS" (SQLite's
  *  datetime('now'), no zone) and ISO are written; both are UTC. */
 export function timeMs(at: string): number {
-  return Date.parse(at.includes("T") ? (/[zZ]|[+-]\d\d:?\d\d$/.test(at) ? at : `${at}Z`) : `${at.replace(" ", "T")}Z`);
+  return Date.parse(
+    at.includes("T")
+      ? /[zZ]|[+-]\d\d:?\d\d$/.test(at)
+        ? at
+        : `${at}Z`
+      : `${at.replace(" ", "T")}Z`,
+  );
 }
 
 /** Minutes and sessions per week from activity times: a session ends after a gap over
  *  five minutes and counts its span plus one minute, so a single click is a minute. A
  *  session is credited to the week it starts in. */
-export function sessionMinutes(times: number[], mondays: string[]): Map<string, { minutes: number; sessions: number }> {
+export function sessionMinutes(
+  times: number[],
+  mondays: string[],
+): Map<string, { minutes: number; sessions: number }> {
   const out = new Map(mondays.map((m) => [m, { minutes: 0, sessions: 0 }]));
   const sorted = [...times].filter(Number.isFinite).sort((a, b) => a - b);
   let i = 0;
@@ -96,33 +115,46 @@ export function sessionMinutes(times: number[], mondays: string[]): Map<string, 
   return out;
 }
 
-async function readMinutes(db: D1Database, mondays: string[]): Promise<{ weeks: TrendMinutesWeek[]; truncated: boolean }> {
+async function readMinutes(
+  db: D1Database,
+  mondays: string[],
+): Promise<{ weeks: TrendMinutesWeek[]; truncated: boolean }> {
   const from = `${mondays[0]} 00:00:00`;
   const [audit, touches, decisions, approvals] = await Promise.all([
     // A write by the administrator's own login. The Portal's reads are not audited, so
     // looking without acting is not counted: the figure is a floor, and says so.
     db
-      .prepare("SELECT at FROM audit_log WHERE at >= ?1 AND actor LIKE 'access:%' ORDER BY at DESC LIMIT ?2")
+      .prepare(
+        "SELECT at FROM audit_log WHERE at >= ?1 AND actor LIKE 'access:%' ORDER BY at DESC LIMIT ?2",
+      )
       .bind(from, MINUTES_ROW_CAP + 1)
       .all<{ at: string }>(),
     db
-      .prepare("SELECT at FROM job_touches WHERE at >= ?1 AND actor_kind = 'human' ORDER BY at DESC LIMIT ?2")
+      .prepare(
+        "SELECT at FROM job_touches WHERE at >= ?1 AND actor_kind = 'human' ORDER BY at DESC LIMIT ?2",
+      )
       .bind(mondays[0], MINUTES_ROW_CAP + 1)
       .all<{ at: string }>(),
     // A decision is a human touch that ended a wait or closed a job, not a note.
     db
       .prepare(
-        "SELECT substr(at, 1, 10) AS day, COUNT(*) AS n FROM job_touches WHERE at >= ?1 AND actor_kind = 'human' AND kind <> 'note' GROUP BY day"
+        "SELECT substr(at, 1, 10) AS day, COUNT(*) AS n FROM job_touches WHERE at >= ?1 AND actor_kind = 'human' AND kind <> 'note' GROUP BY day",
       )
       .bind(mondays[0])
       .all<{ day: string; n: number }>(),
     db
-      .prepare("SELECT substr(approved_at, 1, 10) AS day, COUNT(*) AS n FROM pr_approvals WHERE approved_at >= ?1 AND approved_by LIKE 'access:%' GROUP BY day")
+      .prepare(
+        "SELECT substr(approved_at, 1, 10) AS day, COUNT(*) AS n FROM pr_approvals WHERE approved_at >= ?1 AND approved_by LIKE 'access:%' GROUP BY day",
+      )
       .bind(mondays[0])
       .all<{ day: string; n: number }>(),
   ]);
-  const truncated = audit.results.length > MINUTES_ROW_CAP || touches.results.length > MINUTES_ROW_CAP;
-  const times = [...audit.results.slice(0, MINUTES_ROW_CAP), ...touches.results.slice(0, MINUTES_ROW_CAP)].map((r) => timeMs(r.at));
+  const truncated =
+    audit.results.length > MINUTES_ROW_CAP || touches.results.length > MINUTES_ROW_CAP;
+  const times = [
+    ...audit.results.slice(0, MINUTES_ROW_CAP),
+    ...touches.results.slice(0, MINUTES_ROW_CAP),
+  ].map((r) => timeMs(r.at));
   const minutes = sessionMinutes(times, mondays);
   const perWeek = new Map(mondays.map((m) => [m, 0]));
   for (const r of [...decisions.results, ...approvals.results]) {
@@ -130,7 +162,13 @@ async function readMinutes(db: D1Database, mondays: string[]): Promise<{ weeks: 
     if (perWeek.has(m)) perWeek.set(m, perWeek.get(m)! + r.n);
   }
   return {
-    weeks: mondays.map((m) => ({ week: isoWeek(m), start: m, minutes: minutes.get(m)!.minutes, sessions: minutes.get(m)!.sessions, decisions: perWeek.get(m)! })),
+    weeks: mondays.map((m) => ({
+      week: isoWeek(m),
+      start: m,
+      minutes: minutes.get(m)!.minutes,
+      sessions: minutes.get(m)!.sessions,
+      decisions: perWeek.get(m)!,
+    })),
     truncated,
   };
 }
@@ -141,12 +179,21 @@ async function readQueue(db: D1Database, days: string[]): Promise<TrendQueueDay[
     // Open when the window starts: posted before it and not yet ended by then. A job
     // that ended (done, failed, superseded) never moves again, so its updated_at is when.
     db
-      .prepare("SELECT COUNT(*) AS n FROM jobs WHERE created_at < ?1 AND NOT (status IN ('done', 'failed', 'superseded') AND updated_at < ?1)")
+      .prepare(
+        "SELECT COUNT(*) AS n FROM jobs WHERE created_at < ?1 AND NOT (status IN ('done', 'failed', 'superseded') AND updated_at < ?1)",
+      )
       .bind(from)
       .first<{ n: number }>(),
-    db.prepare("SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n FROM jobs WHERE created_at >= ?1 GROUP BY day").bind(from).all<{ day: string; n: number }>(),
     db
-      .prepare("SELECT substr(updated_at, 1, 10) AS day, COUNT(*) AS n FROM jobs WHERE status IN ('done', 'failed', 'superseded') AND updated_at >= ?1 GROUP BY day")
+      .prepare(
+        "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n FROM jobs WHERE created_at >= ?1 GROUP BY day",
+      )
+      .bind(from)
+      .all<{ day: string; n: number }>(),
+    db
+      .prepare(
+        "SELECT substr(updated_at, 1, 10) AS day, COUNT(*) AS n FROM jobs WHERE status IN ('done', 'failed', 'superseded') AND updated_at >= ?1 GROUP BY day",
+      )
       .bind(from)
       .all<{ day: string; n: number }>(),
   ]);
@@ -161,7 +208,10 @@ async function readQueue(db: D1Database, days: string[]): Promise<TrendQueueDay[
   });
 }
 
-async function readMerges(db: D1Database, mondays: string[]): Promise<{ weeks: TrendMergeWeek[]; rollbacks: PortalTrends["merges"]["rollbacks"] }> {
+async function readMerges(
+  db: D1Database,
+  mondays: string[],
+): Promise<{ weeks: TrendMergeWeek[]; rollbacks: PortalTrends["merges"]["rollbacks"] }> {
   const from = `${mondays[0]} 00:00:00`;
   const [rows, rollbacks] = await Promise.all([
     // auto-merged: the policy merged on its own (src/auto-merge-tick.ts). approved-merged:
@@ -183,42 +233,86 @@ async function readMerges(db: D1Database, mondays: string[]): Promise<{ weeks: T
            AND (action IN ('auto-merged', 'approved-merged', 'pr-closed')
                 OR (action = 'manage_pr' AND (params LIKE '%"merged":true%' OR params LIKE '%"action":"close"%')))
            AND NOT (action = 'approved-merged' AND instr(COALESCE(params, ''), ?2) > 0)
-         GROUP BY day, kind`
+         GROUP BY day, kind`,
       )
       // instr, not LIKE: D1 refuses a LIKE pattern this long.
       .bind(from, `"reason":${JSON.stringify(AUTO_MERGED_APPROVAL_REASON)}`)
       .all<{ day: string; kind: "auto" | "approved" | "seat" | "closed"; n: number }>(),
     db
-      .prepare("SELECT repo, pr, run_at, outcome FROM deploy_outcomes WHERE run_at >= ?1 AND outcome IN ('rolled_back', 'rollback_failed') ORDER BY run_at")
+      .prepare(
+        "SELECT repo, pr, run_at, outcome FROM deploy_outcomes WHERE run_at >= ?1 AND outcome IN ('rolled_back', 'rollback_failed') ORDER BY run_at",
+      )
       .bind(mondays[0])
-      .all<{ repo: string; pr: number | null; run_at: string; outcome: "rolled_back" | "rollback_failed" }>(),
+      .all<{
+        repo: string;
+        pr: number | null;
+        run_at: string;
+        outcome: "rolled_back" | "rollback_failed";
+      }>(),
   ]);
-  const weeks = new Map<string, TrendMergeWeek>(mondays.map((m) => [m, { week: isoWeek(m), start: m, auto: 0, approved: 0, seat: 0, closed: 0 }]));
+  const weeks = new Map<string, TrendMergeWeek>(
+    mondays.map((m) => [
+      m,
+      { week: isoWeek(m), start: m, auto: 0, approved: 0, seat: 0, closed: 0 },
+    ]),
+  );
   for (const r of rows.results) {
     const w = weeks.get(mondayOf(r.day));
     if (w) w[r.kind] += r.n;
   }
-  return { weeks: [...weeks.values()], rollbacks: rollbacks.results.map((r) => ({ at: r.run_at, repo: r.repo, pr: r.pr, outcome: r.outcome })) };
+  return {
+    weeks: [...weeks.values()],
+    rollbacks: rollbacks.results.map((r) => ({
+      at: r.run_at,
+      repo: r.repo,
+      pr: r.pr,
+      outcome: r.outcome,
+    })),
+  };
 }
 
-type DeployOutcomeName = "verified" | "rolled_back" | "rollback_failed" | "rollback_skipped" | "unverified";
+type DeployOutcomeName =
+  | "verified"
+  | "rolled_back"
+  | "rollback_failed"
+  | "rollback_skipped"
+  | "unverified";
 
 /** DORA's deploy measures per repository (checklist F4) from its deploy_outcomes rows in the
  *  window: deploy frequency (gated deploys per week), change failure rate (deploys the live
  *  gate refused, over every deploy whose gate decided) and median time to restore (over the
  *  rolled-back deploys that recorded one). A gate that could not run ("unverified") is
  *  counted apart: it neither shipped nor failed as far as anyone knows. */
-function deployStats(rows: ReadonlyArray<{ repo: string; outcome: DeployOutcomeName; restore_seconds: number | null }>, weeks: number): TrendDeployRepo[] {
-  const by = new Map<string, { shipped: number; refused: number; rolled_back: number; unverified: number; restores: number[] }>();
+function deployStats(
+  rows: ReadonlyArray<{ repo: string; outcome: DeployOutcomeName; restore_seconds: number | null }>,
+  weeks: number,
+): TrendDeployRepo[] {
+  const by = new Map<
+    string,
+    {
+      shipped: number;
+      refused: number;
+      rolled_back: number;
+      unverified: number;
+      restores: number[];
+    }
+  >();
   for (const r of rows) {
-    const t = by.get(r.repo) ?? { shipped: 0, refused: 0, rolled_back: 0, unverified: 0, restores: [] };
+    const t = by.get(r.repo) ?? {
+      shipped: 0,
+      refused: 0,
+      rolled_back: 0,
+      unverified: 0,
+      restores: [],
+    };
     by.set(r.repo, t);
     if (r.outcome === "verified") t.shipped++;
     else if (r.outcome === "unverified") t.unverified++;
     else {
       t.refused++;
       if (r.outcome === "rolled_back") t.rolled_back++;
-      if (r.outcome === "rolled_back" && r.restore_seconds !== null) t.restores.push(r.restore_seconds);
+      if (r.outcome === "rolled_back" && r.restore_seconds !== null)
+        t.restores.push(r.restore_seconds);
     }
   }
   return [...by.entries()]
@@ -227,7 +321,12 @@ function deployStats(rows: ReadonlyArray<{ repo: string; outcome: DeployOutcomeN
       const decided = t.shipped + t.refused;
       const sorted = [...t.restores].sort((a, b) => a - b);
       const mid = sorted.length >> 1;
-      const median = sorted.length === 0 ? null : sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+      const median =
+        sorted.length === 0
+          ? null
+          : sorted.length % 2
+            ? sorted[mid]!
+            : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
       return {
         repo,
         deploys: decided + t.unverified,
@@ -252,8 +351,13 @@ async function readDeploys(db: D1Database, mondays: string[]): Promise<TrendDepl
 
 /** Model spend per week from outcome rows summed by day (cost_usd, rows that carried one).
  *  A week with no costed outcome is null, never 0: no telemetry is not a free week. */
-export function costWeeks(rows: Array<{ day: string; usd: number; n: number }>, mondays: string[]): TrendCostWeek[] {
-  const weeks = new Map<string, { usd: number; jobs: number }>(mondays.map((m) => [m, { usd: 0, jobs: 0 }]));
+export function costWeeks(
+  rows: Array<{ day: string; usd: number; n: number }>,
+  mondays: string[],
+): TrendCostWeek[] {
+  const weeks = new Map<string, { usd: number; jobs: number }>(
+    mondays.map((m) => [m, { usd: 0, jobs: 0 }]),
+  );
   for (const r of rows) {
     const w = weeks.get(mondayOf(r.day));
     if (!w) continue;
@@ -262,13 +366,20 @@ export function costWeeks(rows: Array<{ day: string; usd: number; n: number }>, 
   }
   return mondays.map((m) => {
     const w = weeks.get(m)!;
-    return { week: isoWeek(m), start: m, usd: w.jobs ? Math.round(w.usd * 100) / 100 : null, jobs: w.jobs };
+    return {
+      week: isoWeek(m),
+      start: m,
+      usd: w.jobs ? Math.round(w.usd * 100) / 100 : null,
+      jobs: w.jobs,
+    };
   });
 }
 
 async function readCost(db: D1Database, mondays: string[]): Promise<TrendCostWeek[]> {
   const rows = await db
-    .prepare("SELECT substr(recorded_at, 1, 10) AS day, SUM(cost_usd) AS usd, COUNT(cost_usd) AS n FROM job_outcomes WHERE recorded_at >= ?1 AND cost_usd IS NOT NULL GROUP BY day")
+    .prepare(
+      "SELECT substr(recorded_at, 1, 10) AS day, SUM(cost_usd) AS usd, COUNT(cost_usd) AS n FROM job_outcomes WHERE recorded_at >= ?1 AND cost_usd IS NOT NULL GROUP BY day",
+    )
     .bind(mondays[0])
     .all<{ day: string; usd: number; n: number }>();
   return costWeeks(rows.results, mondays);
@@ -276,13 +387,22 @@ async function readCost(db: D1Database, mondays: string[]): Promise<TrendCostWee
 
 /** The retention slots d1-dump keeps (14 daily, 4 weekly, 3 monthly), each filled when a
  *  complete run falls in it. Run ids begin with their ISO day. */
-export function backupSlots(completeRunIds: string[], now: Date): NonNullable<PortalTrends["backups"]["slots"]> {
+export function backupSlots(
+  completeRunIds: string[],
+  now: Date,
+): NonNullable<PortalTrends["backups"]["slots"]> {
   const days = new Set(completeRunIds.map((id) => id.slice(0, 10)));
   const weeks = new Set([...days].map(mondayOf));
   const months = new Set([...days].map((d) => d.slice(0, 7)));
   const { daily: nDaily, weekly: nWeekly, monthly: nMonthly } = DUMP_RETENTION;
-  const daily: TrendBackupSlot[] = lastDays(now, nDaily).map((key) => ({ key, filled: days.has(key) }));
-  const weekly: TrendBackupSlot[] = weekStarts(now, nWeekly).map((key) => ({ key, filled: weeks.has(key) }));
+  const daily: TrendBackupSlot[] = lastDays(now, nDaily).map((key) => ({
+    key,
+    filled: days.has(key),
+  }));
+  const weekly: TrendBackupSlot[] = weekStarts(now, nWeekly).map((key) => ({
+    key,
+    filled: weeks.has(key),
+  }));
   const y = now.getUTCFullYear();
   const m = now.getUTCMonth();
   const monthly: TrendBackupSlot[] = Array.from({ length: nMonthly }, (_, i) => {
@@ -300,13 +420,18 @@ async function readBackups(env: Env, now: Date): Promise<PortalTrends["backups"]
     do {
       const page = await env.MEDIA.list({ prefix: BACKUP_PREFIX, cursor });
       for (const o of page.objects) {
-        if (o.key.endsWith(`/${COMPLETE_MARKER}`)) complete.push(o.key.slice(BACKUP_PREFIX.length).split("/")[0]!);
+        if (o.key.endsWith(`/${COMPLETE_MARKER}`))
+          complete.push(o.key.slice(BACKUP_PREFIX.length).split("/")[0]!);
       }
       cursor = page.truncated ? page.cursor : undefined;
     } while (cursor);
     return { slots: backupSlots(complete, now), runs: complete.length, error: null };
   } catch (err) {
-    return { slots: null, runs: null, error: `The backup bucket could not be listed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      slots: null,
+      runs: null,
+      error: `The backup bucket could not be listed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 
@@ -323,7 +448,12 @@ interface RunLite {
  *  the day's end failed, "green" when every one passed, carried forward over a day with
  *  none, and "none" before the first run seen. */
 export function ciDays(runs: RunLite[], days: string[]): TrendCiDay[] {
-  const done = runs.filter((r) => r.status === "completed" && r.conclusion !== null && !["cancelled", "skipped", "neutral"].includes(r.conclusion));
+  const done = runs.filter(
+    (r) =>
+      r.status === "completed" &&
+      r.conclusion !== null &&
+      !["cancelled", "skipped", "neutral"].includes(r.conclusion),
+  );
   const byDay = new Map<string, RunLite[]>();
   for (const r of done) {
     const d = r.created_at.slice(0, 10);
@@ -334,7 +464,8 @@ export function ciDays(runs: RunLite[], days: string[]): TrendCiDay[] {
     const list = (byDay.get(day) ?? []).sort((a, b) => a.created_at.localeCompare(b.created_at));
     const failed = list.filter((r) => r.conclusion !== "success").length;
     for (const r of list) latest.set(r.workflow_id, r.conclusion === "success");
-    const state: TrendCiDay["state"] = latest.size === 0 ? "none" : [...latest.values()].every(Boolean) ? "green" : "red";
+    const state: TrendCiDay["state"] =
+      latest.size === 0 ? "none" : [...latest.values()].every(Boolean) ? "green" : "red";
     return { day, runs: list.length, failed, state };
   });
 }
@@ -346,7 +477,12 @@ async function readCiRepo(env: Env, namespace: string, days: string[]): Promise<
   const resp = await ghFetch(env, owner, repo, query);
   if (!resp.ok) throw new Error(`GitHub answered ${resp.status} for ${full}'s runs`);
   const data = (await resp.json()) as { workflow_runs: RunLite[]; total_count: number };
-  return { namespace, repo: full, days: ciDays(data.workflow_runs, days), truncated: data.total_count > data.workflow_runs.length };
+  return {
+    namespace,
+    repo: full,
+    days: ciDays(data.workflow_runs, days),
+    truncated: data.total_count > data.workflow_runs.length,
+  };
 }
 
 async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
@@ -355,18 +491,37 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
     const cached = await env.APP_KV.get(CI_CACHE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached) as PortalTrends["ci"];
-      if (parsed.repos.every((r) => r.days.length === days.length && r.days[r.days.length - 1]?.day === days[days.length - 1])) return parsed;
+      if (
+        parsed.repos.every(
+          (r) =>
+            r.days.length === days.length &&
+            r.days[r.days.length - 1]?.day === days[days.length - 1],
+        )
+      )
+        return parsed;
     }
   } catch (err) {
     // An unreadable cache entry is read again from GitHub below.
-    logEvent("TRENDS_CI_CACHE_UNREADABLE", { message: `TRENDS_CI_CACHE_UNREADABLE ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}` }, { level: "warn" });
+    logEvent(
+      "TRENDS_CI_CACHE_UNREADABLE",
+      {
+        message: `TRENDS_CI_CACHE_UNREADABLE ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "warn" },
+    );
   }
   const repos: TrendCiRepo[] = [];
   const notRead: Array<{ namespace: string; error: string }> = [];
-  const settled = await Promise.allSettled(APP_ROSTER.map((namespace) => readCiRepo(env, namespace, days)));
+  const settled = await Promise.allSettled(
+    APP_ROSTER.map((namespace) => readCiRepo(env, namespace, days)),
+  );
   settled.forEach((r, i) => {
     if (r.status === "fulfilled") repos.push(r.value);
-    else notRead.push({ namespace: APP_ROSTER[i]!, error: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+    else
+      notRead.push({
+        namespace: APP_ROSTER[i]!,
+        error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      });
   });
   const out: PortalTrends["ci"] = { read_at: now.toISOString(), repos, not_read: notRead };
   // Only a full read is kept, so a GitHub outage is retried on the next look, not for an hour.
@@ -375,7 +530,13 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
     try {
       await env.APP_KV.put(CI_CACHE_KEY, JSON.stringify(out), { expirationTtl: CI_CACHE_SECONDS });
     } catch (err) {
-      logEvent("TRENDS_CI_CACHE_WRITE_FAILED", { message: `TRENDS_CI_CACHE_WRITE_FAILED ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}` }, { level: "warn" });
+      logEvent(
+        "TRENDS_CI_CACHE_WRITE_FAILED",
+        {
+          message: `TRENDS_CI_CACHE_WRITE_FAILED ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+        },
+        { level: "warn" },
+      );
     }
   }
   return out;

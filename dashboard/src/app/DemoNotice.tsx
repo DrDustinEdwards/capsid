@@ -6,7 +6,8 @@ import "capsomer/banner.css";
 export function DemoNotice() {
   return (
     <Banner tone="info" title="Demo with sample data">
-      This is how the page looks for a signed-in owner. The numbers are made up, and nothing here belongs to a real account.
+      This is how the page looks for a signed-in owner. The numbers are made up, and nothing here
+      belongs to a real account.
     </Banner>
   );
 }

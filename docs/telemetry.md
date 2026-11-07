@@ -7,10 +7,10 @@ below are set; the receiver is live either way and stores nothing it is not sent
 
 ## What Capsid receives
 
-| Route | What it keeps |
-| --- | --- |
+| Route                       | What it keeps                                                                                                                                                                                                                                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `POST /ops/otlp/v1/metrics` | Per session, metric, type and model, in `session_usage`: `claude_code.cost.usage` (USD), `claude_code.token.usage` (input, output, cacheRead, cacheCreation), `claude_code.active_time.total` (user, cli; seconds), `claude_code.commit.count`, `claude_code.pull_request.count`, `claude_code.lines_of_code.count` (added, removed) |
-| `POST /ops/otlp/v1/logs` | A count of `api_error` events per session and HTTP status, as the metric `claude_code.api_error`. Every other event is dropped |
+| `POST /ops/otlp/v1/logs`    | A count of `api_error` events per session and HTTP status, as the metric `claude_code.api_error`. Every other event is dropped                                                                                                                                                                                                       |
 
 - **Format.** OTLP/HTTP JSON only (`OTEL_EXPORTER_OTLP_PROTOCOL=http/json`); protobuf is
   refused with 415. A gzip body is accepted. The cap is 1MB before and after

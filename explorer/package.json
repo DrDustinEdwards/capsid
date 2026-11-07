@@ -1,8 +1,8 @@
 {
   "name": "capsid-explorer",
   "private": true,
-  "type": "module",
   "description": "capsid.dustinedwards.info: the system explorer, prerendered from Capsid's public model and numbers (capsid/research/design-system-explorer.md, section 4).",
+  "type": "module",
   "scripts": {
     "build": "node --import ../test/resolve-ts.mjs build.mjs",
     "check": "tsc -p .",
@@ -11,8 +11,8 @@
     "indexnow": "node indexnow.mjs"
   },
   "dependencies": {
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.32.1",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.75.0",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.33.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.77.0",
     "enarratio": "0.7.3"
   },
   "devDependencies": {

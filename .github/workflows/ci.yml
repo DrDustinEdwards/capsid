@@ -71,8 +71,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      # The no AI trailer check is checks.yml (devkit's reusable workflow), and the
-      # no-bloat report is no-bloat.yml.
+      # The no AI trailer check, no-bloat and the Worker bundle size are checks.yml
+      # (devkit's pr.yml, one job per pull request).
 
       # Verified on a fresh clone 2026-08-11: npm ci, npm run check and npm test all
       # succeed with no wrangler.jsonc present, because tsconfig pulls its types from
@@ -112,11 +112,19 @@ jobs:
           npm run check:dashboard || status=1
           exit $status
 
-      # THE LINTS (test/lint/: dead exports, doc drift, oxlint). BEFORE Tests on
-      # purpose: this step is not on the auto-merge policy's required list, so a failure
-      # here stops the job, and the skipped required Tests step refuses the merge.
-      - name: Lint dead exports and doc drift
+      # THE LINTS. BEFORE Tests on purpose: these steps are not on the auto-merge
+      # policy's required list, so a failure here stops the job, and the skipped required
+      # Tests step refuses the merge. Lint is the network's shared Oxlint config (type-aware,
+      # so after the typechecks); the repo's own lints (test/lint/: dead exports, doc drift)
+      # are not part of it.
+      - name: Lint
         run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint dead exports and doc drift
+        run: npm run lint:repo
 
       # THE RATCHETS (devkit): no raw console.* call in src/ (the baseline in .console.json
       # is 0; server code logs through logEvent), and no applied migration edited, renamed or
@@ -161,11 +169,13 @@ jobs:
   # (test/conformance/entry.ts) and the real door with its OAuth provider (src/index.ts)
   # under wrangler dev, each scenario held to its recorded count, then the 401 challenge,
   # CIMD and the /register allowlist. Its own job, beside checks, so it adds no
-  # wall-clock time; not on the schedule, for the reason checks is not.
+  # wall-clock time; not on the schedule, for the reason checks is not, and not on a
+  # push to master: the merge was checked as a pull request and no deploy needs it
+  # (devkit README, "No second run on main").
   conformance:
     name: conformance
     runs-on: ubuntu-latest
-    if: github.event_name != 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -400,4 +410,3 @@ jobs:
           echo "::error::the rollback did not take effect: /health still reports ${ROLLBACK_TO} after 20 reads (this run's commit ${GITHUB_SHA}). Production may still be serving the refused deploy; a human decides."
           echo "rollback_did_not_take_effect: from=${ROLLBACK_FROM} now=${ROLLBACK_TO}" >> "$GITHUB_STEP_SUMMARY"
           exit 1
-

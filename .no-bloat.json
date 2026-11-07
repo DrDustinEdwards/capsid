@@ -12,25 +12,25 @@
     }
   ],
   "baseline": {
-    "measured_at": "2d7ccd7",
+    "measured_at": "d2f3435",
     "knip (Worker)": {},
     "knip (dashboard)": {
       "Unused files": 1,
       "Unused exports": 1
     },
     "jscpd": {
-      "clones": 12,
-      "lines": 94,
-      "percentage": 0.16
+      "clones": 42,
+      "lines": 351,
+      "percentage": 0.43
     },
     "tests": {
-      "files": 276,
-      "cases": 2749
+      "files": 273,
+      "cases": 2650
     },
     "comments": {
-      "lines": 16598,
-      "code": 95187,
-      "percentage": 14.85
+      "lines": 16886,
+      "code": 141534,
+      "percentage": 10.66
     }
   }
 }

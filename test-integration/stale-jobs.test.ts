@@ -35,22 +35,30 @@ function jobId(): string {
 async function plant(
   status: string,
   updatedAgo: number,
-  over: { namespace?: string; result_ref?: string; title?: string } = {}
+  over: { namespace?: string; result_ref?: string; title?: string } = {},
 ): Promise<string> {
   const id = jobId();
   const held = status === "claimed" || status === "blocked" ? "agent:sample-driver" : null;
   await env.DB.prepare(
     `INSERT INTO jobs (id, namespace, title, body, status, priority, gate_required, posted_by, claimed_by, result_ref, created_at, updated_at)
-     VALUES (?1, ?2, ?3, 'do the thing', ?4, 0, 0, 'github:sample', ?5, ?6, ?7, ?7)`
+     VALUES (?1, ?2, ?3, 'do the thing', ?4, 0, 0, 'github:sample', ?5, ?6, ?7, ?7)`,
   )
-    .bind(id, over.namespace ?? "sample", over.title ?? `stale view ${id}`, status, held, over.result_ref ?? null, ago(updatedAgo))
+    .bind(
+      id,
+      over.namespace ?? "sample",
+      over.title ?? `stale view ${id}`,
+      status,
+      held,
+      over.result_ref ?? null,
+      ago(updatedAgo),
+    )
     .run();
   return id;
 }
 
 async function autoResumedAt(id: string, at: string, namespace = "sample"): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, detail, at) VALUES (?1, ?2, 'resume', ?3, 'system', NULL, ?4)`
+    `INSERT INTO job_touches (job_id, namespace, kind, actor, actor_kind, detail, at) VALUES (?1, ?2, 'resume', ?3, 'system', NULL, ?4)`,
   )
     .bind(id, namespace, MERGE_RESUME_ACTOR, at)
     .run();
@@ -63,16 +71,30 @@ async function putCache(cache: StalePrCache): Promise<void> {
 function scopedReader(namespace: string): Agent {
   const scopes = defaultScopes([namespace]);
   scopes.grants = ["read"];
-  return { id: "agent_5a1e5a1e5a1e", name: "sample-reader", kind: "driver", actor: "agent:sample-reader", scopes, admin: false, row: null };
+  return {
+    id: "agent_5a1e5a1e5a1e",
+    name: "sample-reader",
+    kind: "driver",
+    actor: "agent:sample-reader",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
-async function callJobs(agent: Agent, args: Record<string, unknown>): Promise<{ isError?: boolean; text: string }> {
+async function callJobs(
+  agent: Agent,
+  args: Record<string, unknown>,
+): Promise<{ isError?: boolean; text: string }> {
   const server = buildServer(env as never, agent);
   const client = new Client({ name: "stale-jobs", version: "1.0.0" });
   const [c, s] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(s), client.connect(c)]);
   try {
-    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: args })) as { isError?: boolean; content: Array<{ text: string }> };
+    const result = (await client.callTool({ name: "capsid_work_jobs", arguments: args })) as {
+      isError?: boolean;
+      content: Array<{ text: string }>;
+    };
     return { isError: result.isError, text: result.content[0].text };
   } finally {
     await client.close();
@@ -119,7 +141,15 @@ describe("staleJobs", () => {
     expect(byId.get(resumedOld)?.reason).toMatch(/30 hours later$/);
     expect(byId.get(settled)?.rule).toBe("prs-settled");
     expect(byId.get(settled)?.reason).toMatch(/1 merged, 1 closed without merging/);
-    for (const clean of [blockedFresh, queuedOld, doneOld, resumedFresh, resumedDone, stillOpen, readBeforeChange]) {
+    for (const clean of [
+      blockedFresh,
+      queuedOld,
+      doneOld,
+      resumedFresh,
+      resumedDone,
+      stillOpen,
+      readBeforeChange,
+    ]) {
       expect(byId.has(clean), `${clean} should not be stale`).toBe(false);
     }
     expect(out.rows).toHaveLength(4);
@@ -130,8 +160,12 @@ describe("staleJobs", () => {
   it("narrows to the namespace named, and with none reads every namespace", async () => {
     const mine = await plant("blocked", 4 * DAY);
     const theirs = await plant("blocked", 4 * DAY, { namespace: "other" });
-    expect((await staleJobs(env as never, NOW, { namespace: "sample" })).rows.map((r) => r.id)).toEqual([mine]);
-    expect((await staleJobs(env as never, NOW)).rows.map((r) => r.id).sort()).toEqual([mine, theirs].sort());
+    expect(
+      (await staleJobs(env as never, NOW, { namespace: "sample" })).rows.map((r) => r.id),
+    ).toEqual([mine]);
+    expect((await staleJobs(env as never, NOW)).rows.map((r) => r.id).sort()).toEqual(
+      [mine, theirs].sort(),
+    );
   });
 
   it("a damaged cache is said in the note and the other rules still answer", async () => {
@@ -147,7 +181,9 @@ describe("the merge-resume step's cache", () => {
   it("records the counts for a blocked job it read, and drops the entry of a job no longer blocked", async () => {
     // GitHub is not reachable from the test runtime and "sample" maps no repo, so the read
     // is unread: the job is not resumed and not settled.
-    const blocked = await plant("blocked", HOUR, { result_ref: "https://github.com/example/sample/pull/9" });
+    const blocked = await plant("blocked", HOUR, {
+      result_ref: "https://github.com/example/sample/pull/9",
+    });
     const finished = await plant("done", HOUR);
     await putCache({ [finished]: { merged: 1, closed: 0, open: 0, unread: 0, at: ago(HOUR) } });
 
@@ -156,7 +192,13 @@ describe("the merge-resume step's cache", () => {
     expect(report.cache_error).toBeUndefined();
     const cache = JSON.parse((await env.APP_KV.get(STALE_PRS_KEY)) ?? "{}") as StalePrCache;
     expect(Object.keys(cache)).toEqual([blocked]);
-    expect(cache[blocked]).toEqual({ merged: 0, closed: 0, open: 0, unread: 1, at: NOW.toISOString() });
+    expect(cache[blocked]).toEqual({
+      merged: 0,
+      closed: 0,
+      open: 0,
+      unread: 1,
+      at: NOW.toISOString(),
+    });
     expect((await staleJobs(env as never, NOW, { namespace: "sample" })).rows).toEqual([]);
   });
 });
@@ -169,7 +211,11 @@ describe("jobs list stale: true, through the tool", () => {
 
     const named = await callJobs(reader, { action: "list", stale: true, namespace: "sample" });
     expect(named.isError, named.text).not.toBe(true);
-    const body = JSON.parse(named.text) as { ok: boolean; action: string; stale: Array<{ id: string; rule: string }> };
+    const body = JSON.parse(named.text) as {
+      ok: boolean;
+      action: string;
+      stale: Array<{ id: string; rule: string }>;
+    };
     expect(body.ok).toBe(true);
     expect(body.action).toBe("list");
     expect(body.stale.map((r) => r.id)).toEqual([mine]);
@@ -187,11 +233,19 @@ describe("jobs list stale: true, through the tool", () => {
   it("refuses stale with view, status or id, and on any action but list", async () => {
     const reader = scopedReader("sample");
     for (const extra of [{ view: "plan" }, { status: "blocked" }, { id: "job_5a1e00000000" }]) {
-      const refused = await callJobs(reader, { action: "list", stale: true, namespace: "sample", ...extra });
+      const refused = await callJobs(reader, {
+        action: "list",
+        stale: true,
+        namespace: "sample",
+        ...extra,
+      });
       expect(refused.isError, JSON.stringify(extra)).toBe(true);
       expect(refused.text).toMatch(/without view, status or id/);
     }
-    const claim = await callJobs(reader, { action: "claim", stale: true, namespace: "sample" });
+    // A writer: a reader is served list alone (src/tools/surface.ts READ_VIEWS).
+    const writer = scopedReader("sample");
+    writer.scopes.grants = ["read", "write"];
+    const claim = await callJobs(writer, { action: "claim", stale: true, namespace: "sample" });
     expect(claim.isError).toBe(true);
     expect(claim.text).toMatch(/stale is for action list only/);
   });
@@ -205,10 +259,19 @@ describe("GET /portal/api/stale, through the Worker", () => {
     const mine = await plant("blocked", 4 * DAY);
     const theirs = await plant("claimed", 4 * DAY, { namespace: "other" });
     await plant("blocked", HOUR);
-    const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())).split(";")[0];
+    const session = (
+      await portalSessionCookie({ email: "admin@example.com" }, SECRET, new Date())
+    ).split(";")[0];
     const ctx = createExecutionContext();
-    const request = new Request(`https://capsid.test${PORTAL_STALE_PATH}`, { headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" }, redirect: "manual" });
-    const response = (await worker.fetch!(request as never, { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET } as never, ctx)) as unknown as Response;
+    const request = new Request(`https://capsid.test${PORTAL_STALE_PATH}`, {
+      headers: { Cookie: session, "Sec-Fetch-Site": "same-origin" },
+      redirect: "manual",
+    });
+    const response = (await worker.fetch!(
+      request as never,
+      { ...(env as unknown as Env), COOKIE_ENCRYPTION_KEY: SECRET } as never,
+      ctx,
+    )) as unknown as Response;
     await waitOnExecutionContext(ctx);
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");

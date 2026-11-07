@@ -52,7 +52,14 @@ const APP_CONCURRENCY = 6;
 const MANIFESTS_PER_APP = 16;
 const WORKFLOWS_PER_APP = 40;
 const TAGS_PER_PAGE = 100;
-const RENOVATE_FILES = ["renovate.json", ".github/renovate.json", "renovate.json5", ".github/renovate.json5", ".renovaterc", ".renovaterc.json"];
+const RENOVATE_FILES = [
+  "renovate.json",
+  ".github/renovate.json",
+  "renovate.json5",
+  ".github/renovate.json5",
+  ".renovaterc",
+  ".renovaterc.json",
+];
 
 interface SharedRow {
   name: string;
@@ -83,8 +90,15 @@ function jsonList(raw: string | null | undefined): string[] {
 }
 
 export async function readSharedConfig(db: D1Database): Promise<SharedConfig[]> {
-  const { results } = await db.prepare("SELECT name, repo, formerly, local_paths FROM shared_packages ORDER BY name LIMIT 50").all<SharedRow>();
-  return (results ?? []).map((r) => ({ name: r.name, repo: r.repo, formerly: jsonList(r.formerly), local_paths: jsonList(r.local_paths) }));
+  const { results } = await db
+    .prepare("SELECT name, repo, formerly, local_paths FROM shared_packages ORDER BY name LIMIT 50")
+    .all<SharedRow>();
+  return (results ?? []).map((r) => ({
+    name: r.name,
+    repo: r.repo,
+    formerly: jsonList(r.formerly),
+    local_paths: jsonList(r.local_paths),
+  }));
 }
 
 // ---- pure parts ----------------------------------------------------------------------
@@ -94,11 +108,19 @@ export function gitSpec(spec: string): { repo: string; ref: string | null } | nu
   const s = spec.trim();
   const m =
     /^(?:github:)?([A-Za-z0-9-]+\/[A-Za-z0-9._-]+?)(?:\.git)?(?:#(.+))?$/.exec(s) ??
-    /^git\+(?:https|ssh):\/\/(?:git@)?github\.com[/:]([A-Za-z0-9-]+\/[A-Za-z0-9._-]+?)(?:\.git)?(?:#(.+))?$/.exec(s) ??
+    /^git\+(?:https|ssh):\/\/(?:git@)?github\.com[/:]([A-Za-z0-9-]+\/[A-Za-z0-9._-]+?)(?:\.git)?(?:#(.+))?$/.exec(
+      s,
+    ) ??
     /^https:\/\/github\.com\/([A-Za-z0-9-]+\/[A-Za-z0-9._-]+?)(?:\.git)?(?:#(.+))?$/.exec(s);
   if (!m) return null;
   // A bare "a/b" without github: and without a ref is a path or a scope, not a repo.
-  if (!s.startsWith("github:") && !s.startsWith("git+") && !s.startsWith("https://") && m[2] === undefined) return null;
+  if (
+    !s.startsWith("github:") &&
+    !s.startsWith("git+") &&
+    !s.startsWith("https://") &&
+    m[2] === undefined
+  )
+    return null;
   return { repo: m[1].toLowerCase(), ref: m[2] ?? null };
 }
 
@@ -150,9 +172,14 @@ export interface RootManifest {
 /** The release fields of a package.json's text. Throws when it is not a JSON object. */
 export function rootManifest(raw: string): RootManifest {
   const j: unknown = JSON.parse(raw);
-  if (!j || typeof j !== "object" || Array.isArray(j)) throw new Error("package.json is not a JSON object");
+  if (!j || typeof j !== "object" || Array.isArray(j))
+    throw new Error("package.json is not a JSON object");
   const o = j as Record<string, unknown>;
-  return { name: typeof o.name === "string" ? o.name : null, version: typeof o.version === "string" ? o.version : null, private: o.private === true };
+  return {
+    name: typeof o.name === "string" ? o.name : null,
+    version: typeof o.version === "string" ? o.version : null,
+    private: o.private === true,
+  };
 }
 
 /**
@@ -196,7 +223,11 @@ export interface AppRead {
   repo?: string;
   blobs: Set<string> | null;
   // Each manifest's dependencies of every kind, by path, and the versions its lockfile installed.
-  manifests: Array<{ path: string; deps: Record<string, string>; lockVersions: Record<string, string> }>;
+  manifests: Array<{
+    path: string;
+    deps: Record<string, string>;
+    lockVersions: Record<string, string>;
+  }>;
   presets: string[];
   // Each workflow file's `uses:` pins.
   workflows?: Array<{ path: string; pins: Array<{ repo: string; pinned: string | null }> }>;
@@ -209,7 +240,7 @@ export function sharedCodeView(
   tags: ReadonlyMap<string, string[] | string>,
   apps: readonly AppRead[],
   now: Date,
-  releases: ReadonlyMap<string, ReleaseRead> = new Map()
+  releases: ReadonlyMap<string, ReleaseRead> = new Map(),
 ): SharedCodeView {
   const packages: SharedCodePackage[] = config.map((pkg) => {
     const names = new Set([pkg.repo, ...pkg.formerly].map((r) => r.toLowerCase()));
@@ -223,27 +254,54 @@ export function sharedCodeView(
     const npmNames = new Set([pkg.name, ...pkg.formerly]);
     const users: SharedCodeApp[] = [];
     for (const app of apps) {
-      const who = { namespace: app.namespace, name: app.name, system: app.system ?? null, repo: app.repo ?? null };
+      const who = {
+        namespace: app.namespace,
+        name: app.name,
+        system: app.system ?? null,
+        repo: app.repo ?? null,
+      };
       for (const m of app.manifests) {
         for (const [dep, spec] of Object.entries(m.deps)) {
           const g = gitSpec(spec);
           if (npm) {
             if (g || !npmNames.has(dep) || /^(?:workspace|file|link):/.test(spec)) continue;
-            const exact = /^v?\d+\.\d+\.\d+$/.test(spec) ? (spec.startsWith("v") ? spec : `v${spec}`) : null;
+            const exact = /^v?\d+\.\d+\.\d+$/.test(spec)
+              ? spec.startsWith("v")
+                ? spec
+                : `v${spec}`
+              : null;
             const pinned = m.lockVersions[dep] ?? exact;
-            users.push({ ...who, where: m.path, pinned, behind: behind(pinned), via_old_name: dep !== pkg.name });
+            users.push({
+              ...who,
+              where: m.path,
+              pinned,
+              behind: behind(pinned),
+              via_old_name: dep !== pkg.name,
+            });
             continue;
           }
           if (!g || !names.has(g.repo)) continue;
           const pinned = m.lockVersions[dep] ?? g.ref ?? null;
-          users.push({ ...who, where: m.path, pinned, behind: behind(pinned), via_old_name: g.repo !== pkg.repo.toLowerCase() });
+          users.push({
+            ...who,
+            where: m.path,
+            pinned,
+            behind: behind(pinned),
+            via_old_name: g.repo !== pkg.repo.toLowerCase(),
+          });
         }
       }
       if (npm) continue;
       for (const entry of app.presets) {
         const p = presetSpec(entry);
         if (!p || !names.has(p.repo)) continue;
-        users.push({ ...who, where: "renovate", pinned: p.ref, behind: behind(p.ref), via_old_name: p.repo !== pkg.repo.toLowerCase() });
+        users.push({
+          ...who,
+          where: "renovate",
+          pinned: p.ref,
+          behind: behind(p.ref),
+          via_old_name: p.repo !== pkg.repo.toLowerCase(),
+        });
       }
       // One row per version the workflows pin, so a repo whose files disagree shows both.
       const byPin = new Map<string | null, { files: number; old: boolean }>();
@@ -257,7 +315,13 @@ export function sharedCodeView(
         }
       }
       for (const [pinned, row] of byPin) {
-        users.push({ ...who, where: `.github/workflows (${row.files} ${row.files === 1 ? "use" : "uses"})`, pinned, behind: behind(pinned), via_old_name: row.old });
+        users.push({
+          ...who,
+          where: `.github/workflows (${row.files} ${row.files === 1 ? "use" : "uses"})`,
+          pinned,
+          behind: behind(pinned),
+          via_old_name: row.old,
+        });
       }
     }
     const local = pkg.local_paths.map((entry) => {
@@ -287,17 +351,35 @@ export function sharedCodeView(
     configured: true,
     error: null,
     apps_read: apps.filter((a) => a.error === null).length,
-    apps_failed: apps.filter((a) => a.error !== null).map((a) => (a.system ? { namespace: a.namespace, system: a.system, error: a.error! } : { namespace: a.namespace, error: a.error! })),
+    apps_failed: apps
+      .filter((a) => a.error !== null)
+      .map((a) =>
+        a.system
+          ? { namespace: a.namespace, system: a.system, error: a.error! }
+          : { namespace: a.namespace, error: a.error! },
+      ),
     packages,
   };
 }
 
-type ReleaseFields = Pick<SharedCodePackage, "version" | "untagged" | "private" | "npm_latest" | "npm_note" | "manifest_error">;
+type ReleaseFields = Pick<
+  SharedCodePackage,
+  "version" | "untagged" | "private" | "npm_latest" | "npm_note" | "manifest_error"
+>;
 
 /** A package's release fields. Untagged only when the tags were read and none names the
  *  version: without the tags it is unknown, and unknown is not untagged. */
-function releaseFields(read: ReleaseRead | undefined, tags: readonly string[] | null): ReleaseFields {
-  const unread = { version: null, untagged: false, private: false, npm_latest: null, npm_note: null };
+function releaseFields(
+  read: ReleaseRead | undefined,
+  tags: readonly string[] | null,
+): ReleaseFields {
+  const unread = {
+    version: null,
+    untagged: false,
+    private: false,
+    npm_latest: null,
+    npm_note: null,
+  };
   if (!read) return { ...unread, manifest_error: null };
   if (typeof read.manifest === "string") return { ...unread, manifest_error: read.manifest };
   const m = read.manifest;
@@ -312,23 +394,42 @@ function releaseFields(read: ReleaseRead | undefined, tags: readonly string[] | 
     npm_latest = read.npm.latest;
     if (!npm_latest) npm_note = "npm has no latest dist-tag";
   } else npm_note = read.npm.reason;
-  return { version: m.version, untagged, private: m.private, npm_latest, npm_note, manifest_error: null };
+  return {
+    version: m.version,
+    untagged,
+    private: m.private,
+    npm_latest,
+    npm_note,
+    manifest_error: null,
+  };
 }
 
 // ---- reading -------------------------------------------------------------------------
 
 /** A repo's root package.json, on its default branch or at `ref`, through the App.
  *  Uncached: the release-tag rule reads it to decide a write. */
-export async function readRootManifest(env: Env, full: string, ref?: string): Promise<RootManifest> {
+export async function readRootManifest(
+  env: Env,
+  full: string,
+  ref?: string,
+): Promise<RootManifest> {
   const [owner, repo] = full.split("/");
   const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/contents/package.json${query}`);
+  const resp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/contents/package.json${query}`,
+  );
   if (!resp.ok) {
     await resp.body?.cancel();
-    throw new Error(`GitHub answered ${resp.status} for ${full}'s package.json${ref ? ` at ${ref.slice(0, 12)}` : ""}`);
+    throw new Error(
+      `GitHub answered ${resp.status} for ${full}'s package.json${ref ? ` at ${ref.slice(0, 12)}` : ""}`,
+    );
   }
   const data = (await resp.json()) as { content?: unknown; encoding?: unknown };
-  if (data.encoding !== "base64" || typeof data.content !== "string") throw new Error(`${full}'s package.json came back without its content`);
+  if (data.encoding !== "base64" || typeof data.content !== "string")
+    throw new Error(`${full}'s package.json came back without its content`);
   return rootManifest(decodeBase64(data.content));
 }
 
@@ -346,9 +447,15 @@ async function readRelease(env: Env, full: string, fetchImpl: FetchLike): Promis
 function depsOf(raw: string): Record<string, string> {
   const j = JSON.parse(raw) as Record<string, unknown>;
   const out: Record<string, string> = {};
-  for (const key of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]) {
+  for (const key of [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies",
+  ]) {
     const block = j[key];
-    if (block && typeof block === "object") for (const [k, v] of Object.entries(block)) if (typeof v === "string") out[k] = v;
+    if (block && typeof block === "object")
+      for (const [k, v] of Object.entries(block)) if (typeof v === "string") out[k] = v;
   }
   return out;
 }
@@ -357,7 +464,13 @@ function depsOf(raw: string): Record<string, string> {
  *  nightly build reads a few hundred files and would otherwise write as many cache keys. */
 async function rawFile(env: Env, full: string, path: string): Promise<string> {
   const [owner, repo] = full.split("/");
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}`, { headers: { Accept: "application/vnd.github.raw+json" } });
+  const resp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}`,
+    { headers: { Accept: "application/vnd.github.raw+json" } },
+  );
   if (!resp.ok) {
     await resp.body?.cancel();
     throw new Error(`GitHub answered ${resp.status} for ${full}'s ${path}`);
@@ -368,13 +481,22 @@ async function rawFile(env: Env, full: string, path: string): Promise<string> {
 /** Every blob path on the default branch, or an error when the tree is missing or truncated. */
 async function blobPaths(env: Env, full: string): Promise<Set<string>> {
   const [owner, repo] = full.split("/");
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
+  const resp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`,
+  );
   if (!resp.ok) {
     await resp.body?.cancel();
     throw new Error(`its file tree could not be read (GitHub answered ${resp.status})`);
   }
-  const tree = (await resp.json()) as { tree?: Array<{ path: string; type: string }>; truncated?: boolean };
-  if (!Array.isArray(tree.tree) || tree.truncated) throw new Error("its file tree is too large to read whole");
+  const tree = (await resp.json()) as {
+    tree?: Array<{ path: string; type: string }>;
+    truncated?: boolean;
+  };
+  if (!Array.isArray(tree.tree) || tree.truncated)
+    throw new Error("its file tree is too large to read whole");
   return new Set(tree.tree.filter((e) => e.type === "blob").map((e) => e.path));
 }
 
@@ -390,8 +512,19 @@ function lockFor(blobs: Set<string>, dir: string): { dir: string; kind: "npm" | 
   }
 }
 
-async function readApp(env: Env, target: { namespace: string; name: string; system: string; repo: string }, watched: ReadonlySet<string>): Promise<AppRead> {
-  const app: AppRead = { ...target, blobs: null, manifests: [], presets: [], workflows: [], error: null };
+async function readApp(
+  env: Env,
+  target: { namespace: string; name: string; system: string; repo: string },
+  watched: ReadonlySet<string>,
+): Promise<AppRead> {
+  const app: AppRead = {
+    ...target,
+    blobs: null,
+    manifests: [],
+    presets: [],
+    workflows: [],
+    error: null,
+  };
   const locks = new Map<string, Promise<string>>();
   const lockText = (path: string) => {
     if (!locks.has(path)) locks.set(path, rawFile(env, target.repo, path));
@@ -400,7 +533,13 @@ async function readApp(env: Env, target: { namespace: string; name: string; syst
   try {
     const blobs = await blobPaths(env, target.repo);
     app.blobs = blobs;
-    const manifests = [...blobs].filter((p) => (p === "package.json" || p.endsWith("/package.json")) && !p.includes("node_modules/")).sort((a, b) => a.split("/").length - b.split("/").length).slice(0, MANIFESTS_PER_APP);
+    const manifests = [...blobs]
+      .filter(
+        (p) =>
+          (p === "package.json" || p.endsWith("/package.json")) && !p.includes("node_modules/"),
+      )
+      .sort((a, b) => a.split("/").length - b.split("/").length)
+      .slice(0, MANIFESTS_PER_APP);
     for (const path of manifests) {
       const deps = depsOf(await rawFile(env, target.repo, path));
       // Only the dependencies a package is matched on are looked up in the lockfile.
@@ -412,7 +551,10 @@ async function readApp(env: Env, target: { namespace: string; name: string; syst
       if (lock) {
         const file = `${lock.dir ? `${lock.dir}/` : ""}${lock.kind === "npm" ? "package-lock.json" : "pnpm-lock.yaml"}`;
         const text = await lockText(file);
-        lockVersions = lock.kind === "npm" ? npmLockVersions(text, lock.dir, dirOf(path), wanted) : pnpmLockVersions(text, lock.dir, dirOf(path), wanted);
+        lockVersions =
+          lock.kind === "npm"
+            ? npmLockVersions(text, lock.dir, dirOf(path), wanted)
+            : pnpmLockVersions(text, lock.dir, dirOf(path), wanted);
       }
       app.manifests.push({ path, deps, lockVersions });
     }
@@ -422,8 +564,12 @@ async function readApp(env: Env, target: { namespace: string; name: string; syst
       const text = await rawFile(env, target.repo, path);
       app.presets.push(...[...text.matchAll(/"(github>[^"]+)"/g)].map((m) => m[1]));
     }
-    const workflows = [...blobs].filter((p) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(p)).sort().slice(0, WORKFLOWS_PER_APP);
-    for (const path of workflows) app.workflows!.push({ path, pins: workflowPins(await rawFile(env, target.repo, path)) });
+    const workflows = [...blobs]
+      .filter((p) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(p))
+      .sort()
+      .slice(0, WORKFLOWS_PER_APP);
+    for (const path of workflows)
+      app.workflows!.push({ path, pins: workflowPins(await rawFile(env, target.repo, path)) });
   } catch (err) {
     app.error = err instanceof Error ? err.message : String(err);
   }
@@ -433,25 +579,46 @@ async function readApp(env: Env, target: { namespace: string; name: string; syst
 /** The repos the model names, once each, with the system that owns each and the namespace
  *  that maps it. A repo several systems share (a site and its admin MCP) is read once, under
  *  the system named for the repo, else the one with a domain, else the first. */
-function modelApps(model: SystemModel, namespaceOf: ReadonlyMap<string, string>): Array<{ namespace: string; name: string; system: string; repo: string }> {
+function modelApps(
+  model: SystemModel,
+  namespaceOf: ReadonlyMap<string, string>,
+): Array<{ namespace: string; name: string; system: string; repo: string }> {
   const byRepo = new Map<string, SystemModel["systems"]>();
-  for (const s of model.systems) for (const r of s.repos) byRepo.set(r, [...(byRepo.get(r) ?? []), s]);
+  for (const s of model.systems)
+    for (const r of s.repos) byRepo.set(r, [...(byRepo.get(r) ?? []), s]);
   return [...byRepo].map(([repo, systems]) => {
     const short = repo.split("/")[1].toLowerCase();
-    const owner = systems.find((s) => s.id === short) ?? systems.find((s) => s.domain) ?? systems[0];
-    return { namespace: namespaceOf.get(repo.toLowerCase()) ?? owner.id, name: owner.name, system: owner.id, repo };
+    const owner =
+      systems.find((s) => s.id === short) ?? systems.find((s) => s.domain) ?? systems[0];
+    return {
+      namespace: namespaceOf.get(repo.toLowerCase()) ?? owner.id,
+      name: owner.name,
+      system: owner.id,
+      repo,
+    };
   });
 }
 
 async function readTags(env: Env, full: string): Promise<string[] | string> {
   const [owner, repo] = full.split("/");
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/tags?per_page=${TAGS_PER_PAGE}`);
+  const resp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/tags?per_page=${TAGS_PER_PAGE}`,
+  );
   if (!resp.ok) return `GitHub answered ${resp.status} for ${full}'s tags`;
   return ((await resp.json()) as Array<{ name: string }>).map((t) => t.name);
 }
 
 /** The view, from the hour's cache unless `fresh`. A missing table says so. */
-export async function readSharedCode(env: Env, now: Date, fresh = false, fetchImpl: FetchLike = (url, init) => fetch(url, init), model: SystemModel = bundledModel()): Promise<SharedCodeView> {
+export async function readSharedCode(
+  env: Env,
+  now: Date,
+  fresh = false,
+  fetchImpl: FetchLike = (url, init) => fetch(url, init),
+  model: SystemModel = bundledModel(),
+): Promise<SharedCodeView> {
   if (!fresh) {
     const cached = await env.APP_KV.get(SHARED_CODE_CACHE_KEY);
     if (cached) return JSON.parse(cached) as SharedCodeView;
@@ -461,40 +628,85 @@ export async function readSharedCode(env: Env, now: Date, fresh = false, fetchIm
     config = await readSharedConfig(env.DB);
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
-    return { generated: now.toISOString(), configured: false, error: /no such table/i.test(why) ? "shared_packages does not exist yet: migrations/0036_shared_packages.sql is the seat's to apply" : why, apps_read: 0, apps_failed: [], packages: [] };
+    return {
+      generated: now.toISOString(),
+      configured: false,
+      error: /no such table/i.test(why)
+        ? "shared_packages does not exist yet: migrations/0036_shared_packages.sql is the seat's to apply"
+        : why,
+      apps_read: 0,
+      apps_failed: [],
+      packages: [],
+    };
   }
   // The published packages the Packages view watches, matched by name. Optional: a
   // missing table is no npm packages, not a failed view.
   const published = await readPackageConfig(env.DB).catch(() => []);
   for (const p of published) {
-    if (p.repo) config.push({ name: p.name, repo: p.repo, registry: "npm", formerly: p.formerly ? [p.formerly] : [], local_paths: [] });
+    if (p.repo)
+      config.push({
+        name: p.name,
+        repo: p.repo,
+        registry: "npm",
+        formerly: p.formerly ? [p.formerly] : [],
+        local_paths: [],
+      });
   }
-  if (config.length === 0) return { generated: now.toISOString(), configured: false, error: null, apps_read: 0, apps_failed: [], packages: [] };
-  const rows = (await env.DB.prepare("SELECT namespace, repos FROM namespaces").all<{ namespace: string; repos: string }>()).results ?? [];
+  if (config.length === 0)
+    return {
+      generated: now.toISOString(),
+      configured: false,
+      error: null,
+      apps_read: 0,
+      apps_failed: [],
+      packages: [],
+    };
+  const rows =
+    (
+      await env.DB.prepare("SELECT namespace, repos FROM namespaces").all<{
+        namespace: string;
+        repos: string;
+      }>()
+    ).results ?? [];
   const namespaceOf = new Map<string, string>();
   for (const row of rows) {
     const parsed = parseReposList(row.repos);
-    if ("list" in parsed) for (const r of parsed.list) if (!namespaceOf.has(r.repo.toLowerCase())) namespaceOf.set(r.repo.toLowerCase(), row.namespace);
+    if ("list" in parsed)
+      for (const r of parsed.list)
+        if (!namespaceOf.has(r.repo.toLowerCase()))
+          namespaceOf.set(r.repo.toLowerCase(), row.namespace);
   }
-  const watched = new Set(config.filter((c) => c.registry === "npm").flatMap((c) => [c.name, ...c.formerly]));
+  const watched = new Set(
+    config.filter((c) => c.registry === "npm").flatMap((c) => [c.name, ...c.formerly]),
+  );
   // A few repos at a time: one repo is a few dozen reads, and the nightly build has the
   // tick's four minutes for everything.
   const targets = modelApps(model, namespaceOf);
-  const apps: AppRead[] = new Array(targets.length);
+  const apps = Array.from<AppRead>({ length: targets.length });
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(APP_CONCURRENCY, targets.length) }, async () => {
-      for (let i = next++; i < targets.length; i = next++) apps[i] = await readApp(env, targets[i], watched);
-    })
+      for (let i = next++; i < targets.length; i = next++)
+        apps[i] = await readApp(env, targets[i], watched);
+    }),
   );
   const tags = new Map<string, string[] | string>();
   const failed = (err: unknown) => (err instanceof Error ? err.message : String(err));
-  for (const pkg of config) tags.set(pkg.name, await (pkg.registry === "npm" ? readNpmVersions(fetchImpl, pkg.name) : readTags(env, pkg.repo)).catch(failed));
+  for (const pkg of config)
+    tags.set(
+      pkg.name,
+      await (
+        pkg.registry === "npm" ? readNpmVersions(fetchImpl, pkg.name) : readTags(env, pkg.repo)
+      ).catch(failed),
+    );
   const releases = new Map<string, ReleaseRead>();
   // A published package's repo may hold several packages (the Astro workspace), so its
   // root package.json says nothing about it; its release is npm's.
-  for (const pkg of config) if (pkg.registry !== "npm") releases.set(pkg.name, await readRelease(env, pkg.repo, fetchImpl));
+  for (const pkg of config)
+    if (pkg.registry !== "npm") releases.set(pkg.name, await readRelease(env, pkg.repo, fetchImpl));
   const view = sharedCodeView(config, tags, apps, now, releases);
-  await env.APP_KV.put(SHARED_CODE_CACHE_KEY, JSON.stringify(view), { expirationTtl: CACHE_TTL_SECONDS });
+  await env.APP_KV.put(SHARED_CODE_CACHE_KEY, JSON.stringify(view), {
+    expirationTtl: CACHE_TTL_SECONDS,
+  });
   return view;
 }

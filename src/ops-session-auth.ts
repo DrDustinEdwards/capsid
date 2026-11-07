@@ -40,7 +40,10 @@ export function sessionCallerRefusal(agent: Agent): string | null {
 }
 
 /** The job a caller's session is working: the one job a driver holds claimed. None, or more than one, is no binding. */
-async function sessionJobFor(db: D1Database, agent: Agent): Promise<{ job_id: string; namespace: string } | null> {
+async function sessionJobFor(
+  db: D1Database,
+  agent: Agent,
+): Promise<{ job_id: string; namespace: string } | null> {
   if (!agent.row || agent.kind !== "driver") return null;
   // LIMIT 2, so "holds several" is told apart from "holds one" without reading them all.
   const { results } = await db
@@ -55,7 +58,7 @@ async function sessionJobFor(db: D1Database, agent: Agent): Promise<{ job_id: st
 export async function resolveSessionCaller(
   request: Request,
   env: { DB: D1Database },
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<SessionCaller | Response> {
   const resolved = await resolveAgent(request, env, now);
   if (!resolved) {
@@ -66,5 +69,10 @@ export async function resolveSessionCaller(
   const refusal = sessionCallerRefusal(resolved.agent);
   if (refusal) return text(refusal, 403);
   const binding = await sessionJobFor(env.DB, resolved.agent);
-  return { agent: resolved.agent, job_id: binding?.job_id ?? null, namespace: binding?.namespace ?? null, touch: resolved.touch };
+  return {
+    agent: resolved.agent,
+    job_id: binding?.job_id ?? null,
+    namespace: binding?.namespace ?? null,
+    touch: resolved.touch,
+  };
 }

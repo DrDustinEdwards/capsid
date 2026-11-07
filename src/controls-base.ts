@@ -25,10 +25,16 @@ export const PORTAL_ACTIONS: readonly PortalAction[] = [
   "package_edit",
   "package_remove",
   "site_repair",
+  "site_backup",
+  "run_job",
   "sign_policy_change",
   "sign_policy_from_repo",
   "unit_resume",
   "automerge_resume",
+  "namespace_add",
+  "namespace_edit",
+  "namespace_remove",
+  "site_key_rotate",
 ];
 
 export type ActionParams = Record<string, string | undefined>;
@@ -49,11 +55,16 @@ const UNDO_INFIX = "undo-";
 // from chat.
 export type Surface = "portal" | "chat";
 const CHAT_AUDIT_PREFIX = "control-";
-export const auditPrefix = (surface: Surface) => (surface === "portal" ? CLICK_AUDIT_PREFIX : CHAT_AUDIT_PREFIX);
+export const auditPrefix = (surface: Surface) =>
+  surface === "portal" ? CLICK_AUDIT_PREFIX : CHAT_AUDIT_PREFIX;
 
 /** The click row's action name: portal-<action>, or portal-undo-<action> for an Undo
  *  (control- for chat). */
-export function clickAuditAction(action: PortalAction, params: ActionParams, surface: Surface = "portal"): string {
+export function clickAuditAction(
+  action: PortalAction,
+  params: ActionParams,
+  surface: Surface = "portal",
+): string {
   return `${auditPrefix(surface)}${params.undo === "true" ? UNDO_INFIX : ""}${action}`;
 }
 
@@ -80,8 +91,33 @@ export function revisionOf(raw: string | undefined): number | null {
   return Number(raw);
 }
 
-export const UNIT_RESUME_REASON = "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";
-export const AUTOMERGE_RESUME_REASON = "automerge_resume needs a reason: why the rollbacks or reverts that paused the namespace are answered. It is recorded in the audit row.";
+/** namespace_remove's two switches, each "true" or absent, as the delete's options
+ *  (src/namespace-delete.ts). */
+export function deleteOptionsFrom(
+  params: ActionParams,
+):
+  | { ok: true; opts: { cascade: boolean; allowImprovePaths: boolean } }
+  | { ok: false; refusal: string } {
+  for (const key of ["cascade", "allow_improve_paths"] as const) {
+    if (params[key] !== undefined && params[key] !== "true")
+      return {
+        ok: false,
+        refusal: `namespace_remove's ${key} is "true" or absent; got '${params[key]}'.`,
+      };
+  }
+  return {
+    ok: true,
+    opts: {
+      cascade: params.cascade === "true",
+      allowImprovePaths: params.allow_improve_paths === "true",
+    },
+  };
+}
+
+export const UNIT_RESUME_REASON =
+  "unit_resume needs a reason: why the rollback that suspended the unit is answered. It is recorded in the audit row.";
+export const AUTOMERGE_RESUME_REASON =
+  "automerge_resume needs a reason: why the rollbacks or reverts that paused the namespace are answered. It is recorded in the audit row.";
 // close_shipped's complete (stale jobs D4, ruled 2026-10-09: the existing admin_complete
 // path, crediting the holder). The pull requests the job names, from result_ref and the
 // summary, become the evidence the outcome verifies, at most the 10 the capsid_work_jobs tool takes.

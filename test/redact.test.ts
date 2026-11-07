@@ -11,7 +11,11 @@ import { redact, redactText } from "../src/redact.ts";
 const GH_CLASSIC = (prefix: string) => `gh${prefix}_` + "Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2";
 const GH_FINE = "github" + "_pat_" + "11ABCDEFG0" + "a".repeat(20) + "_" + "B".repeat(30);
 const AWS_ID = "AK" + "IA" + "EXAMPLEFAKE12345";
-const JWT = ["eyJ" + "hbGciOiJIUzI1NiJ9", "eyJ" + "zdWIiOiJzYW1wbGUifQ", "c2lnbmF0dXJlLWZha2UtZm9yLXRlc3Rz"].join(".");
+const JWT = [
+  "eyJ" + "hbGciOiJIUzI1NiJ9",
+  "eyJ" + "zdWIiOiJzYW1wbGUifQ",
+  "c2lnbmF0dXJlLWZha2UtZm9yLXRlc3Rz",
+].join(".");
 const SLACK = "xo" + "xb-" + "1234567890-abcdefghij";
 const PEM_BEGIN = "-----BEGIN " + "RSA PRIVATE KEY-----";
 const PEM_END = "-----END " + "RSA PRIVATE KEY-----";
@@ -28,17 +32,29 @@ test("GitHub tokens of every prefix are redacted", () => {
   assert.equal(fine.includes("github_pat_"), false, fine);
   assert.match(fine, /\[REDACTED:github-token\]/);
   // Inside a clone URL's userinfo, too.
-  assert.doesNotMatch(redactText(`https://x-access-token:${GH_CLASSIC("s")}@github.com/o/r.git`), /ghs_/);
+  assert.doesNotMatch(
+    redactText(`https://x-access-token:${GH_CLASSIC("s")}@github.com/o/r.git`),
+    /ghs_/,
+  );
 });
 
 test("an Authorization header keeps its scheme and loses its value", () => {
-  assert.equal(redactText("Authorization: Bearer abc123.def456"), "Authorization: Bearer [REDACTED:auth]");
-  assert.equal(redactText(`"authorization": "Basic dXNlcjpwYXNz"`), `"authorization": "Basic [REDACTED:auth]"`);
+  assert.equal(
+    redactText("Authorization: Bearer abc123.def456"),
+    "Authorization: Bearer [REDACTED:auth]",
+  );
+  assert.equal(
+    redactText(`"authorization": "Basic dXNlcjpwYXNz"`),
+    `"authorization": "Basic [REDACTED:auth]"`,
+  );
   assert.equal(redactText("authorization=token9f8e7d6c5b4a"), "authorization=[REDACTED:auth]");
 });
 
 test("a Bearer or Basic credential outside a header is redacted", () => {
-  assert.equal(redactText("curl -H 'x: Bearer sk_live_0a1b2c3d4e'"), "curl -H 'x: Bearer [REDACTED:auth]'");
+  assert.equal(
+    redactText("curl -H 'x: Bearer sk_live_0a1b2c3d4e'"),
+    "curl -H 'x: Bearer [REDACTED:auth]'",
+  );
   assert.equal(redactText("using Basic dXNlcjpwYXNzd29yZA=="), "using Basic [REDACTED:auth]");
 });
 
@@ -48,15 +64,25 @@ test("an AWS access key id is redacted", () => {
 });
 
 test("a private key block is redacted whole, and an unterminated one to the end", () => {
-  const block = [PEM_BEGIN, "MIIEowIBAAKCAQEAfakefakefake", "c2VjcmV0LWJvZHktbGluZQ==", PEM_END].join("\n");
+  const block = [
+    PEM_BEGIN,
+    "MIIEowIBAAKCAQEAfakefakefake",
+    "c2VjcmV0LWJvZHktbGluZQ==",
+    PEM_END,
+  ].join("\n");
   const out = redactText(`before\n${block}\nafter`);
   assert.equal(out, "before\n[REDACTED:private-key]\nafter");
   // A log cut mid-key: nothing after BEGIN survives.
   const cut = redactText(`before\n${PEM_BEGIN}\nMIIEowIBAAKCAQEAfakefakefake\nc2VjcmV0`);
   assert.equal(cut, "before\n[REDACTED:private-key]");
   // Timestamped CI lines, as a key echoed by a step arrives.
-  const stamped = redactText(`2026-09-06T00:58:40.0Z ${PEM_BEGIN}\n2026-09-06T00:58:40.1Z MIIEfake\n2026-09-06T00:58:40.2Z ${PEM_END}\n2026-09-06T00:58:41.0Z next`);
-  assert.equal(stamped, "2026-09-06T00:58:40.0Z [REDACTED:private-key]\n2026-09-06T00:58:41.0Z next");
+  const stamped = redactText(
+    `2026-09-06T00:58:40.0Z ${PEM_BEGIN}\n2026-09-06T00:58:40.1Z MIIEfake\n2026-09-06T00:58:40.2Z ${PEM_END}\n2026-09-06T00:58:41.0Z next`,
+  );
+  assert.equal(
+    stamped,
+    "2026-09-06T00:58:40.0Z [REDACTED:private-key]\n2026-09-06T00:58:41.0Z next",
+  );
 });
 
 test("a JWT is redacted", () => {
@@ -73,9 +99,18 @@ test("Slack tokens and webhook URLs are redacted", () => {
 test("secret-named assignments are redacted in env, YAML, JSON and query forms", () => {
   assert.equal(redactText("API_TOKEN=abcdef123456"), "API_TOKEN=[REDACTED:assignment]");
   assert.equal(redactText("db_password: hunter22"), "db_password: [REDACTED:assignment]");
-  assert.equal(redactText(`{"client_secret": "s3cr3t-value"}`), `{"client_secret": "[REDACTED:assignment]"}`);
-  assert.equal(redactText("https://example.com/cb?access_token=abc123xyz&page=2"), "https://example.com/cb?access_token=[REDACTED:assignment]&page=2");
-  assert.equal(redactText("ANTHROPIC_API_KEY=sample-not-a-key-0000"), "ANTHROPIC_API_KEY=[REDACTED:assignment]");
+  assert.equal(
+    redactText(`{"client_secret": "s3cr3t-value"}`),
+    `{"client_secret": "[REDACTED:assignment]"}`,
+  );
+  assert.equal(
+    redactText("https://example.com/cb?access_token=abc123xyz&page=2"),
+    "https://example.com/cb?access_token=[REDACTED:assignment]&page=2",
+  );
+  assert.equal(
+    redactText("ANTHROPIC_API_KEY=sample-not-a-key-0000"),
+    "ANTHROPIC_API_KEY=[REDACTED:assignment]",
+  );
 });
 
 test("a specific kind is named over the generic assignment, and never redacted twice", () => {
@@ -86,7 +121,10 @@ test("a specific kind is named over the generic assignment, and never redacted t
 
 test("a long random run after a word like secret, token, key or password is redacted", () => {
   const hex = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b";
-  assert.equal(redactText(`the signing secret is ${hex}`), "the signing secret is [REDACTED:high-entropy]");
+  assert.equal(
+    redactText(`the signing secret is ${hex}`),
+    "the signing secret is [REDACTED:high-entropy]",
+  );
   const b64 = "Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MGFiY2RlZmdo";
   assert.equal(redactText(`password was ${b64}`), "password was [REDACTED:high-entropy]");
 });

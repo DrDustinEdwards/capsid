@@ -13,7 +13,7 @@ const NS = "sample";
 
 async function versionsOf(path: string): Promise<Array<string | null>> {
   const { results } = await env.DB.prepare(
-    "SELECT body FROM document_versions WHERE namespace = ?1 AND path = ?2 ORDER BY id"
+    "SELECT body FROM document_versions WHERE namespace = ?1 AND path = ?2 ORDER BY id",
   )
     .bind(NS, path)
     .all<{ body: string | null }>();
@@ -23,14 +23,20 @@ async function versionsOf(path: string): Promise<Array<string | null>> {
 describe("docStatements snapshots the row the table holds at commit", () => {
   it("snapshots a body written after the caller's pre-read", async () => {
     const path = "jobs/lorem-1.md";
-    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, 'Job', 'lorem read body')")
+    await env.DB.prepare(
+      "INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, 'Job', 'lorem read body')",
+    )
       .bind(NS, path)
       .run();
-    const prior = await env.DB.prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
+    const prior = await env.DB.prepare(
+      "SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2",
+    )
       .bind(NS, path)
       .first<{ id: number; title: string | null; body: string | null }>();
     // A write lands between the pre-read and the batch.
-    await env.DB.prepare("UPDATE documents SET body = 'lorem edited in the gap' WHERE namespace = ?1 AND path = ?2")
+    await env.DB.prepare(
+      "UPDATE documents SET body = 'lorem edited in the gap' WHERE namespace = ?1 AND path = ?2",
+    )
       .bind(NS, path)
       .run();
 
@@ -45,7 +51,7 @@ describe("docStatements snapshots the row the table holds at commit", () => {
         tags: "",
         action: "job-mirror",
         actor: "agent:lorem",
-      })
+      }),
     );
 
     expect(await versionsOf(path)).toEqual(["lorem edited in the gap"]);
@@ -53,7 +59,9 @@ describe("docStatements snapshots the row the table holds at commit", () => {
 
   it("snapshots a row created after a pre-read that found none", async () => {
     const path = "jobs/lorem-2.md";
-    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, 'Job', 'lorem created in the gap')")
+    await env.DB.prepare(
+      "INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, 'Job', 'lorem created in the gap')",
+    )
       .bind(NS, path)
       .run();
 
@@ -68,7 +76,7 @@ describe("docStatements snapshots the row the table holds at commit", () => {
         tags: "",
         action: "job-mirror",
         actor: "agent:lorem",
-      })
+      }),
     );
 
     expect(await versionsOf(path)).toEqual(["lorem created in the gap"]);
@@ -87,7 +95,7 @@ describe("docStatements snapshots the row the table holds at commit", () => {
         tags: "",
         action: "job-mirror",
         actor: "agent:lorem",
-      })
+      }),
     );
     expect(await versionsOf(path)).toEqual([]);
   });
@@ -109,7 +117,9 @@ async function docOf(path: string) {
 }
 
 async function auditsOf(path: string) {
-  const { results } = await env.DB.prepare("SELECT actor, action FROM audit_log WHERE namespace = ?1 AND path = ?2 ORDER BY id")
+  const { results } = await env.DB.prepare(
+    "SELECT actor, action FROM audit_log WHERE namespace = ?1 AND path = ?2 ORDER BY id",
+  )
     .bind(NS, path)
     .all<{ actor: string; action: string }>();
   return results;
@@ -118,10 +128,14 @@ async function auditsOf(path: string) {
 describe("a system document write is a write like any other", () => {
   it("snapshots the prior body, lands the new one, and writes an audit row with the one actor spelling", async () => {
     const path = "jobs/lorem-4.md";
-    await env.DB.prepare("INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, 'old', 'lorem old body')")
+    await env.DB.prepare(
+      "INSERT INTO documents (namespace, path, title, body) VALUES (?1, ?2, 'old', 'lorem old body')",
+    )
       .bind(NS, path)
       .run();
-    const prior = await env.DB.prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
+    const prior = await env.DB.prepare(
+      "SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2",
+    )
       .bind(NS, path)
       .first<{ id: number; title: string | null; body: string | null }>();
 
@@ -136,7 +150,7 @@ describe("a system document write is a write like any other", () => {
         prior,
         action: "job-mirror",
         actor: "agent:lorem",
-      })
+      }),
     );
 
     expect(await versionsOf(path)).toEqual(["lorem old body"]);
@@ -154,7 +168,17 @@ describe("a system document write is a write like any other", () => {
     expect(body).toMatch(WIDE_DASH);
 
     await env.DB.batch(
-      await docStatements(env.DB, { namespace: NS, path, title, body, type: "reference", tags: "", prior: null, action: "job-mirror", actor: "agent:lorem" })
+      await docStatements(env.DB, {
+        namespace: NS,
+        path,
+        title,
+        body,
+        type: "reference",
+        tags: "",
+        prior: null,
+        action: "job-mirror",
+        actor: "agent:lorem",
+      }),
     );
 
     const stored = await docOf(path);

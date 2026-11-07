@@ -44,7 +44,10 @@ export interface PrReaders {
    *  throw; `problem` says what part was not read. */
   openPrs(namespace: string): Promise<{ repo: string; prs: OpenPr[]; problem: string | null }>;
   /** The failed step of a failed check run, or why it was not read. */
-  failingStep(repo: string, check: PrCheck): Promise<{ step: string | null; problem: string | null }>;
+  failingStep(
+    repo: string,
+    check: PrCheck,
+  ): Promise<{ step: string | null; problem: string | null }>;
 }
 
 const days = (ms: number): string => `${(ms / DAY_MS).toFixed(1)} days`;
@@ -66,16 +69,22 @@ export function greenAwaitingSeat(namespace: string, prs: OpenPr[], now: Date): 
 /** A pull request whose checks have all finished, at least one failed, and the first
  *  failure finished more than RED_HOURS ago on the current head. A re-run or a new push
  *  starts the clock again, because GitHub then reports new check runs. */
-export function redTooLong(prs: OpenPr[], now: Date): Array<{ pr: OpenPr; since: string; check: PrCheck }> {
+export function redTooLong(
+  prs: OpenPr[],
+  now: Date,
+): Array<{ pr: OpenPr; since: string; check: PrCheck }> {
   const out: Array<{ pr: OpenPr; since: string; check: PrCheck }> = [];
   for (const pr of prs) {
     if (ciVerdict(pr.checks).conclusion !== "failure") continue;
     const failed = pr.checks
-      .filter((c) => !["success", "skipped", "neutral"].includes(c.conclusion ?? "") && c.completed_at)
+      .filter(
+        (c) => !["success", "skipped", "neutral"].includes(c.conclusion ?? "") && c.completed_at,
+      )
       .sort((a, b) => (a.completed_at ?? "").localeCompare(b.completed_at ?? ""));
     const first = failed[0];
     if (!first?.completed_at) continue;
-    if (now.getTime() - Date.parse(first.completed_at) > RED_HOURS * HOUR_MS) out.push({ pr, since: first.completed_at, check: first });
+    if (now.getTime() - Date.parse(first.completed_at) > RED_HOURS * HOUR_MS)
+      out.push({ pr, since: first.completed_at, check: first });
   }
   return out;
 }
@@ -85,7 +94,7 @@ export function redTooLong(prs: OpenPr[], now: Date): Array<{ pr: OpenPr; since:
 export async function gatherPrItems(
   namespaces: readonly string[],
   readers: PrReaders,
-  now: Date
+  now: Date,
 ): Promise<{ items: MaintenanceItem[]; read: Record<string, number> }> {
   const items: MaintenanceItem[] = [];
   const read: Record<string, number> = {};
@@ -104,7 +113,9 @@ export async function gatherPrItems(
       let where: string;
       try {
         const step = await readers.failingStep(got.repo, check);
-        where = step.step ? `"${check.name}" failed at step "${step.step}"` : `"${check.name}" failed; its step was not read (${step.problem ?? "unknown"})`;
+        where = step.step
+          ? `"${check.name}" failed at step "${step.step}"`
+          : `"${check.name}" failed; its step was not read (${step.problem ?? "unknown"})`;
       } catch (err) {
         where = `"${check.name}" failed; its step was not read (${err instanceof Error ? err.message : String(err)})`;
       }
@@ -154,14 +165,28 @@ export function githubPrReaders(env: Env): PrReaders {
   return {
     async openPrs(namespace) {
       const { owner, repo, full } = await resolveRepo(env, namespace);
-      const listed = await readAllPages<RawPr>(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=open`, (page) => page as RawPr[], OPEN_LIST_MAX_PAGES);
+      const listed = await readAllPages<RawPr>(
+        env,
+        owner,
+        repo,
+        `/repos/${owner}/${repo}/pulls?state=open`,
+        (page) => page as RawPr[],
+        OPEN_LIST_MAX_PAGES,
+      );
       const problems: string[] = [];
       if (listed.problem) problems.push(`the open pull request list: ${listed.problem}`);
       const reading = listed.items.slice(0, PRS_READ_PER_REPO);
-      if (listed.items.length > reading.length) problems.push(`${listed.items.length - reading.length} open pull requests were not read`);
+      if (listed.items.length > reading.length)
+        problems.push(`${listed.items.length - reading.length} open pull requests were not read`);
       const prs: OpenPr[] = [];
       for (const pr of reading) {
-        const checks = await readCheckRuns<RawCheck>(env, owner, repo, pr.head.sha, CHECKS_MAX_PAGES);
+        const checks = await readCheckRuns<RawCheck>(
+          env,
+          owner,
+          repo,
+          pr.head.sha,
+          CHECKS_MAX_PAGES,
+        );
         if (checks.problem) {
           problems.push(`#${pr.number} check runs: ${checks.problem}`);
           continue;
@@ -185,14 +210,22 @@ export function githubPrReaders(env: Env): PrReaders {
       return { repo: full, prs, problem: problems.length > 0 ? problems.join("; ") : null };
     },
     async failingStep(repo, check) {
-      if (!check.actions) return { step: null, problem: "it is not a GitHub Actions job, so it has no steps" };
+      if (!check.actions)
+        return { step: null, problem: "it is not a GitHub Actions job, so it has no steps" };
       const [owner, name] = repo.split("/");
-      const resp = await ghFetch(env, owner, name, `/repos/${owner}/${name}/actions/jobs/${check.id}`);
+      const resp = await ghFetch(
+        env,
+        owner,
+        name,
+        `/repos/${owner}/${name}/actions/jobs/${check.id}`,
+      );
       if (!resp.ok) {
         await resp.body?.cancel();
         return { step: null, problem: `the job read returned ${resp.status}` };
       }
-      const job = (await resp.json()) as { steps?: Array<{ name: string; conclusion: string | null }> };
+      const job = (await resp.json()) as {
+        steps?: Array<{ name: string; conclusion: string | null }>;
+      };
       const step = job.steps?.find((s) => s.conclusion === "failure")?.name ?? null;
       return { step, problem: step ? null : "no step of the job is marked failed" };
     },

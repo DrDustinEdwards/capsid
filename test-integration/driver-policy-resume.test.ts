@@ -26,7 +26,15 @@ function jobsEnv() {
 function driver(): Agent {
   const scopes = defaultScopes(["capsid"]);
   scopes.grants = ["read", "write"];
-  return { id: "agent_0123456789ab", name: "capsid-driver", kind: "driver", actor: "agent:capsid-driver", scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name: "capsid-driver",
+    kind: "driver",
+    actor: "agent:capsid-driver",
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 const POLICY = [
@@ -44,44 +52,71 @@ const POLICY = [
 const at = (iso: string) => new Date(iso);
 
 async function blockedAtPush(title: string, command: string): Promise<string> {
-  const posted = await postJob(jobsEnv(), SEAT, at("2026-09-17T01:00:00.000Z"), { namespace: "capsid", title, body: "do the work", gate_required: true });
+  const posted = await postJob(jobsEnv(), SEAT, at("2026-09-17T01:00:00.000Z"), {
+    namespace: "capsid",
+    title,
+    body: "do the work",
+    gate_required: true,
+  });
   const id = posted.job!.id;
   const claimed = await claimJob(jobsEnv(), driver(), at("2026-09-17T01:00:00.000Z"), { id });
   expect(claimed.ok, claimed.refusal).toBe(true);
-  const blocked = await blockJob(jobsEnv(), driver(), at("2026-09-17T01:30:00.000Z"), id, { reason: "finished up to the push", command });
+  const blocked = await blockJob(jobsEnv(), driver(), at("2026-09-17T01:30:00.000Z"), id, {
+    reason: "finished up to the push",
+    command,
+  });
   expect(blocked.ok, blocked.refusal).toBe(true);
   return id;
 }
 
 async function jobRow(id: string) {
-  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1").bind(id).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM jobs WHERE id = ?1")
+    .bind(id)
+    .first<Record<string, unknown>>();
 }
 
 async function resumedAudit(id: string) {
   const { results } = await env.DB.prepare(
-    "SELECT actor, params FROM audit_log WHERE action = 'job-resumed' AND params LIKE ?1 AND params LIKE '%approved%' ORDER BY id"
+    "SELECT actor, params FROM audit_log WHERE action = 'job-resumed' AND params LIKE ?1 AND params LIKE '%approved%' ORDER BY id",
   )
     .bind(`%${id}%`)
     .all<{ actor: string; params: string }>();
-  return (results ?? []).map((r) => ({ actor: r.actor, ...(JSON.parse(r.params) as Record<string, unknown>) }));
+  return (results ?? []).map((r) => ({
+    actor: r.actor,
+    ...(JSON.parse(r.params) as Record<string, unknown>),
+  }));
 }
 
 beforeEach(async () => {
   await resetCapsidDb();
   // jobs post requires a registered namespace.
-  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)").bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }])).run();
-  await env.DB.prepare("INSERT INTO documents (namespace, path, title, body, type, status) VALUES ('capsid', ?1, 'gates', ?2, 'procedural', 'published')")
+  await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, ?2)")
+    .bind("capsid", JSON.stringify([{ repo: "example/capsid", label: "primary" }]))
+    .run();
+  await env.DB.prepare(
+    "INSERT INTO documents (namespace, path, title, body, type, status) VALUES ('capsid', ?1, 'gates', ?2, 'procedural', 'published')",
+  )
     .bind(GATE_POLICY_PATH, await signTaskBody(SECRET, POLICY))
     .run();
 });
 
 describe("a driver approves its own branch push on the gate policy", () => {
   it("push_branch block, driver-side resume, audit row naming the class, outcome from the first claim", async () => {
-    const id = await blockedAtPush("self-approved push", "git push -u origin fix/driver-policy-resume && gh pr create --base master --fill");
+    const id = await blockedAtPush(
+      "self-approved push",
+      "git push -u origin fix/driver-policy-resume && gh pr create --base master --fill",
+    );
 
-    const resumed = await resumeJob(jobsEnv(), driver(), at("2026-09-17T01:31:00.000Z"), id, "the gate policy covers a branch push and a pull request", {
-      approvedByPolicy: "1",
-    });
+    const resumed = await resumeJob(
+      jobsEnv(),
+      driver(),
+      at("2026-09-17T01:31:00.000Z"),
+      id,
+      "the gate policy covers a branch push and a pull request",
+      {
+        approvedByPolicy: "1",
+      },
+    );
     expect(resumed.ok, resumed.refusal).toBe(true);
 
     const row = await jobRow(id);
@@ -99,16 +134,28 @@ describe("a driver approves its own branch push on the gate policy", () => {
       held_by: "agent:capsid-driver",
     });
 
-    const done = await completeJob(jobsEnv(), driver(), at("2026-09-17T01:45:00.000Z"), id, { result_summary: "pushed and opened" });
+    const done = await completeJob(jobsEnv(), driver(), at("2026-09-17T01:45:00.000Z"), id, {
+      result_summary: "pushed and opened",
+    });
     expect(done.ok, done.refusal).toBe(true);
     expect(done.outcome?.row.duration_minutes).toBe(45);
   });
 
   it("PLANT: a force push takes the same path and is refused, leaving the job blocked for the human", async () => {
-    const id = await blockedAtPush("forced push", "git push --force origin fix/driver-policy-resume");
-    const refused = await resumeJob(jobsEnv(), driver(), at("2026-09-17T01:31:00.000Z"), id, "the gate policy covers a branch push", {
-      approvedByPolicy: "1",
-    });
+    const id = await blockedAtPush(
+      "forced push",
+      "git push --force origin fix/driver-policy-resume",
+    );
+    const refused = await resumeJob(
+      jobsEnv(),
+      driver(),
+      at("2026-09-17T01:31:00.000Z"),
+      id,
+      "the gate policy covers a branch push",
+      {
+        approvedByPolicy: "1",
+      },
+    );
     expect(refused.ok).toBe(false);
     expect(refused.refusal).toMatch(/never list because it force-pushes/);
     const row = await jobRow(id);

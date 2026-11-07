@@ -2,7 +2,13 @@ import type { Env } from "./env";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { readSiteRow } from "./ops-sites";
 import type { SiteOperator } from "./ops-types/sites";
-import { callLine, callOperator, toolRefusal, type FetchLike, type OperatorCall } from "./site-operator";
+import {
+  callLine,
+  callOperator,
+  toolRefusal,
+  type FetchLike,
+  type OperatorCall,
+} from "./site-operator";
 import { auditStatement } from "./store-guards";
 import { taskRunStatements } from "./task-runs";
 import { MINUTE_MS, DAY_MS } from "./time";
@@ -32,7 +38,11 @@ interface LimitRecord {
 
 const limitKey = (namespace: string, tool: string) => `${LIMIT_PREFIX}${namespace}:${tool}`;
 
-async function readLimit(env: Pick<Env, "APP_KV">, namespace: string, tool: string): Promise<LimitRecord | null> {
+async function readLimit(
+  env: Pick<Env, "APP_KV">,
+  namespace: string,
+  tool: string,
+): Promise<LimitRecord | null> {
   const raw = await env.APP_KV.get(limitKey(namespace, tool));
   if (!raw) return null;
   try {
@@ -41,7 +51,11 @@ async function readLimit(env: Pick<Env, "APP_KV">, namespace: string, tool: stri
   } catch {
     // A record that does not parse is replaced by the next call's; it limits nothing until
     // then, and that is logged so it is not silent.
-    logEvent("SITE_REPAIR_LIMIT_UNREADABLE", { message: `SITE_REPAIR_LIMIT_UNREADABLE ${namespace} ${tool}` }, { level: "warn" });
+    logEvent(
+      "SITE_REPAIR_LIMIT_UNREADABLE",
+      { message: `SITE_REPAIR_LIMIT_UNREADABLE ${namespace} ${tool}` },
+      { level: "warn" },
+    );
     return null;
   }
 }
@@ -51,23 +65,62 @@ export function limitRefusal(record: LimitRecord | null, now: Date, auto: boolea
   if (!record) return null;
   const since = now.getTime() - Date.parse(record.last);
   const gap = auto ? AUTO_GAP_MS : MIN_GAP_MS;
-  if (since < gap) return `it ran ${Math.round(since / MINUTE_MS)} minute(s) ago; the next call may go after ${Math.round(gap / MINUTE_MS)} minutes.`;
+  if (since < gap)
+    return `it ran ${Math.round(since / MINUTE_MS)} minute(s) ago; the next call may go after ${Math.round(gap / MINUTE_MS)} minutes.`;
   if (auto) {
     const today = record.auto.filter((at) => now.getTime() - Date.parse(at) < DAY_MS);
-    if (today.length >= AUTO_PER_DAY) return `the watcher has run it ${today.length} times in the last day, its limit; a person can still run it from the Portal.`;
+    if (today.length >= AUTO_PER_DAY)
+      return `the watcher has run it ${today.length} times in the last day, its limit; a person can still run it from the Portal.`;
   }
   return null;
 }
 
 /** The rate limit for a person's call, read now: what a preview shows. */
-export async function limitRefusalFor(env: Pick<Env, "APP_KV">, namespace: string, tool: string, now: Date): Promise<string | null> {
+export async function limitRefusalFor(
+  env: Pick<Env, "APP_KV">,
+  namespace: string,
+  tool: string,
+  now: Date,
+): Promise<string | null> {
   return limitRefusal(await readLimit(env, namespace, tool), now, false);
 }
 
-async function writeLimit(env: Pick<Env, "APP_KV">, namespace: string, tool: string, before: LimitRecord | null, now: Date, auto: boolean): Promise<void> {
+async function writeLimit(
+  env: Pick<Env, "APP_KV">,
+  namespace: string,
+  tool: string,
+  before: LimitRecord | null,
+  now: Date,
+  auto: boolean,
+): Promise<void> {
   const kept = (before?.auto ?? []).filter((at) => now.getTime() - Date.parse(at) < DAY_MS);
-  const next: LimitRecord = { last: now.toISOString(), auto: auto ? [...kept, now.toISOString()] : kept };
-  await env.APP_KV.put(limitKey(namespace, tool), JSON.stringify(next), { expirationTtl: 2 * 86_400 });
+  const next: LimitRecord = {
+    last: now.toISOString(),
+    auto: auto ? [...kept, now.toISOString()] : kept,
+  };
+  await env.APP_KV.put(limitKey(namespace, tool), JSON.stringify(next), {
+    expirationTtl: 2 * 86_400,
+  });
+}
+
+/** Take one call of the rate limit for a person's or the watcher's call: why it must wait,
+ *  or null after writing the call into the record. Shared with the backups
+ *  (src/site-backup.ts), so a site's operator calls have one limit. */
+export async function takeLimit(
+  env: Pick<Env, "APP_KV">,
+  namespace: string,
+  tool: string,
+  now: Date,
+  auto: boolean,
+): Promise<string | null> {
+  const before = await readLimit(env, namespace, tool);
+  const wait = limitRefusal(before, now, auto);
+  if (wait) return wait;
+  // The limit is written before the call, which narrows a race between two callers but does
+  // not close it: KV has no compare-and-set, so two that read the same record both go. The
+  // operator API's own limits are the hard bound (Grok audit 2026-10-21, CA-7).
+  await writeLimit(env, namespace, tool, before, now, auto);
+  return null;
 }
 
 export type RepairOutcome =
@@ -81,24 +134,25 @@ export async function runSiteRepair(
   args: { namespace: string; tool: string; actor: string; auto: boolean; via: string },
   now: Date,
   fetchImpl: FetchLike = fetch,
-  site?: { origin: string; operator: SiteOperator }
+  site?: { origin: string; operator: SiteOperator },
 ): Promise<RepairOutcome> {
   let target = site;
   if (!target) {
     const row = await readSiteRow(env.DB, args.namespace);
     if (!row?.origin) return { ran: false, refusal: `${args.namespace} is not a configured site.` };
-    if (!row.operator) return { ran: false, refusal: row.operator_problem ?? `${args.namespace} has no operator API configured, so Capsid may call nothing on it.` };
+    if (!row.operator)
+      return {
+        ran: false,
+        refusal:
+          row.operator_problem ??
+          `${args.namespace} has no operator API configured, so Capsid may call nothing on it.`,
+      };
     target = { origin: row.origin, operator: row.operator };
   }
   const refusal = toolRefusal(target.operator, args.tool);
   if (refusal) return { ran: false, refusal };
-  const before = await readLimit(env, args.namespace, args.tool);
-  const wait = limitRefusal(before, now, args.auto);
+  const wait = await takeLimit(env, args.namespace, args.tool, now, args.auto);
   if (wait) return { ran: false, refusal: `${args.tool} on ${args.namespace} waits: ${wait}` };
-  // The limit is written before the call, which narrows a race between two callers but does
-  // not close it: KV has no compare-and-set, so two that read the same record both go. The
-  // operator API's own limits are the hard bound (Grok audit 2026-10-21, CA-7).
-  await writeLimit(env, args.namespace, args.tool, before, now, args.auto);
   const started = new Date();
   const call = await callOperator(env, target, args.tool, fetchImpl);
   const line = callLine(args.tool, call);
@@ -117,11 +171,24 @@ export async function runSiteRepair(
         present: call.present,
         error: call.error,
       }),
-      ...taskRunStatements(env.DB, "site-repair", started, finished, call.ok && call.converged !== false ? "ok" : "refused", `${args.namespace}: ${line} (${args.via})`),
+      ...taskRunStatements(
+        env.DB,
+        "site-repair",
+        started,
+        finished,
+        call.ok && call.converged !== false ? "ok" : "refused",
+        `${args.namespace}: ${line} (${args.via})`,
+      ),
     ]);
   } catch (err) {
     recorded = false;
-    logEvent("SITE_REPAIR_NOT_RECORDED", { message: `SITE_REPAIR_NOT_RECORDED ${args.namespace} ${args.tool}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "SITE_REPAIR_NOT_RECORDED",
+      {
+        message: `SITE_REPAIR_NOT_RECORDED ${args.namespace} ${args.tool}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
   return { ran: true, call, line, recorded };
 }

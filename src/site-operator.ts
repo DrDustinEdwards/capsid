@@ -5,22 +5,35 @@ import { callSignal } from "./call-signal";
 
 // A SITE'S OPERATOR API (job_09e5f6cbf782, Dustin 2026-10-03). Capsid is the operations
 // hub and may trigger an allowlist of a site's own repair tools, so the repairs, the
-// convergence view and the watchdog can leave the site. A site opts in by configuration
+// convergence view and the watchdog could leave the site (it did, 2026-11-06). A site opts in by configuration
 // (ops_sites.operator, migrations/0035), never by code here.
 //
 // Two allowlists, both enforced in this Worker before any request leaves it:
 //   - the CEILING, in code: a repair is a sync_* tool (sync_status is a read, not a
-//     repair) or refresh_citations. backup_media is never called, and neither is anything
-//     else the site's operator API serves (save_post, delete_post, decide_mention...).
+//     repair) or refresh_citations, a backup is backup_status or run_job { backup: true }
+//     (Capsid Admin's backups, src/site-backup.ts, Dustin 2026-11-06: one control for
+//     every site in place of each site's own), and a job run is run_job { job } (the
+//     run_job control, src/site-jobs.ts, Dustin 2026-11-07: any of a site's cron jobs
+//     run now, through site-runtime's runJobTool on the site). Nothing else the site's
+//     operator API serves is ever called (save_post, delete_post, decide_mention...).
 //   - the SITE'S OWN list, in its configuration: the tools its repairs map and its weekly
-//     tools name. A tool the ceiling allows but the site does not name is refused too.
+//     tools name, and the two backup tools only where it sets backup: true. A tool the
+//     ceiling allows but the site does not name is refused too.
 // Capsid never merges and never mints: the token is one the seat set as a Capsid Worker
 // secret, read by name, sent only to the site's own origin, and never logged, returned or
 // put in an audit row.
 
+/** The two backup tools: the backup state read now, and the site's backup jobs run now
+ *  (run_job { backup: true }). */
+const BACKUP_TOOLS = ["backup_status", "run_job"] as const;
+type BackupTool = (typeof BACKUP_TOOLS)[number];
+const isBackupTool = (tool: string): tool is BackupTool =>
+  (BACKUP_TOOLS as readonly string[]).includes(tool);
+
 /** The ceiling: the only tools Capsid will ever call as a repair. */
 export function repairToolRefusal(tool: string): string | null {
-  if (tool === "backup_media") return "backup_media is not a repair Capsid may call: it copies the media bucket, and it stays with the site's own watchdog.";
+  if (isBackupTool(tool))
+    return `${tool} is a backup or a job run, not a repair: Capsid Admin's backups and run_job control call it.`;
   if (tool === "sync_status") return "sync_status is a read, not a repair.";
   if (tool === "refresh_citations" || /^sync_[a-z][a-z_]{0,40}$/.test(tool)) return null;
   return `'${tool}' is not a repair Capsid may call: only the site's sync_* tools and refresh_citations are.`;
@@ -39,7 +52,10 @@ export type ParsedOperator = { ok: true; operator: SiteOperator } | { ok: false;
 /** A site's operator configuration from its stored or edited JSON, checked whole: one bad
  *  entry refuses all of it, so a configuration is never half applied. */
 export function parseOperator(raw: string): ParsedOperator {
-  const refuse = (refusal: string): ParsedOperator => ({ ok: false, refusal: `operator: ${refusal}` });
+  const refuse = (refusal: string): ParsedOperator => ({
+    ok: false,
+    refusal: `operator: ${refusal}`,
+  });
   if (raw.length > MAX_JSON) return refuse(`at most ${MAX_JSON} characters.`);
   let value: unknown;
   try {
@@ -47,16 +63,22 @@ export function parseOperator(raw: string): ParsedOperator {
   } catch (err) {
     return refuse(`not JSON (${err instanceof Error ? err.message : String(err)}).`);
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return refuse("must be a JSON object.");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return refuse("must be a JSON object.");
   const o = value as Record<string, unknown>;
-  const known = ["path", "auth_var", "repairs", "weekly", "secrets"];
+  const known = ["path", "auth_var", "repairs", "weekly", "secrets", "backup"];
   const extra = Object.keys(o).filter((k) => !known.includes(k));
   if (extra.length) return refuse(`takes ${known.join(", ")}; '${extra[0]}' is not one of them.`);
-  if (typeof o.path !== "string" || !OPERATOR_PATH.test(o.path) || o.path.includes("..")) return refuse("path must be a path on the site's origin, such as /api/operator.");
-  if (typeof o.auth_var !== "string" || !SECRET_NAME.test(o.auth_var)) return refuse("auth_var must name a Capsid Worker secret ending in _OPERATOR_TOKEN, such as DUSTINEDWARDS_OPERATOR_TOKEN.");
+  if (typeof o.path !== "string" || !OPERATOR_PATH.test(o.path) || o.path.includes(".."))
+    return refuse("path must be a path on the site's origin, such as /api/operator.");
+  if (typeof o.auth_var !== "string" || !SECRET_NAME.test(o.auth_var))
+    return refuse(
+      "auth_var must name a Capsid Worker secret ending in _OPERATOR_TOKEN, such as DUSTINEDWARDS_OPERATOR_TOKEN.",
+    );
   const repairs: Array<[string, string]> = [];
   if (o.repairs !== undefined) {
-    if (!o.repairs || typeof o.repairs !== "object" || Array.isArray(o.repairs)) return refuse("repairs must map health check names to repair tools.");
+    if (!o.repairs || typeof o.repairs !== "object" || Array.isArray(o.repairs))
+      return refuse("repairs must map health check names to repair tools.");
     for (const [check, tool] of Object.entries(o.repairs)) {
       if (!CHECK_NAME.test(check)) return refuse(`'${check}' is not a health check name.`);
       if (typeof tool !== "string") return refuse(`the repair for ${check} must be a tool name.`);
@@ -78,13 +100,27 @@ export function parseOperator(raw: string): ParsedOperator {
   }
   const secrets: string[] = [];
   if (o.secrets !== undefined) {
-    if (!Array.isArray(o.secrets) || o.secrets.length > MAX_SECRETS) return refuse(`secrets must be a list of at most ${MAX_SECRETS} names.`);
+    if (!Array.isArray(o.secrets) || o.secrets.length > MAX_SECRETS)
+      return refuse(`secrets must be a list of at most ${MAX_SECRETS} names.`);
     for (const name of o.secrets) {
-      if (typeof name !== "string" || !ENV_NAME.test(name)) return refuse(`'${String(name)}' is not a secret name.`);
+      if (typeof name !== "string" || !ENV_NAME.test(name))
+        return refuse(`'${String(name)}' is not a secret name.`);
       if (!secrets.includes(name)) secrets.push(name);
     }
   }
-  return { ok: true, operator: { path: o.path, auth_var: o.auth_var, repairs: Object.fromEntries(repairs), weekly, secrets } };
+  if (o.backup !== undefined && typeof o.backup !== "boolean")
+    return refuse("backup must be true or false.");
+  return {
+    ok: true,
+    operator: {
+      path: o.path,
+      auth_var: o.auth_var,
+      repairs: Object.fromEntries(repairs),
+      weekly,
+      secrets,
+      backup: o.backup === true,
+    },
+  };
 }
 
 /** The tools this site allows: its repairs and its weekly tools. */
@@ -94,12 +130,30 @@ export function allowedTools(operator: SiteOperator): string[] {
 
 /** Why `tool` may not be called on this site, or null. The ceiling first, then the site's
  *  own list, checked again here before every request, not only when the configuration
- *  was saved: a row written before a ceiling change must not outlive it. */
-export function toolRefusal(operator: SiteOperator, tool: string, reading = false): string | null {
+ *  was saved: a row written before a ceiling change must not outlive it. A backup tool
+ *  goes only where the site set backup: true, and only from the backups (`backup`). */
+export function toolRefusal(
+  operator: SiteOperator,
+  tool: string,
+  reading = false,
+  backup = false,
+  job = false,
+): string | null {
+  // A job run goes to any site with an operator configuration: serving run_job is the
+  // site's own opt in, and its job list is the site's (site-runtime runJobTool).
+  if (job) return tool === "run_job" ? null : `'${tool}' is not run_job.`;
+  if (backup) {
+    if (!isBackupTool(tool))
+      return `'${tool}' is not a backup tool: only ${BACKUP_TOOLS.join(" and ")} are.`;
+    return operator.backup
+      ? null
+      : `this site does not set backup: true in its operator configuration, so Capsid calls no backup tool on it.`;
+  }
   if (reading && tool === "sync_status") return null;
   const ceiling = repairToolRefusal(tool);
   if (ceiling) return ceiling;
-  if (!allowedTools(operator).includes(tool)) return `${tool} is not in this site's allowlist (${allowedTools(operator).join(", ") || "none"}).`;
+  if (!allowedTools(operator).includes(tool))
+    return `${tool} is not in this site's allowlist (${allowedTools(operator).join(", ") || "none"}).`;
   return null;
 }
 
@@ -116,7 +170,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export interface OperatorCall {
   ok: boolean;
   status: number;
-  /** The reply's data, for a read (sync_status). Never echoed for a repair. */
+  /** The reply's data, for a read (sync_status) or a backup. Never echoed for a repair. */
   data: unknown;
   converged: boolean | null;
   expected: number | null;
@@ -132,7 +186,7 @@ export interface OperatorCall {
 const CALL_TIMEOUT_MS = 5 * MINUTE_MS;
 const ERROR_MAX = 300;
 
-/** One allowlisted call: POST {tool, args: {}} to the site's operator route with the
+/** One allowlisted call: POST {tool, args} to the site's operator route with the
  *  configured token. Refused before any request when the tool is not allowed or the token
  *  is not set. Never throws. */
 export async function callOperator(
@@ -140,20 +194,42 @@ export async function callOperator(
   site: { origin: string; operator: SiteOperator },
   tool: string,
   fetchImpl: FetchLike = fetch,
-  opts: { reading?: boolean } = {}
+  opts: { reading?: boolean; backup?: boolean; job?: boolean; args?: Record<string, unknown> } = {},
 ): Promise<OperatorCall> {
-  const fail = (status: number, error: string): OperatorCall => ({ ok: false, status, data: null, converged: null, expected: null, present: null, error: error.slice(0, ERROR_MAX) });
-  const refusal = toolRefusal(site.operator, tool, opts.reading === true);
+  const fail = (status: number, error: string): OperatorCall => ({
+    ok: false,
+    status,
+    data: null,
+    converged: null,
+    expected: null,
+    present: null,
+    error: error.slice(0, ERROR_MAX),
+  });
+  const refusal = toolRefusal(
+    site.operator,
+    tool,
+    opts.reading === true,
+    opts.backup === true,
+    opts.job === true,
+  );
   if (refusal) return fail(0, `refused by Capsid before any request: ${refusal}`);
   const token = (env as unknown as Record<string, unknown>)[site.operator.auth_var];
-  if (typeof token !== "string" || token.length === 0) return fail(0, `the Capsid Worker secret ${site.operator.auth_var} is not set, so nothing was called.`);
+  if (typeof token !== "string" || token.length === 0)
+    return fail(
+      0,
+      `the Capsid Worker secret ${site.operator.auth_var} is not set, so nothing was called.`,
+    );
   let response: Response;
   let payload: unknown;
   try {
     response = await fetchImpl(site.origin + site.operator.path, {
       method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "user-agent": "capsid" },
-      body: JSON.stringify({ tool, args: {} }),
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "user-agent": "capsid",
+      },
+      body: JSON.stringify({ tool, args: opts.args ?? {} }),
       redirect: "manual",
       signal: callSignal(CALL_TIMEOUT_MS),
     });
@@ -161,17 +237,22 @@ export async function callOperator(
   } catch (err) {
     return fail(0, `${tool} did not complete: ${err instanceof Error ? err.message : String(err)}`);
   }
-  const body = (payload && typeof payload === "object" ? payload : {}) as { ok?: unknown; data?: unknown; error?: unknown };
+  const body = (payload && typeof payload === "object" ? payload : {}) as {
+    ok?: unknown;
+    data?: unknown;
+    error?: unknown;
+  };
   if (!response.ok || body.ok !== true) {
     const said = typeof body.error === "string" ? body.error : "no error was given";
     return fail(response.status, `${tool} answered ${response.status}: ${said}`);
   }
-  const data = body.data && typeof body.data === "object" ? (body.data as Record<string, unknown>) : null;
+  const data =
+    body.data && typeof body.data === "object" ? (body.data as Record<string, unknown>) : null;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   return {
     ok: true,
     status: response.status,
-    data: opts.reading ? body.data : null,
+    data: opts.reading || opts.backup || opts.job ? body.data : null,
     converged: typeof data?.converged === "boolean" ? data.converged : null,
     expected: num(data?.expected),
     present: num(data?.present),
@@ -182,6 +263,7 @@ export async function callOperator(
 /** One line for an audit row or a task run: what the call did. */
 export function callLine(tool: string, call: OperatorCall): string {
   if (!call.ok) return call.error ?? `${tool} failed`;
-  if (call.converged === null) return `${tool} answered ${call.status} without a converged verdict, so nothing was proven`;
+  if (call.converged === null)
+    return `${tool} answered ${call.status} without a converged verdict, so nothing was proven`;
   return `${tool} ${call.converged ? "converged" : "did not converge"}${call.expected !== null ? ` (${call.present ?? "?"} of ${call.expected} present)` : ""}`;
 }

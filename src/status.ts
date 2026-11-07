@@ -16,7 +16,7 @@ import type { OpsMergeSafety } from "./ops-types/feed";
 import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 
-// Capsid's status as a driver and the Portal read it (capsid_run_improve action status,
+// Capsid's status as a driver and the Portal read it (capsid_read_status action status,
 // GET /portal/api/namespaces): per namespace the queue, the breaker, what waits on the
 // seat and the maintenance list, and across them the signed policies, the overnight
 // switch, the merge safety meter and, for the admin, the credential inventory. The
@@ -106,13 +106,23 @@ export async function agentSummaries(db: D1Database): Promise<AgentSummary[]> {
     .prepare(
       `SELECT name, kind, scopes, last_seen, revoked_at, NULL AS archived_at FROM agents
        UNION ALL
-       SELECT * FROM (SELECT name, kind, scopes, last_seen, revoked_at, archived_at FROM agents_archive ORDER BY archived_at DESC, name LIMIT ?1)`
+       SELECT * FROM (SELECT name, kind, scopes, last_seen, revoked_at, archived_at FROM agents_archive ORDER BY archived_at DESC, name LIMIT ?1)`,
     )
     .bind(SUMMARY_ARCHIVE_LIMIT)
-    .all<{ name: string; kind: string; scopes: string; last_seen: string | null; revoked_at: string | null; archived_at: string | null }>();
+    .all<{
+      name: string;
+      kind: string;
+      scopes: string;
+      last_seen: string | null;
+      revoked_at: string | null;
+      archived_at: string | null;
+    }>();
   // Live first, then revoked, then archived; by name within each.
-  const rank = (r: { revoked_at: string | null; archived_at: string | null }) => (r.archived_at ? 2 : r.revoked_at ? 1 : 0);
-  const rows = [...(results ?? [])].sort((a, b) => rank(a) - rank(b) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const rank = (r: { revoked_at: string | null; archived_at: string | null }) =>
+    r.archived_at ? 2 : r.revoked_at ? 1 : 0;
+  const rows = [...(results ?? [])].sort(
+    (a, b) => rank(a) - rank(b) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+  );
   const inventory = rows.map((row) => {
     const scopes = parseScopes(row.scopes);
     return {
@@ -143,22 +153,38 @@ async function servedPolicies(env: Env): Promise<PolicyVersions> {
   // Each load verifies the stored document's signature and checks it describes no less
   // than the code enforces. A throw is reported, not raised: a driver asking what
   // version is current should not have status fail because a policy is being re-signed.
-  const one = async (load: () => Promise<{ policy: { version: string; enabled: boolean } } | { error: string }>): Promise<ServedPolicy> => {
+  const one = async (
+    load: () => Promise<{ policy: { version: string; enabled: boolean } } | { error: string }>,
+  ): Promise<ServedPolicy> => {
     try {
       const loaded = await load();
-      return "error" in loaded ? { reason: loaded.error } : { version: loaded.policy.version, enabled: loaded.policy.enabled };
+      return "error" in loaded
+        ? { reason: loaded.error }
+        : { version: loaded.policy.version, enabled: loaded.policy.enabled };
     } catch (err) {
-      return { reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}` };
+      return {
+        reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
   };
-  return { gates: await one(() => loadGatePolicy(env)), auto_merge: await one(() => loadMergePolicy(env)) };
+  return {
+    gates: await one(() => loadGatePolicy(env)),
+    auto_merge: await one(() => loadMergePolicy(env)),
+  };
 }
 
 // An item an app reported about itself is the app's words, and an agent reads
-// capsid_run_improve action status, so its title is relayed inside an external fence (src/provenance.ts,
+// capsid_read_status action status, so its title is relayed inside an external fence (src/provenance.ts,
 // OWASP item 1; capsid/research/design-inbox-report.md, "Trust").
 function fenceReported(app: InboxApp): InboxApp {
-  return { ...app, items: app.items.map((item) => (item.kind === "report" ? { ...item, title: externalFence("inbox-report", app.namespace, item.title) } : item)) };
+  return {
+    ...app,
+    items: app.items.map((item) =>
+      item.kind === "report"
+        ? { ...item, title: externalFence("inbox-report", app.namespace, item.title) }
+        : item,
+    ),
+  };
 }
 
 export async function capsidStatus(
@@ -168,7 +194,7 @@ export async function capsidStatus(
   // resolved agent. Omitted means unrestricted (the cron, the Portal). A scoped caller
   // sees only its own namespaces and no credential inventory, because both map the
   // boundary it sits behind.
-  scope?: { namespaces: "*" | string[]; admin: boolean }
+  scope?: { namespaces: "*" | string[]; admin: boolean },
 ): Promise<StatusReport> {
   const allowed = scope?.namespaces ?? "*";
   const requested = only ? [only] : [...APP_ROSTER];
@@ -193,12 +219,11 @@ export async function capsidStatus(
   const maintenanceAll = maintenanceList?.items ?? [];
 
   for (const namespace of namespaces) {
-    const report = await env.DB
-      .prepare(
-        `SELECT path, body, updated_at FROM documents
+    const report = await env.DB.prepare(
+      `SELECT path, body, updated_at FROM documents
          WHERE namespace = ?1 AND path LIKE ?2 AND type = 'reference'
-         ORDER BY path DESC LIMIT 1`
-      )
+         ORDER BY path DESC LIMIT 1`,
+    )
       .bind(namespace, `${REPORTS_PREFIX}lint-%`)
       .first<{ path: string; body: string | null; updated_at: string }>();
 
@@ -208,14 +233,26 @@ export async function capsidStatus(
       // The filename is ISO-dated, so ORDER BY path gives the newest date. updated_at
       // would give the most recently rewritten report instead.
       latest_report: report
-        ? { path: `${namespace}/${report.path}`, integrity: integrityOf(report.body), generated: report.updated_at }
+        ? {
+            path: `${namespace}/${report.path}`,
+            integrity: integrityOf(report.body),
+            generated: report.updated_at,
+          }
         : null,
       jobs: await jobsSummary(env.DB, namespace, new Date(), env.IMPROVE_SCORE_SECRET),
       awaiting_seat: awaitingAll.filter((a) => a.namespace === namespace),
       maintenance: maintenanceAll.filter((m) => m.namespace === namespace),
       maintenance_prs_read: maintenanceList?.prs_read[namespace] ?? null,
       maintenance_branches_read: maintenanceList?.branches_read[namespace] ?? null,
-      needs_dustin: fenceReported(inboxAll.apps.find((a) => a.namespace === namespace) ?? { namespace, name: namespace, count: 0, severity: "none", items: [] }),
+      needs_dustin: fenceReported(
+        inboxAll.apps.find((a) => a.namespace === namespace) ?? {
+          namespace,
+          name: namespace,
+          count: 0,
+          severity: "none",
+          items: [],
+        },
+      ),
     });
   }
 
@@ -223,7 +260,13 @@ export async function capsidStatus(
     canon_paths: servedCanonPaths(),
     policies: await servedPolicies(env),
     overnight: await overnightState(env),
-    merge_safety: mergeSafety && allowed !== "*" ? { ...mergeSafety, namespaces: mergeSafety.namespaces.filter((n) => allowed.includes(n.namespace)) } : mergeSafety,
+    merge_safety:
+      mergeSafety && allowed !== "*"
+        ? {
+            ...mergeSafety,
+            namespaces: mergeSafety.namespaces.filter((n) => allowed.includes(n.namespace)),
+          }
+        : mergeSafety,
     // Admin only: the inventory is the map an agent looking to widen itself would want.
     ...(scope && !scope.admin ? {} : { agents: await agentSummaries(env.DB) }),
     namespaces: out,

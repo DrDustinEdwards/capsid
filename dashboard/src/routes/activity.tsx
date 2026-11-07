@@ -3,4 +3,5 @@ import { Activity } from "../views/Activity";
 
 export const loader = viewLoader("activity");
 export const clientLoader = browserLoader;
-export default viewPage(Activity);
+const ActivityPage = viewPage(Activity);
+export default ActivityPage;

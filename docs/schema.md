@@ -28,20 +28,20 @@ A document is a row: namespace, path, title, body, type, status, tags,
 
 ### Types
 
-| type | what it is |
-| --- | --- |
-| `core` | one always-loaded summary per namespace, read first to orient |
-| `concept` | a compiled wiki topic, one subject per document |
-| `decision` | a ruling and the measurement that forced it |
-| `spec` | a design a piece of work is built to |
-| `protocol` | a tested procedure |
-| `procedural` | rules for working in a namespace |
-| `task` | an open piece of work |
-| `reference` | pointers outward: URLs, dashboards, lookup tables |
-| `semantic`, `note`, `post` | compiled knowledge and content |
-| `episodic` | a session record: raw material for the consolidation loop |
-| `source` | raw, un-compiled input, an inbox |
-| `prompt` | a reusable template, with `{{variable}}` placeholders |
+| type                       | what it is                                                    |
+| -------------------------- | ------------------------------------------------------------- |
+| `core`                     | one always-loaded summary per namespace, read first to orient |
+| `concept`                  | a compiled wiki topic, one subject per document               |
+| `decision`                 | a ruling and the measurement that forced it                   |
+| `spec`                     | a design a piece of work is built to                          |
+| `protocol`                 | a tested procedure                                            |
+| `procedural`               | rules for working in a namespace                              |
+| `task`                     | an open piece of work                                         |
+| `reference`                | pointers outward: URLs, dashboards, lookup tables             |
+| `semantic`, `note`, `post` | compiled knowledge and content                                |
+| `episodic`                 | a session record: raw material for the consolidation loop     |
+| `source`                   | raw, un-compiled input, an inbox                              |
+| `prompt`                   | a reusable template, with `{{variable}}` placeholders         |
 
 The write path validates the type. An unknown type is refused rather than stored,
 because a document with an invented type is invisible to every query that names
@@ -100,7 +100,7 @@ Ruled 2026-08-13 to 2026-08-17. The type and status vocabulary is enforced on wr
 
 ## Canon is protected from namespace keys
 
-Canon is what every agent is told to trust: `capsid/conventions.md` and `capsid/conventions-<name>.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its archived volumes. `CANON_RULES` in `src/canon.ts` is the list, checked by `test/canon.test.ts` and served by `capsid_run_improve` action `status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
+Canon is what every agent is told to trust: `capsid/conventions.md` and `capsid/conventions-<name>.md`, every namespace's `core.md`, and every namespace's `decisions.md` with its archived volumes. `CANON_RULES` in `src/canon.ts` is the list, checked by `test/canon.test.ts` and served by `capsid_read_status` action `status` as `canon_paths`. Ruled by Dustin on 2026-10-03 (D3 of the OWASP hardening, job_9e602b31888f).
 
 - **Only the admin, the seat (`can_merge`) and a portfolio-wide key (namespaces `*`, the key Dustin's cloud sessions use) change canon.** For them a canon write, restore, move or delete is an ordinary one: snapshotted and audit-logged.
 - **A key scoped to some namespaces (a site driver, a cron) is refused** every write, restore, move and delete of canon, and a move onto a canon path, with nothing changed.
@@ -179,10 +179,10 @@ verified without reading the document back. Pass that hash as `if_match` on the
 next write to the same document and the server enforces the re-read rule.
 
 A `patch` whose anchor equals its replacement is non-destructive. A match
-  changes nothing and returns the same hash and byte count; a mismatch is a
-  refusal that writes nothing. Use it to prove a moved block byte-exact at its
-  destination, to read a document's current size without touching it, or to
-  confirm an anchor exists exactly once before betting a real patch on it.
+changes nothing and returns the same hash and byte count; a mismatch is a
+refusal that writes nothing. Use it to prove a moved block byte-exact at its
+destination, to read a document's current size without touching it, or to
+confirm an anchor exists exactly once before betting a real patch on it.
 
 A wrong `if_match` is a non-mutating hash oracle. The server
 refuses, writes nothing, and returns the current hash.
@@ -255,17 +255,17 @@ that builds a record or a count from `job_outcomes` leaves out a row whose job i
 superseded (`src/agent-record.ts` and the
 pull request re-verification in `src/outcome-prs.ts`).
 
-| column | what it is |
-| --- | --- |
-| `agent`, `namespace` | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later release clears that column |
-| `prs_opened`, `prs_merged` | GitHub's answer whenever the driver named any pull request |
-| `commits`, `files_changed` | the pull requests' own counts when there are any, the driver's otherwise |
-| `tests_added` | the driver's claim, never verifiable here: "a test was added" is a judgment about a diff, not a property of it |
-| `ci_green` | `1`, `0`, or `NULL` for not checked. A run still going is `NULL`, because "CI has not answered" is not "CI failed" |
-| `blocked_count`, `resumed_count` | how many gates the job hit and how many times a human sent it back, the two numbers the Worker knows first-hand |
-| `duration_minutes` | claimed to recorded. The final working stretch: `resume` does not restart the clock from the first claim, so time spent blocked waiting on a human is excluded |
-| `result_kind` | `pr`, `doc` or `none`, derived from `result_ref` rather than declared |
-| `verified` | a JSON object of booleans saying which of the above this Worker checked itself |
+| column                           | what it is                                                                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent`, `namespace`             | who did the work and where, copied from `jobs.claimed_by` at the moment the job ended rather than joined, since a later release clears that column             |
+| `prs_opened`, `prs_merged`       | GitHub's answer whenever the driver named any pull request                                                                                                     |
+| `commits`, `files_changed`       | the pull requests' own counts when there are any, the driver's otherwise                                                                                       |
+| `tests_added`                    | the driver's claim, never verifiable here: "a test was added" is a judgment about a diff, not a property of it                                                 |
+| `ci_green`                       | `1`, `0`, or `NULL` for not checked. A run still going is `NULL`, because "CI has not answered" is not "CI failed"                                             |
+| `blocked_count`, `resumed_count` | how many gates the job hit and how many times a human sent it back, the two numbers the Worker knows first-hand                                                |
+| `duration_minutes`               | claimed to recorded. The final working stretch: `resume` does not restart the clock from the first claim, so time spent blocked waiting on a human is excluded |
+| `result_kind`                    | `pr`, `doc` or `none`, derived from `result_ref` rather than declared                                                                                          |
+| `verified`                       | a JSON object of booleans saying which of the above this Worker checked itself                                                                                 |
 
 The Worker never stores a count it could check and did not. The driver reports;
 this Worker holds a GitHub App token and can ask. Where a check ran the stored
@@ -297,18 +297,18 @@ four. It is captured before any verification runs, in the same batch as the
 transition. A call refused before the transition writes none, and neither does a
 seat's `fail` of another credential's job, since that agent made no claim.
 
-| column | what it is |
-| --- | --- |
-| `action`, `agent`, `namespace` | the call, the caller, and the job's namespace at the time |
-| `raw` | the claim-bearing arguments exactly as sent: `evidence`, `claim`, `result_summary` or `reason`, `result_ref`, `command` |
-| `prs_opened_urls`, `prs_merged_urls`, `prs_opened`, `prs_merged` | the pull requests the agent says it opened and says are merged, as JSON arrays and their lengths |
-| `commits`, `files_changed`, `tests_added` | the driver's own counts from `evidence`, never GitHub's |
-| `tests_run`, `tests_passed`, `tests_failed`, `tests_result` | the tests the agent says it ran, and their result |
-| `deploy_state` | what the agent says about deployment |
-| `files_touched` | a JSON array of the paths the agent says it touched |
-| `model_id`, `client_name`, `client_version`, `permission_mode` | self-reported, recorded and never used to authorize anything |
-| `raw` `claim.usage` | self-reported cost, active seconds and tokens for the session, kept in `raw` with no column of its own and summed per namespace by the `capsid_admin_read_claims` aggregate beside the telemetry on `job_outcomes`; never used to authorize anything |
-| `capsid_sha` | the Worker's own deployed commit, not the agent's word |
+| column                                                           | what it is                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `action`, `agent`, `namespace`                                   | the call, the caller, and the job's namespace at the time                                                                                                                                                                                            |
+| `raw`                                                            | the claim-bearing arguments exactly as sent: `evidence`, `claim`, `result_summary` or `reason`, `result_ref`, `command`                                                                                                                              |
+| `prs_opened_urls`, `prs_merged_urls`, `prs_opened`, `prs_merged` | the pull requests the agent says it opened and says are merged, as JSON arrays and their lengths                                                                                                                                                     |
+| `commits`, `files_changed`, `tests_added`                        | the driver's own counts from `evidence`, never GitHub's                                                                                                                                                                                              |
+| `tests_run`, `tests_passed`, `tests_failed`, `tests_result`      | the tests the agent says it ran, and their result                                                                                                                                                                                                    |
+| `deploy_state`                                                   | what the agent says about deployment                                                                                                                                                                                                                 |
+| `files_touched`                                                  | a JSON array of the paths the agent says it touched                                                                                                                                                                                                  |
+| `model_id`, `client_name`, `client_version`, `permission_mode`   | self-reported, recorded and never used to authorize anything                                                                                                                                                                                         |
+| `raw` `claim.usage`                                              | self-reported cost, active seconds and tokens for the session, kept in `raw` with no column of its own and summed per namespace by the `capsid_admin_read_claims` aggregate beside the telemetry on `job_outcomes`; never used to authorize anything |
+| `capsid_sha`                                                     | the Worker's own deployed commit, not the agent's word                                                                                                                                                                                               |
 
 `job_evaluations` holds one row per check, named for OpenTelemetry's
 `gen_ai.evaluation.result` event: `name`, `score_value`, `score_label` (`pass`,
@@ -357,7 +357,7 @@ stored text of the first job it happened to.
 ### agent_record
 
 `src/agent-record.ts` aggregates those rows into one record per credential, served
-in `capsid_run_improve` action `status`'s `agents` and rendered in Capsid Portal: jobs done, failed and
+in `capsid_read_status` action `status`'s `agents` and rendered in Capsid Portal: jobs done, failed and
 blocked, gates hit, resumes, pull requests opened and merged, a merge rate, a CI
 green rate with `ci_checked` as its stated denominator, and a median duration.
 
@@ -421,8 +421,10 @@ legitimately.
 ## The review gate
 
 Removed 2026-10-31 with `capsid_open_pr`, whose `comment` action was the only way a
-verdict could be posted. `jobs.review_required` (migrations/0017) stays as a column:
-new jobs store 0, and no transition reads it.
+verdict could be posted. `jobs.review_required` (migrations/0017) was dropped by
+migrations/0061, with `jobs.lease_expires` and its index `jobs_lease` (the claim lease,
+removed 2026-10-11). `jobs_status (status, updated_at)` replaces `jobs_lease` for the
+reads that filter on status alone.
 
 ## Skill records
 
@@ -446,7 +448,7 @@ body is exactly what an attacker controls.
 Capsid Portal (`/portal/`, docs/portal.md) reads the store through the same
 functions the tools call, so the two cannot disagree. `GET /portal/api/ops` is the
 feed, `OpsFeed` in `src/ops-types/feed.ts`. `GET /portal/api/namespaces` returns each
-roster namespace from `capsidStatus()` (`src/status.ts`), the function behind `capsid_run_improve` action `status`.
+roster namespace from `capsidStatus()` (`src/status.ts`), the function behind `capsid_read_status` action `status`.
 `GET /portal/api/activity?namespace=&actor=` returns the last 50 `audit_log` rows,
 filtered, with ISO times. `GET /portal/api/stale` returns the stale jobs from
 `staleJobs()`, the function behind `capsid_work_jobs` action `list` with `stale: true`. All four are admin
@@ -490,7 +492,8 @@ each carrying the row before and after as `params`, then the click row
 only in that audit row and the nightly dump. Its `operator` column (migrations/0035) is
 a site's opt-in to Capsid calling its operator API (docs/portal.md, "Site repairs");
 each call is audited as `site-repair` under the caller (`agent:watcher` or
-`access:<email>`) with the tool and the site's verdict, never the token.
+`access:<email>`) with the tool and the site's verdict, never the token, and each backup
+from Capsid Admin's backups as `site-backup` (docs/portal.md, "Site backups").
 
 `record` is the agent record. It is a different measurement from the counts
 beside it. The flat `prs_opened` and `prs_merged` count what this credential did

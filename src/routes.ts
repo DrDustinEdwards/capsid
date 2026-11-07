@@ -1,13 +1,38 @@
 import { handleSignedInReport, SIGNED_IN_REPORT_PATH } from "./signed-in-crawl";
-import { PUBLIC_CODE_PATH, PUBLIC_DOCS, PUBLIC_MODEL_PATH, PUBLIC_STATS_PATH, PUBLIC_VERSIONS_PATH, handlePublicDocument } from "./public-data";
+import {
+  PUBLIC_CODE_PATH,
+  PUBLIC_DOCS,
+  PUBLIC_MODEL_PATH,
+  PUBLIC_STATS_PATH,
+  PUBLIC_VERSIONS_PATH,
+  handlePublicDocument,
+} from "./public-data";
 import { SHADOW_JOB_PATH, SHADOW_RESULT_PATH, handleShadowJob, handleShadowResult } from "./shadow";
 import { REVIEW_RUN_PATH, handleReviewRun } from "./review";
-import { BENCH_DRAW_PATH, BENCH_REPRO_PATH, BENCH_SCORE_PATH, BENCH_START_PATH, BENCH_TASKS_PATH, handleBenchDraw, handleBenchRepro, handleBenchScore, handleBenchStart, handleBenchTasks } from "./bench";
+import {
+  BENCH_DRAW_PATH,
+  BENCH_REPRO_PATH,
+  BENCH_SCORE_PATH,
+  BENCH_START_PATH,
+  BENCH_TASKS_PATH,
+  handleBenchDraw,
+  handleBenchRepro,
+  handleBenchScore,
+  handleBenchStart,
+  handleBenchTasks,
+} from "./bench";
 import { resolveAgent } from "./agents";
 import { checkScope } from "./scope";
 import { gatherInbox, restrictInbox } from "./inbox";
 import { VERIFY_LIVE_CLIENT_PATH, handleClientDocument } from "./oauth-client-docs";
-import { MAX_INBOX_REPORT_BYTES, REPORT_TTL_SECONDS, parseReport, reportCallerRefusal, spendReportRate, storeReport } from "./inbox-report";
+import {
+  MAX_INBOX_REPORT_BYTES,
+  REPORT_TTL_SECONDS,
+  parseReport,
+  reportCallerRefusal,
+  spendReportRate,
+  storeReport,
+} from "./inbox-report";
 import { readSiteConfig } from "./ops-sites";
 import { consentDialogHeaders, REPORT_PATH, securityHeadersFor } from "./security-headers";
 import { receiveCspReport } from "@dustinedwards/site-runtime/csp-report";
@@ -47,16 +72,50 @@ import {
   PORTAL_PREVIEW_PATH,
   PORTAL_SIGN_OUT_PATH,
 } from "./portal-actions";
-import { handlePortalCallback, PORTAL_CALLBACK_PATH, PORTAL_PATH, PORTAL_PREFIX, withPortalIdle } from "./portal-auth";
+import {
+  handlePortalCallback,
+  PORTAL_CALLBACK_PATH,
+  PORTAL_PATH,
+  PORTAL_PREFIX,
+  withPortalIdle,
+} from "./portal-auth";
 import { handlePortalClaims, PORTAL_CLAIMS_PATH } from "./portal-claims";
 import { handlePortalStale, PORTAL_STALE_PATH } from "./portal-stale";
-import { handlePortalDigest, handlePortalPlan, PORTAL_DIGEST_PATH, PORTAL_PLAN_PATH } from "./portal-overnight";
+import {
+  handlePortalDigest,
+  handlePortalPlan,
+  PORTAL_DIGEST_PATH,
+  PORTAL_PLAN_PATH,
+} from "./portal-overnight";
+import { handlePortalMergeUnits, PORTAL_MERGE_UNITS_PATH } from "./portal-merge-units";
+import {
+  handlePortalBuildLog,
+  handlePortalSiteSearch,
+  handlePortalSiteTraffic,
+  handlePortalWorkersBuilds,
+  PORTAL_BUILD_LOG_PATH,
+  PORTAL_SITE_SEARCH_PATH,
+  PORTAL_SITE_TRAFFIC_PATH,
+  PORTAL_WORKERS_BUILDS_PATH,
+} from "./portal-site";
 import { handlePortalMaintenance, PORTAL_MAINTENANCE_PATH } from "./portal-maintenance";
 import { handlePortalConvergence, PORTAL_CONVERGENCE_PATH } from "./portal-convergence";
+import { handlePortalBackups, PORTAL_BACKUPS_PATH } from "./portal-backups";
 import { handlePortalPushGet, handlePortalPushPost, PORTAL_PUSH_PATH } from "./push";
 import { handlePortalLibrary, PORTAL_LIBRARY_PATH } from "./portal-library";
 import { handlePortalTrends, PORTAL_TRENDS_PATH } from "./portal-trends";
-import { handlePortalCompleteness, handlePortalNotFound, handlePortalPackageHistory, handlePortalResources, handlePortalSharedCode, PORTAL_COMPLETENESS_PATH, PORTAL_NOT_FOUND_PATH, PORTAL_PACKAGE_HISTORY_PATH, PORTAL_RESOURCES_PATH, PORTAL_SHARED_CODE_PATH } from "./portal-packages";
+import {
+  handlePortalCompleteness,
+  handlePortalNotFound,
+  handlePortalPackageHistory,
+  handlePortalResources,
+  handlePortalSharedCode,
+  PORTAL_COMPLETENESS_PATH,
+  PORTAL_NOT_FOUND_PATH,
+  PORTAL_PACKAGE_HISTORY_PATH,
+  PORTAL_RESOURCES_PATH,
+  PORTAL_SHARED_CODE_PATH,
+} from "./portal-packages";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { rateLimiter, textResponse } from "./http";
 
@@ -71,7 +130,8 @@ const login = loginHandler<Env>({
   about:
     "<p>Capsid serves the portfolio's knowledge base and reaches its GitHub repos. It will always be able to read. " +
     "Writing documents, changing repos, working jobs and Capsid Admin's controls need the box below.</p>",
-  admit: async (env, user) => ((await isAdminEmail(env, user.email)) ? { signed_in_at: Date.now() } : false),
+  admit: async (env, user) =>
+    (await isAdminEmail(env, user.email)) ? { signed_in_at: Date.now() } : false,
   admits: {
     consent: "Only Capsid's administrator and its co-owners are accepted.",
     refusal: "This account is not an administrator of Capsid (ADMIN_EMAIL or CO_OWNER_EMAILS).",
@@ -89,11 +149,20 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   const response = await login.fetch(request, env);
   if (!(response.headers.get("Content-Type") ?? "").includes("text/html")) return response;
   const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(await consentDialogHeaders())) headers.set(name, value);
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  for (const [name, value] of Object.entries(await consentDialogHeaders()))
+    headers.set(name, value);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
-async function handleOperatorMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handleOperatorMcp(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
   // The bearer is resolved to a caller once, here, and every tool in this request is
   // checked against it. A minted agent carries the scopes its row says.
   const resolved = await resolveAgent(request, env);
@@ -126,8 +195,16 @@ async function handleInbox(request: Request, env: Env): Promise<Response> {
     });
   }
   const everything = await gatherInbox(env, new Date(), null);
-  const readable = (namespace: string) => checkScope(caller.agent, { tool: "capsid_run_improve", action: "status", namespace, grant: "read" }) === null;
-  return Response.json(restrictInbox(everything, readable), { headers: { "Cache-Control": "private, max-age=30" } });
+  const readable = (namespace: string) =>
+    checkScope(caller.agent, {
+      tool: "capsid_read_status",
+      action: "status",
+      namespace,
+      grant: "read",
+    }) === null;
+  return Response.json(restrictInbox(everything, readable), {
+    headers: { "Cache-Control": "private, max-age=30" },
+  });
 }
 
 // What an app reports about itself to the inbox (src/inbox-report.ts): the app's own
@@ -136,9 +213,13 @@ async function handleInbox(request: Request, env: Env): Promise<Response> {
 // refused report spends nothing.
 async function handleInboxReport(request: Request, env: Env): Promise<Response> {
   const caller = await resolveAgent(request, env);
-  if (!caller) return textResponse("unauthorized: the app's own agent key is required", 401, { "WWW-Authenticate": 'Bearer realm="capsid-operator"' });
+  if (!caller)
+    return textResponse("unauthorized: the app's own agent key is required", 401, {
+      "WWW-Authenticate": 'Bearer realm="capsid-operator"',
+    });
   const bounded = await readBoundedText(request, MAX_INBOX_REPORT_BYTES);
-  if (!bounded.ok) return textResponse(`request too large: exceeds ${MAX_INBOX_REPORT_BYTES} bytes`, 413);
+  if (!bounded.ok)
+    return textResponse(`request too large: exceeds ${MAX_INBOX_REPORT_BYTES} bytes`, 413);
   let body: unknown;
   try {
     body = JSON.parse(bounded.text);
@@ -146,7 +227,8 @@ async function handleInboxReport(request: Request, env: Env): Promise<Response> 
     return textResponse("the body must be JSON", 400);
   }
   const namespace = (body as { namespace?: unknown } | null)?.namespace;
-  if (typeof namespace !== "string" || namespace === "") return textResponse("namespace is required", 400);
+  if (typeof namespace !== "string" || namespace === "")
+    return textResponse("namespace is required", 400);
   const refusal = reportCallerRefusal(caller.agent, namespace);
   if (refusal) return textResponse(refusal, 403);
   const now = new Date();
@@ -156,8 +238,21 @@ async function handleInboxReport(request: Request, env: Env): Promise<Response> 
   if (!parsed.ok) return textResponse(parsed.refusal, 400);
   const rate = await spendReportRate(env.APP_KV, caller.agent.actor);
   if (!rate.ok) return textResponse(rate.refusal, rate.status, { "Retry-After": "60" });
-  await storeReport(env.APP_KV, { namespace, reported_at: now.toISOString(), reported_by: caller.agent.actor, items: parsed.value.items });
-  return Response.json({ ok: true, namespace, items: parsed.value.items.length, expires_in_seconds: REPORT_TTL_SECONDS }, { headers: { "Cache-Control": "no-store" } });
+  await storeReport(env.APP_KV, {
+    namespace,
+    reported_at: now.toISOString(),
+    reported_by: caller.agent.actor,
+    items: parsed.value.items,
+  });
+  return Response.json(
+    {
+      ok: true,
+      namespace,
+      items: parsed.value.items.length,
+      expires_in_seconds: REPORT_TTL_SECONDS,
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 // Fail closed: /csp-report is unauthenticated and every accepted report writes log lines, so
@@ -180,9 +275,17 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
     headers: securityHeadersFor(new URL(request.url).hostname),
     allow: async (r) => {
       const { key } = ipKey("csp-report", r);
-      const verdict = await limit(rateLimiter(env), key, CSP_REPORT_RULES, { onUnavailable: "refuse" });
+      const verdict = await limit(rateLimiter(env), key, CSP_REPORT_RULES, {
+        onUnavailable: "refuse",
+      });
       if (verdict.status === "limited") {
-        logEvent("CSP_REPORT_RATE_LIMITED", { message: `CSP_REPORT_RATE_LIMITED ${key} hit the ${verdict.window}s limit (${verdict.used} of ${verdict.limit})` }, { level: "error" });
+        logEvent(
+          "CSP_REPORT_RATE_LIMITED",
+          {
+            message: `CSP_REPORT_RATE_LIMITED ${key} hit the ${verdict.window}s limit (${verdict.used} of ${verdict.limit})`,
+          },
+          { level: "error" },
+        );
       }
       return verdict.status === "ok";
     },
@@ -195,7 +298,8 @@ async function handleCspReport(request: Request, env: Env): Promise<Response> {
 // Both backup endpoints read the X-Backup-* pair and verify against the backup key.
 const backupFront = (env: Env) => ({
   headers: "Backup" as const,
-  verify: (signed: { timestamp: string; signature: string; body: string }, now: Date) => verifyBackupCredentialRequest(env, signed, now),
+  verify: (signed: { timestamp: string; signature: string; body: string }, now: Date) =>
+    verifyBackupCredentialRequest(env, signed, now),
   db: env.DB,
 });
 
@@ -204,24 +308,44 @@ const backupFront = (env: Env) => ({
 // object-read-only on backups/json/. The jti cache runs under the literal scope
 // "backup", which is not in ROSTER.
 async function handleBackupCredential(request: Request, env: Env): Promise<Response> {
-  const front = await signedRequestBody(request, { ...backupFront(env), scope: "backup", event: "BACKUP_CREDENTIAL_REJECTED", parse: parseBackupCredentialRequest });
+  const front = await signedRequestBody(request, {
+    ...backupFront(env),
+    scope: "backup",
+    event: "BACKUP_CREDENTIAL_REJECTED",
+    parse: parseBackupCredentialRequest,
+  });
   if (!front.ok) return front.response;
   const parsed = front.value;
 
-  const minted = await mintBackupCredential(env, parsed.site);
+  const target = parsed.audit === undefined ? `site=${parsed.site}` : `audit=${parsed.audit}`;
+  const minted = await mintBackupCredential(env, parsed.site, parsed.audit);
   if (!minted.ok) {
-    logEvent("BACKUP_CREDENTIAL_FAILED", { message: `BACKUP_CREDENTIAL_FAILED site=${parsed.site} ${minted.refusal}` }, { level: "error" });
+    logEvent(
+      "BACKUP_CREDENTIAL_FAILED",
+      { message: `BACKUP_CREDENTIAL_FAILED ${target} ${minted.refusal}` },
+      { level: "error" },
+    );
     return textResponse(minted.refusal, minted.status);
   }
-  logEvent("BACKUP_CREDENTIAL_MINTED", { message: `BACKUP_CREDENTIAL_MINTED site=${parsed.site} ttl=${minted.credential.expires_in}s` });
-  return new Response(JSON.stringify(minted.credential), { status: 200, headers: { "Content-Type": "application/json" } });
+  logEvent("BACKUP_CREDENTIAL_MINTED", {
+    message: `BACKUP_CREDENTIAL_MINTED ${target} ttl=${minted.credential.expires_in}s`,
+  });
+  return new Response(JSON.stringify(minted.credential), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 // The Amazon copy's report from capsid-backups' watch.yml: the same backup key and checks
 // as the credential mint, its own jti scope, and the report stored whole for the watcher.
 // It mints nothing and reads nothing back.
 async function handleOffaccountReport(request: Request, env: Env): Promise<Response> {
-  const front = await signedRequestBody(request, { ...backupFront(env), scope: "backup-report", event: "OFFACCOUNT_REPORT_REJECTED", parse: parseOffaccountReport });
+  const front = await signedRequestBody(request, {
+    ...backupFront(env),
+    scope: "backup-report",
+    event: "OFFACCOUNT_REPORT_REJECTED",
+    parse: parseOffaccountReport,
+  });
   if (!front.ok) return front.response;
   const parsed = front.value;
   const report: OffaccountReport = { received_at: new Date().toISOString(), sites: parsed.sites };
@@ -236,40 +360,63 @@ export const defaultHandler = {
     const request = original;
     const url = new URL(request.url);
     if (url.pathname === "/health") return handleHealth(env);
-    if (url.pathname === SIGNED_IN_REPORT_PATH && request.method === "GET") return handleSignedInReport(env);
-    if (url.pathname === PUBLIC_MODEL_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.model);
-    if (url.pathname === PUBLIC_STATS_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.stats);
-    if (url.pathname === PUBLIC_CODE_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.code);
-    if (url.pathname === PUBLIC_VERSIONS_PATH && request.method === "GET") return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.versions);
-    if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET") return handleClientDocument(request);
+    if (url.pathname === SIGNED_IN_REPORT_PATH && request.method === "GET")
+      return handleSignedInReport(env);
+    if (url.pathname === PUBLIC_MODEL_PATH && request.method === "GET")
+      return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.model);
+    if (url.pathname === PUBLIC_STATS_PATH && request.method === "GET")
+      return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.stats);
+    if (url.pathname === PUBLIC_CODE_PATH && request.method === "GET")
+      return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.code);
+    if (url.pathname === PUBLIC_VERSIONS_PATH && request.method === "GET")
+      return handlePublicDocument(request, env, ctx, PUBLIC_DOCS.versions);
+    if (url.pathname === VERIFY_LIVE_CLIENT_PATH && request.method === "GET")
+      return handleClientDocument(request);
     if (url.pathname === REPORT_PATH) return handleCspReport(request, env);
     if (url.pathname === "/ops/mcp") return handleOperatorMcp(request, env, ctx);
     if (url.pathname === "/ops/inbox" && request.method === "GET") return handleInbox(request, env);
-    if (url.pathname === "/ops/inbox/report" && request.method === "POST") return handleInboxReport(request, env);
-    if (url.pathname === OPS_HOOKS_PATH && request.method === "POST") return handleOpsHooks(request, env, ctx);
-    if (url.pathname === OTLP_METRICS_PATH && request.method === "POST") return handleOtlpMetrics(request, env);
-    if (url.pathname === OTLP_LOGS_PATH && request.method === "POST") return handleOtlpLogs(request, env);
-    if (url.pathname === BACKUP_CREDENTIAL_PATH && request.method === "POST") return handleBackupCredential(request, env);
-    if (url.pathname === OFFACCOUNT_REPORT_PATH && request.method === "POST") return handleOffaccountReport(request, env);
-    if (url.pathname === BENCH_TASKS_PATH && request.method === "POST") return handleBenchTasks(request, env);
-    if (url.pathname === BENCH_DRAW_PATH && request.method === "POST") return handleBenchDraw(request, env);
-    if (url.pathname === BENCH_START_PATH && request.method === "POST") return handleBenchStart(request, env);
-    if (url.pathname === BENCH_REPRO_PATH && request.method === "POST") return handleBenchRepro(request, env);
-    if (url.pathname === BENCH_SCORE_PATH && request.method === "POST") return handleBenchScore(request, env);
-    if (url.pathname === SHADOW_JOB_PATH && request.method === "GET") return handleShadowJob(request, env);
-    if (url.pathname === SHADOW_RESULT_PATH && request.method === "POST") return handleShadowResult(request, env);
-    if (url.pathname === REVIEW_RUN_PATH && request.method === "POST") return handleReviewRun(request, env);
+    if (url.pathname === "/ops/inbox/report" && request.method === "POST")
+      return handleInboxReport(request, env);
+    if (url.pathname === OPS_HOOKS_PATH && request.method === "POST")
+      return handleOpsHooks(request, env, ctx);
+    if (url.pathname === OTLP_METRICS_PATH && request.method === "POST")
+      return handleOtlpMetrics(request, env);
+    if (url.pathname === OTLP_LOGS_PATH && request.method === "POST")
+      return handleOtlpLogs(request, env);
+    if (url.pathname === BACKUP_CREDENTIAL_PATH && request.method === "POST")
+      return handleBackupCredential(request, env);
+    if (url.pathname === OFFACCOUNT_REPORT_PATH && request.method === "POST")
+      return handleOffaccountReport(request, env);
+    if (url.pathname === BENCH_TASKS_PATH && request.method === "POST")
+      return handleBenchTasks(request, env);
+    if (url.pathname === BENCH_DRAW_PATH && request.method === "POST")
+      return handleBenchDraw(request, env);
+    if (url.pathname === BENCH_START_PATH && request.method === "POST")
+      return handleBenchStart(request, env);
+    if (url.pathname === BENCH_REPRO_PATH && request.method === "POST")
+      return handleBenchRepro(request, env);
+    if (url.pathname === BENCH_SCORE_PATH && request.method === "POST")
+      return handleBenchScore(request, env);
+    if (url.pathname === SHADOW_JOB_PATH && request.method === "GET")
+      return handleShadowJob(request, env);
+    if (url.pathname === SHADOW_RESULT_PATH && request.method === "POST")
+      return handleShadowResult(request, env);
+    if (url.pathname === REVIEW_RUN_PATH && request.method === "POST")
+      return handleReviewRun(request, env);
     if (url.pathname === "/authorize") return handleLogin(request, env);
     if (url.pathname === "/callback") return handleLogin(request, env);
     // The owner page: the same sign-in and admission as consent (site-runtime ./owner-page).
-    if (url.pathname === "/owner" || url.pathname.startsWith("/owner/")) return handleLogin(request, env);
+    if (url.pathname === "/owner" || url.pathname.startsWith("/owner/"))
+      return handleLogin(request, env);
     // Capsid Portal. The callback and every /portal/api/ route are matched before the
     // app's catch-all, and an unknown /portal/api/ path is a 404, never the app's page.
     // Nothing answers under /console: the Portal moved without redirects
     // (capsid/research/design-portal-unify.md), so an old address reaches the 404 below.
-    if (url.pathname === PORTAL_CALLBACK_PATH) return handlePortalCallback(request, env, new Date());
+    if (url.pathname === PORTAL_CALLBACK_PATH)
+      return handlePortalCallback(request, env, new Date());
     // Every other Portal route goes through the shared idle hour (withPortalIdle, src/portal-auth.ts).
-    if (url.pathname === PORTAL_PATH || url.pathname.startsWith(PORTAL_PREFIX)) return withPortalIdle(request, env, () => portalRoute(request, env, url));
+    if (url.pathname === PORTAL_PATH || url.pathname.startsWith(PORTAL_PREFIX))
+      return withPortalIdle(request, env, () => portalRoute(request, env, url));
 
     return new Response("not found", { status: 404 });
   },
@@ -278,28 +425,62 @@ export const defaultHandler = {
 // The Portal's routes behind its callback: every /portal/api/ route is matched before
 // the app's catch-all, and an unknown /portal/api/ path is a 404, never the app's page.
 function portalRoute(request: Request, env: Env, url: URL): Promise<Response> {
-  if (url.pathname === OPS_FEED_PATH && request.method === "GET") return handleOpsFeed(request, env);
-  if (url.pathname === OPS_REFRESH_PATH && request.method === "POST") return handleOpsRefresh(request, env);
-  if (url.pathname === PORTAL_PREVIEW_PATH && request.method === "POST") return handlePortalPreview(request, env);
-  if (url.pathname === PORTAL_PERFORM_PATH && request.method === "POST") return handlePortalPerform(request, env);
-  if (url.pathname === PORTAL_NAMESPACES_PATH && request.method === "GET") return handlePortalNamespaces(request, env);
-  if (url.pathname === PORTAL_ACTIVITY_PATH && request.method === "GET") return handlePortalActivity(request, env);
-  if (url.pathname === PORTAL_CLAIMS_PATH && request.method === "GET") return handlePortalClaims(request, env);
-  if (url.pathname === PORTAL_STALE_PATH && request.method === "GET") return handlePortalStale(request, env);
-  if (url.pathname === PORTAL_PLAN_PATH && request.method === "GET") return handlePortalPlan(request, env);
-  if (url.pathname === PORTAL_DIGEST_PATH && request.method === "GET") return handlePortalDigest(request, env);
-  if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET") return handlePortalMaintenance(request, env);
-  if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET") return handlePortalConvergence(request, env);
-  if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET") return handlePortalPackageHistory(request, env);
-  if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET") return handlePortalSharedCode(request, env);
-  if (url.pathname === PORTAL_NOT_FOUND_PATH && request.method === "GET") return handlePortalNotFound(request, env);
-  if (url.pathname === PORTAL_COMPLETENESS_PATH && request.method === "GET") return handlePortalCompleteness(request, env);
-  if (url.pathname === PORTAL_RESOURCES_PATH && request.method === "GET") return handlePortalResources(request, env);
-  if (url.pathname === PORTAL_LIBRARY_PATH && request.method === "GET") return handlePortalLibrary(request, env);
-  if (url.pathname === PORTAL_TRENDS_PATH && request.method === "GET") return handlePortalTrends(request, env);
-  if (url.pathname === PORTAL_PUSH_PATH && request.method === "GET") return handlePortalPushGet(request, env);
-  if (url.pathname === PORTAL_PUSH_PATH && request.method === "POST") return handlePortalPushPost(request, env);
-  if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST") return handlePortalSignOut(request, env);
+  if (url.pathname === OPS_FEED_PATH && request.method === "GET")
+    return handleOpsFeed(request, env);
+  if (url.pathname === OPS_REFRESH_PATH && request.method === "POST")
+    return handleOpsRefresh(request, env);
+  if (url.pathname === PORTAL_PREVIEW_PATH && request.method === "POST")
+    return handlePortalPreview(request, env);
+  if (url.pathname === PORTAL_PERFORM_PATH && request.method === "POST")
+    return handlePortalPerform(request, env);
+  if (url.pathname === PORTAL_NAMESPACES_PATH && request.method === "GET")
+    return handlePortalNamespaces(request, env);
+  if (url.pathname === PORTAL_ACTIVITY_PATH && request.method === "GET")
+    return handlePortalActivity(request, env);
+  if (url.pathname === PORTAL_CLAIMS_PATH && request.method === "GET")
+    return handlePortalClaims(request, env);
+  if (url.pathname === PORTAL_STALE_PATH && request.method === "GET")
+    return handlePortalStale(request, env);
+  if (url.pathname === PORTAL_PLAN_PATH && request.method === "GET")
+    return handlePortalPlan(request, env);
+  if (url.pathname === PORTAL_MERGE_UNITS_PATH && request.method === "GET")
+    return handlePortalMergeUnits(request, env);
+  if (url.pathname === PORTAL_SITE_SEARCH_PATH && request.method === "GET")
+    return handlePortalSiteSearch(request, env);
+  if (url.pathname === PORTAL_SITE_TRAFFIC_PATH && request.method === "GET")
+    return handlePortalSiteTraffic(request, env);
+  if (url.pathname === PORTAL_WORKERS_BUILDS_PATH && request.method === "GET")
+    return handlePortalWorkersBuilds(request, env);
+  if (url.pathname === PORTAL_BUILD_LOG_PATH && request.method === "GET")
+    return handlePortalBuildLog(request, env);
+  if (url.pathname === PORTAL_DIGEST_PATH && request.method === "GET")
+    return handlePortalDigest(request, env);
+  if (url.pathname === PORTAL_MAINTENANCE_PATH && request.method === "GET")
+    return handlePortalMaintenance(request, env);
+  if (url.pathname === PORTAL_CONVERGENCE_PATH && request.method === "GET")
+    return handlePortalConvergence(request, env);
+  if (url.pathname === PORTAL_BACKUPS_PATH && request.method === "GET")
+    return handlePortalBackups(request, env);
+  if (url.pathname === PORTAL_PACKAGE_HISTORY_PATH && request.method === "GET")
+    return handlePortalPackageHistory(request, env);
+  if (url.pathname === PORTAL_SHARED_CODE_PATH && request.method === "GET")
+    return handlePortalSharedCode(request, env);
+  if (url.pathname === PORTAL_NOT_FOUND_PATH && request.method === "GET")
+    return handlePortalNotFound(request, env);
+  if (url.pathname === PORTAL_COMPLETENESS_PATH && request.method === "GET")
+    return handlePortalCompleteness(request, env);
+  if (url.pathname === PORTAL_RESOURCES_PATH && request.method === "GET")
+    return handlePortalResources(request, env);
+  if (url.pathname === PORTAL_LIBRARY_PATH && request.method === "GET")
+    return handlePortalLibrary(request, env);
+  if (url.pathname === PORTAL_TRENDS_PATH && request.method === "GET")
+    return handlePortalTrends(request, env);
+  if (url.pathname === PORTAL_PUSH_PATH && request.method === "GET")
+    return handlePortalPushGet(request, env);
+  if (url.pathname === PORTAL_PUSH_PATH && request.method === "POST")
+    return handlePortalPushPost(request, env);
+  if (url.pathname === PORTAL_SIGN_OUT_PATH && request.method === "POST")
+    return handlePortalSignOut(request, env);
   if (url.pathname.startsWith(PORTAL_API_PREFIX)) return handlePortalApiNotFound(request, env);
   // The app and everything under it, every method: the handler gates first.
   return handlePortalApp(request, env, (inner) => portalRoute(inner, env, new URL(inner.url)));

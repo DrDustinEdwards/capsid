@@ -1,26 +1,22 @@
-import { trendChart } from "../views/charts";
-import { ChartSlot } from "../ui/ChartSlot";
-import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp, type DrawerType } from "./ctx";
-import type { SiteSnapshot } from "../types";
 import { fetchActivity, useAnswer } from "../lib/api";
 import { actionWords } from "../lib/audit-words";
-import { JOB, PROBE, cfNoData, cfOk, siteKey } from "../lib/derive";
-import { ago, hostOf, ms, pct, shortId, utc } from "../lib/format";
-import { NoData, Pill, St } from "../ui/icons";
+import { JOB } from "../lib/derive";
+import { ago, ms } from "../lib/format";
+import { Pill, St } from "../ui/icons";
 import { When } from "../ui/When";
-import { uptimeOptions } from "../ui/charts";
-import { agentState, nsList, ringOf, uptime } from "../lib/derive";
-import { ChartFrame } from "capsomer/react/chart-frame";
-import "capsomer/chart-frame.css";
-import "capsomer/uptime-strip.css";
-import { uptimeStrip } from "enarratio";
+import { agentState, nsList } from "../lib/derive";
 import { AgentControls, Head, JobBody } from "./DrawerJob";
-
-// Chart 9 (error rate with deploy markers) is an Enarratio line chart, loaded when a site's
-// drawer opens so it stays out of the initial bundle.
-const ErrorRate = trendChart("ErrorRate");
 
 type Ref = { type: DrawerType; id: string };
 
@@ -29,125 +25,10 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
     <>
       <Head label="Not found" title={what} sub="" onClose={onClose} />
       <div className="dbody">
-        <div className="callout">It is not in the current feed. It may have ended more than 24 hours ago, or the watcher has not seen it yet.</div>
-      </div>
-    </>
-  );
-}
-
-// The site's uptime as Capsomer's uptime strip: Enarratio's figure with the week's and the
-// day's share up at the end of its title's line, and the key after it.
-const UPTIME_KEYS = [
-  ["up", "Up"],
-  ["degraded", "Degraded"],
-  ["down", "Down"],
-  ["nodata", "No data"],
-] as const;
-
-function SiteUptime({ s }: { s: SiteSnapshot }) {
-  const ring = ringOf(s);
-  const p7 = uptime(ring);
-  const p24 = uptime(ring.slice(-48));
-  const subtitle = `${p7 == null ? "no data" : pct(p7)} up over 7 days, ${p24 == null ? "no data" : pct(p24, 1)} over 24 hours`;
-  return (
-    <ChartFrame inline chart={uptimeStrip({ ...uptimeOptions(s), title: "Uptime, 7 days", subtitle, source: { name: "The watcher's probes, every half hour" } })}>
-      <ul className="cap-uptime-legend" aria-label="Key">
-        {UPTIME_KEYS.map(([key, word]) => (
-          <li key={key}>
-            <span className="cap-uptime-key" data-key={key} aria-hidden="true" />
-            {word}
-          </li>
-        ))}
-      </ul>
-    </ChartFrame>
-  );
-}
-
-function SiteBody({ s, onClose }: { s: SiteSnapshot; onClose: () => void }) {
-  const { now } = useApp();
-  const p = PROBE[s.state];
-  const cf = cfOk(s);
-  const detail = s.error ?? (s.state === "liveness" ? "No health route; a root 200 is liveness only." : s.state !== "ok" ? p.label : null);
-  return (
-    <>
-      <Head label={`Site · ${s.namespace}`} title={s.name} sub={hostOf(s.origin)} badge={<Pill kind={p.kind}>{p.label}</Pill>} onClose={onClose} />
-      <div className="dbody">
-        {detail && <div className={`callout ${s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : ""}`}>{detail}</div>}
-        <SiteUptime s={s} />
-        <ChartSlot>
-          <ErrorRate site={s} />
-        </ChartSlot>
-        <div>
-          <p className="section-title">Probe</p>
-          <dl className="kv">
-            <dt>Checked</dt>
-            <dd>
-              {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
-            </dd>
-            <dt>URL</dt>
-            <dd className="mono">
-              {s.origin}
-              {s.health_path ?? "/"}
-            </dd>
-            <dt>HTTP status</dt>
-            <dd className="num">{s.http_status ?? "no answer"}</dd>
-            <dt>Latency</dt>
-            <dd className="num">{s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}</dd>
-            <dt>Reports sha</dt>
-            <dd className="mono">{s.sha ?? <span className="faint">not reported</span>}</dd>
-            <dt>Platform</dt>
-            <dd>{s.platform === "vercel" ? "Vercel" : "Cloudflare"}</dd>
-            <dt>Cloudflare script</dt>
-            <dd className="mono">{cf ? cf.script : <NoData reason={cfNoData(s.cloudflare) ?? ""} />}</dd>
-          </dl>
+        <div className="callout">
+          It is not in the current feed. It may have ended more than 24 hours ago, or the watcher
+          has not seen it yet.
         </div>
-        <div>
-          <p className="section-title">Deploys</p>
-          {!cf ? (
-            <div className="faint">No data: {cfNoData(s.cloudflare)}</div>
-          ) : cf.deploys.length ? (
-            <div className="scroll-x">
-              <table className="list">
-                <thead>
-                  <tr>
-                    <th scope="col">Version</th>
-                    <th scope="col">Message</th>
-                    <th scope="col">Author</th>
-                    <th scope="col">When</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cf.deploys.map((d) => (
-                    <tr key={d.id}>
-                      <td className="mono">{shortId(d.version_id ?? d.id)}</td>
-                      <td className="muted">{d.message ?? d.triggered_by ?? ""}</td>
-                      <td className="muted">{d.author_email ?? ""}</td>
-                      <td className="num" title={utc(ms(d.created_on))}>
-                        {ago(ms(d.created_on), now)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="faint">No deploys recorded.</div>
-          )}
-        </div>
-        <div>
-          <p className="section-title">Open elsewhere</p>
-          <div className="toolbar">
-            <a className="btn" href={s.origin} target="_blank" rel="noopener noreferrer">
-              Site
-            </a>
-            {s.health_path && (
-              <a className="btn" href={s.health_path.startsWith("https://") ? s.health_path : `${s.origin}${s.health_path}`} target="_blank" rel="noopener noreferrer">
-                Health route
-              </a>
-            )}
-          </div>
-        </div>
-        <div className="src">Source: watcher pass, KV ops:snapshot, sites[{s.name}]</div>
       </div>
     </>
   );
@@ -189,7 +70,10 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
       <>
         <Head label="Not found" title={`Audit row #${id}`} sub="" onClose={onClose} />
         <div className="dbody">
-          <div className="callout">There is no audit row with this id. Rows older than the retention are pruned after the nightly dump.</div>
+          <div className="callout">
+            There is no audit row with this id. Rows older than the retention are pruned after the
+            nightly dump.
+          </div>
         </div>
       </>
     );
@@ -197,7 +81,12 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
   const d = r.detail;
   return (
     <>
-      <Head label={`Audit row · ${r.namespace ?? "no namespace"}`} title={actionWords(r.action) ?? r.action ?? "no action"} sub={`#${r.id} · ${r.action ?? "no action"} · ${r.actor ?? "no actor"}`} onClose={onClose} />
+      <Head
+        label={`Audit row · ${r.namespace ?? "no namespace"}`}
+        title={actionWords(r.action) ?? r.action ?? "no action"}
+        sub={`#${r.id} · ${r.action ?? "no action"} · ${r.actor ?? "no actor"}`}
+        onClose={onClose}
+      />
       <div className="dbody">
         {d.reason !== null && (
           <div>
@@ -257,10 +146,16 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
               </Fragment>
             ))}
           </dl>
-          {d.unreadable && <p className="faint">This row's recorded detail is not JSON, so it cannot be shown. Rows this old predate that rule.</p>}
+          {d.unreadable && (
+            <p className="faint">
+              This row's recorded detail is not JSON, so it cannot be shown. Rows this old predate
+              that rule.
+            </p>
+          )}
           {d.withheld > 0 && (
             <p className="faint">
-              {d.withheld} recorded {d.withheld === 1 ? "field is" : "fields are"} not shown: hashes, signatures and nested values stay in the audit log.
+              {d.withheld} recorded {d.withheld === 1 ? "field is" : "fields are"} not shown:
+              hashes, signatures and nested values stay in the audit log.
             </p>
           )}
         </div>
@@ -274,16 +169,32 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
   const a = feed.live.agents.find((x) => x.name === name);
   if (!a) return <Missing what={`Agent ${name}`} onClose={onClose} />;
   const st = agentState(a, now);
-  const mine = feed.live.jobs.filter((j) => j.claimed_by === `agent:${a.name}` || j.claimed_by === a.name);
+  const mine = feed.live.jobs.filter(
+    (j) => j.claimed_by === `agent:${a.name}` || j.claimed_by === a.name,
+  );
   return (
     <>
-      <Head label={`Agent · ${a.kind}`} title={a.name} sub={`agent:${a.name}`} badge={<Pill kind={st.kind}>{st.label}</Pill>} onClose={onClose} />
+      <Head
+        label={`Agent · ${a.kind}`}
+        title={a.name}
+        sub={`agent:${a.name}`}
+        badge={<Pill kind={st.kind}>{st.label}</Pill>}
+        onClose={onClose}
+      />
       <div className="dbody">
         <dl className="kv">
           <dt>Namespaces</dt>
           <dd className="mono">{nsList(a)}</dd>
           <dt>Last seen</dt>
-          <dd>{a.last_seen ? <>{ago(ms(a.last_seen), now)} <When t={ms(a.last_seen)} /></> : "never"}</dd>
+          <dd>
+            {a.last_seen ? (
+              <>
+                {ago(ms(a.last_seen), now)} <When t={ms(a.last_seen)} />
+              </>
+            ) : (
+              "never"
+            )}
+          </dd>
           {a.revoked_at && (
             <>
               <dt>Revoked</dt>
@@ -309,9 +220,13 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
             {a.prs_merged} merged of {a.prs_opened} opened
           </dd>
           <dt>CI green</dt>
-          <dd className="num">{a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}</dd>
+          <dd className="num">
+            {a.ci_green_rate == null ? "-" : `${Math.round(a.ci_green_rate * 100)}%`}
+          </dd>
           <dt>Median job</dt>
-          <dd className="num">{a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}</dd>
+          <dd className="num">
+            {a.median_duration_minutes == null ? "-" : `${a.median_duration_minutes} min`}
+          </dd>
           <dt>Flags</dt>
           <dd>{a.flags.join(", ") || "none"}</dd>
         </dl>
@@ -320,7 +235,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
           <p className="section-title">Holding now</p>
           {mine.length ? (
             mine.map((j) => (
-              <div className="qrow" key={j.id} data-open={`job:${j.id}`} tabIndex={0}>
+              <div className="qrow" key={j.id} data-open={`job:${j.id}`} role="button" tabIndex={0}>
                 <St kind={JOB[j.status].kind}>{JOB[j.status].label}</St>
                 <div className="t">
                   <b>{j.title}</b>
@@ -346,10 +261,13 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
   const { feed, open } = useApp();
   // Keep the last content while the drawer slides out.
   const [shown, setShown] = useState<Ref | null>(route);
+  if (route && (shown?.type !== route.type || shown.id !== route.id)) setShown(route);
   const panel = useRef<HTMLDialogElement>(null);
   const opener = useRef<Element | null>(null);
   const routed = useRef(route != null);
-  routed.current = route != null;
+  useEffect(() => {
+    routed.current = route != null;
+  });
   const key = route ? `${route.type}:${route.id}` : "";
   useEffect(() => {
     const d = panel.current;
@@ -360,26 +278,30 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
         opener.current = document.activeElement;
         d.showModal();
       }
-      setShown(route);
       d.querySelector<HTMLElement>("[data-close]")?.focus();
     } else if (d.open) {
       d.close();
       // Back to the row that opened it; when that is gone, or sat in a dialog since closed
       // (the command menu), to the view.
       const from = opener.current;
-      const back = from instanceof HTMLElement && from.isConnected && !from.closest("dialog:not([open])") ? from : document.querySelector<HTMLElement>("main");
+      const back =
+        from instanceof HTMLElement && from.isConnected && !from.closest("dialog:not([open])")
+          ? from
+          : document.querySelector<HTMLElement>("main");
       back?.focus();
       opener.current = null;
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `key` names the route (type:id); the effect runs when the drawer opens on another row, not on a new route object
   }, [key]);
   const ref = route ?? shown;
   let body: ReactNode = null;
-  if (ref?.type === "site") {
-    const s = feed.snapshot?.sites.find((x) => siteKey(x) === ref.id);
-    body = s ? <SiteBody s={s} onClose={onClose} /> : <Missing what={`Site ${ref.id}`} onClose={onClose} />;
-  } else if (ref?.type === "job") {
+  if (ref?.type === "job") {
     const j = feed.live.jobs.find((x) => x.id === ref.id);
-    body = j ? <JobBody j={j} onClose={onClose} /> : <Missing what={`Job ${ref.id}`} onClose={onClose} />;
+    body = j ? (
+      <JobBody j={j} onClose={onClose} />
+    ) : (
+      <Missing what={`Job ${ref.id}`} onClose={onClose} />
+    );
   } else if (ref?.type === "agent") {
     body = <AgentBody name={ref.id} onClose={onClose} />;
   } else if (ref?.type === "audit") {
@@ -412,7 +334,13 @@ export function Drawer({ route, onClose }: { route: Ref | null; onClose: () => v
         if (d && e.target === d) {
           // A click on the dialog element itself outside its box is the backdrop.
           const r = d.getBoundingClientRect();
-          if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return onClose();
+          if (
+            e.clientX < r.left ||
+            e.clientX > r.right ||
+            e.clientY < r.top ||
+            e.clientY > r.bottom
+          )
+            return onClose();
         }
         openRow(e);
       }}

@@ -48,15 +48,20 @@ export async function checkCanary({ fetchImpl, base, clientId, auth }) {
   // outcome.
   let entry;
   try {
-    const listed = await fetchImpl(`${base}/keys?prefix=${encodeURIComponent(key)}`, { headers: auth });
-    if (!listed.ok) return { outcome: "ttl-unverified", detail: `key list status=${listed.status}` };
+    const listed = await fetchImpl(`${base}/keys?prefix=${encodeURIComponent(key)}`, {
+      headers: auth,
+    });
+    if (!listed.ok)
+      return { outcome: "ttl-unverified", detail: `key list status=${listed.status}` };
     const data = await listed.json().catch(() => null);
-    if (!Array.isArray(data?.result)) return { outcome: "ttl-unverified", detail: "the key list response carries no result array" };
+    if (!Array.isArray(data?.result))
+      return { outcome: "ttl-unverified", detail: "the key list response carries no result array" };
     entry = data.result.find((k) => k?.name === key);
   } catch (err) {
     return { outcome: "ttl-unverified", detail: err instanceof Error ? err.message : String(err) };
   }
-  if (!entry) return { outcome: "ttl-unverified", detail: `${key} reads 200 but is not in the key list` };
+  if (!entry)
+    return { outcome: "ttl-unverified", detail: `${key} reads 200 but is not in the key list` };
   if (entry.expiration) return { outcome: "has-ttl", expiration: entry.expiration };
 
   return { outcome: "present" };
@@ -82,7 +87,10 @@ export function canaryReport(result, clientId, namespaceName) {
         detail: `UNREACHABLE: could not read ${key} (${result.detail}). This is a KV or credential failure and is NOT evidence the record is gone.`,
       };
     case "corrupt":
-      return { passed: false, detail: `CORRUPT: ${key} reads 200 but does not carry clientId=${clientId}. Value starts: ${result.detail}` };
+      return {
+        passed: false,
+        detail: `CORRUPT: ${key} reads 200 but does not carry clientId=${clientId}. Value starts: ${result.detail}`,
+      };
     case "has-ttl":
       return {
         passed: false,

@@ -1,11 +1,6 @@
 import type { RepoEnv as Env } from "../env";
 import { redact, redactText, type Redacted } from "../redact";
-import {
-  assertRepoArg,
-  cachedGet,
-  ghFetch,
-  resolveRepo,
-} from "./client";
+import { assertRepoArg, cachedGet, ghFetch, resolveRepo } from "./client";
 
 // Recent CI workflow runs for a namespace's repo, via the GitHub App. Read-only.
 // For the most recent failed run it also returns the failing jobs and steps and a
@@ -44,13 +39,23 @@ type CiJobsResult = Awaited<ReturnType<typeof ciRunJobs>>;
 // Without the drill-in arguments the answer is always the run list, and the callers
 // that read `runs` (job-outcomes.ts, watcher.ts) keep that type. Only a call that
 // passes jobs, job or step can get the jobs view back.
-export async function ciStatus(env: Env, namespace: string, repoSelector?: string, opts?: CiRunsOpts): Promise<CiRunsResult>;
-export async function ciStatus(env: Env, namespace: string, repoSelector: string | undefined, opts: CiDrillOpts): Promise<CiRunsResult | CiJobsResult>;
 export async function ciStatus(
   env: Env,
   namespace: string,
   repoSelector?: string,
-  opts: CiDrillOpts = {}
+  opts?: CiRunsOpts,
+): Promise<CiRunsResult>;
+export async function ciStatus(
+  env: Env,
+  namespace: string,
+  repoSelector: string | undefined,
+  opts: CiDrillOpts,
+): Promise<CiRunsResult | CiJobsResult>;
+export async function ciStatus(
+  env: Env,
+  namespace: string,
+  repoSelector?: string,
+  opts: CiDrillOpts = {},
 ) {
   // The drill-in arguments narrow one run, so each needs the one above it. Refused
   // before any GitHub call rather than ignored, so a caller never reads a run list
@@ -59,13 +64,19 @@ export async function ciStatus(
     throw new Error("ci_status: step needs job, the job (name or id) the step ran in, and run_id");
   }
   if (opts.job !== undefined && opts.runId === undefined) {
-    throw new Error("ci_status: job needs run_id, the run the job belongs to. capsid_inspect_repo action ci without it lists runs and their ids");
+    throw new Error(
+      "ci_status: job needs run_id, the run the job belongs to. capsid_inspect_repo action ci without it lists runs and their ids",
+    );
   }
   if (opts.jobs === true && opts.runId === undefined) {
-    throw new Error("ci_status: jobs needs run_id, the run whose jobs to list. capsid_inspect_repo action ci without it lists runs and their ids");
+    throw new Error(
+      "ci_status: jobs needs run_id, the run whose jobs to list. capsid_inspect_repo action ci without it lists runs and their ids",
+    );
   }
   if (opts.jobs === true && opts.job !== undefined) {
-    throw new Error("ci_status: pass jobs: true to list every job in the run, or job to read one, not both");
+    throw new Error(
+      "ci_status: pass jobs: true to list every job in the run, or job to read one, not both",
+    );
   }
   if (opts.ref) assertRepoArg("ref", opts.ref);
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
@@ -79,14 +90,27 @@ export async function ciStatus(
   if (opts.runId) {
     // One run, by id. Wrapped back into the list's shape so the failed-run drill-in
     // has one code path.
-    const one = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${opts.runId}`);
-    if (one.status === 404) throw new Error(`ci_status: run ${opts.runId} does not exist on ${full}`);
-    if (!one.ok) throw new Error(`ci_status run lookup failed (${one.status}): ${await errorBody(one)}`);
+    const one = await ghFetch(
+      env,
+      owner,
+      repo,
+      `/repos/${owner}/${repo}/actions/runs/${opts.runId}`,
+    );
+    if (one.status === 404)
+      throw new Error(`ci_status: run ${opts.runId} does not exist on ${full}`);
+    if (!one.ok)
+      throw new Error(`ci_status run lookup failed (${one.status}): ${await errorBody(one)}`);
     const run = await one.json();
     if (opts.jobs === true || opts.job !== undefined) {
-      return ciRunJobs(env, { owner, repo, full }, run as CiRun, { job: opts.job, step: opts.step, logTail: opts.logTail === true });
+      return ciRunJobs(env, { owner, repo, full }, run as CiRun, {
+        job: opts.job,
+        step: opts.step,
+        logTail: opts.logTail === true,
+      });
     }
-    return ciStatusFromRuns(env, owner, repo, full, [run as CiRun], opts.logTail === true, { run_id: opts.runId });
+    return ciStatusFromRuns(env, owner, repo, full, [run as CiRun], opts.logTail === true, {
+      run_id: opts.runId,
+    });
   }
   if (opts.ref) {
     if (SHA_SHAPE.test(opts.ref)) {
@@ -95,10 +119,15 @@ export async function ciStatus(
       // error. One extra GET, only when the ref is short.
       let full40 = opts.ref;
       if (opts.ref.length < 40) {
-        const commit = await cachedGet(env, owner, repo, `/repos/${owner}/${repo}/commits/${encodeURIComponent(opts.ref)}`);
+        const commit = await cachedGet(
+          env,
+          owner,
+          repo,
+          `/repos/${owner}/${repo}/commits/${encodeURIComponent(opts.ref)}`,
+        );
         if (!commit.ok) {
           throw new Error(
-            `ci_status: ${opts.ref} does not resolve to a commit on ${full} (${commit.status}), so runs cannot be filtered by it`
+            `ci_status: ${opts.ref} does not resolve to a commit on ${full} (${commit.status}), so runs cannot be filtered by it`,
           );
         }
         full40 = ((await commit.json()) as { sha: string }).sha;
@@ -111,12 +140,21 @@ export async function ciStatus(
   const resp = await ghFetch(env, owner, repo, query);
   if (resp.status === 403) {
     throw new Error(
-      "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry."
+      "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry.",
     );
   }
-  if (!resp.ok) throw new Error(`ci_status failed (${resp.status}): ${redactText(await resp.text())}`);
+  if (!resp.ok)
+    throw new Error(`ci_status failed (${resp.status}): ${redactText(await resp.text())}`);
   const data = (await resp.json()) as { workflow_runs: CiRun[] };
-  return ciStatusFromRuns(env, owner, repo, full, data.workflow_runs, opts.logTail === true, opts.ref ? { ref: opts.ref } : {});
+  return ciStatusFromRuns(
+    env,
+    owner,
+    repo,
+    full,
+    data.workflow_runs,
+    opts.logTail === true,
+    opts.ref ? { ref: opts.ref } : {},
+  );
 }
 
 interface CiRun {
@@ -157,7 +195,7 @@ const STEP_STAMP_PRECISION_MS = 1000;
 function stepLog(
   log: string,
   step: { name?: string; started_at?: string | null; completed_at?: string | null } | undefined,
-  label: "failing step" | "step" = "failing step"
+  label: "failing step" | "step" = "failing step",
 ): { text: string; how: string; redactions: Redacted["redactions"] } {
   const name = step?.name;
   const from = step?.started_at ? Date.parse(step.started_at) : NaN;
@@ -200,7 +238,8 @@ function stepLog(
 
 // A GitHub error body is echoed into a result too, so it is redacted as well, before
 // its 200-character cut for the same reason as above.
-const errorBody = async (resp: Response): Promise<string> => redactText(await resp.text()).slice(0, 200) || "no response body";
+const errorBody = async (resp: Response): Promise<string> =>
+  redactText(await resp.text()).slice(0, 200) || "no response body";
 
 async function ciStatusFromRuns(
   env: Env,
@@ -209,7 +248,7 @@ async function ciStatusFromRuns(
   full: string,
   workflowRuns: CiRun[],
   logTail: boolean,
-  filter: { ref?: string; run_id?: number }
+  filter: { ref?: string; run_id?: number },
 ) {
   const runs = workflowRuns.map((r) => ({
     name: r.name,
@@ -243,7 +282,12 @@ async function ciStatusFromRuns(
       head_sha: failed.head_sha?.slice(0, 7),
       url: failed.html_url,
     };
-    const jobsResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${failed.id}/jobs`);
+    const jobsResp = await ghFetch(
+      env,
+      owner,
+      repo,
+      `/repos/${owner}/${repo}/actions/runs/${failed.id}/jobs`,
+    );
     if (!jobsResp.ok) {
       failedRun.jobs_unavailable = `${jobsResp.status}: ${await errorBody(jobsResp)}`;
     } else {
@@ -252,14 +296,21 @@ async function ciStatusFromRuns(
           id: number;
           name: string;
           conclusion: string | null;
-          steps?: Array<{ name: string; conclusion: string | null; started_at?: string | null; completed_at?: string | null }>;
+          steps?: Array<{
+            name: string;
+            conclusion: string | null;
+            started_at?: string | null;
+            completed_at?: string | null;
+          }>;
         }>;
       };
       failedRun.jobs = jobsData.jobs
         .filter((j) => j.conclusion === "failure")
         .map((j) => ({
           name: j.name,
-          failed_steps: (j.steps ?? []).filter((s) => s.conclusion === "failure").map((s) => s.name),
+          failed_steps: (j.steps ?? [])
+            .filter((s) => s.conclusion === "failure")
+            .map((s) => s.name),
         }));
       const firstFailedJob = jobsData.jobs.find((j) => j.conclusion === "failure");
       if (!logTail) {
@@ -267,9 +318,15 @@ async function ciStatusFromRuns(
         failedRun.log_tail_withheld =
           "read-only key: run metadata only. A write-grant key returns the failing step's log.";
       } else if (!firstFailedJob) {
-        failedRun.log_tail_unavailable = "the run is marked failed but no job in it is, so there is no job log to read";
+        failedRun.log_tail_unavailable =
+          "the run is marked failed but no job in it is, so there is no job log to read";
       } else {
-        const logResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/jobs/${firstFailedJob.id}/logs`);
+        const logResp = await ghFetch(
+          env,
+          owner,
+          repo,
+          `/repos/${owner}/${repo}/actions/jobs/${firstFailedJob.id}/logs`,
+        );
         if (logResp.ok) {
           const failedStep = (firstFailedJob.steps ?? []).find((s) => s.conclusion === "failure");
           const picked = stepLog(await logResp.text(), failedStep);
@@ -277,7 +334,8 @@ async function ciStatusFromRuns(
           failedRun.failing_step = failedStep?.name ?? null;
           failedRun.log_region = picked.how;
           failedRun.log = picked.text;
-          if (Object.keys(picked.redactions).length > 0) failedRun.log_redactions = picked.redactions;
+          if (Object.keys(picked.redactions).length > 0)
+            failedRun.log_redactions = picked.redactions;
         } else {
           failedRun.log_tail_unavailable = `${logResp.status}: ${await errorBody(logResp)}`;
         }
@@ -340,7 +398,7 @@ function pickOne<T extends { name: string }>(
   wanted: string,
   byNumber: (item: T) => number,
   what: string,
-  where: string
+  where: string,
 ): T {
   if (/^\d+$/.test(wanted)) {
     const numbered = items.find((item) => byNumber(item) === Number(wanted));
@@ -350,11 +408,13 @@ function pickOne<T extends { name: string }>(
   if (named.length === 1) return named[0];
   if (named.length > 1) {
     throw new Error(
-      `ci_status: ${named.length} ${what}s in ${where} are named "${wanted}". Pass one by its ${what === "job" ? "id" : "number"}: ${named.map(byNumber).join(", ")}`
+      `ci_status: ${named.length} ${what}s in ${where} are named "${wanted}". Pass one by its ${what === "job" ? "id" : "number"}: ${named.map(byNumber).join(", ")}`,
     );
   }
   const known = items.slice(0, 30).map((item) => `"${item.name}" (${byNumber(item)})`);
-  throw new Error(`ci_status: no ${what} "${wanted}" in ${where}. It has: ${known.join(", ") || "none"}${items.length > 30 ? ", and more" : ""}`);
+  throw new Error(
+    `ci_status: no ${what} "${wanted}" in ${where}. It has: ${known.join(", ") || "none"}${items.length > 30 ? ", and more" : ""}`,
+  );
 }
 
 /** Every job of one run with its steps (jobs: true), or one job, or one step of it with
@@ -364,21 +424,24 @@ async function ciRunJobs(
   env: Env,
   target: { owner: string; repo: string; full: string },
   run: CiRun,
-  opts: { job?: string; step?: string; logTail: boolean }
+  opts: { job?: string; step?: string; logTail: boolean },
 ) {
   const { owner, repo, full } = target;
   const resp = await ghFetch(
     env,
     owner,
     repo,
-    `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?filter=latest&per_page=${CI_JOBS_MAX}`
+    `/repos/${owner}/${repo}/actions/runs/${run.id}/jobs?filter=latest&per_page=${CI_JOBS_MAX}`,
   );
   if (resp.status === 403) {
     throw new Error(
-      "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry."
+      "ci_status: the capsid-repo-access GitHub App lacks Actions: Read. Add that permission in the App settings and accept the installation prompt, then retry.",
     );
   }
-  if (!resp.ok) throw new Error(`ci_status jobs lookup for run ${run.id} failed (${resp.status}): ${await errorBody(resp)}`);
+  if (!resp.ok)
+    throw new Error(
+      `ci_status jobs lookup for run ${run.id} failed (${resp.status}): ${await errorBody(resp)}`,
+    );
   const data = (await resp.json()) as { total_count?: number; jobs: CiJob[] };
   const jobs = data.jobs.slice(0, CI_JOBS_MAX);
   const total = typeof data.total_count === "number" ? data.total_count : jobs.length;
@@ -421,10 +484,16 @@ async function ciRunJobs(
   result.step = stepView(step);
   if (!opts.logTail) {
     // The read-only tier's boundary, worded as the failed-run tail's is.
-    result.log_withheld = "read-only key: step metadata only. A write-grant key returns the step's log.";
+    result.log_withheld =
+      "read-only key: step metadata only. A write-grant key returns the step's log.";
     return result;
   }
-  const logResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/jobs/${job.id}/logs`);
+  const logResp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/actions/jobs/${job.id}/logs`,
+  );
   if (!logResp.ok) {
     result.log_unavailable = `${logResp.status}: ${await errorBody(logResp)}`;
     return result;
@@ -435,4 +504,3 @@ async function ciRunJobs(
   if (Object.keys(picked.redactions).length > 0) result.log_redactions = picked.redactions;
   return result;
 }
-

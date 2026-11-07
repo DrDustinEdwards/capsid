@@ -7,7 +7,17 @@ import { useCallback, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from "../lib/router";
 import type { OpsJob, SiteSnapshot } from "../types";
 import { useApp } from "../app/ctx";
-import { JOB, PROBE, jobBadge, blockedOrder, cfShort, cfOk, hasSites, incidents, siteKey } from "../lib/derive";
+import {
+  JOB,
+  PROBE,
+  jobBadge,
+  blockedOrder,
+  cfShort,
+  cfOk,
+  hasSites,
+  incidents,
+  siteKey,
+} from "../lib/derive";
 import { age, agentLabel, ago, fmtN, hostOf, ms, pct, shortId } from "../lib/format";
 import { Icon, NoData, Pill, St } from "../ui/icons";
 import { ErrorSpark, UptimeFoot, UptimeTicks, errorTotals } from "../ui/charts";
@@ -68,7 +78,13 @@ export function NsChips({ list }: { list: string[] }) {
   return (
     <div className="toolbar" role="group" aria-label="Filter by namespace">
       {all.map((n) => (
-        <button key={n} type="button" className="chip" aria-pressed={ns === n} onClick={() => setNs(n)}>
+        <button
+          key={n}
+          type="button"
+          className="chip"
+          aria-pressed={ns === n}
+          onClick={() => setNs(n)}
+        >
           {n === "all" ? "All" : n}
         </button>
       ))}
@@ -78,7 +94,13 @@ export function NsChips({ list }: { list: string[] }) {
 
 // What a filtered list says when the filter leaves it empty: which filter, and a way back
 // (pattern catalog, N-empty).
-export function FilterEmpty({ children, onShowAll }: { children: ReactNode; onShowAll: () => void }) {
+export function FilterEmpty({
+  children,
+  onShowAll,
+}: {
+  children: ReactNode;
+  onShowAll: () => void;
+}) {
   return (
     <div role="status" data-filter-empty="">
       <Empty
@@ -97,7 +119,8 @@ export function FilterEmpty({ children, onShowAll }: { children: ReactNode; onSh
 export function NoSnapshot() {
   return (
     <Empty kind="nothing-yet" title={<St kind="nodata">No data</St>}>
-      The watcher has not written its first pass yet. Sites, deploys, errors, backups and CI appear after it does.
+      The watcher has not written its first pass yet. Sites, deploys, errors, backups and CI appear
+      after it does.
     </Empty>
   );
 }
@@ -129,7 +152,10 @@ function ErrorTotalsCell({ s }: { s: SiteSnapshot }) {
   const hot = t.rate != null && t.rate > 0.01;
   return (
     <>
-      <ErrorSpark values={cf.errors24.map((x) => x.errors)} label={`Errors per hour for ${s.name}, last 24 hours: ${fmtN(t.err)} of ${fmtN(t.req)} requests`} />
+      <ErrorSpark
+        values={cf.errors24.map((x) => x.errors)}
+        label={`Errors per hour for ${s.name}, last 24 hours: ${fmtN(t.err)} of ${fmtN(t.req)} requests`}
+      />
       <div className={`src${hot ? " hot" : ""}`}>
         {fmtN(t.err)} / {fmtN(t.req)} · {pct(t.rate)}
       </div>
@@ -149,7 +175,18 @@ function BackupCell({ s }: { s: SiteSnapshot }) {
   if (!backup) return <NoData brief reason="not reported by the site" />;
   if (backup.age_hours == null) return <St kind="crit">Never</St>;
   const age = backup.age_hours.toFixed(1);
-  return <Meter size="sm" label={<span className="cap-sr-only">Backup age</span>} value={Math.min(backup.age_hours, BACKUP_LIMIT_HOURS)} max={BACKUP_LIMIT_HOURS} warnAt={0.75} critAt={1} valueText={`${age} of ${BACKUP_LIMIT_HOURS} hours`} display={`${age}h / ${BACKUP_LIMIT_HOURS}h`} />;
+  return (
+    <Meter
+      size="sm"
+      label={<span className="cap-sr-only">Backup age</span>}
+      value={Math.min(backup.age_hours, BACKUP_LIMIT_HOURS)}
+      max={BACKUP_LIMIT_HOURS}
+      warnAt={0.75}
+      critAt={1}
+      valueText={`${age} of ${BACKUP_LIMIT_HOURS} hours`}
+      display={`${age}h / ${BACKUP_LIMIT_HOURS}h`}
+    />
+  );
 }
 
 export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
@@ -181,7 +218,9 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                 </td>
                 <td data-label="Status">
                   <Pill kind={p.kind}>{p.label}</Pill>
-                  <div className="src mt4">{s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}</div>
+                  <div className="src mt4">
+                    {s.latency_ms == null ? "no answer" : `${s.latency_ms} ms`}
+                  </div>
                 </td>
                 <td data-label="Uptime, 2-hour ticks" className="w30">
                   <UptimeTicks site={s} />
@@ -197,7 +236,9 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
                   <BackupCell s={s} />
                 </td>
                 <td data-label="Probe">
-                  <span className="num">{s.http_status == null ? "no answer" : `HTTP ${s.http_status}`}</span>
+                  <span className="num">
+                    {s.http_status == null ? "no answer" : `HTTP ${s.http_status}`}
+                  </span>
                   <div className="src">
                     {s.health_path ?? "/"} · {ago(ms(s.checked_at), now)}
                   </div>
@@ -218,20 +259,51 @@ export function FleetTable({ sites }: { sites: SiteSnapshot[] }) {
 // blockedOrder). Stale jobs have no group here: the Queue's Stale jobs panel holds them
 // and the list leaves them out (2026-10-09). Done and Failed start collapsed: nothing in
 // them needs a person.
-type QueueGroup = { id: string; label: string; pick: (jobs: OpsJob[], now: number) => OpsJob[]; collapsed?: boolean; hideEmpty?: boolean };
+type QueueGroup = {
+  id: string;
+  label: string;
+  pick: (jobs: OpsJob[], now: number) => OpsJob[];
+  collapsed?: boolean;
+  hideEmpty?: boolean;
+};
 
-const byStatus = (st: OpsJob["status"][]) => (jobs: OpsJob[]) => jobs.filter((j) => st.includes(j.status)).sort((a, b) => ms(a.updated_at) - ms(b.updated_at));
+const byStatus = (st: OpsJob["status"][]) => (jobs: OpsJob[]) =>
+  jobs.filter((j) => st.includes(j.status)).sort((a, b) => ms(a.updated_at) - ms(b.updated_at));
 
 const GROUPS: QueueGroup[] = [
-  { id: "blocked", label: "Blocked, waiting on you", pick: (jobs, now) => blockedOrder(jobs, now).all },
+  {
+    id: "blocked",
+    label: "Blocked, waiting on you",
+    pick: (jobs, now) => blockedOrder(jobs, now).all,
+  },
   { id: "running", label: "Running", pick: byStatus(["claimed"]) },
-  { id: "queued", label: "Queued", pick: (jobs) => jobs.filter((j) => j.status === "queued").sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)) },
+  {
+    id: "queued",
+    label: "Queued",
+    pick: (jobs) =>
+      jobs
+        .filter((j) => j.status === "queued")
+        .sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)),
+  },
   // Wanted, but not now (src/jobs-park.ts): never claimed or planned until unparked. A
   // row opens the drawer, which holds Unpark; a button in the row would break its height
   // (design D2).
-  { id: "parked", label: "Parked", pick: (jobs) => jobs.filter((j) => j.status === "parked").sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)), hideEmpty: true },
+  {
+    id: "parked",
+    label: "Parked",
+    pick: (jobs) =>
+      jobs
+        .filter((j) => j.status === "parked")
+        .sort((a, b) => b.priority - a.priority || ms(a.updated_at) - ms(b.updated_at)),
+    hideEmpty: true,
+  },
   { id: "done", label: "Done in the last 24h", pick: byStatus(["done"]), collapsed: true },
-  { id: "failed", label: "Failed or superseded, last 24h", pick: byStatus(["failed", "superseded"]), collapsed: true },
+  {
+    id: "failed",
+    label: "Failed or superseded, last 24h",
+    pick: byStatus(["failed", "superseded"]),
+    collapsed: true,
+  },
 ];
 
 export function jobMeta(j: OpsJob, now: number): string {
@@ -264,7 +336,13 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
           <div className="qgroup" key={g.id} data-group={g.id}>
             <h3>
               {g.collapsed ? (
-                <button type="button" className="disclose" aria-expanded={shown} aria-controls={bodyId} onClick={() => setOpen((o) => ({ ...o, [g.id]: !shown }))}>
+                <button
+                  type="button"
+                  className="disclose"
+                  aria-expanded={shown}
+                  aria-controls={bodyId}
+                  onClick={() => setOpen((o) => ({ ...o, [g.id]: !shown }))}
+                >
                   <span className="chev" aria-hidden="true" />
                   {g.label} <span className="num faint">{list.length}</span>
                 </button>
@@ -283,19 +361,30 @@ export function QueueRows({ jobs }: { jobs: OpsJob[] }) {
                     j.status === "blocked" && j.question
                       ? `Asks: ${(j.waits_on ?? "no question recorded").replace(/^QUESTION:\s*/, "")}`
                       : j.status === "blocked"
-                      ? `Waits on: ${j.waits_on ?? "no reason recorded"}`
-                      : j.status === "parked"
-                        ? `Comes back: ${j.parked_reason ?? "no reason recorded"}`
-                      : j.status === "claimed"
-                        ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
-                        : j.status === "queued"
-                          ? `${j.finding ? "Watcher finding · " : ""}${j.started_by && j.started_at ? `Started by ${agentLabel(j.started_by)} ${ago(ms(j.started_at), now)} · ` : ""}priority ${j.priority}`
-                          : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
+                        ? `Waits on: ${j.waits_on ?? "no reason recorded"}`
+                        : j.status === "parked"
+                          ? `Comes back: ${j.parked_reason ?? "no reason recorded"}`
+                          : j.status === "claimed"
+                            ? `Held by ${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`
+                            : j.status === "queued"
+                              ? `${j.finding ? "Watcher finding · " : ""}${j.started_by && j.started_at ? `Started by ${agentLabel(j.started_by)} ${ago(ms(j.started_at), now)} · ` : ""}priority ${j.priority}`
+                              : `${pr ? `PR #${pr.pr_url.split("/").slice(-1)[0]} · ` : ""}${j.claimed_by ? agentLabel(j.claimed_by) : "no holder"}`;
                   // A blocked job that asks something is marked as a question: it waits on
                   // an answer, not on a command (design-portal-evaluation.md, the question row).
-                  const k = j.status === "blocked" && j.question ? { kind: JOB.blocked.kind, label: "Question" } : jobBadge(j, now);
+                  const k =
+                    j.status === "blocked" && j.question
+                      ? { kind: JOB.blocked.kind, label: "Question" }
+                      : jobBadge(j, now);
                   return (
-                    <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0} {...(j.question ? { "data-question": "" } : {})}>
+                    <div
+                      className="qrow"
+                      key={j.id}
+                      data-row=""
+                      data-open={`job:${j.id}`}
+                      role="button"
+                      tabIndex={0}
+                      {...(j.question ? { "data-question": "" } : {})}
+                    >
                       <St kind={k.kind}>{k.label}</St>
                       <div className="t">
                         <b>{j.title}</b>
@@ -326,7 +415,8 @@ export function IncidentFeed({ ns }: { ns?: string }) {
   const { feed, now } = useApp();
   let items = incidents(feed);
   if (ns && ns !== "all") items = items.filter((x) => x.ns === ns);
-  if (!items.length) return <Empty kind="all-clear" title="No watcher findings in the live window." />;
+  if (!items.length)
+    return <Empty kind="all-clear" title="No watcher findings in the live window." />;
   return (
     <div className="feed">
       {items.map((it) => {
@@ -339,6 +429,7 @@ export function IncidentFeed({ ns }: { ns?: string }) {
             key={`${it.fp}-${it.ref ?? ""}`}
             data-row=""
             data-open={it.ref ?? undefined}
+            role={it.ref ? "button" : undefined}
             tabIndex={it.ref ? 0 : undefined}
             title={it.ref ? undefined : `fingerprint ${it.fp}`}
           >
@@ -363,13 +454,27 @@ export function IncidentFeed({ ns }: { ns?: string }) {
 
 // ---- timeline panel ------------------------------------------------------------------------
 
-export function TimelinePanel({ title, days, src, id, section }: { title: string; days: number; src: string; id?: string; section?: string }) {
+export function TimelinePanel({
+  title,
+  days,
+  src,
+  id,
+  section,
+}: {
+  title: string;
+  days: number;
+  src: string;
+  id?: string;
+  section?: string;
+}) {
   const { feed } = useApp();
   const sites = hasSites(feed) ? (feed.snapshot?.sites ?? []) : [];
   return (
     <Panel flush title={title} src={src} id={id} section={section}>
       {!hasSites(feed) ? (
-        <div className="body faint">No site is configured, so there is no probe to chart. Add one in Settings.</div>
+        <div className="body faint">
+          No site is configured, so there is no probe to chart. Add one on Sites.
+        </div>
       ) : sites.length ? (
         <div className="body">
           <ChartSlot>
@@ -382,4 +487,3 @@ export function TimelinePanel({ title, days, src, id, section }: { title: string
     </Panel>
   );
 }
-

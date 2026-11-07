@@ -25,7 +25,10 @@ import { TOOL_GRANTS } from "../src/scope.ts";
 // dispatches to (src/tools/surface.ts, src/tools/operations.ts), so each operation's
 // block is scanned and judged by every tool action that runs it (./served.ts).
 
-const MUTATING_SQL = /\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b/i;
+// The namespace register and update moved to src/namespace-admin.ts so the Portal's controls
+// share them; a call of either is the same write the SQL was, so it is matched by name.
+const MUTATING_SQL =
+  /\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b|\b(registerNamespace|updateNamespace)\(/i;
 // The gate is src/scope.ts, reached two ways, and a write tool has to be covered by
 // one of them:
 //
@@ -52,13 +55,23 @@ const READ_ONLY: ReadonlyArray<string> = ["read", "admin_read"];
 test("the block scan found the whole tool surface", () => {
   // Vacuity guard: if this parse broke, every assertion below would pass over an
   // empty list.
-  assert.ok(REGISTRATIONS.length >= 17, `expected the full tool surface, parsed ${REGISTRATIONS.length} registrations`);
+  assert.ok(
+    REGISTRATIONS.length >= 17,
+    `expected the full tool surface, parsed ${REGISTRATIONS.length} registrations`,
+  );
   assert.ok(BLOCKS.length >= 37, `expected every operation, parsed ${BLOCKS.length} blocks`);
   for (const name of ["write", "delete", "move", "lint", "restore", "read", "search"]) {
-    assert.ok(BLOCKS.some((b) => b.name === name), `did not parse a block for the ${name} operation`);
+    assert.ok(
+      BLOCKS.some((b) => b.name === name),
+      `did not parse a block for the ${name} operation`,
+    );
   }
   // Every operation is served, and every served operation was parsed.
-  for (const b of BLOCKS) assert.ok(servedAs(b.name).length > 0, `operation ${b.name} (src/${b.file}) is defined but no served tool runs it`);
+  for (const b of BLOCKS)
+    assert.ok(
+      servedAs(b.name).length > 0,
+      `operation ${b.name} (src/${b.file}) is defined but no served tool runs it`,
+    );
   // And the walk reached the whole directory, not one file that happens to contain
   // everything today.
   assert.ok(sourceFiles().length >= 10, "the src/ walk collapsed to a handful of files");
@@ -71,12 +84,12 @@ test("every tool action whose operation contains mutating SQL is gated on the wr
       ? servedAs(b.name)
           .filter((s) => !WRITE_GATED.includes(s.requirement))
           .map((s) => `${s.tool}${s.action ? `.${s.action}` : ""} runs ${b.name} (src/${b.file})`)
-      : []
+      : [],
   );
   assert.deepEqual(
     ungated,
     [],
-    `these tool actions run INSERT/UPDATE/DELETE and are neither write-gated at the registrar (TOOL_GRANTS, TOOL_ACTION_GRANTS) nor carrying their own ctx.scope grant check, so a read-only caller can reach them: ${ungated.join(", ")}`
+    `these tool actions run INSERT/UPDATE/DELETE and are neither write-gated at the registrar (TOOL_GRANTS, TOOL_ACTION_GRANTS) nor carrying their own ctx.scope grant check, so a read-only caller can reach them: ${ungated.join(", ")}`,
   );
 });
 
@@ -94,11 +107,21 @@ test("a tool action marked read does not mutate, which is the claim it would be 
   // A write wrongly marked read is admitted for a read-only caller by the registrar and
   // then writes.
   const lying = BLOCKS.flatMap((b) =>
-    MUTATING_SQL.test(b.body) ? servedAs(b.name).filter((s) => READ_ONLY.includes(s.requirement)).map((s) => `${s.tool}${s.action ? `.${s.action}` : ""} (${b.name})`) : []
+    MUTATING_SQL.test(b.body)
+      ? servedAs(b.name)
+          .filter((s) => READ_ONLY.includes(s.requirement))
+          .map((s) => `${s.tool}${s.action ? `.${s.action}` : ""} (${b.name})`)
+      : [],
   );
-  assert.deepEqual(lying, [], `these tool actions are marked read in TOOL_GRANTS and run mutating SQL: ${lying.join(", ")}`);
+  assert.deepEqual(
+    lying,
+    [],
+    `these tool actions are marked read in TOOL_GRANTS and run mutating SQL: ${lying.join(", ")}`,
+  );
   // Vacuity: the classification is not simply empty of read actions.
-  const reads = BLOCKS.filter((b) => servedAs(b.name).some((s) => READ_ONLY.includes(s.requirement))).length;
+  const reads = BLOCKS.filter((b) =>
+    servedAs(b.name).some((s) => READ_ONLY.includes(s.requirement)),
+  ).length;
   assert.ok(reads >= 8, `only ${reads} operations classify as read; the derivation is broken`);
 });
 
@@ -107,8 +130,14 @@ test("the gate check is not vacuous: several operations are found to be mutating
   // If a refactor moved every statement into a helper, the test above would pass
   // by matching nothing. This asserts it is still looking at real mutations.
   const mutating = BLOCKS.filter((b) => MUTATING_SQL.test(b.body)).map((b) => b.name);
-  assert.ok(mutating.length >= 6, `only ${mutating.length} operations contain mutating SQL: ${mutating.join(", ")}`);
+  assert.ok(
+    mutating.length >= 6,
+    `only ${mutating.length} operations contain mutating SQL: ${mutating.join(", ")}`,
+  );
   for (const name of ["write", "delete", "move", "restore"]) {
-    assert.ok(mutating.includes(name), `${name} no longer contains mutating SQL; has it moved to a helper?`);
+    assert.ok(
+      mutating.includes(name),
+      `${name} no longer contains mutating SQL; has it moved to a helper?`,
+    );
   }
 });

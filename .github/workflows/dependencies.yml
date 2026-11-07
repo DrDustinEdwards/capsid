@@ -4,27 +4,9 @@ name: dependencies
 # a full sha: scripts/check-callers.mjs fails on anything else. The daily run is what finds an advisory published after a
 # merge. Exceptions go in osv-scanner.toml at the repository root, each with its reason.
 
-# A pull request or push runs it only when a manifest or lockfile changes; the daily run finds a new advisory.
+# The daily run alone: pr.yml scans every pull request, and a push run only repeats it (devkit README, "No second run on
+# main").
 on:
-  pull_request:
-    paths:
-      - "**/package.json"
-      - "**/package-lock.json"
-      - "**/pnpm-lock.yaml"
-      - "**/requirements*.txt"
-      - "**/pyproject.toml"
-      - "osv-scanner.toml"
-      - ".github/workflows/dependencies.yml"
-  push:
-    branches: [master]
-    paths:
-      - "**/package.json"
-      - "**/package-lock.json"
-      - "**/pnpm-lock.yaml"
-      - "**/requirements*.txt"
-      - "**/pyproject.toml"
-      - "osv-scanner.toml"
-      - ".github/workflows/dependencies.yml"
   schedule:
     - cron: "17 6 * * *"
 
@@ -37,4 +19,4 @@ concurrency:
 
 jobs:
   dependencies:
-    uses: DrDustinEdwards/devkit/.github/workflows/dependencies.yml@454002f526e5e8e645a9c110605880e220b611a0 # v0.21.0
+    uses: DrDustinEdwards/devkit/.github/workflows/dependencies.yml@562daa2dbfb23f2987f81caeac34f9e054b3d03b # v0.26.4

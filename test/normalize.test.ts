@@ -26,7 +26,7 @@ test("title mode uses a spaced hyphen", () => {
 test("markdown heading lines in a body use a spaced hyphen, prose uses a comma", () => {
   assert.equal(
     normalizeDashes("# capsid — core\nthe shell — the capsid"),
-    "# capsid - core\nthe shell, the capsid"
+    "# capsid - core\nthe shell, the capsid",
   );
 });
 

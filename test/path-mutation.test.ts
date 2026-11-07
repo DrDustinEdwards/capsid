@@ -92,7 +92,7 @@ test("every documents.path mutation in src/ lives inside pathMutation()", () => 
   assert.deepEqual(
     offenders,
     [],
-    `documents.path is mutated outside pathMutation(). Route it through the helper so document_links moves with it:\n  ${offenders.join("\n  ")}`
+    `documents.path is mutated outside pathMutation(). Route it through the helper so document_links moves with it:\n  ${offenders.join("\n  ")}`,
   );
 });
 
@@ -108,14 +108,20 @@ test("the helper actually contains both mutation shapes", () => {
 
 test("the widened UPDATE pattern catches a later path assignment", () => {
   // A path assignment after another SET column, checked against the matcher directly.
-  const later = 'db.prepare("UPDATE documents SET updated_at = datetime(\'now\'), path = ?3 WHERE namespace = ?1")';
-  assert.equal(pathMutationHits(later).length, 1, "a path assignment after another SET column is not being caught");
+  const later =
+    "db.prepare(\"UPDATE documents SET updated_at = datetime('now'), path = ?3 WHERE namespace = ?1\")";
+  assert.equal(
+    pathMutationHits(later).length,
+    1,
+    "a path assignment after another SET column is not being caught",
+  );
   const pathFirst = 'db.prepare("UPDATE documents SET path = ?3 WHERE namespace = ?1")';
   assert.equal(pathMutationHits(pathFirst).length, 1);
 });
 
 test("the UPDATE pattern does not fire on path in a WHERE clause", () => {
   // `path` is in the WHERE clause of nearly every statement in server.ts.
-  const innocent = 'db.prepare("UPDATE documents SET status = ?1 WHERE namespace = ?2 AND path = ?3")';
+  const innocent =
+    'db.prepare("UPDATE documents SET status = ?1 WHERE namespace = ?2 AND path = ?3")';
   assert.deepEqual(pathMutationHits(innocent), []);
 });

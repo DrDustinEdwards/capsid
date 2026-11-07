@@ -35,6 +35,10 @@ export function clientDocument(url: URL): Record<string, unknown> | null {
 export function handleClientDocument(request: Request): Response {
   const url = new URL(request.url);
   const doc = clientDocument(url);
-  if (!doc) return new Response("no such client document", { status: 404, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+  if (!doc)
+    return new Response("no such client document", {
+      status: 404,
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+    });
   return Response.json(doc, { headers: { "Cache-Control": "public, max-age=300" } });
 }

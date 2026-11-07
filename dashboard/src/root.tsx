@@ -1,7 +1,17 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { themeScript } from "capsomer/theme-server";
 import { StrictMode, useState, type ReactNode } from "react";
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useLocation, useRouteLoaderData, type LoaderFunctionArgs } from "react-router";
+import {
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+  isRouteErrorResponse,
+  useLocation,
+  useRouteLoaderData,
+  type LoaderFunctionArgs,
+} from "react-router";
 // The network's faces, self-hosted (CSP font-src 'self'): one variable file each, every weight.
 import "capsomer/fonts.css";
 import monoFontUrl from "capsomer/fonts/martian-mono-latin-wght-normal.woff2?url";
@@ -61,7 +71,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="color-scheme" content="light dark" />
         <meta name="robots" content="noindex" />
         <meta name="theme-color" content="#01585c" />
-        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: the static no-flash theme line */}
+        {/* The static no-flash theme line, set before first paint. */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
         <link rel="icon" href="/favicon.ico" sizes="48x48" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
@@ -69,7 +79,9 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* The manifest is behind the Portal's sign-in, and a manifest is fetched without cookies unless the link
             says use-credentials (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/manifest).
             The demo installs nothing. */}
-        {demo ? null : <link rel="manifest" href="/site.webmanifest" crossOrigin="use-credentials" />}
+        {demo ? null : (
+          <link rel="manifest" href="/site.webmanifest" crossOrigin="use-credentials" />
+        )}
         <Meta />
         <Links nonce={nonce} />
       </head>
@@ -100,7 +112,13 @@ export default function Root() {
 // leaves the visit in its size-matched fallback. A preload starts both with the document. Same files as
 // fonts.css's url()s, so Vite emits one asset each; crossorigin, or the preload is fetched twice.
 export const links = () =>
-  [uiFontUrl, monoFontUrl].map((href) => ({ rel: "preload", href, as: "font", type: "font/woff2", crossOrigin: "anonymous" as const }));
+  [uiFontUrl, monoFontUrl].map((href) => ({
+    rel: "preload",
+    href,
+    as: "font",
+    type: "font/woff2",
+    crossOrigin: "anonymous" as const,
+  }));
 
 export function meta() {
   return [{ title: "Capsid Portal" }];
@@ -114,7 +132,13 @@ export function ErrorBoundary({ error }: { error: unknown }) {
     <main className="page">
       <div className="callout crit" role="alert">
         <h1>{missing ? "No such page" : "The Portal failed to render"}</h1>
-        <p>{missing ? "Nothing in Capsid Portal is at this address." : error instanceof Error ? error.message : "An unexpected error."}</p>
+        <p>
+          {missing
+            ? "Nothing in Capsid Portal is at this address."
+            : error instanceof Error
+              ? error.message
+              : "An unexpected error."}
+        </p>
         <a className="btn" href={base ? `${base}/` : "/"}>
           Go to Needs you
         </a>

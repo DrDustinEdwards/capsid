@@ -55,11 +55,13 @@ function hasControlChar(text: string): boolean {
 export function pathProblem(path: string): string | null {
   if (path.length === 0) return "path must not be empty";
   if (path.length > MAX_PATH) return `path is longer than ${MAX_PATH} characters`;
-  if (path.startsWith("/")) return "path must not start with '/': paths are relative to the namespace";
+  if (path.startsWith("/"))
+    return "path must not start with '/': paths are relative to the namespace";
   if (path.endsWith("/")) return "path must not end with '/': it names a document, not a directory";
   if (path.includes("..")) return "path must not contain '..'";
   if (path.includes("//")) return "path must not contain an empty segment ('//')";
-  if (hasControlChar(path)) return "path must not contain control characters (including newlines and tabs)";
+  if (hasControlChar(path))
+    return "path must not contain control characters (including newlines and tabs)";
   // SQL reads the archive with LIKE 'archive/%', which folds ASCII case, and JavaScript with
   // startsWith("archive/"), which does not. A path like Archive/x.md would be archived to one
   // and live to the other, so only the exact prefix is accepted (Grok audit 2026-10-21, CA-4).
@@ -74,7 +76,8 @@ export function pathProblem(path: string): string | null {
 export function repoPathProblem(value: string): string | null {
   if (value.length === 0) return "must not be empty";
   if (value.length > MAX_PATH) return `is longer than ${MAX_PATH} characters`;
-  if (hasControlChar(value)) return "must not contain control characters (including newlines and tabs)";
+  if (hasControlChar(value))
+    return "must not contain control characters (including newlines and tabs)";
   if (value.startsWith("/")) return "must not start with '/'";
   if (value.endsWith("/")) return "must not end with '/'";
   if (value.includes("//")) return "must not contain an empty segment ('//')";
@@ -93,7 +96,26 @@ export const docPath = z.string().superRefine((value, ctx) => {
 // is a visible anomaly. test/limits.test.ts fails if one appears.
 export const bounded = (max: number) => z.string().max(max);
 
-export const nsName = bounded(MAX_NAMESPACE);
+// The fixed shapes a tool argument can declare as a pattern, so a client sees the shape
+// in the schema before it calls (area 11, T4). Each matches every value the store and
+// GitHub hold today; a free-form string (a title, a query, a path) stays unpatterned.
+// A namespace is a lowercase slug, as every registered one is.
+export const nsName = bounded(MAX_NAMESPACE).regex(
+  /^[a-z0-9][a-z0-9-]*$/,
+  "a namespace is a lowercase slug: a-z, 0-9 and '-'",
+);
+// A repo label ("primary", "site-api") or a mapped "owner/name".
+export const repoSelector = bounded(MAX_REPO_SELECTOR).regex(
+  /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)?$/,
+  'a repo is a label or "owner/name"',
+);
+// A commit sha: hex, abbreviated or full (SHA-1 or SHA-256).
+export const gitSha = bounded(MAX_SHA).regex(
+  /^[0-9a-fA-F]{7,64}$/,
+  "a sha is 7 to 64 hex characters",
+);
+// A calendar day, YYYY-MM-DD.
+export const dayParam = bounded(10).regex(/^\d{4}-\d{2}-\d{2}$/, "a day is YYYY-MM-DD");
 
 // A job's result_ref is where the work landed: a document key inside the store, or
 // a pull request URL outside it. The URL is rendered as a link a human may click, so
@@ -101,7 +123,8 @@ export const nsName = bounded(MAX_NAMESPACE);
 export function resultRefProblem(value: string): string | null {
   if (value.length === 0) return "result ref must not be empty";
   if (value.length > MAX_PATH) return `result ref is longer than ${MAX_PATH} characters`;
-  if (hasControlChar(value)) return "result ref must not contain control characters (including newlines and tabs)";
+  if (hasControlChar(value))
+    return "result ref must not contain control characters (including newlines and tabs)";
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)) return pathProblem(value);
 
   if (!value.startsWith("https://")) return "a result ref URL must use https";

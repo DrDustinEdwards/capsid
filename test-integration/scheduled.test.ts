@@ -3,7 +3,12 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { BACKUP_CRON, SKILLS_REFRESH_CRON, TICK_CRON } from "../src/index";
 import { claimJti } from "../src/signed-requests";
-import { SCHEDULE_KEY, SKILLS_NAMESPACE, SKILLS_REFRESH_ACTOR, guideKey } from "../src/skills-refresh";
+import {
+  SCHEDULE_KEY,
+  SKILLS_NAMESPACE,
+  SKILLS_REFRESH_ACTOR,
+  guideKey,
+} from "../src/skills-refresh";
 
 // The scheduled handler, all three crons, against real bindings.
 //
@@ -20,13 +25,17 @@ const controller = (cron: string) =>
 
 // The run ledger's rows for one task (src/task-runs.ts), oldest first.
 async function ledger(task: string) {
-  const { results } = await env.DB.prepare("SELECT outcome, reason FROM task_runs WHERE task = ?1 ORDER BY id").bind(task).all<{ outcome: string; reason: string }>();
+  const { results } = await env.DB.prepare(
+    "SELECT outcome, reason FROM task_runs WHERE task = ?1 ORDER BY id",
+  )
+    .bind(task)
+    .all<{ outcome: string; reason: string }>();
   return results ?? [];
 }
 
 async function fire(cron: string) {
   const ctx = createExecutionContext();
-  await worker.scheduled?.(controller(cron), env, ctx);
+  worker.scheduled?.(controller(cron), env, ctx);
   await waitOnExecutionContext(ctx);
 }
 
@@ -36,7 +45,9 @@ async function fire(cron: string) {
 // test without credentials meets anyway, and each step records it. The tick's own
 // handler (the signed-in crawl's Portal pages) is in-process and unaffected.
 async function fireTickOffline() {
-  const offline = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in the integration suite"));
+  const offline = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("no network in the integration suite"));
   try {
     await fire(TICK_CRON);
   } finally {
@@ -53,7 +64,7 @@ describe("the three cron expressions", () => {
   it("the backup cron writes real dumps to real R2", async () => {
     await env.DB.prepare(
       `INSERT INTO documents (namespace, path, title, body, type, status)
-       VALUES ('capsid', 'cron-fixture.md', 'A document to dump', 'body', 'note', 'published')`
+       VALUES ('capsid', 'cron-fixture.md', 'A document to dump', 'body', 'note', 'published')`,
     ).run();
 
     await fire(BACKUP_CRON);
@@ -64,8 +75,15 @@ describe("the three cron expressions", () => {
     // A dump that threw halfway leaves the earlier objects behind and looks like a
     // partial success, so the assertion is on the table this fixture put a row in.
     const documentsDump = listed.objects.find((o: { key: string }) => o.key.includes("documents"));
-    expect(documentsDump, `no documents dump among ${listed.objects.map((o: { key: string }) => o.key).join(", ")}`).toBeTruthy();
-    const dumped = await readDumpJson<unknown>(env.MEDIA, documentsDump!.key, (k) => `no object ${k}`);
+    expect(
+      documentsDump,
+      `no documents dump among ${listed.objects.map((o: { key: string }) => o.key).join(", ")}`,
+    ).toBeTruthy();
+    const dumped = await readDumpJson<unknown>(
+      env.MEDIA,
+      documentsDump!.key,
+      (k) => `no object ${k}`,
+    );
     expect(JSON.stringify(dumped)).toContain("cron-fixture.md");
 
     // One row. Where the backup credential is not configured (CI, and a local run), the
@@ -73,13 +91,19 @@ describe("the three cron expressions", () => {
     const runs = await ledger("backup");
     expect(runs).toHaveLength(1);
     const run = runs[0]!;
-    expect(run.reason).toMatch(run.outcome === "refused" ? /^wrote \d+ dump objects, and the prune refused: \S/ : /^wrote \d+ dump objects \(\d+ documents\); pruned /);
+    expect(run.reason).toMatch(
+      run.outcome === "refused"
+        ? /^wrote \d+ dump objects, and the prune refused: \S/
+        : /^wrote \d+ dump objects \(\d+ documents\); pruned /,
+    );
     expect(["ok", "refused"]).toContain(run.outcome);
   });
 
   it("the tick runs against real bindings and records its run", async () => {
     await fireTickOffline();
-    expect(await ledger("tick")).toEqual([{ outcome: "ok", reason: "the tick's steps ran; each records its own run" }]);
+    expect(await ledger("tick")).toEqual([
+      { outcome: "ok", reason: "the tick's steps ran; each records its own run" },
+    ]);
   });
 
   // The skills refresh fires daily and gates on its weekday inside the handler, so
@@ -101,11 +125,17 @@ describe("the three cron expressions", () => {
   });
 
   it("the skills refresh on its weekday posts a real job and records the guide it saw", async () => {
-    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')").bind(SKILLS_NAMESPACE).run();
-    await env.APP_KV.put(SCHEDULE_KEY, JSON.stringify({ enabled: true, dayUtc: new Date().getUTCDay() }));
+    await env.DB.prepare("INSERT OR IGNORE INTO namespaces (namespace, repos) VALUES (?1, '[]')")
+      .bind(SKILLS_NAMESPACE)
+      .run();
+    await env.APP_KV.put(
+      SCHEDULE_KEY,
+      JSON.stringify({ enabled: true, dayUtc: new Date().getUTCDay() }),
+    );
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input instanceof Request ? input.url : input);
-      if (url.endsWith("/models/overview.md")) return new Response("Models: claude-fable-5-1 is the newest.");
+      if (url.endsWith("/models/overview.md"))
+        return new Response("Models: claude-fable-5-1 is the newest.");
       if (url.endsWith("/prompting-claude-fable-5-1.md")) return new Response("guide text");
       return new Response("not stubbed", { status: 500 });
     });
@@ -132,7 +162,14 @@ describe("the three cron expressions", () => {
     // failure is logged under its own name rather than swallowed, and a later cron
     // runs normally.
     const planted = new Error("planted MEDIA failure");
-    const brokenMedia = new Proxy({}, { get: () => async () => { throw planted; } });
+    const brokenMedia = new Proxy(
+      {},
+      {
+        get: () => async () => {
+          throw planted;
+        },
+      },
+    );
     const broken = { ...env, MEDIA: brokenMedia } as typeof env;
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -140,9 +177,14 @@ describe("the three cron expressions", () => {
       expect(() => worker.scheduled?.(controller(BACKUP_CRON), broken, ctx)).not.toThrow();
       await waitOnExecutionContext(ctx).catch(() => {});
       const lines = logged.mock.calls.map((args) => args.map(String).join(" "));
-      expect(lines.some((l) => l.includes("BACKUP_CRON_THREW") && l.includes("planted MEDIA failure")), lines.join(" | ")).toBe(true);
+      expect(
+        lines.some((l) => l.includes("BACKUP_CRON_THREW") && l.includes("planted MEDIA failure")),
+        lines.join(" | "),
+      ).toBe(true);
       // And the run ledger says so, where the Portal reads it.
-      expect(await ledger("backup")).toEqual([{ outcome: "threw", reason: "planted MEDIA failure" }]);
+      expect(await ledger("backup")).toEqual([
+        { outcome: "threw", reason: "planted MEDIA failure" },
+      ]);
     } finally {
       logged.mockRestore();
     }
@@ -158,14 +200,17 @@ describe("the replay table is real", () => {
     // the improve loop went. Only a real database proves the conflict happens, and the
     // replay defense rests on it.
     const first = await env.DB.prepare(
-      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('bench:capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti"
+      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('bench:capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti",
     ).first<{ jti: string }>();
     expect(first?.jti).toBe("dup");
 
     const second = await env.DB.prepare(
-      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('bench:capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti"
+      "INSERT INTO improve_jti (scope, jti, seen_at) VALUES ('bench:capsid', 'dup', datetime('now')) ON CONFLICT DO NOTHING RETURNING jti",
     ).first<{ jti: string }>();
-    expect(second, "the second claim must return nothing; if it returns a row the replay cache is decorative").toBeNull();
+    expect(
+      second,
+      "the second claim must return nothing; if it returns a row the replay cache is decorative",
+    ).toBeNull();
   });
 
   it("PLANT: concurrent claimJti calls for one jti resolve to ONE winner", async () => {
@@ -176,7 +221,10 @@ describe("the replay table is real", () => {
       claimJti(env.DB, "bench:capsid", "raced"),
       claimJti(env.DB, "bench:capsid", "raced"),
     ]);
-    expect(results.filter((r) => r.ok), "exactly one caller may claim a nonce").toHaveLength(1);
+    expect(
+      results.filter((r) => r.ok),
+      "exactly one caller may claim a nonce",
+    ).toHaveLength(1);
     expect(results.filter((r) => !r.ok).map((r) => (r.ok ? 0 : r.status))).toEqual([409, 409]);
   });
 });

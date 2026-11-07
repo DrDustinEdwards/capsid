@@ -1,7 +1,9 @@
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
+import { Suspense, lazy } from "react";
 import { Spinner } from "capsomer/react/empty";
-import { useApp } from "../app/ctx";
+import { QUEUE_TABS, tabOf, useApp } from "../app/ctx";
+import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { LIVE, fetchStale, useAnswer, type Load } from "../lib/api";
 import { JOB } from "../lib/derive";
 import { agentLabel, ago, ms } from "../lib/format";
@@ -25,13 +27,25 @@ const ProjectChart = trendChart("ProjectChart");
 function LiveSessions() {
   const { feed, now } = useApp();
   const list = feed.live.sessions;
-  if (!list.length) return <Empty kind="all-clear" title="No live sessions in the last 24 hours." />;
+  if (!list.length)
+    return <Empty kind="all-clear" title="No live sessions in the last 24 hours." />;
   // A row names the session's job by its title; the id is in the job's drawer (D11).
-  const title = (id: string | null) => (id ? (feed.live.jobs.find((j) => j.id === id)?.title ?? "A job outside the live window") : "No job bound");
+  const title = (id: string | null) =>
+    id
+      ? (feed.live.jobs.find((j) => j.id === id)?.title ?? "A job outside the live window")
+      : "No job bound";
   return (
     <>
       {list.map((s) => (
-        <div className={s.last_failure && s.incident === "failure" ? "qrow sev-crit" : "qrow"} key={s.session_id} data-row="" data-session={s.session_id} data-open={s.job_id ? `job:${s.job_id}` : undefined} tabIndex={s.job_id ? 0 : undefined}>
+        <div
+          className={s.last_failure && s.incident === "failure" ? "qrow sev-crit" : "qrow"}
+          key={s.session_id}
+          data-row=""
+          data-session={s.session_id}
+          data-open={s.job_id ? `job:${s.job_id}` : undefined}
+          role={s.job_id ? "button" : undefined}
+          tabIndex={s.job_id ? 0 : undefined}
+        >
           {s.last_failure ? (
             <St kind={s.incident === "failure" ? "crit" : "warn"}>Failed</St>
           ) : s.needs_input ? (
@@ -48,7 +62,9 @@ function LiveSessions() {
             </div>
           </div>
           <div className="m">
-            {s.last_event === "Notification" && s.last_notification_type ? s.last_notification_type : s.last_event}
+            {s.last_event === "Notification" && s.last_notification_type
+              ? s.last_notification_type
+              : s.last_event}
             <br />
             {ago(ms(s.last_event_at), now)}
           </div>
@@ -114,9 +130,20 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
         </div>
       ) : rows.length ? (
         rows.map((j) => {
-          const k = JOB[j.status as OpsJob["status"]] ?? { kind: "nodata" as const, label: j.status };
+          const k = JOB[j.status as OpsJob["status"]] ?? {
+            kind: "nodata" as const,
+            label: j.status,
+          };
           return (
-            <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} data-rule={j.rule} tabIndex={0}>
+            <div
+              className="qrow"
+              key={j.id}
+              data-row=""
+              data-open={`job:${j.id}`}
+              data-rule={j.rule}
+              role="button"
+              tabIndex={0}
+            >
               <St kind={k.kind}>{k.label}</St>
               <div className="t">
                 <b>{j.title}</b>
@@ -131,7 +158,10 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
           );
         })
       ) : data ? (
-        <Empty kind="all-clear" title={ns === "all" ? "No job looks stuck." : `No job in ${ns} looks stuck.`} />
+        <Empty
+          kind="all-clear"
+          title={ns === "all" ? "No job looks stuck." : `No job in ${ns} looks stuck.`}
+        />
       ) : (
         <div className="body faint">No read yet.</div>
       )}
@@ -139,12 +169,38 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
   );
 }
 
+// The claim checks (the claims ledger: what each agent said beside what the Worker verified),
+// Jobs' second tab since the Portal audit's new map (2026-11-06; it was Agents' Checks tab),
+// loaded when the tab opens. The tab is in the address (?tab=checks), so it can be reloaded or
+// shared with its filters.
+const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
+
 export function Queue() {
+  const tab = tabOf(QUEUE_TABS, useTabParam()) ?? QUEUE_TABS[0].id;
+  if (tab === "checks") {
+    return (
+      <div className="page">
+        <PageHead title="Jobs" />
+        <PageTabs label="Jobs" path="/queue" tabs={QUEUE_TABS} current={tab} />
+        <Suspense fallback={null}>
+          <Claims />
+        </Suspense>
+      </div>
+    );
+  }
+  return <JobsTab />;
+}
+
+function JobsTab() {
   const { feed, filters, setFilters } = useApp();
   const [ns, setNs] = useNsFilter();
   const all = feed.live.jobs;
   const q = filters.q.trim().toLowerCase();
-  const jobs = all.filter((j) => (ns === "all" || j.namespace === ns) && (!q || `${j.title} ${j.id} ${j.waits_on ?? ""} ${j.command ?? ""}`.toLowerCase().includes(q)));
+  const jobs = all.filter(
+    (j) =>
+      (ns === "all" || j.namespace === ns) &&
+      (!q || `${j.title} ${j.id} ${j.waits_on ?? ""} ${j.command ?? ""}`.toLowerCase().includes(q)),
+  );
   const nss = [...new Set(all.map((j) => j.namespace))];
   // Stale jobs show in one place: the panel (Dustin, 2026-10-09, folding the list's old
   // "Stale, blocked over 7 days" group into it). The list leaves out every job the panel
@@ -155,13 +211,28 @@ export function Queue() {
     <div className="page">
       <Anchors />
       <PageHead title="Jobs" />
+      <PageTabs label="Jobs" path="/queue" tabs={QUEUE_TABS} current="jobs" />
       <div className="toolbar">
         <NsChips list={nss} />
-        <input className="search" id="qsearch" type="search" placeholder="Filter jobs (f)" value={filters.q} aria-label="Filter jobs" onChange={(e) => setFilters({ q: e.target.value })} />
+        <input
+          className="search"
+          id="qsearch"
+          type="search"
+          placeholder="Filter jobs (f)"
+          value={filters.q}
+          aria-label="Filter jobs"
+          onChange={(e) => setFilters({ q: e.target.value })}
+        />
       </div>
       <StaleJobs load={stale.load} reread={stale.reread} />
       <div className="grid2">
-        <Panel flush title="All jobs" id="jobs" section="All jobs" src="live · D1 jobs, read on each refresh">
+        <Panel
+          flush
+          title="All jobs"
+          id="jobs"
+          section="All jobs"
+          src="live · D1 jobs, read on each refresh"
+        >
           {!jobs.length && all.length ? (
             <FilterEmpty onShowAll={() => (setFilters({ q: "" }), setNs("all"))}>
               No job {q ? `matches the text "${filters.q.trim()}"` : "is listed"}
@@ -173,19 +244,32 @@ export function Queue() {
         </Panel>
         <Panel flush title="By project" id="by-namespace" section="By project">
           <div className="body">
-          <ChartSlot>
-            <ProjectChart
-              counts={nss.map((project) => {
-                const js = all.filter((j) => j.namespace === project);
-                const n = (status: OpsJob["status"]) => js.filter((j) => j.status === status).length;
-                return { project, blocked: n("blocked"), running: n("claimed"), queued: n("queued") };
-              })}
-            />
-          </ChartSlot>
+            <ChartSlot>
+              <ProjectChart
+                counts={nss.map((project) => {
+                  const js = all.filter((j) => j.namespace === project);
+                  const n = (status: OpsJob["status"]) =>
+                    js.filter((j) => j.status === status).length;
+                  return {
+                    project,
+                    blocked: n("blocked"),
+                    running: n("claimed"),
+                    queued: n("queued"),
+                  };
+                })}
+              />
+            </ChartSlot>
           </div>
         </Panel>
         <Tonight />
-        <Panel flush title="Live sessions" id="live-sessions" section="Live sessions" src="live · hook events, D1 agent_sessions" count={feed.live.sessions.length}>
+        <Panel
+          flush
+          title="Live sessions"
+          id="live-sessions"
+          section="Live sessions"
+          src="live · hook events, D1 agent_sessions"
+          count={feed.live.sessions.length}
+        >
           <LiveSessions />
         </Panel>
       </div>

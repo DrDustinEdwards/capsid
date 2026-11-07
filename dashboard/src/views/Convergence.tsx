@@ -18,11 +18,19 @@ function useConvergence(): { load: Load<PortalConvergence>; reread: () => void }
   return { load, reread: load.reread };
 }
 
+// One site's Sync and repairs tab. A site that has not opted in says so.
 export function Convergence({ ns }: { ns: string }) {
   const { load, reread } = useConvergence();
   const data = load.data;
-  const sites = data ? data.sites.filter((s) => ns === "all" || s.namespace === ns) : [];
-  if (data && data.sites.length === 0) return null;
+  const sites = data ? data.sites.filter((s) => s.namespace === ns) : [];
+  if (data && sites.length === 0) {
+    return (
+      <Empty kind="nothing-yet" title="This site has not opted in.">
+        Capsid calls a site's operator API only when the site's row names one (its operator field).
+        Until then there is no sync status to read and no repair to run.
+      </Empty>
+    );
+  }
   if (!data) {
     return (
       <Panel flush title="Site sync" id="convergence" section="Site sync">
@@ -42,7 +50,8 @@ export function Convergence({ ns }: { ns: string }) {
     <>
       {load.error && (
         <div className="callout crit" role="alert">
-          Could not read site sync again: {load.error}. Showing the read from {data.generated.slice(11, 16)} UTC.
+          Could not read site sync again: {load.error}. Showing the read from{" "}
+          {data.generated.slice(11, 16)} UTC.
         </div>
       )}
       {sites.map((s) => (
@@ -52,17 +61,31 @@ export function Convergence({ ns }: { ns: string }) {
   );
 }
 
-function SitePanel({ site, loading, reread }: { site: ConvergenceSite; loading: boolean; reread: () => void }) {
+function SitePanel({
+  site,
+  loading,
+  reread,
+}: {
+  site: ConvergenceSite;
+  loading: boolean;
+  reread: () => void;
+}) {
   const { now, confirm } = useApp();
-  const run = (tool: string) => confirm({ action: "site_repair", params: { namespace: site.namespace, tool }, title: `Run ${tool} on ${site.name}`, onDone: reread });
+  const run = (tool: string) =>
+    confirm({
+      action: "site_repair",
+      params: { namespace: site.namespace, tool },
+      title: `Run ${tool} on ${site.name}`,
+      onDone: reread,
+    });
   const op = site.operator;
   const failing = site.health?.checks.filter((c) => !c.ok).length ?? 0;
   return (
     <Panel
       flush
-      title={`Site sync: ${site.name}`}
+      title="Operator API"
       id={`convergence-${site.namespace}`}
-      section={`Site sync ${site.name}`}
+      section="Operator API"
       src={
         <>
           {`read ${ago(ms(site.read_at), now)} · `}
@@ -76,7 +99,8 @@ function SitePanel({ site, loading, reread }: { site: ConvergenceSite; loading: 
         {site.problem && <div className="callout warn">{site.problem}</div>}
         {op && !op.secret_set && (
           <div className="callout warn">
-            The Capsid Worker secret <span className="mono">{op.auth_var}</span> is not set, so Capsid calls nothing on this site. The seat sets it with wrangler secret put.
+            The Capsid Worker secret <span className="mono">{op.auth_var}</span> is not set, so
+            Capsid calls nothing on this site. The seat sets it with wrangler secret put.
           </div>
         )}
         {op && (
@@ -103,7 +127,12 @@ function SitePanel({ site, loading, reread }: { site: ConvergenceSite; loading: 
                   {op.weekly.map((tool) => (
                     <span key={tool}>
                       <span className="mono">{tool}</span>{" "}
-                      <button type="button" className="btn" disabled={!op.secret_set} onClick={() => run(tool)}>
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={!op.secret_set}
+                        onClick={() => run(tool)}
+                      >
                         Run now
                       </button>
                     </span>
@@ -114,7 +143,9 @@ function SitePanel({ site, loading, reread }: { site: ConvergenceSite; loading: 
           </dl>
         )}
       </div>
-      {site.health && site.health.checks.length > 0 && <Checks checks={site.health.checks} canRun={!!op?.secret_set} run={run} />}
+      {site.health && site.health.checks.length > 0 && (
+        <Checks checks={site.health.checks} canRun={!!op?.secret_set} run={run} />
+      )}
       {site.status && (
         <div className="body stack-gap">
           <h3 className="conv-h">Operator sync_status</h3>
@@ -131,14 +162,20 @@ function SitePanel({ site, loading, reread }: { site: ConvergenceSite; loading: 
           )}
         </div>
       )}
-      {site.secrets && <Secrets secrets={site.secrets} />}
       {site.recent.length > 0 && (
         <div className="body stack-gap">
           <h3 className="conv-h">Recent repairs</h3>
           <ul className="plain">
             {site.recent.map((r, i) => (
               <li key={`${r.at}|${i}`}>
-                <span className="mono">{r.tool}</span> {r.converged === true ? <St kind="ok">converged</St> : r.converged === false ? <St kind="warn">did not converge</St> : <St kind="nodata">{r.error ? "failed" : "no verdict"}</St>}{" "}
+                <span className="mono">{r.tool}</span>{" "}
+                {r.converged === true ? (
+                  <St kind="ok">converged</St>
+                ) : r.converged === false ? (
+                  <St kind="warn">did not converge</St>
+                ) : (
+                  <St kind="nodata">{r.error ? "failed" : "no verdict"}</St>
+                )}{" "}
                 <span className="faint">
                   {ago(ms(r.at), now)} by {r.actor}
                   {r.via ? ` (${r.via})` : ""}
@@ -162,7 +199,15 @@ function FieldRow({ k, v }: { k: string; v: string }) {
   );
 }
 
-function Checks({ checks, canRun, run }: { checks: ConvergenceCheck[]; canRun: boolean; run: (tool: string) => void }) {
+function Checks({
+  checks,
+  canRun,
+  run,
+}: {
+  checks: ConvergenceCheck[];
+  canRun: boolean;
+  run: (tool: string) => void;
+}) {
   const sorted = [...checks].sort((a, b) => Number(a.ok) - Number(b.ok));
   return (
     <div className="scroll-x">
@@ -183,7 +228,9 @@ function Checks({ checks, canRun, run }: { checks: ConvergenceCheck[]; canRun: b
                 {c.detail && <div className="faint">{c.detail}</div>}
               </td>
               <td>{c.ok ? <St kind="ok">ok</St> : <St kind="warn">drifted</St>}</td>
-              <td className="num">{c.expected === null ? "" : `${c.present ?? "?"} of ${c.expected}`}</td>
+              <td className="num">
+                {c.expected === null ? "" : `${c.present ?? "?"} of ${c.expected}`}
+              </td>
               <td>
                 {!c.repair ? (
                   <span className="faint">none Capsid may run</span>
@@ -194,7 +241,12 @@ function Checks({ checks, canRun, run }: { checks: ConvergenceCheck[]; canRun: b
                 ) : (
                   <span className="row-gap">
                     <span className="mono">{c.repair}</span>
-                    <button type="button" className="btn" disabled={!canRun} onClick={() => run(c.repair as string)}>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={!canRun}
+                      onClick={() => run(c.repair as string)}
+                    >
                       Run
                     </button>
                   </span>
@@ -208,12 +260,23 @@ function Checks({ checks, canRun, run }: { checks: ConvergenceCheck[]; canRun: b
   );
 }
 
+// The site's Worker secrets by name, set or not, against what its configuration names: on
+// the site's Setup tab, from the same read.
+export function SiteSecrets({ ns }: { ns: string }) {
+  const { load } = useConvergence();
+  const site = load.data?.sites.find((s) => s.namespace === ns);
+  if (!site?.secrets) return null;
+  return (
+    <Panel flush title="Worker secrets" id="secrets" section="Worker secrets">
+      <Secrets secrets={site.secrets} />
+    </Panel>
+  );
+}
+
 function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]> }) {
   return (
     <div className="body stack-gap">
-      <h3 className="conv-h">
-        Worker secrets{secrets.script ? <span className="faint mono"> {secrets.script}</span> : null}
-      </h3>
+      {secrets.script ? <p className="faint mono">{secrets.script}</p> : null}
       {secrets.state !== "ok" ? (
         <div className="callout">
           <St kind="nodata">Not read</St> {secrets.reason}
@@ -224,14 +287,17 @@ function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]>
         <ul className="plain">
           {secrets.rows.map((r) => (
             <li key={r.name}>
-              <span className="mono">{r.name}</span> {r.set ? <St kind="ok">set</St> : <St kind="crit">not set</St>}
+              <span className="mono">{r.name}</span>{" "}
+              {r.set ? <St kind="ok">set</St> : <St kind="crit">not set</St>}
               {!r.expected && <span className="faint"> not named in the site's configuration</span>}
             </li>
           ))}
         </ul>
       )}
       <div className="faint">
-        Names only, from Cloudflare's secrets list on the watcher's pass{secrets.read_at ? ` (${secrets.read_at.slice(0, 16).replace("T", " ")} UTC)` : ""}. A value is never read.
+        Names only, from Cloudflare's secrets list on the watcher's pass
+        {secrets.read_at ? ` (${secrets.read_at.slice(0, 16).replace("T", " ")} UTC)` : ""}. A value
+        is never read.
       </div>
     </div>
   );

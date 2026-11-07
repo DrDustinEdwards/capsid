@@ -14,14 +14,23 @@ const DEFAULT_WEEKS = 8;
 const MAX_WEEKS = 26;
 
 /** GET /portal/api/trends: every series, the weekly ones over ?weeks= (1 to 26, default 8). */
-export async function handlePortalTrends(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalTrends(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const raw = new URL(request.url).searchParams.get("weeks")?.trim();
   const weeks = raw ? Number(raw) : DEFAULT_WEEKS;
   if (!Number.isInteger(weeks) || weeks < 1 || weeks > MAX_WEEKS) {
-    return new Response(JSON.stringify({ error: `weeks must be a whole number from 1 to ${MAX_WEEKS}.` }), { status: 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    return new Response(
+      JSON.stringify({ error: `weeks must be a whole number from 1 to ${MAX_WEEKS}.` }),
+      { status: 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } },
+    );
   }
   const body = await readTrends(env, now, weeks);
-  return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }

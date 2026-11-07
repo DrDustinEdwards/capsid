@@ -46,18 +46,25 @@ export interface ActionHour {
 
 /** The window's start for readActionHours, in audit_log's datetime format. */
 function anomalySince(now: Date): string {
-  return new Date(now.getTime() - (BASELINE_DAYS * 24 + RECENT_HOURS) * HOUR_MS).toISOString().slice(0, 19).replace("T", " ");
+  return new Date(now.getTime() - (BASELINE_DAYS * 24 + RECENT_HOURS) * HOUR_MS)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
 }
 
 /** The read the rules run on: every minted agent's audit rows of the last BASELINE_DAYS
  *  plus one days, grouped by action and hour, the watcher (`except`) left out. On the
  *  audit_log_at index (migrations/0005), bounded by the window. */
-export async function readActionHours(db: D1Database, now: Date, except: string): Promise<ActionHour[]> {
+export async function readActionHours(
+  db: D1Database,
+  now: Date,
+  except: string,
+): Promise<ActionHour[]> {
   const { results } = await db
     .prepare(
       `SELECT actor, action, strftime('%Y-%m-%dT%H', at) AS hour, COUNT(*) AS n
        FROM audit_log WHERE at >= ?1 AND actor LIKE 'agent:%' AND actor <> ?2
-       GROUP BY actor, action, hour`
+       GROUP BY actor, action, hour`,
     )
     .bind(anomalySince(now), except)
     .all<ActionHour>();
@@ -83,13 +90,17 @@ export interface ToolHour {
  *  (session_id, id) and (job_id, id) only, so this is a scan, not an index range. It is
  *  bounded by the 30-day prune the hook receiver runs (src/ops-hooks.ts), which keeps
  *  the table to a month of rows; an index would need a migration and is not worth one. */
-export async function readToolHours(db: D1Database, now: Date, except: string): Promise<ToolHour[]> {
+export async function readToolHours(
+  db: D1Database,
+  now: Date,
+  except: string,
+): Promise<ToolHour[]> {
   const { results } = await db
     .prepare(
       `SELECT agent AS actor, strftime('%Y-%m-%dT%H', at) AS hour, COUNT(*) AS n
        FROM session_events
        WHERE event IN ('PostToolUse', 'PostToolUseFailure') AND at >= ?1 AND agent LIKE 'agent:%' AND agent <> ?2
-       GROUP BY agent, hour`
+       GROUP BY agent, hour`,
     )
     .bind(toolSince(now), except)
     .all<ToolHour>();
@@ -97,12 +108,21 @@ export async function readToolHours(db: D1Database, now: Date, except: string): 
 }
 
 function slug(text: string): string {
-  return text.toLowerCase().replace(/^agent:/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  return text
+    .toLowerCase()
+    .replace(/^agent:/, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
 }
 
 /** The hour of day in America/Chicago for a UTC hour key. */
 export function chicagoHour(hourKey: string): number {
-  const h = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "numeric", hourCycle: "h23" }).format(new Date(`${hourKey}:00:00Z`));
+  const h = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    hour: "numeric",
+    hourCycle: "h23",
+  }).format(new Date(`${hourKey}:00:00Z`));
   return Number(h) % 24;
 }
 
@@ -143,7 +163,16 @@ export function anomalyFindings(rows: readonly ActionHour[], now: Date): Finding
       const first = [...recent].sort((x, y) => x.hour.localeCompare(y.hour))[0];
       const local = chicagoHour(first.hour);
       if (local < OFF_HOURS_END) {
-        out.push(mk(`anomaly-first-use-${slug(actor)}`, `${actor} was first used at ${String(local).padStart(2, "0")}:00 Chicago time`, [`first audit row in the hour ${first.hour}:00Z (${first.action})`, `no row in the ${BASELINE_DAYS} days before`]));
+        out.push(
+          mk(
+            `anomaly-first-use-${slug(actor)}`,
+            `${actor} was first used at ${String(local).padStart(2, "0")}:00 Chicago time`,
+            [
+              `first audit row in the hour ${first.hour}:00Z (${first.action})`,
+              `no row in the ${BASELINE_DAYS} days before`,
+            ],
+          ),
+        );
       }
       continue;
     }
@@ -151,12 +180,30 @@ export function anomalyFindings(rows: readonly ActionHour[], now: Date): Finding
     const fresh = [...new Set(recent.map((r) => r.action))].filter((a) => !known.has(a)).sort();
     for (const action of fresh) {
       const n = recent.filter((r) => r.action === action).reduce((s, r) => s + r.n, 0);
-      out.push(mk(`anomaly-new-action-${slug(actor)}-${slug(action)}`, `${actor} did '${action}', which it had not done in ${BASELINE_DAYS} days`, [`${n} row(s) of '${action}' in the last ${RECENT_HOURS} hours`, `its baseline actions: ${[...known].sort().join(", ")}`]));
+      out.push(
+        mk(
+          `anomaly-new-action-${slug(actor)}-${slug(action)}`,
+          `${actor} did '${action}', which it had not done in ${BASELINE_DAYS} days`,
+          [
+            `${n} row(s) of '${action}' in the last ${RECENT_HOURS} hours`,
+            `its baseline actions: ${[...known].sort().join(", ")}`,
+          ],
+        ),
+      );
     }
     const baseMax = Math.max(...perHour(base).values());
     const [peakHour, peak] = [...perHour(recent)].sort((x, y) => y[1] - x[1])[0];
     if (peak >= RATE_FLOOR && peak > RATE_FACTOR * baseMax) {
-      out.push(mk(`anomaly-rate-${slug(actor)}`, `${actor} wrote ${peak} audit rows in one hour, over ${RATE_FACTOR} times its busiest`, [`${peak} rows in the hour ${peakHour}:00Z`, `its busiest hour in the ${BASELINE_DAYS} days before: ${baseMax}`]));
+      out.push(
+        mk(
+          `anomaly-rate-${slug(actor)}`,
+          `${actor} wrote ${peak} audit rows in one hour, over ${RATE_FACTOR} times its busiest`,
+          [
+            `${peak} rows in the hour ${peakHour}:00Z`,
+            `its busiest hour in the ${BASELINE_DAYS} days before: ${baseMax}`,
+          ],
+        ),
+      );
     }
   }
   return out;
@@ -170,7 +217,10 @@ export function toolRateFindings(rows: readonly ToolHour[], now: Date): Finding[
   const recentFrom = new Date(now.getTime() - RECENT_HOURS * HOUR_MS).toISOString().slice(0, 13);
   const byActor = new Map<string, { base: Map<string, number>; recent: Map<string, number> }>();
   for (const r of rows) {
-    const a = byActor.get(r.actor) ?? { base: new Map<string, number>(), recent: new Map<string, number>() };
+    const a = byActor.get(r.actor) ?? {
+      base: new Map<string, number>(),
+      recent: new Map<string, number>(),
+    };
     const side = r.hour >= recentFrom ? a.recent : a.base;
     side.set(r.hour, (side.get(r.hour) ?? 0) + r.n);
     byActor.set(r.actor, a);
@@ -181,7 +231,16 @@ export function toolRateFindings(rows: readonly ToolHour[], now: Date): Finding[
     const baseMax = Math.max(...base.values());
     const [peakHour, peak] = [...recent].sort((x, y) => y[1] - x[1])[0];
     if (peak >= TOOL_RATE_FLOOR && peak > RATE_FACTOR * baseMax) {
-      out.push(mk(`anomaly-tool-rate-${slug(actor)}`, `${actor} made ${peak} tool calls in one hour, over ${RATE_FACTOR} times its busiest`, [`${peak} tool calls in the hour ${peakHour}:00Z`, `its busiest hour in the ${BASELINE_DAYS} days before: ${baseMax}`]));
+      out.push(
+        mk(
+          `anomaly-tool-rate-${slug(actor)}`,
+          `${actor} made ${peak} tool calls in one hour, over ${RATE_FACTOR} times its busiest`,
+          [
+            `${peak} tool calls in the hour ${peakHour}:00Z`,
+            `its busiest hour in the ${BASELINE_DAYS} days before: ${baseMax}`,
+          ],
+        ),
+      );
     }
   }
   return out;

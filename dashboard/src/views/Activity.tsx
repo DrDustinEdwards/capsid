@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
@@ -17,7 +17,10 @@ function None() {
 // reloaded or shared. The inputs apply on submit, not on each keystroke.
 // A job transition writes two rows with the same action, actor and path; this says which
 // is the job's and which its mirror document's.
-const TARGET_LABEL: Record<"job" | "document", string> = { job: "(job)", document: "(mirror document)" };
+const TARGET_LABEL: Record<"job" | "document", string> = {
+  job: "(job)",
+  document: "(mirror document)",
+};
 
 export function Activity() {
   const { feed, now: appNow } = useApp();
@@ -29,12 +32,17 @@ export function Activity() {
   const [nsInput, setNsInput] = useState(namespace);
   const [actorInput, setActorInput] = useState(actor);
 
-  useEffect(() => {
+  // The address changed (back, a link): the fields follow it. Adjusted while rendering, not in an effect.
+  const [seen, setSeen] = useState({ namespace, actor });
+  if (seen.namespace !== namespace || seen.actor !== actor) {
+    setSeen({ namespace, actor });
     setNsInput(namespace);
     setActorInput(actor);
-  }, [namespace, actor]);
+  }
 
-  const load = useAnswer<PortalActivity>(["activity", namespace, actor], () => fetchActivity({ namespace, actor }));
+  const load = useAnswer<PortalActivity>(["activity", namespace, actor], () =>
+    fetchActivity({ namespace, actor }),
+  );
 
   const apply = (ns: string, who: string) => {
     const qs = new URLSearchParams();
@@ -49,7 +57,13 @@ export function Activity() {
   const now = data ? Math.max(appNow, ms(data.generated)) : appNow;
   const names = feed.live.namespaces.map((n) => n.name);
   if (namespace && !names.includes(namespace)) names.push(namespace);
-  const actors = [...new Set([...feed.live.agents.map((a) => `agent:${a.name}`), ...(data?.rows ?? []).map((r) => r.actor).filter((a): a is string => !!a), ...(actor ? [actor] : [])])].sort();
+  const actors = [
+    ...new Set([
+      ...feed.live.agents.map((a) => `agent:${a.name}`),
+      ...(data?.rows ?? []).map((r) => r.actor).filter((a): a is string => !!a),
+      ...(actor ? [actor] : []),
+    ]),
+  ].sort();
 
   return (
     <div className="page">
@@ -66,7 +80,12 @@ export function Activity() {
         <label className="sr-only" htmlFor="actNs">
           Project
         </label>
-        <select id="actNs" className="search" value={nsInput} onChange={(e) => setNsInput(e.target.value)}>
+        <select
+          id="actNs"
+          className="search"
+          value={nsInput}
+          onChange={(e) => setNsInput(e.target.value)}
+        >
           <option value="">All projects</option>
           {names.map((n) => (
             <option key={n} value={n}>
@@ -79,7 +98,12 @@ export function Activity() {
         </label>
         {/* A picker, not a box to type an id into from memory (the UX audit's m7): every
             agent on the roster, and every actor in the rows read. */}
-        <select id="actActor" className="search" value={actorInput} onChange={(e) => setActorInput(e.target.value)}>
+        <select
+          id="actActor"
+          className="search"
+          value={actorInput}
+          onChange={(e) => setActorInput(e.target.value)}
+        >
           <option value="">Anyone</option>
           {actors.map((a) => (
             <option key={a} value={a}>
@@ -108,7 +132,9 @@ export function Activity() {
         count={data?.rows.length}
         src={
           <>
-            {data ? `newest first, at most ${data.limit} rows · read ${ago(ms(data.generated), now)} · ` : ""}
+            {data
+              ? `newest first, at most ${data.limit} rows · read ${ago(ms(data.generated), now)} · `
+              : ""}
             <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
               {load.loading ? "Reading..." : "Read again"}
             </button>
@@ -133,13 +159,21 @@ export function Activity() {
               </thead>
               <tbody>
                 {data.rows.map((r) => (
-                  <tr key={r.id} className="click" data-row="" data-open={`audit:${r.id}`} tabIndex={0}>
+                  <tr
+                    key={r.id}
+                    className="click"
+                    data-row=""
+                    data-open={`audit:${r.id}`}
+                    tabIndex={0}
+                  >
                     <td className="num" title={utc(ms(r.at))}>
                       {ago(ms(r.at), now)}
                     </td>
                     <td className="mono">{r.actor ?? <None />}</td>
                     <td>
-                      {actionWords(r.action) ?? <span className="mono">{r.action ?? <None />}</span>}
+                      {actionWords(r.action) ?? (
+                        <span className="mono">{r.action ?? <None />}</span>
+                      )}
                       {r.target && <span className="faint"> {TARGET_LABEL[r.target]}</span>}
                       {actionWords(r.action) && <div className="src mono">{r.action}</div>}
                     </td>
@@ -151,7 +185,11 @@ export function Activity() {
             </table>
           </div>
         ) : data ? (
-          <div className="body faint">{data.filter.namespace || data.filter.actor ? "No rows match these filters." : "The audit log has no rows."}</div>
+          <div className="body faint">
+            {data.filter.namespace || data.filter.actor
+              ? "No rows match these filters."
+              : "The audit log has no rows."}
+          </div>
         ) : (
           <div className="body faint">No read yet.</div>
         )}

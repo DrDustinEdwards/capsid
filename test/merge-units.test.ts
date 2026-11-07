@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { judgeUnits, REPORT_KEY, SUSPENDED_KEY, unitInboxItems, unitsTick, type ApprovalEvidence, type RollbackEvidence } from "../src/merge-units.ts";
+import {
+  judgeUnits,
+  REPORT_KEY,
+  SUSPENDED_KEY,
+  unitInboxItems,
+  unitsTick,
+  type ApprovalEvidence,
+  type RollbackEvidence,
+} from "../src/merge-units.ts";
 import { fakeKv } from "./fakes.ts";
 
 // Earned promotion and demotion (docs/design/design-merge-pipeline.md section 7, PR 9;
@@ -12,10 +20,27 @@ const DAY = 86_400_000;
 const at = (daysAgo: number) => new Date(NOW.getTime() - daysAgo * DAY).toISOString();
 
 /** `n` merged approvals in one unit, spread evenly over `spanDays`. */
-function merges(n: number, spanDays: number, namespace = "capsid", pathClass = "tests"): ApprovalEvidence[] {
-  return Array.from({ length: n }, (_, i) => ({ namespace, path_class: pathClass, status: "merged", close_reason: null, closed_at: at(spanDays - (n === 1 ? 0 : (i * spanDays) / (n - 1))) }));
+function merges(
+  n: number,
+  spanDays: number,
+  namespace = "capsid",
+  pathClass = "tests",
+): ApprovalEvidence[] {
+  return Array.from({ length: n }, (_, i) => ({
+    namespace,
+    path_class: pathClass,
+    status: "merged",
+    close_reason: null,
+    closed_at: at(spanDays - (n === 1 ? 0 : (i * spanDays) / (n - 1))),
+  }));
 }
-const voided = (reason: string): ApprovalEvidence => ({ namespace: "capsid", path_class: "tests", status: "voided", close_reason: reason, closed_at: at(1) });
+const voided = (reason: string): ApprovalEvidence => ({
+  namespace: "capsid",
+  path_class: "tests",
+  status: "voided",
+  close_reason: reason,
+  closed_at: at(1),
+});
 const rollback = (over: Partial<RollbackEvidence> = {}): RollbackEvidence => ({
   kind: "rollback",
   namespace: "capsid",
@@ -45,9 +70,32 @@ test("19 merges, or 20 over 13 days, propose nothing", () => {
 });
 
 test("one void against the unit is allowed, two are not; a void for a new push never counts", () => {
-  assert.equal(judgeUnits([...merges(20, 14), voided("CI red: build failed")], [], [], NOW).proposals.length, 1);
-  assert.equal(judgeUnits([...merges(20, 14), voided("CI red: x"), voided("undone")], [], [], NOW).proposals.length, 0);
-  assert.equal(judgeUnits([...merges(20, 14), voided("new push: approved at a, head is b"), voided("new push: approved at b, head is c"), voided("head moved: x"), voided("head moved: y"), voided("replaced"), voided("replaced")], [], [], NOW).proposals.length, 1);
+  assert.equal(
+    judgeUnits([...merges(20, 14), voided("CI red: build failed")], [], [], NOW).proposals.length,
+    1,
+  );
+  assert.equal(
+    judgeUnits([...merges(20, 14), voided("CI red: x"), voided("undone")], [], [], NOW).proposals
+      .length,
+    0,
+  );
+  assert.equal(
+    judgeUnits(
+      [
+        ...merges(20, 14),
+        voided("new push: approved at a, head is b"),
+        voided("new push: approved at b, head is c"),
+        voided("head moved: x"),
+        voided("head moved: y"),
+        voided("replaced"),
+        voided("replaced"),
+      ],
+      [],
+      [],
+      NOW,
+    ).proposals.length,
+    1,
+  );
 });
 
 test("an approval with no unit recorded (before migration 0043) counts toward none", () => {
@@ -57,14 +105,25 @@ test("an approval with no unit recorded (before migration 0043) counts toward no
 
 test("PLANT: one rollback of an unattended merge suspends its unit and proposes removing it", () => {
   const report = judgeUnits([], [rollback()], [], NOW);
-  assert.deepEqual(report.suspended.map((s) => s.unit), ["capsid/docs"]);
-  assert.match(report.suspended[0]!.reason, /owner\/capsid#41 merged unattended and was rolled back/);
+  assert.deepEqual(
+    report.suspended.map((s) => s.unit),
+    ["capsid/docs"],
+  );
+  assert.match(
+    report.suspended[0]!.reason,
+    /owner\/capsid#41 merged unattended and was rolled back/,
+  );
   assert.equal(report.proposals.length, 1);
   assert.equal(report.proposals[0]!.kind, "demote");
 });
 
 test("a rollback of an approved merge blocks the unit's promotion but suspends nothing", () => {
-  const report = judgeUnits(merges(20, 14), [rollback({ merged_by: "approval", path_class: "tests" })], [], NOW);
+  const report = judgeUnits(
+    merges(20, 14),
+    [rollback({ merged_by: "approval", path_class: "tests" })],
+    [],
+    NOW,
+  );
   assert.deepEqual(report.suspended, []);
   assert.deepEqual(report.proposals, []);
 });
@@ -93,7 +152,10 @@ test("the step suspends once, audits once, and the next pass changes nothing", a
   const first = await unitsTick(w.env, NOW, read);
   assert.deepEqual(first.newly_suspended, ["capsid/docs"]);
   assert.equal(w.batches.length, 1, "the suspension was not audited");
-  assert.deepEqual(JSON.parse(w.kv.store.get(SUSPENDED_KEY)!).map((s: { unit: string }) => s.unit), ["capsid/docs"]);
+  assert.deepEqual(
+    JSON.parse(w.kv.store.get(SUSPENDED_KEY)!).map((s: { unit: string }) => s.unit),
+    ["capsid/docs"],
+  );
   const second = await unitsTick(w.env, new Date(NOW.getTime() + 300_000), read);
   assert.equal(second.ran, false);
   assert.equal(w.batches.length, 1, "the same suspension was audited twice");
@@ -101,7 +163,10 @@ test("the step suspends once, audits once, and the next pass changes nothing", a
 
 test("proposals and suspensions reach the inbox as kind proposal, per namespace", async () => {
   const w = env();
-  await unitsTick(w.env, NOW, async () => ({ approvals: merges(20, 14, "carrel", "src-routine"), rollbacks: [rollback()] }));
+  await unitsTick(w.env, NOW, async () => ({
+    approvals: merges(20, 14, "carrel", "src-routine"),
+    rollbacks: [rollback()],
+  }));
   assert.ok(w.kv.store.get(REPORT_KEY));
   const items = await unitInboxItems(w.kv.kv);
   assert.deepEqual(
@@ -110,6 +175,6 @@ test("proposals and suspensions reach the inbox as kind proposal, per namespace"
       ["capsid", "proposal", "capsid docs is suspended from auto"],
       ["capsid", "proposal", "Remove capsid docs from auto"],
       ["carrel", "proposal", "Promote carrel src-routine to auto"],
-    ]
+    ],
   );
 });

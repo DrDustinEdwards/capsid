@@ -28,13 +28,17 @@ function git(args) {
 function npmRun(args) {
   const run = spawnSync("npm", args, { stdio: "inherit", shell: process.platform === "win32" });
   if (run.status !== 0) {
-    console.error(`deploy: npm ${args.join(" ")} failed (exit ${run.status ?? "none"}); nothing was deployed.`);
+    console.error(
+      `deploy: npm ${args.join(" ")} failed (exit ${run.status ?? "none"}); nothing was deployed.`,
+    );
     process.exit(run.status ?? 1);
   }
 }
 if (existsSync("dashboard/package.json")) {
   if (!existsSync("dashboard/node_modules")) {
-    console.error("deploy: dashboard/node_modules is missing. Run `npm ci --prefix dashboard` first; nothing was deployed.");
+    console.error(
+      "deploy: dashboard/node_modules is missing. Run `npm ci --prefix dashboard` first; nothing was deployed.",
+    );
     process.exit(1);
   }
   npmRun(["--prefix", "dashboard", "run", "build"]);
@@ -67,7 +71,9 @@ const args = [
 
 console.log(`deploy: sha=${sha.slice(0, 8)} dirty=${dirty} builtAt=${builtAt}`);
 if (dirty) {
-  console.warn("deploy: WORKING TREE IS DIRTY. /health will report dirty=true; the deployed bytes are not the named commit.");
+  console.warn(
+    "deploy: WORKING TREE IS DIRTY. /health will report dirty=true; the deployed bytes are not the named commit.",
+  );
 }
 
 const result = spawnSync("npx", ["--no-install", ...args], {

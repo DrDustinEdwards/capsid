@@ -9,7 +9,12 @@ import {
   verifyEvidence,
   type EvidenceVerdict,
 } from "../src/job-outcomes.ts";
-import { missingForRecord, parseMinRecord, serializeMinRecord, type JobRow } from "../src/jobs-schema.ts";
+import {
+  missingForRecord,
+  parseMinRecord,
+  serializeMinRecord,
+  type JobRow,
+} from "../src/jobs-schema.ts";
 import { reverifyPr } from "../src/outcome-prs.ts";
 import { fakeEnv, fakeKv, withFetch, type Route } from "./fakes.ts";
 
@@ -35,7 +40,6 @@ function job(overrides: Partial<JobRow> = {}): JobRow {
     min_record: null,
     blocked_count: 0,
     corrections_count: 0,
-    review_required: 0,
     resumed_count: 0,
     created_at: "2026-09-11T09:00:00.000Z",
     updated_at: "2026-09-11T11:00:00.000Z",
@@ -71,7 +75,7 @@ test("the duration measures the final stretch, and the row says how many there w
   const row = outcomeFrom(
     job({ claimed_at: "2026-09-11T11:00:00.000Z", blocked_count: 2, resumed_count: 2 }),
     empty(),
-    new Date("2026-09-11T11:45:00.000Z")
+    new Date("2026-09-11T11:45:00.000Z"),
   );
   assert.equal(row.duration_minutes, 45);
   assert.equal(row.blocked_count, 2);
@@ -88,7 +92,13 @@ function empty(): EvidenceVerdict {
     files_changed: null,
     tests_added: null,
     ci_green: null,
-    verified: { prs_opened: false, prs_merged: false, commits: false, files_changed: false, ci_green: false },
+    verified: {
+      prs_opened: false,
+      prs_merged: false,
+      commits: false,
+      files_changed: false,
+      ci_green: false,
+    },
     notes: [],
   };
 }
@@ -97,11 +107,29 @@ test("a job that reported nothing records NULL everywhere, never zero", async ()
   // A column that spelled "nobody counted" and "the count was zero" the same way
   // would make any average over it wrong.
   const verdict = await verifyEvidence(fakeEnv({}), "capsid", undefined);
-  for (const field of ["prs_opened", "prs_merged", "commits", "files_changed", "tests_added", "ci_green"] as const) {
-    assert.equal(verdict[field], null, `${field} came back as something other than null with no evidence`);
+  for (const field of [
+    "prs_opened",
+    "prs_merged",
+    "commits",
+    "files_changed",
+    "tests_added",
+    "ci_green",
+  ] as const) {
+    assert.equal(
+      verdict[field],
+      null,
+      `${field} came back as something other than null with no evidence`,
+    );
   }
   const row = outcomeFrom(job(), verdict, new Date("2026-09-11T11:00:00.000Z"));
-  for (const field of ["prs_opened", "prs_merged", "commits", "files_changed", "tests_added", "ci_green"] as const) {
+  for (const field of [
+    "prs_opened",
+    "prs_merged",
+    "commits",
+    "files_changed",
+    "tests_added",
+    "ci_green",
+  ] as const) {
     assert.equal(row[field], null);
   }
   // The counts the Worker knows first-hand are still there.
@@ -112,8 +140,18 @@ test("a job that reported nothing records NULL everywhere, never zero", async ()
 
 test("PLANT: a job with no telemetry records NULL cost, tokens and active time, never 0", () => {
   // Both ways in: no usage argument, and a session_usage read that found no row.
-  for (const row of [outcomeFrom(job(), empty(), new Date("2026-09-11T11:00:00.000Z")), outcomeFrom(job(), empty(), new Date(), usageFromTotals([]))]) {
-    for (const field of ["cost_usd", "tokens_input", "tokens_output", "tokens_cache_read", "tokens_cache_creation", "active_seconds"] as const) {
+  for (const row of [
+    outcomeFrom(job(), empty(), new Date("2026-09-11T11:00:00.000Z")),
+    outcomeFrom(job(), empty(), new Date(), usageFromTotals([])),
+  ]) {
+    for (const field of [
+      "cost_usd",
+      "tokens_input",
+      "tokens_output",
+      "tokens_cache_read",
+      "tokens_cache_creation",
+      "active_seconds",
+    ] as const) {
       assert.equal(row[field], null, `${field} is ${row[field]} for a job no telemetry reached`);
     }
   }
@@ -140,13 +178,21 @@ test("a job's telemetry totals land on its outcome row: summed per column, a fam
 
 test("a reported zero is stored as zero, which is a different fact", async () => {
   const verdict = await verifyEvidence(fakeEnv({}), "capsid", { tests_added: 0, commits: 0 });
-  assert.equal(verdict.tests_added, 0, "a driver that counted and found none must not be recorded as silent");
+  assert.equal(
+    verdict.tests_added,
+    0,
+    "a driver that counted and found none must not be recorded as silent",
+  );
   assert.equal(verdict.commits, 0);
   assert.equal(verdict.files_changed, null, "a field nobody mentioned is still null");
 });
 
 test("nothing is marked verified when nothing was checked", async () => {
-  const verdict = await verifyEvidence(fakeEnv({}), "capsid", { commits: 9, files_changed: 9, tests_added: 9 });
+  const verdict = await verifyEvidence(fakeEnv({}), "capsid", {
+    commits: 9,
+    files_changed: 9,
+    tests_added: 9,
+  });
   assert.deepEqual(verdict.verified, {
     prs_opened: false,
     prs_merged: false,
@@ -181,39 +227,67 @@ function prRoute(merged: boolean, commits = 3, changed = 5): Route {
 }
 
 const greenRuns: Route = {
-  body: { workflow_runs: [{ id: 1, name: "ci", head_sha: HEAD, status: "completed", conclusion: "success", event: "push", created_at: "x", html_url: "u" }] },
+  body: {
+    workflow_runs: [
+      {
+        id: 1,
+        name: "ci",
+        head_sha: HEAD,
+        status: "completed",
+        conclusion: "success",
+        event: "push",
+        created_at: "x",
+        html_url: "u",
+      },
+    ],
+  },
 };
 
 test("GITHUB'S NUMBERS REPLACE THE DRIVER'S, and only then are they marked verified", async () => {
   // The driver claims two commits and one file; GitHub says three and five, and the
   // row records GitHub's.
-  await withFetch({ [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: greenRuns }, async () => {
-    const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL], commits: 2, files_changed: 1, tests_added: 4 });
-    assert.equal(verdict.commits, 3, "the driver's commit count was kept over GitHub's");
-    assert.equal(verdict.files_changed, 5);
-    assert.equal(verdict.prs_opened, 1);
-    assert.equal(verdict.prs_merged, 1);
-    assert.equal(verdict.ci_green, 1);
-    assert.deepEqual(verdict.verified, {
-      prs_opened: true,
-      prs_merged: true,
-      commits: true,
-      files_changed: true,
-      ci_green: true,
-    });
-    // tests_added is the one field GitHub cannot answer, so it stays the driver's
-    // claim and stays unverified.
-    assert.equal(verdict.tests_added, 4);
-  });
+  await withFetch(
+    { [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: greenRuns },
+    async () => {
+      const verdict = await verifyEvidence(envWithRepo(), "capsid", {
+        prs: [PR_URL],
+        commits: 2,
+        files_changed: 1,
+        tests_added: 4,
+      });
+      assert.equal(verdict.commits, 3, "the driver's commit count was kept over GitHub's");
+      assert.equal(verdict.files_changed, 5);
+      assert.equal(verdict.prs_opened, 1);
+      assert.equal(verdict.prs_merged, 1);
+      assert.equal(verdict.ci_green, 1);
+      assert.deepEqual(verdict.verified, {
+        prs_opened: true,
+        prs_merged: true,
+        commits: true,
+        files_changed: true,
+        ci_green: true,
+      });
+      // tests_added is the one field GitHub cannot answer, so it stays the driver's
+      // claim and stays unverified.
+      assert.equal(verdict.tests_added, 4);
+    },
+  );
 });
 
 test("an unmerged pull request is counted as opened and not as merged", async () => {
-  await withFetch({ [`GET ${PR_PATH}`]: prRoute(false), [`GET ${RUNS_PATH}`]: greenRuns }, async () => {
-    const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
-    assert.equal(verdict.prs_opened, 1);
-    assert.equal(verdict.prs_merged, 0, "an open pull request must count as zero merged, not as unknown");
-    assert.equal(verdict.verified.prs_merged, true);
-  });
+  await withFetch(
+    { [`GET ${PR_PATH}`]: prRoute(false), [`GET ${RUNS_PATH}`]: greenRuns },
+    async () => {
+      const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
+      assert.equal(verdict.prs_opened, 1);
+      assert.equal(
+        verdict.prs_merged,
+        0,
+        "an open pull request must count as zero merged, not as unknown",
+      );
+      assert.equal(verdict.verified.prs_merged, true);
+    },
+  );
 });
 
 test("a pull request GitHub will not answer for leaves prs_opened, commits and files unverified", async () => {
@@ -232,11 +306,18 @@ test("a pull request GitHub will not answer for leaves prs_opened, commits and f
       assert.equal(verdict.prs_merged, 1);
       assert.equal(verdict.verified.prs_merged, true);
       assert.equal(verdict.verified.commits, false);
-      assert.equal(verdict.commits, 2, "the driver's number survives; it is the FLAG that must not");
+      assert.equal(
+        verdict.commits,
+        2,
+        "the driver's number survives; it is the FLAG that must not",
+      );
       // The last named pull request was not read, so CI was not looked up.
       assert.equal(verdict.ci_green, null);
-      assert.ok(verdict.notes.some((n) => /1 of 2/.test(n)), `the shortfall is not named in the notes: ${verdict.notes.join(" | ")}`);
-    }
+      assert.ok(
+        verdict.notes.some((n) => /1 of 2/.test(n)),
+        `the shortfall is not named in the notes: ${verdict.notes.join(" | ")}`,
+      );
+    },
   );
 });
 
@@ -248,37 +329,79 @@ test("a repo the namespace does not map is refused, not read", async () => {
       prs: ["https://github.com/someone/else/pull/1"],
     });
     assert.equal(verdict.verified.prs_opened, false);
-    assert.equal(calls.length, 0, "a pull request outside the namespace's repos was fetched anyway");
-    assert.ok(verdict.notes.some((n) => /not mapped to namespace/.test(n)), verdict.notes.join(" | "));
+    assert.equal(
+      calls.length,
+      0,
+      "a pull request outside the namespace's repos was fetched anyway",
+    );
+    assert.ok(
+      verdict.notes.some((n) => /not mapped to namespace/.test(n)),
+      verdict.notes.join(" | "),
+    );
   });
 });
 
 test("CI THAT HAS NOT FINISHED IS NOT CI THAT FAILED", async () => {
   // Three answers, not two: an in-progress run is neither red nor green.
   const running: Route = {
-    body: { workflow_runs: [{ id: 1, name: "ci", head_sha: HEAD, status: "in_progress", conclusion: null, event: "push", created_at: "x", html_url: "u" }] },
+    body: {
+      workflow_runs: [
+        {
+          id: 1,
+          name: "ci",
+          head_sha: HEAD,
+          status: "in_progress",
+          conclusion: null,
+          event: "push",
+          created_at: "x",
+          html_url: "u",
+        },
+      ],
+    },
   };
-  await withFetch({ [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: running }, async () => {
-    const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
-    assert.equal(verdict.ci_green, null);
-    assert.equal(verdict.verified.ci_green, false);
-    assert.ok(verdict.notes.some((n) => /has not finished/.test(n)), verdict.notes.join(" | "));
-  });
+  await withFetch(
+    { [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: running },
+    async () => {
+      const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
+      assert.equal(verdict.ci_green, null);
+      assert.equal(verdict.verified.ci_green, false);
+      assert.ok(
+        verdict.notes.some((n) => /has not finished/.test(n)),
+        verdict.notes.join(" | "),
+      );
+    },
+  );
 });
 
 test("a sha with no runs is not green and not red", async () => {
-  await withFetch({ [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: { body: { workflow_runs: [] } } }, async () => {
-    const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
-    assert.equal(verdict.ci_green, null);
-    assert.equal(verdict.verified.ci_green, false);
-    // The pull request counts still verified.
-    assert.equal(verdict.verified.prs_merged, true);
-  });
+  await withFetch(
+    { [`GET ${PR_PATH}`]: prRoute(true), [`GET ${RUNS_PATH}`]: { body: { workflow_runs: [] } } },
+    async () => {
+      const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
+      assert.equal(verdict.ci_green, null);
+      assert.equal(verdict.verified.ci_green, false);
+      // The pull request counts still verified.
+      assert.equal(verdict.verified.prs_merged, true);
+    },
+  );
 });
 
 test("a failed run is recorded as red, which is a verified fact", async () => {
   const red: Route = {
-    body: { workflow_runs: [{ id: 1, name: "ci", head_sha: HEAD, status: "completed", conclusion: "failure", event: "push", created_at: "x", html_url: "u" }] },
+    body: {
+      workflow_runs: [
+        {
+          id: 1,
+          name: "ci",
+          head_sha: HEAD,
+          status: "completed",
+          conclusion: "failure",
+          event: "push",
+          created_at: "x",
+          html_url: "u",
+        },
+      ],
+    },
   };
   await withFetch(
     {
@@ -290,7 +413,7 @@ test("a failed run is recorded as red, which is a verified fact", async () => {
       const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL] });
       assert.equal(verdict.ci_green, 0);
       assert.equal(verdict.verified.ci_green, true);
-    }
+    },
   );
 });
 
@@ -309,14 +432,19 @@ test("PLANT: an installation token that cannot be minted is a note, not a throw 
   // No cached token and no App key, so ghFetch throws before any request. A throw here
   // would land after the job row committed and skip the outcome, audit and mirror.
   const env = fakeEnv({
-    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ repos: JSON.stringify(REPOS) }) }) }) },
+    DB: {
+      prepare: () => ({ bind: () => ({ first: async () => ({ repos: JSON.stringify(REPOS) }) }) }),
+    },
     APP_KV: fakeKv().kv,
   });
   await withFetch({}, async () => {
     const verdict = await verifyEvidence(env, "capsid", { prs: [PR_URL], commits: 2 });
     assert.equal(verdict.verified.prs_opened, false);
     assert.equal(verdict.commits, 2);
-    assert.ok(verdict.notes.some((n) => /GitHub App not configured/.test(n)), verdict.notes.join(" | "));
+    assert.ok(
+      verdict.notes.some((n) => /GitHub App not configured/.test(n)),
+      verdict.notes.join(" | "),
+    );
   });
 });
 
@@ -327,7 +455,10 @@ test("PLANT: the re-verify sweep survives a token that cannot be minted (audit 2
       prepare: (sql: string) => ({
         bind: () => ({
           first: async () => ({ repos: JSON.stringify(REPOS) }),
-          all: async () => (/FROM job_outcome_prs/.test(sql) ? { results: [{ job_id: "job_x", merged: null }] } : { results: [] }),
+          all: async () =>
+            /FROM job_outcome_prs/.test(sql)
+              ? { results: [{ job_id: "job_x", merged: null }] }
+              : { results: [] },
         }),
       }),
       batch: async () => assert.fail("a failed read must leave every row as it was"),
@@ -375,38 +506,71 @@ const setsUnverifiable = (w: { sql: string }) => /SET unverifiable/.test(w.sql);
 test("REPRODUCED: a pull request number now held by a different pull request does not verify", async () => {
   // Pinned to PR_old when the outcome was recorded; the number now answers as PR_new,
   // merged. Before the fix the row took the new pull request's merge state.
-  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: "PR_old", named_at: "2026-09-10T00:00:00.000Z" }]);
-  await withFetch({ [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_new", created_at: "2026-09-29T20:00:00Z" } } }, async () => {
-    const out = await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z"));
-    assert.deepEqual(out, [], "a pull request that is not the one the row named was reported as re-verified");
-  });
-  assert.equal(written.filter(setsMerged).length, 0, "the merge state of a different pull request was written");
+  const { env, written } = reverifyEnv([
+    { job_id: "job_x", merged: null, pr_node_id: "PR_old", named_at: "2026-09-10T00:00:00.000Z" },
+  ]);
+  await withFetch(
+    {
+      [`GET ${PR_PATH}`]: {
+        body: { merged: true, node_id: "PR_new", created_at: "2026-09-29T20:00:00Z" },
+      },
+    },
+    async () => {
+      const out = await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z"));
+      assert.deepEqual(
+        out,
+        [],
+        "a pull request that is not the one the row named was reported as re-verified",
+      );
+    },
+  );
+  assert.equal(
+    written.filter(setsMerged).length,
+    0,
+    "the merge state of a different pull request was written",
+  );
   const marked = written.filter(setsUnverifiable);
   assert.equal(marked.length, 1);
   assert.ok(marked[0].args.includes("identity-changed"), JSON.stringify(marked[0].args));
 });
 
 test("the pull request the row pinned is re-verified as before", async () => {
-  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: "PR_same", named_at: "2026-09-10T00:00:00.000Z" }]);
-  await withFetch({ [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_same", created_at: "2026-09-09T00:00:00Z" } } }, async () => {
-    const out = await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z"));
-    assert.deepEqual(out, [{ job_id: "job_x", pr_url: PR_URL, merged: true, changed: true }]);
-  });
+  const { env, written } = reverifyEnv([
+    { job_id: "job_x", merged: null, pr_node_id: "PR_same", named_at: "2026-09-10T00:00:00.000Z" },
+  ]);
+  await withFetch(
+    {
+      [`GET ${PR_PATH}`]: {
+        body: { merged: true, node_id: "PR_same", created_at: "2026-09-09T00:00:00Z" },
+      },
+    },
+    async () => {
+      const out = await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z"));
+      assert.deepEqual(out, [{ job_id: "job_x", pr_url: PR_URL, merged: true, changed: true }]);
+    },
+  );
   assert.equal(written.filter(setsMerged).length, 1);
   assert.equal(written.filter(setsUnverifiable).length, 0);
 });
 
 test("BACKFILL: a row with no pinned id whose repo was created after the outcome is marked recreated and not read by number", async () => {
   // The claude-skills case: recorded 2026-09-17, repo recreated 2026-09-29.
-  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17 10:00:00" }]);
+  const { env, written } = reverifyEnv([
+    { job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17 10:00:00" },
+  ]);
   await withFetch(
     {
-      [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_new", created_at: "2026-09-29T20:00:00Z" } },
+      [`GET ${PR_PATH}`]: {
+        body: { merged: true, node_id: "PR_new", created_at: "2026-09-29T20:00:00Z" },
+      },
       [`GET ${REPO_PATH}`]: { body: { created_at: "2026-09-29T19:13:35Z" } },
     },
     async () => {
-      assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
-    }
+      assert.deepEqual(
+        await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")),
+        [],
+      );
+    },
   );
   assert.equal(written.filter(setsMerged).length, 0);
   const marked = written.filter(setsUnverifiable);
@@ -416,24 +580,37 @@ test("BACKFILL: a row with no pinned id whose repo was created after the outcome
 
 test("BACKFILL: a recreated repo that has not reached the number yet still marks the row, from the repo alone", async () => {
   // claude-skills today: recreated at #1, so pull/8 answers 404.
-  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17 10:00:00" }]);
+  const { env, written } = reverifyEnv([
+    { job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17 10:00:00" },
+  ]);
   await withFetch(
     {
       [`GET ${PR_PATH}`]: { status: 404, body: { message: "Not Found" } },
       [`GET ${REPO_PATH}`]: { body: { created_at: "2026-09-29T19:13:35Z" } },
     },
     async () => {
-      assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
-    }
+      assert.deepEqual(
+        await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")),
+        [],
+      );
+    },
   );
   assert.equal(written.filter(setsMerged).length, 0);
-  assert.ok(written.filter(setsUnverifiable)[0]?.args.includes("repo-recreated"), JSON.stringify(written));
+  assert.ok(
+    written.filter(setsUnverifiable)[0]?.args.includes("repo-recreated"),
+    JSON.stringify(written),
+  );
 });
 
 test("a pull request that cannot be read, in a repo older than the outcome, leaves the row for the next sweep", async () => {
   const { env, written } = reverifyEnv([
     { job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" },
-    { job_id: "job_y", merged: null, pr_node_id: "PR_pinned", named_at: "2026-09-17T10:00:00.000Z" },
+    {
+      job_id: "job_y",
+      merged: null,
+      pr_node_id: "PR_pinned",
+      named_at: "2026-09-17T10:00:00.000Z",
+    },
   ]);
   await withFetch(
     {
@@ -441,49 +618,78 @@ test("a pull request that cannot be read, in a repo older than the outcome, leav
       [`GET ${REPO_PATH}`]: { body: { created_at: "2024-01-01T00:00:00Z" } },
     },
     async () => {
-      assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
-    }
+      assert.deepEqual(
+        await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")),
+        [],
+      );
+    },
   );
   assert.deepEqual(written, []);
 });
 
 test("BACKFILL: a row with no pinned id, in a repo older than the outcome, whose pull request was opened after it, is not that pull request", async () => {
-  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" }]);
+  const { env, written } = reverifyEnv([
+    { job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" },
+  ]);
   await withFetch(
     {
-      [`GET ${PR_PATH}`]: { body: { merged: false, node_id: "PR_later", created_at: "2026-09-20T00:00:00Z" } },
+      [`GET ${PR_PATH}`]: {
+        body: { merged: false, node_id: "PR_later", created_at: "2026-09-20T00:00:00Z" },
+      },
       [`GET ${REPO_PATH}`]: { body: { created_at: "2024-01-01T00:00:00Z" } },
     },
     async () => {
-      assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
-    }
+      assert.deepEqual(
+        await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")),
+        [],
+      );
+    },
   );
   assert.equal(written.filter(setsMerged).length, 0);
   assert.ok(written.filter(setsUnverifiable)[0]?.args.includes("identity-changed"));
 });
 
 test("BACKFILL: a row with no pinned id, in an unchanged repo, is pinned on this read and re-verified", async () => {
-  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" }]);
+  const { env, written } = reverifyEnv([
+    { job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" },
+  ]);
   await withFetch(
     {
-      [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_same", created_at: "2026-09-16T00:00:00Z" } },
+      [`GET ${PR_PATH}`]: {
+        body: { merged: true, node_id: "PR_same", created_at: "2026-09-16T00:00:00Z" },
+      },
       [`GET ${REPO_PATH}`]: { body: { created_at: "2024-01-01T00:00:00Z" } },
     },
     async () => {
       const out = await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z"));
       assert.equal(out.length, 1);
-    }
+    },
   );
   const merged = written.filter(setsMerged);
   assert.equal(merged.length, 1);
-  assert.ok(merged[0].args.includes("PR_same"), "the row was not pinned to the pull request it was checked against");
+  assert.ok(
+    merged[0].args.includes("PR_same"),
+    "the row was not pinned to the pull request it was checked against",
+  );
 });
 
 test("BACKFILL fails closed: a repo that cannot be read leaves the unpinned row as it was", async () => {
-  const { env, written } = reverifyEnv([{ job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" }]);
-  await withFetch({ [`GET ${PR_PATH}`]: { body: { merged: true, node_id: "PR_x", created_at: "2026-09-16T00:00:00Z" } } }, async () => {
-    assert.deepEqual(await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")), []);
-  });
+  const { env, written } = reverifyEnv([
+    { job_id: "job_x", merged: null, pr_node_id: null, named_at: "2026-09-17T10:00:00.000Z" },
+  ]);
+  await withFetch(
+    {
+      [`GET ${PR_PATH}`]: {
+        body: { merged: true, node_id: "PR_x", created_at: "2026-09-16T00:00:00Z" },
+      },
+    },
+    async () => {
+      assert.deepEqual(
+        await reverifyPr(env, "capsid", PR_URL, new Date("2026-09-30T00:00:00Z")),
+        [],
+      );
+    },
+  );
   assert.deepEqual(written, []);
 });
 
@@ -499,7 +705,14 @@ test("a min_record nobody set is no requirement", () => {
 test("a CORRUPT min_record refuses: it fails CLOSED", () => {
   // A garbled bar is not the same as no bar; the claim marks such a job failed rather
   // than leasing it to anyone.
-  for (const bad of ["{", "[]", "null", '{"prs_merged":"lots"}', '{"prs_merged":-1}', '{"prs_merged":1.5}']) {
+  for (const bad of [
+    "{",
+    "[]",
+    "null",
+    '{"prs_merged":"lots"}',
+    '{"prs_merged":-1}',
+    '{"prs_merged":1.5}',
+  ]) {
     assert.equal(parseMinRecord(bad).ok, false, `${bad} parsed as a requirement`);
     const refusal = missingForRecord({ prs_merged: 99 }, bad);
     assert.ok(refusal, `${bad} was treated as no bar`);
@@ -516,7 +729,10 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
   // The same agent at the bar clears it.
   assert.equal(missingForRecord({ prs_merged: 3 }, bar), null);
   // Singular reads as English rather than as "1 merged pull requests".
-  assert.match(missingForRecord({ prs_merged: 0 }, serializeMinRecord({ prs_merged: 1 }))!, /1 merged pull request\b/);
+  assert.match(
+    missingForRecord({ prs_merged: 0 }, serializeMinRecord({ prs_merged: 1 }))!,
+    /1 merged pull request\b/,
+  );
 });
 
 // That the claim and a resume with take both ask the record question is driven against
@@ -528,21 +744,36 @@ test("PLANT: an agent below the bar is refused, and the refusal names both numbe
 test("one unreadable pull request does not erase what the readable ones verified", async () => {
   const nine = "/repos/DrDustinEdwards/capsid-mcp/pulls/9";
   await withFetch(
-    { [`GET ${PR_PATH}`]: prRoute(true, 2, 4), [`GET ${nine}`]: prRoute(true, 1, 2), [`GET ${RUNS_PATH}`]: greenRuns },
+    {
+      [`GET ${PR_PATH}`]: prRoute(true, 2, 4),
+      [`GET ${nine}`]: prRoute(true, 1, 2),
+      [`GET ${RUNS_PATH}`]: greenRuns,
+    },
     async () => {
       const unreadable = "https://github.com/DrDustinEdwards/claude-skills/pull/17";
       const ninth = "https://github.com/DrDustinEdwards/capsid-mcp/pull/9";
-      const verdict = await verifyEvidence(envWithRepo(), "capsid", { prs: [PR_URL, unreadable, ninth], commits: 7 });
+      const verdict = await verifyEvidence(envWithRepo(), "capsid", {
+        prs: [PR_URL, unreadable, ninth],
+        commits: 7,
+      });
       assert.equal(verdict.prs_opened, 3);
-      assert.equal(verdict.verified.prs_opened, false, "a total with an unread pull request in it was marked verified");
+      assert.equal(
+        verdict.verified.prs_opened,
+        false,
+        "a total with an unread pull request in it was marked verified",
+      );
       assert.equal(verdict.prs_merged, 2);
       assert.equal(verdict.verified.prs_merged, true);
-      assert.equal(verdict.commits, 7, "a sum over some of the pull requests replaced the driver's total");
+      assert.equal(
+        verdict.commits,
+        7,
+        "a sum over some of the pull requests replaced the driver's total",
+      );
       assert.equal(verdict.verified.commits, false);
       assert.equal(verdict.ci_green, 1, "CI on the last named pull request, which was read");
       assert.equal(verdict.verified.ci_green, true);
       // Which pull requests were verified: the unread one is absent, never false.
       assert.deepEqual(verdict.pr_states, { [PR_URL]: true, [ninth]: true });
-    }
+    },
   );
 });

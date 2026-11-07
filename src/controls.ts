@@ -4,7 +4,13 @@ import type { PortalAction, PortalPreview } from "./ops-types/portal";
 import { type ActionResult, performAction } from "./controls-perform";
 import { type Plan, planAction } from "./controls-plan";
 import { signConfirm, verifyConfirm } from "./controls-token";
-import { type ActionParams, PORTAL_ACTIONS, type Surface, SWITCHES, UNKNOWN_ACTION } from "./controls-base";
+import {
+  type ActionParams,
+  PORTAL_ACTIONS,
+  type Surface,
+  SWITCHES,
+  UNKNOWN_ACTION,
+} from "./controls-base";
 
 // THE CONTROLS' CORE (capsid/research/design-portal-full-controls.md, section 2): what each
 // admin control is, what it will do, the one dispatch to the shared mutators, and the
@@ -71,6 +77,14 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Remove the package ${params.name ?? ""} from the Portal. The watcher stops reading it; its weekly rows are kept.`;
     case "site_repair":
       return `Run ${params.tool ?? ""} on ${ns} through its operator API. It re-derives one of the site's stores from its source and reports whether it converged. Capsid calls only the site's allowlisted repairs; it never merges and never mints.`;
+    case "site_backup":
+      return params.namespace === "capsid"
+        ? "Back up Capsid's own D1 dump now: the nightly 09:00 UTC run, on demand, under the cron's lease."
+        : params.namespace
+          ? `Back up ${params.namespace} now: its own backup jobs (its D1 dump and its files passes) run through its operator API's run_job, the same jobs as its nightly cron, recorded in its cron_runs.`
+          : "Back up every site now: each site's own backup jobs (its D1 dump and its files passes) run through its operator API's run_job, at once, the same jobs as their nightly crons, recorded in their cron_runs.";
+    case "run_job":
+      return `Run ${params.name ?? ""} on ${ns} now: the job its cron runs, through the same code and record, at once instead of at its hour. Capsid asks the site to run its own job; it never runs a site's work itself.`;
     case "sign_policy_change":
       return params.change === "demote"
         ? `Write and sign the next version of the auto-merge policy without the merge unit ${params.unit ?? ""}: its pull requests wait for an approval again.`
@@ -81,6 +95,14 @@ function describeOnce(action: PortalAction, params: ActionParams): string {
       return `Lift the suspension of the merge unit ${params.unit ?? ""}. The tick may merge its pull requests unattended again, and the rollbacks before now suspend it no more.`;
     case "automerge_resume":
       return `Lift the pause on auto-merge for ${ns}. The tick may merge its pull requests unattended again, and the rollbacks and reverts before now count against it no more.`;
+    case "namespace_add":
+      return `Register the project ${ns} with its repo mapping. The repo tools resolve through the mapping, so it is what an agent scoped to ${ns} may reach; its driver agent is minted separately.`;
+    case "namespace_edit":
+      return `Change the repo mapping of the project ${ns}. The repo tools resolve through it from the next call, so it changes what an agent scoped to ${ns} may reach. The namespace is not renamed and its documents do not move.`;
+    case "namespace_remove":
+      return `Delete the project ${ns}: its live documents (each snapshotted first) and their links, its site row and its registration. Archived documents, versions, the audit log and finished jobs are kept, and registering ${ns} again brings the archived documents back into scope.`;
+    case "site_key_rotate":
+      return `Mint a new operator key for ${ns}'s site API and set it on the site's Worker, then on Carrel. The old key stops working on each side as it is replaced. The new key is never shown, logged or recorded.`;
   }
 }
 
@@ -99,33 +121,57 @@ const FIELDS: Record<PortalAction, readonly string[]> = {
   approve_pr: ["namespace", "repo", "prs", "shas", "confirm", "reason", "undo"],
   revoke_agent: ["name"],
   site_add: ["namespace", "name", "origin", "health_path", "platform", "script", "operator"],
-  site_edit: ["namespace", "revision", "name", "origin", "health_path", "platform", "script", "operator"],
+  site_edit: [
+    "namespace",
+    "revision",
+    "name",
+    "origin",
+    "health_path",
+    "platform",
+    "script",
+    "operator",
+  ],
   site_remove: ["namespace", "revision"],
   reset_breaker: ["namespace"],
   package_add: ["name", "repo", "formerly"],
   package_edit: ["name", "revision", "repo", "formerly"],
   package_remove: ["name", "revision"],
   site_repair: ["namespace", "tool"],
+  site_backup: ["namespace"],
+  run_job: ["namespace", "name"],
   sign_policy_change: ["change", "unit", "confirm", "reason"],
   // The hash its preview read is bound into the token (Plan.bind), so a caller cannot send one.
   sign_policy_from_repo: ["confirm", "reason"],
   unit_resume: ["unit", "reason"],
   automerge_resume: ["namespace", "reason"],
+  namespace_add: ["namespace", "repo", "label", "repos"],
+  // The digest of the mapping its preview read is bound into the token (Plan.bind).
+  namespace_edit: ["namespace", "repos"],
+  // The plan's fingerprint is bound into the token (Plan.bind), as the tool's own token binds it.
+  namespace_remove: ["namespace", "cascade", "allow_improve_paths"],
+  site_key_rotate: ["namespace"],
 };
-
 
 /** The action's params from a preview body: only the fields it takes, each a string,
  *  trimmed, blanks dropped. */
-function paramsFrom(action: PortalAction, raw: unknown): { ok: true; params: Record<string, string> } | { ok: false; refusal: string } {
+function paramsFrom(
+  action: PortalAction,
+  raw: unknown,
+): { ok: true; params: Record<string, string> } | { ok: false; refusal: string } {
   if (raw === undefined) raw = {};
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, refusal: "params must be an object of strings." };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    return { ok: false, refusal: "params must be an object of strings." };
   const allowed = FIELDS[action];
   const params: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw)) {
     if (!allowed.includes(key)) {
-      return { ok: false, refusal: `${action} takes ${allowed.join(" and ")}; '${key}' is not one of them.` };
+      return {
+        ok: false,
+        refusal: `${action} takes ${allowed.join(" and ")}; '${key}' is not one of them.`,
+      };
     }
-    if (typeof value !== "string") return { ok: false, refusal: `${action}'s ${key} must be a string.` };
+    if (typeof value !== "string")
+      return { ok: false, refusal: `${action}'s ${key} must be a string.` };
     if (value.trim()) params[key] = value.trim();
   }
   return { ok: true, params };
@@ -142,7 +188,14 @@ export interface Control {
   fields: readonly string[];
   reasonRequired: boolean;
   plan(env: Env, email: string, params: Record<string, string>, surface: Surface): Promise<Plan>;
-  perform(env: Env, email: string, source: string | null, now: Date, params: ActionParams, surface: Surface): Promise<ActionResult>;
+  perform(
+    env: Env,
+    email: string,
+    source: string | null,
+    now: Date,
+    params: ActionParams,
+    surface: Surface,
+  ): Promise<ActionResult>;
 }
 
 export const CONTROLS: readonly Control[] = PORTAL_ACTIONS.map((name) => ({
@@ -150,7 +203,8 @@ export const CONTROLS: readonly Control[] = PORTAL_ACTIONS.map((name) => ({
   fields: FIELDS[name],
   reasonRequired: SWITCHES.has(name),
   plan: (env, email, params, surface) => planAction(env, email, name, params, surface),
-  perform: (env, email, source, now, params, surface) => performAction(env, email, source, now, name, params, surface),
+  perform: (env, email, source, now, params, surface) =>
+    performAction(env, email, source, now, name, params, surface),
 }));
 
 function controlNamed(name: unknown): Control | null {
@@ -161,19 +215,40 @@ const randomJti = (): string => toHex(crypto.getRandomValues(new Uint8Array(16))
 
 const NONCE_PREFIX = "control-nonce:";
 
-export type Previewed = { ok: true; preview: PortalPreview } | { ok: false; status: number; refusal: string };
+export type Previewed =
+  | { ok: true; preview: PortalPreview }
+  | { ok: false; status: number; refusal: string };
 
 /** The preview step for either surface: validate the name and params, plan from the state
  *  now (a read, never a write), and sign a confirmation for the email. */
-export async function previewControl(env: Env, email: string, name: unknown, rawParams: unknown, now: Date, surface: Surface): Promise<Previewed> {
+export async function previewControl(
+  env: Env,
+  email: string,
+  name: unknown,
+  rawParams: unknown,
+  now: Date,
+  surface: Surface,
+): Promise<Previewed> {
   const control = controlNamed(name);
-  if (!control) return { ok: false, status: 400, refusal: UNKNOWN_ACTION(typeof name === "string" ? name : "") };
+  if (!control)
+    return {
+      ok: false,
+      status: 400,
+      refusal: UNKNOWN_ACTION(typeof name === "string" ? name : ""),
+    };
   const parsed = paramsFrom(control.name, rawParams);
   if (!parsed.ok) return { ok: false, status: 400, refusal: parsed.refusal };
   const plan = await control.plan(env, email, parsed.params, surface);
   if (!plan.ok) return { ok: false, status: 400, refusal: plan.refusal };
   const exp = Math.floor(now.getTime() / 1000) + TOKEN_TTL_SECONDS;
-  const token = await signConfirm(env, { v: 2, jti: randomJti(), action: control.name, params: { ...parsed.params, ...plan.bind }, email, exp });
+  const token = await signConfirm(env, {
+    v: 2,
+    jti: randomJti(),
+    action: control.name,
+    params: { ...parsed.params, ...plan.bind },
+    email,
+    exp,
+  });
   return {
     ok: true,
     preview: {
@@ -187,7 +262,9 @@ export async function previewControl(env: Env, email: string, name: unknown, raw
   };
 }
 
-export type Performed = { ok: true; action: PortalAction; result: Extract<ActionResult, { ok: true }> } | { ok: false; status: number; refusal: string };
+export type Performed =
+  | { ok: true; action: PortalAction; result: Extract<ActionResult, { ok: true }> }
+  | { ok: false; status: number; refusal: string };
 
 /** The perform step for either surface: the token must verify for the email, then it is
  *  spent (a confirmation is used once, whichever surface took it), then the control runs.
@@ -196,8 +273,16 @@ export type Performed = { ok: true; action: PortalAction; result: Extract<Action
  *  compare-and-set, so two performs of one token inside the same instant could both
  *  pass the check; every mutator is guarded on the state it moves from, which is what
  *  stops the second. */
-export async function performControl(env: Env, email: string, token: unknown, source: string | null, now: Date, surface: Surface): Promise<Performed> {
-  if (typeof token !== "string") return { ok: false, status: 400, refusal: "a perform needs the token its preview returned." };
+export async function performControl(
+  env: Env,
+  email: string,
+  token: unknown,
+  source: string | null,
+  now: Date,
+  surface: Surface,
+): Promise<Performed> {
+  if (typeof token !== "string")
+    return { ok: false, status: 400, refusal: "a perform needs the token its preview returned." };
   const verified = await verifyConfirm(env, token, email, now);
   if (!verified.ok) return { ok: false, status: verified.status, refusal: verified.refusal };
   const { action, params, jti, exp } = verified.claims;
@@ -206,11 +291,17 @@ export async function performControl(env: Env, email: string, token: unknown, so
 
   const nonceKey = `${NONCE_PREFIX}${jti}`;
   if ((await env.APP_KV.get(nonceKey)) !== null) {
-    return { ok: false, status: 409, refusal: "this confirmation was already used: preview again to get a new one." };
+    return {
+      ok: false,
+      status: 409,
+      refusal: "this confirmation was already used: preview again to get a new one.",
+    };
   }
   // Held until the token itself would have expired, plus a minute for clock skew, and not
   // under KV's 60 second floor.
-  await env.APP_KV.put(nonceKey, now.toISOString(), { expirationTtl: Math.max(60, exp - Math.floor(now.getTime() / 1000) + 60) });
+  await env.APP_KV.put(nonceKey, now.toISOString(), {
+    expirationTtl: Math.max(60, exp - Math.floor(now.getTime() / 1000) + 60),
+  });
 
   const result = await control.perform(env, email, source, now, params, surface);
   if (!result.ok) return { ok: false, status: 400, refusal: result.refusal };

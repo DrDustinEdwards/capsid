@@ -1,5 +1,5 @@
 import { parseDocParam } from "../lib/keys";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { Link, useLocation, useSearch } from "../lib/router";
@@ -15,7 +15,6 @@ import { PageHead } from "./shared";
 // opens, a search with ?q=, one document with ?doc=<namespace>/<path>. A job id in a
 // document opens that job's drawer over the page. Nothing here writes: writing stays in
 // chat and with drivers. Read from GET /portal/api/library.
-
 
 const SHELVES: Array<{ id: LibraryShelf; title: string; none: string }> = [
   { id: "decisions", title: "Decisions", none: "No decision record yet." },
@@ -45,7 +44,11 @@ function withJobLinks(text: string, back: string): ReactNode[] {
     const at = m.index ?? 0;
     if (at > last) out.push(text.slice(last, at));
     out.push(
-      <Link key={`${at}-${m[0]}`} href={`${routePath("library", { type: "job", id: m[0] })}${back}`} className="mono">
+      <Link
+        key={`${at}-${m[0]}`}
+        href={`${routePath("library", { type: "job", id: m[0] })}${back}`}
+        className="mono"
+      >
         {m[0]}
       </Link>,
     );
@@ -59,6 +62,7 @@ function withJobLinks(text: string, back: string): ReactNode[] {
  *  holds, so a bracket in the text is never taken for a match) in bold: no color needed,
  *  so it reads the same in both themes. */
 function Snippet({ text }: { text: string }) {
+  // oxlint-disable-next-line no-control-regex -- the delimiters are control characters on purpose
   const parts = text.split(/\u0002([^\u0003]*)\u0003/g);
   // split with one capture group: the odd entries are the matched words.
   return <>{parts.map((p, i) => (i % 2 === 1 ? <strong key={i}>{p}</strong> : p))}</>;
@@ -74,8 +78,17 @@ export function Library() {
   const [draft, setDraft] = useState(q);
   const docNs = doc?.ns ?? null;
   const docPath = doc?.path ?? null;
-  useEffect(() => setDraft(q), [q]);
-  const load = useAnswer<PortalLibrary>(["library", docNs, docPath, q], () => fetchLibrary(docNs !== null && docPath !== null ? { ns: docNs, path: docPath } : q ? { q } : null));
+  // The address changed: the field follows it. Adjusted while rendering, not in an effect.
+  const [seenQ, setSeenQ] = useState(q);
+  if (seenQ !== q) {
+    setSeenQ(q);
+    setDraft(q);
+  }
+  const load = useAnswer<PortalLibrary>(["library", docNs, docPath, q], () =>
+    fetchLibrary(
+      docNs !== null && docPath !== null ? { ns: docNs, path: docPath } : q ? { q } : null,
+    ),
+  );
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const next = draft.trim();
@@ -88,7 +101,15 @@ export function Library() {
     <div className="page">
       <PageHead title="Library" />
       <form className="lib-search" role="search" onSubmit={submit}>
-        <input className="search" type="search" name="q" placeholder="Search the knowledge store" aria-label="Search the knowledge store" value={draft} onChange={(e) => setDraft(e.target.value)} />
+        <input
+          className="search"
+          type="search"
+          name="q"
+          placeholder="Search the knowledge store"
+          aria-label="Search the knowledge store"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
         <button type="submit" className="btn">
           Search
         </button>
@@ -115,7 +136,11 @@ export function Library() {
           {SHELVES.map((s) => (
             <Shelf key={s.id} title={s.title} none={s.none} rows={data.shelves[s.id]} now={now} />
           ))}
-          {data.truncated && <p className="faint shared-read">The shelves show the first 500 documents; search for the rest.</p>}
+          {data.truncated && (
+            <p className="faint shared-read">
+              The shelves show the first 500 documents; search for the rest.
+            </p>
+          )}
         </>
       )}
     </div>
@@ -138,10 +163,30 @@ function EntryRow({ row, now }: { row: LibraryEntry; now: number }) {
   );
 }
 
-function Shelf({ title, none, rows, now }: { title: string; none: string; rows: LibraryEntry[]; now: number }) {
+function Shelf({
+  title,
+  none,
+  rows,
+  now,
+}: {
+  title: string;
+  none: string;
+  rows: LibraryEntry[];
+  now: number;
+}) {
   const id = `library-${title.toLowerCase()}`;
   return (
-    <Panel flush title={title} id={id} section={title} footer={<span className="faint">{rows.length} {rows.length === 1 ? "document" : "documents"}</span>}>
+    <Panel
+      flush
+      title={title}
+      id={id}
+      section={title}
+      footer={
+        <span className="faint">
+          {rows.length} {rows.length === 1 ? "document" : "documents"}
+        </span>
+      }
+    >
       {rows.length ? (
         <table className="brief lib-table">
           <caption className="sr-only">{title}</caption>
@@ -166,9 +211,22 @@ function Shelf({ title, none, rows, now }: { title: string; none: string; rows: 
 }
 
 function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" }>; now: number }) {
-  if (!data.rows.length) return <Empty kind="no-match" title={`Nothing matches "${data.query}".`} />;
+  if (!data.rows.length)
+    return <Empty kind="no-match" title={`Nothing matches "${data.query}".`} />;
   return (
-    <Panel flush title="Results" id="library-results" section="Results" footer={<span className="faint">{data.truncated ? `The best ${data.rows.length}; narrow the search for the rest.` : `${data.rows.length} ${data.rows.length === 1 ? "match" : "matches"}`}</span>}>
+    <Panel
+      flush
+      title="Results"
+      id="library-results"
+      section="Results"
+      footer={
+        <span className="faint">
+          {data.truncated
+            ? `The best ${data.rows.length}; narrow the search for the rest.`
+            : `${data.rows.length} ${data.rows.length === 1 ? "match" : "matches"}`}
+        </span>
+      }
+    >
       <ol className="lib-results">
         {data.rows.map((r) => (
           <li key={`${r.namespace}/${r.path}`}>
@@ -178,7 +236,9 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
             <span className="mono faint">
               {r.namespace}/{r.path}
             </span>{" "}
-            <span className="faint">· {r.type} · {ago(ms(r.updated_at), now)}</span>
+            <span className="faint">
+              · {r.type} · {ago(ms(r.updated_at), now)}
+            </span>
             <div>
               <Snippet text={r.snippet} />
             </div>
@@ -189,7 +249,15 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
   );
 }
 
-function DocumentView({ data, back, now }: { data: Extract<PortalLibrary, { kind: "document" }>; back: string; now: number }) {
+function DocumentView({
+  data,
+  back,
+  now,
+}: {
+  data: Extract<PortalLibrary, { kind: "document" }>;
+  back: string;
+  now: number;
+}) {
   const d = data.doc;
   const edges = [
     ...data.outgoing.map((e) => ({ dir: "to", type: e.type, ns: e.to_ns, path: e.to_path })),

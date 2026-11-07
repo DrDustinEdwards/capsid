@@ -9,7 +9,7 @@ import type { MaintenanceRule, OpsMaintenanceItem, PortalMaintenance } from "../
 import { St } from "../ui/icons";
 
 // The Maintenance list on the Overview (job_549550d73d4e): what the daily maintenance pass
-// found, from GET /portal/api/maintenance, the list capsid_run_improve action status serves. The seat reads
+// found, from GET /portal/api/maintenance, the list capsid_read_status action status serves. The seat reads
 // it at the start of a session. Loaded on its own, after the Overview, so the first paint
 // does not carry it. Nothing here changes anything: a row naming a job in the feed opens
 // that job's drawer, and a pull request is a link.
@@ -55,7 +55,9 @@ export function Maintenance() {
   const hidden = items.length - shown.length;
   const open = new Set(feed.live.jobs.map((j) => j.id));
   const r = data?.read;
-  const readLine = r ? `${r.repos} of ${r.roster} repos, ${r.prs} open PRs, ${r.branches} branches, ${r.deploys} live deploys read` : "";
+  const readLine = r
+    ? `${r.repos} of ${r.roster} repos, ${r.prs} open PRs, ${r.branches} branches, ${r.deploys} live deploys read`
+    : "";
   return (
     <Panel
       flush
@@ -82,7 +84,9 @@ export function Maintenance() {
           <Spinner label="Reading the Maintenance list..." />
         </div>
       ) : data && !data.generated ? (
-        <div className="body faint">The daily pass has not run yet. It runs once a day after 11:00 UTC.</div>
+        <div className="body faint">
+          The daily pass has not run yet. It runs once a day after 11:00 UTC.
+        </div>
       ) : items.length ? (
         <>
           {shown.map((i, n) => (
@@ -90,7 +94,12 @@ export function Maintenance() {
           ))}
           {(hidden > 0 || more) && (
             <div className="att-more">
-              <button type="button" className="linkbtn" aria-expanded={more} onClick={() => setMore(!more)}>
+              <button
+                type="button"
+                className="linkbtn"
+                aria-expanded={more}
+                onClick={() => setMore(!more)}
+              >
                 {more ? "Fewer" : `${hidden} more`}
               </button>
             </div>
@@ -113,7 +122,11 @@ function Row({ item, opens }: { item: OpsMaintenanceItem; opens: boolean }) {
   const rule = RULE[item.rule];
   const target = opens ? { "data-row": "", "data-open": `job:${item.job}`, tabIndex: 0 } : {};
   return (
-    <div className={rule.kind === "crit" ? "qrow mrow sev-crit" : "qrow mrow"} data-rule={item.rule} {...target}>
+    <div
+      className={rule.kind === "crit" ? "qrow mrow sev-crit" : "qrow mrow"}
+      data-rule={item.rule}
+      {...target}
+    >
       <St kind={rule.kind}>{rule.label}</St>
       <div className="t">
         <div className="why">{item.line}</div>

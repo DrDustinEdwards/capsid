@@ -26,4 +26,6 @@ export const sampleFeed = ${JSON.stringify(feed, null, 2)} as const satisfies De
 
 mkdirSync(outDir, { recursive: true });
 writeFileSync(`${outDir}sample-feed.check.ts`, ts);
-console.log("fixture-check: wrote dev/generated/sample-feed.check.ts; tsc checks it against OpsFeed");
+console.log(
+  "fixture-check: wrote dev/generated/sample-feed.check.ts; tsc checks it against OpsFeed",
+);

@@ -3,4 +3,5 @@ import { Health } from "../views/Health";
 
 export const loader = viewLoader("health");
 export const clientLoader = browserLoader;
-export default viewPage(Health);
+const HealthPage = viewPage(Health);
+export default HealthPage;

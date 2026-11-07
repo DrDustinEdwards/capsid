@@ -22,7 +22,12 @@ import { checkSecurityHeaders, failures } from "@dustinedwards/site-runtime/chec
 import { CANARY_CLIENT, OAUTH_KV } from "./bindings.mjs";
 import { accessRedirectProblem } from "./access-redirect-lib.mjs";
 import { canaryReport, checkCanary } from "./canary-lib.mjs";
-import { PROBE_REDIRECT, probeClientId, probeDocumentProblem, registrationProblem } from "./cimd-probe-lib.mjs";
+import {
+  PROBE_REDIRECT,
+  probeClientId,
+  probeDocumentProblem,
+  registrationProblem,
+} from "./cimd-probe-lib.mjs";
 import { checkBackupFreshness } from "./freshness-lib.mjs";
 import { probeMcp } from "./mcp-probe-lib.mjs";
 
@@ -44,7 +49,9 @@ const EXIT_COULD_NOT_RUN = 3;
 
 class NoAnswer extends Error {
   constructor(url, cause) {
-    super(`no answer from ${String(url).split("?")[0]}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    super(
+      `no answer from ${String(url).split("?")[0]}: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
   }
 }
 
@@ -124,13 +131,18 @@ async function gateHealth() {
     // Keep polling through every not-yet-converged state, including a response that is
     // not JSON: immediately after a deploy the previous version may still be serving.
     const storeOk = data?.store?.d1 === "ok" && data?.store?.fts === "ok";
-    const converged = resp.status === 200 && isUp(data?.status) && (!expected || data.sha === expected) && storeOk;
+    const converged =
+      resp.status === 200 && isUp(data?.status) && (!expected || data.sha === expected) && storeOk;
     if (converged) break;
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
   }
   // The last poll got no answer, so whatever an earlier poll saw is not the verdict.
   if (lost) {
-    record("1 health + provenance", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    record(
+      "1 health + provenance",
+      COULD_NOT_RUN,
+      `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`,
+    );
     return;
   }
   const live = isUp(data?.status);
@@ -138,10 +150,12 @@ async function gateHealth() {
   const d1 = data?.store?.d1 ?? "(absent)";
   const fts = data?.store?.fts ?? "(absent)";
   const passed = live && shaOk && d1 === "ok" && fts === "ok";
-  const detail = `status=${data?.status ?? "?"} sha=${(data?.sha ?? "?").slice(0, 8)} dirty=${data?.dirty} d1=${d1} fts=${fts} polls=${attempt}` +
+  const detail =
+    `status=${data?.status ?? "?"} sha=${(data?.sha ?? "?").slice(0, 8)} dirty=${data?.dirty} d1=${d1} fts=${fts} polls=${attempt}` +
     (expected ? ` expected=${expected.slice(0, 8)}${shaOk ? " MATCH" : " MISMATCH"}` : "");
   record("1 health + provenance", passed, detail);
-  if (data?.dirty) console.log("      NOTE: deployed from a dirty tree; the bytes are not exactly that commit.");
+  if (data?.dirty)
+    console.log("      NOTE: deployed from a dirty tree; the bytes are not exactly that commit.");
 }
 
 // The probe client for gates 3 to 5. Overridable only so test/verify-live-no-answer.test.ts
@@ -159,18 +173,29 @@ async function gateCimdAndDcr() {
   let metadata;
   let register;
   try {
-    metadata = await request(`${ORIGIN}/.well-known/oauth-authorization-server`, { headers: { "Cache-Control": "no-cache" } });
+    metadata = await request(`${ORIGIN}/.well-known/oauth-authorization-server`, {
+      headers: { "Cache-Control": "no-cache" },
+    });
     // Safe to retry: the probe's redirect is on no allowlist, so nothing is written.
     register = await request(`${ORIGIN}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_name: "capsid verify-live probe", redirect_uris: [PROBE_REDIRECT], token_endpoint_auth_method: "none" }),
+      body: JSON.stringify({
+        client_name: "capsid verify-live probe",
+        redirect_uris: [PROBE_REDIRECT],
+        token_endpoint_auth_method: "none",
+      }),
     });
   } catch (err) {
     record("2 CIMD, DCR allowlisted", COULD_NOT_RUN, noAnswer(err).message);
     return null;
   }
-  const refused = registrationProblem(parseJson(metadata.text), ORIGIN, register.status, parseJson(register.text));
+  const refused = registrationProblem(
+    parseJson(metadata.text),
+    ORIGIN,
+    register.status,
+    parseJson(register.text),
+  );
   if (refused) {
     record("2 CIMD, DCR allowlisted", false, `register=${register.status}: ${refused}`);
     return null;
@@ -182,9 +207,15 @@ async function gateCimdAndDcr() {
   let attempt = 0;
   for (attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
     try {
-      doc = await request(PROBE_CLIENT, { headers: { Accept: "application/json", "Cache-Control": "no-cache" } });
+      doc = await request(PROBE_CLIENT, {
+        headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+      });
     } catch (err) {
-      record("2 CIMD, DCR allowlisted", COULD_NOT_RUN, `the probe document could not be read: ${noAnswer(err).message}`);
+      record(
+        "2 CIMD, DCR allowlisted",
+        COULD_NOT_RUN,
+        `the probe document could not be read: ${noAnswer(err).message}`,
+      );
       return COULD_NOT_RUN;
     }
     if (doc.ok) break;
@@ -193,11 +224,19 @@ async function gateCimdAndDcr() {
   if (!doc.ok) {
     // Who answered, so a 404 from the Worker ("not found") can be told from one at the edge.
     const body = doc.text.slice(0, 80).replace(/\s+/g, " ");
-    record("2 CIMD, DCR allowlisted", false, `the probe document answered ${doc.status} at ${PROBE_CLIENT} (polls=${Math.min(attempt, POLL_ATTEMPTS)} server=${doc.headers.get("server") ?? "?"} body=${JSON.stringify(body)})`);
+    record(
+      "2 CIMD, DCR allowlisted",
+      false,
+      `the probe document answered ${doc.status} at ${PROBE_CLIENT} (polls=${Math.min(attempt, POLL_ATTEMPTS)} server=${doc.headers.get("server") ?? "?"} body=${JSON.stringify(body)})`,
+    );
     return null;
   }
   const bad = probeDocumentProblem(parseJson(doc.text), PROBE_CLIENT, PROBE_REDIRECT);
-  record("2 CIMD, DCR allowlisted", bad === null, `register=${register.status} probe=${PROBE_CLIENT} polls=${attempt}${bad ? `: ${bad}` : ""}`);
+  record(
+    "2 CIMD, DCR allowlisted",
+    bad === null,
+    `register=${register.status} probe=${PROBE_CLIENT} polls=${attempt}${bad ? `: ${bad}` : ""}`,
+  );
   return bad === null ? PROBE_CLIENT : null;
 }
 
@@ -222,7 +261,11 @@ async function gateCanary() {
   // No credentials: assert nothing and SAY so, rather than passing quietly or failing an
   // interactive run that was never going to have a token.
   if (!account || !token) {
-    record("2b canary client record", true, `SKIPPED: no CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN, so ${key} was not read. This run asserts nothing about it.`);
+    record(
+      "2b canary client record",
+      true,
+      `SKIPPED: no CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN, so ${key} was not read. This run asserts nothing about it.`,
+    );
     return;
   }
 
@@ -276,7 +319,11 @@ async function gateBackupFreshness() {
   } catch (err) {
     data = null;
     if (assertFresh) {
-      record("1c backup freshness", COULD_NOT_RUN, `/health could not be read: ${noAnswer(err).message}`);
+      record(
+        "1c backup freshness",
+        COULD_NOT_RUN,
+        `/health could not be read: ${noAnswer(err).message}`,
+      );
       return;
     }
   }
@@ -295,16 +342,27 @@ async function gateConsentForm(clientId) {
     return COULD_NOT_RUN;
   }
   if (resp.status >= 300 && resp.status < 400) {
-    record("3 consent form renders", false, `VOID: got ${resp.status} redirect, not a form. The fast path was hit, so this run proves nothing. Check that the client id is genuinely new.`);
+    record(
+      "3 consent form renders",
+      false,
+      `VOID: got ${resp.status} redirect, not a form. The fast path was hit, so this run proves nothing. Check that the client id is genuinely new.`,
+    );
     return null;
   }
   const html = resp.text;
   const hasForm = /<form[^>]+method=["']post["']/i.test(html);
   const handle = html.match(/name=["']handle["'][^>]*value=["']([^"']+)["']/i)?.[1];
   // The provider binds the handle to this browser with a cookie; gate 5 sends it back.
-  const cookies = resp.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+  const cookies = resp.headers
+    .getSetCookie()
+    .map((c) => c.split(";")[0])
+    .join("; ");
   const passed = resp.status === 200 && hasForm && Boolean(handle) && Boolean(cookies);
-  record("3 consent form renders", passed, `status=${resp.status} form=${hasForm} handle_field=${Boolean(handle)} consent_cookie=${Boolean(cookies)}`);
+  record(
+    "3 consent form renders",
+    passed,
+    `status=${resp.status} form=${hasForm} handle_field=${Boolean(handle)} consent_cookie=${Boolean(cookies)}`,
+  );
   return passed ? { handle, cookies } : null;
 }
 
@@ -326,14 +384,24 @@ async function gateCsp(clientId) {
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
   }
   if (lost) {
-    record("4 consent CSP permits the chain", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    record(
+      "4 consent CSP permits the chain",
+      COULD_NOT_RUN,
+      `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`,
+    );
     return;
   }
   // The consent form's redirect chain terminates at whatever redirect_uri a client's
   // metadata document names, so no static form-action allowlist can be correct. Absent is required;
   // present is a fail regardless of value.
   const passed = !csp || !/form-action/i.test(csp);
-  record("4 consent CSP permits the chain", passed, passed ? `polls=${attempt} csp=${csp ?? "(none)"}` : `polls=${attempt} form-action present after ${POLL_ATTEMPTS} polls: ${csp}`);
+  record(
+    "4 consent CSP permits the chain",
+    passed,
+    passed
+      ? `polls=${attempt} csp=${csp ?? "(none)"}`
+      : `polls=${attempt} form-action present after ${POLL_ATTEMPTS} polls: ${csp}`,
+  );
 }
 
 // Gate 6: security headers, graded by site-runtime's shared check against the MCP host's
@@ -363,25 +431,75 @@ async function gateSecurityHeaders(clientId) {
     ["/health", "json", { url: `${ORIGIN}/health` }],
     // inlineStyles: the consent dialog's policy (CONSENT_DIALOG_HEADERS) allows inline CSS on purpose, and its
     // default-src 'none' runs no script, so site-runtime's C11 is told rather than failed. Every other surface is held to it.
-    ["/authorize consent", "html", { url: consent, init: { redirect: "manual" }, noStore: true, inlineStyles: true }],
+    [
+      "/authorize consent",
+      "html",
+      { url: consent, init: { redirect: "manual" }, noStore: true, inlineStyles: true },
+    ],
     ["/authorize bad req", "other", { url: `${ORIGIN}/authorize`, init: { redirect: "manual" } }],
     ["/callback no code", "other", { url: `${ORIGIN}/callback`, init: { redirect: "manual" } }],
-    [".well-known/as", "json", { url: `${ORIGIN}/.well-known/oauth-authorization-server`, noStore: true }],
+    [
+      ".well-known/as",
+      "json",
+      { url: `${ORIGIN}/.well-known/oauth-authorization-server`, noStore: true },
+    ],
     [".well-known/prm", "json", { url: `${ORIGIN}/.well-known/oauth-protected-resource` }],
-    ["/mcp 401", "any", { url: `${ORIGIN}/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
-    ["/ops/mcp 401", "other", { url: `${ORIGIN}/ops/mcp`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } }],
+    [
+      "/mcp 401",
+      "any",
+      {
+        url: `${ORIGIN}/mcp`,
+        init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+      },
+    ],
+    [
+      "/ops/mcp 401",
+      "other",
+      {
+        url: `${ORIGIN}/ops/mcp`,
+        init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+      },
+    ],
     // The MCP host serves the machine surface only (src/mcp-host.ts): the Portal is not
     // here, on its own host (gate 7). A 302 here is the Portal answering on the wrong
     // host, and a 200 is the app served to anyone.
-    ["/portal/ not on this host", "other", { url: `${ORIGIN}/portal/`, init: { redirect: "manual" }, status: 404 }],
+    [
+      "/portal/ not on this host",
+      "other",
+      { url: `${ORIGIN}/portal/`, init: { redirect: "manual" }, status: 404 },
+    ],
     // The Portal moved from /console with no redirects (capsid/research/
     // design-portal-unify.md): each old address is the Worker's plain 404. A 302 here is
     // a redirect somebody added, and a 200 is the old page back.
-    ["/console gone", "other", { url: `${ORIGIN}/console`, init: { redirect: "manual" }, status: 404 }],
-    ["/console/app/ gone", "other", { url: `${ORIGIN}/console/app/`, init: { redirect: "manual" }, status: 404 }],
-    ["/console/callback gone", "other", { url: `${ORIGIN}/console/callback`, init: { redirect: "manual" }, status: 404 }],
+    [
+      "/console gone",
+      "other",
+      { url: `${ORIGIN}/console`, init: { redirect: "manual" }, status: 404 },
+    ],
+    [
+      "/console/app/ gone",
+      "other",
+      { url: `${ORIGIN}/console/app/`, init: { redirect: "manual" }, status: 404 },
+    ],
+    [
+      "/console/callback gone",
+      "other",
+      { url: `${ORIGIN}/console/callback`, init: { redirect: "manual" }, status: 404 },
+    ],
     ["/nope 404", "other", { url: `${ORIGIN}/nope` }],
-    ["/csp-report", "other", { url: `${ORIGIN}/csp-report`, init: { method: "POST", headers: { "Content-Type": "application/csp-report" }, body: report }, status: 204 }],
+    [
+      "/csp-report",
+      "other",
+      {
+        url: `${ORIGIN}/csp-report`,
+        init: {
+          method: "POST",
+          headers: { "Content-Type": "application/csp-report" },
+          body: report,
+        },
+        status: 204,
+      },
+    ],
   ];
 
   let problems = [];
@@ -393,26 +511,44 @@ async function gateSecurityHeaders(clientId) {
     for (const [label, cls, { url, init, noStore, status, inlineStyles }] of surfaces) {
       let resp;
       try {
-        resp = await request(url, { ...(init ?? {}), headers: { "Cache-Control": "no-cache", ...((init ?? {}).headers ?? {}) } });
+        resp = await request(url, {
+          ...init,
+          headers: { "Cache-Control": "no-cache", ...init?.headers },
+        });
       } catch (err) {
         lost = noAnswer(err);
         break;
       }
       const h = (name) => resp.headers.get(name);
 
-      if (status && resp.status !== status) problems.push(`${label}: status ${resp.status}, expected ${status}`);
-      if (noStore && !/no-store/i.test(h("cache-control") ?? "")) problems.push(`${label}: cache-control ${h("cache-control") ?? "(none)"}, expected no-store`);
+      if (status && resp.status !== status)
+        problems.push(`${label}: status ${resp.status}, expected ${status}`);
+      if (noStore && !/no-store/i.test(h("cache-control") ?? ""))
+        problems.push(
+          `${label}: cache-control ${h("cache-control") ?? "(none)"}, expected no-store`,
+        );
 
       // Every class, no exception: the set and an enforced policy.
-      for (const r of failures(checkSecurityHeaders(resp.headers, { site: "capsid-mcp", ...(inlineStyles ? { inlineStyles } : {}) }))) problems.push(`${label}: ${r.name}: ${r.detail}`);
-      if (cls === "html" && !(h("content-type") ?? "").toLowerCase().includes("text/html")) problems.push(`${label}: expected html, got ${h("content-type")}`);
+      for (const r of failures(
+        checkSecurityHeaders(resp.headers, {
+          site: "capsid-mcp",
+          ...(inlineStyles ? { inlineStyles } : {}),
+        }),
+      ))
+        problems.push(`${label}: ${r.name}: ${r.detail}`);
+      if (cls === "html" && !(h("content-type") ?? "").toLowerCase().includes("text/html"))
+        problems.push(`${label}: expected html, got ${h("content-type")}`);
     }
     if (!lost && problems.length === 0) break;
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
   }
 
   if (lost) {
-    record("6 security headers per class", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    record(
+      "6 security headers per class",
+      COULD_NOT_RUN,
+      `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`,
+    );
     return;
   }
   record(
@@ -420,7 +556,7 @@ async function gateSecurityHeaders(clientId) {
     problems.length === 0,
     problems.length === 0
       ? `polls=${attempt} ${surfaces.length} surfaces clean`
-      : `polls=${attempt} ${problems.length} problems: ${problems.slice(0, 6).join("; ")}${problems.length > 6 ? " ..." : ""}`
+      : `polls=${attempt} ${problems.length} problems: ${problems.slice(0, 6).join("; ")}${problems.length > 6 ? " ..." : ""}`,
   );
 }
 
@@ -452,31 +588,53 @@ async function gateAccessRedirect(clientId, form) {
   // The origin and path only: the query carries this run's state and nonce.
   const parsed = URL.canParse(location) ? new URL(location) : null;
   const shown = parsed ? parsed.origin + parsed.pathname : location || "(none)";
-  record("5 approve redirects to Access", problem === null, `status=${resp.status} location=${shown}${problem ? `: ${problem}` : ""} (not followed)`);
+  record(
+    "5 approve redirects to Access",
+    problem === null,
+    `status=${resp.status} location=${shown}${problem ? `: ${problem}` : ""} (not followed)`,
+  );
 }
 
 // Gate 7: the Portal on its own host (src/portal-host.ts). With no session, its root and
 // any other path on it (here /mcp, which must not reach the MCP endpoint) answer with a
 // redirect to the Access sign-in, whichever of the Worker's login or Access at the edge
 // sends it; never the app, never a 401 from /mcp. Not followed.
-const PORTAL_ORIGIN = (process.env.PORTAL_ORIGIN ?? "https://portal.dustinedwards.info").replace(/\/$/, "");
+const PORTAL_ORIGIN = (process.env.PORTAL_ORIGIN ?? "https://portal.dustinedwards.info").replace(
+  /\/$/,
+  "",
+);
 async function gatePortalHost() {
   const problems = [];
   for (const path of ["/", "/mcp"]) {
     let resp;
     try {
-      resp = await request(`${PORTAL_ORIGIN}${path}`, { redirect: "manual", headers: { "Cache-Control": "no-cache" } });
+      resp = await request(`${PORTAL_ORIGIN}${path}`, {
+        redirect: "manual",
+        headers: { "Cache-Control": "no-cache" },
+      });
     } catch (err) {
-      record("7 Portal host sends to Access", COULD_NOT_RUN, `${PORTAL_ORIGIN}${path}: ${noAnswer(err).message}`);
+      record(
+        "7 Portal host sends to Access",
+        COULD_NOT_RUN,
+        `${PORTAL_ORIGIN}${path}: ${noAnswer(err).message}`,
+      );
       return;
     }
     const location = resp.headers.get("location") ?? "";
     const host = URL.canParse(location) ? new URL(location).hostname : "";
     if (resp.status !== 302 || !host.endsWith(".cloudflareaccess.com")) {
-      problems.push(`${path}: status ${resp.status}, location host ${host || "(none)"}; expected 302 to the Access team domain`);
+      problems.push(
+        `${path}: status ${resp.status}, location host ${host || "(none)"}; expected 302 to the Access team domain`,
+      );
     }
   }
-  record("7 Portal host sends to Access", problems.length === 0, problems.length === 0 ? `${PORTAL_ORIGIN} / and /mcp redirect to Access (not followed)` : problems.join("; "));
+  record(
+    "7 Portal host sends to Access",
+    problems.length === 0,
+    problems.length === 0
+      ? `${PORTAL_ORIGIN} / and /mcp redirect to Access (not followed)`
+      : problems.join("; "),
+  );
 }
 
 // Gate 8: a real MCP call through /ops/mcp, in both protocol eras, with the live-probe
@@ -491,14 +649,27 @@ async function gatePortalHost() {
 async function gateMcpCall() {
   const key = process.env.CAPSID_LIVE_PROBE_KEY;
   if (!key) {
-    record("8 MCP call through /ops/mcp", true, "SKIPPED: no CAPSID_LIVE_PROBE_KEY, so no MCP call was made. This run asserts nothing about the connection.");
-    if (process.env.GITHUB_ACTIONS) console.log("::warning::live gate 8 skipped: the CAPSID_LIVE_PROBE_KEY secret is not set, so this deploy's MCP connection was not checked.");
+    record(
+      "8 MCP call through /ops/mcp",
+      true,
+      "SKIPPED: no CAPSID_LIVE_PROBE_KEY, so no MCP call was made. This run asserts nothing about the connection.",
+    );
+    if (process.env.GITHUB_ACTIONS)
+      console.log(
+        "::warning::live gate 8 skipped: the CAPSID_LIVE_PROBE_KEY secret is not set, so this deploy's MCP connection was not checked.",
+      );
     return;
   }
   const post = async (body, headers) => {
     const resp = await request(`${ORIGIN}/ops/mcp`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream", "Cache-Control": "no-cache", ...headers },
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        "Cache-Control": "no-cache",
+        ...headers,
+      },
       body,
     });
     return { status: resp.status, text: resp.text };
@@ -517,13 +688,19 @@ async function gateMcpCall() {
     if (attempt < POLL_ATTEMPTS) await sleep(POLL_INTERVAL_MS);
   }
   if (lost) {
-    record("8 MCP call through /ops/mcp", COULD_NOT_RUN, `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`);
+    record(
+      "8 MCP call through /ops/mcp",
+      COULD_NOT_RUN,
+      `polls=${POLL_ATTEMPTS}, the last without an answer: ${lost.message}`,
+    );
     return;
   }
   record(
     "8 MCP call through /ops/mcp",
     problems.length === 0,
-    problems.length === 0 ? `polls=${attempt} 2025-11-25 and 2026-07-28: handshake, tools/list, read` : `polls=${attempt} ${problems.join("; ")}`
+    problems.length === 0
+      ? `polls=${attempt} 2025-11-25 and 2026-07-28: handshake, tools/list, read`
+      : `polls=${attempt} ${problems.join("; ")}`,
   );
 }
 
@@ -535,16 +712,26 @@ const clientId = await (async () => {
 })();
 
 // Whether a skipped gate is a refusal or could-not-run follows the gate it depends on.
-const upstream = (gate) => (results.find((r) => r.gate === gate)?.passed === COULD_NOT_RUN ? COULD_NOT_RUN : false);
+const upstream = (gate) =>
+  results.find((r) => r.gate === gate)?.passed === COULD_NOT_RUN ? COULD_NOT_RUN : false;
 
 if (clientId && clientId !== COULD_NOT_RUN) {
   const form = await gateConsentForm(clientId);
   await gateCsp(clientId);
   await gateSecurityHeaders(clientId);
   if (form && form !== COULD_NOT_RUN) await gateAccessRedirect(clientId, form);
-  else record("5 approve redirects to Access", upstream("3 consent form renders"), "skipped: gate 3 did not yield a usable form");
+  else
+    record(
+      "5 approve redirects to Access",
+      upstream("3 consent form renders"),
+      "skipped: gate 3 did not yield a usable form",
+    );
 } else {
-  record("3 consent form renders", upstream("2 CIMD, DCR allowlisted"), "skipped: no probe client from gate 2");
+  record(
+    "3 consent form renders",
+    upstream("2 CIMD, DCR allowlisted"),
+    "skipped: no probe client from gate 2",
+  );
 }
 // Independent of the MCP client gates above, so it runs whatever they found.
 await gatePortalHost();
@@ -554,12 +741,16 @@ await gateMcpCall();
 // trips a libuv assertion on Windows and replaces the exit code with 3221226505.
 const failed = results.filter((r) => r.passed === false);
 const norun = results.filter((r) => r.passed === COULD_NOT_RUN);
-console.log(`\n${results.length - failed.length - norun.length}/${results.length} gates passed against ${ORIGIN}`);
+console.log(
+  `\n${results.length - failed.length - norun.length}/${results.length} gates passed against ${ORIGIN}`,
+);
 if (failed.length) {
   console.log(`FAILED GATES: ${failed.map((f) => f.gate).join(", ")}`);
   if (norun.length) console.log(`COULD NOT RUN: ${norun.map((f) => f.gate).join(", ")}`);
   process.exitCode = EXIT_REFUSED;
 } else if (norun.length) {
-  console.log(`COULD NOT RUN: ${norun.map((f) => f.gate).join(", ")}. No gate refused this deploy; exiting ${EXIT_COULD_NOT_RUN} so it is not rolled back.`);
+  console.log(
+    `COULD NOT RUN: ${norun.map((f) => f.gate).join(", ")}. No gate refused this deploy; exiting ${EXIT_COULD_NOT_RUN} so it is not rolled back.`,
+  );
   process.exitCode = EXIT_COULD_NOT_RUN;
 }

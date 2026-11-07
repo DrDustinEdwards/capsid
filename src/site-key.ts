@@ -7,7 +7,7 @@ import { base64url } from "@dustinedwards/site-runtime/encoding";
 import { callSignal } from "./call-signal";
 
 // SET A SITE KEY (create a site key and set it on both sides, never shown), served as
-// capsid_admin_set_site_key. The site key is the site API's key
+// capsid_admin_set_site_key and as the site_key_rotate control (src/controls.ts).The site key is the site API's key
 // (DrDustinEdwards/site-api): the site's Worker holds it as CARREL_SITE_KEY, and Carrel
 // holds the same value as SITE_<NAMESPACE>_KEY to call that site. This mints a new one
 // and sets it as a secret on both Workers through the Cloudflare API.
@@ -39,60 +39,136 @@ export function mintSiteKey(): string {
   return base64url(crypto.getRandomValues(new Uint8Array(KEY_BYTES)));
 }
 
-async function putSecret(fetchImpl: FetchLike, token: string, account: string, script: string, name: string, value: string): Promise<{ ok: true } | { ok: false; error: string }> {
+async function putSecret(
+  fetchImpl: FetchLike,
+  token: string,
+  account: string,
+  script: string,
+  name: string,
+  value: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   let res: Response;
   try {
     res = await fetchImpl(`${CF_API}/accounts/${account}/workers/scripts/${script}/secrets`, {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "capsid (set site key)" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "User-Agent": "capsid (set site key)",
+      },
       body: JSON.stringify({ name, text: value, type: "secret_text" }),
       signal: callSignal(CF_TIMEOUT_MS),
     });
   } catch (err) {
-    return { ok: false, error: `no answer from Cloudflare: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}` };
+    return {
+      ok: false,
+      error: `no answer from Cloudflare: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`,
+    };
   }
   // Only Cloudflare's own error messages are read back, never the request.
   let messages = "";
   try {
     const body = (await res.json()) as { success?: boolean; errors?: Array<{ message?: string }> };
     if (res.ok && body.success === true) return { ok: true };
-    messages = (body.errors ?? []).map((e) => e.message ?? "").filter(Boolean).join("; ");
+    messages = (body.errors ?? [])
+      .map((e) => e.message ?? "")
+      .filter(Boolean)
+      .join("; ");
   } catch {
     messages = "the answer was not JSON";
   }
-  const hint = res.status === 403 ? " CF_SECRETS_TOKEN needs Workers Scripts Edit on the account." : "";
-  return { ok: false, error: `Cloudflare answered ${res.status}: ${messages || "no error message"}.${hint}` };
+  const hint =
+    res.status === 403 ? " CF_SECRETS_TOKEN needs Workers Scripts Edit on the account." : "";
+  return {
+    ok: false,
+    error: `Cloudflare answered ${res.status}: ${messages || "no error message"}.${hint}`,
+  };
 }
 
-export async function setSiteKey(env: Env, actor: string, namespace: string, fetchImpl: FetchLike = fetch) {
+/** Where a new key would go, or why none can be minted: the token and account it is set
+ *  with, and the site's Worker from its ops_sites row. Reads only, so the site_key_rotate
+ *  control's preview (src/controls-plan.ts) refuses exactly what this refuses. */
+export async function siteKeyTarget(
+  env: Env,
+  namespace: string,
+): Promise<
+  | { ok: true; token: string; account: string; siteScript: string; carrelSecret: string }
+  | { ok: false; refusal: string }
+> {
   const token = env.CF_SECRETS_TOKEN?.trim();
   const account = env.CF_ACCOUNT_ID?.trim() || env.R2_ACCOUNT_ID?.trim();
   if (!token || !account) {
-    throw new Error(`no key was minted: ${!token ? "CF_SECRETS_TOKEN is not set" : "neither CF_ACCOUNT_ID nor R2_ACCOUNT_ID is set"}. The seat sets CF_SECRETS_TOKEN, a token with Workers Scripts Edit (docs/portal.md, "Site keys").`);
+    return {
+      ok: false,
+      refusal: `no key was minted: ${!token ? "CF_SECRETS_TOKEN is not set" : "neither CF_ACCOUNT_ID nor R2_ACCOUNT_ID is set"}. The seat sets CF_SECRETS_TOKEN, a token with Workers Scripts Edit (docs/portal.md, "Site keys").`,
+    };
   }
   const row = await readSiteRow(env.DB, namespace);
   if (!row || row.platform !== "cloudflare" || !row.script || !SCRIPT.test(row.script)) {
-    throw new Error(`no key was minted: ${namespace}'s site row names no Cloudflare Worker script, so there is no site Worker to set it on.`);
+    return {
+      ok: false,
+      refusal: `no key was minted: ${namespace}'s site row names no Cloudflare Worker script, so there is no site Worker to set it on.`,
+    };
   }
-  const siteScript = row.script;
-  const carrelSecret = carrelSecretName(namespace);
+  return {
+    ok: true,
+    token,
+    account,
+    siteScript: row.script,
+    carrelSecret: carrelSecretName(namespace),
+  };
+}
+
+export async function setSiteKey(
+  env: Env,
+  actor: string,
+  namespace: string,
+  fetchImpl: FetchLike = fetch,
+) {
+  const target = await siteKeyTarget(env, namespace);
+  if (!target.ok) throw new Error(target.refusal);
+  const { token, account, siteScript, carrelSecret } = target;
 
   const key = mintSiteKey();
   const site = await putSecret(fetchImpl, token, account, siteScript, SITE_SECRET, key);
-  const carrel = site.ok ? await putSecret(fetchImpl, token, account, CARREL_SCRIPT, carrelSecret, key) : null;
+  const carrel = site.ok
+    ? await putSecret(fetchImpl, token, account, CARREL_SCRIPT, carrelSecret, key)
+    : null;
   const result = {
     namespace,
-    site: { script: siteScript, secret: SITE_SECRET, set: site.ok, ...(site.ok ? {} : { error: site.error }) },
+    site: {
+      script: siteScript,
+      secret: SITE_SECRET,
+      set: site.ok,
+      ...(site.ok ? {} : { error: site.error }),
+    },
     carrel: carrel
-      ? { script: CARREL_SCRIPT, secret: carrelSecret, set: carrel.ok, ...(carrel.ok ? {} : { error: carrel.error }) }
-      : { script: CARREL_SCRIPT, secret: carrelSecret, set: false, error: "not attempted: the site Worker did not take the key, so Carrel keeps the key the site still holds" },
+      ? {
+          script: CARREL_SCRIPT,
+          secret: carrelSecret,
+          set: carrel.ok,
+          ...(carrel.ok ? {} : { error: carrel.error }),
+        }
+      : {
+          script: CARREL_SCRIPT,
+          secret: carrelSecret,
+          set: false,
+          error:
+            "not attempted: the site Worker did not take the key, so Carrel keeps the key the site still holds",
+        },
   };
   const matched = site.ok && carrel?.ok === true;
   // The record of the change, never the value.
   try {
     await auditStatement(env.DB, actor, "set_site_key", namespace, null, result).run();
   } catch (err) {
-    logEvent("AUDIT_INSERT_FAILED", { message: `AUDIT_INSERT_FAILED set_site_key ${namespace}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "AUDIT_INSERT_FAILED",
+      {
+        message: `AUDIT_INSERT_FAILED set_site_key ${namespace}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
   return {
     ...result,

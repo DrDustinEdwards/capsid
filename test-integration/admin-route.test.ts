@@ -39,7 +39,7 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM agents WHERE id = 'agent_adminroute01'").run();
   await env.DB.prepare(
     `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at)
-     VALUES ('agent_adminroute01', 'capsid-driver', 'driver', ?1, ?2, 'github:dustin', '2026-10-10 00:00:00')`
+     VALUES ('agent_adminroute01', 'capsid-driver', 'driver', ?1, ?2, 'github:dustin', '2026-10-10 00:00:00')`,
   )
     .bind(await sha256Hex(DRIVER_KEY), serializeScopes(scopes))
     .run();
@@ -47,7 +47,11 @@ beforeEach(async () => {
 
 async function call(request: Request): Promise<Response> {
   const ctx = createExecutionContext();
-  const response = await worker.fetch!(request as never, { ...env, COOKIE_ENCRYPTION_KEY: "integration-cookie-key" } as never, ctx);
+  const response = await worker.fetch!(
+    request as never,
+    { ...env, COOKIE_ENCRYPTION_KEY: "integration-cookie-key" } as never,
+    ctx,
+  );
   await waitOnExecutionContext(ctx);
   return response as unknown as Response;
 }
@@ -69,7 +73,8 @@ function rpcMessage(text: string): RpcAnswer["message"] {
     if (!line.startsWith("data:")) continue;
     try {
       const parsed = JSON.parse(line.slice(5).trim());
-      if (parsed && typeof parsed === "object" && ("result" in parsed || "error" in parsed)) return parsed;
+      if (parsed && typeof parsed === "object" && ("result" in parsed || "error" in parsed))
+        return parsed;
     } catch {
       // A data line that is not JSON is not the answer; keep reading.
     }
@@ -78,22 +83,40 @@ function rpcMessage(text: string): RpcAnswer["message"] {
 }
 
 let rpcId = 0;
-async function rpc(path: string, bearer: string | null, method: string, params?: Record<string, unknown>, notification = false): Promise<RpcAnswer> {
+async function rpc(
+  path: string,
+  bearer: string | null,
+  method: string,
+  params?: Record<string, unknown>,
+  notification = false,
+): Promise<RpcAnswer> {
   const body: Record<string, unknown> = { jsonrpc: "2.0", method };
   if (params) body.params = params;
   if (!notification) body.id = ++rpcId;
-  const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+  };
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
   if (method !== "initialize") headers["mcp-protocol-version"] = ERA;
-  const response = await call(new Request(`${ORIGIN}${path}`, { method: "POST", headers, body: JSON.stringify(body) }));
+  const response = await call(
+    new Request(`${ORIGIN}${path}`, { method: "POST", headers, body: JSON.stringify(body) }),
+  );
   const text = await response.text();
   return { status: response.status, text, message: rpcMessage(text) };
 }
 
 // initialize, notifications/initialized, tools/list. Returns the server's name and the
 // listed tool names.
-async function listTools(path: string, bearer: string): Promise<{ server: string; tools: string[] }> {
-  const init = await rpc(path, bearer, "initialize", { protocolVersion: ERA, capabilities: {}, clientInfo: { name: "admin-route", version: "1.0.0" } });
+async function listTools(
+  path: string,
+  bearer: string,
+): Promise<{ server: string; tools: string[] }> {
+  const init = await rpc(path, bearer, "initialize", {
+    protocolVersion: ERA,
+    capabilities: {},
+    clientInfo: { name: "admin-route", version: "1.0.0" },
+  });
   expect(init.status, init.text.slice(0, 300)).toBe(200);
   expect(init.message?.error, init.text.slice(0, 300)).toBeUndefined();
   const server = String((init.message?.result?.serverInfo as { name?: string } | undefined)?.name);
@@ -107,8 +130,17 @@ async function listTools(path: string, bearer: string): Promise<{ server: string
   return { server, tools };
 }
 
-async function callTool(path: string, bearer: string, name: string, args: Record<string, unknown>): Promise<RpcAnswer> {
-  await rpc(path, bearer, "initialize", { protocolVersion: ERA, capabilities: {}, clientInfo: { name: "admin-route", version: "1.0.0" } });
+async function callTool(
+  path: string,
+  bearer: string,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<RpcAnswer> {
+  await rpc(path, bearer, "initialize", {
+    protocolVersion: ERA,
+    capabilities: {},
+    clientInfo: { name: "admin-route", version: "1.0.0" },
+  });
   await rpc(path, bearer, "notifications/initialized", undefined, true);
   return rpc(path, bearer, "tools/call", { name, arguments: args });
 }
@@ -125,17 +157,24 @@ describe("/ops/mcp serves Capsid and no Capsid Admin tool", () => {
   });
 
   it("PLANT: an admin tool called on /ops/mcp does not run", async () => {
-    const answer = await callTool("/ops/mcp", DRIVER_KEY, "capsid_admin_read_claims", { namespace: "sample" });
-    const result = answer.message?.result as { isError?: boolean; content?: Array<{ text: string }> } | undefined;
+    const answer = await callTool("/ops/mcp", DRIVER_KEY, "capsid_admin_read_claims", {
+      namespace: "sample",
+    });
+    const result = answer.message?.result as
+      | { isError?: boolean; content?: Array<{ text: string }> }
+      | undefined;
     const refused = answer.message?.error !== undefined || result?.isError === true;
-    expect(refused, `capsid_admin_read_claims ran on /ops/mcp: ${answer.text.slice(0, 300)}`).toBe(true);
+    expect(refused, `capsid_admin_read_claims ran on /ops/mcp: ${answer.text.slice(0, 300)}`).toBe(
+      true,
+    );
     expect(answer.text).toMatch(/capsid_admin_read_claims/);
   });
 });
 
 // The OAuth flow as test-integration/oauth-round-trip.test.ts runs it: a CIMD client,
 // consent, the stubbed Access sign-in, and the code exchange with PKCE.
-const cookieValues = (response: Response): string[] => response.headers.getSetCookie().map((c) => c.split(";")[0]);
+const cookieValues = (response: Response): string[] =>
+  response.headers.getSetCookie().map((c) => c.split(";")[0]);
 
 function hidden(html: string, name: string): string {
   const match = new RegExp(`name="${name}" value="([^"]*)"`).exec(html);
@@ -146,7 +185,14 @@ function hidden(html: string, name: string): string {
 async function adminToken(): Promise<string> {
   const clientId = cimdClient([REDIRECT], "admin-route");
   const url = new URL(`${ORIGIN}/authorize`);
-  for (const [k, v] of Object.entries({ client_id: clientId, redirect_uri: REDIRECT, response_type: "code", code_challenge: CHALLENGE, code_challenge_method: "S256", state: "client-state" })) {
+  for (const [k, v] of Object.entries({
+    client_id: clientId,
+    redirect_uri: REDIRECT,
+    response_type: "code",
+    code_challenge: CHALLENGE,
+    code_challenge_method: "S256",
+    state: "client-state",
+  })) {
     url.searchParams.set(k, v);
   }
   const dialog = await call(new Request(url));
@@ -155,9 +201,16 @@ async function adminToken(): Promise<string> {
   const approved = await call(
     new Request(`${ORIGIN}/authorize`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookieValues(dialog).join("; ") },
-      body: new URLSearchParams({ handle: hidden(html, "handle"), decision: "approve", allow_write: "1" }).toString(),
-    })
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Cookie: cookieValues(dialog).join("; "),
+      },
+      body: new URLSearchParams({
+        handle: hidden(html, "handle"),
+        decision: "approve",
+        allow_write: "1",
+      }).toString(),
+    }),
   );
   expect(approved.status).toBe(302);
   const signIn = new URL(String(approved.headers.get("location")));
@@ -175,19 +228,33 @@ async function adminToken(): Promise<string> {
   });
   let callback: Response;
   try {
-    callback = await call(new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, { headers: { Cookie: stateCookie } }));
+    callback = await call(
+      new Request(`${ORIGIN}/callback?code=access-code&state=${state}`, {
+        headers: { Cookie: stateCookie },
+      }),
+    );
   } finally {
     access.restore();
   }
   const location = callback.headers.get("location");
-  const code = location && location.startsWith(REDIRECT) ? new URL(location).searchParams.get("code") : null;
-  expect(code, `the callback did not send a code back: ${callback.status} ${location}`).toBeTruthy();
+  const code =
+    location && location.startsWith(REDIRECT) ? new URL(location).searchParams.get("code") : null;
+  expect(
+    code,
+    `the callback did not send a code back: ${callback.status} ${location}`,
+  ).toBeTruthy();
   const exchanged = await call(
     new Request(`${ORIGIN}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "authorization_code", code: code!, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER }).toString(),
-    })
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code!,
+        redirect_uri: REDIRECT,
+        client_id: clientId,
+        code_verifier: VERIFIER,
+      }).toString(),
+    }),
   );
   expect(exchanged.status, await exchanged.clone().text()).toBe(200);
   return ((await exchanged.json()) as { access_token: string }).access_token;

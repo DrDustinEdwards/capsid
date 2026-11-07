@@ -66,7 +66,8 @@ export function nextPulse(prev: PulseSite | undefined, probe: SiteProbe, now: Da
     down_since: downSince,
     down_reason: down ? (probe.error ?? `answered ${probe.http_status ?? "nothing"}`) : null,
     recovered,
-    degraded: probe.state === "degraded" ? (probe.error ?? "the health route reports degraded") : null,
+    degraded:
+      probe.state === "degraded" ? (probe.error ?? "the health route reports degraded") : null,
   };
 }
 
@@ -74,7 +75,10 @@ export function nextPulse(prev: PulseSite | undefined, probe: SiteProbe, now: Da
  *  part such as "backup: last successful backup was 38h ago" is keyed by its name only, so
  *  an age that grows each probe is still one check. */
 function degradedChecks(reason: string): string[] {
-  const names = reason.split("; ").map((part) => part.split(":")[0]!.trim().slice(0, 60)).filter(Boolean);
+  const names = reason
+    .split("; ")
+    .map((part) => part.split(":")[0]!.trim().slice(0, 60))
+    .filter(Boolean);
   return names.length ? [...new Set(names)] : ["health"];
 }
 
@@ -85,25 +89,45 @@ export function pulseAlerts(state: PulseState, now: Date): SiteAlert[] {
   const day = now.toISOString().slice(0, 10);
   for (const [namespace, s] of Object.entries(state)) {
     if (s.down_since) {
-      out.push({ key: `site-down:${namespace}:${s.down_since}`, namespace, title: `${s.name} is down`, body: `Down on ${DOWN_AFTER} probes in a row since ${s.down_since}: ${s.down_reason ?? "no answer"}.` });
+      out.push({
+        key: `site-down:${namespace}:${s.down_since}`,
+        namespace,
+        title: `${s.name} is down`,
+        body: `Down on ${DOWN_AFTER} probes in a row since ${s.down_since}: ${s.down_reason ?? "no answer"}.`,
+      });
     } else if (s.degraded) {
       for (const check of degradedChecks(s.degraded)) {
-        out.push({ key: `site-degraded:${namespace}:${check}:${day}`, namespace, title: `${s.name} is degraded: ${check}`, body: s.degraded });
+        out.push({
+          key: `site-degraded:${namespace}:${check}:${day}`,
+          namespace,
+          title: `${s.name} is degraded: ${check}`,
+          body: s.degraded,
+        });
       }
     }
     if (s.recovered) {
-      out.push({ key: `site-up:${namespace}:${s.recovered.down_since}`, namespace, title: `${s.name} is back up`, body: `Down from ${s.recovered.down_since}, answering again at ${s.recovered.at}.` });
+      out.push({
+        key: `site-up:${namespace}:${s.recovered.down_since}`,
+        namespace,
+        title: `${s.name} is back up`,
+        body: `Down from ${s.recovered.down_since}, answering again at ${s.recovered.at}.`,
+      });
     }
   }
   return out;
 }
 
 /** One probe counted against its site's UTC day in ops_uptime_daily (migrations/0054). */
-function uptimeCount(db: D1Database, namespace: string, day: string, up: boolean): D1PreparedStatement {
+function uptimeCount(
+  db: D1Database,
+  namespace: string,
+  day: string,
+  up: boolean,
+): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO ops_uptime_daily (namespace, day, probes, up) VALUES (?1, ?2, 1, ?3)
-       ON CONFLICT (namespace, day) DO UPDATE SET probes = probes + 1, up = up + excluded.up`
+       ON CONFLICT (namespace, day) DO UPDATE SET probes = probes + 1, up = up + excluded.up`,
     )
     .bind(namespace, day, up ? 1 : 0);
 }
@@ -115,7 +139,11 @@ export async function readPulse(env: Pick<Env, "APP_KV">): Promise<PulseState> {
 
 /** One pass: every configured site probed, the state written back. A site no longer
  *  configured drops out. Reports a run only when a site was called down or came back. */
-export async function sitePulseTick(env: Env, now: Date, fetchImpl: typeof fetch = fetch): Promise<{ ran: boolean; note: string }> {
+export async function sitePulseTick(
+  env: Env,
+  now: Date,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ ran: boolean; note: string }> {
   const sites = sitesFrom(await readSiteConfig(env.DB));
   if (sites.length === 0) return { ran: false, note: "no site configured" };
   const prev = await readPulse(env);
@@ -130,16 +158,26 @@ export async function sitePulseTick(env: Env, now: Date, fetchImpl: typeof fetch
     const pulse = nextPulse(prev[site.namespace], probe, now);
     next[site.namespace] = pulse;
     const was = prev[site.namespace]?.down_since ?? null;
-    if (pulse.down_since !== was) changed.push(`${site.namespace} ${pulse.down_since ? "down" : "back up"}`);
+    if (pulse.down_since !== was)
+      changed.push(`${site.namespace} ${pulse.down_since ? "down" : "back up"}`);
   }
   // The daily uptime rows (area 8, U4). A failed write is logged and never stops the pulse,
   // whose alerts matter more than one tick's count.
   try {
     await env.DB.batch(counts);
   } catch (err) {
-    logEvent("SITE_PULSE_UPTIME_UNWRITTEN", { message: `SITE_PULSE_UPTIME_UNWRITTEN ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "SITE_PULSE_UPTIME_UNWRITTEN",
+      {
+        message: `SITE_PULSE_UPTIME_UNWRITTEN ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
   const written = JSON.stringify(next);
   if (written !== JSON.stringify(prev)) await env.APP_KV.put(SITE_PULSE_KEY, written);
-  return { ran: changed.length > 0, note: changed.length ? changed.join(", ") : `${sites.length} sites probed, no change` };
+  return {
+    ran: changed.length > 0,
+    note: changed.length ? changed.join(", ") : `${sites.length} sites probed, no change`,
+  };
 }

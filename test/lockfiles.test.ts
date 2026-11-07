@@ -35,15 +35,29 @@ test("pnpm: a workspace's npm and git dependencies, peers stripped, the git vers
     "    version: 0.2.0",
   ].join("\n");
   const names = ["@example/kit", "sample-charts", "absent"];
-  assert.deepEqual(pnpmLockVersions(lock, "", "apps/web", names), { "@example/kit": "v0.2.0", "sample-charts": "v1.4.2" });
+  assert.deepEqual(pnpmLockVersions(lock, "", "apps/web", names), {
+    "@example/kit": "v0.2.0",
+    "sample-charts": "v1.4.2",
+  });
   assert.deepEqual(pnpmLockVersions(lock, "", "", names), { "@example/kit": "v0.3.0" });
 });
 
 test("npm: a workspace's own copy wins over the hoisted one", () => {
-  const lock = JSON.stringify({ packages: { "node_modules/sample-charts": { version: "1.4.2" }, "site/node_modules/sample-charts": { version: "1.3.0" } } });
-  assert.deepEqual(npmLockVersions(lock, "", "site", ["sample-charts"]), { "sample-charts": "v1.3.0" });
+  const lock = JSON.stringify({
+    packages: {
+      "node_modules/sample-charts": { version: "1.4.2" },
+      "site/node_modules/sample-charts": { version: "1.3.0" },
+    },
+  });
+  assert.deepEqual(npmLockVersions(lock, "", "site", ["sample-charts"]), {
+    "sample-charts": "v1.3.0",
+  });
   assert.deepEqual(npmLockVersions(lock, "", "", ["sample-charts"]), { "sample-charts": "v1.4.2" });
-  assert.deepEqual(npmLockVersions(lock, "site", "site", ["sample-charts"]), { "sample-charts": "v1.4.2" }, "a lockfile in the manifest's own folder is that folder's root");
+  assert.deepEqual(
+    npmLockVersions(lock, "site", "site", ["sample-charts"]),
+    { "sample-charts": "v1.4.2" },
+    "a lockfile in the manifest's own folder is that folder's root",
+  );
 });
 
 test("a workflow pin is the version Renovate writes beside the sha, or the ref when it is one", () => {

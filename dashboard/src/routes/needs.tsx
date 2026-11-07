@@ -3,4 +3,5 @@ import { NeedsYou } from "../views/NeedsYou";
 
 export const loader = viewLoader("needs");
 export const clientLoader = browserLoader;
-export default viewPage(NeedsYou);
+const NeedsYouPage = viewPage(NeedsYou);
+export default NeedsYouPage;

@@ -19,7 +19,13 @@ import {
   type JobFeedRow,
 } from "../src/ops-feed.ts";
 import { OPS_SNAPSHOT_KEY } from "../src/ops-snapshot.ts";
-import { openWatcherFingerprints, watcherTick, WATCHER_ACTOR, WATCHER_LAST_KEY, type Gathered } from "../src/watcher.ts";
+import {
+  openWatcherFingerprints,
+  watcherTick,
+  WATCHER_ACTOR,
+  WATCHER_LAST_KEY,
+  type Gathered,
+} from "../src/watcher.ts";
 import { agentRecord, fakeEnv, fakeKv, withPortalSessionEnds } from "./fakes.ts";
 
 // The Watch Floor feed and its Refresh (src/ops-feed.ts). The live reads are driven
@@ -85,7 +91,11 @@ test("a watcher job's fingerprint is read exactly as openWatcherFingerprints rea
   const db = { prepare: () => ({ bind: () => ({ all: async () => ({ results: rows }) }) }) };
   const watcher = await openWatcherFingerprints(fakeEnv({ DB: db }));
   const fromWatcher = new Map([...watcher].map(([fp, id]) => [id, fp]));
-  assert.equal(fromWatcher.size, 3, "the fixtures must give the watcher three fingerprints, or the comparison below proves little");
+  assert.equal(
+    fromWatcher.size,
+    3,
+    "the fixtures must give the watcher three fingerprints, or the comparison below proves little",
+  );
   for (const row of rows) {
     const shaped = opsJobFrom(job({ id: row.id, title: row.title, posted_by: WATCHER_ACTOR }));
     assert.equal(shaped.finding?.fingerprint ?? null, fromWatcher.get(row.id) ?? null, row.title);
@@ -152,7 +162,10 @@ test("an awaiting-seat value that does not parse is logged, never passed through
 
 test("refresh_allowed_at is two minutes after the last on-demand pass, and null once that has passed", () => {
   assert.equal(refreshAllowedAt(null, NOW), null);
-  assert.equal(refreshAllowedAt(new Date(NOW.getTime() - 30_000).toISOString(), NOW), new Date(NOW.getTime() + 90_000).toISOString());
+  assert.equal(
+    refreshAllowedAt(new Date(NOW.getTime() - 30_000).toISOString(), NOW),
+    new Date(NOW.getTime() + 90_000).toISOString(),
+  );
   assert.equal(refreshAllowedAt(new Date(NOW.getTime() - 120_000).toISOString(), NOW), null);
 });
 
@@ -218,7 +231,9 @@ const FEED: OpsFeedData = {
 const feed = async () => FEED;
 
 async function signed(path: string, init: RequestInit = {}): Promise<Request> {
-  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(";")[0];
+  const cookie = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, NOW)).split(
+    ";",
+  )[0];
   const headers = new Headers(init.headers);
   headers.set("Cookie", cookie);
   return new Request(`https://capsid.example${path}`, { ...init, headers });
@@ -237,20 +252,36 @@ test("the feed answers a signed-in administrator with the feed, uncached", async
 
 test("the feed names the signed-in person from the session: the token's name, else the email's local part", async () => {
   for (const [user, expected] of [
-    [{ email: "admin@example.com", name: "Dustin Edwards" }, { name: "Dustin Edwards", initials: "DE" }],
+    [
+      { email: "admin@example.com", name: "Dustin Edwards" },
+      { name: "Dustin Edwards", initials: "DE" },
+    ],
     [{ email: "admin@example.com" }, { name: "admin", initials: "A" }],
   ] as const) {
     const cookie = (await portalSessionCookie(user, SECRET, NOW)).split(";")[0];
-    const req = new Request(`https://capsid.example${OPS_FEED_PATH}`, { headers: { Cookie: cookie } });
-    const body = (await (await handleOpsFeed(req, env(), NOW, { feed })).json()) as { user: unknown };
+    const req = new Request(`https://capsid.example${OPS_FEED_PATH}`, {
+      headers: { Cookie: cookie },
+    });
+    const body = (await (await handleOpsFeed(req, env(), NOW, { feed })).json()) as {
+      user: unknown;
+    };
     assert.deepEqual(body.user, expected);
   }
 });
 
 test("portalDisplay: another person gets their own name and initials, never a fixed label", () => {
-  assert.deepEqual(portalDisplay({ email: "jane.q.public@example.com" }), { name: "jane.q.public", initials: "JP" });
-  assert.deepEqual(portalDisplay({ email: "x@example.com", name: "Mary-Jane O'Neil" }), { name: "Mary-Jane O'Neil", initials: "MO" });
-  assert.deepEqual(portalDisplay({ email: "x@example.com", name: "Cher" }), { name: "Cher", initials: "C" });
+  assert.deepEqual(portalDisplay({ email: "jane.q.public@example.com" }), {
+    name: "jane.q.public",
+    initials: "JP",
+  });
+  assert.deepEqual(portalDisplay({ email: "x@example.com", name: "Mary-Jane O'Neil" }), {
+    name: "Mary-Jane O'Neil",
+    initials: "MO",
+  });
+  assert.deepEqual(portalDisplay({ email: "x@example.com", name: "Cher" }), {
+    name: "Cher",
+    initials: "C",
+  });
 });
 
 // The Portal's CSRF value
@@ -258,7 +289,11 @@ test("portalDisplay: another person gets their own name and initials, never a fi
 const CSRF_VALUE = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
 // A signed request that also carries a Portal CSRF cookie.
-async function signedWithCsrf(path: string, csrf: string, init: RequestInit = {}): Promise<Request> {
+async function signedWithCsrf(
+  path: string,
+  csrf: string,
+  init: RequestInit = {},
+): Promise<Request> {
   const req = await signed(path, init);
   req.headers.set("Cookie", `${req.headers.get("Cookie")}; ${PORTAL_CSRF_COOKIE}=${csrf}`);
   return req;
@@ -267,32 +302,51 @@ async function signedWithCsrf(path: string, csrf: string, init: RequestInit = {}
 test("the feed and the refresh mint the Portal CSRF cookie when the request has none, and the body carries its value", async () => {
   for (const [path, handler, init] of [
     [OPS_FEED_PATH, handleOpsFeed, {}],
-    [OPS_REFRESH_PATH, handleOpsRefresh, { method: "POST", headers: { [OPS_REFRESH_HEADER]: "refresh" } }],
+    [
+      OPS_REFRESH_PATH,
+      handleOpsRefresh,
+      { method: "POST", headers: { [OPS_REFRESH_HEADER]: "refresh" } },
+    ],
   ] as const) {
     const res = await handler(await signed(path, init), env(), NOW, { feed, gather: gathered });
     assert.equal(res.status, 200, await res.clone().text());
     const set = res.headers.get("Set-Cookie") ?? "";
     const { csrf } = (await res.json()) as { csrf: string };
     assert.match(csrf, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    assert.ok(set.startsWith(`__Secure-${PORTAL_CSRF_COOKIE}=${csrf};`), `${path} did not set the body's csrf as the cookie: ${set}`);
-    for (const attribute of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/portal", "Max-Age=86400"]) {
+    assert.ok(
+      set.startsWith(`__Secure-${PORTAL_CSRF_COOKIE}=${csrf};`),
+      `${path} did not set the body's csrf as the cookie: ${set}`,
+    );
+    for (const attribute of [
+      "HttpOnly",
+      "Secure",
+      "SameSite=Lax",
+      "Path=/portal",
+      "Max-Age=86400",
+    ]) {
       assert.ok(set.includes(attribute), `the cookie lacks ${attribute}: ${set}`);
     }
   }
 });
 
 test("a present Portal CSRF cookie is echoed and never re-set, so a poll does not rotate it", async () => {
-  const res = await handleOpsFeed(await signedWithCsrf(OPS_FEED_PATH, CSRF_VALUE), env(), NOW, { feed });
+  const res = await handleOpsFeed(await signedWithCsrf(OPS_FEED_PATH, CSRF_VALUE), env(), NOW, {
+    feed,
+  });
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("Set-Cookie"), null, "a present cookie was rotated");
   assert.equal(((await res.json()) as { csrf: string }).csrf, CSRF_VALUE);
 });
 
 test("a malformed Portal CSRF cookie is replaced, not echoed", async () => {
-  const res = await handleOpsFeed(await signedWithCsrf(OPS_FEED_PATH, "not-a-token"), env(), NOW, { feed });
+  const res = await handleOpsFeed(await signedWithCsrf(OPS_FEED_PATH, "not-a-token"), env(), NOW, {
+    feed,
+  });
   const { csrf } = (await res.json()) as { csrf: string };
   assert.notEqual(csrf, "not-a-token");
-  assert.ok((res.headers.get("Set-Cookie") ?? "").startsWith(`__Secure-${PORTAL_CSRF_COOKIE}=${csrf};`));
+  assert.ok(
+    (res.headers.get("Set-Cookie") ?? "").startsWith(`__Secure-${PORTAL_CSRF_COOKIE}=${csrf};`),
+  );
 });
 
 test("the feed and the refresh refuse a bearer with 403 and send an anonymous reader to sign in", async () => {
@@ -301,16 +355,35 @@ test("the feed and the refresh refuse a bearer with 403 and send an anonymous re
     [OPS_REFRESH_PATH, "POST", handleOpsRefresh],
   ] as const) {
     const bearer = await handler(
-      new Request(`https://capsid.example${path}`, { method, headers: { Authorization: "Bearer capsid_x", [OPS_REFRESH_HEADER]: "refresh" } }),
+      new Request(`https://capsid.example${path}`, {
+        method,
+        headers: { Authorization: "Bearer capsid_x", [OPS_REFRESH_HEADER]: "refresh" },
+      }),
       env(),
       NOW,
-      { feed }
+      { feed },
     );
     assert.equal(bearer.status, 403, `${path} served a bearer`);
     // A bearer beside a valid session is still refused: the gate reads the header first.
-    const both = await handler(await signed(path, { method, headers: { Authorization: "Bearer capsid_x", [OPS_REFRESH_HEADER]: "refresh" } }), env(), NOW, { feed });
+    const both = await handler(
+      await signed(path, {
+        method,
+        headers: { Authorization: "Bearer capsid_x", [OPS_REFRESH_HEADER]: "refresh" },
+      }),
+      env(),
+      NOW,
+      { feed },
+    );
     assert.equal(both.status, 403, `${path} served a bearer that also carried a session`);
-    const anonymous = await handler(new Request(`https://capsid.example${path}`, { method, headers: { [OPS_REFRESH_HEADER]: "refresh" } }), env(), NOW, { feed });
+    const anonymous = await handler(
+      new Request(`https://capsid.example${path}`, {
+        method,
+        headers: { [OPS_REFRESH_HEADER]: "refresh" },
+      }),
+      env(),
+      NOW,
+      { feed },
+    );
     assert.equal(anonymous.status, 302, `${path} did not send an anonymous reader to sign in`);
     assert.equal(await anonymous.text(), "");
   }
@@ -331,7 +404,10 @@ test("a refresh without the same-origin header is refused with 403, and nothing 
   const kv = fakeKv();
   const variants: Array<Record<string, string>> = [{}, { [OPS_REFRESH_HEADER]: "yes" }];
   for (const headers of variants) {
-    const res = await handleOpsRefresh(await refreshRequest(headers), env(kv), NOW, { feed, gather: gathered });
+    const res = await handleOpsRefresh(await refreshRequest(headers), env(kv), NOW, {
+      feed,
+      gather: gathered,
+    });
     assert.equal(res.status, 403);
     assert.match(await res.text(), /X-Capsid-Ops: refresh/);
   }
@@ -340,18 +416,31 @@ test("a refresh without the same-origin header is refused with 403, and nothing 
 
 test("PLANT: the refresh runs a watcher pass even when the cadence says one is not due", async () => {
   // The watcher ran a minute ago, so the five-minute tick would skip. The refresh must not.
-  const kv = fakeKv({ seed: { [WATCHER_LAST_KEY]: new Date(NOW.getTime() - 60_000).toISOString() } });
+  const kv = fakeKv({
+    seed: { [WATCHER_LAST_KEY]: new Date(NOW.getTime() - 60_000).toISOString() },
+  });
   const { db, batches } = recordingDb();
   const notDue = await watcherTick(env(kv, db), NOW, gathered);
-  assert.equal(notDue.ran, false, "the fixture must be a pass the cadence refuses, or this proves nothing about force");
+  assert.equal(
+    notDue.ran,
+    false,
+    "the fixture must be a pass the cadence refuses, or this proves nothing about force",
+  );
 
-  const res = await handleOpsRefresh(await refreshRequest(), env(kv, db), NOW, { feed, gather: gathered });
+  const res = await handleOpsRefresh(await refreshRequest(), env(kv, db), NOW, {
+    feed,
+    gather: gathered,
+  });
   assert.equal(res.status, 200, await res.clone().text());
   const body = (await res.json()) as { csrf: string };
   assert.deepEqual(body, { ...FEED, csrf: body.csrf, user: { name: "admin", initials: "A" } });
   assert.equal(kv.store.get(WATCHER_LAST_KEY), NOW.toISOString(), "no pass ran");
   assert.ok(kv.store.has(OPS_SNAPSHOT_KEY), "the pass wrote no snapshot");
-  assert.equal(kv.store.get(OPS_REFRESH_KEY), NOW.toISOString(), "the rate-limit stamp was not written");
+  assert.equal(
+    kv.store.get(OPS_REFRESH_KEY),
+    NOW.toISOString(),
+    "the rate-limit stamp was not written",
+  );
 
   // The click's own audit row, naming the administrator.
   const audit = batches.flat().find((s) => /INSERT INTO audit_log/.test(s.sql));
@@ -365,15 +454,25 @@ test("PLANT: the refresh runs a watcher pass even when the cadence says one is n
 
 test("a refresh's audit row records the address it came from", async () => {
   const { db, batches } = recordingDb();
-  const res = await handleOpsRefresh(await refreshRequest({ [OPS_REFRESH_HEADER]: "refresh", "CF-Connecting-IP": "198.51.100.4" }), env(fakeKv(), db), NOW, { feed, gather: gathered });
+  const res = await handleOpsRefresh(
+    await refreshRequest({ [OPS_REFRESH_HEADER]: "refresh", "CF-Connecting-IP": "198.51.100.4" }),
+    env(fakeKv(), db),
+    NOW,
+    { feed, gather: gathered },
+  );
   assert.equal(res.status, 200, await res.clone().text());
   const audit = batches.flat().find((s) => /INSERT INTO audit_log/.test(s.sql));
   assert.equal(JSON.parse(String(audit?.params[4])).source_address, "198.51.100.4");
 });
 
 test("PLANT: a second refresh inside two minutes is refused with 429 and a Retry-After", async () => {
-  const kv = fakeKv({ seed: { [OPS_REFRESH_KEY]: new Date(NOW.getTime() - 30_000).toISOString() } });
-  const res = await handleOpsRefresh(await refreshRequest(), env(kv), NOW, { feed, gather: gathered });
+  const kv = fakeKv({
+    seed: { [OPS_REFRESH_KEY]: new Date(NOW.getTime() - 30_000).toISOString() },
+  });
+  const res = await handleOpsRefresh(await refreshRequest(), env(kv), NOW, {
+    feed,
+    gather: gathered,
+  });
   assert.equal(res.status, 429);
   assert.equal(res.headers.get("Retry-After"), "90");
   assert.deepEqual(kv.puts, [], "a refused refresh ran or stamped");
@@ -387,7 +486,10 @@ test("PLANT: a rate limit that cannot be read or written refuses with 503, faili
     console.error = (...a: unknown[]) => void errors.push(a.map(String).join(" "));
     let res: Response;
     try {
-      res = await handleOpsRefresh(await refreshRequest(), env(kv), NOW, { feed, gather: gathered });
+      res = await handleOpsRefresh(await refreshRequest(), env(kv), NOW, {
+        feed,
+        gather: gathered,
+      });
     } finally {
       console.error = original;
     }

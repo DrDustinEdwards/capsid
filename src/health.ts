@@ -3,7 +3,13 @@ import type { HealthSnapshot } from "./ops-types/sites";
 import { probeFts } from "./store-probe";
 import { aiSearchUsage } from "./doc-index";
 import { HOUR_MS } from "./time";
-import { durableObjectCheck, healthResponse, kvCheck, r2Check, type HealthCheck } from "@dustinedwards/site-runtime/health";
+import {
+  durableObjectCheck,
+  healthResponse,
+  kvCheck,
+  r2Check,
+  type HealthCheck,
+} from "@dustinedwards/site-runtime/health";
 import { auditLogCheck } from "@dustinedwards/site-runtime/audit-log";
 import { readTaskRuns, taskStates, TASKS } from "./task-runs";
 import { DEFAULT_CADENCE_MINUTES } from "./watcher";
@@ -12,8 +18,8 @@ export const BACKUP_LAST_OK_KEY = "backup:last-ok";
 // Daily cron is 24h; 26h is that plus a 2h grace so one slow run does not warn.
 export const BACKUP_STALE_HOURS = 26;
 
-async function backupFreshness(
-  env: Env
+export async function backupFreshness(
+  env: Env,
 ): Promise<{ last_ok: string | null; age_hours: number | null; warning?: string }> {
   let lastOk: string | null = null;
   try {
@@ -30,11 +36,18 @@ async function backupFreshness(
   // NaN compares false against the threshold, so without this an unreadable stamp
   // would pass as fresh with no warning.
   if (Number.isNaN(stamped)) {
-    return { last_ok: lastOk, age_hours: null, warning: `${BACKUP_LAST_OK_KEY} is not a parseable time: ${lastOk.slice(0, 40)}` };
+    return {
+      last_ok: lastOk,
+      age_hours: null,
+      warning: `${BACKUP_LAST_OK_KEY} is not a parseable time: ${lastOk.slice(0, 40)}`,
+    };
   }
   const ageMs = Date.now() - stamped;
   const ageHours = Math.round((ageMs / HOUR_MS) * 10) / 10;
-  const result: { last_ok: string; age_hours: number; warning?: string } = { last_ok: lastOk, age_hours: ageHours };
+  const result: { last_ok: string; age_hours: number; warning?: string } = {
+    last_ok: lastOk,
+    age_hours: ageHours,
+  };
   if (ageMs > BACKUP_STALE_HOURS * HOUR_MS) {
     result.warning = `last successful backup was ${ageHours}h ago, over the ${BACKUP_STALE_HOURS}h threshold`;
   }
@@ -98,7 +111,9 @@ export async function healthReport(env: Env): Promise<HealthReport> {
   let schema_version: string | null = null;
   if (d1 === "ok") {
     try {
-      const row = await env.DB.prepare("SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1").first<{ name: string }>();
+      const row = await env.DB.prepare(
+        "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1",
+      ).first<{ name: string }>();
       schema_version = row?.name ?? null;
     } catch {
       schema_version = null;
@@ -111,7 +126,15 @@ export async function healthReport(env: Env): Promise<HealthReport> {
 
   // Status is the store only: the live gate polls it after a deploy, and a 503 fails it.
   const healthy = d1 === "ok" && fts === "ok";
-  return { status: healthy ? "ok" : "degraded", ...provenance, schema_version, store: { d1, fts }, bindings, backup, ai_search };
+  return {
+    status: healthy ? "ok" : "degraded",
+    ...provenance,
+    schema_version,
+    store: { d1, fts },
+    bindings,
+    backup,
+    ai_search,
+  };
 }
 
 /**
@@ -127,8 +150,17 @@ function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
     run: async () => {
       const states = taskStates(await readTaskRuns(env.DB), now(), DEFAULT_CADENCE_MINUTES);
       const periodic = new Set<string>(TASKS.filter((t) => t.period_ms !== null).map((t) => t.id));
-      const flagged = states.filter((t) => t.flag === "failing" || (periodic.has(t.id) && (t.flag === "quiet" || t.flag === "never")));
-      return flagged.length === 0 || { ok: false, detail: flagged.map((t) => `${t.id} ${t.flag}`).join(", ") };
+      const flagged = states.filter(
+        (t) =>
+          t.flag === "failing" ||
+          (periodic.has(t.id) && (t.flag === "quiet" || t.flag === "never")),
+      );
+      return (
+        flagged.length === 0 || {
+          ok: false,
+          detail: flagged.map((t) => `${t.id} ${t.flag}`).join(", "),
+        }
+      );
     },
   };
 }
@@ -137,7 +169,7 @@ function taskCheck(env: Env, now: () => Date = () => new Date()): HealthCheck {
  * /health in the family shape: site-runtime's healthResponse (status pass, warn or fail,
  * a check list, no-store, noindex), so the ops audit and every monitor read Capsid as they
  * read the other sites. The store is the fail level, as before: D1 and the FTS probe, so
- * a Worker bound to the wrong database is a 503. The backup, MEDIA, APP_KV, OAUTH_KV and the task
+ * a Worker bound to the wrong database is a 503. The backup, MEDIA, AUDIT_BUCKET, APP_KV, OAUTH_KV and the task
  * ledger warn. The fields the deploy gate and rollback read (sha, dirty, builtAt,
  * schema_version, store) are kept beside the family fields. The watcher still probes
  * itself in-process through healthReport.
@@ -156,14 +188,23 @@ export async function handleHealth(env: Env): Promise<Response> {
     taskCheck(env),
   ];
   if (env.MEDIA) checks.push({ ...r2Check("media", env.MEDIA), level: "warn" });
+  // The tool-call log's copies (area 8, H5): one head of a fixed key, a class B read. Warn,
+  // like MEDIA: the daily copy retries on its next run, and tool-call-log below warns when
+  // rows go uncopied for two days.
+  if (env.AUDIT_BUCKET)
+    checks.push({ ...r2Check("audit_bucket", env.AUDIT_BUCKET), level: "warn" });
   if (env.APP_KV) checks.push({ ...kvCheck("app_kv", env.APP_KV), level: "warn" });
   if (env.OAUTH_KV) checks.push({ ...kvCheck("oauth_kv", env.OAUTH_KV), level: "warn" });
   // The two Durable Objects (area 8, H5), warn: a bound namespace mints an id, and no
   // object is woken. Without RATE_LIMITER the limited routes refuse, and without
   // TOOL_CALL_LOG a tool call goes unlogged; the store still answers, so neither is a 503.
   // Left out: AI_SEARCH, because every read of it is a billed query and the hybrid search
-  // falls back to FTS5 without it; ASSETS, because the Portal's files are the deploy's own.
-  checks.push(durableObjectCheck("rate_limiter", env.RATE_LIMITER), durableObjectCheck("tool_call_log", env.TOOL_CALL_LOG));
+  // falls back to FTS5 without it; AI, because every call is billed inference
+  // (.ops-audit.json names it unprobed); ASSETS, because the Portal's files are the deploy's own.
+  checks.push(
+    durableObjectCheck("rate_limiter", env.RATE_LIMITER),
+    durableObjectCheck("tool_call_log", env.TOOL_CALL_LOG),
+  );
   // What is in the log (area 11, L8), warn: a call started and never finished, a spike in
   // calls, or rows not copied to AUDIT_BUCKET for two days.
   if (env.TOOL_CALL_LOG) checks.push(auditLogCheck(env));
@@ -177,7 +218,9 @@ export async function handleHealth(env: Env): Promise<Response> {
       }
       if (store.d1 !== "ok") return { ok: false, detail: store.d1 };
       // Informational. A store without d1_migrations is null, not a health failure.
-      schemaVersion = await env.DB.prepare("SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1")
+      schemaVersion = await env.DB.prepare(
+        "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1",
+      )
         .first<{ name: string }>()
         .then((row) => row?.name ?? null)
         .catch(() => null);
@@ -190,6 +233,14 @@ export async function handleHealth(env: Env): Promise<Response> {
     checks,
   });
   const body = (await response.json()) as Record<string, unknown>;
-  const provenance = { dirty: env.BUILD_DIRTY === "true", builtAt: env.BUILT_AT ?? null, schema_version: schemaVersion, store };
-  return new Response(JSON.stringify({ ...body, ...provenance }), { status: response.status, headers: response.headers });
+  const provenance = {
+    dirty: env.BUILD_DIRTY === "true",
+    builtAt: env.BUILT_AT ?? null,
+    schema_version: schemaVersion,
+    store,
+  };
+  return new Response(JSON.stringify({ ...body, ...provenance }), {
+    status: response.status,
+    headers: response.headers,
+  });
 }

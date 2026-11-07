@@ -29,10 +29,21 @@ interface Reach {
   openWorld?: boolean;
 }
 
-const reach = (r: Reach) => ({ idempotentHint: r.idempotent ?? false, openWorldHint: r.openWorld ?? true });
+const reach = (r: Reach) => ({
+  idempotentHint: r.idempotent ?? false,
+  openWorldHint: r.openWorld ?? true,
+});
 
-const read = (r: Reach = {}): ToolHints => ({ readOnlyHint: true, destructiveHint: false, ...reach(r) });
-const destructive = (r: Reach = {}): ToolHints => ({ readOnlyHint: false, destructiveHint: true, ...reach(r) });
+const read = (r: Reach = {}): ToolHints => ({
+  readOnlyHint: true,
+  destructiveHint: false,
+  ...reach(r),
+});
+const destructive = (r: Reach = {}): ToolHints => ({
+  readOnlyHint: false,
+  destructiveHint: true,
+  ...reach(r),
+});
 
 export const TOOL_HINTS: Record<string, ToolHints> = {
   // ---- Capsid (11)
@@ -59,7 +70,7 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   // post and record create a job each call; evidence is checked against GitHub.
   capsid_work_jobs: destructive({ idempotent: false, openWorld: true }),
   // Status only: Capsid's state from this Worker's own stores.
-  capsid_run_improve: read({ idempotent: true, openWorld: false }),
+  capsid_read_status: read({ idempotent: true, openWorld: false }),
 
   // ---- Capsid Admin (8)
   // Reads the queue, the Portal's stored state and GitHub's open pull requests.
@@ -80,16 +91,32 @@ export const TOOL_HINTS: Record<string, ToolHints> = {
   capsid_admin_run_controls: destructive({ idempotent: false, openWorld: true }),
   // sign_policy overwrites a policy document (snapshotted and audit-logged each call), and
   // breaker_reset and overnight overwrite their switches. Only this Worker's own stores.
-  capsid_admin_control_improve: destructive({ idempotent: false, openWorld: false }),
+  capsid_admin_manage_switches: destructive({ idempotent: false, openWorld: false }),
   // Replaces a site's key on the site Worker and on Carrel through the Cloudflare API.
   capsid_admin_set_site_key: destructive({ idempotent: false, openWorld: true }),
+};
+
+// A tool whose action decides its grant (capsid_work_jobs, capsid_lint_namespace) is
+// served to a caller holding only the read grant with its read actions alone
+// (src/tools/surface.ts READ_VIEWS), so for that caller it is read-only in fact and says
+// so (area 11, T7). Both views read only this Worker's D1 and KV.
+export const READ_VIEW_HINTS: Record<string, ToolHints> = {
+  // list, with its plan, digest, models and stale views: the queue and the stored plan.
+  capsid_work_jobs: read({ idempotent: true, openWorld: false }),
+  // gather: core.md, the wiki, the unconsolidated documents and their edges.
+  capsid_lint_namespace: read({ idempotent: true, openWorld: false }),
 };
 
 // Object.hasOwn, not a bare index: "constructor" is not a missing tool.
 export function hintsFor(tool: string): ToolHints {
   if (!Object.hasOwn(TOOL_HINTS, tool)) {
     // Fail closed: a new tool is under-claimed until the table catches up.
-    return { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
+    return {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    };
   }
   return TOOL_HINTS[tool];
 }

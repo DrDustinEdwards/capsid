@@ -1,7 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
-import { auditStatement, guardedCommit, isMissingRowAbort, requireBodyUnchanged, requireExists, snapshotLive, snapshotTaken } from "../store-guards";
+import {
+  auditStatement,
+  guardedCommit,
+  isMissingRowAbort,
+  requireBodyUnchanged,
+  requireExists,
+  snapshotLive,
+  snapshotTaken,
+} from "../store-guards";
 import { bounded, MAX_SHA, nsName, docPath } from "../limits";
 import { canonGuarded, canonRefusal } from "../canon";
 import { ruleDocCap, ruleDocWriteRefusal } from "../rule-docs";
@@ -32,9 +40,12 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
     async ({ namespace, path, version_id, confirm, if_match, allow_improve_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
-      if (canonGuarded(ctx.agent, namespace, path)) return fail(canonRefusal("restore", namespace, path));
+      if (canonGuarded(ctx.agent, namespace, path))
+        return fail(canonRefusal("restore", namespace, path));
       const version = await db
-        .prepare("SELECT id, title, body, snapshot_at FROM document_versions WHERE id = ?1 AND namespace = ?2 AND path = ?3")
+        .prepare(
+          "SELECT id, title, body, snapshot_at FROM document_versions WHERE id = ?1 AND namespace = ?2 AND path = ?3",
+        )
         .bind(version_id, namespace, path)
         .first<{ id: number; title: string | null; body: string | null; snapshot_at: string }>();
       if (!version) return fail(`no version ${version_id} for ${namespace}/${path}`);
@@ -43,12 +54,23 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
       // The policy-document guard (see policyPathsRefusal).
-      const restorePolicyRefusal = policyPathsRefusal(ctx, "restore", namespace, allow_improve_paths, [path]);
+      const restorePolicyRefusal = policyPathsRefusal(
+        ctx,
+        "restore",
+        namespace,
+        allow_improve_paths,
+        [path],
+      );
       if (restorePolicyRefusal) return fail(restorePolicyRefusal);
       // A rule document is held to the same checks as a write (src/rule-docs.ts). A restore
       // that recreates a deleted document puts back what was there, so it is judged
       // against the version itself and passes.
-      const restoreRuleRefusal = ruleDocWriteRefusal(namespace, path, prior ? (prior.body ?? "") : (version.body ?? ""), version.body ?? "");
+      const restoreRuleRefusal = ruleDocWriteRefusal(
+        namespace,
+        path,
+        prior ? (prior.body ?? "") : (version.body ?? ""),
+        version.body ?? "",
+      );
       if (restoreRuleRefusal) return fail(restoreRuleRefusal);
       // The same protocol capsid_write_doc action write runs, with restore's wordings. On the
       // recreate path the guard is the ABSENCE of a row: the snapshot statement is
@@ -100,9 +122,9 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
              ON CONFLICT(namespace, path) DO UPDATE SET
                title = ?3,
                body = excluded.body,
-               updated_at = datetime('now')`
+               updated_at = datetime('now')`,
           )
-          .bind(namespace, path, version.title, body)
+          .bind(namespace, path, version.title, body),
       );
       statements.push(
         auditStatement(db, actor, "restore", namespace, path, {
@@ -110,7 +132,7 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
           snapshot_at: version.snapshot_at,
           recreated: !prior,
           snapshotted: Boolean(prior),
-        })
+        }),
       );
       const committed = await commit.run(elicited, statements);
       if ("refusal" in committed) return fail(committed.refusal);
@@ -124,9 +146,13 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
         bytes: new TextEncoder().encode(body).length,
         // From the snapshot statement's result, as on write.
         snapshotted: Boolean(prior) && snapshotTaken(committed.results[0]),
-        ...(prior ? {} : { note: "the document did not exist and was recreated; its type, status, tags and links are defaults, not the ones it had" }),
+        ...(prior
+          ? {}
+          : {
+              note: "the document did not exist and was recreated; its type, status, tags and links are defaults, not the ones it had",
+            }),
       });
-    }
+    },
   );
 }
 
@@ -136,20 +162,33 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "delete",
     {
-      description: "Delete a document. Snapshots it first and writes an audit log entry. Refused on a canon document for a key scoped to some namespaces (see capsid_write_doc). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
-      inputSchema: { namespace: nsName, path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
+      description:
+        "Delete a document. Snapshots it first and writes an audit log entry. Refused on a canon document for a key scoped to some namespaces (see capsid_write_doc). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+      inputSchema: {
+        namespace: nsName,
+        path: docPath,
+        confirm: z.boolean().optional(),
+        allow_improve_paths: z.boolean().optional(),
+      },
     },
     async ({ namespace, path, confirm, allow_improve_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
       if (nsError) return fail(nsError);
-      if (canonGuarded(ctx.agent, namespace, path)) return fail(canonRefusal("delete", namespace, path));
+      if (canonGuarded(ctx.agent, namespace, path))
+        return fail(canonRefusal("delete", namespace, path));
       const prior = await db
         .prepare("SELECT id, title, body FROM documents WHERE namespace = ?1 AND path = ?2")
         .bind(namespace, path)
         .first<{ id: number; title: string | null; body: string | null }>();
       if (!prior) return fail(`not found: ${namespace}/${path}`);
       // The policy-document guard (see policyPathsRefusal).
-      const deletePolicyRefusal = policyPathsRefusal(ctx, "delete", namespace, allow_improve_paths, [path]);
+      const deletePolicyRefusal = policyPathsRefusal(
+        ctx,
+        "delete",
+        namespace,
+        allow_improve_paths,
+        [path],
+      );
       if (deletePolicyRefusal) return fail(deletePolicyRefusal);
       const deleteRefusal = await requireConfirmation(server, confirm, {
         prompt: `Delete ${namespace}/${path}? It will be snapshotted to document_versions first, so it can be recovered.`,
@@ -172,7 +211,9 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
       let edgesRemoved = 0;
       try {
         const results = await db.batch([
-          elicited ? requireBodyUnchanged(db, namespace, path, prior.body) : requireExists(db, namespace, path),
+          elicited
+            ? requireBodyUnchanged(db, namespace, path, prior.body)
+            : requireExists(db, namespace, path),
           snapshotLive(db, namespace, path),
           db
             .prepare(
@@ -180,22 +221,27 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
                SELECT ?1, 'delete', ?2, ?3, json_object('edges_removed', json_group_array(
                  json_object('from_ns', from_ns, 'from_path', from_path, 'type', type, 'to_ns', to_ns, 'to_path', to_path)))
                FROM document_links WHERE (from_ns = ?2 AND from_path = ?3) OR (to_ns = ?2 AND to_path = ?3)
-               RETURNING params`
+               RETURNING params`,
             )
             .bind(actor, namespace, path),
           ...pathMutation(db, namespace, path, null),
         ]);
-        const recordedParams = (results[2]?.results?.[0] as { params?: string } | undefined)?.params;
-        if (recordedParams) edgesRemoved = (JSON.parse(recordedParams) as { edges_removed: unknown[] }).edges_removed.length;
+        const recordedParams = (results[2]?.results?.[0] as { params?: string } | undefined)
+          ?.params;
+        if (recordedParams)
+          edgesRemoved = (JSON.parse(recordedParams) as { edges_removed: unknown[] }).edges_removed
+            .length;
       } catch (err) {
         if (isMissingRowAbort(err)) {
           return fail(
             elicited
               ? `delete aborted, nothing changed: ${namespace}/${path} changed or was removed while the confirmation was open. Re-read it and try again.`
-              : `delete aborted, nothing changed: ${namespace}/${path} no longer exists. Another session removed it after this call started.`
+              : `delete aborted, nothing changed: ${namespace}/${path} no longer exists. Another session removed it after this call started.`,
           );
         }
-        return fail(`delete failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`);
+        return fail(
+          `delete failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
       return ok({
         namespace,
@@ -204,7 +250,7 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
         snapshotted: true,
         edges_removed: edgesRemoved,
       });
-    }
+    },
   );
 }
 
@@ -214,8 +260,15 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "move",
     {
-      description: "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Refused when either path is a canon document, for a key scoped to some namespaces (see capsid_write_doc action write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
-      inputSchema: { namespace: nsName, path: docPath, new_path: docPath, confirm: z.boolean().optional(), allow_improve_paths: z.boolean().optional() },
+      description:
+        "Rename a document path within its namespace, repointing every typed edge that touches it. Audit logged. Refused when either path is a canon document, for a key scoped to some namespaces (see capsid_write_doc action write). Needs confirmation: the server elicits it when the client supports elicitation, otherwise pass confirm: true. Needs the write grant.",
+      inputSchema: {
+        namespace: nsName,
+        path: docPath,
+        new_path: docPath,
+        confirm: z.boolean().optional(),
+        allow_improve_paths: z.boolean().optional(),
+      },
     },
     async ({ namespace, path, new_path, confirm, allow_improve_paths }) => {
       const nsError = await requireRegisteredNamespace(db, namespace);
@@ -223,7 +276,8 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
       // Both ends: moving canon away empties it, and moving a document onto a canon path
       // that does not exist yet creates canon from a caller that may not write it.
       for (const end of [path, new_path]) {
-        if (canonGuarded(ctx.agent, namespace, end)) return fail(canonRefusal("move", namespace, end));
+        if (canonGuarded(ctx.agent, namespace, end))
+          return fail(canonRefusal("move", namespace, end));
       }
       // Existence and the edge count are both read BEFORE the batch. D1's meta.changes
       // cannot be used for either: documents carries FTS5 sync triggers, so an UPDATE
@@ -235,7 +289,10 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         .first<{ ok: number }>();
       if (!exists) return fail(`not found: ${namespace}/${path}`);
       // The policy-document guard on both ends (see policyPathsRefusal).
-      const movePolicyRefusal = policyPathsRefusal(ctx, "move", namespace, allow_improve_paths, [path, new_path]);
+      const movePolicyRefusal = policyPathsRefusal(ctx, "move", namespace, allow_improve_paths, [
+        path,
+        new_path,
+      ]);
       if (movePolicyRefusal) return fail(movePolicyRefusal);
       const moved = await db
         .prepare("SELECT body FROM documents WHERE namespace = ?1 AND path = ?2")
@@ -246,7 +303,12 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
       // checks as a write that creates one (src/rule-docs.ts). Moving one away is free, and
       // so is moving a rule document to another rule path: the
       // body is the one already held to the checks.
-      const moveRuleRefusal = ruleDocWriteRefusal(namespace, new_path, ruleDocCap(namespace, path) !== null ? movedBody : null, movedBody);
+      const moveRuleRefusal = ruleDocWriteRefusal(
+        namespace,
+        new_path,
+        ruleDocCap(namespace, path) !== null ? movedBody : null,
+        movedBody,
+      );
       if (moveRuleRefusal) return fail(moveRuleRefusal);
       // move needs confirmation: it repoints every edge and, unlike delete, leaves no
       // snapshot of the old path, only an audit row.
@@ -264,15 +326,22 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         await db.batch([
           requireExists(db, namespace, path),
           ...pathMutation(db, namespace, path, new_path),
-          auditStatement(db, actor, "move", namespace, path, { new_path, edges_repointed: repointed }),
+          auditStatement(db, actor, "move", namespace, path, {
+            new_path,
+            edges_repointed: repointed,
+          }),
         ]);
       } catch (err) {
         if (isMissingRowAbort(err)) {
-          return fail(`move aborted, nothing changed: ${namespace}/${path} no longer exists. Another session moved or removed it after this call started.`);
+          return fail(
+            `move aborted, nothing changed: ${namespace}/${path} no longer exists. Another session moved or removed it after this call started.`,
+          );
         }
-        return fail(`move failed, nothing changed (target may already exist): ${err instanceof Error ? err.message : String(err)}`);
+        return fail(
+          `move failed, nothing changed (target may already exist): ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
       return ok({ namespace, path, new_path, action: "moved", edges_repointed: repointed });
-    }
+    },
   );
 }

@@ -1,7 +1,17 @@
 import { hmacHex } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
-import { isOffaccountSite, OFFACCOUNT_DEFAULT_SITE, OFFACCOUNT_SITES, OFFACCOUNT_SOURCES, type OffaccountSite } from "./offaccount";
+import {
+  isOffaccountAudit,
+  isOffaccountSite,
+  OFFACCOUNT_AUDIT_SOURCES,
+  OFFACCOUNT_AUDITS,
+  OFFACCOUNT_DEFAULT_SITE,
+  OFFACCOUNT_SITES,
+  OFFACCOUNT_SOURCES,
+  type OffaccountAudit,
+  type OffaccountSite,
+} from "./offaccount";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
 import { textResponse } from "./http";
@@ -31,7 +41,7 @@ export const MAX_REPORT_BYTES = 16_384;
 // request.text() would buffer it all first.
 export async function readBoundedText(
   request: { body: ReadableStream<Uint8Array> | null },
-  max: number
+  max: number,
 ): Promise<{ ok: true; text: string } | { ok: false }> {
   // The family's one capped reader (site-runtime ./body): counted as it arrives, null over the ceiling.
   const text = await readCapped(request, max);
@@ -49,19 +59,23 @@ export async function readBoundedText(
 export async function claimJti(
   db: D1Database,
   scope: string,
-  jti: string
+  jti: string,
 ): Promise<{ ok: true } | { ok: false; status: number; refusal: string }> {
   try {
     const { results } = await db
       .prepare(
         `INSERT INTO improve_jti (scope, jti) VALUES (?1, ?2)
          ON CONFLICT(scope, jti) DO NOTHING
-         RETURNING jti`
+         RETURNING jti`,
       )
       .bind(scope, jti)
       .all<{ jti: string }>();
     if (results.length === 1) return { ok: true };
-    return { ok: false, status: 409, refusal: "replay: this signed request (jti) was already accepted" };
+    return {
+      ok: false,
+      status: 409,
+      refusal: "replay: this signed request (jti) was already accepted",
+    };
   } catch (err) {
     return {
       ok: false,
@@ -96,28 +110,35 @@ async function verifyHmac(
     deriveKey: (root: string) => Promise<string>;
     missingSecret: string;
     badSig: string;
-  }
+  },
 ): Promise<{ ok: true } | HmacFail> {
   if (!env.IMPROVE_SCORE_SECRET) {
     return { ok: false, status: 503, refusal: opts.missingSecret };
   }
   const at = Date.parse(signed.timestamp);
-  if (Number.isNaN(at)) return { ok: false, status: 400, refusal: "missing or unparseable timestamp header" };
+  if (Number.isNaN(at))
+    return { ok: false, status: 400, refusal: "missing or unparseable timestamp header" };
   const age = now.getTime() - at;
   // Both directions: a future timestamp is as much a replay handle as a past one. The
   // tolerance is sized for a few minutes of clock skew.
   if (age > SIGNATURE_MAX_AGE_MS || age < -SIGNATURE_MAX_AGE_MS) {
-    return { ok: false, status: 401, refusal: `request timestamp is ${Math.round(age / 1000)}s from now, outside the accepted window` };
+    return {
+      ok: false,
+      status: 401,
+      refusal: `request timestamp is ${Math.round(age / 1000)}s from now, outside the accepted window`,
+    };
   }
   const key = await opts.deriveKey(env.IMPROVE_SCORE_SECRET);
   const expected = await hmacHex(key, signaturePayload(signed.timestamp, signed.body));
-  if (!await safeEqual(signed.signature.trim().toLowerCase(), expected)) {
+  if (!(await safeEqual(signed.signature.trim().toLowerCase(), expected))) {
     return { ok: false, status: 401, refusal: opts.badSig };
   }
   return { ok: true };
 }
 
-function parseJsonBody(body: string): { ok: true; parsed: unknown } | { ok: false; refusal: string } {
+function parseJsonBody(
+  body: string,
+): { ok: true; parsed: unknown } | { ok: false; refusal: string } {
   try {
     return { ok: true, parsed: JSON.parse(body) };
   } catch {
@@ -128,7 +149,10 @@ function parseJsonBody(body: string): { ok: true; parsed: unknown } | { ok: fals
 function jtiOf(parsed: unknown): { ok: true; jti: string } | { ok: false; refusal: string } {
   const jti = (parsed as { jti?: unknown } | null)?.jti;
   if (typeof jti !== "string" || jti.length < 8 || jti.length > 128) {
-    return { ok: false, refusal: "the credential request body must carry a jti of 8 to 128 characters" };
+    return {
+      ok: false,
+      refusal: "the credential request body must carry a jti of 8 to 128 characters",
+    };
   }
   return { ok: true, jti };
 }
@@ -156,26 +180,44 @@ export interface ScopedCredential {
 // dashboard; the Worker holds only its access key id and the mint token.
 async function mintScopedCredential(
   env: Env,
-  scope: { bucket: string; prefix: string; filesPrefix: string; parentAccessKeyId: string }
-): Promise<{ ok: true; credential: ScopedCredential } | { ok: false; status: number; refusal: string }> {
-  const resp = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.R2_ACCOUNT_ID}/r2/temp-access-credentials`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.R2_TEMP_CRED_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      bucket: scope.bucket,
-      parentAccessKeyId: scope.parentAccessKeyId,
-      permission: "object-read-only",
-      ttlSeconds: CREDENTIAL_TTL_SECONDS,
-      prefixes: [scope.prefix, scope.filesPrefix],
-    }),
-  });
+  scope: { bucket: string; prefix: string; filesPrefix: string; parentAccessKeyId: string },
+): Promise<
+  { ok: true; credential: ScopedCredential } | { ok: false; status: number; refusal: string }
+> {
+  const resp = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${env.R2_ACCOUNT_ID}/r2/temp-access-credentials`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.R2_TEMP_CRED_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        bucket: scope.bucket,
+        parentAccessKeyId: scope.parentAccessKeyId,
+        permission: "object-read-only",
+        ttlSeconds: CREDENTIAL_TTL_SECONDS,
+        prefixes: [...new Set([scope.prefix, scope.filesPrefix])],
+      }),
+    },
+  );
   if (!resp.ok) {
-    return { ok: false, status: 502, refusal: `the temp-access-credentials API answered ${resp.status}: ${(await resp.text()).slice(0, 300)}` };
+    return {
+      ok: false,
+      status: 502,
+      refusal: `the temp-access-credentials API answered ${resp.status}: ${(await resp.text()).slice(0, 300)}`,
+    };
   }
-  const data = (await resp.json()) as { result?: { accessKeyId?: string; secretAccessKey?: string; sessionToken?: string } };
+  const data = (await resp.json()) as {
+    result?: { accessKeyId?: string; secretAccessKey?: string; sessionToken?: string };
+  };
   const minted = data.result;
   if (!minted?.accessKeyId || !minted.secretAccessKey || !minted.sessionToken) {
-    return { ok: false, status: 502, refusal: "the temp-access-credentials API answered without the three credential fields" };
+    return {
+      ok: false,
+      status: 502,
+      refusal: "the temp-access-credentials API answered without the three credential fields",
+    };
   }
   return {
     ok: true,
@@ -200,8 +242,11 @@ const BACKUP_FILES_PREFIX = "files/";
 // bucket each mint is scoped to comes from the pinned table, never the caller.
 export async function mintBackupCredential(
   env: Env,
-  site: OffaccountSite = OFFACCOUNT_DEFAULT_SITE
-): Promise<{ ok: true; credential: ScopedCredential } | { ok: false; status: number; refusal: string }> {
+  site: OffaccountSite = OFFACCOUNT_DEFAULT_SITE,
+  audit?: OffaccountAudit,
+): Promise<
+  { ok: true; credential: ScopedCredential } | { ok: false; status: number; refusal: string }
+> {
   if (!env.R2_TEMP_CRED_TOKEN || !env.R2_BACKUP_PARENT_ACCESS_KEY_ID || !env.R2_ACCOUNT_ID) {
     return {
       ok: false,
@@ -210,27 +255,51 @@ export async function mintBackupCredential(
         "backup credential minting is not configured. Set R2_TEMP_CRED_TOKEN, R2_BACKUP_PARENT_ACCESS_KEY_ID and R2_ACCOUNT_ID with wrangler secret put.",
     };
   }
+  // An MCP tool-call log (audit) is one bucket read on tool-calls/ alone; a site is its backups
+  // bucket read on the dumps and the media copies.
   return mintScopedCredential(env, {
-    bucket: OFFACCOUNT_SOURCES[site].bucket,
-    prefix: BACKUP_DUMP_PREFIX,
-    filesPrefix: BACKUP_FILES_PREFIX,
+    bucket: audit ? OFFACCOUNT_AUDIT_SOURCES[audit] : OFFACCOUNT_SOURCES[site].bucket,
+    prefix: audit ? AUDIT_PREFIX : BACKUP_DUMP_PREFIX,
+    filesPrefix: audit ? AUDIT_PREFIX : BACKUP_FILES_PREFIX,
     parentAccessKeyId: env.R2_BACKUP_PARENT_ACCESS_KEY_ID,
   });
 }
 
+const AUDIT_PREFIX = "tool-calls/";
+
 // A jti and an optional site. The site only picks a row of the pinned table, so an
 // unknown one is refused here, before the jti is spent or anything is minted.
 export function parseBackupCredentialRequest(
-  body: string
-): { ok: true; jti: string; site: OffaccountSite } | { ok: false; refusal: string } {
+  body: string,
+):
+  | { ok: true; jti: string; site: OffaccountSite; audit?: undefined }
+  | { ok: true; jti: string; audit: OffaccountAudit; site?: undefined }
+  | { ok: false; refusal: string } {
   const json = parseJsonBody(body);
   if (!json.ok) return json;
   const jti = jtiOf(json.parsed);
   if (!jti.ok) return jti;
-  const site = (json.parsed as { site?: unknown } | null)?.site;
+  const { site, audit } = (json.parsed ?? {}) as { site?: unknown; audit?: unknown };
+  if (audit !== undefined) {
+    if (site !== undefined)
+      return {
+        ok: false,
+        refusal: "the credential request names a site or an audit log, not both",
+      };
+    if (typeof audit !== "string" || !isOffaccountAudit(audit)) {
+      return {
+        ok: false,
+        refusal: `the credential request names no known audit log; the logs are ${OFFACCOUNT_AUDITS.join(", ")}`,
+      };
+    }
+    return { ok: true, jti: jti.jti, audit };
+  }
   if (site === undefined) return { ok: true, jti: jti.jti, site: OFFACCOUNT_DEFAULT_SITE };
   if (typeof site !== "string" || !isOffaccountSite(site)) {
-    return { ok: false, refusal: `the credential request names no known site; the sites are ${OFFACCOUNT_SITES.join(", ")}` };
+    return {
+      ok: false,
+      refusal: `the credential request names no known site; the sites are ${OFFACCOUNT_SITES.join(", ")}`,
+    };
   }
   return { ok: true, jti: jti.jti, site };
 }
@@ -240,7 +309,7 @@ export function parseBackupCredentialRequest(
 export async function verifyBackupCredentialRequest(
   env: Pick<Env, "IMPROVE_SCORE_SECRET">,
   signed: { timestamp: string; signature: string; body: string },
-  now: Date
+  now: Date,
 ): Promise<{ ok: true } | { ok: false; status: number; refusal: string }> {
   return verifyHmac(env, signed, now, {
     deriveKey: deriveBackupCredentialKey,
@@ -256,7 +325,7 @@ export async function verifyBackupCredentialRequest(
 export async function verifyBenchRequest(
   env: Pick<Env, "BENCH_SECRET">,
   signed: { timestamp: string; signature: string; body: string },
-  now: Date
+  now: Date,
 ): Promise<{ ok: true } | { ok: false; status: number; refusal: string }> {
   return verifyHmac({ IMPROVE_SCORE_SECRET: env.BENCH_SECRET }, signed, now, {
     deriveKey: async (key) => key,
@@ -264,7 +333,10 @@ export async function verifyBenchRequest(
     badSig: "bench request signature does not verify",
   });
 }
-type Verify = (signed: { timestamp: string; signature: string; body: string }, now: Date) => Promise<{ ok: true } | HmacFail>;
+type Verify = (
+  signed: { timestamp: string; signature: string; body: string },
+  now: Date,
+) => Promise<{ ok: true } | HmacFail>;
 
 // The shared front of every HMAC-signed endpoint (the backup pair in src/routes.ts, the
 // bench's in src/bench.ts): a bounded body, the signature over the endpoint family's own
@@ -279,17 +351,21 @@ export async function signedRequestBody<T extends { jti: string }>(
     scope: string;
     event: string;
     parse: (body: string) => ({ ok: true } & T) | { ok: false; refusal: string };
-  }
+  },
 ): Promise<{ ok: true; value: T } | { ok: false; response: Response }> {
   const bounded = await readBoundedText(request, MAX_REPORT_BYTES);
-  if (!bounded.ok) return { ok: false, response: textResponse(`request too large: exceeds ${MAX_REPORT_BYTES} bytes`, 413) };
+  if (!bounded.ok)
+    return {
+      ok: false,
+      response: textResponse(`request too large: exceeds ${MAX_REPORT_BYTES} bytes`, 413),
+    };
   const verdict = await opts.verify(
     {
       timestamp: request.headers.get(`X-${opts.headers}-Timestamp`) ?? "",
       signature: request.headers.get(`X-${opts.headers}-Signature`) ?? "",
       body: bounded.text,
     },
-    new Date()
+    new Date(),
   );
   if (!verdict.ok) {
     logEvent(opts.event, { message: `${opts.event} ${verdict.refusal}` }, { level: "error" });

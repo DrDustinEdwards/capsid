@@ -2,13 +2,9 @@
   "name": "capsid",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "description": "Capsid: a Cloudflare-native MCP server serving a consolidated knowledge base from D1 and R2",
   "license": "MIT",
-  "engines": {
-    "node": ">=26.11.1",
-    "npm": "12.2.1"
-  },
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "node scripts/deploy.mjs",
@@ -23,8 +19,10 @@
     "check:dashboard": "npm --prefix dashboard run check",
     "build:dashboard": "npm --prefix dashboard run build && npm --prefix dashboard run size",
     "test:browser": "npm --prefix dashboard run e2e",
-    "lint": "node --import ./test/resolve-ts.mjs --test \"test/lint/*.lint.ts\"",
-    "lint:promises": "oxlint --type-aware --tsconfig tsconfig.json src",
+    "lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives-severity=error",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint:repo": "node --import ./test/resolve-ts.mjs --test \"test/lint/*.lint.ts\"",
     "lint:dead-exports": "node --import ./test/resolve-ts.mjs --test test/lint/dead-exports.lint.ts",
     "lint:docs": "node --import ./test/resolve-ts.mjs --test test/lint/docs.lint.ts",
     "check:console": "devkit-console",
@@ -32,38 +30,43 @@
     "report:bloat": "devkit-no-bloat",
     "check:conformance": "devkit-conformance"
   },
-  "devDependencies": {
-    "@cloudflare/vitest-plugin": "1.4.11",
-    "@cloudflare/workers-types": "5.20261030.1",
-    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.21.2",
-    "@modelcontextprotocol/client": "2.4.0",
-    "@modelcontextprotocol/conformance": "0.2.0-alpha.11",
-    "@types/node": "24.19.2",
-    "jscpd": "5.4.2",
-    "knip": "6.42.1",
-    "oxlint": "1.89.0",
-    "oxlint-tsgolint": "7.0.2004",
-    "typescript": "6.0.3",
-    "vitest": "4.1.12",
-    "wrangler": "4.156.0"
-  },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
-    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.32.1",
-    "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.10.1",
-    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.74.0",
+    "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.33.0",
+    "@dustinedwards/d1-dump": "github:DrDustinEdwards/d1-dump#v0.13.2",
+    "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.88.0",
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.32.0",
     "jose": "6.2.14",
     "zod": "4.6.7"
   },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.11",
+    "@cloudflare/workers-types": "5.20261030.1",
+    "@dustinedwards/devkit": "github:DrDustinEdwards/devkit#v0.26.4",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/conformance": "0.2.0-alpha.11",
+    "@types/node": "24.19.2",
+    "jscpd": "5.4.2",
+    "knip": "6.42.1",
+    "oxfmt": "0.77.0",
+    "oxlint": "1.92.0",
+    "oxlint-tsgolint": "7.0.2006",
+    "typescript": "6.0.3",
+    "vitest": "4.1.12",
+    "wrangler": "4.156.0"
+  },
   "overrides": {
-    "undici": "7.30.1",
-    "sharp": "0.35.5",
     "agents": {
       "@modelcontextprotocol/client": "$@modelcontextprotocol/client",
       "@modelcontextprotocol/sdk": "1.32.1"
-    }
+    },
+    "sharp": "0.35.5",
+    "undici": "7.30.1"
+  },
+  "engines": {
+    "node": ">=26.11.1",
+    "npm": "12.2.1"
   },
   "allowScripts": {
     "core-js-pure": false,

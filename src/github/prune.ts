@@ -54,9 +54,14 @@ export interface PruneCandidate {
 const SHOTS_BRANCH = /^shots\/|-shots$/;
 
 /** The open pull request whose description shows a screenshot branch's images, or null. */
-function shotsInUse(branch: { name: string; sha: string }, open: ReadonlyArray<{ number: number; body?: string | null }>): number | null {
+function shotsInUse(
+  branch: { name: string; sha: string },
+  open: ReadonlyArray<{ number: number; body?: string | null }>,
+): number | null {
   if (!SHOTS_BRANCH.test(branch.name)) return null;
-  const used = open.find((pr) => (pr.body ?? "").includes(branch.name) || (pr.body ?? "").includes(branch.sha));
+  const used = open.find(
+    (pr) => (pr.body ?? "").includes(branch.name) || (pr.body ?? "").includes(branch.sha),
+  );
   return used ? used.number : null;
 }
 
@@ -71,31 +76,69 @@ export function pruneVerdict(
   branch: { name: string; sha: string; protected: boolean },
   defaultBranch: string,
   latest: { number: number; state: string; merged: boolean; headSha: string } | undefined,
-  listsComplete: boolean
+  listsComplete: boolean,
 ): PruneVerdict {
-  if (branch.name === defaultBranch) return { prune: false, reason: "default branch", orphan: false };
+  if (branch.name === defaultBranch)
+    return { prune: false, reason: "default branch", orphan: false };
   if (branch.protected) return { prune: false, reason: "protected branch", orphan: false };
-  if (NEVER_PRUNED.has(branch.name) || NEVER_PRUNED_PREFIXES.some((p) => branch.name.startsWith(p))) {
-    return { prune: false, reason: "kept by name (release, screenshots, results, gh-pages)", orphan: false };
+  if (
+    NEVER_PRUNED.has(branch.name) ||
+    NEVER_PRUNED_PREFIXES.some((p) => branch.name.startsWith(p))
+  ) {
+    return {
+      prune: false,
+      reason: "kept by name (release, screenshots, results, gh-pages)",
+      orphan: false,
+    };
   }
   if (!latest) {
-    return { prune: false, reason: listsComplete ? "no pull request" : "no pull request found in the part of the list that was read", orphan: true };
+    return {
+      prune: false,
+      reason: listsComplete
+        ? "no pull request"
+        : "no pull request found in the part of the list that was read",
+      orphan: true,
+    };
   }
-  if (latest.state === "open") return { prune: false, reason: `open pull request #${latest.number}`, orphan: false };
-  if (!latest.merged) return { prune: false, reason: `pull request #${latest.number} was closed without merging`, orphan: true };
-  if (latest.headSha !== branch.sha) return { prune: false, reason: `commits after pull request #${latest.number} merged`, orphan: true };
+  if (latest.state === "open")
+    return { prune: false, reason: `open pull request #${latest.number}`, orphan: false };
+  if (!latest.merged)
+    return {
+      prune: false,
+      reason: `pull request #${latest.number} was closed without merging`,
+      orphan: true,
+    };
+  if (latest.headSha !== branch.sha)
+    return {
+      prune: false,
+      reason: `commits after pull request #${latest.number} merged`,
+      orphan: true,
+    };
   // A list not read whole may hide a newer open pull request on the same head, so a
   // delete waits until it can be read whole (Grok audit 2026-10-21, CA-17).
-  if (!listsComplete) return { prune: false, reason: `pull request #${latest.number} merged, but the pull request list was not read whole`, orphan: false };
+  if (!listsComplete)
+    return {
+      prune: false,
+      reason: `pull request #${latest.number} merged, but the pull request list was not read whole`,
+      orphan: false,
+    };
   return { prune: true, pr: latest.number };
 }
 
-async function paged<T>(env: Env, owner: string, repo: string, path: string): Promise<{ rows: T[]; complete: boolean }> {
+async function paged<T>(
+  env: Env,
+  owner: string,
+  repo: string,
+  path: string,
+): Promise<{ rows: T[]; complete: boolean }> {
   const rows: T[] = [];
   for (let page = 1; page <= PAGE_CAP; page++) {
     const sep = path.includes("?") ? "&" : "?";
     const resp = await ghFetch(env, owner, repo, `${path}${sep}per_page=${PAGE_SIZE}&page=${page}`);
-    if (!resp.ok) throw new Error(`delete_branch merged: reading ${path} failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
+    if (!resp.ok)
+      throw new Error(
+        `delete_branch merged: reading ${path} failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`,
+      );
     const batch = (await resp.json()) as T[];
     rows.push(...batch);
     if (batch.length < PAGE_SIZE) return { rows, complete: true };
@@ -126,24 +169,42 @@ interface PruneKeptRow extends PruneKept {
   orphan: boolean;
 }
 
-export async function readPrunePlan(env: Env, namespace: string, keep: string[] = [], repoSelector?: string): Promise<PrunePlan> {
+export async function readPrunePlan(
+  env: Env,
+  namespace: string,
+  keep: string[] = [],
+  repoSelector?: string,
+): Promise<PrunePlan> {
   const { owner, repo, full } = await resolveRepo(env, namespace, repoSelector);
   const base = `/repos/${owner}/${repo}`;
   const defaultBranch = await getDefaultBranch(env, owner, repo);
 
   const branches = await paged<BranchRow>(env, owner, repo, `${base}/branches`);
   const open = await paged<PullRow>(env, owner, repo, `${base}/pulls?state=open`);
-  const closed = await paged<PullRow>(env, owner, repo, `${base}/pulls?state=closed&sort=updated&direction=desc`);
+  const closed = await paged<PullRow>(
+    env,
+    owner,
+    repo,
+    `${base}/pulls?state=closed&sort=updated&direction=desc`,
+  );
   const listsComplete = branches.complete && open.complete && closed.complete;
 
   // The newest pull request per head branch, from this repo only: a fork's pull request can
   // carry a head branch of the same name.
-  const latest = new Map<string, { number: number; state: string; merged: boolean; headSha: string }>();
+  const latest = new Map<
+    string,
+    { number: number; state: string; merged: boolean; headSha: string }
+  >();
   for (const pr of [...open.rows, ...closed.rows]) {
     if (pr.head.repo?.full_name?.toLowerCase() !== full.toLowerCase()) continue;
     const seen = latest.get(pr.head.ref);
     if (!seen || pr.number > seen.number) {
-      latest.set(pr.head.ref, { number: pr.number, state: pr.state, merged: pr.merged_at !== null, headSha: pr.head.sha });
+      latest.set(pr.head.ref, {
+        number: pr.number,
+        state: pr.state,
+        merged: pr.merged_at !== null,
+        headSha: pr.head.sha,
+      });
     }
   }
 
@@ -153,26 +214,65 @@ export async function readPrunePlan(env: Env, namespace: string, keep: string[] 
   const keepNames = new Set(keep);
   for (const b of branches.rows) {
     if (keepNames.has(b.name)) {
-      kept.push({ branch: b.name, reason: "kept by request (keep)", sha: b.commit.sha, orphan: false });
+      kept.push({
+        branch: b.name,
+        reason: "kept by request (keep)",
+        sha: b.commit.sha,
+        orphan: false,
+      });
       continue;
     }
-    const verdict = pruneVerdict({ name: b.name, sha: b.commit.sha, protected: b.protected === true }, defaultBranch, latest.get(b.name), listsComplete);
-    const shotsFor = !verdict.prune && verdict.orphan ? shotsInUse({ name: b.name, sha: b.commit.sha }, open.rows) : null;
+    const verdict = pruneVerdict(
+      { name: b.name, sha: b.commit.sha, protected: b.protected === true },
+      defaultBranch,
+      latest.get(b.name),
+      listsComplete,
+    );
+    const shotsFor =
+      !verdict.prune && verdict.orphan
+        ? shotsInUse({ name: b.name, sha: b.commit.sha }, open.rows)
+        : null;
     if (shotsFor !== null) {
-      kept.push({ branch: b.name, reason: `screenshots for open pull request #${shotsFor}`, sha: b.commit.sha, orphan: false });
+      kept.push({
+        branch: b.name,
+        reason: `screenshots for open pull request #${shotsFor}`,
+        sha: b.commit.sha,
+        orphan: false,
+      });
       continue;
     }
     if (verdict.prune) prune.push({ branch: b.name, sha: b.commit.sha, pr: verdict.pr });
-    else kept.push({ branch: b.name, reason: verdict.reason, sha: b.commit.sha, orphan: verdict.orphan });
+    else
+      kept.push({
+        branch: b.name,
+        reason: verdict.reason,
+        sha: b.commit.sha,
+        orphan: verdict.orphan,
+      });
   }
-  return { owner, name: repo, repo: full, defaultBranch, branchesRead: branches.rows.length, listsComplete, openComplete: open.complete, prune, kept };
+  return {
+    owner,
+    name: repo,
+    repo: full,
+    defaultBranch,
+    branchesRead: branches.rows.length,
+    listsComplete,
+    openComplete: open.complete,
+    prune,
+    kept,
+  };
 }
 
 /** Delete up to `cap` of the plan's candidates. Each tip is re-read immediately before its
  *  delete, and a branch that moved since the plan was read is skipped, not deleted.
  *  `onDeleted` runs after each delete and before the next, so a caller's record of one
  *  delete is written before another happens; if it throws, nothing more is deleted. */
-export async function deletePruneCandidates(env: Env, plan: PrunePlan, cap: number, onDeleted?: (c: PruneCandidate) => Promise<void>) {
+export async function deletePruneCandidates(
+  env: Env,
+  plan: PrunePlan,
+  cap: number,
+  onDeleted?: (c: PruneCandidate) => Promise<void>,
+) {
   const { owner, name: repo } = plan;
   const base = `/repos/${owner}/${repo}`;
   const deleted: PruneCandidate[] = [];
@@ -188,14 +288,22 @@ export async function deletePruneCandidates(env: Env, plan: PrunePlan, cap: numb
       tip = undefined;
     }
     if (tip === undefined) {
-      skipped.push({ branch: c.branch, reason: "could not re-read the branch tip, so it was not deleted" });
+      skipped.push({
+        branch: c.branch,
+        reason: "could not re-read the branch tip, so it was not deleted",
+      });
       continue;
     }
     if (tip !== c.sha) {
-      skipped.push({ branch: c.branch, reason: "the branch moved since the preview, so it was not deleted" });
+      skipped.push({
+        branch: c.branch,
+        reason: "the branch moved since the preview, so it was not deleted",
+      });
       continue;
     }
-    const resp = await ghFetch(env, owner, repo, `${base}/git/refs/heads/${encodePath(c.branch)}`, { method: "DELETE" });
+    const resp = await ghFetch(env, owner, repo, `${base}/git/refs/heads/${encodePath(c.branch)}`, {
+      method: "DELETE",
+    });
     if (resp.ok || resp.status === 404 || resp.status === 422) {
       if (resp.ok) {
         deleted.push(c);
@@ -209,7 +317,12 @@ export async function deletePruneCandidates(env: Env, plan: PrunePlan, cap: numb
   return { deleted, skipped, remaining: plan.prune.length - batch.length };
 }
 
-export async function pruneMergedBranches(env: Env, namespace: string, opts: { confirm?: boolean; keep?: string[] } = {}, repoSelector?: string) {
+export async function pruneMergedBranches(
+  env: Env,
+  namespace: string,
+  opts: { confirm?: boolean; keep?: string[] } = {},
+  repoSelector?: string,
+) {
   const plan = await readPrunePlan(env, namespace, opts.keep, repoSelector);
   const kept = plan.kept.map(({ branch, reason }) => ({ branch, reason }));
   const result = {

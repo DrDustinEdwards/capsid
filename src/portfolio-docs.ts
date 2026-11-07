@@ -22,7 +22,12 @@ export const PORTFOLIO_DOCS = {
   // The tool actions that may reach capsid for such a caller, as tool.action. Each
   // requires only the read grant (TOOL_GRANTS). A document's versions and links stay
   // out: a version list or an edge can name a capsid path that is not on this list.
-  tools: ["capsid_read_doc.read", "capsid_find_docs.list", "capsid_find_docs.glob", "capsid_find_docs.search"],
+  tools: [
+    "capsid_read_doc.read",
+    "capsid_find_docs.list",
+    "capsid_find_docs.glob",
+    "capsid_find_docs.search",
+  ],
 } as const;
 
 // A path is matched against this before anything else: lowercase letters, digits, dot,
@@ -52,7 +57,10 @@ export function isPortfolioPath(path: string): boolean {
 
 /** Whether a tool action may reach the portfolio documents for a caller outside capsid. */
 export function isPortfolioTool(tool: string, action: string | undefined): boolean {
-  return action !== undefined && (PORTFOLIO_DOCS.tools as readonly string[]).includes(`${tool}.${action}`);
+  return (
+    action !== undefined &&
+    (PORTFOLIO_DOCS.tools as readonly string[]).includes(`${tool}.${action}`)
+  );
 }
 
 /** The allowlist as a reader sees it, for a refusal and for brief. */
@@ -87,7 +95,7 @@ export async function portfolioDocuments(db: D1Database): Promise<PortfolioRow[]
        FROM documents
        WHERE namespace = ?1
          AND (path IN (SELECT value FROM json_each(?2)) OR EXISTS (SELECT 1 FROM json_each(?3) AS g WHERE documents.path GLOB g.value))
-       ORDER BY path`
+       ORDER BY path`,
     )
     .bind(PORTFOLIO_DOCS.namespace, JSON.stringify(PORTFOLIO_DOCS.documents), JSON.stringify(globs))
     .all<PortfolioRow>();

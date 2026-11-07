@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { stubAccess } from "@dustinedwards/devkit/access";
 import { forgetKeys } from "@dustinedwards/site-runtime/access-login";
-import { handlePortalCallback, portalSessionCookie, portalSignOutCookies, readPortalSession, startPortalLogin, withPortalIdle } from "../src/portal-auth.ts";
+import {
+  handlePortalCallback,
+  portalSessionCookie,
+  portalSignOutCookies,
+  readPortalSession,
+  startPortalLogin,
+  withPortalIdle,
+} from "../src/portal-auth.ts";
 import { portalCsrf } from "../src/ops-feed.ts";
 import { PORTAL_HOST } from "../src/portal-host.ts";
 import { fakeKv, withPortalSessionEnds } from "./fakes.ts";
@@ -43,12 +50,24 @@ function env(overrides: Record<string, unknown> = {}) {
 // Stubs Access for one sign-in (devkit ./access): the token endpoint answers with an ID
 // token carrying the nonce the flow sent (or `claims` over it), the JWKS endpoint with
 // the key. Returns the token requests' bodies.
-async function stubPortalAccess(authorizationUrl: string, claims: Record<string, unknown> = {}): Promise<URLSearchParams[]> {
-  const access = await stubAccess({ issuer: ISSUER, audience: "sample-client", email: "admin@example.com", authorizationUrl, claims });
+async function stubPortalAccess(
+  authorizationUrl: string,
+  claims: Record<string, unknown> = {},
+): Promise<URLSearchParams[]> {
+  const access = await stubAccess({
+    issuer: ISSUER,
+    audience: "sample-client",
+    email: "admin@example.com",
+    authorizationUrl,
+    claims,
+  });
   return access.tokenRequests;
 }
 
-async function started(e: never, returnTo = "/portal/jobs"): Promise<{ state: string; cookie: string; location: string }> {
+async function started(
+  e: never,
+  returnTo = "/portal/jobs",
+): Promise<{ state: string; cookie: string; location: string }> {
   const res = await startPortalLogin(new Request(`${ORIGIN}/portal/`), e, returnTo);
   assert.equal(res.status, 302);
   const location = String(res.headers.get("Location"));
@@ -62,7 +81,9 @@ function setCookies(res: Response): string[] {
 }
 
 function callback(state: string, cookie: string): Request {
-  return new Request(`${ORIGIN}/portal/callback?code=c&state=${state}`, { headers: { Cookie: cookie } });
+  return new Request(`${ORIGIN}/portal/callback?code=c&state=${state}`, {
+    headers: { Cookie: cookie },
+  });
 }
 
 test("the start sets the Portal state cookie on Path=/portal and sends Access the Portal callback, with PKCE and a nonce", async () => {
@@ -76,7 +97,10 @@ test("the start sets the Portal state cookie on Path=/portal and sends Access th
   assert.ok(location.searchParams.get("nonce"));
   const cookies = setCookies(res);
   assert.equal(cookies.length, 1);
-  assert.match(cookies[0], /^__Secure-capsid_portal_state=[0-9a-f]{64}; Path=\/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/);
+  assert.match(
+    cookies[0],
+    /^__Secure-capsid_portal_state=[0-9a-f]{64}; Path=\/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/,
+  );
 });
 
 test("the admin completes the login: session cookie carries the email, state cookie cleared, state consumed", async () => {
@@ -90,15 +114,24 @@ test("the admin completes the login: session cookie carries the email, state coo
   assert.ok(bodies[0]?.get("code_verifier"), "the exchange sent no PKCE verifier");
   const cookies = setCookies(res);
   assert.equal(cookies.length, 2);
-  assert.match(cookies[0], /^__Secure-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; Path=\/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=90000$/);
-  assert.equal(cookies[1], "__Secure-capsid_portal_state=; Path=/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=0");
+  assert.match(
+    cookies[0],
+    /^__Secure-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; Path=\/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=90000$/,
+  );
+  assert.equal(
+    cookies[1],
+    "__Secure-capsid_portal_state=; Path=/portal; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+  );
   const session = await readPortalSession(
     new Request(`${ORIGIN}/portal/`, { headers: { Cookie: cookies[0].split(";")[0] } }),
     e,
-    new Date()
+    new Date(),
   );
   assert.deepEqual(session, { email: "admin@example.com" });
-  assert.equal(await (e as { OAUTH_KV: KVNamespace }).OAUTH_KV.get(`capsid:portal-state:${state}`), null);
+  assert.equal(
+    await (e as { OAUTH_KV: KVNamespace }).OAUTH_KV.get(`capsid:portal-state:${state}`),
+    null,
+  );
 });
 
 test("PLANT: a stored return path that would leave the origin lands on the Portal's home instead", async () => {
@@ -106,12 +139,22 @@ test("PLANT: a stored return path that would leave the origin lands on the Porta
   // host the Location became the protocol-relative //attacker.example.
   for (const origin of [ORIGIN, "https://portal.dustinedwards.info"]) {
     const e = env();
-    const res0 = await startPortalLogin(new Request(`${origin}/portal/`), e, "/portal//attacker.example");
+    const res0 = await startPortalLogin(
+      new Request(`${origin}/portal/`),
+      e,
+      "/portal//attacker.example",
+    );
     const location = String(res0.headers.get("Location"));
     const state = String(new URL(location).searchParams.get("state"));
     const cookie = (res0.headers.get("Set-Cookie") ?? "").split(";")[0];
     await stubPortalAccess(location);
-    const res = await handlePortalCallback(new Request(`${origin}/portal/callback?code=c&state=${state}`, { headers: { Cookie: cookie } }), e, new Date());
+    const res = await handlePortalCallback(
+      new Request(`${origin}/portal/callback?code=c&state=${state}`, {
+        headers: { Cookie: cookie },
+      }),
+      e,
+      new Date(),
+    );
     assert.equal(res.status, 302);
     const target = String(res.headers.get("Location"));
     assert.ok(!target.startsWith("//"), target);
@@ -128,7 +171,11 @@ test("the name in the ID token rides the session cookie, and a token with no nam
     const { state, cookie, location } = await started(e);
     await stubPortalAccess(location, claims);
     const res = await handlePortalCallback(callback(state, cookie), e, new Date());
-    const session = await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }), e, new Date());
+    const session = await readPortalSession(
+      new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }),
+      e,
+      new Date(),
+    );
     assert.deepEqual(session, expected);
   }
 });
@@ -136,15 +183,26 @@ test("the name in the ID token rides the session cookie, and a token with no nam
 test("a state cookie that is not the digest of the state is refused with the Portal's restart hint", async () => {
   const e = env();
   const { state } = await started(e);
-  const res = await handlePortalCallback(callback(state, `capsid_portal_state=${"0".repeat(64)}`), e, new Date());
+  const res = await handlePortalCallback(
+    callback(state, `capsid_portal_state=${"0".repeat(64)}`),
+    e,
+    new Date(),
+  );
   assert.equal(res.status, 403);
-  assert.equal(await res.text(), "state validation failed: this browser did not start the flow. Open /portal again.");
+  assert.equal(
+    await res.text(),
+    "state validation failed: this browser did not start the flow. Open /portal again.",
+  );
 });
 
 test("the MCP flow's state cookie does not satisfy the Portal callback", async () => {
   const e = env();
   const { state, cookie } = await started(e);
-  const res = await handlePortalCallback(callback(state, cookie.replace("capsid_portal_state=", "capsid_state=")), e, new Date());
+  const res = await handlePortalCallback(
+    callback(state, cookie.replace("capsid_portal_state=", "capsid_state=")),
+    e,
+    new Date(),
+  );
   assert.equal(res.status, 403);
 });
 
@@ -159,10 +217,25 @@ test("a state with no KV entry is refused as expired", async () => {
 
 // Each of these reaches the ID token check and must end with no session cookie.
 for (const [name, claims, overrides, pattern] of [
-  ["an email that is not the admin", { email: "someone@example.com" }, {}, /not an administrator of capsid/],
-  ["the admin's email in another case", { email: "Admin@example.com" }, {}, /not an administrator of capsid/],
+  [
+    "an email that is not the admin",
+    { email: "someone@example.com" },
+    {},
+    /not an administrator of capsid/,
+  ],
+  [
+    "the admin's email in another case",
+    { email: "Admin@example.com" },
+    {},
+    /not an administrator of capsid/,
+  ],
   ["an unset ADMIN_EMAIL", {}, { ADMIN_EMAIL: undefined }, /not an administrator of capsid/],
-  ["a wrong issuer", { iss: "https://other.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client" }, {}, /could not be verified/],
+  [
+    "a wrong issuer",
+    { iss: "https://other.cloudflareaccess.com/cdn-cgi/access/sso/oidc/sample-client" },
+    {},
+    /could not be verified/,
+  ],
   ["a wrong audience", { aud: "other-client" }, {}, /could not be verified/],
   ["a nonce from another sign-in", { nonce: "someone-elses-nonce" }, {}, /could not be verified/],
   ["an expired token", { exp: Math.floor(Date.now() / 1000) - 120 }, {}, /could not be verified/],
@@ -185,9 +258,11 @@ test("Access reporting a refused sign-in on the callback gets no session and nev
     throw new Error("the callback called Access after an error");
   }) as typeof fetch;
   const res = await handlePortalCallback(
-    new Request(`${ORIGIN}/portal/callback?error=access_denied&state=${state}`, { headers: { Cookie: cookie } }),
+    new Request(`${ORIGIN}/portal/callback?error=access_denied&state=${state}`, {
+      headers: { Cookie: cookie },
+    }),
     e,
-    new Date()
+    new Date(),
   );
   assert.equal(res.status, 403);
   assert.equal(res.headers.get("Set-Cookie"), null);
@@ -196,7 +271,12 @@ test("Access reporting a refused sign-in on the callback gets no session and nev
 // PLANT: the return clamp. A stored return path outside the Portal lands on /portal/,
 // so a bad KV write cannot become an open redirect. /portalx shares the prefix and
 // must not pass; /console is the old address, which no longer answers.
-for (const stored of ["/portalx", "/console", "https://example.com/portal/", "//example.com/portal/"]) {
+for (const stored of [
+  "/portalx",
+  "/console",
+  "https://example.com/portal/",
+  "//example.com/portal/",
+]) {
   test(`a stored return path of ${stored} lands on /portal/`, async () => {
     const e = env();
     const { state, cookie, location } = await started(e, stored);
@@ -215,23 +295,42 @@ const PORTAL_ORIGIN = `https://${PORTAL_HOST}`;
 
 test("on the Portal host the login sends Access /callback, scopes its cookies to Path=/, and returns to the root path", async () => {
   const e = env();
-  const start = await startPortalLogin(new Request(`${PORTAL_ORIGIN}/portal/jobs`), e, "/portal/jobs");
+  const start = await startPortalLogin(
+    new Request(`${PORTAL_ORIGIN}/portal/jobs`),
+    e,
+    "/portal/jobs",
+  );
   const location = String(start.headers.get("Location"));
   assert.equal(new URL(location).searchParams.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`);
-  assert.match(setCookies(start)[0], /^__Host-capsid_portal_state=[0-9a-f]{64}; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/);
+  assert.match(
+    setCookies(start)[0],
+    /^__Host-capsid_portal_state=[0-9a-f]{64}; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/,
+  );
   const state = String(new URL(location).searchParams.get("state"));
   const bodies = await stubPortalAccess(location);
   const res = await handlePortalCallback(
-    new Request(`${PORTAL_ORIGIN}/portal/callback?code=c&state=${state}`, { headers: { Cookie: setCookies(start)[0].split(";")[0] } }),
+    new Request(`${PORTAL_ORIGIN}/portal/callback?code=c&state=${state}`, {
+      headers: { Cookie: setCookies(start)[0].split(";")[0] },
+    }),
     e,
-    new Date()
+    new Date(),
   );
   assert.equal(res.status, 302);
   assert.equal(res.headers.get("Location"), "/jobs");
-  assert.equal(bodies[0]?.get("redirect_uri"), `${PORTAL_ORIGIN}/callback`, "the exchange must name the same callback the start sent");
+  assert.equal(
+    bodies[0]?.get("redirect_uri"),
+    `${PORTAL_ORIGIN}/callback`,
+    "the exchange must name the same callback the start sent",
+  );
   const cookies = setCookies(res);
-  assert.match(cookies[0], /^__Host-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=90000$/);
-  assert.equal(cookies[1], "__Host-capsid_portal_state=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0");
+  assert.match(
+    cookies[0],
+    /^__Host-capsid_portal=[0-9a-f]+\.[A-Za-z0-9_-]+; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=90000$/,
+  );
+  assert.equal(
+    cookies[1],
+    "__Host-capsid_portal_state=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+  );
 });
 
 // PLANT: host-only cookies. The Portal's cookies must never carry a Domain attribute, on
@@ -241,25 +340,42 @@ test("on the Portal host the login sends Access /callback, scopes its cookies to
 // CSRF cookie, on workers.dev and on the Portal host.
 test("PLANT: no Portal cookie carries a Domain attribute, and each is scoped to its host's Portal path", async () => {
   const seen: Array<{ host: string; cookie: string }> = [];
-  for (const [origin, path] of [[ORIGIN, "/portal"], [PORTAL_ORIGIN, "/"]] as const) {
+  for (const [origin, path] of [
+    [ORIGIN, "/portal"],
+    [PORTAL_ORIGIN, "/"],
+  ] as const) {
     const e = env();
     const start = await startPortalLogin(new Request(`${origin}/portal/`), e, "/portal/");
     const location = String(start.headers.get("Location"));
     await stubPortalAccess(location);
     const state = String(new URL(location).searchParams.get("state"));
     const done = await handlePortalCallback(
-      new Request(`${origin}/portal/callback?code=c&state=${state}`, { headers: { Cookie: setCookies(start)[0].split(";")[0] } }),
+      new Request(`${origin}/portal/callback?code=c&state=${state}`, {
+        headers: { Cookie: setCookies(start)[0].split(";")[0] },
+      }),
       e,
-      new Date()
+      new Date(),
     );
     const csrf = portalCsrf(new Request(`${origin}/portal/api/ops`)).setCookie;
     assert.ok(csrf, "a request with no CSRF cookie must be given one");
-    const cookies = [...setCookies(start), ...setCookies(done), ...portalSignOutCookies(path), csrf];
+    const cookies = [
+      ...setCookies(start),
+      ...setCookies(done),
+      ...portalSignOutCookies(path),
+      csrf,
+    ];
     for (const cookie of cookies) {
       seen.push({ host: origin, cookie });
-      assert.doesNotMatch(cookie, /;\s*domain\s*=/i, `${origin} set a cookie with a Domain: ${cookie}`);
+      assert.doesNotMatch(
+        cookie,
+        /;\s*domain\s*=/i,
+        `${origin} set a cookie with a Domain: ${cookie}`,
+      );
       const attributes = cookie.split(";").map((a) => a.trim());
-      assert.ok(attributes.includes(`Path=${path}`), `${origin} set a cookie outside ${path}: ${cookie}`);
+      assert.ok(
+        attributes.includes(`Path=${path}`),
+        `${origin} set a cookie outside ${path}: ${cookie}`,
+      );
     }
   }
   // Two hosts, each: the state cookie, the session and the cleared state, four sign-out
@@ -274,13 +390,17 @@ test("a co-owner completes the login: the cookie carries her email and verifies 
   await stubPortalAccess(location, { email: "co@example.com" });
   const res = await handlePortalCallback(callback(state, cookie), e, new Date());
   assert.equal(res.status, 302);
-  const session = await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }), e, new Date());
+  const session = await readPortalSession(
+    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }),
+    e,
+    new Date(),
+  );
   assert.deepEqual(session, { email: "co@example.com" });
   // The same cookie stops verifying when she is taken off the list.
   const removed = await readPortalSession(
     new Request(`${ORIGIN}/portal/`, { headers: { Cookie: setCookies(res)[0].split(";")[0] } }),
     env({ CO_OWNER_EMAILS: "other@example.com" }),
-    new Date()
+    new Date(),
   );
   assert.equal(removed, null);
 });
@@ -306,33 +426,75 @@ test("a co-owner's email in another case, or with CO_OWNER_EMAILS unset, is refu
 test("PLANT: an hour with no request sends the browser to Access's logout and ends the session; an active one is let through", async () => {
   const e = env();
   const signedIn = new Date("2026-09-28T12:00:00.000Z");
-  const session = (await portalSessionCookie({ email: "admin@example.com" }, SECRET, signedIn)).split(";")[0];
+  const session = (
+    await portalSessionCookie({ email: "admin@example.com" }, SECRET, signedIn)
+  ).split(";")[0];
   const at = (minutes: number) => new Date(signedIn.getTime() + minutes * 60_000);
   const handled: string[] = [];
   const handle = async () => (handled.push("served"), new Response("ok"));
 
   // A request 30 minutes in is served and records itself.
-  const first = await withPortalIdle(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: session } }), e, handle, at(30));
+  const first = await withPortalIdle(
+    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: session } }),
+    e,
+    handle,
+    at(30),
+  );
   assert.equal(first.status, 200);
-  const seen = setCookies(first).find((c) => c.startsWith("__Host-admin-seen="))?.split(";")[0];
+  const seen = setCookies(first)
+    .find((c) => c.startsWith("__Host-admin-seen="))
+    ?.split(";")[0];
   assert.ok(seen, "an active request did not record itself");
 
   // 80 minutes in, 50 after the last request: still active.
-  const second = await withPortalIdle(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen}` } }), e, handle, at(80));
+  const second = await withPortalIdle(
+    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen}` } }),
+    e,
+    handle,
+    at(80),
+  );
   assert.equal(second.status, 200);
   assert.equal(handled.length, 2);
-  const seen2 = setCookies(second).find((c) => c.startsWith("__Host-admin-seen="))?.split(";")[0];
+  const seen2 = setCookies(second)
+    .find((c) => c.startsWith("__Host-admin-seen="))
+    ?.split(";")[0];
 
   // The page's own poll (X-Background) is served but is not a request by the admin.
-  const poll = await withPortalIdle(new Request(`${ORIGIN}/portal/api/ops`, { headers: { Cookie: `${session}; ${seen2}`, "X-Background": "1" } }), e, handle, at(120));
+  const poll = await withPortalIdle(
+    new Request(`${ORIGIN}/portal/api/ops`, {
+      headers: { Cookie: `${session}; ${seen2}`, "X-Background": "1" },
+    }),
+    e,
+    handle,
+    at(120),
+  );
   assert.equal(poll.status, 200);
-  assert.ok(!setCookies(poll).some((c) => c.startsWith("__Host-admin-seen=")), "a background poll kept the session active");
+  assert.ok(
+    !setCookies(poll).some((c) => c.startsWith("__Host-admin-seen=")),
+    "a background poll kept the session active",
+  );
 
   // 150 minutes in, 70 after the last request by the admin (the poll at 120 does not count): idle.
-  const idle = await withPortalIdle(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen2}` } }), e, handle, at(150));
+  const idle = await withPortalIdle(
+    new Request(`${ORIGIN}/portal/`, { headers: { Cookie: `${session}; ${seen2}` } }),
+    e,
+    handle,
+    at(150),
+  );
   assert.equal(idle.status, 302);
-  assert.equal(idle.headers.get("Location"), "https://sample.cloudflareaccess.com/cdn-cgi/access/logout");
+  assert.equal(
+    idle.headers.get("Location"),
+    "https://sample.cloudflareaccess.com/cdn-cgi/access/logout",
+  );
   assert.equal(handled.length, 3, "an idle request reached the Portal");
   assert.ok(setCookies(idle).some((c) => /^__Secure-capsid_portal=;.*Max-Age=0/.test(c)));
-  assert.equal(await readPortalSession(new Request(`${ORIGIN}/portal/`, { headers: { Cookie: session } }), e, at(151)), null, "the idle session's cookie still verifies");
+  assert.equal(
+    await readPortalSession(
+      new Request(`${ORIGIN}/portal/`, { headers: { Cookie: session } }),
+      e,
+      at(151),
+    ),
+    null,
+    "the idle session's cookie still verifies",
+  );
 });

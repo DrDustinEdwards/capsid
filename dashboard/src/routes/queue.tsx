@@ -3,4 +3,5 @@ import { Queue } from "../views/Queue";
 
 export const loader = viewLoader("queue");
 export const clientLoader = browserLoader;
-export default viewPage(Queue);
+const QueuePage = viewPage(Queue);
+export default QueuePage;

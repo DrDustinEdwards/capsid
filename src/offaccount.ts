@@ -25,6 +25,27 @@ export const OFFACCOUNT_SOURCES = {
 
 export type OffaccountSite = keyof typeof OFFACCOUNT_SOURCES;
 
+// The MCP tool-call logs (site-runtime exportAuditLog, tool-calls/ in a bucket of its own, locked
+// 365 days). The Durable Object that feeds them prunes its rows after 90 days, so days 90 to 365
+// exist only in Cloudflare; capsid-backups copies each bucket to Amazon under files/audit/<name>/,
+// add-only. Pinned like the sites: the name picks a row, the request never names a bucket.
+export const OFFACCOUNT_AUDIT_SOURCES = {
+  "capsid-mcp": "capsid-mcp-tool-calls",
+  "carrel-desk": "carrel-desk-tool-calls",
+  "dustinedwards-admin-mcp": "dustinedwards-admin-mcp-tool-calls",
+  foxhound: "foxhound-tool-calls",
+  "foxhound-admin-mcp": "foxhound-admin-mcp-tool-calls",
+  "foxing-admin-mcp": "foxing-admin-mcp-tool-calls",
+} as const satisfies Record<string, string>;
+
+export type OffaccountAudit = keyof typeof OFFACCOUNT_AUDIT_SOURCES;
+
+export const OFFACCOUNT_AUDITS = Object.keys(OFFACCOUNT_AUDIT_SOURCES) as OffaccountAudit[];
+
+export function isOffaccountAudit(name: string): name is OffaccountAudit {
+  return Object.hasOwn(OFFACCOUNT_AUDIT_SOURCES, name);
+}
+
 // keeps working.
 // send none, keep working through the cutover.
 export const OFFACCOUNT_DEFAULT_SITE: OffaccountSite = "capsid";
@@ -58,15 +79,18 @@ export interface OffaccountSiteReport {
   monthly: string | null;
 }
 
-const runOrNull = (v: unknown): v is string | null => v === null || (typeof v === "string" && RUN_ID.test(v));
-const size = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+const runOrNull = (v: unknown): v is string | null =>
+  v === null || (typeof v === "string" && RUN_ID.test(v));
+const size = (v: unknown): v is number =>
+  typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 
 function siteLine(v: unknown): OffaccountSiteReport | null {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
   const { newest, bytes, recent_bytes, weekly, monthly } = v as Record<string, unknown>;
   if (!runOrNull(newest) || !runOrNull(weekly) || !runOrNull(monthly)) return null;
   if (!(bytes === null || size(bytes)) || (newest === null) !== (bytes === null)) return null;
-  if (!Array.isArray(recent_bytes) || recent_bytes.length > 14 || !recent_bytes.every(size)) return null;
+  if (!Array.isArray(recent_bytes) || recent_bytes.length > 14 || !recent_bytes.every(size))
+    return null;
   return { newest, bytes, recent_bytes, weekly, monthly };
 }
 
@@ -74,8 +98,10 @@ function siteLine(v: unknown): OffaccountSiteReport | null {
 // cannot read as that site being fine; a site this Worker does not know is refused, so
 // the two lists cannot drift apart silently.
 export function parseOffaccountReport(
-  body: string
-): { ok: true; jti: string; sites: Record<OffaccountSite, OffaccountSiteReport> } | { ok: false; refusal: string } {
+  body: string,
+):
+  | { ok: true; jti: string; sites: Record<OffaccountSite, OffaccountSiteReport> }
+  | { ok: false; refusal: string } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -83,17 +109,24 @@ export function parseOffaccountReport(
     return { ok: false, refusal: "the report body is not JSON" };
   }
   const { jti, sites } = (parsed ?? {}) as { jti?: unknown; sites?: unknown };
-  if (typeof jti !== "string" || jti.length < 8 || jti.length > 128) return { ok: false, refusal: "the report must carry a jti of 8 to 128 characters" };
-  if (typeof sites !== "object" || sites === null || Array.isArray(sites)) return { ok: false, refusal: "the report must carry a sites object" };
+  if (typeof jti !== "string" || jti.length < 8 || jti.length > 128)
+    return { ok: false, refusal: "the report must carry a jti of 8 to 128 characters" };
+  if (typeof sites !== "object" || sites === null || Array.isArray(sites))
+    return { ok: false, refusal: "the report must carry a sites object" };
   const named = Object.keys(sites);
   const unknown = named.filter((s) => !isOffaccountSite(s));
-  if (unknown.length) return { ok: false, refusal: `the report names unknown sites: ${unknown.join(", ")}` };
+  if (unknown.length)
+    return { ok: false, refusal: `the report names unknown sites: ${unknown.join(", ")}` };
   const missing = OFFACCOUNT_SITES.filter((s) => !named.includes(s));
   if (missing.length) return { ok: false, refusal: `the report leaves out: ${missing.join(", ")}` };
   const out = {} as Record<OffaccountSite, OffaccountSiteReport>;
   for (const site of OFFACCOUNT_SITES) {
     const line = siteLine((sites as Record<string, unknown>)[site]);
-    if (!line) return { ok: false, refusal: `${site}: expected {newest, bytes, recent_bytes, weekly, monthly}, each run a run id or null` };
+    if (!line)
+      return {
+        ok: false,
+        refusal: `${site}: expected {newest, bytes, recent_bytes, weekly, monthly}, each run a run id or null`,
+      };
     out[site] = line;
   }
   return { ok: true, jti, sites: out };

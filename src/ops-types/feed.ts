@@ -1,6 +1,13 @@
 import type { OpsSiteConfig, OpsPackageConfig, OpsSnapshot } from "./sites";
 
-export type OpsJobStatus = "queued" | "claimed" | "blocked" | "done" | "failed" | "superseded" | "parked";
+export type OpsJobStatus =
+  | "queued"
+  | "claimed"
+  | "blocked"
+  | "done"
+  | "failed"
+  | "superseded"
+  | "parked";
 
 export interface OpsJob {
   id: string;
@@ -231,11 +238,18 @@ export interface CompletenessView {
   areas: CompletenessArea[];
 }
 
-// What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, capsid_run_improve action
+// What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, capsid_read_status action
 // status's needs_dustin, and the Portal's Needs you page all carry this one shape.
 export type InboxSeverity = "needs-you" | "failing" | "none";
 // "proposal": a merge unit promotion, demotion or suspension (src/merge-units.ts).
-export type InboxKind = "blocked-job" | "question" | "pr" | "ci" | "site-down" | "report" | "proposal";
+export type InboxKind =
+  | "blocked-job"
+  | "question"
+  | "pr"
+  | "ci"
+  | "site-down"
+  | "report"
+  | "proposal";
 
 export interface InboxItem {
   title: string;
@@ -285,7 +299,10 @@ export interface OpsMergeSafety {
   namespaces: OpsMergeSafetyRow[];
 }
 
-type OpsMergePolicy = { loads: true; version: string; enabled: boolean } | { loads: false; reason: string };
+// units: the merge units ('<namespace>/<path class>') the signed policy promotes to auto.
+type OpsMergePolicy =
+  | { loads: true; version: string; enabled: boolean; units: string[] }
+  | { loads: false; reason: string };
 
 export interface OpsLive {
   generated: string;
@@ -373,7 +390,9 @@ export interface OpsUptimeCounts {
 export interface OpsUptime {
   target: number;
   days: number;
-  sites: Array<{ namespace: string; months: Array<{ month: string } & OpsUptimeCounts> } & OpsUptimeCounts>;
+  sites: Array<
+    { namespace: string; months: Array<{ month: string } & OpsUptimeCounts> } & OpsUptimeCounts
+  >;
 }
 
 export interface OpsFeed {
@@ -421,7 +440,12 @@ export interface ResourcesDoc {
     // The stores this Worker's Previews bind (preview-only databases and buckets).
     previews: Array<{ binding: string; store: string }>;
   }>;
-  databases: Array<{ name: string; tables: string[] | null; tables_error: string | null; used_by: ResourceUser[] }>;
+  databases: Array<{
+    name: string;
+    tables: string[] | null;
+    tables_error: string | null;
+    used_by: ResourceUser[];
+  }>;
   kv_namespaces: Array<{ title: string; used_by: ResourceUser[] }>;
   buckets: Array<{ name: string; used_by: ResourceUser[] }>;
   // Parts that could not be read, each with the permission that would let it.

@@ -11,18 +11,16 @@ import { describe, expect, it } from "vitest";
 // rule is a bare `SCAN <table>` with no ` USING INDEX` and no ` VIRTUAL TABLE`, on
 // one of the tables that grows without bound.
 
-const HOT_TABLES = [
-  "documents",
-  "document_links",
-  "document_versions",
-  "audit_log",
-  "improve_jti",
-];
+const HOT_TABLES = ["documents", "document_links", "document_versions", "audit_log", "improve_jti"];
 
 // Reads that walk a whole table on purpose, each named with its reason, so a new
 // exception has to be added here explicitly.
 const WHOLE_TABLE_BY_DESIGN = [
-  { file: "backup.ts", sql: /^SELECT \* FROM /i, why: "the nightly dump reads every row of a table on purpose" },
+  {
+    file: "backup.ts",
+    sql: /^SELECT \* FROM /i,
+    why: "the nightly dump reads every row of a table on purpose",
+  },
   {
     file: "portal-activity.ts",
     sql: /^SELECT id, at, actor, action, namespace, path, CASE .* END AS target, params FROM audit_log WHERE 1 = 1 ORDER BY id DESC LIMIT/is,
@@ -51,7 +49,7 @@ function bareScan(detail: string): string | null {
 async function planOf(sql: string): Promise<{ details: string[] } | { error: string }> {
   try {
     const result = await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
-      .bind(...new Array(arity(sql)).fill("x"))
+      .bind(...Array.from({ length: arity(sql) }, () => "x"))
       .all<{ detail: string }>();
     return { details: result.results.map((r) => r.detail) };
   } catch (err) {
@@ -68,16 +66,22 @@ describe("query plans", () => {
     // skipped. That catches the walk missing a file or directory without a fixed
     // floor that breaks when statements move between files.
     const files = env.TEST_SQL_PREPARE_FILES;
-    expect(files.length, "no src/ file calls .prepare(; the file listing is broken").toBeGreaterThan(0);
+    expect(
+      files.length,
+      "no src/ file calls .prepare(; the file listing is broken",
+    ).toBeGreaterThan(0);
     const seen = new Set([...env.TEST_SQL_STATEMENTS, ...env.TEST_SQL_SKIPPED].map((s) => s.file));
     const unseen = files.filter((f) => !seen.has(f));
-    expect(unseen, `files that call .prepare( but yielded no statement: ${unseen.join(", ")}`).toEqual([]);
+    expect(
+      unseen,
+      `files that call .prepare( but yielded no statement: ${unseen.join(", ")}`,
+    ).toEqual([]);
     expect(reads().length, "no SELECTs among them").toBeGreaterThan(0);
     // A statement the walk could not reconstruct is reported rather than dropped, so
     // the plan check cannot quietly cover only part of the reads.
     expect(
       env.TEST_SQL_SKIPPED.length,
-      `${env.TEST_SQL_SKIPPED.length} statements could not be reconstructed: ${env.TEST_SQL_SKIPPED.map((s) => `${s.file}: ${s.sql.slice(0, 70)}`).join(" | ")}`
+      `${env.TEST_SQL_SKIPPED.length} statements could not be reconstructed: ${env.TEST_SQL_SKIPPED.map((s) => `${s.file}: ${s.sql.slice(0, 70)}`).join(" | ")}`,
       // Three: advanceRun's built SET list, and two .prepare() calls that take an
       // expression (backup.ts's dump, improve/open.ts's attempt read).
     ).toBeLessThanOrEqual(3);
@@ -87,8 +91,10 @@ describe("query plans", () => {
     const broken: string[] = [];
     for (const statement of reads()) {
       const plan = await planOf(statement.sql);
-      if ("error" in plan) broken.push(`${statement.file}: ${plan.error} :: ${statement.sql.slice(0, 90)}`);
-      else if (plan.details.length === 0) broken.push(`${statement.file}: empty plan :: ${statement.sql.slice(0, 90)}`);
+      if ("error" in plan)
+        broken.push(`${statement.file}: ${plan.error} :: ${statement.sql.slice(0, 90)}`);
+      else if (plan.details.length === 0)
+        broken.push(`${statement.file}: empty plan :: ${statement.sql.slice(0, 90)}`);
     }
     expect(broken, broken.join("\n")).toEqual([]);
   });
@@ -96,7 +102,9 @@ describe("query plans", () => {
   it("PLANT: no read bare-scans a table that grows without bound", async () => {
     const findings: string[] = [];
     for (const statement of reads()) {
-      const exempt = WHOLE_TABLE_BY_DESIGN.some((e) => e.file === statement.file && e.sql.test(statement.sql));
+      const exempt = WHOLE_TABLE_BY_DESIGN.some(
+        (e) => e.file === statement.file && e.sql.test(statement.sql),
+      );
       if (exempt) continue;
       const plan = await planOf(statement.sql);
       if ("error" in plan) continue; // the previous test owns that failure
@@ -114,14 +122,16 @@ describe("query plans", () => {
     // `id DESC` inside these indexes lets the LIMIT 1 stop at the first entry instead
     // of sorting; a plan that says SEARCH but then TEMP B-TREE FOR ORDER BY has lost that.
     const lastActor = await planOf(
-      "SELECT actor FROM audit_log WHERE namespace = ?1 AND path = ?2 ORDER BY id DESC LIMIT 1"
+      "SELECT actor FROM audit_log WHERE namespace = ?1 AND path = ?2 ORDER BY id DESC LIMIT 1",
     );
     expect("details" in lastActor).toBe(true);
     const actorPlan = ("details" in lastActor ? lastActor.details : []).join(" | ");
     expect(actorPlan).toContain("audit_log_doc");
     expect(actorPlan).not.toContain("TEMP B-TREE");
 
-    const prune = await planOf("SELECT COUNT(*) AS n FROM document_versions WHERE snapshot_at < datetime('now', ?1)");
+    const prune = await planOf(
+      "SELECT COUNT(*) AS n FROM document_versions WHERE snapshot_at < datetime('now', ?1)",
+    );
     const prunePlan = ("details" in prune ? prune.details : []).join(" | ");
     expect(prunePlan).toContain("document_versions_snapshot");
   });
@@ -134,7 +144,7 @@ describe("query plans", () => {
     // which 0059 added for the action-count reads and which the planner may prefer here.
     for (const limit of ["1", "?3"]) {
       const plan = await planOf(
-        `SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT ${limit}`
+        `SELECT actor, params, at FROM audit_log WHERE namespace = ?1 AND path = ?2 AND action = 'job-resumed' ORDER BY id DESC LIMIT ${limit}`,
       );
       expect("details" in plan, `LIMIT ${limit} did not plan`).toBe(true);
       const text = ("details" in plan ? plan.details : []).join(" | ");
@@ -178,11 +188,13 @@ describe("query plans", () => {
   it("PLANT: every FILTERED activity read uses an index and sorts nothing", async () => {
     for (const [label, sql, n, index] of ACTIVITY_VARIANTS) {
       const result = await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
-        .bind(...new Array(n).fill("x"))
+        .bind(...Array.from({ length: n }, () => "x"))
         .all<{ detail: string }>();
       const plan = result.results.map((r) => r.detail).join(" | ");
       expect(plan, `activity ${label} does not use ${index}`).toContain(index);
-      expect(plan, `activity ${label} sorts its rows to honor the LIMIT`).not.toContain("TEMP B-TREE");
+      expect(plan, `activity ${label} sorts its rows to honor the LIMIT`).not.toContain(
+        "TEMP B-TREE",
+      );
     }
   });
 
@@ -193,8 +205,12 @@ describe("query plans", () => {
     ]) {
       const result = await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`).all<{ detail: string }>();
       const plan = result.results.map((r) => r.detail).join(" | ");
-      expect(plan, `${sql.slice(0, 60)} does not use audit_log_action_actor`).toContain("audit_log_action_actor");
-      expect(plan, `${sql.slice(0, 60)} builds a temp b-tree to group`).not.toContain("TEMP B-TREE");
+      expect(plan, `${sql.slice(0, 60)} does not use audit_log_action_actor`).toContain(
+        "audit_log_action_actor",
+      );
+      expect(plan, `${sql.slice(0, 60)} builds a temp b-tree to group`).not.toContain(
+        "TEMP B-TREE",
+      );
     }
   });
 });

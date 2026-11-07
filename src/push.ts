@@ -1,3 +1,4 @@
+import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
 import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { RETRY_CAP_REASON } from "./jobs-schema";
@@ -64,13 +65,25 @@ const PORTAL_URL = `https://${PORTAL_HOST}/`;
 // A pull request's card on Pull requests carries the anchor the dashboard builds
 // (dashboard/src/lib/pr-actions.ts, prAnchor); a job opens in its drawer on Jobs.
 const portalPath = (path: string) => `https://${PORTAL_HOST}${path}`;
-const prUrl = (repo: string, number: number) => portalPath(`/prs#pr-${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${number}`);
+const prUrl = (repo: string, number: number) =>
+  portalPath(`/prs#pr-${repo.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${number}`);
 const jobUrl = (id: string) => portalPath(`/queue/job/${encodeURIComponent(id)}`);
-const DEPLOYS_URL = portalPath("/health?tab=deploys");
+// A site's own page (/sites/<namespace>), at a tab when one is named.
+const siteUrl = (namespace: string, tab?: "deploys") =>
+  portalPath(`/sites/${encodeURIComponent(namespace)}${tab ? `?tab=${tab}` : ""}`);
 const AUTO_MERGE_URL = portalPath("/prs#auto-merge");
-const SITES_URL = portalPath("/health?tab=sites");
+const SITES_URL = portalPath("/sites");
 
-type UrgentKind = "typed-pr" | "rollback" | "correction-cap" | "question" | "automerge-paused" | "visual-pr" | "site" | "tls" | "domain";
+type UrgentKind =
+  | "typed-pr"
+  | "rollback"
+  | "correction-cap"
+  | "question"
+  | "automerge-paused"
+  | "visual-pr"
+  | "site"
+  | "tls"
+  | "domain";
 
 interface Urgent {
   key: string;
@@ -106,7 +119,11 @@ const hours = (ms: number) => `${Math.floor(ms / HOUR_MS)}h`;
 
 /** The seven triggers, from what the tick, the watcher and the queue already keep. Reads
  *  only; `typedSeen` is updated in place with the typed PRs seen now. */
-async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, string>): Promise<Urgent[]> {
+async function gatherUrgent(
+  env: Env,
+  now: Date,
+  typedSeen: Record<string, string>,
+): Promise<Urgent[]> {
   const out: Urgent[] = [];
   const t = now.getTime();
 
@@ -122,7 +139,14 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
     typedSeen[id] = since;
     const waited = t - Date.parse(since);
     if (waited > TYPED_WAIT_MS) {
-      out.push({ key: `typed:${id}`, kind: "typed-pr", namespace: a.namespace, title: "Typed approval waiting", body: `${id}, class typed (money path), waiting ${hours(waited)}. Approve it by typing its number.`, url: prUrl(a.repo, a.number) });
+      out.push({
+        key: `typed:${id}`,
+        kind: "typed-pr",
+        namespace: a.namespace,
+        title: "Typed approval waiting",
+        body: `${id}, class typed (money path), waiting ${hours(waited)}. Approve it by typing its number.`,
+        url: prUrl(a.repo, a.number),
+      });
     }
   }
   for (const id of Object.keys(typedSeen)) if (!typedNow.has(id)) delete typedSeen[id];
@@ -146,7 +170,7 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
   const since = new Date(t - RECENT_MS).toISOString().replace("T", " ").slice(0, 19);
   const rolled = await env.DB.prepare(
     `SELECT repo, namespace, run_id, head_sha, outcome FROM deploy_outcomes
-     WHERE outcome IN ('rolled_back', 'rollback_failed') AND recorded_at >= ?1 ORDER BY recorded_at LIMIT 20`
+     WHERE outcome IN ('rolled_back', 'rollback_failed') AND recorded_at >= ?1 ORDER BY recorded_at LIMIT 20`,
   )
     .bind(since)
     .all<{ repo: string; namespace: string; run_id: number; head_sha: string; outcome: string }>();
@@ -158,21 +182,45 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
       namespace: r.namespace,
       title: failed ? "Rollback failed" : "Deploy rolled back",
       body: `${r.repo} at ${r.head_sha.slice(0, 7)}: ${failed ? "the live gate failed and the rollback did not take effect" : "the live gate failed and the deploy was rolled back"}.`,
-      url: DEPLOYS_URL,
+      url: siteUrl(r.namespace, "deploys"),
     });
   }
 
   // 3 and 4. Blocked jobs: at the correction cap, or a question on a priority job.
   const blocked = await env.DB.prepare(
-    `SELECT id, namespace, priority, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT 200`
-  ).all<{ id: string; namespace: string; priority: number; result_summary: string | null; updated_at: string }>();
+    `SELECT id, namespace, priority, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT 200`,
+  ).all<{
+    id: string;
+    namespace: string;
+    priority: number;
+    result_summary: string | null;
+    updated_at: string;
+  }>();
   for (const j of blocked.results ?? []) {
     const summary = j.result_summary ?? "";
     const age = t - Date.parse(j.updated_at);
     if (summary.startsWith(RETRY_CAP_REASON) && age <= RECENT_MS) {
-      out.push({ key: `cap:${j.id}:${j.updated_at}`, kind: "correction-cap", namespace: j.namespace, title: "Correction cap reached", body: `${j.namespace} job ${j.id}: the reviewer and the driver did not converge. It needs your call.`, url: jobUrl(j.id) });
-    } else if (summary.startsWith("QUESTION:") && j.priority >= QUESTION_PRIORITY && age > QUESTION_AGE_MS) {
-      out.push({ key: `question:${j.id}:${j.updated_at}`, kind: "question", namespace: j.namespace, title: "Question waiting", body: `${j.namespace} job ${j.id}, priority ${j.priority}, asked ${hours(age)} ago.`, url: jobUrl(j.id) });
+      out.push({
+        key: `cap:${j.id}:${j.updated_at}`,
+        kind: "correction-cap",
+        namespace: j.namespace,
+        title: "Correction cap reached",
+        body: `${j.namespace} job ${j.id}: the reviewer and the driver did not converge. It needs your call.`,
+        url: jobUrl(j.id),
+      });
+    } else if (
+      summary.startsWith("QUESTION:") &&
+      j.priority >= QUESTION_PRIORITY &&
+      age > QUESTION_AGE_MS
+    ) {
+      out.push({
+        key: `question:${j.id}:${j.updated_at}`,
+        kind: "question",
+        namespace: j.namespace,
+        title: "Question waiting",
+        body: `${j.namespace} job ${j.id}, priority ${j.priority}, asked ${hours(age)} ago.`,
+        url: jobUrl(j.id),
+      });
     }
   }
 
@@ -180,14 +228,22 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
   // tick already holds every namespace then (src/auto-merge-tick.ts) and logs it.
   try {
     for (const [namespace, p] of Object.entries(await readPaused(env.APP_KV))) {
-      out.push({ key: `paused:${namespace}:${p.since}`, kind: "automerge-paused", namespace, title: "Auto-merge paused", body: `${namespace}: ${p.reason}. Unattended merges stop until you resume it with the automerge_resume control (chat, capsid_admin_run_controls) and a reason.`, url: AUTO_MERGE_URL });
+      out.push({
+        key: `paused:${namespace}:${p.since}`,
+        kind: "automerge-paused",
+        namespace,
+        title: "Auto-merge paused",
+        body: `${namespace}: ${p.reason}. Unattended merges stop until you resume it with the automerge_resume control (chat, capsid_admin_run_controls) and a reason.`,
+        url: AUTO_MERGE_URL,
+      });
     }
   } catch {
     // See above.
   }
 
   // 7. Sites, from the five-minute pulse.
-  for (const a of pulseAlerts(await readPulse(env), now)) out.push({ ...a, kind: "site", url: SITES_URL });
+  for (const a of pulseAlerts(await readPulse(env), now))
+    out.push({ ...a, kind: "site", url: siteUrl(a.namespace) });
 
   // 7, the error rate: the watcher's site-errors findings from its last pass. A snapshot
   // that cannot be read alerts nothing; the Portal shows that it could not be read.
@@ -197,14 +253,23 @@ async function gatherUrgent(env: Env, now: Date, typedSeen: Record<string, strin
     if (!fingerprint.startsWith("site-errors-")) continue;
     const namespace = fingerprint.slice("site-errors-".length);
     const name = snapshot?.sites.find((s) => s.namespace === namespace)?.name ?? namespace;
-    out.push({ key: `site-errors:${namespace}:${day}`, kind: "site", namespace, title: `${name} is returning errors`, body: `Over 1 percent of requests in the last complete hour threw or answered 5xx (watcher pass ${snapshot?.pass_at}).`, url: SITES_URL });
+    out.push({
+      key: `site-errors:${namespace}:${day}`,
+      kind: "site",
+      namespace,
+      title: `${name} is returning errors`,
+      body: `Over 1 percent of requests in the last complete hour threw or answered 5xx (watcher pass ${snapshot?.pass_at}).`,
+      url: siteUrl(namespace),
+    });
   }
 
   // 8. A TLS certificate 21 or 3 days from expiry (src/tls-expiry.ts), from the watcher's
   // last read, and a domain registration 30 or 7 days out, from the last snapshot. One
   // that cannot be read alerts nothing.
-  for (const a of tlsAlerts(await readStoredTls(env).catch(() => null), now)) out.push({ ...a, kind: "tls", namespace: "capsid", url: SITES_URL });
-  for (const a of domainAlerts(snapshot?.expiry?.domains, now)) out.push({ ...a, kind: "domain", namespace: "capsid", url: SITES_URL });
+  for (const a of tlsAlerts(await readStoredTls(env).catch(() => null), now))
+    out.push({ ...a, kind: "tls", namespace: "capsid", url: SITES_URL });
+  for (const a of domainAlerts(snapshot?.expiry?.domains, now))
+    out.push({ ...a, kind: "domain", namespace: "capsid", url: SITES_URL });
   return out;
 }
 
@@ -227,11 +292,17 @@ async function dueAlerts(env: Env, now: Date) {
 }
 
 /** One pass: what is urgent and not yet sent goes to every active device. */
-export async function pushTick(env: Env, now: Date, fetcher: typeof fetch = fetch): Promise<PushReport> {
+export async function pushTick(
+  env: Env,
+  now: Date,
+  fetcher: typeof fetch = fetch,
+): Promise<PushReport> {
   const vapid = readVapidKey(env.VAPID_PRIVATE_KEY);
   // No key means no device can be on, so the alerts take the email fallback.
   if (typeof vapid === "string") return emailFallback(env, now, vapid);
-  const devices = await env.DB.prepare(`SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE status = 'active' ORDER BY id LIMIT ?1`)
+  const devices = await env.DB.prepare(
+    `SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE status = 'active' ORDER BY id LIMIT ?1`,
+  )
     .bind(MAX_DEVICES)
     .all<DeviceRow>();
   const live = devices.results ?? [];
@@ -253,22 +324,38 @@ export async function pushTick(env: Env, now: Date, fetcher: typeof fetch = fetc
       if (res.gone) {
         gone.add(d.id);
         statements.push(
-          env.DB.prepare(`UPDATE push_subscriptions SET status = 'gone', closed_at = ?2, last_status = ?3 WHERE id = ?1 AND status = 'active' RETURNING id`).bind(d.id, at, res.status),
-          auditStatement(env.DB, "capsid:push", "push-device-gone", null, null, { id: d.id, status: res.status })
+          env.DB.prepare(
+            `UPDATE push_subscriptions SET status = 'gone', closed_at = ?2, last_status = ?3 WHERE id = ?1 AND status = 'active' RETURNING id`,
+          ).bind(d.id, at, res.status),
+          auditStatement(env.DB, "capsid:push", "push-device-gone", null, null, {
+            id: d.id,
+            status: res.status,
+          }),
         );
         continue;
       }
-      statements.push(env.DB.prepare(`UPDATE push_subscriptions SET last_sent_at = ?2, last_status = ?3 WHERE id = ?1 AND status = 'active'`).bind(d.id, at, res.status));
+      statements.push(
+        env.DB.prepare(
+          `UPDATE push_subscriptions SET last_sent_at = ?2, last_status = ?3 WHERE id = ?1 AND status = 'active'`,
+        ).bind(d.id, at, res.status),
+      );
       if (res.status >= 200 && res.status < 300) delivered++;
     }
     if (delivered > 0) {
       state.sent[u.key] = at;
       sent.push(u.key);
-      statements.push(auditStatement(env.DB, "capsid:push", "push-sent", u.namespace, null, { kind: u.kind, key: u.key, devices: delivered }));
+      statements.push(
+        auditStatement(env.DB, "capsid:push", "push-sent", u.namespace, null, {
+          kind: u.kind,
+          key: u.key,
+          devices: delivered,
+        }),
+      );
     }
   }
 
-  for (const [k, v] of Object.entries(state.sent)) if (now.getTime() - Date.parse(v) > SENT_TTL_MS) delete state.sent[k];
+  for (const [k, v] of Object.entries(state.sent))
+    if (now.getTime() - Date.parse(v) > SENT_TTL_MS) delete state.sent[k];
   if (statements.length) await env.DB.batch(statements);
   if (JSON.stringify(state) !== before) await env.APP_KV.put(STATE_KEY, JSON.stringify(state));
 
@@ -305,21 +392,36 @@ async function emailFallback(env: Env, now: Date, why: string): Promise<PushRepo
       `${why}, so these came by email (turn a device on in the Portal's Settings).`,
       "",
       ...due.flatMap((u) => [`${u.title}`, u.body, u.url, ""]),
-      ...(urgent.length > due.length ? [`${urgent.length - due.length} more on the next tick.`] : []),
+      ...(urgent.length > due.length
+        ? [`${urgent.length - due.length} more on the next tick.`]
+        : []),
     ].join("\n");
-    try {
-      await env.EMAIL!.send({ from: env.ALERT_FROM!, to: env.ALERT_EMAIL!, subject, text });
+    const mailed = await sendEmail(env.EMAIL, {
+      from: env.ALERT_FROM!,
+      to: env.ALERT_EMAIL!,
+      subject,
+      text,
+    });
+    if (mailed.sent) {
       for (const u of due) {
         state.sent[u.key] = at;
         sent.push(u.key);
       }
-      await env.DB.batch(due.map((u) => auditStatement(env.DB, "capsid:push", "push-emailed", u.namespace, null, { kind: u.kind, key: u.key })));
+      await env.DB.batch(
+        due.map((u) =>
+          auditStatement(env.DB, "capsid:push", "push-emailed", u.namespace, null, {
+            kind: u.kind,
+            key: u.key,
+          }),
+        ),
+      );
       note = `emailed ${sent.length} alert(s) (${why}): ${sent.join(", ")}`;
-    } catch (err) {
-      note = `${why}, and Cloudflare refused the fallback mail: ${(err instanceof Error ? err.message : String(err)).slice(0, 200)}; tried again next tick`;
+    } else {
+      note = `${why}, and Cloudflare refused the fallback mail: ${mailed.error.slice(0, 200)}; tried again next tick`;
     }
   }
-  for (const [k, v] of Object.entries(state.sent)) if (now.getTime() - Date.parse(v) > SENT_TTL_MS) delete state.sent[k];
+  for (const [k, v] of Object.entries(state.sent))
+    if (now.getTime() - Date.parse(v) > SENT_TTL_MS) delete state.sent[k];
   if (JSON.stringify(state) !== before) await env.APP_KV.put(STATE_KEY, JSON.stringify(state));
   return { ran: due.length > 0, note, sent };
 }
@@ -332,7 +434,7 @@ export const PORTAL_PUSH_PATH = "/portal/api/push";
 async function listDevices(env: Env, now: Date): Promise<PortalPush> {
   const vapid = readVapidKey(env.VAPID_PRIVATE_KEY);
   const rows = await env.DB.prepare(
-    `SELECT id, label, created_at, last_sent_at, last_status FROM push_subscriptions WHERE status = 'active' ORDER BY id LIMIT ?1`
+    `SELECT id, label, created_at, last_sent_at, last_status FROM push_subscriptions WHERE status = 'active' ORDER BY id LIMIT ?1`,
   )
     .bind(MAX_DEVICES)
     .all<PortalPush["devices"][number]>();
@@ -347,7 +449,11 @@ async function listDevices(env: Env, now: Date): Promise<PortalPush> {
 
 /** GET /portal/api/push: the VAPID public key and the devices with alerts on. Never an
  *  endpoint: it is a URL anyone could send to. */
-export async function handlePortalPushGet(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalPushGet(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   return json(await listDevices(env, now));
@@ -355,7 +461,12 @@ export async function handlePortalPushGet(request: Request, env: Env, now: Date 
 
 /** POST /portal/api/push: { op: "on", subscription, label } | { op: "off", id } | { op: "test" }.
  *  Behind the actions' checks: the session, same-origin, the body cap and CSRF. */
-export async function handlePortalPushPost(request: Request, env: Env, now: Date = new Date(), fetcher: typeof fetch = fetch): Promise<Response> {
+export async function handlePortalPushPost(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+  fetcher: typeof fetch = fetch,
+): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
   if (!gated.ok) return gated.response;
   const actor = `access:${gated.email}`;
@@ -365,19 +476,35 @@ export async function handlePortalPushPost(request: Request, env: Env, now: Date
   if (body.op === "on") {
     const vapid = readVapidKey(env.VAPID_PRIVATE_KEY);
     if (typeof vapid === "string") return text(vapid, 503);
-    const s = body.subscription as { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } } | undefined;
-    const sub = { endpoint: s?.endpoint, p256dh: s?.keys?.p256dh, auth: s?.keys?.auth } as Partial<PushSubscriptionKeys>;
+    const s = body.subscription as
+      | { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } }
+      | undefined;
+    const sub = {
+      endpoint: s?.endpoint,
+      p256dh: s?.keys?.p256dh,
+      auth: s?.keys?.auth,
+    } as Partial<PushSubscriptionKeys>;
     const problem = subscriptionProblem(sub);
     if (problem) return text(`not turned on: ${problem}`, 400);
     const label = typeof body.label === "string" ? body.label.slice(0, 80) : null;
-    const count = await env.DB.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions WHERE status = 'active'`).first<{ n: number }>();
-    const existing = await env.DB.prepare(`SELECT id FROM push_subscriptions WHERE endpoint = ?1 AND status = 'active'`).bind(sub.endpoint).first<{ id: number }>();
-    if (!existing && (count?.n ?? 0) >= MAX_DEVICES) return text(`not turned on: ${MAX_DEVICES} devices already have alerts on. Turn one off first.`, 409);
+    const count = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM push_subscriptions WHERE status = 'active'`,
+    ).first<{ n: number }>();
+    const existing = await env.DB.prepare(
+      `SELECT id FROM push_subscriptions WHERE endpoint = ?1 AND status = 'active'`,
+    )
+      .bind(sub.endpoint)
+      .first<{ id: number }>();
+    if (!existing && (count?.n ?? 0) >= MAX_DEVICES)
+      return text(
+        `not turned on: ${MAX_DEVICES} devices already have alerts on. Turn one off first.`,
+        409,
+      );
     const host = new URL(sub.endpoint!).hostname;
     if (!existing) {
       await env.DB.batch([
         env.DB.prepare(
-          `INSERT INTO push_subscriptions (endpoint, p256dh, auth, label, status, created_by, created_at) VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6)`
+          `INSERT INTO push_subscriptions (endpoint, p256dh, auth, label, status, created_by, created_at) VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6)`,
         ).bind(sub.endpoint, sub.p256dh, sub.auth, label, actor, at),
         auditStatement(env.DB, actor, "push-device-on", null, null, { label, push_service: host }),
       ]);
@@ -389,9 +516,12 @@ export async function handlePortalPushPost(request: Request, env: Env, now: Date
     const id = Number(body.id);
     if (!Number.isInteger(id) || id < 1) return text("op off needs the device's id.", 400);
     const [moved] = await env.DB.batch([
-      env.DB.prepare(`UPDATE push_subscriptions SET status = 'off', closed_at = ?2 WHERE id = ?1 AND status = 'active' RETURNING id`).bind(id, at),
+      env.DB.prepare(
+        `UPDATE push_subscriptions SET status = 'off', closed_at = ?2 WHERE id = ?1 AND status = 'active' RETURNING id`,
+      ).bind(id, at),
     ]);
-    if (!moved?.results?.length) return text(`device ${id} has no alerts on: it was turned off already or is gone.`, 409);
+    if (!moved?.results?.length)
+      return text(`device ${id} has no alerts on: it was turned off already or is gone.`, 409);
     await env.DB.batch([auditStatement(env.DB, actor, "push-device-off", null, null, { id })]);
     return json(await listDevices(env, now));
   }
@@ -399,11 +529,24 @@ export async function handlePortalPushPost(request: Request, env: Env, now: Date
   if (body.op === "test") {
     const vapid = readVapidKey(env.VAPID_PRIVATE_KEY);
     if (typeof vapid === "string") return text(vapid, 503);
-    const rows = await env.DB.prepare(`SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE status = 'active' ORDER BY id LIMIT ?1`).bind(MAX_DEVICES).all<DeviceRow>();
+    const rows = await env.DB.prepare(
+      `SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE status = 'active' ORDER BY id LIMIT ?1`,
+    )
+      .bind(MAX_DEVICES)
+      .all<DeviceRow>();
     const subject = env.ADMIN_EMAIL ? `mailto:${env.ADMIN_EMAIL}` : `https://${PORTAL_HOST}`;
-    const payload: PushPayload = { title: "Capsid test alert", body: "Phone alerts reach this device.", url: PORTAL_URL, tag: "test" };
+    const payload: PushPayload = {
+      title: "Capsid test alert",
+      body: "Phone alerts reach this device.",
+      url: PORTAL_URL,
+      tag: "test",
+    };
     const results = [];
-    for (const d of rows.results ?? []) results.push({ id: d.id, status: (await sendPush(vapid, subject, d, payload, now, fetcher)).status });
+    for (const d of rows.results ?? [])
+      results.push({
+        id: d.id,
+        status: (await sendPush(vapid, subject, d, payload, now, fetcher)).status,
+      });
     await env.DB.batch([auditStatement(env.DB, actor, "push-test", null, null, { results })]);
     return json({ ...(await listDevices(env, now)), results });
   }

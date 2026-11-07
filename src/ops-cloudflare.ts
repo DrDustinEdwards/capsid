@@ -48,12 +48,16 @@ const SCRIPT_NAME = /^[A-Za-z0-9_-]{1,63}$/;
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-export type CfCredentials = { ok: true; token: string; account: string } | { ok: false; reason: string };
+export type CfCredentials =
+  | { ok: true; token: string; account: string }
+  | { ok: false; reason: string };
 
 /** The token and the account it reads. The account is CF_ACCOUNT_ID, or R2_ACCOUNT_ID
  *  where that is unset: R2 lives in the same Cloudflare account. The reason names
  *  exactly what is unset. */
-export function cloudflareCredentials(env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">): CfCredentials {
+export function cloudflareCredentials(
+  env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
+): CfCredentials {
   const token = env.CF_OPS_TOKEN?.trim() ?? "";
   const account = env.CF_ACCOUNT_ID?.trim() || env.R2_ACCOUNT_ID?.trim() || "";
   const missing: string[] = [];
@@ -80,25 +84,52 @@ type CfEnvelope = { success?: unknown; errors?: unknown; result?: unknown; resul
 
 // The Cloudflare REST envelope. `success` false or a non-2xx is a failed read, with
 // Cloudflare's own messages as the reason. The token is never part of a reason.
-export async function cfGet(fetchImpl: FetchLike, token: string, url: string, what: string): Promise<unknown> {
+export async function cfGet(
+  fetchImpl: FetchLike,
+  token: string,
+  url: string,
+  what: string,
+): Promise<unknown> {
   return (await cfEnvelope(fetchImpl, token, url, what)).result;
 }
 
 /** A POST that only reads (a D1 query of sqlite_master), through the same envelope. */
-export async function cfPostRead(fetchImpl: FetchLike, token: string, url: string, what: string, body: unknown): Promise<unknown> {
+export async function cfPostRead(
+  fetchImpl: FetchLike,
+  token: string,
+  url: string,
+  what: string,
+  body: unknown,
+): Promise<unknown> {
   return (await cfEnvelope(fetchImpl, token, url, what, body)).result;
 }
 
-async function cfEnvelope(fetchImpl: FetchLike, token: string, url: string, what: string, post?: unknown): Promise<CfEnvelope> {
+async function cfEnvelope(
+  fetchImpl: FetchLike,
+  token: string,
+  url: string,
+  what: string,
+  post?: unknown,
+): Promise<CfEnvelope> {
   const res = await fetchImpl(url, {
     method: post === undefined ? "GET" : "POST",
-    headers: { Authorization: `Bearer ${token}`, "User-Agent": "capsid-watcher (ops read)", ...(post === undefined ? {} : { "Content-Type": "application/json" }) },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "capsid-watcher (ops read)",
+      ...(post === undefined ? {} : { "Content-Type": "application/json" }),
+    },
     ...(post === undefined ? {} : { body: JSON.stringify(post) }),
     signal: callSignal(CF_TIMEOUT_MS),
   });
-  const body = parseJson(await res.text(), `${what} answered ${res.status} with a body that is not JSON`) as CfEnvelope | null;
+  const body = parseJson(
+    await res.text(),
+    `${what} answered ${res.status} with a body that is not JSON`,
+  ) as CfEnvelope | null;
   if (!res.ok || body?.success !== true) {
-    throw new CfReadError(`${what} answered ${res.status}: ${messagesOf(body?.errors) || "no error message"}`, res.status);
+    throw new CfReadError(
+      `${what} answered ${res.status}: ${messagesOf(body?.errors) || "no error message"}`,
+      res.status,
+    );
   }
   return body;
 }
@@ -109,7 +140,13 @@ export const CF_MAX_PAGES = 20;
 /** Every item of a paged Cloudflare list, following result_info.total_pages. `url`
  *  carries no page or per_page; both are set here. A list with more than CF_MAX_PAGES
  *  pages fails with the count, never a truncated answer. */
-export async function cfGetAll(fetchImpl: FetchLike, token: string, url: string, what: string, perPage: number): Promise<unknown[]> {
+export async function cfGetAll(
+  fetchImpl: FetchLike,
+  token: string,
+  url: string,
+  what: string,
+  perPage: number,
+): Promise<unknown[]> {
   const out: unknown[] = [];
   for (let page = 1; ; page++) {
     const u = new URL(url);
@@ -122,7 +159,10 @@ export async function cfGetAll(fetchImpl: FetchLike, token: string, url: string,
     // No result_info, or no total_pages, is a list Cloudflare does not page: one page.
     const total = typeof pages === "number" && Number.isFinite(pages) ? pages : 1;
     if (page >= total) return out;
-    if (page >= CF_MAX_PAGES) throw new Error(`${what} has ${total} pages of ${perPage}, more than the ${CF_MAX_PAGES} this read follows`);
+    if (page >= CF_MAX_PAGES)
+      throw new Error(
+        `${what} has ${total} pages of ${perPage}, more than the ${CF_MAX_PAGES} this read follows`,
+      );
   }
 }
 
@@ -137,22 +177,38 @@ function parseJson(text: string, failure: string): unknown {
 function messagesOf(errors: unknown): string {
   if (!Array.isArray(errors)) return "";
   return errors
-    .map((e) => (e && typeof e === "object" && typeof (e as { message?: unknown }).message === "string" ? (e as { message: string }).message : ""))
+    .map((e) =>
+      e && typeof e === "object" && typeof (e as { message?: unknown }).message === "string"
+        ? (e as { message: string }).message
+        : "",
+    )
     .filter(Boolean)
     .join("; ")
     .slice(0, 300);
 }
 
-const reasonOf = (err: unknown): string => (err instanceof Error ? err.message : String(err)).slice(0, 300);
+const reasonOf = (err: unknown): string =>
+  (err instanceof Error ? err.message : String(err)).slice(0, 300);
 
 /** GET /accounts/{id}/workers/domains: every Workers custom domain on the account, as
  *  hostname to the script (`service`) it serves. */
-async function readCustomDomains(fetchImpl: FetchLike, token: string, account: string): Promise<Map<string, string>> {
-  const result = await cfGet(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/workers/domains`, "the Workers custom domains list");
-  if (!Array.isArray(result)) throw new Error("the Workers custom domains list returned no result array");
+async function readCustomDomains(
+  fetchImpl: FetchLike,
+  token: string,
+  account: string,
+): Promise<Map<string, string>> {
+  const result = await cfGet(
+    fetchImpl,
+    token,
+    `${CF_API}/accounts/${encodeURIComponent(account)}/workers/domains`,
+    "the Workers custom domains list",
+  );
+  if (!Array.isArray(result))
+    throw new Error("the Workers custom domains list returned no result array");
   const out = new Map<string, string>();
   for (const d of result as Array<{ hostname?: unknown; service?: unknown }>) {
-    if (typeof d?.hostname === "string" && typeof d.service === "string" && d.service) out.set(d.hostname.toLowerCase(), d.service);
+    if (typeof d?.hostname === "string" && typeof d.service === "string" && d.service)
+      out.set(d.hostname.toLowerCase(), d.service);
   }
   return out;
 }
@@ -161,19 +217,35 @@ export const WEB_ANALYTICS_PERMISSION = "Account / Account Settings / Read";
 
 /** GET /accounts/{id}/rum/site_info/list: every Web Analytics site in the account. A 403
  *  is turned into the permission the token lacks. */
-export async function readWebAnalyticsSites(fetchImpl: FetchLike, token: string, account: string): Promise<WebAnalyticsSite[]> {
+export async function readWebAnalyticsSites(
+  fetchImpl: FetchLike,
+  token: string,
+  account: string,
+): Promise<WebAnalyticsSite[]> {
   const what = "the Web Analytics sites list";
   let rows: unknown[];
   try {
-    rows = await cfGetAll(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/rum/site_info/list`, what, 50);
+    rows = await cfGetAll(
+      fetchImpl,
+      token,
+      `${CF_API}/accounts/${encodeURIComponent(account)}/rum/site_info/list`,
+      what,
+      50,
+    );
   } catch (err) {
     if (err instanceof CfReadError && err.status === 403) {
-      throw new Error(`${what} was refused with 403: CF_OPS_TOKEN lacks ${WEB_ANALYTICS_PERMISSION}. Add it at dash.cloudflare.com/profile/api-tokens, token capsid-portal-read, Edit (docs/portal.md, "The Cloudflare token"). Cloudflare said: ${err.message}`);
+      throw new Error(
+        `${what} was refused with 403: CF_OPS_TOKEN lacks ${WEB_ANALYTICS_PERMISSION}. Add it at dash.cloudflare.com/profile/api-tokens, token capsid-portal-read, Edit (docs/portal.md, "The Cloudflare token"). Cloudflare said: ${err.message}`,
+      );
     }
     throw err;
   }
   const out: WebAnalyticsSite[] = [];
-  for (const row of rows as Array<{ host?: unknown; auto_install?: unknown; ruleset?: { enabled?: unknown } | null }>) {
+  for (const row of rows as Array<{
+    host?: unknown;
+    auto_install?: unknown;
+    ruleset?: { enabled?: unknown } | null;
+  }>) {
     if (typeof row?.host !== "string" || row.host === "") continue;
     out.push({
       host: row.host.toLowerCase(),
@@ -199,14 +271,19 @@ const str = (v: unknown): string | null => (typeof v === "string" && v.length > 
 function toCfDeploy(raw: RawDeploy): CfDeploy {
   let version_id: string | null = null;
   let best = -1;
-  for (const v of Array.isArray(raw.versions) ? (raw.versions as Array<{ percentage?: unknown; version_id?: unknown }>) : []) {
+  for (const v of Array.isArray(raw.versions)
+    ? (raw.versions as Array<{ percentage?: unknown; version_id?: unknown }>)
+    : []) {
     const pct = typeof v?.percentage === "number" ? v.percentage : -1;
     if (pct > best && typeof v.version_id === "string") {
       best = pct;
       version_id = v.version_id;
     }
   }
-  const annotations = raw.annotations && typeof raw.annotations === "object" ? (raw.annotations as Record<string, unknown>) : {};
+  const annotations =
+    raw.annotations && typeof raw.annotations === "object"
+      ? (raw.annotations as Record<string, unknown>)
+      : {};
   return {
     id: str(raw.id) ?? "",
     created_on: str(raw.created_on) ?? "",
@@ -220,11 +297,17 @@ function toCfDeploy(raw: RawDeploy): CfDeploy {
 /** GET /accounts/{id}/workers/scripts/{script}/deployments. Cloudflare lists the
  *  newest first ("the first deployment in the list is the latest deployment actively
  *  serving traffic"); sorted again on created_on so the order does not rest on that. */
-async function readDeploys(fetchImpl: FetchLike, token: string, account: string, script: string): Promise<CfDeploy[]> {
+async function readDeploys(
+  fetchImpl: FetchLike,
+  token: string,
+  account: string,
+  script: string,
+): Promise<CfDeploy[]> {
   const url = `${CF_API}/accounts/${encodeURIComponent(account)}/workers/scripts/${encodeURIComponent(script)}/deployments`;
   const result = await cfGet(fetchImpl, token, url, `the deployments list for ${script}`);
   const list = (result as { deployments?: unknown } | null)?.deployments;
-  if (!Array.isArray(list)) throw new Error(`the deployments list for ${script} returned no deployments array`);
+  if (!Array.isArray(list))
+    throw new Error(`the deployments list for ${script} returned no deployments array`);
   return (list as RawDeploy[])
     .map(toCfDeploy)
     .sort((a, b) => b.created_on.localeCompare(a.created_on))
@@ -236,12 +319,16 @@ async function readDeploys(fetchImpl: FetchLike, token: string, account: string,
 export function errorWindow(now: Date): { start: Date; end: Date; hours: string[] } {
   const end = new Date(Math.floor(now.getTime() / HOUR_MS) * HOUR_MS);
   const start = new Date(end.getTime() - ERROR_HOURS * HOUR_MS);
-  const hours = Array.from({ length: ERROR_HOURS }, (_, i) => new Date(start.getTime() + i * HOUR_MS).toISOString());
+  const hours = Array.from({ length: ERROR_HOURS }, (_, i) =>
+    new Date(start.getTime() + i * HOUR_MS).toISOString(),
+  );
   return { start, end, hours };
 }
 
 function errorsQuery(scripts: string[]): string {
-  for (const s of scripts) if (!SCRIPT_NAME.test(s)) throw new Error(`script name ${JSON.stringify(s)} is not one the query will carry`);
+  for (const s of scripts)
+    if (!SCRIPT_NAME.test(s))
+      throw new Error(`script name ${JSON.stringify(s)} is not one the query will carry`);
   return `query WatchFloorErrors($accountTag: string, $datetimeStart: string, $datetimeEnd: string) {
   viewer {
     accounts(filter: { accountTag: $accountTag }) {
@@ -269,41 +356,70 @@ async function readErrors(
   token: string,
   account: string,
   scripts: string[],
-  now: Date
+  now: Date,
 ): Promise<Map<string, HourBucket[]>> {
   const { start, end, hours } = errorWindow(now);
   const res = await fetchImpl(CF_GRAPHQL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "User-Agent": "capsid-watcher (ops read)" },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "capsid-watcher (ops read)",
+    },
     body: JSON.stringify({
       query: errorsQuery(scripts),
-      variables: { accountTag: account, datetimeStart: start.toISOString(), datetimeEnd: end.toISOString() },
+      variables: {
+        accountTag: account,
+        datetimeStart: start.toISOString(),
+        datetimeEnd: end.toISOString(),
+      },
     }),
     signal: callSignal(CF_TIMEOUT_MS),
   });
-  const body = parseJson(await res.text(), `the analytics query answered ${res.status} with a body that is not JSON`) as {
+  const body = parseJson(
+    await res.text(),
+    `the analytics query answered ${res.status} with a body that is not JSON`,
+  ) as {
     data?: unknown;
     errors?: unknown;
   } | null;
   const graphErrors = messagesOf(body?.errors);
   if (!res.ok || graphErrors || (Array.isArray(body?.errors) && body.errors.length > 0)) {
-    throw new Error(`the analytics query answered ${res.status}: ${graphErrors || "no error message"}`);
+    throw new Error(
+      `the analytics query answered ${res.status}: ${graphErrors || "no error message"}`,
+    );
   }
-  const accounts = (body?.data as { viewer?: { accounts?: unknown } } | null | undefined)?.viewer?.accounts;
-  if (!Array.isArray(accounts) || accounts.length !== 1) throw new Error("the analytics query returned no account");
+  const accounts = (body?.data as { viewer?: { accounts?: unknown } } | null | undefined)?.viewer
+    ?.accounts;
+  if (!Array.isArray(accounts) || accounts.length !== 1)
+    throw new Error("the analytics query returned no account");
   const rows = (accounts[0] as { workersInvocationsAdaptive?: unknown }).workersInvocationsAdaptive;
-  if (!Array.isArray(rows)) throw new Error("the analytics query returned no workersInvocationsAdaptive rows");
+  if (!Array.isArray(rows))
+    throw new Error("the analytics query returned no workersInvocationsAdaptive rows");
 
   const index = new Map(hours.map((h, i) => [h, i]));
-  const out = new Map<string, HourBucket[]>(scripts.map((s) => [s, hours.map((hour) => ({ hour, requests: 0, errors: 0, cpu_ms: 0 }))]));
-  for (const row of rows as Array<{ sum?: { requests?: unknown; errors?: unknown; cpuTimeUs?: unknown }; dimensions?: { scriptName?: unknown; datetimeHour?: unknown } }>) {
+  const out = new Map<string, HourBucket[]>(
+    scripts.map((s) => [s, hours.map((hour) => ({ hour, requests: 0, errors: 0, cpu_ms: 0 }))]),
+  );
+  for (const row of rows as Array<{
+    sum?: { requests?: unknown; errors?: unknown; cpuTimeUs?: unknown };
+    dimensions?: { scriptName?: unknown; datetimeHour?: unknown };
+  }>) {
     const script = row?.dimensions?.scriptName;
     const hourRaw = row?.dimensions?.datetimeHour;
     const requests = row?.sum?.requests;
     const errors = row?.sum?.errors;
     const cpuUs = row?.sum?.cpuTimeUs;
-    if (typeof script !== "string" || typeof hourRaw !== "string" || typeof requests !== "number" || typeof errors !== "number" || typeof cpuUs !== "number") {
-      throw new Error("the analytics query returned a row without scriptName, datetimeHour, requests, errors and cpuTimeUs");
+    if (
+      typeof script !== "string" ||
+      typeof hourRaw !== "string" ||
+      typeof requests !== "number" ||
+      typeof errors !== "number" ||
+      typeof cpuUs !== "number"
+    ) {
+      throw new Error(
+        "the analytics query returned a row without scriptName, datetimeHour, requests, errors and cpuTimeUs",
+      );
     }
     // Cloudflare answered a row named "__unknown__" for 2026-10-31 15:00 although the filter
     // names only our scripts; failing on it left every site's error and CPU checks blind for
@@ -315,7 +431,10 @@ async function readErrors(
     const buckets = out.get(script);
     // A row outside the window or for a script not asked for means the filter is not
     // what this code believes, so the whole read fails rather than being half right.
-    if (i === undefined || !buckets) throw new Error(`the analytics query returned a row outside the asked window or scripts (${script} ${hourRaw})`);
+    if (i === undefined || !buckets)
+      throw new Error(
+        `the analytics query returned a row outside the asked window or scripts (${script} ${hourRaw})`,
+      );
     buckets[i].requests += requests;
     buckets[i].errors += errors;
     buckets[i].cpu_ms += Math.round(cpuUs / 1000);
@@ -337,13 +456,17 @@ export async function readCloudflare(
   env: Pick<Env, "CF_OPS_TOKEN" | "CF_ACCOUNT_ID" | "R2_ACCOUNT_ID">,
   sites: readonly OpsSite[],
   fetchImpl: FetchLike,
-  now: Date
+  now: Date,
 ): Promise<CloudflareRead> {
   const bySite: Record<string, SiteCloudflare> = {};
   const creds = cloudflareCredentials(env);
   const onCloudflare = sites.filter((s) => s.platform === "cloudflare");
   for (const s of sites) {
-    if (s.platform !== "cloudflare") bySite[s.namespace] = { state: "not-cloudflare", reason: `${s.name} is served by ${s.platform}, not Cloudflare` };
+    if (s.platform !== "cloudflare")
+      bySite[s.namespace] = {
+        state: "not-cloudflare",
+        reason: `${s.name} is served by ${s.platform}, not Cloudflare`,
+      };
   }
   if (!creds.ok) {
     for (const s of onCloudflare) bySite[s.namespace] = { state: "no-token", reason: creds.reason };
@@ -351,7 +474,11 @@ export async function readCloudflare(
   }
   const failed = (what: string, err: unknown): string => {
     const reason = reasonOf(err);
-    logEvent("WATCHER_READ_FAILED", { message: `WATCHER_READ_FAILED cloudflare ${what}: ${reason}` }, { level: "error" });
+    logEvent(
+      "WATCHER_READ_FAILED",
+      { message: `WATCHER_READ_FAILED cloudflare ${what}: ${reason}` },
+      { level: "error" },
+    );
     return reason;
   };
 
@@ -376,13 +503,20 @@ export async function readCloudflare(
       continue;
     }
     if (domainsReason !== null) {
-      bySite[s.namespace] = { state: "error", reason: `the script could not be resolved: ${domainsReason}` };
+      bySite[s.namespace] = {
+        state: "error",
+        reason: `the script could not be resolved: ${domainsReason}`,
+      };
       continue;
     }
     const host = hostOf(s.origin);
     const service = domains?.get(host);
     if (service) scriptOf.set(s.namespace, service);
-    else bySite[s.namespace] = { state: "unresolved", reason: `no Workers custom domain on the account names ${host}, so its script is not known` };
+    else
+      bySite[s.namespace] = {
+        state: "unresolved",
+        reason: `no Workers custom domain on the account names ${host}, so its script is not known`,
+      };
   }
 
   const deploys = new Map<string, CfDeploy[]>();
@@ -414,7 +548,9 @@ export async function readCloudflare(
       script,
       deploys: list,
       errors24: buckets,
-      errors_reason: buckets ? null : (errorsReason ?? "the analytics query returned nothing for this script"),
+      errors_reason: buckets
+        ? null
+        : (errorsReason ?? "the analytics query returned nothing for this script"),
     };
   }
   return { bySite, ran };
@@ -429,20 +565,35 @@ const SECRETS_PERMISSION = "Account / Workers Scripts / Read";
 
 /** GET /accounts/{id}/workers/scripts/{script}/secrets: the names. A 403 names the
  *  permission the token lacks. */
-export async function readSecretNames(fetchImpl: FetchLike, token: string, account: string, script: string): Promise<string[]> {
+export async function readSecretNames(
+  fetchImpl: FetchLike,
+  token: string,
+  account: string,
+  script: string,
+): Promise<string[]> {
   if (!SCRIPT_NAME.test(script)) throw new Error(`'${script}' is not a Worker script name`);
   const what = `the secrets list of ${script}`;
   let rows: unknown[];
   try {
-    rows = await cfGetAll(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/workers/scripts/${encodeURIComponent(script)}/secrets`, what, 100);
+    rows = await cfGetAll(
+      fetchImpl,
+      token,
+      `${CF_API}/accounts/${encodeURIComponent(account)}/workers/scripts/${encodeURIComponent(script)}/secrets`,
+      what,
+      100,
+    );
   } catch (err) {
     if (err instanceof CfReadError && err.status === 403) {
-      throw new Error(`${what} was refused with 403: CF_OPS_TOKEN lacks ${SECRETS_PERMISSION}. Cloudflare said: ${err.message}`);
+      throw new Error(
+        `${what} was refused with 403: CF_OPS_TOKEN lacks ${SECRETS_PERMISSION}. Cloudflare said: ${err.message}`,
+      );
     }
     throw err;
   }
   // The name only: whatever else a row carries is dropped here, unread.
-  return rows.map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null)).filter((n): n is string => typeof n === "string" && n.length > 0);
+  return rows
+    .map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null))
+    .filter((n): n is string => typeof n === "string" && n.length > 0);
 }
 
 // The Access applications' names, for a blocked job's "check: access app <name>" line
@@ -452,16 +603,30 @@ export async function readSecretNames(fetchImpl: FetchLike, token: string, accou
 const ACCESS_PERMISSION = "Account / Access: Apps and Policies / Read";
 
 /** GET /accounts/{id}/access/apps: the names. A 403 names the permission the token lacks. */
-export async function readAccessAppNames(fetchImpl: FetchLike, token: string, account: string): Promise<string[]> {
+export async function readAccessAppNames(
+  fetchImpl: FetchLike,
+  token: string,
+  account: string,
+): Promise<string[]> {
   const what = "the Access applications list";
   let rows: unknown[];
   try {
-    rows = await cfGetAll(fetchImpl, token, `${CF_API}/accounts/${encodeURIComponent(account)}/access/apps`, what, 50);
+    rows = await cfGetAll(
+      fetchImpl,
+      token,
+      `${CF_API}/accounts/${encodeURIComponent(account)}/access/apps`,
+      what,
+      50,
+    );
   } catch (err) {
     if (err instanceof CfReadError && err.status === 403) {
-      throw new Error(`${what} was refused with 403: CF_OPS_TOKEN lacks ${ACCESS_PERMISSION}. Cloudflare said: ${err.message}`);
+      throw new Error(
+        `${what} was refused with 403: CF_OPS_TOKEN lacks ${ACCESS_PERMISSION}. Cloudflare said: ${err.message}`,
+      );
     }
     throw err;
   }
-  return rows.map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null)).filter((n): n is string => typeof n === "string" && n.length > 0);
+  return rows
+    .map((r) => (r && typeof r === "object" ? (r as { name?: unknown }).name : null))
+    .filter((n): n is string => typeof n === "string" && n.length > 0);
 }

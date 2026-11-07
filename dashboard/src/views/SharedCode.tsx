@@ -29,7 +29,8 @@ export function SharedCode() {
         </p>
       ) : !data || !data.configured ? (
         <Empty kind="nothing-yet" title="No shared package is configured.">
-          {data?.error ?? "Shared packages are configuration (shared_packages); none is listed yet."}
+          {data?.error ??
+            "Shared packages are configuration (shared_packages); none is listed yet."}
         </Empty>
       ) : (
         <>
@@ -38,8 +39,12 @@ export function SharedCode() {
           ))}
           {/* What was read, at the foot: a view's heading stands alone (design D13). */}
           <p className="faint shared-read">
-            Read {ago(ms(data.generated), now)} from {data.apps_read} {data.apps_read === 1 ? "app" : "apps"}
-            {data.apps_failed.length ? `; ${data.apps_failed.length} could not be read: ${data.apps_failed.map((a) => `${a.namespace} (${a.error})`).join("; ")}` : ""}. Read nightly.
+            Read {ago(ms(data.generated), now)} from {data.apps_read}{" "}
+            {data.apps_read === 1 ? "app" : "apps"}
+            {data.apps_failed.length
+              ? `; ${data.apps_failed.length} could not be read: ${data.apps_failed.map((a) => `${a.namespace} (${a.error})`).join("; ")}`
+              : ""}
+            . Read nightly.
           </p>
         </>
       )}
@@ -83,7 +88,13 @@ function ReleaseLine({ pkg }: { pkg: SharedCodePackage }) {
       {!pkg.private && (
         <>
           {" · "}
-          {pkg.npm_latest ? <>npm <span className="mono">{pkg.npm_latest}</span></> : <St kind="nodata">{pkg.npm_note ?? "npm not read"}</St>}
+          {pkg.npm_latest ? (
+            <>
+              npm <span className="mono">{pkg.npm_latest}</span>
+            </>
+          ) : (
+            <St kind="nodata">{pkg.npm_note ?? "npm not read"}</St>
+          )}
         </>
       )}
     </span>
@@ -92,7 +103,15 @@ function ReleaseLine({ pkg }: { pkg: SharedCodePackage }) {
 
 function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
   const id = `shared-${pkg.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-  const summary = [`${pkg.users.length} ${pkg.users.length === 1 ? "use" : "uses"}`, pkg.behind ? `${pkg.behind} behind` : null, pkg.local_copies.length ? `${pkg.local_left} of ${pkg.local_copies.length} local ${pkg.local_copies.length === 1 ? "copy" : "copies"} left` : null].filter(Boolean).join(" · ");
+  const summary = [
+    `${pkg.users.length} ${pkg.users.length === 1 ? "use" : "uses"}`,
+    pkg.behind ? `${pkg.behind} behind` : null,
+    pkg.local_copies.length
+      ? `${pkg.local_left} of ${pkg.local_copies.length} local ${pkg.local_copies.length === 1 ? "copy" : "copies"} left`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <Panel
       flush
@@ -105,7 +124,13 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
             {pkg.repo}
           </a>
           {" · "}
-          {pkg.latest ? <>newest <span className="mono">{pkg.latest}</span></> : <St kind="nodata">{pkg.tags_error ?? "No release tag"}</St>}
+          {pkg.latest ? (
+            <>
+              newest <span className="mono">{pkg.latest}</span>
+            </>
+          ) : (
+            <St kind="nodata">{pkg.tags_error ?? "No release tag"}</St>
+          )}
           <ReleaseLine pkg={pkg} />
         </>
       }
@@ -152,7 +177,10 @@ function PackagePanel({ pkg }: { pkg: SharedCodePackage }) {
         <ul className="shared-local" aria-label={`Local copies ${pkg.name} replaces`}>
           {pkg.local_copies.map((l) => (
             <li key={`${l.namespace}:${l.path}`}>
-              <St kind={l.present === null ? "nodata" : l.present ? "warn" : "ok"}>{l.present === null ? "Not read" : l.present ? "Still there" : "Removed"}</St> <span className="mono">{l.path}</span> <span className="faint">in {l.namespace}</span>
+              <St kind={l.present === null ? "nodata" : l.present ? "warn" : "ok"}>
+                {l.present === null ? "Not read" : l.present ? "Still there" : "Removed"}
+              </St>{" "}
+              <span className="mono">{l.path}</span> <span className="faint">in {l.namespace}</span>
             </li>
           ))}
         </ul>

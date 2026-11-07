@@ -4,7 +4,11 @@ import { ROSTER } from "./roster";
 import { gatherBranchItems, githubBranchReaders, type BranchReaders } from "./maintenance-branches";
 import { gatherPrItems, githubPrReaders, type PrReaders } from "./maintenance-prs";
 import { gatherDeployItems, githubDeployReaders, type DeployReaders } from "./maintenance-deploys";
-import { gatherReleaseItems, githubReleaseReaders, type ReleaseReaders } from "./maintenance-releases";
+import {
+  gatherReleaseItems,
+  githubReleaseReaders,
+  type ReleaseReaders,
+} from "./maintenance-releases";
 import { gatherModelDriftItems } from "./model-drift";
 import { readFactsDrift } from "./system-facts-store";
 import { bundledModel } from "./public-data";
@@ -19,7 +23,7 @@ const MERGE_RESUME_ACTOR = "system:merge-resume";
 // keeps not happening, and each stale thing was found only when he asked). One pass a day
 // on the five-minute tick, reusing its stamp pattern rather than adding a second scheduler.
 // Every finding either was acted on by a step that already audit-logs (the merge-resume
-// step) or lands in one short list, served by capsid_run_improve action status, that the seat reads at the
+// step) or lands in one short list, served by capsid_read_status action status, that the seat reads at the
 // start of a session. This pass lists; it acts twice. It prunes merged branches, which is
 // off until the seat turns it on and audit-logs each delete (src/maintenance-branches.ts),
 // and it tags a shared package's merged version bump, which is on until the seat turns it
@@ -77,12 +81,20 @@ type MaintenanceReport =
   | { ran: true; note: string; list: MaintenanceList };
 
 /** A queued job whose title carries "LATER <date>" with the date already past. */
-export function laterPassed(jobs: Array<{ id: string; namespace: string; title: string }>, today: string): MaintenanceItem[] {
+export function laterPassed(
+  jobs: Array<{ id: string; namespace: string; title: string }>,
+  today: string,
+): MaintenanceItem[] {
   const out: MaintenanceItem[] = [];
   for (const j of jobs) {
     const date = LATER_DATE.exec(j.title)?.[1];
     if (date && date < today) {
-      out.push({ rule: "later-passed", namespace: j.namespace, job: j.id, line: `${j.id} is queued as LATER ${date}, a date that has passed: re-title it or work it.` });
+      out.push({
+        rule: "later-passed",
+        namespace: j.namespace,
+        job: j.id,
+        line: `${j.id} is queued as LATER ${date}, a date that has passed: re-title it or work it.`,
+      });
     }
   }
   return out;
@@ -113,15 +125,20 @@ export async function gatherMaintenance(
   deployReaders: DeployReaders = githubDeployReaders(env),
   // The model's own drift, then the versions and secrets models' from the nightly build.
   driftReader: DriftReader = async (e) => {
-    const [model, facts] = [await gatherModelDriftItems(e, bundledModel()), await readFactsDrift(e, now)];
+    const [model, facts] = [
+      await gatherModelDriftItems(e, bundledModel()),
+      await readFactsDrift(e, now),
+    ];
     return { items: [...model.items, ...facts.items], read: model.read + facts.read };
   },
-  releaseReaders: ReleaseReaders = githubReleaseReaders(env)
+  releaseReaders: ReleaseReaders = githubReleaseReaders(env),
 ): Promise<MaintenanceList> {
   const today = now.toISOString().slice(0, 10);
   const items: MaintenanceItem[] = [];
 
-  const queuedLater = await env.DB.prepare("SELECT id, namespace, title FROM jobs WHERE status = 'queued' AND title LIKE '%LATER%' LIMIT ?1")
+  const queuedLater = await env.DB.prepare(
+    "SELECT id, namespace, title FROM jobs WHERE status = 'queued' AND title LIKE '%LATER%' LIMIT ?1",
+  )
     .bind(MAX_ITEMS_PER_RULE)
     .all<{ id: string; namespace: string; title: string }>();
   items.push(...laterPassed(queuedLater.results ?? [], today));
@@ -132,7 +149,7 @@ export async function gatherMaintenance(
   const shipped = await env.DB.prepare(
     `SELECT j.id, j.namespace, j.body, p.pr_url, p.job_id AS shipped_by
        FROM jobs j JOIN job_outcome_prs p ON p.merged = 1 AND p.job_id != j.id AND instr(j.body, p.pr_url) > 0
-      WHERE j.status = 'queued' LIMIT ?1`
+      WHERE j.status = 'queued' LIMIT ?1`,
   )
     .bind(MAX_ITEMS_PER_RULE * 4)
     .all<{ id: string; namespace: string; body: string; pr_url: string; shipped_by: string }>();
@@ -151,15 +168,24 @@ export async function gatherMaintenance(
   // A finished or blocked job that said follow-ups would be posted as separate jobs, with
   // no job created in its namespace since it last moved. A heuristic that lists, never acts.
   const promised = await env.DB.prepare(
-    "SELECT id, namespace, result_summary, updated_at FROM jobs WHERE status IN ('done', 'blocked') AND result_summary LIKE '%separate job%' LIMIT ?1"
+    "SELECT id, namespace, result_summary, updated_at FROM jobs WHERE status IN ('done', 'blocked') AND result_summary LIKE '%separate job%' LIMIT ?1",
   )
     .bind(MAX_ITEMS_PER_RULE)
     .all<{ id: string; namespace: string; result_summary: string | null; updated_at: string }>();
   for (const row of promised.results ?? []) {
     if (!promisesFollowUps(row.result_summary)) continue;
-    const later = await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1 AND created_at > ?2").bind(row.namespace, row.updated_at).first<{ n: number }>();
+    const later = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM jobs WHERE namespace = ?1 AND created_at > ?2",
+    )
+      .bind(row.namespace, row.updated_at)
+      .first<{ n: number }>();
     if ((later?.n ?? 0) === 0) {
-      items.push({ rule: "followups-missing", namespace: row.namespace, job: row.id, line: `${row.id} promised follow-up jobs, and none was posted in ${row.namespace} since: post them or say they are not coming.` });
+      items.push({
+        rule: "followups-missing",
+        namespace: row.namespace,
+        job: row.id,
+        line: `${row.id} promised follow-up jobs, and none was posted in ${row.namespace} since: post them or say they are not coming.`,
+      });
     }
   }
 
@@ -167,12 +193,17 @@ export async function gatherMaintenance(
   const since = new Date(now.getTime() - DAY_MS).toISOString();
   const resumed = await env.DB.prepare(
     `SELECT t.job_id AS job_id, t.namespace AS namespace FROM job_touches t JOIN jobs j ON j.id = t.job_id
-      WHERE t.actor = ?1 AND t.kind = 'resume' AND t.at >= ?2 LIMIT ?3`
+      WHERE t.actor = ?1 AND t.kind = 'resume' AND t.at >= ?2 LIMIT ?3`,
   )
     .bind(MERGE_RESUME_ACTOR, since, MAX_ITEMS_PER_RULE)
     .all<{ job_id: string; namespace: string }>();
   for (const row of resumed.results ?? []) {
-    items.push({ rule: "auto-resumed", namespace: row.namespace, job: row.job_id, line: `${row.job_id} was resumed because its pull requests merged: its holder confirms the deploy and completes it.` });
+    items.push({
+      rule: "auto-resumed",
+      namespace: row.namespace,
+      job: row.job_id,
+      line: `${row.job_id} was resumed because its pull requests merged: its holder confirms the deploy and completes it.`,
+    });
   }
 
   // Green driver pull requests waiting for the seat, and pull requests red for days.
@@ -212,7 +243,7 @@ export async function gatherMaintenance(
 }
 
 /** The daily pass. Not due returns a note and records nothing; due gathers the list, keeps
- *  it in KV for capsid_run_improve action status, and stamps the day. The stamp is written after the list,
+ *  it in KV for capsid_read_status action status, and stamps the day. The stamp is written after the list,
  *  so a pass that threw runs again on the next tick. */
 export async function maintenanceTick(
   env: Env,
@@ -221,13 +252,22 @@ export async function maintenanceTick(
   branchReaders?: BranchReaders,
   deployReaders?: DeployReaders,
   driftReader?: DriftReader,
-  releaseReaders?: ReleaseReaders
+  releaseReaders?: ReleaseReaders,
 ): Promise<MaintenanceReport> {
   const today = now.toISOString().slice(0, 10);
-  if (now.getUTCHours() < DAILY_AFTER_UTC_HOUR) return { ran: false, note: `before ${DAILY_AFTER_UTC_HOUR}:00 UTC` };
+  if (now.getUTCHours() < DAILY_AFTER_UTC_HOUR)
+    return { ran: false, note: `before ${DAILY_AFTER_UTC_HOUR}:00 UTC` };
   const last = await env.APP_KV.get(MAINTENANCE_LAST_KEY).catch(() => null);
   if (last && last.slice(0, 10) === today) return { ran: false, note: `already ran ${last}` };
-  const list = await gatherMaintenance(env, now, prReaders, branchReaders, deployReaders, driftReader, releaseReaders);
+  const list = await gatherMaintenance(
+    env,
+    now,
+    prReaders,
+    branchReaders,
+    deployReaders,
+    driftReader,
+    releaseReaders,
+  );
   await env.APP_KV.put(MAINTENANCE_KEY, JSON.stringify(list));
   await env.APP_KV.put(MAINTENANCE_LAST_KEY, now.toISOString());
   const prsRead = Object.values(list.prs_read).reduce((a, b) => a + b, 0);
@@ -252,7 +292,8 @@ export async function readMaintenance(env: Env): Promise<MaintenanceList | null>
     const parsed = JSON.parse(raw) as MaintenanceList;
     if (!Array.isArray(parsed.items) || typeof parsed.generated !== "string") return null;
     // A list written before a rule existed read nothing for it.
-    const counts = (v: unknown): Record<string, number> => (v && typeof v === "object" ? (v as Record<string, number>) : {});
+    const counts = (v: unknown): Record<string, number> =>
+      v && typeof v === "object" ? (v as Record<string, number>) : {};
     return {
       ...parsed,
       // The disk rule was removed; a list stored before then may still carry its items.

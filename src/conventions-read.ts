@@ -27,7 +27,7 @@ export async function recordConventionsRead(
   db: D1Database,
   actor: string,
   via: "read" | "brief",
-  forNamespace: string
+  forNamespace: string,
 ): Promise<void> {
   try {
     await db
@@ -36,11 +36,23 @@ export async function recordConventionsRead(
          SELECT ?1, ?2, ?3, NULL, ?4
          WHERE NOT EXISTS (
            SELECT 1 FROM audit_log WHERE action = ?2 AND actor = ?1 AND at >= datetime('now', ?5)
-         )`
+         )`,
       )
-      .bind(actor, CONVENTIONS_READ_ACTION, HEALTH_PROBE_NS, JSON.stringify({ via, for_namespace: forNamespace }), WINDOW)
+      .bind(
+        actor,
+        CONVENTIONS_READ_ACTION,
+        HEALTH_PROBE_NS,
+        JSON.stringify({ via, for_namespace: forNamespace }),
+        WINDOW,
+      )
       .run();
   } catch (err) {
-    logEvent("CONVENTIONS_READ", { message: `CONVENTIONS_READ could not record the read by ${actor}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "CONVENTIONS_READ",
+      {
+        message: `CONVENTIONS_READ could not record the read by ${actor}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
 }

@@ -3,7 +3,17 @@ import type { HealthReport } from "./health";
 import { healthOf, parseHealth } from "./health-format";
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { healthUrl, type OpsSite } from "./ops-sites";
-import type { CiObservation, ExpirySnapshot, OffaccountObservation, OpsSnapshot, PackageSnapshot, SiteCloudflare, SiteMapDrift, SiteProbe, SiteSnapshot } from "./ops-types/sites";
+import type {
+  CiObservation,
+  ExpirySnapshot,
+  OffaccountObservation,
+  OpsSnapshot,
+  PackageSnapshot,
+  SiteCloudflare,
+  SiteMapDrift,
+  SiteProbe,
+  SiteSnapshot,
+} from "./ops-types/sites";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
@@ -32,9 +42,16 @@ export const MAX_HEALTH_BYTES = 65_536;
 // but the root did, or its body reports warn, `ok: false` or a backup warning.
 // liveness: the site has no health route and its root answered 2xx, which proves it is
 // up and nothing more. down: nothing answered 2xx.
-export type { CiObservation, OffaccountObservation, OpsSnapshot, SiteProbe, SiteSnapshot } from "./ops-types/sites";
+export type {
+  CiObservation,
+  OffaccountObservation,
+  OpsSnapshot,
+  SiteProbe,
+  SiteSnapshot,
+} from "./ops-types/sites";
 
-export const ringSlot = (at: Date): number => Math.floor(at.getTime() / (RING_SLOT_MINUTES * MINUTE_MS));
+export const ringSlot = (at: Date): number =>
+  Math.floor(at.getTime() / (RING_SLOT_MINUTES * MINUTE_MS));
 
 /** Adds this pass's result to a site's ring. Slots no pass reached become '-'. Two
  *  passes in one slot (a Refresh run on demand) keep the worse result, so a failure is
@@ -42,7 +59,7 @@ export const ringSlot = (at: Date): number => Math.floor(at.getTime() / (RING_SL
 export function advanceRing(
   prev: { ring: string; ring_slot: number } | undefined,
   slot: number,
-  up: boolean
+  up: boolean,
 ): { ring: string; ring_slot: number } {
   const mark = up ? "1" : "0";
   if (!prev || prev.ring.length === 0) return { ring: mark, ring_slot: slot };
@@ -76,13 +93,14 @@ export interface RingReading {
  *  slot covers. A refusal is returned as a string, never thrown, for the tool to relay. */
 export function ringReading(
   site: Pick<SiteSnapshot, "namespace" | "ring" | "ring_slot">,
-  pick: { slot: number } | { at: Date }
+  pick: { slot: number } | { at: Date },
 ): RingReading | string {
   let back: number;
   if ("slot" in pick) {
     back = pick.slot;
   } else {
-    if (!Number.isFinite(pick.at.getTime())) return "at is not a time; pass an ISO time such as 2026-09-28T12:10:00Z.";
+    if (!Number.isFinite(pick.at.getTime()))
+      return "at is not a time; pass an ISO time such as 2026-09-28T12:10:00Z.";
     back = site.ring_slot - ringSlot(pick.at);
     if (back < 0) {
       return `at ${pick.at.toISOString()} is after the newest slot of ${site.namespace}'s ring, which starts ${new Date(site.ring_slot * RING_SLOT_MS).toISOString()}.`;
@@ -94,7 +112,8 @@ export function ringReading(
   const absolute = site.ring_slot - back;
   const index = site.ring.length - 1 - back;
   const mark = index >= 0 ? site.ring[index] : null;
-  const value = mark === "1" ? "up" : mark === "0" ? "down" : mark === "-" ? "no-pass" : "outside-ring";
+  const value =
+    mark === "1" ? "up" : mark === "0" ? "down" : mark === "-" ? "no-pass" : "outside-ring";
   return {
     namespace: site.namespace,
     slot: back,
@@ -120,7 +139,10 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
     const res = await fetchImpl(url, {
       method: "GET",
       redirect: "follow",
-      headers: { "User-Agent": "capsid-watcher (ops probe)", Accept: "application/health+json, application/json" },
+      headers: {
+        "User-Agent": "capsid-watcher (ops probe)",
+        Accept: "application/health+json, application/json",
+      },
       signal: callSignal(PROBE_TIMEOUT_MS),
     });
     const latency_ms = Date.now() - started;
@@ -129,11 +151,21 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
       return { status: res.status, latency_ms, body: null, error: null };
     }
     // Past the cap the body is not read as health (null), so no sha is taken from part of it.
-    return { status: res.status, latency_ms, body: await readCapped(res, MAX_HEALTH_BYTES), error: null };
+    return {
+      status: res.status,
+      latency_ms,
+      body: await readCapped(res, MAX_HEALTH_BYTES),
+      error: null,
+    };
   } catch (err) {
     // A probe that got no answer is a result (the site is down from here), recorded
     // with its reason, not an error in the watcher.
-    return { status: null, latency_ms: null, body: null, error: (err instanceof Error ? err.message : String(err)).slice(0, 160) };
+    return {
+      status: null,
+      latency_ms: null,
+      body: null,
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+    };
   }
 }
 
@@ -143,7 +175,13 @@ const is2xx = (status: number | null): boolean => status !== null && status >= 2
  *  fails, so a broken health route on a site that is up reads as degraded, not down. The
  *  body is read whatever the code (src/health-format.ts): fail is read as a failed route,
  *  and warn, `ok: false` or a backup warning under a 2xx is degraded, with the reason. */
-export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, selfHealth: HealthReport | null, opts: { home?: boolean } = {}): Promise<SiteProbe> {
+export async function probeSite(
+  site: OpsSite,
+  fetchImpl: FetchLike,
+  now: Date,
+  selfHealth: HealthReport | null,
+  opts: { home?: boolean } = {},
+): Promise<SiteProbe> {
   const base = {
     namespace: site.namespace,
     name: site.name,
@@ -153,14 +191,36 @@ export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, 
     checked_at: now.toISOString(),
   };
   if (site.self) {
-    if (!selfHealth) return { ...base, state: "down", http_status: null, latency_ms: null, sha: null, error: "healthReport could not be read this pass" };
+    if (!selfHealth)
+      return {
+        ...base,
+        state: "down",
+        http_status: null,
+        latency_ms: null,
+        sha: null,
+        error: "healthReport could not be read this pass",
+      };
     const read = healthOf(selfHealth);
     const ok = read.status === "ok";
-    return { ...base, state: ok ? "ok" : "degraded", http_status: selfHealth.status === "ok" ? 200 : 503, latency_ms: null, sha: selfHealth.sha === "unknown" ? null : selfHealth.sha, error: read.problem };
+    return {
+      ...base,
+      state: ok ? "ok" : "degraded",
+      http_status: selfHealth.status === "ok" ? 200 : 503,
+      latency_ms: null,
+      sha: selfHealth.sha === "unknown" ? null : selfHealth.sha,
+      error: read.problem,
+    };
   }
   if (site.healthPath === null) {
     const root = await reach(fetchImpl, site.origin + "/", false);
-    return { ...base, state: is2xx(root.status) ? "liveness" : "down", http_status: root.status, latency_ms: root.latency_ms, sha: null, error: root.error };
+    return {
+      ...base,
+      state: is2xx(root.status) ? "liveness" : "down",
+      http_status: root.status,
+      latency_ms: root.latency_ms,
+      sha: null,
+      error: root.error,
+    };
   }
   // The home page is read on every pass, beside the health route (U1, round 2): a health
   // route can pass while the page visitors load fails. An API-only host answers 404 at its
@@ -168,18 +228,47 @@ export async function probeSite(site: OpsSite, fetchImpl: FetchLike, now: Date, 
   // (src/site-check.ts) passes home: false, and the root is then read only on a failure.
   const home = opts.home !== false;
   const healthRead = reach(fetchImpl, healthUrl(site.origin, site.healthPath), true);
-  const [health, early] = await Promise.all([healthRead, home ? reach(fetchImpl, site.origin + "/", false) : Promise.resolve(null)]);
+  const [health, early] = await Promise.all([
+    healthRead,
+    home ? reach(fetchImpl, site.origin + "/", false) : Promise.resolve(null),
+  ]);
   const read = parseHealth(health.body);
   if (is2xx(health.status) && read.status !== "down") {
     const homeFails = early !== null && (early.status === null || early.status >= 500);
-    const problems = [read.status === "degraded" ? (read.problem ?? "the health route reports degraded") : null, homeFails ? `home page ${early.error ?? `answered ${early.status}`}` : null].filter(Boolean);
-    return { ...base, state: problems.length ? "degraded" : "ok", http_status: health.status, latency_ms: health.latency_ms, sha: read.sha, error: problems.length ? problems.join("; ") : null };
+    const problems = [
+      read.status === "degraded" ? (read.problem ?? "the health route reports degraded") : null,
+      homeFails ? `home page ${early.error ?? `answered ${early.status}`}` : null,
+    ].filter(Boolean);
+    return {
+      ...base,
+      state: problems.length ? "degraded" : "ok",
+      http_status: health.status,
+      latency_ms: health.latency_ms,
+      sha: read.sha,
+      error: problems.length ? problems.join("; ") : null,
+    };
   }
   const root = early ?? (await reach(fetchImpl, site.origin + "/", false));
-  const why = health.error ?? `health route answered ${health.status}${read.status === "down" ? " fail" : ""}${read.problem ? ` (${read.problem})` : ""}`;
+  const why =
+    health.error ??
+    `health route answered ${health.status}${read.status === "down" ? " fail" : ""}${read.problem ? ` (${read.problem})` : ""}`;
   return is2xx(root.status)
-    ? { ...base, state: "degraded", http_status: health.status, latency_ms: root.latency_ms, sha: null, error: why }
-    : { ...base, state: "down", http_status: root.status ?? health.status, latency_ms: null, sha: null, error: `${why}; root ${root.error ?? `answered ${root.status}`}` };
+    ? {
+        ...base,
+        state: "degraded",
+        http_status: health.status,
+        latency_ms: root.latency_ms,
+        sha: null,
+        error: why,
+      }
+    : {
+        ...base,
+        state: "down",
+        http_status: root.status ?? health.status,
+        latency_ms: null,
+        sha: null,
+        error: `${why}; root ${root.error ?? `answered ${root.status}`}`,
+      };
 }
 
 const probeIsUp = (p: SiteProbe): boolean => p.state !== "down";
@@ -216,7 +305,11 @@ export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): O
   for (const probe of input.probes ?? []) {
     const before = prevSites.get(probe.namespace);
     const cloudflare = input.cloudflare?.[probe.namespace];
-    sites.push({ ...probe, ...advanceRing(before, slot, probeIsUp(probe)), ...(cloudflare ? { cloudflare } : {}) });
+    sites.push({
+      ...probe,
+      ...advanceRing(before, slot, probeIsUp(probe)),
+      ...(cloudflare ? { cloudflare } : {}),
+    });
     prevSites.delete(probe.namespace);
   }
   if (input.probes === null) {
@@ -242,9 +335,18 @@ export function buildSnapshot(prev: OpsSnapshot | null, input: SnapshotInput): O
     ci: input.ci,
     site_map: input.site_map,
     sites,
-    ...(input.packages ? { packages: input.packages } : prev?.packages ? { packages: prev.packages } : {}),
+    ...(input.packages
+      ? { packages: input.packages }
+      : prev?.packages
+        ? { packages: prev.packages }
+        : {}),
     ...(input.expiry || prev?.expiry
-      ? { expiry: { tls: input.expiry?.tls ?? prev?.expiry?.tls ?? null, domains: input.expiry?.domains ?? prev?.expiry?.domains ?? null } }
+      ? {
+          expiry: {
+            tls: input.expiry?.tls ?? prev?.expiry?.tls ?? null,
+            domains: input.expiry?.domains ?? prev?.expiry?.domains ?? null,
+          },
+        }
       : {}),
   };
 }
@@ -257,14 +359,24 @@ export async function readSnapshot(env: Pick<Env, "APP_KV">): Promise<OpsSnapsho
   if (raw === null) return null;
   try {
     const parsed = JSON.parse(raw) as OpsSnapshot;
-    if (parsed?.version !== 1 || !Array.isArray(parsed.sites)) throw new Error(`unexpected shape (version ${String(parsed?.version)})`);
+    if (parsed?.version !== 1 || !Array.isArray(parsed.sites))
+      throw new Error(`unexpected shape (version ${String(parsed?.version)})`);
     return parsed;
   } catch (err) {
-    logEvent("OPS_SNAPSHOT_UNREADABLE", { message: `OPS_SNAPSHOT_UNREADABLE ${err instanceof Error ? err.message : String(err)}; starting the rings again` }, { level: "error" });
+    logEvent(
+      "OPS_SNAPSHOT_UNREADABLE",
+      {
+        message: `OPS_SNAPSHOT_UNREADABLE ${err instanceof Error ? err.message : String(err)}; starting the rings again`,
+      },
+      { level: "error" },
+    );
     return null;
   }
 }
 
-export async function writeSnapshot(env: Pick<Env, "APP_KV">, snapshot: OpsSnapshot): Promise<void> {
+export async function writeSnapshot(
+  env: Pick<Env, "APP_KV">,
+  snapshot: OpsSnapshot,
+): Promise<void> {
   await env.APP_KV.put(OPS_SNAPSHOT_KEY, JSON.stringify(snapshot));
 }

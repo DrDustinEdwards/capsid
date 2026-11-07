@@ -1,4 +1,3 @@
-
 import type { Env } from "./env";
 import { onRoster } from "./roster";
 import { POLICY_PREFIX } from "./signed-docs";
@@ -12,7 +11,9 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and
 // delete_perform): the plan, the refusals, the signed confirmation and the one batch.
 // Its operation is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
-// src/scope.ts). Ruled 2026-09-29, "Capsid MCP roadmap, build or don't build".
+// src/scope.ts). Ruled 2026-09-29, "Capsid MCP roadmap, build or don't build". The
+// namespace_remove control (src/controls.ts) is its second door: its preview reads this
+// plan and refusals and binds the same fingerprint, and its perform is deleteAsPlanned.
 //
 // Two calls, as the Portal's controls are (src/portal-actions.ts). The preview reads
 // everything that names the namespace, writes nothing, and when nothing refuses returns
@@ -54,7 +55,9 @@ const FIXED_STATEMENTS = 5;
 const STATEMENTS_PER_DOCUMENT = 2;
 /** The most live documents one delete_namespace batch can remove, from D1's batch
  *  ceiling (D1_BATCH_STATEMENTS in src/limits.ts). */
-export const NAMESPACE_DELETE_MAX_DOCUMENTS = Math.floor((D1_BATCH_STATEMENTS - FIXED_STATEMENTS) / STATEMENTS_PER_DOCUMENT);
+export const NAMESPACE_DELETE_MAX_DOCUMENTS = Math.floor(
+  (D1_BATCH_STATEMENTS - FIXED_STATEMENTS) / STATEMENTS_PER_DOCUMENT,
+);
 
 const DELETE_TOKEN_TTL_SECONDS = 5 * 60;
 // How many of each blocker a refusal names. The counts are always whole.
@@ -118,8 +121,14 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
   const open = JSON.stringify(OPEN_JOB_STATUSES);
   const results = await db.batch([
     db.prepare("SELECT namespace FROM namespaces WHERE namespace = ?1").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'").bind(namespace),
-    db.prepare("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path LIKE 'archive/%'").bind(namespace),
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'",
+      )
+      .bind(namespace),
+    db
+      .prepare("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND path LIKE 'archive/%'")
+      .bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM document_versions WHERE namespace = ?1").bind(namespace),
     db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE namespace = ?1").bind(namespace),
     // The edges pathMutation will remove: those touching a live document.
@@ -127,15 +136,17 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
       .prepare(
         `SELECT COUNT(*) AS n FROM document_links
          WHERE (from_ns = ?1 AND from_path IN (SELECT path FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'))
-            OR (to_ns = ?1 AND to_path IN (SELECT path FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'))`
+            OR (to_ns = ?1 AND to_path IN (SELECT path FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%'))`,
       )
       .bind(namespace),
-    db.prepare("SELECT status, COUNT(*) AS n FROM jobs WHERE namespace = ?1 GROUP BY status").bind(namespace),
+    db
+      .prepare("SELECT status, COUNT(*) AS n FROM jobs WHERE namespace = ?1 GROUP BY status")
+      .bind(namespace),
     db
       .prepare(
         `SELECT id, status, title FROM jobs
          WHERE namespace = ?1 AND status IN (SELECT value FROM json_each(?2))
-         ORDER BY created_at, id LIMIT 20`
+         ORDER BY created_at, id LIMIT 20`,
       )
       .bind(namespace, open),
     db.prepare("SELECT COUNT(*) AS n FROM job_outcomes WHERE namespace = ?1").bind(namespace),
@@ -151,29 +162,38 @@ export async function readDeletePlan(db: D1Database, namespace: string): Promise
            CASE WHEN json_type(scopes) = 'object' AND json_type(scopes, '$.namespaces') = 'array'
              THEN EXISTS (SELECT 1 FROM json_each(scopes, '$.namespaces') WHERE value = ?1) ELSE 0 END
          ELSE 0 END
-         ORDER BY name`
+         ORDER BY name`,
       )
       .bind(namespace),
     // The signed policy documents (policyWriteRefusal in src/signed-docs.ts), matched
     // case-exactly on the same prefix. Deleting one is a ruling, so it needs
     // allow_improve_paths as a document delete does.
-    db.prepare("SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND substr(path, 1, length(?2)) = ?2").bind(namespace, POLICY_PREFIX),
     db
-      .prepare("SELECT path FROM documents WHERE namespace = ?1 AND substr(path, 1, length(?2)) = ?2 ORDER BY path LIMIT 20")
+      .prepare(
+        "SELECT COUNT(*) AS n FROM documents WHERE namespace = ?1 AND substr(path, 1, length(?2)) = ?2",
+      )
+      .bind(namespace, POLICY_PREFIX),
+    db
+      .prepare(
+        "SELECT path FROM documents WHERE namespace = ?1 AND substr(path, 1, length(?2)) = ?2 ORDER BY path LIMIT 20",
+      )
       .bind(namespace, POLICY_PREFIX),
     db
       .prepare(
         `SELECT namespace, name, origin, health_path, platform, script, self_probe, revision, created_at, updated_at
-         FROM ops_sites WHERE namespace = ?1`
+         FROM ops_sites WHERE namespace = ?1`,
       )
       .bind(namespace),
     db
-      .prepare("SELECT path FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%' ORDER BY path LIMIT ?2")
+      .prepare(
+        "SELECT path FROM documents WHERE namespace = ?1 AND path NOT LIKE 'archive/%' ORDER BY path LIMIT ?2",
+      )
       .bind(namespace, NAMESPACE_DELETE_MAX_DOCUMENTS + 1),
   ]);
 
   const jobsByStatus: Record<string, number> = {};
-  for (const row of rows<{ status: string; n: number }>(results[6])) jobsByStatus[row.status] = Number(row.n);
+  for (const row of rows<{ status: string; n: number }>(results[6]))
+    jobsByStatus[row.status] = Number(row.n);
   let jobsOpen = 0;
   let jobsFinished = 0;
   for (const [status, n] of Object.entries(jobsByStatus)) {
@@ -226,42 +246,43 @@ function named(list: string[], total: number): string {
  *  is the only refusal, since nothing else about it matters. */
 export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] {
   const ns = plan.namespace;
-  if (!plan.registered) return [`namespace not found: ${ns}. There is no registered namespace to delete.`];
+  if (!plan.registered)
+    return [`namespace not found: ${ns}. There is no registered namespace to delete.`];
   const refusals: string[] = [];
   if (plan.on_roster) {
     refusals.push(
-      `${ns} is on the roster (ROSTER in src/roster.ts), which the watcher, auto-merge and maintenance iterate by name. Remove it from the roster in code first; this tool will not.`
+      `${ns} is on the roster (ROSTER in src/roster.ts), which the watcher, auto-merge and maintenance iterate by name. Remove it from the roster in code first; this tool will not.`,
     );
   }
   if (plan.counts.jobs_open > 0) {
     const jobs = plan.open_jobs.map((j) => `${j.id} (${j.status}, '${j.title}')`);
     refusals.push(
       `${ns} has ${plan.counts.jobs_open} open job${plan.counts.jobs_open === 1 ? "" : "s"}: ${named(jobs, plan.counts.jobs_open)}. ` +
-        `cascade never reaches jobs. End each with the capsid_work_jobs tool: action 'supersede' for a queued job, action 'fail' for a claimed or blocked one (the admin may fail a job another credential holds), or 'release' then 'supersede'.`
+        `cascade never reaches jobs. End each with the capsid_work_jobs tool: action 'supersede' for a queued job, action 'fail' for a claimed or blocked one (the admin may fail a job another credential holds), or 'release' then 'supersede'.`,
     );
   }
   if (plan.counts.agents_live > 0) {
     refusals.push(
       `${plan.counts.agents_live} live agent${plan.counts.agents_live === 1 ? " names" : "s name"} ${ns} in its scopes: ${named(plan.live_agents, plan.counts.agents_live)}. ` +
-        `cascade never reaches agents. Use the capsid_admin_manage_agents tool: action 'revoke', or action 'update_scopes' to drop ${ns} from its namespaces.`
+        `cascade never reaches agents. Use the capsid_admin_manage_agents tool: action 'revoke', or action 'update_scopes' to drop ${ns} from its namespaces.`,
     );
   }
   if (plan.counts.documents_live > NAMESPACE_DELETE_MAX_DOCUMENTS) {
     refusals.push(
       `${ns} holds ${plan.counts.documents_live} live documents, and one delete_namespace batch deletes at most ${NAMESPACE_DELETE_MAX_DOCUMENTS} ` +
         `(D1's ${D1_BATCH_STATEMENTS}-statement batch ceiling: ${FIXED_STATEMENTS} fixed statements plus ${STATEMENTS_PER_DOCUMENT} per document). ` +
-        `Delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper.`
+        `Delete documents with capsid_delete_doc, or move them with capsid_write_doc action move, first, or ask the seat to rule a set-based helper.`,
     );
   }
   if (plan.counts.documents_live > 0 && !opts.cascade) {
     refusals.push(
-      `${ns} holds ${plan.counts.documents_live} live document${plan.counts.documents_live === 1 ? "" : "s"}. Pass cascade: true to delete them; each is snapshotted to document_versions first. Archived documents (archive/...) are kept either way.`
+      `${ns} holds ${plan.counts.documents_live} live document${plan.counts.documents_live === 1 ? "" : "s"}. Pass cascade: true to delete them; each is snapshotted to document_versions first. Archived documents (archive/...) are kept either way.`,
     );
   }
   if (plan.counts.policy_documents > 0 && !opts.allowImprovePaths) {
     refusals.push(
       `${ns} holds ${plan.counts.policy_documents} signed policy document${plan.counts.policy_documents === 1 ? "" : "s"} (${named(plan.policy_paths, plan.counts.policy_documents)}). ` +
-        `Deleting one is a ruling, so it needs allow_improve_paths: true, which needs the can_touch_protected flag and is audit-logged.`
+        `Deleting one is a ruling, so it needs allow_improve_paths: true, which needs the can_touch_protected flag and is audit-logged.`,
     );
   }
   return refusals;
@@ -273,7 +294,8 @@ export function deleteRefusals(plan: DeletePlan, opts: DeleteOptions): string[] 
  *  Any change between the preview and the perform changes this string. */
 export function planFingerprint(plan: DeletePlan): string {
   const counts: Record<string, number> = {};
-  for (const key of Object.keys(plan.counts).sort()) counts[key] = plan.counts[key as keyof PlanCounts];
+  for (const key of Object.keys(plan.counts).sort())
+    counts[key] = plan.counts[key as keyof PlanCounts];
   const jobs: Record<string, number> = {};
   for (const key of Object.keys(plan.jobs_by_status).sort()) jobs[key] = plan.jobs_by_status[key];
   return JSON.stringify({
@@ -297,7 +319,8 @@ export function fingerprintDifference(signed: string, current: string): string[]
   const flat = (o: Record<string, unknown>): Record<string, string> => {
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(o)) {
-      if (v && typeof v === "object" && !Array.isArray(v)) for (const [k2, v2] of Object.entries(v)) out[`${k}.${k2}`] = JSON.stringify(v2);
+      if (v && typeof v === "object" && !Array.isArray(v))
+        for (const [k2, v2] of Object.entries(v)) out[`${k}.${k2}`] = JSON.stringify(v2);
       else out[k] = JSON.stringify(v);
     }
     return out;
@@ -305,18 +328,24 @@ export function fingerprintDifference(signed: string, current: string): string[]
   const fa = flat(a);
   const fb = flat(b);
   const keys = [...new Set([...Object.keys(fa), ...Object.keys(fb)])].sort();
-  return keys.filter((k) => fa[k] !== fb[k]).map((k) => `${k} ${fa[k] ?? "absent"} -> ${fb[k] ?? "absent"}`);
+  return keys
+    .filter((k) => fa[k] !== fb[k])
+    .map((k) => `${k} ${fa[k] ?? "absent"} -> ${fb[k] ?? "absent"}`);
 }
 
 // ---- Preview and perform ------------------------------------------------------------
 
-function summarize(plan: DeletePlan): { will_delete: string[]; will_keep: string[] } {
+/** What the delete removes and what it keeps, one line each: the tool's preview and the
+ *  namespace_remove control's preview (src/controls-plan.ts) both show it. */
+export function summarize(plan: DeletePlan): { will_delete: string[]; will_keep: string[] } {
   const c = plan.counts;
   return {
     will_delete: [
       `${c.documents_live} live document(s), each snapshotted to document_versions first`,
       `${c.document_links_removed} edge(s) touching those documents, recorded whole in the audit row (an already dangling edge touches none and stays)`,
-      plan.ops_site ? `the ops_sites row (revision ${plan.ops_site_revision}), recorded whole in the audit row` : "no ops_sites row (there is none)",
+      plan.ops_site
+        ? `the ops_sites row (revision ${plan.ops_site_revision}), recorded whole in the audit row`
+        : "no ops_sites row (there is none)",
       `the namespaces row and its repo mapping, recorded in the audit row`,
     ],
     will_keep: [
@@ -336,13 +365,16 @@ export async function previewNamespaceDelete(
   actor: string,
   namespace: string,
   opts: DeleteOptions,
-  now: Date
+  now: Date,
 ): Promise<ToolAnswer> {
   let plan: DeletePlan;
   try {
     plan = await readDeletePlan(env.DB, namespace);
   } catch (err) {
-    return { ok: false, refusal: `delete_namespace preview failed, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      ok: false,
+      refusal: `delete_namespace preview failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   const refusals = deleteRefusals(plan, opts);
   if (!plan.registered) return { ok: false, refusal: refusals[0] };
@@ -377,7 +409,10 @@ export async function previewNamespaceDelete(
       exp,
     });
   } catch (err) {
-    return { ok: false, refusal: `delete_namespace preview failed, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      ok: false,
+      refusal: `delete_namespace preview failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   return {
     ok: true,
@@ -417,7 +452,7 @@ function planGuard(db: D1Database, plan: DeletePlan, pathsJson: string): D1Prepa
                THEN EXISTS (SELECT 1 FROM json_each(scopes, '$.namespaces') WHERE value = ?1) ELSE 0 END
            ELSE 0 END)
          AND (SELECT revision FROM ops_sites WHERE namespace = ?1) IS ?5
-       )`
+       )`,
     )
     .bind(
       plan.namespace,
@@ -425,7 +460,7 @@ function planGuard(db: D1Database, plan: DeletePlan, pathsJson: string): D1Prepa
       plan.counts.document_links_removed,
       JSON.stringify(OPEN_JOB_STATUSES),
       plan.ops_site_revision,
-      pathsJson
+      pathsJson,
     );
 }
 
@@ -441,31 +476,67 @@ export async function performNamespaceDelete(
   namespace: string,
   opts: DeleteOptions,
   token: string | undefined,
-  now: Date
+  now: Date,
 ): Promise<ToolAnswer> {
-  const db = env.DB;
   if (typeof token !== "string" || token.length === 0) {
-    return { ok: false, refusal: "delete_perform needs the token capsid_admin_manage_namespaces action delete_preview returned. Preview first." };
+    return {
+      ok: false,
+      refusal:
+        "delete_perform needs the token capsid_admin_manage_namespaces action delete_preview returned. Preview first.",
+    };
   }
   let verified: Verified;
   try {
-    verified = await verifyDeleteToken(env, token, { actor, namespace, cascade: opts.cascade, allowImprovePaths: opts.allowImprovePaths }, now);
+    verified = await verifyDeleteToken(
+      env,
+      token,
+      { actor, namespace, cascade: opts.cascade, allowImprovePaths: opts.allowImprovePaths },
+      now,
+    );
   } catch (err) {
-    return { ok: false, refusal: `delete_namespace refused, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      ok: false,
+      refusal: `delete_namespace refused, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
-  if (!verified.ok) return { ok: false, refusal: `delete_namespace refused, nothing changed: ${verified.refusal}` };
+  if (!verified.ok)
+    return { ok: false, refusal: `delete_namespace refused, nothing changed: ${verified.refusal}` };
+  return deleteAsPlanned(env, actor, namespace, opts, verified.claims.plan);
+}
 
+/**
+ * The commit behind both doors, once a confirmation is verified: capsid_admin_manage_namespaces
+ * action delete_perform (its own token, above) and the namespace_remove control (the
+ * controls' token, src/controls.ts, which binds the same fingerprint). The plan is read
+ * again, every refusal applies again, and the fingerprint the confirmation signed must
+ * match it exactly.
+ */
+export async function deleteAsPlanned(
+  env: Env,
+  actor: string,
+  namespace: string,
+  opts: DeleteOptions,
+  signedPlan: string,
+): Promise<ToolAnswer> {
+  const db = env.DB;
   let plan: DeletePlan;
   try {
     plan = await readDeletePlan(db, namespace);
   } catch (err) {
-    return { ok: false, refusal: `delete_namespace failed, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      ok: false,
+      refusal: `delete_namespace failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   const refusals = deleteRefusals(plan, opts);
-  if (refusals.length) return { ok: false, refusal: `delete_namespace refused, nothing changed: ${refusals.join(" ")}` };
+  if (refusals.length)
+    return {
+      ok: false,
+      refusal: `delete_namespace refused, nothing changed: ${refusals.join(" ")}`,
+    };
   const current = planFingerprint(plan);
-  if (current !== verified.claims.plan) {
-    const changed = fingerprintDifference(verified.claims.plan, current);
+  if (current !== signedPlan) {
+    const changed = fingerprintDifference(signedPlan, current);
     return {
       ok: false,
       refusal: `delete_namespace refused, nothing changed: the namespace changed since the preview (${changed.join("; ")}). Preview again.`,
@@ -475,7 +546,10 @@ export async function performNamespaceDelete(
   // batch below is sized from this list, and a list the read truncated would delete
   // part of the namespace.
   const paths = plan.live_paths;
-  if (paths.length !== plan.counts.documents_live || paths.length > NAMESPACE_DELETE_MAX_DOCUMENTS) {
+  if (
+    paths.length !== plan.counts.documents_live ||
+    paths.length > NAMESPACE_DELETE_MAX_DOCUMENTS
+  ) {
     return {
       ok: false,
       refusal: `delete_namespace failed, nothing changed: the plan read ${paths.length} live paths for ${plan.counts.documents_live} live documents, with a cap of ${NAMESPACE_DELETE_MAX_DOCUMENTS}.`,
@@ -503,7 +577,7 @@ export async function performNamespaceDelete(
           `INSERT INTO document_versions (document_id, namespace, path, title, body)
            SELECT id, namespace, path, title, body FROM documents
            WHERE namespace = ?1 AND path IN (SELECT value FROM json_each(?2))
-           RETURNING id`
+           RETURNING id`,
         )
         .bind(namespace, pathsJson),
       // The one audit row, read inside the batch before anything is removed: the
@@ -523,7 +597,7 @@ export async function performNamespaceDelete(
            FROM document_links
            WHERE (from_ns = ?2 AND from_path IN (SELECT value FROM json_each(?4)))
               OR (to_ns = ?2 AND to_path IN (SELECT value FROM json_each(?4)))
-           RETURNING params`
+           RETURNING params`,
         )
         .bind(actor, namespace, recorded, pathsJson),
       db.prepare("DELETE FROM ops_sites WHERE namespace = ?1 RETURNING namespace").bind(namespace),
@@ -537,7 +611,10 @@ export async function performNamespaceDelete(
         refusal: `delete_namespace aborted, nothing changed: ${namespace} changed between the plan and the commit (a document, an edge, an open job, a live agent or its ops_sites row). Preview again.`,
       };
     }
-    return { ok: false, refusal: `delete_namespace failed, nothing changed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      ok: false,
+      refusal: `delete_namespace failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 
   // Counted from RETURNING, never meta.changes (path mutation invariant, test/path-mutation.test.ts). The
@@ -546,7 +623,8 @@ export async function performNamespaceDelete(
   const snapshots = rows(results[1]).length;
   const auditParams = rows<{ params: string }>(results[2])[0]?.params;
   let edgesRemoved = 0;
-  if (auditParams) edgesRemoved = (JSON.parse(auditParams) as { edges_removed: unknown[] }).edges_removed.length;
+  if (auditParams)
+    edgesRemoved = (JSON.parse(auditParams) as { edges_removed: unknown[] }).edges_removed.length;
   const siteRemoved = rows(results[3]).length > 0;
   const documentsDeleted = paths.length;
 

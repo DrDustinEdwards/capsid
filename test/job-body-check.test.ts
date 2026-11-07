@@ -30,7 +30,16 @@ test("a title is checked too", () => {
 });
 
 test("a placeholder in a code fence, an external fence or an inline span is accepted", () => {
-  const body = [FULL, "```", "<ID> TODO: {{x}}", "```", "~~~external source=review ref=1", "TBD <id>", "~~~", "Use `<ID>` here."].join("\n");
+  const body = [
+    FULL,
+    "```",
+    "<ID> TODO: {{x}}",
+    "```",
+    "~~~external source=review ref=1",
+    "TBD <id>",
+    "~~~",
+    "Use `<ID>` here.",
+  ].join("\n");
   assert.equal(placeholderRefusal("body", body), null);
 });
 
@@ -45,13 +54,17 @@ test("a filled body passes, and words that merely contain TBD or TODO do not tri
 test("a body missing parts is warned about, naming each", () => {
   const warning = missingPartsWarning("GOAL: only this");
   assert.ok(warning);
-  for (const part of ["DO", "OUT OF SCOPE", "DONE WHEN", "DECIDED or RULES"]) assert.ok(warning.includes(part), warning);
+  for (const part of ["DO", "OUT OF SCOPE", "DONE WHEN", "DECIDED or RULES"])
+    assert.ok(warning.includes(part), warning);
   assert.ok(!warning.split(". Posted")[0].includes("GOAL"), warning);
 });
 
 test("a body with all five parts, in either heading style, draws no warning", () => {
   assert.equal(missingPartsWarning(FULL), null);
-  assert.equal(missingPartsWarning("## GOAL\n## DO\n**OUT OF SCOPE**\n## DONE WHEN\n## DECIDED"), null);
+  assert.equal(
+    missingPartsWarning("## GOAL\n## DO\n**OUT OF SCOPE**\n## DONE WHEN\n## DECIDED"),
+    null,
+  );
 });
 
 test("prose that starts with a part word is not a heading", () => {
@@ -63,11 +76,17 @@ test("prose that starts with a part word is not a heading", () => {
 test("edit refuses a placeholder, but only after the caller is known to be the seat", async () => {
   const env = fakeEnv({ IMPROVE_SCORE_SECRET: "test-secret" });
   const now = new Date("2026-10-11T00:00:00Z");
-  const seat = await editJob(env, adminAgentForEmail("admin@example.com"), now, "job_x", { body: "GOAL: do <ID>" });
+  const seat = await editJob(env, adminAgentForEmail("admin@example.com"), now, "job_x", {
+    body: "GOAL: do <ID>",
+  });
   assert.equal(seat.ok, false);
   assert.match(seat.refusal ?? "", /placeholder, <ID>/);
-  const driver = await editJob(env, grantAgent("read", "agent:driver"), now, "job_x", { body: "GOAL: do <ID>" });
+  const driver = await editJob(env, grantAgent("read", "agent:driver"), now, "job_x", {
+    body: "GOAL: do <ID>",
+  });
   assert.match(driver.refusal ?? "", /cannot edit a job/);
-  const title = await editJob(env, adminAgentForEmail("admin@example.com"), now, "job_x", { title: "Fix TBD" });
+  const title = await editJob(env, adminAgentForEmail("admin@example.com"), now, "job_x", {
+    title: "Fix TBD",
+  });
   assert.match(title.refusal ?? "", /title has an unfilled placeholder, TBD/);
 });

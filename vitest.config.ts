@@ -47,12 +47,18 @@ const sql = extractStatements(path.join(import.meta.dirname, "src"));
 const srcDir = path.join(import.meta.dirname, "src");
 const prepareFiles = readdirSync(srcDir, { recursive: true })
   .map((f) => String(f).split(path.sep).join("/"))
-  .filter((f) => f.endsWith(".ts") && readFileSync(path.join(srcDir, f), "utf8").includes(".prepare("));
+  .filter(
+    (f) => f.endsWith(".ts") && readFileSync(path.join(srcDir, f), "utf8").includes(".prepare("),
+  );
 
 export default defineConfig({
   // The Portal's pages are the dashboard's build (src/portal-pages.d.ts); this layer tests the
   // Worker around them with the tests' stand-in.
-  resolve: { alias: { "capsid-portal-pages": path.join(import.meta.dirname, "test", "fixtures", "portal-pages.ts") } },
+  resolve: {
+    alias: {
+      "capsid-portal-pages": path.join(import.meta.dirname, "test", "fixtures", "portal-pages.ts"),
+    },
+  },
   plugins: [
     cloudflareTest({
       main: "./src/index.ts",
@@ -61,7 +67,7 @@ export default defineConfig({
         compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
         d1Databases: ["DB"],
         kvNamespaces: ["APP_KV", "OAUTH_KV"],
-        r2Buckets: ["MEDIA", "HOLDOUT"],
+        r2Buckets: ["MEDIA", "HOLDOUT", "AUDIT_BUCKET"],
         // site-runtime's two SQLite Durable Objects, exported by src/index.ts as in
         // wrangler.jsonc.example.
         durableObjects: {
@@ -103,6 +109,9 @@ export default defineConfig({
           IMPROVE_SCORE_SECRET: "integration-root-secret-not-a-real-one",
           // The bench endpoints' own key (src/bench.ts), not derived from the root.
           BENCH_SECRET: "integration-bench-secret-not-a-real-one",
+          // The tool-call log's signing key. The Worker derives it from COOKIE_ENCRYPTION_KEY (src/audit-key.ts),
+          // which this env leaves unbound so the tests can set it per call; bound here, it reaches the log as is.
+          AUDIT_SIGNING_KEY: "integration-signing-key-not-a-real-one-0123456789",
           // The MCP and Portal logins' Access for SaaS app (src/access-login.ts). A fake team domain;
           // the tests stub its token and JWKS endpoints.
           ACCESS_TEAM_DOMAIN: "https://sample.cloudflareaccess.com",

@@ -65,14 +65,21 @@ export interface WhatsNextPr {
 }
 
 /** The repos each registered namespace maps, deduplicated across namespaces. */
-export async function mappedRepos(db: D1Database, notChecked?: string[]): Promise<Array<{ namespace: string; repo: string }>> {
-  const { results } = await db.prepare("SELECT namespace, repos FROM namespaces ORDER BY namespace").all<{ namespace: string; repos: string }>();
+export async function mappedRepos(
+  db: D1Database,
+  notChecked?: string[],
+): Promise<Array<{ namespace: string; repo: string }>> {
+  const { results } = await db
+    .prepare("SELECT namespace, repos FROM namespaces ORDER BY namespace")
+    .all<{ namespace: string; repos: string }>();
   const seen = new Set<string>();
   const out: Array<{ namespace: string; repo: string }> = [];
   for (const row of results ?? []) {
     const parsed = parseReposList(row.repos);
     if ("error" in parsed) {
-      notChecked?.push(`${row.namespace}'s repo mapping does not parse, so its pull requests were not read: ${parsed.error}`);
+      notChecked?.push(
+        `${row.namespace}'s repo mapping does not parse, so its pull requests were not read: ${parsed.error}`,
+      );
       continue;
     }
     for (const entry of parsed.list) {
@@ -84,21 +91,36 @@ export async function mappedRepos(db: D1Database, notChecked?: string[]): Promis
   return out;
 }
 
-async function openPrs(env: Env, namespace: string, full: string, notChecked: string[]): Promise<WhatsNextPr[]> {
+async function openPrs(
+  env: Env,
+  namespace: string,
+  full: string,
+  notChecked: string[],
+): Promise<WhatsNextPr[]> {
   const [owner, repo] = full.split("/");
-  const listed = await readAllPages<RawPr>(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=open&per_page=${PRS_PER_REPO}`, (page) => page as RawPr[], LIST_MAX_PAGES);
+  const listed = await readAllPages<RawPr>(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/pulls?state=open&per_page=${PRS_PER_REPO}`,
+    (page) => page as RawPr[],
+    LIST_MAX_PAGES,
+  );
   if (listed.problem) notChecked.push(`${full} open pull requests: ${listed.problem}`);
   const out: WhatsNextPr[] = [];
   for (const pr of listed.items.slice(0, PRS_PER_REPO)) {
     const checks = await readCheckRuns(env, owner, repo, pr.head.sha, CHECKS_MAX_PAGES);
-    const verdict = checks.problem ? { conclusion: null, note: `check runs not read: ${checks.problem}` } : ciVerdict(checks.items);
+    const verdict = checks.problem
+      ? { conclusion: null, note: `check runs not read: ${checks.problem}` }
+      : ciVerdict(checks.items);
     // The list does not carry mergeability; one read of the pull request does. GitHub
     // computes it lazily, so a null mergeable is "not known yet", never "no conflict".
     let conflict: boolean | null = null;
     const one = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls/${pr.number}`);
     if (one.ok) {
       const detail = (await one.json()) as { mergeable?: boolean | null; mergeable_state?: string };
-      conflict = detail.mergeable_state === "dirty" ? true : detail.mergeable === true ? false : null;
+      conflict =
+        detail.mergeable_state === "dirty" ? true : detail.mergeable === true ? false : null;
     } else {
       await one.body?.cancel();
       notChecked.push(`${full}#${pr.number} mergeability: ${one.status}`);
@@ -118,7 +140,8 @@ async function openPrs(env: Env, namespace: string, full: string, notChecked: st
       ci: verdict.conclusion,
       ci_note: verdict.note,
       conflict,
-      waiting_on_seat: job !== null && pr.draft !== true && verdict.conclusion === "success" && conflict === false,
+      waiting_on_seat:
+        job !== null && pr.draft !== true && verdict.conclusion === "success" && conflict === false,
     });
   }
   return out;
@@ -128,7 +151,7 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
   const notChecked: string[] = [];
 
   const { results: blockedRows } = await env.DB.prepare(
-    "SELECT id, namespace, title, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT ?1"
+    "SELECT id, namespace, title, result_summary, updated_at FROM jobs WHERE status = 'blocked' ORDER BY updated_at LIMIT ?1",
   )
     .bind(JOBS_LIMIT + 1)
     .all<BlockedRow>();
@@ -136,16 +159,32 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
   // out, as the inbox leaves it out; the stale view below still lists it to close.
   const staleCache = (await readStaleCache(env.APP_KV).catch(() => ({ cache: {} }))).cache;
   const applied = await appliedMigrations(env.DB);
-  const blocked = (blockedRows ?? []).slice(0, JOBS_LIMIT).filter((j) => !blockSettled(j, staleCache, applied));
-  if ((blockedRows ?? []).length > JOBS_LIMIT) notChecked.push(`more than ${JOBS_LIMIT} blocked jobs; the oldest ${JOBS_LIMIT} are listed`);
+  const blocked = (blockedRows ?? [])
+    .slice(0, JOBS_LIMIT)
+    .filter((j) => !blockSettled(j, staleCache, applied));
+  if ((blockedRows ?? []).length > JOBS_LIMIT)
+    notChecked.push(`more than ${JOBS_LIMIT} blocked jobs; the oldest ${JOBS_LIMIT} are listed`);
   // A block's summary is the driver's text: its question and command are relayed fenced.
-  const fenced = (id: string, text: string | null) => (text === null ? null : externalFence("job-summary", id, text));
+  const fenced = (id: string, text: string | null) =>
+    text === null ? null : externalFence("job-summary", id, text);
   const questions = blocked
     .filter((j) => isQuestionSummary(j.result_summary))
-    .map((j) => ({ id: j.id, namespace: j.namespace, title: j.title, question: fenced(j.id, j.result_summary), since: j.updated_at }));
+    .map((j) => ({
+      id: j.id,
+      namespace: j.namespace,
+      title: j.title,
+      question: fenced(j.id, j.result_summary),
+      since: j.updated_at,
+    }));
   const waiting = blocked
     .filter((j) => !isQuestionSummary(j.result_summary))
-    .map((j) => ({ id: j.id, namespace: j.namespace, title: j.title, command: fenced(j.id, commandFromSummary(j.result_summary)), since: j.updated_at }));
+    .map((j) => ({
+      id: j.id,
+      namespace: j.namespace,
+      title: j.title,
+      command: fenced(j.id, commandFromSummary(j.result_summary)),
+      since: j.updated_at,
+    }));
 
   let stale: unknown[] = [];
   try {
@@ -161,10 +200,13 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
   } catch (err) {
     notChecked.push(`the namespace mapping: ${err instanceof Error ? err.message : String(err)}`);
   }
-  if (repos.length > REPOS_MAX) notChecked.push(`${repos.length - REPOS_MAX} mapped repos were not read`);
+  if (repos.length > REPOS_MAX)
+    notChecked.push(`${repos.length - REPOS_MAX} mapped repos were not read`);
   for (const { namespace, repo } of repos.slice(0, REPOS_MAX)) {
     if (prs.length >= PRS_TOTAL) {
-      notChecked.push(`stopped at ${PRS_TOTAL} open pull requests; ${repo} and later repos were not read`);
+      notChecked.push(
+        `stopped at ${PRS_TOTAL} open pull requests; ${repo} and later repos were not read`,
+      );
       break;
     }
     try {

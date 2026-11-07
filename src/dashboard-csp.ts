@@ -10,7 +10,13 @@
 // Reporting-Endpoints names. Trusted Types is staged (the Portal's registry entry): the
 // Report-Only policy is the same with require-trusted-types-for added, sent beside it until the
 // reports name every sink React reaches.
-import { buildContentSecurityPolicy, buildStagedPolicy, CSP_REPORT_GROUP, generateNonce, type SitePolicy } from "@dustinedwards/site-runtime/csp";
+import {
+  buildContentSecurityPolicy,
+  buildStagedPolicy,
+  CSP_REPORT_GROUP,
+  generateNonce,
+  type SitePolicy,
+} from "@dustinedwards/site-runtime/csp";
 import { REPORT_URL } from "./security-headers";
 
 const POLICY: SitePolicy = {
@@ -31,5 +37,9 @@ export interface DashboardCsp {
 /** A fresh nonce and the two policies that carry it, for one page response. */
 export function dashboardCsp(nonce: string = generateNonce()): DashboardCsp {
   const site = { ...POLICY, nonce };
-  return { nonce, policy: buildContentSecurityPolicy(site).value, reportOnly: buildStagedPolicy(site, { trustedTypes: true }).value };
+  return {
+    nonce,
+    policy: buildContentSecurityPolicy(site).value,
+    reportOnly: buildStagedPolicy(site, { trustedTypes: true }).value,
+  };
 }

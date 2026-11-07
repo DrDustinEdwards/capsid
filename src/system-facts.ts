@@ -5,9 +5,26 @@ import type { SharedCodeView } from "./ops-types/feed";
 import { bundledModel, PUBLIC_VERSIONS_KEY } from "./public-data";
 import { readSharedCode } from "./shared-code";
 import type { SystemModel } from "./system-model";
-import { FACTS_BEHIND_KEY, FACTS_DRIFT_KEY, FACTS_LAST_KEY, RESOURCES_KEY, readJson, type StoredDrift } from "./system-facts-store";
-import { readResourceFacts, resourceDrift, resourcesDoc, type ResourceFacts } from "./system-resources";
-import { PublicVersionsSchema, toPublicVersions, versionDrift, type BehindSince } from "./system-versions";
+import {
+  FACTS_BEHIND_KEY,
+  FACTS_DRIFT_KEY,
+  FACTS_LAST_KEY,
+  RESOURCES_KEY,
+  readJson,
+  type StoredDrift,
+} from "./system-facts-store";
+import {
+  readResourceFacts,
+  resourceDrift,
+  resourcesDoc,
+  type ResourceFacts,
+} from "./system-resources";
+import {
+  PublicVersionsSchema,
+  toPublicVersions,
+  versionDrift,
+  type BehindSince,
+} from "./system-versions";
 
 // THE NIGHTLY SYSTEM FACTS BUILD (Dustin, 2026-11-03). Once a UTC day after 06:00 (the
 // small hours in Chicago, so the 11:00 maintenance pass lists its drift) the tick reads:
@@ -36,9 +53,15 @@ const LIVE: FactsReaders = {
 
 const why = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 300);
 
-export async function systemFactsTick(env: Env, now: Date, readers: FactsReaders = LIVE, model: SystemModel = bundledModel()): Promise<{ ran: false; note: string } | { ran: true; note: string; failed: boolean }> {
+export async function systemFactsTick(
+  env: Env,
+  now: Date,
+  readers: FactsReaders = LIVE,
+  model: SystemModel = bundledModel(),
+): Promise<{ ran: false; note: string } | { ran: true; note: string; failed: boolean }> {
   const today = now.toISOString().slice(0, 10);
-  if (now.getUTCHours() < AFTER_UTC_HOUR) return { ran: false, note: `before ${AFTER_UTC_HOUR}:00 UTC` };
+  if (now.getUTCHours() < AFTER_UTC_HOUR)
+    return { ran: false, note: `before ${AFTER_UTC_HOUR}:00 UTC` };
   const last = await env.APP_KV.get(FACTS_LAST_KEY);
   if (last && last.slice(0, 10) === today) return { ran: false, note: `already built ${last}` };
 
@@ -60,10 +83,17 @@ export async function systemFactsTick(env: Env, now: Date, readers: FactsReaders
     items.push(...drift.items);
     read += view.apps_read;
     const pins = doc.systems.reduce((n, s) => n + s.pins.length, 0);
-    notes.push(`versions: ${pins} pin(s) of ${doc.packages.length} package(s) in ${doc.systems.length} system(s), ${view.apps_failed.length} repo(s) unread`);
+    notes.push(
+      `versions: ${pins} pin(s) of ${doc.packages.length} package(s) in ${doc.systems.length} system(s), ${view.apps_failed.length} repo(s) unread`,
+    );
   } catch (err) {
     failed = true;
-    items.push({ rule: "model-not-checked", namespace: "capsid", job: null, line: `The versions model could not be built tonight (${why(err)}): the last good one is still served.` });
+    items.push({
+      rule: "model-not-checked",
+      namespace: "capsid",
+      job: null,
+      line: `The versions model could not be built tonight (${why(err)}): the last good one is still served.`,
+    });
     notes.push(`versions failed: ${why(err)}`);
   }
 
@@ -73,11 +103,18 @@ export async function systemFactsTick(env: Env, now: Date, readers: FactsReaders
     const drift = resourceDrift(model, doc);
     items.push(...drift.items);
     read += drift.read;
-    notes.push(`resources: ${doc.workers.length} Worker(s), ${doc.databases.length} D1, ${doc.kv_namespaces.length} KV, ${doc.buckets.length} R2${doc.problems.length ? `; ${doc.problems.length} part(s) unread` : ""}`);
+    notes.push(
+      `resources: ${doc.workers.length} Worker(s), ${doc.databases.length} D1, ${doc.kv_namespaces.length} KV, ${doc.buckets.length} R2${doc.problems.length ? `; ${doc.problems.length} part(s) unread` : ""}`,
+    );
     if (doc.problems.length) failed = true;
   } catch (err) {
     failed = true;
-    items.push({ rule: "model-not-checked", namespace: "capsid", job: null, line: `The secrets and data model could not be built tonight (${why(err)}): the last good one is still served.` });
+    items.push({
+      rule: "model-not-checked",
+      namespace: "capsid",
+      job: null,
+      line: `The secrets and data model could not be built tonight (${why(err)}): the last good one is still served.`,
+    });
     notes.push(`resources failed: ${why(err)}`);
   }
 

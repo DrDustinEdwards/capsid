@@ -28,7 +28,10 @@ export const NEVER: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   { pattern: /\bgh\s+secret\b/i, why: "it sets or deletes a repository secret" },
   { pattern: /\bsecret\s+(put|delete|bulk)\b/i, why: "it sets or deletes a secret" },
   { pattern: /\brevoke\b/i, why: "it revokes a credential" },
-  { pattern: /--force\b|--force-with-lease\b|(^|\s)-f(\s|$)/i, why: "it force-pushes, which rewrites history somebody else may hold" },
+  {
+    pattern: /--force\b|--force-with-lease\b|(^|\s)-f(\s|$)/i,
+    why: "it force-pushes, which rewrites history somebody else may hold",
+  },
   { pattern: /\bpush\s+[^\n;&|]*\+refs\//i, why: "it force-updates a ref" },
   { pattern: /\b(wrangler|npx\s+wrangler)\s+deploy\b/i, why: "it deploys" },
   { pattern: /\b(wrangler|npx\s+wrangler)\s+rollback\b/i, why: "it changes what is deployed" },
@@ -47,7 +50,10 @@ export const NEVER: ReadonlyArray<{ pattern: RegExp; why: string }> = [
   // The `-C <path>` form is matched here too. push_branch accepts it, so a never list
   // that only read `git push` would let `git -C <path> push origin master` through the
   // one check that exists to stop it.
-  { pattern: /\bgit\s+(?:-C\s+\S+\s+)?push[^\n;&|]*\b(master|main)\b/i, why: "it pushes to a default branch" },
+  {
+    pattern: /\bgit\s+(?:-C\s+\S+\s+)?push[^\n;&|]*\b(master|main)\b/i,
+    why: "it pushes to a default branch",
+  },
 ];
 
 export function deniedReason(command: string): string | null {
@@ -72,10 +78,11 @@ export function deniedReason(command: string): string | null {
 // The path is a narrow character class rather than `\S+`: `*` and `?` are glob
 // characters, and a path carrying one would be decided by the shell when the command
 // ran rather than by what this matched.
-const REPO_PATH = /(?:-C\s+(?:"[A-Za-z0-9._~:\\/ -]+"|'[A-Za-z0-9._~:\\/ -]+'|[A-Za-z0-9._~:\\/-]+)\s+)?/;
+const REPO_PATH =
+  /(?:-C\s+(?:"[A-Za-z0-9._~:\\/ -]+"|'[A-Za-z0-9._~:\\/ -]+'|[A-Za-z0-9._~:\\/-]+)\s+)?/;
 const PUSH_BRANCH = new RegExp(
   `^git\\s+${REPO_PATH.source}push\\s+(-u\\s+|--set-upstream\\s+)?origin\\s+[A-Za-z0-9._/-]+\\s*$`,
-  "i"
+  "i",
 );
 const OPEN_PR = /^gh\s+pr\s+create\b/i;
 // Anchored at both ends, like PUSH_BRANCH. An unanchored search would let extra
@@ -87,15 +94,14 @@ const MIGRATION_FILE = String.raw`--file(?:=|\s+)("[A-Za-z0-9._/-]+"|'[A-Za-z0-9
 const MIGRATION_TARGET = String.raw`--(?:remote|local)`;
 const MIGRATION = new RegExp(
   String.raw`^(?:npx\s+)?wrangler\s+d1\s+execute\s+[A-Za-z0-9_-]+\s+(?:${MIGRATION_TARGET}\s+${MIGRATION_FILE}|${MIGRATION_FILE}(?:\s+${MIGRATION_TARGET})?)\s*$`,
-  "i"
+  "i",
 );
 
 export type GateMatch =
   // Every segment's class, in order, and every migration file the command runs. A
   // plural, because a blocked command is routinely two things: the push and the pull
   // request that follows it.
-  | { klasses: GateClass[]; migrationPaths: string[] }
-  | { refused: string };
+  { klasses: GateClass[]; migrationPaths: string[] } | { refused: string };
 
 // The never list matches commands, not prose. Run over the raw string, it would refuse
 // a pull request titled "Add improve_run action register_skill" as a change to the
@@ -129,7 +135,9 @@ const SEPARATORS = ["&&", "||", ";", "|", "&", "\n"];
  * shell either. A lone `&` counts: bash runs what follows as a second command, and
  * PowerShell treats it as the call operator.
  */
-function commandPieces(command: string): { pieces: Array<{ raw: string; bare: string }> } | { refused: string } {
+function commandPieces(
+  command: string,
+): { pieces: Array<{ raw: string; bare: string }> } | { refused: string } {
   if (EXPANDS.test(command)) {
     return {
       refused:
@@ -178,7 +186,11 @@ function commandPieces(command: string): { pieces: Array<{ raw: string; bare: st
     raw += ch;
     bare += ch;
   }
-  if (quote) return { refused: "it has a quote that never closes, so where its commands end cannot be read. It waits for the human." };
+  if (quote)
+    return {
+      refused:
+        "it has a quote that never closes, so where its commands end cannot be read. It waits for the human.",
+    };
   pieces.push({ raw, bare });
   return { pieces };
 }
@@ -197,13 +209,17 @@ function neverListView(command: string): { view: string } | { refused: string } 
 }
 
 /** The class one segment falls into, or why it falls into none. */
-function classifySegment(segment: string): { klass: GateClass; migrationPath?: string } | { refused: string } {
+function classifySegment(
+  segment: string,
+): { klass: GateClass; migrationPath?: string } | { refused: string } {
   const migration = MIGRATION.exec(segment);
   if (migration) {
     // Group 1 or 2, by which side of the file the --remote or --local sits.
     const path = (migration[1] ?? migration[2]).replace(/^["']|["']$/g, "");
     if (!/(^|\/)migrations\//i.test(path)) {
-      return { refused: `${path} is not under migrations/, so it is not a migration this policy covers.` };
+      return {
+        refused: `${path} is not under migrations/, so it is not a migration this policy covers.`,
+      };
     }
     return { klass: "additive_migration", migrationPath: path };
   }
@@ -219,7 +235,9 @@ function classifySegment(segment: string): { klass: GateClass; migrationPath?: s
       refused: `"${segment.slice(0, 80)}" changes directory, and this policy cannot tell which repository a path belongs to. Write the directory on the command instead: git -C <path> push, and gh pr create --repo <owner>/<name>.`,
     };
   }
-  return { refused: `"${segment.slice(0, 80)}" matches no pre-approved class, so this command waits for the human.` };
+  return {
+    refused: `"${segment.slice(0, 80)}" matches no pre-approved class, so this command waits for the human.`,
+  };
 }
 
 /** Which classes a blocked command falls into, or why it falls into none.
@@ -232,19 +250,32 @@ function classifySegment(segment: string): { klass: GateClass; migrationPath?: s
  *  driver actually blocks with, a branch push followed by `gh pr create`, still works. */
 export function classifyCommand(command: string): GateMatch {
   const trimmed = command.trim();
-  if (!trimmed) return { refused: "the blocked job records no command, so there is nothing to match against the policy." };
+  if (!trimmed)
+    return {
+      refused:
+        "the blocked job records no command, so there is nothing to match against the policy.",
+    };
   // The never list first, over the whole command, before any segment is looked at, so
   // a force flag anywhere in a compound cannot be split away from the push it belongs
   // to. It reads the command with `gh pr create`'s quoted arguments removed.
   const seen = neverListView(trimmed);
-  if ("refused" in seen) return { refused: `this command is on the policy's never list because ${seen.refused}` };
+  if ("refused" in seen)
+    return { refused: `this command is on the policy's never list because ${seen.refused}` };
   const denied = deniedReason(seen.view);
-  if (denied) return { refused: `this command is on the policy's never list because ${denied}. It waits for the human.` };
+  if (denied)
+    return {
+      refused: `this command is on the policy's never list because ${denied}. It waits for the human.`,
+    };
 
   const split = commandPieces(trimmed);
-  if ("refused" in split) return { refused: `this command is on the policy's never list because ${split.refused}` };
+  if ("refused" in split)
+    return { refused: `this command is on the policy's never list because ${split.refused}` };
   const segments = split.pieces.map(({ raw: piece }) => piece.trim()).filter(Boolean);
-  if (segments.length === 0) return { refused: "the blocked job records no command, so there is nothing to match against the policy." };
+  if (segments.length === 0)
+    return {
+      refused:
+        "the blocked job records no command, so there is nothing to match against the policy.",
+    };
   const klasses: GateClass[] = [];
   const migrationPaths: string[] = [];
   for (const segment of segments) {
@@ -264,7 +295,10 @@ export function classifyCommand(command: string): GateMatch {
 const ADDITIVE: Array<{ pattern: RegExp; what: string }> = [
   // Not a bare prefix. `CREATE TABLE IF NOT EXISTS t AS SELECT ...` starts with the
   // additive spelling and copies rows out of another table, so it is excluded here.
-  { pattern: /^create\s+table\s+if\s+not\s+exists\b(?![\s\S]*\bas\s+select\b)/i, what: "CREATE TABLE IF NOT EXISTS" },
+  {
+    pattern: /^create\s+table\s+if\s+not\s+exists\b(?![\s\S]*\bas\s+select\b)/i,
+    what: "CREATE TABLE IF NOT EXISTS",
+  },
   // The `COLUMN` keyword is required, so `ALTER TABLE t ADD CONSTRAINT ...` is not
   // called an added column. SQLite accepts the keyword and the policy document names
   // it, so demanding it costs a migration author one word.
@@ -282,9 +316,12 @@ export function splitStatements(sql: string): string[] {
     .filter(Boolean);
 }
 
-export function isAdditiveMigration(sql: string): { ok: true; statements: string[] } | { ok: false; reason: string } {
+export function isAdditiveMigration(
+  sql: string,
+): { ok: true; statements: string[] } | { ok: false; reason: string } {
   const statements = splitStatements(sql);
-  if (statements.length === 0) return { ok: false, reason: "the migration file contains no statements." };
+  if (statements.length === 0)
+    return { ok: false, reason: "the migration file contains no statements." };
   const kinds: string[] = [];
   for (const statement of statements) {
     const match = ADDITIVE.find(({ pattern }) => pattern.test(statement));
@@ -307,7 +344,11 @@ export interface GatePolicy {
 
 export function parseGatePolicy(body: string): { policy: GatePolicy } | { error: string } {
   const version = policyField(body, "version");
-  if (!version) return { error: "the gate policy names no version, so an approval against it cannot be traced to what it allowed." };
+  if (!version)
+    return {
+      error:
+        "the gate policy names no version, so an approval against it cannot be traced to what it allowed.",
+    };
   const enabled = policyField(body, "enabled");
   if (enabled === null) return { error: "the gate policy does not say whether it is enabled." };
   const classes: string[] = [];
@@ -318,8 +359,15 @@ export function parseGatePolicy(body: string): { policy: GatePolicy } | { error:
   return { policy: { version, enabled: enabled.toLowerCase() === "true", classes } };
 }
 
-export async function loadGatePolicy(env: Env): Promise<{ policy: GatePolicy } | { error: string }> {
-  const read = await readSignedPolicy(env, GATE_POLICY_PATH, "gate policy", "nothing is pre-approved");
+export async function loadGatePolicy(
+  env: Env,
+): Promise<{ policy: GatePolicy } | { error: string }> {
+  const read = await readSignedPolicy(
+    env,
+    GATE_POLICY_PATH,
+    "gate policy",
+    "nothing is pre-approved",
+  );
   if ("error" in read) return read;
   const parsed = parseGatePolicy(read.body);
   if ("error" in parsed) return parsed;
@@ -349,13 +397,16 @@ export async function approveByPolicy(
   env: Env,
   requestedVersion: string,
   command: string | null,
-  readMigration: (path: string) => Promise<string | null>
+  readMigration: (path: string) => Promise<string | null>,
 ): Promise<ApprovalVerdict> {
   const loaded = await loadGatePolicy(env);
   if ("error" in loaded) return { approved: false, reason: loaded.error };
   const policy = loaded.policy;
   if (!policy.enabled) {
-    return { approved: false, reason: `gate policy ${policy.version} is present and disabled, so nothing is pre-approved.` };
+    return {
+      approved: false,
+      reason: `gate policy ${policy.version} is present and disabled, so nothing is pre-approved.`,
+    };
   }
   if (requestedVersion !== policy.version) {
     return {
@@ -364,7 +415,10 @@ export async function approveByPolicy(
     };
   }
   if (!command) {
-    return { approved: false, reason: "this blocked job records no command, so there is nothing for the policy to match." };
+    return {
+      approved: false,
+      reason: "this blocked job records no command, so there is nothing for the policy to match.",
+    };
   }
 
   const match = classifyCommand(command);
@@ -385,7 +439,10 @@ export async function approveByPolicy(
       };
     }
     if (sql === null) {
-      return { approved: false, reason: `${path} could not be read, so its statements could not be checked. A migration nobody parsed is not pre-approved.` };
+      return {
+        approved: false,
+        reason: `${path} could not be read, so its statements could not be checked. A migration nobody parsed is not pre-approved.`,
+      };
     }
     const additive = isAdditiveMigration(sql);
     if (!additive.ok) return { approved: false, reason: additive.reason };

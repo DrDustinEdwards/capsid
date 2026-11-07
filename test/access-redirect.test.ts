@@ -13,7 +13,10 @@ import { ACCESS_SAAS } from "../scripts/bindings.mjs";
 
 const ORIGIN = "https://mcp.dustinedwards.info";
 
-function signIn(overrides: Record<string, string | null> = {}, base = `${ACCESS_SAAS.teamDomain}/cdn-cgi/access/sso/oidc/${ACCESS_SAAS.clientId}/authorization`): string {
+function signIn(
+  overrides: Record<string, string | null> = {},
+  base = `${ACCESS_SAAS.teamDomain}/cdn-cgi/access/sso/oidc/${ACCESS_SAAS.clientId}/authorization`,
+): string {
   const url = new URL(base);
   const params: Record<string, string | null> = {
     client_id: ACCESS_SAAS.clientId,
@@ -35,17 +38,44 @@ test("the Access sign-in production answered with passes", () => {
 });
 
 test("the GitHub authorize URL gate 5 used to expect is refused now", () => {
-  assert.match(accessRedirectProblem(302, "https://github.com/login/oauth/authorize?client_id=x", ORIGIN) ?? "", /not the Access team domain/);
+  assert.match(
+    accessRedirectProblem(302, "https://github.com/login/oauth/authorize?client_id=x", ORIGIN) ??
+      "",
+    /not the Access team domain/,
+  );
 });
 
 for (const [name, status, location, reason] of [
   ["not a redirect", 200, signIn(), /status 200/],
   ["no location", 302, "", /not a URL/],
-  ["another team", 302, signIn({}, `https://elsewhere.cloudflareaccess.com/cdn-cgi/access/sso/oidc/${ACCESS_SAAS.clientId}/authorization`), /not the Access team domain/],
-  ["another app's endpoint", 302, signIn({}, `${ACCESS_SAAS.teamDomain}/cdn-cgi/access/sso/oidc/other-app/authorization`), /not the Capsid app's authorization endpoint/],
+  [
+    "another team",
+    302,
+    signIn(
+      {},
+      `https://elsewhere.cloudflareaccess.com/cdn-cgi/access/sso/oidc/${ACCESS_SAAS.clientId}/authorization`,
+    ),
+    /not the Access team domain/,
+  ],
+  [
+    "another app's endpoint",
+    302,
+    signIn({}, `${ACCESS_SAAS.teamDomain}/cdn-cgi/access/sso/oidc/other-app/authorization`),
+    /not the Capsid app's authorization endpoint/,
+  ],
   ["another client_id", 302, signIn({ client_id: "other-app" }), /client_id is not/],
-  ["a redirect_uri on another host", 302, signIn({ redirect_uri: "https://capsid.dustinedwards.info/callback" }), /redirect_uri is/],
-  ["the Portal callback", 302, signIn({ redirect_uri: `${ORIGIN}/portal/callback` }), /redirect_uri is/],
+  [
+    "a redirect_uri on another host",
+    302,
+    signIn({ redirect_uri: "https://capsid.dustinedwards.info/callback" }),
+    /redirect_uri is/,
+  ],
+  [
+    "the Portal callback",
+    302,
+    signIn({ redirect_uri: `${ORIGIN}/portal/callback` }),
+    /redirect_uri is/,
+  ],
   ["no PKCE method", 302, signIn({ code_challenge_method: null }), /not S256/],
   ["plain PKCE", 302, signIn({ code_challenge_method: "plain" }), /not S256/],
   ["no challenge", 302, signIn({ code_challenge: null }), /not a S256 challenge/],

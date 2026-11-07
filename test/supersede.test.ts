@@ -20,7 +20,10 @@ function d1(db: DatabaseSync): D1Database {
       first: async () => (s.get(...args) as Record<string, unknown> | undefined) ?? null,
       all: async () => ({ results: s.all(...args).map((r) => ({ ...r })) }),
       run: async () => ({ meta: { changes: Number(s.run(...args).changes) } }),
-      exec: () => (/\bRETURNING\b|^\s*SELECT/i.test(sql) ? { results: s.all(...args) } : (s.run(...args), { results: [] })),
+      exec: () =>
+        /\bRETURNING\b|^\s*SELECT/i.test(sql)
+          ? { results: s.all(...args) }
+          : (s.run(...args), { results: [] }),
     };
   };
   return {
@@ -41,19 +44,32 @@ function d1(db: DatabaseSync): D1Database {
 
 function fresh(): { raw: DatabaseSync; env: never } {
   const raw = new DatabaseSync(":memory:");
-  for (const name of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
+  for (const name of readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith(".sql"))
+    .sort())
+    raw.exec(readFileSync(join(MIGRATIONS, name), "utf8"));
   return { raw, env: fakeEnv({ DB: d1(raw) }) };
 }
 
 function put(raw: DatabaseSync, path: string, status = "published"): void {
-  raw.prepare("INSERT INTO documents (namespace, path, title, body, status) VALUES ('sample', ?, ?, 'body of ' || ?, ?)").run(path, path, path, status);
+  raw
+    .prepare(
+      "INSERT INTO documents (namespace, path, title, body, status) VALUES ('sample', ?, ?, 'body of ' || ?, ?)",
+    )
+    .run(path, path, path, status);
 }
 
 function link(raw: DatabaseSync, from: string, type: string, to: string): void {
-  raw.prepare("INSERT INTO document_links (from_ns, from_path, type, to_ns, to_path) VALUES ('sample', ?, ?, 'sample', ?)").run(from, type, to);
+  raw
+    .prepare(
+      "INSERT INTO document_links (from_ns, from_path, type, to_ns, to_path) VALUES ('sample', ?, ?, 'sample', ?)",
+    )
+    .run(from, type, to);
 }
 
-const status = (raw: DatabaseSync, path: string) => (raw.prepare("SELECT status FROM documents WHERE path = ?").get(path) as { status: string }).status;
+const status = (raw: DatabaseSync, path: string) =>
+  (raw.prepare("SELECT status FROM documents WHERE path = ?").get(path) as { status: string })
+    .status;
 
 test("a live document's supersedes or replaces edge marks its target superseded, with a snapshot and an audit row", async () => {
   const { raw, env } = fresh();
@@ -63,18 +79,34 @@ test("a live document's supersedes or replaces edge marks its target superseded,
   link(raw, "new.md", "references", "cited.md");
 
   const report = await supersedePass(env);
-  assert.deepEqual(report.marked.map((m) => m.document).sort(), ["sample/old.md", "sample/older.md"]);
+  assert.deepEqual(report.marked.map((m) => m.document).sort(), [
+    "sample/old.md",
+    "sample/older.md",
+  ]);
   assert.equal(status(raw, "old.md"), "superseded");
   assert.equal(status(raw, "older.md"), "superseded");
   assert.equal(status(raw, "cited.md"), "published", "a references edge changes nothing");
   assert.equal(status(raw, "new.md"), "published");
 
-  const versions = raw.prepare("SELECT path, body FROM document_versions ORDER BY path").all() as Array<{ path: string; body: string }>;
-  assert.deepEqual(versions.map((v) => v.path), ["old.md", "older.md"], "each change snapshots the live row first");
-  const audit = raw.prepare("SELECT actor, action, path, params FROM audit_log ORDER BY path").all() as Array<{ actor: string; action: string; path: string; params: string }>;
+  const versions = raw
+    .prepare("SELECT path, body FROM document_versions ORDER BY path")
+    .all() as Array<{ path: string; body: string }>;
+  assert.deepEqual(
+    versions.map((v) => v.path),
+    ["old.md", "older.md"],
+    "each change snapshots the live row first",
+  );
+  const audit = raw
+    .prepare("SELECT actor, action, path, params FROM audit_log ORDER BY path")
+    .all() as Array<{ actor: string; action: string; path: string; params: string }>;
   assert.equal(audit.length, 2);
   assert.equal(audit[0].actor, SUPERSEDE_ACTOR);
-  assert.deepEqual(JSON.parse(audit[0].params), { status: "superseded", prior_status: "published", superseded_by: "sample/new.md", link: "supersedes" });
+  assert.deepEqual(JSON.parse(audit[0].params), {
+    status: "superseded",
+    prior_status: "published",
+    superseded_by: "sample/new.md",
+    link: "supersedes",
+  });
 
   assert.deepEqual((await supersedePass(env)).marked, [], "a second pass finds nothing left to do");
 });
@@ -120,9 +152,17 @@ test("PLANT: an edge to a canon document never marks it superseded", async () =>
   link(raw, "new.md", "replaces", "decisions.md");
   link(raw, "new.md", "supersedes", "old.md");
   const report = await supersedePass(env);
-  assert.deepEqual(report.marked.map((m) => m.document), ["sample/old.md"]);
+  assert.deepEqual(
+    report.marked.map((m) => m.document),
+    ["sample/old.md"],
+  );
   assert.deepEqual(report.skipped_canon.sort(), ["sample/core.md", "sample/decisions.md"]);
   assert.equal(status(raw, "core.md"), "published");
   assert.equal(status(raw, "decisions.md"), "published");
-  assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE path IN ('core.md', 'decisions.md')").get()?.n, 0);
+  assert.equal(
+    raw
+      .prepare("SELECT COUNT(*) AS n FROM audit_log WHERE path IN ('core.md', 'decisions.md')")
+      .get()?.n,
+    0,
+  );
 });

@@ -7,19 +7,21 @@ import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
-import { NoSnapshot, PageHead } from "./shared";
+import { NoSnapshot } from "./shared";
+import { Spinner } from "capsomer/react/empty";
+import { fetchBackups, useAnswer } from "../lib/api";
+import type { SiteBackupRow } from "../types";
 
 // Chart 10, the retention slots, from GET /portal/api/trends; Enarratio loads with it.
 const BackupSlots = trendChart("BackupSlots");
 
-export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
+// Health's Backups tab.
+export function Backups() {
   const { feed, now } = useApp();
   const snap = feed.snapshot;
-  const head = embedded ? null : <PageHead title="Backups" />;
   if (!snap) {
     return (
-      <div className={embedded ? "embedded" : "page"}>
-        {head}
+      <div className="embedded">
         <NoSnapshot />
       </div>
     );
@@ -28,8 +30,7 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
   const o = snap.offaccount;
   const os = o ? offaccountState(o, now) : null;
   return (
-    <div className={embedded ? "embedded" : "page"}>
-      {head}
+    <div className="embedded">
       <div className="grid2">
         <Panel flush title="Primary: Capsid D1" src="/health backup">
           <div className="body stack-gap">
@@ -42,18 +43,43 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
                 {h.backup.warning && <div className="callout crit">{h.backup.warning}</div>}
                 <dl className="kv">
                   <dt>Last good dump</dt>
-                  <dd className="num">{h.backup.last_ok ? <>{ago(ms(h.backup.last_ok), now)} <When t={ms(h.backup.last_ok)} /></> : <St kind="crit">None recorded</St>}</dd>
+                  <dd className="num">
+                    {h.backup.last_ok ? (
+                      <>
+                        {ago(ms(h.backup.last_ok), now)} <When t={ms(h.backup.last_ok)} />
+                      </>
+                    ) : (
+                      <St kind="crit">None recorded</St>
+                    )}
+                  </dd>
                   <dt>Age</dt>
-                  <dd className="num">{h.backup.age_hours == null ? <St kind="nodata">No data</St> : `${h.backup.age_hours.toFixed(1)}h`}</dd>
+                  <dd className="num">
+                    {h.backup.age_hours == null ? (
+                      <St kind="nodata">No data</St>
+                    ) : (
+                      `${h.backup.age_hours.toFixed(1)}h`
+                    )}
+                  </dd>
                   <dt>State</dt>
-                  <dd>{h.backup.warning || !h.backup.last_ok ? <St kind="crit">Stale</St> : <St kind="ok">Fresh</St>}</dd>
+                  <dd>
+                    {h.backup.warning || !h.backup.last_ok ? (
+                      <St kind="crit">Stale</St>
+                    ) : (
+                      <St kind="ok">Fresh</St>
+                    )}
+                  </dd>
                   <dt>Health</dt>
                   <dd>
-                    {h.status === "ok" ? <St kind="ok">ok</St> : <St kind="warn">degraded</St>} <span className="mono faint">sha {h.sha.slice(0, 7)}{h.dirty ? " (dirty)" : ""}</span>
+                    {h.status === "ok" ? <St kind="ok">ok</St> : <St kind="warn">degraded</St>}{" "}
+                    <span className="mono faint">
+                      sha {h.sha.slice(0, 7)}
+                      {h.dirty ? " (dirty)" : ""}
+                    </span>
                   </dd>
                   <dt>Store</dt>
                   <dd className="mono">
-                    d1 {h.store.d1} · fts {h.store.fts} · media {h.bindings.media} · kv {h.bindings.app_kv}
+                    d1 {h.store.d1} · fts {h.store.fts} · media {h.bindings.media} · kv{" "}
+                    {h.bindings.app_kv}
                   </dd>
                   <dt>Size</dt>
                   <dd className="num" data-store-size="">
@@ -63,7 +89,8 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
                       if (!use || s.size_bytes === null) return <St kind="nodata">Not reported</St>;
                       return (
                         <>
-                          {bytes(s.size_bytes)} of {bytes(s.cap_bytes)} ({(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}%){" "}
+                          {bytes(s.size_bytes)} of {bytes(s.cap_bytes)} (
+                          {(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}%){" "}
                           {use.warn && <St kind="warn">over half the cap</St>}
                         </>
                       );
@@ -80,7 +107,8 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
           <div className="body stack-gap">
             {!o || !os ? (
               <div className="callout">
-                <St kind="nodata">No data</St> The Amazon copy's report was not read on the last pass.
+                <St kind="nodata">No data</St> The Amazon copy's report was not read on the last
+                pass.
               </div>
             ) : (
               <>
@@ -96,7 +124,12 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
                       <dd className="num">
                         {s.newest ? (
                           <>
-                            {ago(ms(s.newest), now)} <When t={ms(s.newest)} /> {now - ms(s.newest) >= OFFACCOUNT_STALE ? <St kind="crit">stale</St> : now - ms(s.newest) >= OFFACCOUNT_LATE ? <St kind="warn">late</St> : null}
+                            {ago(ms(s.newest), now)} <When t={ms(s.newest)} />{" "}
+                            {now - ms(s.newest) >= OFFACCOUNT_STALE ? (
+                              <St kind="crit">stale</St>
+                            ) : now - ms(s.newest) >= OFFACCOUNT_LATE ? (
+                              <St kind="warn">late</St>
+                            ) : null}
                           </>
                         ) : (
                           <St kind="crit">No copy</St>
@@ -105,12 +138,26 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
                     </Fragment>
                   ))}
                   <dt>Report</dt>
-                  <dd className="num">{o.reported_at ? <>{ago(ms(o.reported_at), now)} <When t={ms(o.reported_at)} /></> : <St kind="crit">none yet</St>}</dd>
+                  <dd className="num">
+                    {o.reported_at ? (
+                      <>
+                        {ago(ms(o.reported_at), now)} <When t={ms(o.reported_at)} />
+                      </>
+                    ) : (
+                      <St kind="crit">none yet</St>
+                    )}
+                  </dd>
                   <dt>Last copy run</dt>
                   <dd>
                     {o.last_run ? (
                       <>
-                        {o.last_run.conclusion === "success" ? <St kind="ok">success</St> : o.last_run.conclusion ? <St kind="crit">{o.last_run.conclusion}</St> : <St kind="run">running</St>}{" "}
+                        {o.last_run.conclusion === "success" ? (
+                          <St kind="ok">success</St>
+                        ) : o.last_run.conclusion ? (
+                          <St kind="crit">{o.last_run.conclusion}</St>
+                        ) : (
+                          <St kind="run">running</St>
+                        )}{" "}
                         {o.last_run.url && (
                           <a href={o.last_run.url} target="_blank" rel="noopener noreferrer">
                             run
@@ -125,7 +172,13 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
                   <dd>
                     {o.last_drill ? (
                       <>
-                        {o.last_drill.conclusion === "success" ? <St kind="ok">success</St> : o.last_drill.conclusion ? <St kind="crit">{o.last_drill.conclusion}</St> : <St kind="run">running</St>}{" "}
+                        {o.last_drill.conclusion === "success" ? (
+                          <St kind="ok">success</St>
+                        ) : o.last_drill.conclusion ? (
+                          <St kind="crit">{o.last_drill.conclusion}</St>
+                        ) : (
+                          <St kind="run">running</St>
+                        )}{" "}
                         {o.last_drill.url && (
                           <a href={o.last_drill.url} target="_blank" rel="noopener noreferrer">
                             run
@@ -142,10 +195,164 @@ export function Backups({ embedded = false }: { embedded?: boolean } = {}) {
           </div>
         </Panel>
       </div>
+      <SiteBackups />
       <Suspense fallback={null}>
         <BackupSlots />
       </Suspense>
-      <p className="faint note">The primary panel is Capsid's own store. The Amazon panel is every site's off-account copy, each site's newest complete one, as capsid-backups last reported it.</p>
+      <p className="faint note">
+        The primary panel is Capsid's own store. The sites panel is each site's own backups, read
+        live through its operator API; Back up now runs the site's files passes, as its nightly cron
+        does. The Amazon panel is every site's off-account copy, each site's newest complete one, as
+        capsid-backups last reported it.
+      </p>
     </div>
+  );
+}
+
+// Every site's own backups, read live (GET /portal/api/backups), and Back up now: the
+// site_backup control, previewed and performed like every control.
+function SiteBackups() {
+  const { now, confirm } = useApp();
+  const load = useAnswer(["backups"], fetchBackups);
+  const data = load.data;
+  const backUp = (namespace?: string) =>
+    confirm({
+      action: "site_backup",
+      params: namespace ? { namespace } : {},
+      title: namespace ? `Back up ${namespace} now` : "Back up every site now",
+      onDone: load.reread,
+    });
+  return (
+    <Panel
+      flush
+      title="Sites"
+      id="site-backups"
+      section="Site backups"
+      src={
+        <>
+          {data ? `read ${ago(ms(data.read_at), now)} · ` : ""}
+          <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
+            {load.loading ? "Reading..." : "Read again"}
+          </button>{" "}
+          <button
+            type="button"
+            className="btn"
+            disabled={!data || data.sites.length === 0}
+            onClick={() => backUp()}
+          >
+            Back up every site now
+          </button>
+        </>
+      }
+    >
+      <div className="body stack-gap">
+        {load.error && (
+          <div className="callout crit" role="alert">
+            Could not read the sites' backups: {load.error}
+          </div>
+        )}
+        {!data ? (
+          !load.error && (
+            <div className="loading" role="status">
+              <Spinner label="Reading each site's backups..." />
+            </div>
+          )
+        ) : (
+          <>
+            {data.not_configured.length > 0 && (
+              <div className="callout">
+                Not checked from here yet (no <span className="mono">backup: true</span> in the
+                operator configuration): {data.not_configured.join(", ")}.
+              </div>
+            )}
+            <table className="list">
+              <thead>
+                <tr>
+                  <th scope="col">Site</th>
+                  <th scope="col">Newest dump</th>
+                  <th scope="col">Files</th>
+                  <th scope="col">Amazon</th>
+                  <th scope="col">
+                    <span className="sr-only">Back up</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.sites.map((s) => (
+                  <SiteRow
+                    key={s.namespace}
+                    site={s}
+                    now={now}
+                    backUp={() => backUp(s.namespace)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function Fresh({
+  at,
+  warning,
+  now,
+}: {
+  at: string | null | undefined;
+  warning?: string;
+  now: number;
+}) {
+  if (!at) return <St kind="crit">None</St>;
+  return (
+    <>
+      {ago(ms(at), now)} {warning ? <St kind="crit">stale</St> : null}
+    </>
+  );
+}
+
+function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; backUp: () => void }) {
+  const st = site.status;
+  const files = Object.entries(st?.files ?? {});
+  return (
+    <tr data-site-backup={site.namespace}>
+      <th scope="row">{site.namespace}</th>
+      <td className="num">
+        {st ? (
+          <Fresh
+            at={st.last_ok}
+            warning={
+              st.warning && !files.some(([, f]) => f.warning === st.warning)
+                ? st.warning
+                : undefined
+            }
+            now={now}
+          />
+        ) : (
+          <St kind="nodata">{site.error ?? "Not read"}</St>
+        )}
+      </td>
+      <td>
+        {files.length === 0 ? (
+          <St kind="nodata">None reported</St>
+        ) : (
+          files.map(([name, f]) => (
+            <div key={name}>
+              <span className="mono">{name}</span>{" "}
+              <Fresh at={f.last_ok} warning={f.warning} now={now} />
+            </div>
+          ))
+        )}
+      </td>
+      <td className="num">
+        {site.amazon?.newest ? ago(ms(site.amazon.newest), now) : <St kind="nodata">No copy</St>}
+      </td>
+      <td>
+        <button type="button" className="btn" onClick={backUp}>
+          Back up now
+        </button>
+      </td>
+    </tr>
   );
 }

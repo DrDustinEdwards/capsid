@@ -27,11 +27,19 @@ const MIN_SOURCE_FILES = 10;
 function collectSourceFiles(root: string): SourceFile[] {
   const out: SourceFile[] = [];
   const walk = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.name.endsWith(".ts")) {
-        out.push({ name: full.slice(root.length + 1).split(sep).join("/"), text: readFileSync(full, "utf8") });
+        out.push({
+          name: full
+            .slice(root.length + 1)
+            .split(sep)
+            .join("/"),
+          text: readFileSync(full, "utf8"),
+        });
       }
     }
   };
@@ -44,7 +52,7 @@ export function sourceFiles(): SourceFile[] {
   if (files.length < MIN_SOURCE_FILES) {
     throw new Error(
       `the src/ walk found ${files.length} files, fewer than the ${MIN_SOURCE_FILES} floor. ` +
-        `Either the directory moved or the walk is broken; every source guard that reads through here is now scanning nothing.`
+        `Either the directory moved or the walk is broken; every source guard that reads through here is now scanning nothing.`,
     );
   }
   return files;
@@ -78,7 +86,9 @@ export interface SourceExport {
 export function exportsOfSrc(): SourceExport[] {
   const out: SourceExport[] = [];
   for (const file of sourceFiles()) {
-    for (const m of file.text.matchAll(/^export (?:async )?(?:function|const|class) ([A-Za-z0-9_]+)/gm)) {
+    for (const m of file.text.matchAll(
+      /^export (?:async )?(?:function|const|class) ([A-Za-z0-9_]+)/gm,
+    )) {
       out.push({ file: file.name, name: m[1] });
     }
   }
@@ -133,7 +143,11 @@ export function operationBlocks(): ToolBlock[] {
     for (let i = text.indexOf(marker); i !== -1; i = text.indexOf(marker, i + 1)) starts.push(i);
     for (let i = 0; i < starts.length; i++) {
       const body = text.slice(starts[i], i + 1 < starts.length ? starts[i + 1] : text.length);
-      blocks.push({ file: name, body, name: body.match(/ops\.define\(\s*\n?\s*"([^"]+)"/)?.[1] ?? `${name}#${i}` });
+      blocks.push({
+        file: name,
+        body,
+        name: body.match(/ops\.define\(\s*\n?\s*"([^"]+)"/)?.[1] ?? `${name}#${i}`,
+      });
     }
   }
   return blocks;

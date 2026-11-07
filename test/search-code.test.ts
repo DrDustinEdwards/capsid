@@ -14,7 +14,11 @@ function makeEnv() {
   return fakeEnv({
     DB: {
       prepare: () => ({
-        bind: () => ({ first: async () => ({ repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]) }) }),
+        bind: () => ({
+          first: async () => ({
+            repos: JSON.stringify([{ repo: "owner/repo", label: "primary" }]),
+          }),
+        }),
       }),
     },
     APP_KV: fakeKv({ seedToken: true }).kv,
@@ -47,7 +51,7 @@ const blobsOf = (calls: FetchCall[], paths: string[]) =>
 
 async function withTree(
   opts: { paths: string[]; contents: Record<string, string>; blobStatus?: Record<string, number> },
-  fn: (calls: FetchCall[]) => Promise<void>
+  fn: (calls: FetchCall[]) => Promise<void>,
 ) {
   const routes: Record<string, Route> = {
     [`GET ${REPO_PATH}`]: { body: { default_branch: "main" } },
@@ -64,12 +68,18 @@ async function withTree(
 
 test("a match is found when every blob is readable", async () => {
   await withTree(
-    { paths: ["a.ts", "b.ts"], contents: { "a.ts": "const EMAIL_QUEUE = 1;", "b.ts": "nothing here" } },
+    {
+      paths: ["a.ts", "b.ts"],
+      contents: { "a.ts": "const EMAIL_QUEUE = 1;", "b.ts": "nothing here" },
+    },
     async () => {
-      const r = (await searchCode(makeEnv(), "ns", "EMAIL_QUEUE")) as { total_results: number; items: unknown[] };
+      const r = (await searchCode(makeEnv(), "ns", "EMAIL_QUEUE")) as {
+        total_results: number;
+        items: unknown[];
+      };
       assert.equal(r.total_results, 1);
       assert.equal(r.items.length, 1);
-    }
+    },
   );
 });
 
@@ -86,12 +96,16 @@ test("rate-limited blob fetch ABORTS the scan instead of returning empty", async
         () => searchCode(makeEnv(), "ns", "EMAIL_QUEUE"),
         (err: Error) => {
           assert.match(err.message, /aborted/i, "must say the scan aborted");
-          assert.match(err.message, /NOT an empty result/i, "must refuse to be read as a negative finding");
+          assert.match(
+            err.message,
+            /NOT an empty result/i,
+            "must refuse to be read as a negative finding",
+          );
           assert.match(err.message, /403/, "must name the status");
           return true;
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -100,7 +114,7 @@ test("429 aborts too", async () => {
     { paths: ["a.ts"], contents: { "a.ts": "x" }, blobStatus: { "a.ts": 429 } },
     async () => {
       await assert.rejects(() => searchCode(makeEnv(), "ns", "anything"), /aborted/i);
-    }
+    },
   );
 });
 
@@ -109,7 +123,7 @@ test("401 aborts too: a revoked token is not an empty repository", async () => {
     { paths: ["a.ts"], contents: { "a.ts": "x" }, blobStatus: { "a.ts": 401 } },
     async () => {
       await assert.rejects(() => searchCode(makeEnv(), "ns", "anything"), /aborted/i);
-    }
+    },
   );
 });
 
@@ -132,7 +146,7 @@ test("a survivable per-file error does NOT abort, but is reported", async () => 
       assert.equal(r.total_results, 1, "the readable file still matches");
       assert.equal(r.unreadable_files, 1, "the unreadable file is counted");
       assert.deepEqual(r.unreadable_sample, ["gone.ts"], "and named");
-    }
+    },
   );
 });
 
@@ -161,7 +175,11 @@ test("max_files 1 stops after ONE blob and reports where to resume", async () =>
   await withTree({ paths: THREE, contents: CONTENTS }, async (calls) => {
     const result = await searchCode(makeEnv(), "ns", "needle", { maxFiles: 1 });
     // The cap is proven by the request that was not made.
-    assert.deepEqual(blobsOf(calls, THREE), ["a.ts"], "the cap did not stop the scan: it fetched more than one blob");
+    assert.deepEqual(
+      blobsOf(calls, THREE),
+      ["a.ts"],
+      "the cap did not stop the scan: it fetched more than one blob",
+    );
     assert.equal(result.candidates, 3);
     assert.equal(result.files_scanned, 1);
     assert.equal(result.truncated, true);
@@ -174,7 +192,11 @@ test("max_files 1 stops after ONE blob and reports where to resume", async () =>
 test("resuming at next_start scans the next file and nothing before it", async () => {
   await withTree({ paths: THREE, contents: CONTENTS }, async (calls) => {
     const result = await searchCode(makeEnv(), "ns", "needle", { maxFiles: 1, start: 1 });
-    assert.deepEqual(blobsOf(calls, THREE), ["b.ts"], "a resumed scan re-read a file it had already searched");
+    assert.deepEqual(
+      blobsOf(calls, THREE),
+      ["b.ts"],
+      "a resumed scan re-read a file it had already searched",
+    );
     assert.equal(result.start, 1);
     assert.equal(result.files_scanned, 1);
     assert.equal(result.next_start, 2);
@@ -199,7 +221,11 @@ test("max_results stops the scan too, and says more may exist", async () => {
   await withTree({ paths: THREE, contents: CONTENTS }, async (calls) => {
     const result = await searchCode(makeEnv(), "ns", "needle", { maxResults: 1 });
     assert.equal(result.total_results, 1);
-    assert.deepEqual(blobsOf(calls, THREE), ["a.ts"], "the result cap did not stop the scan fetching further blobs");
+    assert.deepEqual(
+      blobsOf(calls, THREE),
+      ["a.ts"],
+      "the result cap did not stop the scan fetching further blobs",
+    );
     assert.equal(result.truncated, true);
     assert.match(result.note ?? "", /max_results cap/);
   });

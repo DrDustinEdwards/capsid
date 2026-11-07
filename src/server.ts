@@ -2,7 +2,6 @@ import { McpServer } from "@modelcontextprotocol/server";
 import type { Env } from "./env";
 import { grantAgent, type Agent } from "./agents";
 import { checkScope, guardRegistrations } from "./scope";
-import type { AdminWriteObserver } from "./admin-client-audit";
 import { registerDocumentResources } from "./resources";
 import { registerPrompts } from "./prompts";
 import { mcpCacheHints } from "@dustinedwards/site-runtime/mcp-server";
@@ -29,7 +28,13 @@ export type { ToolGrant };
 const ABOUT = {
   version: "1.0.0",
   websiteUrl: "https://capsid.dustinedwards.info",
-  icons: [{ src: "https://capsid.dustinedwards.info/assets/icon.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+  icons: [
+    {
+      src: "https://capsid.dustinedwards.info/assets/icon.svg",
+      mimeType: "image/svg+xml",
+      sizes: ["any"],
+    },
+  ],
 };
 export const SERVER_INFO = { name: "capsid", title: "Capsid", ...ABOUT };
 export const ADMIN_SERVER_INFO = { name: "capsid-admin", title: "Capsid Admin", ...ABOUT };
@@ -53,7 +58,10 @@ const CACHE_HINTS = mcpCacheHints({ shared: ["server/discover"] });
 // Warn, never refuse, when overwriting a document touched in the last hour without if_match.
 const CONCURRENT_EDIT_WINDOW_MS = HOUR_MS;
 
-export function concurrentEditWarning(updatedAt: string | null | undefined, now: number): string | null {
+export function concurrentEditWarning(
+  updatedAt: string | null | undefined,
+  now: number,
+): string | null {
   if (!updatedAt) return null;
   // D1 stores datetime('now') in UTC with no zone, which Date.parse reads as local.
   // That would silence the warning on a machine behind UTC and fire it constantly on
@@ -74,19 +82,35 @@ export function concurrentEditWarning(updatedAt: string | null | undefined, now:
 // code path where scopes do not apply.
 const MAX_TOOL_INPUT_ELEMENTS = 10_000;
 
-export function buildServer(env: Env, caller: Agent | ToolGrant, actor = "", observeAdminWrite?: AdminWriteObserver, clientId?: string): McpServer {
-  return build(env, caller, actor, observeAdminWrite, "capsid", clientId);
+export function buildServer(
+  env: Env,
+  caller: Agent | ToolGrant,
+  actor = "",
+  clientId?: string,
+): McpServer {
+  return build(env, caller, actor, "capsid", clientId);
 }
 
 // Capsid Admin: the eight
 // administrator tools, on their own route for the administrator alone
 // (src/mcp-handler.ts). Every tool on it is admin only in TOOL_GRANTS too, so the route
 // and the registrar refuse a non-admin twice.
-export function buildAdminServer(env: Env, caller: Agent | ToolGrant, actor = "", observeAdminWrite?: AdminWriteObserver, clientId?: string): McpServer {
-  return build(env, caller, actor, observeAdminWrite, "admin", clientId);
+export function buildAdminServer(
+  env: Env,
+  caller: Agent | ToolGrant,
+  actor = "",
+  clientId?: string,
+): McpServer {
+  return build(env, caller, actor, "admin", clientId);
 }
 
-function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminWrite: AdminWriteObserver | undefined, surface: "capsid" | "admin", clientId?: string): McpServer {
+function build(
+  env: Env,
+  caller: Agent | ToolGrant,
+  actor: string,
+  surface: "capsid" | "admin",
+  clientId?: string,
+): McpServer {
   const agent = typeof caller === "string" ? grantAgent(caller, actor) : caller;
   // maxToolInputElements caps how many array elements and object members one tools/call may
   // carry, which the SDK leaves unlimited (GHSA-46jr-4wx8-v453; Grok audit 2026-10-21, CA-2).
@@ -105,7 +129,9 @@ function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminW
   // document has no audit history.
   const lastActor = async (ns: string, path: string): Promise<string | null> => {
     const row = await db
-      .prepare("SELECT actor FROM audit_log WHERE namespace = ?1 AND path = ?2 ORDER BY id DESC LIMIT 1")
+      .prepare(
+        "SELECT actor FROM audit_log WHERE namespace = ?1 AND path = ?2 ORDER BY id DESC LIMIT 1",
+      )
       .bind(ns, path)
       .first<{ actor: string | null }>();
     return row?.actor ?? null;
@@ -140,13 +166,19 @@ function build(env: Env, caller: Agent | ToolGrant, actor: string, observeAdminW
 
   // Before any registration, so every tool registered below is wrapped.
   const info = surface === "admin" ? ADMIN_SERVER_INFO : SERVER_INFO;
-  guardRegistrations(server, agent, observeAdminWrite, env.APP_KV, { env, server: { name: info.name, version: info.version }, clientId }, info.icons);
+  guardRegistrations(
+    server,
+    agent,
+    env.APP_KV,
+    { env, server: { name: info.name, version: info.version }, clientId },
+    info.icons,
+  );
 
   if (surface === "admin") {
     registerCapsidAdminTools(server, ctx.ops);
     return server;
   }
-  registerCapsidTools(server, ctx.ops);
+  registerCapsidTools(server, ctx.ops, !agent.scopes.grants.includes("write"));
 
   // Resources and prompts are raw request handlers, not tool registrations, so they
   // check scope themselves (src/resources.ts).

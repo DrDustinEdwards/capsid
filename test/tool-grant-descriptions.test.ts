@@ -14,7 +14,10 @@ import { fakeEnv, fakeKv } from "./fakes.ts";
 async function servedDescriptions(): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   for (const build of [buildServer, buildAdminServer]) {
-    const server = build(fakeEnv({ APP_KV: fakeKv({}).kv }), adminAgentForEmail("admin@example.com"));
+    const server = build(
+      fakeEnv({ APP_KV: fakeKv({}).kv }),
+      adminAgentForEmail("admin@example.com"),
+    );
     const client = new Client({ name: "tool-grant-descriptions", version: "1.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -40,14 +43,22 @@ function grantSentence(tool: string): string | null {
   if (requirement === "admin" || requirement === "admin_read") return "admin only";
   if (requirement === "action" && Object.hasOwn(TOOL_ACTION_GRANTS, tool)) {
     const spec = TOOL_ACTION_GRANTS[tool];
-    assert.equal(spec.default, "admin", `${tool}: the sentence below assumes unlisted actions are admin; rewrite it`);
+    assert.equal(
+      spec.default,
+      "admin",
+      `${tool}: the sentence below assumes unlisted actions are admin; rewrite it`,
+    );
     const readActions = Object.entries(spec.actions)
       .filter(([, req]) => req === "read")
       .map(([action]) => action);
     const writeActions = Object.entries(spec.actions)
       .filter(([, req]) => req === "write")
       .map(([action]) => action);
-    assert.equal(readActions.length + writeActions.length, Object.keys(spec.actions).length, `${tool}: an action is neither read nor write`);
+    assert.equal(
+      readActions.length + writeActions.length,
+      Object.keys(spec.actions).length,
+      `${tool}: an action is neither read nor write`,
+    );
     return `${readActions.join(" and ")} needs the read grant; ${writeActions.join(" and ")} need the write grant`;
   }
   return null;
@@ -65,21 +76,40 @@ test("DERIVED: every tool's description states the requirement TOOL_GRANTS gives
   let stated = 0;
   for (const [tool, description] of served) {
     const text = description.toLowerCase();
-    assert.doesNotMatch(description, OPERATOR_KEY_CLAIM, `${tool}: the description still says an operator key is required`);
+    assert.doesNotMatch(
+      description,
+      OPERATOR_KEY_CLAIM,
+      `${tool}: the description still says an operator key is required`,
+    );
     const sentence = grantSentence(tool);
     if (sentence) {
       stated++;
-      assert.ok(text.includes(sentence), `${tool}: the description does not say "${sentence}", which is what TOOL_GRANTS requires`);
+      assert.ok(
+        text.includes(sentence),
+        `${tool}: the description does not say "${sentence}", which is what TOOL_GRANTS requires`,
+      );
     }
     if (TOOL_GRANTS[tool] === "read") {
-      assert.ok(!text.includes("needs the write grant"), `${tool} is read, and its description says it needs the write grant`);
-      assert.ok(!text.includes("admin only"), `${tool} is read, and its description says admin only`);
+      assert.ok(
+        !text.includes("needs the write grant"),
+        `${tool} is read, and its description says it needs the write grant`,
+      );
+      assert.ok(
+        !text.includes("admin only"),
+        `${tool} is read, and its description says admin only`,
+      );
     }
     if (TOOL_GRANTS[tool] === "write") {
-      assert.ok(!text.includes("admin only"), `${tool} takes the write grant, and its description says admin only`);
+      assert.ok(
+        !text.includes("admin only"),
+        `${tool} takes the write grant, and its description says admin only`,
+      );
     }
     if (TOOL_GRANTS[tool] === "admin_read") {
-      assert.ok(!text.includes("needs the write grant"), `${tool} only reads, and its description says it needs the write grant`);
+      assert.ok(
+        !text.includes("needs the write grant"),
+        `${tool} only reads, and its description says it needs the write grant`,
+      );
     }
   }
   // Count stated so a derivation that matched nothing does not pass: six write tools
@@ -94,6 +124,8 @@ test("PLANT: every served tool's description fits the 4,096 characters Claude Co
   // parameter descriptions and docs/.
   const served = await servedDescriptions();
   assert.ok(served.size > 0, "the server served no tools");
-  const over = [...served].filter(([, d]) => d.length > 4096).map(([name, d]) => `${name} (${d.length})`);
+  const over = [...served]
+    .filter(([, d]) => d.length > 4096)
+    .map(([name, d]) => `${name} (${d.length})`);
   assert.deepEqual(over, [], `these descriptions are cut off: ${over.join(", ")}`);
 });

@@ -53,7 +53,7 @@ async function importPrivateKey(pem: string): Promise<CryptoKey> {
     der,
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
   cachedKey = { pem, key };
   return key;
@@ -61,14 +61,22 @@ async function importPrivateKey(pem: string): Promise<CryptoKey> {
 
 async function createAppJwt(env: Env): Promise<string> {
   if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_PRIVATE_KEY) {
-    throw new Error("GitHub App not configured: set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY");
+    throw new Error(
+      "GitHub App not configured: set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY",
+    );
   }
   const now = Math.floor(Date.now() / 1000);
   const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payload = base64url(JSON.stringify({ iss: env.GITHUB_APP_CLIENT_ID, iat: now - 60, exp: now + 540 }));
+  const payload = base64url(
+    JSON.stringify({ iss: env.GITHUB_APP_CLIENT_ID, iat: now - 60, exp: now + 540 }),
+  );
   const signingInput = `${header}.${payload}`;
   const key = await importPrivateKey(env.GITHUB_APP_PRIVATE_KEY);
-  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(signingInput));
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(signingInput),
+  );
   return `${signingInput}.${base64url(new Uint8Array(signature))}`;
 }
 
@@ -76,7 +84,11 @@ async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Res
   const jwt = await createAppJwt(env);
   return fetch(`${GH}${path}`, {
     ...init,
-    headers: { ...GH_HEADERS, ...(init?.headers as Record<string, string>), Authorization: `Bearer ${jwt}` },
+    headers: {
+      ...GH_HEADERS,
+      ...(init?.headers as Record<string, string>),
+      Authorization: `Bearer ${jwt}`,
+    },
     signal: init?.signal ?? callSignal(GH_TIMEOUT_MS),
   });
 }
@@ -91,7 +103,9 @@ async function getInstallationId(env: Env, owner: string, repo: string): Promise
     // installed on that repo.
     throw new Error(
       `could not resolve GitHub App installation for ${owner}/${repo} (${resp.status}): ${await resp.text()}` +
-        (resp.status === 404 ? " (404 means the App is not installed on this repo; the credentials are fine)" : "")
+        (resp.status === 404
+          ? " (404 means the App is not installed on this repo; the credentials are fine)"
+          : ""),
     );
   }
   const data = (await resp.json()) as { id: number };
@@ -113,7 +127,8 @@ async function getInstallationToken(env: Env, owner: string, repo: string): Prom
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ repositories: [repo] }),
   });
-  if (!resp.ok) throw new Error(`installation token request failed (${resp.status}): ${await resp.text()}`);
+  if (!resp.ok)
+    throw new Error(`installation token request failed (${resp.status}): ${await resp.text()}`);
   const data = (await resp.json()) as { token: string };
   await env.APP_KV.put(cacheKey, data.token, { expirationTtl: TOKEN_TTL_SECONDS });
   return data.token;
@@ -138,10 +153,13 @@ const LIST_MAX_PAGES = 10;
 /** Every repo every installation of the App can see. Throws on any failed or partial
  *  read: a list read in part would read as "everything else is unmapped" or, worse,
  *  "nothing is". */
-export async function listInstalledRepos(env: Env): Promise<{ repos: InstalledRepo[]; installations: number }> {
+export async function listInstalledRepos(
+  env: Env,
+): Promise<{ repos: InstalledRepo[]; installations: number }> {
   const installations: number[] = [];
   for (let page = 1; ; page++) {
-    if (page > LIST_MAX_PAGES) throw new Error(`the App has more than ${LIST_MAX_PAGES * LIST_PER_PAGE} installations`);
+    if (page > LIST_MAX_PAGES)
+      throw new Error(`the App has more than ${LIST_MAX_PAGES * LIST_PER_PAGE} installations`);
     const resp = await appFetch(env, `/app/installations?per_page=${LIST_PER_PAGE}&page=${page}`);
     if (!resp.ok) throw new Error(`could not list the App's installations (${resp.status})`);
     const rows = (await resp.json()) as Array<{ id: number }>;
@@ -156,28 +174,49 @@ export async function listInstalledRepos(env: Env): Promise<{ repos: InstalledRe
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ permissions: { metadata: "read" } }),
     });
-    if (!minted.ok) throw new Error(`could not mint a metadata-only token for installation ${id} (${minted.status})`);
+    if (!minted.ok)
+      throw new Error(
+        `could not mint a metadata-only token for installation ${id} (${minted.status})`,
+      );
     const { token } = (await minted.json()) as { token: string };
     let total = Infinity;
     const seen: InstalledRepo[] = [];
     for (let page = 1; seen.length < total; page++) {
-      if (page > LIST_MAX_PAGES) throw new Error(`installation ${id} lists more than ${LIST_MAX_PAGES * LIST_PER_PAGE} repos`);
-      const resp = await fetch(`${GH}/installation/repositories?per_page=${LIST_PER_PAGE}&page=${page}`, {
-        headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
-        signal: callSignal(GH_TIMEOUT_MS),
-      });
-      if (!resp.ok) throw new Error(`could not list the repos of installation ${id} (${resp.status})`);
+      if (page > LIST_MAX_PAGES)
+        throw new Error(
+          `installation ${id} lists more than ${LIST_MAX_PAGES * LIST_PER_PAGE} repos`,
+        );
+      const resp = await fetch(
+        `${GH}/installation/repositories?per_page=${LIST_PER_PAGE}&page=${page}`,
+        {
+          headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
+          signal: callSignal(GH_TIMEOUT_MS),
+        },
+      );
+      if (!resp.ok)
+        throw new Error(`could not list the repos of installation ${id} (${resp.status})`);
       const body = (await resp.json()) as {
         total_count: number;
-        repositories: Array<{ full_name: string; private: boolean; archived?: boolean; pushed_at?: string | null }>;
+        repositories: Array<{
+          full_name: string;
+          private: boolean;
+          archived?: boolean;
+          pushed_at?: string | null;
+        }>;
       };
       total = body.total_count;
       if (body.repositories.length === 0) break;
       for (const r of body.repositories) {
-        seen.push({ full_name: r.full_name, private: r.private, archived: r.archived === true, pushed_at: r.pushed_at ?? null });
+        seen.push({
+          full_name: r.full_name,
+          private: r.private,
+          archived: r.archived === true,
+          pushed_at: r.pushed_at ?? null,
+        });
       }
     }
-    if (seen.length < total) throw new Error(`installation ${id} listed ${seen.length} of ${total} repos`);
+    if (seen.length < total)
+      throw new Error(`installation ${id} listed ${seen.length} of ${total} repos`);
     repos.push(...seen);
   }
   return { repos, installations: installations.length };
@@ -206,12 +245,22 @@ function repoApiUrl(owner: string, repo: string, path: string): string {
   return url;
 }
 
-export async function ghFetch(env: Env, owner: string, repo: string, path: string, init?: RequestInit): Promise<Response> {
+export async function ghFetch(
+  env: Env,
+  owner: string,
+  repo: string,
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
   const url = repoApiUrl(owner, repo, path);
   const call = (token: string) =>
     fetch(url, {
       ...init,
-      headers: { ...GH_HEADERS, ...(init?.headers as Record<string, string>), Authorization: `Bearer ${token}` },
+      headers: {
+        ...GH_HEADERS,
+        ...(init?.headers as Record<string, string>),
+        Authorization: `Bearer ${token}`,
+      },
       signal: init?.signal ?? callSignal(GH_TIMEOUT_MS),
     });
   let resp = await call(await getInstallationToken(env, owner, repo));
@@ -224,17 +273,27 @@ export async function ghFetch(env: Env, owner: string, repo: string, path: strin
 
 // The cache key is the full API path, including ?ref=, so different refs are
 // different keys.
-export async function cachedGet(env: Env, owner: string, repo: string, path: string): Promise<Response> {
+export async function cachedGet(
+  env: Env,
+  owner: string,
+  repo: string,
+  path: string,
+): Promise<Response> {
   // Assert the URL is in-bounds before it is ever used as a cache key, so a
   // traversal path cannot be stored under a key the invalidator will not find.
   repoApiUrl(owner, repo, path);
   const cacheKey = readKey(path);
-  const cached = (await env.APP_KV.get(cacheKey, "json")) as { status: number; body: string } | null;
+  const cached = (await env.APP_KV.get(cacheKey, "json")) as {
+    status: number;
+    body: string;
+  } | null;
   if (cached) return new Response(cached.body, { status: cached.status });
   const resp = await ghFetch(env, owner, repo, path);
   const body = await resp.text();
   if (resp.ok) {
-    await env.APP_KV.put(cacheKey, JSON.stringify({ status: resp.status, body }), { expirationTtl: READ_CACHE_TTL_SECONDS });
+    await env.APP_KV.put(cacheKey, JSON.stringify({ status: resp.status, body }), {
+      expirationTtl: READ_CACHE_TTL_SECONDS,
+    });
   }
   return new Response(body, { status: resp.status });
 }
@@ -266,9 +325,13 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
     // The commit already landed. Failing the tool call because a cache sweep failed
     // would misreport the write, so this is logged by name and the stale window
     // stays bounded by the 60 second TTL.
-    logEvent("GH_CACHE_INVALIDATION_FAILED", {
-      message: `GH_CACHE_INVALIDATION_FAILED ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}`,
-    }, { level: "error" });
+    logEvent(
+      "GH_CACHE_INVALIDATION_FAILED",
+      {
+        message: `GH_CACHE_INVALIDATION_FAILED ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
   return deleted;
 }
@@ -277,7 +340,7 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
 // "../other" as a legal mapping and make the authorization boundary traversable.
 // GitHub owner and repo names are drawn from [A-Za-z0-9._-]; the charset still
 // matches "..", so repoTokenOk below also rejects "." and "..".
-export const REPO_SHAPE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+const REPO_SHAPE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
 // Neither side of an owner/name may be "." or "..": those walk a URL out of
 // /repos/<owner>/<repo>/ even though they satisfy the charset.
@@ -309,9 +372,14 @@ export function parseReposList(reposJson: string): { list: RepoEntry[] } | { err
   const list: RepoEntry[] = [];
   for (const r of parsed) {
     if (!r || typeof r.repo !== "string" || !repoTokenOk(r.repo)) {
-      return { error: `each repos entry needs a "repo" of the form owner/name (got ${JSON.stringify(r)})` };
+      return {
+        error: `each repos entry needs a "repo" of the form owner/name (got ${JSON.stringify(r)})`,
+      };
     }
-    list.push({ repo: r.repo, label: typeof r.label === "string" && r.label.trim() ? r.label.trim() : "primary" });
+    list.push({
+      repo: r.repo,
+      label: typeof r.label === "string" && r.label.trim() ? r.label.trim() : "primary",
+    });
   }
   return { list };
 }
@@ -320,7 +388,9 @@ export function parseReposList(reposJson: string): { list: RepoEntry[] } | { err
 // this is not folded into parseReposList). Returns an error string or null.
 export function requireSinglePrimary(list: RepoEntry[]): string | null {
   const primaries = list.filter((r) => r.label === "primary").length;
-  return primaries === 1 ? null : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
+  return primaries === 1
+    ? null
+    : `repos must have exactly one entry labeled "primary" (found ${primaries})`;
 }
 
 // https://github.com/<owner>/<repo>/pull/<number>, as GitHub returns it and a driver
@@ -352,7 +422,11 @@ export function parsePrUrl(ref: string | null | undefined): PrUrl | null {
 // authorization boundary, so an unknown selector is rejected with the valid values
 // rather than falling through to an arbitrary repo. With no selector the default is
 // the entry labeled "primary", or the first entry.
-export async function resolveRepo(env: Env, namespace: string, selector?: string): Promise<RepoRef> {
+export async function resolveRepo(
+  env: Env,
+  namespace: string,
+  selector?: string,
+): Promise<RepoRef> {
   const row = await env.DB.prepare("SELECT repos FROM namespaces WHERE namespace = ?1")
     .bind(namespace)
     .first<{ repos: string }>();
@@ -365,21 +439,27 @@ export async function resolveRepo(env: Env, namespace: string, selector?: string
     list = JSON.parse(row.repos || "[]");
   } catch (err) {
     throw new Error(
-      `namespace ${namespace} has a CORRUPT repos mapping: the stored value is not valid JSON (${err instanceof Error ? err.message : String(err)}). Nothing was resolved. Repair it with capsid_admin_manage_namespaces action update.`
+      `namespace ${namespace} has a CORRUPT repos mapping: the stored value is not valid JSON (${err instanceof Error ? err.message : String(err)}). Nothing was resolved. Repair it with capsid_admin_manage_namespaces action update.`,
     );
   }
   if (!Array.isArray(list)) {
-    throw new Error(`namespace ${namespace} has a CORRUPT repos mapping: expected a JSON array, got ${typeof list}.`);
+    throw new Error(
+      `namespace ${namespace} has a CORRUPT repos mapping: expected a JSON array, got ${typeof list}.`,
+    );
   }
   if (list.length === 0) throw new Error(`namespace ${namespace} has no repo mapping`);
   let chosen: { repo: string; label?: string } | undefined;
   if (selector) {
     chosen = list.find((r) => r.label === selector) ?? list.find((r) => r.repo === selector);
     if (!chosen) {
-      const labels = list.map((r) => r.label).filter(Boolean).join(", ") || "(none)";
+      const labels =
+        list
+          .map((r) => r.label)
+          .filter(Boolean)
+          .join(", ") || "(none)";
       const repos = list.map((r) => r.repo).join(", ");
       throw new Error(
-        `repo '${selector}' is not mapped to namespace ${namespace}. Valid labels: ${labels}. Valid repos: ${repos}.`
+        `repo '${selector}' is not mapped to namespace ${namespace}. Valid labels: ${labels}. Valid repos: ${repos}.`,
       );
     }
   } else {
@@ -422,15 +502,30 @@ export async function getDefaultBranch(env: Env, owner: string, repo: string): P
   return ((await resp.json()) as { default_branch: string }).default_branch;
 }
 
-export async function getRefSha(env: Env, owner: string, repo: string, branch: string): Promise<string> {
-  const resp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
-  if (!resp.ok) throw new Error(`ref lookup failed for ${branch} (${resp.status}): ${await resp.text()}`);
+export async function getRefSha(
+  env: Env,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<string> {
+  const resp = await ghFetch(
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+  );
+  if (!resp.ok)
+    throw new Error(`ref lookup failed for ${branch} (${resp.status}): ${await resp.text()}`);
   return ((await resp.json()) as { object: { sha: string } }).object.sha;
 }
 
 // The default branch's head commit sha. listRepoTree has no top-level sha (its shas
 // are per-entry blob shas), so it cannot answer this.
-export async function defaultBranchSha(env: Env, namespace: string, repoSelector?: string): Promise<string> {
+export async function defaultBranchSha(
+  env: Env,
+  namespace: string,
+  repoSelector?: string,
+): Promise<string> {
   const { owner, repo } = await resolveRepo(env, namespace, repoSelector);
   const branch = await getDefaultBranch(env, owner, repo);
   return getRefSha(env, owner, repo, branch);

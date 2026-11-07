@@ -24,17 +24,52 @@ const ctx = { waitUntil: (_p: Promise<unknown>) => {} };
 
 // GitHub's answer for every repo the bundled model names, as measured 2026-10-10.
 const PRIVATE_REPOS = new Set(["capsid-backups", "writing"]);
-const NO_ROWS = (systems: StatsRows["systems"]): StatsRows => ({ finished: [], open: [], outcomes: [], evaluations: [], waits: [], rings: [], documents: 0, namespaces: 0, systems, sha: undefined });
+const NO_ROWS = (systems: StatsRows["systems"]): StatsRows => ({
+  finished: [],
+  open: [],
+  outcomes: [],
+  evaluations: [],
+  waits: [],
+  rings: [],
+  documents: 0,
+  namespaces: 0,
+  systems,
+  sha: undefined,
+});
 function githubSays(names: string[]): PublicBuildReaders {
   return {
     listRepos: async () => ({
-      repos: names.map((n): InstalledRepo => ({ full_name: `DrDustinEdwards/${n}`, private: PRIVATE_REPOS.has(n), archived: false, pushed_at: null })),
+      repos: names.map((n): InstalledRepo => ({
+        full_name: `DrDustinEdwards/${n}`,
+        private: PRIVATE_REPOS.has(n),
+        archived: false,
+        pushed_at: null,
+      })),
     }),
     statsRows: async (_env, _now, systems) => NO_ROWS(systems),
     codeMap: async () => null,
   };
 }
-const ALL = ["capsid", "capsid-bench", "capsomer", "site-runtime", "d1-dump", "devkit", "site-api", "prelum", "carrel", "enarratio", "dustinedwards-info", "claude-skills", "germomics", "foxing", "foxhound", "txasm", "julieedwards-info", ...PRIVATE_REPOS];
+const ALL = [
+  "capsid",
+  "capsid-bench",
+  "capsomer",
+  "site-runtime",
+  "d1-dump",
+  "devkit",
+  "site-api",
+  "prelum",
+  "carrel",
+  "enarratio",
+  "dustinedwards-info",
+  "claude-skills",
+  "germomics",
+  "foxing",
+  "foxhound",
+  "txasm",
+  "julieedwards-info",
+  ...PRIVATE_REPOS,
+];
 
 test("the model is built once a UTC day and stores the filtered bundled model", async () => {
   const kv = fakeKv();
@@ -73,7 +108,9 @@ test("a public repo GitHub does not list is published as private, and a failed r
   const doc = PublicModelSchema.parse(JSON.parse(kv.store.get(PUBLIC_MODEL_KEY) ?? "null"));
   assert.equal(doc.systems.find((s) => s.id === "carrel")?.private, true);
 
-  const failing = fakeKv({ seed: { [PUBLIC_MODEL_KEY]: "last good", [PUBLIC_STATS_KEY]: "last stats" } });
+  const failing = fakeKv({
+    seed: { [PUBLIC_MODEL_KEY]: "last good", [PUBLIC_STATS_KEY]: "last stats" },
+  });
   const failingReaders: PublicBuildReaders = {
     listRepos: githubSays(ALL).listRepos,
     statsRows: async () => {
@@ -81,25 +118,52 @@ test("a public repo GitHub does not list is published as private, and a failed r
     },
     codeMap: async () => null,
   };
-  await assert.rejects(publicBuildTick(fakeEnv({ APP_KV: failing.kv }), NOW, failingReaders), /D1_ERROR/);
-  assert.equal(failing.store.get(PUBLIC_MODEL_KEY), "last good", "the model was written although the stats read failed");
+  await assert.rejects(
+    publicBuildTick(fakeEnv({ APP_KV: failing.kv }), NOW, failingReaders),
+    /D1_ERROR/,
+  );
+  assert.equal(
+    failing.store.get(PUBLIC_MODEL_KEY),
+    "last good",
+    "the model was written although the stats read failed",
+  );
   assert.equal(failing.store.get(PUBLIC_STATS_KEY), "last stats");
-  assert.equal(failing.store.has(PUBLIC_BUILD_LAST_KEY), false, "a failed build was stamped as done, so it would not retry today");
+  assert.equal(
+    failing.store.has(PUBLIC_BUILD_LAST_KEY),
+    false,
+    "a failed build was stamped as done, so it would not retry today",
+  );
 });
 
 function get(ip = "203.0.113.9", query = ""): Request {
-  return new Request(`https://mcp.dustinedwards.info${PUBLIC_MODEL_PATH}${query}`, { headers: { "CF-Connecting-IP": ip } });
+  return new Request(`https://mcp.dustinedwards.info${PUBLIC_MODEL_PATH}${query}`, {
+    headers: { "CF-Connecting-IP": ip },
+  });
 }
 
 test("the route serves the stored document with cache headers and no CORS, and 503 before the first build", async () => {
   const empty = fakeKv();
-  const before = await handlePublicDocument(get(), fakeEnv({ APP_KV: empty.kv }), ctx, PUBLIC_DOCS.model, NOW, undefined);
+  const before = await handlePublicDocument(
+    get(),
+    fakeEnv({ APP_KV: empty.kv }),
+    ctx,
+    PUBLIC_DOCS.model,
+    NOW,
+    undefined,
+  );
   assert.equal(before.status, 503);
   assert.deepEqual(await before.json(), { error: "not computed yet" });
   assert.equal(before.headers.get("Cache-Control"), "no-store");
 
   const kv = fakeKv({ seed: { [PUBLIC_MODEL_KEY]: '{"version":1}' } });
-  const res = await handlePublicDocument(get(), fakeEnv({ APP_KV: kv.kv }), ctx, PUBLIC_DOCS.model, NOW, undefined);
+  const res = await handlePublicDocument(
+    get(),
+    fakeEnv({ APP_KV: kv.kv }),
+    ctx,
+    PUBLIC_DOCS.model,
+    NOW,
+    undefined,
+  );
   assert.equal(res.status, 200);
   assert.equal(await res.text(), '{"version":1}');
   assert.equal(res.headers.get("Cache-Control"), "public, max-age=3600, s-maxage=3600");
@@ -109,10 +173,24 @@ test("the route serves the stored document with cache headers and no CORS, and 5
 test("past the per-IP limit the route answers 429, and an unreadable counter refuses", async () => {
   const kv = fakeKv({ seed: { [PUBLIC_MODEL_KEY]: "{}" } });
   const spent = fakeRateLimiter({ spent: { "public:203.0.113.9": 120 } });
-  const limited = await handlePublicDocument(get(), fakeEnv({ APP_KV: kv.kv, RATE_LIMITER: spent }), ctx, PUBLIC_DOCS.model, NOW, undefined);
+  const limited = await handlePublicDocument(
+    get(),
+    fakeEnv({ APP_KV: kv.kv, RATE_LIMITER: spent }),
+    ctx,
+    PUBLIC_DOCS.model,
+    NOW,
+    undefined,
+  );
   assert.equal(limited.status, 429);
 
-  const refused = await handlePublicDocument(get(), fakeEnv({ APP_KV: kv.kv, RATE_LIMITER: fakeRateLimiter({ failing: true }) }), ctx, PUBLIC_DOCS.model, NOW, undefined);
+  const refused = await handlePublicDocument(
+    get(),
+    fakeEnv({ APP_KV: kv.kv, RATE_LIMITER: fakeRateLimiter({ failing: true }) }),
+    ctx,
+    PUBLIC_DOCS.model,
+    NOW,
+    undefined,
+  );
   assert.equal(refused.status, 503);
 });
 
@@ -124,19 +202,35 @@ test("a cached answer is served before the counter, and the query string cannot 
   } as unknown as Cache;
   const pending: Promise<unknown>[] = [];
   const kv = fakeKv({ seed: { [PUBLIC_MODEL_KEY]: '{"version":1}' } });
-  await handlePublicDocument(get(), fakeEnv({ APP_KV: kv.kv }), { waitUntil: (p: Promise<unknown>) => void pending.push(p) }, PUBLIC_DOCS.model, NOW, cache);
+  await handlePublicDocument(
+    get(),
+    fakeEnv({ APP_KV: kv.kv }),
+    { waitUntil: (p: Promise<unknown>) => void pending.push(p) },
+    PUBLIC_DOCS.model,
+    NOW,
+    cache,
+  );
   await Promise.all(pending);
   const putsAfterFirst = kv.puts.length;
 
   const broken = fakeKv({ failGet: true });
-  const hit = await handlePublicDocument(get("198.51.100.7", "?bust=1"), fakeEnv({ APP_KV: broken.kv, RATE_LIMITER: fakeRateLimiter({ failing: true }) }), ctx, PUBLIC_DOCS.model, NOW, cache);
+  const hit = await handlePublicDocument(
+    get("198.51.100.7", "?bust=1"),
+    fakeEnv({ APP_KV: broken.kv, RATE_LIMITER: fakeRateLimiter({ failing: true }) }),
+    ctx,
+    PUBLIC_DOCS.model,
+    NOW,
+    cache,
+  );
   assert.equal(hit.status, 200, "a cache hit still read KV, or the query string missed the cache");
   assert.equal(await hit.text(), '{"version":1}');
   assert.equal(kv.puts.length, putsAfterFirst);
 });
 
 test("each route serves its own stored document, and the stats route's cache key is its own", async () => {
-  const kv = fakeKv({ seed: { [PUBLIC_MODEL_KEY]: '{"doc":"model"}', [PUBLIC_STATS_KEY]: '{"doc":"stats"}' } });
+  const kv = fakeKv({
+    seed: { [PUBLIC_MODEL_KEY]: '{"doc":"model"}', [PUBLIC_STATS_KEY]: '{"doc":"stats"}' },
+  });
   const stored = new Map<string, Response>();
   const cache = {
     match: async (req: Request) => stored.get(req.url)?.clone(),
@@ -144,10 +238,30 @@ test("each route serves its own stored document, and the stats route's cache key
   } as unknown as Cache;
   const pending: Promise<unknown>[] = [];
   const keep = { waitUntil: (p: Promise<unknown>) => void pending.push(p) };
-  const model = await handlePublicDocument(get(), fakeEnv({ APP_KV: kv.kv }), keep, PUBLIC_DOCS.model, NOW, cache);
+  const model = await handlePublicDocument(
+    get(),
+    fakeEnv({ APP_KV: kv.kv }),
+    keep,
+    PUBLIC_DOCS.model,
+    NOW,
+    cache,
+  );
   await Promise.all(pending);
-  const statsReq = new Request(`https://mcp.dustinedwards.info${PUBLIC_DOCS.stats.path}`, { headers: { "CF-Connecting-IP": "203.0.113.9" } });
-  const stats = await handlePublicDocument(statsReq, fakeEnv({ APP_KV: kv.kv }), keep, PUBLIC_DOCS.stats, NOW, cache);
+  const statsReq = new Request(`https://mcp.dustinedwards.info${PUBLIC_DOCS.stats.path}`, {
+    headers: { "CF-Connecting-IP": "203.0.113.9" },
+  });
+  const stats = await handlePublicDocument(
+    statsReq,
+    fakeEnv({ APP_KV: kv.kv }),
+    keep,
+    PUBLIC_DOCS.stats,
+    NOW,
+    cache,
+  );
   assert.equal(await model.text(), '{"doc":"model"}');
-  assert.equal(await stats.text(), '{"doc":"stats"}', "the stats route answered with the model's cached document");
+  assert.equal(
+    await stats.text(),
+    '{"doc":"stats"}',
+    "the stats route answered with the model's cached document",
+  );
 });

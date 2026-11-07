@@ -3,4 +3,5 @@ import { Library } from "../views/Library";
 
 export const loader = viewLoader("library");
 export const clientLoader = browserLoader;
-export default viewPage(Library);
+const LibraryPage = viewPage(Library);
+export default LibraryPage;

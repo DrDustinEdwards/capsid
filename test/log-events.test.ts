@@ -51,11 +51,18 @@ const MIN_LOG_EVENT_SITES = 80;
 
 test("no file in src/ calls console.log, warn or error directly", () => {
   const found = directCalls();
-  assert.deepEqual(found, [], `log through logEvent (@dustinedwards/site-runtime/log), not console:\n${found.join("\n")}`);
+  assert.deepEqual(
+    found,
+    [],
+    `log through logEvent (@dustinedwards/site-runtime/log), not console:\n${found.join("\n")}`,
+  );
 });
 
 test("the scan sees the logEvent call sites, so an empty scan cannot pass the guards here", () => {
-  assert.ok(calls().length >= MIN_LOG_EVENT_SITES, `only ${calls().length} logEvent call sites found, expected at least ${MIN_LOG_EVENT_SITES}`);
+  assert.ok(
+    calls().length >= MIN_LOG_EVENT_SITES,
+    `only ${calls().length} logEvent call sites found, expected at least ${MIN_LOG_EVENT_SITES}`,
+  );
 });
 
 test("every logEvent call names an upper-case event token and carries a message", () => {
@@ -63,7 +70,7 @@ test("every logEvent call names an upper-case event token and carries a message"
   for (const { file, text } of calls()) {
     const arg = /^logEvent\(\s*([^,]+),/.exec(text)?.[1].trim() ?? "";
     // A string literal must be ALL_CAPS; a variable or a template is allowed where the token is built.
-    if (/^"/.test(arg) && !/^"[A-Z][A-Z0-9_]*"$/.test(arg)) bad.push(`src/${file}: ${arg}`);
+    if (arg.startsWith('"') && !/^"[A-Z][A-Z0-9_]*"$/.test(arg)) bad.push(`src/${file}: ${arg}`);
     if (!/\bmessage\b/.test(text)) bad.push(`src/${file}: ${arg} has no message`);
   }
   assert.deepEqual(bad, []);

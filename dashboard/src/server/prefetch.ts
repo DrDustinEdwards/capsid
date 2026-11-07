@@ -40,7 +40,13 @@ function serverFor(context: Readonly<RouterContextProvider>, request: Request): 
   const given = context.get(portalServer);
   if (given) return given;
   const cookie = request.headers.get("cookie");
-  return { nonce: "", read: (path) => fetch(new URL(`/portal/api${path}`, request.url), { headers: cookie ? { cookie, accept: "application/json" } : { accept: "application/json" } }) };
+  return {
+    nonce: "",
+    read: (path) =>
+      fetch(new URL(`/portal/api${path}`, request.url), {
+        headers: cookie ? { cookie, accept: "application/json" } : { accept: "application/json" },
+      }),
+  };
 }
 
 export function nonceFor(context: Readonly<RouterContextProvider>): string {
@@ -58,7 +64,14 @@ const qs = (o: Record<string, string>) => {
 };
 
 /** What a view reads as it first draws, for the address it was opened at. */
-function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, drawer: { type: string; id: string } | null): Spec[] {
+function specsFor(
+  view: ViewId,
+  url: URL,
+  feed: OpsFeed | null,
+  demo: boolean,
+  drawer: { type: string; id: string } | null,
+  site: string | null,
+): Spec[] {
   const p = url.searchParams;
   const trends: Spec = { key: [LIVE, "trends"], path: "/trends" };
   const namespaces: Spec = { key: [LIVE, "namespaces"], path: "/namespaces" };
@@ -66,51 +79,113 @@ function specsFor(view: ViewId, url: URL, feed: OpsFeed | null, demo: boolean, d
   const out: Spec[] = [];
   switch (view) {
     case "needs":
-      out.push(namespaces, trends, { key: ["claims", "waits"], path: `/claims${qs({ since: new Date(generated - 14 * DAY).toISOString() })}` });
-      out.push({ key: [LIVE, "digest", digestSince(generated)], path: `/digest${qs({ since: digestSince(generated) })}` });
+      out.push(namespaces, trends, {
+        key: ["claims", "waits"],
+        path: `/claims${qs({ since: new Date(generated - 14 * DAY).toISOString() })}`,
+      });
+      out.push({
+        key: [LIVE, "digest", digestSince(generated)],
+        path: `/digest${qs({ since: digestSince(generated) })}`,
+      });
       break;
     case "health":
-      out.push(trends, { key: ["convergence"], path: "/convergence" }, { key: ["maintenance"], path: "/maintenance" });
+      out.push(trends, { key: ["maintenance"], path: "/maintenance" });
+      if (p.get("tab") === "resources") out.push({ key: ["resources"], path: "/resources" });
+      break;
+    case "sites": {
+      // A site's own page reads what its tab shows; the list reads the deploy measures on its
+      // Deploys tab.
+      if (!site) {
+        if (p.get("tab") === "deploys") out.push(trends);
+        break;
+      }
+      out.push(trends);
+      const tab = p.get("tab");
+      if (tab === "sync") out.push({ key: ["convergence"], path: "/convergence" });
+      if (tab === "setup")
+        out.push(
+          { key: ["convergence"], path: "/convergence" },
+          { key: ["resources"], path: "/resources" },
+        );
+      const ns = qs({ namespace: site });
+      if (tab === "deploys")
+        out.push({ key: ["workers-builds", site], path: `/workers-builds${ns}` });
+      if (tab === "traffic") {
+        out.push(
+          { key: ["site-search", site], path: `/site-search${ns}` },
+          { key: ["site-traffic", site], path: `/site-traffic${ns}` },
+        );
+        if (site === "capsid") out.push({ key: ["not-found"], path: "/not-found" });
+      }
+      break;
+    }
+    case "projects":
+      out.push(namespaces);
       break;
     case "prs":
-      out.push(trends);
+      out.push(trends, { key: [LIVE, "merge-units"], path: "/merge-units" });
       break;
     case "queue":
-      out.push(trends, { key: [LIVE, "stale"], path: "/stale" }, { key: [LIVE, "plan"], path: "/plan" });
+      if (p.get("tab") === "checks") {
+        const filter = Object.fromEntries(FILTER_KEYS.map((k) => [k, p.get(k) ?? ""])) as Record<
+          (typeof FILTER_KEYS)[number],
+          string
+        >;
+        out.push(trends, {
+          key: ["claims", FILTER_KEYS.map((k) => filter[k]).join("\u0000")],
+          path: `/claims${qs(filter)}`,
+        });
+        const job = p.get("job") ?? "";
+        if (job) out.push({ key: ["claims", "job", job], path: `/claims${qs({ job })}` });
+        break;
+      }
+      out.push(
+        trends,
+        { key: [LIVE, "stale"], path: "/stale" },
+        { key: [LIVE, "plan"], path: "/plan" },
+      );
       break;
     case "activity": {
       const namespace = p.get("namespace") ?? "";
       const actor = p.get("actor") ?? "";
-      out.push({ key: ["activity", namespace, actor], path: `/activity${qs({ namespace, actor })}` });
+      out.push({
+        key: ["activity", namespace, actor],
+        path: `/activity${qs({ namespace, actor })}`,
+      });
       break;
     }
-    case "agents": {
+    case "agents":
       out.push(trends);
-      if (p.get("tab") === "claims") {
-        const filter = Object.fromEntries(FILTER_KEYS.map((k) => [k, p.get(k) ?? ""])) as Record<(typeof FILTER_KEYS)[number], string>;
-        out.push({ key: ["claims", FILTER_KEYS.map((k) => filter[k]).join("\u0000")], path: `/claims${qs(filter)}` });
-        const job = p.get("job") ?? "";
-        if (job) out.push({ key: ["claims", "job", job], path: `/claims${qs({ job })}` });
-      }
       break;
-    }
     case "packages":
-      out.push({ key: ["shared-code"], path: "/shared-code" }, { key: ["completeness"], path: "/completeness" }, { key: ["resources"], path: "/resources" });
+      out.push(
+        { key: ["shared-code"], path: "/shared-code" },
+        { key: ["completeness"], path: "/completeness" },
+      );
       // The demo draws each package's download chart at once (views/Packages.tsx).
-      if (demo) for (const pkg of feed?.live.packages ?? []) out.push({ key: ["packages", "history", pkg.name], path: `/packages/history${qs({ name: pkg.name })}` });
+      if (demo)
+        for (const pkg of feed?.live.packages ?? [])
+          out.push({
+            key: ["packages", "history", pkg.name],
+            path: `/packages/history${qs({ name: pkg.name })}`,
+          });
       break;
     case "library": {
       const q = p.get("q")?.trim() || "";
       const doc = parseDocParam(p.get("doc"));
       const args: Record<string, string> = doc ? { ns: doc.ns, path: doc.path } : q ? { q } : {};
-      out.push({ key: ["library", doc?.ns ?? null, doc?.path ?? null, q], path: `/library${qs(args)}` });
+      out.push({
+        key: ["library", doc?.ns ?? null, doc?.path ?? null, q],
+        path: `/library${qs(args)}`,
+      });
       break;
     }
     case "settings":
-      out.push(namespaces, { key: PUSH_KEY, path: "/push" });
+      out.push({ key: PUSH_KEY, path: "/push" });
       break;
   }
-  if (drawer?.type === "audit") out.push({ key: ["activity", "row", drawer.id], path: `/activity${qs({ id: drawer.id })}` });
+  if (drawer?.type === "audit")
+    out.push({ key: ["activity", "row", drawer.id], path: `/activity${qs({ id: drawer.id })}` });
   return out;
 }
 
@@ -119,14 +194,20 @@ async function readInto(client: QueryClient, server: PortalServer, spec: Spec): 
   // browser and says why.
   await client.prefetchQuery({
     queryKey: spec.key,
-    queryFn: async () => ask<unknown>(async (): Promise<Answer<unknown>> => answer(await server.read(spec.path), true)),
+    queryFn: async () =>
+      ask<unknown>(async (): Promise<Answer<unknown>> =>
+        answer(await server.read(spec.path), true),
+      ),
   });
 }
 
 // The feed, read once per page: the shell renders it, and a view's reads are timed from it, as
 // the view times them in the browser (the first render's now is the feed's read time).
 const feeds = new WeakMap<object, Promise<OpsFeed | null>>();
-function feedOf(context: Readonly<RouterContextProvider>, request: Request): Promise<OpsFeed | null> {
+function feedOf(
+  context: Readonly<RouterContextProvider>,
+  request: Request,
+): Promise<OpsFeed | null> {
   let feed = feeds.get(context);
   if (!feed) {
     feed = (async () => {
@@ -140,7 +221,10 @@ function feedOf(context: Readonly<RouterContextProvider>, request: Request): Pro
 }
 
 /** The feed, for the shell: the letterhead, the menu's counts and every view read it. */
-export async function prefetchFeed(context: Readonly<RouterContextProvider>, request: Request): Promise<DehydratedState> {
+export async function prefetchFeed(
+  context: Readonly<RouterContextProvider>,
+  request: Request,
+): Promise<DehydratedState> {
   const client = new QueryClient();
   const feed = await feedOf(context, request);
   if (feed) client.setQueryData(FEED_KEY, feed);
@@ -148,12 +232,20 @@ export async function prefetchFeed(context: Readonly<RouterContextProvider>, req
 }
 
 /** A view's own reads, for the address it was opened at. */
-export async function prefetchView(context: Readonly<RouterContextProvider>, request: Request, view: ViewId, drawer: { type: string; id: string } | null = null): Promise<DehydratedState> {
+export async function prefetchView(
+  context: Readonly<RouterContextProvider>,
+  request: Request,
+  view: ViewId,
+  drawer: { type: string; id: string } | null = null,
+  site: string | null = null,
+): Promise<DehydratedState> {
   const server = serverFor(context, request);
   const url = new URL(request.url);
   const client = new QueryClient();
   const demo = pageBase(url.pathname) !== "";
   const feed = await feedOf(context, request);
-  await Promise.all(specsFor(view, url, feed, demo, drawer).map((s) => readInto(client, server, s)));
+  await Promise.all(
+    specsFor(view, url, feed, demo, drawer, site).map((s) => readInto(client, server, s)),
+  );
   return dehydrate(client);
 }

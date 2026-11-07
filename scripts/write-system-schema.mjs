@@ -8,5 +8,8 @@ import { z } from "zod";
 import { SystemModelSchema } from "../src/system-model.ts";
 
 const out = join(import.meta.dirname, "..", "system", "model.schema.json");
-writeFileSync(out, `${JSON.stringify(z.toJSONSchema(SystemModelSchema, { io: "input" }), null, 2)}\n`);
+writeFileSync(
+  out,
+  `${JSON.stringify(z.toJSONSchema(SystemModelSchema, { io: "input" }), null, 2)}\n`,
+);
 console.log(`wrote ${out}`);

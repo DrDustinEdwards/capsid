@@ -28,7 +28,15 @@ export type FactClaim =
   | { kind: "merged"; line: number; said: string; repo: string | null; number: number }
   | { kind: "tagged"; line: number; said: string; name: string | null; version: string }
   // at: written name@version, npm's own spelling. npm: the sentence names npm, or uses it.
-  | { kind: "published"; line: number; said: string; name: string | null; at: boolean; npm: boolean; version: string };
+  | {
+      kind: "published";
+      line: number;
+      said: string;
+      name: string | null;
+      at: boolean;
+      npm: boolean;
+      version: string;
+    };
 
 // A sentence holding any of these is not a claim stated as done.
 const NOT_DONE =
@@ -65,7 +73,25 @@ const PUBLISHED: RegExp[] = [
 ];
 
 // Words that stand before a version without naming a package ("published version 0.3.0").
-const NOT_NAMES = new Set(["a", "an", "and", "as", "build", "it", "npm", "or", "package", "release", "tag", "the", "then", "version", "now", "is", "was"]);
+const NOT_NAMES = new Set([
+  "a",
+  "an",
+  "and",
+  "as",
+  "build",
+  "it",
+  "npm",
+  "or",
+  "package",
+  "release",
+  "tag",
+  "the",
+  "then",
+  "version",
+  "now",
+  "is",
+  "was",
+]);
 const NPM_NAME = /^(?:@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/;
 
 // The claim as written, for the messages, without a list marker.
@@ -78,7 +104,10 @@ function named(raw: string | undefined): string | null {
 /** The sentences of a line, each with whether it ends as a question. A dot inside a version
  *  or a URL does not end a sentence; one followed by a space or the line's end does. */
 function sentences(line: string): Array<{ text: string; question: boolean }> {
-  return (line.match(/(?:[^.!?;:]|[.!?;:](?!\s|$))+[.!?;:]?/g) ?? []).map((text) => ({ text, question: text.trim().endsWith("?") }));
+  return (line.match(/(?:[^.!?;:]|[.!?;:](?!\s|$))+[.!?;:]?/g) ?? []).map((text) => ({
+    text,
+    question: text.trim().endsWith("?"),
+  }));
 }
 
 /** Every checkable claim `body` states as done, in order, each once. Pure. */
@@ -107,21 +136,41 @@ export function factClaims(body: string): FactClaim[] {
               const url = /github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/.exec(item);
               const repo = url ? url[1] : null;
               const number = Number(url ? url[2] : item.slice(1));
-              add(`merged:${repo ?? ""}#${number}`, { kind: "merged", line: index + 1, said: said(m[0]), repo, number });
+              add(`merged:${repo ?? ""}#${number}`, {
+                kind: "merged",
+                line: index + 1,
+                said: said(m[0]),
+                repo,
+                number,
+              });
             }
           }
         }
         for (const pattern of TAGGED) {
           for (const m of text.matchAll(pattern)) {
             const name = named(m[1]);
-            add(`tagged:${name ?? ""}@${m[3]}`, { kind: "tagged", line: index + 1, said: said(m[0]), name, version: m[3] });
+            add(`tagged:${name ?? ""}@${m[3]}`, {
+              kind: "tagged",
+              line: index + 1,
+              said: said(m[0]),
+              name,
+              version: m[3],
+            });
           }
         }
         for (const pattern of PUBLISHED) {
           for (const m of text.matchAll(pattern)) {
             const name = named(m[1]);
             const at = name !== null && m[2] === "@";
-            add(`published:${name ?? ""}@${m[3]}`, { kind: "published", line: index + 1, said: said(m[0]), name, at, npm: npm || at, version: m[3] });
+            add(`published:${name ?? ""}@${m[3]}`, {
+              kind: "published",
+              line: index + 1,
+              said: said(m[0]),
+              name,
+              at,
+              npm: npm || at,
+              version: m[3],
+            });
           }
         }
       }
@@ -147,7 +196,11 @@ export interface FactReaders {
   npm(name: string): Promise<FactRead<string[] | null>>;
 }
 
-type Verdict = { state: "true" } | { state: "false"; read: string } | { state: "unchecked"; reason: string } | { state: "skip" };
+type Verdict =
+  | { state: "true" }
+  | { state: "false"; read: string }
+  | { state: "unchecked"; reason: string }
+  | { state: "skip" };
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const bare = (version: string) => version.replace(/^v/, "");
@@ -159,7 +212,11 @@ export interface FactCheck {
 
 /** Check each claim `body` states against what `readers` read. Refuses only a claim read as
  *  false; a claim that could not be read is a warning. */
-export async function checkBodyFacts(namespace: string, body: string, readers: FactReaders): Promise<FactCheck> {
+export async function checkBodyFacts(
+  namespace: string,
+  body: string,
+  readers: FactReaders,
+): Promise<FactCheck> {
   const claims = factClaims(body);
   if (claims.length === 0) return { refusal: null, warnings: [] };
   let reads = 0;
@@ -176,19 +233,34 @@ export async function checkBodyFacts(namespace: string, body: string, readers: F
     let repo: string | undefined;
     if (claim.repo) {
       repo = list.value.find((r) => same(r, claim.repo!));
-      if (!repo) return { state: "unchecked", reason: `${claim.repo} is not a repo ${namespace} maps, so Capsid does not read it` };
+      if (!repo)
+        return {
+          state: "unchecked",
+          reason: `${claim.repo} is not a repo ${namespace} maps, so Capsid does not read it`,
+        };
     } else if (list.value.length === 1) {
       repo = list.value[0];
     } else {
-      return { state: "unchecked", reason: `${namespace} maps ${list.value.length} repos, so #${claim.number} names none of them for certain; write the pull request's URL` };
+      return {
+        state: "unchecked",
+        reason: `${namespace} maps ${list.value.length} repos, so #${claim.number} names none of them for certain; write the pull request's URL`,
+      };
     }
-    if (!budget()) return { state: "unchecked", reason: `the limit of ${MAX_READS} reads for one body was reached` };
+    if (!budget())
+      return {
+        state: "unchecked",
+        reason: `the limit of ${MAX_READS} reads for one body was reached`,
+      };
     reads++;
     const pr = await readers.pull(repo, claim.number);
     if (!pr.ok) return { state: "unchecked", reason: pr.reason };
-    if (pr.value === null) return { state: "unchecked", reason: `GitHub has no pull request ${repo}#${claim.number}` };
+    if (pr.value === null)
+      return { state: "unchecked", reason: `GitHub has no pull request ${repo}#${claim.number}` };
     if (pr.value.merged) return { state: "true" };
-    return { state: "false", read: `GitHub shows ${repo}#${claim.number} ${pr.value.state === "open" ? "open, not merged" : "closed without merging"}` };
+    return {
+      state: "false",
+      read: `GitHub shows ${repo}#${claim.number} ${pr.value.state === "open" ? "open, not merged" : "closed without merging"}`,
+    };
   }
 
   async function tagged(claim: Extract<FactClaim, { kind: "tagged" }>): Promise<Verdict> {
@@ -197,11 +269,17 @@ export async function checkBodyFacts(namespace: string, body: string, readers: F
     if (list.value.length === 0) return { state: "unchecked", reason: `${namespace} maps no repo` };
     const v = bare(claim.version);
     const lower = claim.name?.toLowerCase();
-    const candidates = [...new Set([`v${v}`, v, ...(lower ? [`${lower}@${v}`, `${lower}-v${v}`] : [])])];
+    const candidates = [
+      ...new Set([`v${v}`, v, ...(lower ? [`${lower}@${v}`, `${lower}-v${v}`] : [])]),
+    ];
     let unread: string | null = null;
     for (const repo of list.value) {
       for (const tag of candidates) {
-        if (!budget()) return { state: "unchecked", reason: `the limit of ${MAX_READS} reads for one body was reached` };
+        if (!budget())
+          return {
+            state: "unchecked",
+            reason: `the limit of ${MAX_READS} reads for one body was reached`,
+          };
         reads++;
         const got = await readers.tag(repo, tag);
         if (!got.ok) unread ??= got.reason;
@@ -209,27 +287,51 @@ export async function checkBodyFacts(namespace: string, body: string, readers: F
       }
     }
     if (unread) return { state: "unchecked", reason: unread };
-    return { state: "false", read: `no tag ${candidates.join(", ")} exists in ${list.value.join(", ")}` };
+    return {
+      state: "false",
+      read: `no tag ${candidates.join(", ")} exists in ${list.value.join(", ")}`,
+    };
   }
 
-  async function packageName(claim: Extract<FactClaim, { kind: "published" }>): Promise<FactRead<string> | null> {
+  async function packageName(
+    claim: Extract<FactClaim, { kind: "published" }>,
+  ): Promise<FactRead<string> | null> {
     if (claim.at && claim.name && NPM_NAME.test(claim.name)) return { ok: true, value: claim.name };
     const pkgs = await configured();
     if (!pkgs.ok) return claim.npm ? { ok: false, reason: pkgs.reason } : null;
     let matches: Array<{ name: string; repo: string | null }>;
     if (claim.name) {
       const name = claim.name;
-      matches = pkgs.value.filter((p) => same(p.name, name) || same(p.name.replace(/^@[^/]+\//, ""), name));
-      if (matches.length === 0) return claim.npm ? { ok: false, reason: `no package configured in the Portal is named ${name}, and the name is not written as name@version` } : null;
+      matches = pkgs.value.filter(
+        (p) => same(p.name, name) || same(p.name.replace(/^@[^/]+\//, ""), name),
+      );
+      if (matches.length === 0)
+        return claim.npm
+          ? {
+              ok: false,
+              reason: `no package configured in the Portal is named ${name}, and the name is not written as name@version`,
+            }
+          : null;
     } else {
       const list = await mapped();
       if (!list.ok) return claim.npm ? { ok: false, reason: list.reason } : null;
-      matches = pkgs.value.filter((p) => p.repo !== null && list.value.some((r) => same(r, p.repo!)));
+      matches = pkgs.value.filter(
+        (p) => p.repo !== null && list.value.some((r) => same(r, p.repo!)),
+      );
       if (matches.length !== 1) {
-        return claim.npm ? { ok: false, reason: `the claim names no package and ${namespace} has ${matches.length} configured; write it as name@${bare(claim.version)}` } : null;
+        return claim.npm
+          ? {
+              ok: false,
+              reason: `the claim names no package and ${namespace} has ${matches.length} configured; write it as name@${bare(claim.version)}`,
+            }
+          : null;
       }
     }
-    if (matches.length > 1) return { ok: false, reason: `${claim.name} could be any of ${matches.map((p) => p.name).join(", ")}` };
+    if (matches.length > 1)
+      return {
+        ok: false,
+        reason: `${claim.name} could be any of ${matches.map((p) => p.name).join(", ")}`,
+      };
     return { ok: true, value: matches[0].name };
   }
 
@@ -241,18 +343,26 @@ export async function checkBodyFacts(namespace: string, body: string, readers: F
     if (!name.ok) return { state: "unchecked", reason: name.reason };
     let doc = npmDocs.get(name.value);
     if (!doc) {
-      if (!budget()) return { state: "unchecked", reason: `the limit of ${MAX_READS} reads for one body was reached` };
+      if (!budget())
+        return {
+          state: "unchecked",
+          reason: `the limit of ${MAX_READS} reads for one body was reached`,
+        };
       reads++;
       doc = readers.npm(name.value);
       npmDocs.set(name.value, doc);
     }
     const versions = await doc;
     if (!versions.ok) return { state: "unchecked", reason: versions.reason };
-    if (versions.value === null) return { state: "false", read: `npm has no package ${name.value}` };
+    if (versions.value === null)
+      return { state: "false", read: `npm has no package ${name.value}` };
     const v = bare(claim.version);
     if (versions.value.includes(v)) return { state: "true" };
     const last = versions.value.slice(-3).join(", ");
-    return { state: "false", read: `npm lists no version ${v} of ${name.value}${last ? ` (the last it lists: ${last})` : ""}` };
+    return {
+      state: "false",
+      read: `npm lists no version ${v} of ${name.value}${last ? ` (the last it lists: ${last})` : ""}`,
+    };
   }
 
   const falses: string[] = [];
@@ -260,16 +370,26 @@ export async function checkBodyFacts(namespace: string, body: string, readers: F
   for (const claim of claims.slice(0, MAX_CLAIMS)) {
     let verdict: Verdict;
     try {
-      verdict = claim.kind === "merged" ? await merged(claim) : claim.kind === "tagged" ? await tagged(claim) : await published(claim);
+      verdict =
+        claim.kind === "merged"
+          ? await merged(claim)
+          : claim.kind === "tagged"
+            ? await tagged(claim)
+            : await published(claim);
     } catch (err) {
       verdict = { state: "unchecked", reason: err instanceof Error ? err.message : String(err) };
     }
     const where = `line ${claim.line}, "${claim.said}"`;
     if (verdict.state === "false") falses.push(`${where}: ${verdict.read}`);
-    else if (verdict.state === "unchecked") warnings.push(`Capsid could not check ${where}: ${verdict.reason}. Not refused; check it before a session relies on it.`);
+    else if (verdict.state === "unchecked")
+      warnings.push(
+        `Capsid could not check ${where}: ${verdict.reason}. Not refused; check it before a session relies on it.`,
+      );
   }
   if (claims.length > MAX_CLAIMS) {
-    warnings.push(`the body states ${claims.length} merged, tagged or published claims; the first ${MAX_CLAIMS} were checked and the rest were not.`);
+    warnings.push(
+      `the body states ${claims.length} merged, tagged or published claims; the first ${MAX_CLAIMS} were checked and the rest were not.`,
+    );
   }
   if (falses.length === 0) return { refusal: null, warnings };
   return {
@@ -284,7 +404,11 @@ const reason = (err: unknown) => (err instanceof Error ? err.message : String(er
 
 /** The readers post and edit use: the namespace's mapping in D1, the Portal's package rows,
  *  GitHub through the App, and npm's registry. */
-function liveFactReaders(env: Env, namespace: string, fetchImpl: FetchLike = (url, init) => fetch(url, init)): FactReaders {
+function liveFactReaders(
+  env: Env,
+  namespace: string,
+  fetchImpl: FetchLike = (url, init) => fetch(url, init),
+): FactReaders {
   const gh = async (repo: string, path: string): Promise<Response> => {
     const [owner, name] = repo.split("/");
     return ghFetch(env, owner, name, `/repos/${owner}/${name}${path}`);
@@ -292,18 +416,32 @@ function liveFactReaders(env: Env, namespace: string, fetchImpl: FetchLike = (ur
   return {
     async repos() {
       try {
-        const row = await env.DB.prepare("SELECT repos FROM namespaces WHERE namespace = ?1").bind(namespace).first<{ repos: string | null }>();
+        const row = await env.DB.prepare("SELECT repos FROM namespaces WHERE namespace = ?1")
+          .bind(namespace)
+          .first<{ repos: string | null }>();
         if (!row) return { ok: false, reason: `${namespace} is not a registered namespace` };
         const list: unknown = JSON.parse(row.repos || "[]");
-        if (!Array.isArray(list)) return { ok: false, reason: `${namespace}'s repos mapping is not a list` };
-        return { ok: true, value: list.map((r: { repo?: unknown }) => r.repo).filter((r): r is string => typeof r === "string" && r.includes("/")) };
+        if (!Array.isArray(list))
+          return { ok: false, reason: `${namespace}'s repos mapping is not a list` };
+        return {
+          ok: true,
+          value: list
+            .map((r: { repo?: unknown }) => r.repo)
+            .filter((r): r is string => typeof r === "string" && r.includes("/")),
+        };
       } catch (err) {
-        return { ok: false, reason: `${namespace}'s repos mapping could not be read: ${reason(err)}` };
+        return {
+          ok: false,
+          reason: `${namespace}'s repos mapping could not be read: ${reason(err)}`,
+        };
       }
     },
     async packages() {
       try {
-        return { ok: true, value: (await readPackageConfig(env.DB)).map((p) => ({ name: p.name, repo: p.repo })) };
+        return {
+          ok: true,
+          value: (await readPackageConfig(env.DB)).map((p) => ({ name: p.name, repo: p.repo })),
+        };
       } catch (err) {
         return { ok: false, reason: `the Portal's package rows could not be read: ${reason(err)}` };
       }
@@ -312,9 +450,16 @@ function liveFactReaders(env: Env, namespace: string, fetchImpl: FetchLike = (ur
       try {
         const res = await gh(repo, `/pulls/${number}`);
         if (res.status === 404) return { ok: true, value: null };
-        if (!res.ok) return { ok: false, reason: `GitHub answered ${res.status} for ${repo}#${number}` };
+        if (!res.ok)
+          return { ok: false, reason: `GitHub answered ${res.status} for ${repo}#${number}` };
         const pr = (await res.json()) as { merged?: unknown; merged_at?: unknown; state?: unknown };
-        return { ok: true, value: { merged: pr.merged === true || typeof pr.merged_at === "string", state: typeof pr.state === "string" ? pr.state : "unknown" } };
+        return {
+          ok: true,
+          value: {
+            merged: pr.merged === true || typeof pr.merged_at === "string",
+            state: typeof pr.state === "string" ? pr.state : "unknown",
+          },
+        };
       } catch (err) {
         return { ok: false, reason: `GitHub could not be read: ${reason(err)}` };
       }
@@ -325,7 +470,8 @@ function liveFactReaders(env: Env, namespace: string, fetchImpl: FetchLike = (ur
         const res = await gh(repo, `/git/ref/tags/${encodePath(tag)}`);
         await res.body?.cancel();
         if (res.status === 404) return { ok: true, value: false };
-        if (!res.ok) return { ok: false, reason: `GitHub answered ${res.status} for tag ${tag} in ${repo}` };
+        if (!res.ok)
+          return { ok: false, reason: `GitHub answered ${res.status} for tag ${tag} in ${repo}` };
         return { ok: true, value: true };
       } catch (err) {
         return { ok: false, reason: `GitHub could not be read: ${reason(err)}` };

@@ -13,23 +13,35 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
   // addresses a document. A bare path is not a document key: two namespaces can both
   // hold prompts/brief.md.
   const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
-  const promptVariables = (body: string) => [...new Set([...body.matchAll(PLACEHOLDER)].map((m) => m[1]))];
+  const promptVariables = (body: string) => [
+    ...new Set([...body.matchAll(PLACEHOLDER)].map((m) => m[1])),
+  ];
   // A title reaches the client's model as a description, which it trusts like a tool
   // description, and any write-grant session can write it, so it passes a character
   // allowlist (no backticks, braces or control characters) and a length cap.
   const PROMPT_TITLE_DISALLOWED = /[^A-Za-z0-9 ,.;:()'"!?_/-]+/g;
   const promptSafeTitle = (title: string | null): string | undefined => {
     if (!title) return undefined;
-    const safe = title.replace(PROMPT_TITLE_DISALLOWED, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+    const safe = title
+      .replace(PROMPT_TITLE_DISALLOWED, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 200);
     return safe || undefined;
   };
   server.server.registerCapabilities({ prompts: { listChanged: false } });
   server.server.setRequestHandler("prompts/list", async () => {
     // The whole scope check, as prompts/get makes it (Grok audit 2026-10-21, CA-5).
-    const listRefusal = checkScope(agent, { tool: "capsid_read_doc", action: "read", grant: "read" });
+    const listRefusal = checkScope(agent, {
+      tool: "capsid_read_doc",
+      action: "read",
+      grant: "read",
+    });
     if (listRefusal) throw new ProtocolError(ProtocolErrorCode.InvalidParams, listRefusal);
     const { results } = await db
-      .prepare("SELECT namespace, path, title, body FROM documents WHERE type = 'prompt' ORDER BY namespace, path")
+      .prepare(
+        "SELECT namespace, path, title, body FROM documents WHERE type = 'prompt' ORDER BY namespace, path",
+      )
       .all<{ namespace: string; path: string; title: string | null; body: string | null }>();
     return {
       prompts: namespaceFilter(agent, results).map((row) => ({
@@ -48,7 +60,7 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
     if (slash <= 0 || slash === name.length - 1) {
       throw new ProtocolError(
         ProtocolErrorCode.InvalidParams,
-        `prompt name must be "<namespace>/<path>", got "${name}". Call prompts/list for the available names.`
+        `prompt name must be "<namespace>/<path>", got "${name}". Call prompts/list for the available names.`,
       );
     }
     const promptNs = name.slice(0, slash);
@@ -57,7 +69,7 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
     if (refusal) throw new ProtocolError(ProtocolErrorCode.InvalidParams, refusal);
     const row = await db
       .prepare(
-        "SELECT title, body FROM documents WHERE type = 'prompt' AND namespace = ?1 AND (path = ?2 OR path = ?2 || '.md')"
+        "SELECT title, body FROM documents WHERE type = 'prompt' AND namespace = ?1 AND (path = ?2 OR path = ?2 || '.md')",
       )
       .bind(promptNs, promptPath)
       .first<{ title: string | null; body: string | null }>();
@@ -72,7 +84,10 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
       return String(value);
     });
     if (missing.size > 0) {
-      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `missing arguments for prompt ${name}: ${[...missing].join(", ")}`);
+      throw new ProtocolError(
+        ProtocolErrorCode.InvalidParams,
+        `missing arguments for prompt ${name}: ${[...missing].join(", ")}`,
+      );
     }
     return {
       description: promptSafeTitle(row.title),
@@ -85,7 +100,11 @@ export function registerPrompts(server: McpServer, agent: Agent, db: D1Database)
           role: "user" as const,
           content: {
             type: "resource" as const,
-            resource: { uri: `capsid://${promptNs}/${promptPath}`, mimeType: "text/markdown", text },
+            resource: {
+              uri: `capsid://${promptNs}/${promptPath}`,
+              mimeType: "text/markdown",
+              text,
+            },
           },
         },
       ],

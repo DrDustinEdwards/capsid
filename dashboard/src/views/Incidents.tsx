@@ -5,30 +5,41 @@ import type { OpsTask } from "../types";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
 import { Panel } from "capsomer/react/panel";
-import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
+import { FilterEmpty, IncidentFeed, NoSnapshot, NsChips, useNsFilter } from "./shared";
 
-export function Incidents({ embedded = false }: { embedded?: boolean } = {}) {
+// Health's Problems tab: the watcher's findings and its last pass.
+export function Incidents() {
   const { feed, now } = useApp();
   const [ns, setNs] = useNsFilter();
   const snap = feed.snapshot;
   const all = incidents(feed);
   const emptied = ns !== "all" && all.length > 0 && !all.some((x) => x.ns === ns);
   return (
-    <div className={embedded ? "embedded" : "page"}>
-      {!embedded && <PageHead title="Incidents" />}
+    <div className="embedded">
       <NsChips list={all.map((x) => x.ns)} />
       <div className="grid2">
         <Panel flush title="Findings" src="jobs posted by agent:watcher">
-          {emptied ? <FilterEmpty onShowAll={() => setNs("all")}>No finding in the project {ns}.</FilterEmpty> : <IncidentFeed ns={ns} />}
+          {emptied ? (
+            <FilterEmpty onShowAll={() => setNs("all")}>
+              No finding in the project {ns}.
+            </FilterEmpty>
+          ) : (
+            <IncidentFeed ns={ns} />
+          )}
         </Panel>
-        <Panel flush title="Last watcher pass" src={snap ? <When t={ms(snap.pass_at)} /> : "none yet"}>
+        <Panel
+          flush
+          title="Last watcher pass"
+          src={snap ? <When t={ms(snap.pass_at)} /> : "none yet"}
+        >
           {snap ? (
             <>
               <div className="body">
                 <dl className="kv">
                   <dt>Finished</dt>
                   <dd>
-                    {ago(ms(snap.pass_at), now)} {passStale(snap, now) && <St kind="warn">stale</St>}
+                    {ago(ms(snap.pass_at), now)}{" "}
+                    {passStale(snap, now) && <St kind="warn">stale</St>}
                   </dd>
                   <dt>Cadence</dt>
                   <dd className="num">every {snap.cadence_min} min</dd>
@@ -40,9 +51,13 @@ export function Incidents({ embedded = false }: { embedded?: boolean } = {}) {
                       <St kind="nodata">Not read</St>
                     ) : snap.site_map.unmapped.length || snap.site_map.unknown.length ? (
                       <span className="mono">
-                        {snap.site_map.unmapped.length ? `unmapped: ${snap.site_map.unmapped.join(", ")}` : ""}
+                        {snap.site_map.unmapped.length
+                          ? `unmapped: ${snap.site_map.unmapped.join(", ")}`
+                          : ""}
                         {snap.site_map.unmapped.length && snap.site_map.unknown.length ? " · " : ""}
-                        {snap.site_map.unknown.length ? `unknown: ${snap.site_map.unknown.join(", ")}` : ""}
+                        {snap.site_map.unknown.length
+                          ? `unknown: ${snap.site_map.unknown.join(", ")}`
+                          : ""}
                       </span>
                     ) : (
                       <St kind="ok">No drift</St>
@@ -63,7 +78,15 @@ export function Incidents({ embedded = false }: { embedded?: boolean } = {}) {
                     {snap.checks.map((c) => (
                       <tr key={c.id}>
                         <td className="mono">{c.id}</td>
-                        <td>{c.state === "could-not-run" ? <St kind="nodata">Could not run</St> : c.state === "clear" ? <St kind="ok">Clear</St> : <St kind="warn">Finding open</St>}</td>
+                        <td>
+                          {c.state === "could-not-run" ? (
+                            <St kind="nodata">Could not run</St>
+                          ) : c.state === "clear" ? (
+                            <St kind="ok">Clear</St>
+                          ) : (
+                            <St kind="warn">Finding open</St>
+                          )}
+                        </td>
                         <td className="muted">{c.findings.join("; ")}</td>
                       </tr>
                     ))}
@@ -76,7 +99,6 @@ export function Incidents({ embedded = false }: { embedded?: boolean } = {}) {
           )}
         </Panel>
       </div>
-      <ScheduledTasks />
     </div>
   );
 }
@@ -90,7 +112,7 @@ const FLAG: Record<NonNullable<OpsTask["flag"]>, string> = {
 // The run ledger (src/task-runs.ts): every scheduled task, its newest run, and the
 // runs before it. A task is flagged when its newest run threw or was refused, or when
 // a periodic task has had no run in twice its period.
-function ScheduledTasks() {
+export function ScheduledTasks() {
   const { feed, now } = useApp();
   const s = feed.scheduled;
   return (
@@ -120,7 +142,11 @@ function ScheduledTasks() {
                   <tr key={t.id} data-task={t.id}>
                     <td>
                       {t.label}
-                      <div className="faint">{t.period_ms == null ? "runs with its work" : `every ${age(now - t.period_ms, now)}`}</div>
+                      <div className="faint">
+                        {t.period_ms == null
+                          ? "runs with its work"
+                          : `every ${age(now - t.period_ms, now)}`}
+                      </div>
                     </td>
                     <td>
                       {t.flag === "failing" || t.flag === "quiet" ? (
@@ -134,7 +160,10 @@ function ScheduledTasks() {
                     <td className="num">
                       {last ? (
                         <>
-                          <St kind={TASK_OUTCOME[last.outcome].kind}>{TASK_OUTCOME[last.outcome].label}</St> {ago(ms(last.finished_at), now)}
+                          <St kind={TASK_OUTCOME[last.outcome].kind}>
+                            {TASK_OUTCOME[last.outcome].label}
+                          </St>{" "}
+                          {ago(ms(last.finished_at), now)}
                         </>
                       ) : (
                         <span className="faint">none recorded</span>
@@ -148,7 +177,10 @@ function ScheduledTasks() {
                           <ul className="plain">
                             {earlier.map((r) => (
                               <li key={r.started_at}>
-                                <St kind={TASK_OUTCOME[r.outcome].kind}>{TASK_OUTCOME[r.outcome].label}</St> {ago(ms(r.finished_at), now)}: {r.reason}
+                                <St kind={TASK_OUTCOME[r.outcome].kind}>
+                                  {TASK_OUTCOME[r.outcome].label}
+                                </St>{" "}
+                                {ago(ms(r.finished_at), now)}: {r.reason}
                               </li>
                             ))}
                           </ul>

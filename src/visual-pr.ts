@@ -19,8 +19,12 @@ export interface VisualPr {
 }
 
 /** Whether a pull request carries the visual label. */
-export function isVisual(pr: { labels?: ReadonlyArray<{ name?: string } | string> | null }): boolean {
-  return (pr.labels ?? []).some((l) => (typeof l === "string" ? l : l.name ?? "").toLowerCase() === VISUAL_LABEL);
+export function isVisual(pr: {
+  labels?: ReadonlyArray<{ name?: string } | string> | null;
+}): boolean {
+  return (pr.labels ?? []).some(
+    (l) => (typeof l === "string" ? l : (l.name ?? "")).toLowerCase() === VISUAL_LABEL,
+  );
 }
 
 const URL_RE = /https:\/\/[^\s)<>"'\]]+/g;
@@ -30,7 +34,8 @@ const PREVIEW_HOST = /^https:\/\/[^/]*\.(workers\.dev|pages\.dev)(\/|$)/i;
 /** The live preview a pull request names: a URL on a line that says "preview", else the
  *  first Worker or Pages preview URL in its description. Images are never previews. */
 export function previewUrl(body: string): string | null {
-  const urls = (line: string) => [...line.matchAll(URL_RE)].map((m) => m[0]).filter((u) => !isImage(u));
+  const urls = (line: string) =>
+    [...line.matchAll(URL_RE)].map((m) => m[0]).filter((u) => !isImage(u));
   for (const line of body.split("\n")) {
     if (/preview/i.test(line) && !/!\[/.test(line)) {
       const [u] = urls(line);
@@ -48,7 +53,9 @@ function isImage(url: string): boolean {
  *  order, each once, at most MAX_SHOTS. */
 export function screenshotUrls(body: string): string[] {
   const found: string[] = [];
-  for (const m of body.matchAll(/!\[[^\]]*\]\((https:\/\/[^\s)]+)\)|<img\b[^>]*\bsrc=["'](https:\/\/[^"']+)["']/gi)) {
+  for (const m of body.matchAll(
+    /!\[[^\]]*\]\((https:\/\/[^\s)]+)\)|<img\b[^>]*\bsrc=["'](https:\/\/[^"']+)["']/gi,
+  )) {
     const url = m[1] ?? m[2];
     if (url && !found.includes(url)) found.push(url);
   }
@@ -58,5 +65,9 @@ export function screenshotUrls(body: string): string[] {
 /** Everything the notice carries, read from the pull request. */
 export function visualDetails(pr: { title?: string | null; body?: string | null }): VisualPr {
   const body = pr.body ?? "";
-  return { title: (pr.title ?? "").trim() || "(no title)", preview: previewUrl(body), shots: screenshotUrls(body) };
+  return {
+    title: (pr.title ?? "").trim() || "(no title)",
+    preview: previewUrl(body),
+    shots: screenshotUrls(body),
+  };
 }

@@ -16,7 +16,7 @@ import { fakeD1, fakeEnv, fakeKv, fakeR2, type DocRow } from "./fakes.ts";
 // Every driver can learn the policy version it must approve under.
 //
 // A driver passes the version of capsid/policy/gates.md as approved_by_policy, but a
-// namespace-scoped driver cannot read the capsid namespace. So capsid_run_improve action status serves
+// namespace-scoped driver cannot read the capsid namespace. So capsid_read_status action status serves
 // the version and the enabled flag, and nothing else: not the body, not the classes,
 // not the never list. Reading the policy itself stays scoped to capsid.
 
@@ -83,51 +83,91 @@ async function envWith(documents: DocRow[], secret: string | undefined = SECRET)
 }
 
 async function signedDoc(path: string, body: string): Promise<DocRow> {
-  return { namespace: "capsid", path, title: path, type: "procedural", body: await signTaskBody(SECRET, body) };
+  return {
+    namespace: "capsid",
+    path,
+    title: path,
+    type: "procedural",
+    body: await signTaskBody(SECRET, body),
+  };
 }
 
 test("a driver scoped to ANOTHER namespace is still served the gates policy version", async () => {
-  const env = await envWith([await signedDoc(GATE_POLICY_PATH, GATES), await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE)]);
+  const env = await envWith([
+    await signedDoc(GATE_POLICY_PATH, GATES),
+    await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
+  ]);
 
   // The claude-skills driver's own scope: its namespace, and not capsid.
-  const status = await capsidStatus(env, undefined, { namespaces: ["claude-skills"], admin: false });
+  const status = await capsidStatus(env, undefined, {
+    namespaces: ["claude-skills"],
+    admin: false,
+  });
 
-  assert.ok("version" in status.policies.gates, `gates policy not served: ${JSON.stringify(status.policies.gates)}`);
+  assert.ok(
+    "version" in status.policies.gates,
+    `gates policy not served: ${JSON.stringify(status.policies.gates)}`,
+  );
   assert.equal(status.policies.gates.version, "7");
   assert.equal(status.policies.gates.enabled, true);
 });
 
 test("the auto-merge policy version is served on the same terms", async () => {
-  const env = await envWith([await signedDoc(GATE_POLICY_PATH, GATES), await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE)]);
+  const env = await envWith([
+    await signedDoc(GATE_POLICY_PATH, GATES),
+    await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
+  ]);
   const status = await capsidStatus(env, undefined, { namespaces: ["germomics"], admin: false });
   assert.ok("version" in status.policies.auto_merge, JSON.stringify(status.policies.auto_merge));
   assert.equal(status.policies.auto_merge.version, "3");
 });
 
 test("ONLY the version and the enabled flag: the body and the classes are not served", async () => {
-  const env = await envWith([await signedDoc(GATE_POLICY_PATH, GATES), await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE)]);
-  const status = await capsidStatus(env, undefined, { namespaces: ["claude-skills"], admin: false });
+  const env = await envWith([
+    await signedDoc(GATE_POLICY_PATH, GATES),
+    await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
+  ]);
+  const status = await capsidStatus(env, undefined, {
+    namespaces: ["claude-skills"],
+    admin: false,
+  });
   assert.deepEqual(Object.keys(status.policies.gates).sort(), ["enabled", "version"]);
   // The whole served object must not carry the document text anywhere.
   const serialized = JSON.stringify(status.policies);
-  assert.equal(/Pre-approved gates|push_branch|never list/.test(serialized), false, `the policy body leaked: ${serialized}`);
+  assert.equal(
+    /Pre-approved gates|push_branch|never list/.test(serialized),
+    false,
+    `the policy body leaked: ${serialized}`,
+  );
 });
 
 test("AN UNSIGNED POLICY REPORTS WHY, rather than a version", async () => {
   // A driver that passed a version read from a document the Worker would refuse to act
   // on would be refused again at the resume, with a less obvious message.
   const env = await envWith([
-    { namespace: "capsid", path: GATE_POLICY_PATH, title: "gates", type: "procedural", body: GATES },
+    {
+      namespace: "capsid",
+      path: GATE_POLICY_PATH,
+      title: "gates",
+      type: "procedural",
+      body: GATES,
+    },
     await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
   ]);
-  const status = await capsidStatus(env, undefined, { namespaces: ["claude-skills"], admin: false });
+  const status = await capsidStatus(env, undefined, {
+    namespaces: ["claude-skills"],
+    admin: false,
+  });
   assert.ok("reason" in status.policies.gates, "an unsigned gate policy was served as a version");
   assert.match(status.policies.gates.reason, /signature|signed|carries no/i);
 });
 
 test("a MISSING policy reports why, and does not fail the whole status call", async () => {
   const env = await envWith([]);
-  const status = await capsidStatus(env, undefined, { namespaces: ["claude-skills"], admin: false });
+  const status = await capsidStatus(env, undefined, {
+    namespaces: ["claude-skills"],
+    admin: false,
+  });
   assert.ok("reason" in status.policies.gates);
   assert.ok("reason" in status.policies.auto_merge);
   // Status still answered: a driver asking the version should not lose the rest.
@@ -136,8 +176,14 @@ test("a MISSING policy reports why, and does not fail the whole status call", as
 
 test("the credential inventory is STILL withheld from a scoped caller", async () => {
   // Serving the policy version must not have widened what else a driver sees.
-  const env = await envWith([await signedDoc(GATE_POLICY_PATH, GATES), await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE)]);
-  const scoped = await capsidStatus(env, undefined, { namespaces: ["claude-skills"], admin: false });
+  const env = await envWith([
+    await signedDoc(GATE_POLICY_PATH, GATES),
+    await signedDoc(AUTO_MERGE_POLICY_PATH, AUTO_MERGE),
+  ]);
+  const scoped = await capsidStatus(env, undefined, {
+    namespaces: ["claude-skills"],
+    admin: false,
+  });
   assert.equal("agents" in scoped, false, "a scoped caller was handed the credential inventory");
   const admin = await capsidStatus(env);
   assert.ok("agents" in admin, "the admin lost the inventory");

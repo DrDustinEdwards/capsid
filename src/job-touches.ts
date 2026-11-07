@@ -9,14 +9,26 @@
 
 // The CHECK on job_touches.kind (migrations/0023, widened by 0031). test/job-touches-migration.test.ts
 // reads the CHECK from the schema every migration builds and compares it with this list both ways.
-export const TOUCH_KINDS = ["gate", "resume", "approval", "correction", "note", "release", "supersede", "admin_fail", "admin_complete", "review"] as const;
+export const TOUCH_KINDS = [
+  "gate",
+  "resume",
+  "approval",
+  "correction",
+  "note",
+  "release",
+  "supersede",
+  "admin_fail",
+  "admin_complete",
+  "review",
+] as const;
 type TouchKind = (typeof TOUCH_KINDS)[number];
 
 export const ACTOR_KINDS = ["human", "seat", "driver", "policy", "reviewer", "system"] as const;
 export type ActorKind = (typeof ACTOR_KINDS)[number];
 
 // The seat's minted credentials, by agent name (`seat`, and `site-seat` for dustinedwards,
-// scripts/roles.ts). A retired operator key (`opkey:`, on older rows) was the seat's too.
+// scripts/roles.ts). A retired operator key (`opkey:`) was the seat's too; it is left only on
+// older audit_log rows, and no job or touch carries one.
 const SEAT_AGENTS = new Set(["agent:seat", "agent:site-seat"]);
 // Credentials that act on a schedule rather than for a person: the watcher
 // (src/watcher.ts, WATCHER_ACTOR), the skills refresh (src/skills-refresh.ts) and the
@@ -48,7 +60,7 @@ export function actorKind(actor: string, context: ActorContext = {}): ActorKind 
   if (context.policy) return "policy";
   if (context.reviewer) return "reviewer";
   if (actor.startsWith("access:") || actor.startsWith("github:")) return "human";
-  if (actor.startsWith("opkey:") || SEAT_AGENTS.has(actor) || context.seat) return "seat";
+  if (SEAT_AGENTS.has(actor) || context.seat) return "seat";
   if (actor === "agent:reviewer") return "reviewer";
   if (SYSTEM_ACTORS.has(actor)) return "system";
   // `<ns>-driver`. Any other minted agent that holds a job is working it, so it is a
@@ -85,7 +97,7 @@ export function touchStatement(db: D1Database, touch: Touch): D1PreparedStatemen
        VALUES (?1, ?2, ?3, ?4, ?5,
          CASE WHEN ?8 = 1 THEN (SELECT CAST(ROUND((julianday(?7) - julianday(g.at)) * 86400000.0) AS INTEGER)
            FROM job_touches g WHERE g.job_id = ?1 AND g.kind = 'gate' ORDER BY g.id DESC LIMIT 1) END,
-         ?6, ?7)`
+         ?6, ?7)`,
     )
     .bind(
       touch.job_id,
@@ -95,6 +107,6 @@ export function touchStatement(db: D1Database, touch: Touch): D1PreparedStatemen
       touch.actor_kind,
       touch.detail ? JSON.stringify(touch.detail) : null,
       touch.at,
-      touch.sinceGate ? 1 : 0
+      touch.sinceGate ? 1 : 0,
     );
 }

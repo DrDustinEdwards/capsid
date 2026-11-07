@@ -43,17 +43,25 @@ function sqlTime(d: Date): string {
 }
 
 /** The threshold, 1 to 50; the default when unset. An unreadable key uses the default and says so. */
-async function readBreakerThreshold(kv: KVNamespace): Promise<{ threshold: number; note?: string }> {
+async function readBreakerThreshold(
+  kv: KVNamespace,
+): Promise<{ threshold: number; note?: string }> {
   let raw: string | null;
   try {
     raw = await kv.get(BREAKER_THRESHOLD_KEY);
   } catch (err) {
-    return { threshold: BREAKER_THRESHOLD_DEFAULT, note: `could not read ${BREAKER_THRESHOLD_KEY}: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      threshold: BREAKER_THRESHOLD_DEFAULT,
+      note: `could not read ${BREAKER_THRESHOLD_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   if (raw === null) return { threshold: BREAKER_THRESHOLD_DEFAULT };
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1 || n > 50) {
-    return { threshold: BREAKER_THRESHOLD_DEFAULT, note: `${BREAKER_THRESHOLD_KEY} holds ${JSON.stringify(raw)}, not a whole number from 1 to 50` };
+    return {
+      threshold: BREAKER_THRESHOLD_DEFAULT,
+      note: `${BREAKER_THRESHOLD_KEY} holds ${JSON.stringify(raw)}, not a whole number from 1 to 50`,
+    };
   }
   return { threshold: n };
 }
@@ -67,19 +75,22 @@ export async function breakerState(env: Env, namespace: string, now: Date): Prom
     resetAt = await env.APP_KV.get(breakerResetKey(namespace));
   } catch (err) {
     // No reset read means every failure in the window counts: the stricter reading.
-    notes.push(`could not read the reset for ${namespace}: ${err instanceof Error ? err.message : String(err)}`);
+    notes.push(
+      `could not read the reset for ${namespace}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
   const windowStart = new Date(now.getTime() - BREAKER_WINDOW_MS);
   const reset = resetAt ? new Date(resetAt) : null;
   const from = reset && !Number.isNaN(reset.getTime()) && reset > windowStart ? reset : windowStart;
-  if (resetAt && (!reset || Number.isNaN(reset.getTime()))) notes.push(`the reset for ${namespace} holds ${JSON.stringify(resetAt)}, not a time; ignored`);
+  if (resetAt && (!reset || Number.isNaN(reset.getTime())))
+    notes.push(`the reset for ${namespace} holds ${JSON.stringify(resetAt)}, not a time; ignored`);
   const since = sqlTime(from);
   // A transition writes two audit rows with this action, one for the job and one for
   // its mirror document, both on the job's path; counting paths counts each job once.
   // A fail exempted when it was written leaves out both of its rows (src/fail-exemption.ts).
   const row = await env.DB.prepare(
     `SELECT COUNT(DISTINCT path) AS n FROM audit_log WHERE action = 'job-fail' AND namespace = ?1 AND at >= ?2 AND actor NOT LIKE 'agent:bench-run-%'
-     AND path NOT IN (SELECT path FROM audit_log WHERE action = 'job-fail' AND namespace = ?1 AND at >= ?2 AND json_extract(params, '$.breaker_exempt') IS NOT NULL)`
+     AND path NOT IN (SELECT path FROM audit_log WHERE action = 'job-fail' AND namespace = ?1 AND at >= ?2 AND json_extract(params, '$.breaker_exempt') IS NOT NULL)`,
   )
     .bind(namespace, since)
     .first<{ n: number }>();
@@ -100,12 +111,12 @@ export function breakerRefusal(state: BreakerState): string {
   return (
     `the circuit breaker for ${state.namespace} is open: ${state.failed} jobs failed by their holders since ${state.since} UTC, ` +
     `at or over the threshold of ${state.threshold}. Nothing in ${state.namespace} is handed out until the seat or Dustin resets it ` +
-    `(capsid_admin_control_improve action breaker_reset, or Reset in the Portal, under Paused after repeated failures on Needs you).`
+    `(capsid_admin_manage_switches action breaker_reset, or Reset in the Portal, under Paused after repeated failures on Needs you).`
   );
 }
 
 /**
- * The seat's or Dustin's control (capsid_admin_control_improve action breaker_reset, admin only, and the
+ * The seat's or Dustin's control (capsid_admin_manage_switches action breaker_reset, admin only, and the
  * Portal's reset_breaker): close one namespace's breaker, so failures before now stop
  * counting, and optionally set the threshold, which applies to every namespace. Audited
  * under the caller, and read back.
@@ -114,15 +125,21 @@ export async function resetBreaker(
   env: Env,
   actor: string,
   now: Date,
-  args: { namespace: string; threshold?: number }
-): Promise<{ ok: true; action: "breaker_reset"; state: BreakerState } | { ok: false; error: string }> {
-  if (args.threshold !== undefined && (!Number.isInteger(args.threshold) || args.threshold < 1 || args.threshold > 50)) {
+  args: { namespace: string; threshold?: number },
+): Promise<
+  { ok: true; action: "breaker_reset"; state: BreakerState } | { ok: false; error: string }
+> {
+  if (
+    args.threshold !== undefined &&
+    (!Number.isInteger(args.threshold) || args.threshold < 1 || args.threshold > 50)
+  ) {
     return { ok: false, error: "threshold must be a whole number from 1 to 50." };
   }
   const before = await breakerState(env, args.namespace, now);
   const stamp = now.toISOString();
   await env.APP_KV.put(breakerResetKey(args.namespace), stamp);
-  if (args.threshold !== undefined) await env.APP_KV.put(BREAKER_THRESHOLD_KEY, String(args.threshold));
+  if (args.threshold !== undefined)
+    await env.APP_KV.put(BREAKER_THRESHOLD_KEY, String(args.threshold));
   await auditStatement(env.DB, actor, "job-breaker-reset", args.namespace, null, {
     reset_at: stamp,
     was_open: before.open,

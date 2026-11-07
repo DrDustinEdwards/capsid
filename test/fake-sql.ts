@@ -19,7 +19,9 @@ export interface EvalContext {
 }
 
 const unmodelled = (what: string, text: string): Error =>
-  new Error(`fake D1: unmodelled ${what} '${text}'. Model it in test/fake-sql.ts rather than ignoring it.`);
+  new Error(
+    `fake D1: unmodelled ${what} '${text}'. Model it in test/fake-sql.ts rather than ignoring it.`,
+  );
 
 // SQLite's datetime('now') text form, from the real clock, so an age predicate such as
 // `seen_at < datetime('now', '-1 day')` compares against the same instant the database would.
@@ -30,7 +32,9 @@ export function sqliteNow(offsetMs = 0): string {
 function modifierMs(modifier: string): number {
   const m = /^([+-]?\d+(?:\.\d+)?) (day|hour|minute|second)s?$/i.exec(modifier.trim());
   if (!m) throw unmodelled("datetime modifier", modifier);
-  const unit = { day: 86_400_000, hour: 3_600_000, minute: 60_000, second: 1000 }[m[2].toLowerCase() as "day"];
+  const unit = { day: 86_400_000, hour: 3_600_000, minute: 60_000, second: 1000 }[
+    m[2].toLowerCase() as "day"
+  ];
   return Number(m[1]) * unit;
 }
 
@@ -97,7 +101,9 @@ export function evalExpr(expr: string, ctx: EvalContext): unknown {
   const sum = splitTop(t, " + ");
   if (sum.length > 1) {
     const terms = sum.map((p) => evalExpr(p, ctx));
-    return terms.some((p) => p === null || p === undefined) ? null : terms.reduce<number>((n, p) => n + Number(p), 0);
+    return terms.some((p) => p === null || p === undefined)
+      ? null
+      : terms.reduce<number>((n, p) => n + Number(p), 0);
   }
   const marker = /^\?(\d+)$/.exec(t);
   if (marker) return ctx.params[Number(marker[1]) - 1] ?? null;
@@ -154,7 +160,10 @@ function compare(a: unknown, b: unknown): number {
 }
 
 function likeToRegExp(pattern: string): RegExp {
-  const body = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".");
+  const body = pattern
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/%/g, ".*")
+    .replace(/_/g, ".");
   return new RegExp(`^${body}$`, "is");
 }
 
@@ -259,7 +268,10 @@ export function applySet(clause: string, ctx: EvalContext & { row: Row }): Row {
   for (const assignment of splitTop(clause, ",")) {
     const eq = assignment.indexOf("=");
     if (eq < 0) throw unmodelled("assignment", assignment);
-    const target = assignment.slice(0, eq).trim().replace(/^\w+\./, "");
+    const target = assignment
+      .slice(0, eq)
+      .trim()
+      .replace(/^\w+\./, "");
     patch[target] = evalExpr(assignment.slice(eq + 1), ctx);
   }
   return patch;
@@ -278,9 +290,19 @@ interface SelectParts {
 
 export function parseSelect(sql: string): SelectParts | null {
   const flat = sql.replace(/\s+/g, " ").trim();
-  const m = /^SELECT (.+?) FROM (\w+)(?: WHERE (.+?))?(?: GROUP BY (.+?))?(?: ORDER BY (.+?))?(?: LIMIT (\S+))?$/i.exec(flat);
+  const m =
+    /^SELECT (.+?) FROM (\w+)(?: WHERE (.+?))?(?: GROUP BY (.+?))?(?: ORDER BY (.+?))?(?: LIMIT (\S+))?$/i.exec(
+      flat,
+    );
   if (!m) return null;
-  return { list: m[1], table: m[2], where: m[3] ?? null, groupBy: m[4] ?? null, orderBy: m[5] ?? null, limit: m[6] ?? null };
+  return {
+    list: m[1],
+    table: m[2],
+    where: m[3] ?? null,
+    groupBy: m[4] ?? null,
+    orderBy: m[5] ?? null,
+    limit: m[6] ?? null,
+  };
 }
 
 const AGGREGATE = /\b(COUNT|SUM)\(/i;
@@ -296,7 +318,9 @@ function aggregateItem(expr: string, group: Row[], ctx: EvalContext): unknown {
   const coalesce = /^COALESCE\((.+)\)$/i.exec(t);
   if (coalesce) {
     for (const arg of splitTop(coalesce[1], ",")) {
-      const v = AGGREGATE.test(arg) ? aggregateItem(arg, group, ctx) : evalExpr(arg, { ...ctx, row: group[0] });
+      const v = AGGREGATE.test(arg)
+        ? aggregateItem(arg, group, ctx)
+        : evalExpr(arg, { ...ctx, row: group[0] });
       if (v !== null && v !== undefined) return v;
     }
     return null;
@@ -316,7 +340,8 @@ function itemName(item: string): { expr: string; name: string } {
 export function selectRows(table: Row[], sql: string, params: unknown[]): Row[] {
   const parts = parseSelect(sql);
   if (!parts) throw unmodelled("SELECT", sql.replace(/\s+/g, " ").trim());
-  if (/\bSELECT\b/i.test(parts.where ?? "") || /\bSELECT\b/i.test(parts.list)) throw unmodelled("subquery", sql);
+  if (/\bSELECT\b/i.test(parts.where ?? "") || /\bSELECT\b/i.test(parts.list))
+    throw unmodelled("subquery", sql);
   const ctx: EvalContext = { params };
   let rows = table.filter((row) => (parts.where ? evalCond(parts.where, { ...ctx, row }) : true));
   const items = parts.list.trim() === "*" ? null : splitTop(parts.list, ",").map(itemName);
@@ -333,7 +358,7 @@ export function selectRows(table: Row[], sql: string, params: unknown[]): Row[] 
     // An aggregate with no GROUP BY answers one row even over no rows, as SQL does.
     if (!keys.length && !groups.size) groups.set("[]", []);
     out = [...groups.values()].map((group) =>
-      Object.fromEntries(items.map((i) => [i.name, aggregateItem(i.expr, group, ctx)]))
+      Object.fromEntries(items.map((i) => [i.name, aggregateItem(i.expr, group, ctx)])),
     );
     rows = out;
   }
@@ -354,7 +379,9 @@ export function selectRows(table: Row[], sql: string, params: unknown[]): Row[] 
   }
   if (parts.limit) rows = rows.slice(0, Number(evalExpr(parts.limit, ctx)));
   if (aggregated || !items) return rows.map((r) => ({ ...r }));
-  return rows.map((row) => Object.fromEntries(items.map((i) => [i.name, evalExpr(i.expr, { ...ctx, row })])));
+  return rows.map((row) =>
+    Object.fromEntries(items.map((i) => [i.name, evalExpr(i.expr, { ...ctx, row })])),
+  );
 }
 
 // writes
@@ -384,11 +411,15 @@ function returningOf(clause: string | undefined, row: Row, params: unknown[]): R
 // INSERT ... VALUES [ON CONFLICT ...], UPDATE ... WHERE and DELETE ... WHERE against one
 // table. Returns null for a statement of another shape (INSERT ... SELECT), which the
 // caller models by name or refuses.
-export function applyWrite(tables: Record<string, TableSpec>, sql: string, params: unknown[]): WriteResult | null {
+export function applyWrite(
+  tables: Record<string, TableSpec>,
+  sql: string,
+  params: unknown[],
+): WriteResult | null {
   const flat = sql.replace(/\s+/g, " ").trim();
   const insert =
     /^INSERT (OR IGNORE )?INTO (\w+) \(([^)]+)\) VALUES \((.+?)\)(?: ON CONFLICT ?\(([^)]+)\) DO (NOTHING|UPDATE SET (.+?)))?(?: RETURNING (.+))?$/i.exec(
-      flat
+      flat,
     );
   if (insert) {
     const [, orIgnore, name, colList, valueList, , action, setClause, returning] = insert;
@@ -396,11 +427,18 @@ export function applyWrite(tables: Record<string, TableSpec>, sql: string, param
     if (!spec) throw unmodelled("table", name);
     const cols = splitTop(colList, ",");
     const values = splitTop(valueList, ",");
-    if (cols.length !== values.length) throw new Error(`fake D1: ${cols.length} columns against ${values.length} values in: ${flat}`);
-    const row: Row = { ...(spec.defaults?.() ?? {}) };
+    if (cols.length !== values.length)
+      throw new Error(
+        `fake D1: ${cols.length} columns against ${values.length} values in: ${flat}`,
+      );
+    const row: Row = { ...spec.defaults?.() };
     cols.forEach((c, i) => (row[c] = evalExpr(values[i], { params })));
     const clash = spec.rows.find((existing) =>
-      spec.unique.some((key) => key.every((k) => existing[k] !== null && existing[k] !== undefined && existing[k] === row[k]))
+      spec.unique.some((key) =>
+        key.every(
+          (k) => existing[k] !== null && existing[k] !== undefined && existing[k] === row[k],
+        ),
+      ),
     );
     if (clash) {
       if (orIgnore || /^NOTHING$/i.test(action ?? "")) return { changes: 0, returning: [] };
@@ -424,7 +462,10 @@ export function applyWrite(tables: Record<string, TableSpec>, sql: string, param
     const hits = spec.rows.filter((row) => evalCond(where, { params, row }));
     const patches = hits.map((row) => applySet(setClause, { params, row }));
     hits.forEach((row, i) => Object.assign(row, patches[i]));
-    return { changes: hits.length, returning: hits.flatMap((row) => returningOf(returning, row, params)) };
+    return {
+      changes: hits.length,
+      returning: hits.flatMap((row) => returningOf(returning, row, params)),
+    };
   }
   const del = /^DELETE FROM (\w+) WHERE (.+)$/i.exec(flat);
   if (del) {

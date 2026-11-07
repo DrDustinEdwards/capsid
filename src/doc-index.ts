@@ -137,9 +137,15 @@ async function routeThroughGateway(env: Env, instance: AiSearchInstance): Promis
   try {
     await instance.update({ ai_gateway_id: id });
     await env.APP_KV.put(GATEWAY_KEY, id);
-    logEvent("DOC_INDEX_GATEWAY_SET", { message: `DOC_INDEX_GATEWAY_SET ${INDEX_INSTANCE} through gateway ${id}` });
+    logEvent("DOC_INDEX_GATEWAY_SET", {
+      message: `DOC_INDEX_GATEWAY_SET ${INDEX_INSTANCE} through gateway ${id}`,
+    });
   } catch (err) {
-    logEvent("DOC_INDEX_GATEWAY_FAILED", { message: `DOC_INDEX_GATEWAY_FAILED ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "DOC_INDEX_GATEWAY_FAILED",
+      { message: `DOC_INDEX_GATEWAY_FAILED ${err instanceof Error ? err.message : String(err)}` },
+      { level: "error" },
+    );
   }
 }
 
@@ -157,7 +163,7 @@ async function changedSince(db: D1Database, cursor: Cursor, limit: number): Prom
     .prepare(
       `SELECT id, namespace, path, title, body, type, status, updated_at FROM documents
        WHERE (updated_at, id) > (?1, ?2)
-       ORDER BY updated_at, id LIMIT ?3`
+       ORDER BY updated_at, id LIMIT ?3`,
     )
     .bind(cursor.updated_at, cursor.id, limit)
     .all<IndexRow>();
@@ -169,11 +175,17 @@ async function changedSince(db: D1Database, cursor: Cursor, limit: number): Prom
 // Returns null when sent, or the refusal's message.
 async function upload(instance: AiSearchInstance, row: IndexRow): Promise<string | null> {
   try {
-    await instance.items.upload(indexKey(row.namespace, row.path), indexContent(row), { metadata: indexMetadata(row) });
+    await instance.items.upload(indexKey(row.namespace, row.path), indexContent(row), {
+      metadata: indexMetadata(row),
+    });
     return null;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("DOC_INDEX_UPLOAD_FAILED", { message: `DOC_INDEX_UPLOAD_FAILED ${row.namespace}/${row.path}: ${message}` }, { level: "error" });
+    logEvent(
+      "DOC_INDEX_UPLOAD_FAILED",
+      { message: `DOC_INDEX_UPLOAD_FAILED ${row.namespace}/${row.path}: ${message}` },
+      { level: "error" },
+    );
     return message;
   }
 }
@@ -183,7 +195,10 @@ async function upload(instance: AiSearchInstance, row: IndexRow): Promise<string
  *  logged and counted, and the run is recorded as refused so it shows on Health. When
  *  every row is refused the fault is the index's, not a document's, so the cursor stays
  *  and the same rows are tried next tick. */
-async function sendChanged(env: Env, instance: AiSearchInstance): Promise<{ tried: number; sent: number; failed: number; refusal: string | null }> {
+async function sendChanged(
+  env: Env,
+  instance: AiSearchInstance,
+): Promise<{ tried: number; sent: number; failed: number; refusal: string | null }> {
   const rows = await changedSince(env.DB, await readCursor(env), INDEX_BATCH);
   let sent = 0;
   let failed = 0;
@@ -197,15 +212,23 @@ async function sendChanged(env: Env, instance: AiSearchInstance): Promise<{ trie
     }
   }
   const last = rows.at(-1);
-  if (last && sent > 0) await env.APP_KV.put(CURSOR_KEY, JSON.stringify({ updated_at: last.updated_at, id: last.id }));
+  if (last && sent > 0)
+    await env.APP_KV.put(CURSOR_KEY, JSON.stringify({ updated_at: last.updated_at, id: last.id }));
   return { tried: rows.length, sent, failed, refusal };
 }
 
 /** Once a UTC day: remove index items whose document is gone or has moved, and
  *  re-send documents the index lacks (an upload that failed). Each side is bounded;
  *  the rest go on the next day's pass. */
-async function reconcile(env: Env, instance: AiSearchInstance): Promise<{ deleted: number; resent: number; failed: number }> {
-  const { results } = await env.DB.prepare("SELECT id, namespace, path FROM documents").all<{ id: number; namespace: string; path: string }>();
+async function reconcile(
+  env: Env,
+  instance: AiSearchInstance,
+): Promise<{ deleted: number; resent: number; failed: number }> {
+  const { results } = await env.DB.prepare("SELECT id, namespace, path FROM documents").all<{
+    id: number;
+    namespace: string;
+    path: string;
+  }>();
   const live = new Map(results.map((r) => [r.id, indexKey(r.namespace, r.path)]));
   const present = new Set<string>();
   const stale: string[] = [];
@@ -222,11 +245,18 @@ async function reconcile(env: Env, instance: AiSearchInstance): Promise<{ delete
     await instance.items.delete(id);
     deleted++;
   }
-  const missing = [...live].filter(([, key]) => !present.has(key)).map(([id]) => id).slice(0, INDEX_BATCH);
+  const missing = [...live]
+    .filter(([, key]) => !present.has(key))
+    .map(([id]) => id)
+    .slice(0, INDEX_BATCH);
   let resent = 0;
   let failed = 0;
   for (const id of missing) {
-    const row = await env.DB.prepare(`SELECT id, namespace, path, title, body, type, status, updated_at FROM documents WHERE id = ?1`).bind(id).first<IndexRow>();
+    const row = await env.DB.prepare(
+      `SELECT id, namespace, path, title, body, type, status, updated_at FROM documents WHERE id = ?1`,
+    )
+      .bind(id)
+      .first<IndexRow>();
     if (!row) continue;
     if ((await upload(instance, row)) === null) resent++;
     else failed++;
@@ -246,12 +276,17 @@ export async function docIndexTick(env: Env, now: Date): Promise<IndexReport> {
   let refused = 0;
   // Not until the backfill is done (before then every document is "missing"), and not
   // while the index refuses everything.
-  if (tried < INDEX_BATCH && (sent > 0 || failed === 0) && (await env.APP_KV.get(RECONCILED_KEY)) !== today) {
+  if (
+    tried < INDEX_BATCH &&
+    (sent > 0 || failed === 0) &&
+    (await env.APP_KV.get(RECONCILED_KEY)) !== today
+  ) {
     ({ deleted, resent, failed: refused } = await reconcile(env, instance));
     await env.APP_KV.put(RECONCILED_KEY, today);
   }
   const allFailed = failed + refused;
-  if (sent === 0 && allFailed === 0 && deleted === 0 && resent === 0) return idle("nothing changed");
+  if (sent === 0 && allFailed === 0 && deleted === 0 && resent === 0)
+    return idle("nothing changed");
   return {
     ran: true,
     note: `sent ${sent}, failed ${failed}${refusal ? ` (first refusal: ${refusal})` : ""}; reconcile removed ${deleted} stale item(s), re-sent ${resent}, failed ${refused}`,
@@ -280,8 +315,15 @@ const RETIRED = ["closed", "superseded"];
 const countKey = (now: Date) => `doc-index:queries:${now.toISOString().slice(0, 7)}`;
 
 /** This month's hybrid queries, for /health (design 3.5). */
-export async function aiSearchUsage(env: Env, now: Date = new Date()): Promise<{ month: string; hybrid: number; cap: number }> {
-  return { month: now.toISOString().slice(0, 7), hybrid: Number((await env.APP_KV.get(countKey(now))) ?? 0), cap: HYBRID_MONTHLY_CAP };
+export async function aiSearchUsage(
+  env: Env,
+  now: Date = new Date(),
+): Promise<{ month: string; hybrid: number; cap: number }> {
+  return {
+    month: now.toISOString().slice(0, 7),
+    hybrid: Number((await env.APP_KV.get(countKey(now))) ?? 0),
+    cap: HYBRID_MONTHLY_CAP,
+  };
 }
 
 type Match = "keyword" | "meaning" | "both";
@@ -300,14 +342,15 @@ export async function hybridSearch(
   env: Env,
   query: string,
   filter: SearchFilter & { includeRetired?: boolean },
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<HybridRow[] | string> {
   const ns = env.AI_SEARCH;
   if (!ns) return "AI_SEARCH is not bound";
   if ((await env.APP_KV.get(READY_KEY)) !== "ready") return "the search index is not built yet";
   const key = countKey(now);
   const used = Number((await env.APP_KV.get(key)) ?? 0);
-  if (used >= HYBRID_MONTHLY_CAP) return `this month's ${HYBRID_MONTHLY_CAP} hybrid queries are used`;
+  if (used >= HYBRID_MONTHLY_CAP)
+    return `this month's ${HYBRID_MONTHLY_CAP} hybrid queries are used`;
   await env.APP_KV.put(key, String(used + 1), { expirationTtl: 40 * 86_400 });
 
   const filters: Record<string, { $eq: string } | { $nin: string[] }> = {};
@@ -319,7 +362,10 @@ export async function hybridSearch(
   // a deadline (C2, C13).
   let timer: number | null = null;
   const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`no answer within ${SEARCH_TIMEOUT_MS} ms`)), SEARCH_TIMEOUT_MS) as unknown as number;
+    timer = setTimeout(
+      () => reject(new Error(`no answer within ${SEARCH_TIMEOUT_MS} ms`)),
+      SEARCH_TIMEOUT_MS,
+    ) as unknown as number;
   });
   try {
     const search = ns.get(INDEX_INSTANCE).search({
@@ -344,7 +390,11 @@ export async function hybridSearch(
     // The upstream error goes to the log only; the caller is told what happened, never
     // the raw text of another service's answer (area 11, C12).
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("DOC_INDEX_SEARCH_FAILED", { message: `DOC_INDEX_SEARCH_FAILED ${message}` }, { level: "warn" });
+    logEvent(
+      "DOC_INDEX_SEARCH_FAILED",
+      { message: `DOC_INDEX_SEARCH_FAILED ${message}` },
+      { level: "warn" },
+    );
     return "the search index did not answer";
   } finally {
     clearTimeout(timer);
@@ -358,7 +408,11 @@ export async function hybridSearch(
     if (!Number.isInteger(id)) continue;
     const seen = ranked.get(id);
     if (seen) seen.match = joinMatch(seen.match, matchOf(chunk));
-    else ranked.set(id, { snippet: chunk.text.replace(/\s+/g, " ").trim().slice(0, SNIPPET_CHARS), match: matchOf(chunk) });
+    else
+      ranked.set(id, {
+        snippet: chunk.text.replace(/\s+/g, " ").trim().slice(0, SNIPPET_CHARS),
+        match: matchOf(chunk),
+      });
   }
   if (ranked.size === 0) return [];
   const { results } = await env.DB.prepare(
@@ -367,9 +421,16 @@ export async function hybridSearch(
        AND (?2 IS NULL OR namespace = ?2)
        AND (?3 IS NULL OR type = ?3)
        AND (?4 IS NULL OR path IN (SELECT value FROM json_each(?4)))
-       AND (?5 = 1 OR status IS NULL OR status NOT IN (SELECT value FROM json_each(?6)))`
+       AND (?5 = 1 OR status IS NULL OR status NOT IN (SELECT value FROM json_each(?6)))`,
   )
-    .bind(JSON.stringify([...ranked.keys()]), filter.namespace, filter.type, filter.allowed, filter.includeRetired ? 1 : 0, JSON.stringify(RETIRED))
+    .bind(
+      JSON.stringify([...ranked.keys()]),
+      filter.namespace,
+      filter.type,
+      filter.allowed,
+      filter.includeRetired ? 1 : 0,
+      JSON.stringify(RETIRED),
+    )
     .all<Omit<SearchRow, "snippet">>();
   const byId = new Map(results.map((r) => [r.id, r]));
   const rows: HybridRow[] = [];

@@ -9,12 +9,15 @@ test.use({ javaScriptEnabled: false });
 
 for (const [path, charts] of [
   ["demos/", 2],
-  ["demos/health?tab=deploys", 1],
+  ["demos/sites?tab=deploys", 1],
+  ["demos/sites/sample", 2],
   ["demos/queue", 3],
   ["demos/agents", 1],
   ["demos/packages", 1],
 ] as const) {
-  test(`PLANT: with scripts off, ${path} has its ${charts} charts, each drawn with its table`, async ({ page }) => {
+  test(`PLANT: with scripts off, ${path} has its ${charts} charts, each drawn with its table`, async ({
+    page,
+  }) => {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     const frames = page.locator(".cap-chart");

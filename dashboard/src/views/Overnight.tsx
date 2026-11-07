@@ -20,7 +20,6 @@ import { St } from "../ui/icons";
 // strip Needs you takes from this file.
 const TonightTimeline = trendChart("TonightTimeline");
 
-
 function Failed({ what, error }: { what: string; error: string | null }) {
   return error ? (
     <div className="callout crit" role="alert">
@@ -49,11 +48,20 @@ export function Tonight() {
       id="tonight"
       section="Tonight"
       count={plan ? planned : undefined}
-      src={plan ? `planned ${ago(ms(plan.generated), now)} · ${plan.budget_minutes} min budget` : "jobs list view plan"}
+      src={
+        plan
+          ? `planned ${ago(ms(plan.generated), now)} · ${plan.budget_minutes} min budget`
+          : "jobs list view plan"
+      }
     >
       <Failed what="the plan" error={load.error} />
       {plan && plan.policy !== "document" && (
-        <div className="callout warn">{plan.policy_note ?? (plan.policy === "default" ? "No overnight policy document: every repo counts as heavy." : "The overnight policy document did not parse.")}</div>
+        <div className="callout warn">
+          {plan.policy_note ??
+            (plan.policy === "default"
+              ? "No overnight policy document: every repo counts as heavy."
+              : "The overnight policy document did not parse.")}
+        </div>
       )}
       {!plan && load.loading ? (
         <div className="loading" role="status">
@@ -75,7 +83,14 @@ export function Tonight() {
                 </span>
               </h3>
               {lane.jobs.map((j) => (
-                <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0}>
+                <div
+                  className="qrow"
+                  key={j.id}
+                  data-row=""
+                  data-open={`job:${j.id}`}
+                  role="button"
+                  tabIndex={0}
+                >
                   {j.gated ? <St kind="blocked">Gated</St> : <St kind="queued">Planned</St>}
                   <div className="t">
                     <b>{j.title}</b>
@@ -99,7 +114,14 @@ export function Tonight() {
                 Skipped <span className="num faint">{plan.skipped.length}</span>
               </h3>
               {plan.skipped.map((j) => (
-                <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0}>
+                <div
+                  className="qrow"
+                  key={j.id}
+                  data-row=""
+                  data-open={`job:${j.id}`}
+                  role="button"
+                  tabIndex={0}
+                >
                   <St kind="nodata">Skipped</St>
                   <div className="t">
                     <b>{j.title}</b>
@@ -112,7 +134,11 @@ export function Tonight() {
               ))}
             </div>
           )}
-          {plan.truncated && <div className="body faint">More jobs are queued than the plan reads; the rest wait for another night.</div>}
+          {plan.truncated && (
+            <div className="body faint">
+              More jobs are queued than the plan reads; the rest wait for another night.
+            </div>
+          )}
         </>
       ) : plan ? (
         <Empty kind="all-clear" title="Nothing is queued for tonight." />
@@ -145,12 +171,17 @@ export function SinceLastLooked() {
     const at = saved ? Date.parse(saved) : NaN;
     if (!Number.isNaN(at)) setSince(new Date(at).toISOString());
     writePref(LAST_LOOKED_PREF, new Date(now).toISOString());
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- once after hydration: the last look is in localStorage, which the server cannot read, and a later `now` must not rewrite it
   }, []);
   const load = useAnswer<PortalDigest>([LIVE, "digest", since], () => fetchDigest(since));
   const d = load.data;
   const merged = d?.pull_requests_merged ?? 0;
   return (
-    <Panel title="Since you last looked" id="since" src={`since ${ago(ms(since), now)} · jobs list view digest`}>
+    <Panel
+      title="Since you last looked"
+      id="since"
+      src={`since ${ago(ms(since), now)} · jobs list view digest`}
+    >
       <Failed what="the digest" error={load.error} />
       {!d && load.loading ? (
         <div className="loading" role="status">
@@ -159,37 +190,49 @@ export function SinceLastLooked() {
       ) : d ? (
         <div className="digest">
           <p className="digest-line" data-digest="">
-            <b className="num">{d.finished.length}</b> finished · <b className="num">{merged}</b> merged · <b className="num">{d.pull_requests_ready.length}</b> ready for you ·{" "}
+            <b className="num">{d.finished.length}</b> finished · <b className="num">{merged}</b>{" "}
+            merged · <b className="num">{d.pull_requests_ready.length}</b> ready for you ·{" "}
             <b className="num">{d.blocked.length}</b> blocked
           </p>
           {(d.pull_requests_ready.length > 0 || d.blocked.length > 0) && (
             // One line first (UX audit, the proposed Needs you); the lists behind it.
             <details className="digest-more">
               <summary>Show them</summary>
-          {d.pull_requests_ready.length > 0 && (
-            <ul className="digest-list">
-              {d.pull_requests_ready.map((p) => (
-                <li key={p.url}>
-                  <a href={p.url} target="_blank" rel="noreferrer noopener">
-                    {p.url.replace("https://github.com/", "")}
-                  </a>{" "}
-                  <span className="faint">{p.state === "unchecked" ? "not checked yet" : p.state}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {d.blocked.length > 0 && (
-            <ul className="digest-list">
-              {d.blocked.map((b) => (
-                <li key={b.id} data-row="" data-open={`job:${b.id}`} tabIndex={0} className="click">
-                  <b>{b.title}</b> <span className="faint">blocked {ago(ms(b.at), now)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+              {d.pull_requests_ready.length > 0 && (
+                <ul className="digest-list">
+                  {d.pull_requests_ready.map((p) => (
+                    <li key={p.url}>
+                      <a href={p.url} target="_blank" rel="noreferrer noopener">
+                        {p.url.replace("https://github.com/", "")}
+                      </a>{" "}
+                      <span className="faint">
+                        {p.state === "unchecked" ? "not checked yet" : p.state}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {d.blocked.length > 0 && (
+                <ul className="digest-list">
+                  {d.blocked.map((b) => (
+                    <li
+                      key={b.id}
+                      data-row=""
+                      data-open={`job:${b.id}`}
+                      role="button"
+                      tabIndex={0}
+                      className="click"
+                    >
+                      <b>{b.title}</b> <span className="faint">blocked {ago(ms(b.at), now)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </details>
           )}
-          {d.truncated.length > 0 && <p className="faint small">Cut short: {d.truncated.join("; ")}.</p>}
+          {d.truncated.length > 0 && (
+            <p className="faint small">Cut short: {d.truncated.join("; ")}.</p>
+          )}
         </div>
       ) : (
         <div className="faint">No read yet.</div>

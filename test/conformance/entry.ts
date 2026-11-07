@@ -18,6 +18,8 @@ export { ToolCallLog } from "@dustinedwards/site-runtime/audit-log";
 
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, grantAgent("read", "conformance")));
+    return serveMcp(request, env, ctx, "/mcp", () =>
+      buildServer(env, grantAgent("read", "conformance")),
+    );
   },
 } satisfies ExportedHandler<Env>;

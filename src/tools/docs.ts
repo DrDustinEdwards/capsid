@@ -3,9 +3,21 @@ import type { Env } from "../env";
 import type { Agent } from "../agents";
 import { type ScopeNeed } from "../scope";
 import type { Operations } from "./operations";
-import { defineListOperation, defineReadOperation, defineBriefOperation, defineHistoryOperation, defineBacklinksOperation, defineFindOperation, defineSearchOperation } from "./docs-read";
+import {
+  defineListOperation,
+  defineReadOperation,
+  defineBriefOperation,
+  defineHistoryOperation,
+  defineBacklinksOperation,
+  defineFindOperation,
+  defineSearchOperation,
+} from "./docs-read";
 import { defineWriteOperation } from "./docs-write";
-import { defineDeleteOperation, defineMoveOperation, defineRestoreOperation } from "./docs-lifecycle";
+import {
+  defineDeleteOperation,
+  defineMoveOperation,
+  defineRestoreOperation,
+} from "./docs-lifecycle";
 import { defineNamespaceOperations } from "./namespaces";
 
 export function ok(data: unknown) {
@@ -25,13 +37,13 @@ export function pathMutation(
   db: D1Database,
   namespace: string,
   path: string,
-  newPath: string | null
+  newPath: string | null,
 ): D1PreparedStatement[] {
   if (newPath === null) {
     return [
       db
         .prepare(
-          "DELETE FROM document_links WHERE (from_ns = ?1 AND from_path = ?2) OR (to_ns = ?1 AND to_path = ?2)"
+          "DELETE FROM document_links WHERE (from_ns = ?1 AND from_path = ?2) OR (to_ns = ?1 AND to_path = ?2)",
         )
         .bind(namespace, path),
       db.prepare("DELETE FROM documents WHERE namespace = ?1 AND path = ?2").bind(namespace, path),
@@ -39,7 +51,9 @@ export function pathMutation(
   }
   return [
     db
-      .prepare("UPDATE documents SET path = ?3, updated_at = datetime('now') WHERE namespace = ?1 AND path = ?2")
+      .prepare(
+        "UPDATE documents SET path = ?3, updated_at = datetime('now') WHERE namespace = ?1 AND path = ?2",
+      )
       .bind(namespace, path, newPath),
     db
       .prepare("UPDATE document_links SET from_path = ?3 WHERE from_ns = ?1 AND from_path = ?2")
@@ -53,10 +67,14 @@ export function pathMutation(
 // Edges touching a document, read before a mutation so the caller can record
 // them. document_versions snapshots only title and body, so for a delete this
 // is the only place the edges survive.
-export function edgesTouching(db: D1Database, namespace: string, path: string): D1PreparedStatement {
+export function edgesTouching(
+  db: D1Database,
+  namespace: string,
+  path: string,
+): D1PreparedStatement {
   return db
     .prepare(
-      "SELECT from_ns, from_path, type, to_ns, to_path FROM document_links WHERE (from_ns = ?1 AND from_path = ?2) OR (to_ns = ?1 AND to_path = ?2)"
+      "SELECT from_ns, from_path, type, to_ns, to_path FROM document_links WHERE (from_ns = ?1 AND from_path = ?2) OR (to_ns = ?1 AND to_path = ?2)",
     )
     .bind(namespace, path);
 }
@@ -82,7 +100,7 @@ async function confirmDestructive(server: McpServer, message: string): Promise<C
           required: ["confirm"],
         },
       },
-      { timeout: 90_000 }
+      { timeout: 90_000 },
     );
     return result.action === "accept" && result.content?.confirm === true ? "accepted" : "declined";
   } catch {
@@ -101,7 +119,7 @@ type ConfirmResult = { ok: true; elicited: boolean } | { ok: false; message: str
 export async function requireConfirmation(
   server: McpServer,
   confirm: boolean | undefined,
-  messages: { prompt: string; declined: string; unsupported: string }
+  messages: { prompt: string; declined: string; unsupported: string },
 ): Promise<ConfirmResult> {
   if (confirm === true) return { ok: true, elicited: false };
   const verdict = await confirmDestructive(server, messages.prompt);

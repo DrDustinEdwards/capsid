@@ -47,7 +47,9 @@ const violations = () => logged.filter((l) => l.includes('"event":"csp-violation
 describe("/csp-report logs a violation and stores nothing", () => {
   it("an ordinary report is 204, logged once with no query string, and nothing reaches R2", async () => {
     const before = await stored();
-    const resp = await postReport(report("a real violation would say more than this", `${ORIGIN}/probe?token=sample-secret`));
+    const resp = await postReport(
+      report("a real violation would say more than this", `${ORIGIN}/probe?token=sample-secret`),
+    );
     expect(resp.status).toBe(204);
     expect(await stored()).toBe(before);
     const lines = violations();
@@ -63,10 +65,14 @@ describe("/csp-report is rate limited before it reads anything", () => {
   it("a limited caller gets 204, and its report is neither logged nor stored", async () => {
     const ip = "203.0.113.77";
     // The sink's own key for this address (site-runtime's ipKey), spent to its hourly limit.
-    const spend = () => limit(rateLimiter(env), `csp-report:${ip}`, CSP_REPORT_RULES, { onUnavailable: "refuse" });
+    const spend = () =>
+      limit(rateLimiter(env), `csp-report:${ip}`, CSP_REPORT_RULES, { onUnavailable: "refuse" });
     let verdict = await spend();
-    for (let i = 0; i < CSP_REPORT_RULES[0].limit + 1 && verdict.status === "ok"; i++) verdict = await spend();
-    expect(verdict.status, "the limiter never refused, so this test proves nothing").toBe("limited");
+    for (let i = 0; i < CSP_REPORT_RULES[0].limit + 1 && verdict.status === "ok"; i++)
+      verdict = await spend();
+    expect(verdict.status, "the limiter never refused, so this test proves nothing").toBe(
+      "limited",
+    );
     const before = await stored();
 
     const valid = await postReport(report("a limited caller"), ip);
@@ -93,15 +99,25 @@ describe("a report the sink stored before 2026-10-20 is reaped by the backup cro
     // misses, so the probe document /health also reads is seeded first.
     await env.DB.prepare(
       `INSERT OR IGNORE INTO documents (namespace, path, title, body, type, status)
-       VALUES ('capsid', 'conventions.md', 'Portfolio-wide conventions', 'Standing rules that apply across all projects.', 'procedural', 'published')`
+       VALUES ('capsid', 'conventions.md', 'Portfolio-wide conventions', 'Standing rules that apply across all projects.', 'procedural', 'published')`,
     ).run();
 
     const ctx = createExecutionContext();
-    await worker.scheduled?.({ cron: BACKUP_CRON, scheduledTime: Date.now(), noRetry() {} } as unknown as ScheduledController, env, ctx);
+    worker.scheduled?.(
+      {
+        cron: BACKUP_CRON,
+        scheduledTime: Date.now(),
+        noRetry() {},
+      } as unknown as ScheduledController,
+      env,
+      ctx,
+    );
     await waitOnExecutionContext(ctx);
 
     const after = (await env.MEDIA.list({ prefix: REPORT_PREFIX })).objects.map((o) => o.key);
-    expect(after, "the prune did not reap an aged report the sink's prefix holds").not.toContain(aged);
+    expect(after, "the prune did not reap an aged report the sink's prefix holds").not.toContain(
+      aged,
+    );
     expect(after, "the prune reaped a fresh report").toContain(fresh);
   });
 });
@@ -111,11 +127,17 @@ describe("/csp-report answers the Portal's preflight", () => {
     const preflight = (origin: string) =>
       SELF.fetch(`${ORIGIN}/csp-report`, {
         method: "OPTIONS",
-        headers: { Origin: origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" },
+        headers: {
+          Origin: origin,
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "content-type",
+        },
       });
     const portal = await preflight("https://portal.dustinedwards.info");
     expect(portal.status).toBe(204);
-    expect(portal.headers.get("Access-Control-Allow-Origin")).toBe("https://portal.dustinedwards.info");
+    expect(portal.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://portal.dustinedwards.info",
+    );
     const other = await preflight("https://example.com");
     expect(other.status).toBe(204);
     expect(other.headers.get("Access-Control-Allow-Origin")).toBeNull();

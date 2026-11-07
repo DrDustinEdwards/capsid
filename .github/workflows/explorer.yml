@@ -22,13 +22,16 @@ on:
       - "test/resolve-ts.mjs"
       - "package-lock.json"
       - ".github/workflows/explorer.yml"
-  # The explorer's own files only. A schema change reaches it at the next daily build: the
-  # live documents keep their old shape until the public build runs again after midnight UTC,
-  # so a deploy on that merge would parse yesterday's documents with today's schemas.
+  # The explorer's own files and the dependencies it installs from the root lock (site-runtime,
+  # Prelum, Capsomer), so a dependency bump ships the same day. A schema change reaches it at the
+  # next daily build: the live documents keep their old shape until the public build runs again
+  # after midnight UTC, so a deploy on that merge would parse yesterday's documents with today's
+  # schemas.
   push:
     branches: [master, main]
     paths:
       - "explorer/**"
+      - "package-lock.json"
       - ".github/workflows/explorer.yml"
   # Hours after the public build, which runs on the first tick of each UTC day (src/public-data.ts).
   schedule:
@@ -154,7 +157,7 @@ jobs:
     concurrency:
       group: explorer-deploy
       cancel-in-progress: false
-    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@454002f526e5e8e645a9c110605880e220b611a0 # v0.21.0
+    uses: DrDustinEdwards/devkit/.github/workflows/worker-deploy.yml@562daa2dbfb23f2987f81caeac34f9e054b3d03b # v0.26.4
     with:
       worker-name: capsid
       health-url: https://capsid.dustinedwards.info/health

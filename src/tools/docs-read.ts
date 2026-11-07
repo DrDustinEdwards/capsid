@@ -1,13 +1,29 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { bounded, BRIEF_BUDGET, HISTORY_ROWS, MAX_DOC_STATUS, MAX_DOC_TYPE, MAX_GLOB, MAX_QUERY, MAX_ROWS, nsName, SEARCH_ROWS, docPath } from "../limits";
+import {
+  bounded,
+  BRIEF_BUDGET,
+  HISTORY_ROWS,
+  MAX_GLOB,
+  MAX_QUERY,
+  MAX_ROWS,
+  nsName,
+  SEARCH_ROWS,
+  docPath,
+} from "../limits";
 import { ok, fail, type ToolCtx } from "./docs";
 import { surfaceOf } from "./surface";
 import { isConventionsDoc, recordConventionsRead } from "../conventions-read";
-import { describePortfolioDocs, isPortfolioPath, PORTFOLIO_DOCS, portfolioDocuments } from "../portfolio-docs";
+import {
+  describePortfolioDocs,
+  isPortfolioPath,
+  PORTFOLIO_DOCS,
+  portfolioDocuments,
+} from "../portfolio-docs";
 import { portfolioOnly } from "../scope";
 import { documentEdges, readDocument, searchDocuments } from "../doc-reads";
 import { hybridSearch } from "../doc-index";
+import { DOC_STATUS_LIST, DOC_TYPE_LIST } from "../doc-meta";
 
 // The document tools that only read: list, read, brief, history, backlinks, find
 // and search. defineDocOperations in ./docs registers them in the published order.
@@ -34,15 +50,17 @@ export function defineListOperation(server: McpServer, ctx: ToolCtx): void {
       description: `List documents with optional namespace, type, and status filters. Returns metadata rows without bodies under \`documents\`: id, namespace, path, title, type, status, tags and timestamps. Bounded to ${MAX_ROWS} rows; when there are more it sets truncated:true with a note.`,
       inputSchema: {
         namespace: nsName.optional(),
-        type: bounded(MAX_DOC_TYPE).optional(),
-        status: bounded(MAX_DOC_STATUS).optional(),
+        type: z.enum(DOC_TYPE_LIST).optional(),
+        status: z.enum(DOC_STATUS_LIST).optional(),
       },
     },
     async ({ namespace, type, status }) => {
       // A caller outside capsid sees the portfolio documents there and nothing else
       // (src/portfolio-docs.ts). The set is small, so it is read whole and filtered here.
       if (portfolioOnly(agent, namespace)) {
-        const rows = (await portfolioDocuments(db)).filter((r) => (type == null || r.type === type) && (status == null || r.status === status));
+        const rows = (await portfolioDocuments(db)).filter(
+          (r) => (type == null || r.type === type) && (status == null || r.status === status),
+        );
         return ok(boundedRows(rows, MAX_ROWS, "Narrow with type or status."));
       }
       const { results } = await db
@@ -55,7 +73,7 @@ export function defineListOperation(server: McpServer, ctx: ToolCtx): void {
            FROM documents
            WHERE (?1 IS NULL OR namespace = ?1) AND (?2 IS NULL OR type = ?2) AND (?3 IS NULL OR status = ?3)
            ORDER BY namespace, path
-           LIMIT ?4`
+           LIMIT ?4`,
         )
         .bind(namespace ?? null, type ?? null, status ?? null, MAX_ROWS + 1)
         .all();
@@ -65,10 +83,10 @@ export function defineListOperation(server: McpServer, ctx: ToolCtx): void {
           MAX_ROWS,
           namespace
             ? "Narrow with type or status, or use capsid_find_docs action glob with a path glob."
-            : "Narrow with namespace (the usual case), type or status, or use capsid_find_docs action glob with a path glob."
-        )
+            : "Narrow with namespace (the usual case), type or status, or use capsid_find_docs action glob with a path glob.",
+        ),
       );
-    }
+    },
   );
 }
 
@@ -88,9 +106,10 @@ export function defineReadOperation(server: McpServer, ctx: ToolCtx): void {
       // Read first: the row recorded below is not addressed to this document, so it
       // cannot change last_actor, but the order keeps that from depending on it.
       const lastWriter = await lastActor(namespace, path);
-      if (isConventionsDoc(namespace, path)) await recordConventionsRead(db, actor, "read", namespace);
+      if (isConventionsDoc(namespace, path))
+        await recordConventionsRead(db, actor, "read", namespace);
       return ok({ ...row, last_actor: lastWriter });
-    }
+    },
   );
 }
 
@@ -103,16 +122,24 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "brief",
     {
-      description:
-        `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
+      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed), the 3 most recent episodics, and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if trimmed, the \`trimmed\` field lists what was dropped to metadata. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: { namespace: nsName },
     },
     async ({ namespace }) => {
       const doc = (ns: string, path: string) =>
         db
-          .prepare("SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND path = ?2")
+          .prepare(
+            "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND path = ?2",
+          )
           .bind(ns, path)
-          .first<{ namespace: string; path: string; title: string | null; type: string | null; body: string | null; updated_at: string }>();
+          .first<{
+            namespace: string;
+            path: string;
+            title: string | null;
+            type: string | null;
+            body: string | null;
+            updated_at: string;
+          }>();
       const [conventions, core, portfolio] = await Promise.all([
         doc("capsid", "conventions.md"),
         doc(namespace, "core.md"),
@@ -123,35 +150,54 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       // most open task docs. archive/ is the only other exclusion.
       //
       // The four remaining reads run together: none depends on another's result.
-      const [openTasksResult, recentEpisodicsResult, coreOutResult, coreInResult] = await Promise.all([
-        db
-          .prepare(
-            // The closure predicate below is the only status filter in this query.
-            // It excludes exactly one value, set deliberately to mean finished.
-            // status is NOT NULL, so the comparison cannot swallow a row via NULL.
-            //
-            // test/doc-meta.test.ts asserts this predicate appears exactly once in
-            // this file, so the lint loop can never grow one. Only the archive/
-            // prefix takes a document out of memory.
-            "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'task' AND status != 'closed' AND path NOT LIKE 'archive/%' ORDER BY updated_at DESC"
-          )
-          .bind(namespace)
-          .all<{ namespace: string; path: string; title: string | null; type: string | null; body: string | null; updated_at: string }>(),
-        db
-          .prepare(
-            "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'episodic' AND path NOT LIKE 'archive/%' ORDER BY created_at DESC LIMIT 3"
-          )
-          .bind(namespace)
-          .all<{ namespace: string; path: string; title: string | null; type: string | null; body: string | null; updated_at: string }>(),
-        db
-          .prepare("SELECT type, to_ns, to_path FROM document_links WHERE from_ns = ?1 AND from_path = 'core.md' ORDER BY type, to_ns, to_path")
-          .bind(namespace)
-          .all(),
-        db
-          .prepare("SELECT type, from_ns, from_path FROM document_links WHERE to_ns = ?1 AND to_path = 'core.md' ORDER BY type, from_ns, from_path")
-          .bind(namespace)
-          .all(),
-      ]);
+      const [openTasksResult, recentEpisodicsResult, coreOutResult, coreInResult] =
+        await Promise.all([
+          db
+            .prepare(
+              // The closure predicate below is the only status filter in this query.
+              // It excludes exactly one value, set deliberately to mean finished.
+              // status is NOT NULL, so the comparison cannot swallow a row via NULL.
+              //
+              // test/doc-meta.test.ts asserts this predicate appears exactly once in
+              // this file, so the lint loop can never grow one. Only the archive/
+              // prefix takes a document out of memory.
+              "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'task' AND status != 'closed' AND path NOT LIKE 'archive/%' ORDER BY updated_at DESC",
+            )
+            .bind(namespace)
+            .all<{
+              namespace: string;
+              path: string;
+              title: string | null;
+              type: string | null;
+              body: string | null;
+              updated_at: string;
+            }>(),
+          db
+            .prepare(
+              "SELECT namespace, path, title, type, body, updated_at FROM documents WHERE namespace = ?1 AND type = 'episodic' AND path NOT LIKE 'archive/%' ORDER BY created_at DESC LIMIT 3",
+            )
+            .bind(namespace)
+            .all<{
+              namespace: string;
+              path: string;
+              title: string | null;
+              type: string | null;
+              body: string | null;
+              updated_at: string;
+            }>(),
+          db
+            .prepare(
+              "SELECT type, to_ns, to_path FROM document_links WHERE from_ns = ?1 AND from_path = 'core.md' ORDER BY type, to_ns, to_path",
+            )
+            .bind(namespace)
+            .all(),
+          db
+            .prepare(
+              "SELECT type, from_ns, from_path FROM document_links WHERE to_ns = ?1 AND to_path = 'core.md' ORDER BY type, from_ns, from_path",
+            )
+            .bind(namespace)
+            .all(),
+        ]);
       if (conventions) await recordConventionsRead(db, actor, "brief", namespace);
       const openTasks = openTasksResult.results;
       const recentEpisodics = recentEpisodicsResult.results;
@@ -169,7 +215,9 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       // audit_log_doc.
       type Keyed = { namespace: string; path: string };
       type Actored<T> = T & { last_actor: string | null };
-      const present = [conventions, core, ...openTasks, ...recentEpisodics].filter((r): r is NonNullable<typeof r> => r !== null);
+      const present = [conventions, core, ...openTasks, ...recentEpisodics].filter(
+        (r): r is NonNullable<typeof r> => r !== null,
+      );
       const actors = new Map<string, string | null>();
       if (present.length) {
         // A plain SELECT rather than a CTE, and no comment inside prepare(), so
@@ -181,15 +229,19 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
                (SELECT actor FROM audit_log
                 WHERE namespace = json_extract(w.value, '$[0]') AND path = json_extract(w.value, '$[1]')
                 ORDER BY id DESC LIMIT 1) AS actor
-             FROM json_each(?1) AS w`
+             FROM json_each(?1) AS w`,
           )
           .bind(JSON.stringify(present.map((r) => [r.namespace, r.path])))
           .all<{ ns: string; path: string; actor: string | null }>();
-        for (const row of results) actors.set(JSON.stringify([row.ns, row.path]), row.actor ?? null);
+        for (const row of results)
+          actors.set(JSON.stringify([row.ns, row.path]), row.actor ?? null);
       }
       const withActor = <T extends Keyed>(row: T | null): Actored<T> | null =>
-        row ? { ...row, last_actor: actors.get(JSON.stringify([row.namespace, row.path])) ?? null } : null;
-      const withActors = <T extends Keyed>(rows: T[]): Actored<T>[] => rows.map((r) => withActor(r) as Actored<T>);
+        row
+          ? { ...row, last_actor: actors.get(JSON.stringify([row.namespace, row.path])) ?? null }
+          : null;
+      const withActors = <T extends Keyed>(rows: T[]): Actored<T>[] =>
+        rows.map((r) => withActor(r) as Actored<T>);
       const conventionsA = withActor(conventions);
       const coreA = withActor(core);
       const openTasksA = withActors(openTasks);
@@ -202,10 +254,24 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       // that are never trimmed exceed the budget by themselves, since trimming the
       // rest cannot bring the packet under it; that is reported as
       // floor_exceeds_budget with the sizes.
-      type Row = { namespace: string; path: string; title: string | null; body: string | null; updated_at: string; last_actor?: string | null };
+      type Row = {
+        namespace: string;
+        path: string;
+        title: string | null;
+        body: string | null;
+        updated_at: string;
+        last_actor?: string | null;
+      };
       const bodyChars = (rows: Row[]) => rows.reduce((sum, r) => sum + (r.body?.length ?? 0), 0);
       const toStub = (rows: Row[]) =>
-        rows.map((r) => ({ namespace: r.namespace, path: r.path, title: r.title, updated_at: r.updated_at, last_actor: r.last_actor ?? null, body: `(trimmed for size: read it with capsid_read_doc, ${r.namespace}/${r.path})` }));
+        rows.map((r) => ({
+          namespace: r.namespace,
+          path: r.path,
+          title: r.title,
+          updated_at: r.updated_at,
+          last_actor: r.last_actor ?? null,
+          body: `(trimmed for size: read it with capsid_read_doc, ${r.namespace}/${r.path})`,
+        }));
       const sizes = {
         conventions: conventionsA?.body?.length ?? 0,
         core: coreA?.body?.length ?? 0,
@@ -213,7 +279,8 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       const floorChars = sizes.conventions + sizes.core;
       const floorOver = floorChars > BRIEF_BUDGET;
       const trimmed: string[] = [];
-      let total = floorChars + bodyChars(openTasksA as Row[]) + bodyChars(recentEpisodicsA as Row[]);
+      let total =
+        floorChars + bodyChars(openTasksA as Row[]) + bodyChars(recentEpisodicsA as Row[]);
       let episodicsOut: unknown[] = recentEpisodicsA;
       let tasksOut: unknown[] = openTasksA;
       if (!floorOver && total > BRIEF_BUDGET && bodyChars(recentEpisodicsA as Row[]) > 0) {
@@ -245,9 +312,11 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         approx_chars: total,
         ...(coreA ? {} : { warning: `no core.md for namespace ${namespace}` }),
         ...(trimmed.length ? { trimmed } : {}),
-        ...(floorOver ? { floor_exceeds_budget: { ...sizes, floor: floorChars, budget: BRIEF_BUDGET } } : {}),
+        ...(floorOver
+          ? { floor_exceeds_budget: { ...sizes, floor: floorChars, budget: BRIEF_BUDGET } }
+          : {}),
       });
-    }
+    },
   );
 }
 
@@ -259,13 +328,17 @@ export function defineHistoryOperation(server: McpServer, ctx: ToolCtx): void {
     {
       description:
         "List the retained versions of a document (newest first) from document_versions, or fetch one body by passing version_id. Every overwrite and delete writes a snapshot, so a deleted document's history is readable. Retention is 90 days. Read-only. A version records title and body only; changes to type, status or tags are in the audit log.",
-      inputSchema: { namespace: nsName, path: docPath, version_id: z.number().int().positive().optional() },
+      inputSchema: {
+        namespace: nsName,
+        path: docPath,
+        version_id: z.number().int().positive().optional(),
+      },
     },
     async ({ namespace, path, version_id }) => {
       if (version_id !== undefined) {
         const row = await db
           .prepare(
-            "SELECT id, document_id, namespace, path, title, body, snapshot_at FROM document_versions WHERE id = ?1 AND namespace = ?2 AND path = ?3"
+            "SELECT id, document_id, namespace, path, title, body, snapshot_at FROM document_versions WHERE id = ?1 AND namespace = ?2 AND path = ?3",
           )
           .bind(version_id, namespace, path)
           .first<{ id: number; body: string | null }>();
@@ -282,12 +355,14 @@ export function defineHistoryOperation(server: McpServer, ctx: ToolCtx): void {
            FROM document_versions
            WHERE namespace = ?1 AND path = ?2
            ORDER BY snapshot_at DESC, id DESC
-           LIMIT ?3`
+           LIMIT ?3`,
         )
         .bind(namespace, path, HISTORY_ROWS)
         .all();
       const live = await db
-        .prepare("SELECT title, updated_at, LENGTH(body) AS bytes FROM documents WHERE namespace = ?1 AND path = ?2")
+        .prepare(
+          "SELECT title, updated_at, LENGTH(body) AS bytes FROM documents WHERE namespace = ?1 AND path = ?2",
+        )
         .bind(namespace, path)
         .first();
       return ok({
@@ -295,9 +370,13 @@ export function defineHistoryOperation(server: McpServer, ctx: ToolCtx): void {
         path,
         live: live ?? null,
         versions: results,
-        ...(live ? {} : { note: "no live document at this path: these are the snapshots of a deleted or moved document" }),
+        ...(live
+          ? {}
+          : {
+              note: "no live document at this path: these are the snapshots of a deleted or moved document",
+            }),
       });
-    }
+    },
   );
 }
 
@@ -315,9 +394,17 @@ export function defineBacklinksOperation(server: McpServer, ctx: ToolCtx): void 
       const { outgoing, incoming } = await documentEdges(db, namespace, path);
       // An incoming edge names a document in another namespace, so it is kept only when
       // the caller may read that document, asked through checkScope (Grok audit 2026-10, A2).
-      const readable = incoming.filter((e) => ctx.scope({ ...surfaceOf("backlinks"), grant: "read", namespace: e.from_ns, path: e.from_path }) === null);
+      const readable = incoming.filter(
+        (e) =>
+          ctx.scope({
+            ...surfaceOf("backlinks"),
+            grant: "read",
+            namespace: e.from_ns,
+            path: e.from_path,
+          }) === null,
+      );
       return ok({ namespace, path, outgoing, incoming: readable });
-    }
+    },
   );
 }
 
@@ -337,14 +424,16 @@ export function defineFindOperation(server: McpServer, ctx: ToolCtx): void {
            FROM documents
            WHERE path GLOB ?1 AND (?2 IS NULL OR namespace = ?2)
            ORDER BY namespace, path
-           LIMIT ?3`
+           LIMIT ?3`,
         )
         .bind(glob, namespace ?? null, MAX_ROWS + 1)
         .all<{ path: string }>();
       // A caller outside capsid keeps only the portfolio documents (src/portfolio-docs.ts).
-      const kept = portfolioOnly(agent, namespace) ? results.filter((r) => isPortfolioPath(r.path)) : results;
+      const kept = portfolioOnly(agent, namespace)
+        ? results.filter((r) => isPortfolioPath(r.path))
+        : results;
       return ok(boundedRows(kept, MAX_ROWS, "Tighten the glob, or add a namespace filter."));
-    }
+    },
   );
 }
 
@@ -358,7 +447,7 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
       inputSchema: {
         query: bounded(MAX_QUERY),
         namespace: nsName.optional(),
-        type: bounded(MAX_DOC_TYPE).optional(),
+        type: z.enum(DOC_TYPE_LIST).optional(),
         mode: z.enum(["keyword", "hybrid"]).optional(),
         include_retired: z.boolean().optional(),
       },
@@ -369,17 +458,22 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
       // page is not spent on rows that would be dropped, and every row is checked again
       // below, so the narrowing is never what keeps another document out.
       const restricted = portfolioOnly(agent, namespace);
-      const allowed = restricted ? JSON.stringify((await portfolioDocuments(db)).map((r) => r.path)) : null;
+      const allowed = restricted
+        ? JSON.stringify((await portfolioDocuments(db)).map((r) => r.path))
+        : null;
       const bound = (rows: Array<{ path: string }>) =>
         boundedRows(
           restricted ? rows.filter((r) => isPortfolioPath(r.path)) : rows,
           SEARCH_ROWS,
-          "Add a namespace or type filter, or make the query more specific."
+          "Add a namespace or type filter, or make the query more specific.",
         );
       const filter = { namespace: namespace ?? null, type: type ?? null, allowed };
       let fallback: string | undefined;
       if (mode !== "keyword") {
-        const hybrid = await hybridSearch(ctx.env, query, { ...filter, includeRetired: include_retired === true });
+        const hybrid = await hybridSearch(ctx.env, query, {
+          ...filter,
+          includeRetired: include_retired === true,
+        });
         if (typeof hybrid !== "string") return ok({ mode: "hybrid", ...bound(hybrid) });
         fallback = hybrid;
       }
@@ -387,8 +481,10 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
         const rows = bound(await searchDocuments(db, query, filter));
         return ok(fallback === undefined ? rows : { mode: "keyword", fallback, ...rows });
       } catch (err) {
-        return fail(`search failed (check FTS5 query syntax): ${err instanceof Error ? err.message : String(err)}`);
+        return fail(
+          `search failed (check FTS5 query syntax): ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-    }
+    },
   );
 }

@@ -43,34 +43,72 @@ const DENIED = [
 ];
 
 const DOCS: DocRow[] = [
-  ...ALLOWED.map((path) => ({ namespace: "capsid", path, title: path, body: `ALLOWED ${path}`, type: "decision" })),
-  ...DENIED.map((path) => ({ namespace: "capsid", path, title: path, body: `SECRET ${path}`, type: "decision" })),
-  { namespace: "carrel", path: "core.md", title: "carrel core", body: "carrel's own", type: "core" },
+  ...ALLOWED.map((path) => ({
+    namespace: "capsid",
+    path,
+    title: path,
+    body: `ALLOWED ${path}`,
+    type: "decision",
+  })),
+  ...DENIED.map((path) => ({
+    namespace: "capsid",
+    path,
+    title: path,
+    body: `SECRET ${path}`,
+    type: "decision",
+  })),
+  {
+    namespace: "carrel",
+    path: "core.md",
+    title: "carrel core",
+    body: "carrel's own",
+    type: "core",
+  },
 ];
 
 const NAMESPACES = [
-  { namespace: "capsid", repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]) },
-  { namespace: "carrel", repos: JSON.stringify([{ repo: "DrDustinEdwards/carrel", label: "primary" }]) },
+  {
+    namespace: "capsid",
+    repos: JSON.stringify([{ repo: "DrDustinEdwards/capsid", label: "primary" }]),
+  },
+  {
+    namespace: "carrel",
+    repos: JSON.stringify([{ repo: "DrDustinEdwards/carrel", label: "primary" }]),
+  },
 ];
 
 // A driver as the roster mints one: one namespace, read and write, no flags.
 function driver(namespace: string): Agent {
   const scopes = defaultScopes([namespace]);
   scopes.grants = ["read", "write"];
-  return { id: "agent_0123456789ab", name: `${namespace}-driver`, kind: "driver", actor: `agent:${namespace}-driver`, scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name: `${namespace}-driver`,
+    kind: "driver",
+    actor: `agent:${namespace}-driver`,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 type Result = { isError?: boolean; text: string };
 
 async function connect(caller: Agent, opts: { ftsRows?: number } = {}) {
   const d1 = fakeD1({ documents: DOCS, namespaces: NAMESPACES, ...opts });
-  const server = buildServer(fakeEnv({ DB: d1.db, APP_KV: fakeKv({ seedToken: true }).kv }), caller);
+  const server = buildServer(
+    fakeEnv({ DB: d1.db, APP_KV: fakeKv({ seedToken: true }).kv }),
+    caller,
+  );
   const client = new Client({ name: "portfolio-docs", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
   const call = async (name: string, args: Record<string, unknown>): Promise<Result> => {
     try {
-      const r = (await client.callTool({ name, arguments: args })) as { isError?: boolean; content: Array<{ text?: string }> };
+      const r = (await client.callTool({ name, arguments: args })) as {
+        isError?: boolean;
+        content: Array<{ text?: string }>;
+      };
       return { isError: r.isError, text: r.content.map((c) => c.text ?? "").join("\n") };
     } catch (err) {
       // An argument the schema rejects can surface as a protocol error.
@@ -87,7 +125,8 @@ async function connect(caller: Agent, opts: { ftsRows?: number } = {}) {
   };
 }
 
-const paths = (r: Result): string[] => (JSON.parse(r.text) as { documents: Array<{ path: string }> }).documents.map((d) => d.path);
+const paths = (r: Result): string[] =>
+  (JSON.parse(r.text) as { documents: Array<{ path: string }> }).documents.map((d) => d.path);
 
 test("PORTFOLIO_DOCS is exactly the documents, volumes, folder and tool actions this test names", () => {
   assert.deepEqual(PORTFOLIO_DOCS, {
@@ -95,12 +134,18 @@ test("PORTFOLIO_DOCS is exactly the documents, volumes, folder and tool actions 
     documents: ["conventions.md", "core.md"],
     volumes: ["archive/decisions-vol-"],
     folders: ["rulings/"],
-    tools: ["capsid_read_doc.read", "capsid_find_docs.list", "capsid_find_docs.glob", "capsid_find_docs.search"],
+    tools: [
+      "capsid_read_doc.read",
+      "capsid_find_docs.list",
+      "capsid_find_docs.glob",
+      "capsid_find_docs.search",
+    ],
   });
 });
 
 test("isPortfolioPath admits the allowed paths and refuses traversal, case, encoding and prefix confusion", () => {
-  for (const path of ALLOWED) assert.equal(isPortfolioPath(path), true, `${path} should be allowed`);
+  for (const path of ALLOWED)
+    assert.equal(isPortfolioPath(path), true, `${path} should be allowed`);
   const refused = [
     ...DENIED,
     "rulings/../policy/gates.md",
@@ -125,7 +170,8 @@ test("isPortfolioPath admits the allowed paths and refuses traversal, case, enco
     "x/conventions.md",
     "",
   ];
-  for (const path of refused) assert.equal(isPortfolioPath(path), false, `${JSON.stringify(path)} should be refused`);
+  for (const path of refused)
+    assert.equal(isPortfolioPath(path), false, `${JSON.stringify(path)} should be refused`);
 });
 
 test("a namespace driver reads every portfolio document in capsid", async () => {
@@ -173,8 +219,14 @@ test("no write, edge or history tool reaches a portfolio document for a namespac
   const calls: Array<[string, Record<string, unknown>]> = [
     ["capsid_write_doc", { namespace: "capsid", path, body: "rewritten", confirm: true }],
     ["capsid_delete_doc", { namespace: "capsid", path, confirm: true }],
-    ["capsid_write_doc", { action: "move", namespace: "capsid", path, new_path: "moved.md", confirm: true }],
-    ["capsid_write_doc", { action: "restore", namespace: "capsid", path, version_id: 1, confirm: true }],
+    [
+      "capsid_write_doc",
+      { action: "move", namespace: "capsid", path, new_path: "moved.md", confirm: true },
+    ],
+    [
+      "capsid_write_doc",
+      { action: "restore", namespace: "capsid", path, version_id: 1, confirm: true },
+    ],
     ["capsid_read_doc", { action: "versions", namespace: "capsid", path }],
     ["capsid_read_doc", { action: "links", namespace: "capsid", path }],
     ["capsid_start_session", { namespace: "capsid" }],
@@ -199,11 +251,23 @@ test("PLANT: list, glob and search in capsid return only the portfolio documents
   assert.ok(!found.isError, found.text);
   assert.deepEqual(paths(found), [...ALLOWED].sort());
 
-  const foundNear = await call("capsid_find_docs", { action: "glob", namespace: "capsid", glob: "rulings*" });
-  assert.deepEqual(paths(foundNear), ALLOWED.filter((p) => p.startsWith("rulings/")).sort(), "rulings-secret/ matched rulings/");
+  const foundNear = await call("capsid_find_docs", {
+    action: "glob",
+    namespace: "capsid",
+    glob: "rulings*",
+  });
+  assert.deepEqual(
+    paths(foundNear),
+    ALLOWED.filter((p) => p.startsWith("rulings/")).sort(),
+    "rulings-secret/ matched rulings/",
+  );
 
   // The fake's FTS answers conventions.md, hit-1.md and hit-2.md whatever the query.
-  const searched = await call("capsid_find_docs", { action: "search", namespace: "capsid", query: "anything" });
+  const searched = await call("capsid_find_docs", {
+    action: "search",
+    namespace: "capsid",
+    query: "anything",
+  });
   assert.ok(!searched.isError, searched.text);
   assert.deepEqual(paths(searched), ["conventions.md"]);
   await close();
@@ -211,9 +275,18 @@ test("PLANT: list, glob and search in capsid return only the portfolio documents
 
 test("a narrowed driver still cannot list, glob or search with no namespace", async () => {
   const { call, close } = await connect(driver("carrel"));
-  for (const args of [{ action: "list" }, {}, { action: "glob", glob: "*" }, { action: "search", query: "anything" }] as Array<Record<string, unknown>>) {
+  for (const args of [
+    { action: "list" },
+    {},
+    { action: "glob", glob: "*" },
+    { action: "search", query: "anything" },
+  ] as Array<Record<string, unknown>>) {
     const r = await call("capsid_find_docs", args);
-    assert.equal(r.isError, true, `capsid_find_docs ${JSON.stringify(args)} with no namespace was answered`);
+    assert.equal(
+      r.isError,
+      true,
+      `capsid_find_docs ${JSON.stringify(args)} with no namespace was answered`,
+    );
     assert.match(r.text, /must name a namespace/);
   }
   await close();
@@ -222,8 +295,15 @@ test("a narrowed driver still cannot list, glob or search with no namespace", as
 test("THE INNOCENT DIRECTION: capsid's own driver still lists everything in capsid, and carrel's driver its own namespace", async () => {
   const own = await connect(driver("capsid"));
   const all = await own.call("capsid_find_docs", { namespace: "capsid" });
-  assert.equal(paths(all).length, ALLOWED.length + DENIED.length, "the filter reached a caller scoped to capsid");
-  const policy = await own.call("capsid_read_doc", { namespace: "capsid", path: "policy/gates.md" });
+  assert.equal(
+    paths(all).length,
+    ALLOWED.length + DENIED.length,
+    "the filter reached a caller scoped to capsid",
+  );
+  const policy = await own.call("capsid_read_doc", {
+    namespace: "capsid",
+    path: "policy/gates.md",
+  });
   assert.ok(!policy.isError, policy.text);
   await own.close();
 
@@ -237,7 +317,14 @@ test("capsid_start_session for any namespace names the portfolio documents to re
   const { call, close } = await connect(driver("carrel"));
   const r = await call("capsid_start_session", { namespace: "carrel" });
   assert.ok(!r.isError, r.text);
-  const out = JSON.parse(r.text) as { portfolio_documents: { namespace: string; read_first: string[]; allowlist: string[]; note: string } };
+  const out = JSON.parse(r.text) as {
+    portfolio_documents: {
+      namespace: string;
+      read_first: string[];
+      allowlist: string[];
+      note: string;
+    };
+  };
   assert.equal(out.portfolio_documents.namespace, "capsid");
   assert.deepEqual(out.portfolio_documents.read_first, [...ALLOWED].sort());
   assert.deepEqual(out.portfolio_documents.allowlist, [

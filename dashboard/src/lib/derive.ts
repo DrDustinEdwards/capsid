@@ -1,9 +1,29 @@
-import type { CiObservation, OpsAgent, OpsFeed, OpsJob, OpsSession, OpsSnapshot, OpsTaskRun, ProbeState, SiteCloudflare, SiteSnapshot } from "../types";
+import type {
+  CiObservation,
+  OpsAgent,
+  OpsFeed,
+  OpsJob,
+  OpsSession,
+  OpsSnapshot,
+  OpsTaskRun,
+  ProbeState,
+  SiteCloudflare,
+  SiteSnapshot,
+} from "../types";
 import { DAY, HOUR, SLOT_MS, age, agentLabel, ago, hostOf, ms } from "./format";
 import { storeAttention } from "./store";
 
 // The status vocabulary: every state is a shape, a word and a color.
-export type Kind = "ok" | "warn" | "crit" | "nodata" | "unknown" | "run" | "queued" | "blocked" | "done";
+export type Kind =
+  | "ok"
+  | "warn"
+  | "crit"
+  | "nodata"
+  | "unknown"
+  | "run"
+  | "queued"
+  | "blocked"
+  | "done";
 
 export const PROBE: Record<ProbeState, { kind: Kind; label: string }> = {
   ok: { kind: "ok", label: "Up" },
@@ -19,13 +39,9 @@ export function hasSites(feed: OpsFeed): boolean {
   return feed.live.sites.some((s) => s.origin !== null);
 }
 
-// The Packages view is on offer only while a package is configured (ops_packages).
-export function hasPackages(feed: OpsFeed): boolean {
-  return feed.live.packages.length > 0;
-}
-
+// A site is named by its namespace: one ops_sites row each, and its page is /sites/<namespace>.
 export function siteKey(s: SiteSnapshot): string {
-  return s.name;
+  return s.namespace;
 }
 
 // Why a site has no Cloudflare numbers. Every state but "ok" is no data, never zero.
@@ -58,6 +74,19 @@ export function cfOk(s: SiteSnapshot) {
   return s.cloudflare?.state === "ok" ? s.cloudflare : null;
 }
 
+/** The Worker scripts the sites run: each settings row's script, or the one the watcher found
+ *  from the account's custom domains. One site's when a namespace is named. */
+export function siteScripts(feed: OpsFeed, ns?: string): string[] {
+  const out = new Set<string>();
+  for (const r of feed.live.sites)
+    if (r.script && (ns === undefined || r.namespace === ns)) out.add(r.script);
+  for (const s of feed.snapshot?.sites ?? []) {
+    const cf = cfOk(s);
+    if (cf && (ns === undefined || s.namespace === ns)) out.add(cf.script);
+  }
+  return [...out];
+}
+
 // ---- probe ring -------------------------------------------------------------
 
 export const RING_SLOTS = 336;
@@ -77,8 +106,10 @@ export function uptime(ring: string): number | null {
   let up = 0;
   let seen = 0;
   for (const c of ring) {
-    if (c === "1") (up++, seen++);
-    else if (c === "0") seen++;
+    if (c === "1") {
+      up++;
+      seen++;
+    } else if (c === "0") seen++;
   }
   return seen ? up / seen : null;
 }
@@ -99,7 +130,8 @@ export const JOB: Record<OpsJob["status"], { kind: Kind; label: string }> = {
 // window (src/stale-jobs.ts, 3 days) is shown as Stalled rather than Running.
 export const STALE_CLAIM_MS = 3 * DAY;
 export function jobBadge(j: OpsJob, now: number): { kind: Kind; label: string } {
-  if (j.status === "claimed" && now - ms(j.updated_at) > STALE_CLAIM_MS) return { kind: "warn", label: "Stalled" };
+  if (j.status === "claimed" && now - ms(j.updated_at) > STALE_CLAIM_MS)
+    return { kind: "warn", label: "Stalled" };
   return JOB[j.status];
 }
 
@@ -121,7 +153,8 @@ export function ciState(c: CiObservation): { kind: Kind; label: string; red: boo
   const l = c.latest;
   if (!l) return { kind: "nodata", label: "Could not read", red: false };
   if (l.conclusion == null) return { kind: "run", label: l.status.replace(/_/g, " "), red: false };
-  if (QUIET.has(l.conclusion)) return { kind: "ok", label: l.conclusion === "success" ? "Green" : l.conclusion, red: false };
+  if (QUIET.has(l.conclusion))
+    return { kind: "ok", label: l.conclusion === "success" ? "Green" : l.conclusion, red: false };
   return { kind: "crit", label: l.conclusion.replace(/_/g, " "), red: true };
 }
 
@@ -163,10 +196,24 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   const sitesOn = hasSites(feed);
   if (!snap) {
     // A warning, not a notice: until the first pass nothing about sites or backups is known.
-    out.push({ sev: "warn", kind: "Watcher", title: "The watcher has not written its first pass yet", sub: "Sites, deploys, errors, backups and CI appear after the first pass", at: ms(live.generated), open: "view:incidents" });
+    out.push({
+      sev: "warn",
+      kind: "Watcher",
+      title: "The watcher has not written its first pass yet",
+      sub: "Sites, deploys, errors, backups and CI appear after the first pass",
+      at: ms(live.generated),
+      open: "view:health#problems",
+    });
   } else {
     if (passStale(snap, now)) {
-      out.push({ sev: "warn", kind: "Watcher", title: `The last watcher pass is ${age(ms(snap.pass_at), now)} old`, sub: `It runs every ${snap.cadence_min} min; site data is stale after ${2 * snap.cadence_min} min`, at: ms(snap.pass_at), open: "view:incidents" });
+      out.push({
+        sev: "warn",
+        kind: "Watcher",
+        title: `The last watcher pass is ${age(ms(snap.pass_at), now)} old`,
+        sub: `It runs every ${snap.cadence_min} min; site data is stale after ${2 * snap.cadence_min} min`,
+        at: ms(snap.pass_at),
+        open: "view:health#problems",
+      });
     }
     for (const s of sitesOn ? snap.sites : []) {
       if (s.state === "down" || s.state === "degraded") {
@@ -180,40 +227,119 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
         });
       }
       const cf = s.cloudflare;
-      if (cf && (cf.state === "error" || cf.state === "unresolved" || (cf.state === "no-token" && feed.cloudflare_configured))) {
-        out.push({ sev: "nodata", kind: "Site", title: `${s.name}: no Cloudflare data`, sub: cfNoData(cf) ?? "", at: ms(snap.pass_at), open: `site:${siteKey(s)}` });
+      if (
+        cf &&
+        (cf.state === "error" ||
+          cf.state === "unresolved" ||
+          (cf.state === "no-token" && feed.cloudflare_configured))
+      ) {
+        out.push({
+          sev: "nodata",
+          kind: "Site",
+          title: `${s.name}: no Cloudflare data`,
+          sub: cfNoData(cf) ?? "",
+          at: ms(snap.pass_at),
+          open: `site:${siteKey(s)}`,
+        });
       }
     }
     const h = snap.health;
     if (!h) {
       // A warning, not a notice: an unknown backup is not a quiet fact (audit ruling 3).
-      out.push({ sev: "warn", kind: "Backup", title: "Capsid health was not read on the last pass", sub: "Backup age is unknown", at: ms(snap.pass_at), open: "view:backups" });
+      out.push({
+        sev: "warn",
+        kind: "Backup",
+        title: "Capsid health was not read on the last pass",
+        sub: "Backup age is unknown",
+        at: ms(snap.pass_at),
+        open: "view:health#backups",
+      });
     } else {
-      if (h.status === "degraded") out.push({ sev: "warn", kind: "Health", title: "Capsid reports degraded health", sub: `store d1 ${h.store.d1}, fts ${h.store.fts} · sha ${h.sha.slice(0, 7)}`, at: ms(snap.pass_at), open: "view:backups" });
+      if (h.status === "degraded")
+        out.push({
+          sev: "warn",
+          kind: "Health",
+          title: "Capsid reports degraded health",
+          sub: `store d1 ${h.store.d1}, fts ${h.store.fts} · sha ${h.sha.slice(0, 7)}`,
+          at: ms(snap.pass_at),
+          open: "view:health#backups",
+        });
       if (h.backup.warning || !h.backup.last_ok) {
-        out.push({ sev: "crit", kind: "Backup", title: h.backup.warning ?? "No good backup is recorded", sub: h.backup.last_ok ? `last good dump ${ago(ms(h.backup.last_ok), now)}` : "no last_ok", at: h.backup.last_ok ? ms(h.backup.last_ok) : ms(snap.pass_at), open: "view:backups" });
+        out.push({
+          sev: "crit",
+          kind: "Backup",
+          title: h.backup.warning ?? "No good backup is recorded",
+          sub: h.backup.last_ok ? `last good dump ${ago(ms(h.backup.last_ok), now)}` : "no last_ok",
+          at: h.backup.last_ok ? ms(h.backup.last_ok) : ms(snap.pass_at),
+          open: "view:health#backups",
+        });
       }
     }
     const o = snap.offaccount;
     if (!o) {
-      out.push({ sev: "warn", kind: "Backup", title: "The Amazon backup copy's report was not read on the last pass", sub: "Each site's newest copy is unknown", at: ms(snap.pass_at), open: "view:backups" });
+      out.push({
+        sev: "warn",
+        kind: "Backup",
+        title: "The Amazon backup copy's report was not read on the last pass",
+        sub: "Each site's newest copy is unknown",
+        at: ms(snap.pass_at),
+        open: "view:health#backups",
+      });
     } else {
       const st = offaccountState(o, now);
       if (st.bad || st.warn) {
-        out.push({ sev: st.bad ? "crit" : "warn", kind: "Backup", title: st.headline, sub: st.detail, at: o.reported_at ? ms(o.reported_at) : ms(snap.pass_at), open: "view:backups" });
+        out.push({
+          sev: st.bad ? "crit" : "warn",
+          kind: "Backup",
+          title: st.headline,
+          sub: st.detail,
+          at: o.reported_at ? ms(o.reported_at) : ms(snap.pass_at),
+          open: "view:health#backups",
+        });
       }
     }
     for (const c of snap.ci) {
       const st = ciState(c);
-      if (!c.latest) out.push({ sev: "nodata", kind: "CI", title: `CI runs for ${c.namespace} could not be read`, sub: "The GitHub read failed on the last pass", at: ms(snap.pass_at), open: "view:health#ci" });
-      else if (st.red) out.push({ sev: "warn", kind: "CI", title: `${c.namespace} default branch is ${st.label}`, sub: `${c.latest.head_sha.slice(0, 7)} · ${c.latest.status}`, at: ms(c.latest.created_at), open: "view:health#ci" });
+      if (!c.latest)
+        out.push({
+          sev: "nodata",
+          kind: "CI",
+          title: `CI runs for ${c.namespace} could not be read`,
+          sub: "The GitHub read failed on the last pass",
+          at: ms(snap.pass_at),
+          open: "view:health#ci",
+        });
+      else if (st.red)
+        out.push({
+          sev: "warn",
+          kind: "CI",
+          title: `${c.namespace} default branch is ${st.label}`,
+          sub: `${c.latest.head_sha.slice(0, 7)} · ${c.latest.status}`,
+          at: ms(c.latest.created_at),
+          open: "view:health#ci",
+        });
     }
     for (const c of snap.checks) {
-      if (c.state === "could-not-run") out.push({ sev: "nodata", kind: "Watcher", title: `Check '${c.id}' could not run on the last pass`, sub: c.findings.join("; "), at: ms(snap.pass_at), open: "view:incidents" });
+      if (c.state === "could-not-run")
+        out.push({
+          sev: "nodata",
+          kind: "Watcher",
+          title: `Check '${c.id}' could not run on the last pass`,
+          sub: c.findings.join("; "),
+          at: ms(snap.pass_at),
+          open: "view:health#problems",
+        });
     }
     const drift = snap.site_map;
     if (sitesOn && drift && (drift.unmapped.length || drift.unknown.length)) {
-      out.push({ sev: "nodata", kind: "Watcher", title: `Site map drift: ${drift.unmapped.length} unmapped, ${drift.unknown.length} unknown`, sub: [...drift.unmapped, ...drift.unknown].join(", "), at: ms(snap.pass_at), open: "view:incidents" });
+      out.push({
+        sev: "nodata",
+        kind: "Watcher",
+        title: `Site map drift: ${drift.unmapped.length} unmapped, ${drift.unknown.length} unknown`,
+        sub: [...drift.unmapped, ...drift.unknown].join(", "),
+        at: ms(snap.pass_at),
+        open: "view:health#problems",
+      });
     }
   }
   // The run ledger (src/task-runs.ts): a scheduled task whose newest run threw or was
@@ -221,7 +347,14 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   // backup is critical, as a stale backup is above. A task with no run yet is shown on
   // Incidents only: after the ledger's first deploy every task starts there.
   if (feed.scheduled.error !== null) {
-    out.push({ sev: "nodata", kind: "Scheduled", title: "The run ledger could not be read", sub: feed.scheduled.error, at: ms(live.generated), open: "view:incidents" });
+    out.push({
+      sev: "nodata",
+      kind: "Scheduled",
+      title: "The run ledger could not be read",
+      sub: feed.scheduled.error,
+      at: ms(live.generated),
+      open: "view:health#problems",
+    });
   } else {
     for (const t of feed.scheduled.tasks) {
       const last = t.recent[0];
@@ -229,18 +362,35 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       out.push({
         sev: t.id === "backup" ? "crit" : "warn",
         kind: "Scheduled",
-        title: t.flag === "failing" ? `${t.label}: its last run ${TASK_OUTCOME[last.outcome].label.toLowerCase()}` : `${t.label} has not run for ${age(ms(last.finished_at), now)}`,
+        title:
+          t.flag === "failing"
+            ? `${t.label}: its last run ${TASK_OUTCOME[last.outcome].label.toLowerCase()}`
+            : `${t.label} has not run for ${age(ms(last.finished_at), now)}`,
         sub: last.reason,
         at: ms(last.finished_at),
-        open: "view:incidents",
+        open: "view:health#problems",
       });
     }
   }
   if (!feed.cloudflare_configured) {
-    out.push({ sev: "nodata", kind: "Watcher", title: "Cloudflare read not configured", sub: "Deploy and error columns show no data until it is", at: ms(live.generated), open: "view:deploys" });
+    out.push({
+      sev: "nodata",
+      kind: "Watcher",
+      title: "Cloudflare read not configured",
+      sub: "Deploy and error columns show no data until it is",
+      at: ms(live.generated),
+      open: "view:sites#deploys",
+    });
   }
   const store = storeAttention(feed);
-  if (store) out.push({ sev: "warn", kind: "Backup", ...store, at: ms(live.generated), open: "view:backups" });
+  if (store)
+    out.push({
+      sev: "warn",
+      kind: "Backup",
+      ...store,
+      at: ms(live.generated),
+      open: "view:health#backups",
+    });
   const blocked = live.jobs.filter((j) => j.status === "blocked");
   if (blocked.length) {
     out.push({
@@ -264,13 +414,23 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
       sev: "warn",
       kind: agent ? "Agent" : "Breaker",
       title: f.headline,
-      sub: agent ? "Out of its usual pattern · a finding only, nothing suspended" : (f.evidence[0] ?? "Paused after repeated failures"),
+      sub: agent
+        ? "Out of its usual pattern · a finding only, nothing suspended"
+        : (f.evidence[0] ?? "Paused after repeated failures"),
       at: ms(f.last_seen),
-      open: agent ? "view:incidents" : "view:needs#waiting",
+      open: agent ? "view:health#problems" : "view:needs#waiting",
     });
   }
   for (const a of live.awaiting_seat) {
-    out.push({ sev: "warn", kind: "PR", title: `${a.repo} #${a.number} awaits the seat`, sub: `${a.failed}: ${a.why}`, at: ms(a.at), open: "view:prs", group: { key: "pr-seat", facet: a.repo } });
+    out.push({
+      sev: "warn",
+      kind: "PR",
+      title: `${a.repo} #${a.number} awaits the seat`,
+      sub: `${a.failed}: ${a.why}`,
+      at: ms(a.at),
+      open: "view:prs",
+      group: { key: "pr-seat", facet: a.repo },
+    });
   }
   // Session incidents (the same ones Incidents lists): a live session stopped on a
   // failure is critical, one waiting on input over ten minutes a warning. Named by the
@@ -289,7 +449,15 @@ export function attentionItems(feed: OpsFeed, now: number): Attention[] {
   }
   for (const a of live.agents) {
     if (a.kind === "driver" && !a.revoked_at && a.last_seen && now - ms(a.last_seen) > 7 * DAY) {
-      out.push({ sev: "nodata", kind: "Agent", title: `${a.name} has been silent for ${Math.floor((now - ms(a.last_seen)) / DAY)} days`, sub: `last seen ${ago(ms(a.last_seen), now)}`, at: ms(a.last_seen), open: `agent:${a.name}`, group: { key: "silent", facet: a.name } });
+      out.push({
+        sev: "nodata",
+        kind: "Agent",
+        title: `${a.name} has been silent for ${Math.floor((now - ms(a.last_seen)) / DAY)} days`,
+        sub: `last seen ${ago(ms(a.last_seen), now)}`,
+        at: ms(a.last_seen),
+        open: `agent:${a.name}`,
+        group: { key: "silent", facet: a.name },
+      });
     }
   }
   return out.sort(worstFirst);
@@ -323,9 +491,21 @@ export const PROBLEM_ROWS = 8;
 
 const GROUPS: Record<GroupKey, { title: (n: number) => string; view: string; label: string }> = {
   // The blocked row is already one row (attentionItems); the group gives it children.
-  blocked: { title: (n) => `${n} ${n === 1 ? "job is" : "jobs are"} waiting on you`, view: "queue", label: "Queue" },
-  "pr-seat": { title: (n) => `${n} pull requests await the seat`, view: "prs", label: "Pull requests" },
-  silent: { title: (n) => `${n} drivers have been silent for over 7 days`, view: "agents", label: "Agents" },
+  blocked: {
+    title: (n) => `${n} ${n === 1 ? "job is" : "jobs are"} waiting on you`,
+    view: "queue",
+    label: "Jobs",
+  },
+  "pr-seat": {
+    title: (n) => `${n} pull requests await the seat`,
+    view: "prs",
+    label: "Pull requests",
+  },
+  silent: {
+    title: (n) => `${n} drivers have been silent for over 7 days`,
+    view: "agents",
+    label: "Agents",
+  },
 };
 
 export interface AttentionRow extends Attention {
@@ -369,7 +549,14 @@ function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
         ...first,
         title: g.title(jobs.length),
         key: "group:blocked",
-        children: jobs.slice(0, GROUP_CHILDREN).map((j) => ({ sev: "warn", kind: "Queue", title: j.title, sub: `${j.namespace} · waits on: ${j.waits_on ?? "no reason recorded"}`, at: ms(j.updated_at), open: `job:${j.id}` })),
+        children: jobs.slice(0, GROUP_CHILDREN).map((j) => ({
+          sev: "warn",
+          kind: "Queue",
+          title: j.title,
+          sub: `${j.namespace} · waits on: ${j.waits_on ?? "no reason recorded"}`,
+          at: ms(j.updated_at),
+          open: `job:${j.id}`,
+        })),
         total: jobs.length,
         view: { id: g.view, label: g.label },
       });
@@ -385,7 +572,10 @@ function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
       sev: sorted[0]!.sev,
       kind: first.kind,
       title: g.title(list.length),
-      sub: facets.length > 3 ? `${facets.slice(0, 3).join(", ")} and ${facets.length - 3} more` : facets.join(", "),
+      sub:
+        facets.length > 3
+          ? `${facets.slice(0, 3).join(", ")} and ${facets.length - 3} more`
+          : facets.join(", "),
       at: Math.max(...list.map((a) => a.at)),
       open: `view:${g.view}`,
       group: first.group,
@@ -404,11 +594,19 @@ function fold(items: Attention[], feed: OpsFeed, now: number): AttentionRow[] {
 // one place).
 export const WAITING_KINDS: ReadonlySet<string> = new Set(["Queue", "PR", "Breaker"]);
 
-export function attentionGroups(feed: OpsFeed, now: number, skip?: ReadonlySet<string>): AttentionGroups {
+export function attentionGroups(
+  feed: OpsFeed,
+  now: number,
+  skip?: ReadonlySet<string>,
+): AttentionGroups {
   const items = attentionItems(feed, now).filter((a) => !skip?.has(a.kind));
   const notices = items.filter((a) => tierOf(a) === "notice");
   return {
-    problems: fold(items.filter((a) => tierOf(a) === "problem"), feed, now),
+    problems: fold(
+      items.filter((a) => tierOf(a) === "problem"),
+      feed,
+      now,
+    ),
     notices: fold(notices, feed, now),
     noticeCount: notices.length,
   };
@@ -421,8 +619,13 @@ export function attentionGroups(feed: OpsFeed, now: number, skip?: ReadonlySet<s
 
 export const STALE_BLOCKED_MS = 7 * DAY;
 
-export function blockedOrder(jobs: OpsJob[], now: number): { blocked: OpsJob[]; stale: OpsJob[]; all: OpsJob[] } {
-  const list = jobs.filter((j) => j.status === "blocked").sort((a, b) => b.priority - a.priority || ms(b.updated_at) - ms(a.updated_at));
+export function blockedOrder(
+  jobs: OpsJob[],
+  now: number,
+): { blocked: OpsJob[]; stale: OpsJob[]; all: OpsJob[] } {
+  const list = jobs
+    .filter((j) => j.status === "blocked")
+    .sort((a, b) => b.priority - a.priority || ms(b.updated_at) - ms(a.updated_at));
   const blocked = list.filter((j) => now - ms(j.updated_at) <= STALE_BLOCKED_MS);
   const stale = list.filter((j) => now - ms(j.updated_at) > STALE_BLOCKED_MS);
   return { blocked, stale, all: [...blocked, ...stale] };
@@ -447,7 +650,9 @@ const HOT = /^(probe|down|offaccount|backup)/;
 // the job's drawer (D11). Shared by Incidents and Needs attention.
 function sessionIncidentTitle(s: OpsSession, job: OpsJob | undefined): string {
   const who = job ? `"${job.title}"` : agentLabel(s.agent);
-  return s.incident === "failure" ? `Session for ${who} stopped: ${s.last_failure ?? "unknown"}` : `Session for ${who} is waiting on input`;
+  return s.incident === "failure"
+    ? `Session for ${who} stopped: ${s.last_failure ?? "unknown"}`
+    : `Session for ${who} is waiting on input`;
 }
 
 export function incidents(feed: OpsFeed): Incident[] {
@@ -472,7 +677,16 @@ export function incidents(feed: OpsFeed): Incident[] {
     if (c.state !== "finding") continue;
     for (const fp of c.findings) {
       if (seen.has(fp)) continue;
-      items.push({ sev: HOT.test(fp) ? "crit" : "warn", open: true, title: `Check '${c.id}' reports a finding`, fp, ns: "watcher", at: ms(feed.snapshot?.pass_at ?? feed.live.generated), ref: null, status: "no job in the live window" });
+      items.push({
+        sev: HOT.test(fp) ? "crit" : "warn",
+        open: true,
+        title: `Check '${c.id}' reports a finding`,
+        fp,
+        ns: "watcher",
+        at: ms(feed.snapshot?.pass_at ?? feed.live.generated),
+        ref: null,
+        status: "no job in the live window",
+      });
     }
   }
   // A live session the feed marks as an incident (src/ops-feed.ts, opsSessionFrom):
@@ -489,7 +703,10 @@ export function incidents(feed: OpsFeed): Incident[] {
       ns: s.namespace ?? "sessions",
       at: ms(s.last_event_at),
       ref: s.job_id ? `job:${s.job_id}` : null,
-      status: s.incident === "failure" ? "a person must act" : `${s.last_notification_type ?? "input"} pending`,
+      status:
+        s.incident === "failure"
+          ? "a person must act"
+          : `${s.last_notification_type ?? "input"} pending`,
     });
   }
   return items.sort((a, b) => Number(b.open) - Number(a.open) || b.at - a.at);
@@ -522,8 +739,12 @@ export function rosterAgents(agents: readonly OpsAgent[]): OpsAgent[] {
 /** The Archive tab's rows: revoked and still in the live table, oldest revocation first
  *  (the next to move), then archived, newest move first. */
 export function archiveAgents(agents: readonly OpsAgent[]): OpsAgent[] {
-  const waiting = agents.filter((a) => a.revoked_at && !a.archived_at).sort((x, y) => ms(x.revoked_at as string) - ms(y.revoked_at as string));
-  const archived = agents.filter((a) => a.archived_at).sort((x, y) => ms(y.archived_at as string) - ms(x.archived_at as string));
+  const waiting = agents
+    .filter((a) => a.revoked_at && !a.archived_at)
+    .sort((x, y) => ms(x.revoked_at as string) - ms(y.revoked_at as string));
+  const archived = agents
+    .filter((a) => a.archived_at)
+    .sort((x, y) => ms(y.archived_at as string) - ms(x.archived_at as string));
   return [...waiting, ...archived];
 }
 
@@ -558,7 +779,12 @@ export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: 
   const missing = o.sites.filter((s) => !s.newest).map((s) => s.site);
   const ageOf = (s: { newest: string | null }) => (s.newest ? now - ms(s.newest) : null);
   const stale = o.sites.filter((s) => (ageOf(s) ?? 0) >= OFFACCOUNT_STALE).map((s) => s.site);
-  const late = o.sites.filter((s) => { const a = ageOf(s); return a != null && a >= OFFACCOUNT_LATE && a < OFFACCOUNT_STALE; }).map((s) => s.site);
+  const late = o.sites
+    .filter((s) => {
+      const a = ageOf(s);
+      return a != null && a >= OFFACCOUNT_LATE && a < OFFACCOUNT_STALE;
+    })
+    .map((s) => s.site);
   const ages = o.sites.map(ageOf).filter((a): a is number => a != null);
   const worst = ages.length ? Math.max(...ages) : null;
   const reportAge = o.reported_at ? now - ms(o.reported_at) : null;
@@ -566,7 +792,8 @@ export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: 
   // The latest passing drill; undefined on a snapshot written before the field, which says
   // nothing either way until the next pass.
   const drill = o.last_drill;
-  const drillOk = drill === undefined || (drill?.at != null && now - ms(drill.at) < OFFACCOUNT_DRILL_STALE);
+  const drillOk =
+    drill === undefined || (drill?.at != null && now - ms(drill.at) < OFFACCOUNT_DRILL_STALE);
   const bad = missing.length > 0 || stale.length > 0 || silent || !drillOk;
   const headline =
     reportAge == null
@@ -582,6 +809,18 @@ export function offaccountState(o: NonNullable<OpsSnapshot["offaccount"]>, now: 
               : late.length
                 ? `The Amazon backup copy is late for ${late.join(", ")}`
                 : "The Amazon backup copy is current";
-  const detail = o.last_run ? `Last copy run ${o.last_run.conclusion ?? "still running"}${o.last_run.at ? ` ${ago(ms(o.last_run.at), now)}` : ""}` : "No copy run recorded";
-  return { missing, stale, late, worst, reportAge, bad, warn: !bad && late.length > 0, headline, detail };
+  const detail = o.last_run
+    ? `Last copy run ${o.last_run.conclusion ?? "still running"}${o.last_run.at ? ` ${ago(ms(o.last_run.at), now)}` : ""}`
+    : "No copy run recorded";
+  return {
+    missing,
+    stale,
+    late,
+    worst,
+    reportAge,
+    bad,
+    warn: !bad && late.length > 0,
+    headline,
+    detail,
+  };
 }

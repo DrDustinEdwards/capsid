@@ -22,11 +22,19 @@ export function prAnchor(a: Pick<OpsAwaitingSeat, "repo" | "number">): string {
 // it once CI is green on that sha. A money PR (class typed) is approved by typing its number
 // in chat, never here; seat and wait cannot be approved.
 export function canApprove(a: OpsAwaitingSeat): a is OpsAwaitingSeat & { head_sha: string } {
-  return (a.class === "approve" || a.class === "auto") && typeof a.head_sha === "string" && a.head_sha.length > 0;
+  return (
+    (a.class === "approve" || a.class === "auto") &&
+    typeof a.head_sha === "string" &&
+    a.head_sha.length > 0
+  );
 }
 
 function approveItem(a: OpsAwaitingSeat & { head_sha: string }): BatchItem {
-  return { action: "approve_pr", params: { namespace: a.namespace, repo: a.repo, prs: String(a.number), shas: a.head_sha }, label: prName(a) };
+  return {
+    action: "approve_pr",
+    params: { namespace: a.namespace, repo: a.repo, prs: String(a.number), shas: a.head_sha },
+    label: prName(a),
+  };
 }
 
 export function approveRequest(a: OpsAwaitingSeat & { head_sha: string }): ConfirmRequest {
@@ -36,14 +44,25 @@ export function approveRequest(a: OpsAwaitingSeat & { head_sha: string }): Confi
 
 // Closing without a merge: a confirm with a reason; GitHub can reopen it, the Portal does not.
 export function closeRequest(a: OpsAwaitingSeat): ConfirmRequest {
-  return { action: "pr_close", params: { namespace: a.namespace, repo: a.repo, number: String(a.number) }, title: `Close pull request ${prName(a)}` };
+  return {
+    action: "pr_close",
+    params: { namespace: a.namespace, repo: a.repo, number: String(a.number) },
+    title: `Close pull request ${prName(a)}`,
+  };
 }
 
 // Several approvals as one confirm: each its own approve_pr, previewed and performed in turn.
-export function approveAllRequest(list: ReadonlyArray<OpsAwaitingSeat & { head_sha: string }>): ConfirmRequest {
+export function approveAllRequest(
+  list: ReadonlyArray<OpsAwaitingSeat & { head_sha: string }>,
+): ConfirmRequest {
   const batch = list.map(approveItem);
   const first = batch[0]!;
-  return { action: first.action, params: first.params, title: `Approve ${list.length} pull ${list.length === 1 ? "request" : "requests"}`, batch };
+  return {
+    action: first.action,
+    params: first.params,
+    title: `Approve ${list.length} pull ${list.length === 1 ? "request" : "requests"}`,
+    batch,
+  };
 }
 
 // The pull request an inbox item's GitHub address names, when it is one waiting for you.

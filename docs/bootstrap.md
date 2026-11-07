@@ -17,12 +17,12 @@ bindings. Only `wrangler dev` and `wrangler deploy` need the real file.
 
 ## 2. Bindings
 
-| binding | kind | why it is separate |
-| --- | --- | --- |
-| `DB` | D1 | documents, versions, links, audit log, jobs, agents |
-| `APP_KV` | KV | the Worker's own bookkeeping: caches, counters |
-| `OAUTH_KV` | KV | the OAuth provider's clients, grants and tokens |
-| `MEDIA` | R2 | backups, the markdown mirror, the report sink |
+| binding    | kind | why it is separate                                  |
+| ---------- | ---- | --------------------------------------------------- |
+| `DB`       | D1   | documents, versions, links, audit log, jobs, agents |
+| `APP_KV`   | KV   | the Worker's own bookkeeping: caches, counters      |
+| `OAUTH_KV` | KV   | the OAuth provider's clients, grants and tokens     |
+| `MEDIA`    | R2   | backups, the markdown mirror, the report sink       |
 
 The two KV namespaces are separate. They shared one for a while,
 which meant the Worker's caches lived in the same keyspace as the provider's
@@ -61,13 +61,13 @@ Each row names the tools it enables and the evidence that the permission is
 actually granted, because a permission list copied from a setup guide is a claim
 nobody has checked.
 
-| permission | level | what needs it | evidence |
-| --- | --- | --- | --- |
-| Metadata | Read | resolving the default branch, every other call | implied by every working call |
-| Contents | Read and write | reading files and trees; tagging and publishing releases | exercised continuously since 2026-07-06 |
-| Pull requests | Read and write | merging and closing pull requests | exercised continuously |
-| Actions | Read and write | reading workflow runs and logs | read confirmed 2026-08-16; write was for `capsid_run_ci`, removed 2026-10-31, and can be lowered to read |
-| Workflows | Write | nothing since 2026-10-31 | was for committing under `.github/workflows/` through `capsid_change_repo`; can be removed |
+| permission    | level          | what needs it                                            | evidence                                                                                                 |
+| ------------- | -------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Metadata      | Read           | resolving the default branch, every other call           | implied by every working call                                                                            |
+| Contents      | Read and write | reading files and trees; tagging and publishing releases | exercised continuously since 2026-07-06                                                                  |
+| Pull requests | Read and write | merging and closing pull requests                        | exercised continuously                                                                                   |
+| Actions       | Read and write | reading workflow runs and logs                           | read confirmed 2026-08-16; write was for `capsid_run_ci`, removed 2026-10-31, and can be lowered to read |
+| Workflows     | Write          | nothing since 2026-10-31                                 | was for committing under `.github/workflows/` through `capsid_change_repo`; can be removed               |
 
 Since `capsid_change_repo` was removed, no tool commits to a repository, so the App's
 Workflows permission and Actions write are unused and can be dropped.
@@ -173,13 +173,13 @@ ones a job runs.
 The default for a new agent is read on its named namespaces with no flags. Widen
 it to what the work actually needs and no further:
 
-| scope | a project driver | the seat |
-| --- | --- | --- |
-| `namespaces` | its own | all of them |
-| `repos` | its namespace's mapped repos | all of them |
-| `grants` | read, write | read, write |
-| `can_merge` | no | yes |
-| `can_touch_protected` | no, except capsid-driver and claude-skills-driver | no |
+| scope                 | a project driver                                  | the seat    |
+| --------------------- | ------------------------------------------------- | ----------- |
+| `namespaces`          | its own                                           | all of them |
+| `repos`               | its namespace's mapped repos                      | all of them |
+| `grants`              | read, write                                       | read, write |
+| `can_merge`           | no                                                | yes         |
+| `can_touch_protected` | no, except capsid-driver and claude-skills-driver | no          |
 
 **`repos` is derived, not typed.** A mint that names no repos reads the live
 namespace mapping and sets the axis from it, so a driver reaches its own repos
@@ -191,7 +191,7 @@ by different calls and neither is editable by the credential they bind.
 
 **The two exceptions are named rather than left as a general no**, because a table
 that says no while the inventory says yes teaches a reader to distrust the table.
-The seat granted them on 2026-09-11. Every other driver holds none. `capsid_run_improve` action `status` and Capsid Portal list what each agent actually holds, so the
+The seat granted them on 2026-09-11. Every other driver holds none. `capsid_read_status` action `status` and Capsid Portal list what each agent actually holds, so the
 inventory settles it and this table describes the rule.
 
 A driver opens pull requests with its own GitHub access and never merges them. A driver's pull request is
@@ -232,8 +232,8 @@ rather than after a driver has already taken it.
 
 ## 8. Names kept from the removed improve loop
 
-`capsid_run_improve` serves only action `status`, a read-grant read of Capsid's state,
-and `capsid_admin_control_improve` holds the admin's switches (`sign_policy`,
+`capsid_read_status` serves only action `status`, a read-grant read of Capsid's state,
+and `capsid_admin_manage_switches` holds the admin's switches (`sign_policy`,
 `breaker_reset` and `overnight`). `IMPROVE_SCORE_SECRET` is the root the
 job, policy and backup credential keys are derived from.
 
@@ -276,10 +276,10 @@ Optional parts stay hidden or inert until configured:
 
 One switch, off by default.
 
-- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_control_improve` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
+- **Auto-merge and pre-approved gates** run only when their policy document's `enabled` field is `true` and the document has been signed again afterwards with `capsid_admin_manage_switches` action `sign_policy`, which is admin only. Editing without re-signing leaves the policy authorizing nothing (docs/autonomy.md).
 
 Those are a clone's defaults. On this deployment the pre-approved gates were enabled on 2026-09-13 and auto-merge on 2026-09-16.
 
 ## 11. Checks before a push
 
-Run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.
+Run `npm ci --prefix dashboard` once, then `npm run check`, `npm run check:test`, `npm run check:integration`, `npm run check:scripts`, `npm run check:dashboard`, `npm run lint`, `npm run lint:repo`, `npm test`, `npm run build:dashboard` and `npm run test:browser`. `npm run test:integration` runs the Worker in workerd. `EXPECT_SHA=<sha> npm run verify:live` checks the live Worker. `npm --prefix dashboard run dev` serves the Portal with fake sample data.

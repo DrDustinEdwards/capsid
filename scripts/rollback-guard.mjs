@@ -34,11 +34,19 @@ const SHA = /^[0-9a-f]{7,40}$/;
  * @returns {{ roll: boolean, reason: string }}
  */
 export function shouldRollBack(liveSha, runSha, attempts = {}) {
-  const live = String(liveSha ?? "").trim().toLowerCase();
-  const mine = String(runSha ?? "").trim().toLowerCase();
+  const live = String(liveSha ?? "")
+    .trim()
+    .toLowerCase();
+  const mine = String(runSha ?? "")
+    .trim()
+    .toLowerCase();
 
   if (!SHA.test(mine)) {
-    return { roll: false, reason: "this run's own commit was not supplied as a sha, so there is nothing to compare the live sha against." };
+    return {
+      roll: false,
+      reason:
+        "this run's own commit was not supplied as a sha, so there is nothing to compare the live sha against.",
+    };
   }
   // UNREADABLE: /health did not answer, did not parse, or carried no sha. When the
   // deploy job ran in this same attempt, this attempt shipped the version now serving,
@@ -67,7 +75,10 @@ export function shouldRollBack(liveSha, runSha, attempts = {}) {
       reason: `what is live is ${live}, not this run's commit ${mine}. The deploy this run shipped is already gone, so rolling back would move production off somebody else's deploy. This is the rerun case: it is what put the refused commit back into production on 2026-09-18.`,
     };
   }
-  return { roll: true, reason: `${live} is live and is this run's own commit, so the deploy this run shipped is the one being rolled back.` };
+  return {
+    roll: true,
+    reason: `${live} is live and is this run's own commit, so the deploy this run shipped is the one being rolled back.`,
+  };
 }
 
 /**
@@ -77,16 +88,30 @@ export function shouldRollBack(liveSha, runSha, attempts = {}) {
  * @returns {{ moved: boolean, reason: string }}
  */
 export function rollbackTookEffect(afterSha, runSha) {
-  const after = String(afterSha ?? "").trim().toLowerCase();
-  const mine = String(runSha ?? "").trim().toLowerCase();
+  const after = String(afterSha ?? "")
+    .trim()
+    .toLowerCase();
+  const mine = String(runSha ?? "")
+    .trim()
+    .toLowerCase();
   if (!SHA.test(after)) {
-    return { moved: false, reason: `/health reports '${afterSha}' after the rollback, so it cannot be shown that the rollback took effect.` };
+    return {
+      moved: false,
+      reason: `/health reports '${afterSha}' after the rollback, so it cannot be shown that the rollback took effect.`,
+    };
   }
   if (!SHA.test(mine)) {
-    return { moved: false, reason: "this run's own commit was not supplied as a sha, so there is nothing to compare against." };
+    return {
+      moved: false,
+      reason:
+        "this run's own commit was not supplied as a sha, so there is nothing to compare against.",
+    };
   }
   if (after.startsWith(mine) || mine.startsWith(after)) {
-    return { moved: false, reason: `${after} is still live after the rollback: the rollback did not take effect.` };
+    return {
+      moved: false,
+      reason: `${after} is still live after the rollback: the rollback did not take effect.`,
+    };
   }
   return { moved: true, reason: `${after} is live after the rollback.` };
 }
@@ -105,7 +130,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(verdict.reason);
     process.exit(verdict.roll ? 0 : 1);
   } catch (err) {
-    console.error(`rollback-guard could not run: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(
+      `rollback-guard could not run: ${err instanceof Error ? err.message : String(err)}`,
+    );
     process.exit(2);
   }
 }

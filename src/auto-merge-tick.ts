@@ -1,7 +1,14 @@
 import { readSuspended, unitKey } from "./merge-units";
 import { readPaused } from "./merge-safety";
 import type { Env } from "./env";
-import { existingTestReason, mergeClass, pathClassOfAll, type Classification, type MergeClass, type PathClass } from "./merge-class";
+import {
+  existingTestReason,
+  mergeClass,
+  pathClassOfAll,
+  type Classification,
+  type MergeClass,
+  type PathClass,
+} from "./merge-class";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { HeadMovedError, managePr } from "./github/refs";
 import { PER_PAGE, readCheckRuns, readPrFiles } from "./github/pr-files";
@@ -17,7 +24,13 @@ import {
 } from "./auto-merge-policy";
 import { logEvent } from "@dustinedwards/site-runtime/log";
 import { isVisual, visualDetails, type VisualPr } from "./visual-pr";
-import { closeAsAutoMerged, executeApproval, expireStaleApprovals, readOpenApprovals, type OpenApproval } from "./approval-executor";
+import {
+  closeAsAutoMerged,
+  executeApproval,
+  expireStaleApprovals,
+  readOpenApprovals,
+  type OpenApproval,
+} from "./approval-executor";
 
 // The auto-merge tick: read each open pull request's facts from GitHub and D1, judge
 // them with evaluatePolicy (src/auto-merge-policy.ts), and merge or record the refusal.
@@ -48,23 +61,39 @@ async function ciStepsFor(
   namespace: string,
   owner: string,
   repo: string,
-  headSha: string
+  headSha: string,
 ): Promise<{ steps: PrFacts["ciSteps"]; problem: string | null }> {
   const runsResp = await ghFetch(
-    env, owner, repo, `/repos/${owner}/${repo}/actions/runs?head_sha=${encodeURIComponent(headSha)}&per_page=${PER_PAGE}`
+    env,
+    owner,
+    repo,
+    `/repos/${owner}/${repo}/actions/runs?head_sha=${encodeURIComponent(headSha)}&per_page=${PER_PAGE}`,
   );
-  if (!runsResp.ok) return { steps: [], problem: `the workflow run list returned ${runsResp.status}` };
+  if (!runsResp.ok)
+    return { steps: [], problem: `the workflow run list returned ${runsResp.status}` };
   const runs = ((await runsResp.json()) as { workflow_runs?: WorkflowRun[] }).workflow_runs ?? [];
   const steps: PrFacts["ciSteps"] = [];
   for (const workflow of new Set((requiredCiFor(namespace) ?? []).map((r) => r.workflow))) {
     const newest = runs.filter((r) => r.path === workflow).sort((a, b) => b.id - a.id)[0];
     // No run of a required workflow leaves its steps absent, which ci_green names.
     if (!newest) continue;
-    const jobsResp = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/actions/runs/${newest.id}/jobs?per_page=${PER_PAGE}`);
-    if (!jobsResp.ok) return { steps: [], problem: `the jobs of run ${newest.id} returned ${jobsResp.status}` };
-    const jobs = ((await jobsResp.json()) as {
-      jobs?: Array<{ name: string; steps?: Array<{ name: string; conclusion: string | null }> }>;
-    }).jobs ?? [];
+    const jobsResp = await ghFetch(
+      env,
+      owner,
+      repo,
+      `/repos/${owner}/${repo}/actions/runs/${newest.id}/jobs?per_page=${PER_PAGE}`,
+    );
+    if (!jobsResp.ok)
+      return { steps: [], problem: `the jobs of run ${newest.id} returned ${jobsResp.status}` };
+    const jobs =
+      (
+        (await jobsResp.json()) as {
+          jobs?: Array<{
+            name: string;
+            steps?: Array<{ name: string; conclusion: string | null }>;
+          }>;
+        }
+      ).jobs ?? [];
     for (const job of jobs) {
       for (const step of job.steps ?? []) {
         steps.push({ workflow, job: job.name, step: step.name, conclusion: step.conclusion });
@@ -80,7 +109,7 @@ async function factsForPr(
   owner: string,
   repo: string,
   defaultBranch: string,
-  pr: OpenPr
+  pr: OpenPr,
 ): Promise<PrFacts> {
   const body = pr.body ?? "";
   const jobId = jobIdFromBody(body);
@@ -89,7 +118,9 @@ async function factsForPr(
   let jobStatus: string | null = null;
   const jobPrUrls: string[] = [];
   if (jobId) {
-    const job = await env.DB.prepare("SELECT claimed_by, status, result_ref FROM jobs WHERE id = ?1 AND namespace = ?2")
+    const job = await env.DB.prepare(
+      "SELECT claimed_by, status, result_ref FROM jobs WHERE id = ?1 AND namespace = ?2",
+    )
       .bind(jobId, namespace)
       .first<{ claimed_by: string | null; status: string | null; result_ref: string | null }>();
     jobClaimedBy = job?.claimed_by ?? null;
@@ -111,7 +142,10 @@ async function factsForPr(
   const changedPaths = files.paths;
   // An incomplete check-run list is not a pass; ci_green refuses it with the reason.
   const ci = checks.problem
-    ? { conclusion: null, note: `the check-run list is incomplete (${checks.problem}), so this PR is not evaluated` }
+    ? {
+        conclusion: null,
+        note: `the check-run list is incomplete (${checks.problem}), so this PR is not evaluated`,
+      }
     : ciVerdict(checks.items);
   const steps = await ciStepsFor(env, namespace, owner, repo, pr.head.sha);
 
@@ -151,8 +185,19 @@ export function declineParams(
   // "namespace_paused" when the safety shutoff paused the namespace (src/merge-safety.ts),
   // "changes_existing_test" when the PR edits an existing test (src/merge-class.ts), or
   // "pr_is_draft" when the PR is still a draft.
-  verdict: { failed: PolicyCheck | "head_moved" | "unit_suspended" | "namespace_paused" | "changes_existing_test" | "visual_awaits_look" | "pr_is_draft"; why: string; passed: PolicyCheck[] },
-  now: Date
+  verdict: {
+    failed:
+      | PolicyCheck
+      | "head_moved"
+      | "unit_suspended"
+      | "namespace_paused"
+      | "changes_existing_test"
+      | "visual_awaits_look"
+      | "pr_is_draft";
+    why: string;
+    passed: PolicyCheck[];
+  },
+  now: Date,
 ): Record<string, unknown> {
   return {
     policy_version: policyVersion,
@@ -174,7 +219,7 @@ export function mergeParams(
   now: Date,
   // The merge unit's path class (src/merge-units.ts), so a later rollback of this merge
   // can be traced to its unit.
-  pathClass: string | null = null
+  pathClass: string | null = null,
 ): Record<string, unknown> {
   return {
     policy_version: policyVersion,
@@ -207,14 +252,20 @@ async function auditDeclineOnChange(
   env: Env,
   facts: { repo: string; number: number; headSha: string },
   failed: string,
-  statement: D1PreparedStatement
+  statement: D1PreparedStatement,
 ): Promise<void> {
   const key = `${LAST_DECLINE_PREFIX}${facts.repo}#${facts.number}`;
   const decision = `${facts.headSha} ${failed}`;
   try {
     if ((await env.APP_KV.get(key)) === decision) return;
   } catch (err) {
-    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "AUTO_MERGE",
+      {
+        message: `AUTO_MERGE could not read the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
   // The row first, so a failed KV write repeats a row on the next tick rather than
   // losing one.
@@ -222,7 +273,13 @@ async function auditDeclineOnChange(
   try {
     await env.APP_KV.put(key, decision, { expirationTtl: LAST_DECLINE_TTL_SECONDS });
   } catch (err) {
-    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not record the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "AUTO_MERGE",
+      {
+        message: `AUTO_MERGE could not record the last decline of ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
 }
 
@@ -253,7 +310,7 @@ interface AutoMergeOutcome {
 // Where the awaiting-seat set lives. Rewritten whole on every tick rather than
 // appended to, because the tick recomputes the full set of open pull requests each
 // time: a PR a human merged or closed stops appearing, with no second mechanism needed
-// to expire it. capsid_run_improve action status reads this key rather than calling GitHub, so asking
+// to expire it. capsid_read_status action status reads this key rather than calling GitHub, so asking
 // for status costs nothing.
 export const AWAITING_SEAT_KEY = "improve:awaiting-seat";
 
@@ -286,10 +343,16 @@ export interface AutoMergeReport {
 /** One pass over every open PR on every namespace the policy covers. */
 export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeReport> {
   const loaded = await loadMergePolicy(env);
-  if ("error" in loaded) return { ran: false, note: loaded.error, policy_version: null, outcomes: [] };
+  if ("error" in loaded)
+    return { ran: false, note: loaded.error, policy_version: null, outcomes: [] };
   const policy = loaded.policy;
   if (!policy.enabled) {
-    return { ran: false, note: `merge policy ${policy.version} is present and disabled, so nothing is auto-merged.`, policy_version: policy.version, outcomes: [] };
+    return {
+      ran: false,
+      note: `merge policy ${policy.version} is present and disabled, so nothing is auto-merged.`,
+      policy_version: policy.version,
+      outcomes: [],
+    };
   }
 
   const outcomes: AutoMergeOutcome[] = [];
@@ -300,7 +363,13 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   try {
     suspended = new Set((await readSuspended(env.APP_KV)).map((s) => s.unit));
   } catch (err) {
-    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read the suspended merge units, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "AUTO_MERGE",
+      {
+        message: `AUTO_MERGE could not read the suspended merge units, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
     suspended = "all";
   }
 
@@ -310,7 +379,13 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   try {
     paused = new Map(Object.entries(await readPaused(env.APP_KV)).map(([ns, p]) => [ns, p.reason]));
   } catch (err) {
-    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read the paused namespaces, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "AUTO_MERGE",
+      {
+        message: `AUTO_MERGE could not read the paused namespaces, so nothing merges unattended this tick: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
     paused = "all";
   }
 
@@ -334,17 +409,33 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       // 2026-10-21, CA-15).
       const listedPrs = await listOpenPrs(env, owner, repo);
       if (typeof listedPrs === "string") {
-        logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not list PRs on ${owner}/${repo} (${listedPrs})` }, { level: "error" });
+        logEvent(
+          "AUTO_MERGE",
+          { message: `AUTO_MERGE could not list PRs on ${owner}/${repo} (${listedPrs})` },
+          { level: "error" },
+        );
         continue;
       }
       prs = listedPrs;
       try {
         approvals = await readOpenApprovals(env.DB, `${owner}/${repo}`);
       } catch (err) {
-        logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read the approvals on ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+        logEvent(
+          "AUTO_MERGE",
+          {
+            message: `AUTO_MERGE could not read the approvals on ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}`,
+          },
+          { level: "error" },
+        );
       }
     } catch (err) {
-      logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not read ${namespace}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+      logEvent(
+        "AUTO_MERGE",
+        {
+          message: `AUTO_MERGE could not read ${namespace}: ${err instanceof Error ? err.message : String(err)}`,
+        },
+        { level: "error" },
+      );
       continue;
     }
 
@@ -363,17 +454,39 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
           why: "the PR body names no job id, and no unit in its namespace has earned unattended merging, so a person approves it. Its files and checks were not read.",
           passed: [] as PolicyCheck[],
         };
-        outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, head_sha: pr.head.sha, ...skipped });
+        outcomes.push({
+          namespace,
+          repo: `${owner}/${repo}`,
+          number: pr.number,
+          merged: false,
+          head_sha: pr.head.sha,
+          ...skipped,
+        });
         try {
-          const skippedFacts = { repo: `${owner}/${repo}`, number: pr.number, headSha: pr.head.sha };
+          const skippedFacts = {
+            repo: `${owner}/${repo}`,
+            number: pr.number,
+            headSha: pr.head.sha,
+          };
           await auditDeclineOnChange(
             env,
             skippedFacts,
             skipped.failed,
-            systemAudit(env.DB, "auto-merge-declined", namespace, declineParams(policy.version, skippedFacts, skipped, now))
+            systemAudit(
+              env.DB,
+              "auto-merge-declined",
+              namespace,
+              declineParams(policy.version, skippedFacts, skipped, now),
+            ),
           );
         } catch (err) {
-          logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+          logEvent(
+            "AUTO_MERGE",
+            {
+              message: `AUTO_MERGE could not audit the decline of ${owner}/${repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}`,
+            },
+            { level: "error" },
+          );
         }
         continue;
       }
@@ -384,13 +497,41 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
       const before = outcomes.length;
       try {
         try {
-          await judgeOnePr(env, policy.version, policy.authors, namespace, owner, repo, defaultBranch, pr, outcomes, now, approvals.get(pr.number) ?? null, suspended, policy.units, paused, visual);
+          await judgeOnePr(
+            env,
+            policy.version,
+            policy.authors,
+            namespace,
+            owner,
+            repo,
+            defaultBranch,
+            pr,
+            outcomes,
+            now,
+            approvals.get(pr.number) ?? null,
+            suspended,
+            policy.units,
+            paused,
+            visual,
+          );
         } catch (err) {
           const why = err instanceof Error ? err.message : String(err);
-          logEvent("AUTO_MERGE", { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` }, { level: "error" });
+          logEvent(
+            "AUTO_MERGE",
+            { message: `AUTO_MERGE failed on ${owner}/${repo}#${pr.number}: ${why}` },
+            { level: "error" },
+          );
           // An outcome already pushed is the true one; only its audit row failed.
           if (outcomes.length > before) continue;
-          outcomes.push({ namespace, repo: `${owner}/${repo}`, number: pr.number, merged: false, failed: "error", why: `the tick could not judge or merge this PR: ${why}`, passed: [] });
+          outcomes.push({
+            namespace,
+            repo: `${owner}/${repo}`,
+            number: pr.number,
+            merged: false,
+            failed: "error",
+            why: `the tick could not judge or merge this PR: ${why}`,
+            passed: [],
+          });
           try {
             await env.DB.batch([
               systemAudit(env.DB, "auto-merge-failed", namespace, {
@@ -403,7 +544,13 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
               }),
             ]);
           } catch (auditErr) {
-            logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}` }, { level: "error" });
+            logEvent(
+              "AUTO_MERGE",
+              {
+                message: `AUTO_MERGE could not audit the failure on ${owner}/${repo}#${pr.number}: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+              },
+              { level: "error" },
+            );
           }
         }
       } finally {
@@ -420,7 +567,13 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   try {
     await expireStaleApprovals(env, now);
   } catch (err) {
-    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not expire old approvals: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "AUTO_MERGE",
+      {
+        message: `AUTO_MERGE could not expire old approvals: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
 
   // The full awaiting-seat set, written whole, and written even when it is empty, so a
@@ -443,7 +596,13 @@ export async function autoMergeTick(env: Env, now: Date): Promise<AutoMergeRepor
   try {
     await env.APP_KV.put(AWAITING_SEAT_KEY, JSON.stringify(awaiting));
   } catch (err) {
-    logEvent("AUTO_MERGE", { message: `AUTO_MERGE could not record the awaiting-seat set: ${err instanceof Error ? err.message : String(err)}` }, { level: "error" });
+    logEvent(
+      "AUTO_MERGE",
+      {
+        message: `AUTO_MERGE could not record the awaiting-seat set: ${err instanceof Error ? err.message : String(err)}`,
+      },
+      { level: "error" },
+    );
   }
 
   const merged = outcomes.filter((o) => o.merged).length;
@@ -461,7 +620,12 @@ const OPEN_PR_PAGES = 10;
 async function listOpenPrs(env: Env, owner: string, repo: string): Promise<OpenPr[] | string> {
   const all: OpenPr[] = [];
   for (let page = 1; page <= OPEN_PR_PAGES; page++) {
-    const listed = await ghFetch(env, owner, repo, `/repos/${owner}/${repo}/pulls?state=open&per_page=100&page=${page}`);
+    const listed = await ghFetch(
+      env,
+      owner,
+      repo,
+      `/repos/${owner}/${repo}/pulls?state=open&per_page=100&page=${page}`,
+    );
     if (!listed.ok) return String(listed.status);
     const batch = (await listed.json()) as OpenPr[];
     all.push(...batch);
@@ -493,12 +657,15 @@ async function judgeOnePr(
   // The namespaces the safety shutoff paused, or "all" when they could not be read.
   paused: PausedNamespaces = new Map(),
   // Labeled visual: it waits for Dustin's look even when the policy would merge it.
-  visual = false
+  visual = false,
 ): Promise<void> {
   const facts = await factsForPr(env, namespace, owner, repo, defaultBranch, pr);
   // A promoted unit widens only the namespace's allowed paths (src/auto-merge-policy.ts).
   const pathClass = facts.filesProblem ? null : pathClassOfAll(facts.changedPaths);
-  const promotedUnit = pathClass && units.includes(`${namespace} / ${pathClass}`) ? { unit: `${namespace} / ${pathClass}` } : null;
+  const promotedUnit =
+    pathClass && units.includes(`${namespace} / ${pathClass}`)
+      ? { unit: `${namespace} / ${pathClass}` }
+      : null;
   const verdict = evaluatePolicy(facts, allowedAuthors, promotedUnit);
   let merge_class = mergeClass(facts, verdict, pr.draft === true);
   // Five holds that only narrow. A draft waits as class wait. The other four leave the PR for Dustin as class approve (his
@@ -506,27 +673,48 @@ async function judgeOnePr(
   // paused namespace (src/merge-safety.ts), and a unit a rollback suspended
   // (src/merge-units.ts). The policy would merge it, so it is held with the reason.
   const unit = merge_class.path_class ? unitKey(namespace, merge_class.path_class) : null;
-  let hold: { failed: "pr_is_draft" | "changes_existing_test" | "namespace_paused" | "unit_suspended" | "visual_awaits_look"; reason: string } | null = null;
+  let hold: {
+    failed:
+      | "pr_is_draft"
+      | "changes_existing_test"
+      | "namespace_paused"
+      | "unit_suspended"
+      | "visual_awaits_look";
+    reason: string;
+  } | null = null;
   // A draft first, and it keeps its class wait: GitHub refuses to merge a draft with a
   // 405, so sending it would only fail (Grok audit 2026-10, C2).
   if (verdict.merge && pr.draft === true) {
-    hold = { failed: "pr_is_draft", reason: "the PR is a draft: it is judged again once it is marked ready for review" };
+    hold = {
+      failed: "pr_is_draft",
+      reason: "the PR is a draft: it is judged again once it is marked ready for review",
+    };
   } else if (verdict.merge && visual) {
-    hold = { failed: "visual_awaits_look", reason: "a visual change: Dustin looks at its preview or screenshots before it merges" };
+    hold = {
+      failed: "visual_awaits_look",
+      reason: "a visual change: Dustin looks at its preview or screenshots before it merges",
+    };
   } else if (verdict.merge && facts.existingTestEdits.length > 0) {
     hold = { failed: "changes_existing_test", reason: existingTestReason(facts.existingTestEdits) };
   } else if (verdict.merge && (paused === "all" || paused.has(namespace))) {
     hold = {
       failed: "namespace_paused",
-      reason: paused === "all" ? "the paused namespaces could not be read, so nothing merges unattended this tick" : `auto-merge for ${namespace} is paused: ${paused.get(namespace)}`,
+      reason:
+        paused === "all"
+          ? "the paused namespaces could not be read, so nothing merges unattended this tick"
+          : `auto-merge for ${namespace} is paused: ${paused.get(namespace)}`,
     };
   } else if (verdict.merge && (suspended === "all" || (unit !== null && suspended.has(unit)))) {
     hold = {
       failed: "unit_suspended",
-      reason: suspended === "all" ? "the suspended merge units could not be read, so nothing merges unattended this tick" : `the merge unit ${unit} is suspended after a rollback`,
+      reason:
+        suspended === "all"
+          ? "the suspended merge units could not be read, so nothing merges unattended this tick"
+          : `the merge unit ${unit} is suspended after a rollback`,
     };
   }
-  if (hold && hold.failed !== "pr_is_draft") merge_class = { class: "approve", path_class: merge_class.path_class, reasons: [hold.reason] };
+  if (hold && hold.failed !== "pr_is_draft")
+    merge_class = { class: "approve", path_class: merge_class.path_class, reasons: [hold.reason] };
   const held = hold !== null;
   const merges = verdict.merge && !held;
   // The executor (docs/design/design-merge-pipeline.md section 4): a pull request the
@@ -537,7 +725,16 @@ async function judgeOnePr(
   if (!merges && approval && pr.draft !== true) {
     const done = await executeApproval(env, namespace, facts, merge_class, approval, now);
     if (done.done === "merged") {
-      outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: done.why, passed: verdict.passed, merge_class });
+      outcomes.push({
+        namespace,
+        repo: facts.repo,
+        number: pr.number,
+        merged: true,
+        failed: null,
+        why: done.why,
+        passed: verdict.passed,
+        merge_class,
+      });
       return;
     }
   }
@@ -556,14 +753,36 @@ async function judgeOnePr(
       env,
       facts,
       verdict.failed,
-      systemAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, verdict, now))
+      systemAudit(
+        env.DB,
+        "auto-merge-declined",
+        namespace,
+        declineParams(policyVersion, facts, verdict, now),
+      ),
     );
     return;
   }
   if (hold) {
     const held = { failed: hold.failed, why: hold.reason, passed: verdict.passed };
-    outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...held, merge_class });
-    await auditDeclineOnChange(env, facts, held.failed, systemAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, held, now)));
+    outcomes.push({
+      namespace,
+      repo: facts.repo,
+      number: pr.number,
+      merged: false,
+      ...held,
+      merge_class,
+    });
+    await auditDeclineOnChange(
+      env,
+      facts,
+      held.failed,
+      systemAudit(
+        env.DB,
+        "auto-merge-declined",
+        namespace,
+        declineParams(policyVersion, facts, held, now),
+      ),
+    );
     return;
   }
   // merge_method "merge", because a squash would not keep the audited head sha. Pinned
@@ -579,18 +798,47 @@ async function judgeOnePr(
       why: `the PR head moved after the policy judged ${facts.headSha}, so GitHub refused the pinned merge. ${err.message}`,
       passed: verdict.passed,
     };
-    outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: false, ...moved, merge_class });
+    outcomes.push({
+      namespace,
+      repo: facts.repo,
+      number: pr.number,
+      merged: false,
+      ...moved,
+      merge_class,
+    });
     await auditDeclineOnChange(
       env,
       facts,
       moved.failed,
-      systemAudit(env.DB, "auto-merge-declined", namespace, declineParams(policyVersion, facts, moved, now))
+      systemAudit(
+        env.DB,
+        "auto-merge-declined",
+        namespace,
+        declineParams(policyVersion, facts, moved, now),
+      ),
     );
     return;
   }
-  outcomes.push({ namespace, repo: facts.repo, number: pr.number, merged: true, failed: null, why: null, passed: verdict.passed, merge_class });
+  outcomes.push({
+    namespace,
+    repo: facts.repo,
+    number: pr.number,
+    merged: true,
+    failed: null,
+    why: null,
+    passed: verdict.passed,
+    merge_class,
+  });
   // Merged by the policy on its own: an approval it held has nothing left to do.
-  if (approval) await closeAsAutoMerged(env, namespace, facts, approval, (result as { sha?: string }).sha ?? null, now);
+  if (approval)
+    await closeAsAutoMerged(
+      env,
+      namespace,
+      facts,
+      approval,
+      (result as { sha?: string }).sha ?? null,
+      now,
+    );
   // The merge has landed, and the tick's catch does not retry a PR whose outcome is pushed,
   // so the row the safety meter and the merge units read is tried a second time before the
   // failure is left to that catch (Grok audit 2026-10-21, CA-18).
@@ -600,7 +848,14 @@ async function judgeOnePr(
         env.DB,
         "auto-merged",
         namespace,
-        mergeParams(policyVersion, facts, verdict.passed, (result as { sha?: string }).sha ?? null, now, merge_class.path_class)
+        mergeParams(
+          policyVersion,
+          facts,
+          verdict.passed,
+          (result as { sha?: string }).sha ?? null,
+          now,
+          merge_class.path_class,
+        ),
       ),
     ]);
   try {

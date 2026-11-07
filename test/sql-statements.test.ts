@@ -29,21 +29,30 @@ test("a statement after a skipped one still has its hole found", () => {
     ].join("\n"),
   });
   const withHole = statements.filter((s) => s.sql.includes("${"));
-  assert.deepEqual(withHole, [], "a statement with an unsubstituted hole was returned as plannable");
+  assert.deepEqual(
+    withHole,
+    [],
+    "a statement with an unsubstituted hole was returned as plannable",
+  );
   assert.equal(skipped.length, 2);
 });
 
 test("a statement with a line comment before its string is extracted", () => {
   const { statements, skipped } = extractFrom({
-    "c.ts": 'db.prepare(\n  // why this query is shaped this way\n  "SELECT id FROM jobs WHERE id = ?1"\n);\n',
+    "c.ts":
+      'db.prepare(\n  // why this query is shaped this way\n  "SELECT id FROM jobs WHERE id = ?1"\n);\n',
   });
-  assert.deepEqual(statements.map((s) => s.sql), ["SELECT id FROM jobs WHERE id = ?1"]);
+  assert.deepEqual(
+    statements.map((s) => s.sql),
+    ["SELECT id FROM jobs WHERE id = ?1"],
+  );
   assert.deepEqual(skipped, []);
 });
 
 test("a prepare call on an expression is counted as skipped", () => {
   const { statements, skipped } = extractFrom({
-    "b.ts": 'db.prepare(flag ? `SELECT 1 FROM jobs` : `SELECT 2 FROM jobs`);\ndb.prepare("SELECT id FROM jobs");\n',
+    "b.ts":
+      'db.prepare(flag ? `SELECT 1 FROM jobs` : `SELECT 2 FROM jobs`);\ndb.prepare("SELECT id FROM jobs");\n',
   });
   assert.equal(statements.length, 1);
   assert.equal(skipped.length, 1);

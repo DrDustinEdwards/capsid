@@ -1,12 +1,35 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
-import type { AdminWriteObserver } from "./admin-client-audit";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { appendAudit, correlationId, loggedArgs, loggedResult, recordAudit, type AuditEnv } from "@dustinedwards/site-runtime/audit-log";
-import { authorizeCall, mcpScopes, outsideResult, toolScopeChallenge, type McpCaller } from "@dustinedwards/site-runtime/mcp-server";
-import { allowsScope, allowsToolAction, describeScope, type AgentGrant, type ScopeFlag } from "./agents-schema";
-import { describePortfolioDocs, isPortfolioPath, isPortfolioTool, PORTFOLIO_DOCS } from "./portfolio-docs";
+import {
+  appendAudit,
+  correlationId,
+  loggedArgs,
+  loggedResult,
+  recordAudit,
+  type AuditEnv,
+} from "@dustinedwards/site-runtime/audit-log";
+import {
+  authorizeCall,
+  mcpScopes,
+  outsideResult,
+  toolScopeChallenge,
+  type McpCaller,
+} from "@dustinedwards/site-runtime/mcp-server";
+import {
+  allowsScope,
+  allowsToolAction,
+  describeScope,
+  type AgentGrant,
+  type ScopeFlag,
+} from "./agents-schema";
+import {
+  describePortfolioDocs,
+  isPortfolioPath,
+  isPortfolioTool,
+  PORTFOLIO_DOCS,
+} from "./portfolio-docs";
 import { MINUTE_MS, HOUR_MS } from "./time";
 import { withCallSignal } from "./call-signal";
 
@@ -67,9 +90,8 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   capsid_close_pr: "write",
   // list reads; every other action changes the queue.
   capsid_work_jobs: "action",
-  // Capsid's status (src/status.ts). The name is the improve loop's, kept when the loop
-  // was removed so no agent's tools list changes.
-  capsid_run_improve: "read",
+  // Capsid's status (src/status.ts).
+  capsid_read_status: "read",
 
   // What needs the seat, across every namespace and repo. It only reads.
   capsid_admin_whats_next: "admin_read",
@@ -95,7 +117,7 @@ export const TOOL_GRANTS: Record<string, ToolRequirement> = {
   // sign_policy decides whether this Worker may merge without a human, breaker_reset
   // reopens a namespace's queue and overnight starts unattended sessions. None of those
   // is a driver's work.
-  capsid_admin_control_improve: "admin",
+  capsid_admin_manage_switches: "admin",
   // Mints a site key and sets it on the site Worker and on Carrel.
   capsid_admin_set_site_key: "admin",
 };
@@ -112,7 +134,10 @@ export function requiredGrant(tool: string): ToolRequirement {
 // but the action. The registrar reads this table. An unlisted action takes `default`,
 // so a new action is refused to a driver until listed. No served tool needs it today;
 // the improve loop's tool did, before the loop was removed.
-export const TOOL_ACTION_GRANTS: Record<string, { default: ToolRequirement; actions: Record<string, ToolRequirement> }> = {};
+export const TOOL_ACTION_GRANTS: Record<
+  string,
+  { default: ToolRequirement; actions: Record<string, ToolRequirement> }
+> = {};
 
 export function requiredForAction(tool: string, action: string | undefined): ToolRequirement {
   const spec = Object.hasOwn(TOOL_ACTION_GRANTS, tool) ? TOOL_ACTION_GRANTS[tool] : null;
@@ -127,8 +152,9 @@ export const SCOPES = mcpScopes("capsid");
 
 // For an "action" tool, the actions that only read; every other action writes. The
 // handlers split the same way where the namespace is known (src/tools/jobs.ts list,
-// src/tools/lint.ts gather).
-const READ_ACTIONS: Record<string, readonly string[]> = {
+// src/tools/lint.ts gather), and a caller holding only the read grant is served the tool
+// with these actions alone (src/tools/surface.ts READ_VIEWS; area 11, T7).
+export const READ_ACTIONS: Record<string, readonly [string, ...string[]]> = {
   capsid_work_jobs: ["list"],
   capsid_lint_namespace: ["gather"],
 };
@@ -138,7 +164,8 @@ const READ_ACTIONS: Record<string, readonly string[]> = {
 function declaredScope(tool: string, action: string | undefined): string {
   const requirement = requiredForAction(tool, action);
   if (requirement === "read" || requirement === "admin_read") return SCOPES.read;
-  if (requirement === "action" && action !== undefined && READ_ACTIONS[tool]?.includes(action)) return SCOPES.read;
+  if (requirement === "action" && action !== undefined && READ_ACTIONS[tool]?.includes(action))
+    return SCOPES.read;
   return SCOPES.write;
 }
 
@@ -152,10 +179,17 @@ function declaredScope(tool: string, action: string | undefined): string {
 function sharedGrantRefusal(agent: Agent, tool: string, action: string | undefined): string | null {
   if (requiredForAction(tool, action) === "action") return null;
   const scope = declaredScope(tool, action);
-  const caller: McpCaller = { kind: "person", email: agent.actor, scopes: agent.scopes.grants.map((g) => SCOPES[g]) };
+  const caller: McpCaller = {
+    kind: "person",
+    email: agent.actor,
+    scopes: agent.scopes.grants.map((g) => SCOPES[g]),
+  };
   if (authorizeCall({}, caller, scope, { site: "Capsid", scopes: SCOPES }) === null) return null;
   const grant: AgentGrant = scope === SCOPES.read ? "read" : "write";
-  return checkScope(agent, { tool, action, grant }) ?? `unauthorized: '${tool}' requires the ${grant} grant.`;
+  return (
+    checkScope(agent, { tool, action, grant }) ??
+    `unauthorized: '${tool}' requires the ${grant} grant.`
+  );
 }
 
 // A requirement as the part of a ScopeNeed it decides. The registrar and every route
@@ -192,21 +226,32 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "the public versions model (src/system-versions.ts): which version of each network package each system installs, read from the repos' lockfiles, a private system's without its file paths; it serves only what the nightly build stored, never GitHub; GET only, edge-cached, the same per-IP limit as the model, failing closed; no CORS",
   "/reports/signed-in-security.json":
     "the signed-in crawl's report (src/signed-in-crawl.ts): findings about the Portal's signed-in headers, for devkit's scoreboard; it serves only what the hourly crawl stored in KV, never a page, cookie or token; GET only",
-  "/oauth/clients/verify-live.json": "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
-  "/csp-report": "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
-  "/ops/mcp": "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
-  "/backup/credential": "signed with the backup-specific HMAC key, derived from the Worker's root secret under its own context, and replay-protected",
+  "/oauth/clients/verify-live.json":
+    "the verify-live probe's OAuth client metadata document (src/oauth-client-docs.ts): public by nature, fetched by the authorization server with no credential, and holds no secret",
+  "/csp-report":
+    "browsers post violation reports with no credential; the body is size- and type-bounded and rate-limited",
+  "/ops/mcp":
+    "resolves the caller, and every tool call it serves then passes checkScope in the registrar",
+  "/backup/credential":
+    "signed with the backup-specific HMAC key, derived from the Worker's root secret under its own context, and replay-protected",
   "/backup/offaccount-report":
     "signed with the same backup-specific HMAC key and replay-protected under its own jti scope; stores the Amazon copy's per-site run ids for the watcher (src/offaccount.ts) and returns nothing",
-  "/bench/tasks": "signed with the capsid-bench HMAC key (src/bench.ts), which no backup key can produce, and replay-protected; registers a task once and never changes one",
-  "/bench/draw": "signed with the capsid-bench HMAC key and replay-protected; records the registration once and appends the drawn task order, which never changes",
-  "/bench/start": "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap, and returns a treatment run's own run key once",
-  "/bench/repro": "signed with the capsid-bench HMAC key and replay-protected; writes the harness's reproduction receipt once for one running treatment run, which its run key's complete then requires",
-  "/shadow/job": "a GitHub Actions OIDC token whose repository is the capsid namespace's primary repo and whose workflow is shadow-test.yml on a pull request; returns only the capsid job that pull request names",
-  "/shadow/result": "the same OIDC token as /shadow/job; keeps the shadow test written for that pull request's job and records its base and head results",
+  "/bench/tasks":
+    "signed with the capsid-bench HMAC key (src/bench.ts), which no backup key can produce, and replay-protected; registers a task once and never changes one",
+  "/bench/draw":
+    "signed with the capsid-bench HMAC key and replay-protected; records the registration once and appends the drawn task order, which never changes",
+  "/bench/start":
+    "signed with the capsid-bench HMAC key and replay-protected; opens a run only while KV bench:enabled reads on and under the running cap, and returns a treatment run's own run key once",
+  "/bench/repro":
+    "signed with the capsid-bench HMAC key and replay-protected; writes the harness's reproduction receipt once for one running treatment run, which its run key's complete then requires",
+  "/shadow/job":
+    "a GitHub Actions OIDC token whose repository is the capsid namespace's primary repo and whose workflow is shadow-test.yml on a pull request; returns only the capsid job that pull request names",
+  "/shadow/result":
+    "the same OIDC token as /shadow/job; keeps the shadow test written for that pull request's job and records its base and head results",
   "/review/run":
     "a GitHub Actions OIDC token (audience capsid-review) whose owner id is Dustin's, whose job workflow is devkit's review.yml and whose event is a pull request; reviews only that pull request, read through the GitHub App, and records the verdict (src/review.ts)",
-  "/bench/score": "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, takes every arm's claim from the report, and checks the treatment's job is its own, and closes that job in the same step",
+  "/bench/score":
+    "signed with the capsid-bench HMAC key and replay-protected; closes one running bench run, takes every arm's claim from the report, and checks the treatment's job is its own, and closes that job in the same step",
   "/ops/inbox":
     "what needs Dustin, per app (src/inbox.ts): resolveAgent on the bearer (401 without one), then each app is kept only if checkScope admits the caller's read grant on that app's namespace, so a key scoped to one namespace sees that app alone and the admin or an all-namespace read key sees every app. GET only, no CORS headers (an app's server calls it, never a browser), nothing written",
   "/ops/inbox/report":
@@ -217,7 +262,8 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "Claude Code's OTLP metrics: resolveAgent on the bearer (401 otherwise), then a driver or the admin holding write through checkScope (403 otherwise); the usage is bound to the one job the driver holds claimed, never to a job the body names; points for a session another caller reported first are refused (src/ops-session-auth.ts, src/ops-otlp.ts)",
   "/ops/otlp/v1/logs":
     "Claude Code's OTLP logs, counted as api_error events only: resolveAgent on the bearer and the same caller and job binding as the metrics route (src/ops-session-auth.ts)",
-  "/authorize": "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
+  "/authorize":
+    "the OAuth authorization step, gated by the OAuth provider and the Access for SaaS login",
   "/callback": "the OAuth callback, which validates state before issuing anything",
   "/owner":
     "site-runtime's owner page (./owner-page), gated as /owner/* is: the Access for SaaS sign-in and admission of consent, ADMIN_EMAIL and CO_OWNER_EMAILS, before it shows anything",
@@ -225,42 +271,68 @@ export const UNGATED_ROUTES: Record<string, string> = {
     "the owner page's POSTs /owner/revoke and /owner/sign-out (site-runtime ./owner-page): the same Access for SaaS sign-in and admission as consent (ADMIN_EMAIL and CO_OWNER_EMAILS), a state bound to the browser, a hashed 30-minute session in OAUTH_KV; a revoke needs a same-origin Origin and the session's CSRF token and reaches only the signed-in person's own grants",
   "/register":
     "tightened Dynamic Client Registration for Grok and Gemini (site-runtime registrationLimited and registrationRefusal, src/index.ts): rate limited per address (5 an hour) and overall (30 a day), failing closed, every redirect URI matched exactly against the allowlist; it writes a client record and grants nothing, since the client still meets the consent page and the Access sign-in",
-  "/portal/callback": "Capsid Portal's Access for SaaS callback, which validates state before issuing a session",
-  "/portal/api/ops": "the Portal's feed, gated by portalGate: the administrator's Access session, and a 403 for any bearer",
+  "/portal/callback":
+    "Capsid Portal's Access for SaaS callback, which validates state before issuing a session",
+  "/portal/api/ops":
+    "the Portal's feed, gated by portalGate: the administrator's Access session, and a 403 for any bearer",
   "/portal/api/ops/refresh":
     "one watcher pass on demand, gated by portalGate, then a same-origin header, then a KV rate limit that fails closed",
   "/portal/api/actions/preview":
     "a Portal action's preview, which writes nothing: portalGate, a same-origin Sec-Fetch-Site, a 64KB body cap, then the X-Capsid-CSRF header against the capsid_portal_csrf cookie",
   "/portal/api/actions/perform":
     "a Portal action's perform: the preview's checks, then a token signed at preview time that binds the action, its params and the administrator's email for five minutes",
-  "/portal/api/namespaces": "the Portal's per-namespace status, read through the function behind capsid_run_improve action status, gated by portalGate",
+  "/portal/api/namespaces":
+    "the Portal's per-namespace status, read through the function behind capsid_read_status action status, gated by portalGate",
   "/portal/api/activity": "the Portal's bounded audit_log read, gated by portalGate",
-  "/portal/api/claims": "the Portal's bounded read of claims, evaluations and touches, through the capsid_admin_read_claims tool's readers, gated by portalGate",
-  "/portal/api/stale": "the Portal's stale jobs, through the reader behind capsid_work_jobs action list stale: true, gated by portalGate",
-  "/portal/api/plan": "the Portal's Tonight plan, through the reader behind capsid_work_jobs action list view plan, over every namespace, gated by portalGate",
-  "/portal/api/digest": "the Portal's since-you-last-looked strip, through the reader behind capsid_work_jobs action list view digest, over every namespace, gated by portalGate",
-  "/portal/api/convergence": "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
-  "/portal/api/maintenance": "the Portal's Maintenance list, the daily pass's stored list that capsid_run_improve action status serves, gated by portalGate",
-  "/portal/api/packages/history": "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
-  "/portal/api/completeness": "the Portal's Completeness view: devkit's daily scoreboard (board.json on its scoreboard branch), read through the GitHub App and cached for ten minutes, gated by portalGate",
-  "/portal/api/not-found": "the Portal's 404 panel: Capsid's own missing pages from page_404_daily over 30 days, read-only, gated by portalGate",
-  "/portal/api/shared-code": "the Portal's Shared code view: each network package's releases and the pins in every model repo, read nightly through the GitHub App and kept in KV, gated by portalGate",
-  "/portal/api/resources": "the Portal's Workers tab: the secrets and data model (secret names, never values, and each Worker's stores), read nightly from Cloudflare and kept in KV, gated by portalGate",
-  "/portal/api/library": "the Portal's read-only Library: the knowledge store's shelves, a search and one document with its edges, through the readers behind capsid_find_docs and capsid_read_doc, gated by portalGate",
-  "/portal/api/trends": "the Portal's trends for its charts: minutes, the queue, merges and rollbacks from D1, backup slots from R2, default-branch CI from GitHub (cached an hour), read-only, gated by portalGate",
+  "/portal/api/claims":
+    "the Portal's bounded read of claims, evaluations and touches, through the capsid_admin_read_claims tool's readers, gated by portalGate",
+  "/portal/api/stale":
+    "the Portal's stale jobs, through the reader behind capsid_work_jobs action list stale: true, gated by portalGate",
+  "/portal/api/plan":
+    "the Portal's Tonight plan, through the reader behind capsid_work_jobs action list view plan, over every namespace, gated by portalGate",
+  "/portal/api/merge-units":
+    "the Portal's Merge units panel: the suspended merge units and the units tick's proposals, read from KV, gated by portalGate",
+  "/portal/api/site-search":
+    "a site page's search tab: Search Console and Bing Webmaster for one namespace's site, through the readers behind capsid_inspect_repo actions search_console and bing_webmaster, gated by portalGate",
+  "/portal/api/site-traffic":
+    "a site page's traffic tab: 404s, 5xx, web vitals and AI crawlers from Cloudflare for one namespace's site, through the reader behind capsid_inspect_repo action site_traffic, gated by portalGate",
+  "/portal/api/workers-builds":
+    "a site page's deploys tab: the Workers Builds of the Worker one namespace's site row names, through the reader behind capsid_admin_read_ops action workers_builds, gated by portalGate",
+  "/portal/api/build-log":
+    "one Workers Build's log for a site page's deploys tab, through the reader behind capsid_admin_read_ops action workers_build_logs, gated by portalGate",
+  "/portal/api/digest":
+    "the Portal's since-you-last-looked strip, through the reader behind capsid_work_jobs action list view digest, over every namespace, gated by portalGate",
+  "/portal/api/backups":
+    "Health's Backups tab: every site's backup_status read live through its operator API beside its Amazon copy, through the reader behind capsid_admin_read_ops action backups, gated by portalGate",
+  "/portal/api/convergence":
+    "the Portal's convergence view of each site that opted into its operator API: sync_status, the health route and secret names read live, gated by portalGate",
+  "/portal/api/maintenance":
+    "the Portal's Maintenance list, the daily pass's stored list that capsid_read_status action status serves, gated by portalGate",
+  "/portal/api/packages/history":
+    "the Portal's on-demand download history of one configured package, cached, gated by portalGate",
+  "/portal/api/completeness":
+    "the Portal's Completeness view: devkit's daily scoreboard (board.json on its scoreboard branch), read through the GitHub App and cached for ten minutes, gated by portalGate",
+  "/portal/api/not-found":
+    "the Portal's 404 panel: Capsid's own missing pages from page_404_daily over 30 days, read-only, gated by portalGate",
+  "/portal/api/shared-code":
+    "the Portal's Shared code view: each network package's releases and the pins in every model repo, read nightly through the GitHub App and kept in KV, gated by portalGate",
+  "/portal/api/resources":
+    "the Portal's Workers tab: the secrets and data model (secret names, never values, and each Worker's stores), read nightly from Cloudflare and kept in KV, gated by portalGate",
+  "/portal/api/library":
+    "the Portal's read-only Library: the knowledge store's shelves, a search and one document with its edges, through the readers behind capsid_find_docs and capsid_read_doc, gated by portalGate",
+  "/portal/api/trends":
+    "the Portal's trends for its charts: minutes, the queue, merges and rollbacks from D1, backup slots from R2, default-branch CI from GitHub (cached an hour), read-only, gated by portalGate",
   "/portal/api/push":
     "the Portal's phone alerts: GET lists the devices with alerts on behind portalGate; POST turns one on or off or sends a test behind the preview's checks (portalGate, same-origin, the body cap, CSRF)",
-  "/portal/api/sign-out": "expires the Portal's own cookies, behind the preview's checks so a cross-site page cannot sign the administrator out",
-  "/portal/api/*": "any other path under /portal/api/: portalGate, then a JSON 404, so the app's page is never served as data",
-  "/portal": "Capsid Portal's page, served from ASSETS only after portalGate admits the administrator's session",
-  "/portal/*": "Capsid Portal's files and client routes, served from ASSETS only after portalGate admits the administrator's session",
+  "/portal/api/sign-out":
+    "expires the Portal's own cookies, behind the preview's checks so a cross-site page cannot sign the administrator out",
+  "/portal/api/*":
+    "any other path under /portal/api/: portalGate, then a JSON 404, so the app's page is never served as data",
+  "/portal":
+    "Capsid Portal's page, served from ASSETS only after portalGate admits the administrator's session",
+  "/portal/*":
+    "Capsid Portal's files and client routes, served from ASSETS only after portalGate admits the administrator's session",
 };
-
-// The refusal for a gated route, or null. The same checkScope the tools use.
-export function routeRefusal(path: string, agent: Agent): string | null {
-  const requirement = Object.hasOwn(ROUTE_GRANTS, path) ? ROUTE_GRANTS[path] : "admin";
-  return checkScope(agent, { tool: path, ...needFor(requirement) });
-}
 
 export interface ScopeNeed {
   tool: string;
@@ -305,7 +377,8 @@ export const JOBS_TOOL = "capsid_work_jobs";
 // Why a flag is needed, so a refusal tells the caller what to ask for.
 const FLAG_REASON: Record<ScopeFlag, string> = {
   can_merge: "merging a pull request can trigger a deploy on a repo that deploys on push",
-  can_touch_protected: "an autonomy policy document decides what this Worker may do without a human, so writing one is a ruling",
+  can_touch_protected:
+    "an autonomy policy document decides what this Worker may do without a human, so writing one is a ruling",
 };
 
 // Order is deliberate: tool, grant, admin, namespace, repo, flags. A caller that
@@ -339,7 +412,11 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
     const stale = stepUpRefusal(agent, need, Date.now());
     if (stale) return stale;
   }
-  if (need.namespace !== undefined && !allowsScope(scopes.namespaces, need.namespace) && !portfolioReadAdmits(need)) {
+  if (
+    need.namespace !== undefined &&
+    !allowsScope(scopes.namespaces, need.namespace) &&
+    !portfolioReadAdmits(need)
+  ) {
     return (
       `unauthorized: ${agent.actor} is not scoped to the '${need.namespace}' namespace. Its namespace scope is ${describeScope(scopes.namespaces)}.` +
       (need.namespace === PORTFOLIO_DOCS.namespace
@@ -369,14 +446,21 @@ export function checkScope(agent: Agent, need: ScopeNeed): string | null {
 // from them.
 const BENCH_RUN_ACTIONS: readonly string[] = ["claim", "list", "complete", "fail"];
 
-function benchRunRefusal(run: { run: string; job: string | null }, actor: string, need: ScopeNeed): string | null {
+function benchRunRefusal(
+  run: { run: string; job: string | null },
+  actor: string,
+  need: ScopeNeed,
+): string | null {
   const refusal = `unauthorized: ${actor} is the run key of bench run ${run.run} and may only claim, read, complete or fail its own job`;
   if (need.tool !== JOBS_TOOL) return `${refusal}; it cannot use ${need.tool}.`;
   if (!need.call) return null;
-  if (!need.action || !BENCH_RUN_ACTIONS.includes(need.action)) return `${refusal}; it cannot ${need.action ?? "call the tool with no action"}.`;
+  if (!need.action || !BENCH_RUN_ACTIONS.includes(need.action))
+    return `${refusal}; it cannot ${need.action ?? "call the tool with no action"}.`;
   if (run.job === null) return `${refusal}, and no single job carries this run's title yet.`;
-  if (need.call.jobId !== run.job) return `${refusal} (${run.job}); this call names ${need.call.jobId ?? "no job"}.`;
-  if (need.call.filtered) return `${refusal}; a list may not take a view, the stale view or a status filter.`;
+  if (need.call.jobId !== run.job)
+    return `${refusal} (${run.job}); this call names ${need.call.jobId ?? "no job"}.`;
+  if (need.call.filtered)
+    return `${refusal}; a list may not take a view, the stale view or a status filter.`;
   return null;
 }
 
@@ -423,7 +507,7 @@ export const STEP_UP: Record<string, readonly string[] | "*"> = {
   capsid_admin_manage_namespaces: ["register", "update", "delete_perform"],
   capsid_admin_manage_agents: ["mint", "revoke", "update_scopes"],
   capsid_admin_run_controls: ["perform"],
-  capsid_admin_control_improve: "*",
+  capsid_admin_manage_switches: "*",
   capsid_admin_set_site_key: "*",
 };
 
@@ -438,30 +522,55 @@ export function needsStepUp(tool: string, action: string | undefined): boolean {
 // not per admin: activity in one session (a laptop) must not keep another, idle one (a
 // forgotten device, or a grant whose refresh token leaked) inside the window. The entry
 // outlives the hard cap, so it never expires while it could still matter.
-const stepUpKey = (actor: string, signedInAt: number): string => `step-up:last:${actor}:${signedInAt}`;
+const stepUpKey = (actor: string, signedInAt: number): string =>
+  `step-up:last:${actor}:${signedInAt}`;
 
 /** The time of this session's last successful step-up action, or undefined when there
  *  is none or KV cannot say. Undefined falls back to the sign-in time alone, so a KV
  *  failure can only narrow access, never widen it; a time after `now` is refused for the
  *  same reason, since it would read as activity that has not happened. */
-export async function readLastStepUp(kv: KVNamespace, actor: string, signedInAt: number, now: number = Date.now()): Promise<number | undefined> {
+export async function readLastStepUp(
+  kv: KVNamespace,
+  actor: string,
+  signedInAt: number,
+  now: number = Date.now(),
+): Promise<number | undefined> {
   try {
     const value = Number(await kv.get(stepUpKey(actor, signedInAt)));
     return Number.isFinite(value) && value > 0 && value <= now ? value : undefined;
   } catch (error) {
-    logEvent("STEP_UP_READ_FAILED", { message: `STEP_UP_READ_FAILED: ${error instanceof Error ? error.message : String(error)}; using the sign-in time alone` }, { level: "error" });
+    logEvent(
+      "STEP_UP_READ_FAILED",
+      {
+        message: `STEP_UP_READ_FAILED: ${error instanceof Error ? error.message : String(error)}; using the sign-in time alone`,
+      },
+      { level: "error" },
+    );
     return undefined;
   }
 }
 
 // Called only after a step-up action succeeded. The action is already done, so a KV
 // failure is logged and never fails it; the cost is that the idle clock is not reset.
-async function recordStepUp(kv: KVNamespace, agent: Agent, signedInAt: number, now: number): Promise<void> {
+async function recordStepUp(
+  kv: KVNamespace,
+  agent: Agent,
+  signedInAt: number,
+  now: number,
+): Promise<void> {
   agent.lastStepUpAt = now;
   try {
-    await kv.put(stepUpKey(agent.actor, signedInAt), String(now), { expirationTtl: STEP_UP_MAX_MS / 1000 + 3600 });
+    await kv.put(stepUpKey(agent.actor, signedInAt), String(now), {
+      expirationTtl: STEP_UP_MAX_MS / 1000 + 3600,
+    });
   } catch (error) {
-    logEvent("STEP_UP_WRITE_FAILED", { message: `STEP_UP_WRITE_FAILED: ${error instanceof Error ? error.message : String(error)}; the action succeeded and the idle clock was not reset` }, { level: "error" });
+    logEvent(
+      "STEP_UP_WRITE_FAILED",
+      {
+        message: `STEP_UP_WRITE_FAILED: ${error instanceof Error ? error.message : String(error)}; the action succeeded and the idle clock was not reset`,
+      },
+      { level: "error" },
+    );
   }
 }
 
@@ -493,20 +602,24 @@ const ADMIN_REASON: Record<string, string> = {
     "It reads what waits on the seat across every namespace and every mapped repo (blocked jobs, questions, open pull requests and their CI, stale work, failed checks), which is wider than any one caller's scope.",
   capsid_admin_manage_namespaces:
     "It edits the namespace-to-repo mapping, which is the authorization boundary every repo call resolves through, and its delete removes every live document of a namespace, so a scoped caller that could use it could widen itself or delete the boundary it sits behind.",
-  capsid_admin_manage_agents: "It mints, re-scopes and revokes agents, so a scoped caller that could use it could widen itself.",
+  capsid_admin_manage_agents:
+    "It mints, re-scopes and revokes agents, so a scoped caller that could use it could widen itself.",
   capsid_admin_read_claims:
     "It reads every agent's claims, the Worker's checks of them and every human touch, across every namespace, which is wider than any one caller's scope.",
   capsid_admin_read_ops:
     "It reads the watcher's last pass, the Cloudflare account's Access and Email Routing configuration, and every Workers Build, across every namespace, which is wider than any one caller's scope.",
   capsid_admin_run_controls:
     "It runs the administrator's controls (revoke an agent, resume or fail a job, edit the sites and packages the Portal watches), each of which changes what other callers may do or see, so a scoped caller that could use one could widen itself.",
-  capsid_admin_control_improve:
-    "It holds the administrator's switches: sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_run_improve.",
-  capsid_admin_set_site_key: "It mints a site's operator key and sets it as a secret on the site's Worker and on Carrel, so a caller that could use it could hand itself a site's key.",
+  capsid_admin_manage_switches:
+    "It holds the administrator's switches: sign_policy decides whether this Worker may merge without a human, breaker_reset reopens a namespace's queue and overnight starts unattended sessions, so a caller that could use one could widen itself. A driver reads status with capsid_read_status.",
+  capsid_admin_set_site_key:
+    "It mints a site's operator key and sets it as a secret on the site's Worker and on Carrel, so a caller that could use it could hand itself a site's key.",
 };
 
 function adminReason(tool: string): string {
-  return Object.hasOwn(ADMIN_REASON, tool) ? ADMIN_REASON[tool] : "It acts on more than one namespace's scope.";
+  return Object.hasOwn(ADMIN_REASON, tool)
+    ? ADMIN_REASON[tool]
+    : "It acts on more than one namespace's scope.";
 }
 
 // The policy override is itself scoped: `allow_improve_paths`, which lets a document
@@ -522,7 +635,7 @@ function deny(message: string) {
 }
 
 // An omitted namespace means "every namespace" on tools such as capsid_find_docs
-// (list, glob, search), capsid_run_improve action status and capsid_work_jobs action list. For a caller scoped to "*" that changes nothing. For a
+// (list, glob, search), capsid_read_status action status and capsid_work_jobs action list. For a caller scoped to "*" that changes nothing. For a
 // narrowed caller it would be a hole with no check in it, invisible because the tool
 // works. So a namespace-restricted caller that omits it is refused and told to name
 // it. Whether a tool takes a namespace is read from its own input schema, so a tool
@@ -545,7 +658,10 @@ interface RegisteredConfig {
 }
 
 type ToolHandler = (...args: unknown[]) => unknown;
-type ScopeChallengeHandler = (context: { request: { params?: Record<string, unknown> }; authInfo?: { scopes: string[]; clientId?: string; extra?: Record<string, unknown> } }) => ReturnType<ReturnType<typeof toolScopeChallenge>>;
+type ScopeChallengeHandler = (context: {
+  request: { params?: Record<string, unknown> };
+  authInfo?: { scopes: string[]; clientId?: string; extra?: Record<string, unknown> };
+}) => ReturnType<ReturnType<typeof toolScopeChallenge>>;
 
 // Whether a handler's result is a success. An error result is not, and neither is a
 // domain refusal, which the tools return as an ordinary result whose JSON says ok:false
@@ -578,13 +694,13 @@ const ACTION_ARG: Record<string, string> = {
   capsid_inspect_repo: "action",
   capsid_close_pr: "action",
   capsid_work_jobs: "action",
-  capsid_run_improve: "action",
+  capsid_read_status: "action",
   capsid_admin_manage_namespaces: "action",
   capsid_admin_manage_agents: "action",
   capsid_admin_read_claims: "action",
   capsid_admin_read_ops: "action",
   capsid_admin_run_controls: "action",
-  capsid_admin_control_improve: "action",
+  capsid_admin_manage_switches: "action",
 };
 
 // The action a tool falls back to when the caller omits an optional one, so a
@@ -599,7 +715,7 @@ const DEFAULT_ACTION: Record<string, string> = {
   capsid_read_doc: "read",
   capsid_write_doc: "write",
   capsid_lint_namespace: "gather",
-  capsid_run_improve: "status",
+  capsid_read_status: "status",
   capsid_admin_read_claims: "aggregate",
 };
 
@@ -622,7 +738,11 @@ function declaredShape(config: RegisteredConfig): Record<string, unknown> | unde
   return schema;
 }
 
-function actionOf(tool: string, config: RegisteredConfig, args: Record<string, unknown>): string | undefined {
+function actionOf(
+  tool: string,
+  config: RegisteredConfig,
+  args: Record<string, unknown>,
+): string | undefined {
   const key = actionArgFor(tool);
   if (!key) return undefined;
   const shape = declaredShape(config);
@@ -664,11 +784,19 @@ const OUTSIDE_TOOLS: Record<string, string> = {
 /** A successful result of a tool in OUTSIDE_TOOLS, marked as outside data; anything else as it is. */
 function markOutside(tool: string, result: unknown): unknown {
   const label = Object.hasOwn(OUTSIDE_TOOLS, tool) ? OUTSIDE_TOOLS[tool] : undefined;
-  const r = result as { isError?: boolean; content?: Array<{ text?: unknown }>; structuredContent?: unknown } | null;
+  const r = result as {
+    isError?: boolean;
+    content?: Array<{ text?: unknown }>;
+    structuredContent?: unknown;
+  } | null;
   if (!label || !r || r.isError === true || !Array.isArray(r.content)) return result;
   const structured = r.structuredContent;
-  if (structured && typeof structured === "object" && !Array.isArray(structured)) return outsideResult(label, structured as Record<string, unknown>);
-  return outsideResult(label, r.content.map((c) => (typeof c.text === "string" ? c.text : "")).join("\n"));
+  if (structured && typeof structured === "object" && !Array.isArray(structured))
+    return outsideResult(label, structured as Record<string, unknown>);
+  return outsideResult(
+    label,
+    r.content.map((c) => (typeof c.text === "string" ? c.text : "")).join("\n"),
+  );
 }
 
 /** An MCP icon, as serverInfo and tools/list carry it (area 11, T9). */
@@ -686,8 +814,18 @@ export function toolListed(agent: Agent, tool: string): boolean {
   return grant === undefined || agent.scopes.grants.includes(grant);
 }
 
-export function guardRegistrations(server: McpServer, agent: Agent, observe?: AdminWriteObserver, stepUpKv?: KVNamespace, log?: CallLog, icons?: readonly ToolIcon[]): void {
-  const original = server.registerTool.bind(server) as (name: string, config: unknown, handler: ToolHandler) => unknown;
+export function guardRegistrations(
+  server: McpServer,
+  agent: Agent,
+  stepUpKv?: KVNamespace,
+  log?: CallLog,
+  icons?: readonly ToolIcon[],
+): void {
+  const original = server.registerTool.bind(server) as (
+    name: string,
+    config: unknown,
+    handler: ToolHandler,
+  ) => unknown;
   const patched = (name: string, config: RegisteredConfig, handler: ToolHandler) => {
     if (!toolListed(agent, name)) return undefined;
     const shape = declaredShape(config);
@@ -696,7 +834,10 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
     const takesNamespace = (action: string | undefined): boolean =>
       namespaceActions && action !== undefined ? namespaceActions.includes(action) : declared;
     // Why this call may not run, or null.
-    const refusalFor = async (args: Record<string, unknown>, action: string | undefined): Promise<string | null> => {
+    const refusalFor = async (
+      args: Record<string, unknown>,
+      action: string | undefined,
+    ): Promise<string | null> => {
       const shared = sharedGrantRefusal(agent, name, action);
       if (shared) return shared;
       const namespace = typeof args.namespace === "string" ? args.namespace : undefined;
@@ -715,7 +856,8 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
           ? {
               call: {
                 jobId: typeof args.id === "string" ? args.id : undefined,
-                filtered: args.view !== undefined || args.stale !== undefined || args.status !== undefined,
+                filtered:
+                  args.view !== undefined || args.stale !== undefined || args.status !== undefined,
               },
             }
           : {}),
@@ -730,24 +872,26 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
         const missing = namespaceRefusal(agent, name);
         if (missing) return missing;
       }
-      // Observation only (src/admin-client-audit.ts): after every refusal above, before
-      // the handler, and only for the admin and a requirement that is not a plain read.
-      // "action" tools (capsid_work_jobs, capsid_lint_namespace) are included, so a
-      // capsid_work_jobs action list is recorded too: more
-      // than a write, never less.
-      if (observe && agent.admin && requiredForAction(name, action) !== "read") {
-        return observe({ tool: name, action, namespace }, server.server.getClientVersion()?.name ?? null);
-      }
       return null;
     };
-    const run = async (callArgs: unknown[], action: string | undefined, signal: AbortSignal | undefined): Promise<unknown> => {
+    const run = async (
+      callArgs: unknown[],
+      action: string | undefined,
+      signal: AbortSignal | undefined,
+    ): Promise<unknown> => {
       // The request's abort signal reaches every outbound request the handler makes
       // (src/call-signal.ts; area 11, P11).
       const result = markOutside(name, await withCallSignal(signal, () => handler(...callArgs)));
       // A step-up action that succeeded resets the idle clock (STEP_UP). A refused or
       // failed one does not: it proves nothing about the person being there.
       const signedInAt = agent.signedInAt;
-      if (stepUpKv && signedInAt !== undefined && signedInAt !== null && needsStepUp(name, action) && toolSucceeded(result)) {
+      if (
+        stepUpKv &&
+        signedInAt !== undefined &&
+        signedInAt !== null &&
+        needsStepUp(name, action) &&
+        toolSucceeded(result)
+      ) {
         await recordStepUp(stepUpKv, agent, signedInAt, Date.now());
       }
       return result;
@@ -760,7 +904,11 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
     const guarded: ToolHandler = async (...callArgs: unknown[]) => {
       const args = (callArgs[0] ?? {}) as Record<string, unknown>;
       const action = actionOf(name, config, args);
-      const mcpReq = (callArgs[1] as { mcpReq?: { _meta?: { traceparent?: unknown }; signal?: AbortSignal } } | undefined)?.mcpReq;
+      const mcpReq = (
+        callArgs[1] as
+          | { mcpReq?: { _meta?: { traceparent?: unknown }; signal?: AbortSignal } }
+          | undefined
+      )?.mcpReq;
       const meta = mcpReq?._meta;
       const signal = mcpReq?.signal;
       const row = log && {
@@ -775,21 +923,31 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       const refusal = await refusalFor(args, action);
       if (refusal) {
         const out = deny(refusal);
-        if (log && row) await recordAudit(log.env, { ...row, phase: "refused", result: loggedResult(out) });
+        if (log && row)
+          await recordAudit(log.env, { ...row, phase: "refused", result: loggedResult(out) });
         return out;
       }
       if (log && row) {
         try {
           await appendAudit(log.env, { ...row, phase: "started" });
         } catch (cause) {
-          return deny(`refused: the tool-call log could not be written (${cause instanceof Error ? cause.message : String(cause)}), and no tool runs unlogged. Nothing was done.`);
+          return deny(
+            `refused: the tool-call log could not be written (${cause instanceof Error ? cause.message : String(cause)}), and no tool runs unlogged. Nothing was done.`,
+          );
         }
       }
       // A client that left before the handler ran gets nothing run; one that leaves during it
       // is logged canceled (site-runtime's invokeTool does the same).
       if (signal?.aborted) {
-        const out = deny("canceled: the client closed the call before the tool ran. Nothing was done.");
-        if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: { ...loggedResult(out), canceled: true } });
+        const out = deny(
+          "canceled: the client closed the call before the tool ran. Nothing was done.",
+        );
+        if (log && row)
+          await recordAudit(log.env, {
+            ...row,
+            phase: "finished",
+            result: { ...loggedResult(out), canceled: true },
+          });
         return out;
       }
       const canceled = () => (signal?.aborted ? { canceled: true } : {});
@@ -799,10 +957,30 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
       } catch (error) {
         // A handler that throws still ends its call in the log, so no `started` row is left
         // without its `finished` (the log's /health check counts those).
-        if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: { isError: true, text: `threw: ${error instanceof Error ? error.message : String(error)}`.slice(0, 1000), ...canceled() } });
+        if (log && row)
+          await recordAudit(log.env, {
+            ...row,
+            phase: "finished",
+            result: {
+              isError: true,
+              text: `threw: ${error instanceof Error ? error.message : String(error)}`.slice(
+                0,
+                1000,
+              ),
+              ...canceled(),
+            },
+          });
         throw error;
       }
-      if (log && row) await recordAudit(log.env, { ...row, phase: "finished", result: { ...loggedResult(result as { isError?: boolean; content: Array<{ text: string }> }), ...canceled() } });
+      if (log && row)
+        await recordAudit(log.env, {
+          ...row,
+          phase: "finished",
+          result: {
+            ...loggedResult(result as { isError?: boolean; content: Array<{ text: string }> }),
+            ...canceled(),
+          },
+        });
       return result;
     };
     // An OAuth token without the scope the call needs is answered 403 insufficient_scope
@@ -810,12 +988,33 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
     // instead of the person reconnecting by hand (area 11, A3). A key carries no token and
     // gets the refusal above in words. A grant from before the scopes existed carries none
     // and reads, as src/index.ts treats it.
-    const challenge = log && toolScopeChallenge(log.env, { site: "Capsid", scopes: SCOPES, ...log.server }, { name, scope: (args: Record<string, unknown>) => declaredScope(name, actionOf(name, config, args)) });
+    const challenge =
+      log &&
+      toolScopeChallenge(
+        log.env,
+        { site: "Capsid", scopes: SCOPES, ...log.server },
+        {
+          name,
+          scope: (args: Record<string, unknown>) =>
+            declaredScope(name, actionOf(name, config, args)),
+        },
+      );
     const scopeChallenge: ScopeChallengeHandler | undefined =
-      challenge && ((context) => challenge({ ...context, authInfo: context.authInfo && { ...context.authInfo, scopes: context.authInfo.scopes.length > 0 ? context.authInfo.scopes : [SCOPES.read] } }));
+      challenge &&
+      ((context) =>
+        challenge({
+          ...context,
+          authInfo: context.authInfo && {
+            ...context.authInfo,
+            scopes: context.authInfo.scopes.length > 0 ? context.authInfo.scopes : [SCOPES.read],
+          },
+        }));
     const { namespaceActions: _namespaceActions, ...declaredConfig } = config ?? {};
     // Each tool carries the server's icon unless it names its own (area 11, T9).
-    const served = icons && !(declaredConfig as { icons?: unknown }).icons ? { ...declaredConfig, icons } : declaredConfig;
+    const served =
+      icons && !(declaredConfig as { icons?: unknown }).icons
+        ? { ...declaredConfig, icons }
+        : declaredConfig;
     return original(name, scopeChallenge ? { ...served, scopeChallenge } : served, guarded);
   };
   (server as unknown as { registerTool: unknown }).registerTool = patched;
@@ -826,7 +1025,8 @@ export function guardRegistrations(server: McpServer, agent: Agent, observe?: Ad
 // false positive costs one refusal naming the flag, a false negative is a payment
 // file edited by a credential nobody scoped for it. A word separator counts as a
 // boundary, so `stripe-client.ts` trips it (and so would `subscription-less.ts`).
-const MONEY_PATH = /(^|\/)(billing|payments?|checkout|invoices?|pricing|subscriptions?|stripe|payouts?|refunds?)(\/|[-_.]|$)/i;
+const MONEY_PATH =
+  /(^|\/)(billing|payments?|checkout|invoices?|pricing|subscriptions?|stripe|payouts?|refunds?)(\/|[-_.]|$)/i;
 
 export function isMoneyPath(path: string): boolean {
   return MONEY_PATH.test(path);
@@ -834,15 +1034,24 @@ export function isMoneyPath(path: string): boolean {
 
 // Every flag a repo mutation needs, derived from the call, in one function so the
 // repo write tools cannot each decide a different answer.
-export function repoWriteFlags(tool: string, action: string | undefined, args: { force?: boolean }): ScopeFlag[] {
+export function repoWriteFlags(
+  tool: string,
+  action: string | undefined,
+  args: { force?: boolean },
+): ScopeFlag[] {
   const flags: ScopeFlag[] = [];
   // close deletes the head branch, so a plain write grant could destroy the only copy
   // of a branch somebody else pushed. That is the same blast radius as merge, so it
   // needs can_merge too. Not deleting on close would leave stale branches behind. A tag
   // or a release can start a deploy as a merge can.
-  if (tool === "capsid_close_pr" && (action === "merge" || action === "close" || action === "tag" || action === "release")) flags.push("can_merge");
+  if (
+    tool === "capsid_close_pr" &&
+    (action === "merge" || action === "close" || action === "tag" || action === "release")
+  )
+    flags.push("can_merge");
   // A forced branch delete too: force lifts the open-PR refusal, so it could delete
   // another agent's open PR head. A delete without force needs no flag.
-  if (tool === "capsid_close_pr" && action === "delete_branch" && args.force === true) flags.push("can_merge");
+  if (tool === "capsid_close_pr" && action === "delete_branch" && args.force === true)
+    flags.push("can_merge");
   return flags;
 }

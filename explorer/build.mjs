@@ -10,7 +10,15 @@
 // explorer/fixtures, which are invented.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,7 +48,7 @@ const LIVE = "https://mcp.dustinedwards.info/public";
 
 /** @param {string} source a path or an https URL */
 async function read(source) {
-  if (/^https:\/\//.test(source)) {
+  if (source.startsWith("https://")) {
     const response = await fetch(source, { headers: { accept: "application/json" } });
     if (!response.ok) throw new Error(`GET ${source} answered ${response.status}`);
     return response.json();
@@ -48,14 +56,32 @@ async function read(source) {
   return JSON.parse(readFileSync(source, "utf8"));
 }
 
-/** One hash over every file under a directory, its path and its bytes, in a fixed order. */
+/**
+ * One hash over every file under a directory, its path and its bytes, in a fixed order, and
+ * over the Worker as it deploys (worker.mjs bundled with site-runtime and Prelum), so a
+ * dependency bump that changes only the Worker still differs from the live build.
+ */
 function contentHash(/** @type {string} */ dir) {
   const hash = createHash("sha256");
+  const worker = buildSync({
+    entryPoints: [join(here, "worker.mjs")],
+    bundle: true,
+    write: false,
+    format: "esm",
+    platform: "neutral",
+    nodePaths: [join(here, "node_modules")],
+    logLevel: "warning",
+  });
+  hash.update("worker.mjs\0").update(worker.outputFiles[0].contents).update("\0");
   const files = readdirSync(dir, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => relative(dir, join(entry.parentPath, entry.name)))
     .sort();
-  for (const file of files) hash.update(`${file}\0`).update(readFileSync(join(dir, file))).update("\0");
+  for (const file of files)
+    hash
+      .update(`${file}\0`)
+      .update(readFileSync(join(dir, file)))
+      .update("\0");
   return hash.digest("hex");
 }
 
@@ -69,11 +95,14 @@ const minifyCss = (css) => transformSync(css, { loader: "css", minify: true }).c
  */
 function inlineCss(file) {
   const text = readFileSync(file, "utf8");
-  return text.replace(/@import\s+"([^"]+)"(?:\s+layer\(([^)]+)\))?\s*;/g, (_m, /** @type {string} */ rel, /** @type {string | undefined} */ layer) => {
-    // A bare specifier ("enarratio/base.css", which capsomer/enarratio.css imports) resolves as a bundler would.
-    const inner = inlineCss(/^[./]/.test(rel) ? join(dirname(file), rel) : require.resolve(rel));
-    return layer ? `@layer ${layer} {\n${inner}\n}` : inner;
-  });
+  return text.replace(
+    /@import\s+"([^"]+)"(?:\s+layer\(([^)]+)\))?\s*;/g,
+    (_m, /** @type {string} */ rel, /** @type {string | undefined} */ layer) => {
+      // A bare specifier ("enarratio/base.css", which capsomer/enarratio.css imports) resolves as a bundler would.
+      const inner = inlineCss(/^[./]/.test(rel) ? join(dirname(file), rel) : require.resolve(rel));
+      return layer ? `@layer ${layer} {\n${inner}\n}` : inner;
+    },
+  );
 }
 
 /**
@@ -83,7 +112,7 @@ function inlineCss(file) {
  */
 async function readCode(source) {
   if (!source) return null;
-  if (/^https:\/\//.test(source)) {
+  if (source.startsWith("https://")) {
     const response = await fetch(source, { headers: { accept: "application/json" } });
     if (response.status === 503) {
       console.log(`explorer: ${source} is not computed yet, so no code pages`);
@@ -99,18 +128,45 @@ async function readCode(source) {
 const llmsTxt = (systems, tools) =>
   llmsDocument({
     title: "Capsid",
-    summary: "Capsid is an open-source (MIT) MCP server for AI coding agents, run on one Cloudflare Worker. Agents start every session from shared project notes, each one can use only the tools it is allowed, and when an agent says a job is done, Capsid checks GitHub. This site runs on one live Capsid server and rebuilds every day from its public data.",
-    intro: ["- Code: https://github.com/DrDustinEdwards/capsid\n- Author: Dustin Edwards, https://dustinedwards.info"],
+    summary:
+      "Capsid is an open-source (MIT) MCP server for AI coding agents, run on one Cloudflare Worker. Agents start every session from shared project notes, each one can use only the tools it is allowed, and when an agent says a job is done, Capsid checks GitHub. This site runs on one live Capsid server and rebuilds every day from its public data.",
+    intro: [
+      "- Code: https://github.com/DrDustinEdwards/capsid\n- Author: Dustin Edwards, https://dustinedwards.info",
+    ],
     sections: [
       {
         heading: "Pages",
         links: [
-          { title: "Overview", url: `${ORIGIN}/`, description: "what Capsid is and how a job runs through it" },
-          { title: "Systems", url: `${ORIGIN}/systems/`, description: `the ${systems} systems this instance runs, and what each is made of` },
-          { title: "Flows", url: `${ORIGIN}/flows/`, description: "what runs through Capsid, step by step" },
-          { title: "Tools", url: `${ORIGIN}/tools/`, description: `the ${tools} MCP tools Capsid serves and their arguments` },
-          { title: "Numbers", url: `${ORIGIN}/numbers/`, description: "the instance's daily numbers" },
-          { title: "Code", url: `${ORIGIN}/code/`, description: "each public repo's code, scored for risk" },
+          {
+            title: "Overview",
+            url: `${ORIGIN}/`,
+            description: "what Capsid is and how a job runs through it",
+          },
+          {
+            title: "Systems",
+            url: `${ORIGIN}/systems/`,
+            description: `the ${systems} systems this instance runs, and what each is made of`,
+          },
+          {
+            title: "Flows",
+            url: `${ORIGIN}/flows/`,
+            description: "what runs through Capsid, step by step",
+          },
+          {
+            title: "Tools",
+            url: `${ORIGIN}/tools/`,
+            description: `the ${tools} MCP tools Capsid serves and their arguments`,
+          },
+          {
+            title: "Numbers",
+            url: `${ORIGIN}/numbers/`,
+            description: "the instance's daily numbers",
+          },
+          {
+            title: "Code",
+            url: `${ORIGIN}/code/`,
+            description: "each public repo's code, scored for risk",
+          },
         ],
       },
     ],
@@ -130,7 +186,10 @@ export function pageDates(pages, asOf, previous, today) {
   for (const [path, html] of pages) {
     const hash = createHash("sha256").update(html.replaceAll(asOf, "")).digest("hex");
     const before = previous?.[path];
-    dates[path] = { hash, lastmod: before ? (before.hash === hash ? before.lastmod : today) : previous ? today : null };
+    dates[path] = {
+      hash,
+      lastmod: before ? (before.hash === hash ? before.lastmod : today) : previous ? today : null,
+    };
   }
   return dates;
 }
@@ -140,7 +199,7 @@ async function readPrevious(source) {
   if (!source) return undefined;
   try {
     let record;
-    if (/^https:\/\//.test(source)) {
+    if (source.startsWith("https://")) {
       const response = await fetch(source, { headers: { accept: "application/json" } });
       if (!response.ok) return undefined;
       record = await response.json();
@@ -153,7 +212,16 @@ async function readPrevious(source) {
 }
 
 /** @param {{ model?: string, stats?: string, code?: string, out?: string, previous?: string, today?: string }} [options] */
-export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stats: statsSource = `${LIVE}/stats/v1.json`, code: codeSource = modelSource === `${LIVE}/model/v1.json` ? `${LIVE}/code/v1.json` : undefined, out = join(here, "dist"), previous: previousSource = modelSource === `${LIVE}/model/v1.json` ? `${ORIGIN}/build.json` : undefined, today = new Date().toISOString().slice(0, 10) } = {}) {
+export async function build({
+  model: modelSource = `${LIVE}/model/v1.json`,
+  stats: statsSource = `${LIVE}/stats/v1.json`,
+  code: codeSource = modelSource === `${LIVE}/model/v1.json` ? `${LIVE}/code/v1.json` : undefined,
+  out = join(here, "dist"),
+  previous: previousSource = modelSource === `${LIVE}/model/v1.json`
+    ? `${ORIGIN}/build.json`
+    : undefined,
+  today = new Date().toISOString().slice(0, 10),
+} = {}) {
   const model = PublicModelSchema.parse(await read(modelSource));
   const stats = PublicStatsSchema.parse(await read(statsSource));
   const code = await readCode(codeSource);
@@ -162,7 +230,8 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   const tools = servedTools();
   const pages = allPages(model, stats, code, tools);
   for (const [path, html] of pages) {
-    const file = path === "/404" ? join(out, "404.html") : join(out, decodeURIComponent(path), "index.html");
+    const file =
+      path === "/404" ? join(out, "404.html") : join(out, decodeURIComponent(path), "index.html");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, html);
   }
@@ -202,8 +271,14 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // The whole chart stylesheet, as every site loads it: Enarratio's base rules on Capsomer's tokens, gridlines, series inks
   // and color pairs (capsomer/enarratio.css; the teal family and prefers-contrast come from the tokens). Only a page that
   // draws a chart links it (src/pages.mjs).
-  writeFileSync(join(assets, "enarratio.css"), minifyCss(inlineCss(join(capsomer, "css", "enarratio.css"))));
-  writeFileSync(join(assets, "explorer.css"), minifyCss(readFileSync(join(here, "src", "explorer.css"), "utf8")));
+  writeFileSync(
+    join(assets, "enarratio.css"),
+    minifyCss(inlineCss(join(capsomer, "css", "enarratio.css"))),
+  );
+  writeFileSync(
+    join(assets, "explorer.css"),
+    minifyCss(readFileSync(join(here, "src", "explorer.css"), "utf8")),
+  );
   // The page's one module, bundled: src/explorer.js imports tabs, Capsomer's chart-enhance and the
   // system map's and the header's modules by the paths they are staged at here, each folder whole
   // (its React wrapper aside), because they import their siblings by "./" and each other by
@@ -212,44 +287,112 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   const stage = join(out, ".bundle");
   mkdirSync(stage, { recursive: true });
   copyFileSync(join(capsomer, "dist", "components", "tabs", "tabs.js"), join(stage, "tabs.js"));
-  for (const name of ["system-map", "tabs", "email", "site-header", "theme-switch", "dialog", "popover", "tooltip", "shell", "meter"]) {
+  for (const name of [
+    "system-map",
+    "tabs",
+    "email",
+    "site-header",
+    "theme-switch",
+    "dialog",
+    "popover",
+    "tooltip",
+    "shell",
+    "meter",
+  ]) {
     const dir = join(capsomer, "dist", "components", name);
     mkdirSync(join(stage, "capsomer", name), { recursive: true });
-    for (const file of readdirSync(dir).filter((f) => f.endsWith(".js") && !f.endsWith(".react.js"))) copyFileSync(join(dir, file), join(stage, "capsomer", name, file));
+    for (const file of readdirSync(dir).filter(
+      (f) => f.endsWith(".js") && !f.endsWith(".react.js"),
+    ))
+      copyFileSync(join(dir, file), join(stage, "capsomer", name, file));
   }
   copyFileSync(join(here, "src", "explorer.js"), join(stage, "explorer.js"));
-  buildSync({ entryPoints: [join(stage, "explorer.js")], outfile: join(assets, "explorer.js"), bundle: true, nodePaths: [join(here, "node_modules")], format: "esm", minify: true, logLevel: "warning" });
+  buildSync({
+    entryPoints: [join(stage, "explorer.js")],
+    outfile: join(assets, "explorer.js"),
+    bundle: true,
+    nodePaths: [join(here, "node_modules")],
+    format: "esm",
+    minify: true,
+    logLevel: "warning",
+  });
   rmSync(stage, { recursive: true });
   // The remembered theme, set before the first paint so the page never flashes the other one: Capsomer's themeScript
   // (cap-theme in localStorage; with nothing remembered the system's setting applies). A file, not an inline script,
   // so the policy needs no hash. It also marks the page as scripted before the first paint, so what script adds (the
   // panel's breakers) is laid out from the start and moves nothing when the module runs.
-  writeFileSync(join(assets, "theme.js"), `document.documentElement.classList.add("js");\n${themeScript()}\n`);
+  writeFileSync(
+    join(assets, "theme.js"),
+    `document.documentElement.classList.add("js");\n${themeScript()}\n`,
+  );
   writeFileSync(join(assets, "search.json"), JSON.stringify(searchDocument(model, code, tools)));
   // The family icon set (Prelum's prelum-icons) at the root, where iconLinks() and the manifest point.
   cpSync(join(here, "src", "icons"), out, { recursive: true });
-  writeFileSync(join(out, "site.webmanifest"), JSON.stringify(webManifest({ name: "Capsid", themeColor: "#01585c", backgroundColor: "#01585c", lang: "en" })));
+  writeFileSync(
+    join(out, "site.webmanifest"),
+    JSON.stringify(
+      webManifest({
+        name: "Capsid",
+        themeColor: "#01585c",
+        backgroundColor: "#01585c",
+        lang: "en",
+      }),
+    ),
+  );
   copyFileSync(join(here, "src", "og-card.png"), join(assets, "og-card.png"));
   // The family's faces (capsomer/fonts.css, inlined above), served from here because the policy
   // allows fonts from 'self' only: Capsomer's fonts/ beside assets/, where its "../fonts/" points.
   cpSync(join(capsomer, "fonts"), join(out, "fonts"), { recursive: true });
   // _headers from the explorer's entry in site-runtime's registry (capsid), by its one bin: the shared set, the page
   // policy reporting to Capsid's /csp-report, and Prelum's training reservation (the TDMRep header ai.txt names).
-  const headersBin = join(dirname(fileURLToPath(import.meta.resolve("@dustinedwards/site-runtime/sites"))), "bin", "site-runtime-headers.mjs");
-  execFileSync(process.execPath, [headersBin, "--site", "capsid", "--out", join(out, "_headers"), "--header", "tdm-reservation: 1"]);
+  const headersBin = join(
+    dirname(fileURLToPath(import.meta.resolve("@dustinedwards/site-runtime/sites"))),
+    "bin",
+    "site-runtime-headers.mjs",
+  );
+  execFileSync(process.execPath, [
+    headersBin,
+    "--site",
+    "capsid",
+    "--out",
+    join(out, "_headers"),
+    "--header",
+    "tdm-reservation: 1",
+  ]);
   // For search engines and language models, from Prelum: every page in a sitemap, robots.txt (the
   // family bot policy; Cloudflare puts its own lines first), ai.txt (citation welcome, training
   // reserved, as the tdm-reservation header in _headers says) and llms.txt (https://llmstxt.org),
   // a short guide.
-  const listed = pages.map(([path]) => path).filter((path) => path !== "/404" && path !== "/search/");
+  const listed = pages
+    .map(([path]) => path)
+    .filter((path) => path !== "/404" && path !== "/search/");
   const dates = pageDates(pages, stats.as_of, await readPrevious(previousSource), today);
-  writeFileSync(join(out, "sitemap.xml"), sitemapDocument(listed.map((path) => ({ loc: ORIGIN + path, lastmod: dates[path]?.lastmod }))));
-  writeFileSync(join(out, "robots.txt"), robotsDocument({ origin: ORIGIN, notes: [`AI usage policy: ${ORIGIN}/ai.txt`, `LLM guide: ${ORIGIN}/llms.txt`] }));
-  writeFileSync(join(out, "ai.txt"), aiTxt({ origin: ORIGIN, name: "Capsid", contact: "contact@dustinedwards.info" }));
+  writeFileSync(
+    join(out, "sitemap.xml"),
+    sitemapDocument(listed.map((path) => ({ loc: ORIGIN + path, lastmod: dates[path]?.lastmod }))),
+  );
+  writeFileSync(
+    join(out, "robots.txt"),
+    robotsDocument({
+      origin: ORIGIN,
+      notes: [`AI usage policy: ${ORIGIN}/ai.txt`, `LLM guide: ${ORIGIN}/llms.txt`],
+    }),
+  );
+  writeFileSync(
+    join(out, "ai.txt"),
+    aiTxt({ origin: ORIGIN, name: "Capsid", contact: "contact@dustinedwards.info" }),
+  );
   writeFileSync(join(out, "llms.txt"), llmsTxt(model.systems.length, tools.length));
   // The family's security contact (RFC 9116) and the IndexNow key file the deploy pings with.
   mkdirSync(join(out, ".well-known"), { recursive: true });
-  writeFileSync(join(out, ".well-known", "security.txt"), securityTxt({ origin: ORIGIN, contact: "security@dustinedwards.info", expires: SECURITY_TXT_EXPIRES }));
+  writeFileSync(
+    join(out, ".well-known", "security.txt"),
+    securityTxt({
+      origin: ORIGIN,
+      contact: "security@dustinedwards.info",
+      expires: SECURITY_TXT_EXPIRES,
+    }),
+  );
   writeFileSync(join(out, `${INDEXNOW_KEY}.txt`), INDEXNOW_KEY);
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the
@@ -257,12 +400,24 @@ export async function build({ model: modelSource = `${LIVE}/model/v1.json`, stat
   // A sha384 integrity and crossorigin on every page's two script tags, for Integrity-Policy (site-runtime ./sri).
   await writeIntegrity(out);
   const content = contentHash(out);
-  writeFileSync(join(out, "build.json"), `${JSON.stringify({ model_as_of: model.as_of, stats_as_of: stats.as_of, code_as_of: code?.as_of ?? null, systems: model.systems.length, content, pages: dates }, null, 2)}\n`);
+  writeFileSync(
+    join(out, "build.json"),
+    `${JSON.stringify({ model_as_of: model.as_of, stats_as_of: stats.as_of, code_as_of: code?.as_of ?? null, systems: model.systems.length, content, pages: dates }, null, 2)}\n`,
+  );
   return { pages: pages.length, out, content };
 }
 
 if (process.argv[1] === import.meta.filename) {
-  const { values } = parseArgs({ options: { model: { type: "string" }, stats: { type: "string" }, code: { type: "string" }, out: { type: "string" }, previous: { type: "string" }, today: { type: "string" } } });
+  const { values } = parseArgs({
+    options: {
+      model: { type: "string" },
+      stats: { type: "string" },
+      code: { type: "string" },
+      out: { type: "string" },
+      previous: { type: "string" },
+      today: { type: "string" },
+    },
+  });
   const result = await build(/** @type {any} */ (values));
   console.log(`explorer: built ${result.pages} pages into ${result.out}`);
 }

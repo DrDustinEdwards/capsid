@@ -1,7 +1,14 @@
 import { env } from "cloudflare:test";
 import { resetCapsidDb } from "./reset-db";
 import { beforeEach, describe, expect, it } from "vitest";
-import { dueForReverify, outcomePrStatements, reverifyPr, reverifyStatements, reverifySweep, unverifiableStatements } from "../src/outcome-prs";
+import {
+  dueForReverify,
+  outcomePrStatements,
+  reverifyPr,
+  reverifyStatements,
+  reverifySweep,
+  unverifiableStatements,
+} from "../src/outcome-prs";
 
 // OUTCOME MERGE STATE, AGAINST A REAL D1 (job_3e1596235513).
 //
@@ -20,24 +27,36 @@ beforeEach(async () => {
   await resetCapsidDb();
 });
 
-async function outcome(jobId: string, over: { recorded_at?: string; prs_merged?: number | null; result_kind?: string } = {}) {
+async function outcome(
+  jobId: string,
+  over: { recorded_at?: string; prs_merged?: number | null; result_kind?: string } = {},
+) {
   await env.DB.prepare(
     `INSERT INTO job_outcomes (job_id, agent, namespace, prs_opened, prs_merged, commits, files_changed, tests_added, ci_green,
        blocked_count, resumed_count, duration_minutes, result_kind, verified, recorded_at)
-     VALUES (?1, 'opkey:aaaabbbbcccc', 'capsid', 1, ?2, 6, 19, 75, 1, 1, 1, 42, ?3, '{}', ?4)`
+     VALUES (?1, 'opkey:aaaabbbbcccc', 'capsid', 1, ?2, 6, 19, 75, 1, 1, 1, 42, ?3, '{}', ?4)`,
   )
-    .bind(jobId, over.prs_merged === undefined ? 0 : over.prs_merged, over.result_kind ?? "pr", over.recorded_at ?? "2026-09-09T12:00:00.000Z")
+    .bind(
+      jobId,
+      over.prs_merged === undefined ? 0 : over.prs_merged,
+      over.result_kind ?? "pr",
+      over.recorded_at ?? "2026-09-09T12:00:00.000Z",
+    )
     .run();
 }
 
 async function prRow(jobId: string, url: string, merged: number | null, verifiedAt: string | null) {
-  await env.DB.prepare("INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at) VALUES (?1, ?2, ?3, ?4)")
+  await env.DB.prepare(
+    "INSERT INTO job_outcome_prs (job_id, pr_url, merged, merge_verified_at) VALUES (?1, ?2, ?3, ?4)",
+  )
     .bind(jobId, url, merged, verifiedAt)
     .run();
 }
 
 async function outcomeRow(jobId: string) {
-  return env.DB.prepare("SELECT * FROM job_outcomes WHERE job_id = ?1").bind(jobId).first<Record<string, unknown>>();
+  return env.DB.prepare("SELECT * FROM job_outcomes WHERE job_id = ?1")
+    .bind(jobId)
+    .first<Record<string, unknown>>();
 }
 
 describe("reverifyStatements", () => {
@@ -49,7 +68,15 @@ describe("reverifyStatements", () => {
     await env.DB.batch(reverifyStatements(env.DB, "job_twice", PR(1), true, NOW));
     const after = await outcomeRow("job_twice");
     expect(after?.prs_merged, "a second pass over the same pull request counted it again").toBe(1);
-    for (const column of ["commits", "files_changed", "tests_added", "ci_green", "duration_minutes", "blocked_count", "resumed_count"]) {
+    for (const column of [
+      "commits",
+      "files_changed",
+      "tests_added",
+      "ci_green",
+      "duration_minutes",
+      "blocked_count",
+      "resumed_count",
+    ]) {
       expect(after?.[column], `${column} was touched`).toBe(before?.[column]);
     }
   });
@@ -58,7 +85,9 @@ describe("reverifyStatements", () => {
     await outcome("job_closed", { prs_merged: 0 });
     await prRow("job_closed", PR(2), null, null);
     await env.DB.batch(reverifyStatements(env.DB, "job_closed", PR(2), false, NOW));
-    const pr = await env.DB.prepare("SELECT merged FROM job_outcome_prs WHERE job_id = 'job_closed'").first<{ merged: number }>();
+    const pr = await env.DB.prepare(
+      "SELECT merged FROM job_outcome_prs WHERE job_id = 'job_closed'",
+    ).first<{ merged: number }>();
     expect(pr?.merged).toBe(0);
     expect((await outcomeRow("job_closed"))?.prs_merged).toBe(0);
   });
@@ -67,7 +96,9 @@ describe("reverifyStatements", () => {
 describe("reverifyPr", () => {
   it("a pull request no row names does no work and writes nothing", async () => {
     expect(await reverifyPr(ENV, "capsid", PR(3), NOW)).toEqual([]);
-    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcome_prs").first<{ n: number }>();
+    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM job_outcome_prs").first<{
+      n: number;
+    }>();
     expect(count?.n).toBe(0);
   });
 
@@ -77,7 +108,9 @@ describe("reverifyPr", () => {
     const before = await outcomeRow("job_unread");
     expect(await reverifyPr(ENV, "capsid", PR(4), NOW)).toEqual([]);
     expect(await outcomeRow("job_unread")).toEqual(before);
-    const pr = await env.DB.prepare("SELECT merged, merge_verified_at FROM job_outcome_prs WHERE job_id = 'job_unread'").first();
+    const pr = await env.DB.prepare(
+      "SELECT merged, merge_verified_at FROM job_outcome_prs WHERE job_id = 'job_unread'",
+    ).first();
     expect(pr).toEqual({ merged: null, merge_verified_at: null });
   });
 });
@@ -108,7 +141,7 @@ describe("reverifySweep", () => {
   it("seeds join rows first, so a seeded URL is looked at in the same sweep, and writes no count itself", async () => {
     await env.DB.prepare(
       `INSERT INTO jobs (id, namespace, title, body, status, posted_by, result_ref, result_summary)
-       VALUES ('job_seed', 'capsid', 'seeded', 'b', 'done', 'github:x', ?1, 'merged later')`
+       VALUES ('job_seed', 'capsid', 'seeded', 'b', 'done', 'github:x', ?1, 'merged later')`,
     )
       .bind(PR(30))
       .run();
@@ -116,7 +149,9 @@ describe("reverifySweep", () => {
     const report = await reverifySweep(ENV, NOW);
     expect(report.seeded).toBe(1);
     expect(report.checked, "the seeded row was not looked at in the same sweep").toBe(1);
-    const pr = await env.DB.prepare("SELECT merged FROM job_outcome_prs WHERE job_id = 'job_seed'").first<{ merged: number | null }>();
+    const pr = await env.DB.prepare(
+      "SELECT merged FROM job_outcome_prs WHERE job_id = 'job_seed'",
+    ).first<{ merged: number | null }>();
     expect(pr?.merged, "a scraped URL was counted before GitHub was asked").toBeNull();
     expect((await outcomeRow("job_seed"))?.prs_merged).toBe(0);
   });
@@ -126,8 +161,12 @@ describe("outcomePrStatements", () => {
   it("records the merge state of each pull request complete read, and leaves an unread one for the sweep", async () => {
     await outcome("job_partial");
     const read = { [PR(1)]: true, [PR(3)]: false };
-    await env.DB.batch(outcomePrStatements(env.DB, "job_partial", [PR(1), PR(2), PR(3)], read, NOW));
-    const { results } = await env.DB.prepare("SELECT pr_url, merged, merge_verified_at FROM job_outcome_prs WHERE job_id = 'job_partial' ORDER BY pr_url").all();
+    await env.DB.batch(
+      outcomePrStatements(env.DB, "job_partial", [PR(1), PR(2), PR(3)], read, NOW),
+    );
+    const { results } = await env.DB.prepare(
+      "SELECT pr_url, merged, merge_verified_at FROM job_outcome_prs WHERE job_id = 'job_partial' ORDER BY pr_url",
+    ).all();
     expect(results).toEqual([
       { pr_url: PR(1), merged: 1, merge_verified_at: NOW.toISOString() },
       // Unread is NULL, never 0: nobody counted it.
@@ -148,42 +187,100 @@ describe("unverifiable rows", () => {
   it("a marked row leaves the sweep and every count, and prs_opened stays the driver's, unverified", async () => {
     await outcome("job_moved", { prs_merged: null });
     await prRow("job_moved", PR(8), null, null);
-    await env.DB.batch(unverifiableStatements(env.DB, "job_moved", PR(8), "repo-recreated", "created after the outcome", NOW));
-    const pr = await env.DB.prepare("SELECT merged, unverifiable, unverifiable_note, unverifiable_at FROM job_outcome_prs WHERE job_id = 'job_moved'").first();
-    expect(pr).toEqual({ merged: null, unverifiable: "repo-recreated", unverifiable_note: "created after the outcome", unverifiable_at: NOW.toISOString() });
+    await env.DB.batch(
+      unverifiableStatements(
+        env.DB,
+        "job_moved",
+        PR(8),
+        "repo-recreated",
+        "created after the outcome",
+        NOW,
+      ),
+    );
+    const pr = await env.DB.prepare(
+      "SELECT merged, unverifiable, unverifiable_note, unverifiable_at FROM job_outcome_prs WHERE job_id = 'job_moved'",
+    ).first();
+    expect(pr).toEqual({
+      merged: null,
+      unverifiable: "repo-recreated",
+      unverifiable_note: "created after the outcome",
+      unverifiable_at: NOW.toISOString(),
+    });
     expect(await dueForReverify(ENV, NOW)).toEqual([]);
     const row = await outcomeRow("job_moved");
     expect(row?.prs_merged, "a pull request nobody can verify was counted").toBe(0);
     expect(row?.prs_opened, "prs_opened was replaced").toBe(1);
-    expect(JSON.parse(String(row?.verified)).prs_opened, "prs_opened was marked verified with a row nobody can verify").not.toBe(true);
+    expect(
+      JSON.parse(String(row?.verified)).prs_opened,
+      "prs_opened was marked verified with a row nobody can verify",
+    ).not.toBe(true);
   });
 
   it("a marked row is never written again, by a later re-verification or a second mark", async () => {
     await outcome("job_moved");
     await prRow("job_moved", PR(17), null, null);
-    await env.DB.batch(unverifiableStatements(env.DB, "job_moved", PR(17), "identity-changed", "first", NOW));
-    await env.DB.batch(reverifyStatements(env.DB, "job_moved", PR(17), true, NOW, { node_id: "PR_new", created_at: "2026-09-29T00:00:00Z" }));
-    await env.DB.batch(unverifiableStatements(env.DB, "job_moved", PR(17), "repo-recreated", "second", NOW));
-    const pr = await env.DB.prepare("SELECT merged, pr_node_id, unverifiable, unverifiable_note FROM job_outcome_prs WHERE job_id = 'job_moved'").first();
-    expect(pr).toEqual({ merged: null, pr_node_id: null, unverifiable: "identity-changed", unverifiable_note: "first" });
+    await env.DB.batch(
+      unverifiableStatements(env.DB, "job_moved", PR(17), "identity-changed", "first", NOW),
+    );
+    await env.DB.batch(
+      reverifyStatements(env.DB, "job_moved", PR(17), true, NOW, {
+        node_id: "PR_new",
+        created_at: "2026-09-29T00:00:00Z",
+      }),
+    );
+    await env.DB.batch(
+      unverifiableStatements(env.DB, "job_moved", PR(17), "repo-recreated", "second", NOW),
+    );
+    const pr = await env.DB.prepare(
+      "SELECT merged, pr_node_id, unverifiable, unverifiable_note FROM job_outcome_prs WHERE job_id = 'job_moved'",
+    ).first();
+    expect(pr).toEqual({
+      merged: null,
+      pr_node_id: null,
+      unverifiable: "identity-changed",
+      unverifiable_note: "first",
+    });
     expect((await outcomeRow("job_moved"))?.prs_merged).toBe(0);
   });
 
   it("a re-verification pins an unpinned row once and never replaces a pin", async () => {
     await outcome("job_pin");
     await prRow("job_pin", PR(5), null, null);
-    await env.DB.batch(reverifyStatements(env.DB, "job_pin", PR(5), false, NOW, { node_id: "PR_first", created_at: "2026-09-01T00:00:00Z" }));
-    await env.DB.batch(reverifyStatements(env.DB, "job_pin", PR(5), true, NOW, { node_id: "PR_other", created_at: "2026-09-02T00:00:00Z" }));
-    const pr = await env.DB.prepare("SELECT merged, pr_node_id, pr_created_at FROM job_outcome_prs WHERE job_id = 'job_pin'").first();
-    expect(pr).toEqual({ merged: 1, pr_node_id: "PR_first", pr_created_at: "2026-09-01T00:00:00Z" });
+    await env.DB.batch(
+      reverifyStatements(env.DB, "job_pin", PR(5), false, NOW, {
+        node_id: "PR_first",
+        created_at: "2026-09-01T00:00:00Z",
+      }),
+    );
+    await env.DB.batch(
+      reverifyStatements(env.DB, "job_pin", PR(5), true, NOW, {
+        node_id: "PR_other",
+        created_at: "2026-09-02T00:00:00Z",
+      }),
+    );
+    const pr = await env.DB.prepare(
+      "SELECT merged, pr_node_id, pr_created_at FROM job_outcome_prs WHERE job_id = 'job_pin'",
+    ).first();
+    expect(pr).toEqual({
+      merged: 1,
+      pr_node_id: "PR_first",
+      pr_created_at: "2026-09-01T00:00:00Z",
+    });
   });
 
   it("the other pull requests of the same outcome still count", async () => {
     await outcome("job_two", { prs_merged: null });
     await prRow("job_two", PR(40), null, null);
     await prRow("job_two", PR(41), null, null);
-    await env.DB.batch(reverifyStatements(env.DB, "job_two", PR(40), true, NOW, { node_id: "PR_forty", created_at: "2026-09-01T00:00:00Z" }));
-    await env.DB.batch(unverifiableStatements(env.DB, "job_two", PR(41), "identity-changed", "moved", NOW));
+    await env.DB.batch(
+      reverifyStatements(env.DB, "job_two", PR(40), true, NOW, {
+        node_id: "PR_forty",
+        created_at: "2026-09-01T00:00:00Z",
+      }),
+    );
+    await env.DB.batch(
+      unverifiableStatements(env.DB, "job_two", PR(41), "identity-changed", "moved", NOW),
+    );
     const row = await outcomeRow("job_two");
     expect(row?.prs_merged).toBe(1);
     expect(JSON.parse(String(row?.verified)).prs_merged).toBe(true);
@@ -195,16 +292,32 @@ describe("unverifiable rows", () => {
     // already counted can be found to name a different pull request later.
     await outcome("job_counted", { prs_merged: null });
     await prRow("job_counted", PR(50), null, null);
-    await env.DB.batch(reverifyStatements(env.DB, "job_counted", PR(50), true, NOW, { node_id: "PR_fifty", created_at: "2026-09-01T00:00:00Z" }));
+    await env.DB.batch(
+      reverifyStatements(env.DB, "job_counted", PR(50), true, NOW, {
+        node_id: "PR_fifty",
+        created_at: "2026-09-01T00:00:00Z",
+      }),
+    );
     expect((await outcomeRow("job_counted"))?.prs_merged).toBe(1);
-    await env.DB.batch(unverifiableStatements(env.DB, "job_counted", PR(50), "identity-changed", "moved", NOW));
-    expect((await outcomeRow("job_counted"))?.prs_merged, "a pull request nobody can verify stayed in the merged count").toBe(0);
+    await env.DB.batch(
+      unverifiableStatements(env.DB, "job_counted", PR(50), "identity-changed", "moved", NOW),
+    );
+    expect(
+      (await outcomeRow("job_counted"))?.prs_merged,
+      "a pull request nobody can verify stayed in the merged count",
+    ).toBe(0);
   });
 
   it("complete pins the pull requests it read", async () => {
     await outcome("job_read");
-    await env.DB.batch(outcomePrStatements(env.DB, "job_read", [PR(1)], { [PR(1)]: false }, NOW, { [PR(1)]: { node_id: "PR_one", created_at: "2026-09-08T00:00:00Z" } }));
-    const pr = await env.DB.prepare("SELECT pr_node_id, pr_created_at FROM job_outcome_prs WHERE job_id = 'job_read'").first();
+    await env.DB.batch(
+      outcomePrStatements(env.DB, "job_read", [PR(1)], { [PR(1)]: false }, NOW, {
+        [PR(1)]: { node_id: "PR_one", created_at: "2026-09-08T00:00:00Z" },
+      }),
+    );
+    const pr = await env.DB.prepare(
+      "SELECT pr_node_id, pr_created_at FROM job_outcome_prs WHERE job_id = 'job_read'",
+    ).first();
     expect(pr).toEqual({ pr_node_id: "PR_one", pr_created_at: "2026-09-08T00:00:00Z" });
   });
 });

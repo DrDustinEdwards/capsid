@@ -52,14 +52,20 @@ export function checkBackupFreshness(health, opts) {
 
   const stamped = Date.parse(lastOk);
   if (Number.isNaN(stamped)) {
-    return { outcome: "unknown", passed: false, detail: `backup.last_ok is not a parseable timestamp: ${JSON.stringify(lastOk)}` };
+    return {
+      outcome: "unknown",
+      passed: false,
+      detail: `backup.last_ok is not a parseable timestamp: ${JSON.stringify(lastOk)}`,
+    };
   }
 
   const now = opts.now ?? Date.now();
   const ageHours = Math.round(((now - stamped) / 3_600_000) * 10) / 10;
   const reported = typeof backup.age_hours === "number" ? backup.age_hours : null;
   const skew =
-    reported === null ? "" : ` (worker reported ${reported}h${Math.abs(reported - ageHours) > CLOCK_SKEW_TOLERANCE_HOURS ? ", DISAGREEING with this runner's clock" : ""})`;
+    reported === null
+      ? ""
+      : ` (worker reported ${reported}h${Math.abs(reported - ageHours) > CLOCK_SKEW_TOLERANCE_HOURS ? ", DISAGREEING with this runner's clock" : ""})`;
 
   // A stamp in the FUTURE gives a negative age. Beyond the clock skew tolerance it is a
   // bad stamp or a bad clock, and proves nothing about when the last backup ran.
@@ -77,5 +83,9 @@ export function checkBackupFreshness(health, opts) {
       detail: `the last clean backup was ${ageHours}h ago, over the ${maxHours}h threshold${skew}. last_ok=${lastOk}`,
     };
   }
-  return { outcome: "fresh", passed: true, detail: `last clean backup ${ageHours}h ago${skew}, under the ${maxHours}h threshold` };
+  return {
+    outcome: "fresh",
+    passed: true,
+    detail: `last clean backup ${ageHours}h ago${skew}, under the ${maxHours}h threshold`,
+  };
 }

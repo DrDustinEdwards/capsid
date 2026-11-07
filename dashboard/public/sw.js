@@ -7,13 +7,24 @@ self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (event) => {
-  let alert = { title: "Capsid", body: "Something needs you.", url: self.registration.scope, tag: "capsid" };
+  let alert = {
+    title: "Capsid",
+    body: "Something needs you.",
+    url: self.registration.scope,
+    tag: "capsid",
+  };
   try {
     alert = { ...alert, ...event.data.json() };
   } catch {
     // An alert that is not JSON still says something needs you.
   }
-  event.waitUntil(self.registration.showNotification(alert.title, { body: alert.body, tag: alert.tag, data: { url: alert.url } }));
+  event.waitUntil(
+    self.registration.showNotification(alert.title, {
+      body: alert.body,
+      tag: alert.tag,
+      data: { url: alert.url },
+    }),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -35,9 +46,12 @@ self.addEventListener("notificationclick", (event) => {
       for (const w of windows) {
         if (!w.url.startsWith(scope) || !("focus" in w)) continue;
         if (!("navigate" in w)) return w.focus();
-        return w.navigate(url).then((moved) => (moved || w).focus(), () => w.focus());
+        return w.navigate(url).then(
+          (moved) => (moved || w).focus(),
+          () => w.focus(),
+        );
       }
       return self.clients.openWindow(url);
-    })
+    }),
   );
 });

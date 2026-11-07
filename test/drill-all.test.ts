@@ -14,7 +14,12 @@ const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOStr
 const runIdOf = (iso: string) => iso.replace(/[:.]/g, "-");
 
 const SCHEMA = [
-  { type: "table", name: "documents", tbl_name: "documents", sql: "CREATE TABLE documents (id INTEGER PRIMARY KEY, path TEXT, body TEXT)" },
+  {
+    type: "table",
+    name: "documents",
+    tbl_name: "documents",
+    sql: "CREATE TABLE documents (id INTEGER PRIMARY KEY, path TEXT, body TEXT)",
+  },
   {
     type: "table",
     name: "documents_fts",
@@ -39,7 +44,11 @@ class FakeBucket {
     const start = cursor ? Number(cursor) : 0;
     const objects = keys.slice(start, start + this.pageSize).map((key) => ({ key }));
     const next = start + this.pageSize;
-    return { objects, truncated: next < keys.length, cursor: next < keys.length ? String(next) : undefined };
+    return {
+      objects,
+      truncated: next < keys.length,
+      cursor: next < keys.length ? String(next) : undefined,
+    };
   };
   delete = async () => {};
   createMultipartUpload = async () => {
@@ -52,12 +61,21 @@ class FakeBucket {
 
 // Writes a run the way d1-dump does: <table>.json, _schema.json, then _complete.json
 // (last, and only when `complete`). `withFts` false plants a site with no FTS5 table.
-function plant(bucket: FakeBucket, exportedAt: string, rows: Array<Record<string, unknown>>, complete = true, withFts = true): string {
+function plant(
+  bucket: FakeBucket,
+  exportedAt: string,
+  rows: Array<Record<string, unknown>>,
+  complete = true,
+  withFts = true,
+): string {
   const id = runIdOf(exportedAt);
   const prefix = `backups/json/${id}/`;
   const docKey = `${prefix}documents.json`;
   bucket.objects.set(docKey, JSON.stringify({ exported_at: exportedAt, table: "documents", rows }));
-  bucket.objects.set(`${prefix}_schema.json`, JSON.stringify({ exported_at: exportedAt, schema: withFts ? SCHEMA : SCHEMA_NO_FTS }));
+  bucket.objects.set(
+    `${prefix}_schema.json`,
+    JSON.stringify({ exported_at: exportedAt, schema: withFts ? SCHEMA : SCHEMA_NO_FTS }),
+  );
   if (complete) {
     const tables = [{ name: "documents", rows: rows.length, key: docKey }];
     bucket.objects.set(
@@ -112,7 +130,10 @@ test("b. a complete run whose only table holds no rows: the drill fails its coun
   const bucket = new FakeBucket();
   const id = plant(bucket, hoursAgo(3), []);
   const { line, ok } = await drillSite("sample", bucket.asR2(), { now: NOW });
-  assert.match(line, new RegExp(`^sample run=${id} age_hours=3.0 tables=1 rows=0 FAIL \\(counts: `));
+  assert.match(
+    line,
+    new RegExp(`^sample run=${id} age_hours=3.0 tables=1 rows=0 FAIL \\(counts: `),
+  );
   assert.match(line, /the copy holds no rows at all/);
   assert.equal(ok, false);
 });
@@ -153,17 +174,24 @@ test("the temp directory is removed after a site, pass or fail", async () => {
   plant(bucket, hoursAgo(3), DOCS);
   await drillSite("sample", bucket.asR2(), { now: NOW });
   await drillSite("sample", new FakeBucket().asR2(), { now: NOW });
-  assert.deepEqual(readdirSync(tmpdir()).filter((n) => n.startsWith("drill-sample-")), before);
+  assert.deepEqual(
+    readdirSync(tmpdir()).filter((n) => n.startsWith("drill-sample-")),
+    before,
+  );
 });
 
 test("firstFailure names the first failing check, not the backend line", () => {
-  const out = "backend: sqlite (asked)\nrestore drill FAILED: x\n  ok   dump: fine\n  FAIL counts: a has 0\n  FAIL fts: b\n";
+  const out =
+    "backend: sqlite (asked)\nrestore drill FAILED: x\n  ok   dump: fine\n  FAIL counts: a has 0\n  FAIL fts: b\n";
   assert.equal(firstFailure(out), "counts: a has 0");
 });
 
 test("selectSites: all by default, --site limits, an unknown name throws", () => {
   assert.equal(selectSites([]).length, SITES.length);
-  assert.deepEqual(selectSites(["--site", "carrel", "--site", "foxhound"]).map((s) => s.name), ["foxhound", "carrel"]);
+  assert.deepEqual(
+    selectSites(["--site", "carrel", "--site", "foxhound"]).map((s) => s.name),
+    ["foxhound", "carrel"],
+  );
   assert.throws(() => selectSites(["--site", "nope"]), /unknown site nope/);
   assert.throws(() => selectSites(["--site=carrel"]), /unknown argument --site=carrel/);
   assert.throws(() => selectSites(["--site"]), /--site needs a site name/);

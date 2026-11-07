@@ -41,27 +41,53 @@ function job(over: Record<string, unknown> = {}) {
 // transition's summary_sig CASE, which test/fake-sql.ts does not model, becomes the branch
 // SQLite takes for a non-null result_summary.
 function store(jobs: Array<Record<string, unknown>>) {
-  const d1 = fakeD1({ namespaces: [{ namespace: "sample", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) }], jobs });
+  const d1 = fakeD1({
+    namespaces: [
+      { namespace: "sample", repos: JSON.stringify([{ repo: "o/r", label: "primary" }]) },
+    ],
+    jobs,
+  });
   const inner = d1.db;
   const db = {
     prepare: (sql: string) => inner.prepare(sql),
     batch: (statements: Array<{ sql: string; params: unknown[] }>) =>
       inner.batch(
-        statements.map((s) => ({ ...s, sql: s.sql.replace(/summary_sig = CASE WHEN \?3 IS NULL THEN summary_sig ELSE \?8 END/, "summary_sig = ?8") })) as unknown as D1PreparedStatement[]
+        statements.map((s) => ({
+          ...s,
+          sql: s.sql.replace(
+            /summary_sig = CASE WHEN \?3 IS NULL THEN summary_sig ELSE \?8 END/,
+            "summary_sig = ?8",
+          ),
+        })) as unknown as D1PreparedStatement[],
       ),
   } as unknown as D1Database;
-  return { d1, env: fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv, IMPROVE_SCORE_SECRET: SECRET }) };
+  return {
+    d1,
+    env: fakeEnv({ DB: db, APP_KV: fakeKv({ seedToken: true }).kv, IMPROVE_SCORE_SECRET: SECRET }),
+  };
 }
 
 // A driver with read and write on the namespace and no seat flag.
 function driver(namespaces = ["sample"], name = "sample-driver"): Agent {
   const scopes = defaultScopes(namespaces);
   scopes.grants = ["read", "write"];
-  return { id: "agent_0123456789ab", name, kind: "driver", actor: `agent:${name}`, scopes, admin: false, row: null };
+  return {
+    id: "agent_0123456789ab",
+    name,
+    kind: "driver",
+    actor: `agent:${name}`,
+    scopes,
+    admin: false,
+    row: null,
+  };
 }
 
 const SUMMARY = "Did the sample work in one pull request.";
-const withPr = { result_summary: SUMMARY, result_ref: PR, raw: { result_summary: SUMMARY, result_ref: PR } };
+const withPr = {
+  result_summary: SUMMARY,
+  result_ref: PR,
+  raw: { result_summary: SUMMARY, result_ref: PR },
+};
 
 // GitHub answers only the pull request itself, whose body names the job (completeUnclaimed
 // reads it). Every other read gets a 500: verification and the overlap check report that
@@ -83,18 +109,29 @@ test("a cloud session completes a queued job it never claimed by naming its pull
   const row = d1.rows.jobs.find((j) => j.id === ID);
   assert.equal(row?.status, "done");
   assert.equal(row?.claimed_by, CLOUD.actor, "the caller is not credited as the job's holder");
-  assert.equal(row?.result_ref, PR, "the pull request is not recorded against the job, so pr_recorded_for_job could not pass");
+  assert.equal(
+    row?.result_ref,
+    PR,
+    "the pull request is not recorded against the job, so pr_recorded_for_job could not pass",
+  );
   assert.equal(d1.rows.job_outcomes.length, 1, "no outcome row was written");
   assert.equal(d1.rows.job_outcomes[0].agent, CLOUD.actor);
   const audit = d1.rows.audit_log as Array<Record<string, unknown>>;
-  assert.ok(audit.some((a) => /"status":"done"/.test(String(a.params))), "no audit row records the close");
+  assert.ok(
+    audit.some((a) => /"status":"done"/.test(String(a.params))),
+    "no audit row records the close",
+  );
 });
 
 test("a driver with write and no seat flag completes a queued job the same way", async () => {
   const { d1, env } = store([job()]);
   const caller = driver();
   const r = await offline(() =>
-    completeAsCaller(env, caller, NOW, ID, { result_summary: SUMMARY, evidence: { prs: [PR] }, raw: { result_summary: SUMMARY } })
+    completeAsCaller(env, caller, NOW, ID, {
+      result_summary: SUMMARY,
+      evidence: { prs: [PR] },
+      raw: { result_summary: SUMMARY },
+    }),
   );
   assert.equal(r.ok, true, r.refusal);
   assert.equal(d1.rows.jobs[0].status, "done");
@@ -105,7 +142,13 @@ test("a driver with write and no seat flag completes a queued job the same way",
 test("PLANT: a queued job completed without a pull request is refused, and nothing is written", async () => {
   const { d1, env } = store([job()]);
   for (const ref of [undefined, "sample/notes/done.md"]) {
-    const r = await offline(() => completeAsCaller(env, CLOUD, NOW, ID, { result_summary: SUMMARY, result_ref: ref, raw: { result_summary: SUMMARY } }));
+    const r = await offline(() =>
+      completeAsCaller(env, CLOUD, NOW, ID, {
+        result_summary: SUMMARY,
+        result_ref: ref,
+        raw: { result_summary: SUMMARY },
+      }),
+    );
     assert.equal(r.ok, false, `completed with result_ref ${ref}`);
     assert.match(r.refusal ?? "", /the pull request is the claim/);
   }
@@ -118,7 +161,10 @@ test("PLANT: a queued job completed without a pull request is refused, and nothi
 test("PLANT: a pull request whose body does not name the job is refused, and nothing is written", async () => {
   // Otherwise any pull request on a mapped repo closes any queued job (CA-3).
   const { d1, env } = store([job()]);
-  const r = await offline(() => completeAsCaller(env, driver(), NOW, ID, withPr), "Closes job_ffffffffffff.");
+  const r = await offline(
+    () => completeAsCaller(env, driver(), NOW, ID, withPr),
+    "Closes job_ffffffffffff.",
+  );
   assert.equal(r.ok, false);
   assert.match(r.refusal ?? "", /has job_0123456789ab in its description/);
   assert.equal(d1.rows.jobs[0].status, "queued");
@@ -140,7 +186,9 @@ test("PLANT: a pull request on a repo the namespace does not map is refused, and
     { result_summary: SUMMARY, result_ref: other },
     { result_summary: SUMMARY, result_ref: PR, evidence: { prs: [other] } },
   ]) {
-    const r = await offline(() => completeAsCaller(env, CLOUD, NOW, ID, { ...args, raw: { result_summary: SUMMARY } }));
+    const r = await offline(() =>
+      completeAsCaller(env, CLOUD, NOW, ID, { ...args, raw: { result_summary: SUMMARY } }),
+    );
     assert.equal(r.ok, false, `completed naming ${other}`);
     assert.match(r.refusal ?? "", /is not on a repo mapped to sample/);
   }
@@ -149,7 +197,9 @@ test("PLANT: a pull request on a repo the namespace does not map is refused, and
 });
 
 test("PLANT: what a claim asks of the caller is asked without one: required_flags and min_record", async () => {
-  const flagged = store([job({ required_scopes: JSON.stringify({ flags: ["can_touch_protected"] }) })]);
+  const flagged = store([
+    job({ required_scopes: JSON.stringify({ flags: ["can_touch_protected"] }) }),
+  ]);
   const noFlag = await offline(() => completeAsCaller(flagged.env, driver(), NOW, ID, withPr));
   assert.equal(noFlag.ok, false);
   assert.match(noFlag.refusal ?? "", /without a claim: .*can_touch_protected/);
@@ -170,8 +220,10 @@ test("the close is audited as complete-unclaimed, not as the seat's record", asy
 });
 
 test("a claimed job is still its holder's: another caller cannot complete it without a claim", async () => {
-  const { d1, env } = store([job({ status: "claimed", claimed_by: "agent:sample-driver", lease_expires: "2026-10-11T14:00:00.000Z" })]);
-  const r = await offline(() => completeAsCaller(env, driver(["sample"], "other-driver"), NOW, ID, withPr));
+  const { d1, env } = store([job({ status: "claimed", claimed_by: "agent:sample-driver" })]);
+  const r = await offline(() =>
+    completeAsCaller(env, driver(["sample"], "other-driver"), NOW, ID, withPr),
+  );
   assert.equal(r.ok, false);
   assert.equal(d1.rows.jobs[0].status, "claimed");
   assert.equal(d1.rows.jobs[0].claimed_by, "agent:sample-driver");
@@ -187,14 +239,20 @@ test("begin marks a queued job started, and a second session reading it is told 
   assert.equal(d1.rows.jobs[0].started_at, NOW.toISOString());
   assert.equal(d1.rows.jobs[0].status, "queued", "a label is not a claim");
   assert.equal(d1.rows.jobs[0].claimed_by, null);
-  assert.ok((d1.rows.audit_log as Array<Record<string, unknown>>).some((a) => a.action === "job-started"), "no job-started audit row");
+  assert.ok(
+    (d1.rows.audit_log as Array<Record<string, unknown>>).some((a) => a.action === "job-started"),
+    "no job-started audit row",
+  );
 
   // A second session lists the job and learns who started it and when.
   const listed = await listJobs(env, { id: ID });
   assert.equal(listed.started?.by, CLOUD.actor);
   assert.equal(listed.started?.at, NOW.toISOString());
-  assert.match(listed.started?.note ?? "", /admin@example\.com started this job at 2026-10-11T12:00:00\.000Z/);
-  assert.equal((listed.jobs?.[0] as { started_by?: string }).started_by, CLOUD.actor);
+  assert.match(
+    listed.started?.note ?? "",
+    /admin@example\.com started this job at 2026-10-11T12:00:00\.000Z/,
+  );
+  assert.equal((listed.jobs?.[0] as { started_by?: string } | undefined)?.started_by, CLOUD.actor);
 
   // Its own begin writes nothing and is told the same.
   const writes = d1.recorded.length;
@@ -209,7 +267,10 @@ test("the mirror document and the Portal Queue show who started the job", async 
   const { d1, env } = store([job()]);
   await beginJob(env, CLOUD, NOW, ID);
   const doc = d1.rows.documents.find((d) => d.path === `jobs/${ID}.md`);
-  assert.match(String(doc?.body), new RegExp(`- started by: ${CLOUD.actor.replace(/[.]/g, "\\.")} at 2026-10-11T12:00:00\\.000Z`));
+  assert.match(
+    String(doc?.body),
+    new RegExp(`- started by: ${CLOUD.actor.replace(/[.]/g, "\\.")} at 2026-10-11T12:00:00\\.000Z`),
+  );
   const feed = opsJobFrom(d1.rows.jobs[0] as unknown as JobFeedRow);
   assert.equal(feed.started_by, CLOUD.actor);
   assert.equal(feed.started_at, NOW.toISOString());

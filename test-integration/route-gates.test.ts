@@ -19,14 +19,15 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM agents").run();
   await env.DB.prepare(
     `INSERT INTO agents (id, name, kind, key_hash, scopes, created_by, created_at)
-     VALUES ('agent_driver000001', 'capsid-driver', 'driver', ?1, ?2, 'github:dustin', '2026-09-11 00:00:00')`
+     VALUES ('agent_driver000001', 'capsid-driver', 'driver', ?1, ?2, 'github:dustin', '2026-09-11 00:00:00')`,
   )
     .bind(await sha256Hex(DRIVER_KEY), serializeScopes(scopes))
     .run();
 });
 
 describe("the route tables are a statement about the Worker that serves them", () => {
-  const isFallback = async (r: Response) => r.status === 404 && (await r.clone().text()) === "not found";
+  const isFallback = async (r: Response) =>
+    r.status === 404 && (await r.clone().text()) === "not found";
 
   it("every path in ROUTE_GRANTS and UNGATED_ROUTES is served by some method, so no entry is stale", async () => {
     const paths = [...Object.keys(ROUTE_GRANTS), ...Object.keys(UNGATED_ROUTES)];
@@ -35,9 +36,15 @@ describe("the route tables are a statement about the Worker that serves them", (
     expect(await isFallback(await SELF.fetch(`${ORIGIN}/not-a-route`))).toBe(true);
     for (const path of paths) {
       const get = await SELF.fetch(`${ORIGIN}${path}`, { redirect: "manual" });
-      const post = await SELF.fetch(`${ORIGIN}${path}`, { method: "POST", redirect: "manual", body: "" });
+      const post = await SELF.fetch(`${ORIGIN}${path}`, {
+        method: "POST",
+        redirect: "manual",
+        body: "",
+      });
       const served = !(await isFallback(get)) || !(await isFallback(post));
-      expect(served, `src/scope.ts names route ${path}, which the Worker does not serve`).toBe(true);
+      expect(served, `src/scope.ts names route ${path}, which the Worker does not serve`).toBe(
+        true,
+      );
     }
   });
 
@@ -46,22 +53,30 @@ describe("the route tables are a statement about the Worker that serves them", (
   // added under /portal without it fails here.
   it("PLANT: every Portal route is behind portalGate: a bearer gets 403 and an anonymous caller the sign-in", async () => {
     const NOT_GATED = new Set(["/portal/callback"]);
-    const portalRoutes = Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/portal") && !NOT_GATED.has(p));
+    const portalRoutes = Object.keys(UNGATED_ROUTES).filter(
+      (p) => p.startsWith("/portal") && !NOT_GATED.has(p),
+    );
     // The feed, the refresh, preview, perform, namespaces, activity, claims, stale jobs,
-    // the Tonight plan, the digest, the Maintenance list, the convergence view, package
+    // the Merge units panel's read, a site page's search, traffic, builds and build log, the Tonight plan, the
+    // digest, the Maintenance list, the convergence view, package
     // history, the completeness board, the 404 counts, the Workers' resources, the Library, the trends,
     // phone alerts, sign-out, the /portal/api/ fallback, the app and the app's files.
-    expect(portalRoutes.length, `Portal routes found: ${portalRoutes.join(", ")}`).toBe(24);
+    expect(portalRoutes.length, `Portal routes found: ${portalRoutes.join(", ")}`).toBe(30);
     for (const path of portalRoutes) {
       for (const method of ["GET", "POST"]) {
-        const bearer = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual", headers: { Authorization: `Bearer ${DRIVER_KEY}` } });
+        const bearer = await SELF.fetch(`${ORIGIN}${path}`, {
+          method,
+          redirect: "manual",
+          headers: { Authorization: `Bearer ${DRIVER_KEY}` },
+        });
         if (await isFallback(bearer)) continue; // not served for this method
         expect(bearer.status, `${method} ${path} served a bearer`).toBe(403);
         const anonymous = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual" });
         expect(anonymous.status, `${method} ${path} served an anonymous caller`).toBe(302);
-        expect(anonymous.headers.get("Location") ?? "", `${method} ${path} did not send an anonymous caller to the Access sign-in`).toContain(
-          "sample.cloudflareaccess.com"
-        );
+        expect(
+          anonymous.headers.get("Location") ?? "",
+          `${method} ${path} did not send an anonymous caller to the Access sign-in`,
+        ).toContain("sample.cloudflareaccess.com");
       }
     }
   });
@@ -71,15 +86,27 @@ describe("the route tables are a statement about the Worker that serves them", (
   // fallback. Six addresses, the old page, its JSON twin and old JSON address, its
   // callback, the old feed and the old app.
   it("every old /console address is the plain 404, with no redirect", async () => {
-    const OLD = ["/console", "/console/json", "/console.json", "/console/callback", "/console/api/ops", "/console/app/"];
+    const OLD = [
+      "/console",
+      "/console/json",
+      "/console.json",
+      "/console/callback",
+      "/console/api/ops",
+      "/console/app/",
+    ];
     expect(OLD.length).toBe(6);
     for (const path of OLD) {
       for (const method of ["GET", "POST"]) {
         const response = await SELF.fetch(`${ORIGIN}${path}`, { method, redirect: "manual" });
-        expect(await isFallback(response), `${method} ${path} answered ${response.status}`).toBe(true);
+        expect(await isFallback(response), `${method} ${path} answered ${response.status}`).toBe(
+          true,
+        );
         expect(response.headers.get("Location"), `${method} ${path} redirects`).toBeNull();
       }
     }
-    expect(Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/console")), "src/scope.ts still names a /console route").toEqual([]);
+    expect(
+      Object.keys(UNGATED_ROUTES).filter((p) => p.startsWith("/console")),
+      "src/scope.ts still names a /console route",
+    ).toEqual([]);
   });
 });

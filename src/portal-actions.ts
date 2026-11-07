@@ -2,13 +2,23 @@ import { getCookie } from "./auth";
 import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import { performControl, previewControl } from "./controls";
 import { ACTIVITY_LIMIT, activityFilterFrom, loadActivity } from "./portal-activity";
-import { endPortalSession, logPortalSignOut, type PortalUser, portalDisplay, portalGate, portalSessionId, portalSignOutCookies, sourceAddress } from "./portal-auth";
+import {
+  endPortalSession,
+  logPortalSignOut,
+  type PortalUser,
+  portalDisplay,
+  portalGate,
+  portalSessionId,
+  portalSignOutCookies,
+  sourceAddress,
+} from "./portal-auth";
 import { portalCookiePath } from "./portal-host";
 import { LOGOUT_HEADERS } from "@dustinedwards/site-runtime/headers";
 import { refuseCrossSite } from "@dustinedwards/site-runtime/origin";
 import { requireJson } from "@dustinedwards/site-runtime/body";
 import type { Env } from "./env";
 import { capsidStatus } from "./status";
+import { parseReposList } from "./github";
 import { readBoundedText } from "./signed-requests";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import type { PortalActivity, PortalNamespaces, PortalPerformed } from "./ops-types/portal";
@@ -53,8 +63,9 @@ const BODY_MAX_BYTES = 65_536;
 // ---------------------------------------------------------------------------
 // The routes.
 
-
-type Gated = { ok: true; email: string; user: PortalUser; csrf: string; body: Record<string, unknown> } | { ok: false; response: Response };
+type Gated =
+  | { ok: true; email: string; user: PortalUser; csrf: string; body: Record<string, unknown> }
+  | { ok: false; response: Response };
 
 /** The checks both POSTs run, in order: the session, the fetch metadata, the content type, the body cap,
  *  the CSRF pair, then the JSON. Nothing here reads or writes state. */
@@ -72,33 +83,62 @@ export async function gateActionRequest(request: Request, env: Env, now: Date): 
   if (notJson) return { ok: false, response: notJson };
 
   const bounded = await readBoundedText(request, BODY_MAX_BYTES);
-  if (!bounded.ok) return { ok: false, response: new Response(null, { status: 413, headers: { "Cache-Control": "no-store" } }) };
+  if (!bounded.ok)
+    return {
+      ok: false,
+      response: new Response(null, { status: 413, headers: { "Cache-Control": "no-store" } }),
+    };
 
   const header = request.headers.get(PORTAL_CSRF_HEADER);
   const cookie = getCookie(request, PORTAL_CSRF_COOKIE);
-  if (!header || !cookie || !await safeEqual(cookie, header)) {
-    return { ok: false, response: textResponse("csrf validation failed: reload Capsid Portal and try again.", 403) };
+  if (!header || !cookie || !(await safeEqual(cookie, header))) {
+    return {
+      ok: false,
+      response: textResponse("csrf validation failed: reload Capsid Portal and try again.", 403),
+    };
   }
 
   let body: unknown;
   try {
     body = JSON.parse(bounded.text);
   } catch (err) {
-    return { ok: false, response: textResponse(`the body is not JSON: ${err instanceof Error ? err.message : String(err)}`, 400) };
+    return {
+      ok: false,
+      response: textResponse(
+        `the body is not JSON: ${err instanceof Error ? err.message : String(err)}`,
+        400,
+      ),
+    };
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, response: textResponse("the body must be a JSON object.", 400) };
   }
-  return { ok: true, email: gate.user.email, user: gate.user, csrf: cookie, body: body as Record<string, unknown> };
+  return {
+    ok: true,
+    email: gate.user.email,
+    user: gate.user,
+    csrf: cookie,
+    body: body as Record<string, unknown>,
+  };
 }
-
 
 /** POST /portal/api/actions/preview: what the action will change, and a token to
  *  perform it. Writes nothing. */
-export async function handlePortalPreview(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalPreview(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
   if (!gated.ok) return gated.response;
-  const previewed = await previewControl(env, gated.email, gated.body.action, gated.body.params, now, "portal");
+  const previewed = await previewControl(
+    env,
+    gated.email,
+    gated.body.action,
+    gated.body.params,
+    now,
+    "portal",
+  );
   if (!previewed.ok) return textResponse(previewed.refusal, previewed.status);
   return jsonResponse(previewed.preview);
 }
@@ -110,17 +150,29 @@ export interface PortalDeps {
 
 /** POST /portal/api/actions/perform: the action a preview signed, run through the
  *  shared mutator, then the fresh feed. */
-export async function handlePortalPerform(request: Request, env: Env, now: Date = new Date(), deps: PortalDeps = {}): Promise<Response> {
+export async function handlePortalPerform(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+  deps: PortalDeps = {},
+): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
   if (!gated.ok) return gated.response;
   const extra = Object.keys(gated.body).filter((key) => key !== "token");
   if (extra.length) {
     return textResponse(
       `a perform carries only { token }: the action and its params come from the signed preview, never from this body. Refused: ${extra.join(", ")}.`,
-      400
+      400,
     );
   }
-  const did = await performControl(env, gated.email, gated.body.token, sourceAddress(request), now, "portal");
+  const did = await performControl(
+    env,
+    gated.email,
+    gated.body.token,
+    sourceAddress(request),
+    now,
+    "portal",
+  );
   if (!did.ok) return textResponse(did.refusal, did.status);
   const { action, result } = did;
 
@@ -131,27 +183,75 @@ export async function handlePortalPerform(request: Request, env: Env, now: Date 
     // The action happened; only the read after it failed. Said as a failure of the
     // read, never as a failure of the action.
     const message = err instanceof Error ? err.message : String(err);
-    logEvent("PORTAL_PERFORM_FEED_FAILED", { message: `PORTAL_PERFORM_FEED_FAILED ${action}: ${message}` }, { level: "error" });
-    return textResponse(`${result.summary} It completed, but reading the feed afterwards failed (${message}). Reload Capsid Portal.`, 500);
+    logEvent(
+      "PORTAL_PERFORM_FEED_FAILED",
+      { message: `PORTAL_PERFORM_FEED_FAILED ${action}: ${message}` },
+      { level: "error" },
+    );
+    return textResponse(
+      `${result.summary} It completed, but reading the feed afterwards failed (${message}). Reload Capsid Portal.`,
+      500,
+    );
   }
-  const performed: PortalPerformed = { action, summary: result.summary, warning: result.warning, feed: { ...data, csrf: gated.csrf, user: portalDisplay(gated.user) } };
+  const performed: PortalPerformed = {
+    action,
+    summary: result.summary,
+    warning: result.warning,
+    feed: { ...data, csrf: gated.csrf, user: portalDisplay(gated.user) },
+  };
   // A header value must be printable Latin-1; the error text is not guaranteed to be.
-  return jsonResponse(performed, 200, result.warning ? { "X-Capsid-Warning": result.warning.replace(/[^\x20-\x7e]+/g, " ") } : {});
+  return jsonResponse(
+    performed,
+    200,
+    result.warning ? { "X-Capsid-Warning": result.warning.replace(/[^\x20-\x7e]+/g, " ") } : {},
+  );
 }
 
-/** GET /portal/api/namespaces: every roster namespace as capsid_run_improve action status reports it,
+/** GET /portal/api/namespaces: every roster namespace as capsid_read_status action status reports it,
  *  from the same function, so the Portal and the tool agree (ruled 2026-09-11). */
-export async function handlePortalNamespaces(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalNamespaces(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const status = await capsidStatus(env);
+  // Each project's repo mapping, so the Projects page can show it and edit it in place.
+  const mapped = await env.DB.prepare("SELECT namespace, repos FROM namespaces").all<{
+    namespace: string;
+    repos: string;
+  }>();
+  const reposOf = new Map(
+    mapped.results.map((r) => {
+      const parsed = parseReposList(r.repos);
+      return [
+        r.namespace,
+        "error" in parsed ? [] : parsed.list.map((e) => ({ repo: e.repo, label: e.label })),
+      ] as const;
+    }),
+  );
   const body: PortalNamespaces = {
     generated: now.toISOString(),
     namespaces: status.namespaces.map((ns) => ({
       namespace: ns.namespace,
-      breaker: { open: ns.breaker.open, failed: ns.breaker.failed, threshold: ns.breaker.threshold, since: ns.breaker.since, reset_at: ns.breaker.reset_at },
-      latest_report: ns.latest_report ? { integrity: ns.latest_report.integrity, generated: ns.latest_report.generated } : null,
-      jobs: { queued: ns.jobs.queued, claimed: ns.jobs.claimed, blocked: ns.jobs.blocked, done_today: ns.jobs.done_today },
+      breaker: {
+        open: ns.breaker.open,
+        failed: ns.breaker.failed,
+        threshold: ns.breaker.threshold,
+        since: ns.breaker.since,
+        reset_at: ns.breaker.reset_at,
+      },
+      latest_report: ns.latest_report
+        ? { integrity: ns.latest_report.integrity, generated: ns.latest_report.generated }
+        : null,
+      jobs: {
+        queued: ns.jobs.queued,
+        claimed: ns.jobs.claimed,
+        blocked: ns.jobs.blocked,
+        done_today: ns.jobs.done_today,
+      },
+      repos: reposOf.get(ns.namespace) ?? [],
     })),
   };
   return jsonResponse(body);
@@ -159,7 +259,11 @@ export async function handlePortalNamespaces(request: Request, env: Env, now: Da
 
 /** GET /portal/api/activity?namespace=&actor=: the last audit rows, filtered. ?id=:
  *  that one row, for the Activity drawer. */
-export async function handlePortalActivity(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalActivity(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const parsed = activityFilterFrom(new URL(request.url));
@@ -181,7 +285,11 @@ export async function handlePortalActivity(request: Request, env: Env, now: Date
  *  the body cap, the CSRF pair), so a cross-site page cannot sign the administrator out.
  *  The Access session at the team domain is Cloudflare's, so the next visit to /portal
  *  may sign in again without a prompt. */
-export async function handlePortalSignOut(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalSignOut(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gated = await gateActionRequest(request, env, now);
   if (!gated.ok) return gated.response;
   const sid = await portalSessionId(request, env);
@@ -189,13 +297,18 @@ export async function handlePortalSignOut(request: Request, env: Env, now: Date 
   await logPortalSignOut(gated.user.email);
   // Clear-Site-Data too, so the browser drops what the Portal left behind (OSHP's logout headers).
   const headers = new Headers({ "Cache-Control": "no-store", ...LOGOUT_HEADERS });
-  for (const cookie of portalSignOutCookies(portalCookiePath(new URL(request.url)))) headers.append("Set-Cookie", cookie);
+  for (const cookie of portalSignOutCookies(portalCookiePath(new URL(request.url))))
+    headers.append("Set-Cookie", cookie);
   return new Response(null, { status: 204, headers });
 }
 
 /** Any other path under /portal/api/, any method: behind the gate like every Portal
  *  route, then a JSON 404, so a typo in the app never reads the app's own page as data. */
-export async function handlePortalApiNotFound(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handlePortalApiNotFound(
+  request: Request,
+  env: Env,
+  now: Date = new Date(),
+): Promise<Response> {
   const gate = await portalGate(request, env, now, OPS_RETURN_TO);
   if (!gate.ok) return gate.response;
   const path = new URL(request.url).pathname;
