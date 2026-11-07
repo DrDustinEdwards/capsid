@@ -99,9 +99,6 @@ export const CREDENTIAL_ALLOW: Record<string, string> = {
   "bench_runs.output_tokens": "a model token count",
   "bench_runs.cache_read_tokens": "a model token count",
   "bench_runs.cache_creation_tokens": "a model token count",
-  // Not a column: words in a comment inside session_usage's CREATE (migrations/0025), which
-  // d1-dump's columnNames splits on its commas without stripping comments first.
-  "session_usage.claude_code.token.usage": "a metric name in a schema comment, not a column",
 };
 
 // Every real table in the schema. test/backup.test.ts derives this list from
@@ -135,13 +132,8 @@ export const TABLES = [
   "job_claims",
   "job_evaluations",
   "job_touches",
-  // The watcher's memory of each finding across jobs (migrations/0024_watcher_findings.sql),
-  // and what Claude Code sessions reported by hook and telemetry (0025), whose receivers
-  // were removed on 2026-11-07; the three tables stay until their drop migration.
+  // The watcher's memory of each finding across jobs (migrations/0024_watcher_findings.sql).
   "watcher_findings",
-  "agent_sessions",
-  "session_events",
-  "session_usage",
   // The run ledger (migrations/0029_task_runs.sql): each scheduled task's runs,
   // pruned at 14 days in code (src/task-runs.ts).
   "task_runs",
