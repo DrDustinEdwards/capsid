@@ -17,7 +17,7 @@ export interface Actions extends StopActions {
   copy: (text: string) => void;
 }
 
-export function commands(
+function commands(
   feed: OpsFeed | null,
   views: ReadonlyArray<ViewDef>,
   a: Actions,
