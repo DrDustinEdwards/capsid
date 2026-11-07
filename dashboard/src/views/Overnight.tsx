@@ -83,7 +83,14 @@ export function Tonight() {
                 </span>
               </h3>
               {lane.jobs.map((j) => (
-                <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0}>
+                <div
+                  className="qrow"
+                  key={j.id}
+                  data-row=""
+                  data-open={`job:${j.id}`}
+                  role="button"
+                  tabIndex={0}
+                >
                   {j.gated ? <St kind="blocked">Gated</St> : <St kind="queued">Planned</St>}
                   <div className="t">
                     <b>{j.title}</b>
@@ -107,7 +114,14 @@ export function Tonight() {
                 Skipped <span className="num faint">{plan.skipped.length}</span>
               </h3>
               {plan.skipped.map((j) => (
-                <div className="qrow" key={j.id} data-row="" data-open={`job:${j.id}`} tabIndex={0}>
+                <div
+                  className="qrow"
+                  key={j.id}
+                  data-row=""
+                  data-open={`job:${j.id}`}
+                  role="button"
+                  tabIndex={0}
+                >
                   <St kind="nodata">Skipped</St>
                   <div className="t">
                     <b>{j.title}</b>
@@ -205,6 +219,7 @@ export function SinceLastLooked() {
                       key={b.id}
                       data-row=""
                       data-open={`job:${b.id}`}
+                      role="button"
                       tabIndex={0}
                       className="click"
                     >

@@ -43,6 +43,7 @@ function LiveSessions() {
           data-row=""
           data-session={s.session_id}
           data-open={s.job_id ? `job:${s.job_id}` : undefined}
+          role={s.job_id ? "button" : undefined}
           tabIndex={s.job_id ? 0 : undefined}
         >
           {s.last_failure ? (
@@ -140,6 +141,7 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
               data-row=""
               data-open={`job:${j.id}`}
               data-rule={j.rule}
+              role="button"
               tabIndex={0}
             >
               <St kind={k.kind}>{k.label}</St>

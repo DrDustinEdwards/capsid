@@ -544,7 +544,7 @@ function BuildLog({ build }: { build: string }) {
                     {l.note ?? `The last ${l.lines.length} of ${l.line_count} lines.`}
                   </p>
                 )}
-                <pre className="log" tabIndex={0}>
+                <pre className="log" role="region" aria-label="Build log" tabIndex={0}>
                   {l.lines.join("\n")}
                 </pre>
               </>
