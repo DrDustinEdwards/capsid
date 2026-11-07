@@ -123,9 +123,20 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
     "brief",
     {
       description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at and last_actor (read one with capsid_read_doc), the 3 most recent episodics in full (this is where a handoff written as type episodic shows up), and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if the episodics are cut, the \`trimmed\` field says so. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
-      inputSchema: { namespace: nsName },
+      inputSchema: {
+        namespace: nsName,
+        thread: z
+          .string()
+          .trim()
+          .min(1)
+          .max(80)
+          .optional()
+          .describe(
+            "Optional name of the thread or session calling, such as its title. Every project thread acts as one login, so this is the only way the audit row can tell threads apart. A name, never a secret.",
+          ),
+      },
     },
-    async ({ namespace }) => {
+    async ({ namespace, thread }) => {
       const doc = (ns: string, path: string) =>
         db
           .prepare(
@@ -198,7 +209,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
             .bind(namespace)
             .all(),
         ]);
-      if (conventions) await recordConventionsRead(db, actor, "brief", namespace);
+      if (conventions) await recordConventionsRead(db, actor, "brief", namespace, thread);
       const openTasks = openTasksResult.results;
       const recentEpisodics = recentEpisodicsResult.results;
       const coreOut = coreOutResult.results;
