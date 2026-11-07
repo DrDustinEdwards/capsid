@@ -26,7 +26,10 @@ import { parseArgs } from "node:util";
 
 import { webManifest } from "@drdustinedwards/site-helpers/icons";
 import { llmsDocument } from "@drdustinedwards/site-helpers/llms";
-import { writeMarkdownCopies } from "@drdustinedwards/site-helpers/markdown-files";
+import {
+  writeMarkdownCopies,
+  writeSitemapLastmod,
+} from "@drdustinedwards/site-helpers/markdown-files";
 import { aiTxt, robotsDocument } from "@drdustinedwards/site-helpers/robots";
 import { sitemapDocument } from "@drdustinedwards/site-helpers/sitemap";
 import { securityTxt } from "@dustinedwards/site-runtime/security-txt";
@@ -172,45 +175,6 @@ const llmsTxt = (systems, tools) =>
       },
     ],
   });
-
-/**
- * When each page last changed, for the sitemap's lastmod: a page whose text (the build date aside) is the same as in the
- * live build keeps the live build's date, a changed or new one gets today's, and a page with no record has none, since no
- * lastmod is better than a wrong one (https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap).
- * The record rides in build.json, so it carries from one deploy to the next.
- * @param {Array<[string, string]>} pages @param {string} asOf @param {Record<string, { hash: string, lastmod: string | null }> | undefined} previous
- * @param {string} today
- */
-export function pageDates(pages, asOf, previous, today) {
-  /** @type {Record<string, { hash: string, lastmod: string | null }>} */
-  const dates = {};
-  for (const [path, html] of pages) {
-    const hash = createHash("sha256").update(html.replaceAll(asOf, "")).digest("hex");
-    const before = previous?.[path];
-    dates[path] = {
-      hash,
-      lastmod: before ? (before.hash === hash ? before.lastmod : today) : previous ? today : null,
-    };
-  }
-  return dates;
-}
-
-/** The live build's page record, or undefined when there is none yet or it cannot be read. @param {string | undefined} source */
-async function readPrevious(source) {
-  if (!source) return undefined;
-  try {
-    let record;
-    if (source.startsWith("https://")) {
-      const response = await fetch(source, { headers: { accept: "application/json" } });
-      if (!response.ok) return undefined;
-      record = await response.json();
-    } else record = JSON.parse(readFileSync(source, "utf8"));
-    const pages = record?.pages;
-    return pages && typeof pages === "object" ? pages : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /** @param {{ model?: string, stats?: string, code?: string, out?: string, previous?: string, today?: string }} [options] */
 export async function build({
@@ -367,10 +331,9 @@ export async function build({
   const listed = pages
     .map(([path]) => path)
     .filter((path) => path !== "/404" && path !== "/search/");
-  const dates = pageDates(pages, stats.as_of, await readPrevious(previousSource), today);
   writeFileSync(
     join(out, "sitemap.xml"),
-    sitemapDocument(listed.map((path) => ({ loc: ORIGIN + path, lastmod: dates[path]?.lastmod }))),
+    sitemapDocument(listed.map((path) => ({ loc: ORIGIN + path }))),
   );
   writeFileSync(
     join(out, "robots.txt"),
@@ -399,6 +362,13 @@ export async function build({
   // Worker serves them as files (serveMarkdownCopies, worker.mjs).
   // The search page is not in the sitemap, so it gets no copy.
   await writeMarkdownCopies({ dir: out, origin: ORIGIN, skip: (path) => path === "/search" });
+  // Each sitemap URL's lastmod: the day its Markdown copy last changed against the live build's build.json (Prelum's
+  // writeSitemapLastmod), which writes the record build.json carries on. Without a record to compare (a build from local
+  // fixtures) no URL has a lastmod, since none is better than a wrong one
+  // (https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap).
+  const dates = previousSource
+    ? await writeSitemapLastmod({ dir: out, origin: ORIGIN, previous: previousSource, today })
+    : {};
   // What this build is of, and a hash of everything else it wrote: the workflow deploys only
   // when the hash differs from the live build.json (ruling answer 8), whether the data or the
   // explorer's own files changed. Written last, so the hash cannot cover itself.
