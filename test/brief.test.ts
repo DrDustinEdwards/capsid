@@ -5,9 +5,10 @@ import { buildServer } from "../src/server.ts";
 import { BRIEF_BUDGET } from "../src/limits.ts";
 import { type DocRow, fakeD1, fakeEnv, type FakeD1Options } from "./fakes.ts";
 
-// The brief's trim reports only sections it actually cut, and does not cut task
-// bodies when the three documents it never trims are over budget on their own,
-// because then no trim can bring the packet under the budget.
+// The brief returns open tasks as stubs, keeps episodics (the handoff) whole until the
+// packet is over budget, and reports only a cut it made. It cuts nothing when the
+// documents it never trims are over budget on their own, because then no trim can
+// bring the packet under the budget.
 
 async function brief(opts: FakeD1Options) {
   const fake = fakeD1(opts);
@@ -65,35 +66,32 @@ test("a floor over budget with no tasks reports the floor, not a trim of nothing
   });
 });
 
-test("a floor over budget leaves task bodies whole, because cutting them cannot fit the packet", async () => {
+test("open tasks come back as stubs whatever the budget, and keep their provenance fields", async () => {
+  const { out } = await brief({ documents: [...floor(100), task(0, 5000), task(1, 5000)] });
+  assert.equal(out.trimmed, undefined);
+  for (const t of out.open_tasks as Array<{ body: string; path: string; title: unknown }>) {
+    assert.match(t.body, /not in the packet: read it with capsid_read_doc/);
+    assert.ok(t.body.length < 200, `stub for ${t.path} is ${t.body.length} chars`);
+  }
+  assert.ok(out.approx_chars < 1000, `approx_chars ${out.approx_chars} counts task bodies`);
+});
+
+test("a floor over budget reports the floor and still stubs tasks", async () => {
   const each = Math.ceil(BRIEF_BUDGET / 2) + 1000;
-  const { out } = await brief({ documents: [...floor(each), task(0, 500), task(1, 500)] });
+  const { out } = await brief({ documents: [...floor(each), task(0, 500)] });
   assert.equal(out.trimmed, undefined);
   assert.ok(out.floor_exceeds_budget);
-  assert.deepEqual(
-    out.open_tasks.map((t: { body: string }) => t.body.length),
-    [500, 500],
-  );
+  assert.match(out.open_tasks[0].body, /not in the packet/);
 });
 
-test("a trim names only sections that had bodies to cut", async () => {
-  // Floor under budget, tasks push it over, no episodics at all.
-  const { out } = await brief({ documents: [...floor(5000), task(0, BRIEF_BUDGET)] });
-  assert.deepEqual(out.trimmed, ["1 task bodies"]);
-  assert.equal(out.floor_exceeds_budget, undefined);
-  assert.match(out.open_tasks[0].body, /trimmed for size/);
-  assert.ok(
-    out.approx_chars <= BRIEF_BUDGET,
-    `approx_chars ${out.approx_chars} is over the budget after trimming`,
-  );
-});
-
-test("episodics are cut first, and tasks stay whole when that is enough", async () => {
-  const { out } = await brief({
-    documents: [...floor(5000), task(0, 100), episodic(0, BRIEF_BUDGET)],
-  });
-  assert.deepEqual(out.trimmed, ["1 episodic bodies"]);
-  assert.equal(out.open_tasks[0].body.length, 100);
+test("episodics, which carry the handoff, stay whole under budget and are cut only over it", async () => {
+  const whole = await brief({ documents: [...floor(5000), episodic(0, 3000)] });
+  assert.equal(whole.out.trimmed, undefined);
+  assert.equal(whole.out.recent_episodics[0].body.length, 3000);
+  const cut = await brief({ documents: [...floor(5000), episodic(0, BRIEF_BUDGET)] });
+  assert.deepEqual(cut.out.trimmed, ["1 episodic bodies"]);
+  assert.match(cut.out.recent_episodics[0].body, /not in the packet/);
+  assert.ok(cut.out.approx_chars <= BRIEF_BUDGET);
 });
 
 test("a packet under budget carries neither field", async () => {

@@ -476,7 +476,9 @@ ORDER BY id DESC LIMIT 50;
 caller per hour (`src/conventions-read.ts`, `test-integration/conventions-read.test.ts`).
 The row is in namespace `capsid` with no path, because a row addressed to the document
 would make the reader its `last_actor`. `params` are `{"via": "read" | "brief",
-"for_namespace": ...}`. Per caller over the last week:
+"for_namespace": ..., "thread": ...}`; `thread` is present only when `capsid_start_session` was
+given its optional `thread` name, and then the limit is one row per caller per thread per hour,
+because every project thread acts as one login. Per caller over the last week:
 
 ```sql
 SELECT actor, COUNT(*) AS hours_with_a_read FROM audit_log

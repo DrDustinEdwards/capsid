@@ -19,8 +19,10 @@ export function isConventionsDoc(namespace: string, path: string): boolean {
   return namespace === HEALTH_PROBE_NS && path === HEALTH_PROBE_PATH;
 }
 
-/** Record that `actor` read the rules, unless it already did inside the last hour. One
- *  statement, so the check and the insert cannot be separated by another request's row
+/** Record that `actor` read the rules, unless it already did inside the last hour. A
+ *  caller that names its `thread` is counted once per hour per thread, since every project
+ *  thread acts as one login; a caller that names none is counted once per hour as before.
+ *  One statement, so the check and the insert cannot be separated by another request's row
  *  for the same caller. A failure is reported and never fails the read: this is a
  *  measurement, and the caller asked for a document. */
 export async function recordConventionsRead(
@@ -28,6 +30,7 @@ export async function recordConventionsRead(
   actor: string,
   via: "read" | "brief",
   forNamespace: string,
+  thread?: string,
 ): Promise<void> {
   try {
     await db
@@ -36,14 +39,20 @@ export async function recordConventionsRead(
          SELECT ?1, ?2, ?3, NULL, ?4
          WHERE NOT EXISTS (
            SELECT 1 FROM audit_log WHERE action = ?2 AND actor = ?1 AND at >= datetime('now', ?5)
+             AND COALESCE(json_extract(params, '$.thread'), '') = ?6
          )`,
       )
       .bind(
         actor,
         CONVENTIONS_READ_ACTION,
         HEALTH_PROBE_NS,
-        JSON.stringify({ via, for_namespace: forNamespace }),
+        JSON.stringify(
+          thread
+            ? { via, for_namespace: forNamespace, thread }
+            : { via, for_namespace: forNamespace },
+        ),
         WINDOW,
+        thread ?? "",
       )
       .run();
   } catch (err) {

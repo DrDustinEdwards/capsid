@@ -66,6 +66,14 @@ describe("conventions-read", () => {
     expect(await rows()).toHaveLength(1);
   });
 
+  it("threads that name themselves are counted one by one under one login, and a thread once an hour", async () => {
+    await call("capsid_start_session", { namespace: "sample", thread: "Thread A" });
+    await call("capsid_start_session", { namespace: "sample", thread: "Thread B" });
+    await call("capsid_start_session", { namespace: "sample", thread: "Thread A" });
+    const out = await rows();
+    expect(out.map((r) => JSON.parse(r.params).thread)).toEqual(["Thread A", "Thread B"]);
+  });
+
   it("another caller's read is its own row", async () => {
     await call(
       "capsid_read_doc",
