@@ -43,6 +43,22 @@ export async function offaccountDispatchTick(env: Env, now: Date): Promise<Dispa
   return report;
 }
 
+// The one GitHub write in this file: a workflow_dispatch of offaccount.yml on `ref`, with no
+// inputs. The probe and the copy's start both go through it.
+function postDispatch(env: Env, ref: string): Promise<Response> {
+  return ghFetch(
+    env,
+    OWNER,
+    REPO,
+    `/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ref }),
+    },
+  );
+}
+
 const RETRY_KEY = "offaccount-dispatch:retry";
 const PROBE_KEY = "offaccount-dispatch:probe";
 const PROBE_RETRY_KEY = "offaccount-dispatch:probe-retry";
@@ -59,17 +75,7 @@ async function probeOncePerDay(
 ): Promise<Extract<DispatchReport, { ran: true }> | null> {
   if ((await env.APP_KV.get(PROBE_KEY)) === day) return null;
   if (await env.APP_KV.get(PROBE_RETRY_KEY)) return null;
-  const resp = await ghFetch(
-    env,
-    OWNER,
-    REPO,
-    `/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ref: "permission-probe-no-such-ref" }),
-    },
-  );
+  const resp = await postDispatch(env, "permission-probe-no-such-ref");
   if (resp.status === 422) {
     await env.APP_KV.put(PROBE_KEY, day, { expirationTtl: 3 * 24 * 3600 });
     return {
@@ -125,11 +131,7 @@ async function attempt(env: Env, now: Date, day: string, key: string): Promise<D
     };
   }
 
-  const dispatched = await ghFetch(env, OWNER, REPO, `${base}/dispatches`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ref: "master" }),
-  });
+  const dispatched = await postDispatch(env, "master");
   if (dispatched.status !== 204) {
     return {
       ran: true,
