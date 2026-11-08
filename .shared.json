@@ -16,7 +16,11 @@
     "test-integration/shadow-routes.test.ts": "the key pair and key set stand in for GitHub Actions' OIDC issuer (src/shadow.ts verifies shadow-test.yml's token), not Access: devkit's stubAccess signs Access's token and claims"
   },
   "libraries": {
-    "jose": "search-console.ts signs the Google service account's JWT and shadow.ts verifies GitHub Actions OIDC tokens; site-runtime's ./access and ./access-login verify only Cloudflare Access tokens"
+    "jose": "search-console.ts signs the Google service account's JWT and shadow.ts verifies GitHub Actions OIDC tokens; site-runtime's ./access and ./access-login verify only Cloudflare Access tokens",
+    "hast-util-from-html": "peer of Prelum's ./markdown-files, which explorer/build.mjs imports to write each page's Markdown copy; the explorer installs it so that import resolves",
+    "hast-util-to-mdast": "peer of Prelum's ./markdown-files, which explorer/build.mjs imports to write each page's Markdown copy; the explorer installs it so that import resolves",
+    "mdast-util-gfm": "peer of Prelum's ./markdown-files, which explorer/build.mjs imports to write each page's Markdown copy; the explorer installs it so that import resolves",
+    "mdast-util-to-markdown": "peer of Prelum's ./markdown-files, which explorer/build.mjs imports to write each page's Markdown copy; the explorer installs it so that import resolves"
   },
   "spelling": {
     "contracts": ["[\"']cancelled[\"']", "cancelled\\(\\)", "ended cancelled"],
