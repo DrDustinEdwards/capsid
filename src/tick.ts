@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { autoMergeTick } from "./auto-merge-tick";
 import { mergeResumeTick } from "./merge-resume";
 import { sweepIfDue } from "./outcome-prs";
+import { offaccountDispatchTick } from "./offaccount-dispatch";
 import { runTask, type TaskResult } from "./task-runs";
 import { watcherTick } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
@@ -116,6 +117,25 @@ export async function runTick(env: Env, now: Date, self?: Fetch): Promise<void> 
       return { outcome: "ok", reason: report.note };
     },
     { tag: "MERGE_RESUME_THREW:", rethrow: false },
+  );
+
+  // The nightly Amazon copy (capsid-backups' offaccount.yml), started from here when GitHub's
+  // schedule has not started it by 11:25 UTC (src/offaccount-dispatch.ts). Not due, or a day
+  // that has its run, is not a run.
+  await runTask(
+    env,
+    "offaccount-dispatch",
+    () => offaccountDispatchTick(env, now),
+    (report): TaskResult => {
+      if (!report.ran) return null;
+      logEvent(
+        "OFFACCOUNT_DISPATCH",
+        { message: `OFFACCOUNT_DISPATCH ${report.note}` },
+        { level: report.ok ? "log" : "error" },
+      );
+      return { outcome: report.ok ? "ok" : "refused", reason: report.note };
+    },
+    { tag: "OFFACCOUNT_DISPATCH_THREW:", rethrow: false },
   );
 
   // The daily maintenance pass (src/maintenance.ts): once a UTC day after 11:00, it lists

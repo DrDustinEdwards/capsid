@@ -388,6 +388,10 @@ const UNGUARDED_EXCEPTIONS: Array<{ site: string; why: string }> = [
     why: "the portal's pr_close control: the owner's signed control token (Access login, no MCP grant); writes its pr-closed audit row",
   },
   {
+    site: "offaccount-dispatch.ts: ghFetch",
+    why: "the tick starting capsid-backups' nightly copy (workflow_dispatch, no inputs) when GitHub's schedule is late, and its daily permission probe of a branch that does not exist; no caller, a refused call is a refused run in the ledger",
+  },
+  {
     site: "maintenance-branches.ts: deletePruneCandidates",
     why: "the maintenance pass's branch prune, a system action behind its KV switch; audited per branch",
   },

@@ -61,16 +61,17 @@ Each row names the tools it enables and the evidence that the permission is
 actually granted, because a permission list copied from a setup guide is a claim
 nobody has checked.
 
-| permission    | level          | what needs it                                            | evidence                                                                                                 |
-| ------------- | -------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Metadata      | Read           | resolving the default branch, every other call           | implied by every working call                                                                            |
-| Contents      | Read and write | reading files and trees; tagging and publishing releases | exercised continuously since 2026-07-06                                                                  |
-| Pull requests | Read and write | merging and closing pull requests                        | exercised continuously                                                                                   |
-| Actions       | Read and write | reading workflow runs and logs                           | read confirmed 2026-08-16; write was for `capsid_run_ci`, removed 2026-10-31, and can be lowered to read |
-| Workflows     | Write          | nothing since 2026-10-31                                 | was for committing under `.github/workflows/` through `capsid_change_repo`; can be removed               |
+| permission    | level          | what needs it                                                                                            | evidence                                                                                                            |
+| ------------- | -------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Metadata      | Read           | resolving the default branch, every other call                                                           | implied by every working call                                                                                       |
+| Contents      | Read and write | reading files and trees; tagging and publishing releases                                                 | exercised continuously since 2026-07-06                                                                             |
+| Pull requests | Read and write | merging and closing pull requests                                                                        | exercised continuously                                                                                              |
+| Actions       | Read and write | reading workflow runs and logs; starting capsid-backups' `offaccount.yml` (`src/offaccount-dispatch.ts`) | read confirmed 2026-08-16; write was for `capsid_run_ci` (removed 2026-10-31), and is needed again for the dispatch |
+| Workflows     | Write          | nothing since 2026-10-31                                                                                 | was for committing under `.github/workflows/` through `capsid_change_repo`; can be removed                          |
 
 Since `capsid_change_repo` was removed, no tool commits to a repository, so the App's
-Workflows permission and Actions write are unused and can be dropped.
+Workflows permission is unused and can be dropped. Actions write stays: the tick starts
+capsid-backups' nightly copy with it.
 
 The granted permission set was not read back from the API. Each row is
 evidence from a call that worked. On a fresh setup, grant the list above and

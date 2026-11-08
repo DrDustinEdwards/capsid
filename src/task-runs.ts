@@ -30,6 +30,7 @@ export type TaskId =
   | "digest"
   | "merge-units"
   | "merge-safety"
+  | "offaccount-dispatch"
   | "doc-index"
   | "supersede"
   | "site-pulse"
@@ -96,6 +97,9 @@ export const TASKS: ReadonlyArray<{
   // The auto-merge safety meter and shutoff (src/merge-safety.ts), on the tick; recorded
   // only when a revert was recorded, a namespace paused or the meter changed.
   { id: "merge-safety", label: "Auto-merge safety meter", period_ms: null },
+  // The nightly Amazon copy's start (src/offaccount-dispatch.ts), on the tick; recorded only
+  // on the day it dispatched, found the run already there, or was refused.
+  { id: "offaccount-dispatch", label: "Amazon copy start", period_ms: null },
   // The meaning index (src/doc-index.ts), on the tick; recorded only when it sent or
   // removed something, so a quiet spell means nothing changed.
   { id: "doc-index", label: "Search index", period_ms: null },
