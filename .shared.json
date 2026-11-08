@@ -23,15 +23,7 @@
     "mdast-util-to-markdown": "peer of Prelum's ./markdown-files, which explorer/build.mjs imports to write each page's Markdown copy; the explorer installs it so that import resolves"
   },
   "spelling": {
-    "contracts": [
-      "[\"']cancelled[\"']",
-      "cancelled\\(\\)",
-      "ended cancelled"
-    ],
-    "skip": [
-      "docs/policy/gates.md",
-      "migrations/**",
-      "test/adversarial/corpus/**"
-    ]
+    "contracts": ["[\"']cancelled[\"']", "cancelled\\(\\)", "ended cancelled"],
+    "skip": ["docs/policy/gates.md", "migrations/**", "test/adversarial/corpus/**"]
   }
 }
