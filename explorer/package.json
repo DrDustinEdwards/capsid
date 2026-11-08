@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@drdustinedwards/site-helpers": "github:DrDustinEdwards/prelum#v0.41.2",
-    "capsomer": "github:DrDustinEdwards/capsomer#v0.83.1",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.87.0",
     "enarratio": "0.9.1"
   },
   "devDependencies": {
