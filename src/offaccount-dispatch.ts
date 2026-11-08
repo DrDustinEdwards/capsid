@@ -29,8 +29,11 @@ function dispatchDue(now: Date): boolean {
 // created today (schedule, a person's dispatch or an earlier try of this step), so a day the
 // schedule was on time, or a person already ran it, is not run twice.
 export async function offaccountDispatchTick(env: Env, now: Date): Promise<DispatchReport> {
-  if (!dispatchDue(now)) return { ran: false };
   const day = now.toISOString().slice(0, 10);
+  const probed = await probeOncePerDay(env, day);
+  // A failed probe is the report; a passed one is the report only when the copy is not due.
+  if (probed && (!probed.ok || !dispatchDue(now))) return probed;
+  if (!dispatchDue(now)) return { ran: false };
   const key = "offaccount-dispatch:last";
   if ((await env.APP_KV.get(key)) === day) return { ran: false };
   // A refusal is tried again an hour later, not every five minutes.
@@ -41,6 +44,57 @@ export async function offaccountDispatchTick(env: Env, now: Date): Promise<Dispa
 }
 
 const RETRY_KEY = "offaccount-dispatch:retry";
+const PROBE_KEY = "offaccount-dispatch:probe";
+const PROBE_RETRY_KEY = "offaccount-dispatch:probe-retry";
+
+// Once per UTC day, before the copy is due: does the App still hold Actions: Write on
+// capsid-backups? The dispatch asks for a branch that does not exist. GitHub checks the
+// caller's permission first and the ref second, so an App that may dispatch is answered 422
+// ("No ref found") and starts nothing, and one that may not is answered 403 or 404. The
+// permission is otherwise exercised only on a late day, so lowering it would show up
+// exactly when the copy was already late. A refusal is a refused run, which /health shows.
+async function probeOncePerDay(
+  env: Env,
+  day: string,
+): Promise<Extract<DispatchReport, { ran: true }> | null> {
+  if ((await env.APP_KV.get(PROBE_KEY)) === day) return null;
+  if (await env.APP_KV.get(PROBE_RETRY_KEY)) return null;
+  const resp = await ghFetch(
+    env,
+    OWNER,
+    REPO,
+    `/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ref: "permission-probe-no-such-ref" }),
+    },
+  );
+  if (resp.status === 422) {
+    await env.APP_KV.put(PROBE_KEY, day, { expirationTtl: 3 * 24 * 3600 });
+    return {
+      ran: true,
+      ok: true,
+      note: "the App holds Actions: Write on capsid-backups (probe answered 422)",
+    };
+  }
+  // A start (204) would mean the probe ref exists; either way the permission is not in doubt,
+  // but only a 422 or 204 is a pass, so anything else is the refusal the ledger shows.
+  if (resp.status === 204) {
+    await env.APP_KV.put(PROBE_KEY, day, { expirationTtl: 3 * 24 * 3600 });
+    return {
+      ran: true,
+      ok: true,
+      note: "the App holds Actions: Write on capsid-backups (probe started a run)",
+    };
+  }
+  await env.APP_KV.put(PROBE_RETRY_KEY, "1", { expirationTtl: 3600 });
+  return {
+    ran: true,
+    ok: false,
+    note: `the App may not dispatch ${WORKFLOW} on capsid-backups: probe answered HTTP ${resp.status}; grant Actions: Write (docs/bootstrap.md)`,
+  };
+}
 
 async function attempt(env: Env, now: Date, day: string, key: string): Promise<DispatchReport> {
   const base = `/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}`;
