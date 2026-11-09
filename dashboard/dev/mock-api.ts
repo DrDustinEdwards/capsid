@@ -2437,6 +2437,7 @@ function seedActivity(): PortalActivityRow[] {
     id: 1000 - i,
     at: new Date(now - m * M).toISOString(),
     actor,
+    client: actor === "agent:sample-driver" ? "Sample Bot" : null,
     action,
     namespace,
     path,
