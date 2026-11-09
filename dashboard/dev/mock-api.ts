@@ -2882,6 +2882,7 @@ export function mockHandler(): (
         target: null,
         at: new Date(mockNow()).toISOString(),
         actor: ACTOR,
+        client: null,
         action: clickName(t.action, t.params),
         namespace: ns,
         path: t.params.id ? `${ns}/jobs/${t.params.id}.md` : null,
