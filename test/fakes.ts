@@ -413,10 +413,10 @@ function landSnapshot(params: unknown[], rows: FakeD1Rows): WriteResult {
 // by json_group_array. An aggregate over no edges still answers one row, so the audit
 // row lands with an empty list, as it does in SQLite.
 const DELETE_AUDIT_EDGES =
-  /^INSERT INTO audit_log \(actor, action, namespace, path, params\) SELECT \?1, 'delete', \?2, \?3, json_object\('edges_removed', json_group_array\( json_object\('from_ns', from_ns, 'from_path', from_path, 'type', type, 'to_ns', to_ns, 'to_path', to_path\)\)\) FROM document_links WHERE \(from_ns = \?2 AND from_path = \?3\) OR \(to_ns = \?2 AND to_path = \?3\) RETURNING params$/i;
+  /^INSERT INTO audit_log \(actor, action, namespace, path, params, client\) SELECT \?1, 'delete', \?2, \?3, json_object\('edges_removed', json_group_array\( json_object\('from_ns', from_ns, 'from_path', from_path, 'type', type, 'to_ns', to_ns, 'to_path', to_path\)\)\), \?4 FROM document_links WHERE \(from_ns = \?2 AND from_path = \?3\) OR \(to_ns = \?2 AND to_path = \?3\) RETURNING params$/i;
 
 function landDeleteAudit(params: unknown[], rows: FakeD1Rows): WriteResult {
-  const [actor, namespace, path] = params as [string, string, string];
+  const [actor, namespace, path, client] = params as [string, string, string, string | null];
   const edges = rows.links
     .filter(
       (l) =>
@@ -439,6 +439,7 @@ function landDeleteAudit(params: unknown[], rows: FakeD1Rows): WriteResult {
     namespace,
     path,
     params: auditParams,
+    client: client ?? null,
     at: sqliteNow(),
   });
   return { changes: 1, returning: [{ params: auditParams }] };

@@ -105,6 +105,7 @@ const OUTPUTS: Record<string, Shape> = {
     updated_at: str,
     body: nullable(str),
     last_actor: nullable(str),
+    last_client: nullable(str),
   },
   brief: {
     namespace: str,

@@ -121,7 +121,7 @@ function supersedingEdgeRefusal(ctx: ToolCtx, namespace: string, edges: LinkEdge
 }
 
 export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
-  const { db, actor } = ctx;
+  const { db, actor, client } = ctx;
 
   ctx.ops.define(
     "write",
@@ -329,25 +329,33 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
       const metaChanged =
         title !== undefined || type !== undefined || tags !== undefined || status !== undefined;
       statements.push(
-        auditStatement(db, actor, "write", namespace, path, {
-          title,
-          type,
-          tags,
-          status,
-          mode: writeMode,
-          updated: Boolean(prior),
-          ...(allow_improve_paths === true ? { allow_improve_paths: true } : {}),
-          ...(prior && metaChanged
-            ? {
-                prior_meta: {
-                  title: prior.title,
-                  type: prior.type,
-                  status: prior.status,
-                  tags: prior.tags,
-                },
-              }
-            : {}),
-        }),
+        auditStatement(
+          db,
+          actor,
+          "write",
+          namespace,
+          path,
+          {
+            title,
+            type,
+            tags,
+            status,
+            mode: writeMode,
+            updated: Boolean(prior),
+            ...(allow_improve_paths === true ? { allow_improve_paths: true } : {}),
+            ...(prior && metaChanged
+              ? {
+                  prior_meta: {
+                    title: prior.title,
+                    type: prior.type,
+                    status: prior.status,
+                    tags: prior.tags,
+                  },
+                }
+              : {}),
+          },
+          client,
+        ),
       );
       // links replaces this document's outgoing edges when provided. Left
       // untouched when omitted, so a routine body edit never drops edges.
@@ -357,12 +365,12 @@ export function defineWriteOperation(server: McpServer, ctx: ToolCtx): void {
         statements.push(
           db
             .prepare(
-              `INSERT INTO audit_log (actor, action, namespace, path, params)
+              `INSERT INTO audit_log (actor, action, namespace, path, params, client)
                SELECT ?1, 'links', ?2, ?3, json_object('edges', ?4, 'edges_replaced', json_group_array(
-                 json_object('type', type, 'to_ns', to_ns, 'to_path', to_path)))
+                 json_object('type', type, 'to_ns', to_ns, 'to_path', to_path))), ?5
                FROM document_links WHERE from_ns = ?2 AND from_path = ?3`,
             )
-            .bind(actor, namespace, path, parsedLinks.edges.length),
+            .bind(actor, namespace, path, parsedLinks.edges.length, client ?? null),
           db
             .prepare("DELETE FROM document_links WHERE from_ns = ?1 AND from_path = ?2")
             .bind(namespace, path),

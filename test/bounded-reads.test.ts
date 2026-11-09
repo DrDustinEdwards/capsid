@@ -353,13 +353,14 @@ test("read returns the named columns, and not the two dead CMS ones", async () =
   assert.equal(out.body, "the body", "read stopped returning the body");
   assert.deepEqual(
     Object.keys(out).sort(),
-    // list's columns plus body, plus last_actor (on read and capsid_start_session, not on list).
+    // list's columns plus body, plus last_actor and last_client (on read and capsid_start_session, not on list).
     // Not frontmatter/publish_at.
     [
       "body",
       "created_at",
       "id",
       "last_actor",
+      "last_client",
       "namespace",
       "path",
       "status",

@@ -87,8 +87,9 @@ export function buildServer(
   caller: Agent | ToolGrant,
   actor = "",
   clientId?: string,
+  clientName?: string,
 ): McpServer {
-  return build(env, caller, actor, "capsid", clientId);
+  return build(env, caller, actor, "capsid", clientId, clientName);
 }
 
 // Capsid Admin: the eight
@@ -100,8 +101,9 @@ export function buildAdminServer(
   caller: Agent | ToolGrant,
   actor = "",
   clientId?: string,
+  clientName?: string,
 ): McpServer {
-  return build(env, caller, actor, "admin", clientId);
+  return build(env, caller, actor, "admin", clientId, clientName);
 }
 
 function build(
@@ -110,6 +112,7 @@ function build(
   actor: string,
   surface: "capsid" | "admin",
   clientId?: string,
+  clientName?: string,
 ): McpServer {
   const agent = typeof caller === "string" ? grantAgent(caller, actor) : caller;
   // maxToolInputElements caps how many array elements and object members one tools/call may
@@ -136,16 +139,28 @@ function build(
       .first<{ actor: string | null }>();
     return row?.actor ?? null;
   };
+  // The MCP client behind that same latest row, null when it was not an MCP client's write.
+  const lastClient = async (ns: string, path: string): Promise<string | null> => {
+    const row = await db
+      .prepare(
+        "SELECT client FROM audit_log WHERE namespace = ?1 AND path = ?2 ORDER BY id DESC LIMIT 1",
+      )
+      .bind(ns, path)
+      .first<{ client: string | null }>();
+    return row?.client ?? null;
+  };
 
   const ctx: ToolCtx = {
     env,
     db,
     actor: agent.actor,
+    client: clientName,
     agent,
     // The handler half of the one enforcement point, for checks that need the action,
     // mode or path.
     scope: (need) => checkScope(agent, need),
     lastActor,
+    lastClient,
     ops: new Operations(),
   };
 
@@ -170,7 +185,7 @@ function build(
     server,
     agent,
     env.APP_KV,
-    { env, server: { name: info.name, version: info.version }, clientId },
+    { env, server: { name: info.name, version: info.version }, clientId, clientName },
     info.icons,
   );
 

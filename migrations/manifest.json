@@ -63,6 +63,7 @@
     "0059_audit_log_action_namespace.sql": "2202e1098d5cae8cb9c51cf3539a2dc0770fc07a1b6980a771571b1f8592cd18",
     "0060_audit_log_action_ns_at.sql": "9d873fafe33bf7237d5f8ed15d3936bbe42e09cb2bb31253b10f40221955fd39",
     "0061_drop_jobs_lease_review.sql": "e70ced7019718d531465a57d562660050fdd15ebf93234f9e6c24ee5091ad04b",
-    "0062_drop_session_tables.sql": "1f22857d3d0d98131b2269fd33b130f7ca4fb0efa96a598b642e1805e4f63596"
+    "0062_drop_session_tables.sql": "1f22857d3d0d98131b2269fd33b130f7ca4fb0efa96a598b642e1805e4f63596",
+    "0063_audit_log_client.sql": "cbbae6f30361ce9197d366a381fedd3920478585c3db03e4077efbb15283569c"
   }
 }

@@ -761,6 +761,7 @@ export interface CallLog {
   env: Partial<AuditEnv>;
   server: { name: string; version: string };
   clientId?: string;
+  clientName?: string;
 }
 
 // The tools whose answers carry text written outside Capsid, and its label: a repository's
@@ -912,6 +913,7 @@ export function guardRegistrations(
         args: await loggedArgs(args),
         server: log.server,
         clientId: log.clientId,
+        clientName: log.clientName,
         correlationId: correlationId(meta),
       };
       const refusal = await refusalFor(args, action);

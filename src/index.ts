@@ -90,6 +90,8 @@ const apiHandler = {
     const admin = adminAgentForEmail(email, signedInAt);
     if (!auth?.scope?.includes(SCOPES.write)) admin.scopes = { ...admin.scopes, grants: ["read"] };
     const clientId = auth?.clientId;
+    // The label the client was shown by at consent (site-runtime mcp-login sets props.client), recorded with each write.
+    const clientName = typeof props?.client === "string" && props.client ? props.client : undefined;
     // Only Capsid Admin serves step-up actions, so only its route reads the clock. A KV
     // failure leaves it undefined, which falls back to the sign-in time alone (src/scope.ts STEP_UP).
     if (adminRoute && signedInAt !== null)
@@ -98,10 +100,12 @@ const apiHandler = {
     // reaches this handler at all, and the step-up in src/scope.ts guards its risky actions.
     if (adminRoute) {
       return serveMcp(request, env, ctx, ADMIN_MCP_ROUTE, () =>
-        buildAdminServer(env, admin, "", clientId),
+        buildAdminServer(env, admin, "", clientId, clientName),
       );
     }
-    return serveMcp(request, env, ctx, "/mcp", () => buildServer(env, admin, "", clientId));
+    return serveMcp(request, env, ctx, "/mcp", () =>
+      buildServer(env, admin, "", clientId, clientName),
+    );
   },
 };
 

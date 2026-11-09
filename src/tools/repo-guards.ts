@@ -99,7 +99,7 @@ export function repoGuards(ctx: ToolCtx) {
     // D1-only tools do not need this: delete, move and finalize put the audit
     // INSERT inside the same batch as the mutation.
     try {
-      await auditStatement(db, actor, action, namespace, path, result).run();
+      await auditStatement(db, actor, action, namespace, path, result, ctx.client).run();
     } catch (err) {
       logEvent(
         "AUDIT_INSERT_FAILED",
