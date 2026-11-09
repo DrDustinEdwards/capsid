@@ -197,6 +197,18 @@ export function documentUpsert(
     .bind(namespace, path, title, body, type, tags, status);
 }
 
+// Who made a write when no MCP client did: the Worker's own passes ("system:maintenance", "capsid:push", the improve loop)
+// are "system", and an agent key running a job names the job ("job:<id>"). A person's write with no client (the Portal, a
+// grant from before the name was kept) stays null rather than guessed.
+function clientOf(actor: string, params: unknown, client: string | undefined): string | null {
+  if (client) return client;
+  if (/^(system|capsid):/.test(actor) || actor === "improve-loop") return "system";
+  const job = (params as { job_id?: unknown } | null)?.job_id;
+  if (actor.startsWith("agent:") && (typeof job === "string" || typeof job === "number"))
+    return `job:${job}`;
+  return null;
+}
+
 // The audit row, spelled once. Every write path appends one
 // (snapshot invariant, test/write-invariants.test.ts). params is stored as JSON. An audit row whose params come from inside the batch (delete's
 // edges, a skill transition guarded by its new status) is an INSERT ... SELECT and
@@ -214,5 +226,5 @@ export function auditStatement(
     .prepare(
       "INSERT INTO audit_log (actor, action, namespace, path, params, client) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
     )
-    .bind(actor, action, namespace, path, JSON.stringify(params), client ?? null);
+    .bind(actor, action, namespace, path, JSON.stringify(params), clientOf(actor, params, client));
 }

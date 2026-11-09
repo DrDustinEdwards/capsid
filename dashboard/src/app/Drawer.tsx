@@ -133,6 +133,12 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
             </dd>
             <dt>Actor</dt>
             <dd className="mono">{r.actor ?? <span className="faint">none</span>}</dd>
+            {r.client && (
+              <>
+                <dt>Via</dt>
+                <dd>{r.client}</dd>
+              </>
+            )}
             {r.path && (
               <>
                 <dt>Path</dt>

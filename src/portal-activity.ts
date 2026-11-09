@@ -24,6 +24,7 @@ export interface ActivityRow {
   id: number;
   at: string;
   actor: string | null;
+  client: string | null;
   action: string | null;
   namespace: string | null;
   path: string | null;
@@ -90,7 +91,7 @@ export async function loadActivity(db: D1Database, filter: ActivityFilter): Prom
   // autoincrement id is what orders rows as they happened.
   const { results } = await db
     .prepare(
-      `SELECT id, at, actor, action, namespace, path, ${TARGET_SQL} AS target, params FROM audit_log ${clause} ORDER BY id DESC LIMIT ?${binds.length}`,
+      `SELECT id, at, actor, client, action, namespace, path, ${TARGET_SQL} AS target, params FROM audit_log ${clause} ORDER BY id DESC LIMIT ?${binds.length}`,
     )
     .bind(...binds)
     .all<Omit<ActivityRow, "detail"> & { params: string | null }>();

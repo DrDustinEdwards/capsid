@@ -169,7 +169,10 @@ export function Activity() {
                     <td className="num" title={utc(ms(r.at))}>
                       {ago(ms(r.at), now)}
                     </td>
-                    <td className="mono">{r.actor ?? <None />}</td>
+                    <td className="mono">
+                      {r.actor ?? <None />}
+                      {r.client && <div className="src">via {r.client}</div>}
+                    </td>
                     <td>
                       {actionWords(r.action) ?? (
                         <span className="mono">{r.action ?? <None />}</span>
