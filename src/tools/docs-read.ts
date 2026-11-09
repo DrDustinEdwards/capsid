@@ -91,13 +91,13 @@ export function defineListOperation(server: McpServer, ctx: ToolCtx): void {
 }
 
 export function defineReadOperation(server: McpServer, ctx: ToolCtx): void {
-  const { db, actor, lastActor } = ctx;
+  const { db, actor, lastActor, lastClient } = ctx;
 
   ctx.ops.define(
     "read",
     {
       description:
-        "Read a full document by namespace and path. The response carries last_actor, the actor of the most recent audit_log entry for this document, or null when there is none.",
+        'Read a full document by namespace and path. The response carries last_actor, the actor of the most recent audit_log entry for this document, or null when there is none, and last_client, the MCP client behind that entry ("Grok Bot"), or null.',
       inputSchema: { namespace: nsName, path: docPath },
     },
     async ({ namespace, path }) => {
@@ -106,9 +106,10 @@ export function defineReadOperation(server: McpServer, ctx: ToolCtx): void {
       // Read first: the row recorded below is not addressed to this document, so it
       // cannot change last_actor, but the order keeps that from depending on it.
       const lastWriter = await lastActor(namespace, path);
+      const lastVia = await lastClient(namespace, path);
       if (isConventionsDoc(namespace, path))
         await recordConventionsRead(db, actor, "read", namespace);
-      return ok({ ...row, last_actor: lastWriter });
+      return ok({ ...row, last_actor: lastWriter, last_client: lastVia });
     },
   );
 }

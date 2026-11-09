@@ -140,6 +140,9 @@ export interface ToolCtx {
   // session, "agent:<name>" for a minted agent (src/agents.ts). Older rows keep
   // "github:<login>", "opkey:<fingerprint>" (a retired operator key) or 'operator'.
   actor: string;
+  // The name the MCP client was shown by at consent ("Grok Bot"), recorded beside the actor on a write; undefined when
+  // no OAuth client made the call (an agent key, a Portal action).
+  client?: string;
   // The caller, resolved once per request (src/agents.ts). `actor` is a projection of
   // it; the scope checks read this.
   agent: Agent;
@@ -152,6 +155,7 @@ export interface ToolCtx {
   // ./surface dispatch to them.
   ops: Operations;
   lastActor: (ns: string, path: string) => Promise<string | null>;
+  lastClient: (ns: string, path: string) => Promise<string | null>;
 }
 
 // Registered in this order, which is the order tools/list publishes.

@@ -208,10 +208,11 @@ export function auditStatement(
   namespace: string | null,
   path: string | null,
   params: unknown,
+  client?: string,
 ): D1PreparedStatement {
   return db
     .prepare(
-      "INSERT INTO audit_log (actor, action, namespace, path, params) VALUES (?1, ?2, ?3, ?4, ?5)",
+      "INSERT INTO audit_log (actor, action, namespace, path, params, client) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
     )
-    .bind(actor, action, namespace, path, JSON.stringify(params));
+    .bind(actor, action, namespace, path, JSON.stringify(params), client ?? null);
 }

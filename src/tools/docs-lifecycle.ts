@@ -21,7 +21,7 @@ import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 // earlier version, delete, and move.
 
 export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
-  const { db, actor } = ctx;
+  const { db, actor, client } = ctx;
 
   ctx.ops.define(
     "restore",
@@ -127,12 +127,20 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
           .bind(namespace, path, version.title, body),
       );
       statements.push(
-        auditStatement(db, actor, "restore", namespace, path, {
-          version_id,
-          snapshot_at: version.snapshot_at,
-          recreated: !prior,
-          snapshotted: Boolean(prior),
-        }),
+        auditStatement(
+          db,
+          actor,
+          "restore",
+          namespace,
+          path,
+          {
+            version_id,
+            snapshot_at: version.snapshot_at,
+            recreated: !prior,
+            snapshotted: Boolean(prior),
+          },
+          client,
+        ),
       );
       const committed = await commit.run(elicited, statements);
       if ("refusal" in committed) return fail(committed.refusal);
@@ -157,7 +165,7 @@ export function defineRestoreOperation(server: McpServer, ctx: ToolCtx): void {
 }
 
 export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
-  const { db, actor } = ctx;
+  const { db, actor, client } = ctx;
 
   ctx.ops.define(
     "delete",
@@ -217,13 +225,13 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
           snapshotLive(db, namespace, path),
           db
             .prepare(
-              `INSERT INTO audit_log (actor, action, namespace, path, params)
+              `INSERT INTO audit_log (actor, action, namespace, path, params, client)
                SELECT ?1, 'delete', ?2, ?3, json_object('edges_removed', json_group_array(
-                 json_object('from_ns', from_ns, 'from_path', from_path, 'type', type, 'to_ns', to_ns, 'to_path', to_path)))
+                 json_object('from_ns', from_ns, 'from_path', from_path, 'type', type, 'to_ns', to_ns, 'to_path', to_path))), ?4
                FROM document_links WHERE (from_ns = ?2 AND from_path = ?3) OR (to_ns = ?2 AND to_path = ?3)
                RETURNING params`,
             )
-            .bind(actor, namespace, path),
+            .bind(actor, namespace, path, client ?? null),
           ...pathMutation(db, namespace, path, null),
         ]);
         const recordedParams = (results[2]?.results?.[0] as { params?: string } | undefined)
@@ -255,7 +263,7 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
 }
 
 export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
-  const { db, actor } = ctx;
+  const { db, actor, client } = ctx;
 
   ctx.ops.define(
     "move",
@@ -326,10 +334,18 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
         await db.batch([
           requireExists(db, namespace, path),
           ...pathMutation(db, namespace, path, new_path),
-          auditStatement(db, actor, "move", namespace, path, {
-            new_path,
-            edges_repointed: repointed,
-          }),
+          auditStatement(
+            db,
+            actor,
+            "move",
+            namespace,
+            path,
+            {
+              new_path,
+              edges_repointed: repointed,
+            },
+            client,
+          ),
         ]);
       } catch (err) {
         if (isMissingRowAbort(err)) {
