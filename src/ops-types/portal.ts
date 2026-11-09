@@ -195,6 +195,8 @@ export interface PortalActivityRow {
   id: number;
   at: string;
   actor: string | null;
+  // The MCP client behind a write ("Grok Bot"), "system" or "job:<id>" for a pass no client made; null when not known.
+  client: string | null;
   action: string | null;
   namespace: string | null;
   path: string | null;

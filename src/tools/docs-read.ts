@@ -123,7 +123,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
   ctx.ops.define(
     "brief",
     {
-      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at and last_actor (read one with capsid_read_doc), the 3 most recent episodics in full (this is where a handoff written as type episodic shows up), and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if the episodics are cut, the \`trimmed\` field says so. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
+      description: `One-call session start for a namespace. Returns capsid/conventions.md, the namespace core.md, \`portfolio_documents\` (the capsid paths every driver reads first and may read: conventions, decisions and its volumes, rulings, core), its open task docs (non-archived and not status closed) as stubs with path, title, updated_at, last_actor and last_client (the MCP client behind it; read one with capsid_read_doc), the 3 most recent episodics in full (this is where a handoff written as type episodic shows up), and the typed edges on core.md, each with updated_at so staleness shows. Read-only. Size-bounded near ${Math.round(BRIEF_BUDGET / 1000)}KB; if the episodics are cut, the \`trimmed\` field says so. When conventions and core.md alone exceed the budget nothing is trimmed and \`floor_exceeds_budget\` carries their sizes.`,
       inputSchema: {
         namespace: nsName,
         thread: z
@@ -226,11 +226,11 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
       // The correlated subquery is the lastActor query per pair, so it uses
       // audit_log_doc.
       type Keyed = { namespace: string; path: string };
-      type Actored<T> = T & { last_actor: string | null };
+      type Actored<T> = T & { last_actor: string | null; last_client: string | null };
       const present = [conventions, core, ...openTasks, ...recentEpisodics].filter(
         (r): r is NonNullable<typeof r> => r !== null,
       );
-      const actors = new Map<string, string | null>();
+      const actors = new Map<string, { actor: string | null; client: string | null }>();
       if (present.length) {
         // A plain SELECT rather than a CTE, and no comment inside prepare(), so
         // test-integration/query-plans.test.ts, which walks SELECT statements written
@@ -240,17 +240,27 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
             `SELECT json_extract(w.value, '$[0]') AS ns, json_extract(w.value, '$[1]') AS path,
                (SELECT actor FROM audit_log
                 WHERE namespace = json_extract(w.value, '$[0]') AND path = json_extract(w.value, '$[1]')
-                ORDER BY id DESC LIMIT 1) AS actor
+                ORDER BY id DESC LIMIT 1) AS actor,
+               (SELECT client FROM audit_log
+                WHERE namespace = json_extract(w.value, '$[0]') AND path = json_extract(w.value, '$[1]')
+                ORDER BY id DESC LIMIT 1) AS client
              FROM json_each(?1) AS w`,
           )
           .bind(JSON.stringify(present.map((r) => [r.namespace, r.path])))
-          .all<{ ns: string; path: string; actor: string | null }>();
+          .all<{ ns: string; path: string; actor: string | null; client: string | null }>();
         for (const row of results)
-          actors.set(JSON.stringify([row.ns, row.path]), row.actor ?? null);
+          actors.set(JSON.stringify([row.ns, row.path]), {
+            actor: row.actor ?? null,
+            client: row.client ?? null,
+          });
       }
       const withActor = <T extends Keyed>(row: T | null): Actored<T> | null =>
         row
-          ? { ...row, last_actor: actors.get(JSON.stringify([row.namespace, row.path])) ?? null }
+          ? {
+              ...row,
+              last_actor: actors.get(JSON.stringify([row.namespace, row.path]))?.actor ?? null,
+              last_client: actors.get(JSON.stringify([row.namespace, row.path]))?.client ?? null,
+            }
           : null;
       const withActors = <T extends Keyed>(rows: T[]): Actored<T>[] =>
         rows.map((r) => withActor(r) as Actored<T>);
@@ -276,6 +286,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
         body: string | null;
         updated_at: string;
         last_actor?: string | null;
+        last_client?: string | null;
       };
       const bodyChars = (rows: Row[]) => rows.reduce((sum, r) => sum + (r.body?.length ?? 0), 0);
       const toStub = (rows: Row[]) =>
@@ -285,6 +296,7 @@ export function defineBriefOperation(server: McpServer, ctx: ToolCtx): void {
           title: r.title,
           updated_at: r.updated_at,
           last_actor: r.last_actor ?? null,
+          last_client: r.last_client ?? null,
           body: `(not in the packet: read it with capsid_read_doc, ${r.namespace}/${r.path})`,
         }));
       const sizes = {

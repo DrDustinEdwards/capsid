@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { buildServer } from "../src/server";
+import { auditStatement } from "../src/store-guards";
 
 // A write through an OAuth client records the client's name beside the actor, in each statement shape: the plain write,
 // the links and delete INSERT ... SELECT, and a read says who last wrote. A write with no client records null.
@@ -55,6 +56,30 @@ describe("the MCP client behind a write", () => {
       confirm: true,
     });
     expect(await clients("write", "a.md")).toEqual(["Sample Bot", null]);
+
+    await call("Sample Bot", "capsid_write_doc", {
+      namespace: "sample",
+      path: "handoff/x.md",
+      title: "X",
+      body: "handoff",
+      type: "episodic",
+    });
+    const brief = await call(undefined, "capsid_start_session", { namespace: "sample" });
+    expect((brief.recent_episodics as Array<{ last_client: string }>)[0]?.last_client).toBe(
+      "Sample Bot",
+    );
+
+    // No client: the Worker's own pass is "system", an agent key on a job names the job, a person is not guessed.
+    for (const [actor, params] of [
+      ["system:maintenance", {}],
+      ["agent:runner", { job_id: "job_1" }],
+      ["access:a@example.com", {}],
+    ] as const)
+      await auditStatement(env.DB, actor, "sample-label", "sample", null, params).run();
+    const labels = await env.DB.prepare(
+      "SELECT client FROM audit_log WHERE action = 'sample-label' ORDER BY id",
+    ).all<{ client: string | null }>();
+    expect(labels.results.map((r) => r.client)).toEqual(["system", "job:job_1", null]);
 
     await call("Other Bot", "capsid_delete_doc", {
       namespace: "sample",
