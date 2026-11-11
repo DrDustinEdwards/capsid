@@ -320,7 +320,7 @@ const ADDITIVE: Array<{ pattern: RegExp; what: string }> = [
 export function splitStatements(sql: string): string[] {
   const statements: string[] = [];
   let current = "";
-  for (let i = 0; i < sql.length; ) {
+  for (let i = 0; i < sql.length;) {
     const c = sql[i]!;
     const close = c === "'" || c === '"' || c === "`" ? c : c === "[" ? "]" : "";
     if (close) {
@@ -363,7 +363,8 @@ export function isAdditiveMigration(
   if (CONTRACT_LINE.test(sql))
     return {
       ok: false,
-      reason: "the migration says `-- contract:`, so the deploy leaves it to a person; it is not pre-approved.",
+      reason:
+        "the migration says `-- contract:`, so the deploy leaves it to a person; it is not pre-approved.",
     };
   const statements = splitStatements(sql);
   if (statements.length === 0)
