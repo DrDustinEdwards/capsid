@@ -6,7 +6,7 @@ import { useLocation, useSearch } from "../lib/router";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, fetchClaimsJob, useAnswer } from "../lib/api";
 import { age, ago, ms } from "../lib/format";
-import { download, toCsv } from "../lib/csv";
+import { downloadCsv, toCsv } from "capsomer/behavior/csv";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "../types";
 import { Panel } from "capsomer/react/panel";
 import {
@@ -341,7 +341,7 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   const cut = data.truncated.length ? "-partial" : "";
   const checks = [...new Set(data.groups.flatMap((g) => Object.keys(g.evaluations)))].sort();
   const agents = () =>
-    download(
+    downloadCsv(
       `claims-by-agent-${stamp}${cut}.csv`,
       toCsv(
         [
@@ -377,7 +377,7 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
       ),
     );
   const waits = () =>
-    download(
+    downloadCsv(
       `claims-waits-${stamp}${cut}.csv`,
       toCsv(
         ["namespace", "gate_class", "ended_by", "waits", "waited_ms_total", "waited_ms_median"],
@@ -401,7 +401,7 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
       "tokens_cache_read",
       "tokens_cache_creation",
     ] as const;
-    download(
+    downloadCsv(
       `claims-usage-${stamp}${cut}.csv`,
       toCsv(
         ["namespace", "source", ...cols],
