@@ -61,8 +61,8 @@
   color: var(--muted);
 }
 
-/* The shell is Capsomer's AdminShell (capsomer/admin-shell.css); only the freshness line and the
-   page's own controls are styled here. */
+/* The shell is Capsomer's AdminShell (capsomer/admin-shell.css); the freshness line is Capsomer's
+   Freshness; only the page's own controls are styled here. */
 .sample {
   font-family: var(--mono);
   font-size: var(--fs-label);
@@ -71,28 +71,6 @@
   border: 1px dashed var(--warn);
   color: var(--warn);
   white-space: nowrap;
-}
-.fresh {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--fs-detail);
-  color: var(--muted);
-  white-space: nowrap;
-}
-.fresh .ring {
-  width: 16px;
-  height: 16px;
-}
-.fresh.stale {
-  color: var(--warn);
-}
-.fresh b {
-  color: var(--text);
-  font-weight: 500;
-}
-.fresh.stale b {
-  color: var(--warn);
 }
 .btn {
   display: inline-flex;
@@ -1551,9 +1529,6 @@ main .sev-crit[data-row]:focus-visible {
   }
 }
 @media (max-width: 820px) {
-  .fresh .long {
-    display: none;
-  }
   .page {
     padding: 16px;
     gap: 16px;
@@ -1628,7 +1603,7 @@ main .sev-crit[data-row]:focus-visible {
   align-items: center;
   font-size: 13px;
 }
-.siteform .full {
+.siteform :is(.full, .cap-danger) {
   grid-column: 1 / -1;
 }
 .siteform .repos {
@@ -1647,7 +1622,7 @@ main .sev-crit[data-row]:focus-visible {
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
   gap: 8px;
 }
-.siteform [data-danger] .check {
+.siteform .cap-danger .check {
   grid-column: auto;
 }
 .field {
@@ -1755,16 +1730,6 @@ td.ctl .toolbar.col {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-}
-.device-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-.device-list .prefrow {
-  flex-wrap: wrap;
 }
 .when .faint {
   white-space: nowrap;

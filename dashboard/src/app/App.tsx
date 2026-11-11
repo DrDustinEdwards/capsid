@@ -12,6 +12,9 @@ import {
   type ReactNode,
 } from "react";
 import { Spinner } from "capsomer/react/empty";
+import { Freshness } from "capsomer/react/freshness";
+import { shareLeft } from "capsomer/behavior/freshness";
+import "capsomer/freshness.css";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
 import { Outlet } from "react-router";
 import { Link, useDemo, useLocation, useSearch } from "../lib/router";
@@ -151,7 +154,8 @@ function useTick(ms: number): number {
   return useSyncExternalStore(clock.subscribe, clock.read, () => 0);
 }
 
-function Freshness({
+// The header's freshness line: the feed's age and the watcher pass, on Capsomer's Freshness.
+function FeedFreshness({
   feed,
   nextPollAt,
   skew,
@@ -161,34 +165,26 @@ function Freshness({
   skew: number;
 }) {
   const clientNow = useTick(1000);
-  if (!feed)
-    return (
-      <div className="fresh" role="status" aria-live="polite">
-        Reading the feed...
-      </div>
-    );
+  if (!feed) return <Freshness pending="Reading the feed..." />;
   // Server times against the server's clock; the next poll against the browser's,
   // since the browser schedules it.
   const now = portalNow(clientNow, skew, ms(feed.live.generated));
   const snap = feed.snapshot;
-  const stale = passStale(snap, now);
-  const frac = Math.max(0, Math.min(1, (nextPollAt - clientNow) / POLL_MS));
   const title = snap
     ? `Live data read ${utc(ms(feed.live.generated))}. Site data from the watcher pass at ${utc(ms(snap.pass_at))} (every ${snap.cadence_min} min). Stale after ${2 * snap.cadence_min} min.`
     : `Live data read ${utc(ms(feed.live.generated))}. The watcher has not written its first pass yet.`;
   return (
-    <div className={`fresh${stale ? " stale" : ""}`} title={title}>
-      <FreshRing frac={frac} stale={stale} />
-      <span>
-        Updated <b>{ago(ms(feed.live.generated), now)}</b>
-      </span>
-      <span className="long">
-        ·{" "}
-        {snap
+    <Freshness
+      updated={ago(ms(feed.live.generated), now)}
+      more={
+        snap
           ? `${hasSites(feed) ? "sites from pass" : "watcher pass"} ${ago(ms(snap.pass_at), now)}`
-          : "no watcher pass yet"}
-      </span>
-    </div>
+          : "no watcher pass yet"
+      }
+      share={shareLeft(nextPollAt, clientNow, POLL_MS)}
+      stale={passStale(snap, now)}
+      title={title}
+    />
   );
 }
 
@@ -802,7 +798,7 @@ export function App() {
               SAMPLE DATA
             </span>
           )}
-          {!signedOut && <Freshness feed={feed} nextPollAt={nextPollAt} skew={skew} />}
+          {!signedOut && <FeedFreshness feed={feed} nextPollAt={nextPollAt} skew={skew} />}
         </>
       }
       onRefresh={signedOut ? undefined : () => void refresh()}
@@ -923,28 +919,5 @@ export function App() {
       </div>
       <div className="tip" ref={tipRef} aria-hidden="true" />
     </>
-  );
-}
-
-// The countdown to the next poll. Decorative, not data: the words beside it say when the data
-// was read, so it stays a few lines of SVG here rather than pulling Enarratio into the entry.
-function FreshRing({ frac, stale }: { frac: number; stale: boolean }) {
-  const r = 6.5;
-  const c = 2 * Math.PI * r;
-  return (
-    <svg className="ring" viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="8" r={r} fill="none" stroke="var(--line-strong)" strokeWidth="2" />
-      <circle
-        cx="8"
-        cy="8"
-        r={r}
-        fill="none"
-        stroke={stale ? "var(--warn)" : "var(--accent)"}
-        strokeWidth="2"
-        strokeDasharray={`${(c * frac).toFixed(2)} ${c.toFixed(2)}`}
-        transform="rotate(-90 8 8)"
-        strokeLinecap="round"
-      />
-    </svg>
   );
 }
