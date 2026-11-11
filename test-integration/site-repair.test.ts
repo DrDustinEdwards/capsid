@@ -50,8 +50,11 @@ function fakeSite(opts: { drift?: string[]; repairs?: boolean } = {}) {
         {
           ok: drift.length === 0,
           checks: [
-            { name: "pages-drift", ok: !drift.includes("pages-drift") },
-            { name: "media-backup-drift", ok: !drift.includes("media-backup-drift") },
+            { name: "pages-drift", status: drift.includes("pages-drift") ? "fail" : "pass" },
+            {
+              name: "media-backup-drift",
+              status: drift.includes("media-backup-drift") ? "fail" : "pass",
+            },
           ],
         },
         { status: drift.length ? 503 : 200 },
