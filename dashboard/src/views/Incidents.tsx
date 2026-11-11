@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { useApp } from "../app/ctx";
 import { incidents, passStale, TASK_OUTCOME } from "../lib/derive";
 import { ago, age, ms } from "../lib/format";
@@ -35,7 +36,7 @@ export function Incidents() {
           {snap ? (
             <>
               <div className="body">
-                <dl className="kv">
+                <dl className="cap-detail-record">
                   <dt>Finished</dt>
                   <dd>
                     {ago(ms(snap.pass_at), now)}{" "}
@@ -119,9 +120,9 @@ export function ScheduledTasks() {
     <Panel flush title="Scheduled tasks" src="run ledger" id="scheduled">
       {s.error !== null ? (
         <div className="body">
-          <div className="callout">
+          <Banner tone="neutral">
             <St kind="nodata">No data</St> The run ledger could not be read: {s.error}
-          </div>
+          </Banner>
         </div>
       ) : (
         <div className="scroll-x">

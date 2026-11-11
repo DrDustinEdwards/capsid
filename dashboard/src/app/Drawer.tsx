@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import {
   Fragment,
   useEffect,
@@ -25,10 +26,10 @@ function Missing({ what, onClose }: { what: string; onClose: () => void }) {
     <>
       <Head label="Not found" title={what} sub="" onClose={onClose} />
       <div className="dbody">
-        <div className="callout">
+        <Banner tone="neutral">
           It is not in the current feed. It may have ended more than 24 hours ago, or the watcher
           has not seen it yet.
-        </div>
+        </Banner>
       </div>
     </>
   );
@@ -57,9 +58,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
       <>
         <Head label="Audit row" title={`#${id}`} sub="" onClose={onClose} />
         <div className="dbody">
-          <div className="callout crit" role="alert">
-            Could not read the row: {load.error}
-          </div>
+          <Alert tone="crit">Could not read the row: {load.error}</Alert>
         </div>
       </>
     );
@@ -70,10 +69,10 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
       <>
         <Head label="Not found" title={`Audit row #${id}`} sub="" onClose={onClose} />
         <div className="dbody">
-          <div className="callout">
+          <Banner tone="neutral">
             There is no audit row with this id. Rows older than the retention are pruned after the
             nightly dump.
-          </div>
+          </Banner>
         </div>
       </>
     );
@@ -91,7 +90,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
         {d.reason !== null && (
           <div>
             <p className="section-title">Reason</p>
-            <div className="callout reason">{d.reason}</div>
+            <blockquote className="reason">{d.reason}</blockquote>
           </div>
         )}
         {d.changes !== null && (
@@ -100,7 +99,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
             {d.changes.length === 0 ? (
               <p className="faint">No field changed.</p>
             ) : (
-              <dl className="kv diff">
+              <dl className="cap-detail-record diff">
                 {d.changes.map((c) => (
                   <Fragment key={c.field}>
                     <dt>{c.field}</dt>
@@ -126,7 +125,7 @@ function AuditBody({ id, onClose }: { id: string; onClose: () => void }) {
         )}
         <div>
           <p className="section-title">Recorded</p>
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>When</dt>
             <dd>
               {ago(ms(r.at), now)} <When t={ms(r.at)} />
@@ -188,7 +187,7 @@ function AgentBody({ name, onClose }: { name: string; onClose: () => void }) {
         onClose={onClose}
       />
       <div className="dbody">
-        <dl className="kv">
+        <dl className="cap-detail-record">
           <dt>Namespaces</dt>
           <dd className="mono">{nsList(a)}</dd>
           <dt>Last seen</dt>

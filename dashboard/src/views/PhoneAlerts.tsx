@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { PUSH_KEY } from "../lib/keys";
@@ -123,24 +124,14 @@ export function PhoneAlerts() {
             and number, never a title, and a tap opens that item in the Portal; it has no Approve
             button.
           </p>
-          {data?.problem && (
-            <div className="callout warn" role="status">
-              Not set up yet: {data.problem}
-            </div>
-          )}
-          {note && (
-            <div
-              className={note.kind === "crit" ? "callout crit" : "callout"}
-              role={note.kind === "crit" ? "alert" : "status"}
-            >
-              {note.text}
-            </div>
-          )}
+          {data?.problem && <Banner tone="warn">Not set up yet: {data.problem}</Banner>}
+          {note && <Banner tone={note.kind === "crit" ? "crit" : "neutral"}>{note.text}</Banner>}
           <div className="toolbar">
             {supported() ? (
               <button
                 type="button"
-                className="btn primary"
+                className="cap-btn"
+                data-variant="primary"
                 disabled={busy || !data?.public_key}
                 onClick={() => void turnOn()}
               >
@@ -151,7 +142,7 @@ export function PhoneAlerts() {
             )}
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               disabled={busy || devices.length === 0 || !data?.public_key}
               onClick={() => void send({ op: "test" }, "Test alert sent to each device.")}
             >
@@ -173,7 +164,7 @@ export function PhoneAlerts() {
                   </span>
                   <button
                     type="button"
-                    className="btn ml-auto"
+                    className="cap-btn ml-auto"
                     disabled={busy}
                     onClick={() =>
                       void send(
@@ -206,26 +197,33 @@ function DailyDigest({ digest, now }: { digest: PortalPush["digest"]; now: numbe
           questions, blocked jobs, rollbacks, and what finished or became ready since the last one.
         </p>
         {digest.on ? (
-          <div className="callout" role="status">
-            On. It goes to {digest.to}.
-          </div>
+          <Banner tone="neutral">On. It goes to {digest.to}.</Banner>
         ) : (
           // Plain words first (the UX audit's m11); what the setup still needs, in the
           // Worker's own words, is one click away.
-          <div className="callout warn" role="status">
-            <b>Not set up yet.</b> Nothing is sent until it is.
-            <details className="mt4">
-              <summary>What it needs</summary>
-              <p className="small">{digest.problem}</p>
-            </details>
-          </div>
+          <Banner
+            tone="warn"
+            body={
+              <>
+                <b>Not set up yet.</b> Nothing is sent until it is.
+                <details className="mt4">
+                  <summary>What it needs</summary>
+                  <p className="small">{digest.problem}</p>
+                </details>
+              </>
+            }
+          />
         )}
-        {digest.last && (
-          <p className={digest.last.outcome === "failed" ? "callout crit" : "faint"}>
-            {digest.last.outcome === "sent" ? "Last sent" : "Last attempt failed"}{" "}
-            {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
-          </p>
-        )}
+        {digest.last &&
+          (digest.last.outcome === "failed" ? (
+            <Banner tone="crit">
+              Last attempt failed {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
+            </Banner>
+          ) : (
+            <p className="faint">
+              Last sent {ago(Date.parse(digest.last.at), now)}: {digest.last.note}
+            </p>
+          ))}
       </div>
     </Panel>
   );

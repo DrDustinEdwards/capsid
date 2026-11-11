@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import { useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useLocation, useSearch } from "../lib/router";
@@ -111,20 +112,20 @@ export function Activity() {
             </option>
           ))}
         </select>
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Apply
         </button>
         {(namespace || actor) && (
-          <button type="button" className="btn" onClick={() => apply("", "")}>
+          <button type="button" className="cap-btn" onClick={() => apply("", "")}>
             Clear
           </button>
         )}
       </form>
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read the activity: {load.error}
           {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+        </Alert>
       )}
       <Panel
         flush
@@ -135,7 +136,7 @@ export function Activity() {
             {data
               ? `newest first, at most ${data.limit} rows · read ${ago(ms(data.generated), now)} · `
               : ""}
-            <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
+            <button type="button" className="cap-btn" disabled={load.loading} onClick={load.reread}>
               {load.loading ? "Reading..." : "Read again"}
             </button>
           </>

@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
@@ -35,13 +36,13 @@ export function Backups() {
         <Panel flush title="Primary: Capsid D1" src="/health backup">
           <div className="body stack-gap">
             {!h ? (
-              <div className="callout">
+              <Banner tone="neutral">
                 <St kind="nodata">No data</St> Capsid health was not read on the last pass.
-              </div>
+              </Banner>
             ) : (
               <>
-                {h.backup.warning && <div className="callout crit">{h.backup.warning}</div>}
-                <dl className="kv">
+                {h.backup.warning && <Alert tone="crit">{h.backup.warning}</Alert>}
+                <dl className="cap-detail-record">
                   <dt>Last good dump</dt>
                   <dd className="num">
                     {h.backup.last_ok ? (
@@ -106,18 +107,18 @@ export function Backups() {
         <Panel flush title="Off-account: Amazon S3" src="watch.yml report">
           <div className="body stack-gap">
             {!o || !os ? (
-              <div className="callout">
+              <Banner tone="neutral">
                 <St kind="nodata">No data</St> The Amazon copy's report was not read on the last
                 pass.
-              </div>
+              </Banner>
             ) : (
               <>
                 {(os.bad || os.warn) && (
-                  <div className={`callout ${os.bad ? "crit" : "warn"}`}>
+                  <Banner tone={os.bad ? "crit" : "warn"}>
                     <b>{os.headline}.</b> {os.detail}.
-                  </div>
+                  </Banner>
                 )}
-                <dl className="kv">
+                <dl className="cap-detail-record">
                   {o.sites.map((s) => (
                     <Fragment key={s.site}>
                       <dt>{s.site}</dt>
@@ -231,12 +232,12 @@ function SiteBackups() {
       src={
         <>
           {data ? `read ${ago(ms(data.read_at), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
+          <button type="button" className="cap-btn" disabled={load.loading} onClick={load.reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>{" "}
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             disabled={!data || data.sites.length === 0}
             onClick={() => backUp()}
           >
@@ -246,11 +247,7 @@ function SiteBackups() {
       }
     >
       <div className="body stack-gap">
-        {load.error && (
-          <div className="callout crit" role="alert">
-            Could not read the sites' backups: {load.error}
-          </div>
-        )}
+        {load.error && <Alert tone="crit">Could not read the sites' backups: {load.error}</Alert>}
         {!data ? (
           !load.error && (
             <div className="loading" role="status">
@@ -260,10 +257,10 @@ function SiteBackups() {
         ) : (
           <>
             {data.not_configured.length > 0 && (
-              <div className="callout">
+              <Banner tone="neutral">
                 Not checked from here yet (no <span className="mono">backup: true</span> in the
                 operator configuration): {data.not_configured.join(", ")}.
-              </div>
+              </Banner>
             )}
             <table className="list">
               <thead>
@@ -349,7 +346,7 @@ function SiteRow({ site, now, backUp }: { site: SiteBackupRow; now: number; back
         {site.amazon?.newest ? ago(ms(site.amazon.newest), now) : <St kind="nodata">No copy</St>}
       </td>
       <td>
-        <button type="button" className="btn" onClick={backUp}>
+        <button type="button" className="cap-btn" onClick={backUp}>
           Back up now
         </button>
       </td>

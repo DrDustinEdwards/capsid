@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy } from "react";
@@ -58,19 +59,19 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       src={
         <>
           {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={reread}>
+          <button type="button" className="cap-btn" disabled={load.loading} onClick={reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>
         </>
       }
     >
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read the stale jobs: {load.error}
           {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+        </Alert>
       )}
-      {data?.note && <div className="callout warn">{data.note}</div>}
+      {data?.note && <Banner tone="warn">{data.note}</Banner>}
       {!data && load.loading ? (
         <div className="loading" role="status">
           <Spinner label="Reading the stale jobs..." />

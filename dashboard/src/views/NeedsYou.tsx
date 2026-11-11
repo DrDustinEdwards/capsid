@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy, useId, useState, type ReactNode } from "react";
@@ -104,11 +105,7 @@ function Waiting() {
         ) : undefined
       }
     >
-      {error && (
-        <div className="callout warn" role="status">
-          Stopped queues could not be read: {error}
-        </div>
-      )}
+      {error && <Banner tone="warn">Stopped queues could not be read: {error}</Banner>}
       {total === 0 ? (
         <Empty kind="all-clear" title="Nothing needs you." />
       ) : (
@@ -237,7 +234,8 @@ function PrGroup({ entries }: { entries: Entry[] }) {
             {chosen.length > 0 && (
               <button
                 type="button"
-                className="btn primary"
+                className="cap-btn"
+                data-variant="primary"
                 onClick={() =>
                   confirm({ ...approveAllRequest(chosen), onDone: () => ticks.all(false) })
                 }
@@ -299,7 +297,8 @@ function PrRow({
         {ok && (
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn"
+            data-variant="primary"
             aria-label={`Approve ${name}`}
             onClick={() => confirm(approveRequest(ok))}
           >
@@ -309,7 +308,7 @@ function PrRow({
         {seat && (
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             aria-label={`Close ${name}`}
             onClick={() => confirm(closeRequest(seat))}
           >
@@ -387,7 +386,11 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
         </Meta>
         <span className="wlinks">
           {j && (
-            <button type="button" className="linkbtn wlink" onClick={() => open(`job:${j.id}`)}>
+            <button
+              type="button"
+              className="cap-link-btn wlink"
+              onClick={() => open(`job:${j.id}`)}
+            >
               More about this job
             </button>
           )}
@@ -422,12 +425,12 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
               </span>
             )}
             <div className="toolbar">
-              <button type="submit" className="btn primary">
+              <button type="submit" className="cap-btn" data-variant="primary">
                 Send
               </button>
               <button
                 type="button"
-                className="btn"
+                className="cap-btn"
                 onClick={() => (setReplying(false), setHint(null))}
               >
                 Cancel
@@ -440,7 +443,8 @@ function JobRow({ app, item }: { app: InboxApp; item: InboxItem }) {
         {blocked && !replying && (
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn"
+            data-variant="primary"
             aria-label={`${verb} ${item.title}`}
             onClick={() => setReplying(true)}
           >
@@ -472,7 +476,8 @@ function StopGroup({ list, onReset }: { list: PortalNamespace[]; onReset: () => 
           <div className="wact">
             <button
               type="button"
-              className="btn primary"
+              className="cap-btn"
+              data-variant="primary"
               aria-label={`Reset ${n.namespace}`}
               onClick={() =>
                 confirm({

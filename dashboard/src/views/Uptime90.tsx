@@ -3,6 +3,7 @@ import { pct } from "../lib/format";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
 import "capsomer/uptime-strip.css";
+import { markup } from "capsomer/behavior/trusted-html";
 import { uptimeStrip, type UptimeSlot } from "enarratio";
 
 // Each site's last 90 UTC days against the 99.9% target, from the five-minute pulse's daily
@@ -76,15 +77,15 @@ export function Uptime90({ ns }: { ns: string }) {
                         <span className="cap-uptime-line">
                           <span
                             className="cap-uptime-strip"
-                            dangerouslySetInnerHTML={{
-                              __html: uptimeStrip({
+                            dangerouslySetInnerHTML={markup(
+                              uptimeStrip({
                                 slots,
                                 alt,
                                 inline: true,
                                 width: 120,
                                 height: 18,
                               }),
-                            }}
+                            )}
                           />
                           <span className="cap-uptime-pct">
                             <St kind={share >= u.target ? "ok" : "warn"}>{pct(share, 2)}</St>

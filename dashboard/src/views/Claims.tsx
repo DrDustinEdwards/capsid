@@ -1,3 +1,4 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { FILTER_KEYS } from "../lib/keys";
 import { Suspense, useState } from "react";
@@ -133,13 +134,13 @@ export function Claims() {
           value={input.until}
           onChange={(e) => setInput({ ...input, until: e.target.value })}
         />
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Apply
         </button>
         {filtered && (
           <button
             type="button"
-            className="btn"
+            className="cap-btn"
             onClick={() => go({ namespace: "", agent: "", since: "", until: "" }, job)}
           >
             Clear
@@ -147,16 +148,16 @@ export function Claims() {
         )}
       </form>
       {agg.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read the claims: {agg.error}
           {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+        </Alert>
       )}
       {data && data.truncated.length > 0 && (
-        <div className="callout warn" role="status">
+        <Banner tone="warn">
           This read hit its bound on: {data.truncated.join(", ")}. Narrow the filter, or read every
           row through the claims tool's export.
-        </div>
+        </Banner>
       )}
       {data && <ClaimsExport data={data} />}
       <Panel
@@ -168,7 +169,7 @@ export function Claims() {
             {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               disabled={agg.loading}
               onClick={() => {
                 agg.reread();
@@ -309,11 +310,11 @@ export function Claims() {
             </option>
           ))}
         </datalist>
-        <button type="submit" className="btn">
+        <button type="submit" className="cap-btn">
           Open job
         </button>
         {job && (
-          <button type="button" className="btn" onClick={() => go(filter, "")}>
+          <button type="button" className="cap-btn" onClick={() => go(filter, "")}>
             Close job
           </button>
         )}
@@ -324,9 +325,9 @@ export function Claims() {
         </div>
       )}
       {detail.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read job {job}: {detail.error}
-        </div>
+        </Alert>
       )}
       {detail.data && <JobDetail data={detail.data} now={now} />}
     </div>
@@ -415,13 +416,13 @@ function ClaimsExport({ data }: { data: PortalClaimsAggregate }) {
   return (
     <div className="toolbar" role="group" aria-label="Export">
       <span className="faint small">Export as CSV:</span>
-      <button type="button" className="btn" onClick={agents}>
+      <button type="button" className="cap-btn" onClick={agents}>
         By agent
       </button>
-      <button type="button" className="btn" onClick={waits}>
+      <button type="button" className="cap-btn" onClick={waits}>
         Waits
       </button>
-      <button type="button" className="btn" onClick={usage}>
+      <button type="button" className="cap-btn" onClick={usage}>
         Usage
       </button>
     </div>

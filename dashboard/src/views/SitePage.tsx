@@ -1,3 +1,4 @@
+import { Banner } from "capsomer/react/banner";
 import { Suspense, lazy, useState } from "react";
 import { Empty } from "capsomer/react/empty";
 import { PageHead } from "capsomer/react/page-head";
@@ -53,7 +54,7 @@ export function SitePage() {
           kind="no-match"
           title="No site has this name."
           action={
-            <Link className="btn" href="/sites">
+            <Link className="cap-btn" href="/sites">
               All sites
             </Link>
           }
@@ -174,16 +175,14 @@ function Overview({ ns, snap }: { ns: string; snap: SiteSnapshot | null }) {
   return (
     <>
       {detail && (
-        <div
-          className={`callout ${s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : ""}`}
-        >
+        <Banner tone={s.state === "down" ? "crit" : s.state === "degraded" ? "warn" : "neutral"}>
           {detail}
-        </div>
+        </Banner>
       )}
       <div className="grid2">
         <Panel flush title="Probe" src={`watcher pass · checked ${ago(ms(s.checked_at), now)}`}>
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Checked</dt>
               <dd>
                 {ago(ms(s.checked_at), now)} <When t={ms(s.checked_at)} />
@@ -328,7 +327,7 @@ function Setup({
           row ? (
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Edit ${row.namespace}`}
               onClick={() => setEditing(true)}
               disabled={editing}
@@ -340,7 +339,7 @@ function Setup({
       >
         {row ? (
           <div className="body">
-            <dl className="kv">
+            <dl className="cap-detail-record">
               <dt>Project</dt>
               <dd className="mono">{row.namespace}</dd>
               <dt>Name</dt>
@@ -417,7 +416,7 @@ function Setup({
           <div className="toolbar">
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Rotate the operator key of ${row.name}`}
               onClick={() =>
                 confirm({

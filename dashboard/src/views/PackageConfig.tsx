@@ -76,7 +76,8 @@ export function PackageForm({
           <Danger note="The Packages page stops showing it.">
             <button
               type="button"
-              className="btn danger"
+              className="cap-btn"
+              data-variant="danger"
               aria-label={`Remove ${editing.row.name}`}
               onClick={() =>
                 confirm({

@@ -111,7 +111,7 @@ export function Deploys() {
                         ) : (
                           <span className="toolbar" role="status" data-filter-empty="">
                             No deploys for the namespace {ns} in this range.
-                            <button type="button" className="btn" onClick={() => setNs("all")}>
+                            <button type="button" className="cap-btn" onClick={() => setNs("all")}>
                               Show all
                             </button>
                           </span>
