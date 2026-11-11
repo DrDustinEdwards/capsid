@@ -6,6 +6,7 @@ import { listArchivedAgents } from "../agents-archive";
 import { bounded, MAX_DOC_TYPE, nsName } from "../limits";
 import { fail, ok, type ToolCtx } from "./docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const AGENT_ACTIONS = ["mint", "list", "revoke", "update_scopes"] as const;
 
 export function defineAgentOperations(server: McpServer, ctx: ToolCtx): void {
@@ -96,7 +97,7 @@ export function defineAgentOperations(server: McpServer, ctx: ToolCtx): void {
         }
         return fail(`unknown agents action '${String(args.action as unknown as string)}'.`);
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );

@@ -12,6 +12,7 @@ import {
   type StalePrCache,
 } from "./stale-jobs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The stale-jobs step on the five-minute tick.
 // A merge is not completion, so this never closes anything: it returns a BLOCKED job to
 // its holder (or the queue) once EVERY pull request the job names has merged, with a
@@ -85,7 +86,7 @@ async function writeStaleCache(env: Env, reads: StalePrCache): Promise<string | 
     );
     return prior.problem;
   } catch (err) {
-    return err instanceof Error ? err.message : String(err);
+    return errorMessage(err);
   }
 }
 

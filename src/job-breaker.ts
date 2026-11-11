@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { auditStatement } from "./store-guards";
 import { DAY_MS } from "./time";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The queue's circuit breaker (job_9e602b31888f, OWASP ASI08, cascading failures).
 //
 // A namespace whose drivers failed N jobs in the last 24 hours stops handing out work
@@ -52,7 +53,7 @@ async function readBreakerThreshold(
   } catch (err) {
     return {
       threshold: BREAKER_THRESHOLD_DEFAULT,
-      note: `could not read ${BREAKER_THRESHOLD_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+      note: `could not read ${BREAKER_THRESHOLD_KEY}: ${errorMessage(err)}`,
     };
   }
   if (raw === null) return { threshold: BREAKER_THRESHOLD_DEFAULT };
@@ -75,9 +76,7 @@ export async function breakerState(env: Env, namespace: string, now: Date): Prom
     resetAt = await env.APP_KV.get(breakerResetKey(namespace));
   } catch (err) {
     // No reset read means every failure in the window counts: the stricter reading.
-    notes.push(
-      `could not read the reset for ${namespace}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    notes.push(`could not read the reset for ${namespace}: ${errorMessage(err)}`);
   }
   const windowStart = new Date(now.getTime() - BREAKER_WINDOW_MS);
   const reset = resetAt ? new Date(resetAt) : null;

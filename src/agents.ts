@@ -12,7 +12,7 @@ import {
   type ScopeFlag,
 } from "./agents-schema";
 import { runKeyAgent } from "./bench-run-key";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
 // A bearer resolves to a caller, not to a tier. A bare "read" or "write" plus a key
@@ -180,7 +180,7 @@ async function touchLastSeen(db: D1Database, agent: Agent): Promise<void> {
     logEvent(
       "AGENT_LAST_SEEN_FAILED",
       {
-        message: `AGENT_LAST_SEEN_FAILED ${agent.id}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `AGENT_LAST_SEEN_FAILED ${agent.id}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );

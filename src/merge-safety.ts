@@ -2,7 +2,7 @@ import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import { loadMergePolicy } from "./auto-merge-policy";
 import type { Env } from "./env";
 import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { OpsMergeSafety, OpsMergeSafetyRow } from "./ops-types/feed";
 import { auditStatement } from "./store-guards";
 import { timeMs } from "./trends";
@@ -273,7 +273,7 @@ export async function recordOutcomeReverts(env: Env, now: Date): Promise<string[
       logEvent(
         "MERGE_SAFETY",
         {
-          message: `MERGE_SAFETY could not read the reverts of ${full}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `MERGE_SAFETY could not read the reverts of ${full}: ${errorMessage(err)}`,
         },
         { level: "error" },
       );
@@ -312,7 +312,7 @@ export async function revertsTick(
       logEvent(
         "MERGE_SAFETY",
         {
-          message: `MERGE_SAFETY could not read the reverts of ${namespace}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `MERGE_SAFETY could not read the reverts of ${namespace}: ${errorMessage(err)}`,
         },
         { level: "error" },
       );

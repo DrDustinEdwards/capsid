@@ -7,7 +7,7 @@
 import { repoPathProblem } from "../limits";
 // RepoEnv, not Env: this module must not be able to name the credentials it omits.
 import type { RepoEnv as Env } from "../env";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { githubAppJwt } from "@dustinedwards/site-runtime/jwt";
 import { callSignal } from "../call-signal";
 
@@ -295,7 +295,7 @@ export async function invalidateRepoReads(env: Env, owner: string, repo: string)
     logEvent(
       "GH_CACHE_INVALIDATION_FAILED",
       {
-        message: `GH_CACHE_INVALIDATION_FAILED ${owner}/${repo}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `GH_CACHE_INVALIDATION_FAILED ${owner}/${repo}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -331,7 +331,7 @@ export function parseReposList(reposJson: string): { list: RepoEntry[] } | { err
   try {
     parsed = JSON.parse(reposJson);
   } catch (err) {
-    return { error: `invalid repos JSON: ${err instanceof Error ? err.message : String(err)}` };
+    return { error: `invalid repos JSON: ${errorMessage(err)}` };
   }
   if (!Array.isArray(parsed) || parsed.length === 0) {
     return { error: "repos must be a non-empty JSON array of { repo, label } entries" };
@@ -406,7 +406,7 @@ export async function resolveRepo(
     list = JSON.parse(row.repos || "[]");
   } catch (err) {
     throw new Error(
-      `namespace ${namespace} has a CORRUPT repos mapping: the stored value is not valid JSON (${err instanceof Error ? err.message : String(err)}). Nothing was resolved. Repair it with capsid_admin_manage_namespaces action update.`,
+      `namespace ${namespace} has a CORRUPT repos mapping: the stored value is not valid JSON (${errorMessage(err)}). Nothing was resolved. Repair it with capsid_admin_manage_namespaces action update.`,
     );
   }
   if (!Array.isArray(list)) {

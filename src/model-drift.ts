@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import type { OpsMaintenanceItem } from "./ops-types/views";
 import { listInstalledRepos, parseReposList, type InstalledRepo } from "./github/client";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { readSiteConfig, sitesFrom } from "./ops-sites";
 import type { SystemModel } from "./system-model";
 
@@ -129,7 +129,7 @@ export async function gatherModelDriftItems(
   } catch (e) {
     logEvent(
       "MODEL_DRIFT_LIST_FAILED",
-      { message: `MODEL_DRIFT_LIST_FAILED ${e instanceof Error ? e.message : String(e)}` },
+      { message: `MODEL_DRIFT_LIST_FAILED ${errorMessage(e)}` },
       { level: "error" },
     );
   }

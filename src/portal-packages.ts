@@ -9,6 +9,7 @@ import { textResponse } from "@dustinedwards/site-runtime/http";
 import { notFoundReport } from "@dustinedwards/site-runtime/not-found";
 import type { PortalNotFound } from "./ops-types/sites";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The Packages view's on-demand history: GET /portal/api/packages/history?name=. The
 // daily downloads come from npm's range API when the view asks, not pass by pass
 // and are cached (src/ops-packages.ts). A route, not
@@ -77,7 +78,7 @@ export async function handlePortalNotFound(
       generated: now.toISOString(),
       pages: null,
       probes: null,
-      error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+      error: errorMessage(err).slice(0, 200),
     };
   }
   return new Response(JSON.stringify(body), {

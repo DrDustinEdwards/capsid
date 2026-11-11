@@ -1,3 +1,4 @@
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // One MATCH probe, used by /health and by backup preflight. COUNT(*) on an
 // external-content FTS5 table reads through to documents and cannot see a
 // corrupted index; integrity-check passes on an emptied one.
@@ -21,6 +22,6 @@ export async function probeFts(db: D1Database): Promise<string> {
       ? "ok"
       : `no match for ${HEALTH_PROBE_NS}/${HEALTH_PROBE_PATH}`;
   } catch (err) {
-    return `error: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`;
+    return `error: ${errorMessage(err).slice(0, 120)}`;
   }
 }

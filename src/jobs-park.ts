@@ -11,6 +11,7 @@ import {
   type JobResult,
 } from "./jobs-transition";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Park: a job that is wanted but not now (job_4ef99d687805, Dustin 2026-10-07), for
 // example one kept on his request until a decision comes back. A parked job is never
 // claimed (claim reads only queued rows), never planned (the overnight plan reads only
@@ -136,7 +137,7 @@ export async function unparkJob(env: Env, agent: Agent, now: Date, id: string): 
     ]);
   } catch (err) {
     // The partial unique index: another job took the title between the check and the write.
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     if (/UNIQUE/i.test(message)) {
       const taken = await openTitleHolder(env.DB, current.namespace, current.title, id).catch(
         () => null,

@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { runTests } from "./test-results.mjs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const CAPSID = process.env.CAPSID_URL ?? "https://mcp.dustinedwards.info";
 const PATHS = ["test-integration/shadow.test.ts", "test/shadow.test.ts"];
 const MAX_TURNS = "40";
@@ -137,4 +138,4 @@ async function main() {
   );
 }
 
-main().catch((err) => summary(`Not finished: ${err instanceof Error ? err.message : String(err)}`));
+main().catch((err) => summary(`Not finished: ${errorMessage(err)}`));

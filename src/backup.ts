@@ -9,7 +9,7 @@ import type { Env } from "./env";
 import { BACKUP_LAST_OK_KEY } from "./health";
 import { REPORT_PREFIX } from "./security-headers";
 import { probeFts } from "./store-probe";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { pruneNotFound } from "@dustinedwards/site-runtime/not-found";
 import type { TaskResult } from "./task-runs";
 import { DAY_MS } from "./time";
@@ -231,7 +231,7 @@ function retryingPuts(bucket: R2Bucket, waitMs: number): R2Bucket {
       } catch (err) {
         if (attempt >= PUT_ATTEMPTS) throw err;
         logEvent("BACKUP_PUT_RETRY", {
-          message: `BACKUP_PUT_RETRY ${args[0]} attempt ${attempt}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `BACKUP_PUT_RETRY ${args[0]} attempt ${attempt}: ${errorMessage(err)}`,
         });
         await new Promise((resolve) => setTimeout(resolve, waitMs * attempt));
       }
@@ -310,7 +310,7 @@ async function readKvPins(env: Env): Promise<Record<string, KvPin>> {
       pins[key] = await env.APP_KV.get(key);
     } catch (err) {
       // Does not fail the run: the D1 dump must not be lost to a KV hiccup.
-      pins[key] = { unreadable: err instanceof Error ? err.message : String(err) };
+      pins[key] = { unreadable: errorMessage(err) };
     }
   }
   return pins;
@@ -455,7 +455,7 @@ async function pruneDaily(env: Env, now: Date): Promise<void> {
   } catch (err) {
     logEvent(
       "BACKUP_DAILY_PRUNE_FAILED",
-      { message: `BACKUP_DAILY_PRUNE_FAILED ${err instanceof Error ? err.message : String(err)}` },
+      { message: `BACKUP_DAILY_PRUNE_FAILED ${errorMessage(err)}` },
       { level: "error" },
     );
   }

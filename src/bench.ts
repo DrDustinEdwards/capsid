@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { signedRequestBody, verifyBenchRequest } from "./signed-requests";
 import { breakerRefusal, breakerState } from "./job-breaker";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import {
   BENCH_NAMESPACE,
   BENCH_REPRO_ACTION,
@@ -227,7 +227,7 @@ export async function handleBenchDraw(request: Request, env: Env): Promise<Respo
       );
     } catch (err) {
       return textResponse(
-        `the draw was not extended (${err instanceof Error ? err.message : String(err)}); a task already drawn, or another batch landed at the same time`,
+        `the draw was not extended (${errorMessage(err)}); a task already drawn, or another batch landed at the same time`,
         409,
       );
     }
@@ -451,7 +451,7 @@ export async function handleBenchStart(request: Request, env: Env): Promise<Resp
     enabled = await env.APP_KV.get(BENCH_ENABLED_KEY);
   } catch (err) {
     return textResponse(
-      `could not read ${BENCH_ENABLED_KEY} (${err instanceof Error ? err.message : String(err)}); a bench run starts only when it reads "on"`,
+      `could not read ${BENCH_ENABLED_KEY} (${errorMessage(err)}); a bench run starts only when it reads "on"`,
       503,
     );
   }

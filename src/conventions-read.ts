@@ -9,7 +9,7 @@
 // with no path, and params say how the document was reached.
 
 import { HEALTH_PROBE_NS, HEALTH_PROBE_PATH } from "./store-probe";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 const CONVENTIONS_READ_ACTION = "conventions-read";
 const WINDOW = "-1 hour";
@@ -59,7 +59,7 @@ export async function recordConventionsRead(
     logEvent(
       "CONVENTIONS_READ",
       {
-        message: `CONVENTIONS_READ could not record the read by ${actor}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `CONVENTIONS_READ could not record the read by ${actor}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );

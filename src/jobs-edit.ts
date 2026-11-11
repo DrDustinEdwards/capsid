@@ -13,6 +13,7 @@ import {
   type JobResult,
 } from "./jobs-transition";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Edit: the seat correcting a job that nobody is working (job_4ef99d687805, Dustin
 // 2026-10-07). Before it, a posted job could not be changed, because its body is
 // signed, so every correction was a supersede and a repost.
@@ -210,7 +211,7 @@ export async function editJob(
   } catch (err) {
     // The partial unique index over (namespace, title) for open jobs: another job took
     // the title between the check above and this write.
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     if (/UNIQUE/i.test(message))
       return collision(
         current.namespace,

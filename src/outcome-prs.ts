@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { PR_URL_SOURCE, ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import { prFacts, verifyEvidence } from "./job-outcomes";
 import { auditStatement } from "./store-guards";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
 
 // Merge-state re-verification. An outcome row records merge state when `complete`
@@ -202,7 +202,7 @@ async function repoCreatedAt(env: Env, namespace: string, prUrl: string): Promis
     logEvent(
       "OUTCOME_PRS_REPO_UNREADABLE",
       {
-        message: `outcome-prs: could not read the repository behind ${prUrl}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `outcome-prs: could not read the repository behind ${prUrl}: ${errorMessage(err)}`,
       },
       { level: "warn" },
     );

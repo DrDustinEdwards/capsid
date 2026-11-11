@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import type { OpsTask, OpsTaskRun, OpsTaskRunOutcome } from "./ops-types/feed";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS, HOUR_MS, DAY_MS } from "./time";
 
 // The run ledger (migrations/0029_task_runs.sql). Every scheduled task goes through runTask,
@@ -189,7 +189,7 @@ async function record(
     logEvent(
       "TASK_RUN_UNRECORDED",
       {
-        message: `TASK_RUN_UNRECORDED ${task} ${outcome}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `TASK_RUN_UNRECORDED ${task} ${outcome}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -216,7 +216,7 @@ export async function runTask<T>(
   try {
     value = timeoutMs === undefined ? await body() : await withTimeout(body(), timeoutMs);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       opts.tag,
       {

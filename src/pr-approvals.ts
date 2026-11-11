@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
 import { auditStatement } from "./store-guards";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // THE APPROVAL RECORD (docs/design/design-merge-pipeline.md section 3, PR 3; Dustin's
 // DECIDE of 2026-10-09). The `approve_pr` control (src/controls.ts) records that Dustin
 // approved one or more pull requests at the head sha he saw; it never merges. The
@@ -83,7 +84,7 @@ async function awaitingSet(env: Env): Promise<AwaitingSeat[] | string> {
     const raw = await env.APP_KV.get(AWAITING_SEAT_KEY);
     return raw ? (JSON.parse(raw) as AwaitingSeat[]) : [];
   } catch (err) {
-    return `the awaiting-seat set could not be read (${err instanceof Error ? err.message : String(err)}), so no class is known and nothing is approved.`;
+    return `the awaiting-seat set could not be read (${errorMessage(err)}), so no class is known and nothing is approved.`;
   }
 }
 
@@ -119,7 +120,7 @@ export async function planApproval(
   try {
     ({ owner, repo: name, full } = await resolveRepo(env, p.namespace, p.repo));
   } catch (err) {
-    return refused(err instanceof Error ? err.message : String(err));
+    return refused(errorMessage(err));
   }
   const { results } = await env.DB.prepare(
     `SELECT id, pr, head_sha FROM pr_approvals WHERE repo = ?1 AND status = 'approved'`,

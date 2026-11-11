@@ -31,6 +31,7 @@ import {
 import { checkBackupFreshness } from "./freshness-lib.mjs";
 import { probeMcp } from "./mcp-probe-lib.mjs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const ORIGIN = (process.argv[2] ?? "https://mcp.dustinedwards.info").replace(/\/$/, "");
 // Overridable because CI's sha gate waits on a rollout that has only just started and
 // needs a longer budget than an interactive run.
@@ -49,9 +50,7 @@ const EXIT_COULD_NOT_RUN = 3;
 
 class NoAnswer extends Error {
   constructor(url, cause) {
-    super(
-      `no answer from ${String(url).split("?")[0]}: ${cause instanceof Error ? cause.message : String(cause)}`,
-    );
+    super(`no answer from ${String(url).split("?")[0]}: ${errorMessage(cause)}`);
   }
 }
 

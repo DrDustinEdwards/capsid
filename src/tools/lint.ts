@@ -21,6 +21,7 @@ import { docPath, GATHER_BUDGET, LINT_CONSUMED_MAX, nsName } from "../limits";
 import { policyWriteRefusal } from "../signed-docs";
 import { fail, ok, pathMutation, requireConfirmation, type ToolCtx } from "./docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The tool this operation is served as (src/tools/surface.ts), for its own scope checks.
 const LINT_TOOL = "capsid_lint_namespace";
 
@@ -392,7 +393,7 @@ export function defineLintOperations(server: McpServer, ctx: ToolCtx): void {
           );
         }
         return fail(
-          `finalize failed, nothing archived (an archive/ target may already exist): ${err instanceof Error ? err.message : String(err)}`,
+          `finalize failed, nothing archived (an archive/ target may already exist): ${errorMessage(err)}`,
         );
       }
       return ok({

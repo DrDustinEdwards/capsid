@@ -25,6 +25,7 @@ import { documentEdges, readDocument, searchDocuments } from "../doc-reads";
 import { hybridSearch } from "../doc-index";
 import { DOC_STATUS_LIST, DOC_TYPE_LIST } from "../doc-meta";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The document tools that only read: list, read, brief, history, backlinks, find
 // and search. defineDocOperations in ./docs registers them in the published order.
 
@@ -502,9 +503,7 @@ export function defineSearchOperation(server: McpServer, ctx: ToolCtx): void {
         const rows = bound(await searchDocuments(db, query, filter));
         return ok(fallback === undefined ? rows : { mode: "keyword", fallback, ...rows });
       } catch (err) {
-        return fail(
-          `search failed (check FTS5 query syntax): ${err instanceof Error ? err.message : String(err)}`,
-        );
+        return fail(`search failed (check FTS5 query syntax): ${errorMessage(err)}`);
       }
     },
   );

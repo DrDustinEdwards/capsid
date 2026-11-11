@@ -3,6 +3,7 @@ import { safeEqual } from "@dustinedwards/site-runtime/compare";
 import type { Env } from "./env";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The Worker signs the documents it later acts on: a job's body (src/jobs-claim.ts) and
 // the two autonomy policies (src/policy-sign.ts). One key, derived from
 // IMPROVE_SCORE_SECRET under its own context string, distinct from the backup
@@ -166,7 +167,7 @@ async function checkPolicyPin(
 ): Promise<string | null> {
   const current = await policyPin(body);
   const cannot = (step: string, err: unknown) =>
-    `the ${what}'s anti-rollback record (${policyPinKey(path)}) could not be ${step} (${err instanceof Error ? err.message : String(err)}), so the stored policy is not shown to be the last one signed. Refusing rather than loading it.`;
+    `the ${what}'s anti-rollback record (${policyPinKey(path)}) could not be ${step} (${errorMessage(err)}), so the stored policy is not shown to be the last one signed. Refusing rather than loading it.`;
   let raw: string | null;
   try {
     raw = await env.APP_KV.get(policyPinKey(path));

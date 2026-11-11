@@ -1,5 +1,6 @@
 import { nsName, pathProblem } from "./limits";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 export const LINK_TYPES = [
   "governs",
   "references",
@@ -28,7 +29,7 @@ export function parseLinks(
   try {
     parsed = JSON.parse(linksJson);
   } catch (err) {
-    return { error: `invalid links JSON: ${err instanceof Error ? err.message : String(err)}` };
+    return { error: `invalid links JSON: ${errorMessage(err)}` };
   }
   if (!Array.isArray(parsed)) {
     return {

@@ -4,6 +4,7 @@ import { ghFetch, parsePrUrl, resolveRepo } from "./github/client";
 import type { JobRow } from "./jobs-schema";
 import { MINUTE_MS } from "./time";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // One outcome row per finished job, written once, carrying counts.
 //
 // The Worker never stores a driver's count for something it could have checked. This
@@ -185,7 +186,7 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
   try {
     resolved = await resolveRepo(env, namespace, `${owner}/${repo}`);
   } catch (err) {
-    return `${url}: ${err instanceof Error ? err.message : String(err)}`;
+    return `${url}: ${errorMessage(err)}`;
   }
   // Caught too: verifyEvidence promises its callers a note, never a throw.
   let pr: {
@@ -206,7 +207,7 @@ export async function prFacts(env: Env, namespace: string, url: string): Promise
     if (!resp.ok) return `${url}: GitHub answered ${resp.status}, so its state could not be read`;
     pr = (await resp.json()) as typeof pr;
   } catch (err) {
-    return `${url}: GitHub could not be read (${err instanceof Error ? err.message : String(err)})`;
+    return `${url}: GitHub could not be read (${errorMessage(err)})`;
   }
   return {
     merged: pr.merged === true,
@@ -242,7 +243,7 @@ async function ciGreenForSha(
   } catch (err) {
     return {
       green: null,
-      note: `CI could not be read for ${sha.slice(0, 7)}: ${err instanceof Error ? err.message : String(err)}`,
+      note: `CI could not be read for ${sha.slice(0, 7)}: ${errorMessage(err)}`,
     };
   }
   const runs = status.runs ?? [];

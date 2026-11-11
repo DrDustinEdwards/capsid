@@ -22,7 +22,7 @@ import { parseReposList } from "./github";
 import { readBoundedText } from "./signed-requests";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import type { PortalActivity, PortalNamespaces, PortalPerformed } from "./ops-types/portal";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 // The Portal's routes for the controls (src/controls.ts holds the controls): the eight actions, what each will do, the one dispatch to the
 // shared mutators, and the routes the app calls (the contract is the bottom of
@@ -104,10 +104,7 @@ export async function gateActionRequest(request: Request, env: Env, now: Date): 
   } catch (err) {
     return {
       ok: false,
-      response: textResponse(
-        `the body is not JSON: ${err instanceof Error ? err.message : String(err)}`,
-        400,
-      ),
+      response: textResponse(`the body is not JSON: ${errorMessage(err)}`, 400),
     };
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -182,7 +179,7 @@ export async function handlePortalPerform(
   } catch (err) {
     // The action happened; only the read after it failed. Said as a failure of the
     // read, never as a failure of the action.
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "PORTAL_PERFORM_FEED_FAILED",
       { message: `PORTAL_PERFORM_FEED_FAILED ${action}: ${message}` },

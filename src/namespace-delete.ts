@@ -8,6 +8,7 @@ import { pathMutation } from "./tools/docs";
 import { signDeleteToken, type Verified, verifyDeleteToken } from "./namespace-delete-token";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Deleting a namespace (capsid_admin_manage_namespaces actions delete_preview and
 // delete_perform): the plan, the refusals, the signed confirmation and the one batch.
 // Its operation is registered in src/tools/namespaces.ts, admin only (TOOL_GRANTS in
@@ -373,7 +374,7 @@ export async function previewNamespaceDelete(
   } catch (err) {
     return {
       ok: false,
-      refusal: `delete_namespace preview failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+      refusal: `delete_namespace preview failed, nothing changed: ${errorMessage(err)}`,
     };
   }
   const refusals = deleteRefusals(plan, opts);
@@ -411,7 +412,7 @@ export async function previewNamespaceDelete(
   } catch (err) {
     return {
       ok: false,
-      refusal: `delete_namespace preview failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+      refusal: `delete_namespace preview failed, nothing changed: ${errorMessage(err)}`,
     };
   }
   return {
@@ -496,7 +497,7 @@ export async function performNamespaceDelete(
   } catch (err) {
     return {
       ok: false,
-      refusal: `delete_namespace refused, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+      refusal: `delete_namespace refused, nothing changed: ${errorMessage(err)}`,
     };
   }
   if (!verified.ok)
@@ -525,7 +526,7 @@ export async function deleteAsPlanned(
   } catch (err) {
     return {
       ok: false,
-      refusal: `delete_namespace failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+      refusal: `delete_namespace failed, nothing changed: ${errorMessage(err)}`,
     };
   }
   const refusals = deleteRefusals(plan, opts);
@@ -613,7 +614,7 @@ export async function deleteAsPlanned(
     }
     return {
       ok: false,
-      refusal: `delete_namespace failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
+      refusal: `delete_namespace failed, nothing changed: ${errorMessage(err)}`,
     };
   }
 

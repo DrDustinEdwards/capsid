@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { Agent } from "./agents";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import {
   appendAudit,
   correlationId,
@@ -536,7 +536,7 @@ export async function readLastStepUp(
     logEvent(
       "STEP_UP_READ_FAILED",
       {
-        message: `STEP_UP_READ_FAILED: ${error instanceof Error ? error.message : String(error)}; using the sign-in time alone`,
+        message: `STEP_UP_READ_FAILED: ${errorMessage(error)}; using the sign-in time alone`,
       },
       { level: "error" },
     );
@@ -561,7 +561,7 @@ async function recordStepUp(
     logEvent(
       "STEP_UP_WRITE_FAILED",
       {
-        message: `STEP_UP_WRITE_FAILED: ${error instanceof Error ? error.message : String(error)}; the action succeeded and the idle clock was not reset`,
+        message: `STEP_UP_WRITE_FAILED: ${errorMessage(error)}; the action succeeded and the idle clock was not reset`,
       },
       { level: "error" },
     );
@@ -928,7 +928,7 @@ export function guardRegistrations(
           await appendAudit(log.env, { ...row, phase: "started" });
         } catch (cause) {
           return deny(
-            `refused: the tool-call log could not be written (${cause instanceof Error ? cause.message : String(cause)}), and no tool runs unlogged. Nothing was done.`,
+            `refused: the tool-call log could not be written (${errorMessage(cause)}), and no tool runs unlogged. Nothing was done.`,
           );
         }
       }
@@ -959,10 +959,7 @@ export function guardRegistrations(
             phase: "finished",
             result: {
               isError: true,
-              text: `threw: ${error instanceof Error ? error.message : String(error)}`.slice(
-                0,
-                1000,
-              ),
+              text: `threw: ${errorMessage(error)}`.slice(0, 1000),
               ...canceled(),
             },
           });

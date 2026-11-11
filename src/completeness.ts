@@ -4,6 +4,7 @@ import { ghFetch } from "./github/client";
 import { bounded } from "./limits";
 import type { CompletenessView } from "./ops-types/feed";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // THE COMPLETENESS SCOREBOARD, read for the Portal (GET /portal/api/completeness). devkit's
 // daily live run (devkit .github/workflows/live.yml, bin/live.mjs) writes board.json to its
 // orphan `scoreboard` branch: every area of the shared code against the package and every
@@ -153,10 +154,7 @@ export async function readCompleteness(
       return emptyView(now, `devkit's board.json is ${text.length} bytes, over ${MAX_FILE_BYTES}`);
     raw = JSON.parse(text);
   } catch (err) {
-    return emptyView(
-      now,
-      `devkit's board.json could not be read: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return emptyView(now, `devkit's board.json could not be read: ${errorMessage(err)}`);
   }
   const view = completenessView(raw, now);
   if (!view.error)

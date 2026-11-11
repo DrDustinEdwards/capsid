@@ -3,6 +3,7 @@ import { hmacHex } from "./auth";
 import type { Env } from "./env";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // The namespace delete's confirmation token (src/namespace-delete.ts previews and
@@ -79,7 +80,7 @@ export async function verifyDeleteToken(
     // Signed by this Worker and unreadable: a defect, said so.
     return {
       ok: false,
-      refusal: `the confirmation token verifies but does not parse (${err instanceof Error ? err.message : String(err)}): preview again.`,
+      refusal: `the confirmation token verifies but does not parse (${errorMessage(err)}): preview again.`,
     };
   }
   if (

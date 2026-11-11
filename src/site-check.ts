@@ -7,6 +7,7 @@ import { probeSite } from "./ops-snapshot";
 import { readSiteRow, sitesFrom } from "./ops-sites";
 import { callSignal } from "./call-signal";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // A live check of one namespace's site, on demand, served as capsid_inspect_repo action site. Three reads of the site's own configured
 // origin, never another host: its health route (as the watcher probes it), one page
 // (its status and the OWASP headers), and one path that must refuse a caller with no
@@ -90,7 +91,7 @@ export async function siteCheck(
       status = resp.status;
       await resp.body?.cancel();
     } catch (err) {
-      error = (err instanceof Error ? err.message : String(err)).slice(0, 120);
+      error = errorMessage(err).slice(0, 120);
     }
     const refused = status === 401 || status === 403;
     probe = {

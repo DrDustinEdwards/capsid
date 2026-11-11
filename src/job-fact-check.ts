@@ -3,6 +3,7 @@ import { encodePath, ghFetch } from "./github/client";
 import { npmVersions, readPackageConfig, type FetchLike } from "./ops-packages";
 import { heading, proseOnly } from "./job-body-check";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The third job body check (src/job-body-check.ts): a body that states a pull request is
 // merged, a version is tagged or a package version is published is checked against GitHub
 // and npm at post and edit, and refused when what Capsid reads says otherwise. The case:
@@ -377,7 +378,7 @@ export async function checkBodyFacts(
             ? await tagged(claim)
             : await published(claim);
     } catch (err) {
-      verdict = { state: "unchecked", reason: err instanceof Error ? err.message : String(err) };
+      verdict = { state: "unchecked", reason: errorMessage(err) };
     }
     const where = `line ${claim.line}, "${claim.said}"`;
     if (verdict.state === "false") falses.push(`${where}: ${verdict.read}`);
@@ -400,7 +401,7 @@ export async function checkBodyFacts(
 
 // ---- The live readers ----------------------------------------------------------------------
 
-const reason = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 160);
+const reason = (err: unknown) => errorMessage(err).slice(0, 160);
 
 /** The readers post and edit use: the namespace's mapping in D1, the Portal's package rows,
  *  GitHub through the App, and npm's registry. */

@@ -47,7 +47,7 @@ import {
   type WatcherReport,
 } from "./watcher";
 import { gatherFindings } from "./watcher-gather";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { textResponse } from "@dustinedwards/site-runtime/http";
 import { MINUTE_MS, DAY_MS } from "./time";
 
@@ -132,7 +132,7 @@ async function siteUptime(env: Env, now: Date): Promise<OpsUptime | null> {
   } catch (err) {
     logEvent(
       "OPS_FEED_UPTIME_UNREADABLE",
-      { message: `OPS_FEED_UPTIME_UNREADABLE ${err instanceof Error ? err.message : String(err)}` },
+      { message: `OPS_FEED_UPTIME_UNREADABLE ${errorMessage(err)}` },
       { level: "error" },
     );
     return null;
@@ -296,7 +296,7 @@ export function awaitingFrom(raw: string | null): OpsAwaitingSeat[] {
     logEvent(
       "OPS_FEED_AWAITING_UNREADABLE",
       {
-        message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `OPS_FEED_AWAITING_UNREADABLE ${AWAITING_SEAT_KEY}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
@@ -408,7 +408,7 @@ async function liveMergePolicy(env: Env): Promise<OpsLive["merge_policy"]> {
   } catch (err) {
     return {
       loads: false,
-      reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}`,
+      reason: `the policy could not be read: ${errorMessage(err)}`,
     };
   }
 }
@@ -469,7 +469,7 @@ async function scheduled(
   try {
     return { read: await readTaskRuns(env.DB) };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "OPS_FEED_TASK_RUNS_UNREADABLE",
       { message: `OPS_FEED_TASK_RUNS_UNREADABLE ${message}` },
@@ -561,7 +561,7 @@ export async function handleOpsRefresh(
   try {
     last = await env.APP_KV.get(OPS_REFRESH_KEY);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "OPS_REFRESH_LIMIT_UNREADABLE",
       { message: `OPS_REFRESH_LIMIT_UNREADABLE ${message}` },
@@ -586,7 +586,7 @@ export async function handleOpsRefresh(
   try {
     await env.APP_KV.put(OPS_REFRESH_KEY, now.toISOString());
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "OPS_REFRESH_LIMIT_UNWRITABLE",
       { message: `OPS_REFRESH_LIMIT_UNWRITABLE ${message}` },
@@ -604,7 +604,7 @@ export async function handleOpsRefresh(
   try {
     report = await watcherTick(env, now, () => gather(env, now), { force: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     logEvent(
       "OPS_REFRESH_PASS_FAILED",
       { message: `OPS_REFRESH_PASS_FAILED ${message}` },
@@ -635,7 +635,7 @@ export async function handleOpsRefresh(
   } catch (err) {
     // The pass happened; only its audit row failed. Said in a header and the log, not
     // turned into a failure of a pass that ran.
-    warning = `the pass ran, but the Portal audit row naming ${actor} was not written: ${err instanceof Error ? err.message : String(err)}`;
+    warning = `the pass ran, but the Portal audit row naming ${actor} was not written: ${errorMessage(err)}`;
     logEvent("OPS_REFRESH_AUDIT_FAILED", { message: warning }, { level: "error" });
   }
   const feed = await (deps.feed ?? opsFeed)(env, now);
