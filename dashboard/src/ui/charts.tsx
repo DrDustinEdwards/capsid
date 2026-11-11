@@ -50,7 +50,7 @@ export function UptimeTicks({ site }: { site: SiteSnapshot }) {
       />
       <span
         dangerouslySetInnerHTML={{
-          __html: uptimeStripTable(opts, { dataTable: "visually-hidden" }).markup,
+          __html: uptimeStripTable(opts).markup,
         }}
       />
     </>
