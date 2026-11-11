@@ -3,7 +3,7 @@ import { claimsFilterFrom, readClaimsAggregate, readJobClaims } from "./job-clai
 import { OPS_RETURN_TO } from "./ops-feed";
 import type { PortalClaimsAggregate, PortalClaimsJob } from "./ops-types/claims";
 import { portalGate } from "./portal-auth";
-import { jsonResponse, textResponse } from "./http";
+import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 
 // The Portal's Claims view: GET /portal/api/claims. The same readers the `capsid_admin_read_claims` tool
 // uses (src/job-claims-read.ts), so the view and the tool cannot disagree. A route, not

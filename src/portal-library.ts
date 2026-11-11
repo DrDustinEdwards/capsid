@@ -4,7 +4,7 @@ import { MAX_NAMESPACE, MAX_QUERY, MAX_ROWS, pathProblem, SEARCH_ROWS } from "./
 import { OPS_RETURN_TO } from "./ops-feed";
 import type { LibraryEntry, LibraryShelf, PortalLibrary } from "./ops-types/views";
 import { portalGate } from "./portal-auth";
-import { jsonResponse as json } from "./http";
+import { jsonResponse as json } from "@dustinedwards/site-runtime/http";
 
 // The Portal's Library: GET /portal/api/library, read-only, over the knowledge store
 // (search, decisions, rulings, research, links to jobs). Writing stays in chat and with drivers.
