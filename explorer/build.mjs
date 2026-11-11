@@ -266,6 +266,7 @@ export async function build({
     "shell",
     "meter",
     "shortcuts",
+    "hooks",
   ]) {
     const dir = join(capsomer, "dist", "components", name);
     mkdirSync(join(stage, "capsomer", name), { recursive: true });
