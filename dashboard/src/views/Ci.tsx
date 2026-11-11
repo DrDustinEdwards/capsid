@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { useApp } from "../app/ctx";
 import { ciState, type Kind } from "../lib/derive";
 import { checkWords } from "../../../src/check-words";
-import { age, ago, ms, utc } from "../lib/format";
+import { parse, relative, span, utc } from "capsomer/behavior/time";
 import { St } from "../ui/icons";
 import { Panel } from "capsomer/react/panel";
 import { Empty } from "capsomer/react/empty";
@@ -65,10 +65,10 @@ export function DefaultBranches() {
                       <td className="mono">{c.latest ? c.latest.head_sha.slice(0, 7) : "-"}</td>
                       <td
                         className="num"
-                        title={c.latest ? utc(ms(c.latest.created_at)) : undefined}
+                        title={c.latest ? utc(parse(c.latest.created_at)) : undefined}
                       >
                         {c.latest ? (
-                          ago(ms(c.latest.created_at), now)
+                          relative(parse(c.latest.created_at), now)
                         ) : (
                           <span className="faint">runs could not be read</span>
                         )}
@@ -155,7 +155,7 @@ export function PullRequests() {
             <div className="toolbar">
               <button
                 type="button"
-                className="btn"
+                className="cap-btn"
                 onClick={() =>
                   confirm({
                     action: "sign_policy_from_repo",
@@ -236,7 +236,7 @@ export function PullRequests() {
                         {n.paused && (
                           <button
                             type="button"
-                            className="btn"
+                            className="cap-btn"
                             aria-label={`Resume auto-merge for ${n.namespace}`}
                             onClick={() =>
                               confirm({
@@ -306,13 +306,13 @@ export function PullRequests() {
                     </td>
                     <td className="num" data-label="Verified">
                       {p.merge_verified_at ? (
-                        ago(ms(p.merge_verified_at), now)
+                        relative(parse(p.merge_verified_at), now)
                       ) : (
                         <span className="faint">not yet</span>
                       )}
                     </td>
                     <td className="num" data-label="Recorded">
-                      {ago(ms(p.recorded_at), now)}
+                      {relative(parse(p.recorded_at), now)}
                     </td>
                   </tr>
                 );
@@ -402,7 +402,7 @@ function MergeUnits() {
       title="Merge units"
       id="merge-units"
       count={rows.length}
-      src={units.generated ? `judged ${utc(ms(units.generated))}` : "not judged yet"}
+      src={units.generated ? `judged ${utc(parse(units.generated))}` : "not judged yet"}
     >
       {rows.length ? (
         <div className="scroll-x reflow">
@@ -438,7 +438,7 @@ function MergeUnits() {
                         {suspended.has(r.unit) && (
                           <button
                             type="button"
-                            className="btn"
+                            className="cap-btn"
                             aria-label={`Lift the suspension of ${r.unit}`}
                             onClick={() =>
                               confirm({
@@ -454,7 +454,8 @@ function MergeUnits() {
                         {r.state === "promote" && (
                           <button
                             type="button"
-                            className="btn primary"
+                            className="cap-btn"
+                            data-variant="primary"
                             aria-label={`Promote ${r.unit}`}
                             onClick={() => sign("promote", r.unit)}
                           >
@@ -464,7 +465,7 @@ function MergeUnits() {
                         {listed && (
                           <button
                             type="button"
-                            className="btn"
+                            className="cap-btn"
                             aria-label={`Demote ${r.unit}`}
                             onClick={() => sign("demote", r.unit)}
                           >
@@ -497,20 +498,21 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
         <a className="wtitle mono" href={prUrl(a)} target="_blank" rel="noopener noreferrer">
           {name}
         </a>
-        <span className="held">
-          <St kind="warn">{checkWords(a.failed)}</St>
-        </span>
+        <St kind="warn" wrap>
+          {checkWords(a.failed)}
+        </St>
         <span className="muted">{a.why}</span>
         {a.visual && <VisualLook visual={a.visual} />}
         <span className="wmeta">
-          {a.namespace} · waiting {age(ms(a.at), now)}
+          {a.namespace} · waiting {span(now - parse(a.at))}
         </span>
       </div>
       <div className="wact">
         {canApprove(a) && (
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn"
+            data-variant="primary"
             aria-label={`Approve ${name}`}
             onClick={() => confirm(approveRequest(a))}
           >
@@ -519,7 +521,7 @@ function WaitingPr({ a }: { a: OpsAwaitingSeat }) {
         )}
         <button
           type="button"
-          className="btn"
+          className="cap-btn"
           aria-label={`Close ${name}`}
           onClick={() => confirm(closeRequest(a))}
         >

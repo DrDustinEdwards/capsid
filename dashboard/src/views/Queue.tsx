@@ -1,12 +1,15 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { trendChart } from "./charts";
 import { ChartSlot } from "../ui/ChartSlot";
 import { Suspense, lazy } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { QUEUE_TABS, tabOf, useApp } from "../app/ctx";
-import { PageTabs, useTabParam } from "../ui/pagetabs";
+import { PageTabs } from "capsomer/react/tabs";
+import { tabLink, useSearch } from "../lib/router";
+import { tabParam } from "capsomer/behavior/tabs";
 import { LIVE, fetchStale, useAnswer, type Load } from "../lib/api";
 import { JOB } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
 import type { OpsJob, PortalStale, StaleRule } from "../types";
 import { St } from "../ui/icons";
 import { Anchors } from "../ui/anchors";
@@ -57,20 +60,20 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
       count={data ? rows.length : undefined}
       src={
         <>
-          {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={reread}>
+          {data ? `read ${relative(parse(data.generated), now)} · ` : ""}
+          <button type="button" className="cap-btn" disabled={load.loading} onClick={reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>
         </>
       }
     >
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read the stale jobs: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+          {data ? `. Showing the read from ${relative(parse(data.generated), now)}.` : ""}
+        </Alert>
       )}
-      {data?.note && <div className="callout warn">{data.note}</div>}
+      {data?.note && <Banner tone="warn">{data.note}</Banner>}
       {!data && load.loading ? (
         <div className="loading" role="status">
           <Spinner label="Reading the stale jobs..." />
@@ -123,12 +126,20 @@ function StaleJobs({ load, reread }: { load: StaleLoad; reread: () => void }) {
 const Claims = lazy(() => import("./Claims").then((m) => ({ default: m.Claims })));
 
 export function Queue() {
-  const tab = tabOf(QUEUE_TABS, useTabParam()) ?? QUEUE_TABS[0].id;
+  const search = useSearch();
+  const tab = tabOf(QUEUE_TABS, tabParam(search)) ?? QUEUE_TABS[0].id;
   if (tab === "checks") {
     return (
       <div className="page">
         <PageHead title="Jobs" />
-        <PageTabs label="Jobs" path="/queue" tabs={QUEUE_TABS} current={tab} />
+        <PageTabs
+          aria-label="Jobs"
+          path="/queue"
+          tabs={QUEUE_TABS}
+          current={tab}
+          search={search}
+          renderLink={tabLink}
+        />
         <Suspense fallback={null}>
           <Claims />
         </Suspense>
@@ -139,6 +150,7 @@ export function Queue() {
 }
 
 function JobsTab() {
+  const search = useSearch();
   const { feed, filters, setFilters } = useApp();
   const [ns, setNs] = useNsFilter();
   const all = feed.live.jobs;
@@ -158,7 +170,14 @@ function JobsTab() {
     <div className="page">
       <Anchors />
       <PageHead title="Jobs" />
-      <PageTabs label="Jobs" path="/queue" tabs={QUEUE_TABS} current="jobs" />
+      <PageTabs
+        aria-label="Jobs"
+        path="/queue"
+        tabs={QUEUE_TABS}
+        current="jobs"
+        search={search}
+        renderLink={tabLink}
+      />
       <div className="toolbar">
         <NsChips list={nss} />
         <input

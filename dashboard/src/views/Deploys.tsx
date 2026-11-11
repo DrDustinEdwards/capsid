@@ -1,7 +1,8 @@
 import { useApp, type Filters } from "../app/ctx";
 import type { CfDeploy, SiteSnapshot } from "../types";
 import { cfNoData, cfOk, siteKey } from "../lib/derive";
-import { DAY, ago, ms, shortId, utc } from "../lib/format";
+import { DAY, parse, relative, utc } from "capsomer/behavior/time";
+import { shortId } from "../lib/format";
 import { Panel } from "capsomer/react/panel";
 import { ChartSlot } from "../ui/ChartSlot";
 import { trendChart } from "./charts";
@@ -23,8 +24,10 @@ export function Deploys() {
   const rows: Array<{ s: SiteSnapshot; d: CfDeploy }> = [];
   for (const s of snap?.sites ?? []) for (const d of cfOk(s)?.deploys ?? []) rows.push({ s, d });
   const list = rows
-    .filter((x) => now - ms(x.d.created_on) < days * DAY && (ns === "all" || x.s.namespace === ns))
-    .sort((a, b) => ms(b.d.created_on) - ms(a.d.created_on));
+    .filter(
+      (x) => now - parse(x.d.created_on) < days * DAY && (ns === "all" || x.s.namespace === ns),
+    )
+    .sort((a, b) => parse(b.d.created_on) - parse(a.d.created_on));
   const missing = (snap?.sites ?? []).filter((s) => !cfOk(s));
   return (
     <div className="embedded">
@@ -85,8 +88,8 @@ export function Deploys() {
                       data-open={`site:${siteKey(s)}`}
                       tabIndex={0}
                     >
-                      <td className="num" title={utc(ms(d.created_on))}>
-                        {ago(ms(d.created_on), now)}
+                      <td className="num" title={utc(parse(d.created_on))}>
+                        {relative(parse(d.created_on), now)}
                       </td>
                       <td>
                         <b>{s.name}</b>
@@ -111,7 +114,7 @@ export function Deploys() {
                         ) : (
                           <span className="toolbar" role="status" data-filter-empty="">
                             No deploys for the namespace {ns} in this range.
-                            <button type="button" className="btn" onClick={() => setNs("all")}>
+                            <button type="button" className="cap-btn" onClick={() => setNs("all")}>
                               Show all
                             </button>
                           </span>

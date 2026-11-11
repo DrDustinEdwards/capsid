@@ -1,9 +1,11 @@
+import { Alert } from "capsomer/react/banner";
 import { useState } from "react";
 import { Spinner } from "capsomer/react/empty";
 import { useApp } from "../app/ctx";
 import { LIVE, fetchNamespaces, useAnswer } from "../lib/api";
 import { agentState, driverOf } from "../lib/derive";
-import { ago, ms, pct } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
+import { pct } from "../lib/format";
 import { St } from "../ui/icons";
 import type { PortalNamespace, PortalNamespaces } from "../types";
 import { Panel } from "capsomer/react/panel";
@@ -27,9 +29,9 @@ function Driver({ ns }: { ns: string }) {
       <St kind={st.kind}>{st.label}</St>
       <div className="src">
         {d.revoked_at
-          ? `revoked ${ago(ms(d.revoked_at), now)}`
+          ? `revoked ${relative(parse(d.revoked_at), now)}`
           : d.last_seen
-            ? `seen ${ago(ms(d.last_seen), now)}`
+            ? `seen ${relative(parse(d.last_seen), now)}`
             : "never seen"}
       </div>
     </>
@@ -48,7 +50,7 @@ function Report({ n }: { n: PortalNamespace }) {
       ) : (
         <span className="num">{pct(rep.integrity, 0)}</span>
       )}
-      <div className="src">report {ago(ms(rep.generated), now)}</div>
+      <div className="src">report {relative(parse(rep.generated), now)}</div>
     </>
   );
 }
@@ -105,13 +107,18 @@ function Row({
       </td>
       <td className="ctl">
         <div className="toolbar col">
-          <button type="button" className="btn" aria-label={`Edit ${n.namespace}`} onClick={onEdit}>
+          <button
+            type="button"
+            className="cap-btn"
+            aria-label={`Edit ${n.namespace}`}
+            onClick={onEdit}
+          >
             Edit
           </button>
           {n.breaker.open && (
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               aria-label={`Reset ${n.namespace}`}
               onClick={() =>
                 confirm({
@@ -147,7 +154,8 @@ function Roster() {
       <div className="toolbar">
         <button
           type="button"
-          className="btn primary"
+          className="cap-btn"
+          data-variant="primary"
           onClick={() => setEditing({ kind: "add" })}
           disabled={editing?.kind === "add"}
         >
@@ -156,10 +164,10 @@ function Roster() {
       </div>
       {editing && <ProjectForm key={formKey} editing={editing} onClose={close} />}
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read the projects: {load.error}
-          {data ? `. Showing the read from ${ago(ms(data.generated), now)}.` : ""}
-        </div>
+          {data ? `. Showing the read from ${relative(parse(data.generated), now)}.` : ""}
+        </Alert>
       )}
       <Panel
         flush
@@ -168,8 +176,8 @@ function Roster() {
         count={data?.namespaces.length}
         src={
           <>
-            {data ? `read ${ago(ms(data.generated), now)} · ` : ""}
-            <button type="button" className="btn" disabled={load.loading} onClick={read}>
+            {data ? `read ${relative(parse(data.generated), now)} · ` : ""}
+            <button type="button" className="cap-btn" disabled={load.loading} onClick={read}>
               {load.loading ? "Reading..." : "Read again"}
             </button>
           </>

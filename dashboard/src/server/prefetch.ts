@@ -1,7 +1,7 @@
 import { QueryClient, dehydrate, type DehydratedState } from "@tanstack/react-query";
 import { createContext, type RouterContextProvider } from "react-router";
 import { FEED_KEY, LIVE, answer, ask, type Answer } from "../lib/api";
-import { DAY } from "../lib/format";
+import { DAY } from "capsomer/behavior/time";
 import { pageBase } from "../lib/router";
 import type { OpsFeed } from "../types";
 import type { ViewId } from "../app/ctx";

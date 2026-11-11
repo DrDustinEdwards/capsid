@@ -1,8 +1,10 @@
+import { Banner } from "capsomer/react/banner";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchCompleteness, useAnswer } from "../lib/api";
-import { ago, fmtN, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
+import { fmtN } from "../lib/format";
 import type {
   CompletenessArea,
   CompletenessCell,
@@ -72,14 +74,16 @@ export function Completeness() {
   const count = (s: CompletenessStatus) => cells.filter((c) => c.status === s).length;
   return (
     <div className="embedded">
-      <div className={`callout${data.finished ? "" : " warn"} done-verdict`}>
-        <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of{" "}
-        {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial,{" "}
-        {fmtN(count("missing"))} missing
-        {count("unmeasured") ? `, ${fmtN(count("unmeasured"))} could not be measured` : ""}.{" "}
-        {data.finished
-          ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
-          : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
+      <div className="done-verdict">
+        <Banner tone={data.finished ? "ok" : "warn"}>
+          <b>{data.finished ? "Finished." : "Not finished."}</b> {fmtN(count("complete"))} of{" "}
+          {fmtN(cells.length)} cells complete, {fmtN(count("partial"))} partial,{" "}
+          {fmtN(count("missing"))} missing
+          {count("unmeasured") ? `, ${fmtN(count("unmeasured"))} could not be measured` : ""}.{" "}
+          {data.finished
+            ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
+            : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}
+        </Banner>
       </div>
       <Panel
         flush
@@ -140,8 +144,8 @@ export function Completeness() {
         <AreaPanel key={a.id} area={a} columns={columns} publicOnly={data.public_token} />
       ))}
       <p className="faint shared-read">
-        Newest run {data.as_of ? ago(ms(data.as_of), now) : "unknown"}; read{" "}
-        {ago(ms(data.read), now)}. Runs daily at 06:23 UTC. Kept for ten minutes.
+        Newest run {data.as_of ? relative(parse(data.as_of), now) : "unknown"}; read{" "}
+        {relative(parse(data.read), now)}. Runs daily at 06:23 UTC. Kept for ten minutes.
       </p>
     </div>
   );

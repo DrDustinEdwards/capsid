@@ -1,5 +1,6 @@
+import { Banner } from "capsomer/react/banner";
 import type { Kind } from "../lib/derive";
-import { age, utc, ms, ago } from "../lib/format";
+import { parse, relative, span, utc } from "capsomer/behavior/time";
 import type {
   ClaimsGroup,
   ClaimsAgreementCounts,
@@ -36,7 +37,7 @@ export function wait(msValue: number | null) {
   return msValue === null ? (
     <None what="no wait" />
   ) : (
-    <span className="num">{age(0, msValue)}</span>
+    <span className="num">{span(msValue - 0)}</span>
   );
 }
 
@@ -166,10 +167,10 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
         <div className="body">
           <p>{job.title}</p>
           {data.truncated.length > 0 && (
-            <div className="callout warn" role="status">
+            <Banner tone="warn">
               Cut at {data.limit} rows each: {data.truncated.join(", ")}. The tool's export reads
               every row.
-            </div>
+            </Banner>
           )}
           {data.outcome === null && (
             <p className="faint">No outcome recorded: the job has not completed or failed.</p>
@@ -195,11 +196,13 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
             return (
               <div key={c.id} className="claim" data-claim={c.id}>
                 <div className="body">
-                  <dl className="kv">
+                  <dl className="cap-detail-record">
                     <dt>Claim</dt>
                     <dd className="mono">
                       #{c.id} · {c.action} · {c.agent} ·{" "}
-                      <span title={utc(ms(c.recorded_at))}>{ago(ms(c.recorded_at), now)}</span>
+                      <span title={utc(parse(c.recorded_at))}>
+                        {relative(parse(c.recorded_at), now)}
+                      </span>
                     </dd>
                     <dt>Stated</dt>
                     <dd className="mono">
@@ -285,8 +288,8 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
               <tbody>
                 {data.touches.map((t) => (
                   <tr key={t.id} data-row="">
-                    <td className="num" data-label="When" title={utc(ms(t.at))}>
-                      {ago(ms(t.at), now)}
+                    <td className="num" data-label="When" title={utc(parse(t.at))}>
+                      {relative(parse(t.at), now)}
                     </td>
                     <td className="mono" data-label="Kind">
                       {t.kind}

@@ -211,7 +211,7 @@ test("PLANT: a scheduled task that failed or went quiet is a problem; a backup i
     rows.map((r) => [r.sev, r.title, r.sub]),
     [
       ["crit", "Backup: its last run threw", "backup reason"],
-      ["warn", "Watcher pass has not run for 1m", "watcher reason"],
+      ["warn", "Watcher pass has not run for 1 minute", "watcher reason"],
     ],
   );
 });

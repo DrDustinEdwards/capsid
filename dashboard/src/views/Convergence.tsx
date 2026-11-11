@@ -1,8 +1,9 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchConvergence, useAnswer, type Load } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
 import type { ConvergenceCheck, ConvergenceSite, PortalConvergence } from "../types";
 import { St } from "../ui/icons";
 
@@ -35,9 +36,7 @@ export function Convergence({ ns }: { ns: string }) {
     return (
       <Panel flush title="Site sync" id="convergence" section="Site sync">
         {load.error ? (
-          <div className="callout crit" role="alert">
-            Could not read site sync: {load.error}
-          </div>
+          <Alert tone="crit">Could not read site sync: {load.error}</Alert>
         ) : (
           <div className="loading" role="status">
             <Spinner label="Reading each site's operator API..." />
@@ -49,10 +48,10 @@ export function Convergence({ ns }: { ns: string }) {
   return (
     <>
       {load.error && (
-        <div className="callout crit" role="alert">
+        <Alert tone="crit">
           Could not read site sync again: {load.error}. Showing the read from{" "}
           {data.generated.slice(11, 16)} UTC.
-        </div>
+        </Alert>
       )}
       {sites.map((s) => (
         <SitePanel key={s.namespace} site={s} loading={load.loading} reread={reread} />
@@ -88,23 +87,23 @@ function SitePanel({
       section="Operator API"
       src={
         <>
-          {`read ${ago(ms(site.read_at), now)} · `}
-          <button type="button" className="btn" disabled={loading} onClick={reread}>
+          {`read ${relative(parse(site.read_at), now)} · `}
+          <button type="button" className="cap-btn" disabled={loading} onClick={reread}>
             {loading ? "Reading..." : "Read again"}
           </button>
         </>
       }
     >
       <div className="body stack-gap" data-convergence={site.namespace}>
-        {site.problem && <div className="callout warn">{site.problem}</div>}
+        {site.problem && <Banner tone="warn">{site.problem}</Banner>}
         {op && !op.secret_set && (
-          <div className="callout warn">
+          <Banner tone="warn">
             The Capsid Worker secret <span className="mono">{op.auth_var}</span> is not set, so
             Capsid calls nothing on this site. The seat sets it with wrangler secret put.
-          </div>
+          </Banner>
         )}
         {op && (
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Operator API</dt>
             <dd className="mono">
               {site.origin}
@@ -129,7 +128,7 @@ function SitePanel({
                       <span className="mono">{tool}</span>{" "}
                       <button
                         type="button"
-                        className="btn"
+                        className="cap-btn"
                         disabled={!op.secret_set}
                         onClick={() => run(tool)}
                       >
@@ -150,11 +149,11 @@ function SitePanel({
         <div className="body stack-gap">
           <h3 className="conv-h">Operator sync_status</h3>
           {site.status.error ? (
-            <div className="callout">
+            <Banner tone="neutral">
               <St kind="nodata">Not read</St> {site.status.error}
-            </div>
+            </Banner>
           ) : (
-            <dl className="kv">
+            <dl className="cap-detail-record">
               {site.status.fields.map((f) => (
                 <FieldRow key={f.key} k={f.key} v={f.value} />
               ))}
@@ -177,7 +176,7 @@ function SitePanel({
                   <St kind="nodata">{r.error ? "failed" : "no verdict"}</St>
                 )}{" "}
                 <span className="faint">
-                  {ago(ms(r.at), now)} by {r.actor}
+                  {relative(parse(r.at), now)} by {r.actor}
                   {r.via ? ` (${r.via})` : ""}
                   {r.error ? `: ${r.error}` : ""}
                 </span>
@@ -243,7 +242,7 @@ function Checks({
                     <span className="mono">{c.repair}</span>
                     <button
                       type="button"
-                      className="btn"
+                      className="cap-btn"
                       disabled={!canRun}
                       onClick={() => run(c.repair as string)}
                     >
@@ -278,9 +277,9 @@ function Secrets({ secrets }: { secrets: NonNullable<ConvergenceSite["secrets"]>
     <div className="body stack-gap">
       {secrets.script ? <p className="faint mono">{secrets.script}</p> : null}
       {secrets.state !== "ok" ? (
-        <div className="callout">
+        <Banner tone="neutral">
           <St kind="nodata">Not read</St> {secrets.reason}
-        </div>
+        </Banner>
       ) : secrets.rows.length === 0 ? (
         <Empty kind="all-clear" title="The Worker has no secrets." />
       ) : (

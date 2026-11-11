@@ -2,7 +2,7 @@ import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchSharedCode, useAnswer } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "../types";
 import { St } from "../ui/icons";
 
@@ -39,7 +39,7 @@ export function SharedCode() {
           ))}
           {/* What was read, at the foot: a view's heading stands alone (design D13). */}
           <p className="faint shared-read">
-            Read {ago(ms(data.generated), now)} from {data.apps_read}{" "}
+            Read {relative(parse(data.generated), now)} from {data.apps_read}{" "}
             {data.apps_read === 1 ? "app" : "apps"}
             {data.apps_failed.length
               ? `; ${data.apps_failed.length} could not be read: ${data.apps_failed.map((a) => `${a.namespace} (${a.error})`).join("; ")}`

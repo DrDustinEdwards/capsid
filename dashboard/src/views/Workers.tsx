@@ -2,7 +2,7 @@ import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchResources, useAnswer } from "../lib/api";
-import { ago, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
 import type { ResourcesDoc } from "../types";
 import { St } from "../ui/icons";
 
@@ -224,7 +224,7 @@ function NotRead({ load }: { load: ReturnType<typeof useResources> }) {
 function ReadNote({ doc }: { doc: ResourcesDoc }) {
   const { now } = useApp();
   return (
-    <p className="faint shared-read">{`Read from Cloudflare ${ago(ms(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>
+    <p className="faint shared-read">{`Read from Cloudflare ${relative(parse(doc.read_at), now)}, nightly. Names only: no secret or variable value is ever read.`}</p>
   );
 }
 

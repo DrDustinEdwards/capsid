@@ -10,7 +10,8 @@ import {
   useAnswer,
   type Load,
 } from "../lib/api";
-import { ago, fmtN, ms, pct, shortId, utc } from "../lib/format";
+import { parse, relative, utc } from "capsomer/behavior/time";
+import { fmtN, pct, shortId } from "../lib/format";
 import type {
   PortalBuildLog,
   PortalSiteSearch,
@@ -131,7 +132,7 @@ function SearchTable({
 
 function Totals({ items }: { items: Array<[string, string]> }) {
   return (
-    <dl className="kv">
+    <dl className="cap-detail-record">
       {items.map(([k, v]) => (
         <Fragment key={k}>
           <dt>{k}</dt>
@@ -595,9 +596,9 @@ export function SiteBuilds({ ns }: { ns: string }) {
                           <tr key={id ?? i}>
                             <td
                               className="num"
-                              title={b.created_on ? utc(ms(b.created_on)) : undefined}
+                              title={b.created_on ? utc(parse(b.created_on)) : undefined}
                             >
-                              {b.created_on ? ago(ms(b.created_on), now) : ""}
+                              {b.created_on ? relative(parse(b.created_on), now) : ""}
                             </td>
                             <td>
                               <St kind={st.kind}>{st.label}</St>
@@ -609,7 +610,7 @@ export function SiteBuilds({ ns }: { ns: string }) {
                               {id && (
                                 <button
                                   type="button"
-                                  className="btn"
+                                  className="cap-btn"
                                   aria-expanded={open === id}
                                   aria-label={`${open === id ? "Hide" : "Show"} the log of build ${shortId(id)}`}
                                   onClick={() => setOpen(open === id ? null : id)}

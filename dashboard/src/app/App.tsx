@@ -1,3 +1,4 @@
+import { Alert } from "capsomer/react/banner";
 import {
   Suspense,
   lazy,
@@ -24,7 +25,7 @@ import {
   useOpsFeed,
 } from "../lib/api";
 import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
-import { ago, ms, portalNow, utc } from "../lib/format";
+import { parse, relative, serverNow, utc } from "capsomer/behavior/time";
 import {
   RAIL_PREF,
   THEME_PREF,
@@ -169,23 +170,23 @@ function Freshness({
     );
   // Server times against the server's clock; the next poll against the browser's,
   // since the browser schedules it.
-  const now = portalNow(clientNow, skew, ms(feed.live.generated));
+  const now = serverNow(clientNow, skew, parse(feed.live.generated));
   const snap = feed.snapshot;
   const stale = passStale(snap, now);
   const frac = Math.max(0, Math.min(1, (nextPollAt - clientNow) / POLL_MS));
   const title = snap
-    ? `Live data read ${utc(ms(feed.live.generated))}. Site data from the watcher pass at ${utc(ms(snap.pass_at))} (every ${snap.cadence_min} min). Stale after ${2 * snap.cadence_min} min.`
-    : `Live data read ${utc(ms(feed.live.generated))}. The watcher has not written its first pass yet.`;
+    ? `Live data read ${utc(parse(feed.live.generated))}. Site data from the watcher pass at ${utc(parse(snap.pass_at))} (every ${snap.cadence_min} min). Stale after ${2 * snap.cadence_min} min.`
+    : `Live data read ${utc(parse(feed.live.generated))}. The watcher has not written its first pass yet.`;
   return (
     <div className={`fresh${stale ? " stale" : ""}`} title={title}>
       <FreshRing frac={frac} stale={stale} />
       <span>
-        Updated <b>{ago(ms(feed.live.generated), now)}</b>
+        Updated <b>{relative(parse(feed.live.generated), now)}</b>
       </span>
       <span className="long">
         ·{" "}
         {snap
-          ? `${hasSites(feed) ? "sites from pass" : "watcher pass"} ${ago(ms(snap.pass_at), now)}`
+          ? `${hasSites(feed) ? "sites from pass" : "watcher pass"} ${relative(parse(snap.pass_at), now)}`
           : "no watcher pass yet"}
       </span>
     </div>
@@ -223,9 +224,9 @@ export function App() {
   const [skew, setSkew] = useState(0);
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect -- the skew is the browser's clock against the feed's stamp, taken when a feed arrives; it is read from the clock, not derived from props
-    if (feed) setSkew(ms(feed.live.generated) - Date.now());
+    if (feed) setSkew(parse(feed.live.generated) - Date.now());
   }, [feed]);
-  const now = portalNow(tick, skew, feed ? ms(feed.live.generated) : 0);
+  const now = serverNow(tick, skew, feed ? parse(feed.live.generated) : 0);
   const [filters, setFiltersState] = useState<Filters>({ q: "", range: "7d" });
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
@@ -242,7 +243,6 @@ export function App() {
   const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
-  const tipRef = useRef<HTMLDivElement>(null);
 
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null);
 
@@ -408,10 +408,10 @@ export function App() {
     }
     if (r.kind === "signed-out") return signOut();
     if (r.kind === "limited") {
-      const at = r.allowedAt ?? (feed?.refresh_allowed_at ? ms(feed.refresh_allowed_at) : null);
+      const at = r.allowedAt ?? (feed?.refresh_allowed_at ? parse(feed.refresh_allowed_at) : null);
       return say(
         at
-          ? `Refresh is rate limited. The next is allowed ${ago(at)} (${utc(at).slice(11)}).`
+          ? `Refresh is rate limited. The next is allowed ${relative(at)} (${utc(at).slice(11)}).`
           : "Refresh is rate limited. Try again shortly.",
       );
     }
@@ -441,7 +441,6 @@ export function App() {
   const setRail = useCallback((next: boolean) => {
     setRailCollapsed(next);
     writePref(RAIL_PREF, next ? "collapsed" : "expanded");
-    tipRef.current?.classList.remove("on");
   }, []);
   const toggleRail = useCallback(() => setRail(!railRef.current), [setRail]);
 
@@ -530,50 +529,6 @@ export function App() {
       setSheetOpener(null);
     };
   }, [views]);
-
-  // Tooltips (data-tip): the uptime ticks, and the collapsed side menu. Shown on pointer
-  // hover and on keyboard focus. data-tip-side="right" puts the tip beside the element
-  // instead of above it.
-  useEffect(() => {
-    const tip = tipRef.current;
-    if (!tip) return;
-    const show = (el: HTMLElement | null | undefined) => {
-      if (!el) return tip.classList.remove("on");
-      tip.textContent = el.dataset.tip ?? "";
-      tip.classList.add("on");
-      const r = el.getBoundingClientRect();
-      const tw = tip.offsetWidth;
-      const th = tip.offsetHeight;
-      if (el.dataset.tipSide === "below") {
-        // The top bar's buttons: a tip above them would leave the window or cover them.
-        tip.style.left = `${Math.max(8, Math.min(window.innerWidth - tw - 8, r.left + r.width / 2 - tw / 2))}px`;
-        tip.style.top = `${r.bottom + 6}px`;
-        return;
-      }
-      if (el.dataset.tipSide === "right") {
-        // Clear of the menu's edge, not over it.
-        const edge = el.closest("nav")?.getBoundingClientRect().right ?? r.right;
-        tip.style.left = `${Math.min(window.innerWidth - tw - 8, Math.max(r.right, edge) + 6)}px`;
-        tip.style.top = `${Math.max(8, r.top + r.height / 2 - th / 2)}px`;
-        return;
-      }
-      tip.style.left = `${Math.max(8, Math.min(window.innerWidth - tw - 8, r.left + r.width / 2 - tw / 2))}px`;
-      tip.style.top = `${Math.max(8, r.top - th - 8)}px`;
-    };
-    const over = (e: MouseEvent) =>
-      show((e.target as Element).closest?.<HTMLElement>("[data-tip]"));
-    const focus = (e: FocusEvent) =>
-      show(e.target instanceof Element ? e.target.closest<HTMLElement>("[data-tip]") : null);
-    const blur = () => tip.classList.remove("on");
-    document.addEventListener("mouseover", over);
-    document.addEventListener("focusin", focus);
-    document.addEventListener("focusout", blur);
-    return () => {
-      document.removeEventListener("mouseover", over);
-      document.removeEventListener("focusin", focus);
-      document.removeEventListener("focusout", blur);
-    };
-  }, []);
 
   // A stop from the command menu presses its switch on Namespaces, so the switch's own
   // reason field opens and the change goes the way a click would send it. It waits for
@@ -712,7 +667,7 @@ export function App() {
               ? "You signed out of Capsid Portal in this browser. Signing in again may not ask for your email if your Access session is still open."
               : "Your Portal session ended, so the feed stopped answering."}
           </p>
-          <a className="btn" href={APP_URL}>
+          <a className="cap-btn" href={APP_URL}>
             {leftByChoice ? "Sign in again" : "Reload to sign in"}
           </a>
         </div>
@@ -722,9 +677,7 @@ export function App() {
     content = (
       <div className="page">
         {error ? (
-          <div className="callout crit" role="alert">
-            Could not read the feed: {error}. It retries every minute.
-          </div>
+          <Alert tone="crit">Could not read the feed: {error}. It retries every minute.</Alert>
         ) : (
           <div className="loading" role="status">
             <Spinner label="Reading the feed..." />
@@ -738,7 +691,7 @@ export function App() {
         {error && (
           <div className="banner" role="alert">
             Could not read the feed: {error}. Showing the last good read from{" "}
-            {ago(ms(feed.live.generated), now)}.
+            {relative(parse(feed.live.generated), now)}.
           </div>
         )}
         <Suspense
@@ -900,7 +853,7 @@ export function App() {
             {message.undo && (
               <button
                 type="button"
-                className="btn"
+                className="cap-btn"
                 disabled={message.busy}
                 onClick={() => void undo(message)}
               >
@@ -909,7 +862,7 @@ export function App() {
             )}
             <button
               type="button"
-              className="btn"
+              className="cap-btn"
               disabled={message.busy}
               onClick={() => {
                 setMessages((all) => all.filter((x) => x.id !== message.id));
@@ -921,7 +874,6 @@ export function App() {
           </div>
         ))}
       </div>
-      <div className="tip" ref={tipRef} aria-hidden="true" />
     </>
   );
 }

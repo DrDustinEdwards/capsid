@@ -1,10 +1,11 @@
+import { Alert } from "capsomer/react/banner";
 import { useState } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 import { useApp } from "../app/ctx";
 import { fetchMaintenance, useAnswer } from "../lib/api";
 import type { Kind } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
 import type { MaintenanceRule, OpsMaintenanceItem, PortalMaintenance } from "../types";
 import { St } from "../ui/icons";
 
@@ -67,18 +68,14 @@ export function Maintenance() {
       count={data?.generated ? items.length : undefined}
       src={
         <>
-          {data?.generated ? `daily pass ${ago(ms(data.generated), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
+          {data?.generated ? `daily pass ${relative(parse(data.generated), now)} · ` : ""}
+          <button type="button" className="cap-btn" disabled={load.loading} onClick={load.reread}>
             {load.loading ? "Reading..." : "Read again"}
           </button>
         </>
       }
     >
-      {load.error && (
-        <div className="callout crit" role="alert">
-          Could not read the Maintenance list: {load.error}
-        </div>
-      )}
+      {load.error && <Alert tone="crit">Could not read the Maintenance list: {load.error}</Alert>}
       {!data && load.loading ? (
         <div className="loading" role="status">
           <Spinner label="Reading the Maintenance list..." />
@@ -96,7 +93,7 @@ export function Maintenance() {
             <div className="att-more">
               <button
                 type="button"
-                className="linkbtn"
+                className="cap-link-btn"
                 aria-expanded={more}
                 onClick={() => setMore(!more)}
               >

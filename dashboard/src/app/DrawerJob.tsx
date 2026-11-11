@@ -1,9 +1,10 @@
+import { Alert, Banner } from "capsomer/react/banner";
 import type { ReactNode } from "react";
 import { jobBadge, resumeCall } from "../lib/derive";
-import { ago, ms } from "../lib/format";
+import { parse, relative } from "capsomer/behavior/time";
 import type { OpsJob, OpsAgent } from "../types";
 import { Pill, St } from "../ui/icons";
-import { When } from "../ui/When";
+import { Time } from "capsomer/react/time";
 import { Danger, jobMeta } from "../views/shared";
 import { useApp, type ConfirmRequest } from "./ctx";
 
@@ -28,7 +29,14 @@ export function Head({
         <div className="mono muted">{sub}</div>
       </div>
       {badge}
-      <button type="button" className="btn iconbtn" data-close aria-label="Close" onClick={onClose}>
+      <button
+        type="button"
+        className="cap-btn"
+        data-icon-only
+        data-close
+        aria-label="Close"
+        onClick={onClose}
+      >
         ×
       </button>
     </header>
@@ -43,7 +51,7 @@ function CopyBlock({ id, text, label }: { id: string; text: string; label: strin
         {text}
       </div>
       <div className="toolbar mt8">
-        <button type="button" className="btn" onClick={() => copy(text)}>
+        <button type="button" className="cap-btn" onClick={() => copy(text)}>
           {label}
         </button>
       </div>
@@ -78,7 +86,8 @@ function JobControls({ j }: { j: OpsJob }) {
         <div className="toolbar">
           <button
             type="button"
-            className="btn primary"
+            className="cap-btn"
+            data-variant="primary"
             onClick={() =>
               confirm({
                 action: "unpark_job",
@@ -149,7 +158,12 @@ function JobControls({ j }: { j: OpsJob }) {
       <div>
         <p className="section-title">Change it</p>
         <div className="toolbar">
-          <button type="button" className="btn primary" onClick={() => confirm(primary.req)}>
+          <button
+            type="button"
+            className="cap-btn"
+            data-variant="primary"
+            onClick={() => confirm(primary.req)}
+          >
             {primary.label}
           </button>
         </div>
@@ -166,13 +180,18 @@ function JobControls({ j }: { j: OpsJob }) {
       </div>
       {more.length > 0 && (
         <details className="more-actions">
-          <summary className="btn">
+          <summary className="cap-btn">
             <span className="chev" aria-hidden="true" />
             More actions
           </summary>
           <div className="toolbar mt8">
             {more.map((m) => (
-              <button key={m.label} type="button" className="btn" onClick={() => confirm(m.req)}>
+              <button
+                key={m.label}
+                type="button"
+                className="cap-btn"
+                onClick={() => confirm(m.req)}
+              >
                 {m.label}
               </button>
             ))}
@@ -190,7 +209,8 @@ function JobControls({ j }: { j: OpsJob }) {
       <Danger note="Ends it as failed, against its holder.">
         <button
           type="button"
-          className="btn danger"
+          className="cap-btn"
+          data-variant="danger"
           onClick={() =>
             confirm({ action: "fail_job", params, title: `Mark job failed: ${j.title}` })
           }
@@ -209,7 +229,8 @@ export function AgentControls({ a }: { a: OpsAgent }) {
     <Danger note="Ends this credential. The preview lists what else it changes.">
       <button
         type="button"
-        className="btn danger"
+        className="cap-btn"
+        data-variant="danger"
         onClick={() =>
           confirm({
             action: "revoke_agent",
@@ -241,14 +262,16 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
         {j.status === "parked" && (
           <div>
             <p className="section-title">Parked until</p>
-            <div className="callout">{j.parked_reason ?? "No reason was recorded."}</div>
+            <Banner tone="neutral">{j.parked_reason ?? "No reason was recorded."}</Banner>
           </div>
         )}
         {j.status === "blocked" && j.question && (
           <div>
             <p className="section-title">Asks you</p>
-            <div className="callout warn" data-question="">
-              {(j.waits_on ?? "No question was recorded.").replace(/^QUESTION:\s*/, "")}
+            <div data-question="">
+              <Banner tone="warn">
+                {(j.waits_on ?? "No question was recorded.").replace(/^QUESTION:\s*/, "")}
+              </Banner>
             </div>
             <p className="faint small">
               Answer it with the button below: your reason and note go to its driver as the resume
@@ -260,14 +283,16 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
           <>
             <div>
               <p className="section-title">Waits on</p>
-              <div className="callout warn">{j.waits_on ?? "No reason was recorded."}</div>
+              <Banner tone="warn">{j.waits_on ?? "No reason was recorded."}</Banner>
             </div>
             <div>
               <p className="section-title">Run this</p>
               {j.command_signature === "mismatch" ? (
-                <div className="callout crit" data-signature="mismatch">
-                  Withheld. This command's signature does not match, so it was changed after the
-                  block wrote it. Do not run anything from this job; tell the seat.
+                <div data-signature="mismatch">
+                  <Alert tone="crit">
+                    Withheld. This command's signature does not match, so it was changed after the
+                    block wrote it. Do not run anything from this job; tell the seat.
+                  </Alert>
                 </div>
               ) : j.command ? (
                 <>
@@ -296,7 +321,7 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
         <JobControls j={j} />
         <div>
           <p className="section-title">Record</p>
-          <dl className="kv">
+          <dl className="cap-detail-record">
             <dt>Status</dt>
             <dd>
               <St kind={k.kind}>{k.label}</St> <span className="faint">{jobMeta(j, now)}</span>
@@ -307,11 +332,11 @@ export function JobBody({ j, onClose }: { j: OpsJob; onClose: () => void }) {
             <dd className="mono">{j.posted_by}</dd>
             <dt>Created</dt>
             <dd>
-              {ago(ms(j.created_at), now)} <When t={ms(j.created_at)} />
+              {relative(parse(j.created_at), now)} <Time at={j.created_at} format="exact" />
             </dd>
             <dt>Last change</dt>
             <dd>
-              {ago(ms(j.updated_at), now)} <When t={ms(j.updated_at)} />
+              {relative(parse(j.updated_at), now)} <Time at={j.updated_at} format="exact" />
             </dd>
             {j.claimed_by && (
               <>

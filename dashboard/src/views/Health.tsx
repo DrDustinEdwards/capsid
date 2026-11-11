@@ -1,9 +1,10 @@
 import { Suspense, lazy, type ReactNode } from "react";
-import { Link } from "../lib/router";
+import { Link, tabLink, useSearch } from "../lib/router";
 import { HEALTH_TABS, placePath, tabOf, useApp, type HealthTab } from "../app/ctx";
 import { WAITING_KINDS, attentionGroups, siteScripts, type AttentionRow } from "../lib/derive";
 import { St } from "../ui/icons";
-import { PageTabs, useTabParam } from "../ui/pagetabs";
+import { PageTabs } from "capsomer/react/tabs";
+import { tabParam } from "capsomer/behavior/tabs";
 import { Backups } from "./Backups";
 import { DefaultBranches } from "./Ci";
 import { Incidents, ScheduledTasks } from "./Incidents";
@@ -25,13 +26,21 @@ const Maintenance = lazy(() => import("./Maintenance").then((m) => ({ default: m
 const NAMED = 3;
 
 export function Health() {
-  const tab: HealthTab = tabOf(HEALTH_TABS, useTabParam()) ?? HEALTH_TABS[0].id;
+  const search = useSearch();
+  const tab: HealthTab = tabOf(HEALTH_TABS, tabParam(search)) ?? HEALTH_TABS[0].id;
   return (
     <div className="page">
       <PageHead title="Health" />
       <Verdict />
       <Overview />
-      <PageTabs label="Health" path="/health" tabs={HEALTH_TABS} current={tab} />
+      <PageTabs
+        aria-label="Health"
+        path="/health"
+        tabs={HEALTH_TABS}
+        current={tab}
+        search={search}
+        renderLink={tabLink}
+      />
       <div className="embedded" id={tab} data-tab-panel={tab}>
         <TabPanel tab={tab} />
       </div>
@@ -96,7 +105,11 @@ function Verdict() {
         {rest > 0 && (
           <>
             {" and "}
-            <button type="button" className="linkbtn" onClick={() => open("view:needs#attention")}>
+            <button
+              type="button"
+              className="cap-link-btn"
+              onClick={() => open("view:needs#attention")}
+            >
               {rest} more
             </button>
           </>
@@ -113,7 +126,7 @@ function ProblemLink({ row }: { row: AttentionRow }) {
   const to = ref.startsWith("view:") ? placePath(ref.slice(5)) : null;
   if (to && !to.includes("#")) return <Link href={to}>{row.title}</Link>;
   return (
-    <button type="button" className="linkbtn" onClick={() => open(ref)}>
+    <button type="button" className="cap-link-btn" onClick={() => open(ref)}>
       {row.title}
     </button>
   );
