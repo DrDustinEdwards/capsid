@@ -22,6 +22,7 @@ import type {
 } from "../types";
 import { errorTotals } from "../ui/charts";
 import { St } from "../ui/icons";
+import { formatMoney } from "@dustinedwards/site-runtime/money";
 
 // The Portal's charts drawn with Enarratio's primitives (docs/design/design-portal-evaluation.md
 // section 3; ruled 2026-10-09, DECIDE 6 and 7): 1 minutes of Dustin per week (Needs you),
@@ -31,7 +32,7 @@ import { St } from "../ui/icons";
 // queue), 5 (claims against verified), 6 (cost), 7 (merges) and 9 (errors and deploys) are
 // Enarratio's bar, line and area charts from enarratio/lite, which drop Observable Plot and
 // fit the chunk budget. This module loads with the page that shows a chart, never in the
-// initial bundle. Each is Enarratio's whole figure (title, finding, notes, source, "Show data")
+// initial bundle. Each is Enarratio's whole figure (title, finding, notes, source, and a toolbar with the data download)
 // in Capsomer's chart frame, which redraws it to its width.
 
 // A later read that failed keeps the last answer on screen; this says so, so the failure is
@@ -387,10 +388,10 @@ export function CostChart() {
     y: "usd",
     xLabel: "Week starting",
     yLabel: "Model spend (USD)",
-    formatValue: (v: number) => `$${v.toFixed(2)}`,
+    formatValue: (v: number) => formatMoney(v, "usd", { scale: 0 }),
     height: 240,
     title: "What does the work cost?",
-    alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, $${now.usd.toFixed(2)} this week`}. Weeks with no recorded cost are gaps.`,
+    alt: `Model spend per week for the last ${weeks.length} weeks${now.usd === null ? ", none recorded this week" : `, ${formatMoney(now.usd, "usd", { scale: 0 })} this week`}. Weeks with no recorded cost are gaps.`,
     caption: "A week with no job outcome carrying a cost is a gap, not a free week.",
     source: { name: "Job outcomes, telemetry cost, an estimate" },
   } as const;

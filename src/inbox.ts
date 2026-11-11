@@ -9,6 +9,7 @@ import type { MergeClass } from "./merge-class";
 import { checkWords } from "./check-words";
 import { prsSettled, readStaleCache, type StalePrCache } from "./stale-jobs";
 import { readStepCache, stepsSeen, type StaleStepCache } from "./manual-steps";
+import { severityOf as worstOf } from "capsomer/behavior/attention-list";
 
 // "WHAT NEEDS DUSTIN, PER APP" (job_84e901d8eb71, Dustin 2026-10-06). The shared admin
 // shell shows a badge per app and a combined inbox count; Capsid answers it once, so no
@@ -44,10 +45,9 @@ const WAITING_ON_PERSON: ReadonlySet<InboxKind> = new Set([
   "proposal",
 ]);
 
-/** The worst severity of a set of items. */
+/** The worst severity of a set of items (Capsomer's severityOf, with Capsid's kinds). */
 export function severityOf(items: readonly Pick<InboxItem, "kind">[]): InboxSeverity {
-  if (items.some((i) => WAITING_ON_PERSON.has(i.kind))) return "needs-you";
-  return items.length > 0 ? "failing" : "none";
+  return worstOf(items, WAITING_ON_PERSON);
 }
 
 // What answering it takes, by the class the tick gave it (src/merge-class.ts).

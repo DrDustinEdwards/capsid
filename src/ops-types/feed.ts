@@ -1,3 +1,8 @@
+import type {
+  Inbox as CapsomerInbox,
+  InboxApp as CapsomerInboxApp,
+  InboxItem as CapsomerInboxItem,
+} from "capsomer/behavior/attention-list";
 import type { OpsSiteConfig, OpsPackageConfig, OpsSnapshot } from "./sites";
 
 export type OpsJobStatus =
@@ -208,8 +213,10 @@ export interface CompletenessView {
 }
 
 // What needs Dustin, per app (src/inbox.ts): GET /ops/inbox, capsid_read_status action
-// status's needs_dustin, and the Portal's Needs you page all carry this one shape.
-export type InboxSeverity = "needs-you" | "failing" | "none";
+// status's needs_dustin, and the Portal's Needs you page all carry this one shape: Capsomer's
+// inbox feed (attention-list), with Capsid's kinds. An item's `job` is set for a blocked job or a
+// question, so the Portal opens the job's panel when there is no link.
+export type { InboxSeverity } from "capsomer/behavior/attention-list";
 // "proposal": a merge unit promotion, demotion or suspension (src/merge-units.ts).
 export type InboxKind =
   | "blocked-job"
@@ -219,34 +226,9 @@ export type InboxKind =
   | "site-down"
   | "report"
   | "proposal";
-
-export interface InboxItem {
-  title: string;
-  kind: InboxKind;
-  /** Where to act on it, or null when there is no page for it. */
-  link: string | null;
-  /** When it started waiting, ISO. The shell shows the age. */
-  since: string;
-  /** The job it is, for a blocked job or a question, so the Portal opens the job's panel
-   *  when there is no link. Absent on every other kind. */
-  job?: string;
-}
-
-export interface InboxApp {
-  namespace: string;
-  name: string;
-  count: number;
-  severity: InboxSeverity;
-  items: InboxItem[];
-}
-
-export interface Inbox {
-  generated: string;
-  /** Items across the apps this caller may read. */
-  count: number;
-  severity: InboxSeverity;
-  apps: InboxApp[];
-}
+export type InboxItem = CapsomerInboxItem<InboxKind>;
+export type InboxApp = CapsomerInboxApp<InboxKind>;
+export type Inbox = CapsomerInbox<InboxKind>;
 
 // One namespace's last seven days of auto-merge, the safety meter (src/merge-safety.ts).
 // approved: merges Dustin approved. bad_auto_7d: rollbacks and reverts of pull requests
