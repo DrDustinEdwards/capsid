@@ -38,6 +38,7 @@ import "capsomer/tabs.css";
 import "capsomer/banner.css";
 import "capsomer/button.css";
 import "capsomer/field.css";
+import "capsomer/repeater-field.css";
 import "capsomer/switch.css";
 import "capsomer/switch-reason.css";
 import "capsomer/meter.css";

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { RepeaterField } from "capsomer/react/repeater-field";
+import { Field as CapField, TextField } from "capsomer/react/field";
 import { useApp } from "../app/ctx";
 import type { PortalNamespace } from "../types";
 import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
@@ -12,10 +14,9 @@ import { Danger } from "./shared";
 
 export type ProjectEditing = { kind: "add" } | { kind: "edit"; n: PortalNamespace };
 
-type RepoDraft = { key: number; repo: string; label: string };
+type RepoDraft = { repo: string; label: string };
 
-let nextKey = 0;
-const draftRow = (repo = "", label = ""): RepoDraft => ({ key: nextKey++, repo, label });
+const draftRow = (repo = "", label = ""): RepoDraft => ({ repo, label });
 
 export function ProjectForm({
   editing,
@@ -36,11 +37,6 @@ export function ProjectForm({
   const [cascade, setCascade] = useState(false);
   const [policies, setPolicies] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
-
-  const edit = (key: number, patch: Partial<RepoDraft>) => (
-    setRows((all) => all.map((r) => (r.key === key ? { ...r, ...patch } : r))),
-    setHint(null)
-  );
 
   const submit = () => {
     const name = ns.trim();
@@ -138,54 +134,46 @@ export function ProjectForm({
           onChange={(e) => (setNs(e.target.value), setHint(null))}
         />
       </Field>
-      <fieldset className="full repos">
-        <legend className="section-title">Repos</legend>
-        <p className="faint note">
-          What an agent scoped to this project may reach through the repo tools. Exactly one is
-          labeled primary.
-        </p>
-        {rows.map((r, i) => (
-          <div className="repo-row" key={r.key} data-repo-row="">
-            <input
-              ref={!adding && i === 0 ? first : undefined}
-              className="field mono"
-              aria-label={`Repo ${i + 1}, as owner/name`}
-              placeholder="owner/name"
-              value={r.repo}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => edit(r.key, { repo: e.target.value })}
-            />
-            <input
-              className="field mono"
-              aria-label={`Label of repo ${i + 1}`}
-              placeholder="primary"
-              value={r.label}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => edit(r.key, { label: e.target.value })}
-            />
-            <button
-              type="button"
-              className="btn"
-              aria-label={`Remove repo ${i + 1}`}
-              disabled={rows.length === 1}
-              onClick={() => setRows((all) => all.filter((x) => x.key !== r.key))}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-        <div>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setRows((all) => [...all, draftRow()])}
-          >
-            Add a repo
-          </button>
-        </div>
-      </fieldset>
+      <div className="full">
+        <RepeaterField
+          legend="Repos"
+          help="What an agent scoped to this project may reach through the repo tools. Exactly one is labeled primary."
+          rows={rows}
+          onChange={(next) => (setRows(next), setHint(null))}
+          newRow={() => draftRow()}
+          rowLabel={(i) => `Repo ${i + 1}`}
+          addLabel="Add a repo"
+          min={1}
+        >
+          {(r, { set, index }) => (
+            <>
+              <CapField label="Owner/name">
+                {(control) => (
+                  <input
+                    {...control}
+                    ref={!adding && index === 0 ? first : undefined}
+                    className="cap-input mono"
+                    placeholder="owner/name"
+                    value={r.repo}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onChange={(e) => set({ repo: e.target.value })}
+                  />
+                )}
+              </CapField>
+              <TextField
+                className="mono"
+                label="Label"
+                placeholder="primary"
+                value={r.label}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => set({ label: e.target.value })}
+              />
+            </>
+          )}
+        </RepeaterField>
+      </div>
       {adding && (
         <p className="faint note full">
           No driver agent is minted here: a mint hands out a key, so it stays with the admin tools.
