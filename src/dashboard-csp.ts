@@ -17,6 +17,7 @@ import {
   generateNonce,
   type SitePolicy,
 } from "@dustinedwards/site-runtime/csp";
+import { TRUSTED_TYPES_NAMES } from "@dustinedwards/site-runtime/trusted-types";
 import { REPORT_URL } from "./security-headers";
 
 const POLICY: SitePolicy = {
@@ -40,6 +41,6 @@ export function dashboardCsp(nonce: string = generateNonce()): DashboardCsp {
   return {
     nonce,
     policy: buildContentSecurityPolicy(site).value,
-    reportOnly: buildStagedPolicy(site, { trustedTypes: true }).value,
+    reportOnly: buildStagedPolicy(site, { trustedTypes: TRUSTED_TYPES_NAMES }).value,
   };
 }
