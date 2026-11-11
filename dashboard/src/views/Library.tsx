@@ -2,6 +2,8 @@ import { parseDocParam } from "../lib/keys";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { Snippet } from "capsomer/react/search-results";
+import "capsomer/search-results.css";
 import { Link, useLocation, useSearch } from "../lib/router";
 import { routePath, useApp } from "../app/ctx";
 import { fetchLibrary, useAnswer } from "../lib/api";
@@ -56,16 +58,6 @@ function withJobLinks(text: string, back: string): ReactNode[] {
   }
   if (last < text.length) out.push(text.slice(last));
   return out;
-}
-
-/** FTS5's snippet, its matched words (between U+0002 and U+0003, which no document
- *  holds, so a bracket in the text is never taken for a match) in bold: no color needed,
- *  so it reads the same in both themes. */
-function Snippet({ text }: { text: string }) {
-  // oxlint-disable-next-line no-control-regex -- the delimiters are control characters on purpose
-  const parts = text.split(/\u0002([^\u0003]*)\u0003/g);
-  // split with one capture group: the odd entries are the matched words.
-  return <>{parts.map((p, i) => (i % 2 === 1 ? <strong key={i}>{p}</strong> : p))}</>;
 }
 
 export function Library() {
@@ -239,7 +231,7 @@ function Results({ data, now }: { data: Extract<PortalLibrary, { kind: "search" 
             <span className="faint">
               · {r.type} · {ago(ms(r.updated_at), now)}
             </span>
-            <div>
+            <div className="cap-search-snippet">
               <Snippet text={r.snippet} />
             </div>
           </li>

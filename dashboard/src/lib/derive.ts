@@ -1,3 +1,4 @@
+import { outcomeStatus } from "capsomer/behavior/status";
 import type {
   CiObservation,
   OpsAgent,
@@ -146,15 +147,22 @@ export function resumeCall(j: OpsJob): string {
 
 // ---- CI ---------------------------------------------------------------------
 
-const QUIET = new Set(["success", "skipped", "neutral"]);
+/** A run's conclusion as the status vocabulary: Capsomer's one reading (skipped is no data,
+ *  canceled and timed out are warnings, anything unknown failed), running while none yet. */
+export function outcomeKind(
+  conclusion: string | null | undefined,
+  labels?: Partial<Record<string, string>>,
+): { kind: Kind; label: string } {
+  const o = outcomeStatus(conclusion, labels);
+  return { kind: o.running ? "run" : o.tone === "info" ? "nodata" : o.tone, label: o.label };
+}
 
 export function ciState(c: CiObservation): { kind: Kind; label: string; red: boolean } {
   const l = c.latest;
   if (!l) return { kind: "nodata", label: "Could not read", red: false };
   if (l.conclusion == null) return { kind: "run", label: l.status.replace(/_/g, " "), red: false };
-  if (QUIET.has(l.conclusion))
-    return { kind: "ok", label: l.conclusion === "success" ? "Green" : l.conclusion, red: false };
-  return { kind: "crit", label: l.conclusion.replace(/_/g, " "), red: true };
+  const o = outcomeKind(l.conclusion, { success: "Green" });
+  return { ...o, red: o.kind === "crit" };
 }
 
 // ---- watcher staleness --------------------------------------------------------

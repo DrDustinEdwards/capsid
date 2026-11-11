@@ -1,8 +1,14 @@
 import { trendChart } from "./charts";
 import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
-import { ago, bytes, ms } from "../lib/format";
-import { OFFACCOUNT_LATE, OFFACCOUNT_STALE, offaccountState } from "../lib/derive";
+import { ago, ms } from "../lib/format";
+import { formatBytes } from "capsomer/behavior/format";
+import {
+  OFFACCOUNT_LATE,
+  OFFACCOUNT_STALE,
+  offaccountState,
+  outcomeKind,
+} from "../lib/derive";
 import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";
@@ -11,6 +17,12 @@ import { NoSnapshot } from "./shared";
 import { Spinner } from "capsomer/react/empty";
 import { fetchBackups, useAnswer } from "../lib/api";
 import type { SiteBackupRow } from "../types";
+
+/** A workflow run's conclusion as a status: Capsomer's one reading of it. */
+function Conclusion({ conclusion }: { conclusion: string | null }) {
+  const o = outcomeKind(conclusion, { success: "success", running: "running" });
+  return <St kind={o.kind}>{o.label}</St>;
+}
 
 // Chart 10, the retention slots, from GET /portal/api/trends; Enarratio loads with it.
 const BackupSlots = trendChart("BackupSlots");
@@ -89,7 +101,7 @@ export function Backups() {
                       if (!use || s.size_bytes === null) return <St kind="nodata">Not reported</St>;
                       return (
                         <>
-                          {bytes(s.size_bytes)} of {bytes(s.cap_bytes)} (
+                          {formatBytes(s.size_bytes)} of {formatBytes(s.cap_bytes)} (
                           {(use.fraction * 100).toFixed(use.fraction < 0.01 ? 2 : 0)}%){" "}
                           {use.warn && <St kind="warn">over half the cap</St>}
                         </>
@@ -151,13 +163,7 @@ export function Backups() {
                   <dd>
                     {o.last_run ? (
                       <>
-                        {o.last_run.conclusion === "success" ? (
-                          <St kind="ok">success</St>
-                        ) : o.last_run.conclusion ? (
-                          <St kind="crit">{o.last_run.conclusion}</St>
-                        ) : (
-                          <St kind="run">running</St>
-                        )}{" "}
+                        <Conclusion conclusion={o.last_run.conclusion} />{" "}
                         {o.last_run.url && (
                           <a href={o.last_run.url} target="_blank" rel="noopener noreferrer">
                             run
@@ -172,13 +178,7 @@ export function Backups() {
                   <dd>
                     {o.last_drill ? (
                       <>
-                        {o.last_drill.conclusion === "success" ? (
-                          <St kind="ok">success</St>
-                        ) : o.last_drill.conclusion ? (
-                          <St kind="crit">{o.last_drill.conclusion}</St>
-                        ) : (
-                          <St kind="run">running</St>
-                        )}{" "}
+                        <Conclusion conclusion={o.last_drill.conclusion} />{" "}
                         {o.last_drill.url && (
                           <a href={o.last_drill.url} target="_blank" rel="noopener noreferrer">
                             run

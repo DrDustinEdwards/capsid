@@ -2,14 +2,15 @@ import { heatStrip, timeline, type TimelineEvent } from "enarratio";
 import { areaChart } from "enarratio/lite/area";
 import { barChart } from "enarratio/lite/bar";
 import { lineChart } from "enarratio/lite/line";
-import { ChartFrame } from "capsomer/react/chart-frame";
+import { ChartFrame, ChartPanel } from "capsomer/react/chart-frame";
+import { drawWith } from "capsomer/behavior/chart-frame";
 import "capsomer/chart-frame.css";
 import { Panel } from "capsomer/react/panel";
-import type { ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, useAnswer } from "../lib/api";
 import { cfNoData, cfOk, ringOf, slotStart } from "../lib/derive";
-import { DAY, HOUR, MIN, SLOT_MS, fmtN, ms, pct, shortId, utc } from "../lib/format";
+import { DAY, HOUR, MIN, SLOT_MS, ms, pct, shortId, utc } from "../lib/format";
+import { formatCount } from "capsomer/behavior/format";
 import { useTrends } from "../lib/trends";
 import type {
   ClaimsAgreement,
@@ -38,16 +39,6 @@ import { St } from "../ui/icons";
 // not hidden behind numbers that are no longer current.
 function Stale({ error }: { error: string | null }) {
   return error ? <p className="faint">Not refreshed: {error}</p> : null;
-}
-
-// A chart that is a panel of its own: the panel's surface and address, with the chart's title
-// and source in Enarratio's figure rather than a second header.
-function ChartPanel({ id, children }: { id: string; children: ReactNode }) {
-  return (
-    <section className="cap-panel" id={id}>
-      <div className="cap-panel-body body">{children}</div>
-    </section>
-  );
 }
 
 // ---- 1. Minutes of Dustin per week ------------------------------------------------------
@@ -105,7 +96,7 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
   return (
     <ChartFrame
       className="minutes-chart"
-      draw={(width, fit) => lineChart({ ...opts, width, ...fit })}
+      draw={drawWith(lineChart, opts)}
     />
   );
 }
@@ -218,7 +209,7 @@ export function WaitingChart() {
   return (
     <ChartFrame
       className="wait-chart"
-      draw={(width, fit) => barChart({ ...opts, width, ...fit })}
+      draw={drawWith(barChart, opts)}
     />
   );
 }
@@ -252,10 +243,7 @@ export function QueueChart() {
     source: { name: "D1 jobs, 14 days" },
   } as const;
   return (
-    <ChartPanel id="queue-trend">
-      <Stale error={error} />
-      <ChartFrame draw={(width, fit) => areaChart({ ...opts, width, ...fit })} />
-    </ChartPanel>
+    <ChartPanel id="queue-trend" stale={error} draw={drawWith(areaChart, opts)} />
   );
 }
 
@@ -296,7 +284,7 @@ export function ProjectChart({ counts }: { counts: ProjectCounts[] }) {
     alt: `Live jobs per project, ${counts.length} ${counts.length === 1 ? "project" : "projects"}: ${sum("blocked")} blocked, ${sum("running")} running, ${sum("queued")} queued.`,
     source: { name: "D1 jobs, the live window" },
   } as const;
-  return <ChartFrame draw={(width, fit) => barChart({ ...opts, width, ...fit })} />;
+  return <ChartFrame draw={drawWith(barChart, opts)} />;
 }
 
 // ---- 5. Does each agent's claim match what was verified? -----------------------------------
@@ -351,22 +339,21 @@ export function AgreementChart({ groups }: { groups: ClaimsGroup[] }) {
     source: { name: "Every check, summed per agent" },
   } as const;
   return (
-    <ChartPanel id="claim-agreement">
-      {/* Columns where they fit, at most 900 px wide; under NARROW px, bars across, one band per
-          agent, so a phone reads it without scrolling sideways (live chart check C12, 2026-11-03). */}
-      <ChartFrame
-        draw={(width) =>
-          width < NARROW
-            ? barChart({
-                ...opts,
-                width,
-                orientation: "horizontal",
-                height: 56 + agents * AGREEMENTS.length * 16,
-              })
-            : barChart({ ...opts, width: Math.min(900, width), height: 260 })
-        }
-      />
-    </ChartPanel>
+    // Columns where they fit, at most 900 px wide; under NARROW px, bars across, one band per
+    // agent, so a phone reads it without scrolling sideways (live chart check C12, 2026-11-03).
+    <ChartPanel
+      id="claim-agreement"
+      draw={(width) =>
+        width < NARROW
+          ? barChart({
+              ...opts,
+              width,
+              orientation: "horizontal",
+              height: 56 + agents * AGREEMENTS.length * 16,
+            })
+          : barChart({ ...opts, width: Math.min(900, width), height: 260 })
+      }
+    />
   );
 }
 
@@ -395,10 +382,7 @@ export function CostChart() {
     source: { name: "Job outcomes, telemetry cost, an estimate" },
   } as const;
   return (
-    <ChartPanel id="cost-trend">
-      <Stale error={error} />
-      <ChartFrame draw={(width, fit) => lineChart({ ...opts, width, ...fit })} />
-    </ChartPanel>
+    <ChartPanel id="cost-trend" stale={error} draw={drawWith(lineChart, opts)} />
   );
 }
 
@@ -447,13 +431,7 @@ export function MergesChart() {
     source: { name: "Audit log, weekly" },
   } as const;
   return (
-    <ChartPanel id="merge-trend">
-      <Stale error={error} />
-      <ChartFrame
-        className="merge-chart"
-        draw={(width, fit) => barChart({ ...opts, width, ...fit })}
-      />
-    </ChartPanel>
+    <ChartPanel id="merge-trend" stale={error} draw={drawWith(barChart, opts)} />
   );
 }
 
@@ -562,7 +540,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
     })),
     height: 220,
     title,
-    subtitle: `${fmtN(tot.req)} requests and ${fmtN(tot.err)} errors (${pct(tot.rate)})`,
+    subtitle: `${formatCount(tot.req)} requests and ${formatCount(tot.err)} errors (${pct(tot.rate)})`,
     alt: `Error rate for ${site.name} over the last 24 hours: peak ${peak.toFixed(2)}% in an hour, ${pct(tot.rate)} overall, ${inWindow.length} ${inWindow.length === 1 ? "deploy" : "deploys"} in the window.`,
     caption: inWindow.length
       ? `Deploys: ${inWindow.map((d) => `${shortId(d.version_id ?? d.id)} at ${utc(ms(d.created_on))}${d.message ? ` (${d.message})` : ""}`).join("; ")}.`
@@ -572,7 +550,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
   return (
     <ChartFrame
       className="error-rate"
-      draw={(width, fit) => lineChart({ ...opts, width, ...fit })}
+      draw={drawWith(lineChart, opts)}
     />
   );
 }
@@ -646,7 +624,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
   return (
     <ChartFrame
       className="deploy-timeline"
-      draw={(width, fit) => timeline({ ...opts, width, ...fit })}
+      draw={drawWith(timeline, opts)}
     />
   );
 }
@@ -697,7 +675,7 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
   return (
     <ChartFrame
       className="tonight-chart"
-      draw={(width, fit) => timeline({ ...opts, width, ...fit })}
+      draw={drawWith(timeline, opts)}
     />
   );
 }
@@ -746,7 +724,7 @@ export function BackupSlots() {
               <ChartFrame
                 key={name}
                 inline
-                draw={(width, fit) => heatStrip({ ...opts, width, ...fit })}
+                draw={drawWith(heatStrip, opts)}
               />
             );
           })
@@ -814,7 +792,7 @@ export function CiHistory() {
               };
               return (
                 <div className="slot-row" key={r.namespace} data-ci={r.namespace}>
-                  <ChartFrame inline draw={(width, fit) => heatStrip({ ...opts, width, ...fit })} />
+                  <ChartFrame inline draw={drawWith(heatStrip, opts)} />
                 </div>
               );
             })}

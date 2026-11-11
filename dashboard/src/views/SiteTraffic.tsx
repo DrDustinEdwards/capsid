@@ -10,7 +10,9 @@ import {
   useAnswer,
   type Load,
 } from "../lib/api";
-import { ago, fmtN, ms, pct, shortId, utc } from "../lib/format";
+import { outcomeKind, type Kind } from "../lib/derive";
+import { ago, ms, pct, shortId, utc } from "../lib/format";
+import { formatCount } from "capsomer/behavior/format";
 import type {
   PortalBuildLog,
   PortalSiteSearch,
@@ -116,8 +118,8 @@ function SearchTable({
           {rows.map((r) => (
             <tr key={r.key}>
               <td className={label === "Pages" ? "mono wrap" : "wrap"}>{r.key}</td>
-              <td className="num">{fmtN(r.clicks)}</td>
-              <td className="num">{fmtN(r.impressions)}</td>
+              <td className="num">{formatCount(r.clicks)}</td>
+              <td className="num">{formatCount(r.impressions)}</td>
               <td className="num">{r.ctr == null ? "" : pct(r.ctr, 1)}</td>
               <td className="num">{r.position == null ? "" : r.position.toFixed(1)}</td>
             </tr>
@@ -159,8 +161,8 @@ function Search({ ns }: { ns: string }) {
                     </p>
                     <Totals
                       items={[
-                        ["Clicks", fmtN(g.totals.clicks)],
-                        ["Impressions", fmtN(g.totals.impressions)],
+                        ["Clicks", formatCount(g.totals.clicks)],
+                        ["Impressions", formatCount(g.totals.impressions)],
                         ["CTR", g.totals.ctr == null ? "none" : pct(g.totals.ctr, 1)],
                         [
                           "Average position",
@@ -197,8 +199,8 @@ function Search({ ns }: { ns: string }) {
                     </p>
                     <Totals
                       items={[
-                        ["Clicks", fmtN(b.totals.clicks)],
-                        ["Impressions", fmtN(b.totals.impressions)],
+                        ["Clicks", formatCount(b.totals.clicks)],
+                        ["Impressions", formatCount(b.totals.impressions)],
                       ]}
                     />
                     {b.note && <p className="faint">{b.note}</p>}
@@ -270,13 +272,13 @@ const VITALS: Array<{ key: WebVital; name: string; good: number; poor: number; u
   ];
 
 const vital = (x: number | null, unit: "ms" | "") =>
-  x == null ? "" : unit === "ms" ? `${fmtN(Math.round(x))} ms` : x.toFixed(3);
+  x == null ? "" : unit === "ms" ? `${formatCount(Math.round(x))} ms` : x.toFixed(3);
 
 function Vitals({ v }: { v: TrafficWebVitals }) {
   return (
     <>
       <p className="body faint">
-        {fmtN(v.page_views_measured)} page views measured by Cloudflare's browser insights.
+        {formatCount(v.page_views_measured)} page views measured by Cloudflare's browser insights.
       </p>
       <div className="scroll-x">
         <table className="list">
@@ -356,7 +358,7 @@ function Traffic({ ns }: { ns: string }) {
                             {real.map((p) => (
                               <tr key={p.path}>
                                 <td className="mono wrap">{p.path}</td>
-                                <td className="num">{fmtN(p.hits)}</td>
+                                <td className="num">{formatCount(p.hits)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -402,7 +404,7 @@ function Traffic({ ns }: { ns: string }) {
                             <tr key={`${f.path} ${f.status}`}>
                               <td className="mono wrap">{f.path}</td>
                               <td className="num">{f.status}</td>
-                              <td className="num">{fmtN(f.hits)}</td>
+                              <td className="num">{formatCount(f.hits)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -452,11 +454,11 @@ function Traffic({ ns }: { ns: string }) {
                             <tr key={r.name}>
                               <td>{r.name}</td>
                               <td className="muted">{CRAWLER_KIND[r.kind] ?? r.kind}</td>
-                              <td className="num">{fmtN(r.hits)}</td>
+                              <td className="num">{formatCount(r.hits)}</td>
                               <td className="muted">
                                 {Object.entries(r.statuses)
                                   .sort((a, b) => b[1] - a[1])
-                                  .map(([status, n]) => `${status} × ${fmtN(n)}`)
+                                  .map(([status, n]) => `${status} × ${formatCount(n)}`)
                                   .join(", ")}
                               </td>
                             </tr>
@@ -502,25 +504,18 @@ export function SearchAndTraffic({ ns }: { ns: string }) {
 
 // ---- Workers Builds ------------------------------------------------------------------------
 
-const BUILD: Record<string, { kind: "ok" | "crit" | "warn" | "run" | "nodata"; label: string }> = {
-  success: { kind: "ok", label: "Built" },
-  fail: { kind: "crit", label: "Failed" },
-  failure: { kind: "crit", label: "Failed" },
-  // Cloudflare's own outcome value, so its spelling is a data contract.
-  cancelled: { kind: "warn", label: "Canceled" }, // codespell:ignore
-  canceled: { kind: "warn", label: "Canceled" },
-  skipped: { kind: "nodata", label: "Skipped" },
-};
+// The outcomes Cloudflare reports for a finished build (its own spelling is a data contract);
+// Capsomer reads each as a status. Any other outcome is not a verdict yet.
+const BUILD_OUTCOMES = new Set(["success", "fail", "failure", "cancelled", "canceled", "skipped"]);
 
 function buildState(b: { status: string | null; outcome: string | null }): {
-  kind: "ok" | "crit" | "warn" | "run" | "nodata";
+  kind: Kind;
   label: string;
 } {
-  const known = b.outcome ? BUILD[b.outcome] : undefined;
-  if (known) return known;
+  if (b.outcome && BUILD_OUTCOMES.has(b.outcome)) return outcomeKind(b.outcome, { success: "Built" });
   if (b.status && b.status !== "stopped")
-    return { kind: "run" as const, label: b.status === "queued" ? "Queued" : "Building" };
-  return { kind: "nodata" as const, label: b.outcome ?? b.status ?? "Unknown" };
+    return { kind: "run", label: b.status === "queued" ? "Queued" : "Building" };
+  return { kind: "nodata", label: b.outcome ?? b.status ?? "Unknown" };
 }
 
 function BuildLog({ build }: { build: string }) {
