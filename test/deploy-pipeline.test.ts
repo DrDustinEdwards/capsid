@@ -147,9 +147,15 @@ test("CI typechecks, builds and budgets the dashboard, and installs it wherever 
   );
   const deployScript = read("scripts/deploy.mjs");
   assert.ok(
-    deployScript.indexOf('"run", "size"') > deployScript.indexOf('"run", "build"') &&
-      deployScript.indexOf('"run", "size"') < deployScript.indexOf('"deploy",'),
+    deployScript.indexOf('"run", "size:dashboard"') > deployScript.indexOf('"run", "build"') &&
+      deployScript.indexOf('"run", "size:dashboard"') < deployScript.indexOf('"deploy",'),
     "scripts/deploy.mjs must build and budget the dashboard before wrangler deploy",
+  );
+  // The deploy runs the root's size:dashboard; #874 removed dashboard's own "size" script
+  // and the deploy kept calling it, so every master deploy failed with "Missing script".
+  assert.ok(
+    pkg.scripts["size:dashboard"],
+    "scripts/deploy.mjs runs a size:dashboard script the root does not have",
   );
 });
 
