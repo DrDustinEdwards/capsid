@@ -1,6 +1,7 @@
 // The Sites table's small charts, drawn by Enarratio: each site's uptime and errors per hour.
 // Inline forms (the bare SVG, role="img" with its text alternative), since a chart in a table
 // cell needs no frame.
+import { markup } from "capsomer/behavior/trusted-html";
 import { sparkline, uptimeStrip, uptimeStripTable, type UptimeSlot } from "enarratio";
 import type { HourBucket, SiteSnapshot } from "../types";
 import { RING_SLOTS, ringOf, slotStart, uptime } from "../lib/derive";
@@ -46,12 +47,10 @@ export function UptimeTicks({ site }: { site: SiteSnapshot }) {
     <>
       <span
         className="cap-uptime-strip"
-        dangerouslySetInnerHTML={{ __html: uptimeStrip({ ...opts, inline: true }) }}
+        dangerouslySetInnerHTML={markup(uptimeStrip({ ...opts, inline: true }))}
       />
       <span
-        dangerouslySetInnerHTML={{
-          __html: uptimeStripTable(opts, { dataTable: "visually-hidden" }).markup,
-        }}
+        dangerouslySetInnerHTML={markup(uptimeStripTable(opts).markup)}
       />
     </>
   );
@@ -82,8 +81,8 @@ export function ErrorSpark({ values, label }: { values: number[]; label: string 
   return (
     <span
       className="spark"
-      dangerouslySetInnerHTML={{
-        __html: sparkline({
+      dangerouslySetInnerHTML={markup(
+        sparkline({
           values,
           label,
           alt: label,
@@ -92,7 +91,7 @@ export function ErrorSpark({ values, label }: { values: number[]; label: string 
           area: true,
           inline: true,
         }),
-      }}
+      )}
     />
   );
 }
