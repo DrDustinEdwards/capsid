@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon as CapIcon, type IconName } from "capsomer/react/icons";
 import type { Kind } from "../lib/derive";
 
 // No style attribute: the Portal's CSP refuses inline styles in the server's HTML (a status
@@ -278,123 +279,35 @@ export function NoData({ reason, brief }: { reason: string; brief?: boolean }) {
   );
 }
 
-const NAV_ICONS: Record<string, ReactNode> = {
-  needs: (
-    <path
-      d="M2 4.5h12v7.5H2zM2 4.5l2.5-2.5h7L14 4.5M2 8h3.5l1 1.5h3l1-1.5H14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-  ),
-  // A globe: every site, and each site's own page.
-  sites: (
-    <>
-      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path
-        d="M2 8h12M8 2c1.8 1.7 2.6 3.7 2.6 6S9.8 12.3 8 14C6.2 12.3 5.4 10.3 5.4 8S6.2 3.7 8 2z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
-      />
-    </>
-  ),
-  // A folder: the projects (namespaces) the work is filed under.
-  projects: (
-    <path
-      d="M1.8 4V12.5h12.4V5.5H7.6L6.2 3.5H1.8z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-  ),
-  queue: (
-    <path d="M2 4h12M2 8h12M2 12h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  ),
-  agents: (
-    <>
-      <circle cx="8" cy="5.5" r="3" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path
-        d="M2.5 14c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-      />
-    </>
-  ),
-  // A gear: Settings is the menu's last entry (UX audit M4).
-  settings: (
-    <>
-      <path
-        d="M14.1 6.7L14.1 9.3L12.3 9.6L12.2 10L13.2 11.3L11.3 13.2L10 12.2L9.6 12.3L9.3 14.1L6.7 14.1L6.4 12.3L6 12.2L4.7 13.2L2.8 11.3L3.8 10L3.7 9.6L1.9 9.3L1.9 6.7L3.7 6.4L3.8 6L2.8 4.7L4.7 2.8L6 3.8L6.4 3.7L6.7 1.9L9.3 1.9L9.6 3.7L10 3.8L11.3 2.8L13.2 4.7L12.2 6L12.3 6.4z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-      />
-      <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-    </>
-  ),
-  // A parcel: published and shared packages (UX audit M6; the collapsed menu showed a
-  // blank button without it).
-  packages: (
-    <path
-      d="M8 1.8l5.6 3v6.4L8 14.2l-5.6-3V4.8zM2.4 4.8L8 7.8l5.6-3M8 7.8v6.4M5.2 3.3l5.6 3"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-  ),
-  library: (
-    <path
-      d="M2.5 2.5h3v11h-3zM6.5 2.5h3v11h-3zM10.5 3.2l2.6-.7 2.4 10.6-2.6.7z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-  ),
-  activity: (
-    <>
-      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path
-        d="M8 4.5V8l2.5 1.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </>
-  ),
-  health: (
-    <path
-      d="M1.5 8.5h3l1.8-4.5 3.4 8 1.8-3.5h3"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  ),
-  prs: (
-    <>
-      <circle cx="4" cy="4" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="4" cy="12" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <circle cx="12" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M4 6v4M6 4h2a4 4 0 0 1 4 4" fill="none" stroke="currentColor" strokeWidth="1.4" />
-    </>
-  ),
+// The menu's icons: the shared set where it has the drawing, the Portal's own 16-unit drawings where
+// it does not (Jobs, Sites, Pull requests, Packages, Health).
+const NAV_ICONS: Record<string, { name: IconName } | { d: string }> = {
+  needs: { name: "queue" },
+  sites: {
+    d: "M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM2 8h12M8 2c1.8 1.7 2.6 3.7 2.6 6S9.8 12.3 8 14C6.2 12.3 5.4 10.3 5.4 8S6.2 3.7 8 2z",
+  },
+  projects: { name: "folder" },
+  queue: { d: "M2 4h12M2 8h12M2 12h7" },
+  agents: { name: "people" },
+  settings: { name: "settings" },
+  packages: {
+    d: "M8 1.8l5.6 3v6.4L8 14.2l-5.6-3V4.8zM2.4 4.8L8 7.8l5.6-3M8 7.8v6.4M5.2 3.3l5.6 3",
+  },
+  library: { name: "book" },
+  activity: { name: "clock" },
+  health: { d: "M1.5 8.5h3l1.8-4.5 3.4 8 1.8-3.5h3" },
+  prs: {
+    d: "M4 2a2 2 0 1 0 0 4a2 2 0 1 0 0-4zM4 10a2 2 0 1 0 0 4a2 2 0 1 0 0-4zM12 6a2 2 0 1 0 0 4a2 2 0 1 0 0-4zM4 6v4M6 4h2a4 4 0 0 1 4 4",
+  },
 };
 
 export function NavIcon({ id, size = 16 }: { id: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
-      {NAV_ICONS[id]}
-    </svg>
+  const icon = NAV_ICONS[id];
+  if (!icon) return null;
+  const className = size > 16 ? "navicon navicon-lg" : "navicon";
+  return "name" in icon ? (
+    <CapIcon name={icon.name} className={className} />
+  ) : (
+    <CapIcon d={icon.d} box={16} className={className} />
   );
 }
