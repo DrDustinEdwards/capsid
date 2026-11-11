@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useApp } from "../app/ctx";
 import type { OpsPackageConfig } from "../types";
-import { ConfigForm, Field, useConfigForm } from "./ConfigForm";
+import { ConfigForm, useConfigForm, type Editing } from "capsomer/react/config-form";
+import "capsomer/config-form.css";
+import { Field } from "./shared";
 import { DangerZone } from "capsomer/react/danger-zone";
 import "capsomer/danger-zone.css";
 
@@ -14,8 +16,6 @@ interface Draft {
   repo: string;
   formerly: string;
 }
-
-export type PackageEditing = { kind: "add" } | { kind: "edit"; row: OpsPackageConfig };
 
 function paramsOf(d: Draft): Record<string, string> {
   const p: Record<string, string> = {};
@@ -30,7 +30,7 @@ export function PackageForm({
   editing,
   onClose,
 }: {
-  editing: PackageEditing;
+  editing: Editing<OpsPackageConfig>;
   onClose: () => void;
 }) {
   const { confirm } = useApp();

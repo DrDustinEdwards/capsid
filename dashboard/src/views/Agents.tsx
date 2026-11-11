@@ -7,6 +7,7 @@ import { St } from "../ui/icons";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Panel } from "capsomer/react/panel";
 import { PageHead } from "./shared";
+import { Missing } from "capsomer/react/empty";
 
 // Chart 6, weekly model spend, sits under the roster.
 const CostChart = trendChart("CostChart");
@@ -210,7 +211,7 @@ function Roster() {
                           </span>
                         ))
                       ) : (
-                        <span className="faint">none</span>
+                        <Missing />
                       )}
                     </td>
                   </tr>

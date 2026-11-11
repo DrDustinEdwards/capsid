@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Empty, Spinner } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
+import { ReadAgain } from "capsomer/react/read-state";
 import { useApp } from "../app/ctx";
 import { fetchMaintenance, useAnswer } from "../lib/api";
 import type { Kind } from "../lib/derive";
@@ -68,9 +69,7 @@ export function Maintenance() {
       src={
         <>
           {data?.generated ? `daily pass ${ago(ms(data.generated), now)} · ` : ""}
-          <button type="button" className="btn" disabled={load.loading} onClick={load.reread}>
-            {load.loading ? "Reading..." : "Read again"}
-          </button>
+          <ReadAgain reading={load.loading} onRead={load.reread} />
         </>
       }
     >

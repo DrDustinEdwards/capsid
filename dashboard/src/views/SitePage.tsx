@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from "react";
-import { Empty } from "capsomer/react/empty";
+import { Empty, Missing } from "capsomer/react/empty";
 import { PageHead } from "capsomer/react/page-head";
 import "capsomer/page-head.css";
 import { Panel } from "capsomer/react/panel";
@@ -9,7 +9,8 @@ import "capsomer/uptime-strip.css";
 import { uptimeStrip } from "enarratio";
 import { SITE_TABS, parseRoute, tabOf, useApp, type SiteTab } from "../app/ctx";
 import { Link, useLocation } from "../lib/router";
-import { PROBE, cfNoData, cfOk, ringOf, siteScripts, uptime } from "../lib/derive";
+import { padRing, uptimeOf } from "capsomer/behavior/uptime-strip";
+import { PROBE, RING_SLOTS, cfNoData, cfOk, siteScripts } from "../lib/derive";
 import { ago, hostOf, ms, msSql, pct, shortId, utc } from "../lib/format";
 import type { OpsSiteConfig, SiteSnapshot } from "../types";
 import { NoData, Pill, St } from "../ui/icons";
@@ -121,9 +122,9 @@ const UPTIME_KEYS = [
 ] as const;
 
 function SiteUptime({ s }: { s: SiteSnapshot }) {
-  const ring = ringOf(s);
-  const p7 = uptime(ring);
-  const p24 = uptime(ring.slice(-48));
+  const ring = padRing(s.ring, RING_SLOTS);
+  const p7 = uptimeOf(ring);
+  const p24 = uptimeOf(ring.slice(-48));
   const subtitle = `${p7 == null ? "no data" : pct(p7)} up over 7 days, ${p24 == null ? "no data" : pct(p24, 1)} over 24 hours`;
   return (
     <ChartFrame
@@ -306,7 +307,7 @@ function Setup({
 }) {
   const { feed, now, confirm } = useApp();
   const [editing, setEditing] = useState(false);
-  const none = <span className="faint">none</span>;
+  const none = <Missing />;
   const at = row ? msSql(row.updated_at) : NaN;
   return (
     <>
@@ -314,7 +315,7 @@ function Setup({
         <Suspense fallback={null}>
           <SiteForm
             key={`edit:${row.namespace}`}
-            editing={{ kind: "edit", row }}
+            editing={{ kind: "edit", row, key: row.namespace }}
             onClose={() => setEditing(false)}
           />
         </Suspense>
@@ -358,7 +359,7 @@ function Setup({
               <dd className="mono">
                 {row.origin === null
                   ? none
-                  : (row.health_path ?? <span className="faint">none, root probed</span>)}
+                  : (row.health_path ?? <Missing>none, root probed</Missing>)}
               </dd>
               <dt>Platform</dt>
               <dd>

@@ -8,7 +8,8 @@ import { Panel } from "capsomer/react/panel";
 import type { ReactNode } from "react";
 import { useApp } from "../app/ctx";
 import { fetchClaimsAggregate, useAnswer } from "../lib/api";
-import { cfNoData, cfOk, ringOf, slotStart } from "../lib/derive";
+import { padRing } from "capsomer/behavior/uptime-strip";
+import { RING_SLOTS, cfNoData, cfOk, slotStart } from "../lib/derive";
 import { DAY, HOUR, MIN, SLOT_MS, fmtN, ms, pct, shortId, utc } from "../lib/format";
 import { useTrends } from "../lib/trends";
 import type {
@@ -592,7 +593,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
   let downSlots = 0;
   const noData: string[] = [];
   for (const s of sites) {
-    const ring = ringOf(s);
+    const ring = padRing(s.ring, RING_SLOTS);
     // Consecutive slots of one kind make one span.
     for (let k = 0; k < ring.length;) {
       const c = ring[k];

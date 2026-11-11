@@ -9,6 +9,7 @@ import type {
   PortalClaimsJob,
 } from "../types";
 import { St } from "../ui/icons";
+import { Missing } from "capsomer/react/empty";
 import { Panel } from "capsomer/react/panel";
 
 export const AGREEMENTS: readonly ClaimsAgreement[] = [
@@ -27,14 +28,10 @@ const AGREEMENT_KIND: Record<ClaimsAgreement, Kind> = {
   unchecked: "warn",
 };
 
-export function None({ what = "none" }: { what?: string }) {
-  return <span className="faint">{what}</span>;
-}
-
 // A wait in milliseconds as "3.2h". Null is no wait measured, never zero.
 export function wait(msValue: number | null) {
   return msValue === null ? (
-    <None what="no wait" />
+    <Missing>no wait</Missing>
   ) : (
     <span className="num">{age(0, msValue)}</span>
   );
@@ -108,7 +105,7 @@ function Agreement({ a }: { a: ClaimsAgreement }) {
 
 export function AgreementCounts({ c }: { c: ClaimsAgreementCounts }) {
   const parts = AGREEMENTS.filter((a) => c[a] > 0);
-  if (parts.length === 0) return <None what="no checks" />;
+  if (parts.length === 0) return <Missing>no checks</Missing>;
   return (
     <span className="mono">
       {parts.map((a, i) => (
@@ -130,10 +127,10 @@ function EvaluationRows({ rows }: { rows: JobEvaluationRow[] }) {
             {e.name}
           </td>
           <td className="mono wrap" data-label="Claimed">
-            {e.claimed ?? <None what="not stated" />}
+            {e.claimed ?? <Missing>not stated</Missing>}
           </td>
           <td className="mono wrap" data-label="Verified">
-            {e.verified ?? <None what="not checked" />}
+            {e.verified ?? <Missing>not checked</Missing>}
           </td>
           <td data-label="Agreement">
             <Agreement a={e.agreement} />
@@ -203,12 +200,12 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                     </dd>
                     <dt>Stated</dt>
                     <dd className="mono">
-                      {said.length ? said.join(" · ") : <None what="no structured claim" />}
+                      {said.length ? said.join(" · ") : <Missing>no structured claim</Missing>}
                     </dd>
                     <dt>Versions</dt>
-                    <dd className="mono">{v || <None what="not stated" />}</dd>
+                    <dd className="mono">{v || <Missing>not stated</Missing>}</dd>
                     <dt>Worker</dt>
-                    <dd className="mono">{c.capsid_sha ?? <None what="unknown build" />}</dd>
+                    <dd className="mono">{c.capsid_sha ?? <Missing>unknown build</Missing>}</dd>
                   </dl>
                 </div>
                 {checks.length ? (
@@ -296,7 +293,7 @@ export function JobDetail({ data, now }: { data: PortalClaimsJob; now: number })
                     </td>
                     <td data-label="Waited">{wait(t.waited_ms)}</td>
                     <td className="mono wrap" data-label="Detail">
-                      {t.detail ?? <None />}
+                      {t.detail ?? <Missing />}
                     </td>
                   </tr>
                 ))}

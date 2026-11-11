@@ -1,11 +1,12 @@
-import { useState } from "react";
+import type { OpsSiteConfig } from "../types";
 import { SITES_TABS, sitePath, tabOf, useApp } from "../app/ctx";
 import { Link } from "../lib/router";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { Panel } from "capsomer/react/panel";
 import { Uptime90 } from "./Uptime90";
 import { Deploys } from "./Deploys";
-import { SiteForm, SiteRow, type Editing } from "./SiteConfig";
+import { useEditor } from "capsomer/react/config-form";
+import { SiteForm, SiteRow } from "./SiteConfig";
 import { FilterEmpty, FleetTable, NoSnapshot, NsChips, PageHead, useNsFilter } from "./shared";
 
 // SITES (the Portal audit's new map, 2026-11-06): every site in one table, its status, uptime,
@@ -26,12 +27,10 @@ export function Sites() {
 function AllSites() {
   const { feed } = useApp();
   const [ns, setNs] = useNsFilter();
-  const [editing, setEditing] = useState<Editing | null>(null);
+  const ed = useEditor<OpsSiteConfig>();
   const snap = feed.snapshot;
   const configured = feed.live.sites;
   const noSite = configured.filter((s) => s.origin === null);
-  // The form is keyed on what it edits, so switching rows starts a fresh draft.
-  const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.row.namespace}`) : "";
   const list = (snap?.sites ?? []).filter((s) => ns === "all" || s.namespace === ns);
   const emptied = !!snap && !list.length && snap.sites.length > 0;
   // A site added since the watcher's last pass has a row but no probe yet.
@@ -43,14 +42,14 @@ function AllSites() {
         <button
           type="button"
           className="btn primary"
-          onClick={() => setEditing({ kind: "add" })}
-          disabled={editing?.kind === "add"}
+          onClick={ed.add}
+          disabled={ed.editing?.kind === "add"}
         >
           Add site
         </button>
         {snap && <NsChips list={snap.sites.map((s) => s.namespace)} />}
       </div>
-      {editing && <SiteForm key={formKey} editing={editing} onClose={() => setEditing(null)} />}
+      {ed.editing && <SiteForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />}
       {!configured.some((s) => s.origin !== null) ? (
         <div className="callout" role="status">
           No site is configured, so the watcher probes nothing. Add a site to start.
@@ -99,11 +98,7 @@ function AllSites() {
               </thead>
               <tbody>
                 {noSite.map((s) => (
-                  <SiteRow
-                    key={s.namespace}
-                    s={s}
-                    onEdit={() => setEditing({ kind: "edit", row: s })}
-                  />
+                  <SiteRow key={s.namespace} s={s} onEdit={() => ed.edit(s, s.namespace)} />
                 ))}
               </tbody>
             </table>

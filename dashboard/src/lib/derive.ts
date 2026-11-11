@@ -90,27 +90,9 @@ export function siteScripts(feed: OpsFeed, ns?: string): string[] {
 
 export const RING_SLOTS = 336;
 
-// The ring padded on the left to 7 days of half-hour slots, oldest first.
-export function ringOf(s: SiteSnapshot): string {
-  const r = s.ring.slice(-RING_SLOTS);
-  return "-".repeat(RING_SLOTS - r.length) + r;
-}
-
-// Start time of slot i (0 oldest) of a padded ring.
+// Start time of slot i (0 oldest) of the ring padded to RING_SLOTS (capsomer padRing).
 export function slotStart(s: SiteSnapshot, i: number): number {
   return (s.ring_slot - (RING_SLOTS - 1 - i)) * SLOT_MS;
-}
-
-export function uptime(ring: string): number | null {
-  let up = 0;
-  let seen = 0;
-  for (const c of ring) {
-    if (c === "1") {
-      up++;
-      seen++;
-    } else if (c === "0") seen++;
-  }
-  return seen ? up / seen : null;
 }
 
 // ---- jobs -------------------------------------------------------------------

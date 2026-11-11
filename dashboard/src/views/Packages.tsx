@@ -10,7 +10,7 @@ import { Panel } from "capsomer/react/panel";
 import { areaChart } from "enarratio/lite/area";
 import { PageTabs, useTabParam } from "../ui/pagetabs";
 import { useDemo } from "../lib/router";
-import type { PackageEditing } from "./PackageConfig";
+import { useEditor } from "capsomer/react/config-form";
 
 // The Shared code and Completeness tabs load when opened, and the add and edit form the first
 // time it opens, so Published's first paint carries neither.
@@ -358,26 +358,24 @@ export function Packages() {
 
 function Published() {
   const { feed } = useApp();
-  const [editing, setEditing] = useState<PackageEditing | null>(null);
+  const ed = useEditor<OpsPackageConfig>();
   const byName = new Map((feed.snapshot?.packages ?? []).map((p) => [p.name, p]));
   const rows = feed.live.packages;
-  // The form is keyed on what it edits, so switching rows starts a fresh draft.
-  const formKey = editing ? (editing.kind === "add" ? "add" : `edit:${editing.row.name}`) : "";
   return (
     <>
       <div className="toolbar">
         <button
           type="button"
           className="btn primary"
-          onClick={() => setEditing({ kind: "add" })}
-          disabled={editing?.kind === "add"}
+          onClick={ed.add}
+          disabled={ed.editing?.kind === "add"}
         >
           Add package
         </button>
       </div>
-      {editing && (
+      {ed.editing && (
         <Suspense fallback={null}>
-          <PackageForm key={formKey} editing={editing} onClose={() => setEditing(null)} />
+          <PackageForm key={ed.formKey} editing={ed.editing} onClose={ed.close} />
         </Suspense>
       )}
       {!rows.length && (
@@ -391,7 +389,7 @@ function Published() {
           key={cfg.name}
           cfg={cfg}
           snap={byName.get(cfg.name) ?? null}
-          onEdit={() => setEditing({ kind: "edit", row: cfg })}
+          onEdit={() => ed.edit(cfg, cfg.name)}
         />
       ))}
     </>
