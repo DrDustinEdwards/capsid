@@ -1,7 +1,6 @@
 // GitHub App repo access for Capsid's repo fallthrough.
 //
-// Mints short-lived installation tokens from the App private key (RS256 JWT via Web
-// Crypto) and caches them in APP_KV for ~55 minutes. Resolves the target repo per
+// Mints short-lived installation tokens from the App private key (RS256 JWT, site-runtime/jwt) and caches them in APP_KV for ~55 minutes. Resolves the target repo per
 // namespace from the D1 namespaces table, then reads and writes over the GitHub
 // REST API. No PAT, no clone.
 
@@ -9,7 +8,7 @@ import { repoPathProblem } from "../limits";
 // RepoEnv, not Env: this module must not be able to name the credentials it omits.
 import type { RepoEnv as Env } from "../env";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { base64url } from "@dustinedwards/site-runtime/encoding";
+import { githubAppJwt } from "@dustinedwards/site-runtime/jwt";
 import { callSignal } from "../call-signal";
 
 const GH = "https://api.github.com";
@@ -39,45 +38,13 @@ export interface RepoRef {
   full: string;
 }
 
-let cachedKey: { pem: string; key: CryptoKey } | null = null;
-
-async function importPrivateKey(pem: string): Promise<CryptoKey> {
-  if (cachedKey && cachedKey.pem === pem) return cachedKey.key;
-  const body = pem
-    .replace(/-----BEGIN [^-]+-----/, "")
-    .replace(/-----END [^-]+-----/, "")
-    .replace(/\s+/g, "");
-  const der = Uint8Array.from(atob(body), (c) => c.charCodeAt(0));
-  const key = await crypto.subtle.importKey(
-    "pkcs8",
-    der,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  cachedKey = { pem, key };
-  return key;
-}
-
 async function createAppJwt(env: Env): Promise<string> {
   if (!env.GITHUB_APP_CLIENT_ID || !env.GITHUB_APP_PRIVATE_KEY) {
     throw new Error(
       "GitHub App not configured: set GITHUB_APP_CLIENT_ID and GITHUB_APP_PRIVATE_KEY",
     );
   }
-  const now = Math.floor(Date.now() / 1000);
-  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payload = base64url(
-    JSON.stringify({ iss: env.GITHUB_APP_CLIENT_ID, iat: now - 60, exp: now + 540 }),
-  );
-  const signingInput = `${header}.${payload}`;
-  const key = await importPrivateKey(env.GITHUB_APP_PRIVATE_KEY);
-  const signature = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    new TextEncoder().encode(signingInput),
-  );
-  return `${signingInput}.${base64url(new Uint8Array(signature))}`;
+  return githubAppJwt(env.GITHUB_APP_CLIENT_ID, env.GITHUB_APP_PRIVATE_KEY);
 }
 
 async function appFetch(env: Env, path: string, init?: RequestInit): Promise<Response> {
