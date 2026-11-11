@@ -64,10 +64,7 @@ export async function serveFile(
 }
 
 /** The response a page leaves with: never cached, and its policy carrying the page's nonce. */
-export function pageHeaders(
-  response: Response,
-  csp: { policy: string },
-): Response {
+export function pageHeaders(response: Response, csp: { policy: string }): Response {
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", "no-store");
   // Referrer-Policy, X-Frame-Options and the rest come from withSecurityHeaders (src/security-headers.ts).
