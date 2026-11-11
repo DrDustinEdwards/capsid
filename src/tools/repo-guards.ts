@@ -3,7 +3,7 @@ import { repoWriteFlags } from "../scope";
 import { surfaceOf } from "./surface";
 import { resolveRepo } from "../github/client";
 import { auditStatement } from "../store-guards";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // The wrappers every repo tool runs through. guardedRead resolves the repo and asks
 // the repos axis before a read; guardedWrite does the same for a mutation, computes
@@ -38,7 +38,7 @@ export function repoGuards(ctx: ToolCtx) {
       if (refusal) return fail(refusal);
       return ok(await fn());
     } catch (err) {
-      return fail(err instanceof Error ? err.message : String(err));
+      return fail(errorMessage(err));
     }
   };
 
@@ -70,7 +70,7 @@ export function repoGuards(ctx: ToolCtx) {
     try {
       resolvedRepo = (await resolveRepo(env, namespace, intent.repo)).full;
     } catch (err) {
-      return fail(err instanceof Error ? err.message : String(err));
+      return fail(errorMessage(err));
     }
     // `action` is the operation (the audit row's action); the check names the served
     // tool and action that run it (src/tools/surface.ts surfaceOf), which is what the
@@ -91,7 +91,7 @@ export function repoGuards(ctx: ToolCtx) {
     try {
       result = await fn();
     } catch (err) {
-      return fail(err instanceof Error ? err.message : String(err));
+      return fail(errorMessage(err));
     }
     // The mutation already landed: fn() has committed to GitHub, and GitHub cannot
     // join a D1 transaction. A failed audit INSERT is reported as a warning on a
@@ -104,7 +104,7 @@ export function repoGuards(ctx: ToolCtx) {
       logEvent(
         "AUDIT_INSERT_FAILED",
         {
-          message: `AUDIT_INSERT_FAILED ${action} ${namespace}/${path ?? ""}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `AUDIT_INSERT_FAILED ${action} ${namespace}/${path ?? ""}: ${errorMessage(err)}`,
         },
         { level: "error" },
       );
@@ -112,7 +112,7 @@ export function repoGuards(ctx: ToolCtx) {
         ...result,
         audit_warning:
           `THE ${action} SUCCEEDED and is described by this result, but the audit_log row could not be written: ` +
-          `${err instanceof Error ? err.message : String(err)}. Do not retry this call; the change is already made.`,
+          `${errorMessage(err)}. Do not retry this call; the change is already made.`,
       });
     }
     return ok(result);

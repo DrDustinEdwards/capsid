@@ -7,6 +7,7 @@ import { callOperator, tokenSet, toolRefusal, type FetchLike } from "./site-oper
 import { readStoredSecrets } from "./secret-presence";
 import { callSignal } from "./call-signal";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // THE CONVERGENCE VIEW (job_09e5f6cbf782): per site that opted in, what its own operator
 // API says (sync_status: the repository count against D1, the search index and the Ask
 // index, and any named divergence) beside what its health route says per content type,
@@ -97,7 +98,7 @@ async function readHealth(
     });
     return { status: res.status, body: await res.json().catch(() => null), error: null };
   } catch (err) {
-    return { status: 0, body: null, error: clip(err instanceof Error ? err.message : String(err)) };
+    return { status: 0, body: null, error: clip(errorMessage(err)) };
   }
 }
 

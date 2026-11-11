@@ -4,7 +4,7 @@ import { AUTO_MERGED_APPROVAL_REASON } from "./approval-executor";
 import type { Env } from "./env";
 import { getDefaultBranch, ghFetch, resolveRepo } from "./github/client";
 import { APP_ROSTER } from "./roster";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type {
   TrendBackupSlot,
   TrendCiDay,
@@ -430,7 +430,7 @@ async function readBackups(env: Env, now: Date): Promise<PortalTrends["backups"]
     return {
       slots: null,
       runs: null,
-      error: `The backup bucket could not be listed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `The backup bucket could not be listed: ${errorMessage(err)}`,
     };
   }
 }
@@ -505,7 +505,7 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
     logEvent(
       "TRENDS_CI_CACHE_UNREADABLE",
       {
-        message: `TRENDS_CI_CACHE_UNREADABLE ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `TRENDS_CI_CACHE_UNREADABLE ${CI_CACHE_KEY}: ${errorMessage(err)}`,
       },
       { level: "warn" },
     );
@@ -520,7 +520,7 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
     else
       notRead.push({
         namespace: APP_ROSTER[i]!,
-        error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+        error: errorMessage(r.reason),
       });
   });
   const out: PortalTrends["ci"] = { read_at: now.toISOString(), repos, not_read: notRead };
@@ -533,7 +533,7 @@ async function readCi(env: Env, now: Date): Promise<PortalTrends["ci"]> {
       logEvent(
         "TRENDS_CI_CACHE_WRITE_FAILED",
         {
-          message: `TRENDS_CI_CACHE_WRITE_FAILED ${CI_CACHE_KEY}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `TRENDS_CI_CACHE_WRITE_FAILED ${CI_CACHE_KEY}: ${errorMessage(err)}`,
         },
         { level: "warn" },
       );

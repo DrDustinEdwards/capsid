@@ -1,6 +1,6 @@
 import { verifyJwt } from "@dustinedwards/site-runtime/access-login";
 import { untrusted, UNTRUSTED_DATA_RULE } from "@dustinedwards/site-runtime/anthropic";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import { textResponse } from "@dustinedwards/site-runtime/http";
@@ -433,10 +433,7 @@ export async function handleReviewRun(request: Request, env: Env): Promise<Respo
   try {
     pull = await readPull(env, who);
   } catch (err) {
-    return textResponse(
-      `could not read ${full}#${who.pr}: ${err instanceof Error ? err.message : String(err)}`,
-      502,
-    );
+    return textResponse(`could not read ${full}#${who.pr}: ${errorMessage(err)}`, 502);
   }
   const cacheKey = `review:${full.toLowerCase()}:${who.pr}:${pull.head}`;
   const cached = await env.APP_KV.get(cacheKey, "json");

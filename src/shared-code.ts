@@ -9,6 +9,7 @@ import type { PackageSnapshot } from "./ops-types/sites";
 import type { SharedCodeApp, SharedCodePackage, SharedCodeView } from "./ops-types/feed";
 import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
 
 // SHARED CODE: how far the centralization has got (job_584b4e7f2824; ruling
@@ -438,7 +439,7 @@ async function readRelease(env: Env, full: string, fetchImpl: FetchLike): Promis
   try {
     manifest = await readRootManifest(env, full);
   } catch (err) {
-    return { manifest: err instanceof Error ? err.message : String(err), npm: null };
+    return { manifest: errorMessage(err), npm: null };
   }
   const npm = manifest.private || !manifest.name ? null : await readNpm(fetchImpl, manifest.name);
   return { manifest, npm };
@@ -571,7 +572,7 @@ async function readApp(
     for (const path of workflows)
       app.workflows!.push({ path, pins: workflowPins(await rawFile(env, target.repo, path)) });
   } catch (err) {
-    app.error = err instanceof Error ? err.message : String(err);
+    app.error = errorMessage(err);
   }
   return app;
 }
@@ -627,7 +628,7 @@ export async function readSharedCode(
   try {
     config = await readSharedConfig(env.DB);
   } catch (err) {
-    const why = err instanceof Error ? err.message : String(err);
+    const why = errorMessage(err);
     return {
       generated: now.toISOString(),
       configured: false,
@@ -691,7 +692,7 @@ export async function readSharedCode(
     }),
   );
   const tags = new Map<string, string[] | string>();
-  const failed = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  const failed = (err: unknown) => errorMessage(err);
   for (const pkg of config)
     tags.set(
       pkg.name,

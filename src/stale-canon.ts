@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { isCanonPath } from "./canon";
 import { ghFetch, resolveRepo } from "./github/client";
 import { readPrFiles, type PrFileRow } from "./github/pr-files";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { externalFence } from "./provenance";
 import type { Finding } from "./watcher-detect";
 import { DAY_MS } from "./time";
@@ -301,7 +301,7 @@ export function parseMemory(raw: string | null): { memory: MergeMemory } | { pro
     }
     return { memory: parsed as MergeMemory };
   } catch (err) {
-    return { problem: err instanceof Error ? err.message : String(err) };
+    return { problem: errorMessage(err) };
   }
 }
 
@@ -413,7 +413,7 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
         pending.push({ namespace, owner, repo, pull });
       memory[namespace] ??= { repo: full, prs: [] };
     } catch (err) {
-      unread.push(`${namespace} (${err instanceof Error ? err.message : String(err)})`);
+      unread.push(`${namespace} (${errorMessage(err)})`);
     }
   }
   pending.sort((a, b) => instant(a.pull.merged_at!) - instant(b.pull.merged_at!));
@@ -431,9 +431,7 @@ export async function readStaleCanon(env: Env, now: Date): Promise<StaleCanonRea
       });
       read++;
     } catch (err) {
-      unread.push(
-        `${p.namespace} #${p.pull.number} (${err instanceof Error ? err.message : String(err)})`,
-      );
+      unread.push(`${p.namespace} #${p.pull.number} (${errorMessage(err)})`);
     }
   }
   const kept = pruneMemory(memory, now);

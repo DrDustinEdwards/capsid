@@ -8,6 +8,7 @@ import { externalFence } from "./provenance";
 import { appliedMigrations, blockSettled } from "./inbox";
 import { readStaleCache, staleJobs } from "./stale-jobs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // WHAT NEEDS ME (capsid/research/design-mcp-servers.md, section 3: "the ruling's 'what
 // needs me'": all open PRs across repos with CI and conflicts). One read for the seat, served as capsid_admin_whats_next:
 //
@@ -190,7 +191,7 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
   try {
     stale = (await staleJobs(env, now)).rows;
   } catch (err) {
-    notChecked.push(`stale jobs: ${err instanceof Error ? err.message : String(err)}`);
+    notChecked.push(`stale jobs: ${errorMessage(err)}`);
   }
 
   const prs: WhatsNextPr[] = [];
@@ -198,7 +199,7 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
   try {
     repos = await mappedRepos(env.DB, notChecked);
   } catch (err) {
-    notChecked.push(`the namespace mapping: ${err instanceof Error ? err.message : String(err)}`);
+    notChecked.push(`the namespace mapping: ${errorMessage(err)}`);
   }
   if (repos.length > REPOS_MAX)
     notChecked.push(`${repos.length - REPOS_MAX} mapped repos were not read`);
@@ -212,7 +213,7 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
     try {
       prs.push(...(await openPrs(env, namespace, repo, notChecked)));
     } catch (err) {
-      notChecked.push(`${repo}: ${err instanceof Error ? err.message : String(err)}`);
+      notChecked.push(`${repo}: ${errorMessage(err)}`);
     }
   }
 
@@ -224,7 +225,7 @@ export async function whatsNext(env: Env, now: Date = new Date()) {
     checks = (snapshot?.checks ?? []).filter((c) => c.state !== "clear");
     if (!snapshot) notChecked.push("the watcher has written no pass yet");
   } catch (err) {
-    notChecked.push(`the watcher's last pass: ${err instanceof Error ? err.message : String(err)}`);
+    notChecked.push(`the watcher's last pass: ${errorMessage(err)}`);
   }
 
   return {

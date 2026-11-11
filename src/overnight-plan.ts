@@ -11,7 +11,7 @@ import type {
   UsageTotals,
 } from "./ops-types/views";
 import { resolveRepo } from "./github/client";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
 // THE OVERNIGHT PLAN AND THE MORNING DIGEST (capsid/research/design-automation-for-speed.md,
@@ -281,7 +281,7 @@ export async function readOvernightPlan(
     } catch (err) {
       // Said in the skip reason, not swallowed: an unmapped namespace and a corrupt
       // mapping have different fixes.
-      const problem = err instanceof Error ? err.message : String(err);
+      const problem = errorMessage(err);
       logEvent(
         "OVERNIGHT_PLAN",
         { message: `OVERNIGHT_PLAN no repo for ${ns}: ${problem}` },

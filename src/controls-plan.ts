@@ -49,6 +49,7 @@ import { limitRefusalFor } from "./site-repair";
 import { BACKUP_LIMIT, backupRefusal, backupSites, CAPSID_DUMP } from "./site-backup";
 import { CAPSID_NAMESPACE, jobRefusal } from "./site-jobs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // A control's preview (src/controls.ts is the core): reads the current state, writes
 // nothing, and returns what will change and the audit rows it will write.
 
@@ -446,7 +447,7 @@ export async function planAction(
       try {
         full = (await resolveRepo(env, p.namespace, p.repo)).full;
       } catch (err) {
-        return refused(err instanceof Error ? err.message : String(err));
+        return refused(errorMessage(err));
       }
       return {
         ok: true,

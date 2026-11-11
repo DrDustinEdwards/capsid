@@ -26,6 +26,7 @@ import { searchConsole } from "./search-console";
 import { MAX_TRAFFIC_DAYS, siteTraffic } from "./site-traffic";
 import { BUILDS_DEFAULT, BUILDS_MAX, buildLogs, listBuilds } from "./workers-builds";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // One site's own page in the Portal: its Search and traffic tab and its Deploys tab, read
 // live for one namespace. Four routes, each a door onto a library the chat tools already
 // serve, so the Portal and chat cannot disagree:
@@ -54,7 +55,7 @@ const none = (
   kind: SiteNoData,
   reason: string,
 ): { ok: false; kind: SiteNoData; reason: string } => ({ ok: false, kind, reason });
-const message = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+const message = (err: unknown): string => errorMessage(err);
 
 /** A source's read: its data, or the read's own error as the reason. */
 async function attempt<T>(read: () => Promise<SiteSource<T>>): Promise<SiteSource<T>> {

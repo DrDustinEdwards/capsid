@@ -5,6 +5,7 @@ import { ciVerdict, jobIdFromBody } from "./auto-merge-policy";
 import type { MaintenanceItem } from "./maintenance";
 import { HOUR_MS, DAY_MS } from "./time";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The daily maintenance pass's pull request rules (job_549550d73d4e, piece 2). Two lists:
 // a green driver pull request that is still open is waiting for the seat, shown with its
 // age; a pull request whose checks have been red for more than 48 hours is shown with the
@@ -103,7 +104,7 @@ export async function gatherPrItems(
     try {
       got = await readers.openPrs(namespace);
     } catch (err) {
-      items.push(notChecked(namespace, err instanceof Error ? err.message : String(err)));
+      items.push(notChecked(namespace, errorMessage(err)));
       continue;
     }
     read[namespace] = got.prs.length;
@@ -117,7 +118,7 @@ export async function gatherPrItems(
           ? `"${check.name}" failed at step "${step.step}"`
           : `"${check.name}" failed; its step was not read (${step.problem ?? "unknown"})`;
       } catch (err) {
-        where = `"${check.name}" failed; its step was not read (${err instanceof Error ? err.message : String(err)})`;
+        where = `"${check.name}" failed; its step was not read (${errorMessage(err)})`;
       }
       items.push({
         rule: "pr-red",

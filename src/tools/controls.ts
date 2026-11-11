@@ -6,6 +6,7 @@ import { bounded, MAX_TITLE } from "../limits";
 import type { PortalAction } from "../ops-types/portal";
 import { fail, ok, type ToolCtx } from "./docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const MAX_PARAM = 1024;
 const MAX_TOKEN = 4096;
 const ACCESS_PREFIX = "access:";
@@ -90,7 +91,7 @@ export function defineControlOperations(server: McpServer, ctx: ToolCtx): void {
           ? ok({ action: did.action, summary: did.result.summary, warning: did.result.warning })
           : fail(did.refusal);
       } catch (err) {
-        return fail(err instanceof Error ? err.message : String(err));
+        return fail(errorMessage(err));
       }
     },
   );

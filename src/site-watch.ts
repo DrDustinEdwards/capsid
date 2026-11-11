@@ -1,6 +1,6 @@
 import { sendEmail } from "@dustinedwards/site-runtime/email";
 import type { Env } from "./env";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import type { OpsSiteConfig, SiteOperator } from "./ops-types/sites";
 import { runSiteRepair, type RepairOutcome } from "./site-repair";
 import { tokenSet, type FetchLike } from "./site-operator";
@@ -76,7 +76,7 @@ async function readHealth(fetchImpl: FetchLike, url: string): Promise<Reading> {
     });
     return { status: res.status, body: await res.json().catch(() => null), error: null };
   } catch (err) {
-    return { status: 0, body: null, error: clip(err instanceof Error ? err.message : String(err)) };
+    return { status: 0, body: null, error: clip(errorMessage(err)) };
   }
 }
 
@@ -332,7 +332,7 @@ async function mailOnChange(
     logEvent(
       "SITE_ALERT_STATE_UNREADABLE",
       {
-        message: `SITE_ALERT_STATE_UNREADABLE ${namespace}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `SITE_ALERT_STATE_UNREADABLE ${namespace}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );

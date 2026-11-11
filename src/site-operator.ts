@@ -3,6 +3,7 @@ import type { SiteOperator } from "./ops-types/sites";
 import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // A SITE'S OPERATOR API (job_09e5f6cbf782, Dustin 2026-10-03). Capsid is the operations
 // hub and may trigger an allowlist of a site's own repair tools, so the repairs, the
 // convergence view and the watchdog could leave the site (it did, 2026-11-06). A site opts in by configuration
@@ -61,7 +62,7 @@ export function parseOperator(raw: string): ParsedOperator {
   try {
     value = JSON.parse(raw);
   } catch (err) {
-    return refuse(`not JSON (${err instanceof Error ? err.message : String(err)}).`);
+    return refuse(`not JSON (${errorMessage(err)}).`);
   }
   if (!value || typeof value !== "object" || Array.isArray(value))
     return refuse("must be a JSON object.");
@@ -235,7 +236,7 @@ export async function callOperator(
     });
     payload = await response.json().catch(() => null);
   } catch (err) {
-    return fail(0, `${tool} did not complete: ${err instanceof Error ? err.message : String(err)}`);
+    return fail(0, `${tool} did not complete: ${errorMessage(err)}`);
   }
   const body = (payload && typeof payload === "object" ? payload : {}) as {
     ok?: unknown;

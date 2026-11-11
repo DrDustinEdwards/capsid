@@ -16,6 +16,7 @@ import type { OpsMergeSafety } from "./ops-types/feed";
 import { externalFence } from "./provenance";
 import { readMaintenance, type MaintenanceItem } from "./maintenance";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Capsid's status as a driver and the Portal read it (capsid_read_status action status,
 // GET /portal/api/namespaces): per namespace the queue, the breaker, what waits on the
 // seat and the maintenance list, and across them the signed policies, the overnight
@@ -163,7 +164,7 @@ async function servedPolicies(env: Env): Promise<PolicyVersions> {
         : { version: loaded.policy.version, enabled: loaded.policy.enabled };
     } catch (err) {
       return {
-        reason: `the policy could not be read: ${err instanceof Error ? err.message : String(err)}`,
+        reason: `the policy could not be read: ${errorMessage(err)}`,
       };
     }
   };

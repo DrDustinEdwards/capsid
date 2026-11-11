@@ -3,6 +3,7 @@ import { readPrFiles } from "./github/pr-files";
 import type { Env } from "./env";
 import { riskOf, type Risk } from "./model-routing";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The risk of the pull request a job already carries, read at claim so a job that came
 // back for a correction is routed on what it actually changed (riskOf in
 // src/model-routing.ts). Every page of files, read-only, through the one reader
@@ -41,7 +42,7 @@ export async function pullRequestRisk(
   } catch (err) {
     return {
       risk: unknownRisk(`the files of ${ref} could not be read`, null),
-      note: `routing could not read ${ref}: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}, so the job was routed as high risk`,
+      note: `routing could not read ${ref}: ${errorMessage(err).slice(0, 160)}, so the job was routed as high risk`,
     };
   }
 }

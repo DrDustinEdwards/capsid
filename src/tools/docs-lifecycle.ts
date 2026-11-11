@@ -17,6 +17,7 @@ import { ok, fail, type ToolCtx, requireConfirmation, pathMutation, edgesTouchin
 import { policyPathsRefusal, requireRegisteredNamespace } from "./docs-write";
 import { sha256Hex } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The document lifecycle beyond writing (src/tools/docs-write.ts writes): restore an
 // earlier version, delete, and move.
 
@@ -247,9 +248,7 @@ export function defineDeleteOperation(server: McpServer, ctx: ToolCtx): void {
               : `delete aborted, nothing changed: ${namespace}/${path} no longer exists. Another session removed it after this call started.`,
           );
         }
-        return fail(
-          `delete failed, nothing changed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        return fail(`delete failed, nothing changed: ${errorMessage(err)}`);
       }
       return ok({
         namespace,
@@ -354,7 +353,7 @@ export function defineMoveOperation(server: McpServer, ctx: ToolCtx): void {
           );
         }
         return fail(
-          `move failed, nothing changed (target may already exist): ${err instanceof Error ? err.message : String(err)}`,
+          `move failed, nothing changed (target may already exist): ${errorMessage(err)}`,
         );
       }
       return ok({ namespace, path, new_path, action: "moved", edges_repointed: repointed });

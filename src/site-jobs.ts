@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 import { exportAuditLog } from "@dustinedwards/site-runtime/audit-log";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { withAuditKey } from "./audit-key";
 import { backupTaskResult, runBackup } from "./backup";
 import { readSiteRow } from "./ops-sites";
@@ -214,7 +214,7 @@ export async function runSiteJob(
     logEvent(
       "SITE_JOB_NOT_RECORDED",
       {
-        message: `SITE_JOB_NOT_RECORDED ${args.namespace}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `SITE_JOB_NOT_RECORDED ${args.namespace}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );

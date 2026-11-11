@@ -28,7 +28,7 @@ import { resetBreaker } from "./job-breaker";
 import { parkJob, unparkJob } from "./jobs-park";
 import { resumeJob, releaseJob, adminFailJob, completeAsCaller, supersedeJob } from "./jobs-seat";
 import { readJob } from "./jobs-transition";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { resumeNamespace } from "./merge-safety";
 import { liftSuspension } from "./merge-units";
 import {
@@ -712,7 +712,7 @@ export async function performAction(
       }
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     if (committed) {
       // The action happened; only the Portal's own audit row failed, so no refusal.
       const warning = `${action} completed, but the Portal audit row naming ${actor} was not written: ${message}`;

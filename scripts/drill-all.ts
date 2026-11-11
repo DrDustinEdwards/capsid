@@ -18,6 +18,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { COMPLETE_MARKER, latestDump, type R2Like } from "@dustinedwards/d1-dump";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 export interface Site {
   name: string;
   bucket: string;
@@ -160,7 +161,7 @@ export async function drillSite(
     return { line: `${stats} FAIL (${firstFailure(output)})`, ok: false };
   } catch (err) {
     return {
-      line: `${head} FAIL (${(err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 200)})`,
+      line: `${head} FAIL (${errorMessage(err).replace(/\s+/g, " ").slice(0, 200)})`,
       ok: false,
     };
   } finally {
@@ -226,7 +227,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   try {
     sites = selectSites(argv);
   } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
+    console.error(errorMessage(err));
     return 2;
   }
   let failed = false;
@@ -236,7 +237,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       opened = await openBucket(site);
     } catch (err) {
       console.log(
-        `${site.name} FAIL (cannot open ${site.bucket}: ${(err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 160)})`,
+        `${site.name} FAIL (cannot open ${site.bucket}: ${errorMessage(err).replace(/\s+/g, " ").slice(0, 160)})`,
       );
       failed = true;
       continue;

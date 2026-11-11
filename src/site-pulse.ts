@@ -4,7 +4,7 @@ import { probeSite } from "./ops-snapshot";
 import { readSiteConfig, sitesFrom } from "./ops-sites";
 import type { SiteProbe } from "./ops-types/sites";
 import { DAY_MS } from "./time";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // THE FIVE-MINUTE PULSE (area 8, 2026-10-30). The watcher probes the sites half-hourly
 // for the Portal's rings and findings, and until this nothing told Dustin when a site went
@@ -169,7 +169,7 @@ export async function sitePulseTick(
     logEvent(
       "SITE_PULSE_UPTIME_UNWRITTEN",
       {
-        message: `SITE_PULSE_UPTIME_UNWRITTEN ${err instanceof Error ? err.message : String(err)}`,
+        message: `SITE_PULSE_UPTIME_UNWRITTEN ${errorMessage(err)}`,
       },
       { level: "error" },
     );

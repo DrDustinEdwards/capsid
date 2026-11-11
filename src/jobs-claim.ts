@@ -34,6 +34,7 @@ import {
   type JobResult,
 } from "./jobs-transition";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Getting work into and out of the queue: post, list and claim.
 
 // The body is signed at post, with the same key and envelope as the signed policy
@@ -240,7 +241,7 @@ export async function postJob(
   try {
     await env.DB.batch(statements);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     // The partial unique index over (namespace, title) for open statuses, reported as
     // what it means rather than as the constraint's own text.
     if (/UNIQUE/i.test(message)) {

@@ -11,6 +11,7 @@ import {
 import { SEARCH_TREE_LIMIT } from "./search";
 import { fromBase64 } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const decodeBase64 = (text: string): string => new TextDecoder().decode(fromBase64(text));
 
 export async function listRepoTree(
@@ -123,7 +124,7 @@ export async function readRepoFiles(
           content: truncated ? one.content.slice(0, REPO_FILE_BUDGET) : one.content,
         };
       } catch (err) {
-        return { path, error: err instanceof Error ? err.message : String(err) };
+        return { path, error: errorMessage(err) };
       }
     }),
   );

@@ -14,6 +14,7 @@ import type { ResourcesDoc } from "./ops-types/feed";
 export type { ResourcesDoc };
 import type { SystemModel } from "./system-model";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // THE SECRETS AND DATA MODEL (Dustin, 2026-11-03): each Worker's secret names, D1 databases
 // and their tables, KV namespaces, R2 buckets, Durable Objects and queues, and which
 // systems use each, read from Cloudflare by the nightly build (src/system-facts.ts) so a
@@ -385,7 +386,7 @@ export function resourceDrift(
 
 function refused(what: string, permission: string) {
   return (err: unknown): string => {
-    const reason = (err instanceof Error ? err.message : String(err)).slice(0, 300);
+    const reason = errorMessage(err).slice(0, 300);
     return err instanceof CfReadError && err.status === 403
       ? `${what} was refused: CF_OPS_TOKEN lacks ${permission}`
       : `${what} could not be read (${reason})`;

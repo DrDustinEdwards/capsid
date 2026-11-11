@@ -14,7 +14,7 @@ import type {
   SiteProbe,
   SiteSnapshot,
 } from "./ops-types/sites";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { MINUTE_MS } from "./time";
 import { callSignal } from "./call-signal";
 
@@ -164,7 +164,7 @@ async function reach(fetchImpl: FetchLike, url: string, withBody: boolean): Prom
       status: null,
       latency_ms: null,
       body: null,
-      error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+      error: errorMessage(err).slice(0, 160),
     };
   }
 }
@@ -366,7 +366,7 @@ export async function readSnapshot(env: Pick<Env, "APP_KV">): Promise<OpsSnapsho
     logEvent(
       "OPS_SNAPSHOT_UNREADABLE",
       {
-        message: `OPS_SNAPSHOT_UNREADABLE ${err instanceof Error ? err.message : String(err)}; starting the rings again`,
+        message: `OPS_SNAPSHOT_UNREADABLE ${errorMessage(err)}; starting the rings again`,
       },
       { level: "error" },
     );

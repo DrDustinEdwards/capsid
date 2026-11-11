@@ -3,6 +3,7 @@ import { DAY_MS } from "./time";
 import { callSignal } from "./call-signal";
 import { parse } from "tldts";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // DOMAIN REGISTRATION EXPIRY, BY RDAP (job_5ac1139641e0, design-portal-insight.md section 5,
 // pulled forward by Dustin on 2026-10-07: dustinedwards.info expires 2026-12-27, and
 // auto-renew being on is no reason to go without the alert).
@@ -196,7 +197,7 @@ export async function readExpiries(
       );
       expiries.push({ domain, expires });
     } catch (err) {
-      failed.push({ domain, error: err instanceof Error ? err.message : String(err) });
+      failed.push({ domain, error: errorMessage(err) });
     }
   }
   return { expiries, failed };

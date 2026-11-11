@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { backupFreshness } from "./health";
 import { OFFACCOUNT_REPORT_KEY, isOffaccountSite, offaccountSiteOf } from "./offaccount";
 import { readSiteConfig, readSiteRow } from "./ops-sites";
@@ -198,7 +198,7 @@ async function runOne(
     logEvent(
       "SITE_BACKUP_NOT_RECORDED",
       {
-        message: `SITE_BACKUP_NOT_RECORDED ${site.namespace}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `SITE_BACKUP_NOT_RECORDED ${site.namespace}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );

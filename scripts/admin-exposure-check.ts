@@ -21,6 +21,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The live host. `/mcp` must end the URL or be followed by a character that cannot
 // continue a path segment, so /ops/mcp never matches.
 export const ADMIN_URL = /https:\/\/mcp\.dustinedwards\.info\/mcp(?![A-Za-z0-9_./-])/;
@@ -98,7 +99,7 @@ if (process.argv[1] && process.argv[1].endsWith("admin-exposure-check.ts")) {
   try {
     main();
   } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
+    console.error(errorMessage(err));
     process.exit(2);
   }
 }

@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 
 // THE WATCHER'S MEMORY OF A FINDING, one watcher_findings row per fingerprint, kept
@@ -91,7 +91,7 @@ export function appendEvidence(
       logEvent(
         "WATCHER_EVIDENCE_UNREADABLE",
         {
-          message: `WATCHER_EVIDENCE_UNREADABLE ${fingerprint}: ${err instanceof Error ? err.message : String(err)}; starting it again`,
+          message: `WATCHER_EVIDENCE_UNREADABLE ${fingerprint}: ${errorMessage(err)}; starting it again`,
         },
         { level: "error" },
       );

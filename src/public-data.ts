@@ -8,6 +8,7 @@ import { readStatsRows, summarize, type StatsRows } from "./public-stats";
 import { buildPublicCode, readCodeMap } from "./public-code";
 import { HOUR_MS } from "./time";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // The public data build (design capsid/research/design-system-explorer.md, section 2;
 // docs/public-data.md). Once a UTC day the tick reads every repo's visibility from
 // GitHub, runs the model through toPublic, computes the aggregate numbers, and stores
@@ -135,7 +136,7 @@ async function storeCode(
     };
   } catch (e) {
     result = {
-      note: `code maps kept from the last build: ${e instanceof Error ? e.message : String(e)}`,
+      note: `code maps kept from the last build: ${errorMessage(e)}`,
       failed: true,
     };
   }

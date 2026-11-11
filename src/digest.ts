@@ -4,7 +4,7 @@ import { AWAITING_SEAT_KEY, type AwaitingSeat } from "./auto-merge-tick";
 import { readOvernightDigest } from "./overnight-plan";
 import { PORTAL_HOST } from "./portal-host";
 import type { DigestState } from "./ops-types/views";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { weeklyDigestLines } from "./watcher-digest";
 import { DAY_MS } from "./time";
 
@@ -153,7 +153,7 @@ async function composeDigest(
     } catch (err) {
       logEvent(
         "DIGEST_WEEKLY_UNREAD",
-        { message: `DIGEST_WEEKLY_UNREAD: ${err instanceof Error ? err.message : String(err)}` },
+        { message: `DIGEST_WEEKLY_UNREAD: ${errorMessage(err)}` },
         { level: "error" },
       );
       weekly = ["Weekly digest could not be read."];

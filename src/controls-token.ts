@@ -5,6 +5,7 @@ import type { Env } from "./env";
 import type { PortalAction } from "./ops-types/portal";
 import { base64url, fromBase64url } from "@dustinedwards/site-runtime/encoding";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 const decodeBase64url = (text: string): string => new TextDecoder().decode(fromBase64url(text));
 
 // The confirmation token: base64url of the canonical claims, a dot, and the hex
@@ -86,7 +87,7 @@ export async function verifyConfirm(
     return {
       ok: false,
       status: 403,
-      refusal: `the confirmation token verifies but does not parse (${err instanceof Error ? err.message : String(err)}): preview again.`,
+      refusal: `the confirmation token verifies but does not parse (${errorMessage(err)}): preview again.`,
     };
   }
   const paramsOk =

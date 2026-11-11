@@ -3,6 +3,7 @@ import { handOnly, statements as migrationStatements } from "@dustinedwards/devk
 import type { Env } from "./env";
 import { POLICY_ID_ITEM, policyField, readSignedPolicy } from "./signed-docs";
 
+import { errorMessage } from "@dustinedwards/site-runtime/log";
 // Pre-approved gates: which blocked commands the seat may approve without asking the
 // human. A driver that reaches a push, a migration or a pull request stops and blocks
 // with the exact command, and without this every one of those waits on a person,
@@ -441,7 +442,7 @@ export async function approveByPolicy(
     } catch (err) {
       return {
         approved: false,
-        reason: `${path} could not be read (${err instanceof Error ? err.message : String(err)}), so its statements could not be checked. A migration nobody parsed is not pre-approved.`,
+        reason: `${path} could not be read (${errorMessage(err)}), so its statements could not be checked. A migration nobody parsed is not pre-approved.`,
       };
     }
     if (sql === null) {

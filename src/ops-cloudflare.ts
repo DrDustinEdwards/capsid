@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import type { OpsSite } from "./ops-sites";
 import type { CfDeploy, HourBucket, SiteCloudflare } from "./ops-types/sites";
 import type { WebAnalyticsSite } from "./ops-types/views";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { HOUR_MS } from "./time";
 import { callSignal } from "./call-signal";
 
@@ -187,8 +187,7 @@ function messagesOf(errors: unknown): string {
     .slice(0, 300);
 }
 
-const reasonOf = (err: unknown): string =>
-  (err instanceof Error ? err.message : String(err)).slice(0, 300);
+const reasonOf = (err: unknown): string => errorMessage(err).slice(0, 300);
 
 /** GET /accounts/{id}/workers/domains: every Workers custom domain on the account, as
  *  hostname to the script (`service`) it serves. */

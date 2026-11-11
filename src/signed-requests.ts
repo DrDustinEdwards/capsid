@@ -15,7 +15,7 @@ import {
 import { readCapped } from "@dustinedwards/site-runtime/body";
 import { MINUTE_MS } from "./time";
 import { textResponse } from "@dustinedwards/site-runtime/http";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 
 // The signed endpoints that are not MCP: the backup credential mint and the Amazon copy's report, and
 // the bench's three (src/bench.ts). Each is HMAC over timestamp and body, refused
@@ -80,7 +80,7 @@ export async function claimJti(
     return {
       ok: false,
       status: 503,
-      refusal: `could not verify replay status (${err instanceof Error ? err.message : String(err)}); refusing the request`,
+      refusal: `could not verify replay status (${errorMessage(err)}); refusing the request`,
     };
   }
 }

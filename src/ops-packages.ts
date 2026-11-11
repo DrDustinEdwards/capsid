@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { ghFetch } from "./github/client";
 import type { OpsPackageConfig, PackageSnapshot, PortalPackageHistory } from "./ops-types/sites";
 import { auditStatement } from "./store-guards";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { DAY_MS } from "./time";
 import { callSignal } from "./call-signal";
 
@@ -248,7 +248,7 @@ async function getJson(
     return {
       ok: false,
       status: null,
-      reason: `${new URL(url).host} could not be read: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`,
+      reason: `${new URL(url).host} could not be read: ${errorMessage(err).slice(0, 160)}`,
     };
   }
 }
@@ -413,7 +413,7 @@ async function ghJson(env: Env, owner: string, repo: string, path: string): Prom
     return {
       ok: false,
       status: null,
-      reason: `GitHub could not be read: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`,
+      reason: `GitHub could not be read: ${errorMessage(err).slice(0, 160)}`,
     };
   }
 }
@@ -596,7 +596,7 @@ export async function packageHistory(
     logEvent(
       "PACKAGES_HISTORY_CACHE_UNREADABLE",
       {
-        message: `PACKAGES_HISTORY_CACHE_UNREADABLE ${key}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `PACKAGES_HISTORY_CACHE_UNREADABLE ${key}: ${errorMessage(err)}`,
       },
       { level: "warn" },
     );

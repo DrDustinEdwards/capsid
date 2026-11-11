@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { CF_API, type FetchLike } from "./ops-cloudflare";
 import { readSiteRow } from "./ops-sites";
 import { auditStatement } from "./store-guards";
-import { logEvent } from "@dustinedwards/site-runtime/log";
+import { errorMessage, logEvent } from "@dustinedwards/site-runtime/log";
 import { base64url } from "@dustinedwards/site-runtime/encoding";
 import { callSignal } from "./call-signal";
 
@@ -62,7 +62,7 @@ async function putSecret(
   } catch (err) {
     return {
       ok: false,
-      error: `no answer from Cloudflare: ${(err instanceof Error ? err.message : String(err)).slice(0, 120)}`,
+      error: `no answer from Cloudflare: ${errorMessage(err).slice(0, 120)}`,
     };
   }
   // Only Cloudflare's own error messages are read back, never the request.
@@ -165,7 +165,7 @@ export async function setSiteKey(
     logEvent(
       "AUDIT_INSERT_FAILED",
       {
-        message: `AUDIT_INSERT_FAILED set_site_key ${namespace}: ${err instanceof Error ? err.message : String(err)}`,
+        message: `AUDIT_INSERT_FAILED set_site_key ${namespace}: ${errorMessage(err)}`,
       },
       { level: "error" },
     );
