@@ -30,12 +30,13 @@ const KIND = {
   unmeasured: "unknown",
   "n/a": "nodata",
 } as const;
-// The grid's tones (Capsomer's StatusMatrix); a check that could not measure is the info glyph.
+// The grid's tones (Capsomer's StatusMatrix); a check that could not measure is the muted
+// question mark, the same mark as KIND's "unknown" in the panels below.
 const TONE = {
   complete: "ok",
   partial: "warn",
   missing: "crit",
-  unmeasured: "info",
+  unmeasured: "muted",
   "n/a": "nodata",
 } as const;
 const LABEL: Record<CompletenessStatus, string> = {
@@ -120,7 +121,12 @@ export function Completeness() {
             cells: Object.fromEntries(
               Object.entries(a.cells).map(([id, c]) => [
                 id,
-                { tone: TONE[c.status], label: LABEL[c.status], reason: c.reason },
+                {
+                  tone: TONE[c.status],
+                  glyph: c.status === "unmeasured" ? ("unknown" as const) : undefined,
+                  label: LABEL[c.status],
+                  reason: c.reason,
+                },
               ]),
             ),
           }))}
