@@ -243,7 +243,6 @@ export function App() {
   const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
-  const tipRef = useRef<HTMLDivElement>(null);
 
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null);
 
@@ -442,7 +441,6 @@ export function App() {
   const setRail = useCallback((next: boolean) => {
     setRailCollapsed(next);
     writePref(RAIL_PREF, next ? "collapsed" : "expanded");
-    tipRef.current?.classList.remove("on");
   }, []);
   const toggleRail = useCallback(() => setRail(!railRef.current), [setRail]);
 
@@ -531,50 +529,6 @@ export function App() {
       setSheetOpener(null);
     };
   }, [views]);
-
-  // Tooltips (data-tip): the uptime ticks, and the collapsed side menu. Shown on pointer
-  // hover and on keyboard focus. data-tip-side="right" puts the tip beside the element
-  // instead of above it.
-  useEffect(() => {
-    const tip = tipRef.current;
-    if (!tip) return;
-    const show = (el: HTMLElement | null | undefined) => {
-      if (!el) return tip.classList.remove("on");
-      tip.textContent = el.dataset.tip ?? "";
-      tip.classList.add("on");
-      const r = el.getBoundingClientRect();
-      const tw = tip.offsetWidth;
-      const th = tip.offsetHeight;
-      if (el.dataset.tipSide === "below") {
-        // The top bar's buttons: a tip above them would leave the window or cover them.
-        tip.style.left = `${Math.max(8, Math.min(window.innerWidth - tw - 8, r.left + r.width / 2 - tw / 2))}px`;
-        tip.style.top = `${r.bottom + 6}px`;
-        return;
-      }
-      if (el.dataset.tipSide === "right") {
-        // Clear of the menu's edge, not over it.
-        const edge = el.closest("nav")?.getBoundingClientRect().right ?? r.right;
-        tip.style.left = `${Math.min(window.innerWidth - tw - 8, Math.max(r.right, edge) + 6)}px`;
-        tip.style.top = `${Math.max(8, r.top + r.height / 2 - th / 2)}px`;
-        return;
-      }
-      tip.style.left = `${Math.max(8, Math.min(window.innerWidth - tw - 8, r.left + r.width / 2 - tw / 2))}px`;
-      tip.style.top = `${Math.max(8, r.top - th - 8)}px`;
-    };
-    const over = (e: MouseEvent) =>
-      show((e.target as Element).closest?.<HTMLElement>("[data-tip]"));
-    const focus = (e: FocusEvent) =>
-      show(e.target instanceof Element ? e.target.closest<HTMLElement>("[data-tip]") : null);
-    const blur = () => tip.classList.remove("on");
-    document.addEventListener("mouseover", over);
-    document.addEventListener("focusin", focus);
-    document.addEventListener("focusout", blur);
-    return () => {
-      document.removeEventListener("mouseover", over);
-      document.removeEventListener("focusin", focus);
-      document.removeEventListener("focusout", blur);
-    };
-  }, []);
 
   // A stop from the command menu presses its switch on Namespaces, so the switch's own
   // reason field opens and the change goes the way a click would send it. It waits for
@@ -920,7 +874,6 @@ export function App() {
           </div>
         ))}
       </div>
-      <div className="tip" ref={tipRef} aria-hidden="true" />
     </>
   );
 }

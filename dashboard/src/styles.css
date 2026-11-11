@@ -28,7 +28,7 @@
     text-decoration: none;
   }
   a:hover,
-  main a:not([class], .anchors a) {
+  main a:not([class], .cap-anchors a) {
     text-decoration: underline;
   }
   :focus-visible {
@@ -622,53 +622,6 @@ table.brief.workers-stores .cap-status {
   gap: 14px;
 }
 
-/* The anchor bar (ui/anchors.tsx): pinned to the top of main on a long view, on the
-   ground tone. main keeps focused rows clear of it (scroll-padding-top, WCAG 2.4.11),
-   from before it mounts, so a section opened by its address is not left under it. */
-.anchor-host {
-  display: contents;
-}
-.anchors {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin: -16px -24px 0;
-  padding: 6px 24px;
-  background: var(--ground);
-  overflow-x: auto;
-}
-.anchors-label {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-right: 8px;
-  white-space: nowrap;
-}
-.anchors a {
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  font-size: var(--fs-detail);
-  font-weight: 500;
-  padding: 4px 8px;
-  white-space: nowrap;
-  text-decoration: none;
-}
-.anchors a:hover {
-  color: var(--text);
-}
-.anchors a[aria-current] {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
-:root:has(.anchor-host) {
-  scroll-padding-top: 48px;
-}
-
 /* a site's own page: its status, address and project under its name */
 .site-lead {
   display: inline-flex;
@@ -1144,22 +1097,6 @@ dialog {
   transform: translate(-50%, 0);
 }
 
-.tip {
-  position: fixed;
-  z-index: 80;
-  pointer-events: none;
-  background: var(--text);
-  color: var(--ground);
-  font-size: var(--fs-detail);
-  padding: 6px 8px;
-  border-radius: 5px;
-  white-space: pre;
-  opacity: 0;
-  transition: opacity 0.08s;
-}
-.tip.on {
-  opacity: 1;
-}
 
 /* app additions: utilities that replace the prototype's inline styles (CSP style-src 'self') */
 #root {
@@ -1345,10 +1282,6 @@ main .sev-crit[data-row]:focus-visible {
   .page {
     padding: 16px;
     gap: 16px;
-  }
-  .anchors {
-    margin: -16px -16px 0;
-    padding: 6px 16px;
   }
   .att-child,
   .grouplink,
