@@ -77,7 +77,9 @@ export function Completeness() {
         <b>{data.finished ? "Finished." : "Not finished."}</b> {formatCount(count("complete"))} of{" "}
         {formatCount(cells.length)} cells complete, {formatCount(count("partial"))} partial,{" "}
         {formatCount(count("missing"))} missing
-        {count("unmeasured") ? `, ${formatCount(count("unmeasured"))} could not be measured` : ""}.{" "}
+        {count("unmeasured")
+          ? `, ${formatCount(count("unmeasured"))} could not be measured`
+          : ""}.{" "}
         {data.finished
           ? `Every cell is complete and has passed ${CLEAN_DAYS} daily runs in a row.`
           : `Finished means every cell complete and clean for ${CLEAN_DAYS} daily runs.`}

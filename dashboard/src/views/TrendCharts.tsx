@@ -93,12 +93,7 @@ function Minutes({ minutes }: { minutes: PortalTrends["minutes"] }) {
     caption: `An estimate from what you did in Capsid: each stretch of actions with no gap over 5 minutes counts from its first action to its last, plus a minute. Reading the Portal without acting is not counted.${minutes.truncated ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Capsid audit log, your actions" },
   } as const;
-  return (
-    <ChartFrame
-      className="minutes-chart"
-      draw={drawWith(lineChart, opts)}
-    />
-  );
+  return <ChartFrame className="minutes-chart" draw={drawWith(lineChart, opts)} />;
 }
 
 // ---- 2. Where does waiting go? ----------------------------------------------------------
@@ -206,12 +201,7 @@ export function WaitingChart() {
     caption: `Total time between a job stopping at a gate and the gate being answered, last 14 days${classes > shown ? `; the ${shown} longest of ${classes} gate classes` : ""}.${load.data.truncated.includes("waits") ? " Cut at the read's row limit, so the figure is low." : ""}`,
     source: { name: "Claims aggregate, gate waits" },
   } as const;
-  return (
-    <ChartFrame
-      className="wait-chart"
-      draw={drawWith(barChart, opts)}
-    />
-  );
+  return <ChartFrame className="wait-chart" draw={drawWith(barChart, opts)} />;
 }
 
 // ---- 3. Is the queue growing or draining? -------------------------------------------------
@@ -242,9 +232,7 @@ export function QueueChart() {
     caption: `${posted} posted and ${ended} ended in 14 days, so the queue ${net === 0 ? "held" : net > 0 ? "grew" : "drained"} by ${Math.abs(net)}. Open means queued, claimed, blocked or parked.`,
     source: { name: "D1 jobs, 14 days" },
   } as const;
-  return (
-    <ChartPanel id="queue-trend" stale={error} draw={drawWith(areaChart, opts)} />
-  );
+  return <ChartPanel id="queue-trend" stale={error} draw={drawWith(areaChart, opts)} />;
 }
 
 // ---- 3b. Where is the work waiting? ------------------------------------------------------------
@@ -381,9 +369,7 @@ export function CostChart() {
     caption: "A week with no job outcome carrying a cost is a gap, not a free week.",
     source: { name: "Job outcomes, telemetry cost, an estimate" },
   } as const;
-  return (
-    <ChartPanel id="cost-trend" stale={error} draw={drawWith(lineChart, opts)} />
-  );
+  return <ChartPanel id="cost-trend" stale={error} draw={drawWith(lineChart, opts)} />;
 }
 
 // ---- 7. How much merges with no human? -------------------------------------------------------
@@ -430,9 +416,7 @@ export function MergesChart() {
       : "No deploy was rolled back in this window.",
     source: { name: "Audit log, weekly" },
   } as const;
-  return (
-    <ChartPanel id="merge-trend" stale={error} draw={drawWith(barChart, opts)} />
-  );
+  return <ChartPanel id="merge-trend" stale={error} draw={drawWith(barChart, opts)} />;
 }
 
 // ---- 8. How often do deploys ship, fail and recover? ---------------------------------------
@@ -547,12 +531,7 @@ export function ErrorRate({ site }: { site: SiteSnapshot }) {
       : "No deploy in the window.",
     source: { name: "Cloudflare Workers analytics, hourly" },
   } as const;
-  return (
-    <ChartFrame
-      className="error-rate"
-      draw={drawWith(lineChart, opts)}
-    />
-  );
+  return <ChartFrame className="error-rate" draw={drawWith(lineChart, opts)} />;
 }
 
 // ---- 9b. Deploys and downtime, one lane per site ------------------------------------------
@@ -621,12 +600,7 @@ export function DeployTimeline({ sites, days }: { sites: SiteSnapshot[]; days: n
     notes,
     source: { name: "Cloudflare deployments and the watcher's probes" },
   };
-  return (
-    <ChartFrame
-      className="deploy-timeline"
-      draw={drawWith(timeline, opts)}
-    />
-  );
+  return <ChartFrame className="deploy-timeline" draw={drawWith(timeline, opts)} />;
 }
 
 // ---- 4. Tonight -------------------------------------------------------------------------
@@ -672,12 +646,7 @@ export function TonightTimeline({ plan }: { plan: PortalPlan }) {
     label: `Tonight's plan, ${events.length} ${events.length === 1 ? "job" : "jobs"} by repo, as if it started when the plan was read (UTC)`,
     source: { name: "The overnight planner's estimates" },
   };
-  return (
-    <ChartFrame
-      className="tonight-chart"
-      draw={drawWith(timeline, opts)}
-    />
-  );
+  return <ChartFrame className="tonight-chart" draw={drawWith(timeline, opts)} />;
 }
 
 // ---- 10. Backup retention slots ---------------------------------------------------------
@@ -720,13 +689,7 @@ export function BackupSlots() {
               cellLabels: slots.map((s) => s.key),
               formatValue: missing,
             };
-            return (
-              <ChartFrame
-                key={name}
-                inline
-                draw={drawWith(heatStrip, opts)}
-              />
-            );
+            return <ChartFrame key={name} inline draw={drawWith(heatStrip, opts)} />;
           })
         )}
       </div>

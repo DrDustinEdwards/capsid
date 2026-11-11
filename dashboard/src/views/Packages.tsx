@@ -232,8 +232,9 @@ function PackagePanel({
                 {() =>
                   snap.downloads.state === "ok" && (
                     <>
-                      <span className="num">{formatCount(snap.downloads.last_week)}</span> in 7 days ·{" "}
-                      <span className="num">{formatCount(snap.downloads.last_month)}</span> in 30 days
+                      <span className="num">{formatCount(snap.downloads.last_week)}</span> in 7 days
+                      · <span className="num">{formatCount(snap.downloads.last_month)}</span> in 30
+                      days
                       <span className="faint">
                         {" "}
                         {snap.downloads.through
@@ -260,9 +261,9 @@ function PackagePanel({
                 {() =>
                   snap.dependents.state === "ok" && (
                     <>
-                      <span className="num">{formatCount(snap.dependents.total)}</span> packages depend on{" "}
-                      {snap.dependents.version}: {formatCount(snap.dependents.direct)} directly,{" "}
-                      {formatCount(snap.dependents.indirect)} through another package
+                      <span className="num">{formatCount(snap.dependents.total)}</span> packages
+                      depend on {snap.dependents.version}: {formatCount(snap.dependents.direct)}{" "}
+                      directly, {formatCount(snap.dependents.indirect)} through another package
                     </>
                   )
                 }

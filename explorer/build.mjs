@@ -227,6 +227,7 @@ export async function build({
     "components/manual/manual.css",
     "components/family-footer/family-footer.css",
     "components/chart-frame/chart-frame.css",
+    "components/graph/graph.css",
     "components/meter/meter.css",
     "tokens/site-capsid.css",
   ]
@@ -264,6 +265,7 @@ export async function build({
     "popover",
     "tooltip",
     "shell",
+    "shortcuts",
     "meter",
   ]) {
     const dir = join(capsomer, "dist", "components", name);

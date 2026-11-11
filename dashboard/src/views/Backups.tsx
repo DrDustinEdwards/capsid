@@ -3,12 +3,7 @@ import { Fragment, Suspense } from "react";
 import { useApp } from "../app/ctx";
 import { ago, ms } from "../lib/format";
 import { formatBytes } from "capsomer/behavior/format";
-import {
-  OFFACCOUNT_LATE,
-  OFFACCOUNT_STALE,
-  offaccountState,
-  outcomeKind,
-} from "../lib/derive";
+import { OFFACCOUNT_LATE, OFFACCOUNT_STALE, offaccountState, outcomeKind } from "../lib/derive";
 import { storeUse } from "../lib/store";
 import { St } from "../ui/icons";
 import { When } from "../ui/When";

@@ -512,7 +512,8 @@ function buildState(b: { status: string | null; outcome: string | null }): {
   kind: Kind;
   label: string;
 } {
-  if (b.outcome && BUILD_OUTCOMES.has(b.outcome)) return outcomeKind(b.outcome, { success: "Built" });
+  if (b.outcome && BUILD_OUTCOMES.has(b.outcome))
+    return outcomeKind(b.outcome, { success: "Built" });
   if (b.status && b.status !== "stopped")
     return { kind: "run", label: b.status === "queued" ? "Queued" : "Building" };
   return { kind: "nodata", label: b.outcome ?? b.status ?? "Unknown" };
