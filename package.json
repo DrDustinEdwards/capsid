@@ -38,6 +38,7 @@
     "@dustinedwards/site-runtime": "github:DrDustinEdwards/site-runtime#v0.123.1",
     "@modelcontextprotocol/server": "2.4.0",
     "agents": "0.33.0",
+    "capsomer": "github:DrDustinEdwards/capsomer#v0.94.0",
     "jose": "6.2.15",
     "tldts": "7.4.19",
     "zod": "4.6.7"
