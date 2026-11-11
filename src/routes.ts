@@ -115,7 +115,8 @@ import {
   PORTAL_SHARED_CODE_PATH,
 } from "./portal-packages";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { rateLimiter, textResponse } from "./http";
+import { textResponse } from "@dustinedwards/site-runtime/http";
+import { rateLimiter } from "./http";
 
 // The MCP authorization flow (rule 13): site-runtime's consent page, the Access for SaaS
 // round trip and the /callback, behind the OAuth provider. Capsid passes what is its own:

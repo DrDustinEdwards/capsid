@@ -171,7 +171,7 @@ Rules:
 
 **Two prerequisites:**
 
-1. **How the Portal gets Enarratio** is still that research's DECIDE 1. It recommends a client-side call, after measuring size against the 105 KB initial and 40 KB per-lazy-chunk budget (`dashboard/scripts/size-budget.mjs`). Enarratio is not a dashboard dependency today, and the current charts are hand-drawn SVG in `dashboard/src/ui/charts.tsx`.
+1. **How the Portal gets Enarratio** is still that research's DECIDE 1. It recommends a client-side call, after measuring size against the 105 KB initial and 40 KB per-lazy-chunk budget (`dashboard/.size-budget.json`). Enarratio is not a dashboard dependency today, and the current charts are hand-drawn SVG in `dashboard/src/ui/charts.tsx`.
 2. **The feed has no series longer than 7 days.** The longest are uptime rings, 10 deploys per site, 7 days of PRs, and 24 hours of ended jobs. Visuals 1, 2, 5, 6 and 7 need one new read-only admin route, `/portal/api/trends?weeks=8`, returning the shapes below from `audit_log`, `job_touches`, `job_outcomes`, `pr_approvals` and `deploy_outcomes`.
 
 | #   | Page              | Question                                           | Primitive                                                                                              | Data shape (real types)                                                                                                                                                                                      |

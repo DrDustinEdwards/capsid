@@ -23,7 +23,7 @@ import { readBoundedText } from "./signed-requests";
 import { isoTime, opsFeed, OPS_RETURN_TO, PORTAL_CSRF_COOKIE, type OpsFeedData } from "./ops-feed";
 import type { PortalActivity, PortalNamespaces, PortalPerformed } from "./ops-types/portal";
 import { logEvent } from "@dustinedwards/site-runtime/log";
-import { jsonResponse, textResponse } from "./http";
+import { jsonResponse, textResponse } from "@dustinedwards/site-runtime/http";
 // The Portal's routes for the controls (src/controls.ts holds the controls): the eight actions, what each will do, the one dispatch to the
 // shared mutators, and the routes the app calls (the contract is the bottom of
 // src/ops-types/). They replaced the old /console page's forms, which called this

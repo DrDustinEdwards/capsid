@@ -1,7 +1,7 @@
 import { renderDemoPage } from "capsid-portal-pages";
 import { dashboardCsp } from "./dashboard-csp";
 import type { Env } from "./env";
-import { textResponse as text } from "./http";
+import { textResponse as text } from "@dustinedwards/site-runtime/http";
 import { pageHeaders, serveFile } from "./portal-app";
 import { isPortalHost } from "./portal-host";
 

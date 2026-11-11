@@ -1,7 +1,7 @@
 import { remoteKeys, verifyJwt, type KeySource } from "@dustinedwards/site-runtime/access-login";
 import type { Env } from "./env";
 import { ghFetch, resolveRepo } from "./github/client";
-import { textResponse } from "./http";
+import { textResponse } from "@dustinedwards/site-runtime/http";
 import { readJob } from "./jobs-transition";
 import { jobDocPath } from "./jobs-schema";
 import { splitSignedTask } from "./signed-docs";
