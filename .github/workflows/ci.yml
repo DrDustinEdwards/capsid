@@ -161,7 +161,7 @@ jobs:
       # Only Chromium is installed; its version is pinned by @playwright/test in
       # dashboard/package-lock.json.
       - name: Install the browser for the app's browser tests
-        run: npx --prefix dashboard playwright install --with-deps chromium
+        run: npx --prefix dashboard playwright install chromium
 
       - name: Browser tests
         run: npm run test:browser
