@@ -1843,3 +1843,11 @@ pre.log {
 .search-rows + .search-rows {
   margin-top: 12px;
 }
+
+/* The menu's icons are Capsomer's Icon (1.25em by default); the menu's own sizes. */
+.navicon {
+  --icon-size: 16px;
+}
+.navicon-lg {
+  --icon-size: 20px;
+}

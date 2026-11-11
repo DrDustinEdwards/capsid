@@ -6,12 +6,13 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import { Spinner } from "capsomer/react/empty";
+import { useNow, useRemembered } from "capsomer/react/hooks";
+import { copyText } from "capsomer/behavior/copy";
 import { AdminShell, type AdminEntry } from "capsomer/react/admin-shell";
 import { Outlet } from "react-router";
 import { Link, useDemo, useLocation, useSearch } from "../lib/router";
@@ -25,14 +26,7 @@ import {
 } from "../lib/api";
 import { WAITING_KINDS, attentionItems, counts, hasSites, passStale } from "../lib/derive";
 import { ago, ms, portalNow, utc } from "../lib/format";
-import {
-  RAIL_PREF,
-  THEME_PREF,
-  readPref,
-  toggleTheme,
-  useSingleKeys,
-  writePref,
-} from "../lib/prefs";
+import { RAIL_PREF, THEME_PREF, toggleTheme, useSingleKeys } from "../lib/prefs";
 import { register, setSheetOpener } from "capsomer/behavior/shortcuts";
 import { NavIcon } from "../ui/icons";
 import {
@@ -130,27 +124,6 @@ let toastTimer: ReturnType<typeof setTimeout> | undefined;
 // Message ids, one counter for the page.
 let nextMessageId = 1;
 
-function createClock(ms: number) {
-  let now = 0;
-  return {
-    subscribe(onChange: () => void) {
-      now = Date.now();
-      const t = setInterval(() => {
-        now = Date.now();
-        onChange();
-      }, ms);
-      return () => clearInterval(t);
-    },
-    read: () => now,
-  };
-}
-
-function useTick(ms: number): number {
-  // The server snapshot is 0; in the browser the clock reads when the page subscribes (after hydration) and every `ms`.
-  const clock = useMemo(() => createClock(ms), [ms]);
-  return useSyncExternalStore(clock.subscribe, clock.read, () => 0);
-}
-
 function Freshness({
   feed,
   nextPollAt,
@@ -160,7 +133,7 @@ function Freshness({
   nextPollAt: number;
   skew: number;
 }) {
-  const clientNow = useTick(1000);
+  const clientNow = useNow(1000);
   if (!feed)
     return (
       <div className="fresh" role="status" aria-live="polite">
@@ -219,7 +192,7 @@ export function App() {
   }, [location]);
   // Relative times are measured on the server's clock (portalNow): the skew is taken
   // when each feed arrives, and now never falls behind the feed's own read time.
-  const tick = useTick(15_000);
+  const tick = useNow(15_000);
   const [skew, setSkew] = useState(0);
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect -- the skew is the browser's clock against the feed's stamp, taken when a feed arrives; it is read from the clock, not derived from props
@@ -236,9 +209,8 @@ export function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   // Read after the first paint: the server renders the menu open, and the browser's saved choice
   // then closes it, so the HTML and the first render agree.
-  const [railCollapsed, setRailCollapsed] = useState(false);
-  // oxlint-disable-next-line react/set-state-in-effect -- the saved choice lives in localStorage, which the server cannot read: it is read once after hydration so the first render matches the server's HTML
-  useEffect(() => setRailCollapsed(readPref(RAIL_PREF) === "collapsed"), []);
+  const [railPref, rememberRail] = useRemembered(RAIL_PREF);
+  const railCollapsed = railPref === "collapsed";
   const [toast, setToast] = useState<{ msg: string; on: boolean }>({ msg: "", on: false });
   const [spinning, setSpinning] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
@@ -377,12 +349,8 @@ export function App() {
 
   const copy = useCallback(
     (text: string) => {
-      navigator.clipboard.writeText(text).then(
-        () => say("Copied"),
-        (e: unknown) =>
-          fail(
-            `Copy failed (${e instanceof Error ? e.message : "no clipboard"}): select the text and copy it.`,
-          ),
+      void copyText(text).then((ok) =>
+        ok ? say("Copied") : fail("Copy failed: select the text and copy it."),
       );
     },
     [say, fail],
@@ -438,11 +406,13 @@ export function App() {
   useEffect(() => {
     railRef.current = railCollapsed;
   }, [railCollapsed]);
-  const setRail = useCallback((next: boolean) => {
-    setRailCollapsed(next);
-    writePref(RAIL_PREF, next ? "collapsed" : "expanded");
-    tipRef.current?.classList.remove("on");
-  }, []);
+  const setRail = useCallback(
+    (next: boolean) => {
+      rememberRail(next ? "collapsed" : "expanded");
+      tipRef.current?.classList.remove("on");
+    },
+    [rememberRail],
+  );
   const toggleRail = useCallback(() => setRail(!railRef.current), [setRail]);
 
   const setFilters = useCallback((f: Partial<Filters>) => {

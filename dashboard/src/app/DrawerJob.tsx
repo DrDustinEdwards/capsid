@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CopyButton } from "capsomer/react/copy";
 import { jobBadge, resumeCall } from "../lib/derive";
 import { ago, ms } from "../lib/format";
 import type { OpsJob, OpsAgent } from "../types";
@@ -36,16 +37,15 @@ export function Head({
 }
 
 function CopyBlock({ id, text, label }: { id: string; text: string; label: string }) {
-  const { copy } = useApp();
   return (
     <>
       <div className="cmd" id={id}>
         {text}
       </div>
       <div className="toolbar mt8">
-        <button type="button" className="btn" onClick={() => copy(text)}>
+        <CopyButton text={text} variant="default">
           {label}
-        </button>
+        </CopyButton>
       </div>
     </>
   );
