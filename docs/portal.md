@@ -382,7 +382,7 @@ The same binding and addresses also turn on the watcher's site health mail (abov
   - a site repair from the convergence panel, the site configuration's add, edit and remove, sign-out, and a blocked command's signature;
   - no sideways scrolling at 1024 px on every view and in each drawer, and on a phone;
   - with scripts off, every chart on the demo's pages is in the HTML with its table (`e2e/no-script.spec.ts`).
-- **Size budget:** CI and every deploy run `devkit-size-budget` against `dashboard/.size-budget.json`, which fails closed. It reads React Router's asset manifest: the heaviest page's JavaScript (the runtime, the shell and its view) must be at most 205 KB gzip, each other chunk at most 40 KB, that page's CSS at most 39 KB, and the CSS loaded with later chunks at most 12 KB together. A raise is a reviewed change to that file, with the reason in the pull request.
+- **Size budget:** CI and every deploy run `dashboard/scripts/size-budget.mjs`, which fails closed. It reads React Router's asset manifest: the heaviest page's JavaScript (the runtime, the shell and its view) must be at most 205 KB gzip, each other chunk at most 40 KB, that page's CSS at most 38 KB, and the CSS loaded with later chunks at most 12 KB together. The script's header records each raise and why.
 - **Assets config:** the `assets` block in `wrangler.jsonc.example` must keep `run_worker_first: true` and `not_found_handling: "none"`, and `test/dry-run-config.test.ts` fails if either changes. Without them the platform could answer a browser's `/authorize` or `/portal/callback` with a file, or serve the app's files without the gate.
 
 ## Who gets in
